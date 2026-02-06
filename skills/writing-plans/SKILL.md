@@ -96,19 +96,76 @@ git commit -m "feat: add specific feature"
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After saving the plan, analyze it to recommend an execution approach, then present
+the choice using `AskUserQuestion`.
 
-**"Plan complete and saved to `docs/plans/<filename>.md`. Three execution options:**
+### Step 1: Analyze the Plan
 
-**1. Subagent-Driven (this session)** — I dispatch fresh subagent per task, review between tasks, fast iteration
+Evaluate the plan you just wrote:
 
-**2. Parallel Session (separate)** — Open new session with executing-plans, batch execution with checkpoints
+| Signal | Points toward |
+|--------|--------------|
+| <3 tasks, or tasks share files/state | Subagent-Driven |
+| Tasks are exploratory/research/architectural | Subagent-Driven |
+| User wants manual checkpoints between batches | Parallel Session |
+| 3+ independent implementation tasks | Codex Delegation |
+| Tasks have clear file lists + test commands | Codex Delegation |
+| Codex CLI not available (`which codex` fails) | Subagent-Driven |
 
-**3. Codex Delegation (parallel Codex agents)** — Dispatch Codex agents via interclode, Claude reviews results
-   - Best for: 3+ independent tasks, maximizing parallelism, preserving Claude context
-   - Requires: Codex CLI installed, interclode plugin
+### Step 2: Check Codex Availability
 
-**Which approach?"**
+Before recommending Codex Delegation, verify: `which codex`
+
+If Codex is not installed, exclude option 3 and recommend between options 1 and 2 only.
+
+### Step 3: Present Choice via AskUserQuestion
+
+Use `AskUserQuestion` with the recommended option listed first (with "(Recommended)"
+in the label). Tailor the descriptions to this specific plan.
+
+**Example** (when recommending Codex Delegation for a plan with 5 independent tasks):
+
+```
+AskUserQuestion:
+  question: "Plan saved to docs/plans/<filename>.md. How should we execute it?"
+  header: "Execution"
+  options:
+    - label: "Codex Delegation (Recommended)"
+      description: "5 independent tasks with clear file boundaries — Codex agents
+        execute in parallel, Claude reviews. Fastest for this plan shape."
+    - label: "Subagent-Driven"
+      description: "Fresh Claude subagent per task in this session, with spec +
+        quality review after each. Serial but thorough."
+    - label: "Parallel Session"
+      description: "Open separate session with executing-plans skill. Batch
+        execution with human checkpoints between groups."
+```
+
+**Example** (when recommending Subagent-Driven for a plan with 2 coupled tasks):
+
+```
+AskUserQuestion:
+  question: "Plan saved to docs/plans/<filename>.md. How should we execute it?"
+  header: "Execution"
+  options:
+    - label: "Subagent-Driven (Recommended)"
+      description: "2 tightly coupled tasks that share state — best handled
+        sequentially with full Claude reasoning per task."
+    - label: "Codex Delegation"
+      description: "Dispatch Codex agents for parallel execution. Less ideal here
+        since tasks share files, but possible if split carefully."
+    - label: "Parallel Session"
+      description: "Open separate session with executing-plans skill. Batch
+        execution with human checkpoints."
+```
+
+**Key rules for the AskUserQuestion call:**
+- Always put the recommended option first with "(Recommended)" in the label
+- Write descriptions that reference *this plan's* specific task count, coupling, and characteristics
+- If Codex is unavailable, show only 2 options (Subagent-Driven and Parallel Session)
+- The "Other" option is automatically available for users who want something different
+
+### Step 4: Execute Based on Choice
 
 **If Subagent-Driven chosen:**
 - **REQUIRED SUB-SKILL:** Use clavain:subagent-driven-development
