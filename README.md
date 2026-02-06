@@ -16,7 +16,7 @@ claude --plugin-dir /path/to/Clavain
 
 ## What's Included
 
-### Skills (30)
+### Skills (31)
 
 Process discipline skills that guide HOW you work:
 
@@ -53,7 +53,6 @@ Process discipline skills that guide HOW you work:
 | `agent-mail-coordination` | Multi-agent coordination via MCP Agent Mail |
 | `codex-delegation` | Execute plan tasks via Codex agents (interclode bridge) |
 | `upstream-sync` | Track updates from upstream tool repos |
-| `codex-delegation` | Parallel implementation via Codex agents (interclode) |
 
 ### Agents (23)
 

@@ -178,3 +178,24 @@ From debugging session (2025-10-03):
 - All investigations completed concurrently
 - All fixes integrated successfully
 - Zero conflicts between agent changes
+
+## Cross-AI Variant: Codex Agents
+
+When tasks are implementation-focused (bug fixes, features, test generation) and don't
+need Claude's deep architectural reasoning, consider dispatching Codex agents instead:
+
+**Use Codex agents when:**
+- Tasks are well-scoped with clear file lists and success criteria
+- You want true parallel execution (Codex agents run in separate sandboxes)
+- You want to preserve Claude's context window for orchestration + review
+- Cost/speed optimization matters (Codex execution is cheaper per task)
+
+**Keep Claude agents when:**
+- Tasks need deep codebase understanding across many files
+- Tasks are exploratory (research, investigation)
+- Tasks involve complex architectural decisions
+
+**To dispatch Codex agents:** Use the `interclode:delegate` skill, which provides
+the full delegation protocol (prompt crafting, dispatch, monitoring, verification).
+Or use `clavain:codex-delegation` for plan-aware delegation that translates plan
+tasks directly into interclode format.

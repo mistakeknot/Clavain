@@ -98,11 +98,15 @@ git commit -m "feat: add specific feature"
 
 After saving the plan, offer execution choice:
 
-**"Plan complete and saved to `docs/plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `docs/plans/<filename>.md`. Three execution options:**
 
-**1. Subagent-Driven (this session)** - I dispatch fresh subagent per task, review between tasks, fast iteration
+**1. Subagent-Driven (this session)** — I dispatch fresh subagent per task, review between tasks, fast iteration
 
-**2. Parallel Session (separate)** - Open new session with executing-plans, batch execution with checkpoints
+**2. Parallel Session (separate)** — Open new session with executing-plans, batch execution with checkpoints
+
+**3. Codex Delegation (parallel Codex agents)** — Dispatch Codex agents via interclode, Claude reviews results
+   - Best for: 3+ independent tasks, maximizing parallelism, preserving Claude context
+   - Requires: Codex CLI installed, interclode plugin
 
 **Which approach?"**
 
@@ -114,3 +118,9 @@ After saving the plan, offer execution choice:
 **If Parallel Session chosen:**
 - Guide them to open new session in worktree
 - **REQUIRED SUB-SKILL:** New session uses clavain:executing-plans
+
+**If Codex Delegation chosen:**
+- **REQUIRED SUB-SKILL:** Use clavain:codex-delegation
+- Claude stays as orchestrator — planning, dispatching, reviewing, integrating
+- Codex agents execute tasks in parallel sandboxes
+- Best when tasks are independent, well-scoped, and benefit from parallel execution
