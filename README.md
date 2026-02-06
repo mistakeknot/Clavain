@@ -2,7 +2,7 @@
 
 General-purpose engineering discipline plugin for Claude Code. 27 skills, 23 agents, 21 commands, 2 hooks, 1 MCP server.
 
-Merged from [superpowers](https://github.com/superpowers-ai/superpowers), [superpowers-lab](https://github.com/superpowers-ai/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/superpowers-ai/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/compound-engineering).
+Merged from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
 ## Install
 
@@ -123,6 +123,13 @@ The `using-clavain` skill is injected into every session via the SessionStart ho
 3. **Language** — What language? (go/py/ts/sh/markdown)
 
 This routes you to the right skill, agent, or command for each task.
+
+## Credits
+
+Built on the work of:
+
+- **Jesse Vincent** ([@obra](https://github.com/obra)) — [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code)
+- **Kieran Klaassen** ([@kieranklaassen](https://github.com/kieranklaassen)) — [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin) at [Every](https://every.to)
 
 ## License
 
