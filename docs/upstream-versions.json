@@ -1,0 +1,37 @@
+{
+  "steveyegge/beads": {
+    "synced_release": "v0.49.4",
+    "synced_commit": "eb1049b",
+    "checked_at": "2026-02-06T20:26:55Z"
+  },
+  "steipete/oracle": {
+    "synced_release": "v0.8.5",
+    "synced_commit": "5c053e2",
+    "checked_at": "2026-02-06T20:26:55Z"
+  },
+  "Dicklesworthstone/mcp_agent_mail": {
+    "synced_release": "v0.3.0",
+    "synced_commit": "9992244",
+    "checked_at": "2026-02-06T20:26:55Z"
+  },
+  "obra/superpowers": {
+    "synced_release": "v4.1.1",
+    "synced_commit": "a98c5df",
+    "checked_at": "2026-02-06T20:26:55Z"
+  },
+  "obra/superpowers-lab": {
+    "synced_release": "none",
+    "synced_commit": "897eebf",
+    "checked_at": "2026-02-06T20:26:55Z"
+  },
+  "obra/superpowers-developing-for-claude-code": {
+    "synced_release": "none",
+    "synced_commit": "74afe93",
+    "checked_at": "2026-02-06T20:26:55Z"
+  },
+  "EveryInc/compound-engineering-plugin": {
+    "synced_release": "none",
+    "synced_commit": "e4ff6a8",
+    "checked_at": "2026-02-06T20:26:55Z"
+  }
+}

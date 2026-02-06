@@ -23,22 +23,50 @@ Clavain bundles knowledge from several upstream tools. This skill tracks their r
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |
 
-## The Process
+## Automated Pipeline
 
-### Step 1: Check Latest Releases
+Upstream sync runs in three layers — background data collection, session-start notification, and on-demand remediation.
 
-For each upstream repo, check the latest release/tag and recent commits:
+### Layer 1: Daily GitHub Action
 
-```bash
-# Latest release
-gh api repos/{owner}/{repo}/releases/latest --jq '.tag_name + " (" + .published_at + ")"' 2>/dev/null || echo "No releases"
+A GitHub Actions workflow (`.github/workflows/upstream-check.yml`) runs daily at 08:00 UTC:
 
-# Recent commits (last 30 days)
-gh api "repos/{owner}/{repo}/commits?since=$(date -d '30 days ago' -Iseconds)&per_page=5" \
-  --jq '.[] | .sha[:7] + " " + (.commit.message | split("\n")[0])'
-```
+1. Executes `scripts/upstream-check.sh --json` against all 7 upstream repos
+2. Compares current releases/commits to the baseline in `docs/upstream-versions.json`
+3. If changes detected: opens a GitHub issue (label `upstream-sync`) with per-repo checklists, or comments on existing open issue
+4. If no changes: exits silently
 
-### Step 2: Identify Breaking Changes
+**No manual action needed.** Issues appear automatically.
+
+### Layer 2: Session-Start Warning
+
+The `hooks/session-start.sh` hook checks the age of `docs/upstream-versions.json` on every session start. If the file is older than 7 days, it injects a warning:
+
+> **Upstream sync stale** (N days since last check). Run `/clavain:upstream-sync` to check for updates.
+
+This catches cases where the GitHub Action hasn't run (e.g., repo not pushed, Action disabled).
+
+### Layer 3: `/clavain:upstream-sync` Command
+
+The command integrates with the pipeline. See `commands/upstream-sync.md` for the full workflow.
+
+**Preferred path** (GitHub issues exist):
+1. Fetch open `upstream-sync` issues via `gh issue list`
+2. For each issue, read the checklist and affected skills
+3. Fetch upstream changelogs to understand what changed
+4. Edit affected Clavain skills to reflect changes
+5. Update baseline: `bash scripts/upstream-check.sh --update`
+6. Commit changes and close the issue
+
+**Manual fallback** (no issues):
+1. Run `bash scripts/upstream-check.sh` directly
+2. If changes detected, follow the remediation process below
+
+## Manual Remediation Process
+
+When applying upstream changes (whether from an issue checklist or manual check):
+
+### Identify Breaking Changes
 
 For each repo with new activity, check:
 
@@ -47,7 +75,6 @@ For each repo with new activity, check:
 3. **Configuration changes** — new env vars, changed defaults, new config files
 4. **Conceptual changes** — new features that Clavain's skills should document
 
-**What to look for:**
 ```bash
 # Check changelogs
 gh api repos/{owner}/{repo}/contents/CHANGELOG.md --jq '.content' | base64 -d | head -100
@@ -57,61 +84,45 @@ gh api "repos/{owner}/{repo}/commits?path=README.md&per_page=3" \
   --jq '.[] | .sha[:7] + " " + (.commit.message | split("\n")[0])'
 ```
 
-### Step 3: Generate Upgrade Checklist
+### Apply Updates
 
-For each upstream change that affects Clavain, create an actionable item:
-
-```markdown
-## Upstream Changes Detected
-
-### Beads (steveyegge/beads)
-- **v1.2.0** (2026-02-01): Added `bd archive` command
-  - [ ] Add `bd archive` to `beads-workflow` skill Essential Commands section
-  - [ ] Check if memory compaction section needs update
-
-### Oracle (steipete/oracle)
-- **v0.9.0** (2026-01-28): Added `--search` flag for provider web search
-  - [ ] Add `--search` to `oracle-review` skill flags table
-  - [ ] Note: API mode only
-
-### MCP Agent Mail (Dicklesworthstone/mcp_agent_mail)
-- No changes since last sync
-```
-
-### Step 4: Apply Updates
-
-For each checklist item:
+For each breaking change:
 1. Read the relevant Clavain skill file
 2. Make the minimal edit to reflect the upstream change
-3. Verify no phantom references introduced
+3. Verify no phantom references introduced (flags/tools that no longer exist)
 
-### Step 5: Record Sync
+### Update Baseline
 
-After applying updates, record what was synced:
+After all skills are updated:
 
 ```bash
-# Create or update sync record
-cat > /root/projects/Clavain/docs/upstream-sync-log.md << 'EOF'
-# Upstream Sync Log
-
-## Latest Sync: YYYY-MM-DD
-
-| Repo | Version Checked | Changes Applied |
-|------|----------------|-----------------|
-| beads | v1.2.0 | Added bd archive to beads-workflow |
-| oracle | v0.9.0 | Added --search flag docs |
-| mcp_agent_mail | v0.5.3 | No changes needed |
-| superpowers | v4.2.0 | No changes (founding source) |
-| compound-engineering | v2.30.0 | No changes (founding source) |
-EOF
+bash scripts/upstream-check.sh --update
 ```
 
-## When to Sync
+This writes the current release/commit for all repos to `docs/upstream-versions.json`.
 
-- **Monthly**: Routine check for all upstreams
-- **Before major Clavain releases**: Ensure all bundled knowledge is current
-- **When a tool misbehaves**: Check if upstream changed something Clavain's docs don't reflect
-- **When user reports stale docs**: Specific tool's docs may be out of date
+## Baseline File
+
+`docs/upstream-versions.json` stores the last-synced state:
+
+```json
+{
+  "steveyegge/beads": {
+    "synced_release": "v0.49.4",
+    "synced_commit": "eb1049b",
+    "checked_at": "2026-02-06T20:26:55Z"
+  }
+}
+```
+
+Fields: `synced_release` (latest tag or `"none"`), `synced_commit` (short SHA of HEAD), `checked_at` (ISO timestamp).
+
+## When Manual Sync is Needed
+
+- **Session-start warning fires** — baseline is stale, run the command
+- **Tool misbehaves** — upstream may have changed something Clavain's docs don't reflect
+- **User reports stale docs** — specific tool's skill may be out of date
+- **Before major Clavain releases** — ensure all bundled knowledge is current
 
 ## Red Flags
 
