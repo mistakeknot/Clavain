@@ -1,6 +1,6 @@
 # Clavain
 
-General-purpose engineering discipline plugin for Claude Code. 27 skills, 23 agents, 21 commands, 2 hooks, 1 MCP server.
+General-purpose engineering discipline plugin for Claude Code. 31 skills, 23 agents, 22 commands, 2 hooks, 2 MCP servers.
 
 Merged from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -16,7 +16,7 @@ claude --plugin-dir /path/to/Clavain
 
 ## What's Included
 
-### Skills (27)
+### Skills (30)
 
 Process discipline skills that guide HOW you work:
 
@@ -49,6 +49,11 @@ Process discipline skills that guide HOW you work:
 | `slack-messaging` | Slack integration |
 | `mcp-cli` | On-demand MCP server usage |
 | `finding-duplicate-functions` | Semantic dedup detection |
+| `flux-drive` | Intelligent document/repo review with agent triage |
+| `agent-mail-coordination` | Multi-agent coordination via MCP Agent Mail |
+| `codex-delegation` | Execute plan tasks via Codex agents (interclode bridge) |
+| `upstream-sync` | Track updates from upstream tool repos |
+| `codex-delegation` | Parallel implementation via Codex agents (interclode) |
 
 ### Agents (23)
 
@@ -60,7 +65,7 @@ Specialized execution agents dispatched by commands and skills:
 
 **Workflow (3):** pr-comment-resolver, spec-flow-analyzer, bug-reproduction-validator
 
-### Commands (21)
+### Commands (22)
 
 User-invoked slash commands:
 
@@ -69,7 +74,7 @@ User-invoked slash commands:
 | `/clavain:lfg` | Full autonomous workflow |
 | `/clavain:brainstorm` | Explore before planning |
 | `/clavain:write-plan` | Create implementation plan |
-| `/clavain:deepen-plan` | Enhance plan with parallel research |
+| `/clavain:flux-drive` | Intelligent document/repo review with agent triage |
 | `/clavain:work` | Execute a plan |
 | `/clavain:review` | Multi-agent code review |
 | `/clavain:execute-plan` | Execute plan in batches |
@@ -87,26 +92,28 @@ User-invoked slash commands:
 | `/clavain:create-agent-skill` | Create skills/agents |
 | `/clavain:generate_command` | Generate new commands |
 | `/clavain:heal-skill` | Fix broken skills |
+| `/clavain:upstream-sync` | Check upstream repos for updates |
 
 ### Hooks (2)
 
 - **SessionStart** — Injects `using-clavain` skill content as context on every session start, resume, clear, and compact
 
-### MCP Server (1)
+### MCP Servers (2)
 
 - **context7** — Library documentation lookup via [Context7](https://context7.com)
+- **mcp-agent-mail** — Multi-agent coordination, file reservations, messaging via [MCP Agent Mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
 
 ## Architecture
 
 ```
 clavain/
 ├── .claude-plugin/plugin.json    # Manifest
-├── skills/                        # 27 discipline skills (SKILL.md each)
+├── skills/                        # 30 discipline skills (SKILL.md each)
 ├── agents/
 │   ├── review/                    # 15 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
-├── commands/                      # 21 slash commands
+├── commands/                      # 22 slash commands
 ├── hooks/
 │   ├── hooks.json                 # Hook registration
 │   └── session-start.sh           # Context injection script
@@ -130,6 +137,9 @@ Built on the work of:
 
 - **Jesse Vincent** ([@obra](https://github.com/obra)) — [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code)
 - **Kieran Klaassen** ([@kieranklaassen](https://github.com/kieranklaassen)) — [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin) at [Every](https://every.to)
+- **Steve Yegge** ([@steveyegge](https://github.com/steveyegge)) — [beads](https://github.com/steveyegge/beads)
+- **Peter Steinberger** ([@steipete](https://github.com/steipete)) — [oracle](https://github.com/steipete/oracle)
+- **Jeff Emanuel** ([@Dicklesworthstone](https://github.com/Dicklesworthstone)) — [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
 
 ## License
 

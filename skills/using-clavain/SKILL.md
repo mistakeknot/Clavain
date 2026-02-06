@@ -19,7 +19,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 27 skills, 23 agents, and 21 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 31 skills, 23 agents, and 22 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -32,12 +32,13 @@ Clavain provides 27 skills, 23 agents, and 21 commands. To avoid overwhelm, use 
 | Stage | Primary Skills | Primary Commands | Key Agents |
 |-------|---------------|-----------------|------------|
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
-| **Plan** | writing-plans | write-plan, deepen-plan | architecture-strategist, spec-flow-analyzer |
+| **Plan** | writing-plans | write-plan, plan_review | architecture-strategist, spec-flow-analyzer |
+| **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents) |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents | work, lfg, resolve_parallel, resolve_todo_parallel | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan_review | kieran-{go,python,typescript,shell}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
 | **Ship** | landing-a-change, verification-before-completion | changelog | deployment-verification-agent |
-| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code | create-agent-skill, generate_command, heal-skill | — |
+| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync | create-agent-skill, generate_command, heal-skill, upstream-sync | — |
 
 ### Layer 2: What domain?
 
@@ -48,7 +49,7 @@ Clavain provides 27 skills, 23 agents, and 21 commands. To avoid overwhelm, use 
 | **Deploy** | — | deployment-verification-agent |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
-| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging | pr-comment-resolver |
+| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging, agent-mail-coordination | pr-comment-resolver |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
 
@@ -130,3 +131,4 @@ Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
 | `/clavain:repro-first-debugging` | Disciplined bug investigation |
 | `/clavain:changelog` | Generate changelog from recent commits |
 | `/clavain:learnings` | Capture solved problem as documentation |
+| `/clavain:upstream-sync` | Check upstream repos for updates, generate upgrade checklist |

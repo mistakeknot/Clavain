@@ -7,7 +7,7 @@ description: Use when tracking work across sessions with Beads issue tracking �
 
 ## Overview
 
-Beads (`bd`) is a git-native issue tracker for persistent task tracking across sessions. Use it for work that spans multiple sessions or has dependencies. For simple single-session tasks, use in-memory `TaskCreate` instead.
+Beads (`bd`) is a git-native issue tracker for persistent task tracking across sessions. Issues are stored as JSONL in `.beads/`, synced via git, with hash-based IDs that prevent merge conflicts. Use it for work that spans multiple sessions or has dependencies. For simple single-session tasks, use in-memory `TaskCreate` instead.
 
 ## When to Use Beads vs TaskCreate
 
@@ -26,6 +26,7 @@ Beads (`bd`) is a git-native issue tracker for persistent task tracking across s
 bd ready                          # Show issues ready to work (no blockers)
 bd list --status=open             # All open issues
 bd list --status=in_progress      # Active work
+bd blocked                        # Show all blocked issues
 bd show <id>                      # Detailed view with dependencies
 ```
 
@@ -36,9 +37,24 @@ bd create --title="..." --type=task|bug|feature --priority=2
 
 **Priority scale:** 0-4 or P0-P4 (0=critical, 2=medium, 4=backlog). NOT "high"/"medium"/"low".
 
+### Hierarchical Issues
+
+Use dot notation for epic → task → sub-task hierarchies:
+```bash
+bd create --title="Auth overhaul" --type=feature --priority=1
+# Creates bd-a3f8
+
+bd create --title="JWT middleware" --parent=bd-a3f8 --priority=2
+# Creates bd-a3f8.1
+
+bd create --title="Token refresh logic" --parent=bd-a3f8.1 --priority=2
+# Creates bd-a3f8.1.1
+```
+
 ### Updating Issues
 ```bash
 bd update <id> --status=in_progress    # Claim work
+bd update <id> --claim                 # Atomically assign + mark in-progress
 bd update <id> --assignee=username     # Assign
 bd close <id>                          # Mark complete
 bd close <id1> <id2> ...              # Close multiple at once
@@ -56,6 +72,43 @@ bd blocked                         # Show all blocked issues
 bd sync                  # Sync with git remote
 bd sync --status         # Check sync status
 ```
+
+## Workflow Modes
+
+### Stealth Mode
+Local-only tracking, nothing committed to the main repo:
+```bash
+bd init --stealth
+```
+
+Use for: experimental planning, personal task tracking, throwaway exploration.
+
+### Contributor Mode
+Routes planning to a separate repo, keeping experimental work out of PRs:
+```bash
+bd init --contributor
+```
+
+Planning state stored in `~/.beads-planning` instead of the project's `.beads/`.
+
+### Maintainer Mode
+Full read-write access. Auto-detected via SSH or authenticated HTTPS:
+```bash
+git config beads.role maintainer    # Force maintainer mode
+```
+
+## Beads Viewer
+
+`bv` provides AI-friendly analytics on your task graph:
+```bash
+bv                    # Open viewer with PageRank, critical path, parallel tracks
+```
+
+Surfaces: task recommendations, execution order, blocking chains, parallel execution opportunities. Use before dispatching parallel agents to identify independent work streams.
+
+## Memory Compaction
+
+Closed tasks are semantically summarized to preserve context while reducing token cost. Beads handles this automatically — old completed tasks are compacted so agents get the gist without reading full histories.
 
 ## Session Close Protocol
 
@@ -78,7 +131,7 @@ git push                # Push to remote
 ```bash
 bd ready                              # Find available work
 bd show <id>                          # Review details
-bd update <id> --status=in_progress   # Claim it
+bd update <id> --claim                # Atomically claim it
 ```
 
 **Completing work:**
@@ -100,3 +153,5 @@ bd dep add <tests-id> <feature-id>    # Tests depend on feature
 - `file-todos` — Beads for cross-session, file-todos for within-session
 - `landing-a-change` — Session close protocol ensures beads are synced
 - `triage` command — Categorize and prioritize beads issues
+- `agent-mail-coordination` — Use beads issue IDs as Agent Mail `thread_id` to link conversations to tracked work
+- `dispatching-parallel-agents` — Use `bv` to identify independent work streams before dispatching

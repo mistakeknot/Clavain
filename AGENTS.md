@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 27 skills, 23 agents, 21 commands, 2 hooks, 1 MCP server |
+| Components | 31 skills, 23 agents, 22 commands, 2 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Architecture
@@ -17,7 +17,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 27 discipline skills
+├── skills/                        # 29 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -34,7 +34,7 @@ Clavain/
 │   ├── review/                    # 15 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
-├── commands/                      # 21 slash commands
+├── commands/                      # 22 slash commands
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart)
 │   └── session-start.sh           # Reads using-clavain/SKILL.md, outputs JSON
@@ -197,3 +197,18 @@ bash -n hooks/session-start.sh && echo "Hook script OK"
 
 - **Jesse Vincent** ([@obra](https://github.com/obra)) — superpowers, superpowers-lab, superpowers-developing-for-claude-code
 - **Kieran Klaassen** ([@kieranklaassen](https://github.com/kieranklaassen)) — compound-engineering at [Every](https://every.to)
+- **Steve Yegge** ([@steveyegge](https://github.com/steveyegge)) — beads
+- **Peter Steinberger** ([@steipete](https://github.com/steipete)) — oracle
+- **Jeff Emanuel** ([@Dicklesworthstone](https://github.com/Dicklesworthstone)) — mcp_agent_mail
+
+## Upstream Tracking
+
+Clavain bundles knowledge from actively-developed upstream tools. Use `/clavain:upstream-sync` to check for updates.
+
+| Tool | Repo | Clavain Skills Affected |
+|------|------|------------------------|
+| Beads | `steveyegge/beads` | `beads-workflow` |
+| Oracle | `steipete/oracle` | `oracle-review` |
+| MCP Agent Mail | `Dicklesworthstone/mcp_agent_mail` | `agent-mail-coordination` |
+| superpowers | `obra/superpowers` | Multiple (founding source) |
+| compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |

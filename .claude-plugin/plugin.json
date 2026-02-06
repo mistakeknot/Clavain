@@ -1,7 +1,7 @@
 {
   "name": "clavain",
   "version": "0.1.0",
-  "description": "General-purpose engineering discipline plugin. 23 agents, 21 commands, 27 skills — combining workflow discipline with specialized execution agents.",
+  "description": "General-purpose engineering discipline plugin. 23 agents, 22 commands, 31 skills, 2 MCP servers — combining workflow discipline with specialized execution agents.",
   "author": {
     "name": "mistakeknot"
   },
@@ -20,6 +20,10 @@
     "context7": {
       "type": "http",
       "url": "https://mcp.context7.com/mcp"
+    },
+    "mcp-agent-mail": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp"
     }
   }
 }
