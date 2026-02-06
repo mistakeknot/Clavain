@@ -237,7 +237,7 @@ Structure your findings as:
 
 This agent is designed to be invoked by:
 - `/clavain:write-plan` - To inform planning with institutional knowledge
-- `/deepen-plan` - To add depth with relevant learnings
+- `/clavain:flux-drive` - To review plans/documents with targeted agent triage
 - Manual invocation before starting work on a feature
 
 The goal is to surface relevant learnings in under 30 seconds for a typical solutions directory, enabling fast knowledge retrieval during planning phases.
