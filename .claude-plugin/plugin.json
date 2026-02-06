@@ -1,0 +1,25 @@
+{
+  "name": "clavain",
+  "version": "0.1.0",
+  "description": "General-purpose engineering discipline plugin. 23 agents, 21 commands, 27 skills — combining workflow discipline with specialized execution agents.",
+  "author": {
+    "name": "mistakeknot"
+  },
+  "license": "MIT",
+  "keywords": [
+    "engineering-discipline",
+    "code-review",
+    "workflow-automation",
+    "tdd",
+    "debugging",
+    "planning",
+    "agents",
+    "general-purpose"
+  ],
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}

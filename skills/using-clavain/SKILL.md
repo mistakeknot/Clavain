@@ -1,0 +1,132 @@
+---
+name: using-clavain
+description: Use when starting any conversation - establishes how to find and use skills, agents, and commands, requiring Skill tool invocation before ANY response including clarifying questions
+---
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## How to Access Skills
+
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.
+
+**In other environments:** Check your platform's documentation for how skills are loaded.
+
+# Using Clavain
+
+Clavain provides 27 skills, 23 agents, and 21 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+
+## The Rule
+
+**Invoke relevant skills BEFORE any response or action.** Even a 1% chance a skill might apply means you should invoke it.
+
+## 3-Layer Routing
+
+### Layer 1: What stage are you in?
+
+| Stage | Primary Skills | Primary Commands | Key Agents |
+|-------|---------------|-----------------|------------|
+| **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
+| **Plan** | writing-plans | write-plan, deepen-plan | architecture-strategist, spec-flow-analyzer |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents | work, lfg, resolve_parallel, resolve_todo_parallel | — |
+| **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
+| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan_review | kieran-{go,python,typescript,shell}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
+| **Ship** | landing-a-change, verification-before-completion | changelog | deployment-verification-agent |
+| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code | create-agent-skill, generate_command, heal-skill | — |
+
+### Layer 2: What domain?
+
+| Domain | Skills | Agents |
+|--------|--------|--------|
+| **Code** | test-driven-development, finding-duplicate-functions, refactor-safely | pattern-recognition-specialist, code-simplicity-reviewer, agent-native-reviewer |
+| **Data** | — | data-integrity-reviewer, data-migration-expert |
+| **Deploy** | — | deployment-verification-agent |
+| **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
+| **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
+| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging | pr-comment-resolver |
+| **Design** | distinctive-design | — |
+| **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
+
+### Layer 3: What language? (optional — applies to review stage)
+
+| Language | Agent |
+|----------|-------|
+| Go (.go) | kieran-go-reviewer |
+| Python (.py) | kieran-python-reviewer |
+| TypeScript (.ts/.tsx) | kieran-typescript-reviewer |
+| Shell (.sh/.bash) | kieran-shell-reviewer |
+| Any async/concurrent code | concurrency-reviewer |
+| Any with security surface | security-sentinel |
+| Any with perf concerns | performance-oracle |
+
+## Routing Heuristic
+
+When a user message arrives:
+
+1. **Detect stage** from the request ("build" → Execute, "fix bug" → Debug, "review" → Review, "plan" → Plan, "what should we" → Explore)
+2. **Detect domain** from context (file types, topic, recent conversation)
+3. **Pick top 3-5 components** from the routing tables above
+4. **Invoke the primary skill** first (process skills before implementation skills)
+5. **Suggest agents/commands** as needed during execution
+
+## Red Flags
+
+These thoughts mean STOP—you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+
+## Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (brainstorming, debugging, TDD) — these determine HOW to approach the task
+2. **Domain skills second** (distinctive-design, refactor-safely) — these guide execution
+3. **Meta skills last** (writing-skills, developing-claude-code-plugins) — only when explicitly meta
+
+"Let's build X" → brainstorming first, then domain skills.
+"Fix this bug" → systematic-debugging first, then domain-specific skills.
+"Review this code" → requesting-code-review first, then language-specific reviewers.
+
+## Skill Types
+
+**Rigid** (TDD, debugging, verification): Follow exactly. Don't adapt away discipline.
+
+**Flexible** (patterns, design): Adapt principles to context.
+
+The skill itself tells you which.
+
+## User Instructions
+
+Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+
+## Key Commands Quick Reference
+
+| Command | When |
+|---------|------|
+| `/clavain:lfg [description]` | Full autonomous workflow (brainstorm → plan → execute → review) |
+| `/clavain:brainstorm [idea]` | Explore before planning |
+| `/clavain:write-plan [spec]` | Create implementation plan |
+| `/clavain:work [plan]` | Execute a plan |
+| `/clavain:review [PR/branch]` | Multi-agent code review |
+| `/clavain:quality-gates` | Auto-select reviewers for current changes |
+| `/clavain:repro-first-debugging` | Disciplined bug investigation |
+| `/clavain:changelog` | Generate changelog from recent commits |
+| `/clavain:learnings` | Capture solved problem as documentation |
