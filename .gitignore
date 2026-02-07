@@ -3,4 +3,5 @@
 *.swo
 *~
 node_modules/
+.upstream-work/
 .claude/*.local.md
