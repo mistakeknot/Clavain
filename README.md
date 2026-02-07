@@ -107,7 +107,7 @@ User-invoked slash commands:
 ```
 clavain/
 ├── .claude-plugin/plugin.json    # Manifest
-├── skills/                        # 30 discipline skills (SKILL.md each)
+├── skills/                        # 31 discipline skills (SKILL.md each)
 ├── agents/
 │   ├── review/                    # 15 code review agents
 │   ├── research/                  # 5 research agents
