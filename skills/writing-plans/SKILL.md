@@ -96,8 +96,13 @@ git commit -m "feat: add specific feature"
 
 ## Execution Handoff
 
-After saving the plan, analyze it to recommend an execution approach, then present
-the choice using `AskUserQuestion`.
+After saving the plan, analyze it to recommend an execution approach.
+
+**If codex-first mode is active** (user set `codex-first: true` in CLAUDE.md or toggled via `/clodex` or `/codex-first`):
+Skip the AskUserQuestion entirely — go directly to **Codex Delegation** (Step 4).
+All code changes must go through Codex agents in this mode.
+
+**Otherwise**, present the choice using `AskUserQuestion`.
 
 ### Step 1: Analyze the Plan
 

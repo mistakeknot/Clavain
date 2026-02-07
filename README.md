@@ -1,6 +1,6 @@
 # Clavain
 
-General-purpose engineering discipline plugin for Claude Code. 31 skills, 23 agents, 22 commands, 2 hooks, 2 MCP servers.
+General-purpose engineering discipline plugin for Claude Code. 32 skills, 23 agents, 24 commands, 2 hooks, 2 MCP servers.
 
 Merged from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -16,7 +16,7 @@ claude --plugin-dir /path/to/Clavain
 
 ## What's Included
 
-### Skills (31)
+### Skills (32)
 
 Process discipline skills that guide HOW you work:
 
@@ -52,6 +52,7 @@ Process discipline skills that guide HOW you work:
 | `flux-drive` | Intelligent document/repo review with agent triage |
 | `agent-mail-coordination` | Multi-agent coordination via MCP Agent Mail |
 | `codex-delegation` | Execute plan tasks via Codex agents (interclode bridge) |
+| `codex-first-dispatch` | Streamlined single-task Codex dispatch for codex-first mode |
 | `upstream-sync` | Track updates from upstream tool repos |
 
 ### Agents (23)
@@ -64,7 +65,7 @@ Specialized execution agents dispatched by commands and skills:
 
 **Workflow (3):** pr-comment-resolver, spec-flow-analyzer, bug-reproduction-validator
 
-### Commands (22)
+### Commands (24)
 
 User-invoked slash commands:
 
@@ -91,6 +92,8 @@ User-invoked slash commands:
 | `/clavain:create-agent-skill` | Create skills/agents |
 | `/clavain:generate-command` | Generate new commands |
 | `/clavain:heal-skill` | Fix broken skills |
+| `/clavain:clodex` | Toggle codex-first execution mode (short alias) |
+| `/clavain:codex-first` | Toggle codex-first execution mode |
 | `/clavain:upstream-sync` | Check upstream repos for updates |
 
 ### Hooks (2)
@@ -107,12 +110,12 @@ User-invoked slash commands:
 ```
 clavain/
 ├── .claude-plugin/plugin.json    # Manifest
-├── skills/                        # 31 discipline skills (SKILL.md each)
+├── skills/                        # 32 discipline skills (SKILL.md each)
 ├── agents/
 │   ├── review/                    # 15 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
-├── commands/                      # 22 slash commands
+├── commands/                      # 24 slash commands
 ├── hooks/
 │   ├── hooks.json                 # Hook registration
 │   └── session-start.sh           # Context injection + staleness warning
