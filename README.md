@@ -95,7 +95,7 @@ User-invoked slash commands:
 
 ### Hooks (2)
 
-- **SessionStart** — Injects `using-clavain` skill content as context on every session start, resume, clear, and compact
+- **SessionStart** — Injects `using-clavain` skill content as context on every session start, resume, clear, and compact. Also warns when upstream baseline (`docs/upstream-versions.json`) is stale (>7 days).
 
 ### MCP Servers (2)
 
@@ -115,7 +115,13 @@ clavain/
 ├── commands/                      # 22 slash commands
 ├── hooks/
 │   ├── hooks.json                 # Hook registration
-│   └── session-start.sh           # Context injection script
+│   └── session-start.sh           # Context injection + staleness warning
+├── scripts/
+│   └── upstream-check.sh          # Checks upstream repos via gh api
+├── docs/
+│   └── upstream-versions.json     # Upstream sync baseline
+├── .github/workflows/
+│   └── upstream-check.yml         # Daily cron for upstream change detection
 ├── lib/                           # Shared utilities
 └── docs-sp-reference/             # Historical superpowers documentation
 ```

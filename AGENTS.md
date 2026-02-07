@@ -17,7 +17,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 29 discipline skills
+├── skills/                        # 31 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -37,7 +37,13 @@ Clavain/
 ├── commands/                      # 22 slash commands
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart)
-│   └── session-start.sh           # Reads using-clavain/SKILL.md, outputs JSON
+│   └── session-start.sh           # Context injection + upstream staleness warning
+├── scripts/
+│   └── upstream-check.sh          # Checks 7 upstream repos via gh api
+├── docs/
+│   └── upstream-versions.json     # Baseline for upstream sync tracking
+├── .github/workflows/
+│   └── upstream-check.yml         # Daily cron: opens GitHub issues on upstream changes
 ├── lib/
 │   └── skills-core.js             # Shared utilities
 └── docs-sp-reference/             # Historical archive from source plugins (read-only)
@@ -122,6 +128,7 @@ Categories:
 - Registration in `hooks/hooks.json` — specifies event, matcher regex, and command
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
 - Currently only `SessionStart` hook (matcher: `startup|resume|clear|compact`)
+- `session-start.sh` does two things: (1) injects `using-clavain` skill content, (2) warns if `docs/upstream-versions.json` is >7 days old
 - Scripts must output valid JSON to stdout
 - Use `set -euo pipefail` in all hook scripts
 
@@ -181,8 +188,12 @@ grep -r 'compound-engineering:' skills/ agents/ commands/ hooks/ || echo "Clean"
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json')); print('Manifest OK')"
 python3 -c "import json; json.load(open('hooks/hooks.json')); print('Hooks OK')"
 
-# Syntax check hook
+# Syntax check scripts
 bash -n hooks/session-start.sh && echo "Hook script OK"
+bash -n scripts/upstream-check.sh && echo "Upstream check OK"
+
+# Test upstream check (no network calls with --json, but needs gh)
+bash scripts/upstream-check.sh 2>&1; echo "Exit: $?"  # 0=changes, 1=no changes, 2=error
 ```
 
 ## Known Constraints
@@ -203,7 +214,11 @@ bash -n hooks/session-start.sh && echo "Hook script OK"
 
 ## Upstream Tracking
 
-Clavain bundles knowledge from actively-developed upstream tools. Use `/clavain:upstream-sync` to check for updates.
+Clavain bundles knowledge from 7 actively-developed upstream tools. A 3-layer automation pipeline keeps them in sync:
+
+1. **Daily GitHub Action** (`.github/workflows/upstream-check.yml`) — checks all repos via `gh api`, opens/updates issues with `upstream-sync` label
+2. **Session-start warning** — `session-start.sh` warns when `docs/upstream-versions.json` is >7 days old
+3. **`/clavain:upstream-sync` command** — picks up open issues, applies skill changes, closes issues
 
 | Tool | Repo | Clavain Skills Affected |
 |------|------|------------------------|
@@ -211,4 +226,11 @@ Clavain bundles knowledge from actively-developed upstream tools. Use `/clavain:
 | Oracle | `steipete/oracle` | `oracle-review` |
 | MCP Agent Mail | `Dicklesworthstone/mcp_agent_mail` | `agent-mail-coordination` |
 | superpowers | `obra/superpowers` | Multiple (founding source) |
+| superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |
+| superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |
+
+Baseline state is tracked in `docs/upstream-versions.json`. Update it after applying changes:
+```bash
+bash scripts/upstream-check.sh --update
+```
