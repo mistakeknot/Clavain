@@ -42,11 +42,9 @@ Clavain/
 │   └── upstream-check.sh          # Checks 7 upstream repos via gh api
 ├── docs/
 │   └── upstream-versions.json     # Baseline for upstream sync tracking
-├── .github/workflows/
-│   └── upstream-check.yml         # Daily cron: opens GitHub issues on upstream changes
-├── lib/
-│   └── skills-core.js             # Shared utilities
-└── docs-sp-reference/             # Historical archive from source plugins (read-only)
+└── .github/workflows/
+    ├── upstream-check.yml         # Daily cron: opens GitHub issues on upstream changes
+    └── sync.yml                   # Weekly cron: Claude Code + Codex auto-merge upstream
 ```
 
 ## How It Works
@@ -200,7 +198,6 @@ bash scripts/upstream-check.sh 2>&1; echo "Exit: $?"  # 0=changes, 1=no changes,
 
 - **No build step** — pure markdown/JSON/bash plugin, nothing to compile
 - **No tests** — plugin validation is structural (file existence, JSON validity, reference consistency)
-- **`docs-sp-reference/`** — historical archive from source plugins; read-only, do not modify
 - **General-purpose only** — no domain-specific components (Rails, Ruby gems, Every.to, Figma, Xcode, browser-automation)
 - **Trunk-based** — no branch/worktree skills; commit directly to `main`
 

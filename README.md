@@ -120,10 +120,9 @@ clavain/
 │   └── upstream-check.sh          # Checks upstream repos via gh api
 ├── docs/
 │   └── upstream-versions.json     # Upstream sync baseline
-├── .github/workflows/
-│   └── upstream-check.yml         # Daily cron for upstream change detection
-├── lib/                           # Shared utilities
-└── docs-sp-reference/             # Historical superpowers documentation
+└── .github/workflows/
+    ├── upstream-check.yml         # Daily cron for upstream change detection
+    └── sync.yml                   # Weekly auto-merge via Claude Code + Codex
 ```
 
 ## How It Works
