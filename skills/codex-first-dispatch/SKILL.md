@@ -5,7 +5,7 @@ description: Streamlined single-task Codex dispatch for codex-first mode. Lighte
 
 # Codex-First Dispatch
 
-Streamlined single-task dispatch to a Codex agent. This is the execution primitive for codex-first mode — every code change, no matter how small, flows through here.
+Single-agent dispatch for codex-first mode. One Codex agent explores, implements, and verifies in a single invocation. Claude's role: craft the megaprompt, dispatch once, read the verdict, commit.
 
 **Announce at start:** "Dispatching to Codex agent..."
 
@@ -19,15 +19,12 @@ If Codex is unavailable, tell the user and ask if they want to fall back to dire
 
 ## Dispatch Modes
 
-Choose the mode based on how much context Claude already has:
+| Mode | When | Claude tokens | Latency |
+|------|------|--------------|---------|
+| **Megaprompt** (default) | All tasks | ~6K | ~60-90s |
+| **Split** (fallback) | Megaprompt failed or task is unusually complex | ~12K | ~120s |
 
-| Mode | When to use | Agents dispatched |
-|------|------------|-------------------|
-| **Full** | Claude has little/no context on the code area | EXPLORE → IMPLEMENT → VERIFY |
-| **Standard** | Claude already read the relevant code | IMPLEMENT → VERIFY |
-| **Minimal** | Trivial change + Claude already verified similar code this session | IMPLEMENT only (Claude verifies) |
-
-**Default to Full** for the first task in a code area. **Drop to Standard** when Claude has already explored the area (e.g., second task touching the same files). **Use Minimal** only for follow-up fixes where the pattern is established.
+**Always start with Megaprompt.** Only fall back to Split if the megaprompt agent fails and you need finer-grained control over exploration vs implementation.
 
 ## Step 0: Resolve dispatch.sh
 
@@ -37,40 +34,130 @@ Find the interclode dispatch script. Check in order:
 
 Store the resolved path as `$DISPATCH`.
 
-## Step 1: EXPLORE (Full mode only)
+---
 
-**Goal:** Get a structured summary of the code area so Claude can write a precise prompt without reading raw source.
+## Megaprompt Mode (Default)
 
-Write an explore prompt to the scratchpad:
+### Step 1: Craft the Megaprompt
+
+Write a single prompt to the scratchpad that tells the Codex agent to explore, implement, AND verify — all in one session. Use this template:
 
 ```markdown
-## Task
-Analyze the following code area and produce a structured summary.
+## Goal
+[1-2 sentence description of the change, from the user's request]
 
-## Target
-- File(s): [paths Claude knows or suspects]
-- Function/type: [name if known]
-- Area: [description if name unknown, e.g., "the overlay rendering code in the TUI"]
+## Phase 1: Explore
+Before making any changes, investigate the code area:
+- Read [suspected files/functions/areas]
+- Identify the exact file(s) and line(s) that need to change
+- Check for existing tests covering this area
+- Note the package name, imports, and any callers of modified code
+- Print a brief exploration summary before proceeding to implementation
 
-## Report Format
-Produce a summary with these sections:
-1. **Location**: Exact file:line for the target function/type
-2. **Signature**: Full function/method signature
-3. **Imports**: Only the imports used by this code (package paths)
-4. **Package**: The Go/Python/TS package name
-5. **Logic summary**: 3-5 bullet points on what the code does
-6. **Callers**: Where this function is called from (file:line, max 5)
-7. **Test coverage**: Existing test file + test function names, or "none"
-8. **Adjacent context**: Nearby types/functions that the implementation interacts with
+## Phase 2: Implement
+Make the change:
+- [Specific description of what to change]
+- [File hints if Claude has any, e.g., "likely in internal/foo/"]
+- [Design notes if relevant, e.g., "use table-driven tests"]
+
+## Phase 3: Verify
+After implementing, run ALL of these and report results:
+1. Build: `[build command, e.g., go build ./internal/foo/...]`
+2. Tests: `[test command, e.g., go test ./internal/foo/... -v]`
+3. Diff: `git diff --stat` (ensure only expected files changed)
+4. If build or tests fail: fix the issue and re-verify (up to 2 self-retries)
+
+## Final Report
+At the end, print a structured verdict:
+```
+EXPLORATION: [1-2 sentence summary of what you found]
+CHANGES: [list files modified/created with brief description]
+BUILD: PASS | FAIL
+TESTS: PASS | FAIL [N passed, M failed]
+VERDICT: CLEAN | NEEDS_ATTENTION [reason]
+```
 
 ## Constraints
-- Do NOT modify any files
-- Keep the report under 80 lines
-- Use exact line numbers
+- Only modify files directly related to the goal
+- Do not reformat, realign, or adjust whitespace in code you didn't functionally change
+- Do not add comments, docstrings, or type annotations to unchanged code
+- Do not refactor or rename anything not directly related to the task
+- Keep the change minimal — prefer 5 clean lines over 50 "proper" lines
+- Do NOT commit or push any changes
 - If GOCACHE permission errors occur, use: GOCACHE=/tmp/go-build-cache
 ```
 
-Dispatch with `-s read-only`:
+**Key principles for the megaprompt:**
+- Give the agent *freedom to explore* — don't over-specify file paths if you're not sure. Say "likely in internal/foo/" not "exactly at internal/foo/bar.go:42"
+- Include build AND test commands — the agent should self-verify
+- Ask for a structured verdict so Claude can parse the result quickly
+- Include self-retry: "if tests fail, fix and re-verify (up to 2 retries)"
+
+Save to: `$SCRATCHPAD/codex-mega-$(date +%s).md`
+
+### Step 2: Dispatch
+
+```bash
+bash "$DISPATCH" \
+  --prompt-file "$PROMPT_FILE" \
+  -C "$PROJECT_DIR" \
+  -o "$SCRATCHPAD/codex-result-$(date +%s).md" \
+  -s workspace-write \
+  --inject-docs
+```
+
+Use `timeout: 600000` (10 minutes) on the Bash tool call.
+
+For **parallel independent changes**, issue multiple Bash tool calls in a single message, each dispatching a separate megaprompt agent.
+
+### Step 3: Read Verdict
+
+Read the output file. Look for the structured verdict block:
+- `VERDICT: CLEAN` → report success to user
+- `VERDICT: NEEDS_ATTENTION` → read the reason, decide whether to retry or escalate
+- No verdict / garbled output → fall back to Split mode
+
+**Claude does NOT need to independently re-run build/test/diff if the verdict is CLEAN.** Trust the agent's self-verification unless you have reason to doubt it (e.g., past experience with this code area being tricky, or the agent's output looks suspicious).
+
+**When to independently verify anyway:**
+- First dispatch in a new session (establish trust)
+- Changes to critical paths (auth, data integrity, billing)
+- Agent reports CLEAN but the diff summary mentions unexpected files
+
+### Step 4: Handle Result
+
+**On CLEAN verdict:**
+```
+Codex agent completed successfully.
+Exploration: [from report]
+Changes: [from report]
+Build: PASS | Tests: PASS
+```
+
+Changes are in the working tree, ready for Claude to commit on user request.
+
+**On NEEDS_ATTENTION or failure (max 1 retry as megaprompt):**
+1. Read the failure details from the agent's output
+2. Write a tighter follow-up megaprompt with the error context
+3. Re-dispatch once
+4. If still failing, fall back to Split mode or escalate:
+   ```
+   Codex agent failed. Issue: [description]
+   Options:
+   1. Try Split mode (separate explore/implement/verify agents)
+   2. I'll make this change directly (exit codex-first for this edit)
+   3. Skip this change
+   ```
+
+---
+
+## Split Mode (Fallback)
+
+Use when megaprompt fails or for tasks requiring separate exploration and implementation control.
+
+### Split Step 1: EXPLORE
+
+Dispatch a read-only agent to investigate:
 
 ```bash
 bash "$DISPATCH" \
@@ -81,136 +168,24 @@ bash "$DISPATCH" \
   --inject-docs
 ```
 
-Read the output summary. Use it to inform Steps 2-3 instead of reading source files directly.
+The explore prompt asks for: location, signature, imports, package, logic summary, callers, test coverage, adjacent context. Same as the megaprompt's Phase 1 but as a standalone agent.
 
-**Claude tokens saved:** ~5-10K per task (avoids reading raw source + imports + tests + callers).
+### Split Step 2: IMPLEMENT
 
-## Step 2: Write IMPLEMENT Prompt
+Write a focused implementation prompt using the explore output, dispatch with `-s workspace-write`.
 
-Write the Codex prompt to the scratchpad directory. Use this template:
+### Split Step 3: VERIFY
 
-```markdown
-## Task
-[Clear description of what to change]
+Dispatch a read-only agent to run build, test, diff, and report a structured verdict.
 
-## Relevant Files
-- `path/to/file.go` — [what this file contains, what to change]
-- `path/to/other.go` — [if applicable]
+Each step uses its own dispatch call. Claude reads summaries between steps rather than raw source.
 
-## Success Criteria
-- [Build command] succeeds (e.g., `go build ./internal/foo/...`)
-- [Test command] passes (e.g., `go test ./internal/foo/... -v`)
-- [Behavioral check if applicable]
-
-## Constraints
-- Only modify files listed in "Relevant Files" unless absolutely necessary
-- Do not reformat, realign, or adjust whitespace in code you didn't functionally change
-- Do not add comments, docstrings, or type annotations to unchanged code
-- Do not refactor or rename anything not directly related to the task
-- Keep the fix minimal — prefer 5 clean lines over 50 "proper" lines
-- Do NOT commit or push any changes
-- If GOCACHE permission errors occur, use: GOCACHE=/tmp/go-build-cache
-```
-
-Save to: `$SCRATCHPAD/codex-prompt-$(date +%s).md`
-
-## Step 3: Dispatch IMPLEMENT
-
-```bash
-bash "$DISPATCH" \
-  --prompt-file "$PROMPT_FILE" \
-  -C "$PROJECT_DIR" \
-  -o "$SCRATCHPAD/codex-output-$(date +%s).md" \
-  -s workspace-write \
-  --inject-docs
-```
-
-Use `timeout: 600000` (10 minutes) on the Bash tool call.
-
-For **parallel independent changes**, issue multiple Bash tool calls in a single message, each dispatching a separate Codex agent with its own prompt file and output file.
-
-## Step 4: VERIFY
-
-### Full/Standard mode — Dispatch a VERIFY agent
-
-Write a verify prompt:
-
-```markdown
-## Task
-Verify the changes made by a previous Codex agent. Run ALL checks and report results.
-
-## Checks
-1. Build: `[build command, e.g., go build ./internal/foo/...]`
-2. Tests: `[test command, e.g., go test ./internal/foo/... -v]`
-3. Diff review: `git diff -- [relevant files]`
-4. Proportionality: `git diff --stat` (flag unexpected files)
-5. Lint: `[lint command if available]`
-
-## Report Format
-```
-BUILD:  PASS | FAIL (error excerpt if fail)
-TESTS:  PASS | FAIL (failing test names + error if fail)
-DIFF:   [1-3 sentence summary of what changed]
-FILES:  [list of files modified, with +/- line counts]
-ISSUES: [any concerns — unexpected files, excessive changes, style problems]
-VERDICT: CLEAN | NEEDS_ATTENTION
-```
-
-## Constraints
-- Do NOT modify any files
-- Do NOT commit or push
-- If GOCACHE permission errors occur, use: GOCACHE=/tmp/go-build-cache
-```
-
-Dispatch with `-s read-only`:
-
-```bash
-bash "$DISPATCH" \
-  --prompt-file "$VERIFY_PROMPT" \
-  -C "$PROJECT_DIR" \
-  -o "$SCRATCHPAD/codex-verify-$(date +%s).md" \
-  -s read-only \
-  --inject-docs
-```
-
-Read the VERIFY report. If `VERDICT: CLEAN`, report success to user. If `NEEDS_ATTENTION`, Claude reads the issues and decides whether to retry or escalate.
-
-**Claude tokens saved:** ~3-5K per task (avoids reading test output + diff + stat).
-
-### Minimal mode — Claude verifies directly
-
-Run build, test, and diff commands via Bash tool calls. Review output. This is the fallback when dispatching a VERIFY agent isn't worth the latency.
-
-## Step 5: Handle Result
-
-### On Success
-Report to the user:
-```
-Codex agent completed successfully.
-Changes: [brief summary from VERIFY report or Claude's review]
-Build: PASS
-Tests: PASS
-```
-
-The changes are now in the working tree, ready for Claude to commit when the user asks.
-
-### On Failure (max 2 retries)
-1. Read the agent output (or VERIFY report) to understand what went wrong
-2. Tighten the prompt — add more context, be more specific about the fix
-3. Re-dispatch with the improved prompt (skip EXPLORE on retry — context is established)
-4. If still failing after 2 retries, escalate to the user:
-   ```
-   Codex agent failed after 2 attempts. Issue: [description]
-   Options:
-   1. I'll make this change directly (exit codex-first for this edit)
-   2. Provide more context for another attempt
-   3. Skip this change
-   ```
+---
 
 ## Notes
 
-- This skill is for **single-task dispatch**. For multi-task parallel execution from a plan, use `clavain:codex-delegation` which wraps `interclode:delegate`.
-- Every invocation is independent — no session state between dispatches.
-- Claude orchestrates; Codex reads, writes, and verifies. Claude's role is judgment — choosing what to build, crafting prompts, deciding if results are acceptable.
-- EXPLORE and VERIFY agents use `-s read-only` sandbox — they cannot modify files.
-- Total agents per Full dispatch: 3 (explore + implement + verify). Typical wall time: ~2 minutes.
+- **Megaprompt is the default.** It uses ~40-60K Codex tokens but only ~6K Claude tokens per task.
+- **Self-retry is built into the megaprompt.** The agent fixes its own build/test failures before reporting. Claude only sees the final verdict.
+- **Parallel dispatch works.** Multiple independent megaprompt agents can run simultaneously in a single Bash tool call message.
+- For multi-task parallel execution from a plan, use `clavain:codex-delegation` which wraps `interclode:delegate`.
+- Claude's only essential jobs: craft the prompt, dispatch, read the verdict, decide if it's acceptable, commit.
