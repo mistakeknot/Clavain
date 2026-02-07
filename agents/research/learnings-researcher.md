@@ -132,7 +132,7 @@ For each relevant document, return a summary in this format:
 
 ## Frontmatter Schema Reference
 
-Reference the [yaml-schema.md](../../skills/compound-docs/references/yaml-schema.md) for the complete schema. Key enum values:
+Reference the [yaml-schema.md](../../skills/engineering-docs/references/yaml-schema.md) for the complete schema. Key enum values:
 
 **problem_type values:**
 - build_error, test_failure, runtime_error, performance_issue
@@ -141,10 +141,10 @@ Reference the [yaml-schema.md](../../skills/compound-docs/references/yaml-schema
 - best_practice, documentation_gap
 
 **component values:**
-- rails_model, rails_controller, rails_view, service_object
-- background_job, database, frontend_stimulus, hotwire_turbo
-- email_processing, brief_system, assistant, authentication
-- payments, development_workflow, testing_framework, documentation, tooling
+- model, controller, view, service_object
+- background_job, database, frontend, api
+- authentication, integration, cli, tui
+- development_workflow, testing_framework, documentation, tooling
 
 **root_cause values:**
 - missing_association, missing_include, missing_index, wrong_api

@@ -1,15 +1,15 @@
-# CORA Documentation Schema
+# Engineering Documentation Schema
 # This schema MUST be validated before writing any documentation file
 
 required_fields:
   module:
     type: string
-    description: "Module/area of CORA (e.g., 'Email Processing', 'Brief System', 'Authentication')"
+    description: "Module/area of the project (e.g., 'Data Processing', 'Authentication', 'CLI')"
     examples:
-      - "Email Processing"
-      - "Brief System"
-      - "Assistant"
+      - "Data Processing"
       - "Authentication"
+      - "API"
+      - "CLI"
 
   date:
     type: string
@@ -19,16 +19,16 @@ required_fields:
   problem_type:
     type: enum
     values:
-      - build_error          # Rails, bundle, compilation errors
+      - build_error          # Compilation, dependency, build system errors
       - test_failure         # Test failures, flaky tests
       - runtime_error        # Exceptions, crashes during execution
       - performance_issue    # Slow queries, memory issues, N+1 queries
       - database_issue       # Migration, query, schema problems
       - security_issue       # Authentication, authorization, XSS, SQL injection
-      - ui_bug               # Frontend, Stimulus, Turbo issues
+      - ui_bug               # Frontend, TUI, or UI issues
       - integration_issue    # External service, API integration problems
       - logic_error          # Business logic bugs
-      - developer_experience # DX issues: workflow, tooling, seed data, dev setup
+      - developer_experience # DX issues: workflow, tooling, dev setup
       - workflow_issue       # Development process, missing steps, unclear practices
       - best_practice        # Documenting patterns and practices to follow
       - documentation_gap    # Missing or inadequate documentation
@@ -37,24 +37,23 @@ required_fields:
   component:
     type: enum
     values:
-      - rails_model          # ActiveRecord models
-      - rails_controller     # ActionController
-      - rails_view           # ERB templates, ViewComponent
-      - service_object       # Custom service classes
-      - background_job       # Sidekiq, Active Job
-      - database             # PostgreSQL, migrations, schema
-      - frontend_stimulus    # Stimulus JS controllers
-      - hotwire_turbo        # Turbo Streams, Turbo Drive
-      - email_processing     # Email handling, mailers
-      - brief_system         # Brief generation, summarization
-      - assistant            # AI assistant, prompts
-      - authentication       # Devise, user auth
-      - payments             # Stripe, billing
-      - development_workflow # Dev process, seed data, tooling
-      - testing_framework    # Test setup, fixtures, VCR
+      - model                # Data models, ORM entities
+      - controller           # Request handlers, route controllers
+      - view                 # Templates, UI components
+      - service_object       # Service classes, business logic
+      - background_job       # Async workers, job queues
+      - database             # Database engine, migrations, schema
+      - frontend             # Frontend UI, JavaScript, CSS
+      - api                  # API endpoints, REST/GraphQL handlers
+      - cli                  # Command-line interface
+      - tui                  # Terminal UI (Bubble Tea, etc.)
+      - authentication       # Auth, sessions, tokens
+      - integration          # External service integrations
+      - development_workflow # Dev process, tooling
+      - testing_framework    # Test setup, fixtures, mocks
       - documentation        # README, guides, inline docs
       - tooling              # Scripts, generators, CLI tools
-    description: "CORA component involved"
+    description: "Project component involved"
 
   symptoms:
     type: array[string]
@@ -62,30 +61,30 @@ required_fields:
     max_items: 5
     description: "Observable symptoms (error messages, visual issues, crashes)"
     examples:
-      - "N+1 query detected in brief generation"
-      - "Brief emails not appearing in summary"
-      - "Turbo Stream response returns 404"
+      - "N+1 query detected in data generation"
+      - "API response returns 404 unexpectedly"
+      - "TUI layout overflow on terminal resize"
 
   root_cause:
     type: enum
     values:
-      - missing_association  # Incorrect Rails associations
+      - missing_association  # Incorrect data relationships
       - missing_include      # Missing eager loading (N+1)
       - missing_index        # Database performance issue
-      - wrong_api            # Using deprecated/incorrect Rails API
+      - wrong_api            # Using deprecated/incorrect API
       - scope_issue          # Incorrect query scope or filtering
-      - thread_violation     # Real-time unsafe operation
+      - thread_violation     # Concurrency-unsafe operation
       - async_timing         # Async/background job timing
       - memory_leak          # Memory leak or excessive allocation
       - config_error         # Configuration or environment issue
       - logic_error          # Algorithm/business logic bug
       - test_isolation       # Test isolation or fixture issue
-      - missing_validation   # Missing model validation
+      - missing_validation   # Missing input validation
       - missing_permission   # Authorization check missing
       - missing_workflow_step # Skipped or undocumented workflow step
       - inadequate_documentation # Missing or unclear documentation
       - missing_tooling      # Lacking helper scripts or automation
-      - incomplete_setup     # Missing seed data, fixtures, or config
+      - incomplete_setup     # Missing test data, fixtures, or config
     description: "Fundamental cause of the problem"
 
   resolution_type:
@@ -95,12 +94,12 @@ required_fields:
       - migration            # Fixed by database migration
       - config_change        # Fixed by changing configuration
       - test_fix             # Fixed by correcting tests
-      - dependency_update    # Fixed by updating gem/dependency
+      - dependency_update    # Fixed by updating dependency
       - environment_setup    # Fixed by environment configuration
       - workflow_improvement # Improved development workflow or process
       - documentation_update # Added or updated documentation
       - tooling_addition     # Added helper script or automation
-      - seed_data_update     # Updated db/seeds.rb or fixtures
+      - seed_data_update     # Updated test/seed data
     description: "Type of fix applied"
 
   severity:
@@ -113,10 +112,10 @@ required_fields:
     description: "Impact severity"
 
 optional_fields:
-  rails_version:
+  framework_version:
     type: string
     pattern: '^\d+\.\d+\.\d+$'
-    description: "Rails version where this was encountered (e.g., '7.1.0')"
+    description: "Framework/language version where this was encountered (e.g., '1.22.0')"
 
   related_components:
     type: array[string]
@@ -130,10 +129,10 @@ optional_fields:
       - "n-plus-one"
       - "eager-loading"
       - "test-isolation"
-      - "turbo-stream"
+      - "concurrency"
 
 validation_rules:
-  - "module must be a valid CORA module name"
+  - "module must be a valid project module name"
   - "date must be in YYYY-MM-DD format"
   - "problem_type must match one of the enum values"
   - "component must match one of the enum values"
@@ -145,15 +144,15 @@ validation_rules:
 
 # Example valid front matter:
 # ---
-# module: Email Processing
+# module: Data Processing
 # date: 2025-11-12
 # problem_type: performance_issue
-# component: rails_model
+# component: model
 # symptoms:
-#   - N+1 query when loading email threads
-#   - Brief generation taking >5 seconds
+#   - N+1 query when loading related records
+#   - Data generation taking >5 seconds
 # root_cause: missing_include
-# rails_version: 7.1.2
+# framework_version: 1.22.0
 # resolution_type: code_fix
 # severity: high
 # tags: [n-plus-one, eager-loading, performance]
@@ -167,9 +166,8 @@ validation_rules:
 # component: development_workflow
 # symptoms:
 #   - No example data for new feature in development
-#   - Rails db:seed doesn't demonstrate new capabilities
+#   - Test fixtures don't demonstrate new capabilities
 # root_cause: incomplete_setup
-# rails_version: 7.1.2
 # resolution_type: seed_data_update
 # severity: low
 # tags: [seed-data, dx, workflow]

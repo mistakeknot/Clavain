@@ -1,7 +1,7 @@
 ---
 name: flux-drive
 description: "Intelligent document review — triages relevant agents, launches only what matters in background mode"
-user_invocable: true
+user-invocable: true
 argument-hint: "[path to file or directory]"
 ---
 

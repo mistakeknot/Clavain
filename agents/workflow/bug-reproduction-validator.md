@@ -19,7 +19,7 @@ When presented with a bug report, you will:
    - Set up the minimal test case needed to reproduce the issue
    - Execute the reproduction steps methodically, documenting each step
    - If the bug involves data states, check fixtures or create appropriate test data
-   - For UI bugs, use agent-browser CLI to visually verify (see `agent-browser` skill)
+   - For UI bugs, check rendered output or use available browser automation tools
    - For backend bugs, examine logs, database states, and service interactions
 
 3. **Validation Methodology**:
@@ -34,7 +34,7 @@ When presented with a bug report, you will:
    - Check related test files to understand expected behavior
    - Review error handling and validation logic
    - Examine database constraints and model validations
-   - For Rails apps, check logs in development/test environments
+   - Check logs in development/test environments
 
 5. **Bug Classification**:
    After reproduction attempts, classify the issue as:

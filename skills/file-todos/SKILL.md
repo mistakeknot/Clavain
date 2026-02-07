@@ -185,8 +185,8 @@ Work logs serve as:
 | Trigger | Flow | Tool |
 |---------|------|------|
 | Code review | `/clavain:review` → Findings → `/triage` → Todos | Review agent + skill |
-| PR comments | `/resolve_pr_parallel` → Individual fixes → Todos | gh CLI + skill |
-| Code TODOs | `/resolve_todo_parallel` → Fixes + Complex todos | Agent + skill |
+| PR comments | `/resolve-pr-parallel` → Individual fixes → Todos | gh CLI + skill |
+| Code TODOs | `/resolve-todo-parallel` → Fixes + Complex todos | Agent + skill |
 | Planning | Brainstorm → Create todo → Work → Complete | Skill |
 | Feedback | Discussion → Create todo → Triage → Work | Skill + slash |
 
@@ -238,10 +238,9 @@ grep -r "payment" todos/
 - Standalone markdown files with YAML frontmatter
 - Used by humans and agents
 
-**Rails Todo model:**
-- Database model in `app/models/todo.rb`
-- User-facing feature in the application
-- Active Record CRUD operations
+**Application Todo model (if applicable):**
+- Database-backed model for user-facing todo features
+- Standard CRUD operations via ORM
 - Different from this file-based system
 
 **TodoWrite tool:**

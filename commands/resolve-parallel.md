@@ -1,5 +1,5 @@
 ---
-name: resolve_parallel
+name: resolve-parallel
 description: Resolve all TODO comments using parallel processing
 argument-hint: "[optional: specific TODO pattern or file]"
 ---

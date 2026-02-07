@@ -1,5 +1,5 @@
 ---
-name: resolve_pr_parallel
+name: resolve-pr-parallel
 description: Resolve all PR comments using parallel processing
 argument-hint: "[optional: PR number or current PR]"
 ---
@@ -21,7 +21,7 @@ Get all unresolved comments for PR
 
 ```bash
 gh pr status
-bin/get-pr-comments PR_NUMBER
+gh pr view PR_NUMBER --comments
 ```
 
 ### 2. Plan
@@ -32,7 +32,7 @@ Create a TodoWrite list of all unresolved items grouped by type.
 
 Spawn a pr-comment-resolver agent for each unresolved item in parallel.
 
-So if there are 3 comments, it will spawn 3 pr-comment-resolver agents in parallel. liek this
+So if there are 3 comments, it will spawn 3 pr-comment-resolver agents in parallel. Like this:
 
 1. Task pr-comment-resolver(comment1)
 2. Task pr-comment-resolver(comment2)
@@ -43,7 +43,7 @@ Always run all in parallel subagents/Tasks for each Todo item.
 ### 4. Commit & Resolve
 
 - Commit changes
-- Run bin/resolve-pr-thread THREAD_ID_1
 - Push to remote
+- Use `gh api` to resolve PR review threads if applicable
 
-Last, check bin/get-pr-comments PR_NUMBER again to see if all comments are resolved. They should be, if not, repeat the process from 1.
+Last, check `gh pr view PR_NUMBER --comments` again to see if all comments are resolved. They should be, if not, repeat the process from step 1.

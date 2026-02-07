@@ -1,5 +1,5 @@
 ---
-name: generate_command
+name: generate-command
 description: Create a new custom slash command following conventions and best practices
 argument-hint: "[command purpose and requirements]"
 ---
@@ -116,8 +116,8 @@ Implement #$ARGUMENTS following these steps:
    - Ensure code follows CLAUDE.md conventions
 
 4. Verify
-   - Run tests: `bin/rails test`
-   - Run linter: `bundle exec standardrb`
+   - Run tests (using the project's test command)
+   - Run linter (using the project's linter)
    - Check changes with git diff
 
 5. Commit (optional)

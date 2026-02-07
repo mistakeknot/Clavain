@@ -77,19 +77,19 @@ User-invoked slash commands:
 | `/clavain:work` | Execute a plan |
 | `/clavain:review` | Multi-agent code review |
 | `/clavain:execute-plan` | Execute plan in batches |
-| `/clavain:plan_review` | Parallel plan review |
+| `/clavain:plan-review` | Parallel plan review |
 | `/clavain:quality-gates` | Auto-select reviewers |
 | `/clavain:repro-first-debugging` | Disciplined bug investigation |
 | `/clavain:migration-safety` | Data migration risk assessment |
 | `/clavain:learnings` | Document solved problems |
 | `/clavain:changelog` | Generate changelog |
 | `/clavain:triage` | Categorize findings |
-| `/clavain:resolve_parallel` | Resolve TODOs in parallel |
-| `/clavain:resolve_pr_parallel` | Resolve PR comments in parallel |
-| `/clavain:resolve_todo_parallel` | Resolve file TODOs in parallel |
+| `/clavain:resolve-parallel` | Resolve TODOs in parallel |
+| `/clavain:resolve-pr-parallel` | Resolve PR comments in parallel |
+| `/clavain:resolve-todo-parallel` | Resolve file TODOs in parallel |
 | `/clavain:agent-native-audit` | Agent-native architecture review |
 | `/clavain:create-agent-skill` | Create skills/agents |
-| `/clavain:generate_command` | Generate new commands |
+| `/clavain:generate-command` | Generate new commands |
 | `/clavain:heal-skill` | Fix broken skills |
 | `/clavain:upstream-sync` | Check upstream repos for updates |
 

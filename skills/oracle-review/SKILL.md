@@ -123,12 +123,12 @@ oracle session <id> --render         # Replay a session
 
 **Pairs with:**
 - `writing-plans` — Review plans before execution
-- `plan_review` command — Use alongside Clavain's own multi-agent review for model diversity
+- `plan-review` command — Use alongside Clavain's own multi-agent review for model diversity
 - `brainstorming` — Get Oracle's take on approach options
 - `agent-mail-coordination` — Share Oracle results across agents via Agent Mail messages (attach review output to a thread)
 
 **Example workflow:**
 1. Write a plan with `/clavain:write-plan`
-2. Review with Clavain agents: `/clavain:plan_review`
+2. Review with Clavain agents: `/clavain:plan-review`
 3. For high-stakes plans, also get Oracle review for model diversity
 4. Synthesize both reviews, resolve conflicts, then execute

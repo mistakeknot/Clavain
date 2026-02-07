@@ -4,7 +4,7 @@ description: Document a recently solved problem to build institutional knowledge
 argument-hint: "[optional: brief context about the fix]"
 ---
 
-# /compound
+# /learnings
 
 Coordinate multiple subagents working in parallel to document a recently solved problem.
 
@@ -65,8 +65,7 @@ This command launches multiple specialized subagents IN PARALLEL to maximize eff
    Based on problem type detected, automatically invoke applicable agents:
    - **performance_issue** → `performance-oracle`
    - **security_issue** → `security-sentinel`
-   - **database_issue** → `data-integrity-guardian`
-   - **test_failure** → `cora-test-reviewer`
+   - **database_issue** → `data-integrity-reviewer`
    - Any code-heavy issue → `code-simplicity-reviewer` + language-specific reviewer
 
 ## What It Captures
@@ -170,7 +169,7 @@ Build → Test → Find Issue → Research → Improve → Document → Validate
 
 ## Routes To
 
-`compound-docs` skill
+`engineering-docs` skill
 
 ## Applicable Specialized Agents
 
@@ -184,13 +183,12 @@ Based on problem type, these agents can enhance documentation:
 ### Specific Domain Experts
 - **performance-oracle**: Analyzes performance_issue category solutions
 - **security-sentinel**: Reviews security_issue solutions for vulnerabilities
-- **cora-test-reviewer**: Creates test cases for prevention strategies
-- **data-integrity-guardian**: Reviews database_issue migrations and queries
+- **data-integrity-reviewer**: Reviews database_issue migrations and queries
 
 ### Enhancement & Documentation
 - **best-practices-researcher**: Enriches solution with industry best practices
 - **code-simplicity-reviewer**: Reviews documentation style and clarity
-- **framework-docs-researcher**: Links to Rails/gem documentation references
+- **framework-docs-researcher**: Links to framework documentation references
 
 ### When to Invoke
 - **Auto-triggered** (optional): Agents can run post-documentation for enhancement
@@ -198,5 +196,4 @@ Based on problem type, these agents can enhance documentation:
 
 ## Related Commands
 
-- `/research [topic]` - Deep investigation (searches docs/solutions/ for patterns)
-- `/clavain:write-plan` - Planning workflow (references documented solutions)
+- `/clavain:writing-plans` - Planning workflow (references documented solutions)

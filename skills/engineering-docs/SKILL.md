@@ -11,7 +11,7 @@ preconditions:
   - Solution has been verified working
 ---
 
-# compound-docs Skill
+# engineering-docs Skill
 
 **Purpose:** Automatically document solved problems to build searchable institutional knowledge with category-based organization (enum-validated problem types).
 
@@ -38,7 +38,7 @@ This skill captures problem solutions immediately after confirmation, creating s
 - "problem solved"
 - "that did it"
 
-**OR manual:** `/doc-fix` command
+**OR manual:** `/clavain:learnings` command
 
 **Non-trivial problems only:**
 
@@ -70,19 +70,17 @@ Extract from conversation history:
 
 **Environment details:**
 
-- Rails version
-- Stage (0-6 or post-implementation)
+- Language/framework version
 - OS version
 - File/line references
 
-**BLOCKING REQUIREMENT:** If critical context is missing (module name, exact error, stage, or resolution steps), ask user and WAIT for response before proceeding to Step 3:
+**BLOCKING REQUIREMENT:** If critical context is missing (module name, exact error, or resolution steps), ask user and WAIT for response before proceeding to Step 3:
 
 ```
 I need a few details to document this properly:
 
 1. Which module had this issue? [ModuleName]
 2. What was the exact error message or symptom?
-3. What stage were you in? (0-6 or post-implementation)
 
 [Continue after user provides details]
 ```
@@ -272,7 +270,7 @@ What's next?
 1. Continue workflow (recommended)
 2. Add to Required Reading - Promote to critical patterns (critical-patterns.md)
 3. Link related issues - Connect to similar problems
-4. Add to existing skill - Add to a learning skill (e.g., hotwire-native)
+4. Add to existing skill - Add to a learning skill (e.g., engineering-docs)
 5. Create new skill - Extract into new learning skill
 6. View documentation - See what was captured
 7. Other
@@ -290,7 +288,7 @@ What's next?
 User selects this when:
 - System made this mistake multiple times across different modules
 - Solution is non-obvious but must be followed every time
-- Foundational requirement (Rails, Rails API, threading, etc.)
+- Foundational requirement (threading, APIs, core architecture, etc.)
 
 Action:
 1. Extract pattern from the documentation
@@ -311,14 +309,14 @@ Action:
 User selects this when the documented solution relates to an existing learning skill:
 
 Action:
-1. Prompt: "Which skill? (hotwire-native, etc.)"
+1. Prompt: "Which skill? (engineering-docs, etc.)"
 2. Determine which reference file to update (resources.md, patterns.md, or examples.md)
 3. Add link and brief description to appropriate section
 4. Confirm: "✓ Added to [skill-name] skill in [file]"
 
 Example: For Hotwire Native Tailwind variants solution:
-- Add to `hotwire-native/references/resources.md` under "Project-Specific Resources"
-- Add to `hotwire-native/references/examples.md` with link to solution doc
+- Add to `engineering-docs/references/resources.md` under "Project-Specific Resources"
+- Add to `engineering-docs/references/examples.md` with link to solution doc
 
 **Option 5: Create new skill**
 
@@ -326,7 +324,7 @@ User selects this when the solution represents the start of a new learning domai
 
 Action:
 1. Prompt: "What should the new skill be called? (e.g., stripe-billing, email-processing)"
-2. Run `python3 .claude/skills/skill-creator/scripts/init_skill.py [skill-name]`
+2. Create the skill directory structure with SKILL.md following plugin conventions
 3. Create initial reference files with this solution as first example
 4. Confirm: "✓ Created new [skill-name] skill with this solution as first example"
 
@@ -348,7 +346,7 @@ Action:
 ## Integration Points
 
 **Invoked by:**
-- /compound command (primary interface)
+- /clavain:learnings command (primary interface)
 - Manual invocation in conversation after solution confirmed
 - Can be triggered by detecting confirmation phrases like "that worked", "it's fixed", etc.
 
@@ -456,8 +454,8 @@ Documentation is successful when ALL of the following are true:
    - Module: Brief System
    - Symptom: Brief generation taking >5 seconds, N+1 query when loading email threads
    - Failed attempts: Added pagination (didn't help), checked background job performance
-   - Solution: Added eager loading with `includes(:emails)` on Brief model
-   - Root cause: Missing eager loading causing separate database query per email thread
+   - Solution: Added eager loading to preload related records
+   - Root cause: Missing eager loading causing separate database query per record
 3. **Check existing:** No similar issue found
 4. **Generate filename:** `n-plus-one-brief-generation-BriefSystem-20251110.md`
 5. **Validate YAML:**
@@ -465,7 +463,7 @@ Documentation is successful when ALL of the following are true:
    module: Brief System
    date: 2025-11-10
    problem_type: performance_issue
-   component: rails_model
+   component: model
    symptoms:
      - "N+1 query when loading email threads"
      - "Brief generation taking >5 seconds"
@@ -490,7 +488,7 @@ What's next?
 1. Continue workflow (recommended)
 2. Add to Required Reading - Promote to critical patterns (critical-patterns.md)
 3. Link related issues - Connect to similar problems
-4. Add to existing skill - Add to a learning skill (e.g., hotwire-native)
+4. Add to existing skill - Add to a learning skill (e.g., engineering-docs)
 5. Create new skill - Extract into new learning skill
 6. View documentation - See what was captured
 7. Other
