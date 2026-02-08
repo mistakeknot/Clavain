@@ -40,10 +40,11 @@ Launch these core agents in parallel:
 6. Task agent-native-reviewer(PR content)
 
 **Language-specific reviewers** (based on file extensions):
-- `.go` files → Task kieran-go-reviewer
-- `.py` files → Task kieran-python-reviewer
-- `.ts/.tsx` files → Task kieran-typescript-reviewer
-- `.sh` files → Task kieran-shell-reviewer
+- `.go` files → Task go-reviewer
+- `.py` files → Task python-reviewer
+- `.ts/.tsx` files → Task typescript-reviewer
+- `.sh` files → Task shell-reviewer
+- `.rs` files → Task rust-reviewer
 
 **Risk-specific reviewers** (conditional):
 - Async/concurrent code → Task concurrency-reviewer

@@ -15,11 +15,13 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 **In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.
 
+**In Codex CLI:** Install Clavain skills with `bash ~/.codex/clavain/scripts/install-codex.sh install`. Codex discovers them from `~/.agents/skills/clavain/` on startup, so restart Codex after install.
+
 **In other environments:** Check your platform's documentation for how skills are loaded.
 
 # Using Clavain
 
-Clavain provides 34 skills, 28 agents, and 27 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 34 skills, 29 agents, and 27 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -36,7 +38,7 @@ Clavain provides 34 skills, 28 agents, and 27 commands. To avoid overwhelm, use 
 | **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents) |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, clodex-toggle, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
-| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit | kieran-{go,python,typescript,shell}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
+| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit | {go,python,typescript,shell,rust}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage | deployment-verification-agent |
 | **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
@@ -57,10 +59,11 @@ Clavain provides 34 skills, 28 agents, and 27 commands. To avoid overwhelm, use 
 
 | Language | Agent |
 |----------|-------|
-| Go (.go) | kieran-go-reviewer |
-| Python (.py) | kieran-python-reviewer |
-| TypeScript (.ts/.tsx) | kieran-typescript-reviewer |
-| Shell (.sh/.bash) | kieran-shell-reviewer |
+| Go (.go) | go-reviewer |
+| Python (.py) | python-reviewer |
+| TypeScript (.ts/.tsx) | typescript-reviewer |
+| Shell (.sh/.bash) | shell-reviewer |
+| Rust (.rs) | rust-reviewer |
 | Any async/concurrent code | concurrency-reviewer |
 | Any with security surface | security-sentinel |
 | Any with perf concerns | performance-oracle |

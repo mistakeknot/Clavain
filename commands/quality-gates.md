@@ -36,10 +36,11 @@ Based on analysis, invoke the appropriate agents in parallel:
 - `code-simplicity-reviewer` — every change benefits from simplicity check
 
 **Language-specific (based on file extensions):**
-- `.go` files → `kieran-go-reviewer`
-- `.py` files → `kieran-python-reviewer`
-- `.ts/.tsx` files → `kieran-typescript-reviewer`
-- `.sh/.bash` files → `kieran-shell-reviewer`
+- `.go` files → `go-reviewer`
+- `.py` files → `python-reviewer`
+- `.ts/.tsx` files → `typescript-reviewer`
+- `.sh/.bash` files → `shell-reviewer`
+- `.rs` files → `rust-reviewer`
 
 **Risk-based (based on file paths and content):**
 - Auth/crypto/input handling/secrets → `security-sentinel`
@@ -56,7 +57,7 @@ Launch selected agents using the Task tool with `run_in_background: true`:
 
 ```
 Task(code-simplicity-reviewer): "Review these changes for unnecessary complexity"
-Task(kieran-go-reviewer): "Review Go changes for idioms and quality"
+Task(go-reviewer): "Review Go changes for idioms and quality"
 Task(security-sentinel): "Scan for security vulnerabilities in auth changes"
 ```
 
@@ -73,7 +74,7 @@ Collect all agent findings and present:
 
 ### Agents Invoked
 1. code-simplicity-reviewer — [pass/findings]
-2. kieran-go-reviewer — [pass/findings]
+2. go-reviewer — [pass/findings]
 3. security-sentinel — [pass/findings]
 
 ### Findings Summary

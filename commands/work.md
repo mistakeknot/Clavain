@@ -137,7 +137,7 @@ This command takes a work document (plan, specification, or todo file) and execu
    Use for complex, risky, or large changes:
 
    - **code-simplicity-reviewer**: Check for unnecessary complexity
-   - **kieran-go-reviewer** / **kieran-python-reviewer** / **kieran-typescript-reviewer**: Language-specific review
+   - **go-reviewer** / **python-reviewer** / **typescript-reviewer** / **shell-reviewer** / **rust-reviewer**: Language-specific review
    - **performance-oracle**: Check for performance issues
    - **security-sentinel**: Scan for security vulnerabilities
 

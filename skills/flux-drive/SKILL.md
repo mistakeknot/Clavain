@@ -193,6 +193,13 @@ These are general-purpose reviewers without codebase-specific knowledge. Only us
 | security-sentinel | clavain:review:security-sentinel | OWASP, vulnerabilities, auth |
 | pattern-recognition-specialist | clavain:review:pattern-recognition-specialist | Anti-patterns, duplication, consistency |
 | data-integrity-reviewer | clavain:review:data-integrity-reviewer | Migrations, data safety, transactions |
+| concurrency-reviewer | clavain:review:concurrency-reviewer | Race conditions, async bugs, goroutine/channel lifecycle |
+| deployment-verification-agent | clavain:review:deployment-verification-agent | Pre/post-deploy checklists, rollback, migration safety |
+| go-reviewer | clavain:review:go-reviewer | Go code quality, idioms, error handling |
+| python-reviewer | clavain:review:python-reviewer | Python code quality, Pythonic patterns, type hints |
+| typescript-reviewer | clavain:review:typescript-reviewer | TypeScript code quality, type safety, React patterns |
+| shell-reviewer | clavain:review:shell-reviewer | Shell script safety, quoting, portability |
+| rust-reviewer | clavain:review:rust-reviewer | Rust code quality, ownership, unsafe soundness |
 
 ### Tier 4 — Cross-AI (Oracle)
 

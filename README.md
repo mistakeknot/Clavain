@@ -18,6 +18,22 @@ claude plugin install clavain@interagency-marketplace
 claude --plugin-dir /path/to/Clavain
 ```
 
+## Codex Install
+
+Clavain can also run in Codex via native skill discovery and generated prompt wrappers.
+
+Quick path:
+
+```bash
+git clone https://github.com/mistakeknot/Clavain.git ~/.codex/clavain
+bash ~/.codex/clavain/scripts/install-codex.sh install
+```
+
+Then restart Codex.
+
+Detailed guide: `docs/README.codex.md`  
+Single-file bootstrap target: `.codex/INSTALL.md`
+
 ## My Workflow
 
 For simple requests, I use `/lfg add user export feature` and Clavain orchestrates Claude Code via hooks, commands, skills, and subagents to brainstorm the approach, write a plan, review the plan with multiple subagents, implement the code, review the implementation, resolve any issues, and run quality gates. While Clavain runs through all of these phases, I focus on the usual suspects: product strategy, user pain points, and finding new [leverage points](https://donellameadows.org/archives/leverage-points-places-to-intervene-in-a-system/).
@@ -223,7 +239,7 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 Clavain is opinionated but not rigid. A few things worth knowing:
 
-**Tier 2 agents are project-specific.** `flux-drive` selects language reviewers based on your tech stack. If you're working in a language that doesn't have a Kieran reviewer (Rust, Java, etc.), it skips that tier gracefully.
+**Tier 2 agents are project-specific.** `flux-drive` selects language reviewers based on your tech stack. If you're working in a language that doesn't have a language reviewer (Java, etc.), it skips that tier gracefully.
 
 **Skills can be overridden.** If you disagree with how `test-driven-development` works, you can create your own skill with the same name in a local plugin that loads after Clavain. Last-loaded wins.
 
