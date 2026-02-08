@@ -203,6 +203,73 @@ bash -n scripts/upstream-check.sh && echo "Upstream check OK"
 bash scripts/upstream-check.sh 2>&1; echo "Exit: $?"  # 0=changes, 1=no changes, 2=error
 ```
 
+## Modpack — Companion Plugins
+
+Clavain is a modpack: an opinionated integration layer that configures companion plugins into a cohesive engineering rig. It doesn't duplicate their capabilities — it routes to them and wires them together.
+
+### Required
+
+These must be installed for Clavain to function fully.
+
+| Plugin | Source | Why Required |
+|--------|--------|-------------|
+| **context7** | claude-plugins-official | Runtime doc fetching. Clavain's MCP server. Skills use it to pull upstream docs without bundling them. |
+| **gurgeh-plugin** | interagency-marketplace | Codebase-aware T1 agents (fd-architecture, fd-code-quality, fd-security, fd-performance, fd-user-experience). Powers `/flux-drive`. |
+| **interclode** | interagency-marketplace | Codex CLI dispatch. Powers codex-first mode (`/clodex`), `/codex-delegation`, parallel agent execution. |
+| **interpeer** | interagency-marketplace | Cross-AI review via Oracle (GPT-5.2 Pro). Used by `/review` and `/flux-drive` for multi-model perspective. |
+| **explanatory-output-style** | claude-plugins-official | Educational insights in output. Injected via SessionStart hook. |
+
+### Recommended
+
+These enhance the rig significantly but aren't hard dependencies.
+
+| Plugin | Source | What It Adds |
+|--------|--------|-------------|
+| **agent-sdk-dev** | claude-plugins-official | Agent SDK scaffolding: `/new-sdk-app` command, Python + TS verifier agents. |
+| **plugin-dev** | claude-plugins-official | Plugin development: 7 skills, 3 agents including agent-creator and skill-reviewer. |
+| **interdoc** | interagency-marketplace | AGENTS.md generation for any repo. |
+| **auracoil** | interagency-marketplace | GPT-5.2 Pro review of AGENTS.md specifically. |
+| **tool-time** | interagency-marketplace | Tool usage analytics across sessions. |
+| **security-guidance** | claude-plugins-official | Security warning hooks on file edits. Complements Clavain's security-sentinel agent. |
+| **serena** | claude-plugins-official | Semantic code analysis via LSP-like tools. Different tool class from Clavain's agents. |
+
+### Infrastructure (language servers)
+
+Enable based on which languages you work with.
+
+| Plugin | Language |
+|--------|----------|
+| **gopls-lsp** | Go |
+| **pyright-lsp** | Python |
+| **typescript-lsp** | TypeScript |
+| **rust-analyzer-lsp** | Rust |
+
+### Conditional (domain-specific)
+
+| Plugin | Enable When |
+|--------|------------|
+| **supabase** | Working with Supabase backends |
+| **vercel** | Deploying to Vercel |
+| **tldrs** + **tldr-swinton** | Hitting context limits, want token-efficient exploration |
+| **tuivision** | Building or testing terminal UI apps |
+
+### Conflicts — Disabled by Clavain
+
+These plugins overlap with Clavain's opinionated equivalents. Keeping both causes duplicate agents in the Task tool roster and confusing routing.
+
+| Plugin | Clavain Replacement | Status |
+|--------|-------------------|--------|
+| code-review | `/review` + `/flux-drive` + 15 review agents | **OFF** |
+| pr-review-toolkit | Same 6 agent types exist in Clavain's review roster | **OFF** |
+| code-simplifier | `code-simplicity-reviewer` agent | **OFF** |
+| commit-commands | `landing-a-change` skill | **OFF** |
+| feature-dev | `/work` + `/lfg` + `/brainstorm` | **OFF** |
+| claude-md-management | `engineering-docs` skill | **OFF** |
+| frontend-design | `distinctive-design` skill | **OFF** |
+| hookify | Clavain manages hooks directly | **OFF** |
+
+Full audit rationale: `docs/plugin-audit.md`
+
 ## Known Constraints
 
 - **No build step** — pure markdown/JSON/bash plugin, nothing to compile
