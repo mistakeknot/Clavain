@@ -23,13 +23,13 @@ Conduct a comprehensive review of the codebase against agent-native architecture
 
 ### Step 1: Load the Agent-Native Skill
 
-First, invoke the agent-native-architecture skill to understand all principles:
+First, load the agent-native-architecture skill to understand all principles. Use the Skill tool:
 
 ```
-/clavain:agent-native-architecture
+Skill: clavain:agent-native-architecture
 ```
 
-Select option 7 (action parity) to load the full reference material.
+Read the skill content to understand all 8 principles before proceeding.
 
 ### Step 2: Launch Parallel Sub-Agents
 
