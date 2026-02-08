@@ -1,12 +1,12 @@
 ---
-name: learnings
-description: Document a recently solved problem to build institutional knowledge
+name: compound
+description: Document a recently solved problem to compound your team's knowledge
 argument-hint: "[optional: brief context about the fix]"
 ---
 
-# /learnings
+# /compound
 
-Capture a recently solved problem as structured documentation.
+Capture a recently solved problem as structured documentation. Each documented solution compounds institutional knowledge — the first occurrence takes research, subsequent ones take minutes.
 
 ## Context
 

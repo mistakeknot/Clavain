@@ -82,7 +82,7 @@ Produce a structured summary:
 **Prevention:** [what would prevent similar bugs]
 ```
 
-If the root cause reveals a systemic issue, suggest capturing it via `/clavain:learnings`.
+If the root cause reveals a systemic issue, suggest capturing it via `/clavain:compound`.
 
 ## Key Agents Used
 

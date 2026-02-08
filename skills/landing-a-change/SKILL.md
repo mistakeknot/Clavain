@@ -107,7 +107,7 @@ Show `git diff --stat` and `git diff` for the user to review, then return to Ste
 
 If anything notable was learned during this work:
 
-- Run `/clavain:learnings` to document the solved problem
+- Run `/clavain:compound` to document the solved problem
 - Or note key insights in the project's memory files
 
 ## Integration

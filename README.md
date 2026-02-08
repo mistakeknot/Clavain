@@ -83,7 +83,7 @@ User-invoked slash commands:
 | `/clavain:quality-gates` | Auto-select reviewers |
 | `/clavain:repro-first-debugging` | Disciplined bug investigation |
 | `/clavain:migration-safety` | Data migration risk assessment |
-| `/clavain:learnings` | Document solved problems |
+| `/clavain:compound` | Document solved problems |
 | `/clavain:changelog` | Generate changelog |
 | `/clavain:triage` | Categorize findings |
 | `/clavain:resolve-parallel` | Resolve TODOs in parallel |

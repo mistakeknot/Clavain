@@ -35,7 +35,7 @@ This skill captures problem solutions immediately after confirmation, creating s
 - "problem solved"
 - "that did it"
 
-**OR manual:** `/clavain:learnings` command
+**OR manual:** `/clavain:compound` command
 
 **Non-trivial problems only:**
 
@@ -324,7 +324,7 @@ Action:
 ## Integration Points
 
 **Invoked by:**
-- /clavain:learnings command (primary interface)
+- /clavain:compound command (primary interface)
 - Manual invocation in conversation after solution confirmed
 - Can be triggered by detecting confirmation phrases like "that worked", "it's fixed", etc.
 

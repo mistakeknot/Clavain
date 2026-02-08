@@ -125,6 +125,6 @@ Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
 | `/clavain:changelog` | Generate changelog from recent commits |
 | `/clavain:triage [findings]` | Triage and categorize findings |
 | `/clavain:migration-safety [migration]` | Database migration safety review |
-| `/clavain:learnings` | Capture solved problem as documentation |
+| `/clavain:compound` | Capture solved problem as documentation |
 | `/clavain:upstream-sync` | Check upstream repos for updates, generate upgrade checklist |
 | `/clavain:setup` | Bootstrap modpack — install plugins, disable conflicts, verify MCP |
