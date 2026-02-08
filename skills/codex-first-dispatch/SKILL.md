@@ -1,6 +1,6 @@
 ---
 name: codex-first-dispatch
-description: Streamlined single-task Codex dispatch for codex-first mode. Lighter than interclode:delegate — skips multi-task planning and file overlap checks.
+description: Use when dispatching a single task to Codex in codex-first mode — streamlined dispatch that skips multi-task planning and file overlap checks
 ---
 
 # Codex-First Dispatch

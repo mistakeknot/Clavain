@@ -1,6 +1,6 @@
 ---
 name: flux-drive
-description: "Intelligent document review — triages relevant agents from a static roster, launches only what matters in background mode."
+description: Use when reviewing documents or codebases with multi-agent analysis — triages relevant agents from roster, launches only what matters in background mode
 ---
 
 # Flux Drive — Intelligent Document Review

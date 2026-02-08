@@ -1,6 +1,6 @@
 ---
 name: distinctive-design
-description: This skill should be used when creating distinctive, production-grade interfaces with high design quality. It applies when the user asks to build visual interfaces — web, TUI, native, or print. Generates creative, polished output that avoids generic AI aesthetics.
+description: Use when creating distinctive, production-grade interfaces with high design quality — web, TUI, native, or print. Generates creative, polished output that avoids generic AI aesthetics.
 ---
 
 This skill guides creation of distinctive, production-grade interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.
