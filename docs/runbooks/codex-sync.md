@@ -94,7 +94,7 @@ Rules:
 Required repository secrets (GitHub Actions):
 
 - `CODEX_AUTH_JSON` (for Codex CLI jobs)
-- `ANTHROPIC_API_KEY` (for Claude jobs)
+- `ANTHROPIC_API_KEY` (optional; only needed for Claude review commands)
 
 Populate `CODEX_AUTH_JSON` with the contents of a working `~/.codex/auth.json` from a machine where `codex login status` reports "Logged in using ChatGPT".
 

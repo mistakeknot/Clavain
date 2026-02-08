@@ -30,15 +30,10 @@ jobs:
 
       - name: Preflight required secrets
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: |
           set -euo pipefail
           missing=()
-
-          if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-            missing+=("ANTHROPIC_API_KEY")
-          fi
 
           if [[ -z "${CODEX_AUTH_JSON:-}" ]]; then
             missing+=("CODEX_AUTH_JSON")
@@ -72,15 +67,13 @@ jobs:
           chmod 600 ~/.codex/auth.json
           codex login status
 
-      # Step 2: Claude Code orchestrates the full sync
-      - name: Run upstream sync via Claude Code
-        uses: anthropics/claude-code-action@v1
+      # Step 2: Codex CLI orchestrates the full sync
+      - name: Run upstream sync via Codex CLI
         env:
-          INPUT_DRY_RUN: ${{ inputs.dry_run }}
           CODEX_HOME: /home/runner/.codex
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
+        run: |
+          set -euo pipefail
+          codex exec --sandbox workspace-write -C "$GITHUB_WORKSPACE" -o /tmp/codex-upstream-sync.md - <<'EOF'
             You are running an automated upstream sync for the Clavain plugin repository.
 
             ## Context
@@ -143,9 +136,9 @@ jobs:
             - Some fileMap values use glob patterns like `references/*` — expand these against the actual upstream directory listing
             - Always use `codex exec` for the actual file merge (not just Claude) — this gives us cross-model verification
             - If `codex` is not available in PATH, fall back to doing the merge yourself directly
-
-          claude_args: |
-            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git clone:*),Bash(git fetch:*),Bash(git diff:*),Bash(git log:*),Bash(git rev-parse:*),Bash(codex exec:*),Bash(ls:*),Bash(mkdir:*),Bash(cp:*)"
+          EOF
+          echo "=== Codex Upstream Sync Summary ==="
+          cat /tmp/codex-upstream-sync.md || true
 
       # Step 3: Check for changes and create PR
       - name: Check for changes
