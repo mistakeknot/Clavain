@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 32 skills, 23 agents, 25 commands, 3 hooks, 2 MCP servers |
+| Components | 31 skills, 23 agents, 26 commands, 4 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Architecture
@@ -17,7 +17,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 32 discipline skills
+├── skills/                        # 31 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -34,11 +34,12 @@ Clavain/
 │   ├── review/                    # 15 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
-├── commands/                      # 25 slash commands
-│   └── setup.md               # Modpack installer (+ 24 others)
+├── commands/                      # 26 slash commands
+│   └── setup.md               # Modpack installer (+ 25 others)
 ├── hooks/
-│   ├── hooks.json                 # Hook registration (SessionStart + SessionEnd)
+│   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
+│   ├── autopilot.sh               # Codex-first gate — denies Edit/Write when autopilot active
 │   ├── session-start.sh           # Context injection + upstream staleness warning
 │   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
@@ -173,6 +174,8 @@ When making changes, verify:
 - [ ] Agent `description` includes `<example>` blocks with `<commentary>`
 - [ ] Command `name` in frontmatter matches filename (minus `.md`)
 - [ ] `hooks/hooks.json` is valid JSON
+- [ ] `hooks/lib.sh` passes `bash -n` syntax check
+- [ ] `hooks/autopilot.sh` passes `bash -n` syntax check
 - [ ] `hooks/session-start.sh` passes `bash -n` syntax check
 - [ ] `hooks/agent-mail-register.sh` passes `bash -n` syntax check
 - [ ] `hooks/dotfiles-sync.sh` passes `bash -n` syntax check
@@ -196,6 +199,8 @@ python3 -c "import json; json.load(open('.claude-plugin/plugin.json')); print('M
 python3 -c "import json; json.load(open('hooks/hooks.json')); print('Hooks OK')"
 
 # Syntax check scripts
+bash -n hooks/lib.sh && echo "lib.sh OK"
+bash -n hooks/autopilot.sh && echo "autopilot.sh OK"
 bash -n hooks/session-start.sh && echo "session-start.sh OK"
 bash -n hooks/agent-mail-register.sh && echo "agent-mail-register.sh OK"
 bash -n hooks/dotfiles-sync.sh && echo "dotfiles-sync.sh OK"
