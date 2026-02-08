@@ -11,7 +11,8 @@
 
 set -euo pipefail
 
-SYNC_SCRIPT="/root/projects/dotfiles-sync/sync-dotfiles.sh"
+# Derive paths relative to the user's home directory
+SYNC_SCRIPT="${HOME}/projects/dotfiles-sync/sync-dotfiles.sh"
 
 # Skip if sync infrastructure doesn't exist
 if [[ ! -x "$SYNC_SCRIPT" ]]; then

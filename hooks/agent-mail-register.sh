@@ -13,6 +13,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=hooks/lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
 AGENT_MAIL_URL="${AGENT_MAIL_URL:-http://127.0.0.1:8765/mcp/}"
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-}"
 
@@ -92,17 +96,6 @@ try:
 except Exception as e:
     print(f'Agent Mail registered (details unavailable: {e})')
 " 2>/dev/null) || agent_info="Agent Mail registered (parse error)"
-
-# Escape for JSON embedding
-escape_for_json() {
-    local s="$1"
-    s="${s//\\/\\\\}"
-    s="${s//\"/\\\"}"
-    s="${s//$'\n'/\\n}"
-    s="${s//$'\r'/\\r}"
-    s="${s//$'\t'/\\t}"
-    printf '%s' "$s"
-}
 
 context_escaped=$(escape_for_json "$agent_info")
 

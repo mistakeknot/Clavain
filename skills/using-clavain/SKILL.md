@@ -19,7 +19,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 32 skills, 23 agents, and 24 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 32 skills, 23 agents, and 25 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -49,7 +49,7 @@ Clavain provides 32 skills, 23 agents, and 24 commands. To avoid overwhelm, use 
 | **Deploy** | — | deployment-verification-agent |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
-| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging, agent-mail-coordination, codex-first-dispatch | pr-comment-resolver |
+| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging, agent-mail-coordination, codex-first-dispatch, codex-delegation | pr-comment-resolver |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
 

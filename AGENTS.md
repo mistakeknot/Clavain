@@ -38,6 +38,7 @@ Clavain/
 │   └── setup.md               # Modpack installer (+ 24 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + SessionEnd)
+│   ├── lib.sh                     # Shared utilities (escape_for_json)
 │   ├── session-start.sh           # Context injection + upstream staleness warning
 │   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
