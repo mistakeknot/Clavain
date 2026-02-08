@@ -61,7 +61,7 @@ This command integrates with the GitHub Actions daily check:
 | Tool | GitHub Repo | Clavain Skill |
 |------|-------------|---------------|
 | Beads | `steveyegge/beads` | `beads-workflow` |
-| Oracle | `steipete/oracle` | `oracle-review` |
+| Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
 | MCP Agent Mail | `Dicklesworthstone/mcp_agent_mail` | `agent-mail-coordination` |
 | superpowers | `obra/superpowers` | multiple |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |

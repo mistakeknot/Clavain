@@ -16,7 +16,7 @@ Clavain bundles knowledge from several upstream tools. This skill tracks their r
 | Tool | Repo | Clavain Skills Affected |
 |------|------|------------------------|
 | Beads | `steveyegge/beads` | `beads-workflow` |
-| Oracle | `steipete/oracle` | `oracle-review` |
+| Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
 | MCP Agent Mail | `Dicklesworthstone/mcp_agent_mail` | `agent-mail-coordination` |
 | superpowers | `obra/superpowers` | Multiple (founding source) |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux-for-interactive-commands`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |
@@ -135,6 +135,6 @@ Fields: `synced_release` (latest tag or `"none"`), `synced_commit` (short SHA of
 
 **Pairs with:**
 - `beads-workflow` — Primary consumer of beads upstream changes
-- `oracle-review` — Primary consumer of oracle upstream changes
+- `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` — Primary consumers of oracle upstream changes
 - `agent-mail-coordination` — Primary consumer of agent-mail upstream changes
 - `developing-claude-code-plugins` — Upstream plugin patterns may evolve

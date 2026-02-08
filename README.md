@@ -2,7 +2,7 @@
 
 Clavain, named after one of the protagonists from Alastair Reynolds's [Revelation Space series](https://en.wikipedia.org/wiki/Revelation_Space_series), is a **highly** opinionated Claude Code plugin that encapsulates how I personally like to use Claude Code to build things. I do not think it is the best way for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own Claude Code experience.
 
-With 35 skills, 23 agents, 25 commands, 3 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I would probably recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavin against your actual historical workflow.
+With 34 skills, 23 agents, 27 commands, 3 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I would probably recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavin against your actual historical workflow.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -18,7 +18,7 @@ claude --plugin-dir /path/to/Clavain
 
 ## What's Included
 
-### Skills (35)
+### Skills (34)
 
 Process discipline skills that guide HOW you work:
 
@@ -38,7 +38,6 @@ Process discipline skills that guide HOW you work:
 | `requesting-code-review` | Dispatch reviewer subagents |
 | `receiving-code-review` | Handle review feedback |
 | `distinctive-design` | Anti-AI-slop visual aesthetic |
-| `oracle-review` | GPT-5.2 Pro cross-AI review |
 | `interpeer` | Auto-detecting Claude↔Codex cross-AI review |
 | `prompterpeer` | Oracle prompt optimizer with human review |
 | `winterpeer` | LLM Council multi-model consensus |
@@ -70,7 +69,7 @@ Specialized execution agents dispatched by commands and skills:
 
 **Workflow (3):** pr-comment-resolver, spec-flow-analyzer, bug-reproduction-validator
 
-### Commands (24)
+### Commands (27)
 
 User-invoked slash commands:
 
@@ -100,6 +99,7 @@ User-invoked slash commands:
 | `/clavain:clodex-toggle` | Toggle codex-first execution mode (short alias) |
 | `/clavain:codex-first` | Toggle codex-first execution mode |
 | `/clavain:debate` | Structured Claude↔Codex debate |
+| `/clavain:interpeer` | Quick cross-AI peer review |
 | `/clavain:upstream-sync` | Check upstream repos for updates |
 
 ### Hooks (3)
@@ -117,12 +117,12 @@ User-invoked slash commands:
 ```
 clavain/
 ├── .claude-plugin/plugin.json    # Manifest
-├── skills/                        # 35 discipline skills (SKILL.md each)
+├── skills/                        # 34 discipline skills (SKILL.md each)
 ├── agents/
 │   ├── review/                    # 15 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
-├── commands/                      # 24 slash commands
+├── commands/                      # 27 slash commands
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + SessionEnd)
 │   ├── autopilot.sh               # Codex-first mode gate (blocks writes when active)

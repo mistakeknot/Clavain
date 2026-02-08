@@ -19,7 +19,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 31 skills, 23 agents, and 26 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 34 skills, 23 agents, and 27 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -49,7 +49,7 @@ Clavain provides 31 skills, 23 agents, and 26 commands. To avoid overwhelm, use 
 | **Deploy** | — | deployment-verification-agent |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
-| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging, agent-mail-coordination, clodex | pr-comment-resolver |
+| **Workflow** | file-todos, beads-workflow, slack-messaging, agent-mail-coordination, clodex | pr-comment-resolver |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
 
@@ -65,9 +65,20 @@ Clavain provides 31 skills, 23 agents, and 26 commands. To avoid overwhelm, use 
 | Any with security surface | security-sentinel |
 | Any with perf concerns | performance-oracle |
 
-### Cross-AI (Oracle)
+### Cross-AI Review
 
-When Oracle is available (detected at session start), it can supplement any review stage with a GPT-5.2 Pro perspective. See `oracle-review` skill for invocation.
+Clavain includes a cross-AI review stack with escalating depth:
+
+| Skill | Calls | Use Case | Speed |
+|-------|-------|----------|-------|
+| `interpeer` | Claude↔Codex (auto-detected) | Quick second opinion | Fast (seconds) |
+| `prompterpeer` | Oracle (with prompt review) | Deep analysis, large context | Slow (minutes) |
+| `winterpeer` | Oracle + Claude synthesis | Critical decisions, consensus | Slowest |
+| `splinterpeer` | N/A (post-processor) | Convert disagreements into tests/specs | N/A |
+
+Use `interpeer` for fast feedback. Escalate to `prompterpeer` for depth, `winterpeer` for consensus. Run `splinterpeer` after any multi-model review to mine disagreements.
+
+For Oracle CLI reference, see `winterpeer/references/oracle-reference.md`.
 
 ## Routing Heuristic
 

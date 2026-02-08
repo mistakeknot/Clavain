@@ -173,13 +173,13 @@ When available, Oracle provides a GPT-5.2 Pro perspective on the same document. 
 
 | Agent | Invocation | Domain |
 |-------|-----------|--------|
-| oracle-review | `oracle --wait -p "<prompt>" -f "<files>"` | Cross-model validation, blind spot detection |
+| oracle-council | `oracle --wait -p "<prompt>" -f "<files>"` | Cross-model validation, blind spot detection |
 
 **Important**: Oracle runs via CLI, not Task tool. Launch it in background:
 ```bash
 DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
   oracle --wait -p "Review this {document_type} for {review_goal}. Focus on: issues a Claude-based reviewer might miss. Provide numbered findings with severity." \
-  -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-review.md 2>&1
+  -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-council.md 2>&1
 ```
 
 Oracle counts toward the 8-agent cap. If the roster is already full, Oracle replaces the lowest-scoring Tier 3 agent.
@@ -219,7 +219,7 @@ Launch all selected agents as parallel Task calls in a **single message**.
 **Tier 4 agent (Oracle)**:
 - Run via Bash tool with `run_in_background: true` and `timeout: 600000`
 - Requires `DISPLAY=:99` and `CHROME_PATH=/usr/local/bin/google-chrome-wrapper`
-- Output goes to `{OUTPUT_DIR}/oracle-review.md`
+- Output goes to `{OUTPUT_DIR}/oracle-council.md`
 
 ### Prompt template for each agent:
 
@@ -428,3 +428,120 @@ Tell the user:
 - Top findings (3-5 most important)
 - Which sections got the most feedback
 - Where full analysis files are saved (`{OUTPUT_DIR}/`)
+
+---
+
+## Phase 4: Cross-AI Escalation (Optional)
+
+After synthesis, check whether Oracle was in the review roster and offer escalation into the interpeer skill stack.
+
+### Step 4.1: Detect Oracle Participation
+
+If Oracle (Tier 4) was **not** in the roster, offer a lightweight option:
+
+```
+Cross-AI: No Oracle perspective was included in this review.
+Want a second opinion? /clavain:interpeer for quick Claude↔Codex feedback.
+```
+
+Then stop. Phase 4 only continues if Oracle participated.
+
+### Step 4.2: Compare Model Perspectives
+
+When Oracle was in the roster, compare its findings against the Claude-based agents:
+
+1. Read `{OUTPUT_DIR}/oracle-council.md`
+2. Compare Oracle's findings with the synthesized findings from Step 3.2
+3. Classify each finding into:
+
+| Category | Definition | Count |
+|----------|-----------|-------|
+| **Agreement** | Oracle and Claude agents flagged the same issue | Strong signal |
+| **Oracle-only** | Oracle found something no Claude agent raised | Potential blind spot |
+| **Claude-only** | Claude agents found something Oracle missed | May be codebase-specific |
+| **Disagreement** | Oracle and Claude agents conflict on the same topic | Needs investigation |
+
+### Step 4.3: Auto-Chain to Splinterpeer
+
+If **any disagreements** were found in Step 4.2:
+
+```
+Cross-AI Analysis:
+- Agreements: N (high confidence)
+- Oracle-only findings: M (review these — potential blind spots)
+- Claude-only findings: K (likely codebase-specific context)
+- Disagreements: D (need resolution)
+
+Disagreements detected. Running splinterpeer to extract actionable artifacts...
+```
+
+Then invoke the `splinterpeer` skill workflow inline (do not dispatch a subagent — this runs in the main session):
+
+1. Structure each disagreement using splinterpeer's Phase 2 format (The Conflict, Evidence, Resolution, Minority Report)
+2. Generate artifacts: tests that would resolve the disagreement, spec clarifications, stakeholder questions
+3. Present the splinterpeer summary
+
+### Step 4.4: Offer Winterpeer for Critical Decisions
+
+After splinterpeer completes (or if there were no disagreements but Oracle raised P0/P1 findings), check if any finding represents a **critical architectural or security decision**. Indicators:
+- P0 severity from any source
+- Disagreement on architecture or security topic
+- Oracle flagged a security issue that Claude agents missed
+
+If critical decisions exist, offer winterpeer escalation:
+
+```
+Critical decision detected: [brief description]
+
+Options:
+1. Resolve now — I'll synthesize the best recommendation from available perspectives
+2. Run winterpeer council — full multi-model consensus review on this specific decision
+3. Continue without escalation
+```
+
+If user chooses option 2, invoke the `winterpeer` skill for just the critical decision (not the whole document).
+
+### Step 4.5: Final Cross-AI Summary
+
+Present a final summary that includes the cross-AI dimension:
+
+```markdown
+## Cross-AI Review Summary
+
+**Model diversity:** Claude agents (N) + Oracle (GPT-5.2 Pro)
+
+| Finding Type | Count | Confidence |
+|-------------|-------|-----------|
+| Cross-model agreement | A | High |
+| Oracle-only (blind spots) | B | Review |
+| Claude-only (codebase context) | C | Moderate |
+| Resolved disagreements | D | Varies |
+
+[If splinterpeer ran:]
+### Artifacts Generated
+- N tests proposed to resolve disagreements
+- M spec clarifications needed
+- K stakeholder questions identified
+
+[If winterpeer ran:]
+### Council Decision
+[Brief summary of winterpeer's synthesis on the critical decision]
+```
+
+## Integration
+
+**Chains to (when Oracle participates):**
+- `splinterpeer` — Automatically invoked when Oracle and Claude agents disagree
+- `winterpeer` — Offered when critical decisions surface
+
+**Chains to (when Oracle absent):**
+- `interpeer` — Offered as lightweight cross-AI option
+
+**Called by:**
+- `/clavain:flux-drive` command
+- `writing-plans` skill (after plan completion)
+- `brainstorming` skill (after design completion)
+
+**See also:**
+- `winterpeer/references/oracle-reference.md` — Oracle CLI reference
+- `winterpeer/references/oracle-troubleshooting.md` — Oracle troubleshooting

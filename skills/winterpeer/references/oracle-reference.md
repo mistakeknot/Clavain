@@ -1,7 +1,7 @@
----
-name: oracle-review
-description: Use when you need cross-AI review via Oracle (GPT-5.2 Pro or other models) — for major architectural decisions, plan validation, security review, or when a second opinion from a different model adds value
----
+# Oracle CLI Reference
+
+> Shared reference for interpeer skills (prompterpeer, winterpeer, splinterpeer). Moved from standalone oracle-review skill.
+
 
 # Oracle Cross-AI Review
 

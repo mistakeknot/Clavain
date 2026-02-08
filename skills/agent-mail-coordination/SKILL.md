@@ -151,7 +151,7 @@ For most workflows, leave at `auto`. Use `contacts_only` for agents with focused
 - `beads-workflow` — Use beads issue IDs as Agent Mail `thread_id` values
 - `dispatching-parallel-agents` — File reservations prevent parallel agent conflicts
 - `subagent-driven-development` — Coordinate implementer/reviewer subagent handoffs
-- `oracle-review` — Share Oracle results across agents via Agent Mail messages
+- `winterpeer` / `prompterpeer` — Share Oracle results across agents via Agent Mail messages
 
 ## Red Flags
 
