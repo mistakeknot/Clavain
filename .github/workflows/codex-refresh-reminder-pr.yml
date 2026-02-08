@@ -1,0 +1,77 @@
+name: Codex Refresh Reminder (PR)
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  remind:
+    if: github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upsert reminder comment for upstream-sync PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = (pr.labels || []).map(l => l.name);
+            const headRef = pr.head?.ref || "";
+            const title = (pr.title || "").toLowerCase();
+
+            const isUpstreamSync =
+              labels.includes("upstream-sync") ||
+              headRef.includes("upstream-sync") ||
+              title.includes("upstream sync");
+
+            if (!isUpstreamSync) {
+              core.info("PR is not an upstream-sync PR; skipping.");
+              return;
+            }
+
+            const marker = "<!-- codex-refresh-upstream-pr-reminder -->";
+            const body = [
+              marker,
+              "This upstream-sync PR touches Clavain content that may affect Codex behavior.",
+              "",
+              "After merging to `main`, run:",
+              "- `make codex-refresh`",
+              "- `make codex-doctor`",
+              "- restart Codex",
+              "",
+              "Runbook: `docs/runbooks/codex-sync.md`"
+            ].join("\\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              per_page: 100
+            });
+
+            const existing = comments.find(c => (c.body || "").includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+              core.info(`Updated existing reminder comment ${existing.id}.`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body
+              });
+              core.info("Created reminder comment.");
+            }

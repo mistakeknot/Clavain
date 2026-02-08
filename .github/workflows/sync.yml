@@ -28,20 +28,56 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Step 1: Install Codex CLI (makes `codex` available for later steps)
-      - name: Setup Codex CLI
-        uses: openai/codex-action@v1
+      - name: Preflight required secrets
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          set -euo pipefail
+          missing=()
+
+          if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+            missing+=("ANTHROPIC_API_KEY")
+          fi
+
+          if [[ -z "${CODEX_AUTH_JSON:-}" ]]; then
+            missing+=("CODEX_AUTH_JSON")
+          fi
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing required GitHub Actions secret(s): ${missing[*]}"
+            echo "::error::Set these in Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt: "echo 'Codex CLI initialized'"
-          sandbox: read-only
+          node-version: "20"
+
+      # Step 1: Install and authenticate Codex CLI (ChatGPT auth file based)
+      - name: Install Codex CLI
+        run: |
+          set -euo pipefail
+          npm install -g @openai/codex
+          codex --version
+
+      - name: Configure Codex auth
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.codex
+          printf '%s' "${CODEX_AUTH_JSON}" > ~/.codex/auth.json
+          chmod 600 ~/.codex/auth.json
+          codex login status
 
       # Step 2: Claude Code orchestrates the full sync
       - name: Run upstream sync via Claude Code
         uses: anthropics/claude-code-action@v1
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          CODEX_HOME: /home/runner/.codex
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
