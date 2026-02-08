@@ -39,7 +39,7 @@ use the plan's task descriptions directly:
 
 - **Task description** → interclode prompt's "## Task" section
 - **Plan's "Files" list** → interclode prompt's "## Relevant Files" section
-- **Plan's "Run test" step** → interclode prompt's "## Success Criteria"
+- **Plan's "Run test" step** → interclode prompt's "## Success Criteria" — **scope test commands** with `-run TestPattern`, `-short`, `-timeout=60s` to avoid integration test hangs
 - **Plan's "Commit" step** → skip (Claude will commit after review)
 - **Always add**: The standard interclode constraints block
 

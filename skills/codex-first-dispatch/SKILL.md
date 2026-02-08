@@ -63,9 +63,11 @@ Make the change:
 ## Phase 3: Verify
 After implementing, run ALL of these and report results:
 1. Build: `[build command, e.g., go build ./internal/foo/...]`
-2. Tests: `[test command, e.g., go test ./internal/foo/... -v]`
+2. Tests: `[SCOPED test command — see below]`
 3. Diff: `git diff --stat` (ensure only expected files changed)
 4. If build or tests fail: fix the issue and re-verify (up to 2 self-retries)
+
+**CRITICAL — Scope test commands**: Use `-run TestPattern` to target tests related to the change, `-short` to skip integration tests, and `-timeout=60s` to prevent hangs. Example: `go test ./internal/tui/... -run TestGurgeh -v -short -timeout=60s`. NEVER use broad `go test ./... -v` — integration tests that need live services will hang and consume the entire timeout.
 
 ## Final Report
 At the end, print a structured verdict:
@@ -89,7 +91,7 @@ VERDICT: CLEAN | NEEDS_ATTENTION [reason]
 
 **Key principles for the megaprompt:**
 - Give the agent *freedom to explore* — don't over-specify file paths if you're not sure. Say "likely in internal/foo/" not "exactly at internal/foo/bar.go:42"
-- Include build AND test commands — the agent should self-verify
+- Include build AND **scoped** test commands — the agent should self-verify. Always use `-run`, `-short`, `-timeout` to avoid integration test hangs
 - Ask for a structured verdict so Claude can parse the result quickly
 - Include self-retry: "if tests fail, fix and re-verify (up to 2 retries)"
 
