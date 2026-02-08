@@ -95,13 +95,13 @@ Consult the **Agent Roster** below and score each agent against the document pro
 
 **Tier bonuses**: Tier 1 agents get +1 (they know this codebase). Tier 2 agents get +1 (project-specific).
 
-**Cross-project awareness**: If the document is for a different project than the one where gurgeh-plugin is installed, Tier 1 agents' codebase knowledge is for the *wrong* project. In this case, their tier bonus reflects domain expertise only — score them honestly and prefer Tier 3 agents when the domain overlap is the same but the codebase is different.
+**Cross-project awareness**: Tier 1 agents read the target project's CLAUDE.md/AGENTS.md to ground their analysis. When reviewing a document for a different project, they adapt to that project's context. However, if the target project has no CLAUDE.md or AGENTS.md, their codebase awareness is limited — score them honestly and prefer Tier 3 agents when domain overlap is the same.
 
 **Selection rules**:
 1. All agents scoring 2+ are included
 2. Agents scoring 1 are included only if their domain covers a thin section
 3. **Cap at 8 agents total** (hard maximum)
-4. **Deduplication**: If a Tier 1 or Tier 2 agent covers the same domain as a Tier 3 agent, drop the Tier 3 one — unless the document is for a different project (cross-project mode), in which case prefer the Tier 3 generic.
+4. **Deduplication**: If a Tier 1 or Tier 2 agent covers the same domain as a Tier 3 agent, drop the Tier 3 one — unless the target project lacks CLAUDE.md/AGENTS.md (no project context), in which case prefer the Tier 3 generic.
 5. Prefer fewer, more relevant agents over many marginal ones
 
 ### Step 1.3: User Confirmation
@@ -130,19 +130,17 @@ If user selects "Cancel", stop here.
 
 ## Agent Roster
 
-### Tier 1 — Codebase-Aware (gurgeh-plugin)
+### Tier 1 — Codebase-Aware
 
-These agents ship with gurgeh-plugin and have baked-in knowledge of the project's architecture, conventions, and patterns.
-
-**Availability check**: Before triage, verify gurgeh-plugin is installed by checking if `gurgeh-plugin:fd-architecture` is in the Task tool's agent list. If gurgeh-plugin is not available, skip Tier 1 entirely and rely on Tier 2/3 agents. Note this in the triage output.
+These agents read the target project's CLAUDE.md and AGENTS.md before analyzing, grounding their review in the project's actual architecture, conventions, and patterns rather than generic checklists.
 
 | Agent | subagent_type | Domain |
 |-------|--------------|--------|
-| fd-architecture | gurgeh-plugin:fd-architecture | Module boundaries, component structure, cross-tool integration |
-| fd-user-experience | gurgeh-plugin:fd-user-experience | CLI/TUI interaction, keyboard ergonomics, terminal constraints |
-| fd-code-quality | gurgeh-plugin:fd-code-quality | Naming, test strategy, project conventions, idioms |
-| fd-performance | gurgeh-plugin:fd-performance | Rendering, data processing, resource usage |
-| fd-security | gurgeh-plugin:fd-security | Threat model, credential handling, access patterns |
+| fd-architecture | clavain:review:fd-architecture | Module boundaries, component structure, cross-tool integration |
+| fd-user-experience | clavain:review:fd-user-experience | CLI/TUI interaction, keyboard ergonomics, terminal constraints |
+| fd-code-quality | clavain:review:fd-code-quality | Naming, test strategy, project conventions, idioms |
+| fd-performance | clavain:review:fd-performance | Rendering, data processing, resource usage |
+| fd-security | clavain:review:fd-security | Threat model, credential handling, access patterns |
 
 ### Tier 2 — Project-Specific (.claude/agents/fd-*.md)
 
@@ -203,8 +201,8 @@ Launch all selected agents as parallel Task calls in a **single message**.
 
 ### How to launch each agent type:
 
-**Tier 1 agents (gurgeh-plugin)**:
-- Use the native `subagent_type` from the roster (e.g., `gurgeh-plugin:fd-architecture`)
+**Tier 1 agents (codebase-aware)**:
+- Use the native `subagent_type` from the roster (e.g., `clavain:review:fd-architecture`)
 - Set `run_in_background: true`
 
 **Tier 2 agents (.claude/agents/)**:

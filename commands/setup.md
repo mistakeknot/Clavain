@@ -28,7 +28,6 @@ Install these plugins from their marketplaces. Skip any already installed.
 
 **From interagency-marketplace:**
 ```bash
-claude plugin install gurgeh-plugin@interagency-marketplace
 claude plugin install interdoc@interagency-marketplace
 claude plugin install auracoil@interagency-marketplace
 claude plugin install tool-time@interagency-marketplace
@@ -98,7 +97,7 @@ Run a final verification:
 ```bash
 echo "=== Plugin Status ==="
 # Check required plugins are enabled
-for plugin in clavain gurgeh-plugin context7 agent-sdk-dev plugin-dev serena security-guidance explanatory-output-style interdoc auracoil tool-time; do
+for plugin in clavain context7 agent-sdk-dev plugin-dev serena security-guidance explanatory-output-style interdoc auracoil tool-time; do
   echo "$plugin: checking..."
 done
 
@@ -115,7 +114,6 @@ echo "agent-mail: $(curl -s --max-time 2 http://127.0.0.1:8765/health >/dev/null
 
 echo "=== Companions ==="
 echo "codex dispatch: $(ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/scripts/dispatch.sh 2>/dev/null && echo 'OK' || echo 'MISSING')"
-echo "gurgeh: $(ls ~/.claude/plugins/cache/interagency-marketplace/gurgeh-plugin/*/agents/ 2>/dev/null && echo 'OK' || echo 'MISSING')"
 echo "oracle: $(command -v oracle >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
 echo "beads: $(ls .beads/ 2>/dev/null && echo 'configured' || echo 'not configured')"
 ```

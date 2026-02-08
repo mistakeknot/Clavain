@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 34 skills, 23 agents, 27 commands, 3 hooks, 2 MCP servers |
+| Components | 34 skills, 28 agents, 27 commands, 3 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Architecture
@@ -31,7 +31,7 @@ Clavain/
 │   │   └── examples/
 │   └── ...                        # Each skill is a directory with SKILL.md
 ├── agents/
-│   ├── review/                    # 15 code review agents
+│   ├── review/                    # 20 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
 ├── commands/                      # 27 slash commands
@@ -114,7 +114,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 - Agents are dispatched via `Task` tool — they run as subagents with their own context
 
 Categories:
-- **review/** — Code review specialists (15): language-specific (kieran-go/python/typescript/shell), cross-cutting (security, performance, concurrency, architecture, patterns, simplicity, agent-native), data (migration, integrity), deployment, plan review
+- **review/** — Code review specialists (20): codebase-aware (fd-architecture/code-quality/performance/security/user-experience), language-specific (kieran-go/python/typescript/shell), cross-cutting (security, performance, concurrency, architecture, patterns, simplicity, agent-native), data (migration, integrity), deployment, plan review
 - **research/** — Information gathering (5): best practices, framework docs, git history, learnings, repo analysis
 - **workflow/** — Process automation (3): PR comments, spec flow analysis, bug reproduction
 
@@ -222,7 +222,6 @@ These must be installed for Clavain to function fully.
 | Plugin | Source | Why Required |
 |--------|--------|-------------|
 | **context7** | claude-plugins-official | Runtime doc fetching. Clavain's MCP server. Skills use it to pull upstream docs without bundling them. |
-| **gurgeh-plugin** | interagency-marketplace | Codebase-aware T1 agents (fd-architecture, fd-code-quality, fd-security, fd-performance, fd-user-experience). Powers `/flux-drive`. |
 | **explanatory-output-style** | claude-plugins-official | Educational insights in output. Injected via SessionStart hook. |
 
 ### Recommended

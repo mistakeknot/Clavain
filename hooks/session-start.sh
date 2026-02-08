@@ -34,11 +34,6 @@ if curl -s -o /dev/null -w '' --connect-timeout 1 http://127.0.0.1:8765/health 2
     companions="${companions}\\n- **agent-mail**: server running at localhost:8765"
 fi
 
-# Gurgeh — needed for flux-drive T1 agents
-if ls ~/.claude/plugins/cache/interagency-marketplace/gurgeh-plugin/*/agents/ >/dev/null 2>&1; then
-    companions="${companions}\\n- **gurgeh-plugin**: T1 codebase-aware agents available for /flux-drive"
-fi
-
 # Oracle — check if available for cross-AI review
 if command -v oracle &>/dev/null && pgrep -f "Xvfb :99" &>/dev/null; then
     companions="${companions}\\n- **oracle**: available for cross-AI review (GPT-5.2 Pro)"

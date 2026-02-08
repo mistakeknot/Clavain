@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 34 skills, 23 agents, 27 commands, 3 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 34 skills, 28 agents, 27 commands, 3 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -37,7 +37,7 @@ I almost always start with `/brainstorm` even when I think I know what I want. I
 
 ### Reviewing Things with `/flux-drive`
 
-`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. Point it at a file, a plan, or an entire repo and it figures out which reviewers are relevant for the given context. It pulls from a roster of 23 agents across 4 tiers:
+`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. Point it at a file, a plan, or an entire repo and it figures out which reviewers are relevant for the given context. It pulls from a roster of 28 agents across 4 tiers:
 
 - **Tier 1** — Codebase-aware agents (architecture, code quality, security, performance, UX) that understand your actual project, not generic checklists
 - **Tier 2** — Project-specific agents selected by tech stack (Go reviewer for Go projects, Python reviewer for Python, etc.)
@@ -127,11 +127,11 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `agent-mail-coordination` | Multi-agent coordination via MCP Agent Mail |
 | `upstream-sync` | Track updates from upstream tool repos |
 
-### Agents (23)
+### Agents (28)
 
 Agents are specialized execution units dispatched by skills and commands. They run as subagents with their own context window.
 
-**Review (15):** Language-specific reviewers (Go, Python, TypeScript, Shell), cross-cutting specialists (architecture, security, performance, concurrency, patterns, simplicity, agent-native), data specialists (migration, integrity), deployment verification, and plan review.
+**Review (20):** Codebase-aware reviewers (architecture, code quality, performance, security, UX), language-specific reviewers (Go, Python, TypeScript, Shell), cross-cutting specialists (architecture, security, performance, concurrency, patterns, simplicity, agent-native), data specialists (migration, integrity), deployment verification, and plan review.
 
 **Research (5):** Best practices, framework docs, git history analysis, institutional learnings, and repo structure analysis.
 
@@ -193,7 +193,6 @@ Clavain is designed as an **agent rig**, inspired by [PC game mod packs](https:/
 | Plugin | Why |
 |--------|-----|
 | [context7](https://context7.com) | Runtime doc fetching. Clavain's skills use it to pull library docs without bundling them. |
-| [gurgeh-plugin](https://github.com/interagency-marketplace) | Codebase-aware Tier 1 agents for `flux-drive` (architecture, code quality, security, performance, UX). |
 | [explanatory-output-style](https://github.com/claude-plugins-official) | Educational insights in output. Injected via SessionStart hook. |
 
 ### Recommended
@@ -213,7 +212,7 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 | Plugin | Clavain Replacement |
 |--------|-------------------|
-| code-review | `/review` + `/flux-drive` + 15 review agents |
+| code-review | `/review` + `/flux-drive` + 20 review agents |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster |
 | code-simplifier | `code-simplicity-reviewer` agent |
 | commit-commands | `landing-a-change` skill |
@@ -238,7 +237,7 @@ clavain/
 ├── .claude-plugin/plugin.json    # Manifest
 ├── skills/                        # 34 discipline skills (SKILL.md each)
 ├── agents/
-│   ├── review/                    # 15 code review agents
+│   ├── review/                    # 20 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
 ├── commands/                      # 27 slash commands
