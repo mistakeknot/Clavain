@@ -44,7 +44,11 @@ OUTPUT_DIR    = {PROJECT_ROOT}/docs/research/flux-drive/{INPUT_STEM}
    ```
 2. For **file inputs**: Compare what the document describes against reality (language, framework, architecture)
 3. For **directory inputs**: This IS the primary analysis — read README, build files, key source files
-4. If there is a **significant divergence** between what a document describes and the actual codebase (e.g., document says Swift but code is Rust+TS):
+4. If qmd MCP tools are available, run a semantic search for project context:
+   - Search for architecture decisions, conventions, and known issues relevant to the document
+   - This supplements CLAUDE.md/AGENTS.md reading with broader project knowledge
+   - Feed relevant results into the document profile as additional context for triage
+5. If there is a **significant divergence** between what a document describes and the actual codebase (e.g., document says Swift but code is Rust+TS):
    - Note it in the document profile as `divergence: [description]`
    - Read 2-3 key codebase files to understand the actual tech stack
    - Use the **actual** tech stack for triage, not the document's
@@ -104,6 +108,27 @@ Consult the **Agent Roster** below and score each agent against the document pro
 4. **Deduplication**: If a Tier 1 or Tier 2 agent covers the same domain as a Tier 3 agent, drop the Tier 3 one — unless the target project lacks CLAUDE.md/AGENTS.md (no project context), in which case prefer the Tier 3 generic.
 5. Prefer fewer, more relevant agents over many marginal ones
 
+### Scoring Examples
+
+**Plan reviewing Go API changes:**
+- fd-architecture: 2+1=3 (module boundaries directly affected)
+- fd-security: 2+1=3 (API adds new endpoints)
+- fd-performance: 1+1=2 (API mentioned but no perf section → thin)
+- fd-user-experience: 0+1=1 (no UI/CLI changes → skip)
+- security-sentinel: 0 (T1 fd-security covers this → deduplicated)
+
+**README review for Python CLI tool:**
+- fd-user-experience: 2+1=3 (CLI UX directly relevant)
+- fd-code-quality: 2+1=3 (conventions review)
+- code-simplicity-reviewer: 2=2 (YAGNI check)
+- fd-architecture: 1+1=2 (only if architecture section is thin)
+- fd-security: 0 (README, no security concerns)
+
+**Thin section thresholds:**
+- **thin**: <5 lines or <3 bullet points — agent with adjacent domain should cover this
+- **adequate**: 5-30 lines or 3-10 bullet points — standard review depth
+- **deep**: 30+ lines or 10+ bullet points — validation only, don't over-review
+
 ### Step 1.3: User Confirmation
 
 Present the triage using AskUserQuestion:
@@ -154,18 +179,24 @@ If no Tier 2 agents exist, skip this tier entirely. Do NOT create them — that'
 
 These are general-purpose reviewers without codebase-specific knowledge. Only use when no Tier 1/2 agent covers the domain.
 
-| Agent | subagent_type | Domain |
-|-------|--------------|--------|
-| architecture-strategist | clavain:review:architecture-strategist | System design, component boundaries |
-| code-simplicity-reviewer | clavain:review:code-simplicity-reviewer | YAGNI, minimalism, over-engineering |
-| performance-oracle | clavain:review:performance-oracle | Algorithms, scaling, bottlenecks |
-| security-sentinel | clavain:review:security-sentinel | OWASP, vulnerabilities, auth |
-| pattern-recognition-specialist | clavain:review:pattern-recognition-specialist | Anti-patterns, duplication, consistency |
-| data-integrity-reviewer | clavain:review:data-integrity-reviewer | Migrations, data safety, transactions |
+| Agent | subagent_type | Model | Domain |
+|-------|--------------|-------|--------|
+| architecture-strategist | clavain:review:architecture-strategist | sonnet | System design, component boundaries |
+| code-simplicity-reviewer | clavain:review:code-simplicity-reviewer | haiku | YAGNI, minimalism, over-engineering |
+| performance-oracle | clavain:review:performance-oracle | sonnet | Algorithms, scaling, bottlenecks |
+| security-sentinel | clavain:review:security-sentinel | sonnet | OWASP, vulnerabilities, auth |
+| pattern-recognition-specialist | clavain:review:pattern-recognition-specialist | haiku | Anti-patterns, duplication, consistency |
+| data-integrity-reviewer | clavain:review:data-integrity-reviewer | sonnet | Migrations, data safety, transactions |
+
+When launching Tier 3 agents, use the recommended `model` parameter to reduce token costs. Override with `inherit` (omit the model parameter) if the document is unusually complex or if the agent's domain is the primary focus of the review.
 
 ### Tier 4 — Cross-AI (Oracle)
 
-**Availability check**: Oracle is available when the SessionStart hook reports "oracle: available for cross-AI review". If not detected, skip Tier 4 entirely.
+**Availability check**: Oracle is available when:
+1. The SessionStart hook reports "oracle: available for cross-AI review", OR
+2. `which oracle` succeeds AND `pgrep -f "Xvfb :99"` finds a running process
+
+If neither check passes, skip Tier 4 entirely.
 
 When available, Oracle provides a GPT-5.2 Pro perspective on the same document. It scores like any other agent but gets a +1 diversity bonus (different model family reduces blind spots).
 
@@ -173,12 +204,14 @@ When available, Oracle provides a GPT-5.2 Pro perspective on the same document. 
 |-------|-----------|--------|
 | oracle-council | `oracle --wait -p "<prompt>" -f "<files>"` | Cross-model validation, blind spot detection |
 
-**Important**: Oracle runs via CLI, not Task tool. Launch it in background:
+**Important**: Oracle runs via CLI, not Task tool. Launch it in background with a timeout:
 ```bash
-DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
+timeout 300 env DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
   oracle --wait -p "Review this {document_type} for {review_goal}. Focus on: issues a Claude-based reviewer might miss. Provide numbered findings with severity." \
-  -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-council.md 2>&1
+  -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-council.md 2>&1 || echo "Oracle failed (exit $?) — continuing without cross-AI perspective" >> {OUTPUT_DIR}/oracle-council.md
 ```
+
+**Error handling**: If the Oracle command fails or times out, note it in the output file and continue without Phase 4. Do NOT block synthesis on Oracle failures — treat it as "Oracle: no findings" and skip Steps 4.2-4.5.
 
 Oracle counts toward the 8-agent cap. If the roster is already full, Oracle replaces the lowest-scoring Tier 3 agent.
 
@@ -241,10 +274,16 @@ as a finding.
 
 ## Document to Review
 
-[For file inputs: Include ONLY the sections relevant to this agent's focus area.
-For large documents (200+ lines), trim sections outside the agent's domain
-to a 1-line summary each. Always include: Summary, Goals, Non-Goals (if present),
-and the specific sections listed in "Focus on" below.]
+IMPORTANT — Token Optimization:
+For file inputs with 200+ lines, you MUST trim the document before including it:
+1. Keep FULL content for sections listed in "Focus on" below
+2. Keep Summary, Goals, Non-Goals in full (if present)
+3. For ALL OTHER sections: replace with a single line: "## [Section Name] — [1-sentence summary]"
+4. For repo reviews: include README + build files + 2-3 key source files only
+
+Target: Agent should receive ~50% of the original document, not 100%.
+
+[For file inputs: Include the trimmed document following the rules above.]
 
 [For repo reviews: Include README content + key structural info gathered in Step 1.0.]
 
@@ -258,6 +297,11 @@ waste cycles being confused by phantom code.]
 You were selected because: [reason from triage table]
 Focus on: [specific sections relevant to this agent's domain]
 Depth needed: [thin sections need more depth, deep sections need only validation]
+
+When constructing the prompt, explicitly list which sections to include in full
+and which to summarize. Example:
+- FULL: Architecture, Security (agent's domain)
+- SUMMARY: Skills table, Commands table, Credits (not in domain)
 
 ## Output Requirements
 
@@ -334,6 +378,21 @@ For each agent's output file, read the **YAML frontmatter** first (first ~60 lin
 - The frontmatter is missing or malformed (fallback to reading Summary + Issues sections)
 
 If an agent's output file doesn't exist or is empty, note it as "no findings" and move on.
+
+### Step 3.0.5: Validate Agent Output
+
+Before synthesis, validate each agent's output file:
+
+1. Check the file starts with `---` (YAML frontmatter delimiter)
+2. Verify required keys exist: `agent`, `tier`, `issues`, `verdict`
+3. Classification:
+   - **Valid**: Frontmatter parsed successfully → proceed with frontmatter-first synthesis
+   - **Malformed**: File exists but frontmatter is missing/incomplete → fall back to prose-based reading (read Summary + Issues sections directly)
+   - **Missing**: File doesn't exist or is empty → "no findings"
+
+Report validation results to user: "5/6 agents returned valid frontmatter, 1 fallback to prose"
+
+This step prevents silent synthesis failures where malformed output gets ignored rather than read as prose.
 
 ### Step 3.2: Deduplicate and Organize
 
@@ -463,6 +522,8 @@ When Oracle was in the roster, compare its findings against the Claude-based age
 
 If **any disagreements** were found in Step 4.2:
 
+**Prerequisite**: Check if the `splinterpeer` skill is available in this session (it should appear in the skills list). If splinterpeer is **not** available, skip auto-chaining and present disagreements as-is with a note: "Splinterpeer not available — resolve disagreements manually or run `/clavain:splinterpeer` in a new session."
+
 ```
 Cross-AI Analysis:
 - Agreements: N (high confidence)
@@ -537,9 +598,8 @@ Present a final summary that includes the cross-AI dimension:
 
 **Called by:**
 - `/clavain:flux-drive` command
-- `writing-plans` skill (after plan completion)
-- `brainstorming` skill (after design completion)
 
 **See also:**
 - `winterpeer/references/oracle-reference.md` — Oracle CLI reference
 - `winterpeer/references/oracle-troubleshooting.md` — Oracle troubleshooting
+- qmd MCP server — semantic search for project documentation (used in Step 1.0)
