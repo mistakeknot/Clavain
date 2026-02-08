@@ -211,11 +211,17 @@ bash scripts/upstream-check.sh 2>&1; echo "Exit: $?"  # 0=changes, 1=no changes,
 
 ## Upstream Tracking
 
-Clavain bundles knowledge from 7 actively-developed upstream tools. A 3-layer automation pipeline keeps them in sync:
+Clavain bundles knowledge from 7 actively-developed upstream tools. Two systems keep them in sync:
 
-1. **Daily GitHub Action** (`.github/workflows/upstream-check.yml`) — checks all repos via `gh api`, opens/updates issues with `upstream-sync` label
-2. **Session-start warning** — `session-start.sh` warns when `docs/upstream-versions.json` is >7 days old
-3. **`/clavain:upstream-sync` command** — picks up open issues, applies skill changes, closes issues
+**1. Check System** (lightweight detection):
+- `.github/workflows/upstream-check.yml` — daily cron, checks repos via `gh api`, opens/updates issues with `upstream-sync` label
+- `scripts/upstream-check.sh` — local runner for same check
+- State: `docs/upstream-versions.json`
+
+**2. Sync System** (automated merging):
+- `.github/workflows/sync.yml` — weekly cron + manual dispatch, uses Claude Code + Codex CLI to auto-merge upstream changes
+- File mappings: `upstreams.json` (source→local path mappings with glob support)
+- Work dir: `.upstream-work/` (gitignored)
 
 | Tool | Repo | Clavain Skills Affected |
 |------|------|------------------------|
@@ -227,9 +233,12 @@ Clavain bundles knowledge from 7 actively-developed upstream tools. A 3-layer au
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |
 
-Baseline state is tracked in `docs/upstream-versions.json`. Update it after applying changes:
+Manual sync check:
 ```bash
-bash scripts/upstream-check.sh --update
+# Check for upstream updates
+bash scripts/upstream-check.sh
+# Or trigger full auto-merge locally
+bash scripts/sync-upstreams.sh
 ```
 
 ## Landing the Plane (Session Completion)
