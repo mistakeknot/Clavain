@@ -381,6 +381,38 @@ For each section that received feedback, add an inline note:
 
 Write the updated document back to `INPUT_FILE`.
 
+#### Deepen thin sections (plans only)
+
+If the document type is **plan** or **brainstorm/design**, and the section analysis from Step 1.1 identified any sections as `thin`, enrich them with researched content. For each thin section:
+
+1. Launch a `Task Explore` agent to research best practices, patterns, and concrete examples for that section's topic
+2. Use Context7 MCP to pull framework-specific documentation if technologies are mentioned
+3. Add a `### Research Insights` block below the original content:
+
+```markdown
+### Research Insights
+
+**Best Practices:**
+- [Concrete, actionable recommendation]
+
+**Edge Cases:**
+- [Edge case and handling strategy]
+
+**Implementation Example:**
+```[language]
+// Concrete code pattern from research
+```
+
+**References:**
+- [Documentation or article URL]
+```
+
+Rules:
+- Preserve all original content — only add below it
+- Only enrich sections marked `thin` — adequate/deep sections get inline findings only
+- Code examples must be syntactically correct and match the project's actual tech stack
+- Skip this step entirely for specs, ADRs, READMEs, and repo reviews
+
 #### For repo reviews (directory input, no specific file)
 
 Do NOT modify the repo's README or any existing files. Instead, write a new summary file to `{OUTPUT_DIR}/summary.md` that:
