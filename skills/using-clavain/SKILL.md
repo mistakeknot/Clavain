@@ -34,11 +34,11 @@ Clavain provides 32 skills, 23 agents, and 24 commands. To avoid overwhelm, use 
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | architecture-strategist, spec-flow-analyzer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents) |
-| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, codex-delegation | work, lfg, resolve-parallel, resolve-todo-parallel | — |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, codex-delegation | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, clodex | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
-| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review | kieran-{go,python,typescript,shell}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
-| **Ship** | landing-a-change, verification-before-completion | changelog | deployment-verification-agent |
-| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync | create-agent-skill, generate-command, heal-skill, upstream-sync | — |
+| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit | kieran-{go,python,typescript,shell}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
+| **Ship** | landing-a-change, verification-before-completion | changelog, triage | deployment-verification-agent |
+| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
 ### Layer 2: What domain?
 
@@ -49,7 +49,7 @@ Clavain provides 32 skills, 23 agents, and 24 commands. To avoid overwhelm, use 
 | **Deploy** | — | deployment-verification-agent |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
-| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging, agent-mail-coordination | pr-comment-resolver |
+| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging, agent-mail-coordination, codex-first-dispatch | pr-comment-resolver |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
 
@@ -130,5 +130,7 @@ Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
 | `/clavain:quality-gates` | Auto-select reviewers for current changes |
 | `/clavain:repro-first-debugging` | Disciplined bug investigation |
 | `/clavain:changelog` | Generate changelog from recent commits |
+| `/clavain:triage [findings]` | Triage and categorize findings |
+| `/clavain:migration-safety [migration]` | Database migration safety review |
 | `/clavain:learnings` | Capture solved problem as documentation |
 | `/clavain:upstream-sync` | Check upstream repos for updates, generate upgrade checklist |
