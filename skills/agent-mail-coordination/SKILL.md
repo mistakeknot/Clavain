@@ -23,8 +23,9 @@ MCP Agent Mail provides messaging, file reservations, and coordination between A
 
 ## Session Startup
 
-Start every multi-agent session with the macro:
+**Automatic**: Clavain's SessionStart hook auto-registers with Agent Mail when the server is running. No manual setup needed.
 
+**Manual** (if auto-registration didn't run):
 ```
 macro_start_session(
   project_path="/path/to/project",
@@ -34,7 +35,20 @@ macro_start_session(
 )
 ```
 
-This registers your identity, ensures the project exists, and announces your presence in one call.
+## Beads Integration
+
+When working on a beads issue, use the issue ID as the Agent Mail `thread_id`. This links messages and file reservations to the issue tracker:
+
+```
+# When claiming an issue: reserve files and announce
+bd update <issue-id> --status=in_progress
+file_reservation_paths(paths=["affected/files"], ttl=3600, exclusive=true)
+send_message(to=["*"], subject="Claiming <issue-id>", thread_id="<issue-id>")
+
+# When done: release and close
+release_file_reservations()
+bd close <issue-id>
+```
 
 ## File Reservations
 

@@ -75,24 +75,9 @@ When a user message arrives:
 4. **Invoke the primary skill** first (process skills before implementation skills)
 5. **Suggest agents/commands** as needed during execution
 
-## Red Flags
+## Red Flag
 
-These thoughts mean STOP—you're rationalizing:
-
-| Thought | Reality |
-|---------|---------|
-| "This is just a simple question" | Questions are tasks. Check for skills. |
-| "I need more context first" | Skill check comes BEFORE clarifying questions. |
-| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
-| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
-| "Let me gather information first" | Skills tell you HOW to gather information. |
-| "This doesn't need a formal skill" | If a skill exists, use it. |
-| "I remember this skill" | Skills evolve. Read current version. |
-| "This doesn't count as a task" | Action = task. Check for skills. |
-| "The skill is overkill" | Simple things become complex. Use it. |
-| "I'll just do this one thing first" | Check BEFORE doing anything. |
-| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
-| "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+If you catch yourself thinking "I'll just do this without a skill" — STOP. Check for a matching skill first. Skills evolve; read the current version even if you "remember" it.
 
 ## Skill Priority
 
@@ -113,6 +98,10 @@ When multiple skills could apply, use this order:
 **Flexible** (patterns, design): Adapt principles to context.
 
 The skill itself tells you which.
+
+## Plugin Conflicts
+
+Clavain replaces these official plugins (disabled in settings): code-review, pr-review-toolkit, code-simplifier, commit-commands, feature-dev, claude-md-management, frontend-design, hookify. If you see duplicate agent names in the Task tool roster, check `docs/plugin-audit.md` for resolution.
 
 ## User Instructions
 

@@ -73,8 +73,14 @@ Implementation verified. How would you like to land this?
 #### Option 1: Commit and push
 
 ```bash
+# Close completed beads issues (if .beads/ exists)
+bd close <issue-ids>
+
 # Stage relevant files (NOT git add .)
 git add <specific files>
+
+# Sync beads state
+bd sync --from-main
 
 # Commit with conventional message
 git commit -m "feat(scope): description of what and why

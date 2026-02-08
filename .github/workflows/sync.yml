@@ -109,7 +109,7 @@ jobs:
             - If `codex` is not available in PATH, fall back to doing the merge yourself directly
 
           claude_args: |
-            --allowedTools "Read,Write,Edit,Bash(git:*),Bash(codex:*),Bash(ls:*),Bash(cat:*),Bash(mkdir:*),Bash(cp:*),Bash(echo:*)"
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git clone:*),Bash(git fetch:*),Bash(git diff:*),Bash(git log:*),Bash(git rev-parse:*),Bash(codex exec:*),Bash(ls:*),Bash(mkdir:*),Bash(cp:*)"
 
       # Step 3: Check for changes and create PR
       - name: Check for changes

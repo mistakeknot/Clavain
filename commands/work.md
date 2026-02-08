@@ -179,24 +179,12 @@ This command takes a work document (plan, specification, or todo file) and execu
    )"
    ```
 
-2. **Create Pull Request** (if using PR workflow)
+2. **Commit and Push** (trunk-based — direct to main)
 
    ```bash
-   git push -u origin feature-branch-name
-
-   gh pr create --title "Feature: [Description]" --body "$(cat <<'EOF'
-   ## Summary
-   - What was built
-   - Why it was needed
-   - Key decisions made
-
-   ## Testing
-   - Tests added/modified
-   - Manual testing performed
-
-   🤖 Generated with [Claude Code](https://claude.com/claude-code)
-   EOF
-   )"
+   git add <changed-files>
+   git commit -m "feat: [Description]"
+   git push
    ```
 
 4. **Notify User**

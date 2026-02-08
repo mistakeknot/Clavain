@@ -4,34 +4,26 @@ description: Resolve all pending CLI todos using parallel processing
 argument-hint: "[optional: specific todo ID or pattern]"
 ---
 
-Resolve all TODO comments using parallel processing.
+Resolve all pending todos from the `todos/*.md` directory using parallel processing.
+
+## Source
+
+Get unresolved TODOs from `todos/*.md`. If any todo recommends deleting files in `docs/plans/` or `docs/solutions/`, skip it and mark as `wont_fix` — those are intentional pipeline artifacts.
 
 ## Workflow
 
 ### 1. Analyze
 
-Get all unresolved TODOs from the /todos/\*.md directory
-
-If any todo recommends deleting, removing, or gitignoring files in `docs/plans/` or `docs/solutions/`, skip it and mark it as `wont_fix`. These are pipeline artifacts that are intentional and permanent.
+Read all pending todo files. Group by type and dependency.
 
 ### 2. Plan
 
-Create a TodoWrite list of all unresolved items grouped by type. Make sure to look at dependencies that might occur and prioritize the ones needed by others. For example, if you need to change a name, you must wait to do the others. Output a mermaid flow diagram showing how we can do this. Can we do everything in parallel? Do we need to do one first that leads to others in parallel? I'll put the to-dos in the mermaid diagram flow‑wise so the agent knows how to proceed in order.
+Create a TodoWrite list of all items. Check for dependencies — if one fix requires another to land first, note the order. Output a brief mermaid diagram showing the parallel/sequential flow.
 
 ### 3. Implement (PARALLEL)
 
-Spawn a pr-comment-resolver agent for each unresolved item in parallel.
+Spawn a `pr-comment-resolver` agent for each independent item in parallel. Wait for sequential dependencies to complete before spawning dependent items.
 
-So if there are 3 comments, it will spawn 3 pr-comment-resolver agents in parallel. like this
+### 4. Commit
 
-1. Task pr-comment-resolver(comment1)
-2. Task pr-comment-resolver(comment2)
-3. Task pr-comment-resolver(comment3)
-
-Always run all in parallel subagents/Tasks for each Todo item.
-
-### 4. Commit & Resolve
-
-- Commit changes
-- Remove the TODO from the file, and mark it as resolved.
-- Push to remote
+Commit changes. Mark resolved todos as complete by renaming the file status prefix.

@@ -109,10 +109,7 @@
         "commands/resolve_parallel.md": "commands/resolve-parallel.md",
         "commands/resolve_pr_parallel.md": "commands/resolve-pr-parallel.md",
         "commands/resolve_todo_parallel.md": "commands/resolve-todo-parallel.md",
-        "commands/triage.md": "commands/triage.md",
-        "commands/workflows/brainstorm.md": "commands/brainstorm.md",
-        "commands/workflows/review.md": "commands/review.md",
-        "commands/workflows/work.md": "commands/work.md"
+        "commands/triage.md": "commands/triage.md"
       }
     }
   ]

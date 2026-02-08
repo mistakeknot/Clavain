@@ -33,26 +33,30 @@ if ! curl -sf --max-time 2 "${AGENT_MAIL_URL}" -H "Content-Type: application/jso
     exit 0
 fi
 
+# Build JSON payload safely using python3 to escape values
+json_payload=$(python3 -c "
+import json, sys
+print(json.dumps({
+    'jsonrpc': '2.0',
+    'id': 'register-' + sys.argv[1],
+    'method': 'tools/call',
+    'params': {
+        'name': 'macro_start_session',
+        'arguments': {
+            'human_key': sys.argv[2],
+            'program': 'claude-code',
+            'model': 'claude-opus-4-6',
+            'task_description': 'session ' + sys.argv[1]
+        }
+    }
+}))" "$session_id" "$PROJECT_DIR" 2>/dev/null) || {
+    exit 0
+}
+
 # Call macro_start_session
 response=$(curl -sf --max-time 5 "${AGENT_MAIL_URL}" \
     -H "Content-Type: application/json" \
-    -d "$(cat <<PAYLOAD
-{
-  "jsonrpc":"2.0",
-  "id":"register-${session_id}",
-  "method":"tools/call",
-  "params":{
-    "name":"macro_start_session",
-    "arguments":{
-      "human_key":"${PROJECT_DIR}",
-      "program":"claude-code",
-      "model":"claude-opus-4-6",
-      "task_description":"session ${session_id}"
-    }
-  }
-}
-PAYLOAD
-)" 2>/dev/null) || {
+    -d "$json_payload" 2>/dev/null) || {
     # Registration failed — silently skip
     exit 0
 }

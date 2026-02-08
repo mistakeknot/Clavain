@@ -311,10 +311,10 @@ Clavain bundles knowledge from 7 actively-developed upstream tools. Two systems 
 
 Manual sync check:
 ```bash
-# Check for upstream updates
+# Check for upstream updates (local — no file changes)
 bash scripts/upstream-check.sh
-# Or trigger full auto-merge locally
-bash scripts/sync-upstreams.sh
+# Trigger full auto-merge (GitHub Action — creates PR)
+gh workflow run sync.yml
 ```
 
 ## Landing the Plane (Session Completion)

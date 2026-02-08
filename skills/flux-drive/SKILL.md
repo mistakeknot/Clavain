@@ -132,7 +132,9 @@ If user selects "Cancel", stop here.
 
 ### Tier 1 — Codebase-Aware (gurgeh-plugin)
 
-These agents ship with the plugin and have baked-in knowledge of the project's architecture, conventions, and patterns.
+These agents ship with gurgeh-plugin and have baked-in knowledge of the project's architecture, conventions, and patterns.
+
+**Availability check**: Before triage, verify gurgeh-plugin is installed by checking if `gurgeh-plugin:fd-architecture` is in the Task tool's agent list. If gurgeh-plugin is not available, skip Tier 1 entirely and rely on Tier 2/3 agents. Note this in the triage output.
 
 | Agent | subagent_type | Domain |
 |-------|--------------|--------|

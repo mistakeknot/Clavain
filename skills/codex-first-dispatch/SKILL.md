@@ -28,9 +28,10 @@ If Codex is unavailable, tell the user and ask if they want to fall back to dire
 
 ## Step 0: Resolve dispatch.sh
 
-Find the interclode dispatch script. Check in order:
-1. `~/.claude/plugins/cache/interagency-marketplace/interclode/*/scripts/dispatch.sh`
-2. `/root/projects/interclode/scripts/dispatch.sh` (local dev)
+Check for the interclode dispatch path in order:
+1. **SessionStart context** — if the hook detected interclode, the path is in the session context (look for "interclode: dispatch.sh at")
+2. `~/.claude/plugins/cache/interagency-marketplace/interclode/*/scripts/dispatch.sh`
+3. `/root/projects/interclode/scripts/dispatch.sh` (local dev)
 
 Store the resolved path as `$DISPATCH`.
 
