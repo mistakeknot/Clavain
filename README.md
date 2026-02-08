@@ -1,8 +1,10 @@
 # Clavain
 
-Clavain, named after one of the protagonists from Alastair Reynolds's [Revelation Space series](https://en.wikipedia.org/wiki/Revelation_Space_series), is a **highly** opinionated Claude Code plugin that encapsulates how I personally like to use Claude Code to build things. I do not think it is the best way for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own Claude Code experience.
+Clavain, named after one of the protagonists from Alastair Reynolds's [Revelation Space series](https://en.wikipedia.org/wiki/Revelation_Space_series), is a **highly** opinionated Claude Code agent rig that encapsulates how I personally like to use Claude Code to build things. An agent rig, as I define it, is a collection of plugins, skills, and integrations that serves as a cohesive system for working with agents.
 
-With 34 skills, 23 agents, 27 commands, 3 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I would probably recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical workflow.
+I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
+
+With 34 skills, 23 agents, 27 commands, 3 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -16,11 +18,11 @@ claude plugin install clavain@interagency-marketplace
 claude --plugin-dir /path/to/Clavain
 ```
 
-## How I Actually Use This
+## My Workflow
 
-The shortest version: I type `/lfg add user export feature` and Claude brainstorms the approach, writes a plan, reviews the plan with multiple agents, implements the code, reviews the implementation, resolves any issues, and runs quality gates. One command, full lifecycle. Most of the time I just watch and approve.
+For simple requests, I type `/lfg add user export feature` and Claude brainstorms the approach, writes a plan, reviews the plan with multiple agents, implements the code, reviews the implementation, resolves any issues, and runs quality gates. One command, full lifecycle. Most of the time I just watch and approve.
 
-But that's the autopilot version. In practice, I use Clavain's pieces individually depending on what I'm doing.
+For more complex endeavors (or new projects), I use Clavain's pieces individually depending on what I'm doing. The following review of the `/lfg` lifecycle provides a brief explanation of all the different parts of Clavain.
 
 ### The `/lfg` Lifecycle
 
@@ -33,9 +35,9 @@ But that's the autopilot version. In practice, I use Clavain's pieces individual
 
 I almost always start with `/brainstorm` even when I think I know what I want. It forces me to articulate requirements before touching code, and Claude often catches edge cases I hadn't considered. After brainstorming, `/write-plan` creates a structured implementation plan, and `/flux-drive` reviews that plan with up to 4 tiers of agents before any code is written.
 
-### Reviewing Things
+### Reviewing Things with `/flux-drive`
 
-`/flux-drive` is probably the piece I use most often on its own. Point it at a file, a plan, or an entire repo and it figures out which reviewers actually matter. It pulls from a roster of 23 agents across 4 tiers:
+`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. Point it at a file, a plan, or an entire repo and it figures out which reviewers are relevant for the given context. It pulls from a roster of 23 agents across 4 tiers:
 
 - **Tier 1** — Codebase-aware agents (architecture, code quality, security, performance, UX) that understand your actual project, not generic checklists
 - **Tier 2** — Project-specific agents selected by tech stack (Go reviewer for Go projects, Python reviewer for Python, etc.)
@@ -44,11 +46,11 @@ I almost always start with `/brainstorm` even when I think I know what I want. I
 
 It only launches what's relevant. A simple markdown doc might get 2 agents; a full repo review might get 8. The agents run in parallel in the background, and you get a synthesized report with findings prioritized by severity.
 
-When Oracle is part of the review, flux-drive chains into the **interpeer stack** — comparing what Claude-based agents found against what GPT found, flagging disagreements, and optionally escalating critical decisions to a full multi-model council.
+When Oracle is part of the review, `flux-drive` chains into the **interpeer stack** — comparing what Claude-based agents found against what GPT found, flagging disagreements, and optionally escalating critical decisions to a full multi-model council.
 
-### Cross-AI Review
+### Cross-Agent Review
 
-This is the part I find most interesting. Different models genuinely see different things, and the disagreements between them are often more valuable than what either finds alone.
+Because different models and agents genuinely see different things, and the disagreements between them are often more valuable than what either finds alone, I find cross-agent review to be incredibly valuable, especially after a `flux-drive` run.
 
 The interpeer stack escalates in depth:
 
@@ -61,13 +63,13 @@ The interpeer stack escalates in depth:
 
 `/interpeer` is the lightweight entry point. It auto-detects whether you're running in Claude Code or Codex CLI and calls the other one. For deeper analysis, `prompterpeer` builds optimized prompts for Oracle (GPT-5.2 Pro) and shows you the enhanced prompt before sending. `winterpeer` runs a full council when the stakes are high — critical architecture or security decisions where you want genuine consensus, not just one model's opinion.
 
-`splinterpeer` is my favorite. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions. Disagreement-driven development.
+`splinterpeer` is my favorite. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions.
 
 ### Codex-First Mode
 
-When I want Claude to orchestrate but not touch code directly, I toggle `/clodex`. In this mode, Claude reads, plans, and writes detailed prompts — but all code changes go through Codex agents. Claude crafts a megaprompt, dispatches it, reads the verdict, and decides if it's acceptable. Think of it as Claude being the tech lead and Codex being the engineer.
+Because Codex CLI has far higher usage limits than Claude Code, I like saving Claude Code usage by toggling `/clodex` or mentioning it in my request. In this mode, Claude reads, plans, and writes detailed prompts — but all code changes go through Codex agents. Claude crafts a megaprompt, dispatches it, reads the verdict, and decides if it's acceptable. Think of it as Claude being the tech lead and Codex being the engineer.
 
-For multi-task work, `/clodex` parallelizes naturally. Five independent changes? Five Codex agents dispatched simultaneously. Claude collects the results and commits.
+For multi-task work, `/clodex` parallelizes naturally. Five independent changes get five Codex agents dispatched simultaneously. Claude collects the results and commits.
 
 ### Structured Debate
 
@@ -182,16 +184,16 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 - **context7** — Library documentation lookup via [Context7](https://context7.com)
 - **mcp-agent-mail** — Multi-agent coordination, file reservations, and messaging via [MCP Agent Mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
 
-## The Modpack
+## The Agent Rig
 
-Clavain is designed as a **modpack** — an opinionated integration layer that configures companion plugins into a cohesive rig. It doesn't duplicate their capabilities; it routes to them and wires them together.
+Clavain is designed as an **agent rig**, inspired by [PC game mod packs](https://en.wikipedia.org/wiki/Video_game_modding#Mod_packs). It is an opinionated integration layer that configures companion plugins into a cohesive rig. Instead of duplicating their capabilities, Clavain routes to them and wires them together.
 
 ### Required Companions
 
 | Plugin | Why |
 |--------|-----|
 | [context7](https://context7.com) | Runtime doc fetching. Clavain's skills use it to pull library docs without bundling them. |
-| [gurgeh-plugin](https://github.com/interagency-marketplace) | Codebase-aware Tier 1 agents for flux-drive (architecture, code quality, security, performance, UX). |
+| [gurgeh-plugin](https://github.com/interagency-marketplace) | Codebase-aware Tier 1 agents for `flux-drive` (architecture, code quality, security, performance, UX). |
 | [explanatory-output-style](https://github.com/claude-plugins-official) | Educational insights in output. Injected via SessionStart hook. |
 
 ### Recommended
@@ -221,13 +223,13 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 Clavain is opinionated but not rigid. A few things worth knowing:
 
-**Tier 2 agents are project-specific.** Flux-drive selects language reviewers based on your tech stack. If you're working in a language that doesn't have a Kieran reviewer (Rust, Java, etc.), it skips that tier gracefully.
+**Tier 2 agents are project-specific.** `flux-drive` selects language reviewers based on your tech stack. If you're working in a language that doesn't have a Kieran reviewer (Rust, Java, etc.), it skips that tier gracefully.
 
 **Skills can be overridden.** If you disagree with how `test-driven-development` works, you can create your own skill with the same name in a local plugin that loads after Clavain. Last-loaded wins.
 
 **Codex-first mode is optional.** Everything works fine with Claude making changes directly. `/clodex` is there for when you want the orchestration pattern, not a requirement.
 
-**Oracle requires setup.** The cross-AI features (prompterpeer, winterpeer, flux-drive Tier 4) need [Oracle](https://github.com/steipete/oracle) installed and configured. Without it, those features are simply skipped — nothing breaks.
+**Oracle requires setup.** The cross-AI features (`prompterpeer`, `winterpeer`, `flux-drive` Tier 4) need [Oracle](https://github.com/steipete/oracle) installed and configured. Without it, those features are simply skipped — nothing breaks.
 
 ## Architecture
 
