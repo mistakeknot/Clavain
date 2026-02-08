@@ -33,4 +33,4 @@ python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manif
 - 3-layer routing: Stage → Domain → Language
 - Trunk-based development — no branches/worktrees skills
 - `docs-sp-reference/` is historical archive from source plugins — don't modify
-- **Always publish after pushing** — run `claude plugin publish clavain@interagency-marketplace` after every `git push`
+- **Always publish after pushing** — after every `git push`, run: `claude plugin marketplace update interagency-marketplace && claude plugin update clavain@interagency-marketplace` (bump version in plugin.json first if needed)
