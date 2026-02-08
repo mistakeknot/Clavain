@@ -1,6 +1,6 @@
 ---
 name: engineering-docs
-description: Capture solved problems as categorized documentation with YAML frontmatter for fast lookup
+description: Use when capturing a solved problem as categorized documentation with YAML frontmatter for fast lookup
 allowed-tools:
   - Read # Parse conversation context
   - Write # Create resolution docs
@@ -23,11 +23,10 @@ This skill captures problem solutions immediately after confirmation, creating s
 
 ---
 
-<critical_sequence name="documentation-capture" enforce_order="strict">
+## Documentation Capture Sequence
 
 ## 7-Step Process
 
-<step number="1" required="true">
 ### Step 1: Detect Confirmation
 
 **Auto-invoke after phrases:**
@@ -52,9 +51,7 @@ This skill captures problem solutions immediately after confirmation, creating s
 - Simple typos
 - Obvious syntax errors
 - Trivial fixes immediately corrected
-</step>
 
-<step number="2" required="true" depends_on="1">
 ### Step 2: Gather Context
 
 Extract from conversation history:
@@ -84,9 +81,7 @@ I need a few details to document this properly:
 
 [Continue after user provides details]
 ```
-</step>
 
-<step number="3" required="false" depends_on="2">
 ### Step 3: Check Existing Docs
 
 Search docs/solutions/ for similar issues:
@@ -119,9 +114,7 @@ WAIT for user response, then execute chosen action.
 **ELSE** (no similar issue found):
 
 Proceed directly to Step 4 (no user interaction needed).
-</step>
 
-<step number="4" required="true" depends_on="2">
 ### Step 4: Generate Filename
 
 Format: `[sanitized-symptom]-[module]-[YYYYMMDD].md`
@@ -138,14 +131,12 @@ Format: `[sanitized-symptom]-[module]-[YYYYMMDD].md`
 - `missing-include-BriefSystem-20251110.md`
 - `parameter-not-saving-state-EmailProcessing-20251110.md`
 - `webview-crash-on-resize-Assistant-20251110.md`
-</step>
 
-<step number="5" required="true" depends_on="4" blocking="true">
-### Step 5: Validate YAML Schema
+### Step 5: Validate YAML Schema (Blocking)
 
 **CRITICAL:** All docs require validated YAML frontmatter with enum validation.
 
-<validation_gate name="yaml-schema" blocking="true">
+#### Validation Gate: YAML Schema (Blocking)
 
 **Validate against schema:**
 Load `schema.yaml` and classify the problem against the enum values defined in [yaml-schema.md](./references/yaml-schema.md). Ensure all required fields are present and match allowed values exactly.
@@ -165,10 +156,7 @@ Please provide corrected values.
 
 **GATE ENFORCEMENT:** Do NOT proceed to Step 6 (Create Documentation) until YAML frontmatter passes all validation rules defined in `schema.yaml`.
 
-</validation_gate>
-</step>
 
-<step number="6" required="true" depends_on="5">
 ### Step 6: Create Documentation
 
 **Determine category from problem_type:** Use the category mapping defined in [yaml-schema.md](./references/yaml-schema.md) (lines 49-61).
@@ -193,9 +181,7 @@ mkdir -p "docs/solutions/${CATEGORY}"
 - Enum validation ensures consistent categorization
 
 **Create documentation:** Populate the structure from `assets/resolution-template.md` with context gathered in Step 2 and validated YAML frontmatter from Step 5.
-</step>
 
-<step number="7" required="false" depends_on="6">
 ### Step 7: Cross-Reference & Critical Pattern Detection
 
 If similar issues found in Step 3:
@@ -248,13 +234,10 @@ But **NEVER auto-promote**. User decides via decision menu (Option 2).
 **Template for critical pattern addition:**
 
 When user selects Option 2 (Add to Required Reading), use the template from `assets/critical-pattern-template.md` to structure the pattern entry. Number it sequentially based on existing patterns in `docs/solutions/patterns/critical-patterns.md`.
-</step>
-
-</critical_sequence>
 
 ---
 
-<decision_gate name="post-documentation" wait_for_user="true">
+### Decision Gate: Post-Documentation
 
 ## Decision Menu After Capture
 
@@ -337,11 +320,10 @@ Action:
 
 - Ask what they'd like to do
 
-</decision_gate>
 
 ---
 
-<integration_protocol>
+## Integration Protocol
 
 ## Integration Points
 
@@ -356,11 +338,10 @@ Action:
 **Handoff expectations:**
 All context needed for documentation should be present in conversation history before invocation.
 
-</integration_protocol>
 
 ---
 
-<success_criteria>
+## Success Criteria
 
 ## Success Criteria
 
@@ -373,7 +354,6 @@ Documentation is successful when ALL of the following are true:
 - ✅ Cross-references added if related issues found
 - ✅ User presented with decision menu and action confirmed
 
-</success_criteria>
 
 ---
 
