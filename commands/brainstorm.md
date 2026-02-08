@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: Explore requirements and approaches through collaborative dialogue before planning implementation
+description: Structured brainstorm workflow — 4 phases (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan. For freeform brainstorming without phases, use /brainstorming instead.
 argument-hint: "[feature idea or problem to explore]"
 ---
 

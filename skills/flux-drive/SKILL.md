@@ -179,16 +179,14 @@ If no Tier 2 agents exist, skip this tier entirely. Do NOT create them — that'
 
 These are general-purpose reviewers without codebase-specific knowledge. Only use when no Tier 1/2 agent covers the domain.
 
-| Agent | subagent_type | Model | Domain |
-|-------|--------------|-------|--------|
-| architecture-strategist | clavain:review:architecture-strategist | sonnet | System design, component boundaries |
-| code-simplicity-reviewer | clavain:review:code-simplicity-reviewer | haiku | YAGNI, minimalism, over-engineering |
-| performance-oracle | clavain:review:performance-oracle | sonnet | Algorithms, scaling, bottlenecks |
-| security-sentinel | clavain:review:security-sentinel | sonnet | OWASP, vulnerabilities, auth |
-| pattern-recognition-specialist | clavain:review:pattern-recognition-specialist | haiku | Anti-patterns, duplication, consistency |
-| data-integrity-reviewer | clavain:review:data-integrity-reviewer | sonnet | Migrations, data safety, transactions |
-
-When launching Tier 3 agents, use the recommended `model` parameter to reduce token costs. Override with `inherit` (omit the model parameter) if the document is unusually complex or if the agent's domain is the primary focus of the review.
+| Agent | subagent_type | Domain |
+|-------|--------------|--------|
+| architecture-strategist | clavain:review:architecture-strategist | System design, component boundaries |
+| code-simplicity-reviewer | clavain:review:code-simplicity-reviewer | YAGNI, minimalism, over-engineering |
+| performance-oracle | clavain:review:performance-oracle | Algorithms, scaling, bottlenecks |
+| security-sentinel | clavain:review:security-sentinel | OWASP, vulnerabilities, auth |
+| pattern-recognition-specialist | clavain:review:pattern-recognition-specialist | Anti-patterns, duplication, consistency |
+| data-integrity-reviewer | clavain:review:data-integrity-reviewer | Migrations, data safety, transactions |
 
 ### Tier 4 — Cross-AI (Oracle)
 
@@ -370,31 +368,28 @@ ls {OUTPUT_DIR}/
 
 You expect N files (one per launched agent). If using `ls`, poll every 30 seconds. If after 5 minutes some are missing, proceed with what you have and note missing agents as "no findings."
 
-### Step 3.1: Collect Results
+### Step 3.1: Validate Agent Output
 
-For each agent's output file, read the **YAML frontmatter** first (first ~60 lines). This gives you a structured list of all issues and improvements without reading full prose. Only read the prose body if:
-- An issue needs more context to understand
-- You need to resolve a conflict between agents
-- The frontmatter is missing or malformed (fallback to reading Summary + Issues sections)
-
-If an agent's output file doesn't exist or is empty, note it as "no findings" and move on.
-
-### Step 3.0.5: Validate Agent Output
-
-Before synthesis, validate each agent's output file:
+For each agent's output file, validate structure before reading content:
 
 1. Check the file starts with `---` (YAML frontmatter delimiter)
 2. Verify required keys exist: `agent`, `tier`, `issues`, `verdict`
 3. Classification:
-   - **Valid**: Frontmatter parsed successfully → proceed with frontmatter-first synthesis
+   - **Valid**: Frontmatter parsed successfully → proceed with frontmatter-first collection
    - **Malformed**: File exists but frontmatter is missing/incomplete → fall back to prose-based reading (read Summary + Issues sections directly)
    - **Missing**: File doesn't exist or is empty → "no findings"
 
 Report validation results to user: "5/6 agents returned valid frontmatter, 1 fallback to prose"
 
-This step prevents silent synthesis failures where malformed output gets ignored rather than read as prose.
+### Step 3.2: Collect Results
 
-### Step 3.2: Deduplicate and Organize
+For each **valid** agent output, read the **YAML frontmatter** first (first ~60 lines). This gives you a structured list of all issues and improvements without reading full prose. Only read the prose body if:
+- An issue needs more context to understand
+- You need to resolve a conflict between agents
+
+For **malformed** outputs, read the Summary + Issues sections as prose fallback.
+
+### Step 3.3: Deduplicate and Organize
 
 1. **Group findings by section** — organize all agent findings under the section they apply to (or by topic for repo reviews)
 2. **Deduplicate**: If multiple agents flagged the same issue, keep the most specific one (prefer Tier 1/2 over Tier 3)
@@ -402,7 +397,7 @@ This step prevents silent synthesis failures where malformed output gets ignored
 4. **Flag conflicts**: If agents disagree, note both positions
 5. **Priority from codebase-aware agents**: When a Tier 1/2 and Tier 3 agent give different advice on the same topic, prefer the codebase-aware recommendation
 
-### Step 3.3: Update the Document
+### Step 3.4: Update the Document
 
 **The write-back strategy depends on input type:**
 
@@ -478,7 +473,7 @@ Do NOT modify the repo's README or any existing files. Instead, write a new summ
 - Links to individual agent reports in the same directory
 - Includes the same Enhancement Summary format (Key Findings, Issues to Address checklist)
 
-### Step 3.4: Report to User
+### Step 3.5: Report to User
 
 Tell the user:
 - How many agents ran and how many were codebase-aware vs generic

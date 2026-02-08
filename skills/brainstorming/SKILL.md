@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: Use before any creative work — creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation.
+description: Freeform brainstorming mode — loads collaborative dialogue style (one question at a time, multiple choice, incremental design). Use for open-ended exploration without structured phases. For a guided workflow with repo research, use /brainstorm instead.
 ---
 
 # Brainstorming Ideas Into Designs

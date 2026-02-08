@@ -1,7 +1,24 @@
 # Flux-Drive Improvements Brainstorm
 
 **Date:** 2026-02-08
-**Status:** Approved for implementation
+**Status:** Implemented (commit 3d02843) — post-implementation review below
+
+## Flux Drive Enhancement Summary
+
+Reviewed by 4 agents (3 codebase-aware, 1 generic) on 2026-02-08.
+
+### Key Findings
+- Model hints in Tier 3 table are non-functional — `model: haiku/sonnet` in SKILL.md has no runtime effect since agent files use `model: inherit` and orchestrator doesn't override (3/4 agents)
+- Step 3.0.5 (validation) is physically placed after Step 3.1 in SKILL.md despite being numbered to run before it (2/4 agents)
+- Token budget math claims 29% savings but actual optimizations yield ~18-21% (2/4 agents)
+- Section trimming relies on prompt instructions with no enforcement mechanism (2/4 agents)
+
+### Issues to Address
+- [ ] Remove Model column from Tier 3 table — Opus-by-default policy (P0, 3/4 agents)
+- [ ] Fix Step 3.0.5 ordering — move before Step 3.1 or renumber (P0, 2/4 agents)
+- [ ] Correct token budget math in this brainstorm (P1, 2/4 agents)
+- [ ] Consider trimming enforcement mechanism for future iteration (P1, 2/4 agents)
+- [ ] Update brainstorm status — improvements 1, 3, 4 already implemented (P1, 1/4 agents)
 
 ## What We're Building
 
@@ -29,6 +46,8 @@ Flux-drive is Clavain's flagship multi-agent review skill. Two self-reviews (v1:
 ### 2. Token Optimization (Cost)
 - **Enforce section trimming**: Actually implement "1-line summary for out-of-domain sections" rule. Target: reduce per-agent document cost from ~12K to ~6K tokens (saves ~36K for 6 agents).
 - **Add haiku model hint**: Tier 3 agents doing pattern/simplicity review can use haiku instead of inheriting opus. Add `model: haiku` suggestion in triage.
+
+> **Flux Drive** (fd-architecture, fd-code-quality, fd-performance): Model hints in the roster table are advisory text only — agent `.md` files all declare `model: inherit`. The orchestrator must pass `model:` in the Task call for this to work. User policy is Opus-by-default, so remove the Model column entirely.
 - **Compress prompt template**: Reduce from ~85 lines to ~50 lines by tightening instructions.
 - **Domain-specific document slicing**: Phase 1 extracts per-domain section summaries that agents receive instead of full document.
 
@@ -60,6 +79,8 @@ Flux-drive is Clavain's flagship multi-agent review skill. Two self-reviews (v1:
 - Should thin-section enrichment (Step 3.3) be tested now or deferred?
 - What model should Tier 3 agents default to? (haiku saves tokens, sonnet is middle ground)
 
+> **Flux Drive** (fd-performance): Resolved — user policy is Opus by default, inherit in clodex mode. Remove model hints from Tier 3 table.
+
 ## Token Budget Target
 
 | Metric | Current | Target |
@@ -67,6 +88,8 @@ Flux-drive is Clavain's flagship multi-agent review skill. Two self-reviews (v1:
 | Per-agent document cost | ~12K tokens | ~6K tokens |
 | 6-agent total | ~197K tokens | ~140K tokens |
 | Savings | — | ~29% reduction |
+
+> **Flux Drive** (fd-architecture, fd-performance): The 29% target is arithmetically inconsistent. Per-agent halving (12K→6K) across 6 agents saves 36K tokens, yielding 161K (18% reduction). Even with prompt compression (~4-6K), max plausible savings reach ~21%, not 29%. Rework with bottom-up estimates.
 
 ## Next Step
 
