@@ -12,6 +12,8 @@ Execute a work plan efficiently while maintaining quality and finishing features
 
 This command takes a work document (plan, specification, or todo file) and executes it systematically. The focus is on **shipping complete features** by understanding requirements quickly, following existing patterns, and maintaining quality throughout.
 
+> **When to use this vs `/execute-plan`:** Use `/work` for autonomous feature shipping from a spec or plan. Use `/execute-plan` when you want batch execution with architect review checkpoints between batches (3 tasks at a time).
+
 ## Input Document
 
 <input_document> #$ARGUMENTS </input_document>
