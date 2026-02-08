@@ -54,6 +54,18 @@ Launch these core agents in parallel:
 
 Run Task code-simplicity-reviewer on the PR content.
 
+## Phase 3.5: Cross-AI Review (Oracle, Optional)
+
+If Oracle is available (SessionStart hook reports it), run a GPT-5.2 Pro review in background:
+
+```bash
+DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
+  oracle --wait -p "Review this PR for issues a Claude-based reviewer might miss. Focus on: security blind spots, architectural concerns, edge cases. Number each finding with severity (P1/P2/P3)." \
+  -f "<changed-files>"
+```
+
+Include Oracle findings in Phase 4 synthesis alongside Clavain agent results.
+
 ## Phase 4: Synthesis
 
 1. Collect all agent findings. Discard any that flag `docs/plans/` or `docs/solutions/` files.

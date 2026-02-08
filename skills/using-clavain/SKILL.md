@@ -65,6 +65,10 @@ Clavain provides 32 skills, 23 agents, and 24 commands. To avoid overwhelm, use 
 | Any with security surface | security-sentinel |
 | Any with perf concerns | performance-oracle |
 
+### Cross-AI (Oracle)
+
+When Oracle is available (detected at session start), it can supplement any review stage with a GPT-5.2 Pro perspective. See `oracle-review` skill for invocation.
+
 ## Routing Heuristic
 
 When a user message arrives:
@@ -123,3 +127,4 @@ Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
 | `/clavain:migration-safety [migration]` | Database migration safety review |
 | `/clavain:learnings` | Capture solved problem as documentation |
 | `/clavain:upstream-sync` | Check upstream repos for updates, generate upgrade checklist |
+| `/clavain:setup` | Bootstrap modpack — install plugins, disable conflicts, verify MCP |

@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 32 skills, 23 agents, 24 commands, 3 hooks, 2 MCP servers |
+| Components | 32 skills, 23 agents, 25 commands, 3 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Architecture
@@ -34,7 +34,8 @@ Clavain/
 │   ├── review/                    # 15 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
-├── commands/                      # 24 slash commands
+├── commands/                      # 25 slash commands
+│   └── setup.md               # Modpack installer (+ 24 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + SessionEnd)
 │   ├── session-start.sh           # Context injection + upstream staleness warning

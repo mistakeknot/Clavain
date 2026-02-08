@@ -165,6 +165,25 @@ These are general-purpose reviewers without codebase-specific knowledge. Only us
 | pattern-recognition-specialist | clavain:review:pattern-recognition-specialist | Anti-patterns, duplication, consistency |
 | data-integrity-reviewer | clavain:review:data-integrity-reviewer | Migrations, data safety, transactions |
 
+### Tier 4 — Cross-AI (Oracle)
+
+**Availability check**: Oracle is available when the SessionStart hook reports "oracle: available for cross-AI review". If not detected, skip Tier 4 entirely.
+
+When available, Oracle provides a GPT-5.2 Pro perspective on the same document. It scores like any other agent but gets a +1 diversity bonus (different model family reduces blind spots).
+
+| Agent | Invocation | Domain |
+|-------|-----------|--------|
+| oracle-review | `oracle --wait -p "<prompt>" -f "<files>"` | Cross-model validation, blind spot detection |
+
+**Important**: Oracle runs via CLI, not Task tool. Launch it in background:
+```bash
+DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
+  oracle --wait -p "Review this {document_type} for {review_goal}. Focus on: issues a Claude-based reviewer might miss. Provide numbered findings with severity." \
+  -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-review.md 2>&1
+```
+
+Oracle counts toward the 8-agent cap. If the roster is already full, Oracle replaces the lowest-scoring Tier 3 agent.
+
 ---
 
 ## Phase 2: Launch
@@ -196,6 +215,11 @@ Launch all selected agents as parallel Task calls in a **single message**.
 **Tier 3 agents (clavain)**:
 - Use the native `subagent_type` from the roster (e.g., `clavain:review:architecture-strategist`)
 - Set `run_in_background: true`
+
+**Tier 4 agent (Oracle)**:
+- Run via Bash tool with `run_in_background: true` and `timeout: 600000`
+- Requires `DISPLAY=:99` and `CHROME_PATH=/usr/local/bin/google-chrome-wrapper`
+- Output goes to `{OUTPUT_DIR}/oracle-review.md`
 
 ### Prompt template for each agent:
 
