@@ -57,8 +57,8 @@ Tell the user:
 After announcing the toggle, remind yourself of the codex-first behavioral contract:
 
 - **Plan**: Read code freely (Read/Grep/Glob). Identify what needs to change.
-- **Prompt**: Write a detailed prompt file to `/tmp/codex-mega-<name>.md`
-- **Dispatch**: Send to Codex via dispatch.sh with `--inject-docs` and `--prompt-file`
+- **Prompt**: Write a task description file to `/tmp/codex-task-<name>.md`
+- **Dispatch**: dispatch.sh assembles full prompt from template + task description
 - **Verify**: Read output, build, test, diff review, proportionality check
 - **Bash**: Only for read-only commands (git status, test runs, build checks). Any file-modifying Bash commands should be dispatched through Codex.
 
