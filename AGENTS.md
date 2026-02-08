@@ -217,7 +217,6 @@ These must be installed for Clavain to function fully.
 |--------|--------|-------------|
 | **context7** | claude-plugins-official | Runtime doc fetching. Clavain's MCP server. Skills use it to pull upstream docs without bundling them. |
 | **gurgeh-plugin** | interagency-marketplace | Codebase-aware T1 agents (fd-architecture, fd-code-quality, fd-security, fd-performance, fd-user-experience). Powers `/flux-drive`. |
-| **interclode** | interagency-marketplace | Codex CLI dispatch. Powers codex-first mode (`/clodex`), `/codex-delegation`, parallel agent execution. |
 | **interpeer** | interagency-marketplace | Cross-AI review via Oracle (GPT-5.2 Pro). Used by `/review` and `/flux-drive` for multi-model perspective. |
 | **explanatory-output-style** | claude-plugins-official | Educational insights in output. Injected via SessionStart hook. |
 

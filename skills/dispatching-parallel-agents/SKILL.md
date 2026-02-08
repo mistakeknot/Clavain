@@ -195,7 +195,6 @@ need Claude's deep architectural reasoning, consider dispatching Codex agents in
 - Tasks are exploratory (research, investigation)
 - Tasks involve complex architectural decisions
 
-**To dispatch Codex agents:** Use the `interclode:delegate` skill, which provides
+**To dispatch Codex agents:** Use the `clavain:clodex` skill, which provides
 the full delegation protocol (prompt crafting, dispatch, monitoring, verification).
-Or use `clavain:codex-delegation` for plan-aware delegation that translates plan
-tasks directly into interclode format.
+It translates plan tasks directly into Codex dispatch format.

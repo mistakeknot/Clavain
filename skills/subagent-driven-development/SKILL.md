@@ -239,7 +239,6 @@ Done!
 
 **Alternative workflows:**
 - **clavain:executing-plans** - Use for parallel session instead of same-session execution
-- **clavain:codex-delegation** - Use Codex agents for parallel implementation when tasks
+- **clavain:clodex** - Use Codex agents for parallel implementation when tasks
   are independent and well-scoped. Claude stays as orchestrator + reviewer.
   Best when you have many tasks and want to preserve Claude's context for review.
-  Invokes interclode:delegate for the actual dispatch.

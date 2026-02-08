@@ -1,5 +1,5 @@
 ---
-name: clodex
+name: clodex-toggle
 description: Toggle codex-first execution mode — all code changes go through Codex agents (alias for /codex-first)
 allowed-tools:
   - Bash
@@ -8,7 +8,7 @@ allowed-tools:
   - Glob
 ---
 
-# Clodex (Codex-First Mode Toggle)
+# Clodex Toggle (Codex-First Mode Toggle)
 
 This is an alias for `/codex-first`. Follow the `codex-first` command's instructions exactly.
 

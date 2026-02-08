@@ -182,7 +182,7 @@ AskUserQuestion:
 - **REQUIRED SUB-SKILL:** New session uses clavain:executing-plans
 
 **If Codex Delegation chosen:**
-- **REQUIRED SUB-SKILL:** Use clavain:codex-delegation
+- **REQUIRED SUB-SKILL:** Use clavain:clodex
 - Claude stays as orchestrator — planning, dispatching, reviewing, integrating
 - Codex agents execute tasks in parallel sandboxes
 - Best when tasks are independent, well-scoped, and benefit from parallel execution

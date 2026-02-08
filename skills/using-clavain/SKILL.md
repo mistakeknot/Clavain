@@ -34,7 +34,7 @@ Clavain provides 32 skills, 23 agents, and 25 commands. To avoid overwhelm, use 
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | architecture-strategist, spec-flow-analyzer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents) |
-| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, codex-delegation | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, clodex | — |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, clodex-toggle, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit | kieran-{go,python,typescript,shell}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage | deployment-verification-agent |
@@ -49,7 +49,7 @@ Clavain provides 32 skills, 23 agents, and 25 commands. To avoid overwhelm, use 
 | **Deploy** | — | deployment-verification-agent |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
-| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging, agent-mail-coordination, codex-first-dispatch, codex-delegation | pr-comment-resolver |
+| **Workflow** | file-todos, beads-workflow, oracle-review, slack-messaging, agent-mail-coordination, clodex | pr-comment-resolver |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
 

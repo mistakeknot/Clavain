@@ -61,7 +61,7 @@ Each todo is a markdown file with YAML frontmatter and structured sections. Use 
 status: ready              # pending | ready | complete
 priority: p1              # p1 | p2 | p3
 issue_id: "002"
-tags: [rails, performance, database]
+tags: [api, performance, database]
 dependencies: ["001"]     # Issue IDs this is blocked by
 ---
 ```
@@ -221,7 +221,7 @@ grep -l 'dependencies:.*"002"' todos/*.md
 **Searching:**
 ```bash
 # Search by tag
-grep -l "tags:.*rails" todos/*.md
+grep -l "tags:.*api" todos/*.md
 
 # Search by priority
 ls todos/*-p1-*.md

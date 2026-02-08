@@ -2,7 +2,7 @@
 
 Clavain, named after one of the protagonists from Alastair Reynolds's [Revelation Space series](https://en.wikipedia.org/wiki/Revelation_Space_series), is a **highly** opinionated Claude Code plugin that encapsulates how I personally like to use Claude Code to build things. I do not think it is the best way for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own Claude Code experience.
 
-With 32 skills, 23 agents, 24 commands, 2 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I would probably recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavin against your actual historical workflow.
+With 31 skills, 23 agents, 25 commands, 3 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I would probably recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavin against your actual historical workflow.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -53,8 +53,7 @@ Process discipline skills that guide HOW you work:
 | `finding-duplicate-functions` | Semantic dedup detection |
 | `flux-drive` | Intelligent document/repo review with agent triage |
 | `agent-mail-coordination` | Multi-agent coordination via MCP Agent Mail |
-| `codex-delegation` | Execute plan tasks via Codex agents (interclode bridge) |
-| `codex-first-dispatch` | Streamlined single-task Codex dispatch for codex-first mode |
+| `clodex` | Codex dispatch — megaprompt for single tasks, parallel delegation for many, with debate and Oracle escalation |
 | `upstream-sync` | Track updates from upstream tool repos |
 
 ### Agents (23)
@@ -94,12 +93,14 @@ User-invoked slash commands:
 | `/clavain:create-agent-skill` | Create skills/agents |
 | `/clavain:generate-command` | Generate new commands |
 | `/clavain:heal-skill` | Fix broken skills |
-| `/clavain:clodex` | Toggle codex-first execution mode (short alias) |
+| `/clavain:clodex-toggle` | Toggle codex-first execution mode (short alias) |
 | `/clavain:codex-first` | Toggle codex-first execution mode |
+| `/clavain:debate` | Structured Claude↔Codex debate |
 | `/clavain:upstream-sync` | Check upstream repos for updates |
 
-### Hooks (2)
+### Hooks (3)
 
+- **PreToolUse** — Autopilot gate: when codex-first mode is active (flag file exists), denies Edit/Write/MultiEdit/NotebookEdit and directs Claude to dispatch changes through Codex agents.
 - **SessionStart** — Injects `using-clavain` skill content as context on every session start, resume, clear, and compact. Also warns when upstream baseline (`docs/upstream-versions.json`) is stale (>7 days).
 
 ### MCP Servers (2)
@@ -119,9 +120,12 @@ clavain/
 │   └── workflow/                  # 3 workflow agents
 ├── commands/                      # 24 slash commands
 ├── hooks/
-│   ├── hooks.json                 # Hook registration
+│   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + SessionEnd)
+│   ├── autopilot.sh               # Codex-first mode gate (blocks writes when active)
 │   └── session-start.sh           # Context injection + staleness warning
 ├── scripts/
+│   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
+│   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
 │   └── upstream-check.sh          # Checks upstream repos via gh api
 ├── docs/
 │   └── upstream-versions.json     # Upstream sync baseline
