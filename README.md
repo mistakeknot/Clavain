@@ -20,9 +20,9 @@ claude --plugin-dir /path/to/Clavain
 
 ## My Workflow
 
-For simple requests, I type `/lfg add user export feature` and Claude brainstorms the approach, writes a plan, reviews the plan with multiple agents, implements the code, reviews the implementation, resolves any issues, and runs quality gates. One command, full lifecycle. Most of the time I just watch and approve.
+For simple requests, I use `/lfg add user export feature` and Clavain orchestrates Claude Code via hooks, commands, skills, and subagents to brainstorm the approach, write a plan, review the plan with multiple subagents, implement the code, review the implementation, resolve any issues, and run quality gates. While Clavain runs through all of these phases, I focus on the usual suspects: product strategy, user pain points, and finding new [leverage points](https://donellameadows.org/archives/leverage-points-places-to-intervene-in-a-system/).
 
-For more complex endeavors (or new projects), I use Clavain's pieces individually depending on what I'm doing. The following review of the `/lfg` lifecycle provides a brief explanation of all the different parts of Clavain.
+For more complex endeavors (or new projects), I use Clavain's pieces individually depending on what I'm doing. The following review of the `/lfg` lifecycle provides a brief explanation of all the different parts of Clavain:
 
 ### The `/lfg` Lifecycle
 
@@ -33,11 +33,11 @@ For more complex endeavors (or new projects), I use Clavain's pieces individuall
    explore        plan           review plan     execute    review code     fix issues              final check
 ```
 
-I almost always start with `/brainstorm` even when I think I know what I want. It forces me to articulate requirements before touching code, and Claude often catches edge cases I hadn't considered. After brainstorming, `/write-plan` creates a structured implementation plan, and `/flux-drive` reviews that plan with up to 4 tiers of agents before any code is written.
+Even when I think I know what I want, I usually start with `/brainstorm` because it forces me to articulate and trace through requirements and user journeys before touching code; Clavain often catches edge cases I hadn't considered. After brainstorming, `/write-plan` creates a structured implementation plan, and `/flux-drive` reviews that plan with up to 4 tiers of agents before any code is written.
 
 ### Reviewing Things with `/flux-drive`
 
-`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. Point it at a file, a plan, or an entire repo and it figures out which reviewers are relevant for the given context. It pulls from a roster of 28 agents across 4 tiers:
+`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It pulls from a roster of 28 agents across 4 tiers:
 
 - **Tier 1** — Codebase-aware agents (architecture, code quality, security, performance, UX) that understand your actual project, not generic checklists
 - **Tier 2** — Project-specific agents selected by tech stack (Go reviewer for Go projects, Python reviewer for Python, etc.)
@@ -46,13 +46,13 @@ I almost always start with `/brainstorm` even when I think I know what I want. I
 
 It only launches what's relevant. A simple markdown doc might get 2 agents; a full repo review might get 8. The agents run in parallel in the background, and you get a synthesized report with findings prioritized by severity.
 
-When Oracle is part of the review, `flux-drive` chains into the **interpeer stack** — comparing what Claude-based agents found against what GPT found, flagging disagreements, and optionally escalating critical decisions to a full multi-model council.
+When Oracle is part of the review, `flux-drive` chains into the **interpeer stack** — comparing what Claude-based agents found against what GPT-5.2 Pro found, flagging disagreements, and optionally escalating critical decisions to a full multi-model council.
 
-### Cross-Agent Review
+### Cross-Agent Review with `/interpeer`
 
-Because different models and agents genuinely see different things, and the disagreements between them are often more valuable than what either finds alone, I find cross-agent review to be incredibly valuable, especially after a `flux-drive` run.
+Because different models and agents genuinely see different things, and the disagreements between them are often more valuable than what either finds alone, I find cross-agent review with `/interpeer` to be incredibly valuable, especially after a `flux-drive` run.
 
-The interpeer stack escalates in depth:
+The `/interpeer` stack escalates in depth:
 
 | Command | What it does | Speed |
 |---------|-------------|-------|
@@ -63,11 +63,11 @@ The interpeer stack escalates in depth:
 
 `/interpeer` is the lightweight entry point. It auto-detects whether you're running in Claude Code or Codex CLI and calls the other one. For deeper analysis, `prompterpeer` builds optimized prompts for Oracle (GPT-5.2 Pro) and shows you the enhanced prompt before sending. `winterpeer` runs a full council when the stakes are high — critical architecture or security decisions where you want genuine consensus, not just one model's opinion.
 
-`splinterpeer` is my favorite. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions.
+I find `splinterpeer` to be particularly useful for complex, ambiguous contexts. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions.
 
-### Codex-First Mode
+### Token Efficiency with `/clodex`
 
-Because Codex CLI has far higher usage limits than Claude Code, I like saving Claude Code usage by toggling `/clodex` or mentioning it in my request. In this mode, Claude reads, plans, and writes detailed prompts — but all code changes go through Codex agents. Claude crafts a megaprompt, dispatches it, reads the verdict, and decides if it's acceptable. Think of it as Claude being the tech lead and Codex being the engineer.
+Because Codex CLI has far higher usage limits than Claude Code, I like saving Claude Code usage by toggling `/clodex` or mentioning it in my request. In this mode, Claude reads, plans, and writes detailed prompts — but all code changes always go through Codex agents for the session (or until /clodex is deactivated by toggle). Claude crafts a megaprompt, dispatches it, reads the verdict from Codex, and decides if it's acceptable. I would describe it as Claude playing the tech lead and Codex playing the engineering team.
 
 For multi-task work, `/clodex` parallelizes naturally. Five independent changes get five Codex agents dispatched simultaneously. Claude collects the results and commits.
 
