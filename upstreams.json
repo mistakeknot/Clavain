@@ -74,7 +74,6 @@
       "fileMap": {
         "skills/agent-native-architecture/SKILL.md": "skills/agent-native-architecture/SKILL.md",
         "skills/agent-native-architecture/references/*": "skills/agent-native-architecture/references/*",
-        "skills/brainstorming/SKILL.md": "skills/brainstorming/SKILL.md",
         "skills/create-agent-skills/SKILL.md": "skills/create-agent-skills/SKILL.md",
         "skills/create-agent-skills/references/*": "skills/create-agent-skills/references/*",
         "skills/create-agent-skills/templates/*": "skills/create-agent-skills/templates/*",
