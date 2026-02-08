@@ -9,7 +9,7 @@ Merged, modified, and maintained with updates from [superpowers](https://github.
 ## Install
 
 ```bash
-# From marketplace (once published)
+# From marketplace
 claude plugin install clavain@interagency-marketplace
 
 # Local development
