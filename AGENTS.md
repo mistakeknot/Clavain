@@ -16,6 +16,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 
 - Codex sync operations: `docs/runbooks/codex-sync.md`
 - GitHub web PR agent commands (`/clavain:claude-review`, `/clavain:codex-review`, `/clavain:dual-review`) are documented in `docs/runbooks/codex-sync.md`
+- GitHub issue command `/clavain:upstream-sync` (for `upstream-sync` issues) is documented in `docs/runbooks/codex-sync.md`
 
 ## Architecture
 

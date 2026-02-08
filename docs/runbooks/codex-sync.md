@@ -91,6 +91,21 @@ Rules:
 - Jobs run in read-only review mode and post results as PR comments
 - This is review-only automation (no code-writing workflow yet)
 
+## GitHub Web Issue Command (Upstream Sync)
+
+Workflow: `.github/workflows/upstream-sync-issue-command.yml`
+
+On an issue labeled `upstream-sync`, comment:
+
+- `/clavain:upstream-sync` to run real sync (`dry_run=false`)
+- `/clavain:upstream-sync --dry-run` to run preview mode
+
+Rules:
+
+- Works only on regular issues (not PRs)
+- Trigger user must be `OWNER`, `MEMBER`, or `COLLABORATOR`
+- Dispatches `.github/workflows/sync.yml` on `main`
+
 Required repository secrets (GitHub Actions):
 
 - `CODEX_AUTH_JSON` (for Codex CLI jobs)
