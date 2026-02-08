@@ -28,7 +28,6 @@ Install these plugins from their marketplaces. Skip any already installed.
 
 **From interagency-marketplace:**
 ```bash
-claude plugin install interpeer@interagency-marketplace
 claude plugin install gurgeh-plugin@interagency-marketplace
 claude plugin install interdoc@interagency-marketplace
 claude plugin install auracoil@interagency-marketplace
@@ -99,7 +98,7 @@ Run a final verification:
 ```bash
 echo "=== Plugin Status ==="
 # Check required plugins are enabled
-for plugin in clavain interpeer gurgeh-plugin context7 agent-sdk-dev plugin-dev serena security-guidance explanatory-output-style interdoc auracoil tool-time; do
+for plugin in clavain gurgeh-plugin context7 agent-sdk-dev plugin-dev serena security-guidance explanatory-output-style interdoc auracoil tool-time; do
   echo "$plugin: checking..."
 done
 

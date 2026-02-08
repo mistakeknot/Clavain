@@ -6,7 +6,7 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 
 | Action | Count | Plugins |
 |--------|-------|---------|
-| **KEEP** | 16 | clavain, interclode, interpeer, interdoc, gurgeh-plugin, auracoil, tool-time, context7, agent-sdk-dev, plugin-dev, serena, gopls-lsp, pyright-lsp, typescript-lsp, rust-analyzer-lsp, security-guidance |
+| **KEEP** | 15 | clavain, interclode, interdoc, gurgeh-plugin, auracoil, tool-time, context7, agent-sdk-dev, plugin-dev, serena, gopls-lsp, pyright-lsp, typescript-lsp, rust-analyzer-lsp, security-guidance |
 | **KEEP** (user pref) | 1 | explanatory-output-style |
 | **DISABLE** | 8 | code-review, code-simplifier, commit-commands, feature-dev, claude-md-management, frontend-design, pr-review-toolkit, hookify |
 | **EVALUATE** | 3 | tldrs, tldr-swinton, tuivision |
@@ -34,10 +34,9 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 |--------|----------|
 | **clavain** | The modpack itself. |
 | **interclode** | Codex CLI dispatch. Clavain's codex-first depends on it. |
-| **interpeer** | Cross-AI review (Oracle/GPT). Distinct from Clavain's Claude-only agents. |
 | **interdoc** | AGENTS.md generation. Different from Clavain's engineering-docs (which captures solutions, not generates AGENTS.md). |
 | **gurgeh-plugin** | Codebase-aware T1 agents (fd-architecture, fd-code-quality, fd-security, fd-performance, fd-user-experience). Used by flux-drive. |
-| **auracoil** | GPT-5.2 review of AGENTS.md specifically. Different scope from interpeer. |
+| **auracoil** | GPT-5.2 review of AGENTS.md specifically. Different scope from Clavain's cross-AI review skills. |
 | **tool-time** | Tool usage analytics. Nothing in Clavain does this. |
 | **context7** | Runtime doc fetching MCP server. Also declared in Clavain's plugin.json. |
 | **agent-sdk-dev** | Agent SDK scaffolding (`/new-sdk-app`, verifier agents). Fills a gap Clavain doesn't cover. |

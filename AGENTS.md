@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 31 skills, 23 agents, 26 commands, 4 hooks, 2 MCP servers |
+| Components | 35 skills, 23 agents, 26 commands, 4 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Architecture
@@ -17,7 +17,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 31 discipline skills
+├── skills/                        # 35 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -222,7 +222,6 @@ These must be installed for Clavain to function fully.
 |--------|--------|-------------|
 | **context7** | claude-plugins-official | Runtime doc fetching. Clavain's MCP server. Skills use it to pull upstream docs without bundling them. |
 | **gurgeh-plugin** | interagency-marketplace | Codebase-aware T1 agents (fd-architecture, fd-code-quality, fd-security, fd-performance, fd-user-experience). Powers `/flux-drive`. |
-| **interpeer** | interagency-marketplace | Cross-AI review via Oracle (GPT-5.2 Pro). Used by `/review` and `/flux-drive` for multi-model perspective. |
 | **explanatory-output-style** | claude-plugins-official | Educational insights in output. Injected via SessionStart hook. |
 
 ### Recommended
