@@ -4,7 +4,7 @@
 
 ## Overview
 
-General-purpose engineering discipline plugin for Claude Code — 32 skills, 23 agents, 24 commands, 2 hooks, 2 MCP servers.
+General-purpose engineering discipline plugin for Claude Code — 32 skills, 23 agents, 24 commands, 3 hooks, 2 MCP servers.
 
 ## Quick Commands
 
@@ -17,6 +17,8 @@ ls skills/*/SKILL.md | wc -l          # Should be 32
 ls agents/{review,research,workflow}/*.md | wc -l  # Should be 23
 ls commands/*.md | wc -l              # Should be 24
 bash -n hooks/session-start.sh        # Syntax check
+bash -n hooks/agent-mail-register.sh   # Syntax check
+bash -n hooks/dotfiles-sync.sh         # Syntax check
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 ```
 

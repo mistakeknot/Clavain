@@ -1,0 +1,28 @@
+# Clavain CODEOWNERS — require review for security-sensitive paths
+#
+# The upstream sync workflow auto-merges external content into skill files
+# that become system prompts. These rules ensure human review for:
+# 1. Hook scripts (execute as code)
+# 2. The bootstrap routing skill (injected into every session)
+# 3. Plugin manifest (controls MCP server config)
+# 4. Sync configuration (controls what gets merged)
+# 5. GitHub workflows (CI/CD pipeline)
+
+# Hook scripts and registration — execute as code on every session
+/hooks/                          @mistakeknot
+
+# Bootstrap routing skill — injected into every session via SessionStart hook
+/skills/using-clavain/           @mistakeknot
+
+# Plugin manifest — controls MCP servers, version, metadata
+/.claude-plugin/                 @mistakeknot
+
+# Sync configuration — controls what upstream content gets merged
+/upstreams.json                  @mistakeknot
+/.github/workflows/sync.yml     @mistakeknot
+
+# All GitHub workflows
+/.github/workflows/              @mistakeknot
+
+# CODEOWNERS itself
+/.github/CODEOWNERS              @mistakeknot

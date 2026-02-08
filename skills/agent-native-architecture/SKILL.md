@@ -3,7 +3,6 @@ name: agent-native-architecture
 description: Use when designing agent-native applications — autonomous agents, MCP tools, self-modifying systems, or apps where features are outcomes achieved by agents operating in a loop
 ---
 
-<why_now>
 ## Why Now
 
 Software agents work reliably now. Claude Code demonstrated that an LLM with access to bash and file tools, operating in a loop until an objective is achieved, can accomplish complex multi-step tasks autonomously.
@@ -13,9 +12,7 @@ The surprising discovery: **a really good coding agent is actually a really good
 The Claude Code SDK makes this accessible. You can build applications where features aren't code you write—they're outcomes you describe, achieved by an agent with tools, operating in a loop until the outcome is reached.
 
 This opens up a new field: software that works the way Claude Code works, applied to categories far beyond coding.
-</why_now>
 
-<core_principles>
 ## Core Principles
 
 ### 1. Parity
@@ -151,9 +148,7 @@ Unlike traditional software, agent-native applications can improve without shipp
 The improvement mechanisms are still being discovered. Context and prompt refinement are proven. Self-modification is emerging. What's clear: the architecture supports getting better in ways traditional software doesn't.
 
 **The test:** Does the application work better after a month of use than on day one, even without code changes?
-</core_principles>
 
-<intake>
 ## What aspect of agent-native architecture do you need help with?
 
 1. **Design architecture** - Plan a new agent-native system from scratch
@@ -171,9 +166,7 @@ The improvement mechanisms are still being discovered. Context and prompt refine
 13. **Refactoring** - Make existing code more agent-native
 
 **Wait for response before proceeding.**
-</intake>
 
-<routing>
 | Response | Action |
 |----------|--------|
 | 1, "design", "architecture", "plan" | Read [architecture-patterns.md](./references/architecture-patterns.md), then apply Architecture Checklist below |
@@ -191,9 +184,7 @@ The improvement mechanisms are still being discovered. Context and prompt refine
 | 13, "review", "refactor", "existing" | Read [refactoring-to-prompt-native.md](./references/refactoring-to-prompt-native.md) |
 
 **After reading the reference, apply those patterns to the user's specific context.**
-</routing>
 
-<architecture_checklist>
 ## Architecture Review Checklist
 
 When designing an agent-native system, verify these **before implementation**:
@@ -236,9 +227,7 @@ When designing an agent-native system, verify these **before implementation**:
 - [ ] **Cost Awareness:** Model tier selection (Haiku/Sonnet/Opus)
 
 **When designing architecture, explicitly address each checkbox in your plan.**
-</architecture_checklist>
 
-<quick_start>
 ## Quick Start: Build an Agent-Native Feature
 
 **Step 1: Define atomic tools**
@@ -273,9 +262,7 @@ const result = await agent.run({
   // Agent loops until it calls complete_task
 });
 ```
-</quick_start>
 
-<reference_index>
 ## Reference Files
 
 All references in `references/`:
@@ -299,9 +286,7 @@ All references in `references/`:
 - [mobile-patterns.md](./references/mobile-patterns.md) - iOS storage, checkpoint/resume, cost awareness
 - [self-modification.md](./references/self-modification.md) - Git-based evolution, guardrails
 - [refactoring-to-prompt-native.md](./references/refactoring-to-prompt-native.md) - Migrating existing code
-</reference_index>
 
-<anti_patterns>
 ## Anti-Patterns
 
 ### Common Approaches That Aren't Fully Agent-Native
@@ -385,9 +370,7 @@ Fix: Use shared workspace where both operate on same files.
 **Gates without reason** — Domain tool is the only way to do something, and you didn't intend to restrict access. The default is open. Keep primitives available unless there's a specific reason to gate.
 
 **Artificial capability limits** — Restricting what the agent can do out of vague safety concerns rather than specific risks. Be thoughtful about restricting capabilities. The agent should generally be able to do what users can do.
-</anti_patterns>
 
-<success_criteria>
 ## Success Criteria
 
 You've built an agent-native application when:
@@ -432,4 +415,3 @@ Can it figure out how to accomplish it, operating in a loop until it succeeds?
 If yes, you've built something agent-native.
 
 If it says "I don't have a feature for that"—your architecture is still too constrained.
-</success_criteria>
