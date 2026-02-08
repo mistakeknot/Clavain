@@ -91,7 +91,7 @@ Do this analysis yourself (no subagents needed). The profile drives triage in St
 
 ### Step 1.2: Select Agents from Roster
 
-Consult the **Agent Roster** below and score each agent against the document profile:
+Consult the **Agent Roster** below and score each agent against the document profile. Present the scoring as a markdown table:
 
 - **2 (relevant)**: Domain directly overlaps with document content.
 - **1 (maybe)**: Adjacent domain. Include only for sections that are thin.
@@ -111,18 +111,24 @@ Consult the **Agent Roster** below and score each agent against the document pro
 ### Scoring Examples
 
 **Plan reviewing Go API changes:**
-- fd-architecture: 2+1=3 (module boundaries directly affected)
-- fd-security: 2+1=3 (API adds new endpoints)
-- fd-performance: 1+1=2 (API mentioned but no perf section → thin)
-- fd-user-experience: 0+1=1 (no UI/CLI changes → skip)
-- security-sentinel: 0 (T1 fd-security covers this → deduplicated)
+
+| Agent | Tier | Score | Reason | Action |
+|-------|------|-------|--------|--------|
+| fd-architecture | T1 | 2+1=3 | Module boundaries directly affected | Launch |
+| fd-security | T1 | 2+1=3 | API adds new endpoints | Launch |
+| fd-performance | T1 | 1+1=2 | API mentioned but no perf section (thin) | Launch |
+| fd-user-experience | T1 | 0+1=1 | No UI/CLI changes | Skip |
+| security-sentinel | T3 | 0 | T1 fd-security covers this (deduplicated) | Skip |
 
 **README review for Python CLI tool:**
-- fd-user-experience: 2+1=3 (CLI UX directly relevant)
-- fd-code-quality: 2+1=3 (conventions review)
-- code-simplicity-reviewer: 2=2 (YAGNI check)
-- fd-architecture: 1+1=2 (only if architecture section is thin)
-- fd-security: 0 (README, no security concerns)
+
+| Agent | Tier | Score | Reason | Action |
+|-------|------|-------|--------|--------|
+| fd-user-experience | T1 | 2+1=3 | CLI UX directly relevant | Launch |
+| fd-code-quality | T1 | 2+1=3 | Conventions review | Launch |
+| code-simplicity-reviewer | T3 | 2 | YAGNI check | Launch |
+| fd-architecture | T1 | 1+1=2 | Only if architecture section is thin | Launch |
+| fd-security | T1 | 0 | README, no security concerns | Skip |
 
 **Thin section thresholds:**
 - **thin**: <5 lines or <3 bullet points — agent with adjacent domain should cover this
