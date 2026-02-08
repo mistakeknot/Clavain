@@ -4,7 +4,7 @@
 
 ## Overview
 
-General-purpose engineering discipline plugin for Claude Code — 34 skills, 28 agents, 27 commands, 3 hooks, 2 MCP servers.
+General-purpose engineering discipline plugin for Claude Code — 34 skills, 28 agents, 27 commands, 3 hooks, 3 MCP servers.
 
 ## Quick Commands
 

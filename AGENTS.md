@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 34 skills, 28 agents, 27 commands, 3 hooks, 2 MCP servers |
+| Components | 34 skills, 28 agents, 27 commands, 3 hooks, 3 MCP servers |
 | License | MIT |
 
 ## Architecture
@@ -289,6 +289,7 @@ Full audit rationale: `docs/plugin-audit.md`
 - **Steve Yegge** ([@steveyegge](https://github.com/steveyegge)) — beads
 - **Peter Steinberger** ([@steipete](https://github.com/steipete)) — oracle
 - **Jeff Emanuel** ([@Dicklesworthstone](https://github.com/Dicklesworthstone)) — mcp_agent_mail
+- **Tobi Lütke** ([@tobi](https://github.com/tobi)) — qmd
 
 ## Upstream Tracking
 

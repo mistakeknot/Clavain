@@ -76,6 +76,12 @@ curl -s --max-time 2 http://127.0.0.1:8765/health
 ```
 If not running, inform the user: "Agent Mail server is not running. Start it with: `mcp-agent-mail` or configure it as a systemd service."
 
+**qmd** — check if available:
+```bash
+command -v qmd && qmd status
+```
+If qmd is not installed, inform the user: "qmd is not installed. Install from https://github.com/tobi/qmd for semantic search across project documentation."
+
 **Oracle** (optional) — check if available:
 ```bash
 command -v oracle && pgrep -f "Xvfb :99"
@@ -111,6 +117,7 @@ echo "=== MCP Servers ==="
 # Verify MCP servers
 echo "context7: $(ls ~/.claude/plugins/cache/*/context7/*/plugin.json 2>/dev/null && echo 'OK' || echo 'MISSING')"
 echo "agent-mail: $(curl -s --max-time 2 http://127.0.0.1:8765/health >/dev/null 2>&1 && echo 'running' || echo 'not running')"
+echo "qmd: $(command -v qmd >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
 
 echo "=== Companions ==="
 echo "codex dispatch: $(ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/scripts/dispatch.sh 2>/dev/null && echo 'OK' || echo 'MISSING')"
@@ -128,7 +135,8 @@ Clavain Modpack Setup Complete
 Required plugins:  [X/13 installed]
 Conflicts disabled: [X/8 disabled]
 Language servers:   [list enabled]
-MCP servers:       context7 ✓ | agent-mail [status] | oracle [status]
+MCP servers:       context7 ✓ | agent-mail [status] | qmd [status]
+Infrastructure:    oracle [status]
 Beads:             [status]
 
 Next steps:

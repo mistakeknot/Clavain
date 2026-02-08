@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 34 skills, 28 agents, 27 commands, 3 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 34 skills, 28 agents, 27 commands, 3 hooks, and 3 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -179,10 +179,11 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 - **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact). Also warns when upstream tracking is stale.
 - **SessionEnd** — Syncs dotfile changes at end of session.
 
-### MCP Servers (2)
+### MCP Servers (3)
 
 - **context7** — Library documentation lookup via [Context7](https://context7.com)
 - **mcp-agent-mail** — Multi-agent coordination, file reservations, and messaging via [MCP Agent Mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
+- **qmd** — Semantic search over indexed project documentation via [qmd](https://github.com/tobi/qmd)
 
 ## The Agent Rig
 
@@ -277,6 +278,7 @@ Built on the work of:
 - **Steve Yegge** ([@steveyegge](https://github.com/steveyegge)) — [beads](https://github.com/steveyegge/beads)
 - **Peter Steinberger** ([@steipete](https://github.com/steipete)) — [oracle](https://github.com/steipete/oracle)
 - **Jeff Emanuel** ([@Dicklesworthstone](https://github.com/Dicklesworthstone)) — [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
+- **Tobi Lütke** ([@tobi](https://github.com/tobi)) — [qmd](https://github.com/tobi/qmd)
 
 ## License
 
