@@ -1,6 +1,6 @@
 # Clavain
 
-Clavain, named after one of the protagonists from Alastair Reynolds's [Revelation Space series]([Alastair Reynolds](https://en.wikipedia.org/wiki/Revelation_Space_series)), is a **highly** opinionated Claude Code plugin that encapsulates how I personally like to use Claude Code to build things. I do not think it is the best way for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own Claude Code experience.
+Clavain, named after one of the protagonists from Alastair Reynolds's [Revelation Space series](https://en.wikipedia.org/wiki/Revelation_Space_series), is a **highly** opinionated Claude Code plugin that encapsulates how I personally like to use Claude Code to build things. I do not think it is the best way for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own Claude Code experience.
 
 With 32 skills, 23 agents, 24 commands, 2 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I would probably recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavin against your actual historical workflow.
 
