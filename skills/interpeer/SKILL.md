@@ -21,6 +21,8 @@ description: Cross-AI peer review with escalation modes — quick (Claude↔Code
 - "get consensus" / "council" → switch to `council`
 - "what do they disagree on?" / "extract disagreements" → switch to `mine`
 
+**Oracle Rule:** Every Oracle CLI invocation MUST go through deep mode's prompt-optimization pipeline (context gathering → structured prompt → user review → execute). This applies to all modes — council mode uses deep mode as its Oracle gateway, not raw `oracle` calls.
+
 For Oracle CLI reference, see `references/oracle-reference.md`.
 For Oracle troubleshooting, see `references/oracle-troubleshooting.md`.
 
@@ -247,20 +249,9 @@ Claude MUST form its own opinion BEFORE reading external responses. This avoids 
 
 **Phase 1: Claude forms independent opinion** — reviews the code, documents analysis internally.
 
-**Phase 2: Ask about prompt review** — "Would you like to review the prompt before I send it, or proceed?"
+**Phase 2: Query Oracle via deep mode** — run the full deep mode pipeline (context gathering → build structured prompt → user review → execute). The only difference from standalone deep mode: add "Provide your independent analysis — I will compare with other models" to the prompt's question section.
 
-**Phase 3: Query Oracle**
-
-```bash
-oracle -p "$(cat <<'EOF'
-[briefing + question + injection warning]
-EOF
-)" \
-  -f 'path/to/files' \
-  --wait --write-output /tmp/council-gpt.md
-```
-
-**Phase 4: Synthesize**
+**Phase 3: Synthesize**
 
 ```markdown
 # interpeer council Review: [Topic]
@@ -309,9 +300,8 @@ If prior Oracle/GPT output exists in context → proceed directly.
 
 If no prior run exists, ask the user:
 1. "run council" → switch to council mode, then return
-2. "run deep" → switch to deep mode, then return
-3. "run oracle" → quick Oracle query, then compare
-4. "I'll provide outputs" → wait for paste
+2. "run deep" → switch to deep mode (Oracle with prompt review), then return
+3. "I'll provide outputs" → wait for paste
 
 ### Philosophy
 
@@ -379,7 +369,7 @@ If no prior run exists, ask the user:
 - Use `--dry-run --files-report` to preview Oracle costs
 
 **DON'T:**
-- Send to Oracle without user approval (deep/council)
+- Call Oracle CLI directly — always go through deep mode's prompt-optimization pipeline
 - Include secrets or credentials in any prompt
 - Blindly implement all suggestions from any model
 - Skip your own analysis step

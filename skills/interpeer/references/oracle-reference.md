@@ -29,6 +29,10 @@ Oracle sends prompts and files to GPT-5.2 Pro (or other models) for a second opi
 - Bug fixes with obvious causes
 - Tasks where speed matters more than thoroughness
 
+## Prompt Optimization Rule
+
+**Never call Oracle with a raw prompt.** Every Oracle invocation must go through interpeer's deep mode pipeline: gather context → build structured prompt → show to user for review → execute after approval. This ensures prompt quality and prevents wasted Oracle queries.
+
 ## How to Invoke
 
 ### CLI Mode (Browser)
