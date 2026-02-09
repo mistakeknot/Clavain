@@ -67,6 +67,8 @@ jobs:
               "---\n\n"
             ) | join("")) +
             "### After applying updates\n\n" +
+            "- [ ] Run `/clavain:upstream-sync` on this issue (or trigger `.github/workflows/sync.yml`)\n" +
+            "- [ ] Complete decision record in `docs/upstream-decisions/pr-<PR_NUMBER>.md` and set `Gate: approved`\n" +
             "- [ ] Run `bash scripts/upstream-check.sh --update` to update baseline\n" +
             "- [ ] Commit updated `docs/upstream-versions.json`\n"
           ' /tmp/changed.json > /tmp/issue-body.md
