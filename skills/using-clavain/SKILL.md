@@ -21,7 +21,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 34 skills, 26 agents, and 24 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 34 skills, 29 agents, and 24 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 

@@ -67,7 +67,7 @@ Extract a structured profile:
 
 ```
 Document Profile:
-- Type: [plan | brainstorm/design | spec/ADR | README/overview | repo-review | other]
+- Type: [plan | brainstorm/design | spec/ADR | prd | README/overview | repo-review | other]
 - Summary: [1-2 sentence description of what this document is]
 - Languages: [from codebase, not just the document]
 - Frameworks: [from codebase, not just the document]
@@ -87,6 +87,7 @@ The `Review goal` adapts to document type:
 - Brainstorm/design → "Evaluate feasibility, surface missing alternatives, challenge assumptions"
 - README/repo-review → "Evaluate quality, find gaps, suggest improvements"
 - Spec/ADR → "Find ambiguities, missing edge cases, implementation risks"
+- PRD → "Challenge assumptions, validate business case, find missing user evidence, surface scope risks"
 - Other → Infer the appropriate review goal from the document's content
 
 Do this analysis yourself (no subagents needed). The profile drives triage in Step 1.2.
@@ -129,6 +130,18 @@ Consult the **Agent Roster** below and score each agent against the document pro
 | code-simplicity-reviewer | Adaptive | 2 | YAGNI check | Launch |
 | architecture-strategist | Adaptive | 1+1=2 | Only if architecture section is thin | Launch |
 | security-sentinel | Adaptive | 0 | README, no security concerns | Skip |
+
+**PRD for new user onboarding flow:**
+
+| Agent | Category | Score | Reason | Action |
+|-------|----------|-------|--------|--------|
+| product-skeptic | Adaptive | 2 | PRD — challenges whether this is the right thing to build | Launch |
+| strategic-reviewer | Adaptive | 2 | PRD — validates business case and strategic alignment | Launch |
+| user-advocate | Adaptive | 2 | PRD — checks user research backing and value proposition | Launch |
+| architecture-strategist | Adaptive | 1+1=2 | PRD mentions architecture changes, project docs exist | Launch |
+| spec-flow-analyzer | Workflow | 2 | PRD has user flows to validate | Launch |
+| security-sentinel | Adaptive | 0 | No security surface changes | Skip |
+| go-reviewer | Adaptive | 0 | No code changes | Skip |
 
 **Thin section thresholds:**
 - **thin**: <5 lines or <3 bullet points — agent with adjacent domain should cover this
@@ -196,6 +209,10 @@ These agents auto-detect project documentation: when CLAUDE.md/AGENTS.md exist, 
 | typescript-reviewer | clavain:review:typescript-reviewer | TypeScript code quality, type safety, React patterns |
 | shell-reviewer | clavain:review:shell-reviewer | Shell script safety, quoting, portability |
 | rust-reviewer | clavain:review:rust-reviewer | Rust code quality, ownership, unsafe soundness |
+| spec-flow-analyzer | clavain:workflow:spec-flow-analyzer | User flow analysis, gap identification, edge case mapping |
+| product-skeptic | clavain:review:product-skeptic | Problem validation, scope creep, YAGNI at the feature level, opportunity cost |
+| strategic-reviewer | clavain:review:strategic-reviewer | Business case, strategic alignment, resource allocation, build-vs-buy |
+| user-advocate | clavain:review:user-advocate | User impact, research backing, value proposition, discoverability |
 
 ### Cross-AI (Oracle)
 
