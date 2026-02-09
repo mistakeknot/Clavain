@@ -179,7 +179,7 @@ Check if `.claude/agents/fd-*.md` files exist in the project root. If so, includ
 
 **Note:** `general-purpose` agents have full tool access (Read, Grep, Glob, Write, Bash, etc.) — the same as Tier 1 agents. The difference is that Tier 1 agents get their system prompt from the plugin automatically, while Tier 2 agents need it pasted into the task prompt.
 
-If no Tier 2 agents exist, skip this tier entirely. Do NOT create them — that's a separate workflow.
+If no Tier 2 agents exist AND clodex mode is active, flux-drive will bootstrap them via Codex (see step `2.3`). If no Tier 2 agents exist and clodex mode is NOT active, skip this tier entirely.
 
 ### Tier 3 — Generic Specialists (clavain)
 
@@ -237,7 +237,24 @@ Create the research output directory before launching agents. Resolve to an abso
 mkdir -p {OUTPUT_DIR}  # Must be absolute, e.g. /root/projects/Foo/docs/research/flux-drive/my-doc-name
 ```
 
-### Step 2.1: Launch agents
+### Step 2.1: Detect dispatch mode
+
+Check if clodex mode is active:
+
+```bash
+if [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/autopilot.flag" ]]; then
+  echo "CLODEX_MODE=true — dispatching review agents through Codex"
+else
+  echo "CLODEX_MODE=false — dispatching review agents through Task tool"
+fi
+```
+
+If `CLODEX_MODE=true`: Use step `2.3` (Codex dispatch) instead of step `2.2`.
+If `CLODEX_MODE=false`: Use step `2.2` (Task dispatch) as normal.
+
+### Step 2.2: Launch agents (Task dispatch)
+
+**Condition**: Use this step when `CLODEX_MODE=false` (default). Skip to step `2.3` if clodex mode is active.
 
 Launch all selected agents as parallel Task calls in a **single message**.
 
@@ -365,6 +382,119 @@ After launching all agents, tell the user:
 - How many agents were launched
 - That they are running in background
 - Estimated wait time (~3-5 minutes; codebase-aware agents take longer as they explore the repo)
+
+### Step 2.3: Launch agents (Codex dispatch)
+
+**Condition**: Use this step when `CLODEX_MODE=true`. This routes review agents through Codex CLI instead of Claude subagents.
+
+#### Resolve paths (with guards)
+
+```bash
+DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 2>/dev/null | head -1)
+[[ -z "$DISPATCH" ]] && DISPATCH=$(find ~/projects/Clavain -name dispatch.sh -path '*/scripts/*' 2>/dev/null | head -1)
+[[ -z "$DISPATCH" ]] && { echo "FATAL: dispatch.sh not found — falling back to Task dispatch"; CLODEX_MODE=false; }
+
+REVIEW_TEMPLATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/skills/clodex/templates/review-agent.md' 2>/dev/null | head -1)
+[[ -z "$REVIEW_TEMPLATE" ]] && REVIEW_TEMPLATE=$(find ~/projects/Clavain -path '*/skills/clodex/templates/review-agent.md' 2>/dev/null | head -1)
+[[ -z "$REVIEW_TEMPLATE" ]] && { echo "FATAL: review-agent.md template not found — falling back to Task dispatch"; CLODEX_MODE=false; }
+```
+
+If either path resolution fails, fall back to Task dispatch (step `2.2`) for this run.
+
+#### Tier 2 bootstrap (clodex mode only)
+
+Before dispatching Tier 2 agents, check if they exist and are current:
+
+```bash
+FD_AGENTS=$(ls .claude/agents/fd-*.md 2>/dev/null)
+
+if [[ -z "$FD_AGENTS" ]]; then
+  BOOTSTRAP=true
+else
+  CURRENT_HASH=$(sha256sum CLAUDE.md AGENTS.md 2>/dev/null | sha256sum | cut -d' ' -f1)
+  STORED_HASH=$(cat .claude/agents/.fd-agents-hash 2>/dev/null || echo "none")
+  if [[ "$CURRENT_HASH" != "$STORED_HASH" ]]; then
+    echo "Tier 2 agents are stale (project docs changed) — regenerating"
+    BOOTSTRAP=true
+  else
+    BOOTSTRAP=false
+  fi
+fi
+```
+
+When `BOOTSTRAP=true`, dispatch a **blocking** Codex agent to create Tier 2 agents:
+
+```bash
+BOOTSTRAP_TEMPLATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/skills/clodex/templates/create-review-agent.md' 2>/dev/null | head -1)
+[[ -z "$BOOTSTRAP_TEMPLATE" ]] && BOOTSTRAP_TEMPLATE=$(find ~/projects/Clavain -path '*/skills/clodex/templates/create-review-agent.md' 2>/dev/null | head -1)
+[[ -z "$BOOTSTRAP_TEMPLATE" ]] && { echo "WARNING: create-review-agent.md not found — skipping Tier 2 bootstrap"; BOOTSTRAP=false; }
+```
+
+Dispatch **without `run_in_background`** so it blocks until complete. Set `timeout: 300000` (5 minutes). If bootstrap fails or times out, skip Tier 2 for this run — do NOT block the rest of the review.
+
+#### Create temp directory and task description files
+
+```bash
+FLUX_TMPDIR=$(mktemp -d /tmp/flux-drive-XXXXXX)
+```
+
+For each selected agent, write a task description file to `$FLUX_TMPDIR/{agent-name}.md`.
+
+**IMPORTANT**: Each section header (`PROJECT:`, `AGENT_IDENTITY:`, etc.) must be on its own line with the colon at end-of-line. Content goes on subsequent lines. This matches dispatch.sh's `^[A-Z_]+:$` section parser.
+
+```
+PROJECT:
+{project name} — review task (read-only)
+
+AGENT_IDENTITY:
+{paste the agent's full system prompt from the agent .md file}
+
+REVIEW_PROMPT:
+{the same prompt template from step `2.2`, with trimmed document content, focus area, and output requirements}
+
+AGENT_NAME:
+{agent-name}
+
+TIER:
+{1|2|3}
+
+OUTPUT_FILE:
+{OUTPUT_DIR}/{agent-name}.md
+```
+
+#### Dispatch all agents in parallel
+
+Launch all Codex agents via parallel Bash calls in a single message:
+
+```bash
+bash "$DISPATCH" \
+  --template "$REVIEW_TEMPLATE" \
+  --prompt-file "$FLUX_TMPDIR/{agent-name}.md" \
+  -C "$PROJECT_ROOT" \
+  -s workspace-write
+```
+
+Notes:
+- Set `run_in_background: true` and `timeout: 600000` on each Bash call
+- Do NOT use `--inject-docs` — Codex reads CLAUDE.md natively via `-C`
+- Do NOT use `-o` for output capture — the agent writes findings directly to `{OUTPUT_DIR}/{agent-name}.md`
+- Completion is detected by checking that file's existence (same as Task dispatch path)
+- **Tier 4 (Oracle)**: Unchanged — already dispatched via Bash
+
+#### Error handling
+
+After all background Bash calls complete, check for missing findings files. For any agent whose `{OUTPUT_DIR}/{agent-name}.md` does not exist:
+1. Check the background Bash exit code — if non-zero, log the error
+2. Retry once with the same prompt file
+3. If retry also produces no findings file, fall back to Task dispatch for that agent
+4. Note the failure in the synthesis summary: "Agent X: Codex dispatch failed, used Task fallback"
+
+#### Cleanup
+
+After Phase 3 synthesis completes, remove the temp directory:
+```bash
+rm -rf "$FLUX_TMPDIR"
+```
 
 ---
 
@@ -611,3 +741,4 @@ Present a final summary that includes the cross-AI dimension:
 - `winterpeer/references/oracle-reference.md` — Oracle CLI reference
 - `winterpeer/references/oracle-troubleshooting.md` — Oracle troubleshooting
 - qmd MCP server — semantic search for project documentation (used in Step 1.0)
+- When clodex mode is active, flux-drive dispatches review agents through Codex CLI instead of Claude subagents. See `clavain:clodex` for Codex dispatch details.

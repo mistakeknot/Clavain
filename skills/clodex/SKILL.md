@@ -18,7 +18,7 @@ Dispatch tasks to Codex CLI agents (`codex exec`). Claude acts as orchestrator â
 
 - Tasks requiring interactive user input mid-execution
 - Tasks needing deep cross-file architectural understanding (use Claude subagents)
-- Code review (use interpeer instead)
+- Code review as a standalone task (use interpeer instead â€” flux-drive uses dispatch infrastructure directly for review agents)
 - Tasks where you're unsure what needs to change (research first, then dispatch)
 
 ## Prerequisites
