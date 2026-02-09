@@ -98,31 +98,74 @@ If `.beads/` doesn't exist, ask: "Initialize beads issue tracking for this proje
 
 ## Step 6: Verify Configuration
 
-Run a final verification:
+Run a final verification. This script reads `~/.claude/settings.json` to check actual enabled/disabled state (plugins missing from `enabledPlugins` are enabled by default — only explicit `false` means disabled):
 
 ```bash
-echo "=== Plugin Status ==="
-# Check required plugins are enabled
-for plugin in clavain context7 agent-sdk-dev plugin-dev serena security-guidance explanatory-output-style interdoc auracoil tool-time; do
-  echo "$plugin: checking..."
-done
+python3 -c "
+import json, os, subprocess
 
-echo "=== Disabled Plugins ==="
-# Check conflicting plugins are disabled
-for plugin in code-review pr-review-toolkit code-simplifier commit-commands feature-dev claude-md-management frontend-design hookify; do
-  echo "$plugin: should be disabled"
-done
+settings_path = os.path.expanduser('~/.claude/settings.json')
+with open(settings_path) as f:
+    plugins = json.load(f).get('enabledPlugins', {})
 
+# Required plugins: absent = enabled (default), True = enabled, False = disabled
+required = {
+    'clavain@interagency-marketplace',
+    'interdoc@interagency-marketplace',
+    'auracoil@interagency-marketplace',
+    'tool-time@interagency-marketplace',
+    'context7@claude-plugins-official',
+    'agent-sdk-dev@claude-plugins-official',
+    'plugin-dev@claude-plugins-official',
+    'serena@claude-plugins-official',
+    'security-guidance@claude-plugins-official',
+    'explanatory-output-style@claude-plugins-official',
+}
+
+conflicts = {
+    'code-review@claude-plugins-official',
+    'pr-review-toolkit@claude-plugins-official',
+    'code-simplifier@claude-plugins-official',
+    'commit-commands@claude-plugins-official',
+    'feature-dev@claude-plugins-official',
+    'claude-md-management@claude-plugins-official',
+    'frontend-design@claude-plugins-official',
+    'hookify@claude-plugins-official',
+}
+
+print('=== Required Plugins ===')
+req_ok = 0
+for p in sorted(required):
+    enabled = plugins.get(p, True)  # absent = enabled by default
+    status = 'enabled' if enabled else 'DISABLED'
+    if enabled: req_ok += 1
+    print(f'  {p}: {status}')
+print(f'  ({req_ok}/{len(required)} enabled)')
+
+print()
+print('=== Conflicting Plugins ===')
+conf_ok = 0
+for p in sorted(conflicts):
+    enabled = plugins.get(p, True)
+    status = 'STILL ENABLED' if enabled else 'disabled'
+    if not enabled: conf_ok += 1
+    print(f'  {p}: {status}')
+print(f'  ({conf_ok}/{len(conflicts)} disabled)')
+"
+```
+
+Then check MCP servers and companions:
+
+```bash
 echo "=== MCP Servers ==="
-# Verify MCP servers
-echo "context7: $(ls ~/.claude/plugins/cache/*/context7/*/plugin.json 2>/dev/null && echo 'OK' || echo 'MISSING')"
+echo "context7: $(ls ~/.claude/plugins/cache/*/context7/*/plugin.json 2>/dev/null | head -1 >/dev/null && echo 'OK' || echo 'MISSING')"
 echo "agent-mail: $(curl -s --max-time 2 http://127.0.0.1:8765/health >/dev/null 2>&1 && echo 'running' || echo 'not running')"
 echo "qmd: $(command -v qmd >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
 
 echo "=== Companions ==="
-echo "codex dispatch: $(ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/scripts/dispatch.sh 2>/dev/null && echo 'OK' || echo 'MISSING')"
+echo "codex dispatch: $(ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/scripts/dispatch.sh 2>/dev/null | head -1 >/dev/null && echo 'OK' || echo 'MISSING')"
 echo "oracle: $(command -v oracle >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
-echo "beads: $(ls .beads/ 2>/dev/null && echo 'configured' || echo 'not configured')"
+echo "beads: $(ls .beads/ 2>/dev/null | head -1 >/dev/null && echo 'configured' || echo 'not configured')"
 ```
 
 ## Step 7: Summary
@@ -132,7 +175,7 @@ Present results:
 ```
 Clavain Modpack Setup Complete
 
-Required plugins:  [X/13 installed]
+Required plugins:  [X/10 enabled]
 Conflicts disabled: [X/8 disabled]
 Language servers:   [list enabled]
 MCP servers:       context7 ✓ | agent-mail [status] | qmd [status]
