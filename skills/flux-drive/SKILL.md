@@ -137,22 +137,21 @@ Consult the **Agent Roster** below and score each agent against the document pro
 
 ### Step 1.3: User Confirmation
 
-Present the triage using AskUserQuestion:
+First, present the triage table showing all agents, tiers, scores, reasons, and Launch/Skip actions.
+
+Then use **AskUserQuestion** to get approval:
 
 ```
-Flux Drive Triage — {INPUT_STEM}
-
-| Agent | Tier | Score | Reason | Action |
-|-------|------|-------|--------|--------|
-| fd-architecture | T1 | 2+1 | Document restructures module boundaries | Launch |
-| fd-user-experience | T1 | 2+1 | Document adds new TUI views | Launch |
-| security-sentinel | T3 | 1 | Document adds API endpoint (thin section) | Launch |
-| ... | ... | ... | ... | ... |
-
-Launching N agents (M codebase-aware, K generic). Approve?
+AskUserQuestion:
+  question: "Launch N agents (M codebase-aware, K generic) for flux-drive review?"
+  options:
+    - label: "Approve"
+      description: "Launch all selected agents"
+    - label: "Edit selection"
+      description: "Adjust which agents to launch"
+    - label: "Cancel"
+      description: "Stop flux-drive review"
 ```
-
-Options: `Approve` / `Edit selection` / `Cancel`
 
 If user selects "Edit selection", adjust and re-present.
 If user selects "Cancel", stop here.

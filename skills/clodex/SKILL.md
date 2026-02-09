@@ -131,7 +131,19 @@ Use `timeout: 600000` (10 minutes) on the Bash tool call.
 | Architecture-sensitive | Claude subagent | Needs cross-file understanding |
 | Sequential dependency | Codex (ordered) | Must wait for prior task |
 
-Present the classification to the user and get approval before dispatching.
+Present the classification table, then use **AskUserQuestion** to get approval:
+
+```
+AskUserQuestion:
+  question: "Dispatch N tasks to Codex agents as classified above?"
+  options:
+    - label: "Approve"
+      description: "Dispatch all tasks as classified"
+    - label: "Edit"
+      description: "Reclassify or adjust tasks first"
+    - label: "Cancel"
+      description: "Don't dispatch"
+```
 
 ### Step 2: Check for File Overlap
 

@@ -172,7 +172,21 @@ Review this implementation. Focus on:
 
 **Phase 3: User Review (CRITICAL)**
 
-Present the prompt for approval. Show files, estimated tokens, and the full prompt. Wait for explicit approval ("approved", "send it") before proceeding.
+Present the files, estimated tokens, and the full prompt. Then use the **AskUserQuestion** tool to get approval:
+
+```
+AskUserQuestion:
+  question: "Approve this Oracle prompt?"
+  options:
+    - label: "Approve"
+      description: "Send to Oracle as-is"
+    - label: "Modify"
+      description: "I want to change something first"
+    - label: "Cancel"
+      description: "Don't send to Oracle"
+```
+
+Wait for explicit approval before proceeding.
 
 **Phase 4: Execute**
 

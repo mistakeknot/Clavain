@@ -55,18 +55,21 @@ Verify the following before committing:
 
 ### Step 4: Document the Change
 
-Present exactly these options:
+Use **AskUserQuestion** to present landing options:
 
 ```
-Implementation verified. How would you like to land this?
-
-1. Commit and push to main
-2. Commit locally (push later)
-3. Generate a changelog entry first, then commit
-4. I need to review the changes first
+AskUserQuestion:
+  question: "Implementation verified. How would you like to land this?"
+  options:
+    - label: "Commit and push"
+      description: "Commit to main and push to remote"
+    - label: "Commit locally"
+      description: "Commit but don't push yet"
+    - label: "Changelog first"
+      description: "Generate changelog entry, then commit"
+    - label: "Review first"
+      description: "I want to review the changes before committing"
 ```
-
-**Don't add explanation** — keep options concise.
 
 ### Step 5: Execute Choice
 
