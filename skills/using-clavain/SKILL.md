@@ -21,7 +21,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 34 skills, 29 agents, and 26 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 34 skills, 26 agents, and 24 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -36,7 +36,7 @@ Clavain provides 34 skills, 29 agents, and 26 commands. To avoid overwhelm, use 
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | architecture-strategist, spec-flow-analyzer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents)¹ |
-| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, debate | — |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve, codex-first, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | {go,python,typescript,shell,rust}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | deployment-verification-agent |
@@ -68,7 +68,7 @@ Clavain provides 34 skills, 29 agents, and 26 commands. To avoid overwhelm, use 
 | Any with security surface | security-sentinel |
 | Any with perf concerns | performance-oracle |
 
-¹ **flux-drive agents (fd-*)**: The agents `fd-architecture`, `fd-user-experience`, `fd-code-quality`, `fd-performance`, and `fd-security` are codebase-aware reviewers auto-selected by flux-drive's triage system. Don't invoke them directly — use `/clavain:flux-drive` which selects the right subset based on what's being reviewed.
+¹ **flux-drive agents (fd-*)**: `fd-user-experience` and `fd-code-quality` are codebase-aware reviewers auto-selected by flux-drive's triage system. Don't invoke them directly — use `/clavain:flux-drive` which selects the right subset. The `architecture-strategist`, `security-sentinel`, and `performance-oracle` agents now auto-detect project docs and switch between codebase-aware and generic modes.
 
 ### Cross-AI Review
 

@@ -51,9 +51,7 @@ Run the project's test suite and linting before proceeding to review:
 
 ## Step 7: Resolve Issues
 
-Check if clodex mode is active (`.claude/autopilot.flag` exists):
-- If **clodex is active**: Run `/clavain:resolve-todo-parallel`. The command's clodex-mode guidance will automatically route code-modifying resolutions through Codex dispatch.
-- If **clodex is NOT active**: Run `/clavain:resolve-todo-parallel` normally.
+Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, or code TODOs) and handles clodex mode automatically.
 
 ## Step 8: Ship
 
