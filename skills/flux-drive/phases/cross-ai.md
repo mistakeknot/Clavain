@@ -4,7 +4,7 @@ After synthesis, check whether Oracle was in the review roster and offer escalat
 
 ### Step 4.1: Detect Oracle Participation
 
-If Oracle (Tier 4) was **not** in the roster, offer a lightweight option:
+If Oracle (Cross-AI) was **not** in the roster, offer a lightweight option:
 
 ```
 Cross-AI: No Oracle perspective was included in this review.

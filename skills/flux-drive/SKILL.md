@@ -99,36 +99,36 @@ Consult the **Agent Roster** below and score each agent against the document pro
 - **1 (maybe)**: Adjacent domain. Include only for sections that are thin.
 - **0 (irrelevant)**: Wrong language, wrong domain, no relationship to this document.
 
-**Tier bonuses**: Tier 1 agents get +1 (always codebase-aware). Tier 2 agents get +1 (project-specific). Tier 3 agents with architecture-strategist, security-sentinel, or performance-oracle get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode).
+**Category bonuses**: Domain Specialists get +1 (always codebase-aware). Project Agents get +1 (project-specific). Adaptive Reviewers architecture-strategist, security-sentinel, and performance-oracle get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode).
 
 **Selection rules**:
 1. All agents scoring 2+ are included
 2. Agents scoring 1 are included only if their domain covers a thin section
 3. **Cap at 8 agents total** (hard maximum)
-4. **Deduplication**: If a Tier 1 or Tier 2 agent covers the same domain as a Tier 3 agent, drop the Tier 3 one
+4. **Deduplication**: If a Domain Specialist or Project Agent covers the same domain as an Adaptive Reviewer, prefer the more specific agent
 5. Prefer fewer, more relevant agents over many marginal ones
 
 ### Scoring Examples
 
 **Plan reviewing Go API changes (project has CLAUDE.md):**
 
-| Agent | Tier | Score | Reason | Action |
-|-------|------|-------|--------|--------|
-| architecture-strategist | T3 | 2+1=3 | Module boundaries directly affected, project docs exist | Launch |
-| security-sentinel | T3 | 2+1=3 | API adds new endpoints, project docs exist | Launch |
-| performance-oracle | T3 | 1+1=2 | API mentioned but no perf section (thin) | Launch |
-| fd-user-experience | T1 | 0+1=1 | No UI/CLI changes | Skip |
-| go-reviewer | T3 | 2 | Go code changes | Launch |
+| Agent | Category | Score | Reason | Action |
+|-------|----------|-------|--------|--------|
+| architecture-strategist | Adaptive | 2+1=3 | Module boundaries directly affected, project docs exist | Launch |
+| security-sentinel | Adaptive | 2+1=3 | API adds new endpoints, project docs exist | Launch |
+| performance-oracle | Adaptive | 1+1=2 | API mentioned but no perf section (thin) | Launch |
+| fd-user-experience | Domain | 0+1=1 | No UI/CLI changes | Skip |
+| go-reviewer | Adaptive | 2 | Go code changes | Launch |
 
 **README review for Python CLI tool:**
 
-| Agent | Tier | Score | Reason | Action |
-|-------|------|-------|--------|--------|
-| fd-user-experience | T1 | 2+1=3 | CLI UX directly relevant | Launch |
-| fd-code-quality | T1 | 2+1=3 | Conventions review | Launch |
-| code-simplicity-reviewer | T3 | 2 | YAGNI check | Launch |
-| architecture-strategist | T3 | 1+1=2 | Only if architecture section is thin | Launch |
-| security-sentinel | T3 | 0 | README, no security concerns | Skip |
+| Agent | Category | Score | Reason | Action |
+|-------|----------|-------|--------|--------|
+| fd-user-experience | Domain | 2+1=3 | CLI UX directly relevant | Launch |
+| fd-code-quality | Domain | 2+1=3 | Conventions review | Launch |
+| code-simplicity-reviewer | Adaptive | 2 | YAGNI check | Launch |
+| architecture-strategist | Adaptive | 1+1=2 | Only if architecture section is thin | Launch |
+| security-sentinel | Adaptive | 0 | README, no security concerns | Skip |
 
 **Thin section thresholds:**
 - **thin**: <5 lines or <3 bullet points — agent with adjacent domain should cover this
@@ -143,7 +143,7 @@ Then use **AskUserQuestion** to get approval:
 
 ```
 AskUserQuestion:
-  question: "Launch N agents (M codebase-aware, K adaptive) for flux-drive review?"
+  question: "Launch N agents (M domain specialists, K adaptive reviewers) for flux-drive review?"
   options:
     - label: "Approve"
       description: "Launch all selected agents"
@@ -160,24 +160,24 @@ If user selects "Cancel", stop here.
 
 ## Agent Roster
 
-### Tier 1 — Codebase-Aware
+### Domain Specialists
 
-These agents read the target project's CLAUDE.md and AGENTS.md before analyzing, grounding their review in the project's actual architecture, conventions, and patterns rather than generic checklists.
+These agents always read the target project's CLAUDE.md and AGENTS.md before analyzing, grounding their review in the project's actual architecture, conventions, and patterns rather than generic checklists.
 
 | Agent | subagent_type | Domain |
 |-------|--------------|--------|
 | fd-user-experience | clavain:review:fd-user-experience | CLI/TUI interaction, keyboard ergonomics, terminal constraints |
 | fd-code-quality | clavain:review:fd-code-quality | Naming, test strategy, project conventions, idioms |
 
-### Tier 2 — Project-Specific (.claude/agents/fd-*.md)
+### Project Agents (.claude/agents/fd-*.md)
 
 Check if `.claude/agents/fd-*.md` files exist in the project root. If so, include them in triage. Use `subagent_type: general-purpose` and include the agent file's full content as the system prompt in the task prompt.
 
-**Note:** `general-purpose` agents have full tool access (Read, Grep, Glob, Write, Bash, etc.) — the same as Tier 1 agents. The difference is that Tier 1 agents get their system prompt from the plugin automatically, while Tier 2 agents need it pasted into the task prompt.
+**Note:** `general-purpose` agents have full tool access (Read, Grep, Glob, Write, Bash, etc.) — the same as Domain Specialists. The difference is that Domain Specialists get their system prompt from the plugin automatically, while Project Agents need it pasted into the task prompt.
 
-If no Tier 2 agents exist AND clodex mode is active, flux-drive will bootstrap them via Codex (see `phases/launch-codex.md`). If no Tier 2 agents exist and clodex mode is NOT active, skip this tier entirely.
+If no Project Agents exist AND clodex mode is active, flux-drive will bootstrap them via Codex (see `phases/launch-codex.md`). If no Project Agents exist and clodex mode is NOT active, skip this category entirely.
 
-### Tier 3 — Adaptive Specialists (clavain)
+### Adaptive Reviewers (clavain)
 
 These agents auto-detect project documentation: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices.
 
@@ -197,13 +197,13 @@ These agents auto-detect project documentation: when CLAUDE.md/AGENTS.md exist, 
 | shell-reviewer | clavain:review:shell-reviewer | Shell script safety, quoting, portability |
 | rust-reviewer | clavain:review:rust-reviewer | Rust code quality, ownership, unsafe soundness |
 
-### Tier 4 — Cross-AI (Oracle)
+### Cross-AI (Oracle)
 
 **Availability check**: Oracle is available when:
 1. The SessionStart hook reports "oracle: available for cross-AI review", OR
 2. `which oracle` succeeds AND `pgrep -f "Xvfb :99"` finds a running process
 
-If neither check passes, skip Tier 4 entirely.
+If neither check passes, skip Cross-AI entirely.
 
 When available, Oracle provides a GPT-5.2 Pro perspective on the same document. It scores like any other agent but gets a +1 diversity bonus (different model family reduces blind spots).
 
@@ -213,14 +213,14 @@ When available, Oracle provides a GPT-5.2 Pro perspective on the same document. 
 
 **Important**: Oracle runs via CLI, not Task tool. Launch it in background with a timeout:
 ```bash
-timeout 300 env DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
+timeout 480 env DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
   oracle --wait -p "Review this {document_type} for {review_goal}. Focus on: issues a Claude-based reviewer might miss. Provide numbered findings with severity." \
   -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-council.md 2>&1 || echo "Oracle failed (exit $?) — continuing without cross-AI perspective" >> {OUTPUT_DIR}/oracle-council.md
 ```
 
 **Error handling**: If the Oracle command fails or times out, note it in the output file and continue without Phase 4. Do NOT block synthesis on Oracle failures — treat it as "Oracle: no findings" and skip Steps 4.2-4.5.
 
-Oracle counts toward the 8-agent cap. If the roster is already full, Oracle replaces the lowest-scoring Tier 3 agent.
+Oracle counts toward the 8-agent cap. If the roster is already full, Oracle replaces the lowest-scoring Adaptive Reviewer.
 
 ---
 

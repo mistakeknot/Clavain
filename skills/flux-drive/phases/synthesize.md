@@ -1,15 +1,14 @@
 # Phase 3: Synthesize
 
-### Step 3.0: Wait for all agents
+### Step 3.0: Verify all agents completed
 
-**Do NOT start synthesis until all agents have completed.** Starting early leads to missed findings and re-edits.
+Phase 2 (Step 2.3) guarantees one `.md` file per launched agent — either findings or an error stub. Verify:
 
-Check completion by reading the task output files (preferred) or polling the output directory:
 ```bash
 ls {OUTPUT_DIR}/
 ```
 
-You expect N files (one per launched agent). If using `ls`, poll every 30 seconds. If after 5 minutes some are missing, proceed with what you have and note missing agents as "no findings."
+Confirm N files (one per launched agent). If count < N, Phase 2 did not complete properly — check Step 2.3 output before proceeding.
 
 ### Step 3.1: Validate Agent Output
 
@@ -19,10 +18,11 @@ For each agent's output file, validate structure before reading content:
 2. Verify required keys exist: `agent`, `tier`, `issues`, `verdict`
 3. Classification:
    - **Valid**: Frontmatter parsed successfully → proceed with frontmatter-first collection
+   - **Error**: File exists with `verdict: error` → note as "agent failed" in summary, don't count toward convergence
    - **Malformed**: File exists but frontmatter is missing/incomplete → fall back to prose-based reading (read Summary + Issues sections directly)
    - **Missing**: File doesn't exist or is empty → "no findings"
 
-Report validation results to user: "5/6 agents returned valid frontmatter, 1 fallback to prose"
+Report validation results to user: "5/6 agents returned valid frontmatter, 1 failed"
 
 ### Step 3.2: Collect Results
 
@@ -35,10 +35,10 @@ For **malformed** outputs, read the Summary + Issues sections as prose fallback.
 ### Step 3.3: Deduplicate and Organize
 
 1. **Group findings by section** — organize all agent findings under the section they apply to (or by topic for repo reviews)
-2. **Deduplicate**: If multiple agents flagged the same issue, keep the most specific one (prefer Tier 1/2 over Tier 3)
+2. **Deduplicate**: If multiple agents flagged the same issue, keep the most specific one (prefer Domain Specialists and Project Agents over Adaptive Reviewers, since they have deeper project context)
 3. **Track convergence**: Note how many agents flagged each issue (e.g., "4/6 agents"). High convergence (3+ agents) = high confidence. Include convergence counts in the Issues to Address checklist.
 4. **Flag conflicts**: If agents disagree, note both positions
-5. **Priority from codebase-aware agents**: When a Tier 1/2 and Tier 3 agent give different advice on the same topic, prefer the codebase-aware recommendation
+5. **Priority from project-specific agents**: When a Domain Specialist/Project Agent and an Adaptive Reviewer give different advice on the same topic, prefer the more project-specific recommendation
 
 ### Step 3.4: Update the Document
 
@@ -56,7 +56,7 @@ Add a summary section at the top:
 ```markdown
 ## Flux Drive Enhancement Summary
 
-Reviewed by N agents (M codebase-aware, K generic) on YYYY-MM-DD.
+Reviewed by N agents (M domain specialists, K adaptive reviewers) on YYYY-MM-DD.
 [If divergence detected:] **WARNING: This document is outdated.** The codebase has diverged from the described [tech stack]. Consider archiving this document and writing a new one.
 
 ### Key Findings
@@ -119,7 +119,7 @@ Do NOT modify the repo's README or any existing files. Instead, write a new summ
 ### Step 3.5: Report to User
 
 Tell the user:
-- How many agents ran and how many were codebase-aware vs generic
+- How many agents ran and how many were domain specialists vs adaptive reviewers
 - Top findings (3-5 most important)
 - Which sections got the most feedback
 - Where full analysis files are saved (`{OUTPUT_DIR}/`)
