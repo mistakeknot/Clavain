@@ -8,7 +8,6 @@ allowed-tools:
   - Bash(ls:*)
   - Bash(git:*)
 ---
-
 <objective>
 Update a skill's SKILL.md and related files based on corrections discovered during execution.
 

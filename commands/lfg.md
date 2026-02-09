@@ -3,7 +3,6 @@ name: lfg
 description: Full autonomous engineering workflow — brainstorm, plan, execute, review, ship
 argument-hint: "[feature description]"
 ---
-
 Run these steps in order. Do not do anything else.
 
 ## Step 1: Brainstorm

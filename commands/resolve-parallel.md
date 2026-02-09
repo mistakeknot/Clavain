@@ -3,7 +3,6 @@ name: resolve-parallel
 description: Resolve all TODO comments using parallel processing
 argument-hint: "[optional: specific TODO pattern or file]"
 ---
-
 Resolve all TODO comments in the codebase using parallel processing.
 
 ## Source

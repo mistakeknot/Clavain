@@ -5,5 +5,4 @@ allowed-tools:
   - Skill(create-agent-skills)
 argument-hint: "[skill description or requirements]"
 ---
-
 Invoke the create-agent-skills skill for: $ARGUMENTS

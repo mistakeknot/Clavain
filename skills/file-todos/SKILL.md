@@ -2,7 +2,6 @@
 name: file-todos
 description: Use when managing the file-based todo tracking system in the todos/ directory — creating todos, managing status and dependencies, conducting triage, and integrating with slash commands
 ---
-
 # File-Based Todo Tracking Skill
 
 ## Overview

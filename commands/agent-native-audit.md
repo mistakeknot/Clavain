@@ -3,7 +3,6 @@ name: agent-native-audit
 description: Run comprehensive agent-native architecture review with scored principles
 argument-hint: "[optional: specific principle to audit]"
 ---
-
 # Agent-Native Architecture Audit
 
 Conduct a comprehensive review of the codebase against agent-native architecture principles, launching parallel sub-agents for each principle and producing a scored report.
