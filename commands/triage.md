@@ -3,7 +3,6 @@ name: triage
 description: Triage and categorize findings for the CLI todo system
 argument-hint: "[findings list or source type]"
 ---
-
 - First set the /model to Haiku
 - Then read all pending todos in the todos/ directory
 

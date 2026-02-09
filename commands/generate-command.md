@@ -3,7 +3,6 @@ name: generate-command
 description: Create a new custom slash command following conventions and best practices
 argument-hint: "[command purpose and requirements]"
 ---
-
 # Create a Custom Claude Code Command
 
 Create a new slash command in `.claude/commands/` for the requested task.
