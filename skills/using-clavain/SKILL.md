@@ -38,9 +38,9 @@ Clavain provides 34 skills, 29 agents, and 26 commands. To avoid overwhelm, use 
 | **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents) |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
-| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit | {go,python,typescript,shell,rust}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
-| **Ship** | landing-a-change, verification-before-completion | changelog, triage | deployment-verification-agent |
-| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | create-agent-skill, generate-command, heal-skill, upstream-sync | — |
+| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | {go,python,typescript,shell,rust}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
+| **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | deployment-verification-agent |
+| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
 ### Layer 2: What domain?
 
@@ -108,50 +108,3 @@ When multiple skills could apply, use this order:
 "Let's build X" → brainstorming first, then domain skills.
 "Fix this bug" → systematic-debugging first, then domain-specific skills.
 "Review this code" → requesting-code-review first, then language-specific reviewers.
-
-## Skill Types
-
-**Rigid** (TDD, debugging, verification): Follow exactly. Don't adapt away discipline.
-
-**Flexible** (patterns, design): Adapt principles to context.
-
-The skill itself tells you which.
-
-## Plugin Conflicts
-
-Clavain replaces these official plugins (disabled in settings): code-review, pr-review-toolkit, code-simplifier, commit-commands, feature-dev, claude-md-management, frontend-design, hookify. If you see duplicate agent names in the Task tool roster, check `docs/plugin-audit.md` for resolution.
-
-## User Instructions
-
-Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
-
-## Key Commands Quick Reference
-
-| Command | When |
-|---------|------|
-| `/clavain:lfg [description]` | Full autonomous workflow (brainstorm → plan → execute → review) |
-| `/clavain:brainstorm [idea]` | Explore before planning |
-| `/clavain:write-plan [spec]` | Create implementation plan |
-| `/clavain:work [plan]` | Execute a plan |
-| `/clavain:execute-plan [plan]` | Execute plan in separate session with checkpoints |
-| `/clavain:review [PR/branch]` | Multi-agent code review |
-| `/clavain:plan-review [plan]` | Have multiple agents review a plan in parallel |
-| `/clavain:flux-drive [path]` | Intelligent document/repo review with agent triage |
-| `/clavain:quality-gates` | Auto-select reviewers for current changes |
-| `/clavain:repro-first-debugging` | Disciplined bug investigation |
-| `/clavain:resolve-parallel` | Resolve all TODO comments in parallel |
-| `/clavain:resolve-todo-parallel` | Resolve pending CLI todos in parallel |
-| `/clavain:resolve-pr-parallel` | Resolve PR comments in parallel |
-| `/clavain:migration-safety [migration]` | Database migration safety review |
-| `/clavain:agent-native-audit` | Agent-native architecture review with scored principles |
-| `/clavain:changelog` | Generate changelog from recent commits |
-| `/clavain:triage [findings]` | Triage and categorize findings |
-| `/clavain:compound` | Capture solved problem as documentation |
-| `/clavain:create-agent-skill` | Create or edit skills and agents |
-| `/clavain:generate-command` | Create a new custom slash command |
-| `/clavain:heal-skill` | Fix incorrect SKILL.md files |
-| `/clavain:interpeer` | Cross-AI peer review (Claude↔Codex) |
-| `/clavain:debate` | Structured Claude↔Codex debate before complex tasks |
-| `/clavain:codex-first` | Toggle codex-first execution mode |
-| `/clavain:upstream-sync` | Check upstream repos for updates |
-| `/clavain:setup` | Bootstrap modpack — install plugins, disable conflicts, verify MCP |

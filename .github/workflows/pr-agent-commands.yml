@@ -70,11 +70,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
+          COMMAND: ${{ needs.parse-command.outputs.command }}
+          ASSOCIATION: ${{ needs.parse-command.outputs.association }}
         with:
           script: |
-            const pr = Number("${{ needs.parse-command.outputs.pr_number }}");
-            const command = "${{ needs.parse-command.outputs.command }}";
-            const association = "${{ needs.parse-command.outputs.association }}";
+            const pr = Number(process.env.PR_NUMBER);
+            const command = process.env.COMMAND;
+            const association = process.env.ASSOCIATION;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -95,12 +99,13 @@ jobs:
     steps:
       - uses: actions/github-script@v7
         env:
+          PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
           MODE: ${{ needs.parse-command.outputs.mode }}
           HAS_ANTHROPIC: ${{ secrets.ANTHROPIC_API_KEY != '' }}
           HAS_CODEX_AUTH: ${{ secrets.CODEX_AUTH_JSON != '' }}
         with:
           script: |
-            const pr = Number("${{ needs.parse-command.outputs.pr_number }}");
+            const pr = Number(process.env.PR_NUMBER);
             const mode = process.env.MODE || "";
             const hasAnthropic = (process.env.HAS_ANTHROPIC || "") === "true";
             const hasCodexAuth = (process.env.HAS_CODEX_AUTH || "") === "true";
@@ -146,9 +151,11 @@ jobs:
       - name: Fetch PR metadata
         id: prmeta
         uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
         with:
           script: |
-            const prNumber = Number("${{ needs.parse-command.outputs.pr_number }}");
+            const prNumber = Number(process.env.PR_NUMBER);
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -197,11 +204,14 @@ jobs:
         uses: actions/github-script@v7
         env:
           CLAUDE_STRUCTURED: ${{ steps.claude.outputs.structured_output }}
+          PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
+          ACTOR: ${{ needs.parse-command.outputs.actor }}
+          COMMAND: ${{ needs.parse-command.outputs.command }}
         with:
           script: |
-            const prNumber = Number("${{ needs.parse-command.outputs.pr_number }}");
-            const actor = "${{ needs.parse-command.outputs.actor }}";
-            const command = "${{ needs.parse-command.outputs.command }}";
+            const prNumber = Number(process.env.PR_NUMBER);
+            const actor = process.env.ACTOR;
+            const command = process.env.COMMAND;
             const raw = process.env.CLAUDE_STRUCTURED || "";
 
             let response = "";
@@ -251,9 +261,11 @@ jobs:
       - name: Fetch PR metadata
         id: prmeta
         uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
         with:
           script: |
-            const prNumber = Number("${{ needs.parse-command.outputs.pr_number }}");
+            const prNumber = Number(process.env.PR_NUMBER);
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -330,11 +342,14 @@ jobs:
         uses: actions/github-script@v7
         env:
           CODEX_FINAL_MESSAGE: ${{ steps.codex_exec.outputs.result }}
+          PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
+          ACTOR: ${{ needs.parse-command.outputs.actor }}
+          COMMAND: ${{ needs.parse-command.outputs.command }}
         with:
           script: |
-            const prNumber = Number("${{ needs.parse-command.outputs.pr_number }}");
-            const actor = "${{ needs.parse-command.outputs.actor }}";
-            const command = "${{ needs.parse-command.outputs.command }}";
+            const prNumber = Number(process.env.PR_NUMBER);
+            const actor = process.env.ACTOR;
+            const command = process.env.COMMAND;
             const result = (process.env.CODEX_FINAL_MESSAGE || "").trim();
 
             const body = [

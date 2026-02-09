@@ -43,4 +43,17 @@ Check if clodex mode is active (`.claude/autopilot.flag` exists):
 ## Step 7: Quality Gates
 `/clavain:quality-gates`
 
+## Error Recovery
+
+If any step fails:
+
+1. **Do NOT skip the failed step** — each step's output feeds into later steps
+2. **Retry once** with a tighter scope (e.g., fewer features, smaller change set)
+3. **If retry fails**, stop and report:
+   - Which step failed
+   - The error or unexpected output
+   - What was completed successfully before the failure
+
+To **resume from a specific step**, re-invoke `/clavain:lfg` and manually skip completed steps by running their slash commands directly (e.g., start from Step 5 by running `/clavain:review`).
+
 Start with Step 1 now.

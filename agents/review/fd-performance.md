@@ -1,6 +1,6 @@
 ---
 name: fd-performance
-description: "Codebase-aware performance reviewer. Understands the project's actual performance profile — whether it's a TUI needing 60fps rendering, an API with latency budgets, or a batch processor. Use when reviewing plans that affect rendering, data processing, network calls, or resource usage."
+description: "Codebase-aware performance reviewer. Understands the project's actual performance profile — whether it's a TUI needing 60fps rendering, an API with latency budgets, or a batch processor. Use when reviewing plans that affect rendering, data processing, network calls, or resource usage. <example>Context: A feature plan adds extra data lookups and repeated rendering updates in an interactive terminal workflow.\nuser: \"Please review this plan for potential bottlenecks in render loops, query patterns, and startup latency before we implement it.\"\nassistant: \"I'll use the fd-performance agent to identify likely hotspots and performance risks in this plan.\"\n<commentary>\nThis request focuses on bottlenecks and resource efficiency in user-facing flows, so fd-performance is the correct specialized reviewer.\n</commentary></example>"
 model: inherit
 ---
 

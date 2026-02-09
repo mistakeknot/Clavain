@@ -74,14 +74,40 @@ jobs:
           chmod 600 ~/.codex/auth.json
           codex login status
 
+      - name: Prepare upstream clones
+        run: |
+          set -euo pipefail
+          mkdir -p .upstream-work
+          while IFS=$'\t' read -r name url branch; do
+            target=".upstream-work/$name"
+            if [[ -d "$target/.git" ]]; then
+              git -C "$target" fetch --all --prune
+            else
+              git clone --branch "$branch" --single-branch "$url" "$target"
+            fi
+          done < <(
+            python3 - <<'PY'
+            import json
+
+            with open("upstreams.json", encoding="utf-8") as f:
+                upstreams = json.load(f).get("upstreams", [])
+
+            for upstream in upstreams:
+                name = upstream.get("name")
+                url = upstream.get("url") or upstream.get("repo")
+                branch = upstream.get("branch") or "main"
+                if name and url:
+                    print(f"{name}\t{url}\t{branch}")
+            PY
+          )
+
       # Step 2: Codex CLI orchestrates the full sync
       - name: Run upstream sync via Codex CLI
         env:
           CODEX_HOME: /home/runner/.codex
         run: |
           set -euo pipefail
-          # upstream sync needs outbound network access for cloning upstream repos.
-          codex exec --sandbox danger-full-access -C "$GITHUB_WORKSPACE" -o /tmp/codex-upstream-sync.md - <<'EOF'
+          codex exec --sandbox workspace-write -C "$GITHUB_WORKSPACE" -o /tmp/codex-upstream-sync.md - <<'EOF'
             You are running an automated upstream sync for the Clavain plugin repository.
 
             ## Context
@@ -96,13 +122,13 @@ jobs:
 
             For each upstream defined in `upstreams.json`:
 
-            ### 1. Clone and diff
-            - Clone the upstream repo to `/tmp/upstream/<name>` (shallow is fine)
+            ### 1. Use local clones and diff
+            - Use the pre-cloned upstream repo at `.upstream-work/<name>` (where `<name>` is from `upstreams.json`)
             - Get the current HEAD commit hash
             - Compare HEAD against `lastSyncedCommit` from upstreams.json
             - If `basePath` is set (e.g. "plugins/compound-engineering"), only look at files under that prefix
             - Run: `git diff --name-status <lastSyncedCommit> HEAD -- <basePath or .>`
-            - If the lastSyncedCommit isn't reachable (shallow clone), deepen with `git fetch --deepen=500` then retry, or `git fetch --unshallow` as last resort
+            - If `lastSyncedCommit` is not reachable in the local clone, log an error for that upstream and skip updating its hash
 
             ### 2. Filter to mapped files
             - For each changed file, strip the `basePath` prefix, then check if it exists in the `fileMap`

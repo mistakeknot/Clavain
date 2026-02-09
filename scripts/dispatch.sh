@@ -139,8 +139,17 @@ while [[ $# -gt 0 ]]; do
       EXTRA_ARGS+=("$1" "$2")
       shift 2
       ;;
+    --dangerously-bypass-approvals-and-sandbox|--yolo)
+      if [[ "${CLAVAIN_ALLOW_UNSAFE:-}" == "1" ]]; then
+        EXTRA_ARGS+=("$1")
+        shift
+      else
+        echo "Error: $1 is blocked by dispatch.sh safety policy. Set CLAVAIN_ALLOW_UNSAFE=1 to override." >&2
+        exit 1
+      fi
+      ;;
     # Known codex flags that are boolean — pass through alone
-    --json|--full-auto|--skip-git-repo-check|--oss|--dangerously-bypass-approvals-and-sandbox|--yolo|--search|--no-alt-screen)
+    --json|--full-auto|--skip-git-repo-check|--oss|--search|--no-alt-screen)
       EXTRA_ARGS+=("$1")
       shift
       ;;

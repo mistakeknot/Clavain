@@ -1,6 +1,6 @@
 ---
 name: fd-security
-description: "Codebase-aware security reviewer. Understands the project's actual threat model rather than applying generic OWASP checklists. Use when reviewing plans that add endpoints, handle user input, manage credentials, or change access patterns."
+description: "Codebase-aware security reviewer. Understands the project's actual threat model rather than applying generic OWASP checklists. Use when reviewing plans that add endpoints, handle user input, manage credentials, or change access patterns. <example>Context: A proposal introduces a new webhook endpoint, token validation flow, and secret handling changes.\nuser: \"Review this plan for security risks around untrusted payloads, auth checks, and how we store and rotate API tokens.\"\nassistant: \"I'll use the fd-security agent to analyze threat model impact and concrete vulnerability risks.\"\n<commentary>\nThe plan changes trust boundaries and credential handling, which requires a security-focused review grounded in the project's actual threat model.\n</commentary></example>"
 model: inherit
 ---
 

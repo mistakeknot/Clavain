@@ -1,6 +1,6 @@
 ---
 name: fd-architecture
-description: "Codebase-aware architecture reviewer. Knows project boundaries, module layout, and integration patterns. Use when reviewing plans that touch component structure, cross-tool boundaries, or system design. Replaces generic architecture-strategist with project-specific knowledge."
+description: "Codebase-aware architecture reviewer. Knows project boundaries, module layout, and integration patterns. Use when reviewing plans that touch component structure, cross-tool boundaries, or system design. Replaces generic architecture-strategist with project-specific knowledge. <example>Context: A change plan proposes moving session bootstrap logic across hooks, scripts, and commands while introducing new shared modules.\nuser: \"Review this plan for splitting startup behavior so we do not create circular dependencies between hooks and command workflows.\"\nassistant: \"I'll use the fd-architecture agent to review boundary placement and integration impacts.\"\n<commentary>\nThis request is primarily about component boundaries and structure, so fd-architecture is the right reviewer to catch coupling and module split issues early.\n</commentary></example>"
 model: inherit
 ---
 
