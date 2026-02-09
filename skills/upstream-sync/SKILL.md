@@ -58,6 +58,23 @@ The command integrates with the pipeline. See `commands/upstream-sync.md` for th
 5. Update baseline: `bash scripts/upstream-check.sh --update`
 6. Commit changes and close the issue
 
+### Layer 4: Human Decision Gate (upstream-sync PRs)
+
+Two PR workflows enforce meaningful adaptation decisions:
+
+1. `.github/workflows/upstream-impact.yml` posts impact summaries (commit/file churn + mapped impact)
+2. `.github/workflows/upstream-decision-gate.yml` blocks merge until decision record is complete
+
+Required decision record per PR:
+
+- Path: `docs/upstream-decisions/pr-<PR_NUMBER>.md`
+- Template: `docs/templates/upstream-decision-record.md`
+- Gate criteria:
+  - `Gate: approved`
+  - no `TBD` placeholders
+  - explicit per-upstream decisions (`adopt-now`, `defer`, `ignore`)
+  - explicit base-workflow intervention decisions when applicable
+
 **Manual fallback** (no issues):
 1. Run `bash scripts/upstream-check.sh` directly
 2. If changes detected, follow the remediation process below

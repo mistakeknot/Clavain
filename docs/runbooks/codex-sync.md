@@ -56,6 +56,39 @@ When `.github/workflows/sync.yml` merges upstream content:
    ls ~/.codex/prompts/clavain-*.md | head -n 5
    ```
 
+## Upstream Impact + Decision Gate
+
+Two workflows enforce meaningful adaptation for upstream-sync PRs:
+
+- `.github/workflows/upstream-impact.yml`
+- `.github/workflows/upstream-decision-gate.yml`
+
+### What they do
+
+1. **Impact report** posts/updates a PR comment with:
+   - commit/file churn per upstream
+   - mapped-file impact count (from `upstreams.json` mappings)
+   - feature/breaking-signal commit headlines
+2. **Decision gate** blocks merge unless the PR includes:
+   - `docs/upstream-decisions/pr-<PR_NUMBER>.md`
+   - `Gate: approved`
+   - no remaining `TBD` placeholders
+
+### Human intervention flow (required)
+
+For any upstream-sync PR:
+
+1. Copy template:
+   ```bash
+   cp docs/templates/upstream-decision-record.md docs/upstream-decisions/pr-<PR_NUMBER>.md
+   ```
+2. Fill decisions per upstream (`adopt-now`, `defer`, `ignore`) with rationale.
+3. If Clavain base workflows are affected, explicitly document decisions under:
+   - `## Base Workflow Decisions`
+   - `### Base Workflow Change Decisions`
+4. Set `Gate: approved` only after decisions are explicit and actionable.
+5. Commit to the PR branch and re-run checks.
+
 ## CI Reminder Behavior
 
 Workflow: `.github/workflows/codex-refresh-reminder.yml`

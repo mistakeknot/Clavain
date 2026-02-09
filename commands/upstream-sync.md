@@ -44,6 +44,18 @@ This command integrates with the GitHub Actions daily check:
 5. Commit changes to `docs/upstream-versions.json` and affected skills
 6. Close the GitHub issue with a summary of what was updated
 
+### Required for upstream-sync PRs
+
+Every upstream-sync PR must include a decision record:
+
+1. Copy template:
+   ```bash
+   cp docs/templates/upstream-decision-record.md docs/upstream-decisions/pr-<PR_NUMBER>.md
+   ```
+2. Fill per-upstream decisions (`adopt-now`, `defer`, `ignore`) and rationale
+3. If base workflows are affected, document intervention decisions under `## Base Workflow Decisions`
+4. Set `Gate: approved` and commit to the PR branch
+
 ### If no GitHub issues (manual fallback)
 
 1. Run the check script directly:

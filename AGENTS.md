@@ -56,7 +56,9 @@ Clavain/
 │   └── upstream-versions.json     # Baseline for upstream sync tracking
 └── .github/workflows/
     ├── upstream-check.yml         # Daily cron: opens GitHub issues on upstream changes
-    └── sync.yml                   # Weekly cron: Claude Code + Codex auto-merge upstream
+    ├── sync.yml                   # Weekly cron: Claude Code + Codex auto-merge upstream
+    ├── upstream-impact.yml        # PR impact digest for upstream-sync changes
+    └── upstream-decision-gate.yml # Human decision gate for upstream-sync PRs
 ```
 
 ## How It Works
@@ -310,6 +312,9 @@ Clavain bundles knowledge from 7 actively-developed upstream tools. Two systems 
 - `.github/workflows/sync.yml` — weekly cron + manual dispatch, uses Claude Code + Codex CLI to auto-merge upstream changes
 - File mappings: `upstreams.json` (source→local path mappings with glob support)
 - Work dir: `.upstream-work/` (gitignored)
+- `.github/workflows/upstream-impact.yml` — posts upstream impact digest on `upstream-sync` PRs
+- `.github/workflows/upstream-decision-gate.yml` — requires human decision record before merge
+- Decision records: `docs/upstream-decisions/pr-<PR_NUMBER>.md` (template: `docs/templates/upstream-decision-record.md`)
 
 | Tool | Repo | Clavain Skills Affected |
 |------|------|------------------------|
