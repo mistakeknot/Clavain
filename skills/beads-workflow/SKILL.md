@@ -147,6 +147,32 @@ bd create --title="Write tests for X" --type=task --priority=2
 bd dep add <tests-id> <feature-id>    # Tests depend on feature
 ```
 
+**After batch creation (reviews, audits, planning):**
+
+Whenever you create 5+ beads in a session — especially from reviews, audits, or brainstorming — run a consolidation pass before moving on:
+
+```bash
+bd list --status=open    # Review the full backlog
+```
+
+Look for:
+1. **Same-file edits** — Multiple beads that touch the same file can often merge into one with combined acceptance criteria
+2. **Parent-child absorption** — Small beads whose scope is entirely contained within a larger bead should become acceptance criteria on the parent, then close with `--reason="absorbed into <parent-id>"`
+3. **Duplicate intent** — Beads phrased differently but targeting the same outcome — close the weaker one
+4. **Missing dependencies** — Beads that implicitly depend on each other (e.g., a schema change that a downstream consumer needs) should have explicit `bd dep add`
+5. **Missing descriptions** — Every bead should have a description with concrete acceptance criteria, not just a title
+
+```bash
+# Absorb child into parent
+bd update <parent-id> --description="...add child's criteria..."
+bd close <child-id> --force --reason="absorbed into <parent-id>"
+
+# Add missing dependency
+bd dep add <downstream-id> <upstream-id>
+```
+
+This typically reduces batch-created backlogs by 30-40% and prevents fragmented work.
+
 ## Integration
 
 **Pairs with:**
