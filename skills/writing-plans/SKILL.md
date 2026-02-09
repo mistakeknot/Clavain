@@ -186,3 +186,5 @@ AskUserQuestion:
 - Claude stays as orchestrator — planning, dispatching, reviewing, integrating
 - Codex agents execute tasks in parallel sandboxes
 - Best when tasks are independent, well-scoped, and benefit from parallel execution
+- When running under `/lfg`, this step subsumes `/work` — the plan is executed here via Codex, so `/lfg` skips the `/work` step
+- The subsequent `/flux-drive` step also dispatches review agents through Codex when clodex mode is active, creating a consistent Codex pipeline
