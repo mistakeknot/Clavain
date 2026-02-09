@@ -42,14 +42,16 @@ For more complex endeavors (or new projects), I use Clavain's pieces individuall
 
 ### The `/lfg` Lifecycle
 
-`/lfg` chains seven commands together. Each one can also be invoked standalone:
+`/lfg` chains seven steps together. Each one can also be invoked standalone:
 
 ```
-/brainstorm  →  /write-plan  →  /flux-drive  →  /work  →  /review  →  /resolve-todo-parallel  →  /quality-gates
-   explore        plan           review plan     execute    review code     fix issues              final check
+/brainstorm  →  /write-plan  →  /work*  →  /flux-drive  →  /review  →  /resolve-todo-parallel  →  /quality-gates
+   explore        plan          execute     review plan     review code     fix issues              final check
+
+* When clodex mode is active, /write-plan executes via Codex Delegation and /work is skipped.
 ```
 
-Even when I think I know what I want, I usually start with `/brainstorm` because it forces me to articulate and trace through requirements and user journeys before touching code; Clavain often catches edge cases I hadn't considered. After brainstorming, `/write-plan` creates a structured implementation plan, and `/flux-drive` reviews that plan with up to 4 tiers of agents before any code is written.
+Even when I think I know what I want, I usually start with `/brainstorm` because it forces me to articulate and trace through requirements and user journeys before touching code; Clavain often catches edge cases I hadn't considered. After brainstorming, `/write-plan` creates a structured implementation plan — and when clodex mode is active, it also dispatches execution through Codex agents, making the `/work` step unnecessary. `/flux-drive` then reviews the plan (or, under clodex, the executed result) with up to 4 tiers of agents before the code review phase.
 
 ### Reviewing Things with `/flux-drive`
 
