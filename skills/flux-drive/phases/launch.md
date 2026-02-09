@@ -32,10 +32,6 @@ Launch all selected agents as parallel Task calls in a **single message**.
 
 ### How to launch each agent type:
 
-**Domain Specialists**:
-- Use the native `subagent_type` from the roster (e.g., `clavain:review:fd-user-experience`)
-- Set `run_in_background: true`
-
 **Project Agents (.claude/agents/)**:
 - `subagent_type: general-purpose`
 - Include the agent file's full content as the system prompt
@@ -156,7 +152,7 @@ Be concrete. Reference specific sections by name. Don't give generic advice.
 After launching all agents, tell the user:
 - How many agents were launched
 - That they are running in background
-- Estimated wait time (~3-5 minutes; Domain Specialists take longer as they explore the repo)
+- Estimated wait time (~3-5 minutes)
 
 ### Step 2.3: Verify agent completion
 

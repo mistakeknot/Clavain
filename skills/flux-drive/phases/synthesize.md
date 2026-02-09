@@ -35,10 +35,10 @@ For **malformed** outputs, read the Summary + Issues sections as prose fallback.
 ### Step 3.3: Deduplicate and Organize
 
 1. **Group findings by section** — organize all agent findings under the section they apply to (or by topic for repo reviews)
-2. **Deduplicate**: If multiple agents flagged the same issue, keep the most specific one (prefer Domain Specialists and Project Agents over Adaptive Reviewers, since they have deeper project context)
+2. **Deduplicate**: If multiple agents flagged the same issue, keep the most specific one (prefer Project Agents over plugin Adaptive Reviewers, since they have deeper project context)
 3. **Track convergence**: Note how many agents flagged each issue (e.g., "4/6 agents"). High convergence (3+ agents) = high confidence. Include convergence counts in the Issues to Address checklist.
 4. **Flag conflicts**: If agents disagree, note both positions
-5. **Priority from project-specific agents**: When a Domain Specialist/Project Agent and an Adaptive Reviewer give different advice on the same topic, prefer the more project-specific recommendation
+5. **Priority from project-specific agents**: When a Project Agent and an Adaptive Reviewer give different advice on the same topic, prefer the Project Agent's recommendation
 
 ### Step 3.4: Update the Document
 
@@ -56,7 +56,7 @@ Add a summary section at the top:
 ```markdown
 ## Flux Drive Enhancement Summary
 
-Reviewed by N agents (M domain specialists, K adaptive reviewers) on YYYY-MM-DD.
+Reviewed by N agents on YYYY-MM-DD.
 [If divergence detected:] **WARNING: This document is outdated.** The codebase has diverged from the described [tech stack]. Consider archiving this document and writing a new one.
 
 ### Key Findings
@@ -119,7 +119,7 @@ Do NOT modify the repo's README or any existing files. Instead, write a new summ
 ### Step 3.5: Report to User
 
 Tell the user:
-- How many agents ran and how many were domain specialists vs adaptive reviewers
+- How many agents ran
 - Top findings (3-5 most important)
 - Which sections got the most feedback
 - Where full analysis files are saved (`{OUTPUT_DIR}/`)

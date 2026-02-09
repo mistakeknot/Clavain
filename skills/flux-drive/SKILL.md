@@ -100,13 +100,13 @@ Consult the **Agent Roster** below and score each agent against the document pro
 - **1 (maybe)**: Adjacent domain. Include only for sections that are thin.
 - **0 (irrelevant)**: Wrong language, wrong domain, no relationship to this document.
 
-**Category bonuses**: Domain Specialists get +1 (always codebase-aware). Project Agents get +1 (project-specific). Adaptive Reviewers architecture-strategist, security-sentinel, and performance-oracle get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode).
+**Category bonuses**: Project Agents get +1 (project-specific). Adaptive Reviewers get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode).
 
 **Selection rules**:
 1. All agents scoring 2+ are included
 2. Agents scoring 1 are included only if their domain covers a thin section
 3. **Cap at 8 agents total** (hard maximum)
-4. **Deduplication**: If a Domain Specialist or Project Agent covers the same domain as an Adaptive Reviewer, prefer the more specific agent
+4. **Deduplication**: If a Project Agent covers the same domain as an Adaptive Reviewer, prefer the Project Agent
 5. Prefer fewer, more relevant agents over many marginal ones
 
 ### Scoring Examples
@@ -118,15 +118,15 @@ Consult the **Agent Roster** below and score each agent against the document pro
 | architecture-strategist | Adaptive | 2+1=3 | Module boundaries directly affected, project docs exist | Launch |
 | security-sentinel | Adaptive | 2+1=3 | API adds new endpoints, project docs exist | Launch |
 | performance-oracle | Adaptive | 1+1=2 | API mentioned but no perf section (thin) | Launch |
-| fd-user-experience | Domain | 0+1=1 | No UI/CLI changes | Skip |
+| fd-user-experience | Adaptive | 0+1=1 | No UI/CLI changes, project docs exist | Skip |
 | go-reviewer | Adaptive | 2 | Go code changes | Launch |
 
 **README review for Python CLI tool:**
 
 | Agent | Category | Score | Reason | Action |
 |-------|----------|-------|--------|--------|
-| fd-user-experience | Domain | 2+1=3 | CLI UX directly relevant | Launch |
-| fd-code-quality | Domain | 2+1=3 | Conventions review | Launch |
+| fd-user-experience | Adaptive | 2+1=3 | CLI UX directly relevant, project docs exist | Launch |
+| fd-code-quality | Adaptive | 2+1=3 | Conventions review, project docs exist | Launch |
 | code-simplicity-reviewer | Adaptive | 2 | YAGNI check | Launch |
 | architecture-strategist | Adaptive | 1+1=2 | Only if architecture section is thin | Launch |
 | security-sentinel | Adaptive | 0 | README, no security concerns | Skip |
@@ -156,7 +156,7 @@ Then use **AskUserQuestion** to get approval:
 
 ```
 AskUserQuestion:
-  question: "Launch N agents (M domain specialists, K adaptive reviewers) for flux-drive review?"
+  question: "Launch N agents for flux-drive review?"
   options:
     - label: "Approve"
       description: "Launch all selected agents"
@@ -173,20 +173,11 @@ If user selects "Cancel", stop here.
 
 ## Agent Roster
 
-### Domain Specialists
-
-These agents always read the target project's CLAUDE.md and AGENTS.md before analyzing, grounding their review in the project's actual architecture, conventions, and patterns rather than generic checklists.
-
-| Agent | subagent_type | Domain |
-|-------|--------------|--------|
-| fd-user-experience | clavain:review:fd-user-experience | CLI/TUI interaction, keyboard ergonomics, terminal constraints |
-| fd-code-quality | clavain:review:fd-code-quality | Naming, test strategy, project conventions, idioms |
-
 ### Project Agents (.claude/agents/fd-*.md)
 
 Check if `.claude/agents/fd-*.md` files exist in the project root. If so, include them in triage. Use `subagent_type: general-purpose` and include the agent file's full content as the system prompt in the task prompt.
 
-**Note:** `general-purpose` agents have full tool access (Read, Grep, Glob, Write, Bash, etc.) — the same as Domain Specialists. The difference is that Domain Specialists get their system prompt from the plugin automatically, while Project Agents need it pasted into the task prompt.
+**Note:** `general-purpose` agents have full tool access (Read, Grep, Glob, Write, Bash, etc.) — the same as Adaptive Reviewers. The difference is that Adaptive Reviewers get their system prompt from the plugin automatically, while Project Agents need it pasted into the task prompt.
 
 If no Project Agents exist AND clodex mode is active, flux-drive will bootstrap them via Codex (see `phases/launch-codex.md`). If no Project Agents exist and clodex mode is NOT active, skip this category entirely.
 
@@ -196,6 +187,8 @@ These agents auto-detect project documentation: when CLAUDE.md/AGENTS.md exist, 
 
 | Agent | subagent_type | Domain |
 |-------|--------------|--------|
+| fd-user-experience | clavain:review:fd-user-experience | CLI/TUI interaction, keyboard ergonomics, terminal constraints |
+| fd-code-quality | clavain:review:fd-code-quality | Naming, test strategy, project conventions, idioms |
 | architecture-strategist | clavain:review:architecture-strategist | Module boundaries, component structure, system design |
 | security-sentinel | clavain:review:security-sentinel | Threat model, credential handling, access patterns |
 | performance-oracle | clavain:review:performance-oracle | Rendering, data processing, resource usage, scaling |
