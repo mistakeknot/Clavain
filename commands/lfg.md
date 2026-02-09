@@ -9,14 +9,21 @@ Run these steps in order. Do not do anything else.
 ## Step 1: Brainstorm
 `/clavain:brainstorm $ARGUMENTS`
 
-## Step 2: Plan + Execute
+## Step 2: Write Plan
 `/clavain:write-plan`
 
-Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it's needed in Step 4.
+Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it's needed in Step 3.
 
-**Note:** When clodex mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 3 (work) — the plan has already been executed.
+**Note:** When clodex mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 4 (execute) — the plan has already been executed.
 
-## Step 3: Execute (non-clodex only)
+## Step 3: Review Plan (gates execution)
+`/clavain:flux-drive <plan-file-from-step-2>`
+
+Pass the plan file path from Step 2 as the flux-drive target. Review happens **before** execution so plan-level risks are caught early.
+
+If flux-drive finds P0/P1 issues, stop and address them before proceeding to execution.
+
+## Step 4: Execute (non-clodex only)
 
 Check if clodex mode is active:
 ```bash
@@ -24,24 +31,33 @@ Check if clodex mode is active:
 ```
 
 - If **clodex is active**: Skip this step — `/write-plan` already executed via Codex Delegation in Step 2.
-- If **clodex is NOT active**: Run `/clavain:work`
+- If **clodex is NOT active**: Run `/clavain:work <plan-file-from-step-2>`
 
-## Step 4: Review Plan
-`/clavain:flux-drive <plan-file-from-step-2>`
+## Step 5: Test & Verify
 
-Pass the plan file path from Step 2 as the flux-drive target. When clodex mode is active, flux-drive automatically dispatches review agents through Codex (Step 2.3 in flux-drive SKILL.md).
+Run the project's test suite and linting before proceeding to review:
 
-## Step 5: Code Review
-`/clavain:review`
+```bash
+# Run project's test command (go test ./... | npm test | pytest | cargo test)
+# Run project's linter if configured
+```
 
-## Step 6: Resolve Issues (clodex-aware)
+**If tests fail:** Stop. Fix failures before proceeding. Do NOT continue to quality gates with a broken build.
+
+**If no test command exists:** Note this and proceed — quality-gates will still run reviewer agents.
+
+## Step 6: Quality Gates
+`/clavain:quality-gates`
+
+## Step 7: Resolve Issues
 
 Check if clodex mode is active (`.claude/autopilot.flag` exists):
 - If **clodex is active**: Run `/clavain:resolve-todo-parallel`. The command's clodex-mode guidance will automatically route code-modifying resolutions through Codex dispatch.
 - If **clodex is NOT active**: Run `/clavain:resolve-todo-parallel` normally.
 
-## Step 7: Quality Gates
-`/clavain:quality-gates`
+## Step 8: Ship
+
+Use the `clavain:landing-a-change` skill to verify, document, and commit the completed work.
 
 ## Error Recovery
 
@@ -54,6 +70,6 @@ If any step fails:
    - The error or unexpected output
    - What was completed successfully before the failure
 
-To **resume from a specific step**, re-invoke `/clavain:lfg` and manually skip completed steps by running their slash commands directly (e.g., start from Step 5 by running `/clavain:review`).
+To **resume from a specific step**, re-invoke `/clavain:lfg` and manually skip completed steps by running their slash commands directly (e.g., start from Step 6 by running `/clavain:quality-gates`).
 
 Start with Step 1 now.

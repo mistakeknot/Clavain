@@ -35,7 +35,7 @@ Clavain provides 34 skills, 29 agents, and 26 commands. To avoid overwhelm, use 
 |-------|---------------|-----------------|------------|
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | architecture-strategist, spec-flow-analyzer |
-| **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents) |
+| **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | {go,python,typescript,shell,rust}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
@@ -67,6 +67,8 @@ Clavain provides 34 skills, 29 agents, and 26 commands. To avoid overwhelm, use 
 | Any async/concurrent code | concurrency-reviewer |
 | Any with security surface | security-sentinel |
 | Any with perf concerns | performance-oracle |
+
+¹ **flux-drive agents (fd-*)**: The agents `fd-architecture`, `fd-user-experience`, `fd-code-quality`, `fd-performance`, and `fd-security` are codebase-aware reviewers auto-selected by flux-drive's triage system. Don't invoke them directly — use `/clavain:flux-drive` which selects the right subset based on what's being reviewed.
 
 ### Cross-AI Review
 

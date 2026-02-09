@@ -122,33 +122,21 @@ This command takes a work document (plan, specification, or todo file) and execu
 
 1. **Run Core Quality Checks**
 
-   Always run before submitting:
+   Always run before committing:
 
    ```bash
    # Run full test suite (use project's test command)
    # Examples: npm test, pytest, go test, cargo test, etc.
 
    # Run linting (per CLAUDE.md)
-   # Use project's linter before pushing to origin
+   # Use project's linter before pushing
    ```
 
-2. **Consider Reviewer Agents** (Optional)
+2. **Reviewer Agents** — delegate to `/quality-gates`
 
-   Use for complex, risky, or large changes:
+   If the change is risky or large, run `/clavain:quality-gates` instead of manually selecting reviewers. It auto-selects the right agents based on what changed.
 
-   - **code-simplicity-reviewer**: Check for unnecessary complexity
-   - **go-reviewer** / **python-reviewer** / **typescript-reviewer** / **shell-reviewer** / **rust-reviewer**: Language-specific review
-   - **performance-oracle**: Check for performance issues
-   - **security-sentinel**: Scan for security vulnerabilities
-
-   Run reviewers in parallel with Task tool:
-
-   ```
-   Task(code-simplicity-reviewer): "Review changes for simplicity"
-   Task(architecture-strategist): "Check conventions and patterns"
-   ```
-
-   Present findings to user and address critical issues.
+   For a cross-AI second opinion, run `/clavain:interpeer quick`.
 
 3. **Final Validation**
    - All TodoWrite tasks marked completed
@@ -159,41 +147,26 @@ This command takes a work document (plan, specification, or todo file) and execu
 
 ### Phase 4: Ship It
 
-1. **Create Commit**
+1. **Commit to Trunk**
 
    ```bash
-   git add .
+   # Stage specific files (NOT git add .)
+   git add <changed-files>
    git status  # Review what's being committed
    git diff --staged  # Check the changes
 
    # Commit with conventional format
-   git commit -m "$(cat <<'EOF'
-   feat(scope): description of what and why
+   git commit -m "feat(scope): description of what and why
 
-   Brief explanation if needed.
+   Co-Authored-By: Claude <noreply@anthropic.com>"
 
-   🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-   Co-Authored-By: Claude <noreply@anthropic.com>
-   EOF
-   )"
-   ```
-
-2. **Commit and Push** (trunk-based — direct to main)
-
-   ```bash
-   git add <changed-files>
-   git commit -m "feat: [Description]"
    git push
    ```
 
-3. **Notify User**
+2. **Notify User**
    - Summarize what was completed
-   - Link to PR
    - Note any follow-up work needed
    - Suggest next steps if applicable
-
----
 
 ---
 
@@ -232,7 +205,7 @@ This command takes a work document (plan, specification, or todo file) and execu
 
 ## Quality Checklist
 
-Before creating PR, verify:
+Before committing, verify:
 
 - [ ] All clarifying questions asked and answered
 - [ ] All TodoWrite tasks marked completed
@@ -241,9 +214,9 @@ Before creating PR, verify:
 - [ ] Code follows existing patterns
 - [ ] Commit messages follow conventional format
 
-## When to Use Reviewer Agents
+## When to Use Quality Gates
 
-**Don't use by default.** Use reviewer agents only when:
+**Don't review by default.** Run `/clavain:quality-gates` only when:
 
 - Large refactor affecting many files (10+)
 - Security-sensitive changes (authentication, permissions, data access)

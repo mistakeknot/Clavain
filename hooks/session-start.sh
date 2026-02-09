@@ -10,8 +10,8 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hooks/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
-# Read using-clavain content
-using_clavain_content=$(cat "${PLUGIN_ROOT}/skills/using-clavain/SKILL.md" 2>&1 || echo "Error reading using-clavain skill")
+# Read using-clavain content (fail gracefully — don't mix stderr into injected context)
+using_clavain_content=$(cat "${PLUGIN_ROOT}/skills/using-clavain/SKILL.md" 2>/dev/null) || using_clavain_content="Could not load using-clavain skill. Run /clavain:using-clavain manually."
 
 using_clavain_escaped=$(escape_for_json "$using_clavain_content")
 
@@ -41,15 +41,16 @@ fi
 
 companion_context=""
 if [[ -n "$companions" ]]; then
-    companion_context="\\n\\n**Detected companions:**${companions}"
+    companion_context="\\n\\nDetected companions (FYI):${companions}"
 fi
 
 # Check upstream staleness (local file check only — no network calls)
 upstream_warning=""
 VERSIONS_FILE="${PLUGIN_ROOT}/docs/upstream-versions.json"
 if [[ -f "$VERSIONS_FILE" ]]; then
-    # Check if the file is older than 7 days
-    file_age_days=$(( ($(date +%s) - $(stat -c %Y "$VERSIONS_FILE" 2>/dev/null || echo 0)) / 86400 ))
+    # Check if the file is older than 7 days (portable: GNU stat -c, BSD stat -f)
+    file_mtime=$(stat -c %Y "$VERSIONS_FILE" 2>/dev/null || stat -f %m "$VERSIONS_FILE" 2>/dev/null || echo 0)
+    file_age_days=$(( ($(date +%s) - file_mtime) / 86400 ))
     if [[ $file_age_days -gt 7 ]]; then
         upstream_warning="\\n\\n**Upstream sync stale** (${file_age_days} days since last check). Run \`/clavain:upstream-sync\` to check for updates from beads, oracle, agent-mail, and other upstream tools."
     fi
@@ -62,7 +63,7 @@ cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "<EXTREMELY_IMPORTANT>\nYou have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${upstream_warning}\n</EXTREMELY_IMPORTANT>"
+    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${upstream_warning}"
   }
 }
 EOF

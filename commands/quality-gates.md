@@ -51,17 +51,37 @@ Based on analysis, invoke the appropriate agents in parallel:
 
 **Threshold:** Don't run more than 5 agents total. Prioritize by risk.
 
-### Phase 3: Run Agents in Parallel
+### Phase 3: Gather Context for Agents
 
-Launch selected agents using the Task tool with `run_in_background: true`:
+Before launching agents, gather the diff context they will review:
+
+```bash
+# Unified diff (staged + unstaged)
+git diff HEAD > /tmp/qg-diff.txt
+git diff --cached >> /tmp/qg-diff.txt
+
+# Changed file list with reasons for agent selection
+git diff --name-only HEAD
+git diff --cached --name-only
+```
+
+### Phase 4: Run Agents in Parallel
+
+Launch selected agents using the Task tool with `run_in_background: true`. Each agent prompt MUST include:
+
+1. **The unified diff** — paste the content of `/tmp/qg-diff.txt` (or inline the diff if small)
+2. **Changed file list** — with why each file was selected for this agent
+3. **Relevant config files** — if any were touched (e.g., go.mod, tsconfig.json, Cargo.toml)
+
+Ask agents to **reference diff hunks** in findings (file:line or hunk header like `@@ -10,5 +10,7 @@`).
 
 ```
-Task(code-simplicity-reviewer): "Review these changes for unnecessary complexity"
-Task(go-reviewer): "Review Go changes for idioms and quality"
-Task(security-sentinel): "Scan for security vulnerabilities in auth changes"
+Task(code-simplicity-reviewer): "Review this diff for unnecessary complexity. [paste diff]. Reference specific hunks."
+Task(go-reviewer): "Review Go changes in this diff. [paste diff]. Reference file:line."
+Task(security-sentinel): "Scan this diff for security vulnerabilities. [paste diff]. Reference specific hunks."
 ```
 
-### Phase 4: Synthesize Results
+### Phase 5: Synthesize Results
 
 Collect all agent findings and present:
 

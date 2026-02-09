@@ -635,7 +635,7 @@ If Oracle (Tier 4) was **not** in the roster, offer a lightweight option:
 
 ```
 Cross-AI: No Oracle perspective was included in this review.
-Want a second opinion? /clavain:interpeer for quick Claude↔Codex feedback.
+Want a second opinion? /clavain:interpeer (quick mode) for Claude↔Codex feedback.
 ```
 
 Then stop. Phase 4 only continues if Oracle participated.
@@ -655,11 +655,9 @@ When Oracle was in the roster, compare its findings against the Claude-based age
 | **Claude-only** | Claude agents found something Oracle missed | May be codebase-specific |
 | **Disagreement** | Oracle and Claude agents conflict on the same topic | Needs investigation |
 
-### Step 4.3: Auto-Chain to Splinterpeer
+### Step 4.3: Auto-Chain to Interpeer Mine Mode
 
 If **any disagreements** were found in Step 4.2:
-
-**Prerequisite**: Check if the `splinterpeer` skill is available in this session (it should appear in the skills list). If splinterpeer is **not** available, skip auto-chaining and present disagreements as-is with a note: "Splinterpeer not available — resolve disagreements manually or run `/clavain:splinterpeer` in a new session."
 
 ```
 Cross-AI Analysis:
@@ -668,34 +666,34 @@ Cross-AI Analysis:
 - Claude-only findings: K (likely codebase-specific context)
 - Disagreements: D (need resolution)
 
-Disagreements detected. Running splinterpeer to extract actionable artifacts...
+Disagreements detected. Running interpeer mine mode to extract actionable artifacts...
 ```
 
-Then invoke the `splinterpeer` skill workflow inline (do not dispatch a subagent — this runs in the main session):
+Then invoke `interpeer` in **mine** mode inline (do not dispatch a subagent — this runs in the main session):
 
-1. Structure each disagreement using splinterpeer's Phase 2 format (The Conflict, Evidence, Resolution, Minority Report)
+1. Structure each disagreement as a conflict (The Conflict, Evidence, Resolution, Minority Report)
 2. Generate artifacts: tests that would resolve the disagreement, spec clarifications, stakeholder questions
-3. Present the splinterpeer summary
+3. Present the mine mode summary
 
-### Step 4.4: Offer Winterpeer for Critical Decisions
+### Step 4.4: Offer Interpeer Council for Critical Decisions
 
-After splinterpeer completes (or if there were no disagreements but Oracle raised P0/P1 findings), check if any finding represents a **critical architectural or security decision**. Indicators:
+After mine mode completes (or if there were no disagreements but Oracle raised P0/P1 findings), check if any finding represents a **critical architectural or security decision**. Indicators:
 - P0 severity from any source
 - Disagreement on architecture or security topic
 - Oracle flagged a security issue that Claude agents missed
 
-If critical decisions exist, offer winterpeer escalation:
+If critical decisions exist, offer council escalation:
 
 ```
 Critical decision detected: [brief description]
 
 Options:
 1. Resolve now — I'll synthesize the best recommendation from available perspectives
-2. Run winterpeer council — full multi-model consensus review on this specific decision
+2. Run interpeer council — full multi-model consensus review on this specific decision
 3. Continue without escalation
 ```
 
-If user chooses option 2, invoke the `winterpeer` skill for just the critical decision (not the whole document).
+If user chooses option 2, invoke `interpeer` in **council** mode for just the critical decision (not the whole document).
 
 ### Step 4.5: Final Cross-AI Summary
 
@@ -713,25 +711,25 @@ Present a final summary that includes the cross-AI dimension:
 | Claude-only (codebase context) | C | Moderate |
 | Resolved disagreements | D | Varies |
 
-[If splinterpeer ran:]
+[If interpeer mine mode ran:]
 ### Artifacts Generated
 - N tests proposed to resolve disagreements
 - M spec clarifications needed
 - K stakeholder questions identified
 
-[If winterpeer ran:]
+[If interpeer council mode ran:]
 ### Council Decision
-[Brief summary of winterpeer's synthesis on the critical decision]
+[Brief summary of council's synthesis on the critical decision]
 ```
 
 ## Integration
 
 **Chains to (when Oracle participates):**
-- `splinterpeer` — Automatically invoked when Oracle and Claude agents disagree
-- `winterpeer` — Offered when critical decisions surface
+- `interpeer` **mine** mode — Automatically invoked when Oracle and Claude agents disagree
+- `interpeer` **council** mode — Offered when critical decisions surface
 
 **Chains to (when Oracle absent):**
-- `interpeer` — Offered as lightweight cross-AI option
+- `interpeer` **quick** mode — Offered as lightweight cross-AI option
 
 **Called by:**
 - `/clavain:flux-drive` command
