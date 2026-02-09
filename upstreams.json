@@ -21,18 +21,18 @@
       "lastSyncedCommit": "5c053e24965d9995ea81691acac60ecbc5f4eca3",
       "basePath": "",
       "fileMap": {
-        "skills/oracle/SKILL.md": "skills/winterpeer/references/oracle-reference.md",
-        "README.md": "skills/winterpeer/references/oracle-docs/upstream-readme.md",
-        "docs/browser-mode.md": "skills/winterpeer/references/oracle-docs/browser-mode.md",
-        "docs/configuration.md": "skills/winterpeer/references/oracle-docs/configuration.md",
-        "docs/debug/remote-chrome.md": "skills/winterpeer/references/oracle-docs/debug/remote-chrome.md",
-        "docs/gemini.md": "skills/winterpeer/references/oracle-docs/gemini.md",
-        "docs/linux.md": "skills/winterpeer/references/oracle-docs/linux.md",
-        "docs/mcp.md": "skills/winterpeer/references/oracle-docs/mcp.md",
-        "docs/multimodel.md": "skills/winterpeer/references/oracle-docs/multimodel.md",
-        "docs/openai-endpoints.md": "skills/winterpeer/references/oracle-docs/openai-endpoints.md",
-        "docs/openrouter.md": "skills/winterpeer/references/oracle-docs/openrouter.md",
-        "docs/testing/mcp-smoke.md": "skills/winterpeer/references/oracle-docs/testing/mcp-smoke.md"
+        "skills/oracle/SKILL.md": "skills/interpeer/references/oracle-reference.md",
+        "README.md": "skills/interpeer/references/oracle-docs/upstream-readme.md",
+        "docs/browser-mode.md": "skills/interpeer/references/oracle-docs/browser-mode.md",
+        "docs/configuration.md": "skills/interpeer/references/oracle-docs/configuration.md",
+        "docs/debug/remote-chrome.md": "skills/interpeer/references/oracle-docs/debug/remote-chrome.md",
+        "docs/gemini.md": "skills/interpeer/references/oracle-docs/gemini.md",
+        "docs/linux.md": "skills/interpeer/references/oracle-docs/linux.md",
+        "docs/mcp.md": "skills/interpeer/references/oracle-docs/mcp.md",
+        "docs/multimodel.md": "skills/interpeer/references/oracle-docs/multimodel.md",
+        "docs/openai-endpoints.md": "skills/interpeer/references/oracle-docs/openai-endpoints.md",
+        "docs/openrouter.md": "skills/interpeer/references/oracle-docs/openrouter.md",
+        "docs/testing/mcp-smoke.md": "skills/interpeer/references/oracle-docs/testing/mcp-smoke.md"
       }
     },
     {

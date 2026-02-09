@@ -738,7 +738,7 @@ Present a final summary that includes the cross-AI dimension:
 - `/clavain:flux-drive` command
 
 **See also:**
-- `winterpeer/references/oracle-reference.md` — Oracle CLI reference
-- `winterpeer/references/oracle-troubleshooting.md` — Oracle troubleshooting
+- `interpeer/references/oracle-reference.md` — Oracle CLI reference
+- `interpeer/references/oracle-troubleshooting.md` — Oracle troubleshooting
 - qmd MCP server — semantic search for project documentation (used in Step 1.0)
 - When clodex mode is active, flux-drive dispatches review agents through Codex CLI instead of Claude subagents. See `clavain:clodex` for Codex dispatch details.

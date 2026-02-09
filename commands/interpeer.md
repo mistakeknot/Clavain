@@ -20,7 +20,7 @@ Load the `interpeer` skill and follow its workflow.
 
 ## Escalation
 
-If the user wants deeper review:
-- **"go deeper"** or **"use Oracle"** → Switch to `prompterpeer` skill
-- **"get consensus"** or **"council"** → Switch to `winterpeer` skill
-- **"what do they disagree on?"** → Switch to `splinterpeer` skill
+If the user wants deeper review, switch modes within `interpeer`:
+- **"go deeper"** or **"use Oracle"** → Switch to `deep` mode
+- **"get consensus"** or **"council"** → Switch to `council` mode
+- **"what do they disagree on?"** → Switch to `mine` mode

@@ -12,10 +12,10 @@
 
 | Mistake | Correct Approach |
 |---------|------------------|
-| Searching for "winterpeer" as a binary | winterpeer is a skill, not a command. Use Oracle CLI. |
+| Searching for "interpeer" as a binary | interpeer is a skill, not a command. Use Oracle CLI. |
 | Using `--models` without API keys | Browser mode is the default. Only use `--models` if you have `OPENAI_API_KEY`. |
 | Navigating to "oracle.do" or similar | Oracle is a CLI tool, not a website. Run `oracle` in terminal. |
-| Using codex instead of oracle | Codex CLI is a different tool. winterpeer uses Oracle. |
+| Using codex instead of oracle | Codex CLI is a different tool. interpeer deep/council modes use Oracle. |
 
 ## Troubleshooting
 

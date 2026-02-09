@@ -73,7 +73,7 @@ Every upstream-sync PR must include a decision record:
 | Tool | GitHub Repo | Clavain Skill |
 |------|-------------|---------------|
 | Beads | `steveyegge/beads` | `beads-workflow` |
-| Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
+| Oracle | `steipete/oracle` | `interpeer` (references/) |
 | MCP Agent Mail | `Dicklesworthstone/mcp_agent_mail` | `agent-mail-coordination` |
 | superpowers | `obra/superpowers` | multiple |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |

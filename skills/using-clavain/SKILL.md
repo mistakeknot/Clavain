@@ -70,18 +70,18 @@ Clavain provides 34 skills, 29 agents, and 26 commands. To avoid overwhelm, use 
 
 ### Cross-AI Review
 
-Clavain includes a cross-AI review stack with escalating depth:
+`interpeer` is the unified cross-AI review skill with escalating modes:
 
-| Skill | Calls | Use Case | Speed |
-|-------|-------|----------|-------|
-| `interpeer` | Claude↔Codex (auto-detected) | Quick second opinion | Fast (seconds) |
-| `prompterpeer` | Oracle (with prompt review) | Deep analysis, large context | Slow (minutes) |
-| `winterpeer` | Oracle + Claude synthesis | Critical decisions, consensus | Slowest |
-| `splinterpeer` | N/A (post-processor) | Convert disagreements into tests/specs | N/A |
+| Mode | What it does | Speed |
+|------|-------------|-------|
+| `quick` (default) | Claude↔Codex auto-detect | Seconds |
+| `deep` | Oracle with prompt review | Minutes |
+| `council` | Multi-model synthesis | Slowest |
+| `mine` | Disagreement → tests/specs | N/A |
 
-Use `interpeer` for fast feedback. Escalate to `prompterpeer` for depth, `winterpeer` for consensus. Run `splinterpeer` after any multi-model review to mine disagreements.
+Say "go deeper" to escalate from quick → deep → council → mine.
 
-For Oracle CLI reference, see `winterpeer/references/oracle-reference.md`.
+For Oracle CLI reference, see `interpeer/references/oracle-reference.md`.
 
 ## Routing Heuristic
 
