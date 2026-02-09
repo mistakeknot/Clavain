@@ -133,12 +133,26 @@ Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
 | `/clavain:brainstorm [idea]` | Explore before planning |
 | `/clavain:write-plan [spec]` | Create implementation plan |
 | `/clavain:work [plan]` | Execute a plan |
+| `/clavain:execute-plan [plan]` | Execute plan in separate session with checkpoints |
 | `/clavain:review [PR/branch]` | Multi-agent code review |
+| `/clavain:plan-review [plan]` | Have multiple agents review a plan in parallel |
+| `/clavain:flux-drive [path]` | Intelligent document/repo review with agent triage |
 | `/clavain:quality-gates` | Auto-select reviewers for current changes |
 | `/clavain:repro-first-debugging` | Disciplined bug investigation |
+| `/clavain:resolve-parallel` | Resolve all TODO comments in parallel |
+| `/clavain:resolve-todo-parallel` | Resolve pending CLI todos in parallel |
+| `/clavain:resolve-pr-parallel` | Resolve PR comments in parallel |
+| `/clavain:migration-safety [migration]` | Database migration safety review |
+| `/clavain:agent-native-audit` | Agent-native architecture review with scored principles |
 | `/clavain:changelog` | Generate changelog from recent commits |
 | `/clavain:triage [findings]` | Triage and categorize findings |
-| `/clavain:migration-safety [migration]` | Database migration safety review |
 | `/clavain:compound` | Capture solved problem as documentation |
-| `/clavain:upstream-sync` | Check upstream repos for updates, generate upgrade checklist |
+| `/clavain:create-agent-skill` | Create or edit skills and agents |
+| `/clavain:generate-command` | Create a new custom slash command |
+| `/clavain:heal-skill` | Fix incorrect SKILL.md files |
+| `/clavain:interpeer` | Cross-AI peer review (Claude↔Codex) |
+| `/clavain:debate` | Structured Claude↔Codex debate before complex tasks |
+| `/clavain:codex-first` | Toggle codex-first execution mode |
+| `/clavain:clodex-toggle` | Toggle codex-first mode (alias) |
+| `/clavain:upstream-sync` | Check upstream repos for updates |
 | `/clavain:setup` | Bootstrap modpack — install plugins, disable conflicts, verify MCP |
