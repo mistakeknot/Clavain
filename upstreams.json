@@ -7,7 +7,11 @@
       "lastSyncedCommit": "eb1049baf371de3988123244bacac01b1a62ef67",
       "basePath": "",
       "fileMap": {
-        "claude-plugin/skills/beads/SKILL.md": "skills/beads-workflow/SKILL.md"
+        "claude-plugin/skills/beads/SKILL.md": "skills/beads-workflow/SKILL.md",
+        "claude-plugin/skills/beads/README.md": "skills/beads-workflow/references/upstream-readme.md",
+        "claude-plugin/skills/beads/CLAUDE.md": "skills/beads-workflow/references/upstream-claude.md",
+        "claude-plugin/skills/beads/resources/*": "skills/beads-workflow/references/*",
+        "claude-plugin/skills/beads/adr/*": "skills/beads-workflow/references/adr/*"
       }
     },
     {
@@ -17,7 +21,18 @@
       "lastSyncedCommit": "5c053e24965d9995ea81691acac60ecbc5f4eca3",
       "basePath": "",
       "fileMap": {
-        "skills/oracle/SKILL.md": "skills/winterpeer/references/oracle-reference.md"
+        "skills/oracle/SKILL.md": "skills/winterpeer/references/oracle-reference.md",
+        "README.md": "skills/winterpeer/references/oracle-docs/upstream-readme.md",
+        "docs/browser-mode.md": "skills/winterpeer/references/oracle-docs/browser-mode.md",
+        "docs/configuration.md": "skills/winterpeer/references/oracle-docs/configuration.md",
+        "docs/debug/remote-chrome.md": "skills/winterpeer/references/oracle-docs/debug/remote-chrome.md",
+        "docs/gemini.md": "skills/winterpeer/references/oracle-docs/gemini.md",
+        "docs/linux.md": "skills/winterpeer/references/oracle-docs/linux.md",
+        "docs/mcp.md": "skills/winterpeer/references/oracle-docs/mcp.md",
+        "docs/multimodel.md": "skills/winterpeer/references/oracle-docs/multimodel.md",
+        "docs/openai-endpoints.md": "skills/winterpeer/references/oracle-docs/openai-endpoints.md",
+        "docs/openrouter.md": "skills/winterpeer/references/oracle-docs/openrouter.md",
+        "docs/testing/mcp-smoke.md": "skills/winterpeer/references/oracle-docs/testing/mcp-smoke.md"
       }
     },
     {
@@ -27,7 +42,17 @@
       "lastSyncedCommit": "999224409f2e084510828de6d87e2897e5964487",
       "basePath": "",
       "fileMap": {
-        "SKILL.md": "skills/agent-mail-coordination/SKILL.md"
+        "SKILL.md": "skills/agent-mail-coordination/SKILL.md",
+        "README.md": "skills/agent-mail-coordination/references/upstream-readme.md",
+        "codex.mcp.json": "skills/agent-mail-coordination/references/codex.mcp.json",
+        "scripts/integrate_codex_cli.sh": "skills/agent-mail-coordination/references/integrate_codex_cli.sh",
+        "scripts/hooks/check_inbox.sh": "skills/agent-mail-coordination/references/hooks/check_inbox.sh",
+        "scripts/hooks/codex_notify.sh": "skills/agent-mail-coordination/references/hooks/codex_notify.sh",
+        "docs/GUIDE_TO_OPTIMAL_MCP_SERVER_DESIGN.md": "skills/agent-mail-coordination/references/server-design-guide.md",
+        "docs/observability.md": "skills/agent-mail-coordination/references/observability.md",
+        "docs/operations_alignment_checklist.md": "skills/agent-mail-coordination/references/operations-alignment-checklist.md",
+        "docs/adr/*": "skills/agent-mail-coordination/references/adr/*",
+        "docs/deployment_samples/*": "skills/agent-mail-coordination/references/deployment_samples/*"
       }
     },
     {
