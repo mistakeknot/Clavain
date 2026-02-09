@@ -27,6 +27,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Record baseline commit
+        id: baseline
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Preflight required secrets
         env:
@@ -128,8 +135,8 @@ jobs:
 
             ### 5. Report
             - Print a clear summary: per-upstream, how many files changed, how many merged, how many skipped/errored
-            - If any files were updated, commit them with message:
-              "sync: apply upstream changes from parent repos"
+            - Do NOT run `git add`, `git commit`, `git pull`, `git push`, `bd sync`, or create branches.
+            - Leave all edits as uncommitted workspace changes so the workflow can open a PR.
 
             ## Important Notes
             - The `fileMap` has renamed files: e.g. upstream `using-superpowers/SKILL.md` maps to local `using-clavain/SKILL.md`
@@ -140,6 +147,15 @@ jobs:
           EOF
           echo "=== Codex Upstream Sync Summary ==="
           cat /tmp/codex-upstream-sync.md || true
+
+      - name: Enforce no direct commits by Codex
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "${{ steps.baseline.outputs.sha }}" ]]; then
+            echo "::error::Codex changed HEAD (committed directly)."
+            echo "::error::This workflow requires uncommitted edits so create-pull-request can open a PR."
+            exit 1
+          fi
 
       - name: Validate sync result
         run: |
