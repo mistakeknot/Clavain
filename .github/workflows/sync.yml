@@ -73,7 +73,8 @@ jobs:
           CODEX_HOME: /home/runner/.codex
         run: |
           set -euo pipefail
-          codex exec --sandbox workspace-write -C "$GITHUB_WORKSPACE" -o /tmp/codex-upstream-sync.md - <<'EOF'
+          # upstream sync needs outbound network access for cloning upstream repos.
+          codex exec --sandbox danger-full-access -C "$GITHUB_WORKSPACE" -o /tmp/codex-upstream-sync.md - <<'EOF'
             You are running an automated upstream sync for the Clavain plugin repository.
 
             ## Context
@@ -139,6 +140,21 @@ jobs:
           EOF
           echo "=== Codex Upstream Sync Summary ==="
           cat /tmp/codex-upstream-sync.md || true
+
+      - name: Validate sync result
+        run: |
+          set -euo pipefail
+          if grep -E 'errored=[1-9][0-9]*' /tmp/codex-upstream-sync.md >/dev/null; then
+            echo "::error::Codex upstream sync reported one or more errors."
+            echo "::error::See /tmp/codex-upstream-sync.md in this run's logs."
+            exit 1
+          fi
+
+          if grep -Ei 'could not resolve host|network access is blocked' /tmp/codex-upstream-sync.md >/dev/null; then
+            echo "::error::Codex upstream sync appears network-blocked."
+            echo "::error::See /tmp/codex-upstream-sync.md in this run's logs."
+            exit 1
+          fi
 
       # Step 3: Check for changes and create PR
       - name: Check for changes
