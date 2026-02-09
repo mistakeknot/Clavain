@@ -86,7 +86,7 @@ jobs:
 
             ## Context
 
-            Clavain aggregates skills, agents, and commands from 4 upstream repos. The file
+            Clavain aggregates skills, agents, and commands from 7 upstream repos. The file
             `upstreams.json` tracks the last-synced commit for each upstream and maps upstream
             file paths to local Clavain file paths.
 
@@ -196,6 +196,9 @@ jobs:
             Automated sync from upstream parent repositories using Claude Code + Codex.
 
             **Upstreams checked:**
+            - [beads](https://github.com/steveyegge/beads)
+            - [oracle](https://github.com/steipete/oracle)
+            - [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
             - [superpowers](https://github.com/obra/superpowers)
             - [superpowers-lab](https://github.com/obra/superpowers-lab)
             - [superpowers-dev](https://github.com/obra/superpowers-developing-for-claude-code)

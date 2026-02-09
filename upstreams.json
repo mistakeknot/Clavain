@@ -1,6 +1,36 @@
 {
   "upstreams": [
     {
+      "name": "beads",
+      "url": "https://github.com/steveyegge/beads.git",
+      "branch": "main",
+      "lastSyncedCommit": "eb1049baf371de3988123244bacac01b1a62ef67",
+      "basePath": "",
+      "fileMap": {
+        "claude-plugin/skills/beads/SKILL.md": "skills/beads-workflow/SKILL.md"
+      }
+    },
+    {
+      "name": "oracle",
+      "url": "https://github.com/steipete/oracle.git",
+      "branch": "main",
+      "lastSyncedCommit": "5c053e24965d9995ea81691acac60ecbc5f4eca3",
+      "basePath": "",
+      "fileMap": {
+        "skills/oracle/SKILL.md": "skills/winterpeer/references/oracle-reference.md"
+      }
+    },
+    {
+      "name": "mcp-agent-mail",
+      "url": "https://github.com/Dicklesworthstone/mcp_agent_mail.git",
+      "branch": "main",
+      "lastSyncedCommit": "999224409f2e084510828de6d87e2897e5964487",
+      "basePath": "",
+      "fileMap": {
+        "SKILL.md": "skills/agent-mail-coordination/SKILL.md"
+      }
+    },
+    {
       "name": "superpowers",
       "url": "https://github.com/obra/superpowers.git",
       "branch": "main",
