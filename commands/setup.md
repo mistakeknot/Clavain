@@ -141,6 +141,6 @@ Beads:             [status]
 
 Next steps:
 - Run `/clavain:lfg [task]` to start working
-- Run `/clavain:tool-time` to see tool usage analytics
+- Run `/tool-time:tool-time` to see tool usage analytics
 - Run `/clavain:upstream-sync` to check for updates
 ```

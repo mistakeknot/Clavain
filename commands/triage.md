@@ -198,7 +198,6 @@ During triage, the following status updates occurred:
    ```bash
    ls todos/*-ready-*.md
    ```
-````
 
 2. Start work on approved items:
 
@@ -211,8 +210,7 @@ During triage, the following status updates occurred:
 4. As you work, update todo status:
    - Ready → In Progress (in your local context as you work)
    - In Progress → Complete (rename file: ready → complete, update frontmatter)
-
-```
+````
 
 ## Example Response Format
 

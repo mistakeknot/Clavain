@@ -30,7 +30,7 @@ Perform exhaustive code reviews using multi-agent analysis and deep inspection.
 
 ## Phase 2: Multi-Agent Review
 
-Launch these core agents in parallel:
+Launch these core agents in parallel with `run_in_background: true` to prevent agent output from flooding the main conversation context:
 
 1. Task pattern-recognition-specialist(PR content)
 2. Task architecture-strategist(PR content)

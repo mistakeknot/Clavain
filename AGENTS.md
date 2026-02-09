@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 34 skills, 29 agents, 27 commands, 3 hooks, 3 MCP servers |
+| Components | 34 skills, 29 agents, 26 commands, 3 hooks, 3 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -37,7 +37,7 @@ Clavain/
 │   │   └── examples/
 │   └── ...                        # Each skill is a directory with SKILL.md
 ├── agents/
-│   ├── review/                    # 20 code review agents
+│   ├── review/                    # 21 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
 ├── commands/                      # 27 slash commands
@@ -51,14 +51,22 @@ Clavain/
 │   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
 ├── scripts/
-│   └── upstream-check.sh          # Checks 7 upstream repos via gh api
+│   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
+│   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
+│   ├── install-codex.sh           # Codex skill installer
+│   ├── upstream-check.sh          # Checks 7 upstream repos via gh api
+│   └── upstream-impact-report.py  # Generates impact digest for upstream PRs
 ├── docs/
 │   └── upstream-versions.json     # Baseline for upstream sync tracking
 └── .github/workflows/
-    ├── upstream-check.yml         # Daily cron: opens GitHub issues on upstream changes
-    ├── sync.yml                   # Weekly cron: Claude Code + Codex auto-merge upstream
-    ├── upstream-impact.yml        # PR impact digest for upstream-sync changes
-    └── upstream-decision-gate.yml # Human decision gate for upstream-sync PRs
+    ├── upstream-check.yml              # Daily cron: opens GitHub issues on upstream changes
+    ├── sync.yml                        # Weekly cron: Claude Code + Codex auto-merge upstream
+    ├── upstream-impact.yml             # PR impact digest for upstream-sync changes
+    ├── upstream-decision-gate.yml      # Human decision gate for upstream-sync PRs
+    ├── pr-agent-commands.yml           # Issue comment dispatch for /review and /codex-review
+    ├── upstream-sync-issue-command.yml # Issue comment dispatch for /sync
+    ├── codex-refresh-reminder.yml      # Push-triggered Codex skill freshness check
+    └── codex-refresh-reminder-pr.yml   # PR-triggered Codex skill freshness check
 ```
 
 ## How It Works
@@ -272,7 +280,7 @@ These plugins overlap with Clavain's opinionated equivalents. Keeping both cause
 
 | Plugin | Clavain Replacement | Status |
 |--------|-------------------|--------|
-| code-review | `/review` + `/flux-drive` + 15 review agents | **OFF** |
+| code-review | `/review` + `/flux-drive` + 21 review agents | **OFF** |
 | pr-review-toolkit | Same 6 agent types exist in Clavain's review roster | **OFF** |
 | code-simplifier | `code-simplicity-reviewer` agent | **OFF** |
 | commit-commands | `landing-a-change` skill | **OFF** |

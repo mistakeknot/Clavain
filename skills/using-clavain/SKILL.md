@@ -21,7 +21,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 34 skills, 29 agents, and 27 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 34 skills, 29 agents, and 26 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -36,7 +36,7 @@ Clavain provides 34 skills, 29 agents, and 27 commands. To avoid overwhelm, use 
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | architecture-strategist, spec-flow-analyzer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents) |
-| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, clodex-toggle, debate | — |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve-parallel, resolve-todo-parallel, resolve-pr-parallel, codex-first, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit | {go,python,typescript,shell,rust}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage | deployment-verification-agent |
@@ -153,6 +153,5 @@ Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
 | `/clavain:interpeer` | Cross-AI peer review (Claude↔Codex) |
 | `/clavain:debate` | Structured Claude↔Codex debate before complex tasks |
 | `/clavain:codex-first` | Toggle codex-first execution mode |
-| `/clavain:clodex-toggle` | Toggle codex-first mode (alias) |
 | `/clavain:upstream-sync` | Check upstream repos for updates |
 | `/clavain:setup` | Bootstrap modpack — install plugins, disable conflicts, verify MCP |

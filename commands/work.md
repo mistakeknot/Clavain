@@ -187,7 +187,7 @@ This command takes a work document (plan, specification, or todo file) and execu
    git push
    ```
 
-4. **Notify User**
+3. **Notify User**
    - Summarize what was completed
    - Link to PR
    - Note any follow-up work needed

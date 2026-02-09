@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 34 skills, 29 agents, 27 commands, 3 hooks, and 3 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 34 skills, 29 agents, 26 commands, 3 hooks, and 3 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -55,7 +55,7 @@ Even when I think I know what I want, I usually start with `/brainstorm` because
 
 ### Reviewing Things with `/flux-drive`
 
-`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It pulls from a roster of 28 agents across 4 tiers:
+`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from a tiered roster of review agents across 4 tiers:
 
 - **Tier 1** — Codebase-aware agents (architecture, code quality, security, performance, UX) that understand your actual project, not generic checklists
 - **Tier 2** — Project-specific agents selected by tech stack (Go reviewer for Go projects, Python reviewer for Python, etc.)
@@ -231,11 +231,14 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 | Plugin | Clavain Replacement |
 |--------|-------------------|
-| code-review | `/review` + `/flux-drive` + 20 review agents |
+| code-review | `/review` + `/flux-drive` + 21 review agents |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster |
 | code-simplifier | `code-simplicity-reviewer` agent |
 | commit-commands | `landing-a-change` skill |
 | feature-dev | `/work` + `/lfg` + `/brainstorm` |
+| claude-md-management | `engineering-docs` skill |
+| frontend-design | `distinctive-design` skill |
+| hookify | Clavain manages hooks directly |
 
 ## Customization
 
@@ -256,7 +259,7 @@ clavain/
 ├── .claude-plugin/plugin.json    # Manifest
 ├── skills/                        # 34 discipline skills (SKILL.md each)
 ├── agents/
-│   ├── review/                    # 20 code review agents
+│   ├── review/                    # 21 code review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 3 workflow agents
 ├── commands/                      # 27 slash commands
@@ -267,14 +270,20 @@ clavain/
 │   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Dotfile sync on session end
 ├── scripts/
-│   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
 │   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
-│   └── upstream-check.sh          # Checks upstream repos via gh api
+│   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
+│   ├── install-codex.sh           # Codex skill installer
+│   ├── upstream-check.sh          # Checks upstream repos via gh api
+│   └── upstream-impact-report.py  # Impact digest for upstream PRs
 ├── docs/
 │   └── upstream-versions.json     # Upstream sync baseline
 └── .github/workflows/
-    ├── upstream-check.yml         # Daily cron for upstream change detection
-    └── sync.yml                   # Weekly auto-merge via Claude Code + Codex
+    ├── upstream-check.yml              # Daily cron for upstream change detection
+    ├── sync.yml                        # Weekly auto-merge via Claude Code + Codex
+    ├── pr-agent-commands.yml           # Issue comment dispatch for /review and /codex-review
+    ├── upstream-impact.yml             # PR impact digest for upstream-sync changes
+    ├── upstream-decision-gate.yml      # Human decision gate for upstream-sync PRs
+    └── ...                             # + 3 more (codex refresh reminders, sync issue command)
 ```
 
 ### How the Routing Works

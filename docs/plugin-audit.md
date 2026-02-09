@@ -18,7 +18,7 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 
 | Plugin | Components | Clavain Equivalent | Why Disable |
 |--------|-----------|-------------------|-------------|
-| **code-review** | 1 cmd (`/review-pr`) | `/review` + `/flux-drive` + 15 review agents | Clavain's review is multi-agent with convergence mapping. The official plugin is a single-pass PR review. |
+| **code-review** | 1 cmd (`/review-pr`) | `/review` + `/flux-drive` + 21 review agents | Clavain's review is multi-agent with convergence mapping. The official plugin is a single-pass PR review. |
 | **pr-review-toolkit** | 6 agents, 1 cmd | Clavain has equivalent agents: `code-simplicity-reviewer`, `security-sentinel`, `pattern-recognition-specialist`, `architecture-strategist`, `concurrency-reviewer`, `plan-reviewer` | Same agents by different names. Having both means duplicate agents in the Task tool roster, confusing routing. Clavain's versions are opinionated and integrated with flux-drive. |
 | **code-simplifier** | 1 agent | `code-simplicity-reviewer` agent | Direct duplicate. |
 | **commit-commands** | 3 cmds (`/commit`, `/clean-gone`, `/commit-push-pr`) | `landing-a-change` skill | Clavain's landing skill includes commit but also verification, issue updates, and push. `/clean-gone` is useful but niche — if needed, make it a Clavain command. |
