@@ -23,7 +23,7 @@ fi
 
 MARKETPLACE="$REPO_ROOT/../interagency-marketplace/.claude-plugin/marketplace.json"
 if [ -f "$MARKETPLACE" ]; then
-    MARKETPLACE_VERSION=$(grep -A5 '"clavain"' "$MARKETPLACE" | grep '"version"' | sed 's/.*"\([0-9][^"]*\)".*/\1/')
+    MARKETPLACE_VERSION=$(grep -A10 '"clavain"' "$MARKETPLACE" | grep '"version"' | sed 's/.*"\([0-9][^"]*\)".*/\1/')
     if [ -n "$MARKETPLACE_VERSION" ] && [ "$MARKETPLACE_VERSION" != "$PLUGIN_VERSION" ]; then
         echo -e "${RED}Marketplace version drift!${NC}" >&2
         echo "" >&2
