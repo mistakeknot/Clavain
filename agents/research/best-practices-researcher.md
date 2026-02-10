@@ -21,11 +21,7 @@ Before going online, check if curated knowledge already exists in skills:
 
 2. **Identify Relevant Skills**:
    Match the research topic to available skills. Common mappings:
-   - Go → `go-reviewer` patterns
-   - Python → `python-reviewer` patterns
-   - TypeScript → `typescript-reviewer` patterns
-   - Shell → `shell-reviewer` patterns
-   - Rust → `rust-reviewer` patterns
+   - Code Quality → `fd-quality` patterns (auto-detects Go, Python, TypeScript, Shell, Rust)
    - Frontend/Design → `distinctive-design`
    - AI/Agents → `agent-native-architecture`, `create-agent-skills`
    - Documentation → `engineering-docs`

@@ -3,5 +3,7 @@
 *.swo
 *~
 node_modules/
+__pycache__/
+.pytest_cache/
 .upstream-work/
 .claude/*.local.md

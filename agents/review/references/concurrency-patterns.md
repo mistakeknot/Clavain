@@ -1,6 +1,6 @@
 # Concurrency Patterns Reference
 
-This file contains extracted code patterns used by `agents/review/concurrency-reviewer.md`.
+This file contains extracted concurrency code patterns used by `agents/review/fd-correctness.md`.
 
 ## Go
 
