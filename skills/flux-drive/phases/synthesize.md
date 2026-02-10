@@ -139,8 +139,38 @@ Use the Write tool to create this file. The orchestrator generates this from the
 
 ### Step 3.5: Report to User
 
-Tell the user:
-- How many agents ran
-- Top findings (3-5 most important)
-- Which sections got the most feedback
-- Where full analysis files are saved (`{OUTPUT_DIR}/`)
+Present the synthesis report using this exact structure. Fill in each section from the collected findings.
+
+```markdown
+## Flux Drive Review — {INPUT_STEM}
+
+**Reviewed**: {YYYY-MM-DD} | **Agents**: {N launched}, {M completed} | **Verdict**: {safe|needs-changes|risky}
+[If early stop:] *(Stage 1 only — {K} agents skipped as unnecessary)*
+
+### Critical Findings (P0)
+[List P0 findings with agent attribution and convergence. If none: "None."]
+
+### Important Findings (P1)
+[List P1 findings with convergence counts: "(3/5 agents)". If none: "None."]
+
+### Improvements Suggested
+[Top 3-5 improvements, prioritized. Each with agent attribution.]
+
+### Section Heat Map
+| Section | Issues | Improvements | Agents Reporting |
+|---------|--------|-------------|-----------------|
+| [Section Name] | P0: N, P1: N | N | agent1, agent2 |
+
+### Conflicts
+[Any disagreements between agents. If none: "No conflicts detected."]
+
+### Files
+- Summary: `{OUTPUT_DIR}/summary.md`
+- Findings: `{OUTPUT_DIR}/findings.json`
+- Individual reports: `{OUTPUT_DIR}/{agent-name}.md`
+```
+
+**After the report**, suggest next steps based on the verdict:
+- **risky**: "Consider addressing P0 findings before proceeding. Run `/clavain:resolve` to auto-fix."
+- **needs-changes**: "Review P1 findings. Run `/clavain:flux-drive` again after changes to verify."
+- **safe**: "No blocking issues found. Individual reports available for detailed review."

@@ -16,22 +16,18 @@ Use a timestamped `OUTPUT_DIR` only when you intentionally need to preserve prev
 
 ### Step 2.1: Detect dispatch mode
 
-Check if clodex mode is active:
+Determine the dispatch mode:
+1. Check if `${CLAUDE_PROJECT_DIR:-.}/.claude/autopilot.flag` exists
+2. If yes: `DISPATCH_MODE = codex` — read `phases/launch-codex.md` for Codex-specific dispatch
+3. If no: `DISPATCH_MODE = task` — continue with Step 2.2 below
 
-```bash
-if [[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/autopilot.flag" ]]; then
-  echo "CLODEX_MODE=true — dispatching review agents through Codex"
-else
-  echo "CLODEX_MODE=false — dispatching review agents through Task tool"
-fi
-```
+**Shared contracts** apply regardless of dispatch mode. See `phases/shared-contracts.md`.
 
-If `CLODEX_MODE=true`: Read `phases/launch-codex.md` instead of continuing here.
-If `CLODEX_MODE=false`: Continue with step 2.2 below.
+**Fallback**: If Codex dispatch fails for any agent (dispatch.sh not found, Codex CLI errors), the orchestrator falls back to Task dispatch for that agent. This is an orchestrator decision, not a bash variable — the orchestrator reads the error and decides.
 
 ### Step 2.2: Stage 1 — Launch top agents
 
-**Condition**: Use this step when `CLODEX_MODE=false` (default).
+**Condition**: Use this step when `DISPATCH_MODE = task` (default).
 
 Launch Stage 1 agents (top 2-3 by triage score) as parallel Task calls with `run_in_background: true`.
 
@@ -88,21 +84,11 @@ Launch Stage 2 agents with `run_in_background: true`. Wait for completion using 
 
 **Exception for very large inputs** (1000+ lines): Include only the sections relevant to the agent's focus area plus Summary, Goals, and Non-Goals. Note which sections were omitted in the agent's prompt.
 
-### Prompt trimming for agent system prompts
-
-Before including an agent's system prompt in the task prompt, strip the following sections to save tokens:
-
-1. **`<example>` blocks**: Remove all `<example>...</example>` blocks (including nested `<commentary>...</commentary>`). These are for triage routing only and are not needed during the agent's review execution.
-
-2. **Output Format sections**: Remove any section titled "Output Format", "Output", "Response Format", or similar. Flux-drive provides its own output format via the override below.
-
-3. **Style/personality sections**: Remove any section about tone, writing style, wit, humor, or directness. These don't affect finding quality in structured output mode.
-
-**Do NOT strip**: Role definition, review approach/checklist, pattern libraries, language-specific checks. These affect finding quality.
-
-**Note**: This trimming applies to **Project Agents** whose `.md` content is pasted manually. Adaptive Reviewers load their system prompt via `subagent_type` — the orchestrator cannot strip content from those. The token cost of example blocks in Adaptive Reviewer prompts is accepted.
+**Prompt trimming**: See `phases/shared-contracts.md` for trimming rules.
 
 ### Prompt template for each agent:
+
+<!-- This template implements the Findings Index contract from shared-contracts.md -->
 
 ```
 ## CRITICAL: Output Format Override
@@ -194,6 +180,8 @@ After each stage launch, tell the user:
 
 ### Step 2.3: Monitor and verify agent completion
 
+This step implements the shared monitoring contract.
+
 After dispatching a stage of agents, report the initial status and then poll for completion:
 
 **Initial status:**
@@ -225,16 +213,6 @@ Agent dispatch complete. Monitoring N agents...
    b. **Pre-retry guard**: If `{OUTPUT_DIR}/{agent-name}.md` already exists (not `.partial`), do NOT retry — the agent completed successfully
    c. **Retry once** (Task-dispatched agents only): Re-launch with the same prompt, `run_in_background: false`, `timeout: 300000` (5 min cap). Do NOT retry Oracle.
    d. If retry produces output, ensure it ends with `<!-- flux-drive:complete -->` and is saved as `{OUTPUT_DIR}/{agent-name}.md` (not `.partial`)
-   e. If retry also fails, create a stub file:
-      ```yaml
-      ---
-      agent: {agent-name}
-      tier: {tier}
-      issues: []
-      improvements: []
-      verdict: error
-      ---
-      Agent failed to produce findings after retry. Error: {error message}
-      ```
+   e. If retry also fails, create an error stub following the format in `phases/shared-contracts.md`.
 3. Clean up: remove any remaining `.md.partial` files in `{OUTPUT_DIR}/`
 4. Report to user: "N/M agents completed successfully, K retried, J failed"

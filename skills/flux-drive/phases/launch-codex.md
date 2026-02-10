@@ -1,22 +1,23 @@
 # Phase 2: Launch (Codex Dispatch)
 
-**Condition**: Use this file when `CLODEX_MODE=true`. This routes review agents through Codex CLI instead of Claude subagents.
+**Condition**: Use this file when `DISPATCH_MODE = codex`. This routes review agents through Codex CLI instead of Claude subagents.
+**Shared contracts**: See `phases/shared-contracts.md` for output format, completion signals, prompt trimming, and monitoring.
 
 ## Resolve paths (with guards)
 
 ```bash
 DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 2>/dev/null | head -1)
 [[ -z "$DISPATCH" ]] && DISPATCH=$(find ~/projects/Clavain -name dispatch.sh -path '*/scripts/*' 2>/dev/null | head -1)
-[[ -z "$DISPATCH" ]] && { echo "FATAL: dispatch.sh not found — falling back to Task dispatch"; CLODEX_MODE=false; }
+[[ -z "$DISPATCH" ]] && { echo "FATAL: dispatch.sh not found"; exit 1; }
 
 REVIEW_TEMPLATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/skills/clodex/templates/review-agent.md' 2>/dev/null | head -1)
 [[ -z "$REVIEW_TEMPLATE" ]] && REVIEW_TEMPLATE=$(find ~/projects/Clavain -path '*/skills/clodex/templates/review-agent.md' 2>/dev/null | head -1)
-[[ -z "$REVIEW_TEMPLATE" ]] && { echo "FATAL: review-agent.md template not found — falling back to Task dispatch"; CLODEX_MODE=false; }
+[[ -z "$REVIEW_TEMPLATE" ]] && { echo "FATAL: review-agent.md template not found"; exit 1; }
 ```
 
 If either path resolution fails, fall back to Task dispatch (`phases/launch.md` step 2.2) for this run.
 
-## Project Agent bootstrap (clodex mode only)
+## Project Agent bootstrap (codex mode only)
 
 Before dispatching Project Agents, check if they exist and are current:
 
@@ -77,14 +78,7 @@ OUTPUT_FILE:
 {OUTPUT_DIR}/{agent-name}.md
 ```
 
-### Prompt trimming for AGENT_IDENTITY
-
-Before writing an agent's system prompt into the AGENT_IDENTITY section of the task file, strip:
-1. All `<example>...</example>` blocks (including nested `<commentary>`)
-2. Output Format sections (any section titled "Output Format", "Output", "Response Format")
-3. Style/personality sections (tone, humor, directness instructions)
-
-Keep: role definition, review approach/checklist, pattern libraries, language-specific checks.
+Prompt trimming for `AGENT_IDENTITY` uses the shared contract in `phases/shared-contracts.md`.
 
 ## Dispatch all agents in parallel
 
@@ -102,16 +96,9 @@ Notes:
 - Set `run_in_background: true` and `timeout: 600000` on each Bash call
 - Do NOT use `--inject-docs` — Codex reads CLAUDE.md natively via `-C`
 - Do NOT use `-o` for output capture — the agent writes findings directly to `{OUTPUT_DIR}/{agent-name}.md`
-- Completion is detected by checking that file's existence (same as Task dispatch path)
 - **Cross-AI (Oracle)**: Unchanged — already dispatched via Bash
 
-## Monitor completion
-
-After dispatching all Codex agents, poll for completion every 30 seconds (up to 10 minutes for Codex mode):
-- Check `{OUTPUT_DIR}/` for `.md` files
-- Report each completion: `✅ {agent-name} ({elapsed}s)`
-- Report running count: `[N/M agents complete]`
-- After 10 minutes, report timeouts
+Monitor using the shared monitoring contract. Codex timeout is 10 minutes.
 
 ## Error handling
 
