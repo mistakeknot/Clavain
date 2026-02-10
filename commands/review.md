@@ -32,30 +32,17 @@ Perform exhaustive code reviews using multi-agent analysis and deep inspection.
 
 Launch these core agents in parallel with `run_in_background: true` to prevent agent output from flooding the main conversation context:
 
-1. Task pattern-recognition-specialist(PR content)
-2. Task architecture-strategist(PR content)
-3. Task security-sentinel(PR content)
-4. Task performance-oracle(PR content)
-5. Task git-history-analyzer(PR content)
-6. Task agent-native-reviewer(PR content)
-
-**Language-specific reviewers** (based on file extensions):
-- `.go` files → Task go-reviewer
-- `.py` files → Task python-reviewer
-- `.ts/.tsx` files → Task typescript-reviewer
-- `.sh` files → Task shell-reviewer
-- `.rs` files → Task rust-reviewer
+1. Task fd-architecture(PR content)
+2. Task fd-safety(PR content)
+3. Task fd-quality(PR content)
+4. Task git-history-analyzer(PR content)
+5. Task agent-native-reviewer(PR content)
 
 **Risk-specific reviewers** (conditional):
-- Async/concurrent code → Task concurrency-reviewer
-- Data changes → Task data-integrity-reviewer
-- Database migrations → Task data-migration-expert + Task deployment-verification-agent
+- Async/concurrent code or data changes → Task fd-correctness
+- Database migrations → Task data-migration-expert
 
-## Phase 3: Simplification Pass
-
-Run Task code-simplicity-reviewer on the PR content.
-
-## Phase 3.5: Cross-AI Review (Oracle, Optional)
+## Phase 3: Cross-AI Review (Oracle, Optional)
 
 If Oracle is available (SessionStart hook reports it), run a GPT-5.2 Pro review in background:
 

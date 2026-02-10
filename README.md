@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 34 skills, 29 agents, 24 commands, 3 hooks, and 3 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 34 skills, 16 agents, 24 commands, 3 hooks, and 3 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -45,8 +45,8 @@ For more complex endeavors (or new projects), I use Clavain's pieces individuall
 `/lfg` chains seven steps together. Each one can also be invoked standalone:
 
 ```
-/brainstorm  →  /write-plan  →  /work*  →  /flux-drive  →  /review  →  /resolve-todo-parallel  →  /quality-gates
-   explore        plan          execute     review plan     review code     fix issues              final check
+/brainstorm  →  /write-plan  →  /work*  →  /flux-drive  →  /review  →  /resolve  →  /quality-gates
+   explore        plan          execute     review plan     review code    fix issues    final check
 
 * When clodex mode is active, /write-plan executes via Codex Delegation and /work is skipped.
 ```
@@ -58,10 +58,10 @@ Even when I think I know what I want, I usually start with `/brainstorm` because
 `/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from three categories of review agents:
 
 - **Project Agents** — Per-project `fd-*.md` agents that live in your repo and know your specific codebase (bootstrapped via Codex when clodex mode is active)
-- **Adaptive Reviewers** — 19 agents (architecture, security, performance, UX, code quality, language-specific, product reasoning, and more) that auto-detect project docs: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices
+- **Plugin Agents** — 6 core v2 agents (Architecture & Design, Safety, Correctness, Quality & Style, User & Product, Performance) that auto-detect project docs: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices
 - **Cross-AI (Oracle)** — GPT-5.2 Pro for cross-model perspective on complex decisions
 
-It only launches what's relevant. A simple markdown doc might get 2 agents; a full repo review might get 8. The agents run in parallel in the background, and you get a synthesized report with findings prioritized by severity.
+It only launches what's relevant. A simple markdown doc might get 2 agents; a full repo review might get 8. The agents run in parallel in the background, and you get a synthesized report with findings prioritized by severity. Over time, flux-drive builds a knowledge layer from review findings — patterns discovered in one review are injected as context into future reviews.
 
 When Oracle is part of the review, `flux-drive` chains into the **interpeer stack** — comparing what Claude-based agents found against what GPT-5.2 Pro found, flagging disagreements, and optionally escalating critical decisions to a full multi-model council.
 
@@ -141,17 +141,17 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `agent-mail-coordination` | Multi-agent coordination via MCP Agent Mail |
 | `upstream-sync` | Track updates from upstream tool repos |
 
-### Agents (29)
+### Agents (16)
 
 Agents are specialized execution units dispatched by skills and commands. They run as subagents with their own context window.
 
-**Review (21):** Codebase-aware reviewers (architecture, code quality, performance, security, UX), language-specific reviewers (Go, Python, TypeScript, Shell, Rust), cross-cutting specialists (architecture, security, performance, concurrency, patterns, simplicity, agent-native), data specialists (migration, integrity), deployment verification, plan review, and product reasoning (product-skeptic, strategic-reviewer, user-advocate).
+**Review (9):** 6 core flux-drive agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance) used by `/flux-drive` for document/repo reviews — each auto-detects language and project docs. Plus plan-reviewer, agent-native-reviewer, and data-migration-expert for specialized review tasks.
 
 **Research (5):** Best practices, framework docs, git history analysis, institutional learnings, and repo structure analysis.
 
-**Workflow (3):** PR comment resolution, spec flow analysis, and bug reproduction validation.
+**Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (27)
+### Commands (24)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -168,17 +168,14 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/plan-review` | Parallel plan review |
 | `/quality-gates` | Auto-select the right reviewers |
 | `/repro-first-debugging` | Disciplined bug investigation |
-| `/clodex-toggle` | Toggle codex-first execution mode |
-| `/codex-first` | Toggle codex-first execution mode (long form) |
+| `/codex-first` | Toggle codex-first execution mode |
 | `/debate` | Structured Claude↔Codex debate |
 | `/interpeer` | Quick cross-AI peer review |
 | `/migration-safety` | Data migration risk assessment |
 | `/compound` | Document solved problems |
 | `/changelog` | Generate changelog from recent merges |
 | `/triage` | Categorize and prioritize findings |
-| `/resolve-parallel` | Resolve TODOs in parallel |
-| `/resolve-pr-parallel` | Resolve PR comments in parallel |
-| `/resolve-todo-parallel` | Resolve file TODOs in parallel |
+| `/resolve` | Resolve findings from any source (auto-detects TODOs, PR comments, or todo files) |
 | `/agent-native-audit` | Agent-native architecture review |
 | `/create-agent-skill` | Create new skills or agents |
 | `/generate-command` | Generate new commands |
@@ -227,9 +224,9 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 | Plugin | Clavain Replacement |
 |--------|-------------------|
-| code-review | `/review` + `/flux-drive` + 21 review agents |
+| code-review | `/review` + `/flux-drive` + 9 review agents |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster |
-| code-simplifier | `code-simplicity-reviewer` agent |
+| code-simplifier | `fd-quality` agent |
 | commit-commands | `landing-a-change` skill |
 | feature-dev | `/work` + `/lfg` + `/brainstorm` |
 | claude-md-management | `engineering-docs` skill |
@@ -240,7 +237,7 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 Clavain is opinionated but not rigid. A few things worth knowing:
 
-**Language reviewers are auto-selected.** `flux-drive` picks Adaptive Reviewers based on your tech stack. If you're working in a language without a dedicated reviewer (Java, etc.), it simply skips that agent.
+**Reviewers are auto-selected.** `flux-drive` picks from 6 core review agents based on the document profile. Each agent auto-detects language and project conventions. Additional specialists (plan-reviewer, agent-native-reviewer, data-migration-expert) are available for direct use via `/review` and `/quality-gates`.
 
 **Skills can be overridden.** If you disagree with how `test-driven-development` works, you can create your own skill with the same name in a local plugin that loads after Clavain. Last-loaded wins.
 
@@ -255,16 +252,18 @@ clavain/
 ├── .claude-plugin/plugin.json    # Manifest
 ├── skills/                        # 34 discipline skills (SKILL.md each)
 ├── agents/
-│   ├── review/                    # 21 review agents
+│   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
-│   └── workflow/                  # 3 workflow agents
-├── commands/                      # 27 slash commands
+│   └── workflow/                  # 2 workflow agents
+├── commands/                      # 24 slash commands
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + SessionEnd)
 │   ├── autopilot.sh               # Codex-first mode gate (blocks writes when active)
 │   ├── session-start.sh           # Context injection + staleness warning
 │   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Dotfile sync on session end
+├── config/
+│   └── flux-drive/knowledge/      # Knowledge layer — patterns from past reviews
 ├── scripts/
 │   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
 │   ├── dispatch.sh                # Codex exec wrapper with sensible defaults

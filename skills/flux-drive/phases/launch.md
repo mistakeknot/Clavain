@@ -45,12 +45,12 @@ Before launching agents, retrieve relevant knowledge entries for each selected a
 **Domain keywords by agent:**
 | Agent | Domain keywords |
 |-------|----------------|
-| fd-v2-architecture | architecture boundaries coupling patterns complexity |
-| fd-v2-safety | security threats credentials deployment rollback trust |
-| fd-v2-correctness | data integrity transactions races concurrency async |
-| fd-v2-quality | naming conventions testing code quality style idioms |
-| fd-v2-user-product | user experience flows UX value proposition scope |
-| fd-v2-performance | performance bottlenecks rendering memory scaling |
+| fd-architecture | architecture boundaries coupling patterns complexity |
+| fd-safety | security threats credentials deployment rollback trust |
+| fd-correctness | data integrity transactions races concurrency async |
+| fd-quality | naming conventions testing code quality style idioms |
+| fd-user-product | user experience flows UX value proposition scope |
+| fd-performance | performance bottlenecks rendering memory scaling |
 
 **Cap**: 5 entries per agent maximum. If qmd returns more, take the top 5 by relevance score.
 
@@ -104,8 +104,8 @@ Launch Stage 2 agents with `run_in_background: true`. Wait for completion using 
 - Include the agent file's full content as the system prompt
 - Set `run_in_background: true`
 
-**Adaptive Reviewers (clavain)**:
-- Use the native `subagent_type` from the roster (e.g., `clavain:review:architecture-strategist`)
+**Plugin Agents (clavain)**:
+- Use the native `subagent_type` from the roster (e.g., `clavain:review:fd-architecture`)
 - Set `run_in_background: true`
 
 **Cross-AI (Oracle)**:
@@ -235,9 +235,9 @@ After dispatching a stage of agents, report the initial status and then poll for
 **Initial status:**
 ```
 Agent dispatch complete. Monitoring N agents...
-⏳ architecture-strategist
-⏳ security-sentinel
-⏳ go-reviewer
+⏳ fd-architecture
+⏳ fd-safety
+⏳ fd-quality
 ...
 ```
 
@@ -245,13 +245,13 @@ Agent dispatch complete. Monitoring N agents...
 1. Check `{OUTPUT_DIR}/` for `.md` files (not `.md.partial` — those are still in progress)
 2. For each new `.md` file found since the last check, report:
    ```
-   ✅ architecture-strategist (47s)
+   ✅ fd-architecture (47s)
    [2/5 agents complete]
    ```
 3. If all expected `.md` files exist, stop polling — all agents are done
 4. After 5 minutes, report any agents still pending:
    ```
-   ⚠️ Timeout: security-sentinel still running after 300s
+   ⚠️ Timeout: fd-safety still running after 300s
    ```
 
 **Completion verification** (after polling ends):

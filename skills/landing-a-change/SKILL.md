@@ -51,7 +51,7 @@ Verify the following before committing:
 - [ ] Changes are committed in logical units with descriptive messages
 - [ ] If deploy-relevant: deployment verification plan exists
 
-**If deploy-relevant changes:** Consider invoking the `deployment-verification-agent` for a Go/No-Go checklist.
+**If deploy-relevant changes:** Consider invoking `fd-safety` for a Go/No-Go checklist.
 
 ### Step 4: Document the Change
 
@@ -122,7 +122,7 @@ If anything notable was learned during this work:
 
 **Invokes:**
 - **verification-before-completion** — for thorough verification when a plan exists
-- **deployment-verification-agent** — when changes are deploy-relevant
+- **fd-safety** — when changes are deploy-relevant
 - **changelog** command — when user wants changelog before committing
 
 ## Common Mistakes

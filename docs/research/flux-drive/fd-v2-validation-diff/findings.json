@@ -1,0 +1,132 @@
+{
+  "reviewed": "2026-02-10",
+  "input": "/tmp/fd-v2-validation-diff.patch",
+  "agents_launched": ["fd-v2-architecture", "fd-v2-quality", "oracle-council"],
+  "agents_completed": ["fd-v2-architecture", "fd-v2-quality"],
+  "findings": [
+    {
+      "id": "P0-1",
+      "severity": "P0",
+      "agent": "fd-v2-architecture",
+      "section": "launch.md",
+      "title": "Stale v1 agent names in dispatch instructions, monitoring examples, and category heading",
+      "convergence": 1
+    },
+    {
+      "id": "P1-1",
+      "severity": "P1",
+      "agent": "fd-v2-quality",
+      "section": "Agent Frontmatter",
+      "title": "All 6 fd-v2-*.md agents missing required <example> blocks in description",
+      "convergence": 1
+    },
+    {
+      "id": "P1-2",
+      "severity": "P1",
+      "agent": "fd-v2-quality",
+      "section": "Agent Frontmatter",
+      "title": "fd-v2-correctness has persona name 'Julik' inconsistent with other 5 agents",
+      "convergence": 1
+    },
+    {
+      "id": "P1-3",
+      "severity": "P1",
+      "agent": "fd-v2-quality",
+      "section": "Agent Frontmatter",
+      "title": "fd-v2-quality.md broken heading hierarchy — ## should be ###",
+      "convergence": 1
+    },
+    {
+      "id": "P1-4",
+      "severity": "P1",
+      "agent": "fd-v2-architecture",
+      "section": "using-clavain SKILL.md",
+      "title": "Routing table not updated for v2 agents — still references 19 v1 agents",
+      "convergence": 1
+    },
+    {
+      "id": "P1-5",
+      "severity": "P1",
+      "agent": "fd-v2-architecture",
+      "section": "SKILL.md / synthesize.md",
+      "title": "Stale 'Adaptive Reviewer' terminology persists in multiple files",
+      "convergence": 1
+    },
+    {
+      "id": "P1-6",
+      "severity": "P1",
+      "agent": "fd-v2-architecture",
+      "section": "synthesize.md",
+      "title": "Stale v1 agent names in findings.json example",
+      "convergence": 1
+    },
+    {
+      "id": "P1-7",
+      "severity": "P1",
+      "agent": "fd-v2-architecture",
+      "section": "synthesize.md",
+      "title": "Compounding agent reads 'YAML frontmatter' but agents produce Findings Index",
+      "convergence": 1
+    },
+    {
+      "id": "P1-8",
+      "severity": "P1",
+      "agent": "fd-v2-architecture",
+      "section": "SKILL.md",
+      "title": "spec-flow-analyzer and data-migration-expert dropped without explicit merge target",
+      "convergence": 1
+    },
+    {
+      "id": "P1-9",
+      "severity": "P1",
+      "agent": "fd-v2-architecture",
+      "section": "launch.md",
+      "title": "Knowledge retrieval pipelining instruction is aspirational — no mechanism exists",
+      "convergence": 1
+    },
+    {
+      "id": "P2-1",
+      "severity": "P2",
+      "agent": "fd-v2-quality",
+      "section": "Agent Frontmatter",
+      "title": "fd-v2-performance 'First Step' heading text inconsistent (missing 'in this order')",
+      "convergence": 1
+    },
+    {
+      "id": "P2-2",
+      "severity": "P2",
+      "agent": "fd-v2-architecture",
+      "section": "validate-roster.sh",
+      "title": "Hardcoded '6' in success message instead of $EXPECTED_COUNT",
+      "convergence": 2
+    }
+  ],
+  "improvements": [
+    {
+      "id": "IMP-1",
+      "agent": "fd-v2-architecture",
+      "section": "validate-roster.sh",
+      "title": "Add subagent_type cross-reference to prevent roster/dispatch drift"
+    },
+    {
+      "id": "IMP-2",
+      "agent": "fd-v2-architecture",
+      "section": "knowledge README.md",
+      "title": "Commit to date-based decay or add review counter — not dual-metric"
+    },
+    {
+      "id": "IMP-3",
+      "agent": "fd-v2-architecture",
+      "section": "knowledge README.md",
+      "title": "Knowledge README example contradicts sanitization rules"
+    },
+    {
+      "id": "IMP-4",
+      "agent": "fd-v2-quality",
+      "section": "synthesize.md",
+      "title": "Compounding prompt heading hierarchy ambiguous — use ### inside fenced block"
+    }
+  ],
+  "verdict": "needs-changes",
+  "early_stop": true
+}

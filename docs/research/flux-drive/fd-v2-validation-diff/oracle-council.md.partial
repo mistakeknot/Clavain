@@ -1,5 +1,5 @@
-🧿 oracle 0.8.5 — Turning maybe into mergeable.
-Launching browser mode (gpt-5.2-pro) with ~31,665 tokens.
+🧿 oracle 0.8.5 — Token thrift, oracle lift.
+Launching browser mode (gpt-5.2-pro) with ~31,655 tokens.
 This run can take up to an hour (usually ~10 minutes).
-ERROR: connect ECONNREFUSED 127.0.0.1:35777
-User error (browser-automation): connect ECONNREFUSED 127.0.0.1:35777
+ERROR: connect ECONNREFUSED 127.0.0.1:41497
+User error (browser-automation): connect ECONNREFUSED 127.0.0.1:41497

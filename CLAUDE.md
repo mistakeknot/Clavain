@@ -4,7 +4,7 @@
 
 ## Overview
 
-General-purpose engineering discipline plugin for Claude Code — 34 skills, 29 agents, 24 commands, 3 hooks, 3 MCP servers.
+General-purpose engineering discipline plugin for Claude Code — 34 skills, 16 agents, 24 commands, 3 hooks, 3 MCP servers.
 
 ## Quick Commands
 
@@ -14,7 +14,7 @@ claude --plugin-dir /root/projects/Clavain
 
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 34
-ls agents/{review,research,workflow}/*.md | wc -l  # Should be 29
+ls agents/{review,research,workflow}/*.md | wc -l  # Should be 16
 ls commands/*.md | wc -l              # Should be 24
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
@@ -28,7 +28,7 @@ python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manif
 
 - Namespace: `clavain:` (not superpowers, not compound-engineering)
 - General-purpose only — no Rails, Ruby gems, Every.to, Figma, Xcode, browser-automation
-- Language-specific reviewers: Go, Python, TypeScript, Shell, Rust (no Ruby/Rails)
+- 6 core review agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance) — each auto-detects language
 - SessionStart hook injects `using-clavain` skill content via `additionalContext` JSON
 - 3-layer routing: Stage → Domain → Language
 - Trunk-based development — no branches/worktrees skills

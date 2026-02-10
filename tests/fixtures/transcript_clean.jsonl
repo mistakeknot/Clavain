@@ -1,0 +1,4 @@
+{"role":"user","content":"What is the weather today?"}
+{"role":"assistant","content":"I don't have access to weather data, but I can help with code questions."}
+{"role":"user","content":"Ok, tell me about Python lists"}
+{"role":"assistant","content":"Python lists are ordered, mutable collections that can hold mixed types."}

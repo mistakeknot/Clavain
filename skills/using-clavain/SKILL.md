@@ -21,7 +21,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 34 skills, 29 agents, and 24 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 34 skills, 16 agents, and 24 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -34,41 +34,41 @@ Clavain provides 34 skills, 29 agents, and 24 commands. To avoid overwhelm, use 
 | Stage | Primary Skills | Primary Commands | Key Agents |
 |-------|---------------|-----------------|------------|
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
-| **Plan** | writing-plans | write-plan, plan-review | architecture-strategist, spec-flow-analyzer |
-| **Review (docs)** | flux-drive | flux-drive | (triaged from roster — up to 8 agents)¹ |
+| **Plan** | writing-plans | write-plan, plan-review | fd-architecture, plan-reviewer |
+| **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster — up to 8 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve, codex-first, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
-| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | {go,python,typescript,shell,rust}-reviewer, security-sentinel, performance-oracle, concurrency-reviewer, code-simplicity-reviewer |
-| **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | deployment-verification-agent |
+| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
+| **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | fd-safety |
 | **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
 ### Layer 2: What domain?
 
 | Domain | Skills | Agents |
 |--------|--------|--------|
-| **Code** | test-driven-development, finding-duplicate-functions, refactor-safely | pattern-recognition-specialist, code-simplicity-reviewer, agent-native-reviewer |
-| **Data** | — | data-integrity-reviewer, data-migration-expert |
-| **Deploy** | — | deployment-verification-agent |
+| **Code** | test-driven-development, finding-duplicate-functions, refactor-safely | fd-architecture, fd-quality, agent-native-reviewer |
+| **Data** | — | fd-correctness, data-migration-expert |
+| **Deploy** | — | fd-safety |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
 | **Workflow** | file-todos, beads-workflow, slack-messaging, agent-mail-coordination, clodex | pr-comment-resolver |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
 
-### Layer 3: What language? (optional — applies to review stage)
+### Layer 3: What concern? (optional — applies to review stage)
 
-| Language | Agent |
-|----------|-------|
-| Go (.go) | go-reviewer |
-| Python (.py) | python-reviewer |
-| TypeScript (.ts/.tsx) | typescript-reviewer |
-| Shell (.sh/.bash) | shell-reviewer |
-| Rust (.rs) | rust-reviewer |
-| Any async/concurrent code | concurrency-reviewer |
-| Any with security surface | security-sentinel |
-| Any with perf concerns | performance-oracle |
+| Concern | Agent |
+|---------|-------|
+| Architecture, boundaries, patterns | fd-architecture |
+| Security, credentials, trust boundaries | fd-safety |
+| Data integrity, concurrency, async | fd-correctness |
+| Naming, conventions, language idioms | fd-quality |
+| User flows, UX, product reasoning | fd-user-product |
+| Performance, bottlenecks, scaling | fd-performance |
+| Database migrations | data-migration-expert |
+| Agent-native design | agent-native-reviewer |
 
-¹ **flux-drive agents (fd-*)**: `fd-user-experience` and `fd-code-quality` are codebase-aware reviewers auto-selected by flux-drive's triage system. Don't invoke them directly — use `/clavain:flux-drive` which selects the right subset. The `architecture-strategist`, `security-sentinel`, and `performance-oracle` agents now auto-detect project docs and switch between codebase-aware and generic modes.
+¹ **flux-drive agents (fd-*)**: 6 core review agents that auto-detect project docs (CLAUDE.md/AGENTS.md) for codebase-aware analysis. Use `/clavain:flux-drive` for intelligent triage, or dispatch directly via `/clavain:review` and `/clavain:quality-gates`.
 
 ### Cross-AI Review
 

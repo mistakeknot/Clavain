@@ -21,7 +21,7 @@ Before touching code:
 
 1. **Identify what's being refactored and why** — not just "clean up" but a specific goal (extract module, remove duplication, simplify interface, etc.)
 2. **Run `finding-duplicate-functions`** skill to detect semantic duplication in the affected area
-3. **Run `pattern-recognition-specialist`** agent to understand existing patterns and the "house style"
+3. **Run `fd-architecture`** agent to understand existing patterns and the "house style"
 4. **Map the blast radius** — which files, tests, and consumers are affected?
 
 ### Step 2: Protect with Tests
@@ -50,7 +50,7 @@ For each batch:
 
 1. Make the change
 2. Run affected tests
-3. **Run `code-simplicity-reviewer`** agent — is the result actually simpler?
+3. **Run `fd-quality`** agent — is the result actually simpler?
 4. Commit with a descriptive message
 
 **After each batch, verify:**
@@ -63,7 +63,7 @@ For each batch:
 After all batches:
 
 1. Run the full test suite
-2. Run `code-simplicity-reviewer` on the complete change
+2. Run `fd-quality` on the complete change
 3. Compare before/after metrics: lines of code, number of files, cyclomatic complexity
 4. Use `landing-a-change` to ship the result
 
@@ -72,10 +72,8 @@ After all batches:
 | Agent | When to Use |
 |-------|-------------|
 | `finding-duplicate-functions` | Step 1 — identify duplication targets |
-| `pattern-recognition-specialist` | Step 1 — understand house patterns |
-| `code-simplicity-reviewer` | Step 4 & 5 — verify each batch is simpler |
-| `architecture-strategist` | When refactoring crosses module boundaries |
-| Language-specific reviewer | Final pass for language idiom compliance |
+| `fd-architecture` | Step 1 — understand house patterns, module boundaries |
+| `fd-quality` | Step 4 & 5 — verify each batch is simpler, idiom compliance |
 
 ## Common Mistakes
 

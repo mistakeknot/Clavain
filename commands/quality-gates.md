@@ -25,29 +25,23 @@ git diff --cached --name-only
 ```
 
 Classify each changed file by:
-- **Language**: .go → Go, .py → Python, .ts/.tsx → TypeScript, .sh → Shell
-- **Risk domain**: auth/crypto/secrets → Security, migration/schema → Data, hot-path/cache/query → Performance, goroutine/async/channel → Concurrency
+- **Language**: .go → Go, .py → Python, .ts/.tsx → TypeScript, .sh → Shell, .rs → Rust
+- **Risk domain**: auth/crypto/secrets → Safety, migration/schema → Correctness, hot-path/cache/query → Performance, goroutine/async/channel → Correctness
 
 ### Phase 2: Select Reviewers
 
 Based on analysis, invoke the appropriate agents in parallel:
 
 **Always run:**
-- `code-simplicity-reviewer` — every change benefits from simplicity check
-
-**Language-specific (based on file extensions):**
-- `.go` files → `go-reviewer`
-- `.py` files → `python-reviewer`
-- `.ts/.tsx` files → `typescript-reviewer`
-- `.sh/.bash` files → `shell-reviewer`
-- `.rs` files → `rust-reviewer`
+- `fd-architecture` — structural review for every change
+- `fd-quality` — naming, conventions, language-specific idioms (auto-detects language)
 
 **Risk-based (based on file paths and content):**
-- Auth/crypto/input handling/secrets → `security-sentinel`
-- Database/migration/schema/backfill → `data-integrity-reviewer` + `data-migration-expert`
-- Performance-critical paths → `performance-oracle`
-- Concurrent/async code → `concurrency-reviewer`
-- Architecture/new modules/interfaces → `architecture-strategist`
+- Auth/crypto/input handling/secrets → `fd-safety`
+- Database/migration/schema/backfill → `fd-correctness` + `data-migration-expert`
+- Performance-critical paths → `fd-performance`
+- Concurrent/async code → `fd-correctness`
+- User-facing flows → `fd-user-product`
 
 **Threshold:** Don't run more than 5 agents total. Prioritize by risk.
 
@@ -76,9 +70,9 @@ Launch selected agents using the Task tool with `run_in_background: true`. Each 
 Ask agents to **reference diff hunks** in findings (file:line or hunk header like `@@ -10,5 +10,7 @@`).
 
 ```
-Task(code-simplicity-reviewer): "Review this diff for unnecessary complexity. [paste diff]. Reference specific hunks."
-Task(go-reviewer): "Review Go changes in this diff. [paste diff]. Reference file:line."
-Task(security-sentinel): "Scan this diff for security vulnerabilities. [paste diff]. Reference specific hunks."
+Task(fd-architecture): "Review this diff for structural issues. [paste diff]. Reference specific hunks."
+Task(fd-quality): "Review this diff for naming, conventions, and idioms. [paste diff]. Reference file:line."
+Task(fd-safety): "Scan this diff for security vulnerabilities. [paste diff]. Reference specific hunks."
 ```
 
 ### Phase 5: Synthesize Results
@@ -90,17 +84,17 @@ Collect all agent findings and present:
 
 ### Changes Analyzed
 - X files changed across Y languages
-- Risk domains detected: [security, data, performance, etc.]
+- Risk domains detected: [safety, correctness, performance, etc.]
 
 ### Agents Invoked
-1. code-simplicity-reviewer — [pass/findings]
-2. go-reviewer — [pass/findings]
-3. security-sentinel — [pass/findings]
+1. fd-architecture — [pass/findings]
+2. fd-quality — [pass/findings]
+3. fd-safety — [pass/findings]
 
 ### Findings Summary
-- 🔴 CRITICAL (P1): [count] — must fix
-- 🟡 IMPORTANT (P2): [count] — should fix
-- 🔵 NICE-TO-HAVE (P3): [count] — optional
+- P1 CRITICAL: [count] — must fix
+- P2 IMPORTANT: [count] — should fix
+- P3 NICE-TO-HAVE: [count] — optional
 
 ### Gate Result: [PASS / FAIL]
 
@@ -109,6 +103,6 @@ Collect all agent findings and present:
 
 ## Important
 
-- **Don't over-review small changes.** If the diff is under 20 lines and touches one file, only run `code-simplicity-reviewer` + the language reviewer.
+- **Don't over-review small changes.** If the diff is under 20 lines and touches one file, only run `fd-quality`.
 - **Run after tests pass.** Quality gates complement testing, not replace it.
 - **P1 findings block shipping.** Present them prominently and ensure resolution.

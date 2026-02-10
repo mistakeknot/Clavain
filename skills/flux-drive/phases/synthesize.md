@@ -36,11 +36,11 @@ For **malformed** outputs, read the Summary + Issues sections as prose fallback.
 ### Step 3.3: Deduplicate and Organize
 
 1. **Group findings by section** — organize all agent findings under the section they apply to (or by topic for repo reviews)
-2. **Deduplicate**: If multiple agents flagged the same issue, keep the most specific one (prefer Project Agents over plugin Adaptive Reviewers, since they have deeper project context)
+2. **Deduplicate**: If multiple agents flagged the same issue, keep the most specific one (prefer Project Agents over plugin Plugin Agents, since they have deeper project context)
 3. **Track convergence**: Note how many agents flagged each issue (e.g., "4/6 agents"). High convergence (3+ agents) = high confidence. Include convergence counts in the Issues to Address checklist.
 **Partial agent sets**: If Stage 2 was not launched (early stop), adjust convergence counts to reflect the smaller agent set. Report in the summary: "Early stop after Stage 1: N agents ran, M agents skipped as unnecessary."
 4. **Flag conflicts**: If agents disagree, note both positions
-5. **Priority from project-specific agents**: When a Project Agent and an Adaptive Reviewer give different advice on the same topic, prefer the Project Agent's recommendation
+5. **Priority from project-specific agents**: When a Project Agent and an Plugin Agent give different advice on the same topic, prefer the Project Agent's recommendation
 
 ### Step 3.4: Update the Document
 
@@ -114,7 +114,7 @@ After collecting and deduplicating findings, generate `{OUTPUT_DIR}/findings.jso
     {
       "id": "P0-1",
       "severity": "P0",
-      "agent": "architecture-strategist",
+      "agent": "fd-architecture",
       "section": "Section Name",
       "title": "Short description",
       "convergence": 3
@@ -123,7 +123,7 @@ After collecting and deduplicating findings, generate `{OUTPUT_DIR}/findings.jso
   "improvements": [
     {
       "id": "IMP-1",
-      "agent": "fd-code-quality",
+      "agent": "fd-quality",
       "section": "Section Name",
       "title": "Short description"
     }

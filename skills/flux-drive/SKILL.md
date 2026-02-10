@@ -102,11 +102,11 @@ Do this analysis yourself (no subagents needed). The profile drives triage in St
 
 Before scoring, eliminate agents that cannot plausibly score ≥1 based on the document profile:
 
-1. **Data filter**: Skip fd-v2-correctness unless the document mentions databases, migrations, data models, concurrency, or async patterns.
-2. **Product filter**: Skip fd-v2-user-product unless the document type is PRD, proposal, strategy document, or has user-facing flows.
-3. **Deploy filter**: Skip fd-v2-safety unless the document mentions security, credentials, deployments, infrastructure, or trust boundaries.
+1. **Data filter**: Skip fd-correctness unless the document mentions databases, migrations, data models, concurrency, or async patterns.
+2. **Product filter**: Skip fd-user-product unless the document type is PRD, proposal, strategy document, or has user-facing flows.
+3. **Deploy filter**: Skip fd-safety unless the document mentions security, credentials, deployments, infrastructure, or trust boundaries.
 
-Domain-general agents always pass the filter: fd-v2-architecture, fd-v2-quality, fd-v2-performance.
+Domain-general agents always pass the filter: fd-architecture, fd-quality, fd-performance.
 
 Present only passing agents in the scoring table below.
 
@@ -144,34 +144,34 @@ Present the triage table with a Stage column:
 
 | Agent | Category | Score | Reason | Action |
 |-------|----------|-------|--------|--------|
-| fd-v2-architecture | Plugin | 2+1=3 | Module boundaries directly affected, project docs exist | Launch |
-| fd-v2-safety | Plugin | 2+1=3 | API adds new endpoints with auth, project docs exist | Launch |
-| fd-v2-quality | Plugin | 2+1=3 | Go code changes, project docs exist | Launch |
-| fd-v2-performance | Plugin | 1+1=2 | API mentioned but no perf section (thin) | Launch |
-| fd-v2-correctness | Plugin | 0 | No database/concurrency changes | Skip |
-| fd-v2-user-product | Plugin | 0 | No user-facing changes | Skip |
+| fd-architecture | Plugin | 2+1=3 | Module boundaries directly affected, project docs exist | Launch |
+| fd-safety | Plugin | 2+1=3 | API adds new endpoints with auth, project docs exist | Launch |
+| fd-quality | Plugin | 2+1=3 | Go code changes, project docs exist | Launch |
+| fd-performance | Plugin | 1+1=2 | API mentioned but no perf section (thin) | Launch |
+| fd-correctness | Plugin | 0 | No database/concurrency changes | Skip |
+| fd-user-product | Plugin | 0 | No user-facing changes | Skip |
 
 **README review for Python CLI tool:**
 
 | Agent | Category | Score | Reason | Action |
 |-------|----------|-------|--------|--------|
-| fd-v2-user-product | Plugin | 2+1=3 | CLI UX directly relevant, project docs exist | Launch |
-| fd-v2-quality | Plugin | 2+1=3 | Conventions review, project docs exist | Launch |
-| fd-v2-architecture | Plugin | 1+1=2 | Only if architecture section is thin | Launch |
-| fd-v2-performance | Plugin | 0 | README, no performance concerns | Skip |
-| fd-v2-safety | Plugin | 0 | README, no security concerns | Skip |
-| fd-v2-correctness | Plugin | 0 | No data/concurrency concerns | Skip |
+| fd-user-product | Plugin | 2+1=3 | CLI UX directly relevant, project docs exist | Launch |
+| fd-quality | Plugin | 2+1=3 | Conventions review, project docs exist | Launch |
+| fd-architecture | Plugin | 1+1=2 | Only if architecture section is thin | Launch |
+| fd-performance | Plugin | 0 | README, no performance concerns | Skip |
+| fd-safety | Plugin | 0 | README, no security concerns | Skip |
+| fd-correctness | Plugin | 0 | No data/concurrency concerns | Skip |
 
 **PRD for new user onboarding flow:**
 
 | Agent | Category | Score | Reason | Action |
 |-------|----------|-------|--------|--------|
-| fd-v2-user-product | Plugin | 2+1=3 | PRD — user flows, value prop, scope validation, project docs exist | Launch |
-| fd-v2-architecture | Plugin | 1+1=2 | PRD mentions architecture changes, project docs exist | Launch |
-| fd-v2-safety | Plugin | 1 | Onboarding may involve auth — thin section | Launch |
-| fd-v2-performance | Plugin | 0 | No performance surface changes | Skip |
-| fd-v2-quality | Plugin | 0 | No code changes | Skip |
-| fd-v2-correctness | Plugin | 0 | No data/concurrency changes | Skip |
+| fd-user-product | Plugin | 2+1=3 | PRD — user flows, value prop, scope validation, project docs exist | Launch |
+| fd-architecture | Plugin | 1+1=2 | PRD mentions architecture changes, project docs exist | Launch |
+| fd-safety | Plugin | 1 | Onboarding may involve auth — thin section | Launch |
+| fd-performance | Plugin | 0 | No performance surface changes | Skip |
+| fd-quality | Plugin | 0 | No code changes | Skip |
+| fd-correctness | Plugin | 0 | No data/concurrency changes | Skip |
 
 **Thin section thresholds:**
 - **thin**: <5 lines or <3 bullet points — agent with adjacent domain should cover this
@@ -217,12 +217,12 @@ These agents are provided by the Clavain plugin. They auto-detect project docume
 
 | Agent | subagent_type | Domain |
 |-------|--------------|--------|
-| fd-v2-architecture | clavain:review:fd-v2-architecture | Module boundaries, coupling, patterns, anti-patterns, complexity |
-| fd-v2-safety | clavain:review:fd-v2-safety | Threats, credentials, trust boundaries, deploy risk, rollback |
-| fd-v2-correctness | clavain:review:fd-v2-correctness | Data consistency, race conditions, transactions, async bugs |
-| fd-v2-quality | clavain:review:fd-v2-quality | Naming, conventions, test approach, language-specific idioms |
-| fd-v2-user-product | clavain:review:fd-v2-user-product | User flows, UX friction, value prop, scope, missing edge cases |
-| fd-v2-performance | clavain:review:fd-v2-performance | Bottlenecks, resource usage, algorithmic complexity, scaling |
+| fd-architecture | clavain:review:fd-architecture | Module boundaries, coupling, patterns, anti-patterns, complexity |
+| fd-safety | clavain:review:fd-safety | Threats, credentials, trust boundaries, deploy risk, rollback |
+| fd-correctness | clavain:review:fd-correctness | Data consistency, race conditions, transactions, async bugs |
+| fd-quality | clavain:review:fd-quality | Naming, conventions, test approach, language-specific idioms |
+| fd-user-product | clavain:review:fd-user-product | User flows, UX friction, value prop, scope, missing edge cases |
+| fd-performance | clavain:review:fd-performance | Bottlenecks, resource usage, algorithmic complexity, scaling |
 
 ### Cross-AI (Oracle)
 
@@ -250,7 +250,7 @@ timeout 480 env DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
 
 **Error handling**: If the Oracle command fails or times out, note it in the output file and continue without Phase 4. Do NOT block synthesis on Oracle failures — treat it as "Oracle: no findings" and skip Steps 4.2-4.5.
 
-Oracle counts toward the 8-agent cap. If the roster is already full, Oracle replaces the lowest-scoring Adaptive Reviewer.
+Oracle counts toward the 8-agent cap. If the roster is already full, Oracle replaces the lowest-scoring Plugin Agent.
 
 ---
 

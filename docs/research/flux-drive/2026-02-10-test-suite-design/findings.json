@@ -1,0 +1,32 @@
+{
+  "reviewed": "2026-02-10",
+  "input": "docs/plans/2026-02-10-test-suite-design.md",
+  "agents_launched": ["architecture-strategist", "fd-code-quality", "performance-oracle"],
+  "agents_completed": ["architecture-strategist", "fd-code-quality", "performance-oracle"],
+  "findings": [
+    {"id": "P0-1", "severity": "P0", "agent": "fd-code-quality", "section": "Step 2b: test_agents.py", "title": "Agent count hardcoded to 35 but references/ subdirectory will break glob", "convergence": 3},
+    {"id": "P0-2", "severity": "P0", "agent": "fd-code-quality", "section": "Step 2b: test_agents.py", "title": "test_agent_subdirectories_valid will fail — agents/review/references/ exists", "convergence": 2},
+    {"id": "P1-1", "severity": "P1", "agent": "architecture-strategist", "section": "CI Workflow", "title": "Claude Code Action auth model wrong — needs ANTHROPIC_API_KEY, no free subscription mode", "convergence": 1},
+    {"id": "P1-2", "severity": "P1", "agent": "architecture-strategist", "section": "CI Workflow", "title": "bats-core/bats-action@2.0.0 is a runner not an installer — may double-execute or miss binary", "convergence": 1},
+    {"id": "P1-3", "severity": "P1", "agent": "architecture-strategist", "section": "Step 3d", "title": "auto-compound bats tests need fixture transcript files — unspecified in plan", "convergence": 2},
+    {"id": "P1-4", "severity": "P1", "agent": "fd-code-quality", "section": "Step 3b: autopilot.bats", "title": "Missing test for jq-unavailable fallback path", "convergence": 1},
+    {"id": "P1-5", "severity": "P1", "agent": "architecture-strategist", "section": "Step 3b", "title": "autopilot.bats asserts wrong JSON structure — must use hookSpecificOutput path", "convergence": 1},
+    {"id": "P1-6", "severity": "P1", "agent": "fd-code-quality", "section": "Step 2a", "title": "test_hooks_json_event_types lacks source of truth for valid event type list", "convergence": 1},
+    {"id": "P1-7", "severity": "P1", "agent": "fd-code-quality", "section": "Step 3a", "title": "session_start.bats has minimal negative testing — missing lib.sh, staleness, special chars", "convergence": 1},
+    {"id": "P1-8", "severity": "P1", "agent": "performance-oracle", "section": "Step 4: Tier 3", "title": "15-min timeout insufficient for 8-10 sequential agent dispatches — need 30 min", "convergence": 1},
+    {"id": "P1-9", "severity": "P1", "agent": "performance-oracle", "section": "Step 3: Tier 2", "title": "session-start.sh curl timeout adds ~1s per test — stub in CI", "convergence": 1}
+  ],
+  "improvements": [
+    {"id": "IMP-1", "agent": "architecture-strategist", "section": "Architecture", "title": "Add hook protocol compliance test tier"},
+    {"id": "IMP-2", "agent": "architecture-strategist", "section": "Step 2e", "title": "Cross-reference routing table in using-clavain/SKILL.md"},
+    {"id": "IMP-3", "agent": "fd-code-quality", "section": "Step 2", "title": "Use @pytest.mark.parametrize for per-file tests"},
+    {"id": "IMP-4", "agent": "fd-code-quality", "section": "Step 1d", "title": "Load bats-support/bats-assert in test_helper.bash"},
+    {"id": "IMP-5", "agent": "fd-code-quality", "section": "Step 3", "title": "Use setup_file/teardown_file for expensive fixtures"},
+    {"id": "IMP-6", "agent": "architecture-strategist", "section": "Step 3", "title": "Add bats tests for agent-mail-register.sh and dotfiles-sync.sh"},
+    {"id": "IMP-7", "agent": "performance-oracle", "section": "Step 4", "title": "Schedule smoke tests instead of every-push"},
+    {"id": "IMP-8", "agent": "performance-oracle", "section": "Step 3", "title": "Stub external commands (curl, pgrep) in bats test helper"},
+    {"id": "IMP-9", "agent": "fd-code-quality", "section": "Step 2e", "title": "Call validate-roster.sh from pytest instead of duplicating logic"}
+  ],
+  "verdict": "needs-changes",
+  "early_stop": false
+}

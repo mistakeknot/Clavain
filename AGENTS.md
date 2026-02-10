@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 34 skills, 29 agents, 24 commands, 3 hooks, 3 MCP servers |
+| Components | 34 skills, 16 agents, 24 commands, 3 hooks, 3 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -37,12 +37,12 @@ Clavain/
 │   │   └── examples/
 │   └── ...                        # Each skill is a directory with SKILL.md
 ├── agents/
-│   ├── review/                    # 21 review agents
+│   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
-│   └── workflow/                  # 3 workflow agents
-├── commands/                      # 27 slash commands
+│   └── workflow/                  # 2 workflow agents
+├── commands/                      # 24 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 25 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 22 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
@@ -50,6 +50,8 @@ Clavain/
 │   ├── session-start.sh           # Context injection + upstream staleness warning
 │   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
+├── config/
+│   └── flux-drive/knowledge/      # Knowledge layer — durable patterns from past reviews
 ├── scripts/
 │   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
 │   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
@@ -130,9 +132,9 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 - Agents are dispatched via `Task` tool — they run as subagents with their own context
 
 Categories:
-- **review/** — Review specialists (21): codebase-aware (fd-code-quality/user-experience), adaptive (architecture-strategist/security-sentinel/performance-oracle auto-detect project docs), language-specific (go/python/typescript/shell/rust-reviewer), cross-cutting (concurrency, patterns, simplicity, agent-native), data (migration, integrity), deployment, plan review, product reasoning (product-skeptic/strategic-reviewer/user-advocate)
+- **review/** — Review specialists (9): 6 core flux-drive agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance) — each auto-detects language and project docs. Plus plan-reviewer, agent-native-reviewer, and data-migration-expert.
 - **research/** — Information gathering (5): best practices, framework docs, git history, learnings, repo analysis
-- **workflow/** — Process automation (3): PR comments, spec flow analysis, bug reproduction
+- **workflow/** — Process automation (2): PR comments, bug reproduction
 
 ### Commands
 
@@ -140,7 +142,7 @@ Categories:
 - YAML frontmatter: `name`, `description`, `argument-hint` (optional)
 - Body contains instructions FOR Claude (not for the user)
 - Commands can reference skills: "Use the `clavain:writing-plans` skill"
-- Commands can dispatch agents: "Launch `Task(architecture-strategist)`"
+- Commands can dispatch agents: "Launch `Task(fd-architecture)`"
 - Invoked as `/clavain:<name>` by users
 
 ### Hooks
@@ -205,7 +207,7 @@ Quick validation:
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 34
 echo "Agents: $(ls agents/{review,research,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 27
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 24
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
@@ -251,7 +253,7 @@ These enhance the rig significantly but aren't hard dependencies.
 | **interdoc** | interagency-marketplace | AGENTS.md generation for any repo. |
 | **auracoil** | interagency-marketplace | GPT-5.2 Pro review of AGENTS.md specifically. |
 | **tool-time** | interagency-marketplace | Tool usage analytics across sessions. |
-| **security-guidance** | claude-plugins-official | Security warning hooks on file edits. Complements Clavain's security-sentinel agent. |
+| **security-guidance** | claude-plugins-official | Security warning hooks on file edits. Complements Clavain's fd-safety agent. |
 | **serena** | claude-plugins-official | Semantic code analysis via LSP-like tools. Different tool class from Clavain's agents. |
 
 ### Infrastructure (language servers)
@@ -280,9 +282,9 @@ These plugins overlap with Clavain's opinionated equivalents. Keeping both cause
 
 | Plugin | Clavain Replacement | Status |
 |--------|-------------------|--------|
-| code-review | `/review` + `/flux-drive` + 21 review agents | **OFF** |
-| pr-review-toolkit | Same 6 agent types exist in Clavain's review roster | **OFF** |
-| code-simplifier | `code-simplicity-reviewer` agent | **OFF** |
+| code-review | `/review` + `/flux-drive` + 9 review agents | **OFF** |
+| pr-review-toolkit | Same agent types exist in Clavain's review roster | **OFF** |
+| code-simplifier | `fd-quality` agent | **OFF** |
 | commit-commands | `landing-a-change` skill | **OFF** |
 | feature-dev | `/work` + `/lfg` + `/brainstorm` | **OFF** |
 | claude-md-management | `engineering-docs` skill | **OFF** |
