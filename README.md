@@ -55,12 +55,11 @@ Even when I think I know what I want, I usually start with `/brainstorm` because
 
 ### Reviewing Things with `/flux-drive`
 
-`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from a tiered roster of review agents across 4 tiers:
+`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from three categories of review agents:
 
-- **Tier 1** — Codebase-aware agents (architecture, code quality, security, performance, UX) that understand your actual project, not generic checklists
-- **Tier 2** — Project-specific agents selected by tech stack (Go reviewer for Go projects, Python reviewer for Python, etc.)
-- **Tier 3** — Generic reviewers (concurrency, patterns, simplicity) when the document warrants them
-- **Tier 4** — Oracle (GPT-5.2 Pro) for cross-AI perspective on complex decisions
+- **Project Agents** — Per-project `fd-*.md` agents that live in your repo and know your specific codebase (bootstrapped via Codex when clodex mode is active)
+- **Adaptive Reviewers** — 19 agents (architecture, security, performance, UX, code quality, language-specific, product reasoning, and more) that auto-detect project docs: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices
+- **Cross-AI (Oracle)** — GPT-5.2 Pro for cross-model perspective on complex decisions
 
 It only launches what's relevant. A simple markdown doc might get 2 agents; a full repo review might get 8. The agents run in parallel in the background, and you get a synthesized report with findings prioritized by severity.
 
@@ -244,13 +243,13 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 Clavain is opinionated but not rigid. A few things worth knowing:
 
-**Tier 2 agents are project-specific.** `flux-drive` selects language reviewers based on your tech stack. If you're working in a language that doesn't have a language reviewer (Java, etc.), it skips that tier gracefully.
+**Language reviewers are auto-selected.** `flux-drive` picks Adaptive Reviewers based on your tech stack. If you're working in a language without a dedicated reviewer (Java, etc.), it simply skips that agent.
 
 **Skills can be overridden.** If you disagree with how `test-driven-development` works, you can create your own skill with the same name in a local plugin that loads after Clavain. Last-loaded wins.
 
 **Codex-first mode is optional.** Everything works fine with Claude making changes directly. `/clodex` is there for when you want the orchestration pattern, not a requirement.
 
-**Oracle requires setup.** The cross-AI features (`prompterpeer`, `winterpeer`, `flux-drive` Tier 4) need [Oracle](https://github.com/steipete/oracle) installed and configured. Without it, those features are simply skipped — nothing breaks.
+**Oracle requires setup.** The cross-AI features (`prompterpeer`, `winterpeer`, `flux-drive` Cross-AI) need [Oracle](https://github.com/steipete/oracle) installed and configured. Without it, those features are simply skipped — nothing breaks.
 
 ## Architecture
 
