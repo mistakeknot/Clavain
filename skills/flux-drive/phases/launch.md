@@ -39,7 +39,7 @@ Wait for Stage 1 agents to complete (use the polling from Step 2.3).
 
 ### Step 2.2b: Expansion decision
 
-After Stage 1 completes, read the YAML frontmatter from each Stage 1 output file. Based on findings:
+After Stage 1 completes, read the Findings Index from each Stage 1 output file. Based on findings:
 
 | Stage 1 Result | Action |
 |---|---|
@@ -109,7 +109,7 @@ Before including an agent's system prompt in the task prompt, strip the followin
 
 Your agent definition has a default output format. IGNORE IT for this task.
 You MUST use the format specified below. This is a flux-drive review task
-and synthesis depends on machine-parseable YAML frontmatter.
+and synthesis depends on a machine-parseable Findings Index.
 
 ### Required Output
 
@@ -122,34 +122,21 @@ from `.md.partial` to `.md` using Bash: `mv {OUTPUT_DIR}/{agent-name}.md.partial
 When your review is complete, rename to `{OUTPUT_DIR}/{agent-name}.md`.
 Your LAST action MUST be this rename. Add `<!-- flux-drive:complete -->` as the final line before renaming.
 
-The file MUST start with this YAML frontmatter block:
+The file MUST start with a Findings Index block:
 
----
-agent: {agent-name}
-tier: {project|adaptive|cross-ai}
-issues:
-  - id: P0-1
-    severity: P0
-    section: "Section Name"
-    title: "Short description of the issue"
-  - id: P1-1
-    severity: P1
-    section: "Section Name"
-    title: "Short description"
-improvements:
-  - id: IMP-1
-    title: "Short description"
-    section: "Section Name"
-verdict: safe|needs-changes|risky
----
+### Findings Index
+- P0 | P0-1 | "Section Name" | Title of the issue
+- P1 | P1-1 | "Section Name" | Title
+- IMP | IMP-1 | "Section Name" | Title of improvement
+Verdict: safe|needs-changes|risky
 
-After the frontmatter, use EXACTLY this prose structure:
+After the Findings Index, use EXACTLY this prose structure:
 
 ### Summary (3-5 lines)
 [Your top findings]
 
 ### Issues Found
-[Numbered, with severity: P0/P1/P2. Must match frontmatter.]
+[Numbered, with severity: P0/P1/P2. Must match Findings Index.]
 
 ### Improvements Suggested
 [Numbered, with rationale]
@@ -157,8 +144,8 @@ After the frontmatter, use EXACTLY this prose structure:
 ### Overall Assessment
 [1-2 sentences]
 
-If you have zero findings, still write the file with empty issues/improvements
-lists and verdict: safe.
+If you have zero findings, still write the file with an empty Findings Index
+(just the header and Verdict line) and verdict: safe.
 
 ---
 

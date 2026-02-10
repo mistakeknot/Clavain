@@ -116,7 +116,9 @@ Score the pre-filtered agents against the document profile. Present the scoring 
 - **1 (maybe)**: Adjacent domain. Include only for sections that are thin.
 - **0 (irrelevant)**: Wrong language, wrong domain, no relationship to this document.
 
-**Category bonuses**: Project Agents get +1 (project-specific). Plugin Agents get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode).
+> **Note**: Base score 0 means the agent is excluded. Category bonuses cannot override irrelevance.
+
+**Category bonuses** (applied only when base score ≥ 1): Project Agents get +1 (project-specific). Plugin Agents get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode). An agent with base score 0 is always excluded regardless of bonuses.
 
 **Selection rules**:
 1. All agents scoring 2+ are included

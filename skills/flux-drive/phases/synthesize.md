@@ -14,19 +14,20 @@ Confirm N files (one per launched agent). If count < N, Phase 2 did not complete
 
 For each agent's output file, validate structure before reading content:
 
-1. Check the file starts with `---` (YAML frontmatter delimiter)
-2. Verify required keys exist: `agent`, `tier`, `issues`, `verdict`
-3. Classification:
-   - **Valid**: Frontmatter parsed successfully → proceed with frontmatter-first collection
-   - **Error**: File exists with `verdict: error` → note as "agent failed" in summary, don't count toward convergence
-   - **Malformed**: File exists but frontmatter is missing/incomplete → fall back to prose-based reading (read Summary + Issues sections directly)
+1. Check the file starts with `### Findings Index` (first non-empty line)
+2. Verify index lines match `- SEVERITY | ID | "Section" | Title` pattern
+3. Check for a `Verdict:` line after the index entries
+4. Classification:
+   - **Valid**: Findings Index parsed successfully → proceed with index-first collection
+   - **Error**: File contains "verdict: error" or "Verdict: error" → note as "agent failed" in summary, don't count toward convergence
+   - **Malformed**: File exists but Findings Index is missing/unrecognizable → fall back to prose-based reading (read Summary + Issues sections directly)
    - **Missing**: File doesn't exist or is empty → "no findings"
 
-Report validation results to user: "5/6 agents returned valid frontmatter, 1 failed"
+Report validation results to user: "5/6 agents returned valid Findings Index, 1 failed"
 
 ### Step 3.2: Collect Results
 
-For each **valid** agent output, read the **YAML frontmatter** first (first ~60 lines). This gives you a structured list of all issues and improvements without reading full prose. Only read the prose body if:
+For each **valid** agent output, read the **Findings Index** first (first ~30 lines). This gives you a structured list of all issues and improvements without reading full prose. Only read the prose body if:
 - An issue needs more context to understand
 - You need to resolve a conflict between agents
 
@@ -98,6 +99,43 @@ Do NOT modify the repo's README or any existing files. Instead, write a new summ
 - Summarizes all findings organized by topic
 - Links to individual agent reports in the same directory
 - Includes the same Enhancement Summary format (Key Findings, Issues to Address checklist)
+
+### Step 3.4a: Generate findings.json
+
+After collecting and deduplicating findings, generate `{OUTPUT_DIR}/findings.json`:
+
+```json
+{
+  "reviewed": "YYYY-MM-DD",
+  "input": "{INPUT_PATH}",
+  "agents_launched": ["agent1", "agent2"],
+  "agents_completed": ["agent1", "agent2"],
+  "findings": [
+    {
+      "id": "P0-1",
+      "severity": "P0",
+      "agent": "architecture-strategist",
+      "section": "Section Name",
+      "title": "Short description",
+      "convergence": 3
+    }
+  ],
+  "improvements": [
+    {
+      "id": "IMP-1",
+      "agent": "fd-code-quality",
+      "section": "Section Name",
+      "title": "Short description"
+    }
+  ],
+  "verdict": "needs-changes",
+  "early_stop": false
+}
+```
+
+Use the Write tool to create this file. The orchestrator generates this from the collected Findings Indexes — agents never write JSON.
+
+**Verdict logic**: If any finding is P0 → "risky". If any P1 → "needs-changes". Otherwise → "safe".
 
 ### Step 3.5: Report to User
 
