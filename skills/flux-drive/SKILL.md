@@ -30,6 +30,10 @@ PROJECT_ROOT  = <nearest ancestor directory containing .git, or INPUT_DIR>
 OUTPUT_DIR    = {PROJECT_ROOT}/docs/research/flux-drive/{INPUT_STEM}
 ```
 
+**Run isolation:** Before launching agents, clean or verify the output directory:
+- If `{OUTPUT_DIR}/` already exists and contains `.md` files, remove them to prevent stale results from contaminating this run.
+- Alternatively, append a short timestamp to OUTPUT_DIR (e.g., `{INPUT_STEM}-20260209T1430`) to isolate runs. Use the simpler clean approach by default.
+
 **Critical:** Resolve `OUTPUT_DIR` to an **absolute path** before using it in agent prompts. Agents inherit the main session's CWD, so relative paths write to the wrong project during cross-project reviews.
 
 ---
@@ -225,7 +229,10 @@ When available, Oracle provides a GPT-5.2 Pro perspective on the same document. 
 ```bash
 timeout 480 env DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
   oracle --wait -p "Review this {document_type} for {review_goal}. Focus on: issues a Claude-based reviewer might miss. Provide numbered findings with severity." \
-  -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-council.md 2>&1 || echo "Oracle failed (exit $?) — continuing without cross-AI perspective" >> {OUTPUT_DIR}/oracle-council.md
+  -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-council.md.partial 2>&1 && \
+  echo '<!-- flux-drive:complete -->' >> {OUTPUT_DIR}/oracle-council.md.partial && \
+  mv {OUTPUT_DIR}/oracle-council.md.partial {OUTPUT_DIR}/oracle-council.md || \
+  (echo -e "---\nagent: oracle-council\ntier: cross-ai\nissues: []\nimprovements: []\nverdict: error\n---\nOracle failed (exit $?)" > {OUTPUT_DIR}/oracle-council.md)
 ```
 
 **Error handling**: If the Oracle command fails or times out, note it in the output file and continue without Phase 4. Do NOT block synthesis on Oracle failures — treat it as "Oracle: no findings" and skip Steps 4.2-4.5.
@@ -245,21 +252,21 @@ Oracle counts toward the 8-agent cap. If the roster is already full, Oracle repl
 **Read the synthesis phase file now:**
 - Read `phases/synthesize.md` (in the flux-drive skill directory)
 
-## Phase 4: Cross-AI Escalation (Optional)
+## Phase 4: Cross-AI Comparison (Optional)
 
-**Read the cross-AI phase file now:**
-- Read `phases/cross-ai.md` (in the flux-drive skill directory)
+**Skip this phase if Oracle was not in the review roster.** For cross-AI options without Oracle, mention `/clavain:interpeer` in the Phase 3 report.
+
+If Oracle participated, read `phases/cross-ai.md` now.
 
 ---
 
 ## Integration
 
-**Chains to (when Oracle participates):**
-- `interpeer` **mine** mode — Automatically invoked when Oracle and Claude agents disagree
-- `interpeer` **council** mode — Offered when critical decisions surface
+**Chains to (user-initiated, after Phase 4 consent gate):**
+- `interpeer` — when user wants to investigate cross-AI disagreements
 
-**Chains to (when Oracle absent):**
-- `interpeer` **quick** mode — Offered as lightweight cross-AI option
+**Suggests (when Oracle absent, in Phase 3 report):**
+- `interpeer` — lightweight cross-AI second opinion
 
 **Called by:**
 - `/clavain:flux-drive` command

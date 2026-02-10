@@ -7,6 +7,13 @@ Create the research output directory before launching agents. Resolve to an abso
 mkdir -p {OUTPUT_DIR}  # Must be absolute, e.g. /root/projects/Foo/docs/research/flux-drive/my-doc-name
 ```
 
+Then enforce run isolation before dispatch:
+```bash
+find {OUTPUT_DIR} -maxdepth 1 -type f \( -name "*.md" -o -name "*.md.partial" \) -delete
+```
+
+Use a timestamped `OUTPUT_DIR` only when you intentionally need to preserve previous run artifacts.
+
 ### Step 2.1: Detect dispatch mode
 
 Check if clodex mode is active:
@@ -44,7 +51,7 @@ Launch all selected agents as parallel Task calls in a **single message**.
 **Cross-AI (Oracle)**:
 - Run via Bash tool with `run_in_background: true` and `timeout: 600000`
 - Requires `DISPLAY=:99` and `CHROME_PATH=/usr/local/bin/google-chrome-wrapper`
-- Output goes to `{OUTPUT_DIR}/oracle-council.md`
+- Output goes to `{OUTPUT_DIR}/oracle-council.md.partial`, renamed to `.md` on success
 
 **Orchestrator: Token trimming (before constructing prompt below):**
 For file inputs with 200+ lines, trim the document before including it in the prompt:
@@ -66,10 +73,14 @@ and synthesis depends on machine-parseable YAML frontmatter.
 
 ### Required Output
 
-Your FIRST action MUST be: use the Write tool to create the findings file.
+Your FIRST action MUST be: use the Write tool to create `{OUTPUT_DIR}/{agent-name}.md.partial`.
 ALL findings go in that file — do NOT return findings in your response text.
+When complete, add `<!-- flux-drive:complete -->` as the last line, then rename the file
+from `.md.partial` to `.md` using Bash: `mv {OUTPUT_DIR}/{agent-name}.md.partial {OUTPUT_DIR}/{agent-name}.md`
 
-**Output file:** {OUTPUT_DIR}/{agent-name}.md
+**Output file:** Write to `{OUTPUT_DIR}/{agent-name}.md.partial` during work.
+When your review is complete, rename to `{OUTPUT_DIR}/{agent-name}.md`.
+Your LAST action MUST be this rename. Add `<!-- flux-drive:complete -->` as the final line before renaming.
 
 The file MUST start with this YAML frontmatter block:
 
@@ -158,12 +169,14 @@ After launching all agents, tell the user:
 
 After all background tasks complete (check via TaskOutput or output file existence):
 
-1. List `{OUTPUT_DIR}/` — expect one `.md` file per launched agent
-2. For any missing file after 5 minutes:
+1. List `{OUTPUT_DIR}/` — expect one `.md` file per launched agent (not `.md.partial`)
+2. Wait up to 5 minutes. Check for completion by looking for `.md` files (not `.partial`).
+3. For any agent where only `.md.partial` exists (started but did not complete) or no file exists:
    a. Check the background task output for errors
-   b. **Retry once** (Task-dispatched agents only): Re-launch the agent with the same prompt (use `run_in_background: false` so you get direct output). Do NOT retry Oracle — its bash command already writes failure to the output file.
-   c. If retry produces output, write it to `{OUTPUT_DIR}/{agent-name}.md`
-   d. If retry also fails, create a stub file:
+   b. **Pre-retry guard**: If `{OUTPUT_DIR}/{agent-name}.md` already exists (not `.partial`), do NOT retry — the agent completed successfully
+   c. **Retry once** (Task-dispatched agents only): Re-launch with the same prompt, `run_in_background: false`, `timeout: 300000` (5 min cap). Do NOT retry Oracle.
+   d. If retry produces output, ensure it ends with `<!-- flux-drive:complete -->` and is saved as `{OUTPUT_DIR}/{agent-name}.md` (not `.partial`)
+   e. If retry also fails, create a stub file:
       ```yaml
       ---
       agent: {agent-name}
@@ -174,4 +187,5 @@ After all background tasks complete (check via TaskOutput or output file existen
       ---
       Agent failed to produce findings after retry. Error: {error message}
       ```
-3. Report to user: "N/M agents completed successfully, K retried, J failed"
+4. Clean up: remove any remaining `.md.partial` files in `{OUTPUT_DIR}/`
+5. Report to user: "N/M agents completed successfully, K retried, J failed"

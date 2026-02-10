@@ -71,16 +71,16 @@ Because different models and agents genuinely see different things, and the disa
 
 The `/interpeer` stack escalates in depth:
 
-| Command | What it does | Speed |
-|---------|-------------|-------|
+| Mode | What it does | Speed |
+|------|-------------|-------|
 | `/interpeer` | Quick Claude↔Codex second opinion | Seconds |
-| `prompterpeer` | Deep Oracle analysis with prompt optimization | Minutes |
-| `winterpeer` | Full LLM Council — multi-model consensus | Slow |
-| `splinterpeer` | Post-processor — turns disagreements into tests and specs | N/A |
+| `/interpeer deep` | Oracle analysis with prompt optimization and human review | Minutes |
+| `/interpeer council` | Full LLM Council — multi-model consensus | Slow |
+| `/interpeer mine` | Post-processor — turns disagreements into tests and specs | N/A |
 
-`/interpeer` is the lightweight entry point. It auto-detects whether you're running in Claude Code or Codex CLI and calls the other one. For deeper analysis, `prompterpeer` builds optimized prompts for Oracle (GPT-5.2 Pro) and shows you the enhanced prompt before sending. `winterpeer` runs a full council when the stakes are high — critical architecture or security decisions where you want genuine consensus, not just one model's opinion.
+`/interpeer` defaults to quick mode — it auto-detects whether you're running in Claude Code or Codex CLI and calls the other one. For deeper analysis, `deep` mode builds optimized prompts for Oracle (GPT-5.2 Pro) and shows you the enhanced prompt before sending. `council` mode runs a full multi-model review when the stakes are high — critical architecture or security decisions where you want genuine consensus, not just one model's opinion.
 
-I find `splinterpeer` to be particularly useful for complex, ambiguous contexts. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions.
+I find `mine` mode to be particularly useful for complex, ambiguous contexts. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions.
 
 ### Token Efficiency with `/clodex`
 
@@ -120,10 +120,7 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `requesting-code-review` | Dispatch reviewer subagents |
 | `receiving-code-review` | Handle review feedback |
 | **Cross-AI** | |
-| `interpeer` | Auto-detecting Claude↔Codex review |
-| `prompterpeer` | Oracle prompt optimizer with human review |
-| `winterpeer` | LLM Council multi-model consensus |
-| `splinterpeer` | Turn model disagreements into tests and specs |
+| `interpeer` | Cross-AI peer review with 4 modes: quick, deep (Oracle), council (multi-model), mine (disagreement extraction) |
 | `clodex` | Codex dispatch — megaprompt, parallel delegation, debate, Oracle escalation |
 | **Knowledge & Docs** | |
 | `beads-workflow` | Git-native issue tracking via `bd` CLI |
@@ -249,7 +246,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 
 **Codex-first mode is optional.** Everything works fine with Claude making changes directly. `/clodex` is there for when you want the orchestration pattern, not a requirement.
 
-**Oracle requires setup.** The cross-AI features (`prompterpeer`, `winterpeer`, `flux-drive` Cross-AI) need [Oracle](https://github.com/steipete/oracle) installed and configured. Without it, those features are simply skipped — nothing breaks.
+**Oracle requires setup.** The cross-AI features (`/interpeer deep`, `/interpeer council`, `flux-drive` Cross-AI) need [Oracle](https://github.com/steipete/oracle) installed and configured. Without it, those features are simply skipped — nothing breaks.
 
 ## Architecture
 
