@@ -58,7 +58,7 @@ Even when I think I know what I want, I usually start with `/brainstorm` because
 `/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from three categories of review agents:
 
 - **Project Agents** — Per-project `fd-*.md` agents that live in your repo and know your specific codebase (bootstrapped via Codex when clodex mode is active)
-- **Plugin Agents** — 6 core v2 agents (Architecture & Design, Safety, Correctness, Quality & Style, User & Product, Performance) that auto-detect project docs: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices
+- **Plugin Agents** — 6 core agents (Architecture & Design, Safety, Correctness, Quality & Style, User & Product, Performance) that auto-detect project docs: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices
 - **Cross-AI (Oracle)** — GPT-5.2 Pro for cross-model perspective on complex decisions
 
 It only launches what's relevant. A simple markdown doc might get 2 agents; a full repo review might get 8. The agents run in parallel in the background, and you get a synthesized report with findings prioritized by severity. Over time, flux-drive builds a knowledge layer from review findings — patterns discovered in one review are injected as context into future reviews.
@@ -287,7 +287,7 @@ The `using-clavain` skill is injected into every session via the SessionStart ho
 
 1. **Stage** — What phase are you in? (explore / plan / execute / debug / review / ship / meta)
 2. **Domain** — What kind of work? (code / data / deploy / docs / research / workflow)
-3. **Language** — What language? (go / python / typescript / shell / markdown)
+3. **Concern** — What review concern? (architecture / safety / correctness / quality / user-product / performance)
 
 This routes to the right skill, agent, or command for each task. You don't need to memorize the full list — the routing table is always in context.
 

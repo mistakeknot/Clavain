@@ -90,7 +90,7 @@ The `using-clavain` skill provides a routing system:
 
 1. **Stage** — What phase? (explore / plan / execute / debug / review / ship / meta)
 2. **Domain** — What kind of work? (code / data / deploy / docs / research / workflow / design / infra)
-3. **Language** — What language? (go / python / typescript / shell / markdown)
+3. **Concern** — What review concern? (architecture / safety / correctness / quality / user-product / performance)
 
 Each cell maps to specific skills, commands, and agents.
 
@@ -296,7 +296,7 @@ Full audit rationale: `docs/plugin-audit.md`
 ## Known Constraints
 
 - **No build step** — pure markdown/JSON/bash plugin, nothing to compile
-- **No tests** — plugin validation is structural (file existence, JSON validity, reference consistency)
+- **3-tier test suite** — structural (pytest), shell (bats-core), smoke (Claude Code subagents). Run via `tests/run-tests.sh`
 - **General-purpose only** — no domain-specific components (Rails, Ruby gems, Every.to, Figma, Xcode, browser-automation)
 - **Trunk-based** — no branch/worktree skills; commit directly to `main`
 
