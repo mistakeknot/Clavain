@@ -1,0 +1,57 @@
+name: Plugin Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * *"  # Daily smoke tests at 6am UTC
+  workflow_dispatch:
+    inputs:
+      run_smoke:
+        description: "Run smoke tests (requires ANTHROPIC_API_KEY)"
+        type: boolean
+        default: false
+
+jobs:
+  structural-and-shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install bats-core
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Install bats helpers
+        run: npm install -g bats-support bats-assert
+
+      - name: Tier 1 — Structural tests (pytest)
+        run: cd tests && uv run pytest structural/ -v --tb=short
+
+      - name: Tier 2 — Shell tests (bats)
+        run: bats tests/shell/ --recursive --tap
+
+  smoke:
+    if: >-
+      (github.event_name == 'schedule') ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Smoke tests via Claude Code
+        if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt_file: tests/smoke/smoke-prompt.md
+          max_turns: 40
