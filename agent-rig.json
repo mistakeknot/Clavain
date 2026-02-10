@@ -1,0 +1,128 @@
+{
+  "name": "clavain",
+  "version": "0.4.18",
+  "description": "General-purpose engineering discipline rig — 29 agents, 24 commands, 34 skills, 3 MCP servers. Combines workflow discipline with specialized execution agents.",
+  "author": "mistakeknot",
+  "license": "MIT",
+  "repository": "mistakeknot/Clavain",
+  "keywords": [
+    "engineering-discipline",
+    "code-review",
+    "workflow-automation",
+    "tdd",
+    "agents",
+    "cross-ai-review"
+  ],
+
+  "plugins": {
+    "core": {
+      "source": "clavain@interagency-marketplace",
+      "description": "The core Clavain engineering discipline plugin"
+    },
+    "required": [
+      { "source": "context7@claude-plugins-official", "description": "Runtime doc fetching via MCP" },
+      { "source": "explanatory-output-style@claude-plugins-official", "description": "Educational output formatting" }
+    ],
+    "recommended": [
+      { "source": "interdoc@interagency-marketplace", "description": "AGENTS.md generation" },
+      { "source": "interclode@interagency-marketplace", "description": "Codex CLI dispatch infrastructure" },
+      { "source": "auracoil@interagency-marketplace", "description": "Cross-AI AGENTS.md review" },
+      { "source": "tool-time@interagency-marketplace", "description": "Tool usage analytics" },
+      { "source": "agent-sdk-dev@claude-plugins-official", "description": "Agent SDK development tools" },
+      { "source": "plugin-dev@claude-plugins-official", "description": "Plugin development tools" },
+      { "source": "serena@claude-plugins-official", "description": "Semantic coding tools" },
+      { "source": "security-guidance@claude-plugins-official", "description": "Security best practices" }
+    ],
+    "infrastructure": [
+      { "source": "gopls-lsp@claude-plugins-official", "description": "Go language server" },
+      { "source": "pyright-lsp@claude-plugins-official", "description": "Python language server" },
+      { "source": "typescript-lsp@claude-plugins-official", "description": "TypeScript language server" },
+      { "source": "rust-analyzer-lsp@claude-plugins-official", "description": "Rust language server" }
+    ],
+    "conflicts": [
+      { "source": "code-review@claude-plugins-official", "reason": "Duplicates Clavain review agents" },
+      { "source": "pr-review-toolkit@claude-plugins-official", "reason": "Duplicates Clavain PR review" },
+      { "source": "code-simplifier@claude-plugins-official", "reason": "Duplicates simplicity reviewer" },
+      { "source": "commit-commands@claude-plugins-official", "reason": "Duplicates commit workflow" },
+      { "source": "feature-dev@claude-plugins-official", "reason": "Duplicates feature dev workflow" },
+      { "source": "claude-md-management@claude-plugins-official", "reason": "Conflicts with doc management" },
+      { "source": "frontend-design@claude-plugins-official", "reason": "Conflicts with design agents" },
+      { "source": "hookify@claude-plugins-official", "reason": "Conflicts with hook management" }
+    ]
+  },
+
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "description": "Runtime documentation fetching"
+    },
+    "mcp-agent-mail": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp",
+      "description": "Multi-agent coordination and message routing",
+      "healthCheck": "http://127.0.0.1:8765/health"
+    },
+    "qmd": {
+      "type": "stdio",
+      "command": "qmd",
+      "args": ["mcp"],
+      "description": "Local semantic search engine"
+    }
+  },
+
+  "tools": [
+    {
+      "name": "oracle",
+      "install": "npm install -g @steipete/oracle",
+      "check": "command -v oracle",
+      "optional": true,
+      "description": "Cross-AI review via GPT-5.2 Pro"
+    },
+    {
+      "name": "codex",
+      "install": "npm install -g @openai/codex",
+      "check": "command -v codex",
+      "optional": true,
+      "description": "OpenAI's coding agent for parallel dispatch"
+    },
+    {
+      "name": "beads",
+      "install": "npm install -g @steveyegge/beads",
+      "check": "command -v bd",
+      "optional": true,
+      "description": "Git-native issue tracking"
+    },
+    {
+      "name": "qmd",
+      "install": "go install github.com/tobi/qmd@latest",
+      "check": "command -v qmd",
+      "optional": true,
+      "description": "Semantic search across documentation"
+    }
+  ],
+
+  "environment": {
+    "DISPLAY": ":99",
+    "CHROME_PATH": "/usr/local/bin/google-chrome-wrapper"
+  },
+
+  "behavioral": {
+    "claude-md": {
+      "source": "config/CLAUDE.md"
+    }
+  },
+
+  "platforms": {
+    "claude-code": {
+      "marketplaces": [
+        { "name": "interagency-marketplace", "repo": "mistakeknot/interagency-marketplace" },
+        { "name": "claude-plugins-official", "repo": "anthropics/claude-plugins-official" }
+      ]
+    },
+    "codex": {
+      "installScript": "scripts/install-codex.sh",
+      "skillsDir": "~/.codex/skills/clavain"
+    }
+  }
+}

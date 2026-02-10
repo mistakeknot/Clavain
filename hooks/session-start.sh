@@ -44,6 +44,9 @@ if [[ -n "$companions" ]]; then
     companion_context="\\n\\nDetected companions (FYI):${companions}"
 fi
 
+# Core conventions reminder (full version in config/CLAUDE.md)
+conventions="\\n\\n**Clavain conventions:** Read before Edit. No heredocs/loops in Bash. Trunk-based git (commit to main). Record learnings to memory immediately."
+
 # Check upstream staleness (local file check only — no network calls)
 upstream_warning=""
 VERSIONS_FILE="${PLUGIN_ROOT}/docs/upstream-versions.json"
@@ -63,7 +66,7 @@ cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${upstream_warning}"
+    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${upstream_warning}"
   }
 }
 EOF
