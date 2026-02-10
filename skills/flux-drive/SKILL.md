@@ -102,11 +102,11 @@ Do this analysis yourself (no subagents needed). The profile drives triage in St
 
 Before scoring, eliminate agents that cannot plausibly score ≥1 based on the document profile:
 
-1. **Language filter**: Skip language-specific reviewers (go-reviewer, python-reviewer, typescript-reviewer, shell-reviewer, rust-reviewer) unless their language appears in the document profile's Languages field.
-2. **Data filter**: Skip data-integrity-reviewer, data-migration-expert, deployment-verification-agent unless the document mentions databases, migrations, deployments, or infrastructure.
-3. **Product filter**: Skip product-skeptic, strategic-reviewer, user-advocate unless the document type is PRD, proposal, or strategy document.
+1. **Data filter**: Skip fd-v2-correctness unless the document mentions databases, migrations, data models, concurrency, or async patterns.
+2. **Product filter**: Skip fd-v2-user-product unless the document type is PRD, proposal, strategy document, or has user-facing flows.
+3. **Deploy filter**: Skip fd-v2-safety unless the document mentions security, credentials, deployments, infrastructure, or trust boundaries.
 
-Domain-general agents always pass the filter: architecture-strategist, security-sentinel, performance-oracle, code-simplicity-reviewer, pattern-recognition-specialist, concurrency-reviewer, fd-user-experience, fd-code-quality, spec-flow-analyzer.
+Domain-general agents always pass the filter: fd-v2-architecture, fd-v2-quality, fd-v2-performance.
 
 Present only passing agents in the scoring table below.
 
@@ -144,33 +144,34 @@ Present the triage table with a Stage column:
 
 | Agent | Category | Score | Reason | Action |
 |-------|----------|-------|--------|--------|
-| architecture-strategist | Adaptive | 2+1=3 | Module boundaries directly affected, project docs exist | Launch |
-| security-sentinel | Adaptive | 2+1=3 | API adds new endpoints, project docs exist | Launch |
-| performance-oracle | Adaptive | 1+1=2 | API mentioned but no perf section (thin) | Launch |
-| fd-user-experience | Adaptive | 0+1=1 | No UI/CLI changes, project docs exist | Skip |
-| go-reviewer | Adaptive | 2 | Go code changes | Launch |
+| fd-v2-architecture | Plugin | 2+1=3 | Module boundaries directly affected, project docs exist | Launch |
+| fd-v2-safety | Plugin | 2+1=3 | API adds new endpoints with auth, project docs exist | Launch |
+| fd-v2-quality | Plugin | 2+1=3 | Go code changes, project docs exist | Launch |
+| fd-v2-performance | Plugin | 1+1=2 | API mentioned but no perf section (thin) | Launch |
+| fd-v2-correctness | Plugin | 0 | No database/concurrency changes | Skip |
+| fd-v2-user-product | Plugin | 0 | No user-facing changes | Skip |
 
 **README review for Python CLI tool:**
 
 | Agent | Category | Score | Reason | Action |
 |-------|----------|-------|--------|--------|
-| fd-user-experience | Adaptive | 2+1=3 | CLI UX directly relevant, project docs exist | Launch |
-| fd-code-quality | Adaptive | 2+1=3 | Conventions review, project docs exist | Launch |
-| code-simplicity-reviewer | Adaptive | 2 | YAGNI check | Launch |
-| architecture-strategist | Adaptive | 1+1=2 | Only if architecture section is thin | Launch |
-| security-sentinel | Adaptive | 0 | README, no security concerns | Skip |
+| fd-v2-user-product | Plugin | 2+1=3 | CLI UX directly relevant, project docs exist | Launch |
+| fd-v2-quality | Plugin | 2+1=3 | Conventions review, project docs exist | Launch |
+| fd-v2-architecture | Plugin | 1+1=2 | Only if architecture section is thin | Launch |
+| fd-v2-performance | Plugin | 0 | README, no performance concerns | Skip |
+| fd-v2-safety | Plugin | 0 | README, no security concerns | Skip |
+| fd-v2-correctness | Plugin | 0 | No data/concurrency concerns | Skip |
 
 **PRD for new user onboarding flow:**
 
 | Agent | Category | Score | Reason | Action |
 |-------|----------|-------|--------|--------|
-| product-skeptic | Adaptive | 2 | PRD — challenges whether this is the right thing to build | Launch |
-| strategic-reviewer | Adaptive | 2 | PRD — validates business case and strategic alignment | Launch |
-| user-advocate | Adaptive | 2 | PRD — checks user research backing and value proposition | Launch |
-| architecture-strategist | Adaptive | 1+1=2 | PRD mentions architecture changes, project docs exist | Launch |
-| spec-flow-analyzer | Workflow | 2 | PRD has user flows to validate | Launch |
-| security-sentinel | Adaptive | 0 | No security surface changes | Skip |
-| go-reviewer | Adaptive | 0 | No code changes | Skip |
+| fd-v2-user-product | Plugin | 2+1=3 | PRD — user flows, value prop, scope validation, project docs exist | Launch |
+| fd-v2-architecture | Plugin | 1+1=2 | PRD mentions architecture changes, project docs exist | Launch |
+| fd-v2-safety | Plugin | 1 | Onboarding may involve auth — thin section | Launch |
+| fd-v2-performance | Plugin | 0 | No performance surface changes | Skip |
+| fd-v2-quality | Plugin | 0 | No code changes | Skip |
+| fd-v2-correctness | Plugin | 0 | No data/concurrency changes | Skip |
 
 **Thin section thresholds:**
 - **thin**: <5 lines or <3 bullet points — agent with adjacent domain should cover this
@@ -216,25 +217,12 @@ These agents are provided by the Clavain plugin. They auto-detect project docume
 
 | Agent | subagent_type | Domain |
 |-------|--------------|--------|
-| fd-user-experience | clavain:review:fd-user-experience | CLI/TUI interaction, keyboard ergonomics, terminal constraints |
-| fd-code-quality | clavain:review:fd-code-quality | Naming, test strategy, project conventions, idioms |
-| architecture-strategist | clavain:review:architecture-strategist | Module boundaries, component structure, system design |
-| security-sentinel | clavain:review:security-sentinel | Threat model, credential handling, access patterns |
-| performance-oracle | clavain:review:performance-oracle | Rendering, data processing, resource usage, scaling |
-| code-simplicity-reviewer | clavain:review:code-simplicity-reviewer | YAGNI, minimalism, over-engineering |
-| pattern-recognition-specialist | clavain:review:pattern-recognition-specialist | Anti-patterns, duplication, consistency |
-| data-integrity-reviewer | clavain:review:data-integrity-reviewer | Migrations, data safety, transactions |
-| concurrency-reviewer | clavain:review:concurrency-reviewer | Race conditions, async bugs, goroutine/channel lifecycle |
-| deployment-verification-agent | clavain:review:deployment-verification-agent | Pre/post-deploy checklists, rollback, migration safety |
-| go-reviewer | clavain:review:go-reviewer | Go code quality, idioms, error handling |
-| python-reviewer | clavain:review:python-reviewer | Python code quality, Pythonic patterns, type hints |
-| typescript-reviewer | clavain:review:typescript-reviewer | TypeScript code quality, type safety, React patterns |
-| shell-reviewer | clavain:review:shell-reviewer | Shell script safety, quoting, portability |
-| rust-reviewer | clavain:review:rust-reviewer | Rust code quality, ownership, unsafe soundness |
-| spec-flow-analyzer | clavain:workflow:spec-flow-analyzer | User flow analysis, gap identification, edge case mapping (workflow agent, not review) |
-| product-skeptic | clavain:review:product-skeptic | Problem validation, scope creep, YAGNI at the feature level, opportunity cost |
-| strategic-reviewer | clavain:review:strategic-reviewer | Business case, strategic alignment, resource allocation, build-vs-buy |
-| user-advocate | clavain:review:user-advocate | User impact, research backing, value proposition, discoverability |
+| fd-v2-architecture | clavain:review:fd-v2-architecture | Module boundaries, coupling, patterns, anti-patterns, complexity |
+| fd-v2-safety | clavain:review:fd-v2-safety | Threats, credentials, trust boundaries, deploy risk, rollback |
+| fd-v2-correctness | clavain:review:fd-v2-correctness | Data consistency, race conditions, transactions, async bugs |
+| fd-v2-quality | clavain:review:fd-v2-quality | Naming, conventions, test approach, language-specific idioms |
+| fd-v2-user-product | clavain:review:fd-v2-user-product | User flows, UX friction, value prop, scope, missing edge cases |
+| fd-v2-performance | clavain:review:fd-v2-performance | Bottlenecks, resource usage, algorithmic complexity, scaling |
 
 ### Cross-AI (Oracle)
 

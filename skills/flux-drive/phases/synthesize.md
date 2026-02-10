@@ -168,9 +168,116 @@ Present the synthesis report using this exact structure. Fill in each section fr
 - Summary: `{OUTPUT_DIR}/summary.md`
 - Findings: `{OUTPUT_DIR}/findings.json`
 - Individual reports: `{OUTPUT_DIR}/{agent-name}.md`
+
+[If this is the first flux-drive run on this project (config/flux-drive/knowledge/ was empty):]
+*First review on this project — building knowledge base for future reviews.*
 ```
 
 **After the report**, suggest next steps based on the verdict:
 - **risky**: "Consider addressing P0 findings before proceeding. Run `/clavain:resolve` to auto-fix."
 - **needs-changes**: "Review P1 findings. Run `/clavain:flux-drive` again after changes to verify."
 - **safe**: "No blocking issues found. Individual reports available for detailed review."
+
+---
+
+## Post-Synthesis: Silent Compounding
+
+After presenting the review to the user (Step 3.5), run a compounding step in the background. This step is SILENT — no user-visible output. The user's last interaction is the Step 3.5 report.
+
+### Purpose
+
+Extract durable patterns from agent findings and save them to `config/flux-drive/knowledge/` for future reviews. This is how flux-drive "gets smarter" over time.
+
+### Implementation
+
+Launch a background Task agent (model: sonnet) with this prompt:
+
+````markdown
+You are the flux-drive compounding agent. Your job is to extract durable, reusable patterns from review findings and save them as knowledge entries.
+
+## Input
+
+Read the agent output files in {OUTPUT_DIR}/:
+- Read the Findings Index from each agent's .md file (first ~30 lines)
+- For P0/P1 findings, read the full prose section for evidence anchors
+
+## Decision Criteria
+
+For each finding, decide: **compound or skip?**
+
+**Compound** (save as knowledge entry) when the finding is:
+- A pattern likely to recur in future reviews (not a one-off typo or style nit)
+- Backed by concrete evidence (file paths, line numbers, symbol names)
+- Generalizable beyond this specific document (not "line 47 has a typo")
+
+**Skip** when:
+- The finding is document-specific and won't recur
+- The finding lacks evidence anchors
+- The finding is a stylistic preference, not a correctness or safety concern
+- The finding is an improvement suggestion, not a discovered pattern
+
+## Knowledge Entry Format
+
+For each finding worth compounding, write a markdown file to `config/flux-drive/knowledge/`:
+
+Filename: `{short-kebab-case-description}.md` (e.g., `auth-middleware-swallows-cancellation.md`)
+
+Content:
+```yaml
+---
+lastConfirmed: {today's date YYYY-MM-DD}
+provenance: independent
+---
+{1-3 sentence description of the pattern}
+
+Evidence: {file paths, symbol names, line ranges from the agent's finding}
+Verify: {1-3 steps to confirm this finding is still valid}
+```
+
+## Provenance Rules
+
+- If this is a NEW finding (no matching knowledge entry was injected): set `provenance: independent`
+- If this finding MATCHES a knowledge entry that was injected into the agent's context: check the agent's provenance note
+  - If the agent noted "independently confirmed": update the existing entry's `lastConfirmed` date and set `provenance: independent`
+  - If the agent noted "primed confirmation": do NOT update `lastConfirmed` — the confirmation is primed, not genuine
+
+## Sanitization Rules
+
+Before writing ANY knowledge entry, sanitize it:
+- Remove specific file paths from external repos (not the Clavain repo)
+- Remove hostnames, internal endpoints, org names, customer identifiers
+- Generalize to heuristic form: "Auth middleware often swallows context cancellation" not "auth.go:47 in ProjectX"
+- Entries about Clavain's own codebase CAN include Clavain-specific paths
+
+## Decay Check
+
+After compounding new entries, scan existing entries in `config/flux-drive/knowledge/`:
+- Read each entry's `lastConfirmed` date
+- If an entry has not been independently confirmed in the last 10 reviews (approximate by date: >60 days), move it to `config/flux-drive/knowledge/archive/`
+- Log archived entries (for your own tracking, not user-visible)
+
+## Output
+
+This agent produces no user-visible output. It only writes/updates files in `config/flux-drive/knowledge/`.
+If compounding fails for any reason, the review is still complete — this is best-effort infrastructure.
+````
+
+### First-Run Bootstrap
+
+On the first flux-drive v2 run on a project, the knowledge directory will be empty. The compounding agent will:
+1. Create initial knowledge entries from the first review's findings
+2. All entries will have `provenance: independent` (no prior entries to be primed by)
+
+Add a note in the Step 3.5 report template: after the Files section, add:
+```markdown
+[If this is the first flux-drive run on this project (config/flux-drive/knowledge/ was empty):]
+*First review on this project — building knowledge base for future reviews.*
+```
+
+### Failure Handling
+
+If the compounding Task fails:
+- Do NOT report the failure to the user
+- Do NOT retry
+- The review is complete regardless of compounding success
+- Log the error internally for debugging

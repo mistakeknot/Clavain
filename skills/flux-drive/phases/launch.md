@@ -25,6 +25,39 @@ Determine the dispatch mode:
 
 **Fallback**: If Codex dispatch fails for any agent (dispatch.sh not found, Codex CLI errors), the orchestrator falls back to Task dispatch for that agent. This is an orchestrator decision, not a bash variable — the orchestrator reads the error and decides.
 
+### Step 2.1a: Retrieve knowledge context
+
+Before launching agents, retrieve relevant knowledge entries for each selected agent. This step is OPTIONAL — if qmd is unavailable, skip and proceed to Step 2.2.
+
+**For each selected agent**, construct a retrieval query:
+1. Combine the agent's domain keywords with the document summary from Phase 1
+2. Use the qmd MCP tool to search:
+   ```
+   Tool: mcp__plugin_clavain_qmd__vsearch
+   Parameters:
+     collection: "Clavain"
+     query: "{agent domain} {document summary keywords}"
+     path: "config/flux-drive/knowledge/"
+     limit: 5
+   ```
+3. If qmd returns results, format them as a knowledge context block
+
+**Domain keywords by agent:**
+| Agent | Domain keywords |
+|-------|----------------|
+| fd-v2-architecture | architecture boundaries coupling patterns complexity |
+| fd-v2-safety | security threats credentials deployment rollback trust |
+| fd-v2-correctness | data integrity transactions races concurrency async |
+| fd-v2-quality | naming conventions testing code quality style idioms |
+| fd-v2-user-product | user experience flows UX value proposition scope |
+| fd-v2-performance | performance bottlenecks rendering memory scaling |
+
+**Cap**: 5 entries per agent maximum. If qmd returns more, take the top 5 by relevance score.
+
+**Fallback**: If qmd MCP tool is unavailable or errors, skip knowledge injection entirely — agents run without it (effectively v1 behavior). Do NOT block agent launch on qmd failures.
+
+**Pipelining**: Start qmd queries before agent dispatch. While queries run, prepare agent prompts. Inject results when both are ready.
+
 ### Step 2.2: Stage 1 — Launch top agents
 
 **Condition**: Use this step when `DISPATCH_MODE = task` (default).
@@ -138,6 +171,21 @@ If you have zero findings, still write the file with an empty Findings Index
 ## Review Task
 
 You are reviewing a {document_type} for {review_goal}.
+
+## Knowledge Context
+
+[If knowledge entries were retrieved for this agent:]
+The following patterns were discovered in previous reviews. Consider them as context but verify independently — do NOT simply re-confirm without checking.
+
+{For each knowledge entry:}
+- **Finding**: {entry body — first 1-3 lines}
+  **Evidence**: {evidence anchors from entry body}
+  **Last confirmed**: {lastConfirmed from frontmatter}
+
+[If no knowledge entries were retrieved:]
+No prior knowledge available for this review domain.
+
+**Provenance note**: If any knowledge entry above matches a finding you would independently flag, note it as "independently confirmed" in your findings. If you are only re-stating a knowledge entry without independent evidence, note it as "primed confirmation" — this distinction is critical for knowledge decay.
 
 ## Project Context
 
