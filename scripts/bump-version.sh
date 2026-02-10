@@ -102,6 +102,25 @@ git commit -m "chore: bump clavain to v$VERSION"
 git push
 echo -e "${GREEN}Pushed interagency-marketplace${NC}"
 
+# Invalidate stale plugin cache versions so next session loads the new one.
+# Claude Code caches each version in ~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/.
+# Old versions linger and can be loaded instead of the new one.
+CACHE_DIR="$HOME/.claude/plugins/cache/interagency-marketplace/clavain"
+if [ -d "$CACHE_DIR" ]; then
+    stale=0
+    for dir in "$CACHE_DIR"/*/; do
+        [ -d "$dir" ] || continue
+        dirname="$(basename "$dir")"
+        if [ "$dirname" != "$VERSION" ]; then
+            rm -rf "$dir"
+            stale=$((stale + 1))
+        fi
+    done
+    if [ "$stale" -gt 0 ]; then
+        echo -e "  ${GREEN}Cleared${NC} $stale stale cache version(s) from $CACHE_DIR"
+    fi
+fi
+
 echo ""
 echo -e "${GREEN}Done!${NC} clavain v$VERSION"
 echo ""
