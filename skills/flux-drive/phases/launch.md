@@ -29,15 +29,46 @@ fi
 If `CLODEX_MODE=true`: Read `phases/launch-codex.md` instead of continuing here.
 If `CLODEX_MODE=false`: Continue with step 2.2 below.
 
-### Step 2.2: Launch agents (Task dispatch)
+### Step 2.2: Stage 1 — Launch top agents
 
 **Condition**: Use this step when `CLODEX_MODE=false` (default).
 
-Launch all selected agents as parallel Task calls in a **single message**.
+Launch Stage 1 agents (top 2-3 by triage score) as parallel Task calls with `run_in_background: true`.
 
-**Critical**: Every agent MUST use `run_in_background: true`. This prevents agent output from flooding the main conversation context.
+Wait for Stage 1 agents to complete (use the polling from Step 2.3).
 
-### How to launch each agent type:
+### Step 2.2b: Expansion decision
+
+After Stage 1 completes, read the YAML frontmatter from each Stage 1 output file. Based on findings:
+
+| Stage 1 Result | Action |
+|---|---|
+| Any P0 issue found | Launch ALL Stage 2 agents — need convergence data |
+| Multiple P1 issues, or agents disagree | Launch ALL Stage 2 agents for coverage |
+| Single P1 from one agent only | Launch 1-2 targeted Stage 2 agents in the flagged domain |
+| Only P2/improvements or clean | **Early stop** — Stage 1 is sufficient |
+
+Present the expansion decision to user:
+```yaml
+AskUserQuestion:
+  question: "Stage 1 complete. [brief findings summary]. Expand to Stage 2?"
+  options:
+    - label: "Launch remaining N agents (Recommended)"
+      description: "Get full coverage from Stage 2 agents"
+    - label: "Stop here"
+      description: "Stage 1 findings are sufficient"
+    - label: "Launch specific agents"
+      description: "Choose which Stage 2 agents to launch"
+```
+
+If findings are only P2/improvements or clean, make "Stop here (Recommended)" the default first option.
+If expanding, present options appropriate to findings severity and continue with the user's choice.
+
+### Step 2.2c: Stage 2 — Remaining agents (if expanded)
+
+Launch Stage 2 agents with `run_in_background: true`. Wait for completion using the same polling mechanism.
+
+### How to launch each agent type (applies to Stage 1 and Stage 2):
 
 **Project Agents (.claude/agents/)**:
 - `subagent_type: general-purpose`
@@ -53,14 +84,23 @@ Launch all selected agents as parallel Task calls in a **single message**.
 - Requires `DISPLAY=:99` and `CHROME_PATH=/usr/local/bin/google-chrome-wrapper`
 - Output goes to `{OUTPUT_DIR}/oracle-council.md.partial`, renamed to `.md` on success
 
-**Orchestrator: Token trimming (before constructing prompt below):**
-For file inputs with 200+ lines, trim the document before including it in the prompt:
-1. Keep FULL content for sections in the agent's focus area
-2. Keep Summary, Goals, Non-Goals in full (if present)
-3. For ALL OTHER sections: replace with: `## [Section Name] — [1-sentence summary]`
-4. For repo reviews: include README + build files + 2-3 key source files only
+**Document content**: Include the full document in each agent's prompt without trimming. Each agent gets the complete document content.
 
-Target: ~50% of original document. The agent should not see trimming instructions.
+**Exception for very large inputs** (1000+ lines): Include only the sections relevant to the agent's focus area plus Summary, Goals, and Non-Goals. Note which sections were omitted in the agent's prompt.
+
+### Prompt trimming for agent system prompts
+
+Before including an agent's system prompt in the task prompt, strip the following sections to save tokens:
+
+1. **`<example>` blocks**: Remove all `<example>...</example>` blocks (including nested `<commentary>...</commentary>`). These are for triage routing only and are not needed during the agent's review execution.
+
+2. **Output Format sections**: Remove any section titled "Output Format", "Output", "Response Format", or similar. Flux-drive provides its own output format via the override below.
+
+3. **Style/personality sections**: Remove any section about tone, writing style, wit, humor, or directness. These don't affect finding quality in structured output mode.
+
+**Do NOT strip**: Role definition, review approach/checklist, pattern libraries, language-specific checks. These affect finding quality.
+
+**Note**: This trimming applies to **Project Agents** whose `.md` content is pasted manually. Adaptive Reviewers load their system prompt via `subagent_type` — the orchestrator cannot strip content from those. The token cost of example blocks in Adaptive Reviewer prompts is accepted.
 
 ### Prompt template for each agent:
 
@@ -86,7 +126,7 @@ The file MUST start with this YAML frontmatter block:
 
 ---
 agent: {agent-name}
-tier: {domain|project|adaptive|cross-ai}
+tier: {project|adaptive|cross-ai}
 issues:
   - id: P0-1
     severity: P0
@@ -160,18 +200,40 @@ Depth needed: [thin sections need more depth, deep sections need only validation
 Be concrete. Reference specific sections by name. Don't give generic advice.
 ```
 
-After launching all agents, tell the user:
-- How many agents were launched
+After each stage launch, tell the user:
+- How many agents were launched in that stage
 - That they are running in background
 - Estimated wait time (~3-5 minutes)
 
-### Step 2.3: Verify agent completion
+### Step 2.3: Monitor and verify agent completion
 
-After all background tasks complete (check via TaskOutput or output file existence):
+After dispatching a stage of agents, report the initial status and then poll for completion:
 
+**Initial status:**
+```
+Agent dispatch complete. Monitoring N agents...
+⏳ architecture-strategist
+⏳ security-sentinel
+⏳ go-reviewer
+...
+```
+
+**Polling loop** (every 30 seconds, up to 5 minutes):
+1. Check `{OUTPUT_DIR}/` for `.md` files (not `.md.partial` — those are still in progress)
+2. For each new `.md` file found since the last check, report:
+   ```
+   ✅ architecture-strategist (47s)
+   [2/5 agents complete]
+   ```
+3. If all expected `.md` files exist, stop polling — all agents are done
+4. After 5 minutes, report any agents still pending:
+   ```
+   ⚠️ Timeout: security-sentinel still running after 300s
+   ```
+
+**Completion verification** (after polling ends):
 1. List `{OUTPUT_DIR}/` — expect one `.md` file per launched agent (not `.md.partial`)
-2. Wait up to 5 minutes. Check for completion by looking for `.md` files (not `.partial`).
-3. For any agent where only `.md.partial` exists (started but did not complete) or no file exists:
+2. For any agent where only `.md.partial` exists (started but did not complete) or no file exists:
    a. Check the background task output for errors
    b. **Pre-retry guard**: If `{OUTPUT_DIR}/{agent-name}.md` already exists (not `.partial`), do NOT retry — the agent completed successfully
    c. **Retry once** (Task-dispatched agents only): Re-launch with the same prompt, `run_in_background: false`, `timeout: 300000` (5 min cap). Do NOT retry Oracle.
@@ -187,5 +249,5 @@ After all background tasks complete (check via TaskOutput or output file existen
       ---
       Agent failed to produce findings after retry. Error: {error message}
       ```
-4. Clean up: remove any remaining `.md.partial` files in `{OUTPUT_DIR}/`
-5. Report to user: "N/M agents completed successfully, K retried, J failed"
+3. Clean up: remove any remaining `.md.partial` files in `{OUTPUT_DIR}/`
+4. Report to user: "N/M agents completed successfully, K retried, J failed"

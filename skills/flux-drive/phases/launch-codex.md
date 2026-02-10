@@ -71,11 +71,20 @@ AGENT_NAME:
 {agent-name}
 
 TIER:
-{domain|project|adaptive|cross-ai}
+{project|adaptive|cross-ai}
 
 OUTPUT_FILE:
 {OUTPUT_DIR}/{agent-name}.md
 ```
+
+### Prompt trimming for AGENT_IDENTITY
+
+Before writing an agent's system prompt into the AGENT_IDENTITY section of the task file, strip:
+1. All `<example>...</example>` blocks (including nested `<commentary>`)
+2. Output Format sections (any section titled "Output Format", "Output", "Response Format")
+3. Style/personality sections (tone, humor, directness instructions)
+
+Keep: role definition, review approach/checklist, pattern libraries, language-specific checks.
 
 ## Dispatch all agents in parallel
 
@@ -95,6 +104,14 @@ Notes:
 - Do NOT use `-o` for output capture — the agent writes findings directly to `{OUTPUT_DIR}/{agent-name}.md`
 - Completion is detected by checking that file's existence (same as Task dispatch path)
 - **Cross-AI (Oracle)**: Unchanged — already dispatched via Bash
+
+## Monitor completion
+
+After dispatching all Codex agents, poll for completion every 30 seconds (up to 10 minutes for Codex mode):
+- Check `{OUTPUT_DIR}/` for `.md` files
+- Report each completion: `✅ {agent-name} ({elapsed}s)`
+- Report running count: `[N/M agents complete]`
+- After 10 minutes, report timeouts
 
 ## Error handling
 

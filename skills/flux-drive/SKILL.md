@@ -98,20 +98,43 @@ Do this analysis yourself (no subagents needed). The profile drives triage in St
 
 ### Step 1.2: Select Agents from Roster
 
-Consult the **Agent Roster** below and score each agent against the document profile. Present the scoring as a markdown table:
+#### Step 1.2a: Pre-filter agents
+
+Before scoring, eliminate agents that cannot plausibly score ≥1 based on the document profile:
+
+1. **Language filter**: Skip language-specific reviewers (go-reviewer, python-reviewer, typescript-reviewer, shell-reviewer, rust-reviewer) unless their language appears in the document profile's Languages field.
+2. **Data filter**: Skip data-integrity-reviewer, data-migration-expert, deployment-verification-agent unless the document mentions databases, migrations, deployments, or infrastructure.
+3. **Product filter**: Skip product-skeptic, strategic-reviewer, user-advocate unless the document type is PRD, proposal, or strategy document.
+
+Domain-general agents always pass the filter: architecture-strategist, security-sentinel, performance-oracle, code-simplicity-reviewer, pattern-recognition-specialist, concurrency-reviewer, fd-user-experience, fd-code-quality, spec-flow-analyzer.
+
+Present only passing agents in the scoring table below.
+
+Score the pre-filtered agents against the document profile. Present the scoring as a markdown table:
 
 - **2 (relevant)**: Domain directly overlaps with document content.
 - **1 (maybe)**: Adjacent domain. Include only for sections that are thin.
 - **0 (irrelevant)**: Wrong language, wrong domain, no relationship to this document.
 
-**Category bonuses**: Project Agents get +1 (project-specific). Adaptive Reviewers get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode).
+**Category bonuses**: Project Agents get +1 (project-specific). Plugin Agents get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode).
 
 **Selection rules**:
 1. All agents scoring 2+ are included
 2. Agents scoring 1 are included only if their domain covers a thin section
 3. **Cap at 8 agents total** (hard maximum)
-4. **Deduplication**: If a Project Agent covers the same domain as an Adaptive Reviewer, prefer the Project Agent
+4. **Deduplication**: If a Project Agent covers the same domain as a Plugin Agent, prefer the Project Agent
 5. Prefer fewer, more relevant agents over many marginal ones
+
+#### Stage assignment
+
+After selecting agents, assign dispatch stages:
+- **Stage 1**: Top 2-3 agents by score (ties broken by: Project > Plugin > Cross-AI)
+- **Stage 2**: All remaining selected agents
+
+Present the triage table with a Stage column:
+
+| Agent | Category | Score | Stage | Reason | Action |
+|-------|----------|-------|-------|--------|--------|
 
 ### Scoring Examples
 
@@ -154,18 +177,18 @@ Consult the **Agent Roster** below and score each agent against the document pro
 
 ### Step 1.3: User Confirmation
 
-First, present the triage table showing all agents, tiers, scores, reasons, and Launch/Skip actions.
+First, present the triage table showing all agents, tiers, scores, stages, reasons, and Launch/Skip actions.
 
 Then use **AskUserQuestion** to get approval:
 
 ```
 AskUserQuestion:
-  question: "Launch N agents for flux-drive review?"
+  question: "Stage 1: [agent names]. Stage 2 (on-demand): [agent names]. Launch Stage 1?"
   options:
     - label: "Approve"
-      description: "Launch all selected agents"
+      description: "Launch Stage 1 agents"
     - label: "Edit selection"
-      description: "Adjust which agents to launch"
+      description: "Adjust stage assignments or agents"
     - label: "Cancel"
       description: "Stop flux-drive review"
 ```
@@ -181,13 +204,13 @@ If user selects "Cancel", stop here.
 
 Check if `.claude/agents/fd-*.md` files exist in the project root. If so, include them in triage. Use `subagent_type: general-purpose` and include the agent file's full content as the system prompt in the task prompt.
 
-**Note:** `general-purpose` agents have full tool access (Read, Grep, Glob, Write, Bash, etc.) — the same as Adaptive Reviewers. The difference is that Adaptive Reviewers get their system prompt from the plugin automatically, while Project Agents need it pasted into the task prompt.
+**Note:** `general-purpose` agents have full tool access (Read, Grep, Glob, Write, Bash, etc.) — the same as Plugin Agents. The difference is that Plugin Agents get their system prompt from the plugin automatically, while Project Agents need it pasted into the task prompt.
 
 If no Project Agents exist AND clodex mode is active, flux-drive will bootstrap them via Codex (see `phases/launch-codex.md`). If no Project Agents exist and clodex mode is NOT active, skip this category entirely.
 
-### Adaptive Reviewers (clavain)
+### Plugin Agents (clavain)
 
-These agents auto-detect project documentation: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices.
+These agents are provided by the Clavain plugin. They auto-detect project documentation: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices.
 
 | Agent | subagent_type | Domain |
 |-------|--------------|--------|
@@ -206,7 +229,7 @@ These agents auto-detect project documentation: when CLAUDE.md/AGENTS.md exist, 
 | typescript-reviewer | clavain:review:typescript-reviewer | TypeScript code quality, type safety, React patterns |
 | shell-reviewer | clavain:review:shell-reviewer | Shell script safety, quoting, portability |
 | rust-reviewer | clavain:review:rust-reviewer | Rust code quality, ownership, unsafe soundness |
-| spec-flow-analyzer | clavain:workflow:spec-flow-analyzer | User flow analysis, gap identification, edge case mapping |
+| spec-flow-analyzer | clavain:workflow:spec-flow-analyzer | User flow analysis, gap identification, edge case mapping (workflow agent, not review) |
 | product-skeptic | clavain:review:product-skeptic | Problem validation, scope creep, YAGNI at the feature level, opportunity cost |
 | strategic-reviewer | clavain:review:strategic-reviewer | Business case, strategic alignment, resource allocation, build-vs-buy |
 | user-advocate | clavain:review:user-advocate | User impact, research backing, value proposition, discoverability |

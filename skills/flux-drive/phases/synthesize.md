@@ -37,6 +37,7 @@ For **malformed** outputs, read the Summary + Issues sections as prose fallback.
 1. **Group findings by section** — organize all agent findings under the section they apply to (or by topic for repo reviews)
 2. **Deduplicate**: If multiple agents flagged the same issue, keep the most specific one (prefer Project Agents over plugin Adaptive Reviewers, since they have deeper project context)
 3. **Track convergence**: Note how many agents flagged each issue (e.g., "4/6 agents"). High convergence (3+ agents) = high confidence. Include convergence counts in the Issues to Address checklist.
+**Partial agent sets**: If Stage 2 was not launched (early stop), adjust convergence counts to reflect the smaller agent set. Report in the summary: "Early stop after Stage 1: N agents ran, M agents skipped as unnecessary."
 4. **Flag conflicts**: If agents disagree, note both positions
 5. **Priority from project-specific agents**: When a Project Agent and an Adaptive Reviewer give different advice on the same topic, prefer the Project Agent's recommendation
 
@@ -46,12 +47,9 @@ For **malformed** outputs, read the Summary + Issues sections as prose fallback.
 
 #### For file inputs (plans, brainstorms, specs, etc.)
 
-Read the current file at `INPUT_FILE`. **Decide the update strategy:**
+Write findings to `{OUTPUT_DIR}/summary.md` (same as repo reviews). Do NOT modify `INPUT_FILE` by default.
 
-- **Amend** (default): Add findings to the existing document. Use when the document is mostly correct and findings are incremental improvements.
-- **Flag for archival**: When the document is fundamentally obsolete (e.g., wrong tech stack, wrong architecture), add a prominent warning at the top recommending the document be archived and rewritten. Still add findings — they apply to the actual codebase even if the document is wrong.
-
-Add a summary section at the top:
+The summary file should contain:
 
 ```markdown
 ## Flux Drive Enhancement Summary
@@ -66,15 +64,32 @@ Reviewed by N agents on YYYY-MM-DD.
 - [ ] [Issue 1 — from agents X, Y, Z] (severity, N/M agents)
 - [ ] [Issue 2 — from agent Y] (severity)
 - ...
+
+### Improvements Suggested
+- [Numbered, with rationale and agent attribution]
+
+### Individual Agent Reports
+- [{agent-name}](./{agent-name}.md) — [1-line verdict summary]
+- ...
 ```
 
-For each section that received feedback, add an inline note:
+After writing the summary file, ask:
+
+```yaml
+AskUserQuestion:
+  question: "Summary written to {OUTPUT_DIR}/summary.md. Add inline annotations to the original document?"
+  options:
+    - label: "No, summary only (Recommended)"
+      description: "Keep the original document clean"
+    - label: "Yes, add inline annotations"
+      description: "Add findings as blockquotes in the original document"
+```
+
+If the user opts in to inline annotations, then apply the existing inline logic: add the Enhancement Summary header at the top of `INPUT_FILE` and add per-section blockquotes:
 
 ```markdown
 > **Flux Drive** ({agent-name}): [Concise finding or suggestion]
 ```
-
-Write the updated document back to `INPUT_FILE`.
 
 #### For repo reviews (directory input, no specific file)
 
