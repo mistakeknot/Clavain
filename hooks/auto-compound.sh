@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook: evaluate whether to suggest /compound after each turn
+# Stop hook: auto-compound non-trivial problem-solving after each turn
 #
 # Analyzes the recent conversation for compoundable signals:
 #   - Git commits (suggests documenting what was solved)
@@ -9,7 +9,7 @@
 #
 # Uses stop_hook_active to prevent infinite re-triggering.
 # Returns JSON with decision:"block" + reason when compound is warranted,
-# causing Claude to evaluate and optionally run /compound.
+# causing Claude to evaluate and automatically run /compound with a brief notice.
 #
 # Input: Hook JSON on stdin (session_id, transcript_path, stop_hook_active)
 # Output: JSON on stdout
@@ -75,7 +75,7 @@ fi
 SIGNALS="${SIGNALS%,}"
 
 # Build the reason prompt — this is what Claude sees
-REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight), suggest running /clavain:compound to the user. If NO (trivial fix, routine commit, or already documented), say nothing and stop. Be brief — one sentence suggestion or silence."
+REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."
 
 # Return block decision to inject the evaluation prompt
 cat <<EOF
