@@ -153,7 +153,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (27)
+### Commands (28)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -171,6 +171,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/plan-review` | Parallel plan review |
 | `/quality-gates` | Auto-select the right reviewers |
 | `/fixbuild` | Fast build-error fix loop — run, parse, fix, re-run |
+| `/smoke-test` | End-to-end smoke test — detect app, walk user journeys, report results |
 | `/repro-first-debugging` | Disciplined bug investigation |
 | `/debate` | Structured Claude↔Codex debate |
 | `/interpeer` | Quick cross-AI peer review |

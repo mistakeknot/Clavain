@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 33 skills, 16 agents, 27 commands, 5 hooks, 2 MCP servers |
+| Components | 33 skills, 16 agents, 28 commands, 5 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks

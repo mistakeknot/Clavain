@@ -21,8 +21,46 @@ Load plan, review critically, execute tasks in batches, report for review betwee
 3. If concerns: Raise them with your human partner before starting
 4. If no concerns: Create TodoWrite and proceed
 
-### Step 2: Execute Batch
-**Default: First 3 tasks**
+### Step 2: Check Execution Mode
+
+```bash
+FLAG_FILE="$(pwd)/.claude/clodex-toggle.flag"
+[ -f "$FLAG_FILE" ] && echo "CLODEX_ACTIVE" || echo "DIRECT_MODE"
+```
+
+- **CLODEX_ACTIVE** → Go to Step 2A (Codex Dispatch)
+- **DIRECT_MODE** → Go to Step 2B (Direct Execution)
+
+### Step 2A: Codex Dispatch (clodex mode)
+
+When clodex mode is active, dispatch tasks to Codex agents instead of executing directly. This enables parallelization — independent tasks run concurrently.
+
+1. **Classify tasks** from the plan into:
+   - **Independent** — no shared files, can run in parallel → Codex agents
+   - **Sequential** — depends on prior task output → dispatch in order
+   - **Exploratory** — needs deep reasoning or unclear scope → Claude subagent
+
+2. **Group into dispatch batches:**
+   - Independent tasks in the same batch run in parallel
+   - Sequential tasks go in consecutive batches
+   - Max 5 agents per batch (to avoid overwhelming resources)
+
+3. **For each batch**, use the `clavain:clodex` skill:
+   - Write task description files (one per task) to `/tmp/codex-task-<name>.md`
+   - Dispatch all independent tasks in a single message (parallel Bash calls)
+   - Wait for all agents to complete
+   - Read each agent's output and verify (build, test, diff review)
+
+4. **Between batches:** Report what completed, what passed/failed, and any issues. Wait for feedback before next batch.
+
+5. **On failure:** If a Codex agent fails, offer:
+   - Retry with tighter prompt (include error context)
+   - Execute directly (fall back to Step 2B for that task)
+   - Skip and continue
+
+### Step 2B: Direct Execution (default)
+
+**Default: First 3 tasks per batch**
 
 For each task:
 1. Mark as in_progress
@@ -81,3 +119,4 @@ After all tasks complete and verified:
 **Required workflow skills:**
 - **clavain:writing-plans** - Creates the plan this skill executes
 - **clavain:landing-a-change** - Complete development after all tasks
+- **clavain:clodex** - Codex dispatch (used when clodex mode is active)

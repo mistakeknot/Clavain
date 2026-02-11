@@ -7,6 +7,8 @@ setup_file() {
     cp "$BATS_TEST_DIRNAME/../fixtures/transcript_with_commit.jsonl" "$TMPDIR_COMPOUND/transcript_commit.jsonl"
     cp "$BATS_TEST_DIRNAME/../fixtures/transcript_with_insight.jsonl" "$TMPDIR_COMPOUND/transcript_insight.jsonl"
     cp "$BATS_TEST_DIRNAME/../fixtures/transcript_clean.jsonl" "$TMPDIR_COMPOUND/transcript_clean.jsonl"
+    cp "$BATS_TEST_DIRNAME/../fixtures/transcript_single_commit.jsonl" "$TMPDIR_COMPOUND/transcript_single_commit.jsonl"
+    cp "$BATS_TEST_DIRNAME/../fixtures/transcript_with_recovery.jsonl" "$TMPDIR_COMPOUND/transcript_recovery.jsonl"
 }
 
 teardown_file() {
@@ -24,17 +26,31 @@ setup() {
     assert_output ""
 }
 
-@test "auto-compound: detects commit signal" {
+@test "auto-compound: detects commit+bead-close signals (weight >= 2)" {
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
-    # Should output block decision with commit signal
+    # Should output block decision with combined signals
     echo "$output" | jq -e '.decision == "block"'
 }
 
-@test "auto-compound: detects insight signal" {
+@test "auto-compound: detects insight+commit signals (weight >= 2)" {
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_insight.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
-    # Should output block decision with insight signal
+    # Should output block decision with combined signals
+    echo "$output" | jq -e '.decision == "block"'
+}
+
+@test "auto-compound: single commit below threshold (weight 1)" {
+    run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_single_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
+    assert_success
+    # Single commit has weight 1, below threshold of 2
+    assert_output ""
+}
+
+@test "auto-compound: detects build/test recovery (weight >= 2)" {
+    run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_recovery.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
+    assert_success
+    # Recovery signal (fail then pass) has weight 2, plus error-fix-cycle weight 1
     echo "$output" | jq -e '.decision == "block"'
 }
 
@@ -54,7 +70,7 @@ setup() {
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"/nonexistent/file.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
 
-    # Even with commit signal
+    # Even with combined signals
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
 }
