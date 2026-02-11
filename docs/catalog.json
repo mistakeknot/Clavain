@@ -1,0 +1,340 @@
+{
+  "generated": "2026-02-11T15:58:20Z",
+  "counts": {
+    "skills": 33,
+    "agents": 16,
+    "commands": 28,
+    "hooks": 5,
+    "mcp_servers": 2
+  },
+  "skills": [
+    {
+      "name": "agent-native-architecture",
+      "description": "Build applications where agents are first-class citizens. Use this skill when designing autonomous agents, creating MCP tools, implementing self-modifying systems, or building apps where features are outcomes achieved by agents operating in a loop."
+    },
+    {
+      "name": "beads-workflow",
+      "description": "Use when tracking work across sessions with Beads issue tracking \u2014 guides the bd CLI workflow for creating, managing, and closing issues with dependencies"
+    },
+    {
+      "name": "brainstorming",
+      "description": "Freeform brainstorming mode \u2014 loads collaborative dialogue style (one question at a time, multiple choice, incremental design). Use for open-ended exploration without structured phases. For a guided workflow with repo research, use /brainstorm instead."
+    },
+    {
+      "name": "clodex",
+      "description": "Dispatch tasks to Codex CLI agents \u2014 single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation."
+    },
+    {
+      "name": "create-agent-skills",
+      "description": "Expert guidance for creating Claude Code skills and slash commands. Use when working with SKILL.md files, authoring new skills, improving existing skills, creating slash commands, or understanding skill structure and best practices."
+    },
+    {
+      "name": "developing-claude-code-plugins",
+      "description": "Use when working on Claude Code plugins (creating, modifying, testing, releasing, or maintaining) - provides streamlined workflows, patterns, and examples for the complete plugin lifecycle"
+    },
+    {
+      "name": "dispatching-parallel-agents",
+      "description": "Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies"
+    },
+    {
+      "name": "distinctive-design",
+      "description": "Use when creating distinctive, production-grade interfaces with high design quality \u2014 web, TUI, native, or print. Generates creative, polished output that avoids generic AI aesthetics."
+    },
+    {
+      "name": "engineering-docs",
+      "description": "Use when capturing a solved problem as categorized documentation with YAML frontmatter for fast lookup"
+    },
+    {
+      "name": "executing-plans",
+      "description": "Use when you have a written implementation plan to execute in a separate session with review checkpoints"
+    },
+    {
+      "name": "file-todos",
+      "description": "This skill should be used when managing the file-based todo tracking system in the todos/ directory. It provides workflows for creating todos, managing status and dependencies, conducting triage, and integrating with slash commands and code review processes."
+    },
+    {
+      "name": "finding-duplicate-functions",
+      "description": "Use when auditing a codebase for semantic duplication - functions that do the same thing but have different names or implementations. Especially useful for LLM-generated codebases where new functions are often created rather than reusing existing ones."
+    },
+    {
+      "name": "flux-drive",
+      "description": "Use when reviewing documents or codebases with multi-agent analysis \u2014 triages relevant agents from roster, launches only what matters in background mode"
+    },
+    {
+      "name": "interpeer",
+      "description": "Cross-AI peer review with escalation modes \u2014 quick (Claude\u2194Codex), deep (reviewed Oracle query), council (multi-model synthesis), mine (disagreement extraction). Auto-detects host agent."
+    },
+    {
+      "name": "landing-a-change",
+      "description": "Use when implementation is complete and all tests pass \u2014 guides the disciplined process of verifying, documenting, and landing a change on trunk"
+    },
+    {
+      "name": "mcp-cli",
+      "description": "Use when interacting with MCP servers on-demand via the mcp CLI tool \u2014 discover tools, resources, and prompts without polluting context with pre-loaded integrations"
+    },
+    {
+      "name": "prompterpeer",
+      "description": "Oracle prompt optimizer with human review. Builds high-quality prompts for GPT-5.2 Pro and shows the enhanced prompt for approval before sending. For careful, reviewed queries to Oracle."
+    },
+    {
+      "name": "receiving-code-review",
+      "description": "Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation"
+    },
+    {
+      "name": "refactor-safely",
+      "description": "Use when performing significant refactoring \u2014 guides a disciplined process that leverages duplication detection, characterization tests, staged execution, and continuous simplicity review"
+    },
+    {
+      "name": "requesting-code-review",
+      "description": "Use when completing tasks, implementing major features, or before merging to verify work meets requirements"
+    },
+    {
+      "name": "slack-messaging",
+      "description": "Use when asked to send or read Slack messages, check Slack channels, test Slack integrations, or interact with a Slack workspace from the command line."
+    },
+    {
+      "name": "splinterpeer",
+      "description": "Extract disagreements between AI models and convert them into actionable artifacts (tests, specs, clarifying questions). Turns model conflict into engineering progress rather than just picking a side."
+    },
+    {
+      "name": "subagent-driven-development",
+      "description": "Use when executing implementation plans with independent tasks in the current session"
+    },
+    {
+      "name": "systematic-debugging",
+      "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes"
+    },
+    {
+      "name": "test-driven-development",
+      "description": "Use when implementing any feature or bugfix, before writing implementation code"
+    },
+    {
+      "name": "upstream-sync",
+      "description": "Use when checking for updates from upstream tool repos (beads, oracle, superpowers, compound-engineering) or when the /clavain:upstream-sync command is invoked"
+    },
+    {
+      "name": "using-clavain",
+      "description": "Use when starting any conversation - establishes how to find and use skills, agents, and commands, requiring Skill tool invocation before ANY response including clarifying questions"
+    },
+    {
+      "name": "using-tmux-for-interactive-commands",
+      "description": "Use when you need to run interactive CLI tools (vim, git rebase -i, Python REPL, etc.) that require real-time input/output - provides tmux-based approach for controlling interactive sessions through detached sessions and send-keys"
+    },
+    {
+      "name": "verification-before-completion",
+      "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always"
+    },
+    {
+      "name": "winterpeer",
+      "description": "LLM Council review for critical decisions. Gets consensus from GPT (via Oracle) and Claude (current session) with synthesized recommendations. For multiple perspectives on important architectural or design decisions."
+    },
+    {
+      "name": "working-with-claude-code",
+      "description": "Use when working with Claude Code CLI, plugins, hooks, MCP servers, skills, configuration, or any Claude Code feature - provides comprehensive official documentation for all aspects of Claude Code"
+    },
+    {
+      "name": "writing-plans",
+      "description": "Use when you have a spec or requirements for a multi-step task, before touching code"
+    },
+    {
+      "name": "writing-skills",
+      "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment"
+    }
+  ],
+  "agents": [
+    {
+      "name": "best-practices-researcher",
+      "description": "Researches and synthesizes external best practices, documentation, and examples for any technology or framework. Use when you need industry standards, community conventions, or implementation guidance.",
+      "category": "research"
+    },
+    {
+      "name": "framework-docs-researcher",
+      "description": "Gathers comprehensive documentation and best practices for frameworks, libraries, or dependencies. Use when you need official docs, version-specific constraints, or implementation patterns.",
+      "category": "research"
+    },
+    {
+      "name": "git-history-analyzer",
+      "description": "Performs archaeological analysis of git history to trace code evolution, identify contributors, and understand why code patterns exist. Use when you need historical context for code changes.",
+      "category": "research"
+    },
+    {
+      "name": "learnings-researcher",
+      "description": "Searches docs/solutions/ for relevant past solutions by frontmatter metadata. Use before implementing features or fixing problems to surface institutional knowledge and prevent repeated mistakes.",
+      "category": "research"
+    },
+    {
+      "name": "repo-research-analyst",
+      "description": "Conducts thorough research on repository structure, documentation, conventions, and implementation patterns. Use when onboarding to a new codebase or understanding project conventions.",
+      "category": "research"
+    },
+    {
+      "name": "agent-native-reviewer",
+      "description": "Reviews code to ensure agent-native parity \u2014 any action a user can take, an agent can also take. Use after adding UI features, agent tools, or system prompts.",
+      "category": "review"
+    },
+    {
+      "name": "data-migration-expert",
+      "description": "Validates data migrations, backfills, and production data transformations against reality. Use when PRs involve ID mappings, column renames, enum conversions, or schema changes.",
+      "category": "review"
+    },
+    {
+      "name": "fd-architecture",
+      "description": "Flux-drive Architecture & Design reviewer \u2014 evaluates module boundaries, coupling, design patterns, anti-patterns, code duplication, and unnecessary complexity. Reads project docs when available for codebase-aware analysis.",
+      "category": "review"
+    },
+    {
+      "name": "fd-correctness",
+      "description": "Flux-drive Correctness reviewer \u2014 evaluates data consistency, transaction safety, race conditions, async bugs, and concurrency patterns across all languages. Reads project docs when available.",
+      "category": "review"
+    },
+    {
+      "name": "fd-performance",
+      "description": "Flux-drive Performance reviewer \u2014 evaluates rendering bottlenecks, data access patterns, algorithmic complexity, memory usage, and resource consumption. Reads project docs when available.",
+      "category": "review"
+    },
+    {
+      "name": "fd-quality",
+      "description": "Flux-drive Quality & Style reviewer \u2014 evaluates naming, conventions, test approach, error handling, and language-specific idioms. Auto-detects language from context. Reads project docs when available.",
+      "category": "review"
+    },
+    {
+      "name": "fd-safety",
+      "description": "Flux-drive Safety reviewer \u2014 evaluates security threats, credential handling, trust boundaries, deployment risk, rollback procedures, and migration safety. Reads project docs when available.",
+      "category": "review"
+    },
+    {
+      "name": "fd-user-product",
+      "description": "Flux-drive User & Product reviewer \u2014 evaluates user flows, UX friction, value proposition, problem validation, scope creep, and missing edge cases. Reads project docs when available.",
+      "category": "review"
+    },
+    {
+      "name": "plan-reviewer",
+      "description": "Use this agent when a major project step has been completed and needs to be reviewed against the original plan and coding standards. Examples: <example>Context: The user is creating a code-review agent that should be called after a logical chunk of code is written. user: \"I've finished implementing the user authentication system as outlined in step 3 of our plan\" assistant: \"Great work! Now let me use the plan-reviewer agent to review the implementation against our plan and coding standards\" <commentary>Since a major project step has been completed, use the plan-reviewer agent to validate the work against the plan and identify any issues.</commentary></example> <example>Context: User has completed a significant feature implementation. user: \"The API endpoints for the task management system are now complete - that covers step 2 from our architecture document\" assistant: \"Excellent! Let me have the plan-reviewer agent examine this implementation to ensure it aligns with our plan and follows best practices\" <commentary>A numbered step from the planning document has been completed, so the plan-reviewer agent should review the work.</commentary></example>",
+      "category": "review"
+    },
+    {
+      "name": "bug-reproduction-validator",
+      "description": "Systematically reproduces and validates bug reports to confirm whether reported behavior is an actual bug. Use when you receive a bug report or issue that needs verification.",
+      "category": "workflow"
+    },
+    {
+      "name": "pr-comment-resolver",
+      "description": "Addresses PR review comments by implementing requested changes and reporting resolutions. Use when code review feedback needs to be resolved with code changes.",
+      "category": "workflow"
+    }
+  ],
+  "commands": [
+    {
+      "name": "agent-native-audit",
+      "description": "Run comprehensive agent-native architecture review with scored principles"
+    },
+    {
+      "name": "brainstorm",
+      "description": "Structured brainstorm workflow \u2014 4 phases (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan. For freeform brainstorming without phases, use /brainstorming instead."
+    },
+    {
+      "name": "changelog",
+      "description": "Create engaging changelogs for recent merges to main branch"
+    },
+    {
+      "name": "clodex-toggle",
+      "description": "Toggle clodex execution mode \u2014 source code changes go through Codex agents, non-code files remain directly editable"
+    },
+    {
+      "name": "compound",
+      "description": "Document a recently solved problem to compound your team's knowledge"
+    },
+    {
+      "name": "create-agent-skill",
+      "description": "Create or edit Claude Code skills with expert guidance on structure and best practices"
+    },
+    {
+      "name": "debate",
+      "description": "Run a structured Claude\u2194Codex debate before implementing a complex task"
+    },
+    {
+      "name": "execute-plan",
+      "description": "Execute plan in batches with review checkpoints"
+    },
+    {
+      "name": "fixbuild",
+      "description": "Run build, capture error, fix it, re-run \u2014 fast loop for type errors and build failures without heavyweight debugging"
+    },
+    {
+      "name": "flux-drive",
+      "description": "Intelligent document review \u2014 triages relevant agents, launches only what matters in background mode"
+    },
+    {
+      "name": "generate-command",
+      "description": "Create a new custom slash command following conventions and best practices"
+    },
+    {
+      "name": "heal-skill",
+      "description": "Fix incorrect SKILL.md files when a skill has wrong instructions or outdated API references"
+    },
+    {
+      "name": "interpeer",
+      "description": "Quick cross-AI peer review \u2014 auto-detects host agent and calls the other for a second opinion"
+    },
+    {
+      "name": "lfg",
+      "description": "Full autonomous engineering workflow \u2014 brainstorm, strategize, plan, execute, review, ship"
+    },
+    {
+      "name": "migration-safety",
+      "description": "Orchestrate database migration and data-risk work with consistent safety checks \u2014 combines data integrity, migration, and deployment verification agents"
+    },
+    {
+      "name": "model-routing",
+      "description": "Toggle subagent model routing between economy (smart defaults) and quality (all Opus) mode"
+    },
+    {
+      "name": "plan-review",
+      "description": "Have multiple specialized agents review a plan in parallel"
+    },
+    {
+      "name": "quality-gates",
+      "description": "Auto-select and run the right reviewer agents based on what changed \u2014 one command for comprehensive quality review"
+    },
+    {
+      "name": "repro-first-debugging",
+      "description": "Disciplined bug investigation that enforces \"reproduce first, then diagnose\" \u2014 composes debugging agents into a structured workflow"
+    },
+    {
+      "name": "resolve",
+      "description": "Resolve findings from any source \u2014 auto-detects TODOs, PR comments, or todo files, then resolves in parallel"
+    },
+    {
+      "name": "review",
+      "description": "Perform exhaustive code reviews using multi-agent analysis and deep inspection"
+    },
+    {
+      "name": "setup",
+      "description": "Bootstrap the Clavain modpack \u2014 install required plugins, disable conflicts, verify MCP servers, configure hooks"
+    },
+    {
+      "name": "smoke-test",
+      "description": "Run smoke tests against a running app \u2014 detect dev server, walk critical user journeys, report results"
+    },
+    {
+      "name": "strategy",
+      "description": "Structure brainstorm output into a PRD with features, create beads for tracking, and validate before detailed planning"
+    },
+    {
+      "name": "triage",
+      "description": "Triage and categorize findings for the CLI todo system"
+    },
+    {
+      "name": "upstream-sync",
+      "description": "Check upstream repos (beads, oracle, superpowers, compound-engineering) for updates and generate upgrade checklist"
+    },
+    {
+      "name": "work",
+      "description": "Execute work plans efficiently while maintaining quality and finishing features"
+    },
+    {
+      "name": "write-plan",
+      "description": "Create detailed implementation plan with bite-sized tasks"
+    }
+  ]
+}

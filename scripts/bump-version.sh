@@ -41,6 +41,14 @@ if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; the
     exit 1
 fi
 
+if $DRY_RUN; then
+    if ! python3 "$REPO_ROOT/scripts/gen-catalog.py" --check; then
+        echo -e "${YELLOW}[dry-run] Catalog drift detected. Run python3 scripts/gen-catalog.py to refresh.${NC}"
+    fi
+else
+    python3 "$REPO_ROOT/scripts/gen-catalog.py"
+fi
+
 CURRENT=$(grep -E '"version"' "$REPO_ROOT/.claude-plugin/plugin.json" | sed 's/.*"\([0-9][^"]*\)".*/\1/')
 echo "Current version: $CURRENT"
 echo "New version:     $VERSION"
