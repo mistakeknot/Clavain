@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 33 skills, 16 agents, 23 commands, 4 hooks, 2 MCP servers |
+| Components | 33 skills, 16 agents, 25 commands, 5 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -40,13 +40,15 @@ Clavain/
 │   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 24 slash commands
+├── commands/                      # 25 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 22 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 23 others)
 ├── hooks/
-│   ├── hooks.json                 # Hook registration (SessionStart + Stop + SessionEnd)
+│   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
 │   ├── session-start.sh           # Context injection + upstream staleness warning
+│   ├── auto-compound.sh           # Auto-compound knowledge capture on Stop
+│   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
 ├── config/
 │   └── flux-drive/knowledge/      # Knowledge layer — durable patterns from past reviews
@@ -147,8 +149,13 @@ Categories:
 
 - Registration in `hooks/hooks.json` — specifies event, matcher regex, and command
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
+- **PreToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
+  - `autopilot.sh` — validates write operations in codex-first mode
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
   - `session-start.sh` — injects `using-clavain` skill content + warns if upstream versions >7 days old
+- **Stop**:
+  - `auto-compound.sh` — detects compoundable signals (commits, resolutions, insights), prompts knowledge capture
+  - `session-handoff.sh` — detects uncommitted work or in-progress beads, prompts HANDOFF.md creation (once per session)
 - **SessionEnd**:
   - `dotfiles-sync.sh` — syncs dotfile changes at end of session
 - Scripts must output valid JSON to stdout
@@ -192,6 +199,8 @@ When making changes, verify:
 - [ ] `hooks/hooks.json` is valid JSON
 - [ ] `hooks/lib.sh` passes `bash -n` syntax check
 - [ ] `hooks/session-start.sh` passes `bash -n` syntax check
+- [ ] `hooks/auto-compound.sh` passes `bash -n` syntax check
+- [ ] `hooks/session-handoff.sh` passes `bash -n` syntax check
 - [ ] `hooks/dotfiles-sync.sh` passes `bash -n` syntax check
 - [ ] No references to dropped namespaces (`superpowers:`, `compound-engineering:`)
 - [ ] No references to dropped components (Rails, Ruby, Every.to, Figma, Xcode)
@@ -200,9 +209,9 @@ When making changes, verify:
 Quick validation:
 ```bash
 # Count components
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 34
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 33
 echo "Agents: $(ls agents/{review,research,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 24
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 25
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
@@ -215,6 +224,8 @@ python3 -c "import json; json.load(open('hooks/hooks.json')); print('Hooks OK')"
 # Syntax check scripts
 bash -n hooks/lib.sh && echo "lib.sh OK"
 bash -n hooks/session-start.sh && echo "session-start.sh OK"
+bash -n hooks/auto-compound.sh && echo "auto-compound.sh OK"
+bash -n hooks/session-handoff.sh && echo "session-handoff.sh OK"
 bash -n hooks/dotfiles-sync.sh && echo "dotfiles-sync.sh OK"
 bash -n scripts/upstream-check.sh && echo "Upstream check OK"
 

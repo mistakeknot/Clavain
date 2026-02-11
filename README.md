@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 33 skills, 16 agents, 23 commands, 4 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 33 skills, 16 agents, 25 commands, 5 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -153,7 +153,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (24)
+### Commands (25)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -169,12 +169,14 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/execute-plan` | Execute plan in batches with checkpoints |
 | `/plan-review` | Parallel plan review |
 | `/quality-gates` | Auto-select the right reviewers |
+| `/fixbuild` | Fast build-error fix loop — run, parse, fix, re-run |
 | `/repro-first-debugging` | Disciplined bug investigation |
 | `/debate` | Structured Claude↔Codex debate |
 | `/interpeer` | Quick cross-AI peer review |
 | `/migration-safety` | Data migration risk assessment |
 | `/compound` | Document solved problems |
 | `/changelog` | Generate changelog from recent merges |
+| `/clodex-toggle` | Toggle Codex-first execution mode |
 | `/triage` | Categorize and prioritize findings |
 | `/resolve` | Resolve findings from any source (auto-detects TODOs, PR comments, or todo files) |
 | `/agent-native-audit` | Agent-native architecture review |
@@ -185,10 +187,11 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
-### Hooks (4)
+### Hooks (5)
 
+- **PreToolUse** — Autopilot gate: validates write operations in codex-first mode (`autopilot.sh`).
 - **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact) (`session-start.sh`).
-- **Stop** — Auto-compound check: detects compoundable signals (commits, resolutions, insights) and prompts knowledge capture (`auto-compound.sh`).
+- **Stop** — Auto-compound check: detects compoundable signals and prompts knowledge capture (`auto-compound.sh`). Session handoff: detects uncommitted work or in-progress beads and prompts HANDOFF.md creation (`session-handoff.sh`).
 - **SessionEnd** — Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
 ### MCP Servers (2)
@@ -255,10 +258,12 @@ clavain/
 │   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 23 slash commands
+├── commands/                      # 25 slash commands
 ├── hooks/
-│   ├── hooks.json                 # Hook registration (SessionStart + Stop + SessionEnd)
+│   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + Stop + SessionEnd)
 │   ├── session-start.sh           # Context injection + staleness warning
+│   ├── auto-compound.sh           # Auto-compound knowledge capture on Stop
+│   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
 │   └── dotfiles-sync.sh           # Dotfile sync on session end
 ├── config/
 │   └── flux-drive/knowledge/      # Knowledge layer — patterns from past reviews
