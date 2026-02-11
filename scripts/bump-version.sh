@@ -77,6 +77,15 @@ update_file \
     "\"version\": \"$VERSION\"" \
     ".claude-plugin/plugin.json"
 
+RIG_CURRENT=$(grep -E '"version"' "$REPO_ROOT/agent-rig.json" 2>/dev/null | head -1 | sed 's/.*"\([0-9][^"]*\)".*/\1/')
+if [ -n "$RIG_CURRENT" ]; then
+    update_file \
+        "$REPO_ROOT/agent-rig.json" \
+        "\"version\": \"$RIG_CURRENT\"" \
+        "\"version\": \"$VERSION\"" \
+        "agent-rig.json"
+fi
+
 MARKETPLACE_CURRENT=$(grep -A10 '"clavain"' "$MARKETPLACE_ROOT/.claude-plugin/marketplace.json" | grep '"version"' | sed 's/.*"\([0-9][^"]*\)".*/\1/')
 update_file \
     "$MARKETPLACE_ROOT/.claude-plugin/marketplace.json" \
@@ -91,7 +100,7 @@ fi
 
 echo ""
 cd "$REPO_ROOT"
-git add .claude-plugin/plugin.json
+git add .claude-plugin/plugin.json agent-rig.json
 git commit -m "chore: bump version to $VERSION"
 git push
 echo -e "${GREEN}Pushed Clavain${NC}"
@@ -102,26 +111,13 @@ git commit -m "chore: bump clavain to v$VERSION"
 git push
 echo -e "${GREEN}Pushed interagency-marketplace${NC}"
 
-# Invalidate stale plugin cache versions so next session loads the new one.
-# Claude Code caches each version in ~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/.
-# Old versions linger and can be loaded instead of the new one.
-CACHE_DIR="$HOME/.claude/plugins/cache/interagency-marketplace/clavain"
-if [ -d "$CACHE_DIR" ]; then
-    stale=0
-    for dir in "$CACHE_DIR"/*/; do
-        [ -d "$dir" ] || continue
-        dirname="$(basename "$dir")"
-        if [ "$dirname" != "$VERSION" ]; then
-            rm -rf "$dir"
-            stale=$((stale + 1))
-        fi
-    done
-    if [ "$stale" -gt 0 ]; then
-        echo -e "  ${GREEN}Cleared${NC} $stale stale cache version(s) from $CACHE_DIR"
-    fi
-fi
+# Note: stale cache cleanup moved to session-start.sh hook.
+# Deleting old cache mid-session broke Stop hooks (auto-compound.sh) because
+# CLAUDE_PLUGIN_ROOT pointed to the deleted directory for the rest of the session.
+# Now the SessionStart hook cleans up old versions at the start of the NEXT session.
 
 echo ""
 echo -e "${GREEN}Done!${NC} clavain v$VERSION"
 echo ""
 echo "Next: restart Claude Code sessions to pick up the new plugin version."
+echo "  (Stale cache versions will be cleaned up automatically on next session start.)"

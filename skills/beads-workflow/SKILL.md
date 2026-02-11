@@ -179,5 +179,4 @@ This typically reduces batch-created backlogs by 30-40% and prevents fragmented 
 - `file-todos` — Beads for cross-session, file-todos for within-session
 - `landing-a-change` — Session close protocol ensures beads are synced
 - `triage` command — Categorize and prioritize beads issues
-- `agent-mail-coordination` — Use beads issue IDs as Agent Mail `thread_id` to link conversations to tracked work
 - `dispatching-parallel-agents` — Use `bv` to identify independent work streams before dispatching

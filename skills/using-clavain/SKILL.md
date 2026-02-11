@@ -51,7 +51,7 @@ Clavain provides 34 skills, 16 agents, and 23 commands. To avoid overwhelm, use 
 | **Deploy** | — | fd-safety |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
-| **Workflow** | file-todos, beads-workflow, slack-messaging, agent-mail-coordination, clodex | pr-comment-resolver |
+| **Workflow** | file-todos, beads-workflow, slack-messaging, clodex | pr-comment-resolver |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
 

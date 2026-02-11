@@ -36,26 +36,6 @@
       }
     },
     {
-      "name": "mcp-agent-mail",
-      "url": "https://github.com/Dicklesworthstone/mcp_agent_mail.git",
-      "branch": "main",
-      "lastSyncedCommit": "061435c07455aa3fb3ac83367344ac749feedfdc",
-      "basePath": "",
-      "fileMap": {
-        "SKILL.md": "skills/agent-mail-coordination/SKILL.md",
-        "README.md": "skills/agent-mail-coordination/references/upstream-readme.md",
-        "codex.mcp.json": "skills/agent-mail-coordination/references/codex.mcp.json",
-        "scripts/integrate_codex_cli.sh": "skills/agent-mail-coordination/references/integrate_codex_cli.sh",
-        "scripts/hooks/check_inbox.sh": "skills/agent-mail-coordination/references/hooks/check_inbox.sh",
-        "scripts/hooks/codex_notify.sh": "skills/agent-mail-coordination/references/hooks/codex_notify.sh",
-        "docs/GUIDE_TO_OPTIMAL_MCP_SERVER_DESIGN.md": "skills/agent-mail-coordination/references/server-design-guide.md",
-        "docs/observability.md": "skills/agent-mail-coordination/references/observability.md",
-        "docs/operations_alignment_checklist.md": "skills/agent-mail-coordination/references/operations-alignment-checklist.md",
-        "docs/adr/*": "skills/agent-mail-coordination/references/adr/*",
-        "docs/deployment_samples/*": "skills/agent-mail-coordination/references/deployment_samples/*"
-      }
-    },
-    {
       "name": "superpowers",
       "url": "https://github.com/obra/superpowers.git",
       "branch": "main",

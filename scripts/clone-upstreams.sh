@@ -17,7 +17,6 @@ declare -A REPOS=(
   [compound-engineering]="https://github.com/EveryInc/compound-engineering-plugin.git"
   [beads]="https://github.com/steveyegge/beads.git"
   [oracle]="https://github.com/steipete/oracle.git"
-  [mcp-agent-mail]="https://github.com/Dicklesworthstone/mcp_agent_mail.git"
 )
 
 mkdir -p "$UPSTREAMS_DIR"

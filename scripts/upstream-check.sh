@@ -20,7 +20,6 @@ VERSIONS_FILE="${REPO_ROOT}/docs/upstream-versions.json"
 UPSTREAMS=(
   "steveyegge/beads|beads-workflow"
   "steipete/oracle|oracle-review"
-  "Dicklesworthstone/mcp_agent_mail|agent-mail-coordination"
   "obra/superpowers|multiple (founding source)"
   "obra/superpowers-lab|using-tmux-for-interactive-commands,slack-messaging,mcp-cli,finding-duplicate-functions"
   "obra/superpowers-developing-for-claude-code|developing-claude-code-plugins,working-with-claude-code"

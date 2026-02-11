@@ -23,7 +23,6 @@ declare -A DIR_TO_NAME=(
   [compound-engineering]=compound-engineering
   [beads]=beads
   [oracle]=oracle
-  [mcp-agent-mail]=mcp-agent-mail
 )
 
 RED='\033[0;31m'

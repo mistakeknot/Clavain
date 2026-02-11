@@ -129,7 +129,6 @@ oracle session <id> --render         # Replay a session
 - `writing-plans` — Review plans before execution
 - `plan-review` command — Use alongside Clavain's own multi-agent review for model diversity
 - `brainstorming` — Get Oracle's take on approach options
-- `agent-mail-coordination` — Share Oracle results across agents via Agent Mail messages (attach review output to a thread)
 - `interpeer` — Cross-AI review (quick/deep/council/mine modes)
 
 **Example workflow:**

@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 34 skills, 16 agents, 23 commands, 4 hooks, 3 MCP servers |
+| Components | 33 skills, 16 agents, 23 commands, 4 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -47,7 +47,6 @@ Clavain/
 │   ├── hooks.json                 # Hook registration (SessionStart + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
 │   ├── session-start.sh           # Context injection + upstream staleness warning
-│   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
 ├── config/
 │   └── flux-drive/knowledge/      # Knowledge layer — durable patterns from past reviews
@@ -150,7 +149,6 @@ Categories:
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
   - `session-start.sh` — injects `using-clavain` skill content + warns if upstream versions >7 days old
-  - `agent-mail-register.sh` — registers agent identity with MCP Agent Mail server
 - **SessionEnd**:
   - `dotfiles-sync.sh` — syncs dotfile changes at end of session
 - Scripts must output valid JSON to stdout
@@ -194,7 +192,6 @@ When making changes, verify:
 - [ ] `hooks/hooks.json` is valid JSON
 - [ ] `hooks/lib.sh` passes `bash -n` syntax check
 - [ ] `hooks/session-start.sh` passes `bash -n` syntax check
-- [ ] `hooks/agent-mail-register.sh` passes `bash -n` syntax check
 - [ ] `hooks/dotfiles-sync.sh` passes `bash -n` syntax check
 - [ ] No references to dropped namespaces (`superpowers:`, `compound-engineering:`)
 - [ ] No references to dropped components (Rails, Ruby, Every.to, Figma, Xcode)
@@ -218,7 +215,6 @@ python3 -c "import json; json.load(open('hooks/hooks.json')); print('Hooks OK')"
 # Syntax check scripts
 bash -n hooks/lib.sh && echo "lib.sh OK"
 bash -n hooks/session-start.sh && echo "session-start.sh OK"
-bash -n hooks/agent-mail-register.sh && echo "agent-mail-register.sh OK"
 bash -n hooks/dotfiles-sync.sh && echo "dotfiles-sync.sh OK"
 bash -n scripts/upstream-check.sh && echo "Upstream check OK"
 
@@ -303,12 +299,11 @@ Full audit rationale: `docs/plugin-audit.md`
 - **Kieran Klaassen** ([@kieranklaassen](https://github.com/kieranklaassen)) — compound-engineering at [Every](https://every.to)
 - **Steve Yegge** ([@steveyegge](https://github.com/steveyegge)) — beads
 - **Peter Steinberger** ([@steipete](https://github.com/steipete)) — oracle
-- **Jeff Emanuel** ([@Dicklesworthstone](https://github.com/Dicklesworthstone)) — mcp_agent_mail
 - **Tobi Lütke** ([@tobi](https://github.com/tobi)) — qmd
 
 ## Upstream Tracking
 
-Clavain bundles knowledge from 7 actively-developed upstream tools. Two systems keep them in sync:
+Clavain bundles knowledge from 6 actively-developed upstream tools. Two systems keep them in sync:
 
 **1. Check System** (lightweight detection):
 - `.github/workflows/upstream-check.yml` — daily cron, checks repos via `gh api`, opens/updates issues with `upstream-sync` label
@@ -327,7 +322,6 @@ Clavain bundles knowledge from 7 actively-developed upstream tools. Two systems 
 |------|------|------------------------|
 | Beads | `steveyegge/beads` | `beads-workflow` |
 | Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
-| MCP Agent Mail | `Dicklesworthstone/mcp_agent_mail` | `agent-mail-coordination` |
 | superpowers | `obra/superpowers` | Multiple (founding source) |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |

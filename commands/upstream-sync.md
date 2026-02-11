@@ -1,6 +1,6 @@
 ---
 name: upstream-sync
-description: Check upstream repos (beads, oracle, agent-mail, superpowers, compound-engineering) for updates and generate upgrade checklist
+description: Check upstream repos (beads, oracle, superpowers, compound-engineering) for updates and generate upgrade checklist
 allowed-tools:
   - Bash
   - Read
@@ -74,7 +74,6 @@ Every upstream-sync PR must include a decision record:
 |------|-------------|---------------|
 | Beads | `steveyegge/beads` | `beads-workflow` |
 | Oracle | `steipete/oracle` | `interpeer` (references/) |
-| MCP Agent Mail | `Dicklesworthstone/mcp_agent_mail` | `agent-mail-coordination` |
 | superpowers | `obra/superpowers` | multiple |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |

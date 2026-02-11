@@ -1,6 +1,6 @@
 ---
 name: upstream-sync
-description: Use when checking for updates from upstream tool repos (beads, oracle, mcp_agent_mail, superpowers, compound-engineering) or when the /clavain:upstream-sync command is invoked
+description: Use when checking for updates from upstream tool repos (beads, oracle, superpowers, compound-engineering) or when the /clavain:upstream-sync command is invoked
 ---
 
 # Upstream Sync
@@ -17,7 +17,6 @@ Clavain bundles knowledge from several upstream tools. This skill tracks their r
 |------|------|------------------------|
 | Beads | `steveyegge/beads` | `beads-workflow` |
 | Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
-| MCP Agent Mail | `Dicklesworthstone/mcp_agent_mail` | `agent-mail-coordination` |
 | superpowers | `obra/superpowers` | Multiple (founding source) |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux-for-interactive-commands`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
@@ -153,5 +152,4 @@ Fields: `synced_release` (latest tag or `"none"`), `synced_commit` (short SHA of
 **Pairs with:**
 - `beads-workflow` — Primary consumer of beads upstream changes
 - `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` — Primary consumers of oracle upstream changes
-- `agent-mail-coordination` — Primary consumer of agent-mail upstream changes
 - `developing-claude-code-plugins` — Upstream plugin patterns may evolve

@@ -70,11 +70,6 @@ claude plugin disable hookify@claude-plugins-official
 Check that required MCP servers are configured:
 
 **context7** — should be declared in Clavain's plugin.json (automatic)
-**agent-mail** — check if server is running:
-```bash
-curl -s --max-time 2 http://127.0.0.1:8765/health
-```
-If not running, inform the user: "Agent Mail server is not running. Start it with: `mcp-agent-mail` or configure it as a systemd service."
 
 **qmd** — check if available:
 ```bash
@@ -159,7 +154,6 @@ Then check MCP servers and companions:
 ```bash
 echo "=== MCP Servers ==="
 echo "context7: $(ls ~/.claude/plugins/cache/*/context7/*/plugin.json 2>/dev/null | head -1 >/dev/null && echo 'OK' || echo 'MISSING')"
-echo "agent-mail: $(curl -s --max-time 2 http://127.0.0.1:8765/health >/dev/null 2>&1 && echo 'running' || echo 'not running')"
 echo "qmd: $(command -v qmd >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
 
 echo "=== Companions ==="
@@ -178,7 +172,7 @@ Clavain Modpack Setup Complete
 Required plugins:  [X/10 enabled]
 Conflicts disabled: [X/8 disabled]
 Language servers:   [list enabled]
-MCP servers:       context7 ✓ | agent-mail [status] | qmd [status]
+MCP servers:       context7 ✓ | qmd [status]
 Infrastructure:    oracle [status]
 Beads:             [status]
 

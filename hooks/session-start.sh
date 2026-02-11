@@ -10,6 +10,20 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hooks/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
+# Clean up stale plugin cache versions from previous sessions.
+# bump-version.sh no longer deletes old cache mid-session (that breaks Stop hooks).
+# Instead, we clean up here at the start of the NEXT session when PLUGIN_ROOT
+# already points to the new version.
+CURRENT_VERSION_DIR="$(basename "$PLUGIN_ROOT")"
+CACHE_PARENT="$(dirname "$PLUGIN_ROOT")"
+if [[ -d "$CACHE_PARENT" ]] && [[ "$CACHE_PARENT" == *"/plugins/cache/"* ]]; then
+    for old_dir in "$CACHE_PARENT"/*/; do
+        [[ -d "$old_dir" ]] || continue
+        [[ "$(basename "$old_dir")" == "$CURRENT_VERSION_DIR" ]] && continue
+        rm -rf "$old_dir" 2>/dev/null || true
+    done
+fi
+
 # Read using-clavain content (fail gracefully — don't mix stderr into injected context)
 using_clavain_content=$(cat "${PLUGIN_ROOT}/skills/using-clavain/SKILL.md" 2>/dev/null) || using_clavain_content="Could not load using-clavain skill. Run /clavain:using-clavain manually."
 
@@ -21,11 +35,6 @@ companions=""
 # Beads — detect if project uses beads
 if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     companions="${companions}\\n- **beads**: .beads/ detected — use \`bd\` for task tracking (not TaskCreate)"
-fi
-
-# Agent Mail — check if server is running
-if curl -s -o /dev/null -w '' --connect-timeout 1 http://127.0.0.1:8765/health 2>/dev/null; then
-    companions="${companions}\\n- **agent-mail**: server running at localhost:8765"
 fi
 
 # Oracle — check if available for cross-AI review
@@ -49,7 +58,7 @@ if [[ -f "$VERSIONS_FILE" ]]; then
     file_mtime=$(stat -c %Y "$VERSIONS_FILE" 2>/dev/null || stat -f %m "$VERSIONS_FILE" 2>/dev/null || echo 0)
     file_age_days=$(( ($(date +%s) - file_mtime) / 86400 ))
     if [[ $file_age_days -gt 7 ]]; then
-        upstream_warning="\\n\\n**Upstream sync stale** (${file_age_days} days since last check). Run \`/clavain:upstream-sync\` to check for updates from beads, oracle, agent-mail, and other upstream tools."
+        upstream_warning="\\n\\n**Upstream sync stale** (${file_age_days} days since last check). Run \`/clavain:upstream-sync\` to check for updates from beads, oracle, and other upstream tools."
     fi
 else
     upstream_warning="\\n\\n**No upstream baseline found.** Run \`bash scripts/upstream-check.sh --update\` in the Clavain repo to establish baseline."

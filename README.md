@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 34 skills, 16 agents, 23 commands, 4 hooks, and 3 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 33 skills, 16 agents, 23 commands, 4 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -141,7 +141,6 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `using-tmux-for-interactive-commands` | Interactive CLI tools in tmux |
 | `slack-messaging` | Slack integration |
 | `mcp-cli` | On-demand MCP server usage |
-| `agent-mail-coordination` | Multi-agent coordination via MCP Agent Mail |
 | `upstream-sync` | Track updates from upstream tool repos |
 
 ### Agents (16)
@@ -188,14 +187,13 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 ### Hooks (4)
 
-- **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact) (`session-start.sh`). Also registers with Agent Mail if available (`agent-mail-register.sh`).
+- **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact) (`session-start.sh`).
 - **Stop** — Auto-compound check: detects compoundable signals (commits, resolutions, insights) and prompts knowledge capture (`auto-compound.sh`).
 - **SessionEnd** — Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
-### MCP Servers (3)
+### MCP Servers (2)
 
 - **context7** — Library documentation lookup via [Context7](https://context7.com)
-- **mcp-agent-mail** — Multi-agent coordination, file reservations, and messaging via [MCP Agent Mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
 - **qmd** — Semantic search over indexed project documentation via [qmd](https://github.com/tobi/qmd)
 
 ## The Agent Rig
@@ -252,7 +250,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ```
 clavain/
 ├── .claude-plugin/plugin.json    # Manifest
-├── skills/                        # 34 discipline skills (SKILL.md each)
+├── skills/                        # 33 discipline skills (SKILL.md each)
 ├── agents/
 │   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
@@ -261,7 +259,6 @@ clavain/
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + Stop + SessionEnd)
 │   ├── session-start.sh           # Context injection + staleness warning
-│   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Dotfile sync on session end
 ├── config/
 │   └── flux-drive/knowledge/      # Knowledge layer — patterns from past reviews
@@ -300,7 +297,6 @@ Built on the work of:
 - **Kieran Klaassen** ([@kieranklaassen](https://github.com/kieranklaassen)) — [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin) at [Every](https://every.to)
 - **Steve Yegge** ([@steveyegge](https://github.com/steveyegge)) — [beads](https://github.com/steveyegge/beads)
 - **Peter Steinberger** ([@steipete](https://github.com/steipete)) — [oracle](https://github.com/steipete/oracle)
-- **Jeff Emanuel** ([@Dicklesworthstone](https://github.com/Dicklesworthstone)) — [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
 - **Tobi Lütke** ([@tobi](https://github.com/tobi)) — [qmd](https://github.com/tobi/qmd)
 
 ## License
