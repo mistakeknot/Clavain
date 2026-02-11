@@ -4,20 +4,8 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
-
-def _parse_frontmatter(path):
-    """Parse YAML frontmatter from a markdown file."""
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---"):
-        return None, text
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None, text
-    fm = yaml.safe_load(parts[1])
-    body = parts[2]
-    return fm, body
+from helpers import parse_frontmatter as _parse_frontmatter
 
 
 def _get_command_files():
@@ -32,8 +20,8 @@ COMMAND_FILES = _get_command_files()
 def test_command_count(commands_dir):
     """Total command count matches expected value."""
     files = sorted(commands_dir.glob("*.md"))
-    assert len(files) == 24, (
-        f"Expected 24 commands, found {len(files)}: {[f.stem for f in files]}"
+    assert len(files) == 23, (
+        f"Expected 23 commands, found {len(files)}: {[f.stem for f in files]}"
     )
 
 
@@ -53,6 +41,19 @@ def test_command_frontmatter_required_fields(cmd_file):
         assert field in fm, (
             f"{cmd_file.name} frontmatter missing: {field}"
         )
+
+
+@pytest.mark.parametrize("cmd_file", COMMAND_FILES, ids=lambda p: p.stem)
+def test_command_name_matches_filename(cmd_file):
+    """Frontmatter 'name' matches filename without .md extension."""
+    fm, _ = _parse_frontmatter(cmd_file)
+    assert fm is not None, f"{cmd_file.name} has no frontmatter"
+    expected = cmd_file.stem
+    actual = fm.get("name", "")
+    assert actual == expected, (
+        f"Name mismatch in {cmd_file.name}: "
+        f"frontmatter says {actual!r}, filename says {expected!r}"
+    )
 
 
 @pytest.mark.parametrize("cmd_file", COMMAND_FILES, ids=lambda p: p.stem)

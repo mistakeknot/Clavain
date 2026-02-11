@@ -18,12 +18,6 @@ using_clavain_escaped=$(escape_for_json "$using_clavain_content")
 # Detect companion plugins and build integration context
 companions=""
 
-# Codex dispatch — resolve dispatch.sh path for codex-first mode
-dispatch_path=$(find "${PLUGIN_ROOT}/scripts" -name dispatch.sh 2>/dev/null | head -1)
-if [[ -n "$dispatch_path" ]]; then
-    companions="${companions}\\n- **codex dispatch**: dispatch.sh at \`${dispatch_path}\`"
-fi
-
 # Beads — detect if project uses beads
 if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     companions="${companions}\\n- **beads**: .beads/ detected — use \`bd\` for task tracking (not TaskCreate)"

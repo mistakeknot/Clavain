@@ -8,6 +8,7 @@ set -euo pipefail
 #   ./scripts/pull-upstreams.sh           # Pull all, show summary
 #   ./scripts/pull-upstreams.sh --status  # Just show behind/ahead counts
 #   ./scripts/pull-upstreams.sh --diff    # Show new commits since Clavain's last sync
+#   ./scripts/pull-upstreams.sh --sync    # Pull, then run sync-upstreams.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -32,6 +33,17 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 mode="${1:---pull}"
+
+# If --sync, pull first then hand off to sync-upstreams.sh
+if [[ "$mode" == "--sync" ]]; then
+  echo "=== Pull + Sync Mode ==="
+  echo ""
+  # Pull first (reuse this script's --pull logic)
+  "$0" --pull
+  echo ""
+  echo "=== Running sync-upstreams.sh ==="
+  exec "$SCRIPT_DIR/sync-upstreams.sh" "${@:2}"
+fi
 
 if [[ ! -d "$UPSTREAMS_DIR" ]]; then
   echo "ERROR: $UPSTREAMS_DIR does not exist. Run scripts/clone-upstreams.sh first."

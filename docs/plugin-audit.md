@@ -33,7 +33,7 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 | Plugin | Why Keep |
 |--------|----------|
 | **clavain** | The modpack itself. |
-| **interclode** | Codex CLI dispatch. Clavain's codex-first depends on it. |
+| **interclode** | Codex CLI dispatch. Powers Clavain's `/clodex` skill. |
 | **interdoc** | AGENTS.md generation. Different from Clavain's engineering-docs (which captures solutions, not generates AGENTS.md). |
 | ~~gurgeh-plugin~~ | ~~Codebase-aware T1 agents.~~ **ABSORBED into Clavain** — 5 fd-* agents now ship natively in `agents/review/`. |
 | **auracoil** | GPT-5.2 review of AGENTS.md specifically. Different scope from Clavain's cross-AI review skills. |

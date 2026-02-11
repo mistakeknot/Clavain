@@ -23,15 +23,9 @@ Pass the plan file path from Step 2 as the flux-drive target. Review happens **b
 
 If flux-drive finds P0/P1 issues, stop and address them before proceeding to execution.
 
-## Step 4: Execute (non-clodex only)
+## Step 4: Execute
 
-Check if clodex mode is active:
-```bash
-[[ -f "${CLAUDE_PROJECT_DIR:-.}/.claude/autopilot.flag" ]]
-```
-
-- If **clodex is active**: Skip this step — `/write-plan` already executed via Codex Delegation in Step 2.
-- If **clodex is NOT active**: Run `/clavain:work <plan-file-from-step-2>`
+Run `/clavain:work <plan-file-from-step-2>`
 
 ## Step 5: Test & Verify
 

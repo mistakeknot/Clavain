@@ -4,20 +4,8 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
-
-def _parse_frontmatter(path):
-    """Parse YAML frontmatter from a markdown file."""
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---"):
-        return None, text
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None, text
-    fm = yaml.safe_load(parts[1])
-    body = parts[2]
-    return fm, body
+from helpers import parse_frontmatter as _parse_frontmatter
 
 
 def _get_skill_dirs():
@@ -67,6 +55,19 @@ def test_skill_frontmatter_required_fields(skill_dir):
         assert field in fm, (
             f"{skill_dir.name}/SKILL.md frontmatter missing: {field}"
         )
+
+
+@pytest.mark.parametrize("skill_dir", SKILL_DIRS, ids=lambda p: p.name)
+def test_skill_name_matches_dirname(skill_dir):
+    """Frontmatter 'name' matches directory name."""
+    fm, _ = _parse_frontmatter(skill_dir / "SKILL.md")
+    assert fm is not None, f"{skill_dir.name}/SKILL.md has no frontmatter"
+    expected = skill_dir.name
+    actual = fm.get("name", "")
+    assert actual == expected, (
+        f"Name mismatch in {skill_dir.name}/SKILL.md: "
+        f"frontmatter says {actual!r}, dirname says {expected!r}"
+    )
 
 
 @pytest.mark.parametrize("skill_dir", SKILL_DIRS, ids=lambda p: p.name)

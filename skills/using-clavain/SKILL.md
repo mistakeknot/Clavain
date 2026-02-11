@@ -21,7 +21,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 34 skills, 16 agents, and 24 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 34 skills, 16 agents, and 23 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -36,7 +36,7 @@ Clavain provides 34 skills, 16 agents, and 24 commands. To avoid overwhelm, use 
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | fd-architecture, plan-reviewer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster — up to 8 agents)¹ |
-| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve, codex-first, debate | — |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | fd-safety |
@@ -68,7 +68,18 @@ Clavain provides 34 skills, 16 agents, and 24 commands. To avoid overwhelm, use 
 | Database migrations | data-migration-expert |
 | Agent-native design | agent-native-reviewer |
 
-¹ **flux-drive agents (fd-*)**: 6 core review agents that auto-detect project docs (CLAUDE.md/AGENTS.md) for codebase-aware analysis. Use `/clavain:flux-drive` for intelligent triage, or dispatch directly via `/clavain:review` and `/clavain:quality-gates`.
+### Which review command?
+
+| Command | Use when... | Input |
+|---------|------------|-------|
+| `/clavain:flux-drive` | Deep review of documents, plans, repos, or large diffs with scored agent triage | File, directory, or diff |
+| `/clavain:quality-gates` | Quick code review of working changes (auto-selects agents from git diff) | None (uses git diff) |
+| `/clavain:review` | PR-focused multi-agent review | PR number, URL, or branch |
+| `/clavain:plan-review` | Lightweight 3-agent plan review | Plan file |
+
+**Default:** If unsure, use `/clavain:flux-drive` — it handles the widest range of inputs and auto-triages agents.
+
+¹ **flux-drive agents (fd-*)**: 6 core review agents that auto-detect project docs (CLAUDE.md/AGENTS.md) for codebase-aware analysis.
 
 ### Cross-AI Review
 

@@ -3,23 +3,8 @@
 import re
 
 import pytest
-import yaml
 
-
-def _parse_frontmatter(path):
-    """Parse YAML frontmatter from a markdown file.
-
-    Returns (frontmatter_dict, body_str) or (None, full_content).
-    """
-    text = path.read_text(encoding="utf-8")
-    if not text.startswith("---"):
-        return None, text
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None, text
-    fm = yaml.safe_load(parts[1])
-    body = parts[2]
-    return fm, body
+from helpers import parse_frontmatter as _parse_frontmatter
 
 
 def _get_agent_files(agents_dir):

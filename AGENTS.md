@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 34 skills, 16 agents, 24 commands, 3 hooks, 3 MCP servers |
+| Components | 34 skills, 16 agents, 23 commands, 4 hooks, 3 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -44,9 +44,8 @@ Clavain/
 │   ├── setup.md               # Modpack installer
 │   └── interpeer.md           # Quick cross-AI peer review (+ 22 others)
 ├── hooks/
-│   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + SessionEnd)
+│   ├── hooks.json                 # Hook registration (SessionStart + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
-│   ├── autopilot.sh               # Codex-first gate — denies Edit/Write when autopilot active
 │   ├── session-start.sh           # Context injection + upstream staleness warning
 │   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
@@ -194,7 +193,6 @@ When making changes, verify:
 - [ ] Command `name` in frontmatter matches filename (minus `.md`)
 - [ ] `hooks/hooks.json` is valid JSON
 - [ ] `hooks/lib.sh` passes `bash -n` syntax check
-- [ ] `hooks/autopilot.sh` passes `bash -n` syntax check
 - [ ] `hooks/session-start.sh` passes `bash -n` syntax check
 - [ ] `hooks/agent-mail-register.sh` passes `bash -n` syntax check
 - [ ] `hooks/dotfiles-sync.sh` passes `bash -n` syntax check
@@ -219,7 +217,6 @@ python3 -c "import json; json.load(open('hooks/hooks.json')); print('Hooks OK')"
 
 # Syntax check scripts
 bash -n hooks/lib.sh && echo "lib.sh OK"
-bash -n hooks/autopilot.sh && echo "autopilot.sh OK"
 bash -n hooks/session-start.sh && echo "session-start.sh OK"
 bash -n hooks/agent-mail-register.sh && echo "agent-mail-register.sh OK"
 bash -n hooks/dotfiles-sync.sh && echo "dotfiles-sync.sh OK"

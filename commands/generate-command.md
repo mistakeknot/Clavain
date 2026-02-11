@@ -1,5 +1,5 @@
 ---
-name: generate_command
+name: generate-command
 description: Create a new custom slash command following conventions and best practices
 argument-hint: "[command purpose and requirements]"
 disable-model-invocation: true

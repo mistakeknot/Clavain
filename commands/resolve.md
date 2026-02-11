@@ -64,13 +64,6 @@ Create a TodoWrite list of all items. Check for dependencies — if one fix requ
 
 Spawn a `pr-comment-resolver` agent for each independent item in parallel. Wait for sequential dependencies to complete before spawning dependent items.
 
-**Clodex mode:** If `.claude/autopilot.flag` exists, agents cannot use Edit/Write directly. For code-modifying resolutions:
-1. Write a megaprompt describing the fix to a temp file
-2. Dispatch through `clavain:clodex` (Codex Delegation mode)
-3. If a finding only requires read-only actions (documentation, beads updates), resolve directly
-
-For findings that require complex multi-file edits under clodex mode, flag them for manual resolution rather than attempting automated dispatch.
-
 ### 4. Commit
 
 Commit changes. For each source type:

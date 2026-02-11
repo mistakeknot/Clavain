@@ -15,66 +15,24 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  issues: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
 
-      - name: Record baseline commit
-        id: baseline
-        run: |
-          set -euo pipefail
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Preflight required secrets
-        env:
-          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
-        run: |
-          set -euo pipefail
-          missing=()
-
-          if [[ -z "${CODEX_AUTH_JSON:-}" ]]; then
-            missing+=("CODEX_AUTH_JSON")
-          fi
-
-          if (( ${#missing[@]} > 0 )); then
-            echo "::error::Missing required GitHub Actions secret(s): ${missing[*]}"
-            echo "::error::Set these in Settings -> Secrets and variables -> Actions."
-            exit 1
-          fi
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          node-version: "20"
+          python-version: "3.12"
 
-      # Step 1: Install and authenticate Codex CLI (ChatGPT auth file based)
-      - name: Install Codex CLI
-        run: |
-          set -euo pipefail
-          npm install -g @openai/codex
-          codex --version
-
-      - name: Configure Codex auth
-        env:
-          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.codex
-          printf '%s' "${CODEX_AUTH_JSON}" > ~/.codex/auth.json
-          chmod 600 ~/.codex/auth.json
-          codex login status
-
-      - name: Prepare upstream clones
+      - name: Clone upstream repos
         run: |
           set -euo pipefail
           mkdir -p .upstream-work
@@ -87,118 +45,29 @@ jobs:
             fi
           done < <(
             python3 - <<'PY'
-            import json
-
-            with open("upstreams.json", encoding="utf-8") as f:
-                upstreams = json.load(f).get("upstreams", [])
-
-            for upstream in upstreams:
-                name = upstream.get("name")
-                url = upstream.get("url") or upstream.get("repo")
-                branch = upstream.get("branch") or "main"
-                if name and url:
-                    print(f"{name}\t{url}\t{branch}")
-            PY
+          import json
+          with open("upstreams.json") as f:
+              upstreams = json.load(f).get("upstreams", [])
+          for u in upstreams:
+              name = u.get("name")
+              url = u.get("url")
+              branch = u.get("branch", "main")
+              if name and url:
+                  print(f"{name}\t{url}\t{branch}")
+          PY
           )
 
-      # Step 2: Codex CLI orchestrates the full sync
-      - name: Run upstream sync via Codex CLI
+      - name: Run upstream sync
         env:
-          CODEX_HOME: /home/runner/.codex
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          codex exec --sandbox workspace-write -C "$GITHUB_WORKSPACE" -o /tmp/codex-upstream-sync.md - <<'EOF'
-            You are running an automated upstream sync for the Clavain plugin repository.
-
-            ## Context
-
-            Clavain aggregates skills, agents, and commands from 7 upstream repos. The file
-            `upstreams.json` tracks the last-synced commit for each upstream and maps upstream
-            file paths to local Clavain file paths.
-
-            DRY_RUN mode: ${{ inputs.dry_run }}
-
-            ## Your Task
-
-            For each upstream defined in `upstreams.json`:
-
-            ### 1. Use local clones and diff
-            - Use the pre-cloned upstream repo at `.upstream-work/<name>` (where `<name>` is from `upstreams.json`)
-            - Get the current HEAD commit hash
-            - Compare HEAD against `lastSyncedCommit` from upstreams.json
-            - If `basePath` is set (e.g. "plugins/compound-engineering"), only look at files under that prefix
-            - Run: `git diff --name-status <lastSyncedCommit> HEAD -- <basePath or .>`
-            - If `lastSyncedCommit` is not reachable in the local clone, log an error for that upstream and skip updating its hash
-
-            ### 2. Filter to mapped files
-            - For each changed file, strip the `basePath` prefix, then check if it exists in the `fileMap`
-            - Glob patterns like `references/*` mean: any file in that directory should map to the same-named file in the local path
-            - Skip files not in the fileMap (they're upstream-only, not relevant to Clavain)
-
-            ### 3. Merge changes
-            For each mapped file that changed:
-
-            **If the file is NEW upstream and doesn't exist locally:** copy it in.
-
-            **If the file is MODIFIED and exists locally:** This is the critical step.
-            - Read the local file content
-            - Get the upstream diff for that file
-            - Read the upstream file's full new content
-            - Delegate the merge to Codex by running:
-              ```
-              codex exec -p "You are merging upstream changes into a local file. RULES: 1) Preserve ALL local YAML frontmatter (the --- block) exactly as-is. 2) Preserve local section headers and custom sections. 3) Apply upstream content changes (new paragraphs, updated code blocks, new sections). 4) Preserve any Clavain-specific content not in upstream. 5) Replace 'superpowers' references with 'clavain' where the local file uses 'clavain'. Output ONLY the merged file, no code fences, no explanation. LOCAL FILE: $(cat <local-path>) UPSTREAM DIFF: $(git diff ...) UPSTREAM FULL: $(cat <upstream-path>)" --model o3 --sandbox workspace-write
-              ```
-            - Validate the result: must not be empty, must preserve frontmatter if original had it
-            - If validation fails, fall back to keeping the local file unchanged and log a warning
-
-            **If the file was DELETED upstream:** skip it, log for manual review.
-
-            **If DRY_RUN is "true":** only report what would change, don't write any files.
-
-            ### 4. Update state
-            - After processing all upstreams, update `lastSyncedCommit` in upstreams.json to each upstream's current HEAD
-            - Do NOT update the commit hash for any upstream that had errors
-
-            ### 5. Report
-            - Print a clear summary: per-upstream, how many files changed, how many merged, how many skipped/errored
-            - Do NOT run `git add`, `git commit`, `git pull`, `git push`, `bd sync`, or create branches.
-            - Leave all edits as uncommitted workspace changes so the workflow can open a PR.
-
-            ## Important Notes
-            - The `fileMap` has renamed files: e.g. upstream `using-superpowers/SKILL.md` maps to local `using-clavain/SKILL.md`
-            - compound-engineering has `basePath: "plugins/compound-engineering"` — strip this prefix from upstream paths before looking up in fileMap
-            - Some fileMap values use glob patterns like `references/*` — expand these against the actual upstream directory listing
-            - Always use `codex exec` for the actual file merge (not just Claude) — this gives us cross-model verification
-            - If `codex` is not available in PATH, fall back to doing the merge yourself directly
-          EOF
-          echo "=== Codex Upstream Sync Summary ==="
-          cat /tmp/codex-upstream-sync.md || true
-
-      - name: Enforce no direct commits by Codex
-        run: |
-          set -euo pipefail
-          if [[ "$(git rev-parse HEAD)" != "${{ steps.baseline.outputs.sha }}" ]]; then
-            echo "::error::Codex changed HEAD (committed directly)."
-            echo "::error::This workflow requires uncommitted edits so create-pull-request can open a PR."
-            exit 1
+          if [[ "$DRY_RUN" == "true" ]]; then
+            scripts/sync-upstreams.sh --dry-run --report /tmp/sync-report.md 2>&1 | tee /tmp/sync-output.txt
+          else
+            scripts/sync-upstreams.sh --auto --no-ai --report /tmp/sync-report.md 2>&1 | tee /tmp/sync-output.txt
           fi
 
-      - name: Validate sync result
-        run: |
-          set -euo pipefail
-          if grep -E 'errored=[1-9][0-9]*' /tmp/codex-upstream-sync.md >/dev/null; then
-            echo "::error::Codex upstream sync reported one or more errors."
-            echo "::error::See /tmp/codex-upstream-sync.md in this run's logs."
-            exit 1
-          fi
-
-          if grep -Ei 'could not resolve host|network access is blocked' /tmp/codex-upstream-sync.md >/dev/null; then
-            echo "::error::Codex upstream sync appears network-blocked."
-            echo "::error::See /tmp/codex-upstream-sync.md in this run's logs."
-            exit 1
-          fi
-
-      # Step 3: Check for changes and create PR
       - name: Check for changes
         id: changes
         run: |
@@ -206,6 +75,20 @@ jobs:
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Read sync report
+        if: steps.changes.outputs.has_changes == 'true' && inputs.dry_run != 'true'
+        id: report
+        run: |
+          if [[ -f /tmp/sync-report.md ]]; then
+            {
+              echo "content<<REPORT_EOF"
+              cat /tmp/sync-report.md
+              echo "REPORT_EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "content=No report generated." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create Pull Request
@@ -219,27 +102,26 @@ jobs:
           body: |
             ## Upstream Sync
 
-            Automated sync from upstream parent repositories using Claude Code + Codex.
+            Automated sync from upstream repositories via `sync-upstreams.sh --auto --no-ai`.
 
-            **Upstreams checked:**
-            - [beads](https://github.com/steveyegge/beads)
-            - [oracle](https://github.com/steipete/oracle)
-            - [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
-            - [superpowers](https://github.com/obra/superpowers)
-            - [superpowers-lab](https://github.com/obra/superpowers-lab)
-            - [superpowers-dev](https://github.com/obra/superpowers-developing-for-claude-code)
-            - [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin)
+            **Three-way classification:** Uses `lastSyncedCommit` as ancestor to determine
+            who changed each file. COPY/AUTO files applied automatically, KEEP-LOCAL preserved,
+            CONFLICT/REVIEW files skipped for manual handling.
 
-            Review the file changes carefully — merges were performed by AI and may need manual adjustment.
-            Before merge, include a decision record file:
-            `docs/upstream-decisions/pr-<PR_NUMBER>.md` (see `docs/templates/upstream-decision-record.md`).
+            ${{ steps.report.outputs.content }}
+
+            **Protection guards:**
+            - Protected files (e.g. `commands/lfg.md`) are never overwritten
+            - Deleted agents/commands are never re-created
+            - Namespace replacements applied automatically
+            - Content blocklist checked post-sync
 
             ---
             _Generated by [upstream sync workflow](.github/workflows/sync.yml)_
           commit-message: |
             sync: apply upstream changes from parent repos
 
-            Automated merge of upstream content updates via Claude Code + Codex.
+            Automated sync via sync-upstreams.sh --auto.
           labels: |
             upstream-sync
             automated

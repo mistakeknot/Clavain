@@ -14,18 +14,7 @@ find {OUTPUT_DIR} -maxdepth 1 -type f \( -name "*.md" -o -name "*.md.partial" \)
 
 Use a timestamped `OUTPUT_DIR` only when you intentionally need to preserve previous run artifacts.
 
-### Step 2.1: Detect dispatch mode
-
-Determine the dispatch mode:
-1. Check if `${CLAUDE_PROJECT_DIR:-.}/.claude/autopilot.flag` exists
-2. If yes: `DISPATCH_MODE = codex` — read `phases/launch-codex.md` for Codex-specific dispatch
-3. If no: `DISPATCH_MODE = task` — continue with Step 2.2 below
-
-**Shared contracts** apply regardless of dispatch mode. See `phases/shared-contracts.md`.
-
-**Fallback**: If Codex dispatch fails for any agent (dispatch.sh not found, Codex CLI errors), the orchestrator falls back to Task dispatch for that agent. This is an orchestrator decision, not a bash variable — the orchestrator reads the error and decides.
-
-### Step 2.1a: Retrieve knowledge context
+### Step 2.1: Retrieve knowledge context
 
 Before launching agents, retrieve relevant knowledge entries for each selected agent. This step is OPTIONAL — if qmd is unavailable, skip and proceed to Step 2.2.
 

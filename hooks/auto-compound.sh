@@ -78,11 +78,16 @@ SIGNALS="${SIGNALS%,}"
 REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."
 
 # Return block decision to inject the evaluation prompt
-cat <<EOF
+if command -v jq &>/dev/null; then
+    jq -n --arg reason "$REASON" '{"decision":"block","reason":$reason}'
+else
+    # Fallback: REASON contains only hardcoded strings, safe for interpolation
+    cat <<ENDJSON
 {
   "decision": "block",
   "reason": "${REASON}"
 }
-EOF
+ENDJSON
+fi
 
 exit 0

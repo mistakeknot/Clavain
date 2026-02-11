@@ -141,19 +141,9 @@
         "agents/research/learnings-researcher.md": "agents/research/learnings-researcher.md",
         "agents/research/repo-research-analyst.md": "agents/research/repo-research-analyst.md",
         "agents/review/agent-native-reviewer.md": "agents/review/agent-native-reviewer.md",
-        "agents/review/architecture-strategist.md": "agents/review/architecture-strategist.md",
-        "agents/review/code-simplicity-reviewer.md": "agents/review/code-simplicity-reviewer.md",
-        "agents/review/data-integrity-guardian.md": "agents/review/data-integrity-reviewer.md",
         "agents/review/data-migration-expert.md": "agents/review/data-migration-expert.md",
-        "agents/review/deployment-verification-agent.md": "agents/review/deployment-verification-agent.md",
-        "agents/review/kieran-python-reviewer.md": "agents/review/python-reviewer.md",
-        "agents/review/kieran-typescript-reviewer.md": "agents/review/typescript-reviewer.md",
-        "agents/review/pattern-recognition-specialist.md": "agents/review/pattern-recognition-specialist.md",
-        "agents/review/performance-oracle.md": "agents/review/performance-oracle.md",
-        "agents/review/security-sentinel.md": "agents/review/security-sentinel.md",
         "agents/workflow/bug-reproduction-validator.md": "agents/workflow/bug-reproduction-validator.md",
         "agents/workflow/pr-comment-resolver.md": "agents/workflow/pr-comment-resolver.md",
-        "agents/workflow/spec-flow-analyzer.md": "agents/workflow/spec-flow-analyzer.md",
         "commands/agent-native-audit.md": "commands/agent-native-audit.md",
         "commands/changelog.md": "commands/changelog.md",
         "commands/create-agent-skill.md": "commands/create-agent-skill.md",
@@ -161,11 +151,33 @@
         "commands/heal-skill.md": "commands/heal-skill.md",
         "commands/lfg.md": "commands/lfg.md",
         "commands/plan_review.md": "commands/plan-review.md",
-        "commands/resolve_parallel.md": "commands/resolve-parallel.md",
-        "commands/resolve_pr_parallel.md": "commands/resolve-pr-parallel.md",
-        "commands/resolve_todo_parallel.md": "commands/resolve-todo-parallel.md",
         "commands/triage.md": "commands/triage.md"
       }
     }
-  ]
+  ],
+  "syncConfig": {
+    "protectedFiles": [
+      "commands/lfg.md"
+    ],
+    "deletedLocally": [],
+    "namespaceReplacements": {
+      "/compound-engineering:": "/clavain:",
+      "/workflows:plan": "/clavain:write-plan",
+      "/workflows:work": "/clavain:work",
+      "/workflows:review": "/clavain:quality-gates",
+      "ralph-wiggum:": "clavain:",
+      "/deepen-plan": "/clavain:lfg"
+    },
+    "contentBlocklist": [
+      "rails_model",
+      "rails_controller",
+      "rails_view",
+      "service_object",
+      "frontend_stimulus",
+      "hotwire_turbo",
+      "brief_system",
+      "Every.to",
+      "EveryInc"
+    ]
+  }
 }

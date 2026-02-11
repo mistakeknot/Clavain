@@ -1,6 +1,6 @@
 ---
 name: clodex
-description: Dispatch tasks to Codex CLI agents — single megaprompt for one task, parallel delegation for many. Includes behavioral contract for codex-first mode, structured debate triggers, and Oracle escalation.
+description: Dispatch tasks to Codex CLI agents — single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation.
 version: 0.3.0
 ---
 
@@ -188,7 +188,6 @@ For EACH completed agent: read output, build, run scoped tests, review diff, pro
 
 | Topic | File |
 |-------|------|
-| Codex-first behavioral contract | `references/behavioral-contract.md` |
 | Debate mode | `references/debate-mode.md` |
 | Oracle escalation | `references/oracle-escalation.md` |
 | CLI flags quick reference | `references/cli-reference.md` |

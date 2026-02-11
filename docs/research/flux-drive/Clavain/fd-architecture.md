@@ -1,302 +1,113 @@
----
-agent: fd-architecture
-tier: 1
-issues:
-  - id: P0-1
-    severity: P0
-    section: "Component Count Consistency"
-    title: "Pervasive count mismatch: actual 32 skills / 24 commands but AGENTS.md, using-clavain SKILL.md, and plugin.json each report different numbers"
-  - id: P1-1
-    severity: P1
-    section: "Routing Table Completeness"
-    title: "codex-first-dispatch skill, codex-first command, and clodex command are absent from the using-clavain routing table"
-  - id: P1-2
-    severity: P1
-    section: "Upstream Sync Architecture"
-    title: "Two independent upstream sync systems operate on different state files with overlapping but non-identical repo lists and no documented relationship"
-  - id: P1-3
-    severity: P1
-    section: "Upstream fileMap Conflict"
-    title: "brainstorming/SKILL.md is mapped in both the superpowers and compound-engineering upstreams.json entries, creating a last-writer-wins merge conflict"
-  - id: P1-4
-    severity: P1
-    section: "flux-drive Skill"
-    title: "Tier 1 agents reference gurgeh-plugin subagent types creating an undeclared cross-plugin dependency"
-  - id: P2-1
-    severity: P2
-    section: "Command Layer Consistency"
-    title: "work.md Phase 4 mentions feature branches and git push -u origin despite trunk-based development policy"
-  - id: P2-2
-    severity: P2
-    section: "Command Layer Consistency"
-    title: "review.md prerequisites mention worktrees despite trunk-based-only policy"
-  - id: P2-3
-    severity: P2
-    section: "Hook Architecture"
-    title: "SessionStart hook marked async:true may not block before first LLM response, causing routing table absence on first turn"
-  - id: P2-4
-    severity: P2
-    section: "MCP Server Configuration"
-    title: "mcp-agent-mail server hardcodes localhost:8765 with no health check or graceful degradation for portable use"
-  - id: P2-5
-    severity: P2
-    section: "Upstream Remnant Contamination"
-    title: "Rails-specific content remains in deployment-verification-agent and work.md despite general-purpose-only policy"
-  - id: P2-6
-    severity: P2
-    section: "Command Layer Consistency"
-    title: "Thick commands (review 455 lines, work 275 lines) embed full workflow logic that belongs in skills"
-improvements:
-  - id: IMP-1
-    title: "Unify upstream sync systems or clearly document their distinct purposes"
-    section: "Upstream Sync Architecture"
-  - id: IMP-2
-    title: "Add automated component count validation to prevent count drift"
-    section: "Component Count Consistency"
-  - id: IMP-3
-    title: "Ship Clavain-native Tier 1 agents for flux-drive instead of depending on external gurgeh-plugin"
-    section: "flux-drive Skill"
-  - id: IMP-4
-    title: "Standardize command thickness conventions with explicit categories in AGENTS.md"
-    section: "Command Layer Consistency"
-  - id: IMP-5
-    title: "Add cross-reference validation script to prevent phantom references from accumulating"
-    section: "Cross-Reference Integrity"
-verdict: needs-changes
----
+### Findings Index
+- P1 | P1-1 | "Upstream Sync Architecture" | upstreams.json fileMap has 32 stale entries pointing to deleted files
+- P1 | P1-2 | "Documentation Consistency" | Hook count in all documentation surfaces says "3 hooks" but plugin has 4 hook events and 5 hook scripts
+- P1 | P1-3 | "Review Command Overlap" | Three review entry points (review, quality-gates, flux-drive) have overlapping agent dispatch with no documented selection guidance
+- P2 | P2-1 | "auto-compound.sh Omitted from Validation" | auto-compound.sh not listed in CLAUDE.md or AGENTS.md validation checklists
+- P2 | P2-2 | "Stop Hook Missing Matcher" | Stop hook in hooks.json has no matcher field unlike other hook events
+- IMP | IMP-1 | "Test Infrastructure" | _parse_frontmatter duplicated 3x across test files -- extract to conftest.py
+- IMP | IMP-2 | "Upstream FileMap Lifecycle" | No automated test validates that fileMap targets in upstreams.json exist on disk
+- IMP | IMP-3 | "Diff Routing and Skill Phase Structure" | flux-drive skill is well-architected but phase file numbering is inconsistent (Step 2.1b appears after Step 2.2c)
+Verdict: needs-changes
 
-### Summary
+### Summary (3-5 lines)
 
-Clavain's core architecture is sound and has improved significantly since the prior review (c57fbeb). The 3-layer routing system (Stage / Domain / Language), the skill/agent/command decomposition, and the SessionStart hook injection form a coherent plugin architecture. Most P0 and P1 issues from the prior review have been fixed: phantom agent references (cora-test-reviewer, data-integrity-guardian), invalid @agent- syntax, compound-docs references, EVERY_WRITE_STYLE.md, bin/get-pr-comments scripts, and lib/skills-core.js have all been removed or corrected. However, the project has grown (32 skills, 24 commands) without updating component counts in multiple authoritative files, the routing table has gaps for the new codex-first components, and the dual upstream sync systems create architectural confusion.
-
-### Section-by-Section Review
-
-#### 1. Component Count Consistency
-
-This is the most pervasive issue. The actual component counts on disk are:
-
-- **Skills**: 32 (verified via glob of `skills/*/SKILL.md`)
-- **Agents**: 23 (verified via glob of `agents/{review,research,workflow}/*.md`)
-- **Commands**: 24 (verified via glob of `commands/*.md`)
-
-But multiple authoritative files disagree:
-
-| File | Location | Claims |
-|------|----------|--------|
-| `/root/projects/Clavain/CLAUDE.md` | line 7 | 32 skills, 23 agents, 24 commands |
-| `/root/projects/Clavain/README.md` | line 3 | 32 skills, 23 agents, 24 commands |
-| `/root/projects/Clavain/.claude-plugin/plugin.json` | line 4 | 23 agents, 24 commands, 32 skills |
-| `/root/projects/Clavain/AGENTS.md` | line 12 | **31 skills, 23 agents, 22 commands** |
-| `/root/projects/Clavain/skills/using-clavain/SKILL.md` | line 22 | **31 skills, 23 agents, 22 commands** |
-
-CLAUDE.md, README.md, and plugin.json are correct (32/23/24). AGENTS.md and the using-clavain SKILL.md are stale (31/23/22). The using-clavain SKILL.md count is especially critical because it is injected into every session via the SessionStart hook -- agents will believe they have 31 skills and 22 commands when 32 and 24 actually exist, potentially missing the newer components during routing.
-
-The discrepancy is exactly accounted for by the new components added after the prior review:
-- **New skill** (31 -> 32): `codex-first-dispatch`
-- **New commands** (22 -> 24): `codex-first`, `clodex`
-
-#### 2. Routing Table Completeness (`skills/using-clavain/SKILL.md`)
-
-The routing table is the architectural linchpin. It was improved since the last review: `codex-delegation` now appears in the Execute stage (line 37). However, three newer components are missing:
-
-| Component | Type | Should Be In |
-|-----------|------|-------------|
-| `codex-first-dispatch` | skill | Execute stage, alongside `codex-delegation` |
-| `codex-first` | command | Execute stage commands column, or Meta stage |
-| `clodex` | command | Same row as `codex-first` (it is an alias) |
-
-The `codex-first-dispatch` skill is the execution primitive for codex-first mode -- it is referenced from `codex-first` command's "Dispatch Workflow" section (line 57 of `/root/projects/Clavain/commands/codex-first.md`). Without routing table presence, the using-clavain routing heuristic will never direct users to this skill.
-
-Additionally, the routing table's Key Commands Quick Reference (lines 122-134 of `/root/projects/Clavain/skills/using-clavain/SKILL.md`) lists 9 commands. With 24 total commands, 15 are unlisted. While listing all 24 would be excessive, the codex-first toggle deserves a spot since it changes session-wide behavior.
-
-#### 3. Plugin Manifest (`.claude-plugin/plugin.json`)
-
-The manifest is clean and correct. Two MCP servers are declared:
-
-- **context7**: Remote HTTP endpoint (`https://mcp.context7.com/mcp`). No concerns -- external service with expected availability.
-- **mcp-agent-mail**: Local HTTP endpoint (`http://127.0.0.1:8765/mcp`). This hardcoded localhost dependency means the plugin will generate connection errors on any machine where the mcp-agent-mail server is not running. Since Clavain is a general-purpose plugin, most users will not have this server. There is no documented setup requirement in README.md or AGENTS.md, no health check, and no graceful degradation.
-
-The plugin.json description field is the only place that correctly lists all three counts (32 skills, 24 commands, 23 agents) in one line. This is correct.
-
-#### 4. Hook Architecture (`hooks/hooks.json` + `hooks/session-start.sh`)
-
-The SessionStart hook design is architecturally sound:
-
-- `session-start.sh` reads `using-clavain/SKILL.md`, JSON-escapes it with performant bash parameter expansion, and outputs `hookSpecificOutput.additionalContext` JSON
-- The upstream staleness check (file age of `docs/upstream-versions.json` > 7 days) is local-only with no network calls -- good design for a session-start hook
-- `set -euo pipefail` and proper error handling
-
-Remaining concern: The hook is marked `"async": true` in `/root/projects/Clavain/hooks/hooks.json`. For a SessionStart hook that injects the routing table, this means the hook might not complete before the first LLM response. If the routing table arrives late, the first user message may be processed without skill awareness. Changing to `"async": false` would guarantee the routing context is present for the first turn.
-
-#### 5. 3-Layer Decomposition (Skills / Agents / Commands)
-
-**Skills (32)**: Well-organized with one directory per skill. Sub-resources (references, examples, templates) are properly nested within skill directories. YAML frontmatter is consistent. The `engineering-docs` skill has been cleaned up -- no more compound-docs heading, EVERY_WRITE references, or hotwire-native content.
-
-**Agents (23)**: Properly categorized into review (15), research (5), and workflow (3). The `<example>` blocks with `<commentary>` are present in all agents examined. Language-specific reviewers have non-overlapping domains. The agent roster is well-partitioned.
-
-**Commands (24)**: The layer continues to show inconsistent thickness:
-
-| Category | Commands | Line Counts |
-|----------|----------|-------------|
-| Thin wrappers | write-plan, execute-plan, flux-drive, create-agent-skill, clodex | 1-16 lines each |
-| Moderate | brainstorm, quality-gates, plan-review, codex-first, upstream-sync | 16-94 lines each |
-| Thick workflows | review (455 lines), work (275 lines), learnings (203 lines), triage (~311 lines) | Full multi-phase workflows |
-
-The thick commands embed complete workflow logic including multi-agent dispatch, synthesis, and todo creation. AGENTS.md convention says commands "can reference skills" and "can dispatch agents" but the thick commands go beyond this -- they contain the full orchestration. This is not necessarily wrong, but the architectural convention should acknowledge both patterns.
-
-#### 6. Upstream Sync Architecture
-
-This is the most architecturally confusing area. There are **two independent upstream sync systems**:
-
-**System 1: Daily Change Detection**
-- Files: `scripts/upstream-check.sh`, `docs/upstream-versions.json`, `.github/workflows/upstream-check.yml`
-- Tracks: 7 repos (superpowers, superpowers-lab, superpowers-dev, compound-engineering, beads, oracle, mcp_agent_mail)
-- State: `docs/upstream-versions.json` stores release tags and short commit SHAs per repo
-- Automation: Daily GitHub Action at 08:00 UTC, opens issues labeled `upstream-sync`
-- Purpose: **Detection** -- "have the upstreams changed?"
-
-**System 2: Automated Merge Pipeline**
-- Files: `upstreams.json`, `.github/workflows/sync.yml` (untracked), `scripts/sync-upstreams.sh` (missing from disk)
-- Tracks: 4 repos (superpowers, superpowers-lab, superpowers-dev, compound-engineering) -- NOT beads, oracle, mcp_agent_mail
-- State: `upstreams.json` stores full commit SHAs, file-level mapping with rename/path transformations
-- Automation: Weekly GitHub Action on Mondays, uses Claude Code + Codex to merge, creates PRs
-- Purpose: **Remediation** -- "apply upstream changes to local files"
-
-The architectural relationship is undocumented. Key concerns:
-
-1. **Different repo lists**: System 1 tracks 7 repos; System 2 tracks 4. The 3 missing from System 2 (beads, oracle, mcp_agent_mail) are "knowledge upstreams" (Clavain documents their APIs) vs "source upstreams" (Clavain contains their files). This distinction makes sense but is never stated.
-
-2. **Different state formats**: System 1 uses short SHAs in `docs/upstream-versions.json`; System 2 uses full SHAs in `upstreams.json`. The commit hashes in System 1 (`a98c5df`) match the shortened form of System 2's hashes (`a98c5dfc9de0df5318f4980d91d24780a566ee60`), suggesting they were synchronized at one point but will drift independently.
-
-3. **Session-start hook only checks System 1**: The staleness warning in `session-start.sh` checks `docs/upstream-versions.json` age, not `upstreams.json`. This means the hook warns about stale change detection but not stale merge state.
-
-4. **`scripts/sync-upstreams.sh` referenced in MEMORY.md but missing from disk**: The MEMORY.md file states this script exists, but glob and git status show only `scripts/upstream-check.sh` on disk. The `sync.yml` workflow uses Claude Code inline prompting instead of a local script, which is consistent with the file not existing -- but MEMORY.md is misleading.
-
-5. **`upstreams.json` and `sync.yml` are both untracked** (shown in git status). They exist on disk but are not committed to the repo. This means the automated merge pipeline is not yet checked into the repository.
-
-#### 7. Upstream fileMap Conflict
-
-In `/root/projects/Clavain/upstreams.json`, the file `skills/brainstorming/SKILL.md` appears in both the `superpowers` entry (line 10) and the `compound-engineering` entry (line 77). During the sync.yml merge pipeline, both upstreams will attempt to update the same local file. The sync workflow processes upstreams sequentially, so the last one (compound-engineering) will overwrite whatever superpowers wrote. This is a data integrity issue -- the merge pipeline has no conflict detection for overlapping file maps.
-
-This is the only overlapping file between the two upstreams that map to the same local path.
-
-#### 8. flux-drive Skill
-
-The flux-drive skill at `/root/projects/Clavain/skills/flux-drive/SKILL.md` (373 lines) implements a sophisticated 3-phase document review workflow with tiered agent triage.
-
-The Tier 1 agents all reference `gurgeh-plugin:fd-*` subagent types (lines 139-143):
-
-```
-| fd-architecture | gurgeh-plugin:fd-architecture | ...
-| fd-user-experience | gurgeh-plugin:fd-user-experience | ...
-| fd-code-quality | gurgeh-plugin:fd-code-quality | ...
-| fd-performance | gurgeh-plugin:fd-performance | ...
-| fd-security | gurgeh-plugin:fd-security | ...
-```
-
-This creates an implicit cross-plugin dependency. The gurgeh-plugin is a separate project-specific plugin (associated with the Autarch project). If it is not installed, Tier 1 agents will fail at dispatch time. The skill's deduplication rule (Step 1.2 rule 4) says to prefer Tier 1 over Tier 3 when domains overlap -- so in practice, Tier 3 clavain agents will be suppressed in favor of gurgeh-plugin agents that may not exist.
-
-The cross-project awareness logic (line 98) partially mitigates this by noting when the review target is different from where gurgeh-plugin is installed, but it does not handle the case where gurgeh-plugin is simply absent.
-
-Notably, this review itself is running through flux-drive. The current execution demonstrates the fallback: when gurgeh-plugin agents are unavailable, the system falls back to the Architecture Reviewer role specified in the flux-drive prompt template. This works, but it is an implicit fallback rather than an explicit one documented in the skill.
-
-#### 9. Cross-Reference Integrity (Progress Since Prior Review)
-
-The prior review (from the existing fd-architecture.md) identified 11 phantom references. The current state:
-
-| Prior Issue | Status | Evidence |
-|-------------|--------|----------|
-| P0-1: cora-test-reviewer in learnings.md | **Fixed** | grep returns no matches |
-| P0-2: @agent- syntax in plan_review.md | **Fixed** | plan-review.md now uses proper Task tool syntax |
-| P1-3: lib/skills-core.js superpowers namespace | **Fixed** | File no longer exists |
-| P1-4: compound-docs reference in learnings.md | **Fixed** | grep returns no matches |
-| P1-5: engineering-docs contamination | **Fixed** | No compound-docs, doc-fix, EVERY_WRITE, hotwire-native references |
-| P1-6: EVERY_WRITE_STYLE in changelog.md | **Fixed** | grep returns no matches |
-| P1-7: bin/get-pr-comments in resolve_pr_parallel.md | **Fixed** | Command rewritten to use gh CLI |
-| P1-1: codex-delegation missing from routing | **Fixed** | Now in Execute stage |
-| P1-2: Rails/Ruby references | **Partially fixed** | Reduced from 6+ files to 3 remaining files |
-| P2-5: work.md feature branches | **Not fixed** | Still at line 183 |
-| P2-6: review.md worktrees | **Not fixed** | Still at lines 20 and 47 |
-
-Remaining Rails/Ruby references:
-
-| File | Line | Content |
-|------|------|---------|
-| `/root/projects/Clavain/agents/review/deployment-verification-agent.md` | 58 | `rails db:migrate` in example table |
-| `/root/projects/Clavain/commands/work.md` | 85, 127 | `bin/rails test` in examples |
-
-These are now used alongside other language examples (npm test, pytest, go test) rather than as the sole example, which reduces the severity from P1 to P2.
-
-#### 10. Command-Workflow Alignment
-
-The `lfg.md` command at `/root/projects/Clavain/commands/lfg.md` chains 7 commands: brainstorm -> write-plan -> flux-drive -> work -> review -> resolve-todo-parallel -> quality-gates. This "golden path" is architecturally clean.
-
-The `codex-first.md` command introduces a session-wide behavioral contract that changes how all subsequent execution works. This is a different pattern from other commands -- it is a mode toggle rather than a workflow. The CLAUDE.md auto-detection feature (line 82: "If the project's CLAUDE.md contains `codex-first: true`") adds an implicit activation path. The `clodex.md` command is properly implemented as a thin alias that defers to `codex-first`.
-
-The `upstream-sync.md` command (at `/root/projects/Clavain/commands/upstream-sync.md`) documents the relationship with the System 1 pipeline (daily GitHub Action -> issues -> this command picks them up). It does not mention System 2 (the upstreams.json sync.yml merge pipeline), which reinforces that the two systems are disconnected.
+The Clavain plugin (v0.4.26) has solid structural foundations: 427 pytest tests pass, all components follow naming conventions, frontmatter contracts are enforced, the 3-layer routing table correctly references all 34 skills, 16 agents, and 24 commands, and the flux-drive multi-agent review system is well-designed with staged dispatch, diff slicing, and knowledge injection. The primary architectural gaps are in the upstream sync layer (32 stale fileMap entries that would cause silent failures on next sync), documentation surface consistency (hook counts are wrong everywhere), and three overlapping review entry points that create user confusion about which to invoke.
 
 ### Issues Found
 
-**P0-1: Pervasive component count mismatch (Component Count Consistency)**
-The actual component counts (32 skills, 24 commands) do not match the counts in `/root/projects/Clavain/AGENTS.md` (line 12: "31 skills, 23 agents, 22 commands") or `/root/projects/Clavain/skills/using-clavain/SKILL.md` (line 22: "Clavain provides 31 skills, 23 agents, and 22 commands"). The using-clavain count is injected into every session, causing agents to work with stale component inventories. The discrepancy is caused by the addition of `codex-first-dispatch` (skill), `codex-first` (command), and `clodex` (command) without updating these files.
+**P1-1: upstreams.json fileMap has 32 stale entries pointing to deleted files**
 
-**P1-1: New codex-first components missing from routing table (Routing Table Completeness)**
-The `codex-first-dispatch` skill, `codex-first` command, and `clodex` command are absent from the routing table in `/root/projects/Clavain/skills/using-clavain/SKILL.md`. The codex-first-dispatch skill should appear in the Execute stage alongside `codex-delegation`. The codex-first and clodex commands should appear in either the Execute or Meta stage commands column.
+File: `/root/projects/Clavain/upstreams.json`
 
-**P1-2: Dual upstream sync systems with no documented relationship (Upstream Sync Architecture)**
-System 1 (`scripts/upstream-check.sh` + `docs/upstream-versions.json` + `.github/workflows/upstream-check.yml`) and System 2 (`upstreams.json` + `.github/workflows/sync.yml`) track overlapping sets of repos with different state formats, different automation schedules, and no shared state. System 1 tracks 7 repos for change detection; System 2 tracks 4 repos for automated merging. The 3 repos unique to System 1 are "knowledge upstreams" vs "source upstreams" -- a valid distinction that is never documented. AGENTS.md's "Upstream Tracking" section describes only System 1.
+The compound-engineering upstream has 12 fileMap entries pointing to agents and commands that were deleted during the fd-* consolidation (architecture-strategist, code-simplicity-reviewer, deployment-verification-agent, python-reviewer, typescript-reviewer, pattern-recognition-specialist, performance-oracle, security-sentinel, spec-flow-analyzer, resolve-parallel, resolve-pr-parallel, resolve-todo-parallel). The oracle upstream has 8 entries for docs that were not synced. The mcp-agent-mail upstream has 7 entries for references that were not synced. The beads upstream has 2 entries for references that were not synced.
 
-**P1-3: brainstorming/SKILL.md mapped in two upstreams (Upstream fileMap Conflict)**
-In `/root/projects/Clavain/upstreams.json`, both the `superpowers` entry (line 10) and the `compound-engineering` entry (line 77) map to `skills/brainstorming/SKILL.md`. The sync.yml merge pipeline has no conflict resolution for overlapping file maps, so the last upstream processed will silently overwrite the prior merge result.
+Impact: When the sync system (`.github/workflows/sync.yml` or `scripts/pull-upstreams.sh`) next runs, it will attempt to write to these 32 target paths. For the compound-engineering entries, this would re-create the legacy agents that were intentionally consolidated into fd-* agents, undoing the v2 consolidation. For the oracle/mcp-agent-mail/beads entries, it would create reference files that may or may not be useful.
 
-**P1-4: flux-drive Tier 1 depends on gurgeh-plugin (flux-drive Skill)**
-All five Tier 1 agents in `/root/projects/Clavain/skills/flux-drive/SKILL.md` (lines 139-143) reference `gurgeh-plugin:fd-*` subagent types. This is an undeclared dependency on a separate plugin. There is no fallback documented in the skill for when gurgeh-plugin is not installed, and the deduplication rule (prefer Tier 1 over Tier 3) will suppress working Tier 3 agents in favor of non-existent Tier 1 agents.
+Evidence: Running a script to check each fileMap target against disk shows all 32 missing. The compound-engineering entries are the most dangerous because they map to `agents/review/` and `commands/` -- active directories where re-created files would be picked up by tests and routing.
 
-**P2-1: work.md mentions feature branches (Command Layer Consistency)**
-`/root/projects/Clavain/commands/work.md` line 183 contains `git push -u origin feature-branch-name`. This contradicts the trunk-based development policy in CLAUDE.md line 30: "Trunk-based development -- no branches/worktrees skills."
+Smallest fix: Remove the 12 compound-engineering stale entries (agents and commands that map to deleted files). For the oracle/mcp-agent-mail/beads reference entries, either remove them from fileMap or run the sync to populate them -- the sync has apparently never been run for these reference files. Decision: if the references are wanted, run the sync; if not, remove the fileMap entries.
 
-**P2-2: review.md mentions worktrees (Command Layer Consistency)**
-`/root/projects/Clavain/commands/review.md` line 20 lists "Proper permissions to create worktrees" and line 47 says "in worktree or on current branch." This contradicts the trunk-based-only policy.
+**P1-2: Hook count in all documentation surfaces says "3 hooks" but plugin has 4 hook events and 5 hook scripts** (independently confirmed)
 
-**P2-3: SessionStart hook async flag (Hook Architecture)**
-The hook in `/root/projects/Clavain/hooks/hooks.json` is marked `"async": true`. If the hook does not complete before the LLM generates its first response, the routing table will be absent from the first turn. For a hook whose sole purpose is context injection, synchronous execution would be safer.
+Files: `/root/projects/Clavain/CLAUDE.md` (line 7), `/root/projects/Clavain/AGENTS.md` (line 12), `/root/projects/Clavain/README.md` (line 7), `/root/projects/Clavain/.claude-plugin/plugin.json` (description)
 
-**P2-4: mcp-agent-mail hardcoded localhost (MCP Server Configuration)**
-The mcp-agent-mail entry in `/root/projects/Clavain/.claude-plugin/plugin.json` hardcodes `http://127.0.0.1:8765/mcp`. For a general-purpose plugin distributed to users who may not have this server running, this will produce connection errors on every session.
+The `hooks/hooks.json` file registers 4 hook events:
+1. PreToolUse (autopilot.sh)
+2. SessionStart (session-start.sh, agent-mail-register.sh)
+3. Stop (auto-compound.sh)
+4. SessionEnd (dotfiles-sync.sh)
 
-**P2-5: Remaining Rails-specific content (Upstream Remnant Contamination)**
-`/root/projects/Clavain/agents/review/deployment-verification-agent.md` line 58 uses `rails db:migrate` as the sole example in a deployment step table. `/root/projects/Clavain/commands/work.md` lines 85 and 127 use `bin/rails test` alongside other test commands. These are reduced from the prior review but still present.
+That is 5 hook scripts across 4 hook events. All documentation surfaces say "3 hooks." This was previously flagged in the v3 flux-drive review (knowledge context confirms this was noted on 2026-02-09) but has not been corrected. The Stop hook with auto-compound.sh appears to have been added after the count was established.
 
-**P2-6: Inconsistent command thickness (Command Layer Consistency)**
-Commands range from 1-line skill wrappers (write-plan, flux-drive) to 455-line standalone workflows (review). The AGENTS.md convention does not acknowledge this split. Thick commands embed full multi-agent orchestration that architecturally belongs in skills.
+A previous review (knowledge entry, last confirmed 2026-02-09) noted that the count methodology was "defensible but worth noting." However, with the addition of the Stop hook (auto-compound.sh), even counting by events yields 4, not 3. The count is now simply wrong by any methodology.
+
+Smallest fix: Update all 4 documentation surfaces to say "4 hooks" (counting by event type) or "5 hooks" (counting by script). Given that the AGENTS.md hooks section lists hooks by script name, "5 hooks" would be more consistent.
+
+**P1-3: Three review entry points (review, quality-gates, flux-drive) have overlapping agent dispatch with no documented selection guidance**
+
+Files:
+- `/root/projects/Clavain/commands/review.md` -- launches fd-architecture, fd-safety, fd-quality, git-history-analyzer, agent-native-reviewer, conditionally fd-correctness and data-migration-expert
+- `/root/projects/Clavain/commands/quality-gates.md` -- launches fd-architecture, fd-quality always, then risk-based fd-safety, fd-correctness, fd-performance, fd-user-product, data-migration-expert
+- `/root/projects/Clavain/commands/flux-drive.md` -> `/root/projects/Clavain/skills/flux-drive/SKILL.md` -- scored triage from full 6-agent fd-* roster plus Oracle, with staged dispatch
+
+All three commands dispatch overlapping subsets of the same fd-* agents but use different selection heuristics:
+- `review` has a hardcoded roster of 5 always-launch agents (including non-fd agents like git-history-analyzer)
+- `quality-gates` uses file-path-based risk classification with a 5-agent cap
+- `flux-drive` uses scored triage with category bonuses, staged dispatch, and an 8-agent cap
+
+The routing table in `using-clavain/SKILL.md` places all three in the "Review" stage but gives no guidance on which to choose. The `lfg` command chains to both `flux-drive` (for plan review in Step 3) and `quality-gates` (for code review in Step 6), which is correct differentiation, but a user who just says "review this" has no clear signal about which command to use.
+
+The `work` command (line 135) delegates review to `/quality-gates`, providing one documented path, but this creates an implicit hierarchy (work -> quality-gates, lfg -> flux-drive + quality-gates) that is not surfaced in the routing table.
+
+Smallest fix: Add a "When to use which review command" section to the routing table in `using-clavain/SKILL.md`:
+- `/review` -- PR-focused review (takes PR number, GitHub URL)
+- `/quality-gates` -- Quick code review on working changes (auto-selects from git diff)
+- `/flux-drive` -- Deep document/repo/diff review with scored triage, staged dispatch, knowledge context
+
+**P2-1: auto-compound.sh omitted from validation checklists**
+
+Files: `/root/projects/Clavain/CLAUDE.md` (lines 19-23), `/root/projects/Clavain/AGENTS.md` (lines 196-201, 218-225)
+
+Both CLAUDE.md and AGENTS.md list explicit `bash -n` syntax check commands for session-start.sh, autopilot.sh, agent-mail-register.sh, dotfiles-sync.sh, and lib.sh. The auto-compound.sh script is missing from both lists. The structural tests DO cover it (test_scripts.py dynamically finds all .sh files), but the manual validation checklists in documentation are incomplete.
+
+Smallest fix: Add `bash -n hooks/auto-compound.sh` to both CLAUDE.md Quick Commands and AGENTS.md Validation Checklist sections.
+
+**P2-2: Stop hook in hooks.json has no matcher field**
+
+File: `/root/projects/Clavain/hooks/hooks.json` (lines 41-53)
+
+The Stop hook registration lacks a `matcher` field, unlike PreToolUse (matcher: `Edit|Write|MultiEdit|NotebookEdit`) and SessionStart (matcher: `startup|resume|clear|compact`). While this may be intentional (Stop hooks may not support matchers in the Claude Code hook API), it is inconsistent with the other hook registrations and is not documented. The SessionEnd hook also lacks a matcher, but the AGENTS.md documentation does not discuss when Stop hooks fire.
+
+Smallest fix: Add a comment in hooks.json or document in AGENTS.md that Stop and SessionEnd events do not use matchers (if that is the API constraint), or add an appropriate matcher if the API supports it.
 
 ### Improvements Suggested
 
-**IMP-1: Unify or explicitly partition the upstream sync systems**
-Document the distinction between "source upstreams" (4 repos tracked by System 2 for automated file merging) and "knowledge upstreams" (3 additional repos tracked by System 1 for change detection only). Add this to `/root/projects/Clavain/AGENTS.md` in the "Upstream Tracking" section. Consider whether System 1 should be deprecated in favor of extending System 2 with a detection-only mode for the 3 knowledge upstreams.
+**IMP-1: Extract _parse_frontmatter to conftest.py to eliminate 3x test duplication**
 
-**IMP-2: Add automated component count validation**
-Add a step to the validation checklist (or a script) that counts skills, agents, and commands on disk and compares against the counts in CLAUDE.md, AGENTS.md, plugin.json, README.md, and using-clavain/SKILL.md. This would catch count drift immediately when components are added or removed.
+Files:
+- `/root/projects/Clavain/tests/structural/test_agents.py` (line 9)
+- `/root/projects/Clavain/tests/structural/test_skills.py` (line 10)
+- `/root/projects/Clavain/tests/structural/test_commands.py` (line 10)
 
-**IMP-3: Ship Clavain-native Tier 1 agents for flux-drive**
-Instead of depending on gurgeh-plugin for Tier 1 agents, create Clavain-native equivalents (e.g., `agents/review/fd-architecture.md`, `fd-code-quality.md`, etc.) so flux-drive works out of the box. The gurgeh-plugin versions could then be Tier 2 overrides for projects that have gurgeh-plugin installed.
+The `_parse_frontmatter(path)` function is identically defined in all three test files. It should be extracted to `conftest.py` (which already exists with shared fixtures) or to a `helpers.py` module. This is accidental copy-paste drift, not intentional duplication for isolation -- the function is identical in all three files.
 
-**IMP-4: Standardize command thickness in AGENTS.md**
-Add an explicit convention distinguishing "thin commands" (1-10 lines, invoke a skill) from "orchestration commands" (multi-phase workflows). Document which commands fall into each category. For thick commands, consider extracting the workflow into a skill and converting the command to a thin wrapper, similar to how `flux-drive.md` wraps the `flux-drive` skill.
+**IMP-2: Add automated test validating upstreams.json fileMap targets exist**
 
-**IMP-5: Add cross-reference validation script**
-Create `scripts/validate-refs.sh` that:
-1. Extracts all `clavain:` references from skills, commands, and agents
-2. Verifies each referenced skill, agent, or command exists on disk
-3. Checks that component counts in documentation files match actual counts
-4. Fails with a non-zero exit code on any mismatch
-This would prevent the phantom reference issues that plagued the initial merge from recurring.
+File: `/root/projects/Clavain/tests/structural/`
+
+The structural test suite validates routing table references, hook script existence, and frontmatter contracts, but there is no test that verifies `upstreams.json` fileMap targets resolve to existing files on disk. This is how 32 stale entries accumulated undetected. A test like `test_upstream_filemap_targets_exist` in a new `test_upstreams.py` (or in `test_cross_references.py`) would catch this class of drift immediately.
+
+Note: The test would need to distinguish between "should exist now" entries (active skills, agents, commands) and "will be created on sync" entries (reference docs that have never been synced). One approach: test only entries where the target directory exists (e.g., agents/review/ exists, so entries targeting agents/review/foo.md should resolve).
+
+**IMP-3: flux-drive skill phase step numbering is inconsistent**
+
+File: `/root/projects/Clavain/skills/flux-drive/phases/launch.md`
+
+Step 2.1b ("Prepare diff content for agent prompts") appears in the file after Steps 2.2, 2.2b, and 2.2c. The file reads: 2.0, 2.1, 2.1a, 2.2, 2.2b, 2.2c, then 2.1b. A reader following the "progressive loading" directive would encounter steps out of order. The intent is that 2.1b is a preparation step that should be read before 2.2, but its placement after 2.2c is confusing.
+
+The flux-drive skill architecture is otherwise well-structured: the split into `SKILL.md` (routing/triage), `phases/launch.md` (dispatch), `phases/synthesize.md`, `phases/cross-ai.md`, and `phases/shared-contracts.md` keeps each concern in its own file with clear contracts between phases. The diff-routing configuration in `config/flux-drive/diff-routing.md` is a good separation of policy from mechanism.
 
 ### Overall Assessment
 
-Clavain's architecture is **acceptable with targeted fixes needed**. The core design (3-layer routing, skill/agent/command decomposition, SessionStart hook injection) is strong and has proven itself through active use. The prior review's critical issues (phantom references, invalid dispatch syntax, stale namespace) have been systematically addressed, demonstrating that the project has a functional feedback loop.
-
-The most urgent issues are:
-1. **Update component counts** in AGENTS.md and using-clavain/SKILL.md to match actual inventory (32 skills, 24 commands) -- this affects every session via the hook injection.
-2. **Add codex-first components to the routing table** -- without this, the codex-first mode is discoverable only by users who already know it exists.
-3. **Document the upstream sync architecture** -- the dual-system design is reasonable but the lack of documentation creates confusion about which system does what and how they relate.
+Clavain's component architecture is fundamentally sound -- the 3-layer routing, fd-* agent consolidation, flux-drive staged dispatch system, and test infrastructure are well-designed and consistently maintained. The main structural risks are in the upstream sync layer (stale fileMap entries that could silently undo the agent consolidation on next sync) and documentation surfaces that have drifted from reality after hook additions. Both are fixable with targeted changes.
+<!-- flux-drive:complete -->

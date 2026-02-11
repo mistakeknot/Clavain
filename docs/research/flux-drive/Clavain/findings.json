@@ -1,0 +1,169 @@
+{
+  "reviewed": "2026-02-10",
+  "input": "/root/projects/Clavain",
+  "agents_launched": ["fd-architecture", "fd-quality", "fd-user-product", "fd-safety", "fd-performance", "oracle-council"],
+  "agents_completed": ["fd-architecture", "fd-quality", "fd-user-product", "fd-safety", "fd-performance"],
+  "agents_failed": ["oracle-council"],
+  "findings": [
+    {
+      "id": "P0-1",
+      "severity": "P0",
+      "agent": "fd-user-product",
+      "section": "Command References",
+      "title": "/triage references non-existent /resolve_todo_parallel command",
+      "convergence": 1
+    },
+    {
+      "id": "P1-1",
+      "severity": "P1",
+      "agent": "fd-architecture",
+      "section": "Upstream Sync",
+      "title": "upstreams.json fileMap has 32 stale entries pointing to deleted files",
+      "convergence": 1
+    },
+    {
+      "id": "P1-2",
+      "severity": "P1",
+      "agent": "fd-architecture, fd-quality",
+      "section": "Documentation Accuracy",
+      "title": "Hook count says '3 hooks' everywhere but plugin has 4 events and 5 scripts",
+      "convergence": 2
+    },
+    {
+      "id": "P1-3",
+      "severity": "P1",
+      "agent": "fd-architecture, fd-user-product",
+      "section": "Review Commands",
+      "title": "3-4 overlapping review entry points (review, quality-gates, flux-drive, plan-review) with no selection guidance",
+      "convergence": 2
+    },
+    {
+      "id": "P1-4",
+      "severity": "P1",
+      "agent": "fd-quality",
+      "section": "Naming Conventions",
+      "title": "generate-command.md frontmatter uses underscore (generate_command) instead of kebab-case",
+      "convergence": 1
+    },
+    {
+      "id": "P1-5",
+      "severity": "P1",
+      "agent": "fd-quality",
+      "section": "Test Coverage",
+      "title": "Missing name-matches-filename tests for skills and commands (test gap that allowed P1-4)",
+      "convergence": 1
+    },
+    {
+      "id": "P1-6",
+      "severity": "P1",
+      "agent": "fd-user-product",
+      "section": "First-Run Experience",
+      "title": "No guided first-use path — /setup sends users directly to /lfg (most complex command)",
+      "convergence": 1
+    },
+    {
+      "id": "P1-7",
+      "severity": "P1",
+      "agent": "fd-user-product",
+      "section": "Command References",
+      "title": "/changelog references non-existent EVERY_WRITE_STYLE.md file",
+      "convergence": 1
+    },
+    {
+      "id": "P1-8",
+      "severity": "P1",
+      "agent": "fd-user-product, fd-quality",
+      "section": "Skill Discoverability",
+      "title": "3 skills (prompterpeer, winterpeer, splinterpeer) missing from README — inflates '34 skills' count",
+      "convergence": 2
+    },
+    {
+      "id": "P1-9",
+      "severity": "P1",
+      "agent": "fd-user-product",
+      "section": "Routing Table",
+      "title": "113-line routing table injected every session with no progressive disclosure",
+      "convergence": 1
+    },
+    {
+      "id": "P1-10",
+      "severity": "P1",
+      "agent": "fd-performance",
+      "section": "Test Suite",
+      "title": "Bats autopilot test creates symlinks for all system binaries — 6.8s (67% of shell test time)",
+      "convergence": 1
+    },
+    {
+      "id": "P1-11",
+      "severity": "P1",
+      "agent": "fd-performance",
+      "section": "Flux-Drive Token Budget",
+      "title": "Full flux-drive orchestrator consumes ~14k tokens before any agent work begins",
+      "convergence": 1
+    }
+  ],
+  "improvements": [
+    {
+      "id": "IMP-1",
+      "agent": "fd-architecture, fd-quality",
+      "section": "Test Infrastructure",
+      "title": "Extract _parse_frontmatter to conftest.py (duplicated 3x)"
+    },
+    {
+      "id": "IMP-2",
+      "agent": "fd-architecture",
+      "section": "Upstream Sync",
+      "title": "Add automated test validating upstreams.json fileMap targets exist"
+    },
+    {
+      "id": "IMP-3",
+      "agent": "fd-quality, fd-architecture",
+      "section": "Agent System Prompts",
+      "title": "fd-* agents lack output format spec — entirely dependent on caller injection (independently confirmed)"
+    },
+    {
+      "id": "IMP-4",
+      "agent": "fd-user-product",
+      "section": "First-Run Experience",
+      "title": "Add /quickstart command for guided first-use cycle"
+    },
+    {
+      "id": "IMP-5",
+      "agent": "fd-user-product",
+      "section": "Command Naming",
+      "title": "Consolidate review entry points with argument-based routing or clearer naming"
+    },
+    {
+      "id": "IMP-6",
+      "agent": "fd-user-product",
+      "section": "README",
+      "title": "Add 'Getting Started in 5 Minutes' section to README"
+    },
+    {
+      "id": "IMP-7",
+      "agent": "fd-safety, fd-quality",
+      "section": "Hook Security",
+      "title": "auto-compound.sh should use jq or escape_for_json instead of raw heredoc interpolation"
+    },
+    {
+      "id": "IMP-8",
+      "agent": "fd-performance",
+      "section": "Test Suite",
+      "title": "Bats tests run serially; parallel execution would cut wall time from 10s to ~3s"
+    },
+    {
+      "id": "IMP-9",
+      "agent": "fd-performance",
+      "section": "Flux-Drive",
+      "title": "Move scoring examples to sub-file to save ~477 tokens per session"
+    },
+    {
+      "id": "IMP-10",
+      "agent": "fd-performance",
+      "section": "Flux-Drive",
+      "title": "Pipeline qmd knowledge queries instead of serial per-agent retrieval"
+    }
+  ],
+  "verdict": "needs-changes",
+  "early_stop": false
+}

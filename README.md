@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 34 skills, 16 agents, 24 commands, 3 hooks, and 3 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 34 skills, 16 agents, 23 commands, 4 hooks, and 3 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -84,7 +84,7 @@ I find `mine` mode to be particularly useful for complex, ambiguous contexts. It
 
 ### Token Efficiency with `/clodex`
 
-Because Codex CLI has far higher usage limits than Claude Code, I like saving Claude Code usage by toggling `/clodex` or mentioning it in my request. In this mode, Claude reads, plans, and writes detailed prompts — but all code changes always go through Codex agents for the session (or until /clodex is deactivated by toggle). Claude crafts a megaprompt, dispatches it, reads the verdict from Codex, and decides if it's acceptable. I would describe it as Claude playing the tech lead and Codex playing the engineering team.
+Because Codex CLI has far higher usage limits than Claude Code, `/clodex` lets Claude orchestrate while Codex does the heavy lifting. Claude reads, plans, and writes detailed prompts — then dispatches to Codex agents for implementation. Claude crafts a megaprompt, dispatches it, reads the verdict from Codex, and decides if it's acceptable. Claude plays the tech lead, Codex plays the engineering team.
 
 For multi-task work, `/clodex` parallelizes naturally. Five independent changes get five Codex agents dispatched simultaneously. Claude collects the results and commits.
 
@@ -121,6 +121,9 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `receiving-code-review` | Handle review feedback |
 | **Cross-AI** | |
 | `interpeer` | Cross-AI peer review with 4 modes: quick, deep (Oracle), council (multi-model), mine (disagreement extraction) |
+| `prompterpeer` | Oracle prompt optimizer — builds and reviews prompts for GPT-5.2 Pro (interpeer deep mode) |
+| `winterpeer` | LLM Council review — multi-model consensus for critical decisions (interpeer council mode) |
+| `splinterpeer` | Disagreement mining — extracts model conflicts into tests, specs, and questions (interpeer mine mode) |
 | `clodex` | Codex dispatch — megaprompt, parallel delegation, debate, Oracle escalation |
 | **Knowledge & Docs** | |
 | `beads-workflow` | Git-native issue tracking via `bd` CLI |
@@ -168,7 +171,6 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/plan-review` | Parallel plan review |
 | `/quality-gates` | Auto-select the right reviewers |
 | `/repro-first-debugging` | Disciplined bug investigation |
-| `/codex-first` | Toggle codex-first execution mode |
 | `/debate` | Structured Claude↔Codex debate |
 | `/interpeer` | Quick cross-AI peer review |
 | `/migration-safety` | Data migration risk assessment |
@@ -184,11 +186,11 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
-### Hooks (3)
+### Hooks (4)
 
-- **PreToolUse** — Codex-first gate: blocks Edit/Write when codex-first mode is active, directing changes through Codex agents instead.
-- **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact). Also warns when upstream tracking is stale.
-- **SessionEnd** — Syncs dotfile changes at end of session.
+- **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact) (`session-start.sh`). Also registers with Agent Mail if available (`agent-mail-register.sh`).
+- **Stop** — Auto-compound check: detects compoundable signals (commits, resolutions, insights) and prompts knowledge capture (`auto-compound.sh`).
+- **SessionEnd** — Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
 ### MCP Servers (3)
 
@@ -241,7 +243,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 
 **Skills can be overridden.** If you disagree with how `test-driven-development` works, you can create your own skill with the same name in a local plugin that loads after Clavain. Last-loaded wins.
 
-**Codex-first mode is optional.** Everything works fine with Claude making changes directly. `/clodex` is there for when you want the orchestration pattern, not a requirement.
+**Codex dispatch is optional.** Everything works fine with Claude making changes directly. `/clodex` is there for when you want the orchestration pattern, not a requirement.
 
 **Oracle requires setup.** The cross-AI features (`/interpeer deep`, `/interpeer council`, `flux-drive` Cross-AI) need [Oracle](https://github.com/steipete/oracle) installed and configured. Without it, those features are simply skipped — nothing breaks.
 
@@ -255,10 +257,9 @@ clavain/
 │   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 24 slash commands
+├── commands/                      # 23 slash commands
 ├── hooks/
-│   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + SessionEnd)
-│   ├── autopilot.sh               # Codex-first mode gate (blocks writes when active)
+│   ├── hooks.json                 # Hook registration (SessionStart + Stop + SessionEnd)
 │   ├── session-start.sh           # Context injection + staleness warning
 │   ├── agent-mail-register.sh     # MCP Agent Mail session registration
 │   └── dotfiles-sync.sh           # Dotfile sync on session end

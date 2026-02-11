@@ -27,7 +27,9 @@ run_shell() {
     FAILED=1
     return
   fi
-  bats "$PROJECT_ROOT/tests/shell/" --recursive || FAILED=1
+  BATS_ARGS=("$PROJECT_ROOT/tests/shell/" --recursive)
+  command -v parallel &>/dev/null && BATS_ARGS+=(--jobs 4)
+  bats "${BATS_ARGS[@]}" || FAILED=1
 }
 
 run_smoke() {
