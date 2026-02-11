@@ -1,7 +1,7 @@
 ---
 name: data-migration-expert
 description: "Validates data migrations, backfills, and production data transformations against reality. Use when PRs involve ID mappings, column renames, enum conversions, or schema changes."
-model: inherit
+model: sonnet
 ---
 
 <examples>

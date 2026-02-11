@@ -2,7 +2,7 @@
 name: pr-comment-resolver
 description: "Addresses PR review comments by implementing requested changes and reporting resolutions. Use when code review feedback needs to be resolved with code changes."
 color: blue
-model: inherit
+model: sonnet
 ---
 
 <examples>
