@@ -3,13 +3,7 @@ name: using-clavain
 description: Use when starting any conversation - establishes how to find and use skills, agents, and commands, requiring Skill tool invocation before ANY response including clarifying questions
 ---
 
-<EXTREMELY-IMPORTANT>
-If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
-
-IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
-
-This is not negotiable. This is not optional. You cannot rationalize your way out of this.
-</EXTREMELY-IMPORTANT>
+**Proactive skill invocation is required.** When a skill matches the current task — even partially — invoke it before responding. Skills are designed to be triggered automatically; skipping a relevant skill degrades output quality.
 
 ## How to Access Skills
 
@@ -21,7 +15,7 @@ This is not negotiable. This is not optional. You cannot rationalize your way ou
 
 # Using Clavain
 
-Clavain provides 33 skills, 16 agents, and 28 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 30 skills, 16 agents, and 28 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 

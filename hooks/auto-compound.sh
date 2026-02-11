@@ -23,6 +23,11 @@
 
 set -euo pipefail
 
+# Guard: fail-open if jq is not available
+if ! command -v jq &>/dev/null; then
+    exit 0
+fi
+
 # Read hook input
 INPUT=$(cat)
 

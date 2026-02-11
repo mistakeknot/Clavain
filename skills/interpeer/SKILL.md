@@ -1,6 +1,6 @@
 ---
 name: interpeer
-description: Cross-AI peer review with escalation modes — quick (Claude↔Codex), deep (reviewed Oracle query), council (multi-model synthesis), mine (disagreement extraction). Auto-detects host agent.
+description: Cross-AI peer review with escalation modes — quick (Claude↔Codex), deep (reviewed Oracle query, formerly prompterpeer), council (multi-model synthesis, formerly winterpeer), mine (disagreement extraction, formerly splinterpeer). Auto-detects host agent.
 ---
 
 # interpeer: Cross-AI Peer Review

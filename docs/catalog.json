@@ -1,7 +1,7 @@
 {
-  "generated": "2026-02-11T15:58:20Z",
+  "generated": "2026-02-11T18:45:41Z",
   "counts": {
-    "skills": 33,
+    "skills": 30,
     "agents": 16,
     "commands": 28,
     "hooks": 5,
@@ -62,7 +62,7 @@
     },
     {
       "name": "interpeer",
-      "description": "Cross-AI peer review with escalation modes \u2014 quick (Claude\u2194Codex), deep (reviewed Oracle query), council (multi-model synthesis), mine (disagreement extraction). Auto-detects host agent."
+      "description": "Cross-AI peer review with escalation modes \u2014 quick (Claude\u2194Codex), deep (reviewed Oracle query, formerly prompterpeer), council (multi-model synthesis, formerly winterpeer), mine (disagreement extraction, formerly splinterpeer). Auto-detects host agent."
     },
     {
       "name": "landing-a-change",
@@ -71,10 +71,6 @@
     {
       "name": "mcp-cli",
       "description": "Use when interacting with MCP servers on-demand via the mcp CLI tool \u2014 discover tools, resources, and prompts without polluting context with pre-loaded integrations"
-    },
-    {
-      "name": "prompterpeer",
-      "description": "Oracle prompt optimizer with human review. Builds high-quality prompts for GPT-5.2 Pro and shows the enhanced prompt for approval before sending. For careful, reviewed queries to Oracle."
     },
     {
       "name": "receiving-code-review",
@@ -91,10 +87,6 @@
     {
       "name": "slack-messaging",
       "description": "Use when asked to send or read Slack messages, check Slack channels, test Slack integrations, or interact with a Slack workspace from the command line."
-    },
-    {
-      "name": "splinterpeer",
-      "description": "Extract disagreements between AI models and convert them into actionable artifacts (tests, specs, clarifying questions). Turns model conflict into engineering progress rather than just picking a side."
     },
     {
       "name": "subagent-driven-development",
@@ -123,10 +115,6 @@
     {
       "name": "verification-before-completion",
       "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always"
-    },
-    {
-      "name": "winterpeer",
-      "description": "LLM Council review for critical decisions. Gets consensus from GPT (via Oracle) and Claude (current session) with synthesized recommendations. For multiple perspectives on important architectural or design decisions."
     },
     {
       "name": "working-with-claude-code",

@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 33 skills, 16 agents, 28 commands, 5 hooks, 2 MCP servers |
+| Components | 30 skills, 16 agents, 28 commands, 5 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -23,7 +23,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 33 discipline skills
+├── skills/                        # 30 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -209,7 +209,7 @@ When making changes, verify:
 Quick validation:
 ```bash
 # Count components
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 33
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 30
 echo "Agents: $(ls agents/{review,research,workflow}/*.md | wc -l)"
 echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 28
 
