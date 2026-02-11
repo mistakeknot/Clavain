@@ -1,6 +1,6 @@
 {
   "name": "clavain",
-  "version": "0.4.28",
+  "version": "0.4.29",
   "description": "General-purpose engineering discipline plugin. 16 agents, 25 commands, 33 skills, 2 MCP servers — combining workflow discipline with specialized execution agents. Includes Codex dispatch, cross-AI review (interpeer with quick/deep/council/mine modes), and structured debate.",
   "author": {
     "name": "mistakeknot"
