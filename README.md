@@ -258,38 +258,15 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-clavain/
-├── .claude-plugin/plugin.json    # Manifest
-├── skills/                        # 30 discipline skills (SKILL.md each)
-├── agents/
-│   ├── review/                    # 9 review agents
-│   ├── research/                  # 5 research agents
-│   └── workflow/                  # 2 workflow agents
-├── commands/                      # 32 slash commands
-├── hooks/
-│   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + Stop + SessionEnd)
-│   ├── session-start.sh           # Context injection + staleness warning
-│   ├── auto-compound.sh           # Auto-compound knowledge capture on Stop
-│   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
-│   └── dotfiles-sync.sh           # Dotfile sync on session end
-├── config/
-│   └── flux-drive/knowledge/      # Knowledge layer — patterns from past reviews
-├── scripts/
-│   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
-│   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
-│   ├── install-codex.sh           # Codex skill installer
-│   ├── upstream-check.sh          # Checks upstream repos via gh api
-│   └── upstream-impact-report.py  # Impact digest for upstream PRs
-├── docs/
-│   └── upstream-versions.json     # Upstream sync baseline
-└── .github/workflows/
-    ├── upstream-check.yml              # Daily cron for upstream change detection
-    ├── sync.yml                        # Weekly auto-merge via Claude Code + Codex
-    ├── pr-agent-commands.yml           # Issue comment dispatch for /review and /codex-review
-    ├── upstream-impact.yml             # PR impact digest for upstream-sync changes
-    ├── upstream-decision-gate.yml      # Human decision gate for upstream-sync PRs
-    └── ...                             # + 3 more (codex refresh reminders, sync issue command)
+skills/       # 30 discipline skills (SKILL.md each)
+agents/       # 16 agents (review/ + research/ + workflow/)
+commands/     # 32 slash commands
+hooks/        # 5 hooks (SessionStart, Stop×2, SessionEnd, PreToolUse)
+config/       # flux-drive knowledge layer
+scripts/      # debate, codex dispatch, upstream sync
 ```
+
+Full directory tree and component conventions: see `AGENTS.md`.
 
 ### How the Routing Works
 

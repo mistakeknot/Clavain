@@ -304,14 +304,6 @@ Full audit rationale: `docs/plugin-audit.md`
 - **General-purpose only** — no domain-specific components (Rails, Ruby gems, Every.to, Figma, Xcode, browser-automation)
 - **Trunk-based** — no branch/worktree skills; commit directly to `main`
 
-## Credits
-
-- **Jesse Vincent** ([@obra](https://github.com/obra)) — superpowers, superpowers-lab, superpowers-developing-for-claude-code
-- **Kieran Klaassen** ([@kieranklaassen](https://github.com/kieranklaassen)) — compound-engineering at [Every](https://every.to)
-- **Steve Yegge** ([@steveyegge](https://github.com/steveyegge)) — beads
-- **Peter Steinberger** ([@steipete](https://github.com/steipete)) — oracle
-- **Tobi Lütke** ([@tobi](https://github.com/tobi)) — qmd
-
 ## Upstream Tracking
 
 Clavain bundles knowledge from 6 actively-developed upstream tools. Two systems keep them in sync:
