@@ -1,5 +1,7 @@
 # Codex CLI Quick Reference
 
+**IMPORTANT**: Always use `codex exec`, never bare `codex`. The top-level `codex` command launches interactive mode and does not accept exec flags.
+
 | Flag | Purpose |
 |------|---------|
 | `-C <DIR>` | Working directory (required) |
@@ -8,6 +10,18 @@
 | `-m <MODEL>` | Override model |
 | `-i <FILE>` | Attach image (repeatable) |
 | `--add-dir <DIR>` | Write access to additional directories |
-| `--full-auto` | Shortcut for `-s workspace-write` |
+| `--full-auto` | Convenience flag: sets `-s workspace-write` (boolean, no value) |
+| `-c key=value` | Override config values (e.g., `-c model="o3"`) |
 
 **Resume**: `codex exec resume --last "follow-up"` or `codex exec resume <SESSION_ID> "follow-up"`
+
+## Deprecated / Invalid Flags
+
+These flags do NOT exist in the current Codex CLI and will cause errors:
+
+| Wrong | Correct |
+|-------|---------|
+| `codex --approval-mode full-auto` | `codex exec --full-auto` |
+| `codex --approval-mode ...` | Flag removed entirely — use `--full-auto` or `-s <MODE>` |
+| `codex -q` / `codex --quiet` | No quiet flag exists — Codex writes to stderr by default |
+| `codex --file <FILE>` | Use `--prompt-file` (dispatch.sh) or pass prompt as positional arg |

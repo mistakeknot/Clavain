@@ -29,6 +29,15 @@ Dispatch tasks to Codex CLI agents (`codex exec`). Claude acts as orchestrator �
 
 If Codex is unavailable, suggest falling back to `clavain:subagent-driven-development`.
 
+## Critical: Always Use dispatch.sh
+
+**NEVER call `codex` directly.** Always use `dispatch.sh` which wraps `codex exec` with correct flags. Common mistakes when calling codex directly:
+- `codex --approval-mode full-auto` — **wrong**, this flag doesn't exist. The correct form is `codex exec --full-auto`
+- `codex --file task.md` — **wrong**, no `--file` flag. Use dispatch.sh `--prompt-file`
+- Bare `codex "prompt"` — **wrong**, opens interactive mode. Always `codex exec "prompt"`
+
+See `references/cli-reference.md` for the full flag reference and `references/troubleshooting.md` for common errors.
+
 ## Dispatch Routing
 
 | Situation | Mode | Why |

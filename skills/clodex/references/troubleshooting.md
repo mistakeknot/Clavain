@@ -10,3 +10,6 @@
 | Agent touches wrong files | List files explicitly in constraints |
 | Two agents conflict | Check file overlap before dispatching |
 | Agent commits despite "don't" | Use `workspace-write` sandbox, always `git status` after |
+| `unexpected argument '--approval-mode'` | Old API. Use `codex exec --full-auto`, not `codex --approval-mode full-auto` |
+| `unexpected argument '--file'` | No `--file` flag. Use dispatch.sh `--prompt-file` or positional arg |
+| `codex` hangs / opens interactive | You called bare `codex` — always use `codex exec` for non-interactive |
