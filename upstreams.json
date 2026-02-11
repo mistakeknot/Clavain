@@ -4,7 +4,7 @@
       "name": "beads",
       "url": "https://github.com/steveyegge/beads.git",
       "branch": "main",
-      "lastSyncedCommit": "d6040bd33362043084cdfef0b898d7fc08ec60fe",
+      "lastSyncedCommit": "4a904961367d2ee66b70bee3a4e2095645203d74",
       "basePath": "",
       "fileMap": {
         "claude-plugin/skills/beads/SKILL.md": "skills/beads-workflow/SKILL.md",
