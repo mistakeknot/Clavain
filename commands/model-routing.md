@@ -2,6 +2,7 @@
 name: model-routing
 description: Toggle subagent model routing between economy (smart defaults) and quality (all Opus) mode
 argument-hint: "[economy|quality|status]"
+disable-model-invocation: true
 ---
 
 # Model Routing

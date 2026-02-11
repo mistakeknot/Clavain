@@ -2,6 +2,7 @@
 name: resolve
 description: Resolve findings from any source — auto-detects TODOs, PR comments, or todo files, then resolves in parallel
 argument-hint: "[optional: 'todos', 'pr', 'code', PR number, or specific pattern]"
+disable-model-invocation: true
 ---
 
 Resolve findings from any source using parallel processing. Auto-detects the source or accepts an explicit hint.

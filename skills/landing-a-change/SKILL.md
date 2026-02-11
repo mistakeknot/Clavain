@@ -1,6 +1,7 @@
 ---
 name: landing-a-change
 description: Use when implementation is complete and all tests pass — guides the disciplined process of verifying, documenting, and landing a change on trunk
+disable-model-invocation: true
 ---
 
 # Landing a Change

@@ -6,6 +6,7 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+disable-model-invocation: true
 ---
 
 # Clodex Mode Toggle

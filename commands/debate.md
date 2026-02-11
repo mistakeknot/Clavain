@@ -1,6 +1,7 @@
 ---
 name: debate
 description: Run a structured Claude↔Codex debate before implementing a complex task
+disable-model-invocation: true
 ---
 
 # Debate — Structured Cross-AI Discussion

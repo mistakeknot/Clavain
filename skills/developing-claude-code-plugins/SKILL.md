@@ -1,6 +1,7 @@
 ---
 name: developing-claude-code-plugins
 description: Use when working on Claude Code plugins (creating, modifying, testing, releasing, or maintaining) - provides streamlined workflows, patterns, and examples for the complete plugin lifecycle
+disable-model-invocation: true
 ---
 
 # Developing Claude Code Plugins

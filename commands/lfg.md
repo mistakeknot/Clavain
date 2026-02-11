@@ -2,6 +2,7 @@
 name: lfg
 description: Full autonomous engineering workflow — brainstorm, strategize, plan, execute, review, ship
 argument-hint: "[feature description]"
+disable-model-invocation: true
 ---
 
 Run these steps in order. Do not do anything else.
@@ -13,6 +14,8 @@ Run these steps in order. Do not do anything else.
 `/clavain:strategy`
 
 Structures the brainstorm into a PRD, creates beads for tracking, and validates with flux-drive before planning.
+
+**Optional:** Run `/clavain:review-doc` on the brainstorm output first for a quick polish before structuring.
 
 ## Step 3: Write Plan
 `/clavain:write-plan`
@@ -32,6 +35,8 @@ If flux-drive finds P0/P1 issues, stop and address them before proceeding to exe
 
 Run `/clavain:work <plan-file-from-step-3>`
 
+**Parallel execution:** When the plan has independent modules, dispatch them in parallel using the `dispatching-parallel-agents` skill. This is automatic when clodex mode is active (executing-plans detects the flag and dispatches Codex agents).
+
 ## Step 6: Test & Verify
 
 Run the project's test suite and linting before proceeding to review:
@@ -47,6 +52,8 @@ Run the project's test suite and linting before proceeding to review:
 
 ## Step 7: Quality Gates
 `/clavain:quality-gates`
+
+**Parallel opportunity:** Quality gates and resolve can overlap — quality-gates spawns review agents while resolve addresses already-known findings. If you have known TODOs from execution, start `/clavain:resolve` in parallel with quality-gates.
 
 ## Step 8: Resolve Issues
 

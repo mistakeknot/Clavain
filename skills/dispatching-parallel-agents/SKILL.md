@@ -198,3 +198,42 @@ need Claude's deep architectural reasoning, consider dispatching Codex agents in
 **To dispatch Codex agents:** Use the `clavain:clodex` skill, which provides
 the full delegation protocol (prompt crafting, dispatch, monitoring, verification).
 It translates plan tasks directly into Codex dispatch format.
+
+## Orchestration Patterns
+
+Three reusable patterns for multi-agent work, extracted from real-world swarm orchestration:
+
+### Parallel Specialists
+Independent tasks run concurrently. Each agent has a distinct domain with no shared files.
+
+```
+Task("Review authentication module")   ─┐
+Task("Review database migrations")     ─┤── all in one message
+Task("Review API error handling")      ─┘
+```
+
+**When:** Plan has 3+ independent modules. `/lfg` Step 5 (execute) uses this when the plan defines independent components.
+
+### Pipeline
+Sequential handoff — agent N's output feeds agent N+1's input.
+
+```
+Agent 1: Research & design    → design.md
+Agent 2: Implement from design.md → code changes
+Agent 3: Write tests for code changes → test files
+```
+
+**When:** Tasks have strict data dependencies. Each step needs the prior step's output.
+
+### Fan-out / Fan-in
+Dispatch N agents for the same question with different perspectives, then synthesize.
+
+```
+Task("Review from security perspective")     ─┐
+Task("Review from performance perspective")  ─┤── fan-out
+Task("Review from UX perspective")           ─┘
+                     │
+              Synthesize findings              ── fan-in
+```
+
+**When:** You want diverse analysis. `/flux-drive` and `/quality-gates` use this pattern — launching fd-* agents in parallel, then synthesizing their findings.

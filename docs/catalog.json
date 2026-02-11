@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-11T18:45:41Z",
+  "generated": "2026-02-11T20:02:34Z",
   "counts": {
     "skills": 30,
     "agents": 16,
-    "commands": 28,
+    "commands": 30,
     "hooks": 5,
     "mcp_servers": 2
   },
@@ -297,6 +297,10 @@
       "description": "Perform exhaustive code reviews using multi-agent analysis and deep inspection"
     },
     {
+      "name": "review-doc",
+      "description": "Quick single-pass document refinement \u2014 assess clarity, score quality, fix issues, offer iteration"
+    },
+    {
       "name": "setup",
       "description": "Bootstrap the Clavain modpack \u2014 install required plugins, disable conflicts, verify MCP servers, configure hooks"
     },
@@ -311,6 +315,10 @@
     {
       "name": "triage",
       "description": "Triage and categorize findings for the CLI todo system"
+    },
+    {
+      "name": "triage-prs",
+      "description": "Triage all open PRs \u2014 batch by theme, review with parallel agents, generate report, walk through decisions"
     },
     {
       "name": "upstream-sync",

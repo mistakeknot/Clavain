@@ -1,13 +1,16 @@
 ---
 name: beads-workflow
 description: Use when tracking work across sessions with Beads issue tracking — guides the bd CLI workflow for creating, managing, and closing issues with dependencies
+disable-model-invocation: true
 ---
 
 # Beads Workflow
 
 ## Overview
 
-Beads (`bd`) is a git-native issue tracker for persistent task tracking across sessions. Issues are stored as JSONL in `.beads/`, synced via git, with hash-based IDs that prevent merge conflicts. Use it for work that spans multiple sessions or has dependencies. For simple single-session tasks, use in-memory `TaskCreate` instead.
+Beads (`bd`) is a git-native issue tracker for persistent task tracking across sessions. Issues stored as JSONL in `.beads/`, synced via git, with hash-based IDs that prevent merge conflicts. Use it for work that spans multiple sessions or has dependencies. For simple single-session tasks, use in-memory `TaskCreate` instead.
+
+**Backend:** Dolt (version-controlled SQL with cell-level merge) is the default. `.beads/dolt/` contains the database (gitignored). `.beads/issues.jsonl` is the git-portable sync layer. If Dolt issues surface, rebuild from JSONL: `bd doctor --fix --source=jsonl`.
 
 ## When to Use Beads vs TaskCreate
 

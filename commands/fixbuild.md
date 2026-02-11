@@ -2,6 +2,7 @@
 name: fixbuild
 description: Run build, capture error, fix it, re-run — fast loop for type errors and build failures without heavyweight debugging
 argument-hint: "[optional: build command, e.g. 'go build ./...' or 'npm run build']"
+disable-model-invocation: true
 ---
 
 # Fix Build
