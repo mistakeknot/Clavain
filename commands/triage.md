@@ -2,6 +2,7 @@
 name: triage
 description: Triage and categorize findings for the CLI todo system
 argument-hint: "[findings list or source type]"
+disable-model-invocation: true
 ---
 
 - First set the /model to Haiku
@@ -198,11 +199,12 @@ During triage, the following status updates occurred:
    ```bash
    ls todos/*-ready-*.md
    ```
+````
 
 2. Start work on approved items:
 
    ```bash
-   /resolve todos  # Work on multiple approved items efficiently
+   /resolve_todo_parallel  # Work on multiple approved items efficiently
    ```
 
 3. Or pick individual items to work on
@@ -210,7 +212,8 @@ During triage, the following status updates occurred:
 4. As you work, update todo status:
    - Ready → In Progress (in your local context as you work)
    - In Progress → Complete (rename file: ready → complete, update frontmatter)
-````
+
+```
 
 ## Example Response Format
 
@@ -294,7 +297,7 @@ Progress: 3/10 completed | Estimated time: ~2 minutes remaining
 - ✅ Update todo files (rename, frontmatter, work log)
 - ❌ Do NOT implement fixes or write code
 - ❌ Do NOT add detailed implementation details
-- ❌ That's for /resolve todos phase
+- ❌ That's for /resolve_todo_parallel phase
 ```
 
 When done give these options
@@ -302,7 +305,7 @@ When done give these options
 ```markdown
 What would you like to do next?
 
-1. run /resolve todos to resolve the todos
+1. run /resolve_todo_parallel to resolve the todos
 2. commit the todos
 3. nothing, go chill
 ```

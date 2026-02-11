@@ -1,6 +1,7 @@
 ---
 name: file-todos
-description: Use when managing the file-based todo tracking system in the todos/ directory — creating todos, managing status and dependencies, conducting triage, and integrating with slash commands
+description: This skill should be used when managing the file-based todo tracking system in the todos/ directory. It provides workflows for creating todos, managing status and dependencies, conducting triage, and integrating with slash commands and code review processes.
+disable-model-invocation: true
 ---
 
 # File-Based Todo Tracking Skill
@@ -61,7 +62,7 @@ Each todo is a markdown file with YAML frontmatter and structured sections. Use 
 status: ready              # pending | ready | complete
 priority: p1              # p1 | p2 | p3
 issue_id: "002"
-tags: [api, performance, database]
+tags: [rails, performance, database]
 dependencies: ["001"]     # Issue IDs this is blocked by
 ---
 ```
@@ -184,9 +185,9 @@ Work logs serve as:
 
 | Trigger | Flow | Tool |
 |---------|------|------|
-| Code review | `/clavain:review` → Findings → `/triage` → Todos | Review agent + skill |
-| PR comments | `/resolve pr` → Individual fixes → Todos | gh CLI + skill |
-| Code TODOs | `/resolve code` → Fixes + Complex todos | Agent + skill |
+| Code review | `/workflows:review` → Findings → `/triage` → Todos | Review agent + skill |
+| PR comments | `/resolve_pr_parallel` → Individual fixes → Todos | gh CLI + skill |
+| Code TODOs | `/resolve_todo_parallel` → Fixes + Complex todos | Agent + skill |
 | Planning | Brainstorm → Create todo → Work → Complete | Skill |
 | Feedback | Discussion → Create todo → Triage → Work | Skill + slash |
 
@@ -221,7 +222,7 @@ grep -l 'dependencies:.*"002"' todos/*.md
 **Searching:**
 ```bash
 # Search by tag
-grep -l "tags:.*api" todos/*.md
+grep -l "tags:.*rails" todos/*.md
 
 # Search by priority
 ls todos/*-p1-*.md
@@ -238,9 +239,10 @@ grep -r "payment" todos/
 - Standalone markdown files with YAML frontmatter
 - Used by humans and agents
 
-**Application Todo model (if applicable):**
-- Database-backed model for user-facing todo features
-- Standard CRUD operations via ORM
+**Rails Todo model:**
+- Database model in `app/models/todo.rb`
+- User-facing feature in the application
+- Active Record CRUD operations
 - Different from this file-based system
 
 **TodoWrite tool:**

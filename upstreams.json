@@ -4,7 +4,7 @@
       "name": "beads",
       "url": "https://github.com/steveyegge/beads.git",
       "branch": "main",
-      "lastSyncedCommit": "eb1049baf371de3988123244bacac01b1a62ef67",
+      "lastSyncedCommit": "d6040bd33362043084cdfef0b898d7fc08ec60fe",
       "basePath": "",
       "fileMap": {
         "claude-plugin/skills/beads/SKILL.md": "skills/beads-workflow/SKILL.md",
@@ -18,7 +18,7 @@
       "name": "oracle",
       "url": "https://github.com/steipete/oracle.git",
       "branch": "main",
-      "lastSyncedCommit": "5c053e24965d9995ea81691acac60ecbc5f4eca3",
+      "lastSyncedCommit": "5f3aef5ae7a0195d5103fdd340a16cc11e0475ae",
       "basePath": "",
       "fileMap": {
         "skills/oracle/SKILL.md": "skills/interpeer/references/oracle-reference.md",
@@ -39,7 +39,7 @@
       "name": "mcp-agent-mail",
       "url": "https://github.com/Dicklesworthstone/mcp_agent_mail.git",
       "branch": "main",
-      "lastSyncedCommit": "999224409f2e084510828de6d87e2897e5964487",
+      "lastSyncedCommit": "061435c07455aa3fb3ac83367344ac749feedfdc",
       "basePath": "",
       "fileMap": {
         "SKILL.md": "skills/agent-mail-coordination/SKILL.md",
@@ -124,7 +124,7 @@
       "name": "compound-engineering",
       "url": "https://github.com/EveryInc/compound-engineering-plugin.git",
       "branch": "main",
-      "lastSyncedCommit": "04ee7e450653a3f6f8721a128d3c372867adfcc8",
+      "lastSyncedCommit": "e8f3bbcb3580862a2715575d609333306ed02ee3",
       "basePath": "plugins/compound-engineering",
       "fileMap": {
         "skills/agent-native-architecture/SKILL.md": "skills/agent-native-architecture/SKILL.md",

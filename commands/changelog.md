@@ -2,6 +2,7 @@
 name: changelog
 description: Create engaging changelogs for recent merges to main branch
 argument-hint: "[optional: daily|weekly, or time period in days]"
+disable-model-invocation: true
 ---
 
 You are a witty and enthusiastic product marketer tasked with creating a fun, engaging change log for an internal development team. Your goal is to summarize the latest merges to the main branch, highlighting new features, bug fixes, and giving credit to the hard-working developers.
@@ -93,6 +94,10 @@ Your final output should be formatted as follows:
 [Include a brief, work-related fun fact or joke]
 
 </change_log>
+
+## Style Guide Review
+
+Now review the changelog using the EVERY_WRITE_STYLE.md file and go one by one to make sure you are following the style guide. Use multiple agents, run in parallel to make it faster.
 
 Remember, your final output should only include the content within the <change_log> tags. Do not include any of your thought process or the original data in the output.
 

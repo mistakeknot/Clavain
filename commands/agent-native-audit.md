@@ -2,6 +2,7 @@
 name: agent-native-audit
 description: Run comprehensive agent-native architecture review with scored principles
 argument-hint: "[optional: specific principle to audit]"
+disable-model-invocation: true
 ---
 
 # Agent-Native Architecture Audit
@@ -23,13 +24,13 @@ Conduct a comprehensive review of the codebase against agent-native architecture
 
 ### Step 1: Load the Agent-Native Skill
 
-First, load the agent-native-architecture skill to understand all principles. Use the Skill tool:
+First, invoke the agent-native-architecture skill to understand all principles:
 
 ```
-Skill: clavain:agent-native-architecture
+/compound-engineering:agent-native-architecture
 ```
 
-Read the skill content to understand all 8 principles before proceeding.
+Select option 7 (action parity) to load the full reference material.
 
 ### Step 2: Launch Parallel Sub-Agents
 

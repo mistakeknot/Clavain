@@ -1,7 +1,8 @@
 ---
-name: generate-command
+name: generate_command
 description: Create a new custom slash command following conventions and best practices
 argument-hint: "[command purpose and requirements]"
+disable-model-invocation: true
 ---
 
 # Create a Custom Claude Code Command
@@ -116,8 +117,8 @@ Implement #$ARGUMENTS following these steps:
    - Ensure code follows CLAUDE.md conventions
 
 4. Verify
-   - Run tests (using the project's test command)
-   - Run linter (using the project's linter)
+   - Run tests: `bin/rails test`
+   - Run linter: `bundle exec standardrb`
    - Check changes with git diff
 
 5. Commit (optional)
