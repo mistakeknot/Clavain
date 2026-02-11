@@ -1,6 +1,6 @@
 ---
 name: fd-correctness
-description: "Flux-drive Correctness reviewer — evaluates data consistency, transaction safety, race conditions, async bugs, and concurrency patterns across all languages. Reads project docs when available."
+description: "Flux-drive Correctness reviewer — evaluates data consistency, transaction safety, race conditions, async bugs, and concurrency patterns across all languages. Reads project docs when available. Examples: <example>Context: User wrote a database migration that renames columns and backfills data. user: \"Review this migration — it renames user_id to account_id and backfills from a lookup table\" assistant: \"I'll use the fd-correctness agent to evaluate the migration's data consistency and transaction safety.\" <commentary>Database migrations with renames and backfills need transaction atomicity review, NULL handling, and referential integrity checks.</commentary></example> <example>Context: User implemented a concurrent job queue with worker pools. user: \"Check this worker pool implementation for race conditions\" assistant: \"I'll use the fd-correctness agent to analyze the concurrency patterns and potential race conditions.\" <commentary>Concurrent worker pools involve shared mutable state, lifecycle management, and synchronization — fd-correctness's concurrency domain.</commentary></example>"
 model: sonnet
 ---
 

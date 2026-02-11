@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 30 skills, 16 agents, 30 commands, 5 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 30 skills, 16 agents, 32 commands, 5 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -153,7 +153,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (30)
+### Commands (32)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -189,6 +189,8 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/triage-prs` | Triage open PR backlog with parallel review agents |
 | `/review-doc` | Quick single-pass document refinement (lighter than flux-drive) |
 | `/upstream-sync` | Check upstream repos for updates |
+| `/help` | Show Clavain commands organized by daily drivers first |
+| `/doctor` | Quick health check — MCP servers, tools, beads, plugin conflicts |
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
@@ -263,7 +265,7 @@ clavain/
 │   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 30 slash commands
+├── commands/                      # 32 slash commands
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + Stop + SessionEnd)
 │   ├── session-start.sh           # Context injection + staleness warning

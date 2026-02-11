@@ -212,6 +212,41 @@ Present the triage table with a Stage column:
 - **adequate**: 5-30 lines or 3-10 bullet points — standard review depth
 - **deep**: 30+ lines or 10+ bullet points — validation only, don't over-review
 
+### Step 1.2c: Pyramid Scan (large documents only)
+
+**Trigger:** `INPUT_TYPE = file` AND document exceeds 500 lines.
+
+If triggered, generate a section-level summary to help agents focus:
+
+1. **Extract sections** — Identify all top-level sections (## headings) from the document profile's section analysis.
+2. **Summarize each** — Write 1-2 sentences per section capturing scope and key decisions.
+3. **Map to agent domains** — For each selected agent, tag each section:
+   - `full` — section is in the agent's core domain (architecture sections → fd-architecture, security sections → fd-safety, etc.)
+   - `summary` — section is adjacent but not core (provide summary only)
+   - `skip` — section has no relevance to this agent
+4. **Safety override** — Any section mentioning auth, credentials, secrets, tokens, or certificates is always tagged `full` for fd-safety regardless of domain mapping.
+
+**Include in agent prompts** (Phase 2): Prepend the pyramid summary before the full document content:
+
+```
+## Pyramid Summary (focus guide — full content follows)
+
+Sections relevant to your domain (read carefully):
+- [Section A]: [summary]
+- [Section B]: [summary]
+
+Sections outside your domain (skim only):
+- [Section C]: [summary]
+
+Full document content follows below.
+---
+[full document]
+```
+
+Agents still receive the full document — the pyramid summary is a focus guide, not a content gate. This is prep for future content slicing (where irrelevant sections would be omitted entirely).
+
+If the document is ≤500 lines, skip this step — agents receive the full document without a pyramid summary.
+
 ### Step 1.3: User Confirmation
 
 First, present the triage table showing all agents, tiers, scores, stages, reasons, and Launch/Skip actions.
@@ -272,15 +307,22 @@ When available, Oracle provides a GPT-5.2 Pro perspective on the same document. 
 |-------|-----------|--------|
 | oracle-council | `oracle --wait -p "<prompt>" -f "<files>"` | Cross-model validation, blind spot detection |
 
-**Important**: Oracle runs via CLI, not Task tool. Launch it in background with a timeout:
+**Important**: Oracle runs via CLI, not Task tool. Use `--write-output` to capture the clean response (stdout redirect loses output in browser mode). Do NOT wrap with `timeout` — Oracle has its own internal timeout that handles session cleanup properly.
+
 ```bash
-timeout 480 env DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
-  oracle --wait -p "Review this {document_type} for {review_goal}. Focus on: issues a Claude-based reviewer might miss. Provide numbered findings with severity." \
-  -f "{INPUT_FILE or key files}" > {OUTPUT_DIR}/oracle-council.md.partial 2>&1 && \
+env DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
+  oracle --wait --timeout 1800 \
+  --write-output {OUTPUT_DIR}/oracle-council.md.partial \
+  -p "Review this {document_type} for {review_goal}. Focus on: issues a Claude-based reviewer might miss. Provide numbered findings with severity." \
+  -f "{INPUT_FILE or key files}" && \
   echo '<!-- flux-drive:complete -->' >> {OUTPUT_DIR}/oracle-council.md.partial && \
   mv {OUTPUT_DIR}/oracle-council.md.partial {OUTPUT_DIR}/oracle-council.md || \
   (echo -e "---\nagent: oracle-council\ntier: cross-ai\nissues: []\nimprovements: []\nverdict: error\n---\nOracle failed (exit $?)" > {OUTPUT_DIR}/oracle-council.md)
 ```
+
+**Why `--write-output` instead of `> file`**: Oracle browser mode writes the GPT response via `console.log` (not raw stdout). When piped to a file, ANSI escape codes contaminate the output and the response can be lost if the process is killed before flush. `--write-output` writes clean assistant text directly to the specified path after the browser scrape completes.
+
+**Why no `timeout` wrapper**: External `timeout` sends SIGTERM, which kills Oracle before it can update session status or write output. Oracle's internal `--timeout` handles cleanup: it marks the session as timed-out, writes partial output, and exits cleanly. Default for gpt-5.2-pro is 60 minutes; we cap at 30 minutes (`1800`).
 
 **Error handling**: If the Oracle command fails or times out, note it in the output file and continue without Phase 4. Do NOT block synthesis on Oracle failures — treat it as "Oracle: no findings" and skip Steps 4.2-4.5.
 

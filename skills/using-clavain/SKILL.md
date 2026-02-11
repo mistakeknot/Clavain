@@ -16,7 +16,7 @@ disable-model-invocation: true
 
 # Using Clavain
 
-Clavain provides 30 skills, 16 agents, and 30 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
+Clavain provides 30 skills, 16 agents, and 32 commands. To avoid overwhelm, use the **3-layer routing** below to find the right component.
 
 ## The Rule
 
@@ -35,7 +35,7 @@ Clavain provides 30 skills, 16 agents, and 30 commands. To avoid overwhelm, use 
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | fd-safety |
-| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
+| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, help, doctor, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
 ### Layer 2: What domain?
 

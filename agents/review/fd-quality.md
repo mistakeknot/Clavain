@@ -1,6 +1,6 @@
 ---
 name: fd-quality
-description: "Flux-drive Quality & Style reviewer — evaluates naming, conventions, test approach, error handling, and language-specific idioms. Auto-detects language from context. Reads project docs when available."
+description: "Flux-drive Quality & Style reviewer — evaluates naming, conventions, test approach, error handling, and language-specific idioms. Auto-detects language from context. Reads project docs when available. Examples: <example>Context: User submitted a PR with Go code for a new service handler. user: \"Review this Go handler for style and conventions\" assistant: \"I'll use the fd-quality agent to evaluate naming, error handling, and Go idioms.\" <commentary>Go code review needs language-specific checks: explicit error handling with %w wrapping, accept-interfaces-return-structs, table-driven tests.</commentary></example> <example>Context: User is refactoring shared utilities from JavaScript to TypeScript. user: \"I've converted the utils to TypeScript — check the type safety and conventions\" assistant: \"I'll use the fd-quality agent to review the TypeScript conversion for type safety and idiomatic patterns.\" <commentary>Cross-language refactoring needs quality review for proper type narrowing, avoiding 'any', and consistent naming conventions.</commentary></example>"
 model: sonnet
 ---
 
