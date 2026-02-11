@@ -49,12 +49,16 @@ DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
 | `-p "prompt"` | The review prompt |
 | `-f "files..."` | Files/globs to include (multiple allowed) |
 | `-m model` | Model selection (default: gpt-5.2-pro) |
+| `--write-output <path>` | Write clean assistant text to file (use instead of `> file`) |
+| `--timeout <seconds>` | Internal timeout with proper cleanup (default: 60m for gpt-5.2-pro) |
 | `--engine api` | Use API mode instead of browser |
 | `--models gpt-5.2-pro,gemini-3-pro` | Multi-model parallel run (API only) |
 | `--dry-run` | Preview token count without calling the model |
 | `--files-report` | Show per-file token breakdown |
 
 **For long reviews:** Run in background with `run_in_background: true` and timeout 600000ms. Check progress via `tail` on the output file.
+
+**Critical: capturing output in browser mode.** Always use `--write-output <path>` instead of `> file` redirect. Browser mode writes the GPT response via `console.log`, which includes ANSI formatting when stdout is a TTY and may not flush before external timeouts. `--write-output` saves clean text after the browser scrape completes. Never wrap Oracle with `timeout` — use `--timeout` instead, which handles session cleanup properly.
 
 ### MCP Mode
 

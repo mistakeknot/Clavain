@@ -24,9 +24,12 @@
 | "oracle: command not found" | Install: `npm install -g @steipete/oracle` |
 | Oracle hangs | Check `oracle status --hours 1`, recover with `oracle session <id>` |
 | "OPENAI_API_KEY not set" | Use browser mode (default) instead of `-e api` |
-| Browser mode slow | Normal - can take 1-10 minutes. Add `-e api` if you have the key. |
+| Browser mode slow | Normal - can take 1-30 minutes for gpt-5.2-pro. Add `-e api` if you have the key. |
 | Token limit exceeded | Use `--dry-run --files-report` to preview, reduce files |
 | Chrome doesn't open | Oracle needs Chrome installed and accessible |
+| **Output file empty (browser mode)** | Use `--write-output <path>` instead of `> file` redirect. Browser mode uses `console.log` which doesn't reliably pipe to stdout. |
+| **Session stuck as "running"** | External `timeout` killed Oracle before cleanup. Use `--timeout <seconds>` flag instead. Recover the response with `oracle session <id>`. |
+| **Exit code 124 (timeout)** | External `timeout` wrapper is too short. Remove `timeout` wrapper, use `--timeout 1800` for 30 min cap. GPT-5.2 Pro browser mode can take 10-30 minutes. |
 
 ## Session Recovery
 

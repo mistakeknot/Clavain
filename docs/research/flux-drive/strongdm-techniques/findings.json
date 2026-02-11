@@ -1,0 +1,35 @@
+{
+  "reviewed": "2026-02-11",
+  "input": "docs/research/pyramid-mode-flux-drive.md, docs/research/auto-inject-learnings-lfg.md, docs/research/shift-work-boundary.md",
+  "agents_launched": ["fd-architecture", "fd-user-product", "fd-performance", "oracle-council"],
+  "agents_completed": ["fd-architecture", "fd-user-product", "fd-performance"],
+  "agents_pending": ["oracle-council"],
+  "findings": [
+    {"id": "P1-1", "severity": "P1", "section": "Pyramid Mode", "title": "Pyramid scan has no shared contract in shared-contracts.md", "agents": ["fd-architecture"], "convergence": 1},
+    {"id": "P1-2", "severity": "P1", "section": "Pyramid Mode — Expansion", "title": "Expansion re-launch contradicts itself and breaks monitoring contract", "agents": ["fd-architecture", "fd-performance"], "convergence": 2},
+    {"id": "P1-3", "severity": "P1", "section": "Pyramid Mode — Expansion", "title": "Expansion loop creates unpredictable wait times with no user progress signal", "agents": ["fd-user-product"], "convergence": 1},
+    {"id": "P1-4", "severity": "P1", "section": "Auto-Inject Learnings", "title": "Keyword extraction mismatch — plan file vs docs/solutions/ frontmatter", "agents": ["fd-architecture"], "convergence": 1},
+    {"id": "P1-5", "severity": "P1", "section": "Shift-Work Boundary", "title": "Autonomous mode removes checkpoints without rollback/pause mechanism", "agents": ["fd-user-product", "fd-architecture"], "convergence": 2},
+    {"id": "P1-6", "severity": "P1", "section": "Shift-Work Boundary", "title": "Spec completeness grep heuristics will false-positive", "agents": ["fd-user-product", "fd-performance"], "convergence": 2},
+    {"id": "P1-7", "severity": "P1", "section": "Shift-Work Boundary", "title": "Autonomous batch mode creates second dispatch-mode axis (2x2 with clodex)", "agents": ["fd-architecture"], "convergence": 1},
+    {"id": "P1-8", "severity": "P1", "section": "Shift-Work Boundary", "title": "Batch=ALL risks context window exhaustion on 20+ task plans", "agents": ["fd-performance"], "convergence": 1},
+    {"id": "P1-9", "severity": "P1", "section": "Cross-Feature", "title": "All three proposals splice into lfg.md without coordinating step numbering", "agents": ["fd-architecture"], "convergence": 1},
+    {"id": "P1-10", "severity": "P1", "section": "All Documents", "title": "No user opt-out or override mechanism for any feature", "agents": ["fd-user-product"], "convergence": 1},
+    {"id": "P1-11", "severity": "P1", "section": "Pyramid Mode — Token Budget", "title": "Summarization cost unaccounted — orchestrator overhead offsets 30-50% of claimed savings", "agents": ["fd-performance"], "convergence": 1},
+    {"id": "P1-12", "severity": "P1", "section": "Pyramid Mode — Design", "title": "Two parallel content-assembly systems (pyramid + diff slicing) to maintain", "agents": ["fd-performance", "fd-architecture"], "convergence": 2}
+  ],
+  "improvements": [
+    {"id": "IMP-1", "section": "Pyramid Mode", "title": "Unify pyramid scan and diff slicing under single content-assembly abstraction", "agents": ["fd-performance", "fd-architecture"]},
+    {"id": "IMP-2", "section": "Auto-Inject Learnings", "title": "Wire into write-plan (Option B) first; defer lfg insertion until validated", "agents": ["fd-architecture"]},
+    {"id": "IMP-3", "section": "Shift-Work Boundary", "title": "Collapse autonomous mode into clodex toggle rather than new flag", "agents": ["fd-architecture"]},
+    {"id": "IMP-4", "section": "Cross-Feature", "title": "Define named insertion points in lfg.md instead of numbered step splicing", "agents": ["fd-architecture"]},
+    {"id": "IMP-5", "section": "Shift-Work Boundary", "title": "Add pause escape hatch + mandatory incremental commits in autonomous mode", "agents": ["fd-user-product"]},
+    {"id": "IMP-6", "section": "Pyramid Mode", "title": "Surface pyramid mode at Step 1.3 confirmation with user override option", "agents": ["fd-user-product"]},
+    {"id": "IMP-7", "section": "Auto-Inject Learnings", "title": "Skip step entirely when docs/solutions/ has <5 files", "agents": ["fd-user-product", "fd-performance"]},
+    {"id": "IMP-8", "section": "All Documents", "title": "Ship with feature flags for incremental rollout", "agents": ["fd-user-product"]},
+    {"id": "IMP-9", "section": "Shift-Work Boundary", "title": "Add task-count ceiling (batch=min(ALL,10)) to prevent context blowout", "agents": ["fd-performance"]},
+    {"id": "IMP-10", "section": "Pyramid Mode", "title": "Instrument token usage per agent before implementing to validate savings claims", "agents": ["fd-performance"]}
+  ],
+  "verdict": "needs-changes",
+  "early_stop": false
+}
