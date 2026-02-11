@@ -1,7 +1,7 @@
 {
   "name": "clavain",
-  "version": "0.4.27",
-  "description": "General-purpose engineering discipline plugin. 16 agents, 23 commands, 34 skills, 3 MCP servers — combining workflow discipline with specialized execution agents. Includes Codex dispatch, cross-AI review (interpeer with quick/deep/council/mine modes), and structured debate.",
+  "version": "0.4.28",
+  "description": "General-purpose engineering discipline plugin. 16 agents, 23 commands, 33 skills, 2 MCP servers — combining workflow discipline with specialized execution agents. Includes Codex dispatch, cross-AI review (interpeer with quick/deep/council/mine modes), and structured debate.",
   "author": {
     "name": "mistakeknot"
   },
@@ -23,10 +23,6 @@
     "context7": {
       "type": "http",
       "url": "https://mcp.context7.com/mcp"
-    },
-    "mcp-agent-mail": {
-      "type": "http",
-      "url": "http://127.0.0.1:8765/mcp"
     },
     "qmd": {
       "type": "stdio",
