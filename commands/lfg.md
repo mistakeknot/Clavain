@@ -1,6 +1,6 @@
 ---
 name: lfg
-description: Full autonomous engineering workflow — brainstorm, plan, execute, review, ship
+description: Full autonomous engineering workflow — brainstorm, strategize, plan, execute, review, ship
 argument-hint: "[feature description]"
 ---
 
@@ -9,25 +9,30 @@ Run these steps in order. Do not do anything else.
 ## Step 1: Brainstorm
 `/clavain:brainstorm $ARGUMENTS`
 
-## Step 2: Write Plan
+## Step 2: Strategize
+`/clavain:strategy`
+
+Structures the brainstorm into a PRD, creates beads for tracking, and validates with flux-drive before planning.
+
+## Step 3: Write Plan
 `/clavain:write-plan`
 
-Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it's needed in Step 3.
+Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it's needed in Step 4.
 
-**Note:** When clodex mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 4 (execute) — the plan has already been executed.
+**Note:** When clodex mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 5 (execute) — the plan has already been executed.
 
-## Step 3: Review Plan (gates execution)
-`/clavain:flux-drive <plan-file-from-step-2>`
+## Step 4: Review Plan (gates execution)
+`/clavain:flux-drive <plan-file-from-step-3>`
 
-Pass the plan file path from Step 2 as the flux-drive target. Review happens **before** execution so plan-level risks are caught early.
+Pass the plan file path from Step 3 as the flux-drive target. Review happens **before** execution so plan-level risks are caught early.
 
 If flux-drive finds P0/P1 issues, stop and address them before proceeding to execution.
 
-## Step 4: Execute
+## Step 5: Execute
 
-Run `/clavain:work <plan-file-from-step-2>`
+Run `/clavain:work <plan-file-from-step-3>`
 
-## Step 5: Test & Verify
+## Step 6: Test & Verify
 
 Run the project's test suite and linting before proceeding to review:
 
@@ -40,14 +45,14 @@ Run the project's test suite and linting before proceeding to review:
 
 **If no test command exists:** Note this and proceed — quality-gates will still run reviewer agents.
 
-## Step 6: Quality Gates
+## Step 7: Quality Gates
 `/clavain:quality-gates`
 
-## Step 7: Resolve Issues
+## Step 8: Resolve Issues
 
 Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, or code TODOs) and handles clodex mode automatically.
 
-## Step 8: Ship
+## Step 9: Ship
 
 Use the `clavain:landing-a-change` skill to verify, document, and commit the completed work.
 

@@ -42,16 +42,16 @@ For more complex endeavors (or new projects), I use Clavain's pieces individuall
 
 ### The `/lfg` Lifecycle
 
-`/lfg` chains seven steps together. Each one can also be invoked standalone:
+`/lfg` chains nine steps together. Each one can also be invoked standalone:
 
 ```
-/brainstorm  →  /write-plan  →  /work*  →  /flux-drive  →  /review  →  /resolve  →  /quality-gates
-   explore        plan          execute     review plan     review code    fix issues    final check
+/brainstorm  →  /strategy  →  /write-plan  →  /work*  →  /flux-drive  →  /review  →  /resolve  →  /quality-gates  →  ship
+   explore      structure       plan          execute     review plan     review code    fix issues    final check     commit
 
 * When clodex mode is active, /write-plan executes via Codex Delegation and /work is skipped.
 ```
 
-Even when I think I know what I want, I usually start with `/brainstorm` because it forces me to articulate and trace through requirements and user journeys before touching code; Clavain often catches edge cases I hadn't considered. After brainstorming, `/write-plan` creates a structured implementation plan — and when clodex mode is active, it also dispatches execution through Codex agents, making the `/work` step unnecessary. `/flux-drive` then reviews the plan (or, under clodex, the executed result) with up to 4 tiers of agents before the code review phase.
+Even when I think I know what I want, I usually start with `/brainstorm` because it forces me to articulate and trace through requirements and user journeys before touching code; Clavain often catches edge cases I hadn't considered. `/strategy` then structures the brainstorm into a PRD with discrete features and creates beads for tracking — this convergent step catches scope creep and missing acceptance criteria before any planning starts. After that, `/write-plan` creates a structured implementation plan — and when clodex mode is active, it also dispatches execution through Codex agents, making the `/work` step unnecessary. `/flux-drive` then reviews the plan (or, under clodex, the executed result) with up to 4 tiers of agents before the code review phase.
 
 ### Reviewing Things with `/flux-drive`
 
@@ -153,7 +153,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (26)
+### Commands (27)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -162,6 +162,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/lfg` | Full autonomous lifecycle — brainstorm through ship |
 | `/setup` | Bootstrap the modpack — install plugins, disable conflicts, verify servers |
 | `/brainstorm` | Explore before planning |
+| `/strategy` | Structure brainstorm into PRD with trackable beads |
 | `/write-plan` | Create implementation plan |
 | `/flux-drive` | Multi-agent document/repo review |
 | `/work` | Execute a plan autonomously |
