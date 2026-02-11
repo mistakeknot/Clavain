@@ -52,6 +52,41 @@ Keep: role definition, review approach/checklist, pattern libraries, language-sp
 
 **Scope**: Trimming applies to Project Agents (manual paste) and Codex AGENT_IDENTITY sections. Plugin Agents load system prompts via `subagent_type` — the orchestrator cannot strip those.
 
+## Diff Slicing Contract
+
+When `INPUT_TYPE = diff` and `slicing_eligible: yes` (diff >= 1000 lines), the orchestrator applies soft-prioritize slicing per `config/flux-drive/diff-routing.md`. This contract defines how slicing interacts with other phases.
+
+### Agent Content Access
+
+| Agent Type | Content Received |
+|------------|-----------------|
+| Cross-cutting (fd-architecture, fd-quality) | Full diff — no slicing |
+| Domain-specific (fd-safety, fd-correctness, fd-performance, fd-user-product) | Priority hunks (full) + context summaries (one-liner per file) |
+| Oracle (Cross-AI) | Full diff — external tool, no slicing control |
+| Project Agents (.claude/agents/) | Full diff — cannot assume routing awareness |
+
+### Slicing Metadata
+
+Each sliced agent prompt includes a metadata line:
+```
+[Diff slicing active: P priority files (L1 lines), C context files (L2 lines summarized)]
+```
+
+The orchestrator tracks per-agent access as a mapping for use during synthesis:
+```
+slicing_map:
+  fd-safety: {priority: [file1, file2], context: [file3, file4], mode: sliced}
+  fd-architecture: {priority: all, context: none, mode: full}
+  ...
+```
+
+### Synthesis Implications
+
+- **Convergence adjustment**: When counting how many agents flagged the same issue, do NOT count agents that only received context summaries for the file in question. A finding from 2/3 agents that saw the file in full is higher confidence than 2/6 total agents.
+- **Out-of-scope findings**: If an agent flags an issue in a file it received only as context summary, tag the finding as `[discovered beyond sliced scope]`. This is valuable — it means the agent inferred the issue from file name/stats alone.
+- **Slicing disagreements**: Agents may note "Request full hunks: {filename}" in their findings. The orchestrator should track these requests. If 2+ agents request full hunks for the same context file, note it as a routing improvement suggestion in the synthesis report.
+- **No penalty for silence**: Do NOT penalize an agent for not flagging issues in files it received only as context summaries. Silence on context files is expected, not a gap.
+
 ## Monitoring Contract
 
 After dispatching agents, poll for completion:

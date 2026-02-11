@@ -41,6 +41,11 @@ For **malformed** outputs, read the Summary + Issues sections as prose fallback.
 **Partial agent sets**: If Stage 2 was not launched (early stop), adjust convergence counts to reflect the smaller agent set. Report in the summary: "Early stop after Stage 1: N agents ran, M agents skipped as unnecessary."
 4. **Flag conflicts**: If agents disagree, note both positions
 5. **Priority from project-specific agents**: When a Project Agent and an Plugin Agent give different advice on the same topic, prefer the Project Agent's recommendation
+6. **Diff slicing awareness** (when `INPUT_TYPE = diff` and slicing was active): Use the `slicing_map` from `phases/shared-contracts.md` to track which agents had full vs summary access per file:
+   - When counting convergence for a finding, only count agents that received the file as priority (full hunks). Agents that received it as context-only are excluded from convergence counts.
+   - Tag findings from context-only files as `[discovered beyond sliced scope]` — these are especially valuable since the agent had limited visibility.
+   - If 2+ agents independently request full hunks for the same context file (via "Request full hunks" notes), flag this as a routing improvement suggestion.
+   - Include these observations in the Diff Slicing Report (see Step 3.5).
 
 ### Step 3.4: Update the Document
 
@@ -168,6 +173,21 @@ Present the synthesis report using this exact structure. Fill in each section fr
 - Summary: `{OUTPUT_DIR}/summary.md`
 - Findings: `{OUTPUT_DIR}/findings.json`
 - Individual reports: `{OUTPUT_DIR}/{agent-name}.md`
+
+### Diff Slicing Report
+
+[Include this section only when INPUT_TYPE = diff AND slicing was active (diff >= 1000 lines).]
+
+| Agent | Mode | Priority Files | Context Files | Lines Reviewed (full) |
+|-------|------|---------------|---------------|----------------------|
+| fd-architecture | full | all | — | {total_lines} |
+| fd-safety | sliced | {P} | {C} | {L1} |
+| ... | ... | ... | ... | ... |
+
+**Threshold**: {1000} lines (slicing activated)
+**Slicing disagreements**: [List any context files that 2+ agents requested full hunks for, or "None"]
+**Routing improvements**: [Suggest pattern additions to diff-routing.md if agents consistently needed context files, or "None suggested"]
+**Out-of-scope discoveries**: [List findings tagged `[discovered beyond sliced scope]`, or "None"]
 
 [If this is the first flux-drive run on this project (config/flux-drive/knowledge/ was empty):]
 *First review on this project — building knowledge base for future reviews.*

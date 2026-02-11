@@ -20,11 +20,13 @@ INPUT_PATH = <the path the user provided>
 ```
 
 Then detect:
-- If `INPUT_PATH` is a **file**: `INPUT_FILE = INPUT_PATH`, `INPUT_DIR = <directory containing file>`
-- If `INPUT_PATH` is a **directory**: `INPUT_FILE = none (repo review mode)`, `INPUT_DIR = INPUT_PATH`
+- If `INPUT_PATH` is a **file** AND content starts with `diff --git` or `--- a/`: `INPUT_FILE = INPUT_PATH`, `INPUT_DIR = <directory containing file>`, `INPUT_TYPE = diff`
+- If `INPUT_PATH` is a **file** (non-diff): `INPUT_FILE = INPUT_PATH`, `INPUT_DIR = <directory containing file>`, `INPUT_TYPE = file`
+- If `INPUT_PATH` is a **directory**: `INPUT_FILE = none (repo review mode)`, `INPUT_DIR = INPUT_PATH`, `INPUT_TYPE = directory`
 
 Derive:
 ```
+INPUT_TYPE    = file | directory | diff
 INPUT_STEM    = <filename without extension, or directory basename for repo reviews>
 PROJECT_ROOT  = <nearest ancestor directory containing .git, or INPUT_DIR>
 OUTPUT_DIR    = {PROJECT_ROOT}/docs/research/flux-drive/{INPUT_STEM}
@@ -86,6 +88,29 @@ Document Profile:
 - Review goal: [1 sentence — what should agents focus on?]
 ```
 
+#### Diff Profile (when `INPUT_TYPE = diff`)
+
+For **diff inputs**, extract a diff-specific profile instead of the document profile above:
+
+```
+Diff Profile:
+- File count: [N files changed]
+- Stats: [+X lines added, -Y lines removed]
+- Binary files: [list any binary file changes]
+- Languages detected: [from file extensions in the diff]
+- Domains touched: [architecture, security, performance, UX, data, API, etc.]
+- Renamed files: [list of old → new renames]
+- Key files: [top 5 files by change size]
+- Commit message: [if available from diff header]
+- Estimated complexity: [small (<200 lines) | medium (200-1000) | large (1000+)]
+- Slicing eligible: [yes if total diff lines >= 1000, no otherwise]
+- Review goal: "Find issues, risks, and improvements in the proposed changes"
+```
+
+Parse the diff to extract file paths and per-file `+`/`-` line counts. For slicing eligibility, count total added + removed lines (excluding diff metadata lines like `@@` hunks and `diff --git` headers).
+
+If `slicing_eligible: yes`, the orchestrator will apply diff slicing in Phase 2 using `config/flux-drive/diff-routing.md`. See `phases/launch.md` Step 2.1b.
+
 The `Review goal` adapts to document type:
 - Plan → "Find gaps, risks, missing steps"
 - Brainstorm/design → "Evaluate feasibility, surface missing alternatives, challenge assumptions"
@@ -100,13 +125,22 @@ Do this analysis yourself (no subagents needed). The profile drives triage in St
 
 #### Step 1.2a: Pre-filter agents
 
-Before scoring, eliminate agents that cannot plausibly score ≥1 based on the document profile:
+Before scoring, eliminate agents that cannot plausibly score ≥1 based on the document/diff profile:
+
+**For file and directory inputs:**
 
 1. **Data filter**: Skip fd-correctness unless the document mentions databases, migrations, data models, concurrency, or async patterns.
 2. **Product filter**: Skip fd-user-product unless the document type is PRD, proposal, strategy document, or has user-facing flows.
 3. **Deploy filter**: Skip fd-safety unless the document mentions security, credentials, deployments, infrastructure, or trust boundaries.
 
-Domain-general agents always pass the filter: fd-architecture, fd-quality, fd-performance.
+**For diff inputs** (use `config/flux-drive/diff-routing.md` patterns):
+
+1. **Data filter**: Skip fd-correctness unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
+2. **Product filter**: Skip fd-user-product unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
+3. **Deploy filter**: Skip fd-safety unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
+4. **Perf filter**: Skip fd-performance unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
+
+Domain-general agents always pass the filter: fd-architecture, fd-quality, and fd-performance (for file/directory inputs only — for diffs, fd-performance is filtered by routing patterns like other domain agents).
 
 Present only passing agents in the scoring table below.
 

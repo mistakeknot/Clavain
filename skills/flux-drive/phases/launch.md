@@ -115,9 +115,60 @@ Launch Stage 2 agents with `run_in_background: true`. Wait for completion using 
 
 **Document content**: Include the full document in each agent's prompt without trimming. Each agent gets the complete document content.
 
-**Exception for very large inputs** (1000+ lines): Include only the sections relevant to the agent's focus area plus Summary, Goals, and Non-Goals. Note which sections were omitted in the agent's prompt.
+**Exception for very large file/directory inputs** (1000+ lines): Include only the sections relevant to the agent's focus area plus Summary, Goals, and Non-Goals. Note which sections were omitted in the agent's prompt.
 
 **Prompt trimming**: See `phases/shared-contracts.md` for trimming rules.
+
+### Step 2.1b: Prepare diff content for agent prompts
+
+**Skip this step if `INPUT_TYPE` is not `diff`.** For file/directory inputs, use the standard document content rules above.
+
+For diff inputs, content preparation depends on diff size and the agent's routing classification:
+
+#### Small diffs (< 1000 lines)
+
+Send the full diff to all agents. No slicing needed.
+
+#### Large diffs (>= 1000 lines) — Soft-Prioritize Slicing
+
+When `slicing_eligible: yes` from the Diff Profile (Phase 1, Step 1.1):
+
+1. **Read** `config/flux-drive/diff-routing.md` from the flux-drive skill directory
+2. **Classify each changed file** as `priority` or `context` per agent:
+   - A file is `priority` for an agent if it matches ANY of the agent's priority file patterns OR any hunk in the file contains ANY of the agent's priority keywords
+   - All other files are `context` for that agent
+3. **Cross-cutting agents** (fd-architecture, fd-quality): always receive the full diff — skip slicing entirely
+4. **Domain-specific agents** (fd-safety, fd-correctness, fd-performance, fd-user-product): receive priority hunks in full + compressed context summary
+5. **80% threshold**: If an agent's priority files cover >= 80% of total changed lines, skip slicing for that agent and send the full diff
+
+#### Constructing per-agent diff content
+
+For each **domain-specific agent** that receives sliced content:
+
+**Priority section** — Include the complete diff hunks for all priority files, preserving the original diff format:
+```
+diff --git a/path/to/file b/path/to/file
+--- a/path/to/file
++++ b/path/to/file
+@@ ... @@
+[full hunk content]
+```
+
+**Context section** — For non-priority files, include a one-line summary per file:
+```
+[context] path/to/file: +12 -5 (modified)
+[context] path/to/other: +0 -0 (renamed from old/path)
+[context] path/to/binary: [binary change]
+```
+
+#### Edge cases
+
+| Case | Handling |
+|------|----------|
+| Binary files | Listed in context summary: `[binary] path: binary change`. Never priority (no text hunks). |
+| Rename-only | Context summary: `[renamed] old → new: +0 -0`. Priority for fd-architecture regardless. |
+| Multi-commit diff | Deduplicate: each file appears once with aggregate hunks. |
+| No pattern matches | Agent gets only compressed summaries + stats. Still sees all file names. |
 
 ### Prompt template for each agent:
 
@@ -204,6 +255,8 @@ as a finding.
 
 ## Document to Review
 
+[For INPUT_TYPE = file or directory:]
+
 [Trimmed document content — orchestrator applies token optimization above.]
 
 [For repo reviews: README + key structural info from Step 1.0.]
@@ -211,6 +264,36 @@ as a finding.
 [When divergence exists, also include specific things for THIS agent to
 check in the actual codebase — file paths, line numbers, known issues
 you spotted during Step 1.0.]
+
+## Diff to Review
+
+[For INPUT_TYPE = diff only — replace the "Document to Review" section above with this:]
+
+### Diff Stats
+- Files changed: {file_count}
+- Lines: +{added} -{removed}
+- Commit: {commit_message or "N/A"}
+
+### Priority Files (full hunks)
+
+[Complete diff hunks for files classified as priority for this agent.
+Preserve original unified diff format.]
+
+{priority diff hunks}
+
+### Context Files (summary only)
+
+[One-liner per non-priority file — filename, change stats, change type.]
+
+{context file summaries}
+
+[Diff slicing active: {P} priority files ({L1} lines), {C} context files ({L2} lines summarized)]
+
+> **Note to agent**: If you need full hunks for a context file to complete your review,
+> note it in your findings as "Request full hunks: {filename}" — the orchestrator may
+> re-run with adjusted routing.
+
+[For cross-cutting agents or small diffs: omit the Priority/Context split and include the full diff under a single "### Full Diff" header instead.]
 
 ## Your Focus Area
 
