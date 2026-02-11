@@ -153,7 +153,7 @@ For each relevant document, return a summary in this format:
 
 ## Frontmatter Schema Reference
 
-Reference the [yaml-schema.md](../../skills/compound-docs/references/yaml-schema.md) for the complete schema. Key enum values:
+Key enum values for frontmatter filtering:
 
 **problem_type values:**
 - build_error, test_failure, runtime_error, performance_issue
@@ -162,10 +162,10 @@ Reference the [yaml-schema.md](../../skills/compound-docs/references/yaml-schema
 - best_practice, documentation_gap
 
 **component values:**
-- rails_model, rails_controller, rails_view, service_object
-- background_job, database, frontend_stimulus, hotwire_turbo
-- email_processing, brief_system, assistant, authentication
-- payments, development_workflow, testing_framework, documentation, tooling
+- model, controller, view, service_object
+- background_job, database, frontend, api
+- authentication, payments, development_workflow
+- testing_framework, documentation, tooling
 
 **root_cause values:**
 - missing_association, missing_include, missing_index, wrong_api
@@ -257,8 +257,8 @@ Structure your findings as:
 ## Integration Points
 
 This agent is designed to be invoked by:
-- `/workflows:plan` - To inform planning with institutional knowledge
-- `/deepen-plan` - To add depth with relevant learnings
+- `/clavain:write-plan` - To inform planning with institutional knowledge
+- `/clavain:lfg` - To add depth with relevant learnings during the LFG workflow
 - Manual invocation before starting work on a feature
 
 The goal is to surface relevant learnings in under 30 seconds for a typical solutions directory, enabling fast knowledge retrieval during planning phases.

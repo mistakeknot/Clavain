@@ -185,9 +185,9 @@ Work logs serve as:
 
 | Trigger | Flow | Tool |
 |---------|------|------|
-| Code review | `/workflows:review` → Findings → `/triage` → Todos | Review agent + skill |
-| PR comments | `/resolve_pr_parallel` → Individual fixes → Todos | gh CLI + skill |
-| Code TODOs | `/resolve_todo_parallel` → Fixes + Complex todos | Agent + skill |
+| Code review | `/clavain:quality-gates` → Findings → `/clavain:triage` → Todos | Review agent + skill |
+| PR comments | `/clavain:resolve` → Individual fixes → Todos | gh CLI + skill |
+| Code TODOs | `/clavain:resolve` → Fixes + Complex todos | Agent + skill |
 | Planning | Brainstorm → Create todo → Work → Complete | Skill |
 | Feedback | Discussion → Create todo → Triage → Work | Skill + slash |
 
