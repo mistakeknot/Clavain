@@ -46,7 +46,7 @@ When clodex mode is active, dispatch tasks to Codex agents instead of executing 
    - Max 5 agents per batch (to avoid overwhelming resources)
 
 3. **For each batch**, use the `clavain:clodex` skill:
-   - Write task description files (one per task) to `/tmp/codex-task-<name>.md`
+   - Write prompt files (one per task) to `/tmp/codex-task-<name>.md` — plain language with goal, files, build/test commands, and verdict suffix
    - Dispatch all independent tasks in a single message (parallel Bash calls)
    - Wait for all agents to complete
    - Read each agent's output and verify (build, test, diff review)

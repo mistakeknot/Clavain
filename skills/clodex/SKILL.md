@@ -1,7 +1,7 @@
 ---
 name: clodex
 description: Dispatch tasks to Codex CLI agents — single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation.
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Clodex — Codex Dispatch
@@ -47,15 +47,12 @@ See `references/cli-reference.md` for the full flag reference and `references/tr
 | Sequential dependent tasks | **Ordered delegation** | Agent N starts after agent N-1 verified |
 | Complex decision before implementing | **Debate first** | Get Codex's independent analysis before coding |
 
-## Step 0: Resolve Paths
+## Step 0: Resolve dispatch.sh
 
-`$CLAUDE_PLUGIN_ROOT` is only available during skill loading — it's NOT exported to the Bash environment. Find absolute paths:
+`$CLAUDE_PLUGIN_ROOT` is only available during skill loading — it's NOT exported to the Bash environment. Find the absolute path:
 ```bash
 DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 2>/dev/null | head -1)
 [ -z "$DISPATCH" ] && DISPATCH=$(find ~/projects/Clavain -name dispatch.sh -path '*/scripts/*' 2>/dev/null | head -1)
-
-TEMPLATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/skills/clodex/templates/megaprompt.md' 2>/dev/null | head -1)
-[ -z "$TEMPLATE" ] && TEMPLATE=$(find ~/projects/Clavain -path '*/skills/clodex/templates/megaprompt.md' 2>/dev/null | head -1)
 ```
 
 ---
@@ -64,26 +61,31 @@ TEMPLATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/skills/clodex/templat
 
 **Announce:** "Dispatching to Codex agent..."
 
-### Step 1: Write Task Description
+**Status line:** Before dispatching, create a task with `TaskCreate` so the user sees progress:
+```
+TaskCreate:
+  subject: "Dispatch Codex agent: [brief goal]"
+  activeForm: "Dispatching Codex agent"
+```
+Mark `in_progress` before the Bash call. Mark `completed` after reading the verdict.
 
-Write a short task description file with section headers. Only include sections relevant to the task:
+### Step 1: Write the Prompt
+
+Write a concise prompt file with the goal, relevant files, and build/test commands. Write it as natural language — Codex handles exploration, implementation, and verification on its own.
 
 ```markdown
-GOAL:
-Fix the timeout bug in auth handler
+Fix the timeout bug in the auth handler.
 
-EXPLORE_TARGETS:
-internal/auth/handler.go, internal/auth/middleware.go
+Files: internal/auth/handler.go, internal/auth/middleware.go
 
-IMPLEMENT:
-- Change timeout from 5s to 30s in handler.go
-- Add retry with exponential backoff
+Change the timeout from 5s to 30s in handler.go and add retry with exponential backoff.
 
-BUILD_CMD:
-go build ./internal/auth/...
+Build: go build ./internal/auth/...
+Test: go test ./internal/auth/... -run TestLogin -short -timeout=60s
 
-TEST_CMD:
-go test ./internal/auth/... -run TestLogin -short -timeout=60s
+When done, report:
+VERDICT: CLEAN | NEEDS_ATTENTION [reason]
+FILES_CHANGED: [list]
 ```
 
 Save to: `/tmp/codex-task-$(date +%s).md`
@@ -92,16 +94,12 @@ Save to: `/tmp/codex-task-$(date +%s).md`
 
 ### Step 2: Dispatch
 
-dispatch.sh assembles the full prompt from the template + task description:
-
 ```bash
 bash "$DISPATCH" \
-  --template "$TEMPLATE" \
   --prompt-file "$TASK_FILE" \
   -C "$PROJECT_DIR" \
   -o "/tmp/codex-result-$(date +%s).md" \
-  -s workspace-write \
-  --inject-docs
+  -s workspace-write
 ```
 
 Use `timeout: 600000` (10 minutes) on the Bash tool call.
@@ -120,7 +118,7 @@ Use `timeout: 600000` (10 minutes) on the Bash tool call.
 ### Step 4: Handle Failure (max 1 retry)
 
 1. Read failure details
-2. Write tighter follow-up task description with error context
+2. Write tighter follow-up prompt with error context
 3. Re-dispatch once
 4. If still failing, offer options:
    - Try Split mode (separate explore/implement/verify agents)
@@ -158,31 +156,20 @@ AskUserQuestion:
 
 If two tasks might modify the same file: **(a) combine them** into one agent prompt, or **(b) dispatch sequentially**.
 
-### Step 3: Write Task Descriptions
+### Step 3: Write Prompt Files
 
-For the parallel-task template, resolve its path:
-```bash
-PAR_TEMPLATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/skills/clodex/templates/parallel-task.md' 2>/dev/null | head -1)
-[ -z "$PAR_TEMPLATE" ] && PAR_TEMPLATE=$(find ~/projects/Clavain -path '*/skills/clodex/templates/parallel-task.md' 2>/dev/null | head -1)
-```
-
-Each task description uses these sections:
-- `PROJECT:` — project name and brief description
-- `TASK:` — detailed description of what to change
-- `FILES:` — specific file paths with descriptions
-- `CRITERIA:` — additional success criteria beyond build/test
-- `BUILD_CMD:` — build command
-- `TEST_CMD:` — scoped test command
+Write one prompt file per task (same format as megaprompt Step 1). Each should include the goal, relevant files, build/test commands, and the verdict suffix.
 
 ### Step 4: Dispatch in Parallel
+
+**Status line:** Create one task per agent with `TaskCreate` (e.g., `activeForm: "Dispatching fix-auth agent"`). Mark each `in_progress` before its Bash call, `completed` after reading its verdict.
 
 Launch all Bash calls **in a single message** (multiple tool calls). Set `timeout: 600000` on each.
 
 ```bash
 bash "$DISPATCH" \
-  --template "$PAR_TEMPLATE" \
   --prompt-file /tmp/task1.md \
-  --inject-docs -C "$PROJECT_DIR" \
+  -C "$PROJECT_DIR" \
   --name fix-auth -o /tmp/codex-{name}.md \
   -s workspace-write
 ```
