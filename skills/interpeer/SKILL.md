@@ -75,11 +75,17 @@ Review the following code. Focus on:
 
 **Phase 2: Call Peer**
 
-From Claude Code → Codex:
+From Claude Code → Codex (via dispatch.sh):
 ```bash
-codex exec --sandbox read-only \
+DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 2>/dev/null | head -1)
+[ -z "$DISPATCH" ] && DISPATCH=$(find ~/projects/Clavain -name dispatch.sh -path '*/scripts/*' 2>/dev/null | head -1)
+
+bash "$DISPATCH" \
+  --tier fast \
+  -s read-only \
   -o /tmp/interpeer-response.md \
-  - < /tmp/interpeer-prompt.md
+  -C "$PROJECT_DIR" \
+  --prompt-file /tmp/interpeer-prompt.md
 ```
 
 From Codex CLI → Claude:

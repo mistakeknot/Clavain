@@ -46,7 +46,7 @@ BOOTSTRAP_TEMPLATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/skills/clod
 [[ -z "$BOOTSTRAP_TEMPLATE" ]] && { echo "WARNING: create-review-agent.md not found — skipping Project Agent bootstrap"; BOOTSTRAP=false; }
 ```
 
-Dispatch **without `run_in_background`** so it blocks until complete. Set `timeout: 300000` (5 minutes). If bootstrap fails or times out, skip Project Agents for this run — do NOT block the rest of the review.
+Dispatch **without `run_in_background`** so it blocks until complete. Use `--tier fast` (scoped generation task). Set `timeout: 300000` (5 minutes). If bootstrap fails or times out, skip Project Agents for this run — do NOT block the rest of the review.
 
 ## Create temp directory and task description files
 
@@ -73,6 +73,7 @@ AGENT_NAME:
 
 TIER:
 {project|adaptive|cross-ai}
+(Note: This TIER field is metadata for tracking. dispatch.sh handles model selection via its --tier flag.)
 
 OUTPUT_FILE:
 {OUTPUT_DIR}/{agent-name}.md
@@ -89,7 +90,8 @@ bash "$DISPATCH" \
   --template "$REVIEW_TEMPLATE" \
   --prompt-file "$FLUX_TMPDIR/{agent-name}.md" \
   -C "$PROJECT_ROOT" \
-  -s workspace-write
+  -s workspace-write \
+  --tier deep
 ```
 
 Notes:

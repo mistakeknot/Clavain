@@ -17,6 +17,7 @@ SANDBOX="workspace-write"
 WORKDIR=""
 OUTPUT=""
 MODEL=""
+TIER=""
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
 NAME=""
 DRY_RUN=false
@@ -38,6 +39,8 @@ Options:
   -o, --output-last-message <FILE>  Output file ({name} replaced by --name value)
   -s, --sandbox <MODE>          Sandbox: read-only | workspace-write | danger-full-access
   -m, --model <MODEL>           Override model (default: from ~/.codex/config.toml)
+  --tier <fast|deep>            Resolve model from config/dispatch/tiers.yaml
+                                  Mutually exclusive with -m (use -m to override)
   -i, --image <FILE>            Attach image to prompt (repeatable)
   --inject-docs[=SCOPE]         Prepend docs from working dir to prompt
                                   (no value)  CLAUDE.md only (recommended — Codex reads AGENTS.md natively)
@@ -70,6 +73,65 @@ require_arg() {
   fi
 }
 
+# Resolve a tier name to a model string from tiers.yaml
+resolve_tier_model() {
+  local tier="$1"
+  local config_file=""
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  # Find tiers.yaml — relative to script first (works in both plugin cache and dev checkout),
+  # then fall back to explicit find
+  if [[ -f "$script_dir/../config/dispatch/tiers.yaml" ]]; then
+    config_file="$script_dir/../config/dispatch/tiers.yaml"
+  else
+    config_file=$(find ~/.claude/plugins/cache -path '*/clavain/*/config/dispatch/tiers.yaml' 2>/dev/null | head -1)
+    [[ -z "$config_file" ]] && config_file=$(find /root/projects/Clavain -path '*/config/dispatch/tiers.yaml' 2>/dev/null | head -1)
+  fi
+
+  if [[ -z "$config_file" ]]; then
+    echo "Warning: tiers.yaml not found — --tier ignored, using default model" >&2
+    return 1
+  fi
+
+  # Parse YAML: find tier block under "tiers:", then read its "model:" value
+  local in_tiers=false
+  local in_tier=false
+  local model=""
+  while IFS= read -r line; do
+    # Detect top-level "tiers:" section
+    if [[ "$line" =~ ^tiers: ]]; then
+      in_tiers=true
+      continue
+    fi
+    # Exit tiers section on next top-level key
+    if [[ "$in_tiers" == true && "$line" =~ ^[a-z] ]]; then
+      break
+    fi
+    # Match the requested tier (e.g. "  fast:")
+    if [[ "$in_tiers" == true && "$line" =~ ^[[:space:]]+${tier}:[[:space:]]*$ ]]; then
+      in_tier=true
+      continue
+    fi
+    # Read model value from within the tier block
+    if [[ "$in_tier" == true && "$line" =~ ^[[:space:]]+model:[[:space:]]*(.+) ]]; then
+      model="${BASH_REMATCH[1]}"
+      break
+    fi
+    # Hit a sibling tier key — stop
+    if [[ "$in_tier" == true && "$line" =~ ^[[:space:]]+[a-z]+:[[:space:]]*$ ]]; then
+      break
+    fi
+  done < "$config_file"
+
+  if [[ -z "$model" ]]; then
+    echo "Warning: tier '$tier' not found in $config_file" >&2
+    return 1
+  fi
+
+  echo "$model"
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -94,6 +156,11 @@ while [[ $# -gt 0 ]]; do
     -m|--model)
       require_arg "$1" "${2:-}"
       MODEL="$2"
+      shift 2
+      ;;
+    --tier)
+      require_arg "$1" "${2:-}"
+      TIER="$2"
       shift 2
       ;;
     -i|--image)
@@ -169,6 +236,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Resolve --tier to a model name (mutually exclusive with -m)
+if [[ -n "$TIER" ]]; then
+  if [[ -n "$MODEL" ]]; then
+    echo "Error: Cannot use both --tier and --model" >&2
+    exit 1
+  fi
+  if RESOLVED_MODEL=$(resolve_tier_model "$TIER"); then
+    MODEL="$RESOLVED_MODEL"
+    echo "Tier '$TIER' resolved to model: $MODEL" >&2
+  fi
+  # If resolution fails, warning already printed — MODEL stays empty (uses config.toml default)
+fi
 
 # Resolve prompt: positional arg, --prompt-file, or error
 PROMPT="${1:-}"
@@ -340,6 +420,9 @@ CMD+=("$PROMPT")
 
 # Dry run: print command and exit
 if [[ "$DRY_RUN" == true ]]; then
+  if [[ -n "$TIER" ]]; then
+    echo "# Tier: $TIER → model: ${MODEL:-<default>}" >&2
+  fi
   echo "# Would execute:" >&2
   # Print command with prompt truncated for readability
   PROMPT_PREVIEW="${PROMPT:0:200}"

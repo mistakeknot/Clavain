@@ -153,10 +153,12 @@ ROUND1_PROMPT="/tmp/debate-r1-prompt-${TOPIC}.md"
 ROUND1_OUTPUT="/tmp/debate-r1-output-${TOPIC}.md"
 ROUND2_PROMPT="/tmp/debate-r2-prompt-${TOPIC}.md"
 
-# Build model args
+# Build model args: explicit -m overrides, otherwise use --tier deep
 MODEL_ARGS=()
 if [[ -n "$MODEL" ]]; then
   MODEL_ARGS+=(-m "$MODEL")
+else
+  MODEL_ARGS+=(--tier deep)
 fi
 
 DRY_RUN_ARG=""

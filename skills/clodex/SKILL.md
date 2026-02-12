@@ -38,6 +38,19 @@ If Codex is unavailable, suggest falling back to `clavain:subagent-driven-develo
 
 See `references/cli-reference.md` for the full flag reference and `references/troubleshooting.md` for common errors.
 
+## Model Tiers
+
+dispatch.sh supports `--tier fast|deep` to resolve model names from `config/dispatch/tiers.yaml`:
+
+| Tier | Model | Use for |
+|------|-------|---------|
+| **fast** | `gpt-5.3-codex-spark` | Read-only exploration, verification, quick reviews |
+| **deep** | `gpt-5.3-codex` | Implementation, complex reasoning, debates |
+
+- `--tier` and `-m` are mutually exclusive — `-m` is the escape hatch for one-off overrides
+- If `tiers.yaml` is missing, `--tier` degrades gracefully (warning, uses config.toml default)
+- Change model names in one place (`tiers.yaml`) when new models ship
+
 ## Dispatch Routing
 
 | Situation | Mode | Why |
@@ -91,7 +104,8 @@ bash "$DISPATCH" \
   --prompt-file "$TASK_FILE" \
   -C "$PROJECT_DIR" \
   -o "/tmp/codex-result-$(date +%s).md" \
-  -s workspace-write
+  -s workspace-write \
+  --tier deep
 ```
 
 Use `timeout: 600000` (10 minutes) on the Bash tool call.
@@ -161,7 +175,8 @@ bash "$DISPATCH" \
   --prompt-file /tmp/task1.md \
   -C "$PROJECT_DIR" \
   --name fix-auth -o /tmp/codex-{name}.md \
-  -s workspace-write
+  -s workspace-write \
+  --tier deep
 ```
 
 ### Step 5: Verify and Land

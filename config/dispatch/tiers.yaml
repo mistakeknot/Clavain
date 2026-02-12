@@ -1,0 +1,14 @@
+# Model tier configuration for dispatch.sh
+# Change model names here when new models ship — all callers inherit automatically.
+
+tiers:
+  fast:
+    model: gpt-5.3-codex-spark
+    description: Scoped read-only tasks, exploration, verification, quick reviews
+  deep:
+    model: gpt-5.3-codex
+    description: Generative tasks, implementation, complex reasoning, debates
+
+# Fallback if Spark is unavailable (API returns model_not_found)
+fallback:
+  fast: deep  # fast falls back to deep tier's model
