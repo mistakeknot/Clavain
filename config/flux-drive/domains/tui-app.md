@@ -2,12 +2,91 @@
 
 ## Detection Signals
 
-Primary signals: `tui/`, `ui/`, `view/`, `component/`
-Frameworks: Bubble Tea, Lipgloss, Bubbles, Ratatui, tui-rs, Crossterm, Termion, Blessed, Ink, Rich, Textual
-Keywords: `render`, `update`, `view`, `model`, `msg`, `cmd`, `tea.Model`, `widget`, `layout`, `viewport`
+Primary signals (strong indicators):
+- Directories: `tui/`, `ui/`, `view/`, `component/`
+- Files: `*.go`, `*.rs`
+- Frameworks: Bubble Tea, Lipgloss, Bubbles, Ratatui, tui-rs, Crossterm, Termion, Blessed, Ink, Rich, Textual
+- Keywords: `render`, `update`, `view`, `model`, `msg`, `cmd`, `tea.Model`, `widget`, `layout`, `viewport`
+
+Secondary signals (supporting):
+- Directories: `styles/`, `keys/`, `input/`
+- Files: `keymap.*`, `theme.*`, `styles.*`
+- Keywords: `flex`, `border`, `cursor`, `focus`, `tab_order`, `key_binding`, `ansi`, `escape_sequence`
 
 ## Injection Criteria
 
-_Placeholder — to be completed in Phase B._
+When `tui-app` is detected, inject these domain-specific review bullets into each core agent's prompt.
 
-<!-- When populated, this section will contain 3-5 domain-specific review bullets per core agent. -->
+### fd-architecture
+
+- Check that UI components follow a unidirectional data flow (Model → View → Update cycle, not bidirectional bindings)
+- Verify that business logic is separate from rendering — the Model should be testable without a terminal
+- Flag monolithic update functions — each component should handle its own messages with clear delegation
+- Check that key bindings are centralized in a keymap, not scattered across components (enables user customization)
+- Verify that the layout system handles terminal resize gracefully (components adapt, don't clip or panic)
+
+### fd-safety
+
+- Check that user input is sanitized before display (terminal escape sequences in data could manipulate the UI)
+- Verify that file operations from TUI commands validate paths (user-typed paths in file pickers need traversal protection)
+- Flag raw terminal mode cleanup — if the app crashes, ensure the terminal is restored (deferred reset on panic)
+- Check that clipboard operations don't silently expose sensitive data (password fields shouldn't paste to system clipboard)
+- Verify that external command execution from TUI (shell-out) validates and escapes arguments
+
+### fd-correctness
+
+- Check that focus management is consistent — tabbing through elements should follow a predictable, documented order
+- Verify that list/table scrolling handles edge cases (empty list, single item, index out of bounds after filter)
+- Flag async operations that update the model without going through the message loop (bypasses the update cycle, causes stale views)
+- Check that multi-pane layouts maintain independent scroll positions (scrolling in one pane shouldn't affect another)
+- Verify that text input handles Unicode correctly (multi-byte characters, combining marks, cursor positioning)
+
+### fd-quality
+
+- Check that style definitions use a theme system, not hardcoded ANSI codes (enables color scheme customization)
+- Verify that help text is accessible from every screen (context-sensitive ? or F1 showing available key bindings)
+- Flag inconsistent key binding conventions (Ctrl+Q to quit in one view, Esc in another, q in a third)
+- Check that status bar or footer communicates current mode, available actions, and any pending operations
+- Verify that terminal output is tested (golden file snapshots of rendered output for regression detection)
+
+### fd-performance
+
+- Check that render calls are batched — don't flush to terminal after every small change (causes visible flicker)
+- Flag full-screen redraws when only a small region changed (use dirty-region tracking or differential rendering)
+- Verify that large lists use virtual scrolling (only render visible rows + buffer, not all 10,000 items)
+- Check that key repeat doesn't queue up stale events (fast scrolling shouldn't lag behind with accumulated updates)
+- Flag blocking operations in the update loop — network/file IO should be async commands, not synchronous calls
+
+### fd-user-product
+
+- Check that the app has a discoverable command palette or help screen (new users shouldn't need to read docs to navigate)
+- Verify that destructive operations show inline confirmation (don't just delete on single keypress without feedback)
+- Flag missing visual feedback for state changes (selected item highlighting, active pane indication, loading spinners)
+- Check that mouse support is optional and keyboard-first (mouse can enhance but shouldn't be required)
+- Verify that the app works in common terminal sizes (80x24 minimum) and degrades gracefully in very small terminals
+
+## Agent Specifications
+
+These are domain-specific agents that `/flux-gen` can generate for TUI app projects. They complement (not replace) the core fd-* agents.
+
+### fd-terminal-rendering
+
+Focus: Render performance, ANSI output correctness, terminal compatibility, visual regression testing.
+
+Key review areas:
+- Differential rendering and dirty region tracking
+- ANSI escape sequence correctness across terminal emulators
+- Color fallback for limited-color terminals (256 → 16 → monochrome)
+- Golden-file snapshot testing for rendered output
+- Resize handling and reflow behavior
+
+### fd-interaction-design
+
+Focus: Key binding consistency, focus management, navigation patterns, accessibility in terminal context.
+
+Key review areas:
+- Keymap completeness and conflict detection
+- Focus traversal order and visual indicators
+- Modal vs modeless interaction patterns
+- Screen reader compatibility (where supported)
+- Mouse interaction as progressive enhancement

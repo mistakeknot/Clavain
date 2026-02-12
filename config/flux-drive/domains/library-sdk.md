@@ -2,12 +2,91 @@
 
 ## Detection Signals
 
-Primary signals: `src/`, `lib/`, `examples/`, `docs/`, `CHANGELOG.md`, `CONTRIBUTING.md`
-Frameworks: (language-agnostic — detected by package manifest presence)
-Keywords: `public_api`, `export`, `semver`, `breaking_change`, `backward_compatible`, `deprecate`, `generic`, `interface`, `trait`
+Primary signals (strong indicators):
+- Directories: `src/`, `lib/`, `examples/`, `docs/`, `api/`
+- Files: `package.json`, `Cargo.toml`, `go.mod`, `setup.py`, `pyproject.toml`, `*.gemspec`, `*.podspec`, `CHANGELOG.md`, `CONTRIBUTING.md`
+- Frameworks: (language-agnostic — detected by package manifest and documentation patterns)
+- Keywords: `public_api`, `export`, `semver`, `breaking_change`, `backward_compatible`, `deprecate`, `generic`, `interface`, `trait`
+
+Secondary signals (supporting):
+- Directories: `benchmarks/`, `fixtures/`, `types/`, `internal/`
+- Files: `LICENSE`, `*.d.ts`, `index.ts`, `mod.rs`, `__init__.py`
+- Keywords: `type_definition`, `re_export`, `pub(crate)`, `__all__`, `module.exports`
 
 ## Injection Criteria
 
-_Placeholder — to be completed in Phase B._
+When `library-sdk` is detected, inject these domain-specific review bullets into each core agent's prompt.
 
-<!-- When populated, this section will contain 3-5 domain-specific review bullets per core agent. -->
+### fd-architecture
+
+- Check that the public API surface is minimal and intentional — only expose what consumers need, keep internals private
+- Verify that the library has a clear extension mechanism (plugins, middleware, hooks) rather than forcing consumers to fork
+- Flag circular dependencies between modules — library consumers shouldn't need the entire package for one feature
+- Check that the dependency tree is minimal (libraries with heavy transitive deps cause version conflicts in consumer projects)
+- Verify that the library supports tree-shaking or selective imports (consumers shouldn't pay for features they don't use)
+
+### fd-safety
+
+- Check that user-supplied inputs are validated at the public API boundary (don't trust caller data shapes or ranges)
+- Verify that the library doesn't execute arbitrary code from config files or data inputs (no eval/exec on user strings)
+- Flag APIs that accept file paths without documenting or restricting access scope (path traversal via library misuse)
+- Check that default configurations are secure (opt-in to dangerous features, not opt-out)
+- Verify that error messages from the library don't leak internal implementation details to end users
+
+### fd-correctness
+
+- Check that public API types are precise — use union types/enums over stringly-typed parameters, optional vs required is accurate
+- Verify that the library is re-entrant and thread-safe where documented, or clearly states single-threaded requirements
+- Flag mutable global state — library-level globals create hidden coupling and make testing impossible for consumers
+- Check that generic/template constraints are tight enough to produce useful error messages (not "type X doesn't implement Y" 3 layers deep)
+- Verify that deprecated APIs still work correctly until removal — deprecation means "will be removed", not "might be broken"
+
+### fd-quality
+
+- Check that every public type, function, and method has documentation with usage examples
+- Verify that error types are specific and documented — consumers need to match on error kinds, not parse error strings
+- Flag inconsistent naming across the API surface (mix of get/fetch/retrieve, or create/new/make for the same pattern)
+- Check that CHANGELOG follows Keep a Changelog format with entries categorized by Added/Changed/Deprecated/Removed/Fixed
+- Verify that examples in docs are tested (doctest, mdbook test, or CI-compiled example directory)
+
+### fd-performance
+
+- Check that hot paths avoid allocations — reuse buffers, accept slices/references instead of owned types where possible
+- Flag APIs that force consumers into inefficient patterns (returning Vec when iterator would allow streaming)
+- Verify that benchmarks exist for performance-critical paths and are run in CI (detect regressions before release)
+- Check that the library doesn't do unnecessary work on initialization (lazy-init expensive resources)
+- Flag hidden O(n) operations in APIs that look O(1) (e.g., len() that traverses a linked list)
+
+### fd-user-product
+
+- Check that getting-started documentation works end-to-end (copy-paste the example, it compiles and runs)
+- Verify that migration guides exist for breaking version changes (consumers need step-by-step upgrade instructions)
+- Flag missing error context — when the library returns an error, the consumer should understand what they did wrong
+- Check that the README includes: what the library does, installation, minimal example, link to full docs
+- Verify that common use cases have dedicated examples (not just API reference — show how pieces compose)
+
+## Agent Specifications
+
+These are domain-specific agents that `/flux-gen` can generate for library/SDK projects. They complement (not replace) the core fd-* agents.
+
+### fd-api-surface
+
+Focus: Public API design, backward compatibility, type safety, documentation coverage.
+
+Key review areas:
+- API surface minimality (nothing public that shouldn't be)
+- Semver compliance for changes
+- Type signature precision and ergonomics
+- Documentation completeness per public item
+- Cross-version compatibility testing
+
+### fd-consumer-experience
+
+Focus: Onboarding, error messages, examples, integration patterns, ecosystem compatibility.
+
+Key review areas:
+- First-use experience (install → working code path)
+- Error message actionability from consumer perspective
+- Example coverage for common use cases
+- Dependency compatibility with popular frameworks
+- Migration path clarity between versions
