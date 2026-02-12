@@ -10,15 +10,15 @@
 - Published v0.4.50
 - **Populated all 11 domain profiles** (Phase B complete) — 330 domain-specific review criteria across 11 domains, 2-3 agent specs each
 - Closed Clavain-ckz2 (domain detection script task)
+- **Wired domain detection into runtime** — Step 2.1a in launch.md loads domain profiles, extracts per-agent injection criteria, injects into prompt template as Domain Context section. Multi-domain support (up to 3, ordered by confidence).
 
 ## Pending
 - Pre-existing uncommitted changes in commands/*.md and CLAUDE.md (phase lifecycle tracking from prior session)
 
 ## Next
-- Wire domain detection into flux-drive orchestrator runtime (currently SKILL.md instructions only)
 - Implement /flux-gen command (Clavain-8l91) — generates domain-specific agents from profile specs
 - Commit the pre-existing commands/*.md phase lifecycle changes
-- Commit domain profiles + publish new version
+- Publish new version with domain injection wiring
 
 ## Context
 - `hooks/lib-phase.sh` and `docs/plans/2026-02-12-phase-state-tracking.md` are untracked from a prior session
