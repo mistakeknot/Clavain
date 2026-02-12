@@ -31,17 +31,17 @@ teardown() {
     assert_output ""
 }
 
-@test "auto-compound: detects commit+bead-close signals (weight >= 2)" {
+@test "auto-compound: commit+bead-close below threshold (weight 2 < 3)" {
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
-    # Should output block decision with combined signals
-    echo "$output" | jq -e '.decision == "block"'
+    # commit (1) + bead-closed (1) = 2, below new threshold of 3
+    assert_output ""
 }
 
-@test "auto-compound: detects insight+commit signals (weight >= 2)" {
+@test "auto-compound: detects insight+commit+investigation signals (weight >= 3)" {
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_insight.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
-    # Should output block decision with combined signals
+    # insight (1) + commit (1) + investigation (2) = 4, above threshold of 3
     echo "$output" | jq -e '.decision == "block"'
 }
 
@@ -52,10 +52,10 @@ teardown() {
     assert_output ""
 }
 
-@test "auto-compound: detects build/test recovery (weight >= 2)" {
+@test "auto-compound: detects recovery+investigation signals (weight >= 3)" {
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_recovery.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
-    # Recovery signal (fail then pass) has weight 2, plus error-fix-cycle weight 1
+    # recovery (2) + investigation (2) = 4, above threshold of 3
     echo "$output" | jq -e '.decision == "block"'
 }
 
@@ -86,6 +86,27 @@ teardown() {
     touch "$sentinel"
     run bash -c "echo '{\"stop_hook_active\": false, \"session_id\": \"${session_id}\", \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     rm -f "$sentinel"
+    assert_success
+    assert_output ""
+}
+
+@test "auto-compound: skips when opt-out file exists" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.claude"
+    touch "$tmpdir/.claude/clavain.no-autocompound"
+    run bash -c "cd '$tmpdir' && echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_insight.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
+    rm -rf "$tmpdir"
+    assert_success
+    assert_output ""
+}
+
+@test "auto-compound: skips when throttle sentinel is recent" {
+    local session_id="test-throttle-$$"
+    local throttle_sentinel="/tmp/clavain-compound-last-${session_id}"
+    touch "$throttle_sentinel"
+    run bash -c "echo '{\"stop_hook_active\": false, \"session_id\": \"${session_id}\", \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_insight.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
+    rm -f "$throttle_sentinel"
     assert_success
     assert_output ""
 }

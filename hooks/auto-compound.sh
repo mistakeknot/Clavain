@@ -2,18 +2,17 @@
 # Stop hook: auto-compound non-trivial problem-solving after each turn
 #
 # Analyzes the recent conversation for compoundable signals:
-#   - Git commits (suggests documenting what was solved)
-#   - Debugging resolutions ("that worked", "it's fixed", etc.)
-#   - Non-trivial problem-solving patterns
-#   - Insight blocks (★ Insight markers in explanatory mode)
-#   - Bead closures (completed work items)
-#   - Build/test recovery (passing after failure)
-#   - High tool activity (many bash commands = non-trivial session)
+#   - Git commits (weight 1)
+#   - Debugging resolutions ("that worked", "it's fixed", etc.) (weight 2)
+#   - Non-trivial fix patterns (investigation language) (weight 2)
+#   - Bead closures (completed work items) (weight 1)
+#   - Insight blocks (★ Insight markers in explanatory mode) (weight 1)
+#   - Build/test recovery (passing after failure) (weight 2)
 #
-# Signals are weighted. Compound triggers when total weight >= 2,
-# so a single commit alone won't fire, but commit + resolution will.
+# Signals are weighted. Compound triggers when total weight >= 3,
+# so commit + bead-close (2) won't fire alone, but commit + resolution (3) will.
 #
-# Uses stop_hook_active to prevent infinite re-triggering.
+# Guards: stop_hook_active, cross-hook sentinel, per-repo opt-out, 5-min throttle.
 # Returns JSON with decision:"block" + reason when compound is warranted,
 # causing Claude to evaluate and automatically run /compound with a brief notice.
 #
@@ -37,6 +36,11 @@ if [[ "$STOP_ACTIVE" == "true" ]]; then
     exit 0
 fi
 
+# Guard: per-repo opt-out
+if [[ -f ".claude/clavain.no-autocompound" ]]; then
+    exit 0
+fi
+
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
 # Guard: if another Stop hook already fired this cycle, don't cascade
@@ -46,6 +50,16 @@ if [[ -f "$STOP_SENTINEL" ]]; then
 fi
 # Write sentinel NOW — before transcript analysis — to minimize TOCTOU window
 touch "$STOP_SENTINEL"
+
+# Guard: throttle — at most once per 5 minutes
+THROTTLE_SENTINEL="/tmp/clavain-compound-last-${SESSION_ID}"
+if [[ -f "$THROTTLE_SENTINEL" ]]; then
+    THROTTLE_MTIME=$(stat -c %Y "$THROTTLE_SENTINEL" 2>/dev/null || stat -f %m "$THROTTLE_SENTINEL" 2>/dev/null || date +%s)
+    THROTTLE_NOW=$(date +%s)
+    if [[ $((THROTTLE_NOW - THROTTLE_MTIME)) -lt 300 ]]; then
+        exit 0
+    fi
+fi
 
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 if [[ -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]]; then
@@ -101,25 +115,10 @@ if echo "$RECENT" | grep -iq 'FAIL\|FAILED\|ERROR.*build\|error.*compile\|test.*
     fi
 fi
 
-# 7. High bash activity (>8 bash tool calls = non-trivial session) — weight 1
-BASH_COUNT=$(echo "$RECENT" | grep -Ec '"Bash"|"command":' || true)
-if [[ "$BASH_COUNT" -gt 8 ]]; then
-    SIGNALS="${SIGNALS}high-activity,"
-    WEIGHT=$((WEIGHT + 1))
-fi
-
-# 8. Error→fix cycle (error message followed by edit/write) — weight 1
-if echo "$RECENT" | grep -iq 'error\|exception\|traceback\|panic'; then
-    if echo "$RECENT" | grep -q '"Edit"\|"Write"\|replace_content\|replace_symbol'; then
-        SIGNALS="${SIGNALS}error-fix-cycle,"
-        WEIGHT=$((WEIGHT + 1))
-    fi
-fi
-
-# Threshold: need weight >= 2 to trigger compound
-# This means a single commit or single bead-close won't fire alone,
-# but commit + bead-close, or any investigation/resolution/recovery will.
-if [[ "$WEIGHT" -lt 2 ]]; then
+# Threshold: need weight >= 3 to trigger compound
+# commit (1) + bead-close (1) = 2, not enough alone.
+# Needs real investigation/resolution/recovery signal.
+if [[ "$WEIGHT" -lt 3 ]]; then
     exit 0
 fi
 
@@ -128,6 +127,9 @@ SIGNALS="${SIGNALS%,}"
 
 # Build the reason prompt — this is what Claude sees
 REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] (weight ${WEIGHT}) in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."
+
+# Write throttle sentinel
+touch "$THROTTLE_SENTINEL"
 
 # Return block decision to inject the evaluation prompt
 if command -v jq &>/dev/null; then

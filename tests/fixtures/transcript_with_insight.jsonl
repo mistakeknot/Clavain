@@ -1,6 +1,7 @@
 {"role":"user","content":"Explain how this works"}
 {"role":"assistant","content":"Let me analyze this pattern."}
 {"role":"assistant","content":"Insight ─ The key realization is that the cache invalidation happens before the write completes."}
+{"role":"assistant","content":"The problem was that cache invalidation raced with the write path."}
 {"role":"assistant","content":"This means we need to sequence these operations carefully."}
 {"role":"assistant","content":"Running \"git commit -m 'fix: sequence cache operations'\""}
 {"role":"assistant","content":"Changes committed."}
