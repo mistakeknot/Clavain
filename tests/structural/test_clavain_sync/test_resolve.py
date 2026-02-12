@@ -1,5 +1,6 @@
 """Tests for resolve.py — AI conflict resolution via claude -p."""
 import json
+import subprocess
 from unittest.mock import patch, MagicMock
 from clavain_sync.resolve import analyze_conflict, ConflictDecision
 
@@ -34,7 +35,7 @@ def test_analyze_returns_parsed_decision(mock_run, mock_which):
 @patch("clavain_sync.resolve.shutil.which", return_value="/usr/bin/claude")
 @patch("clavain_sync.resolve.subprocess.run")
 def test_analyze_falls_back_on_failure(mock_run, mock_which):
-    mock_run.side_effect = Exception("claude not found")
+    mock_run.side_effect = subprocess.SubprocessError("claude not found")
     result = analyze_conflict(
         local_path="skills/foo.md",
         local_content="local",

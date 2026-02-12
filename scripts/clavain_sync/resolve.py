@@ -97,5 +97,5 @@ Check for blocklist terms in the upstream changes."""
             rationale=data.get("rationale", ""),
             blocklist_found=data.get("blocklist_found", []),
         )
-    except Exception:
+    except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, ValueError, OSError):
         return _FALLBACK

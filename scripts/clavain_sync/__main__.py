@@ -10,6 +10,7 @@ from .classify import Classification, classify_file
 from .config import load_config, Upstream
 from .filemap import resolve_local_path
 from .git_ops import (
+    GitError,
     commit_is_reachable,
     count_new_commits,
     fetch_and_reset,
@@ -31,14 +32,25 @@ else:
 
 
 def find_upstreams_dir(project_root: Path) -> Path:
-    """Find the upstreams clone directory."""
+    """Find the upstreams clone directory.
+
+    Search order:
+    1. CLAVAIN_UPSTREAMS_DIR environment variable
+    2. .upstream-work/ in project root (CI/ephemeral)
+    3. /root/projects/upstreams (default server layout)
+    """
+    env_dir = os.environ.get("CLAVAIN_UPSTREAMS_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        if p.is_dir():
+            return p
     work_dir = project_root / ".upstream-work"
     if work_dir.is_dir():
         return work_dir
     default = Path("/root/projects/upstreams")
     if default.is_dir():
         return default
-    print(f"ERROR: No upstreams directory found. Run scripts/clone-upstreams.sh first.", file=sys.stderr)
+    print("ERROR: No upstreams directory found. Set CLAVAIN_UPSTREAMS_DIR or run scripts/clone-upstreams.sh.", file=sys.stderr)
     sys.exit(1)
 
 
@@ -70,7 +82,11 @@ def sync_upstream(
         return []
 
     # Fetch latest
-    fetch_and_reset(clone_dir, upstream.branch)
+    try:
+        fetch_and_reset(clone_dir, upstream.branch)
+    except GitError as e:
+        print(f"  {RED}{e}{NC}")
+        return []
     head_commit = get_head_commit(clone_dir)
     head_short = head_commit[:7]
 
@@ -111,8 +127,8 @@ def sync_upstream(
         if local_path is None:
             continue
 
-        # Read contents using git object store for snapshot isolation
-        # (avoids TOCTOU race if another process modifies the clone)
+        # Read local content from filesystem (it's our working copy, not in git).
+        # Upstream/ancestor content uses git show for snapshot isolation.
         local_full = project_root / local_path
         local_content = local_full.read_text() if local_full.is_file() else None
         upstream_content = get_ancestor_content(
@@ -190,7 +206,6 @@ def sync_upstream(
                     print(f"           {YELLOW}AI: {ai_result.decision} (risk: {ai_result.risk}) — skipped{NC}")
             elif mode == "auto":
                 print(f"           {YELLOW}(skipped in --auto --no-ai mode){NC}")
-            # Interactive mode: would need tty handling (not implemented in first iteration)
 
         elif classification.value.startswith("REVIEW"):
             reason = classification.value.split(":", 1)[1]
@@ -270,7 +285,8 @@ def main() -> None:
         elif args.auto:
             mode = "auto"
         else:
-            mode = "interactive"
+            print("ERROR: Interactive mode not yet implemented. Use --dry-run or --auto.", file=sys.stderr)
+            sys.exit(1)
 
         # Load config
         cfg = load_config(config_path)

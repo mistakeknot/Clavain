@@ -90,5 +90,7 @@ def classify_file(
     if upstream_changed and local_changed:
         return Classification.CONFLICT
 
-    # Both unchanged but content differs — shouldn't happen
+    # Both unchanged but content differs — defensive branch.
+    # This can only trigger if namespace replacement is non-deterministic
+    # or if content was modified outside the sync process. Flags for human review.
     return Classification.REVIEW_UNEXPECTED
