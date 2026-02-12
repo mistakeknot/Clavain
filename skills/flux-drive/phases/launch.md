@@ -40,12 +40,34 @@ Before launching agents, retrieve relevant knowledge entries for each selected a
 | fd-quality | naming conventions testing code quality style idioms |
 | fd-user-product | user experience flows UX value proposition scope |
 | fd-performance | performance bottlenecks rendering memory scaling |
+| fd-game-design | game balance pacing player psychology feedback loops emergent behavior |
 
 **Cap**: 5 entries per agent maximum. If qmd returns more, take the top 5 by relevance score.
 
 **Fallback**: If qmd MCP tool is unavailable or errors, skip knowledge injection entirely — agents run without it (effectively v1 behavior). Do NOT block agent launch on qmd failures.
 
 **Pipelining**: Start qmd queries before agent dispatch. While queries run, prepare agent prompts. Inject results when both are ready.
+
+### Step 2.1a: Load domain-specific review criteria
+
+**Skip this step if Step 1.0a detected no domains** (document profile shows "none detected").
+
+For each detected domain (from the Document Profile's `Project domains` field), load the corresponding domain profile and extract per-agent injection criteria:
+
+1. **Read the domain profile file**: `${CLAUDE_PLUGIN_ROOT}/config/flux-drive/domains/{domain-name}.md`
+2. **For each selected agent**, find the `### fd-{agent-name}` subsection under `## Injection Criteria`
+3. **Extract the bullet points** — these are the domain-specific review criteria for that agent
+4. **Store as `{DOMAIN_CONTEXT}`** per agent, formatted as shown in the prompt template below
+
+**Multi-domain injection:**
+- Inject criteria from ALL detected domains, not just the primary one (a game server should get both `game-simulation` and `web-api` criteria)
+- Order sections by confidence score (primary domain first)
+- **Cap at 3 domains** to prevent prompt bloat — if more than 3 detected, use only the top 3 by confidence
+- If a domain profile has no matching `### fd-{agent-name}` section for a particular agent, skip that domain for that agent
+
+**Fallback**: If the domain profile file doesn't exist or can't be read, skip that domain silently. Do NOT block agent launch on domain profile failures.
+
+**Performance**: Domain profile files are small (~90-100 lines each). Reading 1-3 files adds negligible overhead. This step should take <1 second.
 
 ### Step 2.2: Stage 1 — Launch top agents
 
@@ -226,6 +248,27 @@ The following patterns were discovered in previous reviews. Consider them as con
 No prior knowledge available for this review domain.
 
 **Provenance note**: If any knowledge entry above matches a finding you would independently flag, note it as "independently confirmed" in your findings. If you are only re-stating a knowledge entry without independent evidence, note it as "primed confirmation" — this distinction is critical for knowledge decay.
+
+## Domain Context
+
+[If domains were detected in Step 1.0a AND Step 2.1a extracted criteria for this agent:]
+
+This project is classified as: {domain1} ({confidence1}), {domain2} ({confidence2}), ...
+
+Additional review criteria for your focus area in these project types:
+
+### {domain1-name}
+{bullet points from domain profile's ### fd-{agent-name} section}
+
+### {domain2-name}
+{bullet points from domain profile's ### fd-{agent-name} section}
+
+[Repeat for up to 3 detected domains. Omit any domain that has no matching section for this agent.]
+
+Apply these criteria **in addition to** your standard review approach. They highlight common issues specific to this project type. Treat them as additional checks, not replacements for your core analysis.
+
+[If no domains detected OR no criteria found for this agent:]
+(Omit this section entirely — do not include an empty Domain Context header.)
 
 ## Project Context
 

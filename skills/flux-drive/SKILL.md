@@ -87,7 +87,7 @@ The script reads `config/flux-drive/domains/index.yaml`, scans directories/files
 
 **Performance budget:** This step should take <10 seconds. Use `ls` and targeted `grep`, not recursive find. Skip keyword scanning if directory+file+framework signals already exceed min_confidence for at least one domain.
 
-**Output:** The detected domains feed into Step 1.1 (document profile) and Step 1.2 (agent scoring).
+**Output:** The detected domains feed into Step 1.1 (document profile), Step 1.2 (agent scoring with domain bonuses), and Step 2.1a (domain-specific review criteria injection into agent prompts).
 
 ### Step 1.1: Analyze the Document
 
@@ -186,7 +186,7 @@ Score the pre-filtered agents against the document profile. Present the scoring 
 
 **Category bonuses** (applied only when base score ≥ 1): Project Agents get +1 (project-specific). Plugin Agents get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode). An agent with base score 0 is always excluded regardless of bonuses.
 
-**Domain bonuses** (applied only when base score >= 1): When Step 1.0a detected a project domain, agents whose domain expertise matches get +1. Specifically: fd-game-design gets +1 when `game-simulation` is detected. Future domain profiles will specify which agents get boosted (see `config/flux-drive/domains/*.md` injection criteria). An agent with base score 0 is always excluded regardless of domain bonuses.
+**Domain bonuses** (applied only when base score >= 1): When Step 1.0a detected a project domain, agents whose domain expertise matches get +1. Specifically: fd-game-design gets +1 when `game-simulation` is detected. Each domain profile in `config/flux-drive/domains/*.md` specifies injection criteria — domain-specific review bullets that are loaded during Phase 2 (Step 2.1a) and prepended to each agent's prompt. An agent with base score 0 is always excluded regardless of domain bonuses.
 
 **Selection rules**:
 1. All agents scoring 2+ are included
