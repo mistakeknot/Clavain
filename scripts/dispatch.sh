@@ -364,5 +364,11 @@ if [[ "$DRY_RUN" == true ]]; then
   exit 0
 fi
 
-# Execute
-exec "${CMD[@]}"
+# Write dispatch state file for statusline visibility
+STATE_FILE="/tmp/clavain-dispatch-$$.json"
+trap 'rm -f "$STATE_FILE"' EXIT INT TERM
+printf '{"name":"%s","workdir":"%s","started":%d}\n' \
+  "${NAME:-codex}" "${WORKDIR:-.}" "$(date +%s)" > "$STATE_FILE"
+
+# Execute (not exec — need bash alive for trap cleanup)
+"${CMD[@]}"

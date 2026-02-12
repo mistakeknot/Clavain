@@ -61,14 +61,6 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 
 **Announce:** "Dispatching to Codex agent..."
 
-**Status line:** Before dispatching, create a task with `TaskCreate` so the user sees progress:
-```
-TaskCreate:
-  subject: "Dispatch Codex agent: [brief goal]"
-  activeForm: "Dispatching Codex agent"
-```
-Mark `in_progress` before the Bash call. Mark `completed` after reading the verdict.
-
 ### Step 1: Write the Prompt
 
 Write a concise prompt file with the goal, relevant files, and build/test commands. Write it as natural language — Codex handles exploration, implementation, and verification on its own.
@@ -161,8 +153,6 @@ If two tasks might modify the same file: **(a) combine them** into one agent pro
 Write one prompt file per task (same format as megaprompt Step 1). Each should include the goal, relevant files, build/test commands, and the verdict suffix.
 
 ### Step 4: Dispatch in Parallel
-
-**Status line:** Create one task per agent with `TaskCreate` (e.g., `activeForm: "Dispatching fix-auth agent"`). Mark each `in_progress` before its Bash call, `completed` after reading its verdict.
 
 Launch all Bash calls **in a single message** (multiple tool calls). Set `timeout: 600000` on each.
 
