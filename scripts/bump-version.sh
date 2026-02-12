@@ -119,29 +119,38 @@ git commit -m "chore: bump clavain to v$VERSION"
 git push
 echo -e "${GREEN}Pushed interagency-marketplace${NC}"
 
-# Symlink old cache version → new version so running sessions' Stop hooks still work.
-# Claude Code's plugin installer deletes old cache dirs when it downloads a new version,
-# so the running session's CLAUDE_PLUGIN_ROOT points to a deleted directory.
-# This symlink heals that. session-start.sh cleans up stale symlinks on next session.
+# Symlink old cache versions → real dir so running sessions' Stop hooks still work.
+# Problem: sessions may be on ANY older version (not just $CURRENT), because sessions
+# can outlive multiple publish cycles. We find the one real directory and symlink
+# everything else to it. session-start.sh cleans up stale symlinks on next session.
 CACHE_DIR="$HOME/.claude/plugins/cache/interagency-marketplace/clavain"
-if [[ -d "$CACHE_DIR/$VERSION" ]]; then
-    # New version installed — symlink old version(s) to it
-    for old_dir in "$CACHE_DIR"/*/; do
-        old_ver="$(basename "$old_dir")"
-        [[ "$old_ver" == "$VERSION" ]] && continue
-        [[ -L "${old_dir%/}" ]] && continue  # already a symlink
-        # Don't symlink if it's a real directory (shouldn't happen, but safe)
-        [[ -d "$old_dir" ]] && rm -rf "$old_dir" 2>/dev/null || true
+if [[ -d "$CACHE_DIR" ]]; then
+    # Find the real (non-symlink) directory — that's the one with actual files
+    REAL_DIR=""
+    for candidate in "$CACHE_DIR"/*/; do
+        [[ -d "$candidate" ]] || continue
+        [[ -L "${candidate%/}" ]] && continue
+        REAL_DIR="$(basename "$candidate")"
+        break
     done
-    # Create symlink from old version
-    if [[ -n "$CURRENT" && "$CURRENT" != "$VERSION" && ! -e "$CACHE_DIR/$CURRENT" ]]; then
-        ln -sf "$VERSION" "$CACHE_DIR/$CURRENT"
-        echo -e "  ${GREEN}Symlinked${NC} cache/$CURRENT → $VERSION (keeps running session hooks alive)"
+
+    if [[ -n "$REAL_DIR" ]]; then
+        # Symlink $CURRENT if it's missing (the version we just bumped away from)
+        if [[ -n "$CURRENT" && "$CURRENT" != "$REAL_DIR" && ! -e "$CACHE_DIR/$CURRENT" ]]; then
+            ln -sf "$REAL_DIR" "$CACHE_DIR/$CURRENT"
+            echo -e "  ${GREEN}Symlinked${NC} cache/$CURRENT → $REAL_DIR"
+        fi
+        # Also ensure $VERSION points somewhere (may not be downloaded yet)
+        if [[ "$VERSION" != "$REAL_DIR" && ! -e "$CACHE_DIR/$VERSION" ]]; then
+            ln -sf "$REAL_DIR" "$CACHE_DIR/$VERSION"
+            echo -e "  ${GREEN}Symlinked${NC} cache/$VERSION → $REAL_DIR (pre-download bridge)"
+        fi
+        echo -e "  Running sessions' Stop hooks bridged via $REAL_DIR"
+    else
+        echo -e "  ${YELLOW}Note:${NC} No real cache dir found. Stop hooks may fail until next session."
     fi
-elif [[ -d "$CACHE_DIR" ]]; then
-    # New version not yet installed — create symlink preemptively when it appears
-    # (Claude Code may take a moment to download)
-    echo -e "  ${YELLOW}Note:${NC} Cache not yet updated. Stop hooks may fail until next session."
+else
+    echo -e "  ${YELLOW}Note:${NC} No cache dir at $CACHE_DIR. Plugin not installed locally."
 fi
 
 echo ""
