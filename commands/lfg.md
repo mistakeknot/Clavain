@@ -106,6 +106,10 @@ Run the project's test suite and linting before proceeding to review:
 
 Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, or code TODOs) and handles clodex mode automatically.
 
+**After resolving:** If quality-gates found patterns that could recur in other code (e.g., format injection, portability issues, race conditions), compound them:
+- Run `/clavain:compound` to document the pattern in `config/flux-drive/knowledge/`
+- If findings revealed a plan-level mistake, annotate the plan file with a `## Lessons Learned` section so future similar plans benefit
+
 ## Step 9: Ship
 
 Use the `clavain:landing-a-change` skill to verify, document, and commit the completed work.
