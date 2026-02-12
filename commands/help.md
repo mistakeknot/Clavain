@@ -20,6 +20,8 @@ These are the commands you'll use most often:
 | `/clavain:resolve` | Fix findings from TODOs, PR comments, or todo files | `/resolve` |
 | `/clavain:interpeer` | Quick cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
 
+> **Aliases:** `/deep-review` = flux-drive, `/full-pipeline` = lfg, `/cross-review` = interpeer
+
 ## By Stage
 
 ### Explore

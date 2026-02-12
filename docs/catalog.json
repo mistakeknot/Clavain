@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-12T00:23:47Z",
+  "generated": "2026-02-12T02:25:06Z",
   "counts": {
     "skills": 30,
     "agents": 16,
-    "commands": 33,
+    "commands": 36,
     "hooks": 5,
     "mcp_servers": 2
   },
@@ -237,8 +237,16 @@
       "description": "Create or edit Claude Code skills with expert guidance on structure and best practices"
     },
     {
+      "name": "cross-review",
+      "description": "Alias for interpeer \u2014 cross-AI peer review (Claude \u2194 Codex/Oracle)"
+    },
+    {
       "name": "debate",
       "description": "Run a structured Claude\u2194Codex debate before implementing a complex task"
+    },
+    {
+      "name": "deep-review",
+      "description": "Alias for flux-drive \u2014 intelligent multi-agent document review"
     },
     {
       "name": "doctor",
@@ -255,6 +263,10 @@
     {
       "name": "flux-drive",
       "description": "Intelligent document review \u2014 triages relevant agents, launches only what matters in background mode"
+    },
+    {
+      "name": "full-pipeline",
+      "description": "Alias for lfg \u2014 full autonomous engineering workflow"
     },
     {
       "name": "generate-command",

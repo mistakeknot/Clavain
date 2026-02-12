@@ -56,10 +56,11 @@ for entry in "${UPSTREAMS[@]}"; do
   latest_release=$(echo "$raw_release" | jq -r '.tag_name // empty' 2>/dev/null || true)
   [[ -z "$latest_release" ]] && latest_release="none"
 
-  # Get latest commit SHA + message on default branch
-  latest_commit=$(gh api "repos/${repo}/commits?per_page=1" --jq '.[0].sha[:7]' 2>/dev/null || echo "unknown")
-  latest_commit_msg=$(gh api "repos/${repo}/commits?per_page=1" --jq '.[0].commit.message | split("\n")[0]' 2>/dev/null || echo "")
-  latest_commit_date=$(gh api "repos/${repo}/commits?per_page=1" --jq '.[0].commit.committer.date[:10]' 2>/dev/null || echo "")
+  # Get latest commit SHA + message + date on default branch (single API call)
+  commit_json=$(gh api "repos/${repo}/commits?per_page=1" 2>/dev/null || echo '[]')
+  latest_commit=$(echo "$commit_json" | jq -r '.[0].sha[:7] // "unknown"')
+  latest_commit_msg=$(echo "$commit_json" | jq -r '.[0].commit.message | split("\n")[0] // ""')
+  latest_commit_date=$(echo "$commit_json" | jq -r '.[0].commit.committer.date[:10] // ""')
 
   # Compare against saved state
   synced_release=$(echo "$EXISTING" | jq -r --arg r "$repo" '.[$r].synced_release // "none"')
