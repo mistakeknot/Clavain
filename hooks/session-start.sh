@@ -10,17 +10,21 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hooks/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
-# Clean up stale plugin cache versions from previous sessions.
-# bump-version.sh no longer deletes old cache mid-session (that breaks Stop hooks).
-# Instead, we clean up here at the start of the NEXT session when PLUGIN_ROOT
-# already points to the new version.
+# Clean up stale plugin cache versions (old directories AND symlinks from bump-version.sh).
+# bump-version.sh creates symlinks from old→new version so running sessions' Stop hooks
+# still work. We clean those up here at the start of the NEXT session.
 CURRENT_VERSION_DIR="$(basename "$PLUGIN_ROOT")"
 CACHE_PARENT="$(dirname "$PLUGIN_ROOT")"
 if [[ -d "$CACHE_PARENT" ]] && [[ "$CACHE_PARENT" == *"/plugins/cache/"* ]]; then
-    for old_dir in "$CACHE_PARENT"/*/; do
-        [[ -d "$old_dir" ]] || continue
-        [[ "$(basename "$old_dir")" == "$CURRENT_VERSION_DIR" ]] && continue
-        rm -rf "$old_dir" 2>/dev/null || true
+    for old_entry in "$CACHE_PARENT"/*/; do
+        old_name="$(basename "$old_entry")"
+        [[ "$old_name" == "$CURRENT_VERSION_DIR" ]] && continue
+        # Remove symlinks (from bump-version.sh) and stale directories
+        if [[ -L "${old_entry%/}" ]]; then
+            rm -f "${old_entry%/}" 2>/dev/null || true
+        elif [[ -d "$old_entry" ]]; then
+            rm -rf "$old_entry" 2>/dev/null || true
+        fi
     done
 fi
 

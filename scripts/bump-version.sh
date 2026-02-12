@@ -119,13 +119,33 @@ git commit -m "chore: bump clavain to v$VERSION"
 git push
 echo -e "${GREEN}Pushed interagency-marketplace${NC}"
 
-# Note: stale cache cleanup moved to session-start.sh hook.
-# Deleting old cache mid-session broke Stop hooks (auto-compound.sh) because
-# CLAUDE_PLUGIN_ROOT pointed to the deleted directory for the rest of the session.
-# Now the SessionStart hook cleans up old versions at the start of the NEXT session.
+# Symlink old cache version → new version so running sessions' Stop hooks still work.
+# Claude Code's plugin installer deletes old cache dirs when it downloads a new version,
+# so the running session's CLAUDE_PLUGIN_ROOT points to a deleted directory.
+# This symlink heals that. session-start.sh cleans up stale symlinks on next session.
+CACHE_DIR="$HOME/.claude/plugins/cache/interagency-marketplace/clavain"
+if [[ -d "$CACHE_DIR/$VERSION" ]]; then
+    # New version installed — symlink old version(s) to it
+    for old_dir in "$CACHE_DIR"/*/; do
+        old_ver="$(basename "$old_dir")"
+        [[ "$old_ver" == "$VERSION" ]] && continue
+        [[ -L "${old_dir%/}" ]] && continue  # already a symlink
+        # Don't symlink if it's a real directory (shouldn't happen, but safe)
+        [[ -d "$old_dir" ]] && rm -rf "$old_dir" 2>/dev/null || true
+    done
+    # Create symlink from old version
+    if [[ -n "$CURRENT" && "$CURRENT" != "$VERSION" && ! -e "$CACHE_DIR/$CURRENT" ]]; then
+        ln -sf "$VERSION" "$CACHE_DIR/$CURRENT"
+        echo -e "  ${GREEN}Symlinked${NC} cache/$CURRENT → $VERSION (keeps running session hooks alive)"
+    fi
+elif [[ -d "$CACHE_DIR" ]]; then
+    # New version not yet installed — create symlink preemptively when it appears
+    # (Claude Code may take a moment to download)
+    echo -e "  ${YELLOW}Note:${NC} Cache not yet updated. Stop hooks may fail until next session."
+fi
 
 echo ""
 echo -e "${GREEN}Done!${NC} clavain v$VERSION"
 echo ""
 echo "Next: restart Claude Code sessions to pick up the new plugin version."
-echo "  (Stale cache versions will be cleaned up automatically on next session start.)"
+echo "  (Stale symlinks cleaned up automatically on next session start.)"
