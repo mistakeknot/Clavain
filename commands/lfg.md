@@ -4,6 +4,54 @@ description: Full autonomous engineering workflow — brainstorm, strategize, pl
 argument-hint: "[feature description]"
 ---
 
+## Before Starting — Work Discovery
+
+If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
+
+1. Run the work discovery scanner:
+   ```bash
+   DISCOVERY_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_scan_beads
+   ```
+
+2. Parse the output:
+   - `DISCOVERY_UNAVAILABLE` → skip discovery, proceed to Step 1 (bd not installed)
+   - `DISCOVERY_ERROR` → skip discovery, proceed to Step 1 (bd query failed)
+   - `[]` → no open beads, proceed to Step 1
+   - JSON array → present options (continue to step 3)
+
+3. Present the top results via **AskUserQuestion**:
+   - **First option (recommended):** Top-ranked bead. Label format: `"<Action> <bead-id> — <title> (P<priority>)"`. Add `", stale"` if stale is true. Mark as `(Recommended)`.
+   - **Options 2-3:** Next highest-ranked beads, same label format.
+   - **Second-to-last option:** `"Start fresh brainstorm"` — proceeds to Step 1 below.
+   - **Last option:** `"Show full backlog"` — runs `/clavain:sprint-status`.
+   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm"
+
+4. **Pre-flight check** (guards against stale scan results): Before routing, verify the selected bead still exists:
+   ```bash
+   bd show <selected_bead_id> 2>/dev/null
+   ```
+   If `bd show` fails (bead was closed/deleted since scan), tell the user "That bead is no longer available" and re-run discovery from step 1.
+
+5. Based on selection, route to the appropriate command:
+   - `continue` or `execute` with a `plan_path` → `/clavain:work <plan_path>`
+   - `plan` → `/clavain:write-plan`
+   - `strategize` → `/clavain:strategy`
+   - `brainstorm` → `/clavain:brainstorm`
+   - "Start fresh brainstorm" → proceed to Step 1
+   - "Show full backlog" → `/clavain:sprint-status`
+
+6. Log the selection for telemetry:
+   ```bash
+   DISCOVERY_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_log_selection "<bead_id>" "<action>" <true|false>
+   ```
+   Where `true` = user picked the first (recommended) option, `false` = user picked a different option.
+
+7. **After routing to a command, stop.** Do NOT continue to Step 1 — the routed command handles the workflow from here.
+
+If invoked WITH arguments (`$ARGUMENTS` is not empty), skip discovery and proceed directly to Step 1.
+
+---
+
 Run these steps in order. Do not do anything else.
 
 ## Step 1: Brainstorm

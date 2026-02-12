@@ -11,11 +11,11 @@ description: Use when starting any conversation - establishes how to find and us
 
 **In Codex CLI:** Install Clavain skills with `bash ~/.codex/clavain/scripts/install-codex.sh install`. Codex discovers them from `~/.agents/skills/clavain/` on startup, so restart Codex after install.
 
-# Quick Router — 30 skills, 16 agents, and 36 commands
+# Quick Router — 30 skills, 17 agents, and 36 commands
 
 | You want to... | Run this |
 |----------------|----------|
-| Build a feature end-to-end | `/clavain:lfg` (alias: `/clavain:full-pipeline`) |
+| Build a feature end-to-end | `/clavain:lfg` (no args = work discovery, with args = full pipeline) |
 | Review code, docs, or plans | `/clavain:flux-drive` (alias: `/clavain:deep-review`) |
 | Quick review from git diff | `/clavain:quality-gates` |
 | Cross-AI second opinion | `/clavain:interpeer` (alias: `/clavain:cross-review`) |

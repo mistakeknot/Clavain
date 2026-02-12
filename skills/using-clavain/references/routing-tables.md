@@ -11,7 +11,7 @@ For the compact version, see the `using-clavain` skill.
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | fd-architecture, plan-reviewer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster — up to 8 agents)¹ |
-| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg, resolve, debate | — |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg², resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | fd-safety |
@@ -40,6 +40,7 @@ For the compact version, see the `using-clavain` skill.
 | Naming, conventions, language idioms | fd-quality |
 | User flows, UX, product reasoning | fd-user-product |
 | Performance, bottlenecks, scaling | fd-performance |
+| Game design, balance, pacing, emergent behavior | fd-game-design |
 | Database migrations | data-migration-expert |
 | Agent-native design | agent-native-reviewer |
 
@@ -54,7 +55,9 @@ For the compact version, see the `using-clavain` skill.
 
 **Default:** If unsure, use `/clavain:flux-drive` — it handles the widest range of inputs and auto-triages agents.
 
-¹ **flux-drive agents (fd-*)**: 6 core review agents that auto-detect project docs (CLAUDE.md/AGENTS.md) for codebase-aware analysis.
+¹ **flux-drive agents (fd-*)**: 7 core review agents that auto-detect project docs (CLAUDE.md/AGENTS.md) for codebase-aware analysis.
+
+² **`/lfg` discovery mode**: With no arguments, `/lfg` scans open beads, ranks by priority, and presents the top options via AskUserQuestion. User picks a bead and gets routed to the right command. With arguments, `/lfg` runs the full 9-step pipeline as before.
 
 ## Cross-AI Review
 
