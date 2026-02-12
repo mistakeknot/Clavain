@@ -464,6 +464,57 @@ EOF
     [[ $(echo "$line" | jq -r '.artifact') == "docs/plans/test.md" ]]
 }
 
+# ─── _gate_update_statusline ─────────────────────────────────────────
+
+@test "_gate_update_statusline: writes state file when CLAUDE_SESSION_ID is set" {
+    export CLAUDE_SESSION_ID="test-session-abc"
+    _gate_update_statusline "Clavain-021h" "planned" "Plan: docs/plans/test.md"
+
+    local state_file="/tmp/clavain-bead-test-session-abc.json"
+    [[ -f "$state_file" ]]
+    # Validate JSON structure
+    jq empty "$state_file"
+    [[ $(jq -r '.id' "$state_file") == "Clavain-021h" ]]
+    [[ $(jq -r '.phase' "$state_file") == "planned" ]]
+    [[ $(jq -r '.reason' "$state_file") == "Plan: docs/plans/test.md" ]]
+    [[ $(jq -r '.ts' "$state_file") =~ ^[0-9]+$ ]]
+
+    rm -f "$state_file"
+}
+
+@test "_gate_update_statusline: skips silently when CLAUDE_SESSION_ID is unset" {
+    unset CLAUDE_SESSION_ID
+    run _gate_update_statusline "Clavain-021h" "planned" "reason"
+    assert_success
+    # No file should exist with empty session id
+    [[ ! -f "/tmp/clavain-bead-.json" ]]
+}
+
+@test "_gate_update_statusline: overwrites on phase change" {
+    export CLAUDE_SESSION_ID="test-session-overwrite"
+    _gate_update_statusline "Clavain-021h" "planned" "Plan created"
+    _gate_update_statusline "Clavain-021h" "executing" "Started work"
+
+    local state_file="/tmp/clavain-bead-test-session-overwrite.json"
+    [[ $(jq -r '.phase' "$state_file") == "executing" ]]
+
+    rm -f "$state_file"
+}
+
+@test "advance_phase: writes statusline state file" {
+    export CLAUDE_SESSION_ID="test-session-advance"
+    advance_phase "Test-001" "brainstorm" "Created brainstorm"
+
+    local state_file="/tmp/clavain-bead-test-session-advance.json"
+    [[ -f "$state_file" ]]
+    [[ $(jq -r '.id' "$state_file") == "Test-001" ]]
+    [[ $(jq -r '.phase' "$state_file") == "brainstorm" ]]
+
+    rm -f "$state_file"
+}
+
+# ─── Telemetry ────────────────────────────────────────────────────────
+
 @test "telemetry: phase_desync event is valid JSONL" {
     _gate_log_desync "Test-001" "executing" "planned" "docs/plans/test.md"
 

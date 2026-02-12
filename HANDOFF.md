@@ -13,17 +13,20 @@
 - **Wired domain detection into runtime** — Step 2.1a in launch.md loads domain profiles, extracts per-agent injection criteria, injects into prompt template as Domain Context section. Multi-domain support (up to 3, ordered by confidence).
 - **Created /flux-gen command** — generates project-specific fd-* agents in `.claude/agents/` from domain profile Agent Specifications. Count bumped to 37 commands.
 - **Closed Clavain-7mpd** (domain-aware flux-drive) — core feature complete
+- **Orchestrator overhaul** (Clavain-62ek) — 0-7 scoring scale (base 0-3 + domain_boost 0-2 + project_bonus 0-1 + domain_agent 0-1), adaptive 4-12 slot allocation, domain adjacency map for expansion decisions
 
 ## Pending
 - Pre-existing uncommitted changes in commands/*.md and CLAUDE.md (phase lifecycle tracking from prior session)
+- Also uncommitted: hooks/lib-gates.sh, tests/shell/gates.bats (gate library from prior session)
 
 ## Next
-- Publish new version (domain injection + flux-gen)
-- Commit the pre-existing commands/*.md phase lifecycle changes
-- P2 follow-ups: orchestrator overhaul (Clavain-62ek), token optimizations (Clavain-i1u6)
+- Publish new version (orchestrator overhaul + domain injection + flux-gen)
+- Commit the pre-existing uncommitted changes (commands/*.md, hooks/lib-gates.sh, tests/shell/gates.bats)
+- P2 follow-up: token optimizations (Clavain-i1u6) — O3 file reference, O1 universal slicing, O4+O5
 
 ## Context
 - `hooks/lib-phase.sh` and `docs/plans/2026-02-12-phase-state-tracking.md` are untracked from a prior session
 - The `bump-version.sh` symlink only bridges ONE version; `session-start.sh` now bridges ALL old versions
 - Domain profiles: `config/flux-drive/domains/*.md` — 11 files, ~92-103 lines each, 1034 total
 - Command count is now 37 (was 36) — flux-gen added
+- Orchestrator scoring: 0-7 scale replaces old 0/1/2 + bonus. Adaptive 4-12 slots replaces hard 8. Adjacency map drives expansion.

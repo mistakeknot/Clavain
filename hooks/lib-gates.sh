@@ -120,6 +120,9 @@ advance_phase() {
     fi
 
     _gate_log_advance "$bead_id" "$target" "$reason" "$artifact_path"
+
+    # Update statusline state file (read by ~/.claude/statusline.sh)
+    _gate_update_statusline "$bead_id" "$target" "$reason"
 }
 
 # Get the current phase with fallback: beads first, then artifact header.
@@ -251,6 +254,23 @@ _gate_sed_escape() {
     str="${str//\//\\/}"
     str="${str//&/\\&}"
     echo "$str"
+}
+
+# Write bead context to a session-keyed state file for the statusline.
+# The statusline script runs as a subprocess and can't see in-conversation
+# state, so we use /tmp/clavain-bead-<session_id>.json as a sideband channel.
+#
+# Args: $1 = bead_id, $2 = phase, $3 = reason (optional)
+_gate_update_statusline() {
+    local bead_id="$1" phase="$2" reason="${3:-}"
+    local session_id="${CLAUDE_SESSION_ID:-}"
+    [ -z "$session_id" ] && return 0
+    local state_file="/tmp/clavain-bead-${session_id}.json"
+    jq -n -c \
+        --arg id "$bead_id" --arg phase "$phase" \
+        --arg reason "$reason" --arg ts "$(date +%s)" \
+        '{id:$id, phase:$phase, reason:$reason, ts:($ts|tonumber)}' \
+        > "$state_file" 2>/dev/null || true
 }
 
 # ─── Telemetry ───────────────────────────────────────────────────────
