@@ -31,6 +31,14 @@ fi
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
+# Guard: if another Stop hook already fired this cycle, don't cascade
+STOP_SENTINEL="/tmp/clavain-stop-${SESSION_ID}"
+if [[ -f "$STOP_SENTINEL" ]]; then
+    exit 0
+fi
+# Write sentinel NOW — before signal analysis — to minimize TOCTOU window
+touch "$STOP_SENTINEL"
+
 # Guard: only fire once per session (sentinel in /tmp)
 SENTINEL="/tmp/clavain-handoff-${SESSION_ID}"
 if [[ -f "$SENTINEL" ]]; then
@@ -96,5 +104,8 @@ else
 }
 ENDJSON
 fi
+
+# Clean up stale sentinels from previous sessions
+find /tmp -maxdepth 1 -name 'clavain-stop-*' -mmin +60 -delete 2>/dev/null || true
 
 exit 0

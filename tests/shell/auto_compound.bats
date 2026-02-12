@@ -19,6 +19,11 @@ setup() {
     load test_helper
 }
 
+teardown() {
+    # Clean up any sentinel files created during the test
+    rm -f /tmp/clavain-stop-* /tmp/clavain-compound-last-* 2>/dev/null || true
+}
+
 @test "auto-compound: noop when stop_hook_active" {
     run bash -c "echo '{\"stop_hook_active\": true, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
@@ -73,6 +78,16 @@ setup() {
     # Even with combined signals
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
+}
+
+@test "auto-compound: skips when cross-hook sentinel exists" {
+    local session_id="test-sentinel-$$"
+    local sentinel="/tmp/clavain-stop-${session_id}"
+    touch "$sentinel"
+    run bash -c "echo '{\"stop_hook_active\": false, \"session_id\": \"${session_id}\", \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
+    rm -f "$sentinel"
+    assert_success
+    assert_output ""
 }
 
 @test "auto-compound: handles missing transcript" {

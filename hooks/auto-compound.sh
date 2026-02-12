@@ -37,6 +37,16 @@ if [[ "$STOP_ACTIVE" == "true" ]]; then
     exit 0
 fi
 
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
+
+# Guard: if another Stop hook already fired this cycle, don't cascade
+STOP_SENTINEL="/tmp/clavain-stop-${SESSION_ID}"
+if [[ -f "$STOP_SENTINEL" ]]; then
+    exit 0
+fi
+# Write sentinel NOW — before transcript analysis — to minimize TOCTOU window
+touch "$STOP_SENTINEL"
+
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 if [[ -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]]; then
     exit 0
@@ -131,5 +141,8 @@ else
 }
 ENDJSON
 fi
+
+# Clean up stale sentinels from previous sessions
+find /tmp -maxdepth 1 -name 'clavain-stop-*' -mmin +60 -delete 2>/dev/null || true
 
 exit 0
