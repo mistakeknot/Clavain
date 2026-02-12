@@ -10,7 +10,7 @@ For the compact version, see the `using-clavain` skill.
 |-------|---------------|-----------------|------------|
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | fd-architecture, plan-reviewer |
-| **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster — up to 8 agents)¹ |
+| **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster — adaptive 4-12 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg², resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
 | **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
