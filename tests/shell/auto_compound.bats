@@ -48,7 +48,7 @@ teardown() {
 @test "auto-compound: single commit below threshold (weight 1)" {
     run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$TMPDIR_COMPOUND/transcript_single_commit.jsonl\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
     assert_success
-    # Single commit has weight 1, below threshold of 2
+    # Single commit has weight 1, below threshold of 3
     assert_output ""
 }
 
