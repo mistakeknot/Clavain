@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# DEPRECATED: This script has been replaced by the Python package clavain_sync.
+# Use: python3 -m clavain_sync sync [--dry-run] [--auto] [--upstream NAME]
+# Or:  pull-upstreams.sh --sync (defaults to Python version)
+# To use this legacy version: pull-upstreams.sh --sync --legacy
+
 # sync-upstreams.sh — Smart upstream sync with three-way classification and
 # AI-assisted conflict resolution.
 #

@@ -40,8 +40,23 @@ if [[ "$mode" == "--sync" ]]; then
   # Pull first (reuse this script's --pull logic)
   "$0" --pull
   echo ""
-  echo "=== Running sync-upstreams.sh ==="
-  exec "$SCRIPT_DIR/sync-upstreams.sh" "${@:2}"
+  # Check for --legacy flag
+  legacy=false
+  remaining_args=()
+  for arg in "${@:2}"; do
+    if [[ "$arg" == "--legacy" ]]; then
+      legacy=true
+    else
+      remaining_args+=("$arg")
+    fi
+  done
+  if [[ "$legacy" == true ]]; then
+    echo "=== Running sync-upstreams.sh (legacy bash) ==="
+    exec "$SCRIPT_DIR/sync-upstreams.sh" "${remaining_args[@]}"
+  else
+    echo "=== Running clavain_sync (Python) ==="
+    exec python3 -m clavain_sync sync "${remaining_args[@]}"
+  fi
 fi
 
 if [[ ! -d "$UPSTREAMS_DIR" ]]; then
