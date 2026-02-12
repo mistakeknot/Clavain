@@ -1,32 +1,22 @@
 # Session Handoff
 
 ## Done
-- Extracted domain detection into deterministic script (`scripts/detect-domains.py`, 265 lines)
-- Updated `skills/flux-drive/SKILL.md` Step 1.0a to invoke script with LLM fallback
-- Created 32 unit tests in `tests/structural/test_detect_domains.py` (all passing)
-- Lowered `claude-code-plugin` min_confidence 0.40→0.35 in `index.yaml` (calibrated by real scorer)
-- Made clodex toggle persist across sessions (session-start.sh detects flag, injects status)
-- Fixed multi-hop stop-hook breakage (session-start.sh replaces old dirs with symlinks instead of deleting)
-- Published v0.4.50
-- **Populated all 11 domain profiles** (Phase B complete) — 330 domain-specific review criteria across 11 domains, 2-3 agent specs each
-- Closed Clavain-ckz2 (domain detection script task)
-- **Wired domain detection into runtime** — Step 2.1a in launch.md loads domain profiles, extracts per-agent injection criteria, injects into prompt template as Domain Context section. Multi-domain support (up to 3, ordered by confidence).
-- **Created /flux-gen command** — generates project-specific fd-* agents in `.claude/agents/` from domain profile Agent Specifications. Count bumped to 37 commands.
-- **Closed Clavain-7mpd** (domain-aware flux-drive) — core feature complete
-- **Orchestrator overhaul** (Clavain-62ek) — 0-7 scoring scale (base 0-3 + domain_boost 0-2 + project_bonus 0-1 + domain_agent 0-1), adaptive 4-12 slot allocation, domain adjacency map for expansion decisions
+- Statusline bead integration: `_gate_update_statusline()` in lib-gates.sh writes `/tmp/clavain-bead-<session>.json`
+- Statusline Layer 1.5 in `~/.claude/statusline.sh` reads bead context (additive with phase label)
+- 4 new bats tests (47 total in gates.bats), 114/114 shell tests pass
+- Fixed `bump-version.sh` cache bridging — finds real dir and bridges both `$CURRENT` and `$VERSION`
+- Published v0.4.52, pushed Clavain + marketplace
+- Closed Clavain-021h (F6: Shared Gate Library)
 
 ## Pending
-- Pre-existing uncommitted changes in commands/*.md and CLAUDE.md (phase lifecycle tracking from prior session)
-- Also uncommitted: hooks/lib-gates.sh, tests/shell/gates.bats (gate library from prior session)
+- Nothing from this session
 
 ## Next
-- Publish new version (orchestrator overhaul + domain injection + flux-gen)
-- Commit the pre-existing uncommitted changes (commands/*.md, hooks/lib-gates.sh, tests/shell/gates.bats)
-- P2 follow-up: token optimizations (Clavain-i1u6) — O3 file reference, O1 universal slicing, O4+O5
+- Clavain-9tiv (F7: Tiered Gate Enforcement) is next unblocked feature in the epic
+- Consider closing epic Clavain-tayp if remaining P3 features are deferred
+- P2 follow-up: token optimizations (Clavain-i1u6)
 
 ## Context
-- `hooks/lib-phase.sh` and `docs/plans/2026-02-12-phase-state-tracking.md` are untracked from a prior session
-- The `bump-version.sh` symlink only bridges ONE version; `session-start.sh` now bridges ALL old versions
-- Domain profiles: `config/flux-drive/domains/*.md` — 11 files, ~92-103 lines each, 1034 total
-- Command count is now 37 (was 36) — flux-gen added
-- Orchestrator scoring: 0-7 scale replaces old 0/1/2 + bonus. Adaptive 4-12 slots replaces hard 8. Adjacency map drives expansion.
+- `~/.claude/statusline.sh` is outside the repo (user dotfiles) — changes there don't need commits
+- Session was on cached version 0.4.48; manually symlinked `0.4.48 → 0.4.50` to fix stop hooks
+- `bump-version.sh` now properly bridges multi-hop version gaps
