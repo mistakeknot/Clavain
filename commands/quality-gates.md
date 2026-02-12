@@ -101,6 +101,18 @@ Collect all agent findings and present:
 [If FAIL: list P1 items that must be addressed]
 ```
 
+### Phase 6: File Findings as Beads (optional)
+
+If the project has `.beads/` initialized, ask the user:
+> "File review findings as beads issues for tracking? (recommended for >3 findings)"
+
+If yes, for each significant finding:
+```bash
+bd create --title="[quality-gates] <brief finding>" --type=bug --priority=3
+```
+
+Group related findings into a single bead where appropriate. This makes review output actionable across sessions — per Yegge's recommendation that code reviews should produce trackable issues.
+
 ## Important
 
 - **Don't over-review small changes.** If the diff is under 20 lines and touches one file, only run `fd-quality`.

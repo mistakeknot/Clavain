@@ -112,6 +112,19 @@ Surfaces: task recommendations, execution order, blocking chains, parallel execu
 
 Closed tasks are semantically summarized to preserve context while reducing token cost. Beads handles this automatically — old completed tasks are compacted so agents get the gist without reading full histories.
 
+## Daily Maintenance
+
+Beads databases grow over time. Keep them healthy:
+
+- **`bd doctor --fix --yes`** — runs daily via systemd timer; fixes common issues automatically
+- **`bd admin cleanup --older-than 30 --force`** — prunes closed issues older than 30 days (always recoverable from git history)
+- **`bd sync`** — commits hygiene changes to git
+- **Manual upgrade**: Run `bd upgrade` periodically to get latest fixes (not automated — requires binary install)
+
+If you see "issues.jsonl too large" or agents failing to parse beads, run `bd admin cleanup --older-than 7 --force` for aggressive cleanup.
+
+The daily hygiene runs at 6:15 AM Pacific across all projects in `/root/projects/`. Check logs: `journalctl -u clavain-beads-hygiene.service --since today`
+
 ## Session Close Protocol
 
 **CRITICAL**: Before saying "done" or "complete", run this checklist:

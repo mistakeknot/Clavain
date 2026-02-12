@@ -35,6 +35,18 @@ companions=""
 # Beads — detect if project uses beads
 if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     companions="${companions}\\n- **beads**: .beads/ detected — use \`bd\` for task tracking (not TaskCreate)"
+    # Surface beads health warnings (bd doctor --json is local-only, typically <100ms)
+    if command -v bd &>/dev/null; then
+        beads_issues=$( (bd doctor --json 2>/dev/null || true) | python3 -c "
+import sys,json
+try:
+    d=json.load(sys.stdin)
+    print(sum(1 for c in d.get('checks',[]) if c.get('status') in ('warning','error')))
+except: print(0)" 2>/dev/null) || beads_issues="0"
+        if [[ "$beads_issues" -gt 0 ]]; then
+            companions="${companions}\\n  - beads doctor found ${beads_issues} issue(s) — run \`bd doctor --fix\` to repair"
+        fi
+    fi
 fi
 
 # Oracle — check if available for cross-AI review
