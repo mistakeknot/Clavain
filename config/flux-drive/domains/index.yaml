@@ -361,7 +361,7 @@ domains:
         - at_least_once
 
   - profile: claude-code-plugin
-    min_confidence: 0.4
+    min_confidence: 0.35
     signals:
       directories:
         - .claude-plugin

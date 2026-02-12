@@ -10,7 +10,7 @@ allowed-tools:
 
 # Clodex Mode Toggle
 
-Toggle clodex execution mode for this session.
+Toggle clodex execution mode. State persists across sessions via flag file.
 
 ## When Invoked
 
@@ -87,3 +87,4 @@ The PreToolUse hook in `hooks/hooks.json` checks for the flag file at `$PROJECT_
 - The flag file is at `$PROJECT_DIR/.claude/clodex-toggle.flag` (not in plugin directory)
 - The `.claude/` directory may already exist (Claude Code uses it for project settings)
 - The flag file contains a timestamp for debugging (when was clodex mode enabled?)
+- **Persistence:** The flag file survives session restarts. The SessionStart hook detects it and injects clodex status into context, and the PreToolUse hook enforces the write gate regardless of session. Run `/clodex-toggle` to turn off.

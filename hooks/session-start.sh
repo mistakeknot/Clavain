@@ -58,6 +58,12 @@ if command -v oracle &>/dev/null && pgrep -f "Xvfb :99" &>/dev/null; then
     companions="${companions}\\n- **oracle**: available for cross-AI review (GPT-5.2 Pro)"
 fi
 
+# Clodex — detect persistent toggle state
+CLODEX_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/clodex-toggle.flag"
+if [[ -f "$CLODEX_FLAG" ]]; then
+    companions="${companions}\\n- **clodex**: ON — source code edits are routed through Codex agents. Direct Edit/Write to source files will be blocked by the PreToolUse hook. Use \`/clodex\` to dispatch changes. Run \`/clodex-toggle\` to turn off."
+fi
+
 companion_context=""
 if [[ -n "$companions" ]]; then
     companion_context="\\n\\nDetected companions (FYI):${companions}"

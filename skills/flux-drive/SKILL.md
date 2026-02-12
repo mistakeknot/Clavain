@@ -64,6 +64,31 @@ OUTPUT_DIR    = {PROJECT_ROOT}/docs/research/flux-drive/{INPUT_STEM}
 
 A document-codebase divergence is itself a P0 finding — every agent should be told about it.
 
+### Step 1.0a: Classify Project Domain
+
+Detect the project's domain(s) using signals from `config/flux-drive/domains/index.yaml`. This runs once per project and is cached.
+
+**Cache check:** Look for `{PROJECT_ROOT}/.claude/flux-drive.yaml`. If it exists and contains `domains:` with at least one entry, skip detection and use cached results. If the file also contains `override: true`, never re-detect — the user has manually set their domains.
+
+**Detection** (when no cache or cache is stale):
+
+Run the domain detection script:
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-domains.py {PROJECT_ROOT} --json
+```
+
+The script reads `config/flux-drive/domains/index.yaml`, scans directories/files/build-deps/keywords, computes weighted scores (directories 0.3, files 0.2, frameworks 0.3, keywords 0.2), and writes a cache to `{PROJECT_ROOT}/.claude/flux-drive.yaml`. The highest-confidence domain is marked `primary: true`.
+
+- **Exit 0**: Domains detected — use the JSON output.
+- **Exit 1**: No domains detected — use LLM fallback below.
+- **Exit 2**: Script error — log warning, proceed without domain classification.
+
+**LLM fallback** (exit code 1, first scan only): Infer domain from the Document Profile (Step 1.1) or build system files. Set confidence to 0.5 for inferred domains. Write results to `{PROJECT_ROOT}/.claude/flux-drive.yaml`.
+
+**Performance budget:** This step should take <10 seconds. Use `ls` and targeted `grep`, not recursive find. Skip keyword scanning if directory+file+framework signals already exceed min_confidence for at least one domain.
+
+**Output:** The detected domains feed into Step 1.1 (document profile) and Step 1.2 (agent scoring).
+
 ### Step 1.1: Analyze the Document
 
 For **file inputs**: Read the file at `INPUT_FILE`.
@@ -78,6 +103,7 @@ Document Profile:
 - Languages: [from codebase, not just the document]
 - Frameworks: [from codebase, not just the document]
 - Domains touched: [architecture, security, performance, UX, data, API, etc.]
+- Project domains: [from Step 1.0a — e.g., "game-simulation (0.65), cli-tool (0.35)" or "none detected"]
 - Technologies: [specific tech mentioned]
 - Divergence: [none | description — only for documents that describe code]
 - Key codebase files: [list 3-5 actual files agents should read]
@@ -99,6 +125,7 @@ Diff Profile:
 - Binary files: [list any binary file changes]
 - Languages detected: [from file extensions in the diff]
 - Domains touched: [architecture, security, performance, UX, data, API, etc.]
+- Project domains: [from Step 1.0a — e.g., "game-simulation (0.65), cli-tool (0.35)" or "none detected"]
 - Renamed files: [list of old → new renames]
 - Key files: [top 5 files by change size]
 - Commit message: [if available from diff header]
@@ -135,7 +162,7 @@ Before scoring, eliminate agents that cannot plausibly score ≥1 based on the d
 
 **For file and directory inputs (continued):**
 
-4. **Game filter**: Skip fd-game-design unless the document/project mentions game, simulation, AI behavior, storyteller, balance, procedural generation, tick loop, needs/mood systems, or drama management.
+4. **Game filter**: Skip fd-game-design unless Step 1.0a detected `game-simulation` domain OR the document/project mentions game, simulation, AI behavior, storyteller, balance, procedural generation, tick loop, needs/mood systems, or drama management.
 
 **For diff inputs** (use `config/flux-drive/diff-routing.md` patterns):
 
@@ -158,6 +185,8 @@ Score the pre-filtered agents against the document profile. Present the scoring 
 > **Note**: Base score 0 means the agent is excluded. Category bonuses cannot override irrelevance.
 
 **Category bonuses** (applied only when base score ≥ 1): Project Agents get +1 (project-specific). Plugin Agents get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode). An agent with base score 0 is always excluded regardless of bonuses.
+
+**Domain bonuses** (applied only when base score >= 1): When Step 1.0a detected a project domain, agents whose domain expertise matches get +1. Specifically: fd-game-design gets +1 when `game-simulation` is detected. Future domain profiles will specify which agents get boosted (see `config/flux-drive/domains/*.md` injection criteria). An agent with base score 0 is always excluded regardless of domain bonuses.
 
 **Selection rules**:
 1. All agents scoring 2+ are included
@@ -211,6 +240,18 @@ Present the triage table with a Stage column:
 | fd-performance | Plugin | 0 | No performance surface changes | Skip |
 | fd-quality | Plugin | 0 | No code changes | Skip |
 | fd-correctness | Plugin | 0 | No data/concurrency changes | Skip |
+
+**Game project plan (game-simulation domain detected at 0.65):**
+
+| Agent | Category | Score | Reason | Action |
+|-------|----------|-------|--------|--------|
+| fd-architecture | Plugin | 2+1=3 | Module boundaries affected, project docs exist | Launch |
+| fd-game-design | Plugin | 2+1+1=4 | Game balance and pacing directly relevant, domain detected, project docs | Launch |
+| fd-quality | Plugin | 2+1=3 | Code changes, project docs exist | Launch |
+| fd-correctness | Plugin | 1+1=2 | Tick loop concurrency, project docs exist | Launch |
+| fd-performance | Plugin | 1+1=2 | Game loop performance relevant | Launch |
+| fd-safety | Plugin | 0 | No security concerns | Skip |
+| fd-user-product | Plugin | 0 | Game design covers player experience | Skip |
 
 **Thin section thresholds:**
 - **thin**: <5 lines or <3 bullet points — agent with adjacent domain should cover this
