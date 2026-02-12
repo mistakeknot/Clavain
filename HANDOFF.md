@@ -1,22 +1,21 @@
 # Session Handoff
 
 ## Done
-- Implemented M1 F1+F2: beads-based work discovery for `/lfg` (scanner library, lfg.md integration, 21 bats tests, 4 structural tests)
-- Ran flux-drive plan review (fd-architecture + fd-correctness) and applied all findings before coding
-- Ran quality-gates code review (fd-quality + fd-correctness) and fixed all P0/P1 findings
-- Added "compound after resolve" step to `/lfg` workflow + 2 knowledge entries
-- Closed beads Clavain-6czs (F1) and Clavain-a3hp (F2)
-- Committed fd-game-design agent + domain profiles (separate commit)
+- Implemented F5: Phase State Tracking (`hooks/lib-phase.sh` + 9 command updates)
+- Created `lib-phase.sh` with phase_set, phase_get, phase_infer_bead, telemetry
+- Updated lfg, brainstorm, review-doc, strategy, write-plan, flux-drive, work, execute-plan, quality-gates
+- Ran fd-architecture + fd-correctness reviews, addressed multi-bead detection + regex fix
+- All 620 structural tests pass, 9 manual integration tests pass
 
 ## Pending
-- Clavain-7mpd (domain-aware flux-drive) — Phase A done (agent + profiles), Phase B not started (orchestrator overhaul, token optimizations, wiring domain detection into flux-drive Step 1.0)
-- 6 remaining epic beads (Clavain-tayp): F3 orphaned artifact detection, F4 session-start scan, F5-F8 phase gates
+- Changes not yet committed (all unstaged)
+- Clavain-z661 (F5) still in_progress — ready to close after commit
 
 ## Next
-- Continue M1: implement F3 (orphaned artifact detection) or F4 (session-start light scan)
-- Or continue Clavain-7mpd Phase B: wire domain detection into flux-drive orchestrator
+- Commit F5 changes, close Clavain-z661
+- Next: F3 (orphaned artifacts), F4 (session-start scan), or F6 (shared gate library)
 
 ## Context
-- `bd list --status=open` for full backlog; `/lfg` with no args now does discovery automatically
-- 10 domain profile stubs need populating (only game-simulation.md is complete)
-- All tests green: 67 shell, 585 structural
+- `**Bead:**` grep regex needs `\*{0,2}` around colon — markdown bold wraps as `**Bead:**`
+- Multi-bead plans: stderr warning + first match used. Set `CLAVAIN_BEAD_ID` for explicit control
+- `CLAVAIN_BEAD_ID` is a Claude context instruction, not a bash env var

@@ -57,6 +57,16 @@ For each issue from Step 2:
 
 Apply fixes to the document.
 
+## Step 4b: Record Phase (brainstorm docs only)
+
+If the reviewed document is in `docs/brainstorms/`, record the phase transition:
+```bash
+PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+BEAD_ID=$(phase_infer_bead "<reviewed_doc_path>")
+phase_set "$BEAD_ID" "brainstorm-reviewed" "Reviewed: <reviewed_doc_path>"
+```
+Only set `brainstorm-reviewed` for brainstorm docs. PRDs and plans have their own phase transitions in other commands.
+
 ## Step 5: Offer Next Action
 
 After fixes are applied:

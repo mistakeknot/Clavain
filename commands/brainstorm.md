@@ -78,6 +78,16 @@ Write a brainstorm document to `docs/brainstorms/YYYY-MM-DD-<topic>-brainstorm.m
 
 Ensure `docs/brainstorms/` directory exists before writing.
 
+### Phase 3b: Record Phase
+
+After writing the brainstorm document, record the phase transition:
+```bash
+PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+BEAD_ID=$(phase_infer_bead "<brainstorm_doc_path>")
+phase_set "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>"
+```
+If `CLAVAIN_BEAD_ID` is set in the environment, that takes priority. If no bead ID is found, skip silently.
+
 ### Phase 4: Handoff
 
 Use **AskUserQuestion tool** to present next steps:

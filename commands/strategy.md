@@ -86,6 +86,18 @@ bd dep add <feature-id> <epic-id>
 
 Report the created beads to the user.
 
+### Phase 3b: Record Phase
+
+After creating beads, record the phase transition on the epic:
+```bash
+PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+phase_set "<epic_bead_id>" "strategized" "PRD: <prd_path>"
+```
+Also set `phase=strategized` on each child feature bead created:
+```bash
+phase_set "<feature_bead_id>" "strategized" "PRD: <prd_path>"
+```
+
 ## Phase 4: Validate
 
 Run a lightweight flux-drive review on the PRD:

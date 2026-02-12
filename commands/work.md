@@ -47,6 +47,15 @@ This command takes a work document (plan, specification, or todo file) and execu
    - Include testing and quality check tasks
    - Keep tasks specific and completable
 
+### Phase 1b: Record Phase
+
+Before starting execution, record the phase transition:
+```bash
+PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+BEAD_ID=$(phase_infer_bead "<input_document_path>")
+phase_set "$BEAD_ID" "executing" "Executing: <input_document_path>"
+```
+
 ### Phase 2: Execute
 
 1. **Task Execution Loop**

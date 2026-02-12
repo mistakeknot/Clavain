@@ -32,7 +32,9 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
    ```
    If `bd show` fails (bead was closed/deleted since scan), tell the user "That bead is no longer available" and re-run discovery from step 1.
 
-5. Based on selection, route to the appropriate command:
+5. **Set bead context** for phase tracking: remember the selected bead ID as `CLAVAIN_BEAD_ID` for this session. All subsequent workflow commands use this to record phase transitions.
+
+6. Based on selection, route to the appropriate command:
    - `continue` or `execute` with a `plan_path` → `/clavain:work <plan_path>`
    - `plan` → `/clavain:write-plan`
    - `strategize` → `/clavain:strategy`
@@ -40,13 +42,13 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
    - "Start fresh brainstorm" → proceed to Step 1
    - "Show full backlog" → `/clavain:sprint-status`
 
-6. Log the selection for telemetry:
+7. Log the selection for telemetry:
    ```bash
    DISCOVERY_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_log_selection "<bead_id>" "<action>" <true|false>
    ```
    Where `true` = user picked the first (recommended) option, `false` = user picked a different option.
 
-7. **After routing to a command, stop.** Do NOT continue to Step 1 — the routed command handles the workflow from here.
+8. **After routing to a command, stop.** Do NOT continue to Step 1 — the routed command handles the workflow from here.
 
 If invoked WITH arguments (`$ARGUMENTS` is not empty), skip discovery and proceed directly to Step 1.
 
@@ -54,15 +56,27 @@ If invoked WITH arguments (`$ARGUMENTS` is not empty), skip discovery and procee
 
 Run these steps in order. Do not do anything else.
 
+### Phase Tracking
+
+After each step completes successfully, record the phase transition. If `CLAVAIN_BEAD_ID` is set (from discovery or the user), run:
+```bash
+PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh" && phase_set "$CLAVAIN_BEAD_ID" "<phase>" "<reason>"
+```
+Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking.
+
 ## Step 1: Brainstorm
 `/clavain:brainstorm $ARGUMENTS`
+
+**Phase:** After brainstorm doc is created, set `phase=brainstorm` with reason `"Brainstorm: <doc_path>"`.
 
 ## Step 2: Strategize
 `/clavain:strategy`
 
 Structures the brainstorm into a PRD, creates beads for tracking, and validates with flux-drive before planning.
 
-**Optional:** Run `/clavain:review-doc` on the brainstorm output first for a quick polish before structuring.
+**Optional:** Run `/clavain:review-doc` on the brainstorm output first for a quick polish before structuring. If you do, set `phase=brainstorm-reviewed` after review-doc completes.
+
+**Phase:** After strategy completes, set `phase=strategized` with reason `"PRD: <prd_path>"`.
 
 ## Step 3: Write Plan
 `/clavain:write-plan`
@@ -71,6 +85,8 @@ Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it'
 
 **Note:** When clodex mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 5 (execute) — the plan has already been executed.
 
+**Phase:** After plan is written, set `phase=planned` with reason `"Plan: <plan_path>"`.
+
 ## Step 4: Review Plan (gates execution)
 `/clavain:flux-drive <plan-file-from-step-3>`
 
@@ -78,9 +94,13 @@ Pass the plan file path from Step 3 as the flux-drive target. Review happens **b
 
 If flux-drive finds P0/P1 issues, stop and address them before proceeding to execution.
 
+**Phase:** After plan review passes, set `phase=plan-reviewed` with reason `"Plan reviewed: <plan_path>"`.
+
 ## Step 5: Execute
 
 Run `/clavain:work <plan-file-from-step-3>`
+
+**Phase:** At the START of execution (before work begins), set `phase=executing` with reason `"Executing: <plan_path>"`.
 
 **Parallel execution:** When the plan has independent modules, dispatch them in parallel using the `dispatching-parallel-agents` skill. This is automatic when clodex mode is active (executing-plans detects the flag and dispatches Codex agents).
 
@@ -102,6 +122,8 @@ Run the project's test suite and linting before proceeding to review:
 
 **Parallel opportunity:** Quality gates and resolve can overlap — quality-gates spawns review agents while resolve addresses already-known findings. If you have known TODOs from execution, start `/clavain:resolve` in parallel with quality-gates.
 
+**Phase:** After quality gates PASS, set `phase=shipping` with reason `"Quality gates passed"`. Do NOT set if gates FAIL.
+
 ## Step 8: Resolve Issues
 
 Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, or code TODOs) and handles clodex mode automatically.
@@ -113,6 +135,8 @@ Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, 
 ## Step 9: Ship
 
 Use the `clavain:landing-a-change` skill to verify, document, and commit the completed work.
+
+**Phase:** After successful ship, set `phase=done` with reason `"Shipped"`. Also close the bead: `bd close "$CLAVAIN_BEAD_ID" 2>/dev/null || true`.
 
 ## Error Recovery
 

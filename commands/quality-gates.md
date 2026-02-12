@@ -101,6 +101,18 @@ Collect all agent findings and present:
 [If FAIL: list P1 items that must be addressed]
 ```
 
+### Phase 5b: Record Phase (on PASS only)
+
+If the gate result is **PASS**, record the phase transition:
+```bash
+PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+BEAD_ID="${CLAVAIN_BEAD_ID:-}"
+if [[ -n "$BEAD_ID" ]]; then
+    phase_set "$BEAD_ID" "shipping" "Quality gates passed"
+fi
+```
+Do NOT set the phase if the gate result is FAIL — the work needs fixing first.
+
 ### Phase 6: File Findings as Beads (optional)
 
 If the project has `.beads/` initialized, ask the user:
