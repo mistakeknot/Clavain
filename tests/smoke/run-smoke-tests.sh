@@ -7,21 +7,41 @@ set -euo pipefail
 #
 # Usage:
 #   ./tests/smoke/run-smoke-tests.sh           # Run all smoke tests
-#   ./tests/smoke/run-smoke-tests.sh --dry-run  # Just verify agent files exist
+#   ./tests/smoke/run-smoke-tests.sh --dry-run  # Just verify agent/command files exist
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
-# Agent roster — must match smoke-prompt.md
+# Agent roster — must match smoke-prompt.md (all 16 agents)
 AGENTS=(
+  # Review (9)
   "agents/review/fd-quality.md"
   "agents/review/fd-architecture.md"
   "agents/review/fd-performance.md"
   "agents/review/fd-safety.md"
+  "agents/review/fd-correctness.md"
+  "agents/review/fd-user-product.md"
   "agents/review/plan-reviewer.md"
   "agents/review/agent-native-reviewer.md"
+  "agents/review/data-migration-expert.md"
+  # Research (5)
   "agents/research/best-practices-researcher.md"
+  "agents/research/framework-docs-researcher.md"
+  "agents/research/git-history-analyzer.md"
+  "agents/research/learnings-researcher.md"
+  "agents/research/repo-research-analyst.md"
+  # Workflow (2)
   "agents/workflow/pr-comment-resolver.md"
+  "agents/workflow/bug-reproduction-validator.md"
+)
+
+# Command roster — must match smoke-prompt.md
+COMMANDS=(
+  "commands/help.md"
+  "commands/doctor.md"
+  "commands/changelog.md"
+  "commands/brainstorm.md"
+  "commands/quality-gates.md"
 )
 
 echo "=== Clavain Smoke Tests ==="
@@ -45,8 +65,24 @@ fi
 echo "  All ${#AGENTS[@]} agent files present."
 echo ""
 
+# Pre-check: verify all command files exist
+echo "Pre-check: verifying command files..."
+for cmd in "${COMMANDS[@]}"; do
+  if [[ ! -f "$PROJECT_ROOT/$cmd" ]]; then
+    echo "  MISSING: $cmd"
+    missing=$((missing + 1))
+  fi
+done
+
+if [[ $missing -gt 0 ]]; then
+  echo "FATAL: $missing file(s) missing. Cannot run smoke tests."
+  exit 1
+fi
+echo "  All ${#COMMANDS[@]} command files present."
+echo ""
+
 if [[ "${1:-}" == "--dry-run" ]]; then
-  echo "Dry run complete. All agent files verified."
+  echo "Dry run complete. All ${#AGENTS[@]} agent + ${#COMMANDS[@]} command files verified."
   exit 0
 fi
 
@@ -58,14 +94,14 @@ if ! command -v claude &>/dev/null; then
 fi
 
 # Run smoke tests via claude CLI
-echo "Dispatching ${#AGENTS[@]} agents via claude CLI..."
-echo "This will take 1-3 minutes."
+echo "Dispatching ${#AGENTS[@]} agents + ${#COMMANDS[@]} command tests via claude CLI..."
+echo "This will take 2-4 minutes."
 echo ""
 
 claude --print \
   --plugin-dir "$PROJECT_ROOT" \
   -p "$(cat "$SCRIPT_DIR/smoke-prompt.md")" \
-  --max-turns 40
+  --max-turns 60
 
 # Cleanup any artifact files agents wrote
 rm -f "$PROJECT_ROOT"/docs/research/smoke-test-*.md 2>/dev/null || true
