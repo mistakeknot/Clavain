@@ -11,16 +11,19 @@
 - **Populated all 11 domain profiles** (Phase B complete) — 330 domain-specific review criteria across 11 domains, 2-3 agent specs each
 - Closed Clavain-ckz2 (domain detection script task)
 - **Wired domain detection into runtime** — Step 2.1a in launch.md loads domain profiles, extracts per-agent injection criteria, injects into prompt template as Domain Context section. Multi-domain support (up to 3, ordered by confidence).
+- **Created /flux-gen command** — generates project-specific fd-* agents in `.claude/agents/` from domain profile Agent Specifications. Count bumped to 37 commands.
+- **Closed Clavain-7mpd** (domain-aware flux-drive) — core feature complete
 
 ## Pending
 - Pre-existing uncommitted changes in commands/*.md and CLAUDE.md (phase lifecycle tracking from prior session)
 
 ## Next
-- Implement /flux-gen command (Clavain-8l91) — generates domain-specific agents from profile specs
+- Publish new version (domain injection + flux-gen)
 - Commit the pre-existing commands/*.md phase lifecycle changes
-- Publish new version with domain injection wiring
+- P2 follow-ups: orchestrator overhaul (Clavain-62ek), token optimizations (Clavain-i1u6)
 
 ## Context
 - `hooks/lib-phase.sh` and `docs/plans/2026-02-12-phase-state-tracking.md` are untracked from a prior session
 - The `bump-version.sh` symlink only bridges ONE version; `session-start.sh` now bridges ALL old versions
 - Domain profiles: `config/flux-drive/domains/*.md` — 11 files, ~92-103 lines each, 1034 total
+- Command count is now 37 (was 36) — flux-gen added
