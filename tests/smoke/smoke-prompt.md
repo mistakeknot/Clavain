@@ -213,7 +213,7 @@ These tests verify that key multi-step workflows are wired correctly. They piggy
 ### Workflow 25: Help catalog completeness
 - Source: Command 18 (help) output
 - Chain verified: command → complete catalog rendering
-- PASS criteria: Output contains at least 30 distinct `/clavain:` references (we have 36 commands, allowing for some omissions in help display)
+- PASS criteria: Output contains at least 30 distinct `/clavain:` references (we have 37 commands, allowing for some omissions in help display)
 
 ---
 

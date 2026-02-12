@@ -52,6 +52,7 @@ For the compact version, see the `using-clavain` skill.
 | `/clavain:quality-gates` | Quick code review of working changes (auto-selects agents from git diff) | None (uses git diff) |
 | `/clavain:review` | PR-focused multi-agent review | PR number, URL, or branch |
 | `/clavain:plan-review` | Lightweight 3-agent plan review | Plan file |
+| `/clavain:flux-gen` | Generate project-specific domain review agents in `.claude/agents/` | Optional: domain name |
 
 **Default:** If unsure, use `/clavain:flux-drive` — it handles the widest range of inputs and auto-triages agents.
 

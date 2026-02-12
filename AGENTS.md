@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 30 skills, 17 agents, 36 commands, 5 hooks, 2 MCP servers |
+| Components | 30 skills, 17 agents, 37 commands, 5 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -40,9 +40,9 @@ Clavain/
 │   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 36 slash commands
+├── commands/                      # 37 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 34 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 35 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
@@ -212,7 +212,7 @@ Quick validation:
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 30
 echo "Agents: $(ls agents/{review,research,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 36
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 37
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
