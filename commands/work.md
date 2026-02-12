@@ -51,9 +51,9 @@ This command takes a work document (plan, specification, or todo file) and execu
 
 Before starting execution, record the phase transition:
 ```bash
-PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID=$(phase_infer_bead "<input_document_path>")
-phase_set "$BEAD_ID" "executing" "Executing: <input_document_path>"
+advance_phase "$BEAD_ID" "executing" "Executing: <input_document_path>" "<input_document_path>"
 ```
 
 ### Phase 2: Execute

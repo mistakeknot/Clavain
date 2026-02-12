@@ -82,9 +82,9 @@ Ensure `docs/brainstorms/` directory exists before writing.
 
 After writing the brainstorm document, record the phase transition:
 ```bash
-PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID=$(phase_infer_bead "<brainstorm_doc_path>")
-phase_set "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>"
+advance_phase "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>" "<brainstorm_doc_path>"
 ```
 If `CLAVAIN_BEAD_ID` is set in the environment, that takes priority. If no bead ID is found, skip silently.
 

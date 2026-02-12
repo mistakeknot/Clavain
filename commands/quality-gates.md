@@ -105,10 +105,10 @@ Collect all agent findings and present:
 
 If the gate result is **PASS**, record the phase transition:
 ```bash
-PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID="${CLAVAIN_BEAD_ID:-}"
 if [[ -n "$BEAD_ID" ]]; then
-    phase_set "$BEAD_ID" "shipping" "Quality gates passed"
+    advance_phase "$BEAD_ID" "shipping" "Quality gates passed" ""
 fi
 ```
 Do NOT set the phase if the gate result is FAIL — the work needs fixing first.

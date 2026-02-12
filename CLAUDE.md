@@ -23,6 +23,7 @@ bash -n hooks/auto-compound.sh         # Syntax check
 bash -n hooks/session-handoff.sh       # Syntax check
 bash -n hooks/lib-phase.sh             # Syntax check
 bash -n hooks/lib-discovery.sh         # Syntax check
+bash -n hooks/lib-gates.sh             # Syntax check
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 ```
 

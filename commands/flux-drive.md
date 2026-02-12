@@ -9,8 +9,8 @@ Use the `clavain:flux-drive` skill to review the document or directory specified
 
 **After review completes**, if the reviewed file is in `docs/plans/`, record the phase transition:
 ```bash
-PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh"
+GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID=$(phase_infer_bead "<reviewed_file_path>")
-phase_set "$BEAD_ID" "plan-reviewed" "Plan reviewed: <reviewed_file_path>"
+advance_phase "$BEAD_ID" "plan-reviewed" "Plan reviewed: <reviewed_file_path>" "<reviewed_file_path>"
 ```
 Only set `plan-reviewed` for plan files. Do NOT set for brainstorm, PRD, or code reviews.

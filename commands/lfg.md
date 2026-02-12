@@ -60,9 +60,9 @@ Run these steps in order. Do not do anything else.
 
 After each step completes successfully, record the phase transition. If `CLAVAIN_BEAD_ID` is set (from discovery or the user), run:
 ```bash
-PHASE_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-phase.sh" && phase_set "$CLAVAIN_BEAD_ID" "<phase>" "<reason>"
+GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh" && advance_phase "$CLAVAIN_BEAD_ID" "<phase>" "<reason>" "<artifact_path>"
 ```
-Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking.
+Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
 
 ## Step 1: Brainstorm
 `/clavain:brainstorm $ARGUMENTS`
