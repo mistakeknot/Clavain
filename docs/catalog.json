@@ -1,8 +1,8 @@
 {
-  "generated": "2026-02-12T02:25:06Z",
+  "generated": "2026-02-12T19:57:43Z",
   "counts": {
     "skills": 30,
-    "agents": 16,
+    "agents": 17,
     "commands": 36,
     "hooks": 5,
     "mcp_servers": 2
@@ -173,6 +173,11 @@
     {
       "name": "fd-correctness",
       "description": "Flux-drive Correctness reviewer \u2014 evaluates data consistency, transaction safety, race conditions, async bugs, and concurrency patterns across all languages. Reads project docs when available. Examples: <example>Context: User wrote a database migration that renames columns and backfills data. user: \"Review this migration \u2014 it renames user_id to account_id and backfills from a lookup table\" assistant: \"I'll use the fd-correctness agent to evaluate the migration's data consistency and transaction safety.\" <commentary>Database migrations with renames and backfills need transaction atomicity review, NULL handling, and referential integrity checks.</commentary></example> <example>Context: User implemented a concurrent job queue with worker pools. user: \"Check this worker pool implementation for race conditions\" assistant: \"I'll use the fd-correctness agent to analyze the concurrency patterns and potential race conditions.\" <commentary>Concurrent worker pools involve shared mutable state, lifecycle management, and synchronization \u2014 fd-correctness's concurrency domain.</commentary></example>",
+      "category": "review"
+    },
+    {
+      "name": "fd-game-design",
+      "description": "Flux-drive Game Design reviewer \u2014 evaluates balance, pacing, player psychology, feedback loops, emergent behavior, and procedural content quality. Reads project docs when available for codebase-aware analysis. Examples: <example>Context: User designed a needs-based AI system for game agents. user: \"Review the utility AI system for the agent behavior\" assistant: \"I'll use the fd-game-design agent to evaluate the needs curves, action scoring, and emergent behavior patterns.\" <commentary>Utility AI tuning involves game design balance, not just code correctness.</commentary></example> <example>Context: User wrote a storyteller/drama management system. user: \"Check if the storyteller pacing feels right\" assistant: \"I'll use the fd-game-design agent to review the drama curve, event cooldowns, and death spiral prevention.\" <commentary>Drama pacing is a game design concern about player experience.</commentary></example>",
       "category": "review"
     },
     {

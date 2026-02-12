@@ -83,6 +83,23 @@ These agents need the complete diff regardless of size:
 **Priority hunk keywords** (case-insensitive):
 `user`, `prompt`, `flow`, `step`, `wizard`, `onboard`, `error message`, `usage`, `help`, `flag`, `--`, `subcommand`, `menu`, `dialog`, `modal`, `toast`, `alert`, `confirm`, `cancel`, `submit`, `validate`, `placeholder`, `label`, `aria-`, `accessibility`, `a11y`, `i18n`, `locale`
 
+### fd-game-design
+
+**Priority file patterns:**
+- `**/game/**`, `**/games/**`
+- `**/simulation/**`, `**/sim/**`
+- `**/tick/**`, `**/tick_*`, `**/*_tick.*`
+- `**/storyteller/**`, `**/drama/**`, `**/narrative/**`
+- `**/needs/**`, `**/mood/**`, `**/desire*`
+- `**/ecs/**`, `**/entity/**`, `**/component/**`, `**/system/**`
+- `**/balance/**`, `**/tuning/**`, `**/config/balance*`
+- `**/ai/**`, `**/behavior/**`, `**/behaviour/**`, `**/utility_ai*`
+- `**/procedural/**`, `**/procgen/**`, `**/worldgen/**`
+- `**/combat/**`, `**/inventory/**`, `**/crafting/**`
+
+**Priority hunk keywords** (case-insensitive):
+`tick`, `tick_rate`, `delta_time`, `fixed_update`, `simulation`, `storyteller`, `drama`, `tension`, `pacing`, `cooldown`, `spawn_rate`, `difficulty`, `balance`, `tuning`, `weight`, `score`, `utility`, `need`, `mood`, `satisfaction`, `decay`, `threshold`, `feedback_loop`, `death_spiral`, `rubber_band`, `catch_up`, `emergent`, `procedural`, `seed`, `noise`, `perlin`, `wave_function`, `agent_ai`, `behavior_tree`, `state_machine`, `blackboard`, `steering`, `pathfind`, `navmesh`
+
 ---
 
 ## Overlap Resolution

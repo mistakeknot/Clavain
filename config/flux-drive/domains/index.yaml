@@ -1,0 +1,453 @@
+# Domain Detection Index
+#
+# Maps domain profiles to detection signals. Used by flux-drive Step 1.0
+# to classify a project's domain(s) and inject domain-specific review criteria.
+#
+# Detection: Score each domain by counting matching signals. A domain is
+# "detected" when its score meets min_confidence (fraction of total signals).
+# Multiple domains can match — e.g., a game server is both game-simulation
+# and web-api.
+#
+# Profiles: Each detected domain has a corresponding .md file in this
+# directory with injection criteria (extra review bullets per core agent)
+# and optional domain-specific agent specifications.
+
+domains:
+  - profile: game-simulation
+    min_confidence: 0.3
+    signals:
+      directories:
+        - game
+        - games
+        - simulation
+        - sim
+        - ecs
+        - tick
+        - storyteller
+        - drama
+        - narrative
+        - combat
+        - inventory
+        - crafting
+        - procedural
+        - procgen
+        - worldgen
+        - ai/behavior
+        - needs
+        - mood
+      files:
+        - "*.gd"           # Godot
+        - "*.tscn"         # Godot scenes
+        - "project.godot"
+        - "*.unity"
+        - "*.uproject"     # Unreal
+        - "game.toml"
+        - "game.yaml"
+        - "game_config.*"
+        - "balance.yaml"
+        - "balance.json"
+        - "tuning.*"
+      frameworks:
+        - godot
+        - unity
+        - unreal
+        - bevy
+        - macroquad
+        - ggez
+        - raylib
+        - pygame
+        - love2d
+        - phaser
+        - pixi
+      keywords:
+        - tick_rate
+        - delta_time
+        - fixed_update
+        - storyteller
+        - drama_manager
+        - utility_ai
+        - behavior_tree
+        - state_machine
+        - navmesh
+        - pathfinding
+        - procedural_generation
+        - death_spiral
+        - feedback_loop
+        - spawn_rate
+        - difficulty_curve
+
+  - profile: ml-pipeline
+    min_confidence: 0.3
+    signals:
+      directories:
+        - models
+        - training
+        - inference
+        - datasets
+        - notebooks
+        - experiments
+        - features
+        - pipelines
+      files:
+        - "*.ipynb"
+        - requirements.txt
+        - "setup.py"
+        - "pyproject.toml"
+        - "Pipfile"
+        - "dvc.yaml"
+        - "mlflow.*"
+        - "wandb.*"
+        - "*.onnx"
+        - "*.pt"
+        - "*.h5"
+        - "*.safetensors"
+      frameworks:
+        - pytorch
+        - tensorflow
+        - keras
+        - scikit-learn
+        - huggingface
+        - transformers
+        - mlflow
+        - wandb
+        - dvc
+        - ray
+        - airflow
+      keywords:
+        - model.train
+        - model.eval
+        - optimizer
+        - loss_function
+        - batch_size
+        - epoch
+        - learning_rate
+        - gradient
+        - backpropagation
+        - embedding
+        - tokenizer
+        - fine_tune
+        - hyperparameter
+
+  - profile: web-api
+    min_confidence: 0.3
+    signals:
+      directories:
+        - api
+        - routes
+        - controllers
+        - handlers
+        - middleware
+        - endpoints
+        - graphql
+        - grpc
+      files:
+        - "openapi.*"
+        - "swagger.*"
+        - "*.proto"
+        - "schema.graphql"
+        - "routes.*"
+      frameworks:
+        - express
+        - fastapi
+        - django
+        - flask
+        - gin
+        - echo
+        - fiber
+        - actix-web
+        - axum
+        - spring-boot
+        - rails
+        - nest
+        - hono
+      keywords:
+        - endpoint
+        - middleware
+        - request
+        - response
+        - router
+        - handler
+        - REST
+        - GraphQL
+        - gRPC
+        - rate_limit
+        - authentication
+        - authorization
+
+  - profile: cli-tool
+    min_confidence: 0.3
+    signals:
+      directories:
+        - cmd
+        - cli
+        - commands
+        - subcmd
+      files:
+        - "main.go"
+        - "cli.*"
+        - "Cargo.toml"
+      frameworks:
+        - cobra
+        - clap
+        - click
+        - argparse
+        - commander
+        - yargs
+        - oclif
+        - bubbletea
+        - charmbracelet
+        - inquirer
+      keywords:
+        - subcommand
+        - flag
+        - argument
+        - parse_args
+        - cli
+        - terminal
+        - stdin
+        - stdout
+        - exit_code
+
+  - profile: mobile-app
+    min_confidence: 0.3
+    signals:
+      directories:
+        - ios
+        - android
+        - app
+        - screens
+        - navigation
+      files:
+        - "*.swift"
+        - "*.kt"
+        - "*.dart"
+        - "Podfile"
+        - "build.gradle"
+        - "pubspec.yaml"
+        - "app.json"
+        - "Info.plist"
+        - "AndroidManifest.xml"
+      frameworks:
+        - react-native
+        - flutter
+        - swiftui
+        - uikit
+        - jetpack-compose
+        - expo
+        - capacitor
+        - ionic
+      keywords:
+        - navigation
+        - screen
+        - gesture
+        - touch
+        - push_notification
+        - deep_link
+        - app_lifecycle
+        - offline_first
+
+  - profile: embedded-systems
+    min_confidence: 0.3
+    signals:
+      directories:
+        - firmware
+        - hal
+        - drivers
+        - bsp
+        - rtos
+      files:
+        - "*.c"
+        - "*.h"
+        - "Makefile"
+        - "CMakeLists.txt"
+        - "*.ld"
+        - "*.s"
+        - "platformio.ini"
+        - "*.dts"
+      frameworks:
+        - freertos
+        - zephyr
+        - embassy
+        - arduino
+        - esp-idf
+        - stm32
+        - nrf-sdk
+        - mbed
+      keywords:
+        - interrupt
+        - ISR
+        - DMA
+        - GPIO
+        - SPI
+        - I2C
+        - UART
+        - volatile
+        - register
+        - peripheral
+        - firmware
+        - bootloader
+        - watchdog
+
+  - profile: library-sdk
+    min_confidence: 0.3
+    signals:
+      directories:
+        - src
+        - lib
+        - examples
+        - docs
+        - api
+      files:
+        - "package.json"
+        - "Cargo.toml"
+        - "go.mod"
+        - "setup.py"
+        - "pyproject.toml"
+        - "*.gemspec"
+        - "*.podspec"
+        - "CHANGELOG.md"
+        - "CONTRIBUTING.md"
+      frameworks: []
+      keywords:
+        - public_api
+        - export
+        - semver
+        - breaking_change
+        - backward_compatible
+        - deprecate
+        - type_definition
+        - generic
+        - interface
+        - trait
+
+  - profile: data-pipeline
+    min_confidence: 0.3
+    signals:
+      directories:
+        - etl
+        - pipeline
+        - ingestion
+        - transform
+        - dags
+        - warehouse
+      files:
+        - "dbt_project.yml"
+        - "*.sql"
+        - "dagster.*"
+        - "prefect.*"
+        - "*.parquet"
+        - "*.avro"
+      frameworks:
+        - airflow
+        - dagster
+        - prefect
+        - dbt
+        - spark
+        - flink
+        - kafka
+        - beam
+        - fivetran
+      keywords:
+        - pipeline
+        - ETL
+        - ELT
+        - transform
+        - ingestion
+        - warehouse
+        - schema_evolution
+        - backfill
+        - idempotent
+        - exactly_once
+        - at_least_once
+
+  - profile: claude-code-plugin
+    min_confidence: 0.4
+    signals:
+      directories:
+        - .claude-plugin
+        - skills
+        - agents
+        - commands
+        - hooks
+      files:
+        - "plugin.json"
+        - "SKILL.md"
+        - "*.md"
+      frameworks: []
+      keywords:
+        - subagent_type
+        - PreToolUse
+        - PostToolUse
+        - SessionStart
+        - CLAUDE_PLUGIN_ROOT
+        - AskUserQuestion
+        - frontmatter
+        - skill_description
+
+  - profile: tui-app
+    min_confidence: 0.3
+    signals:
+      directories:
+        - tui
+        - ui
+        - view
+        - component
+      files:
+        - "*.go"
+        - "*.rs"
+      frameworks:
+        - bubbletea
+        - lipgloss
+        - bubbles
+        - ratatui
+        - tui-rs
+        - crossterm
+        - termion
+        - blessed
+        - ink
+        - rich
+        - textual
+      keywords:
+        - render
+        - update
+        - view
+        - model
+        - msg
+        - cmd
+        - tea.Model
+        - tea.Cmd
+        - widget
+        - layout
+        - flex
+        - border
+        - viewport
+
+  - profile: desktop-tauri
+    min_confidence: 0.3
+    signals:
+      directories:
+        - src-tauri
+        - frontend
+        - webview
+      files:
+        - "tauri.conf.json"
+        - "Cargo.toml"
+        - "*.tsx"
+        - "*.svelte"
+      frameworks:
+        - tauri
+        - electron
+        - wails
+        - neutralinojs
+      keywords:
+        - invoke
+        - tauri_command
+        - window
+        - webview
+        - ipc
+        - menu
+        - tray
+        - system_tray
+        - notification
+        - file_dialog
+        - auto_update

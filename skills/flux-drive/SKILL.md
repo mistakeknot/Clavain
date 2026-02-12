@@ -133,12 +133,17 @@ Before scoring, eliminate agents that cannot plausibly score ≥1 based on the d
 2. **Product filter**: Skip fd-user-product unless the document type is PRD, proposal, strategy document, or has user-facing flows.
 3. **Deploy filter**: Skip fd-safety unless the document mentions security, credentials, deployments, infrastructure, or trust boundaries.
 
+**For file and directory inputs (continued):**
+
+4. **Game filter**: Skip fd-game-design unless the document/project mentions game, simulation, AI behavior, storyteller, balance, procedural generation, tick loop, needs/mood systems, or drama management.
+
 **For diff inputs** (use `config/flux-drive/diff-routing.md` patterns):
 
 1. **Data filter**: Skip fd-correctness unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
 2. **Product filter**: Skip fd-user-product unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
 3. **Deploy filter**: Skip fd-safety unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
 4. **Perf filter**: Skip fd-performance unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
+5. **Game filter**: Skip fd-game-design unless any changed file matches its priority file patterns or any hunk contains its priority keywords.
 
 Domain-general agents always pass the filter: fd-architecture, fd-quality, and fd-performance (for file/directory inputs only — for diffs, fd-performance is filtered by routing patterns like other domain agents).
 
@@ -292,6 +297,7 @@ These agents are provided by the Clavain plugin. They auto-detect project docume
 | fd-quality | clavain:review:fd-quality | Naming, conventions, test approach, language-specific idioms |
 | fd-user-product | clavain:review:fd-user-product | User flows, UX friction, value prop, scope, missing edge cases |
 | fd-performance | clavain:review:fd-performance | Bottlenecks, resource usage, algorithmic complexity, scaling |
+| fd-game-design | clavain:review:fd-game-design | Balance, pacing, player psychology, feedback loops, emergent behavior |
 
 ### Cross-AI (Oracle)
 

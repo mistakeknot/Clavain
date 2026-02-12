@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 30 skills, 16 agents, 36 commands, 5 hooks, 2 MCP servers |
+| Components | 30 skills, 17 agents, 36 commands, 5 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -133,7 +133,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 - Agents are dispatched via `Task` tool — they run as subagents with their own context
 
 Categories:
-- **review/** — Review specialists (9): 6 core flux-drive agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance) — each auto-detects language and project docs. Plus plan-reviewer, agent-native-reviewer, and data-migration-expert.
+- **review/** — Review specialists (10): 7 core flux-drive agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design) — each auto-detects language and project docs. Plus plan-reviewer, agent-native-reviewer, and data-migration-expert.
 - **research/** — Information gathering (5): best practices, framework docs, git history, learnings, repo analysis
 - **workflow/** — Process automation (2): PR comments, bug reproduction
 

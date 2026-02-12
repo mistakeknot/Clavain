@@ -12,9 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
-# Agent roster — must match smoke-prompt.md (all 16 agents)
+# Agent roster — must match smoke-prompt.md (all 17 agents)
 AGENTS=(
-  # Review (9)
+  # Review (10)
   "agents/review/fd-quality.md"
   "agents/review/fd-architecture.md"
   "agents/review/fd-performance.md"
@@ -24,6 +24,7 @@ AGENTS=(
   "agents/review/plan-reviewer.md"
   "agents/review/agent-native-reviewer.md"
   "agents/review/data-migration-expert.md"
+  "agents/review/fd-game-design.md"
   # Research (5)
   "agents/research/best-practices-researcher.md"
   "agents/research/framework-docs-researcher.md"
