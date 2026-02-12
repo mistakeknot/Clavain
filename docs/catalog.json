@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-11T20:26:19Z",
+  "generated": "2026-02-12T00:23:47Z",
   "counts": {
     "skills": 30,
     "agents": 16,
-    "commands": 32,
+    "commands": 33,
     "hooks": 5,
     "mcp_servers": 2
   },
@@ -315,6 +315,10 @@
     {
       "name": "smoke-test",
       "description": "Run smoke tests against a running app \u2014 detect dev server, walk critical user journeys, report results"
+    },
+    {
+      "name": "sprint-status",
+      "description": "Deep scan of sprint workflow state \u2014 session continuity, pipeline health, plan progress, beads, and recommendations"
     },
     {
       "name": "strategy",

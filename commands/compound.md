@@ -2,7 +2,7 @@
 name: compound
 description: Document a recently solved problem to compound your team's knowledge
 argument-hint: "[optional: brief context about the fix]"
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # /compound

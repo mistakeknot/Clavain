@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 30 skills, 16 agents, 32 commands, 5 hooks, 2 MCP servers |
+| Components | 30 skills, 16 agents, 33 commands, 5 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -40,13 +40,14 @@ Clavain/
 │   ├── review/                    # 9 review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 32 slash commands
+├── commands/                      # 33 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 30 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 31 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
-│   ├── session-start.sh           # Context injection + upstream staleness warning
+│   ├── sprint-scan.sh             # Sprint awareness scanner (sourced by session-start + sprint-status)
+│   ├── session-start.sh           # Context injection + upstream staleness + sprint awareness
 │   ├── auto-compound.sh           # Auto-compound knowledge capture on Stop
 │   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
@@ -211,7 +212,7 @@ Quick validation:
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 30
 echo "Agents: $(ls agents/{review,research,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 32
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 33
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"

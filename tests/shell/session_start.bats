@@ -54,3 +54,36 @@ setup() {
     "
     assert_success
 }
+
+@test "session-start: no sprint status when clean (run from /tmp)" {
+    run bash -c "
+        curl() { return 1; }
+        pgrep() { return 1; }
+        export -f curl pgrep
+        cd /tmp && bash '$HOOKS_DIR/session-start.sh'
+    "
+    assert_success
+    echo "$output" | jq . >/dev/null 2>&1
+    assert_success
+    # Should not contain sprint status section
+    context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$context" != *"Sprint status"* ]]
+}
+
+@test "session-start: detects HANDOFF.md in sprint scan" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    touch "$tmpdir/HANDOFF.md"
+    run bash -c "
+        curl() { return 1; }
+        pgrep() { return 1; }
+        export -f curl pgrep
+        cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
+    "
+    rm -rf "$tmpdir"
+    assert_success
+    echo "$output" | jq . >/dev/null 2>&1
+    assert_success
+    context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$context" == *"HANDOFF.md found"* ]]
+}

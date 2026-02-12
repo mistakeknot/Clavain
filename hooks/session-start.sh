@@ -67,12 +67,21 @@ else
     upstream_warning="\\n\\n**No upstream baseline found.** Run \`bash scripts/upstream-check.sh --update\` in the Clavain repo to establish baseline."
 fi
 
+# Sprint awareness scan (lightweight)
+# shellcheck source=hooks/sprint-scan.sh
+source "${SCRIPT_DIR}/sprint-scan.sh"
+sprint_context=$(sprint_brief_scan 2>/dev/null) || sprint_context=""
+# sprint_brief_scan outputs \\n literals; escape any remaining JSON-unsafe chars
+if [[ -n "$sprint_context" ]]; then
+    sprint_context=$(escape_for_json "$sprint_context")
+fi
+
 # Output context injection as JSON
 cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}"
+    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}"
   }
 }
 EOF

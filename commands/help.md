@@ -74,6 +74,7 @@ These are the commands you'll use most often:
 | `/clavain:heal-skill` | Fix broken skills |
 | `/clavain:upstream-sync` | Check upstream repos for updates |
 | `/clavain:clodex-toggle` | Toggle Codex delegation mode |
+| `/clavain:sprint-status` | Deep scan of sprint workflow state and recommendations |
 | `/clavain:model-routing` | Configure model routing for agents |
 
 For the full routing guide with skills and agents, use the `using-clavain` skill.
