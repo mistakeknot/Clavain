@@ -2,7 +2,6 @@
 name: lfg
 description: Full autonomous engineering workflow — brainstorm, strategize, plan, execute, review, ship
 argument-hint: "[feature description]"
-disable-model-invocation: true
 ---
 
 Run these steps in order. Do not do anything else.

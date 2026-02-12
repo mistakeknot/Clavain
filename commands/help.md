@@ -1,7 +1,6 @@
 ---
 name: help
 description: Show Clavain commands organized by daily drivers first, then by workflow stage
-disable-model-invocation: true
 ---
 
 # Clavain Help

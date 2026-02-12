@@ -2,7 +2,6 @@
 name: strategy
 description: Structure brainstorm output into a PRD with features, create beads for tracking, and validate before detailed planning
 argument-hint: "[brainstorm doc path, or feature description if no brainstorm exists]"
-disable-model-invocation: true
 ---
 
 # Strategy

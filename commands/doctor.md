@@ -1,7 +1,6 @@
 ---
 name: doctor
 description: Quick health check — verifies MCP servers, external tools, beads, and plugin configuration without making changes
-disable-model-invocation: true
 ---
 
 # Clavain Doctor

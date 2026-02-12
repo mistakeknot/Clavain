@@ -2,7 +2,6 @@
 name: setup
 description: Bootstrap the Clavain modpack — install required plugins, disable conflicts, verify MCP servers, configure hooks
 argument-hint: "[optional: --check-only to verify without making changes]"
-disable-model-invocation: true
 ---
 
 # Clavain Modpack Setup

@@ -1,7 +1,6 @@
 ---
 name: sprint-status
 description: Deep scan of sprint workflow state — session continuity, pipeline health, plan progress, beads, and recommendations
-disable-model-invocation: true
 ---
 
 # Sprint Status

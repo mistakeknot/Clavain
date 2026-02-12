@@ -2,7 +2,6 @@
 name: smoke-test
 description: Run smoke tests against a running app — detect dev server, walk critical user journeys, report results
 argument-hint: "[URL or port, e.g. http://localhost:3000 or 8080]"
-disable-model-invocation: true
 ---
 
 # /smoke-test

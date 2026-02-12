@@ -1,7 +1,6 @@
 ---
 name: upstream-sync
 description: Use when checking for updates from upstream tool repos (beads, oracle, superpowers, compound-engineering) or when the /clavain:upstream-sync command is invoked
-disable-model-invocation: true
 ---
 
 # Upstream Sync

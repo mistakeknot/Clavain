@@ -10,7 +10,6 @@ allowed-tools:
   - Glob
   - WebFetch
   - Task
-disable-model-invocation: true
 ---
 
 # Upstream Sync

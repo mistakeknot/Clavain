@@ -1,7 +1,6 @@
 ---
 name: using-clavain
 description: Use when starting any conversation - establishes how to find and use skills, agents, and commands, requiring Skill tool invocation before ANY response including clarifying questions
-disable-model-invocation: true
 ---
 
 **Proactive skill invocation is required.** When a skill matches the current task — even partially — invoke it before responding. Skills are designed to be triggered automatically; skipping a relevant skill degrades output quality.

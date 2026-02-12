@@ -1,7 +1,6 @@
 ---
 name: beads-workflow
 description: Use when tracking work across sessions with Beads issue tracking — guides the bd CLI workflow for creating, managing, and closing issues with dependencies
-disable-model-invocation: true
 ---
 
 # Beads Workflow

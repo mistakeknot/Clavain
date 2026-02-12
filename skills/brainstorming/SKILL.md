@@ -1,7 +1,6 @@
 ---
 name: brainstorming
 description: Freeform brainstorming mode — loads collaborative dialogue style (one question at a time, multiple choice, incremental design). Use for open-ended exploration without structured phases. For a guided workflow with repo research, use /brainstorm instead.
-disable-model-invocation: true
 ---
 
 # Brainstorming Ideas Into Designs
