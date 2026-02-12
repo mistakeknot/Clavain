@@ -77,32 +77,79 @@ Launch Stage 1 agents (top 2-3 by triage score) as parallel Task calls with `run
 
 Wait for Stage 1 agents to complete (use the polling from Step 2.3).
 
-### Step 2.2b: Expansion decision
+### Step 2.2b: Domain-aware expansion decision
 
-After Stage 1 completes, read the Findings Index from each Stage 1 output file. Based on findings:
+After Stage 1 completes, read the Findings Index from each Stage 1 output file. Then use the **expansion scoring algorithm** to recommend which Stage 2 agents (and expansion pool agents) to launch.
 
-| Stage 1 Result | Action |
-|---|---|
-| Any P0 issue found | Launch ALL Stage 2 agents — need convergence data |
-| Multiple P1 issues, or agents disagree | Launch ALL Stage 2 agents for coverage |
-| Single P1 from one agent only | Launch 1-2 targeted Stage 2 agents in the flagged domain |
-| Only P2/improvements or clean | **Early stop** — Stage 1 is sufficient |
+#### Domain adjacency map
 
-Present the expansion decision to user:
+Agents with related domains. A finding in one agent's domain makes adjacent agents more valuable:
+
 ```yaml
-AskUserQuestion:
-  question: "Stage 1 complete. [brief findings summary]. Expand to Stage 2?"
-  options:
-    - label: "Launch remaining N agents (Recommended)"
-      description: "Get full coverage from Stage 2 agents"
-    - label: "Stop here"
-      description: "Stage 1 findings are sufficient"
-    - label: "Launch specific agents"
-      description: "Choose which Stage 2 agents to launch"
+adjacency:
+  fd-architecture: [fd-performance, fd-quality]
+  fd-correctness: [fd-safety, fd-performance]
+  fd-safety: [fd-correctness, fd-architecture]
+  fd-quality: [fd-architecture, fd-user-product]
+  fd-user-product: [fd-quality, fd-game-design]
+  fd-performance: [fd-architecture, fd-correctness]
+  fd-game-design: [fd-user-product, fd-correctness, fd-performance]
 ```
 
-If findings are only P2/improvements or clean, make "Stop here (Recommended)" the default first option.
-If expanding, present options appropriate to findings severity and continue with the user's choice.
+#### Expansion scoring algorithm
+
+For each Stage 2 / expansion pool agent, compute an expansion score:
+
+```
+expansion_score = 0
+
+# Severity signals (from Stage 1 findings)
+if any P0 in an adjacent agent's domain:    expansion_score += 3
+if any P1 in an adjacent agent's domain:    expansion_score += 2
+if Stage 1 agents disagree on a finding in this agent's domain: expansion_score += 2
+
+# Domain signals
+if agent has domain injection criteria for a detected domain: expansion_score += 1
+```
+
+#### Expansion decision
+
+| max(expansion_scores) | Decision |
+|---|---|
+| ≥ 3 | **RECOMMEND expansion** — present specific agents with reasoning (default first option) |
+| 2 | **OFFER expansion** — present as user's choice (no default recommendation) |
+| ≤ 1 | **RECOMMEND stop** — "Stop here" is the default first option |
+
+#### Presenting to user
+
+Use **AskUserQuestion** with reasoning about WHY each agent should be added:
+
+```yaml
+AskUserQuestion:
+  question: "Stage 1 complete. [findings summary]. [expansion reasoning]"
+  options:
+    # When recommending expansion (max score ≥ 3):
+    - label: "Launch [specific agents] (Recommended)"
+      description: "[reasoning — e.g., 'P0 in game design → fd-correctness validates simulation state']"
+    - label: "Launch all Stage 2 (N agents)"
+      description: "Full coverage from remaining agents"
+    - label: "Stop here"
+      description: "Stage 1 findings are sufficient"
+    # When offering (max score = 2):
+    - label: "Launch [specific agents]"
+      description: "[reasoning]"
+    - label: "Stop here"
+      description: "Stage 1 findings are sufficient"
+    # When recommending stop (max score ≤ 1):
+    - label: "Stop here (Recommended)"
+      description: "Only P2/improvements found — Stage 1 is sufficient"
+    - label: "Launch all Stage 2 anyway"
+      description: "Run remaining N agents for extra coverage"
+```
+
+**Example reasoning**: "Stage 1 found a P0 in game design (death spiral in storyteller). fd-correctness is adjacent to fd-game-design and has domain criteria for simulation state consistency — it could validate whether this is a code bug or design issue. Launch fd-correctness + fd-performance for Stage 2?"
+
+If the user chooses expansion, launch only the recommended agents (not all Stage 2) unless they explicitly select "Launch all."
 
 ### Step 2.2c: Stage 2 — Remaining agents (if expanded)
 
