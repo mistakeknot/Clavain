@@ -10,20 +10,24 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hooks/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
-# Clean up stale plugin cache versions (old directories AND symlinks from bump-version.sh).
-# bump-version.sh creates symlinks from old→new version so running sessions' Stop hooks
-# still work. We clean those up here at the start of the NEXT session.
+# Clean up stale plugin cache versions.
+# Strategy: replace old DIRECTORIES with symlinks to current version (so any
+# still-running session's Stop hooks resolve), then remove stale SYMLINKS that
+# already point to current (left over from a previous cleanup cycle).
 CURRENT_VERSION_DIR="$(basename "$PLUGIN_ROOT")"
 CACHE_PARENT="$(dirname "$PLUGIN_ROOT")"
 if [[ -d "$CACHE_PARENT" ]] && [[ "$CACHE_PARENT" == *"/plugins/cache/"* ]]; then
     for old_entry in "$CACHE_PARENT"/*/; do
         old_name="$(basename "$old_entry")"
         [[ "$old_name" == "$CURRENT_VERSION_DIR" ]] && continue
-        # Remove symlinks (from bump-version.sh) and stale directories
-        if [[ -L "${old_entry%/}" ]]; then
-            rm -f "${old_entry%/}" 2>/dev/null || true
-        elif [[ -d "$old_entry" ]]; then
-            rm -rf "$old_entry" 2>/dev/null || true
+        old_path="${old_entry%/}"
+        if [[ -L "$old_path" ]]; then
+            # Symlink from a previous cycle — safe to remove
+            rm -f "$old_path" 2>/dev/null || true
+        elif [[ -d "$old_path" ]]; then
+            # Real directory — replace with symlink so late Stop hooks still work
+            rm -rf "$old_path" 2>/dev/null || true
+            ln -sf "$CURRENT_VERSION_DIR" "$old_path" 2>/dev/null || true
         fi
     done
 fi
