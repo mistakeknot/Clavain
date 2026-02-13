@@ -150,12 +150,20 @@ strip_frontmatter() {
 
 generate_prompts() {
   mkdir -p "$CODEX_PROMPTS_DIR"
+  local expected="$CODEX_PROMPTS_DIR/.clavain-expected-prompts"
   local count=0
+  local removed=0
+
+  : > "$expected"
+
+  # Track currently known command names so stale wrappers can be removed.
+  # This keeps wrapper generation idempotent when commands are added/removed.
   local src
   for src in "$SOURCE_DIR"/commands/*.md; do
     [[ -f "$src" ]] || continue
     local name out
     name="$(basename "$src" .md)"
+    echo "$name" >> "$expected"
     out="$CODEX_PROMPTS_DIR/clavain-$name.md"
     {
       echo "# Clavain Command: /clavain:$name"
@@ -171,7 +179,21 @@ generate_prompts() {
     } > "$out"
     count=$((count + 1))
   done
+
+  local file cmd_name
+  for file in "$CODEX_PROMPTS_DIR"/clavain-*.md; do
+    [[ -f "$file" ]] || continue
+    cmd_name="$(basename "$file" .md)"
+    cmd_name="${cmd_name#clavain-}"
+    if [[ -n "$cmd_name" ]] && ! grep -Fxq "$cmd_name" "$expected" 2>/dev/null; then
+      rm -f "$file"
+      removed=$((removed + 1))
+    fi
+  done
+
+  rm -f "$expected"
   echo "Generated $count prompt wrappers in $CODEX_PROMPTS_DIR"
+  echo "Removed $removed stale prompt wrappers in $CODEX_PROMPTS_DIR"
 }
 
 remove_prompts() {

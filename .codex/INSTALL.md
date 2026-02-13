@@ -18,6 +18,8 @@ Enable Clavain in Codex using native skill discovery, plus optional command prom
    ```bash
    bash ~/.codex/clavain/scripts/install-codex.sh install
    ```
+   - This links skills and generates Codex wrappers under `~/.codex/prompts/clavain-*.md`.
+   - Wrapper generation is self-healing: stale wrappers for removed/renamed commands are removed.
 
 3. Restart Codex (quit and relaunch the CLI).
 
@@ -42,6 +44,14 @@ bash ~/.codex/clavain/scripts/install-codex.sh doctor
 Expected:
 - `~/.agents/skills/clavain` points to `~/.codex/clavain/skills`
 - Prompt wrappers exist in `~/.codex/prompts/clavain-*.md`
+- Stale wrapper cleanup happens automatically during install.
+
+From this repo checkout, keep Codex views fresh with:
+
+```bash
+make codex-refresh
+make codex-doctor
+```
 
 ## Update
 
