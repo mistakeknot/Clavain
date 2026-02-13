@@ -1,7 +1,7 @@
 # Plan: M1 Work Discovery — F3 Orphaned Artifact Detection + F4 Session-Start Light Scan
 
 **Bead:** Clavain-tayp (epic), Clavain-ur4f (F3), Clavain-89m5 (F4)
-**Phase:** planned (as of 2026-02-13T19:47:57Z)
+**Phase:** executing (as of 2026-02-13T19:51:30Z)
 **PRD:** docs/prds/2026-02-12-phase-gated-lfg.md
 **Date:** 2026-02-13
 
