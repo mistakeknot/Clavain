@@ -3,12 +3,24 @@
 
 set -euo pipefail
 
+# Read hook input from stdin (must happen before anything else consumes it)
+HOOK_INPUT=$(cat)
+
 # Determine plugin root directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # shellcheck source=hooks/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
+
+# Persist session_id as CLAUDE_SESSION_ID so downstream tools (interphase's
+# _gate_update_statusline) can write bead state for the statusline to read.
+if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
+    _session_id=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _session_id=""
+    if [[ -n "$_session_id" ]]; then
+        echo "export CLAUDE_SESSION_ID=${_session_id}" >> "$CLAUDE_ENV_FILE"
+    fi
+fi
 
 # Clean up stale plugin cache versions.
 # Strategy: replace old DIRECTORIES with symlinks to current version (so any
