@@ -382,15 +382,18 @@ class TestStalenessCheck:
 
     def test_tier3_fresh_when_files_older(self, tmp_path):
         """Tier 3: structural files older than detection - fresh."""
-        # Create a structural file with old mtime
+        # Create a structural file with old mtime (1 year ago)
         (tmp_path / "go.mod").write_text("module test\n", encoding="utf-8")
-        old_time = time.time() - 86400  # 1 day ago
+        old_time = time.time() - 86400 * 365  # 1 year ago
         os.utime(tmp_path / "go.mod", (old_time, old_time))
         # Write cache without hash (forces tier 2/3 path), no .git (skips tier 2)
+        # Use current time as detected_at to ensure file is clearly older
+        import datetime as dt
+        now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
         cache_path = tmp_path / "flux-drive.yaml"
         cache_path.write_text(
             f"cache_version: {CACHE_VERSION}\n"
-            f"domains:\n  - name: test\n    confidence: 0.5\ndetected_at: '2026-02-12T00:00:00+00:00'\n",
+            f"domains:\n  - name: test\n    confidence: 0.5\ndetected_at: '{now_iso}'\n",
             encoding="utf-8",
         )
         result = check_stale(tmp_path, cache_path)
