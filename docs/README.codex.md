@@ -19,7 +19,7 @@ git clone https://github.com/mistakeknot/Clavain.git ~/.codex/clavain
 bash ~/.codex/clavain/scripts/install-codex.sh install
 ```
 
-Restart Codex after install.
+Restart Codex after install. The installer is idempotent and removes stale `clavain-*.md` wrappers.
 
 If you only want skill discovery (no generated prompt wrappers):
 
@@ -32,6 +32,12 @@ From a local checkout of this repo, you can also run:
 ```bash
 make codex-refresh
 make codex-doctor
+```
+
+For unattended updates, use the new autonomous helper:
+
+```bash
+bash scripts/codex-auto-refresh.sh
 ```
 
 ## Windows (PowerShell)
@@ -75,6 +81,13 @@ Checks:
 - Skill links in `~/.agents/skills` and `~/.codex/skills`
 - Prompt wrappers in `~/.codex/prompts`
 - Codex CLI availability
+
+From this repo checkout, the preferred refresh path is:
+
+```bash
+make codex-refresh
+make codex-doctor
+```
 
 ## Update
 

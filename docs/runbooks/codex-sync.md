@@ -22,6 +22,90 @@ make codex-doctor
 
 Restart Codex after `codex-refresh`.
 
+### Autonomous refresh script
+
+Run this in automation for unattended updates:
+
+```bash
+bash ~/.codex/clavain/scripts/codex-auto-refresh.sh
+```
+
+Defaults:
+
+- Clone path: `$HOME/.codex/clavain`
+- Log file: `$HOME/.local/share/clavain/codex-refresh.log`
+
+Common overrides:
+
+```bash
+CLAVAIN_DIR="$HOME/src/clavain-codex" \
+CLAVAIN_AUTO_REFRESH_LOG="$HOME/Library/Logs/clavain-codex-refresh.log" \
+bash ~/.codex/clavain/scripts/codex-auto-refresh.sh
+```
+
+#### Cron
+
+```bash
+(crontab -l 2>/dev/null; echo "*/30 * * * * bash ~/.codex/clavain/scripts/codex-auto-refresh.sh >> ~/.local/share/clavain/cron.out 2>&1") | crontab -
+```
+
+#### systemd timer
+
+```bash
+cat > ~/.config/systemd/user/clavain-codex-refresh.service <<'EOF'
+[Unit]
+Description=Refresh Codex Clavain integration
+
+[Service]
+Type=oneshot
+ExecStart=%h/.codex/clavain/scripts/codex-auto-refresh.sh
+EOF
+
+cat > ~/.config/systemd/user/clavain-codex-refresh.timer <<'EOF'
+[Unit]
+Description=Run Clavain Codex refresh every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now clavain-codex-refresh.timer
+```
+
+#### macOS launchd
+
+```bash
+mkdir -p ~/Library/LaunchAgents
+cat > ~/Library/LaunchAgents/com.local.clavain.codex-refresh.plist <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.clavain.codex-refresh</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/bash</string>
+    <string>%h/.codex/clavain/scripts/codex-auto-refresh.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>StandardOutPath</key>
+  <string>%h/Library/Logs/clavain-codex-refresh.out</string>
+  <key>StandardErrorPath</key>
+  <string>%h/Library/Logs/clavain-codex-refresh.err</string>
+</dict>
+</plist>
+EOF
+
+launchctl load -w ~/Library/LaunchAgents/com.local.clavain.codex-refresh.plist
+```
+
 ## Daily Operator Flow
 
 1. Pull latest main:
