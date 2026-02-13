@@ -20,11 +20,12 @@ def test_lib_discovery_has_required_functions(project_root):
 
 
 def test_lib_discovery_has_sentinels(project_root):
-    """lib-discovery.sh defines DISCOVERY_UNAVAILABLE and DISCOVERY_ERROR sentinels."""
+    """lib-discovery.sh (or delegated interphase) defines DISCOVERY_UNAVAILABLE sentinel."""
     lib = project_root / "hooks" / "lib-discovery.sh"
     text = lib.read_text(encoding="utf-8")
+    # The shim provides DISCOVERY_UNAVAILABLE as a no-op stub.
+    # DISCOVERY_ERROR is only emitted by the full implementation in interphase.
     assert "DISCOVERY_UNAVAILABLE" in text, "Missing DISCOVERY_UNAVAILABLE sentinel"
-    assert "DISCOVERY_ERROR" in text, "Missing DISCOVERY_ERROR sentinel"
 
 
 def test_lfg_has_discovery_section(project_root):

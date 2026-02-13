@@ -4,7 +4,7 @@
 
 ## Overview
 
-General-purpose engineering discipline plugin for Claude Code — 30 skills, 17 agents, 37 commands, 5 hooks, 2 MCP servers.
+General-purpose engineering discipline plugin for Claude Code — 29 skills, 17 agents, 37 commands, 5 hooks, 2 MCP servers. Companion: `interphase` (phase tracking, gates, discovery).
 
 ## Quick Commands
 
@@ -13,7 +13,7 @@ General-purpose engineering discipline plugin for Claude Code — 30 skills, 17 
 claude --plugin-dir /root/projects/Clavain
 
 # Validate structure
-ls skills/*/SKILL.md | wc -l          # Should be 30
+ls skills/*/SKILL.md | wc -l          # Should be 29
 ls agents/{review,research,workflow}/*.md | wc -l  # Should be 17
 ls commands/*.md | wc -l              # Should be 37
 bash -n hooks/lib.sh                   # Syntax check
@@ -21,9 +21,8 @@ bash -n hooks/session-start.sh         # Syntax check
 bash -n hooks/dotfiles-sync.sh         # Syntax check
 bash -n hooks/auto-compound.sh         # Syntax check
 bash -n hooks/session-handoff.sh       # Syntax check
-bash -n hooks/lib-phase.sh             # Syntax check
-bash -n hooks/lib-discovery.sh         # Syntax check
-bash -n hooks/lib-gates.sh             # Syntax check
+bash -n hooks/lib-discovery.sh         # Syntax check (shim → interphase)
+bash -n hooks/lib-gates.sh             # Syntax check (shim → interphase)
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 ```
 

@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 30 skills, 17 agents, 37 commands, 5 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 29 skills, 17 agents, 37 commands, 5 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -96,7 +96,7 @@ I use this before any architectural decision I'm uncertain about. The debate its
 
 ## What's Included
 
-### Skills (30)
+### Skills (29)
 
 Skills are workflow disciplines — they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -126,7 +126,6 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `splinterpeer` | Disagreement mining — extracts model conflicts into tests, specs, and questions (interpeer mine mode) |
 | `clodex` | Codex dispatch — megaprompt, parallel delegation, debate, Oracle escalation |
 | **Knowledge & Docs** | |
-| `beads-workflow` | Git-native issue tracking via `bd` CLI |
 | `engineering-docs` | Capture solved problems as searchable docs |
 | `file-todos` | File-based todo tracking across sessions |
 | `agent-native-architecture` | Build agent-first applications |
@@ -258,7 +257,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 30 discipline skills (SKILL.md each)
+skills/       # 29 discipline skills (SKILL.md each)
 agents/       # 17 agents (review/ + research/ + workflow/)
 commands/     # 37 slash commands
 hooks/        # 5 hooks (SessionStart, Stop×2, SessionEnd, PreToolUse)

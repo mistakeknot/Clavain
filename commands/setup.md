@@ -31,6 +31,7 @@ Install these plugins from their marketplaces. Skip any already installed.
 claude plugin install interdoc@interagency-marketplace
 claude plugin install auracoil@interagency-marketplace
 claude plugin install tool-time@interagency-marketplace
+claude plugin install interphase@interagency-marketplace
 ```
 
 **From claude-plugins-official:**

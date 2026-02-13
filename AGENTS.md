@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 30 skills, 17 agents, 37 commands, 5 hooks, 2 MCP servers |
+| Components | 29 skills, 17 agents, 37 commands, 5 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -23,7 +23,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 30 discipline skills
+├── skills/                        # 29 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -210,7 +210,7 @@ When making changes, verify:
 Quick validation:
 ```bash
 # Count components
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 30
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 29
 echo "Agents: $(ls agents/{review,research,workflow}/*.md | wc -l)"
 echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 37
 
@@ -324,7 +324,7 @@ Clavain bundles knowledge from 6 actively-developed upstream tools. Two systems 
 
 | Tool | Repo | Clavain Skills Affected |
 |------|------|------------------------|
-| Beads | `steveyegge/beads` | `beads-workflow` — default backend is now Dolt (version-controlled SQL with cell-level merge); JSONL maintained for git portability; SQLite removed |
+| Beads | `steveyegge/beads` | `interphase` companion plugin — phase tracking, gates, discovery. Default backend is Dolt (version-controlled SQL with cell-level merge); JSONL maintained for git portability; SQLite removed |
 | Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
 | superpowers | `obra/superpowers` | Multiple (founding source) |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |

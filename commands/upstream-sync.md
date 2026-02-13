@@ -72,7 +72,7 @@ Every upstream-sync PR must include a decision record:
 
 | Tool | GitHub Repo | Clavain Skill |
 |------|-------------|---------------|
-| Beads | `steveyegge/beads` | `beads-workflow` |
+| Beads | `steveyegge/beads` | `interphase` companion plugin |
 | Oracle | `steipete/oracle` | `interpeer` (references/) |
 | superpowers | `obra/superpowers` | multiple |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |

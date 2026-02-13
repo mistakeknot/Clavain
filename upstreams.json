@@ -6,13 +6,8 @@
       "branch": "main",
       "lastSyncedCommit": "4a904961367d2ee66b70bee3a4e2095645203d74",
       "basePath": "",
-      "fileMap": {
-        "claude-plugin/skills/beads/SKILL.md": "skills/beads-workflow/SKILL.md",
-        "claude-plugin/skills/beads/README.md": "skills/beads-workflow/references/upstream-readme.md",
-        "claude-plugin/skills/beads/CLAUDE.md": "skills/beads-workflow/references/upstream-claude.md",
-        "claude-plugin/skills/beads/resources/*": "skills/beads-workflow/references/*",
-        "claude-plugin/skills/beads/adr/*": "skills/beads-workflow/references/adr/*"
-      }
+      "fileMap": {}
+
     },
     {
       "name": "oracle",

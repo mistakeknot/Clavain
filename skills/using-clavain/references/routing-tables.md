@@ -26,7 +26,7 @@ For the compact version, see the `using-clavain` skill.
 | **Deploy** | — | fd-safety |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
-| **Workflow** | file-todos, beads-workflow, slack-messaging, clodex | pr-comment-resolver, sprint-status |
+| **Workflow** | file-todos, slack-messaging, clodex | pr-comment-resolver, sprint-status |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
 

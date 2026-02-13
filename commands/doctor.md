@@ -39,6 +39,17 @@ else
 fi
 ```
 
+### 3b. Beads Lifecycle Companion
+
+```bash
+if ls ~/.claude/plugins/cache/*/interphase/*/hooks/lib-gates.sh 2>/dev/null | head -1 >/dev/null; then
+  echo "interphase: installed"
+else
+  echo "interphase: not installed (phase tracking disabled)"
+  echo "  Install: claude plugin install interphase@interagency-marketplace"
+fi
+```
+
 ### 4. Conflicting Plugins
 
 Check that known conflicting plugins are disabled:
@@ -90,6 +101,7 @@ qmd           [PASS|WARN: not installed]
 oracle        [installed|not found]
 codex         [installed|not found]
 beads         [OK (N open, M closed)|not initialized]
+interphase [installed|not installed]
 conflicts     [clear|WARN: N active]
 version       v0.X.Y
 ──────────────────────────────────

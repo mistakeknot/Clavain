@@ -1,7 +1,7 @@
 {
   "name": "clavain",
-  "version": "0.4.53",
-  "description": "General-purpose engineering discipline rig — 17 agents, 37 commands, 30 skills, 2 MCP servers. Combines workflow discipline with specialized execution agents.",
+  "version": "0.5.0",
+  "description": "General-purpose engineering discipline rig — 17 agents, 37 commands, 29 skills, 2 MCP servers. Combines workflow discipline with specialized execution agents. Companion: interphase.",
   "author": "mistakeknot",
   "license": "MIT",
   "repository": "mistakeknot/Clavain",

@@ -18,7 +18,7 @@ VERSIONS_FILE="${REPO_ROOT}/docs/upstream-versions.json"
 # Upstream repos to track
 # Format: "owner/repo|skill1,skill2,..."
 UPSTREAMS=(
-  "steveyegge/beads|beads-workflow"
+  "steveyegge/beads|interphase (companion plugin)"
   "steipete/oracle|oracle-review"
   "obra/superpowers|multiple (founding source)"
   "obra/superpowers-lab|using-tmux-for-interactive-commands,slack-messaging,mcp-cli,finding-duplicate-functions"
