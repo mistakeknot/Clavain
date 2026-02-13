@@ -24,7 +24,7 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
    - **Options 2-3:** Next highest-ranked beads, same label format.
    - **Second-to-last option:** `"Start fresh brainstorm"` — proceeds to Step 1 below.
    - **Last option:** `"Show full backlog"` — runs `/clavain:sprint-status`.
-   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm", create_bead → "Link orphan:"
+   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm", ship → "Ship", closed → "Closed", create_bead → "Link orphan:"
    - **Orphan entries** (action: "create_bead", id: null): Label format: `"Link orphan: <title> (<type>)"`. These are untracked artifacts in docs/ that have no bead. Description: "Create a bead and link it to this artifact."
 
 4. **Pre-flight check** (guards against stale scan results): Before routing, verify the selected bead still exists:
@@ -41,6 +41,8 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
    - `plan` → `/clavain:write-plan`
    - `strategize` → `/clavain:strategy`
    - `brainstorm` → `/clavain:brainstorm`
+   - `ship` → `/clavain:quality-gates` (bead is in shipping phase — run final gates)
+   - `closed` → Tell user "This bead is already done" and re-run discovery
    - `create_bead` (orphan artifact) → Create bead and link:
      1. Run `bd create --title="<artifact title>" --type=task --priority=3` and capture the new bead ID from stdout
      2. **Validate** the bead ID matches format `[A-Za-z]+-[a-z0-9]+`. If `bd create` failed or returned invalid output, tell the user "Failed to create bead — try `bd create` manually" and stop.
@@ -58,7 +60,14 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
 
 8. **After routing to a command, stop.** Do NOT continue to Step 1 — the routed command handles the workflow from here.
 
-If invoked WITH arguments (`$ARGUMENTS` is not empty), skip discovery and proceed directly to Step 1.
+If invoked WITH arguments (`$ARGUMENTS` is not empty):
+- **If `$ARGUMENTS` matches a bead ID** (format: `[A-Za-z]+-[a-z0-9]+`):
+  ```bash
+  # Verify bead exists
+  bd show "$ARGUMENTS" 2>/dev/null
+  ```
+  If valid: set `CLAVAIN_BEAD_ID="$ARGUMENTS"`, read its phase with `phase_get`, call `infer_bead_action` to determine the action, then route per step 6 above. If `bd show` fails: tell user "Bead not found" and proceed to Step 1.
+- **Otherwise**: Treat `$ARGUMENTS` as a feature description and proceed directly to Step 1.
 
 ---
 
@@ -106,6 +115,15 @@ If flux-drive finds P0/P1 issues, stop and address them before proceeding to exe
 
 ## Step 5: Execute
 
+**Gate check:** Before executing, enforce the gate:
+```bash
+GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+if ! enforce_gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
+    echo "Gate blocked: plan must be reviewed first. Run /clavain:flux-drive on the plan, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
+    # Stop — do NOT proceed to execution
+fi
+```
+
 Run `/clavain:work <plan-file-from-step-3>`
 
 **Phase:** At the START of execution (before work begins), set `phase=executing` with reason `"Executing: <plan_path>"`.
@@ -130,7 +148,16 @@ Run the project's test suite and linting before proceeding to review:
 
 **Parallel opportunity:** Quality gates and resolve can overlap — quality-gates spawns review agents while resolve addresses already-known findings. If you have known TODOs from execution, start `/clavain:resolve` in parallel with quality-gates.
 
-**Phase:** After quality gates PASS, set `phase=shipping` with reason `"Quality gates passed"`. Do NOT set if gates FAIL.
+**Gate check + Phase:** After quality gates PASS, enforce the shipping gate before recording:
+```bash
+GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+if ! enforce_gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
+    echo "Gate blocked: review findings are stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
+    # Do NOT advance to shipping — stop and tell user
+fi
+advance_phase "$CLAVAIN_BEAD_ID" "shipping" "Quality gates passed" ""
+```
+Do NOT set the phase if gates FAIL.
 
 ## Step 8: Resolve Issues
 

@@ -47,12 +47,16 @@ This command takes a work document (plan, specification, or todo file) and execu
    - Include testing and quality check tasks
    - Keep tasks specific and completable
 
-### Phase 1b: Record Phase
+### Phase 1b: Gate Check + Record Phase
 
-Before starting execution, record the phase transition:
+Before starting execution, enforce the gate (requires plan-reviewed for P0/P1 beads):
 ```bash
 GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID=$(phase_infer_bead "<input_document_path>")
+if ! enforce_gate "$BEAD_ID" "executing" "<input_document_path>"; then
+    echo "Gate blocked: run /clavain:flux-drive on the plan first, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
+    # Stop and tell user — do NOT proceed to execution
+fi
 advance_phase "$BEAD_ID" "executing" "Executing: <input_document_path>" "<input_document_path>"
 ```
 
