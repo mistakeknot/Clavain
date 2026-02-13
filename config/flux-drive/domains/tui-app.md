@@ -73,6 +73,10 @@ These are domain-specific agents that `/flux-gen` can generate for TUI app proje
 
 Focus: Render performance, ANSI output correctness, terminal compatibility, visual regression testing.
 
+Persona: You are a terminal rendering specialist — you care about smooth updates, minimal flicker, and correct behavior across terminal emulators from xterm to Windows Terminal.
+
+Decision lens: Prefer rendering correctness across terminals over visual polish on one. A beautiful TUI that breaks on tmux helps nobody.
+
 Key review areas:
 - Check renderer updates only dirty regions and avoids full-screen redraws when unnecessary.
 - Verify ANSI escape sequences render correctly across supported terminal emulators without state corruption.
@@ -83,6 +87,10 @@ Key review areas:
 ### fd-interaction-design
 
 Focus: Key binding consistency, focus management, navigation patterns, accessibility in terminal context.
+
+Persona: You are a TUI interaction designer — you ensure keyboard navigation is intuitive, focus management is predictable, and accessibility isn't an afterthought.
+
+Decision lens: Prefer keyboard-navigable, accessible interactions over mouse-friendly visual layouts. TUI users chose the terminal for a reason.
 
 Key review areas:
 - Check keymaps cover primary actions and flag conflicting bindings before release.
