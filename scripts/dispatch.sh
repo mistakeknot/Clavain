@@ -449,9 +449,106 @@ fi
 
 # Write dispatch state file for statusline visibility
 STATE_FILE="/tmp/clavain-dispatch-$$.json"
-trap 'rm -f "$STATE_FILE"' EXIT INT TERM
-printf '{"name":"%s","workdir":"%s","started":%d}\n' \
-  "${NAME:-codex}" "${WORKDIR:-.}" "$(date +%s)" > "$STATE_FILE"
+SUMMARY_FILE=""
+if [[ -n "$OUTPUT" ]]; then
+  SUMMARY_FILE="${OUTPUT}.summary"
+fi
+trap 'rm -f "$STATE_FILE" "${STATE_FILE}.tmp"' EXIT INT TERM
 
-# Execute (not exec — need bash alive for trap cleanup)
-"${CMD[@]}"
+# Validate state file path is writable
+if ! touch "$STATE_FILE" 2>/dev/null; then
+  echo "Error: Cannot write to $STATE_FILE (check /tmp permissions and disk space)" >&2
+  exit 1
+fi
+
+STARTED_TS="$(date +%s)"
+
+# Initial state
+printf '{"name":"%s","workdir":"%s","started":%d,"activity":"starting","turns":0,"commands":0,"messages":0}\n' \
+  "${NAME:-codex}" "${WORKDIR:-.}" "$STARTED_TS" > "$STATE_FILE"
+
+# Check if gawk is available for JSONL streaming (match() with capture groups + systime() are gawk extensions)
+HAS_GAWK=false
+if awk --version 2>&1 | grep -q 'GNU Awk'; then
+  HAS_GAWK=true
+fi
+
+# Awk JSONL parser: reads events from codex --json stdout, updates state file with
+# activity type and counters, accumulates stats for summary.
+# Skips non-JSON lines (Codex emits WARNING/ERROR lines to stdout when --json is used).
+# Uses simple gawk regex matching — no JSON library needed for top-level fields.
+# Assumes Codex JSONL uses unescaped enum strings for "type" field (safe per Codex schema).
+_jsonl_parser() {
+  local state_file="$1" name="$2" workdir="$3" started="$4" summary_file="$5"
+  awk -v sf="$state_file" -v name="$name" -v wd="$workdir" -v st="$started" -v smf="$summary_file" '
+    BEGIN { turns=0; cmds=0; msgs=0; in_tok=0; out_tok=0; activity="starting" }
+
+    # Skip non-JSON lines (stderr noise from Codex)
+    !/^\{/ { next }
+
+    {
+      line = $0
+      # Extract top-level "type" value
+      ev = ""; match(line, /"type":"([^"]+)"/, a); if (RSTART) ev = a[1]
+
+      if (ev == "turn.started") {
+        turns++; activity = "thinking"
+      }
+      else if (ev == "item.started") {
+        # Check item.type with field-boundary matching to avoid false positives
+        if (match(line, /"item":\{[^}]*"type":"command_execution"/)) activity = "running command"
+      }
+      else if (ev == "item.completed") {
+        if (match(line, /"item":\{[^}]*"type":"command_execution"/)) cmds++
+        else if (match(line, /"item":\{[^}]*"type":"agent_message"/)) { msgs++; activity = "writing" }
+      }
+      else if (ev == "turn.completed") {
+        # Extract token counts
+        match(line, /"input_tokens":([0-9]+)/, t); if (RSTART) in_tok += t[1]+0
+        match(line, /"output_tokens":([0-9]+)/, t); if (RSTART) out_tok += t[1]+0
+        activity = "thinking"
+      }
+
+      # Atomic state file update: write to temp, then rename
+      tmp = sf ".tmp"
+      printf "{\"name\":\"%s\",\"workdir\":\"%s\",\"started\":%d,\"activity\":\"%s\",\"turns\":%d,\"commands\":%d,\"messages\":%d}\n", \
+        name, wd, st, activity, turns, cmds, msgs > tmp
+      close(tmp)
+      system("mv " tmp " " sf)
+    }
+
+    END {
+      if (smf != "") {
+        elapsed = systime() - st
+        mins = int(elapsed / 60)
+        secs = elapsed % 60
+        printf "Dispatch: %s\nDuration: %dm %ds\nTurns: %d | Commands: %d | Messages: %d\nTokens: %d in / %d out\n", \
+          name, mins, secs, turns, cmds, msgs, in_tok, out_tok > smf
+        close(smf)
+      }
+    }
+  '
+}
+
+if [[ "$HAS_GAWK" == true ]]; then
+  # Add --json to capture JSONL stream, pipe through parser
+  CMD+=(--json)
+
+  # Execute: pipe stdout through parser, capture exit code immediately
+  "${CMD[@]}" | _jsonl_parser "$STATE_FILE" "${NAME:-codex}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+  CODEX_EXIT="${PIPESTATUS[0]}"
+
+  # Write summary from bash if awk didn't (fallback for short/failed runs)
+  if [[ -n "$SUMMARY_FILE" && ! -f "$SUMMARY_FILE" ]]; then
+    ELAPSED=$(( $(date +%s) - STARTED_TS ))
+    MINS=$(( ELAPSED / 60 ))
+    SECS=$(( ELAPSED % 60 ))
+    printf 'Dispatch: %s\nDuration: %dm %ds\n' "${NAME:-codex}" "$MINS" "$SECS" > "$SUMMARY_FILE"
+  fi
+
+  exit "$CODEX_EXIT"
+else
+  # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
+  echo "Note: gawk not found — running without live statusline updates" >&2
+  "${CMD[@]}"
+fi
