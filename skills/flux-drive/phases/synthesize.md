@@ -191,12 +191,77 @@ Present the synthesis report using this exact structure. Fill in each section fr
 
 [If this is the first flux-drive run on this project (config/flux-drive/knowledge/ was empty):]
 *First review on this project — building knowledge base for future reviews.*
+
+### Beads Created
+[Populated by Step 3.6. If beads not configured: "*Beads not configured — run `bd init` to enable.*"]
 ```
 
 **After the report**, suggest next steps based on the verdict:
 - **risky**: "Consider addressing P0 findings before proceeding. Run `/clavain:resolve` to auto-fix."
 - **needs-changes**: "Review P1 findings. Run `/clavain:flux-drive` again after changes to verify."
 - **safe**: "No blocking issues found. Individual reports available for detailed review."
+
+### Step 3.6: Create Beads from Findings
+
+After presenting the report, create beads issues to track actionable findings. This ensures review work isn't lost.
+
+**Prerequisite check**: Run `test -d {PROJECT_ROOT}/.beads && echo "beads"`. If `.beads/` doesn't exist, skip this step entirely — beads isn't set up for this project.
+
+#### What becomes a bead
+
+| Severity | Action | Priority |
+|----------|--------|----------|
+| P0 | Always create bead | `--priority=0` |
+| P1 | Always create bead | `--priority=1` |
+| P2 | Create bead if ≤5 total findings (otherwise skip noise) | `--priority=2` |
+| IMP | Do not create beads (improvements are suggestions, not tracked work) | — |
+
+#### Creating beads
+
+For each qualifying finding, run:
+
+```bash
+bd create --title="[fd] {finding_title}" --type=task --priority={priority} \
+  --description="From flux-drive review of {INPUT_STEM} ({YYYY-MM-DD}).
+
+Agent: {agent_name}
+Section: {section}
+Severity: {severity}
+Convergence: {N}/{M} agents
+
+{1-2 sentence summary of the finding and recommended fix}
+
+Review output: {OUTPUT_DIR}/{agent-name}.md"
+```
+
+**Naming convention**: Prefix titles with `[fd]` so beads from flux-drive reviews are easy to filter.
+
+**Deduplication**: Before creating a bead, search for existing open beads with similar titles:
+```bash
+bd list --status=open 2>/dev/null | grep -i "{key_phrase}"
+```
+If a matching bead already exists, skip creation and note: "Existing bead {ID} covers this finding."
+
+**Grouping**: If multiple findings are closely related (e.g., same root cause flagged by different agents), create ONE bead that references all findings rather than N separate beads.
+
+#### Report beads in output
+
+After creating beads, append to the Step 3.5 report:
+
+```markdown
+### Beads Created
+| Bead ID | Priority | Title |
+|---------|----------|-------|
+| {id} | P{n} | {title} |
+
+{N} beads created from {M} findings. Use `bd list --status=open` to see all.
+```
+
+If `.beads/` didn't exist, append instead:
+```markdown
+### Beads
+*Beads not configured for this project. Run `bd init` to enable issue tracking from reviews.*
+```
 
 ---
 
