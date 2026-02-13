@@ -42,10 +42,11 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
    - `strategize` → `/clavain:strategy`
    - `brainstorm` → `/clavain:brainstorm`
    - `create_bead` (orphan artifact) → Create bead and link:
-     1. Run `bd create --title="<artifact title>" --type=task --priority=3` and capture the new bead ID
-     2. Insert `**Bead:** <new-id>` on line 2 of the artifact file (after the `# Title` heading). Use the Edit tool: old_string = first line of file, new_string = first line + newline + `**Bead:** <new-id>`
-     3. Set `CLAVAIN_BEAD_ID` to the new bead ID
-     4. Route based on artifact type: brainstorm → `/clavain:strategy`, prd → `/clavain:write-plan`, plan → `/clavain:work <plan_path>`
+     1. Run `bd create --title="<artifact title>" --type=task --priority=3` and capture the new bead ID from stdout
+     2. **Validate** the bead ID matches format `[A-Za-z]+-[a-z0-9]+`. If `bd create` failed or returned invalid output, tell the user "Failed to create bead — try `bd create` manually" and stop.
+     3. Insert `**Bead:** <new-id>` on line 2 of the artifact file (after the `# Title` heading). Use the Edit tool: old_string = first line of file, new_string = first line + newline + `**Bead:** <new-id>`
+     4. Set `CLAVAIN_BEAD_ID` to the new bead ID
+     5. Route based on artifact type: brainstorm → `/clavain:strategy`, prd → `/clavain:write-plan`, plan → `/clavain:work <plan_path>`
    - "Start fresh brainstorm" → proceed to Step 1
    - "Show full backlog" → `/clavain:sprint-status`
 
