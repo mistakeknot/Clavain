@@ -114,12 +114,25 @@ if [[ -n "$sprint_context" ]]; then
     sprint_context=$(escape_for_json "$sprint_context")
 fi
 
+# Work discovery brief scan (interphase companion — beads-based work state)
+# Source the discovery shim which delegates to interphase if available.
+# If interphase is not installed, discovery_brief_scan won't be defined → silent skip.
+discovery_context=""
+# shellcheck source=hooks/lib-discovery.sh
+source "${SCRIPT_DIR}/lib-discovery.sh" 2>/dev/null || true
+if type discovery_brief_scan &>/dev/null; then
+    discovery_context=$(discovery_brief_scan 2>/dev/null) || discovery_context=""
+    if [[ -n "$discovery_context" ]]; then
+        discovery_context="\\n• $(escape_for_json "$discovery_context")"
+    fi
+fi
+
 # Output context injection as JSON
 cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}"
+    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}"
   }
 }
 EOF

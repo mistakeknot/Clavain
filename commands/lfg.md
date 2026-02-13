@@ -24,13 +24,15 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
    - **Options 2-3:** Next highest-ranked beads, same label format.
    - **Second-to-last option:** `"Start fresh brainstorm"` — proceeds to Step 1 below.
    - **Last option:** `"Show full backlog"` — runs `/clavain:sprint-status`.
-   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm"
+   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm", create_bead → "Link orphan:"
+   - **Orphan entries** (action: "create_bead", id: null): Label format: `"Link orphan: <title> (<type>)"`. These are untracked artifacts in docs/ that have no bead. Description: "Create a bead and link it to this artifact."
 
 4. **Pre-flight check** (guards against stale scan results): Before routing, verify the selected bead still exists:
    ```bash
    bd show <selected_bead_id> 2>/dev/null
    ```
    If `bd show` fails (bead was closed/deleted since scan), tell the user "That bead is no longer available" and re-run discovery from step 1.
+   **Skip this check for orphan entries** (action: "create_bead") — they have no bead ID yet.
 
 5. **Set bead context** for phase tracking: remember the selected bead ID as `CLAVAIN_BEAD_ID` for this session. All subsequent workflow commands use this to record phase transitions.
 
@@ -39,6 +41,11 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
    - `plan` → `/clavain:write-plan`
    - `strategize` → `/clavain:strategy`
    - `brainstorm` → `/clavain:brainstorm`
+   - `create_bead` (orphan artifact) → Create bead and link:
+     1. Run `bd create --title="<artifact title>" --type=task --priority=3` and capture the new bead ID
+     2. Insert `**Bead:** <new-id>` on line 2 of the artifact file (after the `# Title` heading). Use the Edit tool: old_string = first line of file, new_string = first line + newline + `**Bead:** <new-id>`
+     3. Set `CLAVAIN_BEAD_ID` to the new bead ID
+     4. Route based on artifact type: brainstorm → `/clavain:strategy`, prd → `/clavain:write-plan`, plan → `/clavain:work <plan_path>`
    - "Start fresh brainstorm" → proceed to Step 1
    - "Show full backlog" → `/clavain:sprint-status`
 
