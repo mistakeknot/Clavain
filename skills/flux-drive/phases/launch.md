@@ -50,7 +50,7 @@ Before launching agents, retrieve relevant knowledge entries for each selected a
 
 ### Step 2.1a: Load domain-specific review criteria
 
-**Skip this step if Step 1.0a detected no domains** (document profile shows "none detected").
+**Skip this step if Step 1.0.1 detected no domains** (document profile shows "none detected").
 
 For each detected domain (from the Document Profile's `Project domains` field), load the corresponding domain profile and extract per-agent injection criteria:
 
@@ -298,7 +298,7 @@ No prior knowledge available for this review domain.
 
 ## Domain Context
 
-[If domains were detected in Step 1.0a AND Step 2.1a extracted criteria for this agent:]
+[If domains were detected in Step 1.0.1 AND Step 2.1a extracted criteria for this agent:]
 
 This project is classified as: {domain1} ({confidence1}), {domain2} ({confidence2}), ...
 

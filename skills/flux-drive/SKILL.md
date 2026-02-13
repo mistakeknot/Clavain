@@ -64,7 +64,7 @@ OUTPUT_DIR    = {PROJECT_ROOT}/docs/research/flux-drive/{INPUT_STEM}
 
 A document-codebase divergence is itself a P0 finding — every agent should be told about it.
 
-### Step 1.0a: Classify Project Domain
+### Step 1.0.1: Classify Project Domain
 
 Detect the project's domain(s) using signals from `config/flux-drive/domains/index.yaml`. This runs once per project and is cached.
 
@@ -87,7 +87,76 @@ The script reads `config/flux-drive/domains/index.yaml`, scans directories/files
 
 **Performance budget:** This step should take <10 seconds. Use `ls` and targeted `grep`, not recursive find. Skip keyword scanning if directory+file+framework signals already exceed min_confidence for at least one domain.
 
-**Output:** The detected domains feed into Step 1.1 (document profile), Step 1.2 (agent scoring with domain bonuses), and Step 2.1a (domain-specific review criteria injection into agent prompts).
+**Output:** The detected domains feed into Step 1.0.2 (staleness check), Step 1.1 (document profile), Step 1.2 (agent scoring with domain bonuses), and Step 2.1a (domain-specific review criteria injection into agent prompts).
+
+### Step 1.0.2: Check Staleness (pure, no side effects)
+
+Check if the cached domain detection results are outdated due to structural project changes. This uses a three-tier strategy (hash → git → mtime) that completes in <100ms for the common case.
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-domains.py {PROJECT_ROOT} --check-stale
+```
+
+Exit codes:
+- **0** → Cache is fresh, use cached domains. Proceed to Step 1.1.
+- **3** → Cache is stale (structural changes detected). Proceed to Step 1.0.3.
+- **4** → No cache exists (first run or deleted). Proceed to Step 1.0.3.
+- **1** → No domains detected. Skip agent generation entirely. Proceed to Step 1.1.
+- **2** → Script error. Log warning: "Domain detection unavailable (detect-domains.py error). Agent auto-generation skipped. Run /flux-gen manually. Proceeding with core agents only." Proceed to Step 1.1.
+
+### Step 1.0.3: Re-detect and Compare (writes cache only)
+
+When staleness is detected (exit 3) or no cache exists (exit 4):
+
+1. Read previous domains from cache (if any) before re-detection.
+
+2. Re-run detection:
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-domains.py {PROJECT_ROOT} --no-cache --json
+   ```
+   - If exit 1 (no domains): log "No domains detected." Proceed to Step 1.1.
+   - If exit 2 (error): log error, proceed to Step 1.1.
+
+3. Compare new domain list to previous:
+   - Domains unchanged → proceed to Step 1.0.4 (check agents only)
+   - Domains changed → log: "Domain shift: [old] → [new]". Proceed to Step 1.0.4 with change flag set.
+
+### Step 1.0.4: Agent Generation (writes agent files)
+
+Auto-generate project-specific agents when domains are detected but agents are missing. This step is silent (no AskUserQuestion) — it runs non-interactively within the flux-drive pipeline.
+
+1. **Validate domain profiles exist:**
+   For each detected domain, check that `${CLAUDE_PLUGIN_ROOT}/config/flux-drive/domains/{domain}.md` exists AND has an `## Agent Specifications` section.
+   - If profile missing: log warning, remove domain from generation list.
+   - If ALL profiles missing: log error, suggest `--no-cache` re-detect. Skip generation.
+
+2. **Check for existing project agents:**
+   ```bash
+   ls {PROJECT_ROOT}/.claude/agents/fd-*.md 2>/dev/null
+   ```
+
+3. **Decision matrix:**
+   a. Agents exist AND domains unchanged → skip generation. Report "up to date."
+   b. Agents exist AND domains changed →
+      - Identify orphaned agents (domain removed) via YAML frontmatter check: parse `generated_by: flux-gen` and `domain:` fields
+      - Identify missing agents (new domain added)
+      - Log: "Domain shift: N new agents needed, M agents orphaned."
+      - Generate only missing agents (don't touch existing)
+   c. No agents exist AND domains detected →
+      - Log: "Generating project agents for [domain1, domain2]..."
+      - Generate agents using the template from `/flux-gen` Step 4 (including YAML frontmatter with `generated_by`, `domain`, `generated_at`, `flux_gen_version`)
+
+4. **Track generation status per agent:**
+   - On success: report agent name and focus line
+   - On failure: log error with reason
+   - After loop: "Generated N of M agents. K failed."
+   - If any failed: list failures with reasons. Do NOT abort flux-drive.
+
+5. **Report summary:**
+   ```
+   Domain check: game-simulation (0.65) — fresh (scanned 2026-02-09)
+   Project agents: 2 exist, 1 generated, 0 failed
+   ```
 
 ### Step 1.1: Analyze the Document
 
@@ -103,7 +172,7 @@ Document Profile:
 - Languages: [from codebase, not just the document]
 - Frameworks: [from codebase, not just the document]
 - Domains touched: [architecture, security, performance, UX, data, API, etc.]
-- Project domains: [from Step 1.0a — e.g., "game-simulation (0.65), cli-tool (0.35)" or "none detected"]
+- Project domains: [from Step 1.0.1 — e.g., "game-simulation (0.65), cli-tool (0.35)" or "none detected"]
 - Technologies: [specific tech mentioned]
 - Divergence: [none | description — only for documents that describe code]
 - Key codebase files: [list 3-5 actual files agents should read]
@@ -125,7 +194,7 @@ Diff Profile:
 - Binary files: [list any binary file changes]
 - Languages detected: [from file extensions in the diff]
 - Domains touched: [architecture, security, performance, UX, data, API, etc.]
-- Project domains: [from Step 1.0a — e.g., "game-simulation (0.65), cli-tool (0.35)" or "none detected"]
+- Project domains: [from Step 1.0.1 — e.g., "game-simulation (0.65), cli-tool (0.35)" or "none detected"]
 - Renamed files: [list of old → new renames]
 - Key files: [top 5 files by change size]
 - Commit message: [if available from diff header]
@@ -162,7 +231,7 @@ Before scoring, eliminate agents that cannot plausibly score ≥1 based on the d
 
 **For file and directory inputs (continued):**
 
-4. **Game filter**: Skip fd-game-design unless Step 1.0a detected `game-simulation` domain OR the document/project mentions game, simulation, AI behavior, storyteller, balance, procedural generation, tick loop, needs/mood systems, or drama management.
+4. **Game filter**: Skip fd-game-design unless Step 1.0.1 detected `game-simulation` domain OR the document/project mentions game, simulation, AI behavior, storyteller, balance, procedural generation, tick loop, needs/mood systems, or drama management.
 
 **For diff inputs** (use `config/flux-drive/diff-routing.md` patterns):
 
@@ -199,7 +268,7 @@ Score Components:
 
 **Project bonus** (+0 or +1): Plugin Agents get +1 when the target project has CLAUDE.md/AGENTS.md (they auto-detect and use codebase-aware mode). Project Agents get +1 (project-specific by definition).
 
-**Domain boost** (+0, +1, or +2; applied only when base score ≥ 1): When Step 1.0a detected a project domain, check each agent's injection criteria in the corresponding domain profile (`config/flux-drive/domains/*.md`):
+**Domain boost** (+0, +1, or +2; applied only when base score ≥ 1): When Step 1.0.1 detected a project domain, check each agent's injection criteria in the corresponding domain profile (`config/flux-drive/domains/*.md`):
 - Agent has injection criteria with ≥3 bullets for this domain → +2
 - Agent has injection criteria (1-2 bullets) for this domain → +1
 - Agent has no injection criteria for this domain → +0
