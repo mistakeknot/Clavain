@@ -295,6 +295,81 @@ class TestTier1:
         assert _check_stale_tier1(tmp_path, cache) == 3
 
 
+class TestTier2:
+    """Tier 2: Git-based staleness checks."""
+
+    @staticmethod
+    def _init_git_repo(path):
+        """Initialize a git repo with an initial commit."""
+        subprocess.run(["git", "init", str(path)], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(path), "config", "user.email", "test@test.com"], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(path), "config", "user.name", "Test"], capture_output=True, check=True)
+        (path / "README.md").write_text("init")
+        subprocess.run(["git", "-C", str(path), "add", "."], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(path), "commit", "-m", "init"], capture_output=True, check=True)
+
+    def test_no_git_returns_none(self, tmp_path):
+        """No .git directory → None (try next tier)."""
+        cache = {"detected_at": "2020-01-01T00:00:00+00:00"}
+        assert _check_stale_tier2(tmp_path, cache) is None
+
+    def test_no_timestamp_returns_3(self, tmp_path):
+        """Missing/invalid detected_at → stale."""
+        self._init_git_repo(tmp_path)
+        cache = {"detected_at": ""}
+        assert _check_stale_tier2(tmp_path, cache) == 3
+
+    def test_structural_file_commit_returns_3(self, tmp_path):
+        """Committing a structural file after detected_at → stale."""
+        self._init_git_repo(tmp_path)
+        # detected_at = before the structural change
+        detected_at = dt.datetime.now(dt.timezone.utc).isoformat()
+        # Wait briefly to ensure git log --since picks up the new commit
+        time.sleep(0.1)
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        subprocess.run(["git", "-C", str(tmp_path), "add", "package.json"], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "add package.json"], capture_output=True, check=True)
+        cache = {"detected_at": detected_at}
+        assert _check_stale_tier2(tmp_path, cache) == 3
+
+    def test_non_structural_commit_returns_0(self, tmp_path):
+        """Committing only non-structural files → fresh."""
+        self._init_git_repo(tmp_path)
+        detected_at = dt.datetime.now(dt.timezone.utc).isoformat()
+        time.sleep(0.1)
+        (tmp_path / "main.py").write_text("print('hello')")
+        subprocess.run(["git", "-C", str(tmp_path), "add", "main.py"], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "add main.py"], capture_output=True, check=True)
+        cache = {"detected_at": detected_at}
+        assert _check_stale_tier2(tmp_path, cache) == 0
+
+    def test_no_commits_since_detection_returns_0(self, tmp_path):
+        """No commits since detected_at → fresh."""
+        self._init_git_repo(tmp_path)
+        time.sleep(0.1)
+        detected_at = dt.datetime.now(dt.timezone.utc).isoformat()
+        cache = {"detected_at": detected_at}
+        assert _check_stale_tier2(tmp_path, cache) == 0
+
+    def test_structural_extension_commit_returns_3(self, tmp_path):
+        """Committing a file with structural extension (.gd, etc.) → stale."""
+        self._init_git_repo(tmp_path)
+        detected_at = dt.datetime.now(dt.timezone.utc).isoformat()
+        time.sleep(0.1)
+        (tmp_path / "player.gd").write_text("extends Node")
+        subprocess.run(["git", "-C", str(tmp_path), "add", "player.gd"], capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "add godot script"], capture_output=True, check=True)
+        cache = {"detected_at": detected_at}
+        assert _check_stale_tier2(tmp_path, cache) == 3
+
+    def test_git_timeout_returns_none(self, tmp_path):
+        """Git timeout → None (fall to tier 3)."""
+        self._init_git_repo(tmp_path)
+        cache = {"detected_at": "2026-01-01T00:00:00+00:00"}
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("git", 5)):
+            assert _check_stale_tier2(tmp_path, cache) is None
+
+
 class TestTier3:
     def test_old_file_fresh(self, tmp_path):
         """Structural file older than detected_at → fresh."""
