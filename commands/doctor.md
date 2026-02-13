@@ -50,6 +50,17 @@ else
 fi
 ```
 
+### 3c. Statusline Companion
+
+```bash
+if ls ~/.claude/plugins/cache/*/interline/*/scripts/statusline.sh 2>/dev/null | head -1 >/dev/null; then
+  echo "interline: installed"
+else
+  echo "interline: not installed (statusline rendering unavailable)"
+  echo "  Install: claude plugin install interline@interagency-marketplace"
+fi
+```
+
 ### 4. Conflicting Plugins
 
 Check that known conflicting plugins are disabled:
@@ -101,7 +112,8 @@ qmd           [PASS|WARN: not installed]
 oracle        [installed|not found]
 codex         [installed|not found]
 beads         [OK (N open, M closed)|not initialized]
-interphase [installed|not installed]
+interphase    [installed|not installed]
+interline     [installed|not installed]
 conflicts     [clear|WARN: N active]
 version       v0.X.Y
 ──────────────────────────────────

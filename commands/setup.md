@@ -32,6 +32,7 @@ claude plugin install interdoc@interagency-marketplace
 claude plugin install auracoil@interagency-marketplace
 claude plugin install tool-time@interagency-marketplace
 claude plugin install interphase@interagency-marketplace
+claude plugin install interline@interagency-marketplace
 ```
 
 **From claude-plugins-official:**
@@ -159,6 +160,7 @@ echo "qmd: $(command -v qmd >/dev/null 2>&1 && echo 'installed' || echo 'not ins
 
 echo "=== Companions ==="
 echo "codex dispatch: $(ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/scripts/dispatch.sh 2>/dev/null | head -1 >/dev/null && echo 'OK' || echo 'MISSING')"
+echo "interline: $(ls ~/.claude/plugins/cache/*/interline/*/scripts/statusline.sh 2>/dev/null | head -1 >/dev/null && echo 'installed' || echo 'not installed')"
 echo "oracle: $(command -v oracle >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
 echo "beads: $(ls .beads/ 2>/dev/null | head -1 >/dev/null && echo 'configured' || echo 'not configured')"
 ```
