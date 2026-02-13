@@ -2,6 +2,7 @@
 name: clodex
 description: Dispatch tasks to Codex CLI agents — single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation.
 version: 0.4.0
+user-invocable: false
 ---
 
 # Clodex — Codex Dispatch
