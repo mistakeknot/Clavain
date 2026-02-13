@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 29 skills, 17 agents, 37 commands, 5 hooks, 2 MCP servers |
+| Components | 29 skills, 17 agents, 37 commands, 6 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -49,6 +49,8 @@ Clavain/
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
 │   ├── sprint-scan.sh             # Sprint awareness scanner (sourced by session-start + sprint-status)
 │   ├── session-start.sh           # Context injection + upstream staleness + sprint awareness
+│   ├── clodex-audit.sh             # Clodex mode source code write audit (PostToolUse Edit/Write)
+│   ├── auto-publish.sh            # Auto-publish after git push (PostToolUse Bash)
 │   ├── auto-compound.sh           # Auto-compound knowledge capture on Stop
 │   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
@@ -156,6 +158,8 @@ Categories:
   - `session-start.sh` — injects `using-clavain` skill content, clodex behavioral contract (when active), upstream staleness warnings
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
   - `clodex-audit.sh` — logs source code writes when clodex mode is active (audit only, no denial)
+- **PostToolUse** (matcher: `Bash`):
+  - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace (60s TTL sentinel prevents loops)
 - **Stop**:
   - `auto-compound.sh` — detects compoundable signals (commits, resolutions, insights), prompts knowledge capture
   - `session-handoff.sh` — detects uncommitted work or in-progress beads, prompts HANDOFF.md creation (once per session)
@@ -205,6 +209,8 @@ When making changes, verify:
 - [ ] `hooks/auto-compound.sh` passes `bash -n` syntax check
 - [ ] `hooks/session-handoff.sh` passes `bash -n` syntax check
 - [ ] `hooks/dotfiles-sync.sh` passes `bash -n` syntax check
+- [ ] `hooks/auto-publish.sh` passes `bash -n` syntax check
+- [ ] `hooks/clodex-audit.sh` passes `bash -n` syntax check
 - [ ] No references to dropped namespaces (`superpowers:`, `compound-engineering:`)
 - [ ] No references to dropped components (Rails, Ruby, Every.to, Figma, Xcode)
 - [ ] Routing table in `using-clavain/SKILL.md` is consistent with actual components
@@ -230,6 +236,8 @@ bash -n hooks/session-start.sh && echo "session-start.sh OK"
 bash -n hooks/auto-compound.sh && echo "auto-compound.sh OK"
 bash -n hooks/session-handoff.sh && echo "session-handoff.sh OK"
 bash -n hooks/dotfiles-sync.sh && echo "dotfiles-sync.sh OK"
+bash -n hooks/auto-publish.sh && echo "auto-publish.sh OK"
+bash -n hooks/clodex-audit.sh && echo "clodex-audit.sh OK"
 bash -n scripts/upstream-check.sh && echo "Upstream check OK"
 
 # Test upstream check (no network calls with --json, but needs gh)

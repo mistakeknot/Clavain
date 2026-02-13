@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 29 skills, 17 agents, 37 commands, 5 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 29 skills, 17 agents, 37 commands, 6 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -267,7 +267,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 skills/       # 29 discipline skills (SKILL.md each)
 agents/       # 17 agents (review/ + research/ + workflow/)
 commands/     # 37 slash commands
-hooks/        # 5 hooks (SessionStart, PostToolUse, Stop×2, SessionEnd)
+hooks/        # 6 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd)
 config/       # flux-drive knowledge layer
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync
 ```
