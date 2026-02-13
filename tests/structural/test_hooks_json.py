@@ -12,6 +12,9 @@ VALID_EVENT_TYPES = {
     "Stop",
 }
 
+# Exact event types Clavain should register
+EXPECTED_EVENT_TYPES = {"SessionStart", "PostToolUse", "Stop", "SessionEnd"}
+
 
 def test_hooks_json_valid(hooks_json):
     """hooks.json is a valid dict with a 'hooks' key."""
@@ -26,6 +29,21 @@ def test_hooks_json_event_types(hooks_json):
             f"Unknown event type: {event_type!r}. "
             f"Valid types: {VALID_EVENT_TYPES}"
         )
+
+
+def test_hooks_json_expected_event_types(hooks_json):
+    """hooks.json registers exactly the expected event types."""
+    actual = set(hooks_json["hooks"].keys())
+    assert actual == EXPECTED_EVENT_TYPES, (
+        f"Expected event types {EXPECTED_EVENT_TYPES}, got {actual}"
+    )
+
+
+def test_hooks_json_no_pretooluse(hooks_json):
+    """PreToolUse hook must not be registered (removed in clodex overhaul)."""
+    assert "PreToolUse" not in hooks_json["hooks"], (
+        "PreToolUse hook should not exist — clodex uses behavioral contract, not deny-gate"
+    )
 
 
 def test_hooks_json_commands_exist(hooks_json, project_root):
@@ -73,3 +91,12 @@ def test_hooks_json_matchers_valid(hooks_json):
                     raise AssertionError(
                         f"Invalid regex matcher {matcher!r} in {event_type}: {e}"
                     )
+
+
+def test_session_start_clodex_injection(project_root):
+    """session-start.sh contains the clodex behavioral contract injection."""
+    session_start = project_root / "hooks" / "session-start.sh"
+    content = session_start.read_text()
+    assert "CLODEX MODE" in content, (
+        "session-start.sh should contain 'CLODEX MODE' for behavioral contract injection"
+    )

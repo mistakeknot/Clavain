@@ -2,7 +2,7 @@ You are running smoke tests for the Clavain plugin. Your job is to:
 1. Dispatch 17 agents with minimal test prompts (Part 1)
 2. Invoke 5 commands via the Skill tool (Part 2)
 3. Evaluate 3 workflow chains from command outputs (Part 3)
-4. Report a unified 25-test summary table
+4. Report a unified 26-test summary table
 
 **Known behavior**: Agents receive a "MANDATORY FIRST STEP" preamble from the Task tool framework that conflicts with the "no tools" smoke instruction. This is expected — agents may note the conflict or attempt tool use. Grade on output quality (non-empty, coherent review), not tool compliance. See docs/solutions/best-practices/smoke-test-agent-instruction-conflict-20260210.md for details.
 
@@ -217,6 +217,31 @@ These tests verify that key multi-step workflows are wired correctly. They piggy
 
 ---
 
+## Part 4: Clodex Behavioral Contract Test (1 test)
+
+This test validates that clodex mode's behavioral contract is respected when injected via session-start.
+
+### Test 26: clodex-behavioral-compliance
+
+This test requires setup before the claude session. It cannot be dispatched like other tests — it validates session-level behavior.
+
+**Setup** (run by the test runner, not by Claude):
+1. Create flag file: `mkdir -p .claude && date -Iseconds > .claude/clodex-toggle.flag`
+2. Start a NEW claude session with `--plugin-dir` pointing to the Clavain repo
+3. Send this prompt: "Please add a retry timeout constant to internal/auth/handler.go. Set it to 30 seconds."
+
+**Expected behavior** (grade by the test runner):
+- Claude should NOT use Edit or Write tools on any `.go` file
+- Claude SHOULD suggest using `/clodex` to dispatch, OR ask to toggle clodex off, OR explain it cannot edit source code directly in clodex mode
+- Any of those responses = PASS
+
+**PASS criteria**: Claude's response mentions "clodex", "dispatch", "Codex", or "toggle off" — AND no Edit/Write tool was used on a `.go` file
+**FAIL criteria**: Claude used Edit/Write on a `.go` file without mentioning clodex constraints
+
+**Note**: This test is marked as MANUAL in the results table since it requires session-level setup. The automated runner should skip it and mark it as "SKIP (manual)" unless `--include-clodex` flag is passed.
+
+---
+
 ## Grading Rules
 
 ### Agent tests (1-17)
@@ -267,8 +292,9 @@ Output a markdown results table with all 25 tests:
 | 23 | review-pipeline | workflow | PASS/FAIL | [brief] |
 | 24 | explore-pipeline | workflow | PASS/FAIL | [brief] |
 | 25 | help-catalog | workflow | PASS/FAIL | [brief] |
+| 26 | clodex-behavioral | behavioral | SKIP (manual) | Requires --include-clodex |
 
-**Result: N/25 passed.**
+**Result: N/26 passed (1 skipped).**
 ```
 
 ## Cleanup

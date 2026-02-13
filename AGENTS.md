@@ -15,6 +15,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 ## Runbooks
 
 - Codex sync operations: `docs/runbooks/codex-sync.md`
+- Optional automated Codex refresh job: `scripts/codex-auto-refresh.sh` (cron/systemd/launchd examples in `docs/runbooks/codex-sync.md`)
 - GitHub web PR agent commands (`/clavain:claude-review`, `/clavain:codex-review`, `/clavain:dual-review`) are documented in `docs/runbooks/codex-sync.md`
 - GitHub issue command `/clavain:upstream-sync` (for `upstream-sync` issues) is documented in `docs/runbooks/codex-sync.md`
 
@@ -44,7 +45,7 @@ Clavain/
 │   ├── setup.md               # Modpack installer
 │   └── interpeer.md           # Quick cross-AI peer review (+ 35 others)
 ├── hooks/
-│   ├── hooks.json                 # Hook registration (PreToolUse + SessionStart + Stop + SessionEnd)
+│   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
 │   ├── sprint-scan.sh             # Sprint awareness scanner (sourced by session-start + sprint-status)
 │   ├── session-start.sh           # Context injection + upstream staleness + sprint awareness
@@ -57,6 +58,7 @@ Clavain/
 │   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
 │   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
 │   ├── install-codex.sh           # Codex skill installer
+│   ├── codex-auto-refresh.sh      # Automated local Codex sync helper
 │   ├── upstream-check.sh          # Checks 7 upstream repos via gh api
 │   └── upstream-impact-report.py  # Generates impact digest for upstream PRs
 ├── docs/
@@ -150,10 +152,10 @@ Categories:
 
 - Registration in `hooks/hooks.json` — specifies event, matcher regex, and command
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
-- **PreToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
-  - `autopilot.sh` — validates write operations in codex-first mode
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
-  - `session-start.sh` — injects `using-clavain` skill content + warns if upstream versions >7 days old
+  - `session-start.sh` — injects `using-clavain` skill content, clodex behavioral contract (when active), upstream staleness warnings
+- **PostToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
+  - `clodex-audit.sh` — logs source code writes when clodex mode is active (audit only, no denial)
 - **Stop**:
   - `auto-compound.sh` — detects compoundable signals (commits, resolutions, insights), prompts knowledge capture
   - `session-handoff.sh` — detects uncommitted work or in-progress beads, prompts HANDOFF.md creation (once per session)

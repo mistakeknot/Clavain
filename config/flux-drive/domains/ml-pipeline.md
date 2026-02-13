@@ -74,30 +74,30 @@ These are domain-specific agents that `/flux-gen` can generate for ML pipeline p
 Focus: Reproducibility, data leakage detection, metric validity, experiment tracking hygiene.
 
 Key review areas:
-- Train/test split contamination
-- Random seed propagation across libraries
-- Metric calculation correctness
-- Experiment metadata completeness
-- Checkpoint and artifact versioning
+- Check train, validation, and test splits are isolated with no leakage by entity, time, or feature derivation path.
+- Verify random seeds are set and propagated across all libraries and components that affect stochastic behavior.
+- Validate metric definitions and implementations match task objectives and handle edge cases correctly.
+- Confirm each run records required metadata (code version, data snapshot, params, environment) for reproducibility.
+- Ensure checkpoints and artifacts are versioned, immutable, and linked to the exact experiment run.
 
 ### fd-data-quality
 
 Focus: Data pipeline validation, schema enforcement, distribution monitoring, feature engineering correctness.
 
 Key review areas:
-- Input schema validation at pipeline boundaries
-- Feature computation consistency (training vs inference)
-- Missing value and outlier handling
-- Data drift detection and alerting
-- Lineage tracking from raw data to features
+- Check input schema is validated at each pipeline boundary, and reject or route records that violate contracts.
+- Verify feature transformations are identical between training and inference paths.
+- Validate missing-value and outlier handling rules are explicit, consistent, and monitored for drift.
+- Confirm drift metrics and alert thresholds are defined per critical feature and trigger actionable alerts.
+- Ensure lineage traces each feature back to raw sources and transformation steps.
 
 ### fd-model-serving
 
 Focus: Inference optimization, deployment patterns, model lifecycle management, A/B testing infrastructure.
 
 Key review areas:
-- Model loading and warm-up patterns
-- Batching and concurrency configuration
-- Canary deployment and traffic splitting
-- Resource sizing (GPU memory, CPU threads)
-- Graceful degradation under load
+- Check model loading and warm-up complete before traffic cutover and meet startup latency targets.
+- Verify batching and concurrency settings balance latency SLOs with throughput goals.
+- Validate canary rollouts use controlled traffic splits with automatic rollback on degradation.
+- Confirm CPU and GPU sizing meets p95 and p99 latency goals with required memory headroom under expected load.
+- Ensure overload behavior degrades gracefully (queueing, shedding, fallback) without cascading failures.

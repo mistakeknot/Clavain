@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for CLI tool proj
 Focus: Command discoverability, help text quality, flag consistency, interactive vs scriptable behavior.
 
 Key review areas:
-- Help text completeness and example coverage
-- Flag naming consistency across subcommands
-- Interactive prompt design and validation
-- Output formatting modes (human, JSON, table)
-- Error message actionability
+- Check that every command and flag has help text with at least one runnable example for common usage.
+- Verify flag names, short aliases, and semantics are consistent across subcommands for equivalent behaviors.
+- Validate interactive prompts provide safe defaults, input validation, and cancel paths without trapping users.
+- Confirm human, JSON, and table output modes emit equivalent data content with format-specific presentation only.
+- Ensure error messages state cause, impact, and a concrete next action users can run.
 
 ### fd-shell-integration
 
 Focus: Shell completion, man pages, config file format, environment variable handling, piping behavior.
 
 Key review areas:
-- Completion script correctness and coverage
-- Stdin/stdout/stderr separation
-- TTY detection and behavior adaptation
-- Signal handling and graceful shutdown
-- Config file discovery and precedence
+- Check shell completion scripts cover commands, flags, and dynamic values for supported shells.
+- Verify machine-readable output goes to stdout, diagnostics go to stderr, and stdin handling works in pipelines.
+- Validate TTY detection toggles interactive behavior correctly and avoids prompts in non-interactive contexts.
+- Confirm SIGINT and SIGTERM handlers stop work safely, flush state, and return meaningful exit codes.
+- Ensure config lookup order is deterministic (`flags > env > file > defaults`) and documented.

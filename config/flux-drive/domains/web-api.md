@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for web API proje
 Focus: API schema consistency, versioning, backward compatibility, consumer experience.
 
 Key review areas:
-- OpenAPI/GraphQL schema drift from implementation
-- Breaking change detection across versions
-- Response envelope consistency
-- Pagination contract adherence
-- Error response schema uniformity
+- Check that OpenAPI/GraphQL schema matches the implementation, and flag any endpoint, field, argument, or type present in only one side.
+- Verify that version-to-version changes are backward compatible for existing consumers, and flag removals or incompatible type changes.
+- Confirm that all endpoints return the documented response envelope shape, including status, data, and error fields where applicable.
+- Validate that paginated endpoints enforce one pagination contract (cursor or offset), with stable ordering and documented next-page semantics.
+- Ensure error responses use a uniform schema and HTTP status mapping across endpoints, and flag exceptions without documented rationale.
 
 ### fd-data-access
 
 Focus: Query patterns, ORM usage, connection management, migration safety.
 
 Key review areas:
-- N+1 query detection and eager loading
-- Transaction boundary correctness
-- Connection pool configuration
-- Migration rollback safety
-- Index coverage for query patterns
+- Check for N+1 query patterns in hot paths and verify eager loading or batching is applied where repeated fetches occur.
+- Validate that transaction boundaries cover each logical unit of work and prevent partial writes on failure.
+- Confirm connection pool size, timeout, and idle settings align with expected concurrency and database limits.
+- Verify each migration has a tested rollback or safe-forward strategy that preserves data integrity.
+- Ensure high-frequency filter, join, and sort patterns are supported by indexes, and flag full scans on large tables.

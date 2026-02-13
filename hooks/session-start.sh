@@ -65,7 +65,7 @@ fi
 # Clodex — detect persistent toggle state
 CLODEX_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/clodex-toggle.flag"
 if [[ -f "$CLODEX_FLAG" ]]; then
-    companions="${companions}\\n- **clodex**: ON — source code edits are routed through Codex agents. Direct Edit/Write to source files will be blocked by the PreToolUse hook. Use \`/clodex\` to dispatch changes. Run \`/clodex-toggle\` to turn off."
+    companions="${companions}\\n- **CLODEX MODE: ON** — Route source code changes through Codex (preserves Claude token budget for orchestration).\\n  1. Plan: Read/Grep/Glob freely\\n  2. Prompt: Write task to /tmp/, dispatch via /clodex\\n  3. Verify: read output, run tests, review diffs\\n  4. Git ops (add/commit/push) are yours — do directly\\n  Bash: read-only for source files (no redirects, sed -i, tee). Git + test/build OK.\\n  Direct-edit OK: .md/.json/.yaml/.yml/.toml/.txt/.csv/.xml/.html/.css/.svg/.lock/.cfg/.ini/.conf/.env, /tmp/*\\n  Everything else (code files): dispatch via /clodex. If Codex unavailable: /clodex-toggle off, or use /subagent-driven-development."
 fi
 
 companion_context=""

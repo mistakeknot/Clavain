@@ -31,6 +31,13 @@ bash ~/.codex/clavain/scripts/install-codex.sh install
 
 Then restart Codex.
 
+From a local clone:
+
+```bash
+make codex-refresh
+make codex-doctor
+```
+
 Detailed guide: `docs/README.codex.md`  
 Single-file bootstrap target: `.codex/INSTALL.md`
 
@@ -195,8 +202,8 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 ### Hooks (5)
 
-- **PreToolUse** — Autopilot gate: validates write operations in codex-first mode (`autopilot.sh`).
-- **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact) (`session-start.sh`).
+- **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When clodex mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
+- **PostToolUse** — Clodex audit: logs source code writes when clodex mode is active for post-session review (`clodex-audit.sh`).
 - **Stop** — Auto-compound check: detects compoundable signals and prompts knowledge capture (`auto-compound.sh`). Session handoff: detects uncommitted work or in-progress beads and prompts HANDOFF.md creation (`session-handoff.sh`).
 - **SessionEnd** — Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
@@ -260,9 +267,9 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 skills/       # 29 discipline skills (SKILL.md each)
 agents/       # 17 agents (review/ + research/ + workflow/)
 commands/     # 37 slash commands
-hooks/        # 5 hooks (SessionStart, Stop×2, SessionEnd, PreToolUse)
+hooks/        # 5 hooks (SessionStart, PostToolUse, Stop×2, SessionEnd)
 config/       # flux-drive knowledge layer
-scripts/      # debate, codex dispatch, upstream sync
+scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync
 ```
 
 Full directory tree and component conventions: see `AGENTS.md`.

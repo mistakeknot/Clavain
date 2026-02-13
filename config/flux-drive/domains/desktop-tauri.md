@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for desktop (Taur
 Focus: Frontend-backend communication patterns, command typing, payload serialization, event streaming.
 
 Key review areas:
-- Command type safety across the IPC boundary
-- Payload size and serialization efficiency
-- Event subscription lifecycle management
-- Error propagation from backend to frontend
-- Binary data transfer patterns (streaming vs base64)
+- Check that IPC commands and responses are strongly typed on both sides, and flag unchecked dynamic payloads.
+- Verify payloads stay within size targets and serialization avoids unnecessary copying or encoding overhead.
+- Validate event subscriptions are registered and disposed with component lifecycle to prevent leaks.
+- Confirm backend errors propagate with structured codes and messages that frontend code can handle deterministically.
+- Ensure binary transfers use streaming when size or frequency makes base64 overhead unacceptable.
 
 ### fd-native-integration
 
 Focus: OS-specific behavior, platform conventions, window management, system services, auto-update.
 
 Key review areas:
-- Platform-specific menu and shortcut conventions
-- File association and protocol handler registration
-- System tray behavior and notification delivery
-- Auto-update flow with signature verification
-- Installer/uninstaller correctness (clean removal, migration)
+- Check menus and keyboard shortcuts follow platform conventions on macOS, Windows, and Linux.
+- Verify file and protocol handlers register correctly and are removed cleanly on uninstall.
+- Validate tray actions and notifications behave consistently across supported OS states (foreground, background, locked).
+- Confirm auto-update downloads are signature-verified before install and fail closed on verification errors.
+- Ensure install and uninstall flows preserve required user-data migrations and remove app artifacts that should not persist.

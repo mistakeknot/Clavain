@@ -74,30 +74,30 @@ These are domain-specific agents that `/flux-gen` can generate for game simulati
 Focus: Tick loop architecture, determinism, serialization, replay fidelity.
 
 Key review areas:
-- Fixed vs variable timestep and accumulator correctness
-- Deterministic execution order across systems
-- State snapshot and delta serialization
-- Replay divergence detection
-- Rollback/resimulation for networking
+- Check timestep logic uses a stable integration strategy and accumulator handling avoids spiral-of-death behavior.
+- Verify system update order is deterministic across runs given identical inputs and seed state.
+- Validate snapshot and delta serialization captures all authoritative state needed for restore and sync.
+- Confirm replay tooling detects and reports the first divergent tick with relevant state-diff context.
+- Ensure rollback and resimulation windows are bounded and produce consistent post-resimulation state.
 
 ### fd-game-systems
 
 Focus: Individual game system design (combat, economy, crafting, progression).
 
 Key review areas:
-- System coupling and data flow between systems
-- Economy sinks/faucets balance
-- Crafting recipe graph completeness
-- Progression curve vs content gating alignment
-- Loot table probability distributions
+- Check system boundaries minimize tight coupling and data-flow contracts are explicit between producers and consumers.
+- Verify sinks and faucets keep net currency or resource generation within target range over representative sessions.
+- Validate crafting graphs have no unreachable recipes, dead-end inputs, or missing progression links.
+- Confirm progression pacing aligns with content gates so required milestones are achievable at intended playtime bands.
+- Ensure loot-table probabilities sum correctly and observed drop rates remain within statistical tolerance.
 
 ### fd-agent-narrative
 
 Focus: AI behavior, storytelling, drama management, procedural narrative.
 
 Key review areas:
-- Utility AI curve shapes and decision quality
-- Storyteller tension/release rhythm
-- Event cooldown and clustering prevention
-- NPC behavior believability and variety
-- Procedural narrative coherence constraints
+- Check utility curves produce stable, context-appropriate decisions and avoid pathological oscillation.
+- Verify tension and release pacing follows intended cadence across short and long play sessions.
+- Validate cooldown rules prevent repetitive event clustering beyond defined frequency caps.
+- Confirm NPC behaviors meet variety thresholds and remain coherent with role, world state, and prior actions.
+- Ensure generated narrative events satisfy coherence constraints for causality, continuity, and character consistency.

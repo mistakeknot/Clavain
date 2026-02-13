@@ -1,5 +1,5 @@
 {
-  "generated": "2026-02-13T00:39:56Z",
+  "generated": "2026-02-13T04:57:44Z",
   "counts": {
     "skills": 29,
     "agents": 17,
@@ -227,7 +227,7 @@
     },
     {
       "name": "clodex-toggle",
-      "description": "Toggle clodex execution mode \u2014 source code changes go through Codex agents, non-code files remain directly editable"
+      "description": "Toggle clodex execution mode"
     },
     {
       "name": "compound",

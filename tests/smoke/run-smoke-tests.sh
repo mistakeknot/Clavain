@@ -87,11 +87,27 @@ if [[ "${1:-}" == "--dry-run" ]]; then
   exit 0
 fi
 
+# Check for --include-clodex flag
+INCLUDE_CLODEX=false
+for arg in "$@"; do
+  if [[ "$arg" == "--include-clodex" ]]; then
+    INCLUDE_CLODEX=true
+  fi
+done
+
 # Check claude CLI is available
 if ! command -v claude &>/dev/null; then
   echo "FATAL: claude CLI not found in PATH."
   echo "Install Claude Code or run smoke tests from within a Claude Code session."
   exit 1
+fi
+
+# Set up clodex flag if --include-clodex
+if [[ "$INCLUDE_CLODEX" == true ]]; then
+  mkdir -p "$PROJECT_ROOT/.claude"
+  date -Iseconds > "$PROJECT_ROOT/.claude/clodex-toggle.flag"
+  echo "Clodex behavioral test enabled."
+  echo ""
 fi
 
 # Run smoke tests via claude CLI
@@ -104,5 +120,10 @@ claude --print \
   -p "$(cat "$SCRIPT_DIR/smoke-prompt.md")" \
   --max-turns 60
 
-# Cleanup any artifact files agents wrote
+# Cleanup
 rm -f "$PROJECT_ROOT"/docs/research/smoke-test-*.md 2>/dev/null || true
+if [[ "$INCLUDE_CLODEX" == true ]]; then
+  rm -f "$PROJECT_ROOT/.claude/clodex-toggle.flag"
+  echo ""
+  echo "Clodex flag cleaned up."
+fi

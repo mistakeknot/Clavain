@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for mobile app pr
 Focus: OS-specific lifecycle, permissions, deep linking, notifications, background processing.
 
 Key review areas:
-- App lifecycle state transitions and restoration
-- Permission request timing and fallback handling
-- Deep link and universal link routing
-- Push notification payload handling across app states
-- Background task scheduling and execution limits
+- Check lifecycle transitions handle pause, resume, and terminate correctly, and restore critical state on relaunch.
+- Verify permissions are requested at point of need with clear fallback behavior when denied.
+- Validate deep and universal links route to correct screens with secure parameter validation.
+- Confirm push payloads are handled correctly in foreground, background, and terminated states.
+- Ensure background tasks respect platform scheduling limits and complete within allowed execution windows.
 
 ### fd-mobile-ux
 
 Focus: Touch interaction, accessibility, responsive layout, animation performance, gesture handling.
 
 Key review areas:
-- Touch target sizing (minimum 44pt/48dp)
-- Screen reader navigation completeness
-- Adaptive layout across device sizes
-- Animation frame rate and jank detection
-- Gesture conflict resolution (scroll vs swipe vs drag)
+- Check interactive targets meet minimum size requirements (44pt iOS and 48dp Android) on supported screens.
+- Verify screen-reader order, labels, and actions are complete for all interactive views.
+- Validate layouts adapt correctly across supported device sizes, orientations, and safe areas.
+- Confirm critical animations maintain target frame rate and monitor jank against defined thresholds.
+- Ensure gesture recognizers resolve conflicts predictably between scroll, swipe, and drag interactions.

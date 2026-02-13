@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for data pipeline
 Focus: Data quality validation, schema enforcement, deduplication, consistency checks across pipeline stages.
 
 Key review areas:
-- Primary key uniqueness enforcement
-- Referential integrity across tables
-- Data completeness checks (row counts, null rates)
-- Cross-source reconciliation
-- Slowly changing dimension correctness
+- Check that primary keys are unique at ingest and write stages, and flag duplicate-key violations with source records.
+- Verify foreign-key relationships remain valid after each load, with orphan counts at or below defined thresholds.
+- Validate row-count deltas and null-rate metrics against expected bounds, and flag breaches for investigation.
+- Confirm reconciled totals and key metrics match across source systems within declared tolerance.
+- Ensure SCD handling applies correct effective dates, versioning, and current-record markers without overlaps.
 
 ### fd-pipeline-operations
 
 Focus: Orchestration patterns, failure recovery, backfill safety, monitoring and alerting.
 
 Key review areas:
-- DAG dependency correctness and cycle detection
-- Retry and timeout configuration
-- Backfill idempotency and date range handling
-- SLA monitoring and breach alerting
-- Resource scaling for peak vs steady-state loads
+- Check DAG dependencies are acyclic and reflect true upstream and downstream data requirements.
+- Verify retry limits, backoff, and timeouts are set per task criticality and external system behavior.
+- Validate backfills can rerun safely for the same date range without duplicate outputs or state corruption.
+- Confirm SLA metrics are instrumented and alerts trigger within the defined breach window.
+- Ensure resource scaling policies handle peak loads without starving steady-state jobs or exceeding cost limits.

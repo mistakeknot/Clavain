@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for TUI app proje
 Focus: Render performance, ANSI output correctness, terminal compatibility, visual regression testing.
 
 Key review areas:
-- Differential rendering and dirty region tracking
-- ANSI escape sequence correctness across terminal emulators
-- Color fallback for limited-color terminals (256 → 16 → monochrome)
-- Golden-file snapshot testing for rendered output
-- Resize handling and reflow behavior
+- Check renderer updates only dirty regions and avoids full-screen redraws when unnecessary.
+- Verify ANSI escape sequences render correctly across supported terminal emulators without state corruption.
+- Validate color fallback paths preserve readability and semantic meaning at 256-color, 16-color, and monochrome levels.
+- Confirm snapshot tests cover representative screens and fail on unintended visual regressions.
+- Ensure resize events trigger stable reflow without clipping, overlap, or orphaned UI artifacts.
 
 ### fd-interaction-design
 
 Focus: Key binding consistency, focus management, navigation patterns, accessibility in terminal context.
 
 Key review areas:
-- Keymap completeness and conflict detection
-- Focus traversal order and visual indicators
-- Modal vs modeless interaction patterns
-- Screen reader compatibility (where supported)
-- Mouse interaction as progressive enhancement
+- Check keymaps cover primary actions and flag conflicting bindings before release.
+- Verify focus traversal order is logical and current focus is always visually apparent.
+- Validate modal and modeless flows are consistent and clearly communicate interaction state changes.
+- Confirm supported screen-reader modes expose meaningful labels and navigation landmarks.
+- Ensure mouse support enhances workflows without breaking keyboard-only operation.

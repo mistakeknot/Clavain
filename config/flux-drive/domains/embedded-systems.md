@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for embedded syst
 Focus: Register-level correctness, peripheral configuration, timing constraints, electrical interface compliance.
 
 Key review areas:
-- Register read-modify-write atomicity
-- Clock tree configuration and peripheral clock gating
-- Timing specification compliance (setup/hold times, baud rates)
-- Pin mux and alternate function configuration
-- Power domain and voltage level correctness
+- Check register read-modify-write sequences are atomic where required by concurrency or interrupt behavior.
+- Verify clock tree and peripheral gating settings match datasheet requirements for all enabled peripherals.
+- Validate configured timings (setup, hold, baud) stay within component tolerance across target frequencies.
+- Confirm pin mux selections and alternate functions match board schematics and avoid conflicting assignments.
+- Ensure power domains and voltage levels are configured for each peripheral operating range before activation.
 
 ### fd-rtos-patterns
 
 Focus: Task design, synchronization primitives, memory management, deadline analysis.
 
 Key review areas:
-- Task priority assignment and priority inversion prevention
-- Mutex vs semaphore vs queue selection
-- Stack size estimation and overflow detection
-- Deadline analysis for periodic tasks
-- Memory pool allocation vs dynamic malloc
+- Check task priorities reflect deadline criticality and include mitigation for priority inversion (inheritance or ceiling).
+- Verify synchronization primitive choice matches ownership and signaling semantics for each shared resource.
+- Validate per-task stack sizing with runtime high-water marks and overflow detection enabled.
+- Confirm periodic-task worst-case execution time and jitter stay within declared deadlines.
+- Ensure memory pools are used for real-time paths, and dynamic allocation is bounded or excluded where nondeterministic.

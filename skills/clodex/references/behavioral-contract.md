@@ -1,19 +1,22 @@
 # Clodex Behavioral Contract
 
-When clodex mode is active (`/clodex-toggle`), these rules apply:
+> This contract is enforced purely through session-start context injection. There is no PreToolUse hook.
 
-## The Three Rules
-1. **Read freely**: Read, Grep, Glob, WebFetch, WebSearch -- without restriction
-2. **Write source code via Codex**: All source code changes go through dispatch.sh -> Codex agents
-3. **Edit non-code directly**: Markdown, JSON, YAML, config files, and /tmp/ files can be edited normally
+## Three Rules
 
-**Exception**: Git operations (add, commit, push) are Claude's responsibility -- do them directly.
+1. **Plan freely** — Read, Grep, Glob are unrestricted
+2. **Dispatch source code changes** — Use /clodex to send implementation tasks to Codex agents
+3. **Edit non-code directly** — .md, .json, .yaml, .yml, .toml, .txt, .csv, .xml, .html, .css, .svg, .lock, .cfg, .ini, .conf, .env, /tmp/*
 
-## Allowed Direct Edits (not blocked by hook)
-`*.md`, `*.json`, `*.yaml`, `*.yml`, `*.toml`, `*.txt`, `*.csv`, `*.xml`, `*.html`, `*.css`, `*.svg`, `/tmp/*`, dotfiles
+## Bash Restriction
 
-## Allowed Bash (read-only)
-`git status/diff/log/show`, `go build/test`, `make test`, `npm test`, `pytest`, `cat/head/tail/wc/ls/find`, `codex exec resume`
+Bash is read-only for source files. No writing (redirects, sed -i, tee), no deleting (rm), no renaming (mv).
+Allowed: git commands, test runners, build tools, read-only inspection.
 
-## Must Dispatch via Codex (source code)
-Source file creation/modification/deletion (`*.go`, `*.py`, `*.ts`, `*.js`, `*.rs`, `*.java`, `*.rb`, `*.c`, `*.cpp`, `*.h`, `*.swift`, `*.kt`, `*.sh`)
+## Exception
+
+Git operations (add, commit, push) are Claude's responsibility — do them directly.
+
+## When Codex is Unavailable
+
+If Codex CLI is not installed, fall back to /subagent-driven-development or run /clodex-toggle to turn off.

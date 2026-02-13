@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for library/SDK p
 Focus: Public API design, backward compatibility, type safety, documentation coverage.
 
 Key review areas:
-- API surface minimality (nothing public that shouldn't be)
-- Semver compliance for changes
-- Type signature precision and ergonomics
-- Documentation completeness per public item
-- Cross-version compatibility testing
+- Check public API exports include only intended stable symbols, and flag accidental exposure of internal types.
+- Verify API changes map to semantic versioning rules (patch, minor, major) based on compatibility impact.
+- Validate type signatures are precise enough to prevent misuse while remaining ergonomic for common calls.
+- Confirm each public item has documentation covering purpose, parameters, returns, and failure modes.
+- Ensure compatibility tests cover supported old and new version combinations and detect integration breaks.
 
 ### fd-consumer-experience
 
 Focus: Onboarding, error messages, examples, integration patterns, ecosystem compatibility.
 
 Key review areas:
-- First-use experience (install → working code path)
-- Error message actionability from consumer perspective
-- Example coverage for common use cases
-- Dependency compatibility with popular frameworks
-- Migration path clarity between versions
+- Check first-use flow reaches a working example from install with minimal required configuration.
+- Verify consumer-facing errors include cause and concrete remediation steps with relevant docs links or commands.
+- Validate examples cover core use cases and reflect current API signatures and best practices.
+- Confirm dependency versions are compatible with target framework versions listed in support policy.
+- Ensure migration guides describe breaking changes, replacement APIs, and stepwise upgrade actions.

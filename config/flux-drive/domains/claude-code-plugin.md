@@ -74,19 +74,19 @@ These are domain-specific agents that `/flux-gen` can generate for Claude Code p
 Focus: Manifest correctness, file organization, frontmatter validation, naming conventions, cross-reference integrity.
 
 Key review areas:
-- plugin.json schema compliance and completeness
-- Frontmatter field validation across all markdown files
-- Cross-references between skills, agents, and commands
-- File naming and directory structure conventions
-- Version consistency across plugin.json and marketplace.json
+- Check that `plugin.json` satisfies required schema fields and includes all mandatory metadata.
+- Verify markdown frontmatter fields are present, typed correctly, and consistent with each component type.
+- Confirm every skill, agent, and command reference resolves to an existing file, and flag broken or circular links that break routing.
+- Validate that file names and directory layout follow repository conventions for component discovery.
+- Ensure version values in `plugin.json` and `marketplace.json` are identical and follow the expected release increment.
 
 ### fd-prompt-engineering
 
 Focus: Skill instruction clarity, agent prompt effectiveness, token efficiency, routing accuracy.
 
 Key review areas:
-- Instruction clarity and unambiguity
-- Token budget optimization (inline vs referenced content)
-- Routing table accuracy (triggers match intended use cases)
-- Agent prompt specificity (clear success criteria, example outputs)
-- Skill composition patterns (when skills reference other skills)
+- Check that instructions are explicit, unambiguous, and include concrete success conditions for execution.
+- Verify prompts keep critical guidance inline while moving bulky detail to references to stay within practical token budgets.
+- Validate that routing triggers map to intended skills or agents and do not overlap in conflicting ways.
+- Confirm agent prompts define measurable success criteria and at least one representative output pattern.
+- Ensure skill-to-skill references are intentional, minimal, and do not create dependency loops or redundant instruction chains.
