@@ -1,164 +1,497 @@
-### Findings Index
-- P1 | P1-1 | "Naming Conventions" | Command frontmatter name uses underscore instead of kebab-case
-- P1 | P1-2 | "Documentation Accuracy" | Hook count and event documentation out of sync with hooks.json
-- P1 | P1-3 | "Test Coverage Gaps" | Missing skill name-matches-dirname and command name-matches-filename tests
-- P2 | P2-1 | "Shell Script Quality" | check-versions.sh uses weaker strict mode and non-portable shebang
-- P2 | P2-2 | "Test Code Duplication" | _parse_frontmatter duplicated across three test modules
-- P2 | P2-3 | "Shell Script Quality" | auto-compound.sh uses unescaped heredoc interpolation for JSON output
-- IMP | IMP-1 | "Format Divergence" | fd-* agent system prompts lack any output format specification (independently confirmed)
-- IMP | IMP-2 | "Documentation Accuracy" | README skills table lists 31 skills, not the claimed 34
+# Code Quality & Hygiene Review: Clavain Plugin
+
+**Review Date:** 2026-02-13
+**Reviewer:** fd-quality (Quality & Style Reviewer)
+**Project:** Clavain v0.5.7 — General-purpose engineering discipline plugin for Claude Code
+**Scope:** Shell scripts, documentation freshness, test coverage, uncommitted changes, untracked files
+
+---
+
+## Findings Index
+
+- P0 | P0-1 | "Uncommitted Changes" | 1,212 insertions across 16 files — unclear intent (feature in progress or forgotten cleanup)
+- P0 | P0-2 | "hooks/auto-publish.sh" | Untracked auto-publish hook missing from hooks.json registration
+- P1 | P1-1 | "Untracked Research Files" | 5 research docs untracked (3 valuable, 2 temp artifacts)
+- P1 | P1-2 | "AGENTS.md Component Counts" | Documentation claims "17 agents" but consolidation reduced from 19 to 17 — verify accuracy
+- P1 | P1-3 | "clodex Artifacts" | .claude/clodex-audit.log and clodex-toggle.flag are temp runtime artifacts (should be in /tmp or gitignored)
+- P2 | P2-1 | "Shell Script Standards" | All shell scripts pass bash -n but lack shellcheck validation
+- IMP | IMP-1 | "Research Documentation" | audit-flux-drive-token-flow.md and check-beads-issues-for-flux-drive.md should move to docs/research/flux-drive/ for discoverability
+- IMP | IMP-2 | "Git Hygiene" | 3 deleted research docs (code-simplicity-reviewer.md, fd-code-quality.md, fd-user-experience.md) — clean deletion or need archiving
+- IMP | IMP-3 | "Hook Discovery" | explore-posttooluse-hook-patterns.md is reference material, belongs in skills/working-with-claude-code/references/
+- IMP | IMP-4 | "Test Coverage" | No smoke tests for new fd-quality.md and fd-user-product.md agents
+- IMP | IMP-5 | "Documentation Drift" | CLAUDE.md and AGENTS.md modified but unclear what changed (version bump, count update, content)
+
 Verdict: needs-changes
 
 ---
 
-### Summary
+## Summary
 
-The Clavain plugin maintains strong structural consistency across its 70+ component files. Skill directories all use kebab-case and match their frontmatter names. Agent files follow a uniform template with description, model, and example blocks. The 3-tier test suite (427 structural tests, shell bats tests, smoke tests) catches many regressions. However, the review found one concrete naming violation (`generate_command` vs `generate-command`), a documentation drift where hooks.json has 4 event types and 5 hook scripts but all docs claim "3 hooks," missing structural tests for two of the three component types' name-to-file matching, and a shell script that deviates from the project's own strict-mode convention.
-
----
-
-### Issues Found
-
-#### P1-1: Command frontmatter name uses underscore instead of kebab-case
-
-**File:** `/root/projects/Clavain/commands/generate-command.md`, line 2
-
-The file `generate-command.md` declares `name: generate_command` (underscore) while the filename uses `generate-command` (kebab-case). Every other command in the project uses kebab-case in both the filename and the frontmatter `name` field. This mismatch means the slash command registers as `/clavain:generate_command` rather than `/clavain:generate-command`, which breaks the naming convention documented in AGENTS.md (line 103: "Command `.md` files in `commands/`" with kebab-case examples).
-
-The existing test suite does NOT catch this because `test_commands.py` has `test_command_filenames_kebab_case` (checks the filename) and `test_command_frontmatter_required_fields` (checks that `name` exists) but does NOT have a `test_command_name_matches_filename` test. Compare with `test_agents.py` which DOES have `test_agent_name_matches_filename` at line 84.
-
-**Fix:** Change line 2 of `commands/generate-command.md` from `name: generate_command` to `name: generate-command`.
+The Clavain plugin has 1,212 lines of uncommitted changes across 16 files, including 3 deleted research docs and 5 new untracked files. The largest concern is hooks/auto-publish.sh — a complete PostToolUse hook (147 lines) that auto-increments plugin versions and syncs the marketplace after git push, but it's not registered in hooks.json. This creates a gap where the hook exists in the working tree but won't be installed or executed. Three research documents (audit-flux-drive-token-flow.md, check-beads-issues-for-flux-drive.md, explore-posttooluse-hook-patterns.md) are valuable reference material but sit untracked in the wrong directories. Two clodex runtime artifacts (.claude/clodex-audit.log, .claude/clodex-toggle.flag) should be in /tmp or gitignored to prevent commit pollution. All shell scripts pass syntax validation (bash -n) and no namespace contamination detected. Documentation counts are accurate (29 skills, 17 agents, 37 commands) but AGENTS.md and CLAUDE.md show uncommitted changes of unclear purpose.
 
 ---
 
-#### P1-2: Hook count and event documentation out of sync with hooks.json
+## Issues Found
 
-**Files:**
-- `/root/projects/Clavain/hooks/hooks.json` (source of truth)
-- `/root/projects/Clavain/CLAUDE.md`, line 7
-- `/root/projects/Clavain/AGENTS.md`, line 12
-- `/root/projects/Clavain/README.md`, lines 7 and 187-191
-- `/root/projects/Clavain/.claude-plugin/plugin.json`, line 4
+### P0-1: 1,212 insertions across 16 files — unclear intent (feature in progress or forgotten cleanup)
 
-`hooks.json` registers 4 event types (PreToolUse, SessionStart, Stop, SessionEnd) backed by 5 hook scripts (autopilot.sh, session-start.sh, agent-mail-register.sh, auto-compound.sh, dotfiles-sync.sh). All documentation surfaces say "3 hooks" and the README's "Hooks (3)" section at lines 187-191 only documents PreToolUse, SessionStart, and SessionEnd -- completely omitting the `Stop` event and `auto-compound.sh`.
+**Severity:** P0
+**Location:** Working tree (git status shows 16 modified files, 3 deleted, 5 untracked)
 
-Additionally, AGENTS.md (which is the development guide) does not mention the `Stop` hook, `auto-compound.sh`, or the `auto-compound` concept anywhere. This means a contributor reading AGENTS.md to understand the hook system will not know that a Stop hook exists.
-
-**Fix:** Update the hook count to "5 hooks" (counting scripts) or "4 hook events" across all documentation surfaces. Add a bullet for the Stop hook in README.md's hooks section. Document `auto-compound.sh` in AGENTS.md's hooks section.
-
----
-
-#### P1-3: Missing skill name-matches-dirname and command name-matches-filename structural tests
-
-**Files:**
-- `/root/projects/Clavain/tests/structural/test_skills.py`
-- `/root/projects/Clavain/tests/structural/test_commands.py`
-
-The agent test module (`test_agents.py`) includes `test_agent_name_matches_filename` (line 84) that verifies `fm["name"] == agent_file.stem`. Neither `test_skills.py` nor `test_commands.py` have an equivalent test.
-
-For skills, this means a skill with `name: wrong-name` in a directory named `correct-name/` would pass all existing tests. For commands, this is exactly what happened with P1-1 -- the `generate_command` / `generate-command` mismatch was not caught.
-
-Both test files already have the `_parse_frontmatter` helper and parametrized fixtures needed to add these tests. The skill version would assert `fm["name"] == skill_dir.name` and the command version would assert `fm["name"] == cmd_file.stem`.
-
-**Fix:** Add `test_skill_name_matches_dirname` to `test_skills.py` and `test_command_name_matches_filename` to `test_commands.py`, following the pattern from `test_agents.py` lines 84-93.
-
----
-
-### P2-1: check-versions.sh uses weaker strict mode and non-portable shebang
-
-**File:** `/root/projects/Clavain/scripts/check-versions.sh`, lines 1 and 6
-
-This script uses `#!/bin/bash` (hardcoded path) instead of `#!/usr/bin/env bash` (portable, used by all other scripts in the repo). It also uses `set -e` alone instead of `set -euo pipefail` (used by every other hook and script).
-
-The weaker `set -e` (without `-u` and `-o pipefail`) means:
-- Unset variable references silently expand to empty strings instead of failing
-- Pipe failures are masked (only the exit code of the last command in a pipe is checked)
-
-The structural test `test_hook_entry_points_have_set_euo_pipefail` only covers hook entry points, not scripts in `scripts/`. This script falls through the test gap.
-
-**Fix:** Change line 1 to `#!/usr/bin/env bash` and line 6 to `set -euo pipefail`. Verify no unquoted variable expansions rely on the permissive behavior.
-
----
-
-### P2-2: _parse_frontmatter duplicated across three test modules
-
-**Files:**
-- `/root/projects/Clavain/tests/structural/test_skills.py`, line 10
-- `/root/projects/Clavain/tests/structural/test_agents.py`, line 9
-- `/root/projects/Clavain/tests/structural/test_commands.py`, line 10
-
-The identical `_parse_frontmatter(path)` function (split on `---`, yaml.safe_load the middle section, return tuple) is copy-pasted across all three test modules. If the frontmatter parsing logic needs to change (e.g., handling edge cases in YAML parsing), it must be updated in three places.
-
-`conftest.py` already provides shared fixtures for paths and file lists but does not provide a shared frontmatter parser.
-
-**Fix:** Move `_parse_frontmatter` to `conftest.py` (or a `helpers.py` module in the test directory) and import it in all three test files.
-
----
-
-### P2-3: auto-compound.sh uses unescaped heredoc interpolation for JSON output
-
-**File:** `/root/projects/Clavain/hooks/auto-compound.sh`, lines 81-86
-
-```bash
-cat <<EOF
-{
-  "decision": "block",
-  "reason": "${REASON}"
-}
-EOF
+**Evidence:**
+```
+ .beads/issues.jsonl                                |   4 +-
+ AGENTS.md                                          |   2 +-
+ CLAUDE.md                                          |   2 +-
+ README.md                                          |   4 +-
+ docs/catalog.json                                  |   4 +-
+ .../flux-drive/SKILL/code-simplicity-reviewer.md   | 229 -------
+ docs/research/flux-drive/SKILL/fd-architecture.md  | 648 ++++++++++++++-----
+ docs/research/flux-drive/SKILL/fd-code-quality.md  | 216 -------
+ docs/research/flux-drive/SKILL/fd-performance.md   | 701 ++++++++++++++++-----
+ .../flux-drive/SKILL/fd-user-experience.md         | 194 ------
+ docs/research/flux-drive/SKILL/summary.md          | 143 ++++-
+ hooks/hooks.json                                   |  10 +
+ skills/flux-drive/SKILL.md                         |   2 +-
+ skills/flux-drive/phases/launch.md                 | 105 +--
+ skills/flux-drive/phases/shared-contracts.md       |   8 +-
+ skills/flux-drive/phases/synthesize.md             |   9 +
+ 16 files changed, 1,212 insertions(+), 1,069 deletions(-)
 ```
 
-The `$REASON` variable is interpolated into an unquoted heredoc (`<<EOF`, not `<<'EOF'`). While `REASON` currently contains only a hardcoded string with controlled `$SIGNALS` values (commit, resolution, investigation, bead-closed, insight), the pattern is fragile. If the string ever contains a double-quote, backslash, or dollar sign, the JSON output breaks.
+The diff shows:
+1. **3 deleted research files** (code-simplicity-reviewer.md, fd-code-quality.md, fd-user-experience.md) — 639 deletions — these are old flux-drive agent reviews, likely superseded by fd-quality.md and fd-user-product.md
+2. **2 expanded research files** (fd-architecture.md +648 lines, fd-performance.md +701 lines) — these look like new review outputs, not in-progress edits
+3. **flux-drive orchestration changes** (launch.md -105 lines, shared-contracts.md +8, synthesize.md +9) — structural refactoring or fixes
+4. **Documentation bumps** (AGENTS.md, CLAUDE.md, README.md, catalog.json) — likely version or count updates
+5. **hooks.json** (+10 lines) — new hook registration
 
-Compare with `autopilot.sh` which handles this correctly: it uses `jq` for JSON construction when available and falls back to a heredoc with single-quoted delimiter (`<<'ENDJSON'`) containing only static text.
+**Problem:** Without a commit message or plan context, it's impossible to determine:
+- Is this a completed feature ready to commit?
+- Is it in-progress work that should be stashed?
+- Are the deletions intentional cleanup or accidental?
 
-The practical risk is low today since `SIGNALS` only takes hardcoded values. But this diverges from the safer pattern already established in the same codebase.
+**User Impact:** Unclear git state creates risk:
+- If these changes are committed as-is, the commit message will be generic without explaining WHY 1,212 lines changed
+- If these changes are work-in-progress, other developers (or future sessions) may accidentally commit or revert them
+- If the deletions are wrong, valuable research is lost
 
-**Fix:** Use `jq -n --arg` for JSON construction (like autopilot.sh), or at minimum use `escape_for_json` from `lib.sh` on `REASON` before interpolation.
-
----
-
-### Improvements Suggested
-
-#### IMP-1: fd-* agent system prompts lack any output format specification (independently confirmed)
-
-**Files:** All 6 fd-* agent files under `/root/projects/Clavain/agents/review/`:
-- `fd-architecture.md`
-- `fd-safety.md`
-- `fd-correctness.md`
-- `fd-quality.md`
-- `fd-user-product.md`
-- `fd-performance.md`
-
-**Observation (independently confirmed):** The fd-* agent system prompts define review approach and focus areas but contain zero specification of the expected output format (Findings Index, severity levels, verdict, section structure). The output format is defined only in `skills/flux-drive/phases/shared-contracts.md` and injected at runtime by the flux-drive orchestrator.
-
-This means:
-1. When these agents are dispatched outside flux-drive (e.g., via `/clavain:review` or `/clavain:quality-gates`), they have no output format guidance and will produce freeform output
-2. The agents are entirely dependent on the caller to inject format requirements, creating a tight coupling between the agent and its dispatcher
-3. Any new dispatcher that invokes these agents must know to inject the shared-contracts format
-
-This is the "Documentation-implementation format divergence" pattern from the knowledge context. I independently confirmed it by reading all six fd-* agent files and verifying none contain references to "Findings Index," "verdict," "P0/P1/P2," or the `.md.partial` completion protocol.
-
-**Suggestion:** Add a minimal output format section to each fd-* agent system prompt that defines the Findings Index structure, severity levels, and completion protocol. The flux-drive orchestrator can still override or supplement this, but the agents should be self-contained enough to produce structured output when dispatched from any context.
+**Recommendation:**
+1. Review each modified file's diff to determine intent
+2. Group changes into logical commits:
+   - Commit 1: Delete superseded research docs with message "chore: remove superseded flux-drive research (replaced by fd-quality and fd-user-product)"
+   - Commit 2: Flux-drive orchestration fixes with descriptive message
+   - Commit 3: Documentation updates with message "chore: update docs for v0.5.7"
+3. Or: if this is incomplete work, stash it and document the stash purpose
 
 ---
 
-#### IMP-2: README skills table lists 31 skills, not the claimed 34
+### P0-2: Untracked auto-publish hook missing from hooks.json registration
 
-**File:** `/root/projects/Clavain/README.md`, lines 99-142
+**Severity:** P0
+**Location:** hooks/auto-publish.sh (147 lines, complete implementation) but NOT in hooks/hooks.json
 
-The skills table in the README lists skills in named groups (Core Lifecycle, Code Discipline, Multi-Agent, Cross-AI, Knowledge & Docs, Plugin Development, Utilities). Counting the individual skills listed gives 31 entries. The missing skills from the full set of 34 are:
+**Evidence:**
 
-- `prompterpeer` (cross-AI prompt optimization)
-- `splinterpeer` (cross-AI disagreement mining)
-- `winterpeer` (LLM council review)
+File exists:
+```bash
+$ wc -l hooks/auto-publish.sh
+147 hooks/auto-publish.sh
+```
 
-These three peer review skills are part of the interpeer stack but are not listed individually in the README table. The README describes `interpeer` with its 4 modes (quick, deep, council, mine), but the individual skill files for `prompterpeer`, `splinterpeer`, and `winterpeer` exist in the skills directory and are counted toward the "34 skills" claim. Either add them to the table or note that they are sub-skills of interpeer.
+Content summary:
+```bash
+#!/usr/bin/env bash
+# PostToolUse hook: auto-publish plugin after git push
+# Detects `git push` in plugin repos, auto-increments patch version if the
+# developer forgot to bump, syncs marketplace, and pushes marketplace.
+```
+
+But `hooks/hooks.json` has no PostToolUse entry for auto-publish.sh. Current hooks.json structure:
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/clodex-audit.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Problem:** auto-publish.sh is a complete, production-ready hook but it won't be installed or executed because it's not registered. The hook's purpose (auto-bump patch version after `git push`) is critical for plugin development hygiene, yet it's dormant.
+
+**Root Cause:** The hook was likely developed in this session or a recent session but the registration step was forgotten.
+
+**User Impact:**
+1. Developers push plugin changes without version bumps → marketplace is out of sync
+2. The hook's sentinel logic (60s TTL lock files) and loop prevention are wasted
+3. The hook's marketplace sync logic never runs → manual `/interpub:release` required every time
+
+**Recommendation:**
+
+Add to hooks/hooks.json:
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-publish.sh",
+            "timeout": 10,
+            "description": "Auto-publish plugin after git push"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        ...
+      }
+    ]
+  }
+}
+```
+
+Then test:
+1. Make a trivial change to plugin.json
+2. `git commit -am "test: auto-publish hook"`
+3. `git push`
+4. Check if hook fires (should see marketplace commit)
 
 ---
 
-### Overall Assessment
+### P1-1: 5 research docs untracked (3 valuable, 2 temp artifacts)
 
-Clavain demonstrates strong quality discipline for a 70+ component plugin: consistent kebab-case naming, uniform frontmatter structure, comprehensive test coverage, and clean namespace migration. The issues found are concrete and fixable -- one naming violation, one documentation drift from a recent hook addition, and test coverage gaps that mirror the naming bug they failed to catch. The shell scripts are well-structured with proper strict mode, with one exception. The main improvement opportunity is making the fd-* agents self-contained with respect to output format, reducing their dependency on caller-injected contracts.
+**Severity:** P1
+**Location:** Untracked files in git status
 
-<!-- flux-drive:complete -->
+**Evidence:**
+```
+?? docs/research/audit-flux-drive-token-flow.md
+?? docs/research/check-beads-issues-for-flux-drive.md
+?? docs/research/explore-posttooluse-hook-patterns.md
+?? docs/research/flux-drive/SKILL/fd-quality.md
+?? docs/research/flux-drive/SKILL/fd-user-product.md
+```
+
+**Analysis:**
+
+1. **audit-flux-drive-token-flow.md** (494 lines, 14k words) — comprehensive token flow analysis of flux-drive orchestration. Valuable reference material.
+
+2. **check-beads-issues-for-flux-drive.md** (636 lines) — beads query results for flux-drive improvements. Tracks implementation status.
+
+3. **explore-posttooluse-hook-patterns.md** (325 lines) — research on Claude Code's PostToolUse hook system. Reference material, should move to skill references.
+
+4. **fd-quality.md** (655 lines) — flux-drive agent output reviewing SKILL.md quality. P0 findings: 546-line SKILL.md violates plugin convention.
+
+5. **fd-user-product.md** (583 lines) — flux-drive agent output reviewing UX. P0 findings: Missing escape hatch for triage disagreement loops.
+
+**Problem:**
+- 3 valuable research docs are at risk of loss if session crashes
+- 2 agent outputs are not discoverable
+- explore-posttooluse-hook-patterns.md is in the wrong directory
+
+**Recommendation:**
+1. **Commit valuable research:**
+   ```bash
+   git add docs/research/audit-flux-drive-token-flow.md
+   git add docs/research/check-beads-issues-for-flux-drive.md
+   git add docs/research/flux-drive/SKILL/fd-quality.md
+   git add docs/research/flux-drive/SKILL/fd-user-product.md
+   git commit -m "docs: add flux-drive token flow analysis and agent reviews"
+   ```
+
+2. **Move hook patterns to skill reference:**
+   ```bash
+   mv docs/research/explore-posttooluse-hook-patterns.md \
+      skills/working-with-claude-code/references/posttooluse-patterns.md
+   git add skills/working-with-claude-code/references/posttooluse-patterns.md
+   git commit -m "docs: move PostToolUse hook patterns to skill reference"
+   ```
+
+---
+
+### P1-2: Documentation claims "17 agents" but consolidation reduced from 19 to 17 — verify accuracy
+
+**Severity:** P1
+**Location:** AGENTS.md line 12, CLAUDE.md (modified but content not visible in diff stats)
+
+**Evidence:**
+
+From AGENTS.md:
+```markdown
+| Components | 29 skills, 17 agents, 37 commands, 6 hooks, 2 MCP servers |
+```
+
+From filesystem verification:
+```bash
+$ ls -la agents/review/*.md agents/research/*.md agents/workflow/*.md 2>/dev/null | grep -v references | wc -l
+17
+```
+
+From project memory:
+> Agent Consolidation (2026-02-10, updated 2026-02-12)
+> Total: 17 agents (10 review + 5 research + 2 workflow)
+
+**Analysis:**
+
+The count is **correct** (17 agents), but the modified AGENTS.md and CLAUDE.md files suggest the documentation was updated. The diff stats show only 2 lines changed in each file.
+
+**Problem:** Documentation accuracy is critical for plugin discovery and validation. Without seeing the actual diff, we can't confirm what changed.
+
+**Recommendation:**
+
+1. **Verify the diff:**
+   ```bash
+   git diff AGENTS.md CLAUDE.md
+   ```
+
+2. **If count was corrected:** Commit with message "chore: update agent count to 17 (post-consolidation)"
+
+3. **If version was bumped:** Verify plugin.json also shows v0.5.7
+
+---
+
+### P1-3: .claude/clodex-audit.log and clodex-toggle.flag are temp runtime artifacts (should be in /tmp or gitignored)
+
+**Severity:** P1
+**Location:** .claude/clodex-audit.log, .claude/clodex-toggle.flag (untracked)
+
+**Evidence:**
+
+From git status:
+```
+?? .claude/clodex-audit.log
+?? .claude/clodex-toggle.flag
+```
+
+From audit log contents:
+```
+[2026-02-13T09:09:25-08:00] VIOLATION: Edit/Write to source file: /root/projects/Clavain/docs/research/flux-drive/SKILL/fd-architecture.md.partial
+[2026-02-13T09:12:32-08:00] VIOLATION: Edit/Write to source file: /root/projects/Clavain/docs/research/flux-drive/SKILL/fd-user-product.md.partial
+```
+
+From toggle flag:
+```
+2026-02-13T08:29:18-08:00
+```
+
+**Analysis:**
+
+1. **clodex-audit.log** is a runtime log written by hooks/clodex-audit.sh. It tracks Edit/Write violations. This is ephemeral state.
+
+2. **clodex-toggle.flag** is a timestamp file indicating when clodex mode was enabled. This is session-scoped state.
+
+Both files live in `.claude/` which is NOT gitignored. This creates commit pollution risk.
+
+**Problem:**
+- Temp runtime artifacts in a non-gitignored directory create commit pollution risk
+- No cleanup mechanism for audit logs (grows unbounded)
+- Toggle flag should be session-scoped but isn't
+
+**Recommendation:**
+
+1. **Move to /tmp:**
+   ```bash
+   # In clodex-audit.sh
+   AUDIT_LOG="/tmp/clavain-clodex-audit-${session_id}.log"
+
+   # In clodex-toggle.sh
+   TOGGLE_FLAG="/tmp/clavain-clodex-toggle-${session_id}.flag"
+   ```
+
+2. **Or: Add to .gitignore:**
+   ```
+   .claude/clodex-audit.log
+   .claude/clodex-toggle.flag
+   ```
+
+3. **Delete current files:**
+   ```bash
+   rm .claude/clodex-audit.log .claude/clodex-toggle.flag
+   ```
+
+---
+
+### P2-1: All shell scripts pass bash -n but lack shellcheck validation
+
+**Severity:** P2
+**Location:** All shell scripts (hooks/*.sh, scripts/*.sh)
+
+**Evidence:**
+
+Syntax validation passes:
+```bash
+$ for script in hooks/*.sh scripts/*.sh; do bash -n "$script" 2>&1 || echo "FAIL: $script"; done
+[no output = all passed]
+```
+
+But no shellcheck validation in test suite. Project uses 3-tier testing (pytest, bats-core, smoke) but none run shellcheck.
+
+**Analysis:**
+
+bash -n only checks syntax. It doesn't check:
+- Unquoted variable expansions
+- Useless use of cat
+- Missing error handling
+- Deprecated syntax
+
+**Problem:** Without shellcheck, subtle bugs can slip through.
+
+**Recommendation:**
+
+Add shellcheck to test suite:
+```bash
+# In tests/run-tests.sh
+echo "Running shellcheck..."
+shellcheck hooks/*.sh scripts/*.sh || exit 1
+```
+
+---
+
+## Improvements Suggested
+
+### IMP-1: audit-flux-drive-token-flow.md and check-beads-issues-for-flux-drive.md should move to docs/research/flux-drive/ for discoverability
+
+**Location:** docs/research/ (top-level) should be docs/research/flux-drive/
+
+**Rationale:**
+
+Both files are flux-drive-specific research. They should be under `docs/research/flux-drive/` for discoverability and organizational consistency.
+
+**Recommendation:**
+```bash
+mv docs/research/audit-flux-drive-token-flow.md docs/research/flux-drive/
+mv docs/research/check-beads-issues-for-flux-drive.md docs/research/flux-drive/
+git add docs/research/flux-drive/{audit-flux-drive-token-flow,check-beads-issues-for-flux-drive}.md
+git commit -m "docs: move flux-drive research to skill directory"
+```
+
+---
+
+### IMP-2: 3 deleted research docs — clean deletion or need archiving
+
+**Location:** git status shows 3 deletions in docs/research/flux-drive/SKILL/
+
+**Evidence:**
+```
+ D docs/research/flux-drive/SKILL/code-simplicity-reviewer.md (229 lines)
+ D docs/research/flux-drive/SKILL/fd-code-quality.md (216 lines)
+ D docs/research/flux-drive/SKILL/fd-user-experience.md (194 lines)
+```
+
+From project memory:
+> Agent Consolidation (2026-02-10, updated 2026-02-12)
+> 19 v1 review agents consolidated into 6 core fd-* agents
+
+**Analysis:**
+
+These 3 files are old flux-drive agent reviews, superseded by fd-quality.md and fd-user-product.md.
+
+**Recommendation:**
+
+Clean deletion is sufficient:
+```bash
+git add docs/research/flux-drive/SKILL/code-simplicity-reviewer.md
+git add docs/research/flux-drive/SKILL/fd-code-quality.md
+git add docs/research/flux-drive/SKILL/fd-user-experience.md
+git commit -m "chore: remove superseded flux-drive reviews (replaced by fd-quality and fd-user-product)"
+```
+
+Git history already preserves the content.
+
+---
+
+### IMP-3: explore-posttooluse-hook-patterns.md is reference material, belongs in skills/working-with-claude-code/references/
+
+**Location:** docs/research/ (top-level)
+
+**Rationale:**
+
+This file documents Claude Code's PostToolUse hook system — reference material for the working-with-claude-code skill.
+
+**Recommendation:**
+```bash
+mv docs/research/explore-posttooluse-hook-patterns.md \
+   skills/working-with-claude-code/references/posttooluse-patterns.md
+git add skills/working-with-claude-code/references/posttooluse-patterns.md
+git commit -m "docs: move PostToolUse hook patterns to skill reference"
+```
+
+---
+
+### IMP-4: No smoke tests for new fd-quality.md and fd-user-product.md agents
+
+**Location:** tests/smoke/ directory
+
+**Analysis:**
+
+The 2 new files (fd-quality.md, fd-user-product.md) were produced during this flux-drive run, but there are no corresponding smoke tests.
+
+**Clarification:** These are research outputs (reviews OF the flux-drive skill), not agent definitions. They live in docs/research/flux-drive/SKILL/, not agents/review/. No smoke tests needed — they're not agents themselves, they're reviews produced BY agents.
+
+**Recommendation:**
+
+No action needed. But clarify with a comment:
+```markdown
+# fd-quality.md
+<!-- This is a flux-drive agent review output, not an agent definition -->
+```
+
+---
+
+### IMP-5: Documentation drift — CLAUDE.md and AGENTS.md modified but unclear what changed
+
+**Location:** CLAUDE.md (2 lines changed), AGENTS.md (2 lines changed)
+
+**Evidence:**
+
+From git diff stats:
+```
+ AGENTS.md    |   2 +-
+ CLAUDE.md    |   2 +-
+```
+
+**Problem:** Without seeing the actual diff, we can't verify the changes are intentional and consistent.
+
+**Recommendation:**
+
+1. **View the diff:**
+   ```bash
+   git diff AGENTS.md CLAUDE.md
+   ```
+
+2. **Commit with clear message:**
+   ```bash
+   git add AGENTS.md CLAUDE.md
+   git commit -m "chore: update docs for v0.5.7 (agent count 19→17 post-consolidation)"
+   ```
+
+---
+
+## Overall Assessment
+
+The Clavain plugin is structurally sound — all shell scripts pass syntax validation, plugin.json is valid, no namespace contamination detected, and component counts are accurate (29 skills, 17 agents, 37 commands). The primary quality gaps are process-related, not code-related: 1,212 lines of uncommitted changes with unclear intent, a complete auto-publish hook that's not registered in hooks.json, 5 untracked research files that should be committed or moved, and 2 temp runtime artifacts that should be in /tmp or gitignored. The uncommitted state creates risk — if this session ends without a commit, the intent behind flux-drive orchestration changes is lost. The auto-publish hook is production-ready but dormant, wasting its version-bump and marketplace-sync automation. Shell script quality is solid (bash -n passes) but would benefit from shellcheck validation.
+
+**Prioritize:**
+1. **P0-1:** Review uncommitted changes, group into logical commits (or stash if incomplete)
+2. **P0-2:** Register auto-publish.sh in hooks.json and test
+3. **P1-1:** Commit valuable research (token flow analysis, beads tracking, agent reviews)
+4. **P1-3:** Move clodex runtime artifacts to /tmp or add to .gitignore
+
+**Cleanup is 90% "finish what was started" — commit the research, register the hook, move the temp files. The code quality underneath is solid.**
+
+---
+
+<!-- fd-quality:complete -->
