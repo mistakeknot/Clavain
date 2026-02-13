@@ -263,6 +263,15 @@ If `.beads/` didn't exist, append instead:
 *Beads not configured for this project. Run `bd init` to enable issue tracking from reviews.*
 ```
 
+### Step 3.7: Clean up temp files
+
+Remove document temp files created in Phase 2 (Step 2.1c):
+```bash
+rm -f /tmp/flux-drive-${INPUT_STEM}-*.md /tmp/flux-drive-${INPUT_STEM}-*.diff 2>/dev/null
+```
+
+This cleanup runs after synthesis, not before — agents may still be reading temp files during retry (Step 2.3).
+
 ---
 
 ## Post-Synthesis: Silent Compounding

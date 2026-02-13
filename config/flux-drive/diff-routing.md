@@ -1,6 +1,6 @@
 # Diff-to-Agent Routing Configuration
 
-This file maps file patterns and hunk keywords to flux-drive review agents. Used by the orchestrator when a diff input exceeds 1000 lines to soft-prioritize hunks per agent.
+This file maps file patterns and hunk keywords to flux-drive review agents. Used by the orchestrator to soft-prioritize content per agent: diff hunks (when diff exceeds 1000 lines) and document sections (when file exceeds 200 lines).
 
 **How it works**: Each domain-specific agent receives priority file hunks in full + a compressed summary (filename + change stats) for other files. Cross-cutting agents always get the full diff. No information is lost.
 
@@ -111,6 +111,38 @@ A file matching priority patterns for multiple agents is marked as priority for 
 ## 80% Overlap Threshold
 
 If an agent's priority files cover >= 80% of total changed lines in the diff, skip slicing for that agent and send the full diff. The overhead of compressed summaries is not worth it when almost everything is priority.
+
+---
+
+## Section-Level Routing (Document Slicing)
+
+When `INPUT_TYPE = file` and the document exceeds 200 lines, the same routing logic applies to **document sections** instead of diff hunks.
+
+**How it works**: The orchestrator splits the document into sections (by `##` headings). For each domain-specific agent, it classifies sections as `priority` or `context` using the same keywords from the agent's "Priority hunk keywords" list above.
+
+A section is `priority` for an agent if:
+- The section heading matches any of the agent's keywords (case-insensitive substring)
+- The section body contains any of the agent's keywords (sampled — first 50 lines)
+
+A section is `context` for an agent if neither condition matches.
+
+**Section heading patterns** (additional keywords matched against heading text only):
+
+| Agent | Heading keywords |
+|-------|-----------------|
+| fd-safety | security, auth, credential, deploy, rollback, trust, permissions, secrets, certificates |
+| fd-correctness | data, transaction, migration, concurrency, async, race, state, consistency, integrity |
+| fd-performance | performance, scaling, cache, bottleneck, latency, throughput, memory, rendering, optimization |
+| fd-user-product | user, UX, flow, onboarding, CLI, interface, experience, accessibility, error handling |
+| fd-game-design | game, simulation, balance, pacing, AI, behavior, procedural, storyteller, feedback loop |
+
+**Cross-cutting agents** (fd-architecture, fd-quality) always receive the full document — same as diff slicing.
+
+**Safety override**: Any section mentioning auth, credentials, secrets, tokens, or certificates is always `priority` for fd-safety regardless of keyword matching.
+
+**80% threshold**: Same as diff slicing — if an agent's priority sections cover >= 80% of total document lines, skip slicing for that agent.
+
+**Small documents** (< 200 lines): Skip section slicing entirely. The token savings are negligible and the risk of over-filtering is higher.
 
 ---
 

@@ -69,6 +69,73 @@ For each detected domain (from the Document Profile's `Project domains` field), 
 
 **Performance**: Domain profile files are small (~90-100 lines each). Reading 1-3 files adds negligible overhead. This step should take <1 second.
 
+### Step 2.1c: Write document to temp file(s)
+
+Write the document (or per-agent slices) to temp files so agents can Read them instead of receiving inline content. This eliminates document duplication across agent prompts.
+
+**Timestamp**: Generate once for all temp files in this run:
+```bash
+TS=$(date +%s)
+```
+
+#### Case 1: File/directory inputs — small document (< 200 lines)
+
+One shared file for all agents:
+```bash
+REVIEW_FILE="/tmp/flux-drive-${INPUT_STEM}-${TS}.md"
+```
+Write the full document content. All agents reference this single file.
+
+#### Case 2: File/directory inputs — document slicing active (>= 200 lines)
+
+Uses the `section_map` from Step 1.2c. Write per-agent temp files for domain-specific agents:
+
+1. **Cross-cutting agents** (fd-architecture, fd-quality): Write one shared full-document file:
+   ```bash
+   REVIEW_FILE="/tmp/flux-drive-${INPUT_STEM}-${TS}.md"
+   ```
+
+2. **Domain-specific agents**: Write one file per agent containing priority sections in full + context section summaries:
+   ```bash
+   REVIEW_FILE_fd_safety="/tmp/flux-drive-${INPUT_STEM}-fd-safety-${TS}.md"
+   REVIEW_FILE_fd_correctness="/tmp/flux-drive-${INPUT_STEM}-fd-correctness-${TS}.md"
+   ```
+
+   **Per-agent file structure**:
+   ```markdown
+   [Document slicing active: {P} priority sections ({L1} lines), {C} context sections ({L2} lines summarized)]
+
+   ## Priority Sections (full content)
+
+   {priority section content — preserve original markdown including headings}
+
+   ## Context Sections (summaries)
+
+   - **{Section Name}**: {1-line summary} ({N} lines)
+   - **{Section Name}**: {1-line summary} ({N} lines)
+
+   > If you need full content for a context section, note it as
+   > "Request full section: {name}" in your findings.
+   ```
+
+3. **Pyramid Summary** (documents >= 500 lines): Prepend the pyramid summary to each agent's file (it's small and helps agents navigate).
+
+#### Case 3: Diff inputs — no slicing (< 1000 lines or cross-cutting)
+
+One shared file:
+```bash
+REVIEW_FILE="/tmp/flux-drive-${INPUT_STEM}-${TS}.diff"
+```
+
+#### Case 4: Diff inputs — with per-agent slicing (>= 1000 lines)
+
+Per-agent files with priority hunks + context summaries (unchanged from existing diff slicing logic):
+```bash
+REVIEW_FILE_fd_safety="/tmp/flux-drive-${INPUT_STEM}-fd-safety-${TS}.diff"
+```
+
+Record all REVIEW_FILE paths for use in prompt construction (Step 2.2).
+
 ### Step 2.2: Stage 1 — Launch top agents
 
 **Condition**: Use this step when `DISPATCH_MODE = task` (default).
@@ -171,7 +238,7 @@ Launch Stage 2 agents with `run_in_background: true`. Wait for completion using 
 - Requires `DISPLAY=:99` and `CHROME_PATH=/usr/local/bin/google-chrome-wrapper`
 - Output goes to `{OUTPUT_DIR}/oracle-council.md.partial`, renamed to `.md` on success
 
-**Document content**: Include the full document in each agent's prompt without trimming. Each agent gets the complete document content.
+**Document content**: Write the document to a temp file once; agents Read it as their first action. See Step 2.1c below.
 
 **Exception for very large file/directory inputs** (1000+ lines): Include only the sections relevant to the agent's focus area plus Summary, Goals, and Non-Goals. Note which sections were omitted in the agent's prompt.
 
@@ -233,47 +300,29 @@ diff --git a/path/to/file b/path/to/file
 <!-- This template implements the Findings Index contract from shared-contracts.md -->
 
 ```
-## CRITICAL: Output Format Override
+## Output Format
 
-Your agent definition has a default output format. IGNORE IT for this task.
-You MUST use the format specified below. This is a flux-drive review task
-and synthesis depends on a machine-parseable Findings Index.
+Write findings to `{OUTPUT_DIR}/{agent-name}.md.partial`. Rename to `.md` when done.
+Add `<!-- flux-drive:complete -->` as the last line before renaming.
 
-### Required Output
-
-Your FIRST action MUST be: use the Write tool to create `{OUTPUT_DIR}/{agent-name}.md.partial`.
 ALL findings go in that file — do NOT return findings in your response text.
-When complete, add `<!-- flux-drive:complete -->` as the last line, then rename the file
-from `.md.partial` to `.md` using Bash: `mv {OUTPUT_DIR}/{agent-name}.md.partial {OUTPUT_DIR}/{agent-name}.md`
 
-**Output file:** Write to `{OUTPUT_DIR}/{agent-name}.md.partial` during work.
-When your review is complete, rename to `{OUTPUT_DIR}/{agent-name}.md`.
-Your LAST action MUST be this rename. Add `<!-- flux-drive:complete -->` as the final line before renaming.
-
-The file MUST start with a Findings Index block:
+File structure:
 
 ### Findings Index
-- P0 | P0-1 | "Section Name" | Title of the issue
-- P1 | P1-1 | "Section Name" | Title
-- IMP | IMP-1 | "Section Name" | Title of improvement
+- SEVERITY | ID | "Section" | Title
 Verdict: safe|needs-changes|risky
 
-After the Findings Index, use EXACTLY this prose structure:
-
-### Summary (3-5 lines)
-[Your top findings]
+### Summary
+[3-5 lines]
 
 ### Issues Found
-[Numbered, with severity: P0/P1/P2. Must match Findings Index.]
+[ID. SEVERITY: Title — 1-2 sentences with evidence]
 
-### Improvements Suggested
-[Numbered, with rationale]
+### Improvements
+[ID. Title — 1 sentence with rationale]
 
-### Overall Assessment
-[1-2 sentences]
-
-If you have zero findings, still write the file with an empty Findings Index
-(just the header and Verdict line) and verdict: safe.
+Zero findings: empty index + verdict: safe.
 
 ---
 
@@ -281,18 +330,17 @@ If you have zero findings, still write the file with an empty Findings Index
 
 You are reviewing a {document_type} for {review_goal}.
 
+[Only include this section if knowledge entries were retrieved in Step 2.1 for this agent.
+If no knowledge entries exist, omit the entire Knowledge Context section — do not include it empty.]
+
 ## Knowledge Context
 
-[If knowledge entries were retrieved for this agent:]
 The following patterns were discovered in previous reviews. Consider them as context but verify independently — do NOT simply re-confirm without checking.
 
 {For each knowledge entry:}
 - **Finding**: {entry body — first 1-3 lines}
   **Evidence**: {evidence anchors from entry body}
   **Last confirmed**: {lastConfirmed from frontmatter}
-
-[If no knowledge entries were retrieved:]
-No prior knowledge available for this review domain.
 
 **Provenance note**: If any knowledge entry above matches a finding you would independently flag, note it as "independently confirmed" in your findings. If you are only re-stating a knowledge entry without independent evidence, note it as "primed confirmation" — this distinction is critical for knowledge decay.
 
@@ -334,11 +382,20 @@ as a finding.
 
 ## Document to Review
 
-[For INPUT_TYPE = file or directory:]
+**File path**: `{REVIEW_FILE}` [or `{REVIEW_FILE_{agent-name}}` if document slicing is active]
 
-[Trimmed document content — orchestrator applies token optimization above.]
+Your FIRST action must be to Read this file using the Read tool.
 
-[For repo reviews: README + key structural info from Step 1.0.]
+[For full-document agents (cross-cutting, or document < 200 lines):]
+It contains the full document under review.
+
+[For sliced agents (document >= 200 lines, domain-specific):]
+This file contains priority sections for your review domain in full,
+plus one-line summaries of other sections. If you need full content
+for a summarized section, note "Request full section: {name}" in your findings.
+
+[For repo reviews: Include README + key structural info from Step 1.0 inline,
+then reference the temp file for the full content.]
 
 [When divergence exists, also include specific things for THIS agent to
 check in the actual codebase — file paths, line numbers, known issues
@@ -353,26 +410,17 @@ you spotted during Step 1.0.]
 - Lines: +{added} -{removed}
 - Commit: {commit_message or "N/A"}
 
-### Priority Files (full hunks)
+**Diff file**: `{REVIEW_FILE}` (or `{REVIEW_FILE_{agent-name}}` if per-agent slicing is active)
 
-[Complete diff hunks for files classified as priority for this agent.
-Preserve original unified diff format.]
+Your FIRST action must be to Read this file. It contains the diff content for your review.
 
-{priority diff hunks}
-
-### Context Files (summary only)
-
-[One-liner per non-priority file — filename, change stats, change type.]
-
-{context file summaries}
+[If diff slicing is active for this agent, add:]
+This file contains your priority hunks in full + context file summaries.
+If you need full hunks for a context file, note it as "Request full hunks: {filename}" in your findings.
 
 [Diff slicing active: {P} priority files ({L1} lines), {C} context files ({L2} lines summarized)]
 
-> **Note to agent**: If you need full hunks for a context file to complete your review,
-> note it in your findings as "Request full hunks: {filename}" — the orchestrator may
-> re-run with adjusted routing.
-
-[For cross-cutting agents or small diffs: omit the Priority/Context split and include the full diff under a single "### Full Diff" header instead.]
+[For cross-cutting agents or small diffs: all agents share one diff file with the full content.]
 
 ## Your Focus Area
 

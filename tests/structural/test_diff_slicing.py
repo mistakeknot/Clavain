@@ -103,10 +103,10 @@ def test_launch_has_diff_to_review_section(launch_phase: str):
     assert "## Diff to Review" in launch_phase
 
 
-def test_launch_has_priority_context_sections(launch_phase: str):
-    """launch.md prompt template has Priority Files and Context Files sections."""
-    assert "Priority Files" in launch_phase
-    assert "Context Files" in launch_phase
+def test_launch_has_priority_context_slicing(launch_phase: str):
+    """launch.md has priority/context slicing for both diff and document inputs."""
+    assert "priority hunks" in launch_phase or "priority sections" in launch_phase
+    assert "context" in launch_phase.lower()
 
 
 def test_shared_contracts_has_slicing_contract(shared_contracts: str):

@@ -1,219 +1,523 @@
+# Flux-Drive Architecture Review Plan
+
+## Task
+Deep architectural review of the flux-drive skill orchestration system.
+
+## Scope
+- `skills/flux-drive/SKILL.md` (546 lines)
+- `skills/flux-drive/phases/launch.md` (429 lines)
+- `skills/flux-drive/phases/shared-contracts.md` (98 lines)
+- `skills/flux-drive/phases/synthesize.md` (369 lines)
+- `skills/flux-drive/phases/cross-ai.md` (31 lines)
+- `config/flux-drive/domains/index.yaml` (454 lines)
+- `config/flux-drive/diff-routing.md` (134 lines)
+
+## Analysis Areas
+
+### 1. Phase Decomposition & Boundaries
+**Status**: Analysis complete
+
+#### Finding: Progressive Loading is an Illusion (P0)
+The skill claims "Progressive loading: This skill is split across phase files. Read each phase file when you reach it — not before." This is misleading architecture.
+
+**Evidence**:
+- Line 10 in SKILL.md: "Progressive loading: This skill is split across phase files. Read each phase file when you reach it — not before."
+- Lines 513-526 in SKILL.md show Phase 2-4 sections that say "Read the [phase] file now"
+- But the orchestrator MUST read all phase files before dispatching agents to construct valid agent prompts
+
+**Why this is a boundary violation**:
+The orchestrator needs information from later phases during earlier phases:
+1. **launch.md** (Phase 2) contains the prompt template (lines 232-384) that defines the Findings Index contract
+2. **shared-contracts.md** defines the completion signal (`.md.partial` → `.md` rename) and error stub format
+3. **synthesize.md** (Phase 3) defines convergence counting rules that affect how many agents to launch in Phase 2
+
+The orchestrator cannot defer reading these files - it needs them upfront to:
+- Construct agent prompts with the correct output format override
+- Know what completion looks like for monitoring
+- Understand convergence thresholds for domain-aware expansion decisions
+
+**Correct architecture**: Either admit "read all phase files at the start" OR actually support deferred loading by:
+- Moving the prompt template to SKILL.md
+- Moving completion/error contracts to SKILL.md
+- Making each phase truly independent (Phase 3 synthesis should not define rules that affect Phase 2 decisions)
+
+**Impact**: This creates cognitive debt for developers maintaining the skill. They think phases are independent but find cross-references requiring simultaneous understanding of all files.
+
+#### Finding: Hidden Coupling Between Triage and Synthesis (P1)
+Step 1.2 (triage) defines "convergence" as a metric (lines 323, 341) but doesn't specify the algorithm. The convergence algorithm is buried in synthesize.md Step 3.3.
+
+**Evidence**:
+- SKILL.md line 340: "Track convergence: Note how many agents flagged each issue (e.g., '4/6 agents')"
+- synthesize.md lines 36-46: Actual convergence dedup algorithm with diff-slicing awareness
+- The triage step uses convergence to decide agent slot allocation (domain_slots calculation), but the definition of what convergence means is 2 phases away
+
+**Why this matters**:
+If convergence is part of the triage decision (how many slots?), the triage phase needs the convergence rules co-located, not forward-referenced to a later phase.
+
+**Fix**: Move convergence algorithm definition to SKILL.md or create a glossary section that defines shared concepts upfront.
+
+### 2. Scoring System Design
+**Status**: Analysis complete
+
+#### Finding: Domain Boost Calculation is Opaque (P1)
+Lines 271-275 in SKILL.md define domain boost as +2 for "≥3 bullets" and +1 for "1-2 bullets" but this requires the orchestrator to count injection criteria bullets across multiple domain profile .md files.
+
+**Evidence**:
+```
+Domain boost (+0, +1, or +2; applied only when base score ≥ 1):
+- Agent has injection criteria with ≥3 bullets for this domain → +2
+- Agent has injection criteria (1-2 bullets) for this domain → +1
+- Agent has no injection criteria for this domain → +0
+```
+
+**Problem**: This is a lossy coupling. The boost value is encoded indirectly through bullet count in separate .md files. If a domain profile author adds a 4th bullet for clarity, they've unknowingly changed triage scoring.
+
+**Better design**: Domain profiles should declare boost weights explicitly in frontmatter:
+```yaml
 ---
-agent: fd-architecture
-tier: 1
-issues:
-  - id: P0-1
-    severity: P0
-    section: "Agent Roster — Tier 3"
-    title: "Roster omits 8 registered review agents that could be relevant"
-  - id: P1-1
-    severity: P1
-    section: "Phase 1 — Step 1.2"
-    title: "Tier bonus arithmetic creates an effective floor of 1 for all Tier 1/2 agents, undermining 'irrelevant' scoring"
-  - id: P1-2
-    severity: P1
-    section: "Phase 2 — Step 2.1"
-    title: "Token optimization trimming delegated to agents with no enforcement or fallback"
-  - id: P1-3
-    severity: P1
-    section: "Phase 4 — Step 4.3"
-    title: "Splinterpeer invoked inline in main session but designed for multi-model input it will not have"
-  - id: P1-4
-    severity: P1
-    section: "Phase 3 — Step 3.4"
-    title: "Write-back to INPUT_FILE during concurrent reviews risks data loss"
-  - id: P1-5
-    severity: P1
-    section: "Phase 4 — Step 4.2"
-    title: "Oracle output format is unstructured prose — comparison against structured YAML frontmatter is underspecified"
-  - id: P1-6
-    severity: P1
-    section: "Phase 1 — Step 1.2"
-    title: "Deduplication rule 4 contradicts itself — prefers T1 except when it doesn't"
-  - id: P2-1
-    severity: P2
-    section: "Integration"
-    title: "Integration section is thin — no mention of using-clavain routing, hooks, or MCP server dependencies"
-improvements:
-  - id: IMP-1
-    title: "Add concurrency-reviewer, agent-native-reviewer, and language-specific reviewers to roster"
-    section: "Agent Roster"
-  - id: IMP-2
-    title: "Define explicit Oracle output format requirement in the Oracle prompt template"
-    section: "Agent Roster — Tier 4"
-  - id: IMP-3
-    title: "Add a file-locking or sequential-write strategy for Step 3.4"
-    section: "Phase 3 — Step 3.4"
-  - id: IMP-4
-    title: "Specify behavior when the document is itself the flux-drive SKILL.md (self-review)"
-    section: "Input"
-  - id: IMP-5
-    title: "Expand Integration section with hook dependencies, MCP server usage, and routing table entry"
-    section: "Integration"
-verdict: needs-changes
+domain: game-simulation
+agents:
+  fd-game-design:
+    boost: 2
+    focus: pacing, balance, emergent behavior
+  fd-correctness:
+    boost: 2
+    focus: simulation state consistency
 ---
-
-### Summary
-
-The flux-drive SKILL.md is a well-structured 600-line orchestration spec with clear phase boundaries and a thoughtful tiered agent model. However, it has a significant roster gap: 8 of the 20 registered review agents are invisible to flux-drive's triage, meaning the skill can never select concurrency-reviewer, agent-native-reviewer, plan-reviewer, deployment-verification-agent, data-migration-expert, or any of the 4 language-specific kieran reviewers. The scoring arithmetic for Tier 1/2 bonuses creates a floor that makes the "irrelevant" score functionally impossible for codebase-aware agents. Phase 4's cross-AI escalation chain has an input-format mismatch between Oracle's unstructured prose output and the YAML frontmatter the rest of the pipeline expects, and the inline splinterpeer invocation assumes multi-model input that is not actually available in this context.
-
-### Section-by-Section Review
-
-#### Input (lines 9-32)
-
-The path derivation rules are sound. The `PROJECT_ROOT` detection via `.git` ancestor is correct. The absolute path requirement for `OUTPUT_DIR` (line 31) is well-motivated and explicitly called out.
-
-One edge case: when `INPUT_PATH` points to a file that is itself inside the `docs/research/flux-drive/` tree (e.g., reviewing a previous flux-drive output), the `INPUT_STEM` derivation would create a nested output directory like `docs/research/flux-drive/SKILL/fd-architecture/`. This is not necessarily wrong, but the spec does not acknowledge it or define whether self-referential reviews are supported.
-
-Another edge case: `PROJECT_ROOT` falls back to `INPUT_DIR` when no `.git` ancestor exists. This means reviewing a file on a non-git filesystem writes output alongside the input, which could be surprising. The spec should state this explicitly as intended behavior or guard against it.
-
-#### Phase 1 — Analyze + Static Triage (lines 35-153)
-
-**Step 1.0 (lines 37-56):** The project understanding step is well-designed. The qmd MCP integration (line 47-50) is a good use of the available infrastructure — qmd is registered in `plugin.json` as a stdio MCP server. The divergence detection (lines 51-56) is a strong defensive measure.
-
-**Step 1.1 (lines 59-91):** The document profile structure is comprehensive. The section analysis with thin/adequate/deep classification (lines 77-78) is the key input to triage and is well-defined. The review goal adaptation by document type (lines 83-88) is practical.
-
-**Step 1.2 (lines 93-131):** This is where the most significant architectural issues cluster.
-
-**Scoring system (lines 96-100):** The 0/1/2 base scoring plus tier bonuses creates problematic arithmetic:
-- A Tier 1 agent scored as "irrelevant" (base 0) gets +1 bonus = score 1. Per rule 2 (line 107), agents scoring 1 are included if they cover a thin section. This means a Tier 1 agent in a completely wrong domain can still be selected if any section is thin — which undermines the "irrelevant" classification.
-- A Tier 3 agent scored as "maybe" (base 1) gets no bonus = score 1. This is the same score as an "irrelevant" Tier 1 agent, creating ambiguity in the deduplication logic.
-
-**Deduplication rule 4 (lines 108):** "If a Tier 1 or Tier 2 agent covers the same domain as a Tier 3 agent, drop the Tier 3 one — unless the target project lacks CLAUDE.md/AGENTS.md, in which case prefer the Tier 3 generic." This rule has a logical gap: it assumes domain overlap is binary (same/different), but the roster has cases where domains partially overlap (e.g., fd-architecture covers "module boundaries, component structure" while architecture-strategist covers "system design, component boundaries" — overlapping on component boundaries but diverging on module vs. system scope). The spec does not define how to handle partial overlap.
-
-**Step 1.3 (lines 133-152):** The user confirmation step is good practice. The three options (Approve/Edit/Cancel) are sufficient.
-
-#### Agent Roster (lines 156-215)
-
-**Tier 1 (lines 158-168):** All 5 agents (`fd-architecture`, `fd-code-quality`, `fd-performance`, `fd-security`, `fd-user-experience`) exist in `/root/projects/Clavain/agents/review/` with matching `name` fields in their YAML frontmatter. The `subagent_type` values follow the `clavain:review:<name>` convention consistently. These are verified as registered.
-
-**Tier 2 (lines 170-177):** The dynamic discovery mechanism (check `.claude/agents/fd-*.md`) is elegant and extensible. The `general-purpose` subagent_type with pasted system prompt is the correct approach for non-plugin agents.
-
-**Tier 3 (lines 179-189):** All 6 agents exist and are registered:
-- `architecture-strategist` -- verified in `/root/projects/Clavain/agents/review/architecture-strategist.md`
-- `code-simplicity-reviewer` -- verified
-- `performance-oracle` -- verified
-- `security-sentinel` -- verified
-- `pattern-recognition-specialist` -- verified
-- `data-integrity-reviewer` -- verified
-
-**Missing from Roster:** The following 8 registered review agents are completely absent from the flux-drive roster:
-
-| Agent | File | Potential Domain Relevance |
-|-------|------|---------------------------|
-| `concurrency-reviewer` | `agents/review/concurrency-reviewer.md` | Race conditions, async bugs — relevant for any concurrent system |
-| `agent-native-reviewer` | `agents/review/agent-native-reviewer.md` | Agent accessibility parity — relevant for agent-facing tools |
-| `plan-reviewer` | `agents/review/plan-reviewer.md` | Plan validation — directly relevant for plan-type documents |
-| `deployment-verification-agent` | `agents/review/deployment-verification-agent.md` | Deploy checklists — relevant for deployment plans |
-| `data-migration-expert` | `agents/review/data-migration-expert.md` | Migration safety — relevant for data migration plans |
-| `kieran-go-reviewer` | `agents/review/kieran-go-reviewer.md` | Go-specific idioms |
-| `kieran-python-reviewer` | `agents/review/kieran-python-reviewer.md` | Python-specific idioms |
-| `kieran-typescript-reviewer` | `agents/review/kieran-typescript-reviewer.md` | TypeScript-specific idioms |
-| `kieran-shell-reviewer` | `agents/review/kieran-shell-reviewer.md` | Shell-specific idioms |
-
-This is the most significant gap. The AGENTS.md describes 20 review agents, the routing table mentions "triaged from roster — up to 8 agents", but the flux-drive roster only includes 11 of those 20 (5 Tier 1 + 6 Tier 3). The missing agents cannot be selected regardless of document content because they are invisible to the triage scoring system.
-
-The language-specific reviewers (kieran-*) are especially notable omissions because Step 1.1 explicitly asks for "Languages" in the document profile, suggesting the spec *intended* to route to language specialists but never connected the wiring.
-
-**Tier 4 (lines 192-214):** The Oracle availability check (lines 193-196) correctly mirrors the logic in `hooks/session-start.sh` (line 38), which checks `command -v oracle` and `pgrep -f "Xvfb :99"`. The SessionStart hook reports "oracle: available for cross-AI review" as companion context, and line 194 of the SKILL.md checks for that exact string. This is consistent.
-
-The Oracle prompt template (lines 207-209) is reasonable but outputs unstructured prose to a markdown file. This creates an asymmetry with all other agents, which output structured YAML frontmatter. Phase 4's comparison logic (Step 4.2) must manually parse Oracle's prose against the synthesized YAML findings — but the spec does not define how to do this parsing.
-
-#### Phase 2 — Launch (lines 217-356)
-
-The prompt template (lines 255-349) is well-structured. The token optimization instruction (lines 275-283) delegates trimming responsibility to the orchestrating agent ("you MUST trim the document"), which is correct — the orchestrator knows which sections map to which agent's focus area.
-
-However, there is no enforcement mechanism. If the orchestrator fails to trim (or trims incorrectly), agents receive the full document and consume unnecessary tokens. Given that this runs up to 8 agents in parallel, token waste compounds quickly. A fallback such as "if the document exceeds N tokens, truncate non-focus sections to headers only" would provide a safety net.
-
-The `run_in_background: true` requirement (line 231) is critical and well-emphasized. The output format specification in the prompt template (lines 310-348) is thorough — it defines the YAML frontmatter schema, prose structure, and severity levels clearly.
-
-#### Phase 3 — Synthesize (lines 358-483)
-
-**Step 3.0 (lines 360-369):** The polling strategy (check every 30 seconds, timeout at 5 minutes) is reasonable. The fallback to "no findings" for missing agents is correct.
-
-**Step 3.1 (lines 371-382):** The three-tier validation (Valid/Malformed/Missing) is good defensive design. The fallback to prose-based reading for malformed frontmatter is the right call.
-
-**Step 3.2 (lines 384-389):** Reading only the YAML frontmatter first (~60 lines) is a smart token optimization for synthesis. The conditional prose reading for conflict resolution is well-motivated.
-
-**Step 3.3 (lines 391-398):** Deduplication and convergence tracking are well-defined. The priority rule for codebase-aware agents (line 398) is consistent with the tier model.
-
-**Step 3.4 (lines 400-467):** The write-back strategy has a concurrency concern. If flux-drive is run concurrently on the same file (which is possible via multiple Claude Code sessions), two instances could read the same `INPUT_FILE`, generate different findings, and overwrite each other. The spec does not mention locking, versioning, or conflict detection.
-
-The "Deepen thin sections" feature (lines 436-466) for plans is architecturally interesting — it launches additional `Task Explore` agents and uses Context7 MCP. This is a second wave of agent launches that is not counted in the Phase 2 cap of 8 agents. The spec should clarify whether these research agents count toward the cap.
-
-The repo review path (lines 468-474) correctly avoids modifying existing files and writes a standalone summary. This is clean separation.
-
-#### Phase 4 — Cross-AI Escalation (lines 486-583)
-
-**Step 4.1 (lines 488-499):** When Oracle is absent, offering `/clavain:interpeer` is the correct fallback. The interpeer skill provides Claude-Codex bidirectional review, which is a lighter-weight cross-AI option.
-
-**Step 4.2 (lines 501-515):** The four-category comparison framework (Agreement, Oracle-only, Claude-only, Disagreement) is well-designed. However, the implementation is underspecified: Oracle's output is unstructured prose (written to `oracle-council.md` via CLI), while Claude agents produce structured YAML frontmatter. The spec says "Compare Oracle's findings with the synthesized findings from Step 3.2" but does not explain how to normalize the two formats for comparison. This is left entirely to the orchestrator's judgment.
-
-**Step 4.3 (lines 517-536):** The auto-chain to splinterpeer has an architectural mismatch. Splinterpeer's own SKILL.md (line 18) says its input is "Two or more model perspectives (from winterpeer, prompterpeer, or manual paste)." In the flux-drive context, the "two perspectives" are: (1) the synthesized Claude findings and (2) Oracle's prose output. But splinterpeer was designed for structured multi-model outputs, not for one structured synthesis + one prose blob. The spec says to "structure each disagreement using splinterpeer's Phase 2 format" (line 534), which puts the burden on the orchestrator to pre-process Oracle's prose into splinterpeer-compatible format — an undocumented transformation step.
-
-Additionally, splinterpeer is invoked "inline (do not dispatch a subagent)" (line 532). This means the full splinterpeer workflow runs in the main session context, which already contains the entire flux-drive context. This could approach or exceed context limits for large documents with many findings.
-
-**Step 4.4 (lines 538-556):** The winterpeer escalation offer is well-structured with clear indicators (P0 severity, security disagreements). The three options are good. The scope limitation ("just the critical decision, not the whole document" — line 556) is important for keeping winterpeer focused.
-
-**Step 4.5 (lines 558-583):** The cross-AI summary template is comprehensive. The table format with confidence levels is useful for decision-making.
-
-#### Integration (lines 585-600)
-
-This section is thin relative to the complexity of the skill. It lists chain relationships and the calling command, but omits:
-
-1. **Hook dependency**: flux-drive relies on the SessionStart hook's Oracle detection (line 38-39 of `session-start.sh`) for its Tier 4 availability check. This coupling should be documented.
-2. **MCP server dependencies**: Step 1.0 uses qmd for semantic search, Step 3.4 uses Context7 for research — both are registered in `plugin.json`. The Integration section should note these.
-3. **Routing table entry**: The `using-clavain` routing table has flux-drive at "Review (docs)" row (line 38 of using-clavain/SKILL.md). This is the entry point that routes users to the skill.
-4. **Conflict with code-review plugin**: AGENTS.md line 267 lists code-review plugin as conflicting with `/review` + `/flux-drive`. This means flux-drive is part of the reason that plugin is disabled — worth noting in Integration.
-
-### Issues Found
-
-**P0-1: Roster omits 8 registered review agents** (Agent Roster, lines 156-214)
-The roster includes only 11 of 20 review agents. The missing 8 — concurrency-reviewer, agent-native-reviewer, plan-reviewer, deployment-verification-agent, data-migration-expert, and the 4 kieran language-specific reviewers — cannot be selected by triage regardless of document content. This is especially problematic for:
-- Plan documents (plan-reviewer is literally named for this use case)
-- Concurrent system designs (concurrency-reviewer is the only agent for race conditions)
-- Go/Python/TypeScript/Shell codebases (language-specific reviewers provide deeper idiom analysis than generic agents)
-
-The omission appears unintentional: the document profile explicitly collects "Languages" (line 72) but has no language-specific agents to route to.
-
-**P1-1: Tier bonus creates a floor score of 1 for all T1/T2 agents** (Phase 1, lines 96-100)
-An "irrelevant" (base 0) Tier 1 agent gets +1 = score 1. Per rule 2, score 1 agents are included if they cover a thin section. This means ANY Tier 1 agent can be selected for ANY document if even one section is thin — defeating the purpose of domain-based triage. Consider changing the bonus to only apply to agents scoring 1+ base, or changing the threshold for inclusion to 2+.
-
-**P1-2: Token trimming has no enforcement** (Phase 2, lines 275-283)
-The prompt template tells agents to trim to ~50% but provides no mechanism to verify this happened. If the orchestrator includes the full document in all 8 agent prompts (a likely failure mode when the orchestrator is under cognitive load), token costs multiply 8x with no warning.
-
-**P1-3: Splinterpeer input format mismatch** (Phase 4, lines 517-536)
-Splinterpeer expects "Two or more model perspectives" as structured input. In flux-drive's invocation, it receives one synthesized YAML summary and one unstructured Oracle prose blob. The transformation from these inputs to splinterpeer's Phase 2 format is undocumented and adds fragility to the escalation chain.
-
-**P1-4: No concurrent write protection for INPUT_FILE** (Phase 3, lines 400-434)
-If two flux-drive sessions review the same file simultaneously, they will read the same version, independently generate findings, and the last writer wins. This is a realistic scenario for teams sharing a codebase. The spec should either document this as a known limitation or add a lightweight guard (e.g., check for existing `## Flux Drive Enhancement Summary` section before writing).
-
-**P1-5: Oracle output format asymmetry** (Phase 4, lines 501-515)
-All Claude-based agents produce structured YAML frontmatter with machine-parseable issues. Oracle produces free-form prose via CLI redirect. The comparison in Step 4.2 must bridge this format gap, but the spec provides no guidance on how to normalize Oracle findings into the same structure for comparison.
-
-**P1-6: Partial domain overlap undefined in deduplication** (Phase 1, line 108)
-Rule 4 says "covers the same domain" but domains partially overlap (e.g., fd-architecture and architecture-strategist both cover "component boundaries" but diverge on scope). The spec needs to define whether partial overlap triggers deduplication or not.
-
-**P2-1: Integration section is thin** (Integration, lines 585-600)
-The integration section omits hook dependencies, MCP server dependencies, routing table coupling, and conflict relationships with disabled plugins. For a 600-line orchestration spec, the integration footprint is significantly underspecified.
-
-### Improvements Suggested
-
-**IMP-1: Add missing agents to roster as Tier 3 entries**
-Add concurrency-reviewer, agent-native-reviewer, plan-reviewer, deployment-verification-agent, data-migration-expert, and the 4 kieran language reviewers to the Tier 3 table. The language-specific reviewers could form a "Tier 3b — Language Specialists" sub-tier that is selected based on the "Languages" field in the document profile. Plan-reviewer could be auto-included (score boost) when document type is "plan".
-
-**IMP-2: Require structured output from Oracle**
-Modify the Oracle prompt template (line 208) to explicitly request YAML frontmatter in the same format as Claude agents. This would eliminate the format asymmetry in Phase 4 and enable machine-parseable comparison. Example addition to the Oracle prompt: "Format your output with YAML frontmatter matching this schema: agent, tier, issues (id, severity, section, title), improvements, verdict."
-
-**IMP-3: Add write-back guard for concurrent reviews**
-Before writing findings to `INPUT_FILE` in Step 3.4, check if a `## Flux Drive Enhancement Summary` section already exists. If it does, either append findings below it (with a timestamp to distinguish runs) or warn the user and ask whether to overwrite. This prevents silent data loss from concurrent reviews.
-
-**IMP-4: Define self-review behavior**
-When `INPUT_FILE` is itself inside `docs/research/flux-drive/`, the spec should either disallow the review (guard clause) or acknowledge that it produces nested output directories. Similarly, reviewing the flux-drive SKILL.md itself is a valid use case that creates a recursive loop risk — the spec should acknowledge this.
-
-**IMP-5: Expand Integration section**
-Add: (1) SessionStart hook dependency for Oracle detection, (2) qmd and Context7 MCP server dependencies, (3) using-clavain routing table entry, (4) conflict relationship with disabled code-review plugin, (5) the fact that Phase 3.4's research agents are outside the 8-agent cap.
-
-### Overall Assessment
-
-Flux-drive is architecturally sound in its phase decomposition and tiered agent model. The core design — static triage, parallel background execution, YAML-first synthesis, optional cross-AI escalation — is well-conceived and matches the Clavain plugin's infrastructure correctly. The two areas requiring changes before this spec is production-ready are: (1) the roster gap that makes 8 of 20 review agents permanently invisible to triage, and (2) the Oracle format asymmetry that creates fragility in Phase 4's comparison and escalation chain. Both are fixable without restructuring the phases.
+```
+
+This makes the coupling explicit and prevents accidental changes to triage behavior when editing review criteria.
+
+#### Finding: Dynamic Slot Allocation Formula is Fragile (P1)
+Lines 288-309 define the slot ceiling formula but it's spread across narrative text, not machine-readable config.
+
+**Evidence**:
+```
+base_slots    = 4
+scope_slots:
+  - single file:          +0
+  - small diff (<500 lines): +1
+  - large diff (500+):    +2
+  - directory/repo:       +3
+domain_slots:
+  - 0 domains detected:   +0
+  - 1 domain detected:    +1
+  - 2+ domains detected:  +2
+```
+
+**Problem**: This is a hardcoded decision tree embedded in narrative. Changing the thresholds (e.g., "small diff" from <500 to <300 lines) requires editing markdown prose. No validation that these numbers make sense together.
+
+**Better approach**: Extract to YAML config:
+```yaml
+slot_allocation:
+  base: 4
+  hard_maximum: 12
+  scope:
+    single_file: 0
+    small_diff_threshold: 500
+    small_diff_bonus: 1
+    large_diff_bonus: 2
+    directory_bonus: 3
+  domain:
+    zero: 0
+    one: 1
+    multiple: 2
+  generated_agents: 2
+```
+
+This makes the formula testable, tunable, and validates that base + max(scope) + max(domain) + generated <= hard_maximum.
+
+#### Finding: Stage Assignment Percentage is Arbitrary (P2)
+Line 320 says "Stage 1: Top 40% of total slots (rounded up, min 2, max 5)" but provides no rationale for 40% vs 30% or 50%.
+
+**Evidence**: The 40% value appears once, with no justification or empirical basis.
+
+**Impact**: Minor, but this feels like a magic number. If the goal is "launch high-confidence agents first, wait for results, then decide on expansion", the percentage should be tuned based on actual review outcomes (how often does Stage 1 find sufficient issues to stop early?).
+
+**Suggestion**: Either justify the 40% value in a comment (e.g., "Empirically, 40% captures the 2-3 highest-scoring agents in typical reviews") OR make it configurable.
+
+### 3. Agent Dispatch Architecture
+**Status**: Analysis complete
+
+#### Finding: Diff Slicing Coupling Creates Split Responsibility (P0)
+The diff slicing feature (lines 182-230 in launch.md) is architecturally split:
+- **Routing patterns** in `config/flux-drive/diff-routing.md` (separate file, 134 lines)
+- **Slicing algorithm** in launch.md Step 2.1b (49 lines)
+- **Convergence adjustment** in shared-contracts.md lines 84-88
+- **Synthesis reporting** in synthesize.md lines 178-191
+
+**Why this is a problem**:
+Diff slicing is a single feature but its logic is scattered across 4 files. To understand how slicing works, you must read:
+1. What makes a file "priority" (diff-routing.md patterns)
+2. How priority files are assembled into per-agent diffs (launch.md)
+3. How convergence counts adjust for partial visibility (shared-contracts.md)
+4. How slicing metadata appears in the report (synthesize.md)
+
+**Root cause**: This is a cross-cutting concern (affects triage, dispatch, synthesis, reporting) but it's implemented as localized additions to each phase rather than as a first-class abstraction.
+
+**Better architecture**:
+- **Option A** (minimal): Create `config/flux-drive/slicing.md` that consolidates all slicing logic (patterns, algorithm, convergence rules, reporting format) and reference it from phase files.
+- **Option B** (proper): Extract slicing as a module with a clean interface:
+  ```
+  SlicingEngine:
+    .classify_files(diff, agent) -> {priority: [...], context: [...]}
+    .build_agent_diff(diff, classification) -> string
+    .adjust_convergence(finding, slicing_map) -> int
+    .generate_report(slicing_map) -> markdown
+  ```
+
+The current scattered implementation makes it hard to:
+- Validate that routing patterns are complete (which file types fall through to context-only?)
+- Test the slicing algorithm in isolation
+- Ensure convergence adjustment is applied consistently across all synthesis paths
+
+#### Finding: Agent Prompt Template Violates DRY (P1)
+Lines 232-384 in launch.md contain a 153-line prompt template. But parts of this template are duplicated or implied elsewhere:
+
+**Duplications**:
+1. **Findings Index format** is defined in both the prompt template (lines 254-260) AND shared-contracts.md (lines 11-22)
+2. **Completion signal** is defined in the prompt template (line 251) AND shared-contracts.md (lines 28-32)
+3. **Domain Context injection format** is defined in the prompt template (lines 299-318) AND implied by domain profile structure
+
+**Problem**: If the Findings Index format changes (e.g., add a "Convergence" column), you must update:
+- The prompt template in launch.md
+- The contract definition in shared-contracts.md
+- The parsing logic in synthesize.md Step 3.1
+- Any examples in documentation
+
+**Better approach**: The prompt template should reference a canonical contract definition rather than duplicating it. Use a variable substitution pattern:
+```
+{FINDINGS_INDEX_SPEC}  <- replaced at runtime with the contract from shared-contracts.md
+```
+
+This ensures a single source of truth.
+
+#### Finding: Prompt Trimming Rules are Context-Dependent (P2)
+shared-contracts.md lines 44-52 define trimming rules but they apply inconsistently:
+- Project Agents (manual paste): trimmed
+- Plugin Agents (via subagent_type): NOT trimmed (orchestrator can't strip)
+- Codex AGENT_IDENTITY: trimmed
+
+**Problem**: This creates an information asymmetry. Project Agents and Plugin Agents reviewing the same document have different context (Plugin Agents see examples, Project Agents don't).
+
+**Impact**: Mild. Plugin Agents might produce more detailed findings due to having access to example patterns. But this breaks the assumption that agent type shouldn't affect finding quality.
+
+**Fix**: Either:
+1. Make trimming consistent (strip examples from all agent types, or none)
+2. Explicitly document that Plugin Agents have richer context and this is intentional
+
+### 4. Template System & Contracts
+**Status**: Analysis complete
+
+#### Finding: Error Stub Format is Too Minimal (P1)
+shared-contracts.md lines 35-41 define the error stub:
+```
+### Findings Index
+Verdict: error
+
+Agent failed to produce findings after retry. Error: {error message}
+```
+
+**Problem**: This loses critical debugging context:
+- What was the agent's input? (document path, slicing metadata, domain context)
+- Did the agent start? (did it create .md.partial?)
+- What was the timeout? (5 min for retries, but was original timeout hit?)
+- Was this a Task dispatch failure or an agent logic failure?
+
+**Better format**:
+```yaml
+---
+agent: {agent-name}
+status: error
+reason: {timeout | task_failure | output_malformed}
+attempted_at: {timestamp}
+input_file: {path}
+diff_slicing: {active|inactive}
+---
+### Findings Index
+Verdict: error
+
+Agent failed after retry.
+
+Error: {error message}
+Logs: {background task output excerpt}
+```
+
+This preserves enough context to debug failed agents without re-running the entire review.
+
+#### Finding: Completion Signal Relies on Filesystem State (P1)
+The completion contract (shared-contracts.md lines 28-32) uses file renaming as the completion signal:
+```
+- Agents write to {agent-name}.md.partial during work
+- Rename .md.partial to .md as the final action
+- Orchestrator detects completion by checking for .md files
+```
+
+**Problem**: This is a racy contract. If:
+1. Agent writes .md.partial
+2. Agent crashes before rename
+3. Orchestrator retries
+4. Retry succeeds and renames to .md
+5. Original agent recovers and also tries to rename
+
+You get file contention. Worse: if two agents have the same name (Project Agent + Plugin Agent both called "fd-architecture"), they clobber each other's output.
+
+**Better approach**: Atomic completion via marker file:
+```
+- Agent writes {agent-name}.md.partial during work
+- Agent writes {agent-name}.md.done (empty marker) when complete
+- Agent renames .md.partial to .md only if .done exists
+- Orchestrator polls for .done files, then verifies .md exists
+```
+
+This makes completion explicit and prevents races.
+
+### 5. Cross-File References & Navigation
+**Status**: Analysis complete
+
+#### Finding: Domain Profile Index is Weakly Typed (P1)
+`config/flux-drive/domains/index.yaml` defines 11 domains with 4 signal types each (directories, files, frameworks, keywords). But there's no validation that:
+1. Each domain has a corresponding .md file in the same directory
+2. Each domain .md file has the required sections (Injection Criteria with fd-{agent-name} subsections, Agent Specifications)
+3. The min_confidence values are sane (all are 0.3-0.35 except claude-code-plugin at 0.35)
+
+**Evidence**:
+- index.yaml line 2-14: Comments describe structure but no schema validation
+- SKILL.md line 129: "Validate domain profiles exist" but this check happens at runtime during agent generation, not at deploy time
+
+**Problem**: A broken domain profile (missing .md file, malformed injection criteria) is discovered late (during a review) rather than early (at skill installation).
+
+**Fix**: Add a validation step to the skill's test suite:
+```bash
+# For each domain in index.yaml:
+# - Check that config/flux-drive/domains/{domain}.md exists
+# - Parse the .md for "## Injection Criteria" section
+# - Parse for "### fd-{agent}" subsections
+# - Warn if any core agent is missing from any domain profile
+```
+
+This catches config drift before production.
+
+#### Finding: Pyramid Scan Section Tagging is Ambiguous (P2)
+Lines 393-424 in SKILL.md define pyramid scan logic for large documents (>500 lines). Sections are tagged as:
+- `full` — in agent's core domain
+- `summary` — adjacent but not core
+- `skip` — no relevance
+
+**Problem**: "Adjacent but not core" is subjective. The examples show:
+- "architecture sections → fd-architecture" (full)
+- "security sections → fd-safety" (full)
+
+But what about "API design section → fd-architecture"? Is that full or summary? The mapping is implied from agent domain descriptions, not explicitly defined.
+
+**Impact**: Two orchestrators might tag the same section differently, leading to inconsistent agent coverage.
+
+**Fix**: Either:
+1. Provide explicit domain-to-section keyword mapping (e.g., fd-architecture matches: {architecture, design, modules, components, layers})
+2. OR make tagging a heuristic ("if section title matches any agent domain keyword → full, else summary") and document the heuristic
+
+### 6. Progressive Loading Claim
+**Status**: Analysis complete
+
+#### Summary of Finding P0-1 (already documented above)
+The "progressive loading" claim is architectural theater. All phase files must be read upfront for the orchestrator to function. The cross-references make deferred loading impossible.
+
+**Recommendation**: Remove the progressive loading claim and document the actual architecture:
+```
+## Phase File Organization
+
+This skill is organized into phase files for **readability**, not progressive loading.
+The orchestrator must read all phase files before launching agents because:
+- Agent prompts reference contracts from shared-contracts.md
+- Triage decisions reference synthesis rules (convergence thresholds)
+- Domain context injection requires launch.md prompt template structure
+
+Read all files in skills/flux-drive/phases/ at the start of the skill.
+```
+
+This sets honest expectations.
+
+### 7. Integration Points & External Contracts
+**Status**: Analysis complete
+
+#### Finding: Oracle Integration is Brittle (P1)
+Lines 476-508 in SKILL.md define Oracle integration with heavy caveats:
+- Requires DISPLAY=:99 and CHROME_PATH env vars
+- Needs Xvfb running
+- Uses --write-output to avoid stdout corruption
+- Uses --timeout to avoid orphaned sessions
+- Must not wrap with external timeout
+
+**Problem**: This is a lot of environmental coupling for what should be "just another agent". The special-casing breaks the agent abstraction.
+
+**Evidence**:
+- Line 491-499: 9-line bash command with env vars, error handling, and fallback
+- Lines 500-505: Two full paragraphs explaining why --write-output and why no timeout wrapper
+
+**Better architecture**: Abstract Oracle behind a dispatch adapter:
+```
+OracleAdapter:
+  .is_available() -> bool
+  .dispatch(prompt, files, output_path) -> Result
+```
+
+The adapter encapsulates:
+- Environment checks (DISPLAY, CHROME_PATH, Xvfb)
+- Command construction (--write-output, --timeout)
+- Error handling and fallback
+
+The orchestrator just calls `OracleAdapter.dispatch()` and doesn't need to know about browser mode quirks.
+
+This also makes Oracle swappable - if the implementation changes (e.g., Oracle switches to API mode), only the adapter changes, not 50+ lines of orchestrator logic.
+
+#### Finding: QMD MCP Dependency is Optional but Not Graceful (P2)
+Lines 19-46 in launch.md describe knowledge injection via qmd MCP tools. Line 47 says "If qmd MCP tool is unavailable or errors, skip knowledge injection entirely".
+
+**Problem**: The orchestrator won't know WHY qmd is unavailable:
+- Not installed?
+- Collection "Clavain" doesn't exist?
+- qmd server is down?
+
+Without diagnostics, users can't fix qmd integration issues.
+
+**Better approach**:
+```python
+try:
+    results = qmd.vsearch(collection="Clavain", query=...)
+except ToolNotFoundError:
+    log.warn("qmd MCP not installed - knowledge injection disabled")
+except CollectionNotFoundError:
+    log.warn("qmd collection 'Clavain' not found - run qmd init first")
+except qmd.ServerError as e:
+    log.error(f"qmd server error: {e} - knowledge injection disabled")
+```
+
+Specific errors guide the user toward fixes.
+
+### 8. Token Efficiency Claims
+**Status**: Analysis complete
+
+#### Finding: Prompt Trimming is Asymmetric Across Agent Types (P2)
+(Already documented in section 3 - Prompt Trimming Rules are Context-Dependent)
+
+#### Finding: Diff Slicing Token Savings are Unmeasured (P2)
+Lines 182-230 in launch.md describe soft-prioritize slicing but provide no metrics for token savings. The claim is "reduce token cost for large diffs" but:
+- No baseline: what's the token count for a 2000-line diff sent to 5 agents?
+- No measurement: what's the token count after slicing?
+- No validation: does slicing actually improve finding quality, or do agents miss issues in context-only files?
+
+**Suggestion**: Add instrumentation:
+```
+Diff slicing report:
+- Total diff tokens: 15,234
+- fd-safety (sliced): 3,120 tokens (79% reduction)
+- fd-architecture (full): 15,234 tokens (0% reduction, cross-cutting)
+```
+
+This makes the value proposition measurable and helps tune routing patterns.
+
+## Final Findings Index
+
+### Findings Index
+- P0 | P0-1 | "Phase Decomposition" | Progressive Loading is an Illusion - orchestrator must read all phase files upfront due to cross-references
+- P0 | P0-2 | "Agent Dispatch" | Diff Slicing Coupling Creates Split Responsibility - single feature scattered across 4 files
+- P1 | P1-1 | "Phase Decomposition" | Hidden Coupling Between Triage and Synthesis - convergence algorithm defined in wrong phase
+- P1 | P1-2 | "Scoring System" | Domain Boost Calculation is Opaque - boost derived from bullet count in separate files
+- P1 | P1-3 | "Scoring System" | Dynamic Slot Allocation Formula is Fragile - hardcoded in narrative text
+- P1 | P1-4 | "Agent Dispatch" | Agent Prompt Template Violates DRY - Findings Index format duplicated in 3 places
+- P1 | P1-5 | "Template System" | Error Stub Format is Too Minimal - loses debugging context
+- P1 | P1-6 | "Template System" | Completion Signal Relies on Filesystem State - racy contract for file rename
+- P1 | P1-7 | "Cross-File References" | Domain Profile Index is Weakly Typed - no validation that profiles exist and are well-formed
+- P1 | P1-8 | "Integration Points" | Oracle Integration is Brittle - heavy environmental coupling breaks agent abstraction
+- P2 | P2-1 | "Scoring System" | Stage Assignment Percentage is Arbitrary - 40% value lacks justification
+- P2 | P2-2 | "Agent Dispatch" | Prompt Trimming Rules are Context-Dependent - information asymmetry between agent types
+- P2 | P2-3 | "Cross-File References" | Pyramid Scan Section Tagging is Ambiguous - no explicit domain-to-section mapping
+- P2 | P2-4 | "Integration Points" | QMD MCP Dependency is Optional but Not Graceful - no diagnostics for why it's unavailable
+- P2 | P2-5 | "Token Efficiency" | Diff Slicing Token Savings are Unmeasured - no metrics to validate efficiency claims
+
+Verdict: needs-changes
+
+## Improvement Suggestions
+
+### IMP-1: Extract Slicing as First-Class Module
+Create `lib/slicing.sh` or `SlicingEngine` class with:
+- `.classify_files(diff, agent)` - apply routing patterns
+- `.build_agent_diff(diff, classification)` - construct per-agent content
+- `.adjust_convergence(finding, slicing_map)` - modify convergence counts
+- `.generate_report(slicing_map)` - produce metadata section
+
+Consolidates 134 lines of scattered logic into ~60 lines of cohesive module.
+
+### IMP-2: Make Domain Boost Explicit in Domain Profiles
+Add frontmatter to domain .md files:
+```yaml
+---
+domain: game-simulation
+agents:
+  fd-game-design: {boost: 2, focus: "pacing, balance"}
+  fd-correctness: {boost: 2, focus: "state consistency"}
+---
+```
+
+Prevents accidental triage changes when editing review criteria.
+
+### IMP-3: Convert Slot Allocation to YAML Config
+Extract lines 288-309 to `config/flux-drive/slot-allocation.yaml` with validation:
+- base + max(all bonuses) <= hard_maximum
+- threshold values are sorted (small_diff < large_diff)
+
+Makes formula testable and tunable.
+
+### IMP-4: Create Oracle Dispatch Adapter
+Abstract Oracle behind `OracleAdapter` interface:
+```
+.is_available() -> bool
+.dispatch(prompt, files, output_path) -> Result
+```
+
+Encapsulates environment setup, command construction, error handling. Makes Oracle swappable.
+
+### IMP-5: Add Domain Profile Validation to Test Suite
+Create `tests/structural/test_domain_profiles.py`:
+- For each domain in index.yaml, verify .md exists
+- Parse .md for required sections
+- Check that all core agents (fd-architecture, fd-safety, etc.) have injection criteria in at least one domain
+
+Catches config drift at deploy time.
+
+### IMP-6: Instrument Diff Slicing for Token Metrics
+Add token counting to slicing report:
+```
+Diff slicing report:
+| Agent | Mode | Tokens (full) | Tokens (sliced) | Reduction |
+```
+
+Validates efficiency claims and helps tune routing patterns.
+
+### IMP-7: Replace Rename-Based Completion with Atomic Marker
+Use `.done` marker file pattern:
+1. Agent writes .md.partial
+2. Agent writes .md.done when complete
+3. Orchestrator polls for .done, then verifies .md exists
+
+Prevents races and file contention.
+
+## Overall Assessment
+
+The flux-drive orchestration system demonstrates sophisticated phase-based architecture with domain-aware triage, multi-modal agent dispatch, and diff slicing optimization. However, it suffers from **architectural drift** — what started as clean phase boundaries has accumulated cross-references and scattered concerns.
+
+**Core issue**: The system conflates *narrative organization* (phase files for readability) with *architectural modularity* (truly independent phases). The "progressive loading" claim is the most visible symptom, but the deeper problem is that features like diff slicing and convergence tracking span multiple phases without a unifying abstraction.
+
+**Strengths**:
+- Rich domain detection with 11 profiles and multi-domain support
+- Sophisticated scoring system with 4 bonus types
+- Diff slicing reduces token waste for large diffs
+- Knowledge injection creates learning loop
+
+**Weaknesses**:
+- Scattered feature logic makes change risky (update slicing? touch 4 files)
+- Duplicated contracts create synchronization burden
+- Environmental coupling (Oracle) breaks agent abstraction
+- Unmeasured efficiency claims (token savings)
+
+**Recommendation**: Prioritize P0 fixes (progressive loading claim, slicing consolidation) before adding new features. The system has good bones but needs refactoring to match its complexity.

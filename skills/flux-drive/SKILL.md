@@ -7,7 +7,7 @@ description: Use when reviewing documents or codebases with multi-agent analysis
 
 You are executing the flux-drive skill. This skill reviews any document (plan, brainstorm, spec, ADR, README) or an entire repository by launching **only relevant** agents selected from a static roster. Follow each phase in order. Do NOT skip phases.
 
-**Progressive loading:** This skill is split across phase files. Read each phase file when you reach it — not before.
+**File organization:** This skill is split across phase files for readability. Read `phases/shared-contracts.md` first (defines output format and completion signals), then read each phase file as you reach it.
 
 ## Input
 
@@ -389,40 +389,36 @@ Slot ceiling: 4 (base) + 0 (single file) + 1 (1 domain) + 2 (flux-gen) = 7 slots
 - **adequate**: 5-30 lines or 3-10 bullet points — standard review depth
 - **deep**: 30+ lines or 10+ bullet points — validation only, don't over-review
 
-### Step 1.2c: Pyramid Scan (large documents only)
+### Step 1.2c: Document Section Mapping
 
-**Trigger:** `INPUT_TYPE = file` AND document exceeds 500 lines.
+**Trigger:** `INPUT_TYPE = file` AND document exceeds 200 lines.
 
-If triggered, generate a section-level summary to help agents focus:
+Split the document into sections and classify relevance per agent. This enables per-agent content slicing in Phase 2 (Step 2.1c).
 
-1. **Extract sections** — Identify all top-level sections (## headings) from the document profile's section analysis.
-2. **Summarize each** — Write 1-2 sentences per section capturing scope and key decisions.
-3. **Map to agent domains** — For each selected agent, tag each section:
-   - `full` — section is in the agent's core domain (architecture sections → fd-architecture, security sections → fd-safety, etc.)
-   - `summary` — section is adjacent but not core (provide summary only)
-   - `skip` — section has no relevance to this agent
-4. **Safety override** — Any section mentioning auth, credentials, secrets, tokens, or certificates is always tagged `full` for fd-safety regardless of domain mapping.
+1. **Extract sections** — Split document by `##` headings. Each section = heading + content until next heading.
+2. **Classify per agent** — For each selected **domain-specific** agent, classify each section using the routing keywords from `config/flux-drive/diff-routing.md` (Section-Level Routing):
+   - `priority` — section heading or body matches any of the agent's keywords → include in full
+   - `context` — no keyword match → include as 1-line summary only
+3. **Cross-cutting agents** (fd-architecture, fd-quality) — always receive the full document. Skip classification for these agents.
+4. **Safety override** — Any section mentioning auth, credentials, secrets, tokens, or certificates is always `priority` for fd-safety.
+5. **80% threshold** — If an agent's priority sections cover >= 80% of total document lines, skip slicing for that agent (send full document).
 
-**Include in agent prompts** (Phase 2): Prepend the pyramid summary before the full document content:
+**For documents >= 500 lines**, also generate a Pyramid Summary:
+- Write 1-2 sentence summaries per section
+- Prepend to each agent's content as a focus guide (even cross-cutting agents benefit from the summary)
 
+**For documents 200-500 lines**, skip summaries — classify sections only (the savings come from slicing, not from summarization overhead).
+
+**For documents < 200 lines**, skip this step entirely — all agents receive the full document.
+
+**Output**: A `section_map` per agent, used in Step 2.1c to write per-agent temp files:
 ```
-## Pyramid Summary (focus guide — full content follows)
-
-Sections relevant to your domain (read carefully):
-- [Section A]: [summary]
-- [Section B]: [summary]
-
-Sections outside your domain (skim only):
-- [Section C]: [summary]
-
-Full document content follows below.
----
-[full document]
+section_map:
+  fd-safety: {priority: ["Security", "Deployment"], context: ["Architecture", "Performance"]}
+  fd-performance: {priority: ["Performance", "Scaling"], context: ["Security", "Deployment"]}
+  fd-architecture: {mode: full}
+  fd-quality: {mode: full}
 ```
-
-Agents still receive the full document — the pyramid summary is a focus guide, not a content gate. This is prep for future content slicing (where irrelevant sections would be omitted entirely).
-
-If the document is ≤500 lines, skip this step — agents receive the full document without a pyramid summary.
 
 ### Step 1.3: User Confirmation
 
