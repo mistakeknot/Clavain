@@ -1,18 +1,23 @@
 # Session Handoff
 
 ## Done
-- Full 25-test smoke test suite: **25/25 passed**
-- 17 agents dispatched in parallel (all review, research, workflow agents confirmed)
-- 5 commands tested via Skill tool (help, doctor, changelog, brainstorm, quality-gates)
-- 3 workflow chains verified (review pipeline, explore pipeline, help catalog)
+- Interline v0.2.0: live bead display via `bd list` query + sideband merge
+- Priority colors (P0-P4), title truncation, multi-bead comma-separated
+- Compact mode: ID-only when multiple beads, full format for single bead
+- Published to marketplace, installed locally
+- fd-correctness review findings triaged → 4 items added to Clavain-2mmc
 
 ## Pending
-- Clavain-29cx (P1): flux-gen + flux-drive integration -- not touched this session
+- Clavain-4jeg (P1): flux-gen template overhaul — not started this session
+- Clavain-tb62 (P2): JSONL stream parser — not started this session
+- Uncommitted domain profile changes (11 .md files + update-domain-profiles.py + flux-gen.md)
 
 ## Next
-1. Resume Clavain-29cx flux-gen integration work
-2. Consider fixing MANDATORY FIRST STEP preamble conflict for cleaner smoke tests
+1. Commit the uncommitted domain profile changes first
+2. Start Clavain-4jeg: add persona, review sequence, prioritization to flux-gen.md template
+3. Clavain-2mmc has 10 hardening items from quality reviews (defer unless quick)
 
 ## Context
-- No smoke-test-*.md artifacts created (Write denied to agents)
-- All agents hit known preamble instruction conflict -- graded on output quality
+- Interline repo at `/root/projects/interline/` is clean and pushed
+- Uncommitted Clavain changes are from domain profiles system (Clavain-29cx, shipped v0.5.4)
+- Clavain is 1 commit ahead of origin (needs push)
