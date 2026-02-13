@@ -8,3 +8,7 @@ __pycache__/
 .upstream-work/
 .claude/*.local.md
 .serena/
+.tldrs/
+.beads/dolt/
+.beads/dolt-access.lock
+.claude/flux-drive.yaml
