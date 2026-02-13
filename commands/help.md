@@ -53,6 +53,7 @@ These are the commands you'll use most often:
 | `/clavain:migration-safety` | Database migration safety checks |
 | `/clavain:agent-native-audit` | Verify agent-native parity |
 | `/clavain:triage-prs` | Batch PR backlog triage with fd-* agents |
+| `/clavain:flux-gen` | Generate domain-specific review agents for your project |
 
 ### Ship
 | `/clavain:changelog` | Generate changelog from recent commits |

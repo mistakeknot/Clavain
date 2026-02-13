@@ -25,7 +25,13 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/detect-domains.py {PROJECT_ROOT} --json
 If `$ARGUMENTS` specifies a domain name (e.g., `game-simulation`), use only that domain. If `$ARGUMENTS` is `all` or empty, use all detected domains.
 
 If no domains detected and no argument provided, tell the user:
-> No domains detected for this project. You can specify a domain manually: `/flux-gen game-simulation`
+> No domains detected for this project. This usually means the project is too small or doesn't match known domain signals.
+>
+> **Available domains:** game-simulation, web-api, ml-pipeline, cli-tool, mobile-app, embedded-systems, data-pipeline, library-sdk, tui-app, desktop-tauri, claude-code-plugin
+>
+> **To specify manually:** `/flux-gen game-simulation` (or any domain above)
+> **To see detection signals:** Read `config/flux-drive/domains/index.yaml`
+> **To skip domain agents:** Run `/flux-drive` directly — core agents work without domain specialization
 
 ## Step 2: Load Agent Specifications
 
@@ -83,7 +89,7 @@ If docs don't exist, apply general best practices for {domain-name} projects.
 ### Key Review Areas
 
 {For each bullet in Key review areas:}
-- **{bullet}**: Examine this aspect carefully. Look for concrete evidence in the code or document. Flag specific issues with file paths and line numbers where possible.
+- {bullet}
 
 ### How to Review
 
