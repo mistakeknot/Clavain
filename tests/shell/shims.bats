@@ -115,6 +115,7 @@ teardown() {
 @test "gates shim: delegates when INTERPHASE_ROOT is set" {
     # Point to interphase repo as if it were installed
     export INTERPHASE_ROOT="/root/projects/interphase"
+    [[ -d "$INTERPHASE_ROOT/hooks" ]] || skip "interphase not installed"
     unset _GATES_LOADED _PHASE_LOADED
     source "$HOOKS_DIR/lib-gates.sh"
 
@@ -125,6 +126,7 @@ teardown() {
 
 @test "gates shim: delegated advance_phase works" {
     export INTERPHASE_ROOT="/root/projects/interphase"
+    [[ -d "$INTERPHASE_ROOT/hooks" ]] || skip "interphase not installed"
     unset _GATES_LOADED _PHASE_LOADED
 
     # Mock bd for the delegated library
@@ -141,6 +143,7 @@ teardown() {
 
 @test "gates shim: delegated phase_infer_bead reads env var" {
     export INTERPHASE_ROOT="/root/projects/interphase"
+    [[ -d "$INTERPHASE_ROOT/hooks" ]] || skip "interphase not installed"
     export CLAVAIN_BEAD_ID="Test-env-bead"
     unset _GATES_LOADED _PHASE_LOADED
     source "$HOOKS_DIR/lib-gates.sh"
@@ -155,6 +158,7 @@ teardown() {
 
 @test "discovery shim: delegates when INTERPHASE_ROOT is set" {
     export INTERPHASE_ROOT="/root/projects/interphase"
+    [[ -d "$INTERPHASE_ROOT/hooks" ]] || skip "interphase not installed"
     export DISCOVERY_PROJECT_DIR="$TEST_PROJECT"
     mkdir -p "$TEST_PROJECT/.beads"
     unset _DISCOVERY_LOADED
@@ -174,6 +178,7 @@ teardown() {
 
 @test "discovery shim: delegated infer_bead_action works" {
     export INTERPHASE_ROOT="/root/projects/interphase"
+    [[ -d "$INTERPHASE_ROOT/hooks" ]] || skip "interphase not installed"
     export DISCOVERY_PROJECT_DIR="$TEST_PROJECT"
     unset _DISCOVERY_LOADED
     source "$HOOKS_DIR/lib-discovery.sh"
