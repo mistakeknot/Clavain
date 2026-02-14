@@ -1,26 +1,24 @@
-# Session Handoff — 2026-02-13
+# Session Handoff — 2026-02-14
 
 ## Done
-- Created `commands/init.md` — scaffolds `.clavain/` agent memory filesystem
-- Updated `hooks/session-handoff.sh` — writes to `.clavain/scratch/handoff.md` when available
-- Updated `hooks/session-start.sh` — reads handoff context into additionalContext
-- Updated `commands/doctor.md` — added "3d. Agent Memory" health check
-- Ran `gen-catalog.py` to propagate 37→38 command count
-- Fixed test assertion 37→38, all 782 tests pass (706 structural + 76 shell)
-- Brainstorm, PRD, and plan docs written in `docs/`
+- Extracted flux-drive into Interflux companion plugin (Clavain-o4ix, closed)
+- 42 files copied, namespaces updated, 39 files deleted from Clavain
+- Both test suites green: Clavain 520/520, Interflux 93/93
+- Interflux git repo initialized at `/root/projects/Interflux/`
+- MEMORY.md updated with extraction details
 
 ## Pending
-- Quality gates running (3 background agents: fd-architecture, fd-quality, fd-correctness)
-- LFG Step 7 (quality-gates) needs synthesis after agents complete
-- Steps 8 (resolve) and 9 (ship/commit) not started
+- Clavain not pushed to remote (2 commits ahead)
+- Interflux not registered in marketplace
+- Clavain v0.6.0 not published
+- Clavain-496k (diff slicing consolidation) still open — untracked docs in working tree
 
 ## Next
-1. Synthesize quality gates report from agent outputs
-2. Address any P1/P2 findings
-3. Commit all changes, close bead Clavain-d4ao, advance phase to done
+1. `git push` Clavain to remote
+2. Register Interflux in marketplace, publish v0.1.0
+3. Publish Clavain v0.6.0 via `/interpub:release 0.6.0`
+4. Resume Clavain-496k slicing consolidation (now targets Interflux)
 
 ## Context
-- Bead: Clavain-d4ao (P3, "Define .clavain/ agent memory filesystem contract")
-- Phase: executing (needs to reach shipping → done)
-- `commands/init.md` is a new file (not yet committed)
-- Auto-updated files: AGENTS.md, CLAUDE.md, README.md, plugin.json, agent-rig.json, catalog.json, SKILL.md
+- Cross-plugin refs (`clavain:resolve`, `clavain:interpeer`) are intentional in Interflux
+- `gen-catalog.py` regex requires plural "MCP servers" even for count=1
