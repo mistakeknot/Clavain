@@ -84,6 +84,8 @@ Capabilities extracted from Clavain when patterns stabilized:
 | **interflux** | Multi-agent review + research engine (7 fd-* agents, 5 research agents, 2 skills, 2 MCP servers) | Shipped |
 | **interphase** | Phase tracking, gates, and work discovery | Shipped |
 | **interline** | Statusline renderer (dispatch state, bead context, phase, clodex mode) | Shipped |
+| **interpath** | Product artifact generation (roadmaps, PRDs, vision docs, changelogs, status reports) | Shipped |
+| **interwatch** | Doc freshness monitoring (drift detection, confidence scoring, auto-refresh) | Shipped |
 | **intercraft** | Claude Code meta-tooling | Planned |
 | **intershift** | Cross-AI dispatch engine | Planned |
 | **interscribe** | Knowledge compounding engine | Planned |
@@ -190,6 +192,8 @@ Adaptive model routing, cross-project knowledge, MCP-native companion communicat
 | interflux | Multi-agent review engine | Yes (for flux-drive) |
 | interphase | Phase tracking and gates | Yes (for phase-gated lfg) |
 | interline | Statusline rendering | Recommended |
+| interpath | Product artifact generation | Recommended |
+| interwatch | Doc freshness monitoring | Recommended |
 
 ## 10. Risks
 

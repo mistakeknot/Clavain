@@ -25,6 +25,10 @@ description: Use when starting any conversation - establishes how to find and us
 | Resolve review findings | `/clavain:resolve` |
 | Generate domain-specific reviewers | `/interflux:flux-gen` |
 | Check project health | `/clavain:doctor` or `/clavain:sprint-status` |
+| Generate a roadmap | `/interpath:roadmap` |
+| Generate a PRD | `/interpath:prd` |
+| Check doc freshness | `/interwatch:watch` or `/interwatch:status` |
+| Refresh a stale doc | `/interwatch:refresh` |
 | See all commands | `/clavain:help` |
 
 ## Routing Heuristic

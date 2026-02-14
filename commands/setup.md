@@ -33,6 +33,8 @@ claude plugin install auracoil@interagency-marketplace
 claude plugin install tool-time@interagency-marketplace
 claude plugin install interphase@interagency-marketplace
 claude plugin install interline@interagency-marketplace
+claude plugin install interpath@interagency-marketplace
+claude plugin install interwatch@interagency-marketplace
 ```
 
 **From claude-plugins-official:**

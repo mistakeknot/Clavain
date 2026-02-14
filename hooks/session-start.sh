@@ -80,6 +80,18 @@ if [[ -n "$interflux_root" ]]; then
     companions="${companions}\\n- **interflux**: review engine available (fd-* agents, domain detection, qmd)"
 fi
 
+# Interpath — product artifact generation companion
+interpath_root=$(_discover_interpath_plugin)
+if [[ -n "$interpath_root" ]]; then
+    companions="${companions}\\n- **interpath**: product artifact generation (roadmaps, PRDs, vision docs)"
+fi
+
+# Interwatch — doc freshness monitoring companion
+interwatch_root=$(_discover_interwatch_plugin)
+if [[ -n "$interwatch_root" ]]; then
+    companions="${companions}\\n- **interwatch**: doc freshness monitoring"
+fi
+
 # Clodex — detect persistent toggle state
 CLODEX_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/clodex-toggle.flag"
 if [[ -f "$CLODEX_FLAG" ]]; then

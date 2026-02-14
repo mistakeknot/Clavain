@@ -39,6 +39,44 @@ _discover_interflux_plugin() {
     echo ""
 }
 
+# Discover the interpath companion plugin root directory.
+# Checks INTERPATH_ROOT env var first, then searches the plugin cache.
+# Output: plugin root path to stdout, or empty string if not found.
+_discover_interpath_plugin() {
+    if [[ -n "${INTERPATH_ROOT:-}" ]]; then
+        echo "$INTERPATH_ROOT"
+        return 0
+    fi
+    local f
+    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
+        -path '*/interpath/*/scripts/interpath.sh' 2>/dev/null | sort -V | tail -1)
+    if [[ -n "$f" ]]; then
+        # interpath.sh is at <root>/scripts/interpath.sh, so strip two levels
+        echo "$(dirname "$(dirname "$f")")"
+        return 0
+    fi
+    echo ""
+}
+
+# Discover the interwatch companion plugin root directory.
+# Checks INTERWATCH_ROOT env var first, then searches the plugin cache.
+# Output: plugin root path to stdout, or empty string if not found.
+_discover_interwatch_plugin() {
+    if [[ -n "${INTERWATCH_ROOT:-}" ]]; then
+        echo "$INTERWATCH_ROOT"
+        return 0
+    fi
+    local f
+    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
+        -path '*/interwatch/*/scripts/interwatch.sh' 2>/dev/null | sort -V | tail -1)
+    if [[ -n "$f" ]]; then
+        # interwatch.sh is at <root>/scripts/interwatch.sh, so strip two levels
+        echo "$(dirname "$(dirname "$f")")"
+        return 0
+    fi
+    echo ""
+}
+
 # Escape string for JSON embedding using bash parameter substitution.
 # Each ${s//old/new} is a single C-level pass — fast and reliable.
 escape_for_json() {

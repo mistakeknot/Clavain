@@ -79,12 +79,14 @@ Tight coupling is a feature during the research phase, not a bug. Capabilities a
 | interphase | Phase tracking and gates are generalizable | Shipped |
 | interflux | Multi-agent review is generalizable | Shipped |
 | interline | Statusline rendering is generalizable | Shipped |
+| interpath | Product artifact generation is generalizable | Shipped |
+| interwatch | Doc freshness monitoring is generalizable | Shipped |
 | intercraft | Claude Code meta-tooling is generalizable | Planned |
 | intershift | Cross-AI dispatch is generalizable | Planned |
 | interscribe | Knowledge compounding is generalizable | Planned |
 | interarch | Agent-native architecture is generalizable | Planned |
 
-The naming convention follows a consistent metaphor: each companion occupies the space *between* two things. Interphase (between phases), interline (between lines), interflux (between flows), intershift (between shifts of context). They are bridges and boundary layers, not monoliths.
+The naming convention follows a consistent metaphor: each companion occupies the space *between* two things. Interphase (between phases), interline (between lines), interflux (between flows), interpath (between paths of artifacts), interwatch (between watches of freshness), intershift (between shifts of context). They are bridges and boundary layers, not monoliths.
 
 ## What Clavain Is Not
 

@@ -61,7 +61,29 @@ else
 fi
 ```
 
-### 3d. Agent Memory
+### 3d. Artifact Generation Companion
+
+```bash
+if ls ~/.claude/plugins/cache/*/interpath/*/scripts/interpath.sh 2>/dev/null | head -1 >/dev/null; then
+  echo "interpath: installed"
+else
+  echo "interpath: not installed (product artifact generation unavailable)"
+  echo "  Install: claude plugin install interpath@interagency-marketplace"
+fi
+```
+
+### 3e. Doc Freshness Companion
+
+```bash
+if ls ~/.claude/plugins/cache/*/interwatch/*/scripts/interwatch.sh 2>/dev/null | head -1 >/dev/null; then
+  echo "interwatch: installed"
+else
+  echo "interwatch: not installed (doc drift detection unavailable)"
+  echo "  Install: claude plugin install interwatch@interagency-marketplace"
+fi
+```
+
+### 3f. Agent Memory
 
 ```bash
 if [ -d .clavain ]; then
@@ -143,6 +165,8 @@ codex         [installed|not found]
 beads         [OK (N open, M closed)|not initialized]
 interphase    [installed|not installed]
 interline     [installed|not installed]
+interpath     [installed|not installed]
+interwatch    [installed|not installed]
 .clavain      [initialized|not set up]
 conflicts     [clear|WARN: N active]
 version       v0.X.Y
