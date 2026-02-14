@@ -84,6 +84,10 @@ Key review areas:
 - Confirm replay tooling detects and reports the first divergent tick with relevant state-diff context.
 - Ensure rollback and resimulation windows are bounded and produce consistent post-resimulation state.
 
+Success criteria hints:
+- Show a concrete replay divergence scenario (seed, tick, expected vs actual state) for each determinism finding
+- Include frame/tick budget numbers when flagging performance concerns in the simulation loop
+
 ### fd-game-systems
 
 Focus: Individual game system design (combat, economy, crafting, progression).
@@ -99,6 +103,10 @@ Key review areas:
 - Confirm progression pacing aligns with content gates so required milestones are achievable at intended playtime bands.
 - Ensure loot-table probabilities sum correctly and observed drop rates remain within statistical tolerance.
 
+Success criteria hints:
+- Quantify feedback loop imbalances with specific resource flow rates or progression time estimates
+- Reference the game's target session length when flagging pacing or economy drift issues
+
 ### fd-agent-narrative
 
 Focus: AI behavior, storytelling, drama management, procedural narrative.
@@ -113,3 +121,7 @@ Key review areas:
 - Validate cooldown rules prevent repetitive event clustering beyond defined frequency caps.
 - Confirm NPC behaviors meet variety thresholds and remain coherent with role, world state, and prior actions.
 - Ensure generated narrative events satisfy coherence constraints for causality, continuity, and character consistency.
+
+Success criteria hints:
+- Describe a concrete NPC behavior sequence that demonstrates the oscillation or incoherence being flagged
+- Reference specific utility curve parameters when suggesting tuning changes

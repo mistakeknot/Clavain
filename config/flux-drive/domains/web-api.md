@@ -84,6 +84,10 @@ Key review areas:
 - Validate that paginated endpoints enforce one pagination contract (cursor or offset), with stable ordering and documented next-page semantics.
 - Ensure error responses use a uniform schema and HTTP status mapping across endpoints, and flag exceptions without documented rationale.
 
+Success criteria hints:
+- Include the exact endpoint path and HTTP method when flagging contract issues
+- Show a before/after payload example for any breaking change finding
+
 ### fd-data-access
 
 Focus: Query patterns, ORM usage, connection management, migration safety.
@@ -98,3 +102,7 @@ Key review areas:
 - Confirm connection pool size, timeout, and idle settings align with expected concurrency and database limits.
 - Verify each migration has a tested rollback or safe-forward strategy that preserves data integrity.
 - Ensure high-frequency filter, join, and sort patterns are supported by indexes, and flag full scans on large tables.
+
+Success criteria hints:
+- Reference specific query patterns (e.g., "SELECT with JOIN on unindexed column X") when flagging N+1 or full-scan issues
+- Include estimated row counts or concurrency levels when flagging connection pool or transaction boundary concerns

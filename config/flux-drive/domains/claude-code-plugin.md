@@ -84,6 +84,10 @@ Key review areas:
 - Validate that file names and directory layout follow repository conventions for component discovery.
 - Ensure version values in `plugin.json` and `marketplace.json` are identical and follow the expected release increment.
 
+Success criteria hints:
+- Reference specific manifest keys (e.g., "plugin.json missing 'keywords' field") rather than vague "manifest issues"
+- Include the broken cross-reference path when flagging dangling links between skills/agents/commands
+
 ### fd-prompt-engineering
 
 Focus: Skill instruction clarity, agent prompt effectiveness, token efficiency, routing accuracy.
@@ -98,3 +102,7 @@ Key review areas:
 - Validate that routing triggers map to intended skills or agents and do not overlap in conflicting ways.
 - Confirm agent prompts define measurable success criteria and at least one representative output pattern.
 - Ensure skill-to-skill references are intentional, minimal, and do not create dependency loops or redundant instruction chains.
+
+Success criteria hints:
+- Show a concrete example of unintended agent behavior that would result from the ambiguous instruction being flagged
+- Include token count estimates when flagging prompts that risk exceeding practical context budgets

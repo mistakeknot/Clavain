@@ -78,7 +78,7 @@ For each agent spec, create `.claude/agents/fd-{name}.md` using this template:
 generated_by: flux-gen
 domain: {domain-name}
 generated_at: '{ISO 8601 timestamp}'
-flux_gen_version: 2
+flux_gen_version: 3
 ---
 # fd-{name} — {Domain} Domain Reviewer
 
@@ -121,6 +121,16 @@ If docs don't exist, operate in generic mode:
 - Rendering bottlenecks, algorithmic complexity, or memory usage (fd-performance handles this)
 - User flows, UX friction, or value proposition (fd-user-product handles this)
 - Only flag the above if they are deeply entangled with your domain expertise and the core agent would miss the domain-specific nuance
+
+## Success Criteria
+
+A good {domain-name} review:
+- Ties every finding to a specific file, function, and line number — never a vague "consider X"
+- Provides a concrete failure scenario for each P0/P1 finding — what breaks, under what conditions, and who is affected
+- Recommends the smallest viable fix, not an architecture overhaul — one diff hunk, not a rewrite
+- Distinguishes domain-specific expertise from generic code quality (defer the latter to core agents listed in "What NOT to Flag")
+- Frames uncertain findings as questions: "Does this handle X?" not "This doesn't handle X"
+{If the domain profile's Agent Specification includes **Success criteria hints**, append them as additional bullets here. Otherwise, use only the generic bullets above.}
 
 ## Decision Lens
 
@@ -190,4 +200,4 @@ To regenerate: /flux-gen (existing agents are preserved unless you choose overwr
 - Project Agents get +1 category bonus in triage scoring
 - Multiple domains may generate overlapping agents — flux-drive deduplication handles this (prefer Project > Plugin)
 - Users should customize generated agents for their specific project needs
-- `flux_gen_version: 2` agents have persona, decision lens, and anti-overlap clauses; version 1 agents are still valid but benefit from regeneration
+- `flux_gen_version: 3` agents have persona, decision lens, anti-overlap clauses, and success criteria; version 1-2 agents are still valid but benefit from regeneration
