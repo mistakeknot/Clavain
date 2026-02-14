@@ -74,10 +74,18 @@ touch "$SENTINEL"
 
 SIGNALS="${SIGNALS%,}"
 
+# Determine handoff target: .clavain/scratch/ if available, else project root.
+# Hooks run from project root (set by Claude Code), so relative paths are safe.
+HANDOFF_PATH="HANDOFF.md"
+if [[ -d ".clavain" ]]; then
+    mkdir -p ".clavain/scratch" 2>/dev/null || true
+    HANDOFF_PATH=".clavain/scratch/handoff.md"
+fi
+
 # Build the handoff prompt
 REASON="Session handoff check: detected incomplete work signals [${SIGNALS}]. Before stopping, you MUST:
 
-1. Write a brief HANDOFF.md in the project root with:
+1. Write a brief handoff file to ${HANDOFF_PATH} with:
    - **Done**: What was accomplished this session (bullet points)
    - **Pending**: What's still in progress or unfinished
    - **Next**: Concrete next steps for the next session
@@ -91,7 +99,7 @@ REASON="Session handoff check: detected incomplete work signals [${SIGNALS}]. Be
 4. Stage and commit your work (even if incomplete):
    \`git add <files> && git commit -m \"wip: <what was done>\"\`
 
-Keep it brief — HANDOFF.md should be 10-20 lines, not a report."
+Keep it brief — the handoff file should be 10-20 lines, not a report."
 
 # Return block decision
 if command -v jq &>/dev/null; then

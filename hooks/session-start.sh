@@ -127,12 +127,23 @@ if type discovery_brief_scan &>/dev/null; then
     fi
 fi
 
+# Previous session handoff context (.clavain/scratch/handoff.md)
+# session-handoff creates scratch/; we only read here (don't create dirs).
+handoff_context=""
+if [[ -f ".clavain/scratch/handoff.md" ]]; then
+    # Cap at 40 lines to prevent context bloat
+    handoff_content=$(head -40 ".clavain/scratch/handoff.md" 2>/dev/null) || handoff_content=""
+    if [[ -n "$handoff_content" ]]; then
+        handoff_context="\\n\\n**Previous session context:**\\n$(escape_for_json "$handoff_content")"
+    fi
+fi
+
 # Output context injection as JSON
 cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}"
+    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${handoff_context}"
   }
 }
 EOF

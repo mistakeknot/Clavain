@@ -61,6 +61,35 @@ else
 fi
 ```
 
+### 3d. Agent Memory
+
+```bash
+if [ -d .clavain ]; then
+  echo ".clavain: initialized"
+  # Check scratch/ is gitignored
+  if grep -qF '.clavain/scratch/' .gitignore 2>/dev/null; then
+    echo "  scratch gitignore: OK"
+  else
+    echo "  WARN: .clavain/scratch/ not in .gitignore"
+  fi
+  # Check for stale handoff (portable stat with existence guard)
+  if [ -f .clavain/scratch/handoff.md ]; then
+    mtime=$(stat -c %Y .clavain/scratch/handoff.md 2>/dev/null || stat -f %m .clavain/scratch/handoff.md 2>/dev/null || echo 0)
+    if [ "$mtime" -gt 0 ]; then
+      age=$(( ($(date +%s) - mtime) / 86400 ))
+      if [ "$age" -gt 7 ]; then
+        echo "  WARN: stale handoff (${age} days old)"
+      fi
+    fi
+  fi
+  # Count learnings entries
+  learnings_count=$(ls .clavain/learnings/*.md 2>/dev/null | wc -l | tr -d ' ')
+  echo "  learnings: ${learnings_count} entries"
+else
+  echo ".clavain: not initialized (run /clavain:init to set up)"
+fi
+```
+
 ### 4. Conflicting Plugins
 
 Check that known conflicting plugins are disabled:
@@ -114,6 +143,7 @@ codex         [installed|not found]
 beads         [OK (N open, M closed)|not initialized]
 interphase    [installed|not installed]
 interline     [installed|not installed]
+.clavain      [initialized|not set up]
 conflicts     [clear|WARN: N active]
 version       v0.X.Y
 ──────────────────────────────────
@@ -124,3 +154,5 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - qmd not installed → "Install qmd for semantic doc search: https://github.com/tobi/qmd"
 - conflicts active → "Run `/clavain:setup` to disable conflicting plugins"
 - beads not initialized → "Run `bd init` to enable issue tracking"
+- .clavain not initialized → "Run `/clavain:init` to set up agent memory"
+- .clavain scratch not gitignored → "Run `/clavain:init` to fix gitignore"

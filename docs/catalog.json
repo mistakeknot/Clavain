@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-14T01:53:59Z",
+  "generated": "2026-02-14T06:06:27Z",
   "counts": {
     "skills": 29,
     "agents": 17,
-    "commands": 37,
+    "commands": 38,
     "hooks": 7,
     "mcp_servers": 2,
     "review": 10,
@@ -287,6 +287,10 @@
     {
       "name": "help",
       "description": "Show Clavain commands organized by daily drivers first, then by workflow stage"
+    },
+    {
+      "name": "init",
+      "description": "Scaffold .clavain/ agent memory directory in the current project"
     },
     {
       "name": "interpeer",

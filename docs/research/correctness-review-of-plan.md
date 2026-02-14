@@ -1,607 +1,387 @@
-# Correctness Review: Work Discovery Plan (2026-02-12)
+# Correctness Review: .clavain/ Agent Memory Filesystem Contract
 
+**Plan:** [docs/plans/2026-02-13-clavain-memory-filesystem.md](../plans/2026-02-13-clavain-memory-filesystem.md)
 **Reviewer:** Julik (fd-correctness)
-**Document:** `/root/projects/Clavain/docs/plans/2026-02-12-work-discovery.md`
-**Date:** 2026-02-12
+**Date:** 2026-02-13
 
-## Summary
+## Executive Summary
 
-Reviewed implementation plan for beads-based work discovery scanner (`lib-discovery.sh`) and LFG discovery mode. Found **5 high-severity correctness issues** and **3 medium-severity issues** across edge cases, race conditions, pattern matching reliability, output format safety, and injection risks.
+Overall assessment: **HIGH CONFIDENCE** — plan is robust with minor improvements needed.
 
-## Critical Findings
+The plan correctly handles the session lifecycle non-concurrency guarantee. Four correctness issues identified:
 
-### 1. Edge Case: `infer_bead_action()` — Incorrect JSON Parsing (HIGH)
+1. **MEDIUM** — Gitignore append lacks duplicate protection (idempotency gap)
+2. **LOW** — Path resolution assumptions not documented for multi-directory workflows
+3. **LOW** — TOCTOU race in session-start is benign but should be documented
+4. **INFO** — Stat command portability already handled correctly
 
-**Location:** Lines 62-96, `infer_bead_action()` function
-
-**Issue:** The function uses `jq -r '.notes // ""'` to extract notes, but if `jq` fails (malformed JSON, missing field), the pipeline returns an empty string **and continues execution**. This can cause:
-
-- All three `has_*` flags to remain `false` even when artifacts exist in notes
-- Fallback filesystem scan to be triggered unnecessarily
-- Wrong action to be returned
-
-**Failure scenario:**
-```bash
-# If bead_json is malformed or bd show returns error JSON:
-local notes=$(echo "$bead_json" | jq -r '.notes // ""')  # jq exits 0, returns ""
-[[ "$notes" == *"Plan:"* ]] && has_plan=true  # Always false, even if notes had "Plan: docs/plans/..."
-# Result: returns "brainstorm" when should return "execute"
-```
-
-**Interleaving:**
-1. `bd show --json <bead>` returns `{"error": "database locked"}` (race with concurrent `bd` call)
-2. `jq -r '.notes'` returns `"null"`, exit code 0
-3. All string pattern matches fail
-4. Filesystem fallback also fails if plan file not committed yet
-5. Function returns `"brainstorm"` for an in-progress bead with a plan
-
-**Fix:**
-```bash
-infer_bead_action() {
-    local bead_id="$1"
-    local bead_json="$2"
-
-    # Validate JSON first
-    if ! echo "$bead_json" | jq -e . >/dev/null 2>&1; then
-        echo "error:invalid_json" >&2
-        return 1
-    fi
-
-    local status=$(echo "$bead_json" | jq -r '.status // "unknown"')
-    local notes=$(echo "$bead_json" | jq -r '.notes // ""')
-    local title=$(echo "$bead_json" | jq -r '.title // "untitled"')
-
-    # Fail if essential fields are missing
-    if [[ "$status" == "unknown" || "$status" == "null" ]]; then
-        echo "error:missing_status" >&2
-        return 1
-    fi
-
-    # ... rest of function
-}
-```
-
-**Impact:** Scanner can return wrong action, routing user to `/brainstorm` when they should go to `/work`. This wastes time and breaks the "smart discovery" promise.
+All issues have clear mitigation strategies. No blocking concerns.
 
 ---
 
-### 2. Race Condition: Scanner vs. Concurrent Bead Mutations (HIGH)
+## Finding 1: Gitignore Append Lacks Duplicate Protection (MEDIUM)
 
-**Location:** Lines 31-43, `discovery_scan_beads()` function description
+### Invariant Violation
 
-**Issue:** The plan doesn't specify atomicity guarantees. The scanner calls:
-1. `bd list --status=open --json` → gets list of beads
-2. For each bead, calls `bd show <id> --json` → gets details
-3. For each bead, runs filesystem scans (`grep -rl`)
+**Step 1.3** states: "Append `.clavain/scratch/` to `.gitignore` (if not already present)"
 
-**Race scenarios:**
+The plan does not specify HOW to check "if not already present." Running `/clavain:init` twice could create:
 
-#### Race A: Bead status changes between list and show
-```
-Time  Scanner Thread              User/Other Session
-----  --------------------------  --------------------------
-T0    bd list → [Clavain-abc]
-T1    bd show Clavain-abc        bd update Clavain-abc --status=done
-T2    infer_action → "execute"
-T3    Present to user
-T4    User selects bead          Bead is already closed
+```gitignore
+.clavain/scratch/
+.clavain/scratch/
 ```
 
-**Result:** User selects a bead that's no longer open. When routed to `/work`, the command may fail or operate on stale state.
+### Failure Narrative
 
-#### Race B: Filesystem artifact appears after scan
-```
-Time  Scanner Thread                   User/Other Session
-----  -------------------------------  --------------------------
-T0    bd list → [Clavain-abc]
-T1    grep docs/plans/ (no match)
-T2    infer_action → "plan"           git commit -m "add plan"
-T3    Present "Write plan" option     Plan now exists
-T4    User selects, expects to write  /write-plan fails: plan exists
-```
+1. User runs `/clavain:init` — writes `.clavain/scratch/` to `.gitignore` (line 10)
+2. User accidentally runs `/clavain:init` again (via command history, typo, or forgotten first run)
+3. Implementation does `echo '.clavain/scratch/' >> .gitignore` without `grep -F` check
+4. Result: `.gitignore` now has duplicate entries
 
-**Result:** User is prompted to write a plan that already exists. The command should either skip duplicate work or refresh state.
+**Impact:** LOW runtime consequence (gitignore deduplicates internally), but violates idempotency contract and creates file hygiene issues. The doctor check at **Step 4 line 69** uses `grep -q '.clavain/scratch'` which would still PASS with duplicates, hiding the problem.
 
-#### Race C: Concurrent scanner runs (session-start + manual /lfg)
-The plan mentions the scanner will be used by:
-- `commands/lfg.md` (on-demand)
-- `hooks/session-start.sh` (future F4)
-- `hooks/sprint-scan.sh` (full scan, existing)
+### Root Cause
 
-If a user runs `/lfg` while session-start is still scanning:
-```bash
-# Both processes may call bd simultaneously
-bd list --status=open --json  # Process 1
-bd list --status=open --json  # Process 2 (race)
+Plan says "must be idempotent" (Step 1.5) but doesn't specify the duplicate-check implementation for gitignore appending.
+
+### Recommendation
+
+**In Step 1.3**, replace:
+
+```markdown
+3. Append `.clavain/scratch/` to `.gitignore` (if not already present)
 ```
 
-Dolt's storage layer is ACID-compliant, so concurrent reads are safe, but the **combined read-infer-present flow is not atomic**. The scanner doesn't lock state, so the presented options may be stale by the time the user selects.
+With:
 
-**Fix recommendations:**
-1. **Timestamp the scan:** Include scan timestamp in output, and when routing to a command, have the command re-validate bead state before starting work.
-2. **Idempotency:** Ensure all routed commands (`/work`, `/write-plan`, etc.) check for duplicate work and fail gracefully if the precondition is no longer met.
-3. **Session-start deduplication:** Add a lockfile or PID check so only one scanner runs at a time:
+```markdown
+3. Append `.clavain/scratch/` to `.gitignore` using duplicate-safe pattern:
    ```bash
-   discovery_scan_beads() {
-       local lockfile="${HOME}/.clavain/discovery.lock"
-       if [[ -f "$lockfile" ]] && kill -0 $(cat "$lockfile" 2>/dev/null) 2>/dev/null; then
-           echo "# Scanner already running" >&2
-           return 1
-       fi
-       echo $$ > "$lockfile"
-       trap "rm -f '$lockfile'" EXIT
-       # ... actual scan logic
-   }
+   if ! grep -qF '.clavain/scratch/' .gitignore 2>/dev/null; then
+       echo '.clavain/scratch/' >> .gitignore
+   fi
    ```
+   (Uses `-F` for literal match to avoid regex edge cases with `/` characters)
+```
 
-**Impact:** Scanner can present stale or invalid options, breaking user trust. In a multi-session environment (tmux, multiple Claude sessions), this becomes probabilistic corruption.
+**Why `-F`:** Without it, `grep -q '.clavain/scratch/'` treats `.` as regex wildcard — `_clavain/scratch/` would match incorrectly. `-F` forces literal string matching.
 
 ---
 
-### 3. Pattern Matching: `grep -rl "Bead.*${bead_id}"` — Substring False Positives (MEDIUM-HIGH)
+## Finding 2: Path Resolution Assumptions Not Documented (LOW)
 
-**Location:** Lines 77-82, filesystem fallback in `infer_bead_action()`
+### Issue
 
-**Issue:** The pattern `"Bead.*${bead_id}"` will match:
-- The target bead ID (`Clavain-abc`)
-- Any bead ID that contains it as a substring (`Clavain-abc1`, `Clavain-abc-v2`)
-- Any bead ID that shares a prefix (`Clavain-abcd`)
+The plan assumes hooks and commands run from the project root directory, but this is not explicitly stated or enforced.
 
-**Failure scenario:**
-```bash
-# Bead IDs: Clavain-abc, Clavain-abc1
-# File docs/plans/2026-02-12-fix.md contains:
-#   "**Bead:** Clavain-abc1"
-# But NOT Clavain-abc
+**Evidence:**
+- **Step 2** session-handoff.sh line 36: checks `if [[ -d .clavain/ ]]`
+- **Step 3** session-start.sh line 49: checks `if [[ -f .clavain/scratch/handoff.md ]]`
+- **Step 4** doctor.md line 66: checks `if [ -d .clavain ]`
 
-bead_id="Clavain-abc"
-grep -rl "Bead.*${bead_id}" docs/plans/  # Matches the file (false positive)
-# Function returns has_plan=true for Clavain-abc, even though the plan is for Clavain-abc1
+All use relative paths starting with `.clavain/`.
+
+### Failure Scenario
+
+**Hooks are safe** — Claude Code's hook system sets CWD to project root before invoking hooks.
+
+**Commands may not be safe** — if a user runs `/clavain:init` from a subdirectory:
+
+1. User is in `/root/projects/MyProject/src/`
+2. Runs `/clavain:init`
+3. Creates `.clavain/` at `/root/projects/MyProject/src/.clavain/` instead of project root
+4. session-handoff.sh still runs from project root, checks `.clavain/` there (not found)
+5. Handoff goes to root `HANDOFF.md` instead of `.clavain/scratch/handoff.md`
+6. State split across two locations — confusion
+
+### Current Behavior
+
+Claude Code commands do NOT automatically run from project root. The `Bash` tool uses Claude's current working directory, which can be a subdirectory if the user `cd`'d there or if files were opened from a subfolder.
+
+### Recommendation
+
+**Add to Step 1 (init.md) before the directory creation logic:**
+
+```markdown
+1. Determine the git repository root:
+   ```bash
+   GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+   if [[ -z "$GIT_ROOT" ]]; then
+       echo "ERROR: Not in a git repository. /clavain:init requires git."
+       exit 1
+   fi
+   cd "$GIT_ROOT"
+   ```
+2. Proceed with directory creation (now guaranteed to be at project root)
 ```
 
-**Why this happens:**
-- Bead IDs follow the format `{project}-{4char}` (e.g., `Clavain-a3hp`)
-- The 4-char suffix is hex, so `abc` is a valid substring of `abc1`, `abcd`, `abce`, etc.
-- The regex `Bead.*abc` is too greedy — the `.*` matches any characters between "Bead" and "abc"
+**Add to Step 2 (session-handoff.sh) before line 36:**
 
-**Fix:**
-```bash
-# Anchor the bead ID with word boundaries or whitespace
-if ! $has_plan; then
-    # Match "Bead: Clavain-abc" or "Bead:Clavain-abc" but not "Bead:Clavain-abc1"
-    grep -rl "Bead[: ]${bead_id}\b" docs/plans/ 2>/dev/null | head -1 | grep -q . && has_plan=true
+```markdown
+# Determine project root for .clavain/ check
+if command -v git &>/dev/null && git rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || PROJECT_ROOT="$PWD"
+    CLAVAIN_DIR="${PROJECT_ROOT}/.clavain"
+else
+    CLAVAIN_DIR=".clavain"  # Fallback to CWD-relative
 fi
-if ! $has_prd; then
-    grep -rl "Bead[: ]${bead_id}\b" docs/prds/ 2>/dev/null | head -1 | grep -q . && has_prd=true
+
+if [[ -d "$CLAVAIN_DIR" ]]; then
+    # Use ${CLAVAIN_DIR}/scratch/handoff.md
 fi
 ```
 
-Or use a more precise pattern:
-```bash
-# Match "**Bead:** Clavain-abc" (the actual Clavain markdown convention)
-grep -rl "\*\*Bead:\*\* ${bead_id}\b" docs/plans/ 2>/dev/null | head -1 | grep -q . && has_plan=true
-```
-
-**Alternative fix:** Use `bd show --json` to get the plan/PRD references from notes field ONLY, and skip filesystem fallback entirely. Filesystem scans should be a last resort, not a primary detection method.
-
-**Impact:** Scanner can assign wrong action to a bead because it thinks a plan exists when it doesn't (or vice versa). This breaks routing and wastes user time.
+**Justification:** Git root is the canonical project boundary. Using relative `.clavain/` works ONLY if CWD is already the project root, which is true for hooks but not guaranteed for commands.
 
 ---
 
-### 4. Structured Output Format: Pipe-Delimited Fields — Injection Risk (HIGH)
+## Finding 3: Session-Start TOCTOU Race is Benign (LOW - Documentation Issue)
 
-**Location:** Lines 99-107, output format specification
+### User Question
 
-**Issue:** The output uses pipe (`|`) as a field delimiter:
-```
-bead:Clavain-abc|title:Fix auth timeout|priority:1|action:execute|stale:no
-```
+"session-start reads handoff.md while session-handoff writes it. Is there a TOCTOU issue?"
 
-If a bead title contains a pipe character, this format is ambiguous:
-```
-bead:Clavain-abc|title:Fix auth|timeout issue|priority:1|action:execute|stale:no
-                              ^-- Is this a delimiter or part of the title?
-```
+### Analysis
 
-**Failure scenario:**
+**No exploitable TOCTOU** because session-start and session-handoff **never run concurrently within the same session lifecycle.**
+
+#### Hook Execution Model (from Claude Code internals)
+
+1. **SessionStart hook** runs when a new session begins (before first user message)
+2. User interacts with Claude
+3. **Stop hook** runs when session is terminating (on `/exit`, `/stop`, or timeout)
+
+**Key guarantee:** A session's Stop hook and the NEXT session's SessionStart hook are separated by:
+- Stop hook completes → session teardown → new session spawned → SessionStart runs
+
+They are **sequential events across different session instances**, not concurrent events.
+
+#### The TOCTOU That Doesn't Exist
+
+**Hypothetical race (doesn't happen):**
+1. Session A's Stop hook writes `handoff.md` (Step 2)
+2. Session B's SessionStart hook reads `handoff.md` (Step 3)
+3. Race: if both run at same time, read could see partial write
+
+**Why it can't happen:**
+- Session A's Stop hook must COMPLETE before Session A terminates
+- Session B can only START after Session A terminates
+- Therefore: write finishes → file is stable → read begins
+
+**Sentinel file timing (lines 43-46 in session-handoff.sh):**
 ```bash
-# User creates bead with title: "Migrate | Refactor | Test"
-bd create --title "Migrate | Refactor | Test" --priority 1
-
-# Scanner outputs:
-# bead:Clavain-xyz|title:Migrate | Refactor | Test|priority:1|action:brainstorm|stale:no
-
-# LLM parser in lfg.md splits on |, gets:
-# ["bead:Clavain-xyz", "title:Migrate ", " Refactor ", " Test", "priority:1", ...]
-# Parser breaks, can't find "priority:" field, crashes or skips bead
+SENTINEL="/tmp/clavain-handoff-${SESSION_ID}"
+if [[ -f "$SENTINEL" ]]; then
+    exit 0
+fi
 ```
 
-**Why pipes in titles are realistic:**
-- Common in technical writing: "Component A | Component B"
-- Shell examples: "ps aux | grep process"
-- Path separators: "src/module1 | src/module2"
+This ensures the hook only fires once per session. The sentinel check happens BEFORE any `.clavain/` directory checks, so even if a user manually triggered two sessions in rapid succession, only one would write the handoff.
 
-**Fix options:**
+### Different Session IDs = No Collision
 
-#### Option A: Use a more obscure delimiter
-```bash
-# Use ASCII 0x1E (record separator) or 0x1F (unit separator)
-# Extremely unlikely to appear in bead titles
-printf 'bead:%s\x1Ftitle:%s\x1Fpriority:%d\x1Faction:%s\x1Fstale:%s\n' \
-    "$bead_id" "$title" "$priority" "$action" "$stale"
+**Step 2** will write to `.clavain/scratch/handoff.md` for Session A.
+**Step 3** will read the SAME `.clavain/scratch/handoff.md` for Session B.
+
+There is NO per-session file naming (no `handoff-${SESSION_ID}.md`). This is **intentional** — the handoff is session-agnostic state for "the next session."
+
+**Cross-session race (also doesn't happen):**
+- User opens two Claude sessions (A and B) in the same project simultaneously
+- Session A's Stop hook writes `handoff.md`
+- Session B's SessionStart hook reads `handoff.md`
+
+**Mitigation:** Session IDs are unique, so sentinels are distinct (`/tmp/clavain-handoff-${SESSION_A}`, `/tmp/clavain-handoff-${SESSION_B}`). Both Stop hooks could fire, but the LAST one to finish would overwrite `handoff.md`. The next new session would read that final state. This is **correct behavior** — the most recent session's context is what matters.
+
+### Recommendation
+
+**Add to Step 2 (session-handoff.sh) documentation:**
+
+```markdown
+**Concurrency note:** This hook may run from multiple simultaneous sessions in the same project. The last session to complete overwrites `.clavain/scratch/handoff.md`, which is correct — the most recent context is preserved for the next session.
 ```
 
-#### Option B: JSON output (recommended)
-```bash
-# Output valid JSON, let LLM parse with jq
-printf '{"bead":"%s","title":"%s","priority":%d,"action":"%s","stale":"%s"}\n' \
-    "$bead_id" "$(echo "$title" | jq -Rs .)" "$priority" "$action" "$stale"
+**Add to Step 3 (session-start.sh) documentation:**
+
+```markdown
+**Concurrency note:** SessionStart reads handoff.md AFTER the previous session's Stop hook completes (sequential lifecycle). No TOCTOU risk. If multiple sessions were active, the last one to finish writing handoff.md "wins" — this is expected behavior.
 ```
 
-JSON escaping handles pipes, quotes, newlines, etc. The LLM can parse with `jq` (which Claude Code already uses extensively).
-
-#### Option C: Escape pipes in titles
-```bash
-# Replace | with \| in title before output
-local title_escaped="${title//|/\\|}"
-printf 'bead:%s|title:%s|priority:%d|action:%s|stale:%s\n' \
-    "$bead_id" "$title_escaped" "$priority" "$action" "$stale"
-```
-
-**Recommendation:** Use JSON output (Option B). The plan already uses `jq` for parsing `bd` output, so the LLM can handle JSON input as well.
-
-**Impact:** Parser failures cause beads to be silently dropped from discovery results. User never sees the option, assumes no work is available, wastes time.
+**No code changes needed.** This is a documentation clarification, not a bug.
 
 ---
 
-### 5. Telemetry Logging: `printf` Injection Risk (MEDIUM)
+## Finding 4: Stat Command Portability Correctly Handled (INFO)
 
-**Location:** Lines 160-173, `discovery_log_selection()` function
+### User Question
 
-**Issue:** The function uses `printf` with user-controlled data (bead ID, action):
+The plan's doctor.md check (Step 4, line 76) uses:
+
 ```bash
-printf '{"event":"discovery_select","bead":"%s","action":"%s","recommended":%s,"timestamp":"%s"}\n' \
-    "$bead_id" "$action" "$was_recommended" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+stat -c %Y .clavain/scratch/handoff.md 2>/dev/null || stat -f %m .clavain/scratch/handoff.md 2>/dev/null
 ```
 
-If `$bead_id` or `$action` contain format specifiers (`%s`, `%d`, etc.), `printf` will interpret them:
+Is this portable?
+
+### Analysis
+
+**YES — already correct.**
+
+The pattern `stat -c %Y ... || stat -f %m ...` is the standard cross-platform idiom for getting file modification timestamps:
+
+- **GNU stat** (Linux): `-c %Y` outputs Unix timestamp
+- **BSD stat** (macOS): `-f %m` outputs Unix timestamp
+- **Fallback chain:** try GNU, fall back to BSD, then fall back to `echo $(date +%s)` (current time) if both fail
+
+**Evidence from existing Clavain code:**
+
+- `hooks/session-start.sh:99` uses identical pattern
+- `hooks/auto-publish.sh:58` uses identical pattern
+- `hooks/auto-compound.sh:57` uses identical pattern
+- `hooks/sprint-scan.sh:243` uses identical pattern
+
+This is an established convention in the codebase.
+
+### Recommendation
+
+**No changes needed.** The plan correctly follows existing portability patterns.
+
+**Optional clarity improvement for Step 4, line 76:**
+
+Add a comment in the code snippet:
+
 ```bash
-bead_id='Clavain-abc%s%s%s'
-action='execute%n%n'
-printf '{"bead":"%s","action":"%s"}\n' "$bead_id" "$action"
-# printf interprets %s as format spec, expects more arguments, crashes or prints garbage
-```
-
-**Failure scenario:**
-1. User creates bead with title containing `%s` (rare but possible in technical titles)
-2. Scanner logs the selection
-3. `printf` misinterprets the format string, writes malformed JSON
-4. Telemetry file becomes unparseable
-5. If any future code tries to parse `telemetry.jsonl`, it fails
-
-**Why this is realistic:**
-- Technical bead titles might include format strings: "Fix printf %s bug in logger"
-- Bead IDs are generated, so less risk, but action strings are derived from notes/titles
-
-**Fix:**
-```bash
-discovery_log_selection() {
-    local bead_id="$1"
-    local action="$2"
-    local was_recommended="$3"
-    local telemetry_file="${HOME}/.clavain/telemetry.jsonl"
-    mkdir -p "$(dirname "$telemetry_file")" 2>/dev/null || return 0
-
-    # Escape JSON strings properly
-    local bead_json=$(printf '%s' "$bead_id" | jq -Rs .)
-    local action_json=$(printf '%s' "$action" | jq -Rs .)
-    local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-    # Use echo with pre-escaped JSON values
-    echo "{\"event\":\"discovery_select\",\"bead\":${bead_json},\"action\":${action_json},\"recommended\":${was_recommended},\"timestamp\":\"${timestamp}\"}" \
-        >> "$telemetry_file" 2>/dev/null || true
-}
-```
-
-Or use `jq` to construct the JSON:
-```bash
-jq -n \
-    --arg event "discovery_select" \
-    --arg bead "$bead_id" \
-    --arg action "$action" \
-    --argjson rec "$was_recommended" \
-    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{event: $event, bead: $bead, action: $action, recommended: $rec, timestamp: $ts}' \
-    >> "$telemetry_file" 2>/dev/null || true
-```
-
-**Impact:** Low likelihood (requires user to create bead with format-string title), but high consequence if it happens (telemetry becomes corrupt, future analytics break).
-
----
-
-## Additional Findings
-
-### 6. Error Handling: No Validation of `bd list` Output (MEDIUM)
-
-**Location:** Lines 31-43, `discovery_scan_beads()` description
-
-**Issue:** The plan doesn't specify what happens if:
-- `bd list --status=open --json` returns empty array `[]`
-- `bd list` fails (exit code != 0)
-- `bd` is not installed (command not found)
-
-The plan mentions "Handle `bd` unavailable gracefully" in Task 1, but doesn't specify the exact behavior.
-
-**Fix:**
-```bash
-discovery_scan_beads() {
-    # Check if bd is available
-    if ! command -v bd >/dev/null 2>&1; then
-        echo "# DISCOVERY_UNAVAILABLE: bd not installed" >&2
-        return 1
-    fi
-
-    # Get bead list
-    local beads_json=$(bd list --status=open --json 2>&1)
-    local bd_exit=$?
-
-    if [[ $bd_exit -ne 0 ]]; then
-        echo "# DISCOVERY_ERROR: bd list failed (exit $bd_exit)" >&2
-        return 1
-    fi
-
-    # Validate JSON
-    if ! echo "$beads_json" | jq -e . >/dev/null 2>&1; then
-        echo "# DISCOVERY_ERROR: invalid JSON from bd list" >&2
-        return 1
-    fi
-
-    # Check if empty
-    local bead_count=$(echo "$beads_json" | jq 'length')
-    if [[ "$bead_count" -eq 0 ]]; then
-        echo "# DISCOVERY_EMPTY: no open beads" >&2
-        return 0  # Not an error, just empty
-    fi
-
-    # ... rest of function
-}
-```
-
-The `lfg.md` command should check the exit code and stderr output to decide whether to fall through to normal pipeline.
-
----
-
-### 7. Staleness Check: Date Comparison Edge Case (LOW)
-
-**Location:** Line 44, staleness check description
-
-**Issue:** "if bead updated >2 days ago" — the plan doesn't specify:
-- How to parse the `updated` timestamp from `bd show --json`
-- How to compare timestamps in bash (which lacks native date arithmetic)
-- What timezone to use (beads uses UTC, system clock might be local)
-
-**Failure scenario:**
-```bash
-# bd returns ISO8601: "2026-02-10T14:30:00Z"
-# bash date command behavior varies by platform (GNU vs BSD)
-# Naive comparison:
-local updated="2026-02-10T14:30:00Z"
-local now_epoch=$(date +%s)
-local updated_epoch=$(date -d "$updated" +%s 2>/dev/null)  # Fails on BSD (macOS)
-```
-
-**Fix (GNU coreutils, Linux only):**
-```bash
-is_stale() {
-    local updated_iso="$1"  # "2026-02-10T14:30:00Z"
-    local now_epoch=$(date +%s)
-    local updated_epoch=$(date -d "$updated_iso" +%s 2>/dev/null)
-
-    if [[ -z "$updated_epoch" ]]; then
-        # Parsing failed, assume not stale (fail open)
-        return 1
-    fi
-
-    local age_seconds=$((now_epoch - updated_epoch))
-    local two_days=$((2 * 24 * 60 * 60))
-
-    [[ $age_seconds -gt $two_days ]]
-}
-```
-
-**Recommendation:** Document that staleness check requires GNU date (available in Linux, not macOS). Or use a more portable approach:
-```bash
-# Extract date portion, compare lexicographically (works for ISO8601)
-local updated_date="${updated_iso%%T*}"  # "2026-02-10"
-local today=$(date -u +%Y-%m-%d)
-# If date is before (today - 2 days), it's stale
-# Requires date arithmetic... still platform-dependent
-```
-
-**Alternative:** Move staleness logic to beads CLI itself (`bd list --stale-threshold=2d`) so the shell script doesn't need to parse dates.
-
-**Impact:** Staleness marker may be wrong on some platforms, but this is cosmetic (doesn't affect routing).
-
----
-
-### 8. Concurrency: Filesystem Scan Race with Git Operations (LOW)
-
-**Location:** Lines 77-82, filesystem fallback
-
-**Issue:** The scanner runs `grep -rl` on `docs/plans/` and `docs/prds/` while git operations may be in progress:
-- Another session is committing a new plan
-- A git pull is in progress
-- A file is being edited (Write tool creates temp file, renames)
-
-**Race scenario:**
-```
-Time  Scanner Thread                   Git/Other Process
-----  -------------------------------  --------------------------
-T0    grep -rl docs/plans/
-T1    stat docs/plans/foo.md          Write creates foo.md.tmp
-T2    grep reads foo.md               Write renames to foo.md
-T3    grep completes                  grep may miss foo.md
-```
-
-**Why this is unlikely to cause issues:**
-- `grep -rl` only needs to see file content, not atomic writes
-- If a file is added/removed during scan, worst case is scanner misses it (fallback to notes field)
-- Git operations lock `.git/index`, not the worktree files
-
-**Impact:** Very low. Filesystem scan is already a fallback. If it misses a file due to race, the primary detection method (notes field) should still work.
-
----
-
-## Recommendations
-
-### Priority 1 (Must Fix Before Merge)
-1. **Fix `infer_bead_action()` JSON validation** — always validate `jq` output before using it
-2. **Change output format to JSON** — pipe-delimited format is unsafe
-3. **Add word-boundary anchors to grep patterns** — prevent substring false positives
-4. **Fix telemetry printf injection** — use `jq` to construct JSON
-
-### Priority 2 (Should Fix Before Release)
-5. **Add timestamp to scanner output** — so routed commands can detect stale state
-6. **Add lockfile to prevent concurrent scans** — deduplicate session-start + manual invocations
-7. **Document error handling for bd unavailable** — specify exact fallback behavior
-
-### Priority 3 (Nice to Have)
-8. **Move staleness check to beads CLI** — avoid platform-specific date parsing
-9. **Add integration test for concurrent scanner calls** — verify no data corruption
-
----
-
-## Failure Narrative: Worst-Case Scenario
-
-**Setup:**
-- User has 3 open beads: `Clavain-abc` (P0, has plan), `Clavain-abc1` (P1, no plan), `Clavain-abd` (P2, no plan)
-- Bead `Clavain-abc` was updated 3 days ago (stale)
-- User runs `/lfg` in one tmux pane
-- Another session is running `bd update Clavain-abc --status=done` concurrently
-- Bead `Clavain-abc1` title is: "Migrate auth | Add SSO | Test"
-
-**Timeline:**
-```
-T0  Scanner: bd list --status=open --json → [Clavain-abc, Clavain-abc1, Clavain-abd]
-T1  Scanner: bd show Clavain-abc --json → gets bead details (still open)
-T2  Other session: bd update Clavain-abc --status=done
-T3  Scanner: infer_bead_action(Clavain-abc) → finds no plan in notes (corrupted JSON from concurrent update)
-T4  Scanner: grep "Bead.*Clavain-abc" docs/plans/ → matches plan for Clavain-abc1 (substring match)
-T5  Scanner: has_plan=true, action="execute"
-T6  Scanner: bd show Clavain-abc1 --json → gets bead details
-T7  Scanner: infer_bead_action(Clavain-abc1) → notes has "Plan: docs/plans/foo.md"
-T8  Scanner: action="execute"
-T9  Scanner: formats output with pipe delimiters
-T10 Scanner: outputs "bead:Clavain-abc1|title:Migrate auth | Add SSO | Test|priority:1|action:execute|stale:no"
-T11 LLM in lfg.md: splits on | → ["bead:Clavain-abc1", "title:Migrate auth ", " Add SSO ", " Test", ...]
-T12 LLM: can't find priority field, skips Clavain-abc1
-T13 LLM: presents only Clavain-abd (wrong recommendation)
-T14 User selects Clavain-abd, starts brainstorm
-T15 User wastes 30 minutes brainstorming when they should be executing the plan for Clavain-abc1
-```
-
-**Root causes:**
-1. Race between scanner and concurrent bead update → wrong action for Clavain-abc
-2. Substring grep match → false positive for Clavain-abc
-3. Pipe in title → parser corruption for Clavain-abc1
-4. No validation of scanner output → silent failure
-
-**Consequences:**
-- Scanner returns wrong recommendation
-- User works on wrong bead
-- Trust in discovery system is broken
-- User falls back to manual `bd list`, defeating the purpose of the feature
-
----
-
-## Testing Recommendations
-
-### Unit Tests (Shell)
-```bash
-# test_discovery.bats
-
-@test "infer_bead_action handles malformed JSON" {
-    bead_json='{"error": "database locked"}'
-    run infer_bead_action "Clavain-abc" "$bead_json"
-    [[ "$status" -ne 0 ]]
-}
-
-@test "infer_bead_action rejects missing status field" {
-    bead_json='{"notes": "Plan: foo.md", "title": "Test"}'
-    run infer_bead_action "Clavain-abc" "$bead_json"
-    [[ "$status" -ne 0 ]]
-}
-
-@test "grep pattern does not match substring bead IDs" {
-    # Create fake plan file with Clavain-abc1
-    echo "**Bead:** Clavain-abc1" > /tmp/test-plan.md
-
-    # Run infer_bead_action for Clavain-abc (not abc1)
-    bead_json='{"status":"open","notes":"","title":"Test"}'
-    run infer_bead_action "Clavain-abc" "$bead_json"
-
-    # Should NOT find the plan
-    [[ "$output" != "execute" ]]
-}
-
-@test "output format handles pipe in title" {
-    bead_json='{"status":"open","notes":"","title":"Fix | Test | Deploy"}'
-    run format_discovery_output "$bead_json"
-
-    # Output should be valid JSON
-    echo "$output" | jq -e . >/dev/null
-}
-
-@test "telemetry printf handles format specifiers in bead ID" {
-    run discovery_log_selection "Clavain-%s%s%s" "execute" "true"
-    [[ "$status" -eq 0 ]]
-
-    # Telemetry file should contain valid JSON
-    tail -1 ~/.clavain/telemetry.jsonl | jq -e . >/dev/null
-}
-```
-
-### Integration Tests
-```bash
-@test "concurrent scanner calls do not corrupt output" {
-    # Run two scanners in parallel
-    discovery_scan_beads > /tmp/scan1.txt &
-    discovery_scan_beads > /tmp/scan2.txt &
-    wait
-
-    # Both outputs should be valid JSON
-    jq -e . /tmp/scan1.txt >/dev/null
-    jq -e . /tmp/scan2.txt >/dev/null
-}
-
-@test "scanner detects bead closed between list and show" {
-    # Start scanner
-    discovery_scan_beads > /tmp/scan.txt &
-    sleep 0.1
-
-    # Close a bead mid-scan
-    bd update Clavain-test --status=done
-
-    wait
-
-    # Scanner should not include the closed bead
-    ! grep -q "Clavain-test" /tmp/scan.txt
-}
+# Portable: stat -c (GNU) || stat -f (BSD)
+age=$(( ($(date +%s) - $(stat -c %Y .clavain/scratch/handoff.md 2>/dev/null || stat -f %m .clavain/scratch/handoff.md 2>/dev/null || echo $(date +%s))) / 86400 ))
 ```
 
 ---
 
-## Conclusion
+## Additional Observations
 
-The plan is architecturally sound but has **5 high-severity correctness issues** that will cause failures in production:
-1. Wrong action inference due to JSON validation gaps
-2. Race conditions between scanner and concurrent state changes
-3. Substring false positives in grep patterns
-4. Parser corruption from pipe characters in titles
-5. Printf injection in telemetry logging
+### Non-Git Projects (from brainstorm line 165)
 
-All issues have concrete fixes. Priority 1 fixes should be applied before merge. Priority 2 fixes should be applied before the feature is released to users.
+The brainstorm asks: "What about projects that aren't git repos?"
 
-The scanner is read-heavy, so database locking is not a concern, but the **lack of atomicity in the read-infer-present flow** means the presented options may be stale. The fix is to add validation at routing time (when the command is invoked) rather than trying to lock the scanner.
+**Current plan behavior:**
+- **Step 1** (init.md) has no git requirement specified
+- **Step 2** (session-handoff.sh line 52) checks `git rev-parse --is-inside-work-tree` and only processes git repos
+- **Step 4** (doctor.md) checks `.clavain/` existence but not git
 
-**Final recommendation:** Apply Priority 1 fixes, add the recommended unit tests, and document the staleness behavior in `lfg.md` so users understand that discovery is a point-in-time snapshot.
+**Consequence:**
+- User can run `/clavain:init` in a non-git directory — creates `.clavain/` successfully
+- session-handoff.sh will skip handoff logic (exits early at line 52's git check)
+- `.clavain/scratch/handoff.md` never gets written, but directory exists
+- **No corruption risk** — graceful degradation
+
+**Recommendation:** If non-git support is desired, **Step 2 needs refactoring**. Currently the git check is line 52, which is BEFORE the `.clavain/` check (line 36 in the plan). To support non-git projects:
+
+1. Move git-specific checks (lines 52-57) INSIDE the `.clavain/` conditional
+2. Change from "is this a git repo with uncommitted changes" to "is there ANY signal of incomplete work"
+3. Non-git signals: existence of `.clavain/scratch/*.tmp` files, uncommitted learnings, etc.
+
+**If non-git is NOT a goal:** Add explicit check to Step 1 (see Finding 2 recommendation) to require git.
+
+### Test Count Assertion Update (Step 6)
+
+Plan correctly notes (line 122): "Structural tests hardcode command count at 37. Will need updating to 38."
+
+**Verification needed:**
+```bash
+grep -r "37" tests/structural/
+```
+
+Likely locations:
+- `tests/structural/test_structure.py` has assertion like `assert len(commands) == 37`
+
+**Action after implementing Step 1:** Update the hardcoded count AND verify test passes:
+
+```bash
+uv run --project tests pytest tests/structural/test_structure.py::test_command_count -xvs
+```
+
+### gen-catalog.py Auto-Detection (Step 5)
+
+Plan states: "gen-catalog.py will auto-detect and propagate this."
+
+**Verify the count pattern expectation:**
+
+From MEMORY.md:
+> gen-catalog.py expects pattern `\d+ skills, \d+ agents, and \d+ commands` in SKILL.md
+
+After creating `commands/init.md`, running `python3 scripts/gen-catalog.py` should:
+1. Detect 38 command files (currently 37)
+2. Update all locations with the new count
+3. Update `using-clavain/SKILL.md` line 7's count summary
+
+**Test the propagation:**
+```bash
+python3 scripts/gen-catalog.py --dry-run  # Check what would change
+python3 scripts/gen-catalog.py            # Apply changes
+git diff                                   # Verify updates
+```
+
+---
+
+## Correctness Checklist
+
+| Concern | Status | Severity | Mitigation |
+|---------|--------|----------|------------|
+| Gitignore duplicate append | ISSUE | MEDIUM | Add `grep -qF` guard before append |
+| Path resolution from subdirs | ISSUE | LOW | Add git root resolution to init.md |
+| Session-start/handoff TOCTOU | BENIGN | INFO | Document sequential lifecycle, no code change |
+| Stat portability | CORRECT | INFO | Already using portable pattern |
+| Idempotency of init command | AT-RISK | MEDIUM | Fixed by gitignore duplicate guard |
+| Non-git project support | UNDEFINED | INFO | Clarify scope: require git or refactor handoff |
+| Test count assertion | TRACKED | INFO | Update after Step 1 implementation |
+
+---
+
+## Final Recommendations
+
+### MUST FIX (Before Implementation)
+
+1. **Step 1.3** — Add `grep -qF` duplicate guard for gitignore append
+2. **Step 1** — Add git root resolution logic (or explicitly document "must run from project root")
+
+### SHOULD ADD (For Clarity)
+
+3. **Step 2 & 3** — Add concurrency notes about sequential lifecycle and multi-session behavior
+4. **Step 4** — Optional: add portability comment to stat command
+
+### NICE TO HAVE (For Future Iterations)
+
+5. **PRD clarity** — Document whether non-git projects are in scope (affects session-handoff logic)
+6. **Verification steps** — Add explicit test commands to Step 6 for count assertions
+
+---
+
+## Failure Mode Summary
+
+**Most likely failure:** User runs `/clavain:init` from a subdirectory, creates `.clavain/` in wrong location, state split across root and subdir.
+
+**Mitigation:** Add git root resolution (Finding 2).
+
+**Second most likely failure:** Duplicate gitignore entries from repeated init runs.
+
+**Mitigation:** Add grep guard (Finding 1).
+
+**Least likely failure:** TOCTOU race on handoff.md read/write.
+
+**Reality:** Can't happen due to sequential session lifecycle (Finding 3).
+
+---
+
+## Correctness Verdict
+
+**APPROVED with minor fixes.**
+
+The plan demonstrates strong correctness reasoning:
+- Idempotency is a stated requirement
+- Portability patterns match existing code
+- Session lifecycle isolation is correctly assumed
+- File structure is simple (no complex state machines)
+
+The two MEDIUM issues (gitignore duplicates, path resolution) are straightforward fixes with clear implementation guidance above.
+
+After applying Findings 1 and 2 recommendations, the plan is production-ready.
