@@ -14,3 +14,4 @@ __pycache__/
 .claude/flux-drive.yaml
 .claude/clodex-audit.log
 .claude/clodex-toggle.flag
+.clavain/scratch/
