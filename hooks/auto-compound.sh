@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # Stop hook: auto-compound non-trivial problem-solving after each turn
 #
-# Analyzes the recent conversation for compoundable signals:
+# Uses shared signal detection from lib-signals.sh with these signals:
 #   - Git commits (weight 1)
-#   - Debugging resolutions ("that worked", "it's fixed", etc.) (weight 2)
-#   - Non-trivial fix patterns (investigation language) (weight 2)
-#   - Bead closures (completed work items) (weight 1)
-#   - Insight blocks (★ Insight markers in explanatory mode) (weight 1)
-#   - Build/test recovery (passing after failure) (weight 2)
+#   - Debugging resolutions (weight 2)
+#   - Investigation language (weight 2)
+#   - Bead closures (weight 1)
+#   - Insight blocks (weight 1)
+#   - Build/test recovery (weight 2)
+#   - Version bumps (weight 2)
 #
-# Signals are weighted. Compound triggers when total weight >= 3,
-# so commit + bead-close (2) won't fire alone, but commit + resolution (3) will.
+# Compound triggers when total signal weight >= 3.
+# See hooks/lib-signals.sh for signal pattern definitions.
 #
-# Guards: stop_hook_active, cross-hook sentinel, per-repo opt-out, 5-min throttle.
+# Guards: stop_hook_active, shared sentinel, per-repo opt-out, 5-min throttle.
 # Returns JSON with decision:"block" + reason when compound is warranted,
 # causing Claude to evaluate and automatically run /compound with a brief notice.
 #
