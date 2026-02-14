@@ -45,7 +45,6 @@ Clavain/
 │   └── ...                        # Each skill is a directory with SKILL.md
 ├── agents/
 │   ├── review/                    # 3 review agents
-│   ├── research/                  # 0 research agents
 │   └── workflow/                  # 2 workflow agents
 ├── commands/                      # 36 slash commands
 │   ├── setup.md               # Modpack installer
@@ -63,17 +62,14 @@ Clavain/
 │   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
 ├── config/
-│   └── flux-drive/
-│       ├── knowledge/             # Knowledge layer — durable patterns from past reviews
-│       └── domains/               # Domain detection profiles (11 domains)
-│           ├── index.yaml         # Detection signals and scoring weights
-│           └── <domain>.md        # Per-domain review criteria + agent specs
+│   └── dispatch/                  # Codex dispatch configuration
 ├── scripts/
 │   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
 │   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
 │   ├── install-codex.sh           # Codex skill installer
 │   ├── codex-auto-refresh.sh      # Automated local Codex sync helper
-│   ├── detect-domains.py          # Domain profile scoring (deterministic, 32 unit tests)
+│   ├── gen-catalog.py             # Generate skill/agent/command catalog
+│   ├── bump-version.sh            # Bump version across plugin.json + marketplace.json
 │   ├── upstream-check.sh          # Checks 7 upstream repos via gh api
 │   └── upstream-impact-report.py  # Generates impact digest for upstream PRs
 ├── docs/
@@ -150,8 +146,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 - Agents are dispatched via `Task` tool — they run as subagents with their own context
 
 Categories:
-- **review/** — Review specialists (3): plan-reviewer, agent-native-reviewer, and data-migration-expert. The 7 core fd-* agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design) now live in the **interflux** companion plugin.
-- **research/** — Information gathering (5): best practices, framework docs, git history, learnings, repo analysis
+- **review/** — Review specialists (3): plan-reviewer, agent-native-reviewer, and data-migration-expert. The 7 core fd-* agents live in the **interflux** companion plugin. The 5 research agents also moved to interflux.
 - **workflow/** — Process automation (2): PR comments, bug reproduction
 
 ### Commands
@@ -269,6 +264,16 @@ These must be installed for Clavain to function fully.
 |--------|--------|-------------|
 | **context7** | claude-plugins-official | Runtime doc fetching. Clavain's MCP server. Skills use it to pull upstream docs without bundling them. |
 | **explanatory-output-style** | claude-plugins-official | Educational insights in output. Injected via SessionStart hook. |
+
+### Companion Plugins
+
+Extracted subsystems that Clavain delegates to via namespace routing.
+
+| Plugin | Source | What It Provides |
+|--------|--------|-----------------|
+| **interflux** | interagency-marketplace | Multi-agent review + research engine. 7 fd-* review agents, 5 research agents, flux-drive/flux-research skills, qmd + exa MCP servers. Protocol spec in `docs/spec/`. |
+| **interphase** | interagency-marketplace | Phase tracking, gates, and work discovery. lib-phase.sh, lib-gates.sh, lib-discovery.sh. Clavain shims delegate to interphase when installed. |
+| **interline** | interagency-marketplace | Statusline renderer. Shows dispatch state, bead context, workflow phase, clodex mode. |
 
 ### Recommended
 
