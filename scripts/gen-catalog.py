@@ -107,11 +107,13 @@ def collect_skills(root: Path) -> tuple[list[dict[str, str]], int]:
     return skills, len(skill_files)
 
 
-def collect_agents(root: Path) -> tuple[list[dict[str, str]], int]:
+def collect_agents(root: Path) -> tuple[list[dict[str, str]], int, dict[str, int]]:
     agents: list[dict[str, str]] = []
     count = 0
+    category_counts: dict[str, int] = {}
     for category in ("review", "research", "workflow"):
         category_dir = root / "agents" / category
+        cat_count = 0
         for path in sorted(category_dir.glob("*.md")):
             frontmatter = parse_frontmatter(path)
             agents.append(
@@ -122,8 +124,10 @@ def collect_agents(root: Path) -> tuple[list[dict[str, str]], int]:
                 }
             )
             count += 1
+            cat_count += 1
+        category_counts[category] = cat_count
     agents.sort(key=lambda item: (item["category"], item["name"]))
-    return agents, count
+    return agents, count, category_counts
 
 
 def collect_commands(root: Path) -> tuple[list[dict[str, str]], int]:
@@ -211,6 +215,9 @@ def update_agents_md_counts(text: str, counts: dict[str, int], path: Path) -> st
         f'echo "Commands: $(ls commands/*.md | wc -l)"        # Should be {counts["commands"]}',
         path,
     )
+    updated = replace_once(updated, r"# \d+ review agents", f"# {counts['review']} review agents", path)
+    updated = replace_once(updated, r"# \d+ research agents", f"# {counts['research']} research agents", path)
+    updated = replace_once(updated, r"# \d+ workflow agents", f"# {counts['workflow']} workflow agents", path)
     return updated
 
 
@@ -246,6 +253,9 @@ def update_readme_counts(text: str, counts: dict[str, int], path: Path) -> str:
         path,
     )
     updated = replace_once(updated, r"# \d+ slash commands", f"# {counts['commands']} slash commands", path)
+    updated = replace_once(updated, r"### Hooks \(\d+\)", f"### Hooks ({counts['hooks']})", path)
+    updated = replace_once(updated, r"\d+ review agents", f"{counts['review']} review agents", path)
+    updated = replace_once(updated, r"### Agents \(\d+\)", f"### Agents ({counts['agents']})", path)
     return updated
 
 
@@ -315,7 +325,7 @@ def build_catalog_text(
 
 def build_expected_files(root: Path) -> dict[Path, str]:
     skills, skill_count = collect_skills(root)
-    agents, agent_count = collect_agents(root)
+    agents, agent_count, agent_category_counts = collect_agents(root)
     commands, command_count = collect_commands(root)
     counts = {
         "skills": skill_count,
@@ -323,6 +333,7 @@ def build_expected_files(root: Path) -> dict[Path, str]:
         "commands": command_count,
         "hooks": count_hook_entries(root),
         "mcp_servers": count_mcp_servers(root),
+        **agent_category_counts,
     }
 
     expected: dict[Path, str] = {}

@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 29 skills, 17 agents, 37 commands, 6 hooks, 2 MCP servers |
+| Components | 29 skills, 17 agents, 37 commands, 7 hooks, 2 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -31,6 +31,12 @@ Clavain/
 │   ├── executing-plans/SKILL.md   # Execute phase
 │   ├── test-driven-development/SKILL.md
 │   ├── systematic-debugging/SKILL.md
+│   ├── flux-drive/                # Has sub-resources (phases/, references/)
+│   │   ├── SKILL.md
+│   │   ├── phases/                # Phase-specific instructions (launch, synthesis, etc.)
+│   │   └── references/            # Extracted reference material
+│   │       ├── agent-roster.md    # Agent categories, invocation, Oracle CLI usage
+│   │       └── scoring-examples.md # Worked triage scoring examples
 │   ├── writing-skills/            # Has sub-resources (examples/, references)
 │   │   ├── SKILL.md
 │   │   ├── testing-skills-with-subagents.md
@@ -38,7 +44,7 @@ Clavain/
 │   │   └── examples/
 │   └── ...                        # Each skill is a directory with SKILL.md
 ├── agents/
-│   ├── review/                    # 9 review agents
+│   ├── review/                    # 10 review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 2 workflow agents
 ├── commands/                      # 37 slash commands
@@ -50,17 +56,24 @@ Clavain/
 │   ├── sprint-scan.sh             # Sprint awareness scanner (sourced by session-start + sprint-status)
 │   ├── session-start.sh           # Context injection + upstream staleness + sprint awareness
 │   ├── clodex-audit.sh             # Clodex mode source code write audit (PostToolUse Edit/Write)
+│   ├── lib-gates.sh               # Phase gate shim (delegates to interphase; no-op stub if absent)
+│   ├── lib-discovery.sh           # Plugin discovery shim (delegates to interphase; no-op stub if absent)
 │   ├── auto-publish.sh            # Auto-publish after git push (PostToolUse Bash)
 │   ├── auto-compound.sh           # Auto-compound knowledge capture on Stop
 │   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
 ├── config/
-│   └── flux-drive/knowledge/      # Knowledge layer — durable patterns from past reviews
+│   └── flux-drive/
+│       ├── knowledge/             # Knowledge layer — durable patterns from past reviews
+│       └── domains/               # Domain detection profiles (11 domains)
+│           ├── index.yaml         # Detection signals and scoring weights
+│           └── <domain>.md        # Per-domain review criteria + agent specs
 ├── scripts/
 │   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
 │   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
 │   ├── install-codex.sh           # Codex skill installer
 │   ├── codex-auto-refresh.sh      # Automated local Codex sync helper
+│   ├── detect-domains.py          # Domain profile scoring (deterministic, 32 unit tests)
 │   ├── upstream-check.sh          # Checks 7 upstream repos via gh api
 │   └── upstream-impact-report.py  # Generates impact digest for upstream PRs
 ├── docs/
@@ -297,7 +310,7 @@ These plugins overlap with Clavain's opinionated equivalents. Keeping both cause
 
 | Plugin | Clavain Replacement | Status |
 |--------|-------------------|--------|
-| code-review | `/review` + `/flux-drive` + 9 review agents | **OFF** |
+| code-review | `/review` + `/flux-drive` + 10 review agents | **OFF** |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster | **OFF** |
 | code-simplifier | `fd-quality` agent | **OFF** |
 | commit-commands | `landing-a-change` skill | **OFF** |

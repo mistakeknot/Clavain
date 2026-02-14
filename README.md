@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 29 skills, 17 agents, 37 commands, 6 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 29 skills, 17 agents, 37 commands, 7 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -195,15 +195,20 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/triage-prs` | Triage open PR backlog with parallel review agents |
 | `/review-doc` | Quick single-pass document refinement (lighter than flux-drive) |
 | `/upstream-sync` | Check upstream repos for updates |
+| `/sprint-status` | Deep scan of sprint workflow state — sessions, pipeline, beads |
+| `/flux-gen` | Generate project-specific review agents from detected domain profiles |
+| `/deep-review` | Alias for `/flux-drive` |
+| `/full-pipeline` | Alias for `/lfg` |
+| `/cross-review` | Alias for `/interpeer` |
 | `/help` | Show Clavain commands organized by daily drivers first |
 | `/doctor` | Quick health check — MCP servers, tools, beads, plugin conflicts |
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
-### Hooks (5)
+### Hooks (7)
 
 - **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When clodex mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
-- **PostToolUse** — Clodex audit: logs source code writes when clodex mode is active for post-session review (`clodex-audit.sh`).
+- **PostToolUse** — Clodex audit: logs source code writes when clodex mode is active for post-session review (`clodex-audit.sh`). Auto-publish: detects `git push` in plugin repos and auto-bumps version + syncs marketplace (`auto-publish.sh`).
 - **Stop** — Auto-compound check: detects compoundable signals and prompts knowledge capture (`auto-compound.sh`). Session handoff: detects uncommitted work or in-progress beads and prompts HANDOFF.md creation (`session-handoff.sh`).
 - **SessionEnd** — Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
@@ -240,7 +245,7 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 | Plugin | Clavain Replacement |
 |--------|-------------------|
-| code-review | `/review` + `/flux-drive` + 9 review agents |
+| code-review | `/review` + `/flux-drive` + 10 review agents |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster |
 | code-simplifier | `fd-quality` agent |
 | commit-commands | `landing-a-change` skill |

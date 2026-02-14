@@ -32,6 +32,16 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/catalog-reminder.sh\"",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [

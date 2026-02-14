@@ -4,7 +4,7 @@
 
 ## Overview
 
-General-purpose engineering discipline plugin for Claude Code — 29 skills, 17 agents, 37 commands, 6 hooks, 2 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer).
+General-purpose engineering discipline plugin for Claude Code — 29 skills, 17 agents, 37 commands, 7 hooks, 2 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer).
 
 ## Quick Commands
 
@@ -22,6 +22,7 @@ bash -n hooks/dotfiles-sync.sh         # Syntax check
 bash -n hooks/auto-compound.sh         # Syntax check
 bash -n hooks/session-handoff.sh       # Syntax check
 bash -n hooks/auto-publish.sh          # Syntax check
+bash -n hooks/catalog-reminder.sh      # Syntax check
 bash -n hooks/lib-discovery.sh         # Syntax check (shim → interphase)
 bash -n hooks/lib-gates.sh             # Syntax check (shim → interphase)
 bash -n scripts/clodex-toggle.sh       # Syntax check
