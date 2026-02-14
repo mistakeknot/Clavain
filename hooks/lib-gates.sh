@@ -14,7 +14,7 @@ _BEADS_ROOT=$(_discover_beads_plugin)
 if [[ -n "$_BEADS_ROOT" && -f "${_BEADS_ROOT}/hooks/lib-gates.sh" ]]; then
     # Delegate to interphase plugin
     unset _GATES_LOADED  # let the real library set its own guard
-    GATES_PROJECT_DIR="${GATES_PROJECT_DIR:-.}" source "${_BEADS_ROOT}/hooks/lib-gates.sh"
+    export GATES_PROJECT_DIR="${GATES_PROJECT_DIR:-.}"; source "${_BEADS_ROOT}/hooks/lib-gates.sh"
 else
     # No-op stubs — all functions are fail-safe (never block workflow)
     CLAVAIN_PHASES=(brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping done)

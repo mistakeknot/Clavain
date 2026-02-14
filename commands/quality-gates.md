@@ -105,7 +105,7 @@ Collect all agent findings and present:
 
 If the gate result is **PASS**, enforce the shipping gate and record the phase transition:
 ```bash
-GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID="${CLAVAIN_BEAD_ID:-}"
 if [[ -n "$BEAD_ID" ]]; then
     if ! enforce_gate "$BEAD_ID" "shipping" ""; then

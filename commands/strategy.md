@@ -90,7 +90,7 @@ Report the created beads to the user.
 
 After creating beads, record the phase transition on the epic:
 ```bash
-GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 advance_phase "<epic_bead_id>" "strategized" "PRD: <prd_path>" ""
 ```
 Also set `phase=strategized` on each child feature bead created:

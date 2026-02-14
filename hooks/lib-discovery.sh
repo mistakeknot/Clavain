@@ -14,7 +14,7 @@ _BEADS_ROOT=$(_discover_beads_plugin)
 if [[ -n "$_BEADS_ROOT" && -f "${_BEADS_ROOT}/hooks/lib-discovery.sh" ]]; then
     # Delegate to interphase plugin
     unset _DISCOVERY_LOADED  # let the real library set its own guard
-    DISCOVERY_PROJECT_DIR="${DISCOVERY_PROJECT_DIR:-.}" source "${_BEADS_ROOT}/hooks/lib-discovery.sh"
+    export DISCOVERY_PROJECT_DIR="${DISCOVERY_PROJECT_DIR:-.}"; source "${_BEADS_ROOT}/hooks/lib-discovery.sh"
 else
     # No-op stubs — all functions return safe defaults
     discovery_scan_beads() { echo "DISCOVERY_UNAVAILABLE"; }

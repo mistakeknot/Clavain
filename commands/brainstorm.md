@@ -82,7 +82,7 @@ Ensure `docs/brainstorms/` directory exists before writing.
 
 After writing the brainstorm document, record the phase transition:
 ```bash
-GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID=$(phase_infer_bead "<brainstorm_doc_path>")
 advance_phase "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>" "<brainstorm_doc_path>"
 ```

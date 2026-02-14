@@ -11,7 +11,7 @@ _discover_beads_plugin() {
     fi
     local f
     f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
-        -path '*/interphase/*/hooks/lib-gates.sh' 2>/dev/null | head -1)
+        -path '*/interphase/*/hooks/lib-gates.sh' 2>/dev/null | sort -V | tail -1)
     if [[ -n "$f" ]]; then
         # lib-gates.sh is at <root>/hooks/lib-gates.sh, so strip two levels
         echo "$(dirname "$(dirname "$f")")"

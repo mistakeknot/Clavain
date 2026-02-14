@@ -51,7 +51,7 @@ This command takes a work document (plan, specification, or todo file) and execu
 
 Before starting execution, enforce the gate (requires plan-reviewed for P0/P1 beads):
 ```bash
-GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID=$(phase_infer_bead "<input_document_path>")
 if ! enforce_gate "$BEAD_ID" "executing" "<input_document_path>"; then
     echo "Gate blocked: run /clavain:flux-drive on the plan first, or set CLAVAIN_SKIP_GATE='reason' to override." >&2

@@ -10,7 +10,7 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
 
 1. Run the work discovery scanner:
    ```bash
-   DISCOVERY_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_scan_beads
+   export DISCOVERY_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_scan_beads
    ```
 
 2. Parse the output:
@@ -54,7 +54,7 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
 
 7. Log the selection for telemetry:
    ```bash
-   DISCOVERY_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_log_selection "<bead_id>" "<action>" <true|false>
+   export DISCOVERY_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_log_selection "<bead_id>" "<action>" <true|false>
    ```
    Where `true` = user picked the first (recommended) option, `false` = user picked a different option.
 
@@ -77,7 +77,7 @@ Run these steps in order. Do not do anything else.
 
 After each step completes successfully, record the phase transition. If `CLAVAIN_BEAD_ID` is set (from discovery or the user), run:
 ```bash
-GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh" && advance_phase "$CLAVAIN_BEAD_ID" "<phase>" "<reason>" "<artifact_path>"
+export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh" && advance_phase "$CLAVAIN_BEAD_ID" "<phase>" "<reason>" "<artifact_path>"
 ```
 Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
 
@@ -117,7 +117,7 @@ If flux-drive finds P0/P1 issues, stop and address them before proceeding to exe
 
 **Gate check:** Before executing, enforce the gate:
 ```bash
-GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 if ! enforce_gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
     echo "Gate blocked: plan must be reviewed first. Run /clavain:flux-drive on the plan, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Stop — do NOT proceed to execution
@@ -150,7 +150,7 @@ Run the project's test suite and linting before proceeding to review:
 
 **Gate check + Phase:** After quality gates PASS, enforce the shipping gate before recording:
 ```bash
-GATES_PROJECT_DIR="." source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 if ! enforce_gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
     echo "Gate blocked: review findings are stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Do NOT advance to shipping — stop and tell user
