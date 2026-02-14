@@ -72,58 +72,20 @@ if [[ -z "$RECENT" ]]; then
     exit 0
 fi
 
-# Weighted signal detection
-SIGNALS=""
-WEIGHT=0
-
-# 1. Git commit detected (Claude ran git commit) — weight 1
-if echo "$RECENT" | grep -q '"git commit\|"git add.*&&.*git commit'; then
-    SIGNALS="${SIGNALS}commit,"
-    WEIGHT=$((WEIGHT + 1))
-fi
-
-# 2. Debugging resolution phrases — weight 2 (strong signal)
-if echo "$RECENT" | grep -iq '"that worked\|"it'\''s fixed\|"working now\|"problem solved\|"that did it\|"bug fixed\|"issue resolved'; then
-    SIGNALS="${SIGNALS}resolution,"
-    WEIGHT=$((WEIGHT + 2))
-fi
-
-# 3. Non-trivial fix patterns (investigation language) — weight 2
-if echo "$RECENT" | grep -iq '"root cause\|"the issue was\|"the problem was\|"turned out\|"the fix is\|"solved by'; then
-    SIGNALS="${SIGNALS}investigation,"
-    WEIGHT=$((WEIGHT + 2))
-fi
-
-# 4. Bead closed (completed work item) — weight 1
-if echo "$RECENT" | grep -q '"bd close\|"bd update.*completed'; then
-    SIGNALS="${SIGNALS}bead-closed,"
-    WEIGHT=$((WEIGHT + 1))
-fi
-
-# 5. Insight block emitted (★ Insight marker from explanatory mode) — weight 1
-if echo "$RECENT" | grep -q 'Insight ─'; then
-    SIGNALS="${SIGNALS}insight,"
-    WEIGHT=$((WEIGHT + 1))
-fi
-
-# 6. Build/test recovery: passing after earlier failure — weight 2
-# Detect patterns like "FAILED" followed by "passed" or "BUILD SUCCESSFUL"
-if echo "$RECENT" | grep -iq 'FAIL\|FAILED\|ERROR.*build\|error.*compile\|test.*failed'; then
-    if echo "$RECENT" | grep -iq 'passed\|BUILD SUCCESSFUL\|build succeeded\|tests pass\|all.*pass'; then
-        SIGNALS="${SIGNALS}recovery,"
-        WEIGHT=$((WEIGHT + 2))
-    fi
-fi
+# Detect signals using shared library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib-signals.sh"
+detect_signals "$RECENT"
 
 # Threshold: need weight >= 3 to trigger compound
 # commit (1) + bead-close (1) = 2, not enough alone.
 # Needs real investigation/resolution/recovery signal.
-if [[ "$WEIGHT" -lt 3 ]]; then
+if [[ "$CLAVAIN_SIGNAL_WEIGHT" -lt 3 ]]; then
     exit 0
 fi
 
-# Remove trailing comma
-SIGNALS="${SIGNALS%,}"
+SIGNALS="$CLAVAIN_SIGNALS"
+WEIGHT="$CLAVAIN_SIGNAL_WEIGHT"
 
 # Build the reason prompt — this is what Claude sees
 REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] (weight ${WEIGHT}) in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."

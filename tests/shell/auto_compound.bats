@@ -116,3 +116,12 @@ teardown() {
     assert_success
     assert_output ""
 }
+
+@test "auto-compound: version-bump+commit triggers (weight >= 3)" {
+    # version-bump (2) + commit (1) = 3, meets threshold
+    local fixture="$TMPDIR_COMPOUND/transcript_version_bump.jsonl"
+    printf '{"role":"assistant","content":"Running bump-version.sh 0.7.0"}\n{"role":"assistant","content":"Running \"git commit -m bump\""}\n' > "$fixture"
+    run bash -c "echo '{\"stop_hook_active\": false, \"transcript_path\": \"$fixture\"}' | bash '$HOOKS_DIR/auto-compound.sh'"
+    assert_success
+    echo "$output" | jq -e '.decision == "block"'
+}
