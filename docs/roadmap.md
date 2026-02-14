@@ -9,14 +9,14 @@
 
 ## Where We Are
 
-Clavain is a general-purpose engineering discipline plugin for Claude Code — 27 skills, 5 agents, 36 commands, 7 hooks, 1 MCP server. Five companion plugins shipped (interflux, interphase, interline, interpath, interwatch); four more planned. 278 beads closed, 45 open.
+Clavain is a general-purpose engineering discipline plugin for Claude Code — 27 skills, 5 agents, 37 commands, 7 hooks, 1 MCP server. Five companion plugins shipped (interflux, interphase, interline, interpath, interwatch); four more planned. 278 beads closed, 45 open.
 
 ### What's Working
 
 - Full product lifecycle coverage: brainstorm, strategy, plan, execute, review, test, ship, learn
 - 3-layer routing (Stage/Domain/Concern) injected every session via SessionStart hook
 - Multi-agent review engine (interflux) with 7 fd-* review agents + 5 research agents, domain detection across 11 profiles, diff/document slicing, and knowledge compounding
-- Phase-gated `/lfg` pipeline with work discovery via beads state tracking
+- Phase-gated `/sprint` pipeline with work discovery via beads state tracking
 - Cross-AI peer review via Oracle (GPT-5.2 Pro)
 - Parallel dispatch to Codex CLI via `/clodex`
 - Structural test suite (pytest + bats-core) guarding component counts, cross-references, namespace hygiene
@@ -129,7 +129,7 @@ Establish the per-project memory contract that analytics, learnings, and downstr
 
 #### Phase 1 Exit Criteria
 
-- [ ] Analytics trace emitted for every `/flux-drive` and `/lfg` run
+- [ ] Analytics trace emitted for every `/flux-drive` and `/sprint` run
 - [ ] 5 KPIs computable from stored traces
 - [ ] Eval corpus with 10+ tasks, runnable as CI
 - [ ] Topology experiment completed, 2-3 templates documented
@@ -303,7 +303,7 @@ Research areas organized by proximity to current capabilities. These are not del
 | Agent measurement & analytics | What metrics predict human override? | P1.1 directly |
 | Multi-agent failure taxonomy | How do hallucination cascades propagate? | P1.2 evals |
 | Cognitive load budgets & review UX | How do you present multi-agent output for fast, confident review? | P1.1 time-to-first-signal |
-| Product-native agent orchestration | Is lfg-style lifecycle orchestration genuine whitespace? | P1.3 topology |
+| Product-native agent orchestration | Is sprint-style lifecycle orchestration genuine whitespace? | P1.3 topology |
 | Agent regression testing | Did this prompt change degrade bug-catching? | P1.2 evals as CI |
 
 **Beads:** Clavain-fzrn, Clavain-jk7q, Clavain-3kee, Clavain-705b
@@ -399,7 +399,7 @@ Research areas organized by proximity to current capabilities. These are not del
 | Clavain-9tq | Deferred flux-drive v2 features (8 items) | P3.5 |
 | Clavain-eff5 | Plan interarch extraction | P2.2d |
 | Clavain-rpso | [flux-drive-spec] Phase 5: adapter guide | P2.3 |
-| Clavain-b683 | Auto-inject past solutions into /lfg execute | P3 |
+| Clavain-b683 | Auto-inject past solutions into /sprint execute | P3 |
 | Clavain-l8zk | `/describe-pr` command | P2.5 |
 | Clavain-0d3a | flux-gen UX improvements | P2.5 |
 | Clavain-ub8n | flux-gen frontmatter overhaul | P2.5 |

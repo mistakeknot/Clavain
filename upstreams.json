@@ -131,7 +131,7 @@
   ],
   "syncConfig": {
     "protectedFiles": [
-      "commands/lfg.md"
+      "commands/sprint.md"
     ],
     "deletedLocally": [],
     "namespaceReplacements": {
@@ -140,7 +140,7 @@
       "/workflows:work": "/clavain:work",
       "/workflows:review": "/clavain:quality-gates",
       "ralph-wiggum:": "clavain:",
-      "/deepen-plan": "/clavain:lfg"
+      "/deepen-plan": "/clavain:sprint"
     },
     "contentBlocklist": [
       "rails_model",

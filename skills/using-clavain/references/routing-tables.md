@@ -11,7 +11,7 @@ For the compact version, see the `using-clavain` skill.
 | **Explore** | brainstorming | brainstorm | interflux:research:repo-research-analyst, interflux:research:best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | interflux:fd-architecture, plan-reviewer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster in interflux — adaptive 4-12 agents)¹ |
-| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg², resolve, debate | — |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, sprint², resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, interflux:research:git-history-analyzer |
 | **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | interflux:fd-safety |
@@ -58,7 +58,7 @@ For the compact version, see the `using-clavain` skill.
 
 ¹ **flux-drive agents (fd-*)**: 7 core review agents in the interflux companion plugin that auto-detect project docs (CLAUDE.md/AGENTS.md) for codebase-aware analysis.
 
-² **`/lfg` discovery mode**: With no arguments, `/lfg` scans open beads, ranks by priority, and presents the top options via AskUserQuestion. User picks a bead and gets routed to the right command. With arguments, `/lfg` runs the full 9-step pipeline as before.
+² **`/sprint` discovery mode**: With no arguments, `/sprint` scans open beads, ranks by priority, and presents the top options via AskUserQuestion. User picks a bead and gets routed to the right command. With arguments, `/sprint` runs the full 9-step pipeline as before.
 
 ## Cross-AI Review
 

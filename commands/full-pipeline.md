@@ -1,6 +1,6 @@
 ---
 name: full-pipeline
-description: "Alias for lfg — full autonomous engineering workflow"
+description: "Alias for sprint — full autonomous engineering workflow"
 argument-hint: "[feature description]"
 ---
 
@@ -73,6 +73,6 @@ If any step fails:
    - The error or unexpected output
    - What was completed successfully before the failure
 
-To **resume from a specific step**, re-invoke `/clavain:lfg` and manually skip completed steps by running their slash commands directly (e.g., start from Step 6 by running `/clavain:quality-gates`).
+To **resume from a specific step**, re-invoke `/clavain:sprint` and manually skip completed steps by running their slash commands directly (e.g., start from Step 6 by running `/clavain:quality-gates`).
 
 Start with Step 1 now.

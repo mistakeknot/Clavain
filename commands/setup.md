@@ -183,7 +183,7 @@ Beads:             [status]
 
 Next steps:
 - Try `/clavain:brainstorm improve error handling in this project` for a quick demo
-- Or run `/clavain:lfg [task]` for the full autonomous lifecycle
+- Or run `/clavain:sprint [task]` for the full autonomous lifecycle
 - Run `/tool-time:tool-time` to see tool usage analytics
 - Run `/clavain:upstream-sync` to check for updates
 ```

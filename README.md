@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 27 skills, 5 agents, 36 commands, 8 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 27 skills, 5 agents, 37 commands, 8 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -46,13 +46,13 @@ Single-file bootstrap target: `.codex/INSTALL.md`
 
 ## My Workflow
 
-For simple requests, I use `/lfg add user export feature` and Clavain orchestrates Claude Code via hooks, commands, skills, and subagents to brainstorm the approach, write a plan, review the plan with multiple subagents, implement the code, review the implementation, resolve any issues, and run quality gates. While Clavain runs through all of these phases, I focus on the usual suspects: product strategy, user pain points, and finding new [leverage points](https://donellameadows.org/archives/leverage-points-places-to-intervene-in-a-system/).
+For simple requests, I use `/sprint add user export feature` and Clavain orchestrates Claude Code via hooks, commands, skills, and subagents to brainstorm the approach, write a plan, review the plan with multiple subagents, implement the code, review the implementation, resolve any issues, and run quality gates. While Clavain runs through all of these phases, I focus on the usual suspects: product strategy, user pain points, and finding new [leverage points](https://donellameadows.org/archives/leverage-points-places-to-intervene-in-a-system/).
 
-For more complex endeavors (or new projects), I use Clavain's pieces individually depending on what I'm doing. The following review of the `/lfg` lifecycle provides a brief explanation of all the different parts of Clavain:
+For more complex endeavors (or new projects), I use Clavain's pieces individually depending on what I'm doing. The following review of the `/sprint` lifecycle provides a brief explanation of all the different parts of Clavain:
 
-### The `/lfg` Lifecycle
+### The `/sprint` Lifecycle
 
-`/lfg` chains nine steps together. Each one can also be invoked standalone:
+`/sprint` chains nine steps together. Each one can also be invoked standalone:
 
 ```
 /brainstorm  →  /strategy  →  /write-plan  →  /work*  →  /flux-drive  →  /review  →  /resolve  →  /quality-gates  →  ship
@@ -159,13 +159,13 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (36)
+### Commands (37)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
 | Command | What it does |
 |---------|-------------|
-| `/lfg` | Full autonomous lifecycle — brainstorm through ship |
+| `/sprint` | Full autonomous lifecycle — brainstorm through ship |
 | `/setup` | Bootstrap the modpack — install plugins, disable conflicts, verify servers |
 | `/brainstorm` | Explore before planning |
 | `/strategy` | Structure brainstorm into PRD with trackable beads |
@@ -198,7 +198,8 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/sprint-status` | Deep scan of sprint workflow state — sessions, pipeline, beads |
 | `/flux-gen` | Generate project-specific review agents from detected domain profiles |
 | `/deep-review` | Alias for `/flux-drive` |
-| `/full-pipeline` | Alias for `/lfg` |
+| `/lfg` | Alias for `/sprint` |
+| `/full-pipeline` | Alias for `/sprint` |
 | `/cross-review` | Alias for `/interpeer` |
 | `/help` | Show Clavain commands organized by daily drivers first |
 | `/doctor` | Quick health check — MCP servers, tools, beads, plugin conflicts |
@@ -250,7 +251,7 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 | pr-review-toolkit | Same agent types exist in Clavain's review roster |
 | code-simplifier | `interflux:review:fd-quality` agent |
 | commit-commands | `landing-a-change` skill |
-| feature-dev | `/work` + `/lfg` + `/brainstorm` |
+| feature-dev | `/work` + `/sprint` + `/brainstorm` |
 | claude-md-management | `engineering-docs` skill |
 | frontend-design | `distinctive-design` skill |
 | hookify | Clavain manages hooks directly |
@@ -272,7 +273,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ```
 skills/       # 27 discipline skills (SKILL.md each)
 agents/       # 5 agents (review/ + workflow/)
-commands/     # 36 slash commands
+commands/     # 37 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync

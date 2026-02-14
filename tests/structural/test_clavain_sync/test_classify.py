@@ -7,11 +7,11 @@ class TestClassifyFile:
 
     def test_skip_protected(self):
         result = classify_file(
-            local_path="commands/lfg.md",
+            local_path="commands/sprint.md",
             local_content="local",
             upstream_content="upstream",
             ancestor_content="ancestor",
-            protected_files={"commands/lfg.md"},
+            protected_files={"commands/sprint.md"},
             deleted_files=set(),
             namespace_replacements={},
             blocklist=[],

@@ -130,7 +130,7 @@ Clavain is well-positioned to explore open questions at the intersection of mult
 - **Agent measurement and analytics** (Ashpool + tldrs integration)
 - **Multi-agent failure taxonomy** (hallucination cascades, coordination tax, partial failures)
 - **Cognitive load budgets and review UX** (progressive disclosure, time-to-first-signal)
-- **Product-native agent orchestration** (Clavain's lfg pipeline is genuine whitespace)
+- **Product-native agent orchestration** (Clavain's sprint pipeline is genuine whitespace)
 - **Agent regression testing** (evals as CI, behavior drift detection)
 
 ### Medium-term (informed by Phase 1 data)

@@ -212,7 +212,7 @@ Task("Review database migrations")     ─┤── all in one message
 Task("Review API error handling")      ─┘
 ```
 
-**When:** Plan has 3+ independent modules. `/lfg` Step 5 (execute) uses this when the plan defines independent components.
+**When:** Plan has 3+ independent modules. `/sprint` Step 5 (execute) uses this when the plan defines independent components.
 
 ### Pipeline
 Sequential handoff — agent N's output feeds agent N+1's input.

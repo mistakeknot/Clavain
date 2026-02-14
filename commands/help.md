@@ -11,7 +11,7 @@ These are the commands you'll use most often:
 
 | Command | What it does | Example |
 |---------|-------------|---------|
-| `/clavain:lfg` | Full autonomous workflow — brainstorm → plan → execute → review → ship | `/lfg build a caching layer` |
+| `/clavain:sprint` | Full autonomous workflow — brainstorm → plan → execute → review → ship | `/sprint build a caching layer` |
 | `/clavain:brainstorm` | Structured 4-phase brainstorm with auto-handoff to write-plan | `/brainstorm how should we handle auth?` |
 | `/clavain:write-plan` | Create detailed implementation plan with bite-sized tasks | `/write-plan` (after brainstorm) |
 | `/clavain:work` | Execute a plan efficiently, maintaining quality | `/work docs/plans/2026-02-11-auth.md` |
@@ -20,7 +20,7 @@ These are the commands you'll use most often:
 | `/clavain:resolve` | Fix findings from TODOs, PR comments, or todo files | `/resolve` |
 | `/clavain:interpeer` | Quick cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
 
-> **Aliases:** `/deep-review` = flux-drive, `/full-pipeline` = lfg, `/cross-review` = interpeer
+> **Aliases:** `/deep-review` = flux-drive, `/full-pipeline` = sprint, `/lfg` = sprint, `/cross-review` = interpeer
 
 ## By Stage
 
@@ -39,7 +39,7 @@ These are the commands you'll use most often:
 | `/clavain:work` | Execute plans with quality checkpoints |
 |---|---|
 | `/clavain:execute-plan` | Execute plan in separate session with review checkpoints |
-| `/clavain:lfg` | Full autonomous pipeline (brainstorm through ship) |
+| `/clavain:sprint` | Full autonomous pipeline (brainstorm through ship) |
 | `/clavain:resolve` | Auto-resolve findings from any source |
 | `/clavain:fixbuild` | Fix build/test failures |
 

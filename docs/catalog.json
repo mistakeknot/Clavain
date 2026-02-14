@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-14T22:49:50Z",
+  "generated": "2026-02-14T23:32:16Z",
   "counts": {
     "skills": 27,
     "agents": 5,
-    "commands": 36,
+    "commands": 37,
     "hooks": 8,
     "mcp_servers": 1,
     "review": 3,
@@ -197,7 +197,7 @@
     },
     {
       "name": "full-pipeline",
-      "description": "Alias for lfg \u2014 full autonomous engineering workflow"
+      "description": "Alias for sprint \u2014 full autonomous engineering workflow"
     },
     {
       "name": "generate-command",
@@ -221,7 +221,7 @@
     },
     {
       "name": "lfg",
-      "description": "Full autonomous engineering workflow \u2014 brainstorm, strategize, plan, execute, review, ship"
+      "description": "Alias for sprint \u2014 full autonomous engineering workflow"
     },
     {
       "name": "migration-safety",
@@ -262,6 +262,10 @@
     {
       "name": "smoke-test",
       "description": "Run smoke tests against a running app \u2014 detect dev server, walk critical user journeys, report results"
+    },
+    {
+      "name": "sprint",
+      "description": "Full autonomous engineering workflow \u2014 brainstorm, strategize, plan, execute, review, ship"
     },
     {
       "name": "sprint-status",

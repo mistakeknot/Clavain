@@ -28,10 +28,10 @@ def test_lib_discovery_has_sentinels(project_root):
     assert "DISCOVERY_UNAVAILABLE" in text, "Missing DISCOVERY_UNAVAILABLE sentinel"
 
 
-def test_lfg_has_discovery_section(project_root):
-    """commands/lfg.md has the Before Starting discovery section."""
-    lfg = project_root / "commands" / "lfg.md"
-    text = lfg.read_text(encoding="utf-8")
-    assert "Before Starting" in text, "lfg.md missing 'Before Starting' discovery section"
-    assert "discovery_scan_beads" in text, "lfg.md missing discovery_scan_beads invocation"
-    assert "DISCOVERY_UNAVAILABLE" in text, "lfg.md missing DISCOVERY_UNAVAILABLE handling"
+def test_sprint_has_discovery_section(project_root):
+    """commands/sprint.md has the Before Starting discovery section."""
+    sprint = project_root / "commands" / "sprint.md"
+    text = sprint.read_text(encoding="utf-8")
+    assert "Before Starting" in text, "sprint.md missing 'Before Starting' discovery section"
+    assert "discovery_scan_beads" in text, "sprint.md missing discovery_scan_beads invocation"
+    assert "DISCOVERY_UNAVAILABLE" in text, "sprint.md missing DISCOVERY_UNAVAILABLE handling"

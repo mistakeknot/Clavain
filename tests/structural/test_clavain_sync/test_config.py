@@ -24,7 +24,7 @@ def sample_config(tmp_path):
             }
         ],
         "syncConfig": {
-            "protectedFiles": ["commands/lfg.md"],
+            "protectedFiles": ["commands/sprint.md"],
             "deletedLocally": [],
             "namespaceReplacements": {
                 "/old-ns:": "/clavain:"
@@ -45,7 +45,7 @@ def test_load_config_returns_upstream_list(sample_config):
 
 def test_load_config_parses_sync_config(sample_config):
     cfg = load_config(sample_config)
-    assert "commands/lfg.md" in cfg.protected_files
+    assert "commands/sprint.md" in cfg.protected_files
     assert "/old-ns:" in cfg.namespace_replacements
     assert cfg.namespace_replacements["/old-ns:"] == "/clavain:"
     assert "rails_model" in cfg.blocklist

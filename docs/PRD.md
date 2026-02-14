@@ -1,6 +1,6 @@
 # Clavain — Product Requirements Document
 
-**Version:** 0.6.5
+**Version:** 0.6.8
 **Last updated:** 2026-02-14
 **Vision:** [`docs/vision.md`](vision.md)
 **Dev guide:** [`AGENTS.md`](../AGENTS.md)
@@ -48,7 +48,7 @@ Clavain encodes engineering and product discipline into four component types tha
 |------|-------|---------|---------|
 | **Skills** | 27 | Reusable discipline knowledge | `systematic-debugging`, `writing-plans`, `flux-drive` |
 | **Agents** | 5 | Autonomous specialists (review + workflow) | `plan-reviewer`, `pr-comment-resolver` |
-| **Commands** | 36 | User-invocable entry points | `/lfg`, `/interpeer`, `/write-plan` |
+| **Commands** | 37 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
 | **Hooks** | 7 | Event-driven automation | `session-start.sh`, `auto-compound.sh` |
 | **MCP Servers** | 1 | External tool integration | context7 (runtime doc fetching) |
 
@@ -69,7 +69,7 @@ Routing is injected into every session via the `SessionStart` hook, which loads 
 | Problem discovery | Collaborative brainstorming, repo research | `brainstorming` skill, `flux-research` (interflux) |
 | Product specification | Strategy, PRD creation, prioritization | `writing-strategy` skill, beads integration |
 | Planning | Parallelization analysis, subagent delegation | `writing-plans` skill, `/write-plan` command |
-| Execution | Plan execution, work, cross-AI dispatch | `executing-plans` skill, `/work`, `/lfg`, clodex |
+| Execution | Plan execution, work, cross-AI dispatch | `executing-plans` skill, `/work`, `/sprint`, clodex |
 | Review | Multi-agent review, cross-AI peer review | `flux-drive` (interflux), `/interpeer`, `/quality-gates` |
 | Testing | TDD, smoke tests, verification | `test-driven-development` skill, `/fixbuild` |
 | Shipping | Landing changes, resolving findings | `landing-a-change` skill, `/resolve` |
@@ -93,7 +93,7 @@ Capabilities extracted from Clavain when patterns stabilized:
 
 ## 5. Key Workflows
 
-### 5.1 `/lfg` — Full Pipeline (brainstorm → ship)
+### 5.1 `/sprint` — Full Pipeline (brainstorm → ship)
 
 The flagship workflow. With no arguments, scans beads for work discovery. With a topic, drives the full lifecycle:
 
@@ -190,7 +190,7 @@ Adaptive model routing, cross-project knowledge, MCP-native companion communicat
 | Codex CLI | Alternative agent dispatch | For `/clodex`, `/debate` |
 | context7 MCP | Runtime documentation fetching | Yes |
 | interflux | Multi-agent review engine | Yes (for flux-drive) |
-| interphase | Phase tracking and gates | Yes (for phase-gated lfg) |
+| interphase | Phase tracking and gates | Yes (for phase-gated sprint) |
 | interline | Statusline rendering | Recommended |
 | interpath | Product artifact generation | Recommended |
 | interwatch | Doc freshness monitoring | Recommended |
