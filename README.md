@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 29 skills, 17 agents, 38 commands, 7 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 28 skills, 17 agents, 38 commands, 7 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -103,7 +103,7 @@ I use this before any architectural decision I'm uncertain about. The debate its
 
 ## What's Included
 
-### Skills (29)
+### Skills (28)
 
 Skills are workflow disciplines — they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -124,8 +124,7 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `flux-drive` | Intelligent document/repo review with agent triage |
 | `subagent-driven-development` | Parallel subagent execution |
 | `dispatching-parallel-agents` | When and how to parallelize |
-| `requesting-code-review` | Dispatch reviewer subagents |
-| `receiving-code-review` | Handle review feedback |
+| `code-review-discipline` | Request reviews and handle feedback with technical rigor |
 | **Cross-AI** | |
 | `interpeer` | Cross-AI peer review with 4 modes: quick, deep (Oracle), council (multi-model), mine (disagreement extraction) |
 | `prompterpeer` | Oracle prompt optimizer — builds and reviews prompts for GPT-5.2 Pro (interpeer deep mode) |
@@ -269,7 +268,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 29 discipline skills (SKILL.md each)
+skills/       # 28 discipline skills (SKILL.md each)
 agents/       # 17 agents (review/ + research/ + workflow/)
 commands/     # 38 slash commands
 hooks/        # 6 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd)

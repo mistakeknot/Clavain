@@ -231,7 +231,7 @@ Done!
 
 **Required workflow skills:**
 - **clavain:writing-plans** - Creates the plan this skill executes
-- **clavain:requesting-code-review** - Code review template for reviewer subagents
+- **clavain:code-review-discipline** - Code review template for reviewer subagents
 - **clavain:landing-a-change** - Complete development after all tasks
 
 **Subagents should use:**

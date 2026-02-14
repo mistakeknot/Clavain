@@ -13,7 +13,7 @@ For the compact version, see the `using-clavain` skill.
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster — adaptive 4-12 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg², resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
-| **Review** | requesting-code-review, receiving-code-review | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
+| **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | fd-safety |
 | **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, help, doctor, sprint-status, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
@@ -85,4 +85,4 @@ When multiple skills could apply, use this order:
 
 "Let's build X" → brainstorming first, then domain skills.
 "Fix this bug" → systematic-debugging first, then domain-specific skills.
-"Review this code" → requesting-code-review first, then language-specific reviewers.
+"Review this code" → code-review-discipline first, then language-specific reviewers.

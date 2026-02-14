@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/clodex-audit.sh\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/clodex-audit.sh",
             "timeout": 5
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/auto-publish.sh\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-publish.sh",
             "timeout": 15
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/catalog-reminder.sh\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/catalog-reminder.sh",
             "timeout": 5
           }
         ]
@@ -49,12 +49,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/auto-compound.sh\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-compound.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-handoff.sh\"",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-handoff.sh",
             "timeout": 5
           }
         ]

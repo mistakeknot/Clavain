@@ -26,8 +26,8 @@ def test_skill_count(skills_dir):
         d for d in skills_dir.iterdir()
         if d.is_dir() and (d / "SKILL.md").exists()
     )
-    assert len(dirs) == 29, (
-        f"Expected 29 skills, found {len(dirs)}: {[d.name for d in dirs]}"
+    assert len(dirs) == 28, (
+        f"Expected 28 skills, found {len(dirs)}: {[d.name for d in dirs]}"
     )
 
 

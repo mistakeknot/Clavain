@@ -1,7 +1,7 @@
 {
-  "generated": "2026-02-14T06:06:27Z",
+  "generated": "2026-02-14T09:07:49Z",
   "counts": {
-    "skills": 29,
+    "skills": 28,
     "agents": 17,
     "commands": 38,
     "hooks": 7,
@@ -22,6 +22,10 @@
     {
       "name": "clodex",
       "description": "Dispatch tasks to Codex CLI agents \u2014 single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation."
+    },
+    {
+      "name": "code-review-discipline",
+      "description": "Use when requesting or receiving code review \u2014 covers dispatching reviewer subagents, handling feedback with technical rigor, and avoiding performative agreement"
     },
     {
       "name": "create-agent-skills",
@@ -72,16 +76,8 @@
       "description": "Use when interacting with MCP servers on-demand via the mcp CLI tool \u2014 discover tools, resources, and prompts without polluting context with pre-loaded integrations"
     },
     {
-      "name": "receiving-code-review",
-      "description": "Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation"
-    },
-    {
       "name": "refactor-safely",
       "description": "Use when performing significant refactoring \u2014 guides a disciplined process that leverages duplication detection, characterization tests, staged execution, and continuous simplicity review"
-    },
-    {
-      "name": "requesting-code-review",
-      "description": "Use when completing tasks, implementing major features, or before merging to verify work meets requirements"
     },
     {
       "name": "slack-messaging",
