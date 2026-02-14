@@ -113,6 +113,8 @@ def collect_agents(root: Path) -> tuple[list[dict[str, str]], int, dict[str, int
     category_counts: dict[str, int] = {}
     for category in ("review", "research", "workflow"):
         category_dir = root / "agents" / category
+        if not category_dir.is_dir():
+            continue
         cat_count = 0
         for path in sorted(category_dir.glob("*.md")):
             frontmatter = parse_frontmatter(path)
@@ -215,9 +217,9 @@ def update_agents_md_counts(text: str, counts: dict[str, int], path: Path) -> st
         f'echo "Commands: $(ls commands/*.md | wc -l)"        # Should be {counts["commands"]}',
         path,
     )
-    updated = replace_once(updated, r"# \d+ review agents", f"# {counts['review']} review agents", path)
-    updated = replace_once(updated, r"# \d+ research agents", f"# {counts['research']} research agents", path)
-    updated = replace_once(updated, r"# \d+ workflow agents", f"# {counts['workflow']} workflow agents", path)
+    for category in ("review", "research", "workflow"):
+        if category in counts:
+            updated = replace_once(updated, rf"# \d+ {category} agents", f"# {counts[category]} {category} agents", path)
     return updated
 
 

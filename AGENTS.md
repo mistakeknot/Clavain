@@ -139,7 +139,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 
 ### Agents
 
-- Flat files in category directories: `agents/review/`, `agents/research/`, `agents/workflow/`
+- Flat files in category directories: `agents/review/`, `agents/workflow/`
 - YAML frontmatter: `name`, `description` (with `<example>` blocks showing when to trigger), `model` (usually `inherit`)
 - Description must include concrete `<example>` blocks with `<commentary>` explaining WHY to trigger
 - System prompt is the body of the markdown file
@@ -227,7 +227,7 @@ Quick validation:
 ```bash
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 27
-echo "Agents: $(ls agents/{review,research,workflow}/*.md | wc -l)"
+echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"
 echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 36
 
 # Check for phantom namespace references
