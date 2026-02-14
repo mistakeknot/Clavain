@@ -85,6 +85,12 @@ update_file \
     "\"version\": \"$VERSION\"" \
     ".claude-plugin/plugin.json"
 
+update_file \
+    "$REPO_ROOT/docs/PRD.md" \
+    "^\*\*Version:\*\* $CURRENT" \
+    "**Version:** $VERSION" \
+    "docs/PRD.md"
+
 RIG_CURRENT=$(grep -E '"version"' "$REPO_ROOT/agent-rig.json" 2>/dev/null | head -1 | sed 's/.*"\([0-9][^"]*\)".*/\1/')
 if [ -n "$RIG_CURRENT" ]; then
     update_file \
@@ -108,7 +114,7 @@ fi
 
 echo ""
 cd "$REPO_ROOT"
-git add .claude-plugin/plugin.json agent-rig.json
+git add .claude-plugin/plugin.json agent-rig.json docs/PRD.md
 git commit -m "chore: bump version to $VERSION"
 git push
 echo -e "${GREEN}Pushed Clavain${NC}"

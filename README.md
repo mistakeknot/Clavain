@@ -152,9 +152,7 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 
 Agents are specialized execution units dispatched by skills and commands. They run as subagents with their own context window.
 
-**Review (3):** plan-reviewer, agent-native-reviewer, and data-migration-expert for specialized review tasks. The 7 core fd-* review agents now live in the **interflux** companion plugin.
-
-**Research (5):** Best practices, framework docs, git history analysis, institutional learnings, and repo structure analysis.
+**Review (3):** plan-reviewer, agent-native-reviewer, and data-migration-expert for specialized review tasks. The 7 core fd-* review agents and 5 research agents now live in the **interflux** companion plugin.
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
@@ -211,10 +209,11 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 - **Stop** — Auto-compound check: detects compoundable signals and prompts knowledge capture (`auto-compound.sh`). Session handoff: detects uncommitted work or in-progress beads and prompts HANDOFF.md creation (`session-handoff.sh`).
 - **SessionEnd** — Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
-### MCP Servers (2)
+### MCP Servers (1)
 
 - **context7** — Library documentation lookup via [Context7](https://context7.com)
-- **qmd** — Semantic search over indexed project documentation via [qmd](https://github.com/tobi/qmd)
+
+*(qmd semantic search lives in the **interflux** companion plugin.)*
 
 ## The Agent Rig
 
@@ -269,7 +268,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 
 ```
 skills/       # 27 discipline skills (SKILL.md each)
-agents/       # 10 agents (review/ + research/ + workflow/)
+agents/       # 5 agents (review/ + workflow/)
 commands/     # 36 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
