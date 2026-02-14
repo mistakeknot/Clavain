@@ -107,7 +107,8 @@ else
 ENDJSON
 fi
 
-# Clean up stale sentinels from previous sessions
-find /tmp -maxdepth 1 -name 'clavain-stop-*' -mmin +60 -delete 2>/dev/null || true
+# Clean up stale sentinels from previous sessions (>1 hour old)
+# Covers shared stop sentinel, per-hook throttle sentinels from all hooks
+find /tmp -maxdepth 1 \( -name 'clavain-stop-*' -o -name 'clavain-drift-last-*' -o -name 'clavain-compound-last-*' \) -mmin +60 -delete 2>/dev/null || true
 
 exit 0
