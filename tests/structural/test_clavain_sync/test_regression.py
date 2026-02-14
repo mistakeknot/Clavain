@@ -16,8 +16,11 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 def _has_upstreams():
     """Check if upstream clones exist."""
     for d in [PROJECT_ROOT / ".upstream-work", Path("/root/projects/upstreams")]:
-        if d.is_dir():
-            return True
+        try:
+            if d.is_dir():
+                return True
+        except PermissionError:
+            continue
     return False
 
 
