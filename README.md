@@ -11,7 +11,10 @@ Merged, modified, and maintained with updates from [superpowers](https://github.
 ## Install
 
 ```bash
-# From marketplace
+# Full rig install (recommended) — installs Clavain + companions, MCP servers, env vars, and conflict resolution
+npx @gensysven/agent-rig install mistakeknot/Clavain
+
+# Plugin only (no companions or environment setup)
 claude plugin install clavain@interagency-marketplace
 
 # Local development
