@@ -24,7 +24,7 @@ Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it'
 **Note:** When clodex mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 5 (execute) — the plan has already been executed.
 
 ## Step 4: Review Plan (gates execution)
-`/clavain:flux-drive <plan-file-from-step-3>`
+`/interflux:flux-drive <plan-file-from-step-3>`
 
 Pass the plan file path from Step 3 as the flux-drive target. Review happens **before** execution so plan-level risks are caught early.
 

@@ -15,7 +15,7 @@ These are the commands you'll use most often:
 | `/clavain:brainstorm` | Structured 4-phase brainstorm with auto-handoff to write-plan | `/brainstorm how should we handle auth?` |
 | `/clavain:write-plan` | Create detailed implementation plan with bite-sized tasks | `/write-plan` (after brainstorm) |
 | `/clavain:work` | Execute a plan efficiently, maintaining quality | `/work docs/plans/2026-02-11-auth.md` |
-| `/clavain:flux-drive` | Deep multi-agent review of any document, diff, or repo | `/flux-drive docs/plans/my-plan.md` |
+| `/interflux:flux-drive` | Deep multi-agent review of any document, diff, or repo | `/flux-drive docs/plans/my-plan.md` |
 | `/clavain:quality-gates` | Auto-select reviewers based on git diff | `/quality-gates` |
 | `/clavain:resolve` | Fix findings from TODOs, PR comments, or todo files | `/resolve` |
 | `/clavain:interpeer` | Quick cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
@@ -44,7 +44,7 @@ These are the commands you'll use most often:
 | `/clavain:fixbuild` | Fix build/test failures |
 
 ### Review
-| `/clavain:flux-drive` | Deep multi-agent review (any input type) |
+| `/interflux:flux-drive` | Deep multi-agent review (any input type) |
 |---|---|
 | `/clavain:quality-gates` | Quick code review from git diff |
 | `/clavain:review` | PR-focused multi-agent review |
@@ -53,7 +53,7 @@ These are the commands you'll use most often:
 | `/clavain:migration-safety` | Database migration safety checks |
 | `/clavain:agent-native-audit` | Verify agent-native parity |
 | `/clavain:triage-prs` | Batch PR backlog triage with fd-* agents |
-| `/clavain:flux-gen` | Generate domain-specific review agents for your project |
+| `/interflux:flux-gen` | Generate domain-specific review agents for your project |
 
 ### Ship
 | `/clavain:changelog` | Generate changelog from recent commits |

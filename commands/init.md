@@ -52,7 +52,7 @@ Agent memory filesystem for this project. Created by `/clavain:init`.
 
 - **learnings/** — Curated durable knowledge. YAML frontmatter + markdown body. Feeds into review agents.
 - **scratch/** — Ephemeral working state (gitignored). Session handoffs, run checkpoints.
-- **contracts/** — API contracts, invariants, SLOs. Read by fd-correctness and fd-safety during reviews.
+- **contracts/** — API contracts, invariants, SLOs. Read by interflux:fd-correctness and interflux:fd-safety during reviews.
 
 ## Gitignore
 

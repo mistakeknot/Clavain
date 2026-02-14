@@ -1,12 +1,12 @@
 {
-  "generated": "2026-02-14T09:07:49Z",
+  "generated": "2026-02-14T09:51:22Z",
   "counts": {
-    "skills": 28,
-    "agents": 17,
-    "commands": 38,
+    "skills": 27,
+    "agents": 10,
+    "commands": 36,
     "hooks": 7,
-    "mcp_servers": 2,
-    "review": 10,
+    "mcp_servers": 1,
+    "review": 3,
     "research": 5,
     "workflow": 2
   },
@@ -58,10 +58,6 @@
     {
       "name": "finding-duplicate-functions",
       "description": "Use when auditing a codebase for semantic duplication - functions that do the same thing but have different names or implementations. Especially useful for LLM-generated codebases where new functions are often created rather than reusing existing ones."
-    },
-    {
-      "name": "flux-drive",
-      "description": "Use when reviewing documents or codebases with multi-agent analysis \u2014 triages relevant agents from roster, launches only what matters in background mode"
     },
     {
       "name": "interpeer",
@@ -161,41 +157,6 @@
       "category": "review"
     },
     {
-      "name": "fd-architecture",
-      "description": "Flux-drive Architecture & Design reviewer \u2014 evaluates module boundaries, coupling, design patterns, anti-patterns, code duplication, and unnecessary complexity. Reads project docs when available for codebase-aware analysis. Examples: <example>Context: User is restructuring a monolithic module into separate packages. user: \"I've split the data layer into three packages \u2014 can you review the module boundaries?\" assistant: \"I'll use the fd-architecture agent to evaluate the module boundaries and coupling.\" <commentary>Module restructuring directly involves architecture boundaries and coupling \u2014 fd-architecture's core domain.</commentary></example> <example>Context: User is adding a new third-party dependency to the project. user: \"We're adding Redis as a caching layer \u2014 review the integration plan\" assistant: \"I'll use the fd-architecture agent to evaluate how Redis integrates with the existing architecture.\" <commentary>New dependency evaluation requires assessing design patterns, coupling impact, and whether the abstraction fits the codebase.</commentary></example>",
-      "category": "review"
-    },
-    {
-      "name": "fd-correctness",
-      "description": "Flux-drive Correctness reviewer \u2014 evaluates data consistency, transaction safety, race conditions, async bugs, and concurrency patterns across all languages. Reads project docs when available. Examples: <example>Context: User wrote a database migration that renames columns and backfills data. user: \"Review this migration \u2014 it renames user_id to account_id and backfills from a lookup table\" assistant: \"I'll use the fd-correctness agent to evaluate the migration's data consistency and transaction safety.\" <commentary>Database migrations with renames and backfills need transaction atomicity review, NULL handling, and referential integrity checks.</commentary></example> <example>Context: User implemented a concurrent job queue with worker pools. user: \"Check this worker pool implementation for race conditions\" assistant: \"I'll use the fd-correctness agent to analyze the concurrency patterns and potential race conditions.\" <commentary>Concurrent worker pools involve shared mutable state, lifecycle management, and synchronization \u2014 fd-correctness's concurrency domain.</commentary></example>",
-      "category": "review"
-    },
-    {
-      "name": "fd-game-design",
-      "description": "Flux-drive Game Design reviewer \u2014 evaluates balance, pacing, player psychology, feedback loops, emergent behavior, and procedural content quality. Reads project docs when available for codebase-aware analysis. Examples: <example>Context: User designed a needs-based AI system for game agents. user: \"Review the utility AI system for the agent behavior\" assistant: \"I'll use the fd-game-design agent to evaluate the needs curves, action scoring, and emergent behavior patterns.\" <commentary>Utility AI tuning involves game design balance, not just code correctness.</commentary></example> <example>Context: User wrote a storyteller/drama management system. user: \"Check if the storyteller pacing feels right\" assistant: \"I'll use the fd-game-design agent to review the drama curve, event cooldowns, and death spiral prevention.\" <commentary>Drama pacing is a game design concern about player experience.</commentary></example>",
-      "category": "review"
-    },
-    {
-      "name": "fd-performance",
-      "description": "Flux-drive Performance reviewer \u2014 evaluates rendering bottlenecks, data access patterns, algorithmic complexity, memory usage, and resource consumption. Reads project docs when available. Examples: <example>Context: User noticed slow page loads and suspects N+1 queries. user: \"The dashboard endpoint is slow \u2014 review the data access patterns\" assistant: \"I'll use the fd-performance agent to evaluate the query patterns and identify bottlenecks.\" <commentary>Slow endpoints with suspected N+1 queries need data access review: repeated scans, missing indexes, inefficient lookups.</commentary></example> <example>Context: User's TUI application has visible rendering lag when updating. user: \"The TUI flickers on every update \u2014 review the rendering approach\" assistant: \"I'll use the fd-performance agent to check for unnecessary redraws and rendering bottlenecks.\" <commentary>TUI rendering issues involve batching, debouncing, and UI/event loop blocking \u2014 fd-performance's rendering domain.</commentary></example>",
-      "category": "review"
-    },
-    {
-      "name": "fd-quality",
-      "description": "Flux-drive Quality & Style reviewer \u2014 evaluates naming, conventions, test approach, error handling, and language-specific idioms. Auto-detects language from context. Reads project docs when available. Examples: <example>Context: User submitted a PR with Go code for a new service handler. user: \"Review this Go handler for style and conventions\" assistant: \"I'll use the fd-quality agent to evaluate naming, error handling, and Go idioms.\" <commentary>Go code review needs language-specific checks: explicit error handling with %w wrapping, accept-interfaces-return-structs, table-driven tests.</commentary></example> <example>Context: User is refactoring shared utilities from JavaScript to TypeScript. user: \"I've converted the utils to TypeScript \u2014 check the type safety and conventions\" assistant: \"I'll use the fd-quality agent to review the TypeScript conversion for type safety and idiomatic patterns.\" <commentary>Cross-language refactoring needs quality review for proper type narrowing, avoiding 'any', and consistent naming conventions.</commentary></example>",
-      "category": "review"
-    },
-    {
-      "name": "fd-safety",
-      "description": "Flux-drive Safety reviewer \u2014 evaluates security threats, credential handling, trust boundaries, deployment risk, rollback procedures, and migration safety. Reads project docs when available. Examples: <example>Context: User modified the authentication flow to support OAuth. user: \"I've updated the login to use OAuth2 \u2014 please review the security implications\" assistant: \"I'll use the fd-safety agent to evaluate the auth flow changes and credential handling.\" <commentary>Auth flow changes involve trust boundaries and credential handling \u2014 fd-safety's core domain.</commentary></example> <example>Context: User is adding a new API endpoint that accepts file uploads. user: \"Review the new file upload endpoint for security issues\" assistant: \"I'll use the fd-safety agent to check for security threats in the upload endpoint.\" <commentary>New endpoints with file uploads need trust boundary analysis, input validation review, and deployment risk assessment.</commentary></example>",
-      "category": "review"
-    },
-    {
-      "name": "fd-user-product",
-      "description": "Flux-drive User & Product reviewer \u2014 evaluates user flows, UX friction, value proposition, problem validation, scope creep, and missing edge cases. Reads project docs when available. Examples: <example>Context: User redesigned the CLI command structure for their tool. user: \"Review the new CLI command hierarchy \u2014 is it intuitive?\" assistant: \"I'll use the fd-user-product agent to evaluate the CLI UX, discoverability, and user flow.\" <commentary>CLI redesigns need UX review for information hierarchy, progressive disclosure, error experience, and time-to-value.</commentary></example> <example>Context: User wrote a PRD for a new feature. user: \"Review this PRD \u2014 does the problem statement hold up?\" assistant: \"I'll use the fd-user-product agent to validate the problem definition and check for scope creep.\" <commentary>PRDs need product validation: who has this problem, how severe, what evidence exists, and whether the solution fits.</commentary></example>",
-      "category": "review"
-    },
-    {
       "name": "plan-reviewer",
       "description": "Use this agent when a major project step has been completed and needs to be reviewed against the original plan and coding standards. Examples: <example>Context: The user is creating a code-review agent that should be called after a logical chunk of code is written. user: \"I've finished implementing the user authentication system as outlined in step 3 of our plan\" assistant: \"Great work! Now let me use the plan-reviewer agent to review the implementation against our plan and coding standards\" <commentary>Since a major project step has been completed, use the plan-reviewer agent to validate the work against the plan and identify any issues.</commentary></example> <example>Context: User has completed a significant feature implementation. user: \"The API endpoints for the task management system are now complete - that covers step 2 from our architecture document\" assistant: \"Excellent! Let me have the plan-reviewer agent examine this implementation to ensure it aligns with our plan and follows best practices\" <commentary>A numbered step from the planning document has been completed, so the plan-reviewer agent should review the work.</commentary></example>",
       "category": "review"
@@ -259,14 +220,6 @@
     {
       "name": "fixbuild",
       "description": "Run build, capture error, fix it, re-run \u2014 fast loop for type errors and build failures without heavyweight debugging"
-    },
-    {
-      "name": "flux-drive",
-      "description": "Intelligent document review \u2014 triages relevant agents, launches only what matters in background mode"
-    },
-    {
-      "name": "flux-gen",
-      "description": "Generate project-specific review agents from detected domain profiles"
     },
     {
       "name": "full-pipeline",

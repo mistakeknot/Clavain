@@ -33,15 +33,15 @@ Classify each changed file by:
 Based on analysis, invoke the appropriate agents in parallel:
 
 **Always run:**
-- `fd-architecture` — structural review for every change
-- `fd-quality` — naming, conventions, language-specific idioms (auto-detects language)
+- `interflux:review:fd-architecture` — structural review for every change
+- `interflux:review:fd-quality` — naming, conventions, language-specific idioms (auto-detects language)
 
 **Risk-based (based on file paths and content):**
-- Auth/crypto/input handling/secrets → `fd-safety`
-- Database/migration/schema/backfill → `fd-correctness` + `data-migration-expert`
-- Performance-critical paths → `fd-performance`
-- Concurrent/async code → `fd-correctness`
-- User-facing flows → `fd-user-product`
+- Auth/crypto/input handling/secrets → `interflux:review:fd-safety`
+- Database/migration/schema/backfill → `interflux:review:fd-correctness` + `data-migration-expert`
+- Performance-critical paths → `interflux:review:fd-performance`
+- Concurrent/async code → `interflux:review:fd-correctness`
+- User-facing flows → `interflux:review:fd-user-product`
 
 **Threshold:** Don't run more than 5 agents total. Prioritize by risk.
 
@@ -70,9 +70,9 @@ Launch selected agents using the Task tool with `run_in_background: true`. Each 
 Ask agents to **reference diff hunks** in findings (file:line or hunk header like `@@ -10,5 +10,7 @@`).
 
 ```
-Task(fd-architecture): "Review this diff for structural issues. [paste diff]. Reference specific hunks."
-Task(fd-quality): "Review this diff for naming, conventions, and idioms. [paste diff]. Reference file:line."
-Task(fd-safety): "Scan this diff for security vulnerabilities. [paste diff]. Reference specific hunks."
+Task(interflux:review:fd-architecture): "Review this diff for structural issues. [paste diff]. Reference specific hunks."
+Task(interflux:review:fd-quality): "Review this diff for naming, conventions, and idioms. [paste diff]. Reference file:line."
+Task(interflux:review:fd-safety): "Scan this diff for security vulnerabilities. [paste diff]. Reference specific hunks."
 ```
 
 ### Phase 5: Synthesize Results
@@ -87,9 +87,9 @@ Collect all agent findings and present:
 - Risk domains detected: [safety, correctness, performance, etc.]
 
 ### Agents Invoked
-1. fd-architecture — [pass/findings]
-2. fd-quality — [pass/findings]
-3. fd-safety — [pass/findings]
+1. interflux:fd-architecture — [pass/findings]
+2. interflux:fd-quality — [pass/findings]
+3. interflux:fd-safety — [pass/findings]
 
 ### Findings Summary
 - P1 CRITICAL: [count] — must fix
@@ -132,6 +132,6 @@ Group related findings into a single bead where appropriate. This makes review o
 
 ## Important
 
-- **Don't over-review small changes.** If the diff is under 20 lines and touches one file, only run `fd-quality`.
+- **Don't over-review small changes.** If the diff is under 20 lines and touches one file, only run `interflux:review:fd-quality`.
 - **Run after tests pass.** Quality gates complement testing, not replace it.
 - **P1 findings block shipping.** Present them prominently and ensure resolution.

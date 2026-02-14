@@ -37,9 +37,9 @@ Show the batching and ask for approval before proceeding.
 
 For each batch, spawn a review agent using the Task tool (all batches in one message for parallelism):
 
-- **Bug fix batches** → fd-correctness agent: check for regression risk, test coverage
-- **Feature batches** → fd-architecture agent: check for design alignment, scope creep
-- **All batches** → fd-quality agent: naming, conventions, test approach
+- **Bug fix batches** → interflux:review:fd-correctness agent: check for regression risk, test coverage
+- **Feature batches** → interflux:review:fd-architecture agent: check for design alignment, scope creep
+- **All batches** → interflux:review:fd-quality agent: naming, conventions, test approach
 
 Each agent receives the PR list with `gh pr diff <number>` for each PR in its batch. Agent output: markdown table with columns: PR#, Summary, Risk, Recommendation (merge/revise/close).
 

@@ -54,7 +54,7 @@ Before starting execution, enforce the gate (requires plan-reviewed for P0/P1 be
 export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID=$(phase_infer_bead "<input_document_path>")
 if ! enforce_gate "$BEAD_ID" "executing" "<input_document_path>"; then
-    echo "Gate blocked: run /clavain:flux-drive on the plan first, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
+    echo "Gate blocked: run /interflux:flux-drive on the plan first, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Stop and tell user — do NOT proceed to execution
 fi
 advance_phase "$BEAD_ID" "executing" "Executing: <input_document_path>" "<input_document_path>"

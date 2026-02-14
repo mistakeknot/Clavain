@@ -32,9 +32,9 @@ Launch all 3 agents simultaneously:
 ```
 Task(data-migration-expert): "Review this migration for safety: <context>. Check for: ID mapping correctness, swapped values, orphaned associations, dual-write patterns. Produce validation queries."
 
-Task(fd-correctness): "Review this data change for integrity: <context>. Check for: referential integrity, transaction boundaries, privacy compliance, constraint violations. Identify invariants that must hold."
+Task(interflux:review:fd-correctness): "Review this data change for integrity: <context>. Check for: referential integrity, transaction boundaries, privacy compliance, constraint violations. Identify invariants that must hold."
 
-Task(fd-safety): "Create a Go/No-Go deployment checklist for: <context>. Include: pre-deploy verification queries, post-deploy checks, rollback procedure, monitoring plan."
+Task(interflux:review:fd-safety): "Create a Go/No-Go deployment checklist for: <context>. Include: pre-deploy verification queries, post-deploy checks, rollback procedure, monitoring plan."
 ```
 
 ### Phase 3: Synthesize Results

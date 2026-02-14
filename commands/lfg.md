@@ -105,7 +105,7 @@ Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it'
 **Phase:** After plan is written, set `phase=planned` with reason `"Plan: <plan_path>"`.
 
 ## Step 4: Review Plan (gates execution)
-`/clavain:flux-drive <plan-file-from-step-3>`
+`/interflux:flux-drive <plan-file-from-step-3>`
 
 Pass the plan file path from Step 3 as the flux-drive target. Review happens **before** execution so plan-level risks are caught early.
 
@@ -119,7 +119,7 @@ If flux-drive finds P0/P1 issues, stop and address them before proceeding to exe
 ```bash
 export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 if ! enforce_gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
-    echo "Gate blocked: plan must be reviewed first. Run /clavain:flux-drive on the plan, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
+    echo "Gate blocked: plan must be reviewed first. Run /interflux:flux-drive on the plan, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Stop — do NOT proceed to execution
 fi
 ```

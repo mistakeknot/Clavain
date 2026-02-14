@@ -9,21 +9,21 @@ For the compact version, see the `using-clavain` skill.
 | Stage | Primary Skills | Primary Commands | Key Agents |
 |-------|---------------|-----------------|------------|
 | **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
-| **Plan** | writing-plans | write-plan, plan-review | fd-architecture, plan-reviewer |
-| **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster — adaptive 4-12 agents)¹ |
+| **Plan** | writing-plans | write-plan, plan-review | interflux:fd-architecture, plan-reviewer |
+| **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster in interflux — adaptive 4-12 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg², resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
-| **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
-| **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | fd-safety |
+| **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
+| **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | interflux:fd-safety |
 | **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, help, doctor, sprint-status, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
 ## Layer 2: What domain?
 
 | Domain | Skills | Agents |
 |--------|--------|--------|
-| **Code** | test-driven-development, finding-duplicate-functions, refactor-safely | fd-architecture, fd-quality, agent-native-reviewer |
-| **Data** | — | fd-correctness, data-migration-expert |
-| **Deploy** | — | fd-safety |
+| **Code** | test-driven-development, finding-duplicate-functions, refactor-safely | interflux:fd-architecture, interflux:fd-quality, agent-native-reviewer |
+| **Data** | — | interflux:fd-correctness, data-migration-expert |
+| **Deploy** | — | interflux:fd-safety |
 | **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
 | **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
 | **Workflow** | file-todos, slack-messaging, clodex | pr-comment-resolver, sprint-status |
@@ -34,13 +34,13 @@ For the compact version, see the `using-clavain` skill.
 
 | Concern | Agent |
 |---------|-------|
-| Architecture, boundaries, patterns | fd-architecture |
-| Security, credentials, trust boundaries | fd-safety |
-| Data integrity, concurrency, async | fd-correctness |
-| Naming, conventions, language idioms | fd-quality |
-| User flows, UX, product reasoning | fd-user-product |
-| Performance, bottlenecks, scaling | fd-performance |
-| Game design, balance, pacing, emergent behavior | fd-game-design |
+| Architecture, boundaries, patterns | interflux:fd-architecture |
+| Security, credentials, trust boundaries | interflux:fd-safety |
+| Data integrity, concurrency, async | interflux:fd-correctness |
+| Naming, conventions, language idioms | interflux:fd-quality |
+| User flows, UX, product reasoning | interflux:fd-user-product |
+| Performance, bottlenecks, scaling | interflux:fd-performance |
+| Game design, balance, pacing, emergent behavior | interflux:fd-game-design |
 | Database migrations | data-migration-expert |
 | Agent-native design | agent-native-reviewer |
 
@@ -48,15 +48,15 @@ For the compact version, see the `using-clavain` skill.
 
 | Command | Use when... | Input |
 |---------|------------|-------|
-| `/clavain:flux-drive` | Deep review of documents, plans, repos, or large diffs with scored agent triage | File, directory, or diff |
+| `/interflux:flux-drive` | Deep review of documents, plans, repos, or large diffs with scored agent triage | File, directory, or diff |
 | `/clavain:quality-gates` | Quick code review of working changes (auto-selects agents from git diff) | None (uses git diff) |
 | `/clavain:review` | PR-focused multi-agent review | PR number, URL, or branch |
 | `/clavain:plan-review` | Lightweight 3-agent plan review | Plan file |
-| `/clavain:flux-gen` | Generate project-specific domain review agents in `.claude/agents/` | Optional: domain name |
+| `/interflux:flux-gen` | Generate project-specific domain review agents in `.claude/agents/` | Optional: domain name |
 
-**Default:** If unsure, use `/clavain:flux-drive` — it handles the widest range of inputs and auto-triages agents.
+**Default:** If unsure, use `/interflux:flux-drive` — it handles the widest range of inputs and auto-triages agents.
 
-¹ **flux-drive agents (fd-*)**: 7 core review agents that auto-detect project docs (CLAUDE.md/AGENTS.md) for codebase-aware analysis.
+¹ **flux-drive agents (fd-*)**: 7 core review agents in the interflux companion plugin that auto-detect project docs (CLAUDE.md/AGENTS.md) for codebase-aware analysis.
 
 ² **`/lfg` discovery mode**: With no arguments, `/lfg` scans open beads, ranks by priority, and presents the top options via AskUserQuestion. User picks a bead and gets routed to the right command. With arguments, `/lfg` runs the full 9-step pipeline as before.
 

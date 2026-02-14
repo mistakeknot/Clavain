@@ -4,7 +4,7 @@
 
 ## Overview
 
-General-purpose engineering discipline plugin for Claude Code — 28 skills, 17 agents, 38 commands, 7 hooks, 2 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer).
+General-purpose engineering discipline plugin for Claude Code — 27 skills, 10 agents, 36 commands, 7 hooks, 1 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review engine).
 
 ## Quick Commands
 
@@ -13,9 +13,9 @@ General-purpose engineering discipline plugin for Claude Code — 28 skills, 17 
 claude --plugin-dir /root/projects/Clavain
 
 # Validate structure
-ls skills/*/SKILL.md | wc -l          # Should be 29
-ls agents/{review,research,workflow}/*.md | wc -l  # Should be 17
-ls commands/*.md | wc -l              # Should be 38
+ls skills/*/SKILL.md | wc -l          # Should be 27
+ls agents/{review,research,workflow}/*.md | wc -l  # Should be 10
+ls commands/*.md | wc -l              # Should be 36
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
 bash -n hooks/dotfiles-sync.sh         # Syntax check
@@ -33,7 +33,7 @@ python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manif
 
 - Namespace: `clavain:` (not superpowers, not compound-engineering)
 - General-purpose only — no Rails, Ruby gems, Every.to, Figma, Xcode, browser-automation
-- 7 core review agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design) — each auto-detects language
+- 7 core review agents live in interflux companion (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design)
 - SessionStart hook injects `using-clavain` skill content via `additionalContext` JSON
 - 3-layer routing: Stage → Domain → Concern
 - Trunk-based development — no branches/worktrees skills

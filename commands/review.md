@@ -32,14 +32,14 @@ Perform exhaustive code reviews using multi-agent analysis and deep inspection.
 
 Launch these core agents in parallel with `run_in_background: true` to prevent agent output from flooding the main conversation context:
 
-1. Task fd-architecture(PR content)
-2. Task fd-safety(PR content)
-3. Task fd-quality(PR content)
+1. Task interflux:review:fd-architecture(PR content)
+2. Task interflux:review:fd-safety(PR content)
+3. Task interflux:review:fd-quality(PR content)
 4. Task git-history-analyzer(PR content)
 5. Task agent-native-reviewer(PR content)
 
 **Risk-specific reviewers** (conditional):
-- Async/concurrent code or data changes → Task fd-correctness
+- Async/concurrent code or data changes → Task interflux:review:fd-correctness
 - Database migrations → Task data-migration-expert
 
 ## Phase 3: Cross-AI Review (Oracle, Optional)

@@ -74,6 +74,12 @@ if command -v oracle &>/dev/null && pgrep -f "Xvfb :99" &>/dev/null; then
     companions="${companions}\\n- **oracle**: available for cross-AI review (GPT-5.2 Pro)"
 fi
 
+# Interflux — multi-agent review engine companion
+interflux_root=$(_discover_interflux_plugin)
+if [[ -n "$interflux_root" ]]; then
+    companions="${companions}\\n- **interflux**: review engine available (fd-* agents, domain detection, qmd)"
+fi
+
 # Clodex — detect persistent toggle state
 CLODEX_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/clodex-toggle.flag"
 if [[ -f "$CLODEX_FLAG" ]]; then

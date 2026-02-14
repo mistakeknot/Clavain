@@ -20,6 +20,25 @@ _discover_beads_plugin() {
     echo ""
 }
 
+# Discover the interflux companion plugin root directory.
+# Checks INTERFLUX_ROOT env var first, then searches the plugin cache.
+# Output: plugin root path to stdout, or empty string if not found.
+_discover_interflux_plugin() {
+    if [[ -n "${INTERFLUX_ROOT:-}" ]]; then
+        echo "$INTERFLUX_ROOT"
+        return 0
+    fi
+    local f
+    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
+        -path '*/interflux/*/.claude-plugin/plugin.json' 2>/dev/null | sort -V | tail -1)
+    if [[ -n "$f" ]]; then
+        # plugin.json is at <root>/.claude-plugin/plugin.json, so strip two levels
+        echo "$(dirname "$(dirname "$f")")"
+        return 0
+    fi
+    echo ""
+}
+
 # Escape string for JSON embedding using bash parameter substitution.
 # Each ${s//old/new} is a single C-level pass — fast and reliable.
 escape_for_json() {

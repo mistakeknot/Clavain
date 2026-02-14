@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 28 skills, 17 agents, 38 commands, 7 hooks, and 2 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 27 skills, 10 agents, 36 commands, 7 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -103,7 +103,7 @@ I use this before any architectural decision I'm uncertain about. The debate its
 
 ## What's Included
 
-### Skills (28)
+### Skills (27)
 
 Skills are workflow disciplines — they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -148,17 +148,17 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `mcp-cli` | On-demand MCP server usage |
 | `upstream-sync` | Track updates from upstream tool repos |
 
-### Agents (17)
+### Agents (10)
 
 Agents are specialized execution units dispatched by skills and commands. They run as subagents with their own context window.
 
-**Review (10):** 7 core flux-drive agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design) used by `/flux-drive` for document/repo reviews — each auto-detects language and project docs. Plus plan-reviewer, agent-native-reviewer, and data-migration-expert for specialized review tasks.
+**Review (3):** plan-reviewer, agent-native-reviewer, and data-migration-expert for specialized review tasks. The 7 core fd-* review agents now live in the **interflux** companion plugin.
 
 **Research (5):** Best practices, framework docs, git history analysis, institutional learnings, and repo structure analysis.
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (38)
+### Commands (36)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -244,9 +244,9 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 | Plugin | Clavain Replacement |
 |--------|-------------------|
-| code-review | `/review` + `/flux-drive` + 10 review agents |
+| code-review | `/review` + `/flux-drive` + 3 review agents |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster |
-| code-simplifier | `fd-quality` agent |
+| code-simplifier | `interflux:review:fd-quality` agent |
 | commit-commands | `landing-a-change` skill |
 | feature-dev | `/work` + `/lfg` + `/brainstorm` |
 | claude-md-management | `engineering-docs` skill |
@@ -268,11 +268,11 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 28 discipline skills (SKILL.md each)
-agents/       # 17 agents (review/ + research/ + workflow/)
-commands/     # 38 slash commands
-hooks/        # 6 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd)
-config/       # flux-drive knowledge layer
+skills/       # 27 discipline skills (SKILL.md each)
+agents/       # 10 agents (review/ + research/ + workflow/)
+commands/     # 36 slash commands
+hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
+config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync
 ```
 

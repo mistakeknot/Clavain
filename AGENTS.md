@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 28 skills, 17 agents, 38 commands, 7 hooks, 2 MCP servers |
+| Components | 27 skills, 10 agents, 36 commands, 7 hooks, 1 MCP servers |
 | License | MIT |
 
 ## Runbooks
@@ -24,7 +24,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 28 discipline skills
+├── skills/                        # 27 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -44,12 +44,12 @@ Clavain/
 │   │   └── examples/
 │   └── ...                        # Each skill is a directory with SKILL.md
 ├── agents/
-│   ├── review/                    # 10 review agents
+│   ├── review/                    # 3 review agents
 │   ├── research/                  # 5 research agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 38 slash commands
+├── commands/                      # 36 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 36 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 34 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
@@ -150,7 +150,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 - Agents are dispatched via `Task` tool — they run as subagents with their own context
 
 Categories:
-- **review/** — Review specialists (10): 7 core flux-drive agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design) — each auto-detects language and project docs. Plus plan-reviewer, agent-native-reviewer, and data-migration-expert.
+- **review/** — Review specialists (3): plan-reviewer, agent-native-reviewer, and data-migration-expert. The 7 core fd-* agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design) now live in the **interflux** companion plugin.
 - **research/** — Information gathering (5): best practices, framework docs, git history, learnings, repo analysis
 - **workflow/** — Process automation (2): PR comments, bug reproduction
 
@@ -160,7 +160,7 @@ Categories:
 - YAML frontmatter: `name`, `description`, `argument-hint` (optional)
 - Body contains instructions FOR Claude (not for the user)
 - Commands can reference skills: "Use the `clavain:writing-plans` skill"
-- Commands can dispatch agents: "Launch `Task(fd-architecture)`"
+- Commands can dispatch agents: "Launch `Task(interflux:review:fd-architecture)`"
 - Invoked as `/clavain:<name>` by users
 
 ### Hooks
@@ -231,9 +231,9 @@ When making changes, verify:
 Quick validation:
 ```bash
 # Count components
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 28
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 27
 echo "Agents: $(ls agents/{review,research,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 38
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 36
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
@@ -312,7 +312,7 @@ These plugins overlap with Clavain's opinionated equivalents. Keeping both cause
 |--------|-------------------|--------|
 | code-review | `/review` + `/flux-drive` + 10 review agents | **OFF** |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster | **OFF** |
-| code-simplifier | `fd-quality` agent | **OFF** |
+| code-simplifier | `interflux:review:fd-quality` agent | **OFF** |
 | commit-commands | `landing-a-change` skill | **OFF** |
 | feature-dev | `/work` + `/lfg` + `/brainstorm` | **OFF** |
 | claude-md-management | `engineering-docs` skill | **OFF** |

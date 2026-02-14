@@ -103,7 +103,7 @@ advance_phase "<feature_bead_id>" "strategized" "PRD: <prd_path>" ""
 Run a lightweight flux-drive review on the PRD:
 
 ```
-/clavain:flux-drive docs/prds/YYYY-MM-DD-<topic>.md
+/interflux:flux-drive docs/prds/YYYY-MM-DD-<topic>.md
 ```
 
 This catches scope creep, missing acceptance criteria, and architectural risks before any code is written.
