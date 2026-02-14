@@ -1,13 +1,13 @@
 {
-  "generated": "2026-02-14T09:51:22Z",
+  "generated": "2026-02-14T10:49:23Z",
   "counts": {
     "skills": 27,
-    "agents": 10,
+    "agents": 5,
     "commands": 36,
     "hooks": 7,
     "mcp_servers": 1,
     "review": 3,
-    "research": 5,
+    "research": 0,
     "workflow": 2
   },
   "skills": [
@@ -121,31 +121,6 @@
     }
   ],
   "agents": [
-    {
-      "name": "best-practices-researcher",
-      "description": "Researches and synthesizes external best practices, documentation, and examples for any technology or framework. Use when you need industry standards, community conventions, or implementation guidance.",
-      "category": "research"
-    },
-    {
-      "name": "framework-docs-researcher",
-      "description": "Gathers comprehensive documentation and best practices for frameworks, libraries, or dependencies. Use when you need official docs, version-specific constraints, or implementation patterns.",
-      "category": "research"
-    },
-    {
-      "name": "git-history-analyzer",
-      "description": "Performs archaeological analysis of git history to trace code evolution, identify contributors, and understand why code patterns exist. Use when you need historical context for code changes.",
-      "category": "research"
-    },
-    {
-      "name": "learnings-researcher",
-      "description": "Searches docs/solutions/ for relevant past solutions by frontmatter metadata. Use before implementing features or fixing problems to surface institutional knowledge and prevent repeated mistakes.",
-      "category": "research"
-    },
-    {
-      "name": "repo-research-analyst",
-      "description": "Conducts thorough research on repository structure, documentation, conventions, and implementation patterns. Use when onboarding to a new codebase or understanding project conventions.",
-      "category": "research"
-    },
     {
       "name": "agent-native-reviewer",
       "description": "Reviews code to ensure agent-native parity \u2014 any action a user can take, an agent can also take. Use after adding UI features, agent tools, or system prompts.",

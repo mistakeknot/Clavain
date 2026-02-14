@@ -47,9 +47,9 @@ First, establish a reliable reproduction:
 
 With a reliable reproduction established:
 
-1. **Check if it's a regression** — spawn `git-history-analyzer`:
+1. **Check if it's a regression** — spawn `interflux:research:git-history-analyzer`:
    ```
-   Task(git-history-analyzer): "This bug: <description>. When did it start? Find the most likely commit that introduced it. Focus on recent changes to: <affected files>"
+   Task(interflux:research:git-history-analyzer): "This bug: <description>. When did it start? Find the most likely commit that introduced it. Focus on recent changes to: <affected files>"
    ```
 
 2. **If regression identified:** The suspect commit narrows the search dramatically. Focus debugging on that change.
@@ -89,9 +89,9 @@ If the root cause reveals a systemic issue, suggest capturing it via `/clavain:c
 | Agent | Purpose |
 |-------|---------|
 | `bug-reproduction-validator` | Phase 1 — establish reliable reproduction |
-| `git-history-analyzer` | Phase 2 — find suspect commits for regressions |
+| `interflux:research:git-history-analyzer` | Phase 2 — find suspect commits for regressions |
 | `systematic-debugging` skill | Phase 2 — structured evidence collection |
-| `repo-research-analyst` | Phase 2 — understand unfamiliar code areas |
+| `interflux:research:repo-research-analyst` | Phase 2 — understand unfamiliar code areas |
 
 ## Important
 

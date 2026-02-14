@@ -35,7 +35,7 @@ Launch these core agents in parallel with `run_in_background: true` to prevent a
 1. Task interflux:review:fd-architecture(PR content)
 2. Task interflux:review:fd-safety(PR content)
 3. Task interflux:review:fd-quality(PR content)
-4. Task git-history-analyzer(PR content)
+4. Task interflux:research:git-history-analyzer(PR content)
 5. Task agent-native-reviewer(PR content)
 
 **Risk-specific reviewers** (conditional):

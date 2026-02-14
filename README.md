@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 27 skills, 10 agents, 36 commands, 7 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 27 skills, 5 agents, 36 commands, 7 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -148,7 +148,7 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `mcp-cli` | On-demand MCP server usage |
 | `upstream-sync` | Track updates from upstream tool repos |
 
-### Agents (10)
+### Agents (5)
 
 Agents are specialized execution units dispatched by skills and commands. They run as subagents with their own context window.
 

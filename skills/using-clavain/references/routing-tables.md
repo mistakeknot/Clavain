@@ -8,11 +8,11 @@ For the compact version, see the `using-clavain` skill.
 
 | Stage | Primary Skills | Primary Commands | Key Agents |
 |-------|---------------|-----------------|------------|
-| **Explore** | brainstorming | brainstorm | repo-research-analyst, best-practices-researcher |
+| **Explore** | brainstorming | brainstorm | interflux:research:repo-research-analyst, interflux:research:best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | interflux:fd-architecture, plan-reviewer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster in interflux — adaptive 4-12 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, lfg², resolve, debate | — |
-| **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, git-history-analyzer |
+| **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, interflux:research:git-history-analyzer |
 | **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | interflux:fd-safety |
 | **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, help, doctor, sprint-status, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
@@ -24,8 +24,8 @@ For the compact version, see the `using-clavain` skill.
 | **Code** | test-driven-development, finding-duplicate-functions, refactor-safely | interflux:fd-architecture, interflux:fd-quality, agent-native-reviewer |
 | **Data** | — | interflux:fd-correctness, data-migration-expert |
 | **Deploy** | — | interflux:fd-safety |
-| **Docs** | engineering-docs | framework-docs-researcher, learnings-researcher |
-| **Research** | mcp-cli | best-practices-researcher, repo-research-analyst, git-history-analyzer |
+| **Docs** | engineering-docs | interflux:research:framework-docs-researcher, interflux:research:learnings-researcher |
+| **Research** | mcp-cli | interflux:research:best-practices-researcher, interflux:research:repo-research-analyst, interflux:research:git-history-analyzer |
 | **Workflow** | file-todos, slack-messaging, clodex | pr-comment-resolver, sprint-status |
 | **Design** | distinctive-design | — |
 | **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |

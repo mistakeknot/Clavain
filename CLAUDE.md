@@ -4,7 +4,7 @@
 
 ## Overview
 
-General-purpose engineering discipline plugin for Claude Code — 27 skills, 10 agents, 36 commands, 7 hooks, 1 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review engine).
+General-purpose engineering discipline plugin for Claude Code — 27 skills, 5 agents, 36 commands, 7 hooks, 1 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine).
 
 ## Quick Commands
 
@@ -14,7 +14,7 @@ claude --plugin-dir /root/projects/Clavain
 
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 27
-ls agents/{review,research,workflow}/*.md | wc -l  # Should be 10
+ls agents/{review,workflow}/*.md | wc -l  # Should be 5
 ls commands/*.md | wc -l              # Should be 36
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
