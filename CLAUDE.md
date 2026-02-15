@@ -13,7 +13,7 @@ Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 
 claude --plugin-dir /root/projects/Interverse/hub/clavain
 
 # Validate structure
-ls skills/*/SKILL.md | wc -l          # Should be 22
+ls skills/*/SKILL.md | wc -l          # Should be 23
 ls agents/{review,workflow}/*.md | wc -l  # Should be 4
 ls commands/*.md | wc -l              # Should be 38
 bash -n hooks/lib.sh                   # Syntax check
@@ -24,7 +24,10 @@ bash -n hooks/auto-drift-check.sh      # Syntax check
 bash -n hooks/lib-signals.sh           # Syntax check
 bash -n hooks/session-handoff.sh       # Syntax check
 bash -n hooks/auto-publish.sh          # Syntax check
+bash -n hooks/bead-agent-bind.sh       # Syntax check
 bash -n hooks/catalog-reminder.sh      # Syntax check
+bash -n hooks/clodex-audit.sh          # Syntax check
+bash -n hooks/sprint-scan.sh           # Syntax check (utility, not a hook binding)
 bash -n hooks/lib-discovery.sh         # Syntax check (shim → interphase)
 bash -n hooks/lib-gates.sh             # Syntax check (shim → interphase)
 bash -n hooks/lib-interspect.sh        # Syntax check (interspect shared library)

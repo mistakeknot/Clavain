@@ -226,9 +226,9 @@ When making changes, verify:
 Quick validation:
 ```bash
 # Count components
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 27
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 23
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 37
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 38
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
