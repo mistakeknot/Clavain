@@ -210,10 +210,70 @@ sprint_check_skipped_phases() {
 
 # ─── Orchestrators ─────────────────────────────────────────────────────
 
+# Check Intermute for active agents and reservations.
+# Prints coordination summary. Returns 0 if agents found, 1 otherwise.
+sprint_check_coordination() {
+    local intermute_url="${INTERMUTE_URL:-http://127.0.0.1:7338}"
+    # Quick health check (1s timeout — don't slow down sprint scan)
+    curl -sf --connect-timeout 1 --max-time 1 "${intermute_url}/health" >/dev/null 2>&1 || return 1
+    command -v jq &>/dev/null || return 1
+
+    local project
+    project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null) || return 1
+    [[ -n "$project" ]] || return 1
+
+    local agents_json
+    agents_json=$(curl -sf --max-time 2 "${intermute_url}/api/agents?project=${project}" 2>/dev/null) || return 1
+    local count
+    count=$(echo "$agents_json" | jq '.agents | length' 2>/dev/null) || return 1
+    [[ "$count" -gt 0 ]] || return 1
+
+    # Build agent summary with reservations
+    local reservations_json
+    reservations_json=$(curl -sf --max-time 2 "${intermute_url}/api/reservations?project=${project}" 2>/dev/null) || reservations_json=""
+
+    local output="${count} agent(s) online: "
+    local agent_list
+    agent_list=$(echo "$agents_json" | jq -r '.agents[] | "\(.name // .id[:8])"' 2>/dev/null) || agent_list=""
+
+    if [[ -n "$reservations_json" ]]; then
+        # Show each agent with their reserved files
+        local agent_summaries=""
+        while IFS= read -r agent_name; do
+            [[ -z "$agent_name" ]] && continue
+            local agent_id
+            agent_id=$(echo "$agents_json" | jq -r --arg name "$agent_name" '.agents[] | select(.name == $name or (.id[:8]) == $name) | .id' 2>/dev/null | head -1) || agent_id=""
+            local agent_files=""
+            if [[ -n "$agent_id" && -n "$reservations_json" ]]; then
+                agent_files=$(echo "$reservations_json" | jq -r --arg aid "$agent_id" \
+                    '[.reservations[]? | select(.agent_id == $aid and .is_active == true) | .path_pattern] | join(",")' 2>/dev/null) || agent_files=""
+            fi
+            if [[ -n "$agent_files" ]]; then
+                agent_summaries="${agent_summaries}${agent_name}→${agent_files}, "
+            else
+                agent_summaries="${agent_summaries}${agent_name}, "
+            fi
+        done <<< "$agent_list"
+        output="${count} agent(s) online: ${agent_summaries%, }"
+    else
+        output="${count} agent(s) online: $(echo "$agent_list" | tr '\n' ',' | sed 's/,$//')"
+    fi
+
+    echo "$output"
+    return 0
+}
+
 # Brief scan for session-start hook. Fast signals only, zero output when clean.
 # Output is plain text suitable for JSON escaping and additionalContext injection.
 sprint_brief_scan() {
     local signals=""
+
+    # Multi-session coordination — always show if agents are active
+    local coord_status
+    coord_status=$(sprint_check_coordination 2>/dev/null) || coord_status=""
+    if [[ -n "$coord_status" ]]; then
+        signals="${signals}• Coordination: ${coord_status}\n"
+    fi
 
     # HANDOFF.md — always show (highest priority)
     if sprint_check_handoff &>/dev/null; then
@@ -271,6 +331,17 @@ sprint_brief_scan() {
 # Output is formatted text for direct display.
 sprint_full_scan() {
     echo "# Sprint Status"
+    echo ""
+
+    # 0. Multi-Session Coordination
+    echo "## Coordination"
+    local coord_status
+    coord_status=$(sprint_check_coordination 2>/dev/null) || coord_status=""
+    if [[ -n "$coord_status" ]]; then
+        echo "$coord_status"
+    else
+        echo "No active coordination (Intermute offline or no agents)"
+    fi
     echo ""
 
     # 1. Session Continuity

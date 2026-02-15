@@ -96,6 +96,38 @@ fi
 interlock_root=$(_discover_interlock_plugin)
 if [[ -n "$interlock_root" ]]; then
     companions="${companions}\\n- **interlock**: multi-agent coordination (file reservations, conflict detection)"
+
+    # Auto-join Intermute if reachable and in a git repo
+    # This replaces the need for manual /interlock:join
+    _intermute_url="${INTERMUTE_URL:-http://127.0.0.1:7338}"
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        if curl -sf --connect-timeout 1 --max-time 2 "${_intermute_url}/health" >/dev/null 2>&1; then
+            # Ensure join flag exists (interlock hooks gate on this)
+            _join_flag="${HOME}/.config/clavain/intermute-joined"
+            mkdir -p "$(dirname "$_join_flag")" 2>/dev/null || true
+            touch "$_join_flag" 2>/dev/null || true
+
+            # Query active agents for awareness context
+            _agents_json=$(curl -sf --max-time 2 "${_intermute_url}/api/agents?project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")" 2>/dev/null) || _agents_json=""
+            if [[ -n "$_agents_json" ]]; then
+                _agent_count=$(echo "$_agents_json" | jq '.agents | length' 2>/dev/null) || _agent_count="0"
+                if [[ "$_agent_count" -gt 0 ]]; then
+                    _agent_names=$(echo "$_agents_json" | jq -r '[.agents[].name] | join(", ")' 2>/dev/null) || _agent_names=""
+                    companions="${companions}\\n  - Intermute: ${_agent_count} agent(s) online (${_agent_names})"
+
+                    # Show active reservations summary
+                    _reservations_json=$(curl -sf --max-time 2 "${_intermute_url}/api/reservations?project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")" 2>/dev/null) || _reservations_json=""
+                    if [[ -n "$_reservations_json" ]]; then
+                        _res_count=$(echo "$_reservations_json" | jq '[.reservations[]? | select(.is_active == true)] | length' 2>/dev/null) || _res_count="0"
+                        if [[ "$_res_count" -gt 0 ]]; then
+                            _res_summary=$(echo "$_reservations_json" | jq -r '[.reservations[]? | select(.is_active == true) | "\(.agent_id[:8])→\(.path_pattern)"] | join(", ")' 2>/dev/null) || _res_summary=""
+                            companions="${companions}\\n  - Active reservations (${_res_count}): ${_res_summary}"
+                        fi
+                    fi
+                fi
+            fi
+        fi
+    fi
 fi
 
 # Clodex — detect persistent toggle state
