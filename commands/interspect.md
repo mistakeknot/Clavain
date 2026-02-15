@@ -7,7 +7,7 @@ description: Analyze Interspect evidence — detect patterns, classify by counti
 
 Main analysis command. Queries the evidence store, detects patterns, classifies by counting-rule thresholds, and presents a structured report.
 
-**Phase 1 notice:** No modifications are applied. This command shows what Interspect *would* propose in Phase 2.
+**Phase 2: Evidence + Proposals** — routing overrides can be proposed and applied via `/interspect:propose`.
 
 ## Locate Library
 
@@ -63,7 +63,7 @@ Present the analysis as:
 ```
 ## Interspect Analysis Report
 
-**Phase 1: Evidence + Reporting** — no modifications will be applied.
+**Phase 2: Evidence + Proposals** — routing overrides available via `/interspect:propose`.
 
 ### Ready Patterns (eligible for Phase 2 proposals)
 
@@ -97,6 +97,22 @@ Present the analysis as:
 {based on data: suggest running /interspect:correction if few overrides,
 suggest checking /interspect:health if evidence collection looks sparse}
 ```
+
+## Tier 2: Routing Override Eligibility Summary
+
+After showing the analysis report, check for routing-eligible patterns and display a summary:
+
+1. For each ready pattern where the source is a flux-drive agent:
+   - Call `_interspect_is_routing_eligible "$agent"` (from lib-interspect.sh)
+   - If eligible, count it
+2. Display a footer (DO NOT present proposals or AskUserQuestion from this command):
+
+If routing-eligible patterns exist:
+> "N pattern(s) eligible for routing overrides. Run `/interspect:propose` to review exclusion proposals."
+
+Progress display for growing patterns:
+- "fd-game-design: 3/5 events, 2/3 sessions (needs 1 more session)"
+- "Keep using `/interspect:correction` when this agent is wrong. Or exclude manually via hand-editing `.claude/routing-overrides.json`."
 
 ## Edge Cases
 

@@ -73,10 +73,44 @@ Present as:
 
 ### Canaries: {active_canaries} active
 ### Modifications: {active_mods} applied
+```
 
+## Routing Overrides
+
+Read routing overrides using the shared-lock reader (prevents torn reads during concurrent apply):
+
+```bash
+OVERRIDES_JSON=$(_interspect_read_routing_overrides_locked)
+OVERRIDE_COUNT=$(echo "$OVERRIDES_JSON" | jq '.overrides | length')
+OVERRIDES=$(echo "$OVERRIDES_JSON" | jq -r '.overrides[] | [.agent, .action, .reason, .created, .created_by] | @tsv')
+```
+
+Present routing overrides with actionable context:
+
+```
+### Routing Overrides: {override_count} active
+
+| Agent | Action | Reason | Created | Source | Canary | Next Action |
+|-------|--------|--------|---------|--------|--------|-------------|
+{for each override:
+  - query canary table for status
+  - if created_by=interspect, check modifications table for consistency
+  - if agent not in roster, flag as "orphaned"
+  - show next-action hint}
+
+{if override_count >= 3: "Warning: High exclusion rate (N agents). Review agent roster or run `/interspect:propose` to check pattern health."}
+
+> You can also hand-edit `.claude/routing-overrides.json` — set `"created_by": "human"` for custom overrides.
+```
+
+## Navigation
+
+```
 Run `/interspect` for pattern analysis.
 Run `/interspect:evidence <agent>` for detailed agent evidence.
 Run `/interspect:health` for signal diagnostics.
+Run `/interspect:propose` for routing override proposals.
+Run `/interspect:revert <agent>` to remove an override.
 ```
 
 ## Detailed View (agent name provided)
