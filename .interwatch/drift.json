@@ -1,0 +1,9 @@
+{
+  "scan_date": "2026-02-15T15:30:00",
+  "watchables": {
+    "roadmap": {"path": "docs/roadmap.md", "score": 9, "confidence": "High", "action": "auto-refreshed"},
+    "prd": {"path": "docs/PRD.md", "score": 8, "confidence": "High", "action": "auto-refreshed"},
+    "vision": {"path": "docs/vision.md", "score": 3, "confidence": "Low", "action": "report-only"},
+    "agents-md": {"path": "AGENTS.md", "score": 1, "confidence": "Green", "action": "none"}
+  }
+}

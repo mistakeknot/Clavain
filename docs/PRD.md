@@ -1,7 +1,7 @@
 # Clavain — Product Requirements Document
 
-**Version:** 0.6.13
-**Last updated:** 2026-02-14
+**Version:** 0.6.22
+**Last updated:** 2026-02-15
 **Vision:** [`docs/vision.md`](vision.md)
 **Dev guide:** [`AGENTS.md`](../AGENTS.md)
 
@@ -46,10 +46,10 @@ Clavain encodes engineering and product discipline into four component types tha
 
 | Type | Count | Purpose | Example |
 |------|-------|---------|---------|
-| **Skills** | 27 | Reusable discipline knowledge | `systematic-debugging`, `writing-plans`, `flux-drive` |
-| **Agents** | 5 | Autonomous specialists (review + workflow) | `plan-reviewer`, `pr-comment-resolver` |
-| **Commands** | 37 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
-| **Hooks** | 8 | Event-driven automation | `session-start.sh`, `auto-compound.sh` |
+| **Skills** | 23 | Reusable discipline knowledge | `systematic-debugging`, `writing-plans`, `flux-drive` |
+| **Agents** | 4 | Autonomous specialists (review + workflow) | `plan-reviewer`, `pr-comment-resolver` |
+| **Commands** | 41 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
+| **Hooks** | 12 | Event-driven automation | `session-start.sh`, `auto-compound.sh`, `interspect-evidence.sh` |
 | **MCP Servers** | 1 | External tool integration | context7 (runtime doc fetching) |
 
 ### 4.2 Routing System
@@ -87,10 +87,21 @@ Capabilities extracted from Clavain when patterns stabilized:
 | **interpath** | Product artifact generation (roadmaps, PRDs, vision docs, changelogs, status reports) | Shipped |
 | **interwatch** | Doc freshness monitoring (drift detection, confidence scoring, auto-refresh) | Shipped |
 | **interlock** | Multi-agent file coordination (MCP server wrapping intermute) | Shipped |
-| **intercraft** | Claude Code meta-tooling | Planned |
+| **interslack** | Slack integration | Shipped |
+| **interform** | Design patterns + visual quality | Shipped |
+| **intercraft** | Agent-native architecture patterns | Shipped |
+| **interdev** | MCP CLI developer tooling | Shipped |
+| **intercheck** | Code quality guards + session health | Shipped |
+| **interject** | Ambient discovery + research engine (MCP) | Shipped |
+| **internext** | Work prioritization + tradeoff analysis | Shipped |
+| **interpub** | Plugin publishing | Shipped |
+| **intersearch** | Shared embedding + Exa search | Shipped |
+| **interdoc** | AGENTS.md generator + Oracle critique | Shipped |
+| **tldr-swinton** | Token-efficient code context (MCP) | Shipped |
+| **tool-time** | Tool usage analytics | Shipped |
+| **tuivision** | TUI automation + visual testing (MCP) | Shipped |
 | **intershift** | Cross-AI dispatch engine | Planned |
 | **interscribe** | Knowledge compounding engine | Planned |
-| **interarch** | Agent-native architecture tooling | Planned |
 
 ## 5. Key Workflows
 
@@ -150,36 +161,38 @@ Lightweight review from `git diff` — faster than flux-drive, suitable for incr
 
 > Full detail in [`docs/vision.md`](vision.md) Roadmap section.
 
-### Phase 1: Measure (current)
+### Phase 1: Measure (next priority)
 
-Build the truth engine. Without measurement, everything else is guesswork.
+Build the truth engine. Without measurement, everything else is guesswork. Interspect provides evidence collection but not the analytics layer.
 
-| Item | Bead | Priority |
-|------|------|----------|
-| Outcome-based agent analytics | Clavain-mb6u | P1 |
-| Agent evals as CI | Clavain-705b | P1 |
-| Topology experiment (2/4/6/8 agents) | Clavain-7z28 | P1 |
+| Item | Status | Priority |
+|------|--------|----------|
+| Outcome-based agent analytics | Not started (beads needed) | P1 |
+| Agent evals as CI | Not started (beads needed) | P1 |
+| Topology experiment (2/4/6/8 agents) | Not started (blocked by analytics) | P1 |
 
 ### Phase 2: Integrate + Extract
 
-Deep tldrs integration measured against Phase 1 baselines. Extract intercraft, intershift, interscribe, interarch — informed by analytics.
+Deep tldrs integration measured against Phase 1 baselines. Extract intershift, interscribe — the two remaining planned companions.
 
-| Item | Bead | Priority |
-|------|------|----------|
-| Deep tldrs integration | Clavain-spad | P2 |
-| intercraft extraction | Clavain-2ley | P2 |
-| intershift extraction | Clavain-6ikc | P2 |
-| interscribe extraction | Clavain-sdqv | P2 |
+| Item | Status | Priority |
+|------|--------|----------|
+| Deep tldrs integration | Not started (blocked by analytics) | P2 |
+| Flux-drive spec library | Not started (beads needed) | P2 |
+| intershift extraction | Planned | P2 |
+| interscribe extraction | Planned | P2 |
+
+**Note:** intercraft and interarch have already been shipped as companion plugins.
 
 ### Phase 3: Advance
 
 Adaptive model routing, cross-project knowledge, MCP-native companion communication.
 
-| Item | Bead | Priority |
-|------|------|----------|
-| Adaptive model routing | Clavain-4xqu | P3 |
-| Cross-project knowledge | Clavain-nv7f | P3 |
-| MCP-native communication | Clavain-oijz | P3 |
+| Item | Status | Priority |
+|------|--------|----------|
+| Adaptive model routing | Not started | P3 |
+| Cross-project knowledge | Not started | P3 |
+| MCP-native communication | Not started | P3 |
 
 ## 9. Dependencies
 
