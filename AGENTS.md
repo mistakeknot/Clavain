@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 27 skills, 5 agents, 37 commands, 8 hooks, 1 MCP servers |
+| Components | 22 skills, 4 agents, 32 commands, 8 hooks, 1 MCP server |
 | License | MIT |
 
 ## Runbooks
@@ -146,7 +146,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 - Agents are dispatched via `Task` tool — they run as subagents with their own context
 
 Categories:
-- **review/** — Review specialists (3): plan-reviewer, agent-native-reviewer, and data-migration-expert. The 7 core fd-* agents live in the **interflux** companion plugin. The 5 research agents also moved to interflux.
+- **review/** — Review specialists (2): plan-reviewer and data-migration-expert. The 7 core fd-* agents live in the **interflux** companion plugin. The 5 research agents also moved to interflux. The agent-native-reviewer lives in **intercraft**.
 - **workflow/** — Process automation (2): PR comments, bug reproduction
 
 ### Commands
@@ -321,7 +321,7 @@ These plugins overlap with Clavain's opinionated equivalents. Keeping both cause
 | commit-commands | `landing-a-change` skill | **OFF** |
 | feature-dev | `/work` + `/sprint` + `/brainstorm` | **OFF** |
 | claude-md-management | `engineering-docs` skill | **OFF** |
-| frontend-design | `distinctive-design` skill | **OFF** |
+| frontend-design | `interform:distinctive-design` skill | **OFF** |
 | hookify | Clavain manages hooks directly | **OFF** |
 
 Full audit rationale: `docs/plugin-audit.md`
@@ -355,7 +355,7 @@ Clavain bundles knowledge from 6 actively-developed upstream tools. Two systems 
 | Beads | `steveyegge/beads` | `interphase` companion plugin — phase tracking, gates, discovery. Default backend is Dolt (version-controlled SQL with cell-level merge); JSONL maintained for git portability; SQLite removed |
 | Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
 | superpowers | `obra/superpowers` | Multiple (founding source) |
-| superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |
+| superpowers-lab | `obra/superpowers-lab` | `using-tmux` (remaining skills moved to companion plugins) |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |
 

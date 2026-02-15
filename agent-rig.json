@@ -1,7 +1,7 @@
 {
   "name": "clavain",
   "version": "0.6.13",
-  "description": "General-purpose engineering discipline rig — 5 agents, 37 commands, 27 skills, 1 MCP servers. Combines workflow discipline with specialized execution agents. Companions: interphase, interline.",
+  "description": "General-purpose engineering discipline rig — 4 agents, 32 commands, 22 skills, 1 MCP server. Combines workflow discipline with specialized execution agents. Companions: interphase, interline, interslack, interform, intercraft, interdev.",
   "author": "mistakeknot",
   "license": "MIT",
   "repository": "mistakeknot/Clavain",
@@ -65,6 +65,22 @@
       {
         "source": "security-guidance@claude-plugins-official",
         "description": "Security best practices"
+      },
+      {
+        "source": "interslack@interagency-marketplace",
+        "description": "Slack integration"
+      },
+      {
+        "source": "interform@interagency-marketplace",
+        "description": "Design patterns and visual quality"
+      },
+      {
+        "source": "intercraft@interagency-marketplace",
+        "description": "Agent-native architecture patterns"
+      },
+      {
+        "source": "interdev@interagency-marketplace",
+        "description": "MCP CLI and developer tooling"
       }
     ],
     "infrastructure": [
@@ -176,8 +192,8 @@
   },
   "postInstall": {
     "message": [
-      "Try: /lfg add user export feature",
-      "Run /help to see all 36 commands, or /doctor to verify your setup."
+      "Try: /sprint add user export feature",
+      "Run /help to see all 32 commands, or /doctor to verify your setup."
     ]
   },
   "platforms": {

@@ -18,7 +18,7 @@ Clavain bundles knowledge from several upstream tools. This skill tracks their r
 | Beads | `steveyegge/beads` | `interphase` companion plugin |
 | Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
 | superpowers | `obra/superpowers` | Multiple (founding source) |
-| superpowers-lab | `obra/superpowers-lab` | `using-tmux-for-interactive-commands`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |
+| superpowers-lab | `obra/superpowers-lab` | `using-tmux-for-interactive-commands` (remaining skills moved to companion plugins) |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |
 

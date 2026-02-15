@@ -25,7 +25,7 @@ Summarize as:
 ```
 Model Routing Status:
   Research (5): [model] — best-practices, framework-docs, git-history, learnings, repo-research
-  Review (3+7): [model] — plan-reviewer, agent-native, data-migration (clavain) + fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance (interflux)
+  Review (2+7): [model] — plan-reviewer, data-migration (clavain) + fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance (interflux) + agent-native (intercraft)
   Workflow (2):  [model] — bug-reproduction, pr-comment-resolver
 
 Mode: [economy|quality|mixed]

@@ -75,6 +75,6 @@ Every upstream-sync PR must include a decision record:
 | Beads | `steveyegge/beads` | `interphase` companion plugin |
 | Oracle | `steipete/oracle` | `interpeer` (references/) |
 | superpowers | `obra/superpowers` | multiple |
-| superpowers-lab | `obra/superpowers-lab` | `using-tmux`, `slack-messaging`, `mcp-cli`, `finding-duplicate-functions` |
+| superpowers-lab | `obra/superpowers-lab` | `using-tmux` (remaining skills moved to companion plugins) |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | multiple |

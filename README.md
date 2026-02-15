@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 27 skills, 5 agents, 37 commands, 8 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 22 skills, 4 agents, 32 commands, 8 hooks, and 1 MCP server, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -106,7 +106,7 @@ I use this before any architectural decision I'm uncertain about. The debate its
 
 ## What's Included
 
-### Skills (27)
+### Skills (22)
 
 Skills are workflow disciplines — they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -122,7 +122,6 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `test-driven-development` | RED-GREEN-REFACTOR cycle |
 | `systematic-debugging` | Evidence-first bug investigation |
 | `refactor-safely` | Disciplined refactoring with duplication detection |
-| `finding-duplicate-functions` | Semantic dedup across codebase |
 | **Multi-Agent** | |
 | `flux-drive` | Intelligent document/repo review with agent triage |
 | `subagent-driven-development` | Parallel subagent execution |
@@ -137,8 +136,6 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | **Knowledge & Docs** | |
 | `engineering-docs` | Capture solved problems as searchable docs |
 | `file-todos` | File-based todo tracking across sessions |
-| `agent-native-architecture` | Build agent-first applications |
-| `distinctive-design` | Anti-AI-slop visual aesthetic |
 | **Plugin Development** | |
 | `create-agent-skills` | Write Claude Code skills and agents |
 | `developing-claude-code-plugins` | Plugin development patterns |
@@ -147,19 +144,17 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | **Utilities** | |
 | `using-clavain` | Bootstrap routing — maps tasks to the right component |
 | `using-tmux-for-interactive-commands` | Interactive CLI tools in tmux |
-| `slack-messaging` | Slack integration |
-| `mcp-cli` | On-demand MCP server usage |
 | `upstream-sync` | Track updates from upstream tool repos |
 
-### Agents (5)
+### Agents (4)
 
 Agents are specialized execution units dispatched by skills and commands. They run as subagents with their own context window.
 
-**Review (3):** plan-reviewer, agent-native-reviewer, and data-migration-expert for specialized review tasks. The 7 core fd-* review agents and 5 research agents now live in the **interflux** companion plugin.
+**Review (2):** plan-reviewer and data-migration-expert for specialized review tasks. The 7 core fd-* review agents and 5 research agents live in **interflux**. The agent-native-reviewer lives in **intercraft**.
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (37)
+### Commands (32)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -188,7 +183,6 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/model-routing` | Toggle subagent model tier (economy vs quality) |
 | `/triage` | Categorize and prioritize findings |
 | `/resolve` | Resolve findings from any source (auto-detects TODOs, PR comments, or todo files) |
-| `/agent-native-audit` | Agent-native architecture review |
 | `/create-agent-skill` | Create new skills or agents |
 | `/generate-command` | Generate new commands |
 | `/heal-skill` | Fix broken skills |
@@ -197,10 +191,6 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/upstream-sync` | Check upstream repos for updates |
 | `/sprint-status` | Deep scan of sprint workflow state — sessions, pipeline, beads |
 | `/flux-gen` | Generate project-specific review agents from detected domain profiles |
-| `/deep-review` | Alias for `/flux-drive` |
-| `/lfg` | Alias for `/sprint` |
-| `/full-pipeline` | Alias for `/sprint` |
-| `/cross-review` | Alias for `/interpeer` |
 | `/help` | Show Clavain commands organized by daily drivers first |
 | `/doctor` | Quick health check — MCP servers, tools, beads, plugin conflicts |
 
@@ -253,14 +243,14 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 | commit-commands | `landing-a-change` skill |
 | feature-dev | `/work` + `/sprint` + `/brainstorm` |
 | claude-md-management | `engineering-docs` skill |
-| frontend-design | `distinctive-design` skill |
+| frontend-design | `interform:distinctive-design` skill |
 | hookify | Clavain manages hooks directly |
 
 ## Customization
 
 Clavain is opinionated but not rigid. A few things worth knowing:
 
-**Reviewers are auto-selected.** `flux-drive` picks from 7 core review agents based on the document profile. Each agent auto-detects language and project conventions. Additional specialists (plan-reviewer, agent-native-reviewer, data-migration-expert) are available for direct use via `/review` and `/quality-gates`.
+**Reviewers are auto-selected.** `flux-drive` picks from 7 core review agents based on the document profile. Each agent auto-detects language and project conventions. Additional specialists (plan-reviewer, data-migration-expert, and intercraft's agent-native-reviewer) are available for direct use via `/review` and `/quality-gates`.
 
 **Skills can be overridden.** If you disagree with how `test-driven-development` works, you can create your own skill with the same name in a local plugin that loads after Clavain. Last-loaded wins.
 
@@ -271,9 +261,9 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 27 discipline skills (SKILL.md each)
-agents/       # 5 agents (review/ + workflow/)
-commands/     # 37 slash commands
+skills/       # 22 discipline skills (SKILL.md each)
+agents/       # 4 agents (review/ + workflow/)
+commands/     # 32 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync

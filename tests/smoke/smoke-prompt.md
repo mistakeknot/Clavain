@@ -10,7 +10,6 @@ You are running smoke tests for the Clavain plugin. Your job is to:
 
 Before dispatching any agents, verify all agent files exist. Check each of these paths exists:
 - agents/review/plan-reviewer.md
-- agents/review/agent-native-reviewer.md
 - agents/review/data-migration-expert.md
 - agents/research/best-practices-researcher.md
 - agents/research/framework-docs-researcher.md
@@ -44,13 +43,7 @@ Every agent prompt MUST start with exactly this text:
 "Step 1: Add user model with email validation. Step 2: Create registration endpoint. Step 3: Add login with JWT tokens. Step 4: Deploy to staging."
 Provide 2-3 bullet points. Keep response under 200 words.
 
-### Agent 2: agent-native-reviewer
-- subagent_type: clavain:review:agent-native-reviewer
-- Prompt: [smoke test prefix] Review this feature for agent-native access:
-"A new dashboard page lets users filter emails by date range and sender. Users click a calendar widget to select dates, then click Apply. Results appear in a scrollable table."
-Provide 2-3 bullet points. Keep response under 200 words.
-
-### Agent 3: data-migration-expert
+### Agent 2: data-migration-expert
 - subagent_type: clavain:review:data-migration-expert
 - Prompt: [smoke test prefix] Review this database migration for safety:
 ```sql
@@ -190,8 +183,7 @@ Output a markdown results table with all 18 tests:
 | # | Test | Type | Status | Notes |
 |---|------|------|--------|-------|
 | 1 | plan-reviewer | agent | PASS/FAIL | [brief] |
-| 2 | agent-native-reviewer | agent | PASS/FAIL | [brief] |
-| 3 | data-migration-expert | agent | PASS/FAIL | [brief] |
+| 2 | data-migration-expert | agent | PASS/FAIL | [brief] |
 | 4 | best-practices-researcher | agent | PASS/FAIL | [brief] |
 | 5 | framework-docs-researcher | agent | PASS/FAIL | [brief] |
 | 6 | git-history-analyzer | agent | PASS/FAIL | [brief] |

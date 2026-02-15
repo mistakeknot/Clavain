@@ -1,19 +1,15 @@
 {
   "generated": "2026-02-14T23:32:16Z",
   "counts": {
-    "skills": 27,
-    "agents": 5,
-    "commands": 37,
+    "skills": 22,
+    "agents": 4,
+    "commands": 32,
     "hooks": 8,
     "mcp_servers": 1,
-    "review": 3,
+    "review": 2,
     "workflow": 2
   },
   "skills": [
-    {
-      "name": "agent-native-architecture",
-      "description": "Build applications where agents are first-class citizens. Use this skill when designing autonomous agents, creating MCP tools, implementing self-modifying systems, or building apps where features are outcomes achieved by agents operating in a loop."
-    },
     {
       "name": "brainstorming",
       "description": "Freeform brainstorming mode \u2014 loads collaborative dialogue style (one question at a time, multiple choice, incremental design). Use for open-ended exploration without structured phases. For a guided workflow with repo research, use /brainstorm instead."
@@ -39,10 +35,6 @@
       "description": "Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies"
     },
     {
-      "name": "distinctive-design",
-      "description": "Use when creating distinctive, production-grade interfaces with high design quality \u2014 web, TUI, native, or print. Generates creative, polished output that avoids generic AI aesthetics."
-    },
-    {
       "name": "engineering-docs",
       "description": "Use when capturing a solved problem as categorized documentation with YAML frontmatter for fast lookup"
     },
@@ -55,10 +47,6 @@
       "description": "This skill should be used when managing the file-based todo tracking system in the todos/ directory. It provides workflows for creating todos, managing status and dependencies, conducting triage, and integrating with slash commands and code review processes."
     },
     {
-      "name": "finding-duplicate-functions",
-      "description": "Use when auditing a codebase for semantic duplication - functions that do the same thing but have different names or implementations. Especially useful for LLM-generated codebases where new functions are often created rather than reusing existing ones."
-    },
-    {
       "name": "interpeer",
       "description": "Cross-AI peer review with escalation modes \u2014 quick (Claude\u2194Codex), deep (reviewed Oracle query, formerly prompterpeer), council (multi-model synthesis, formerly winterpeer), mine (disagreement extraction, formerly splinterpeer). Auto-detects host agent."
     },
@@ -67,16 +55,8 @@
       "description": "Use when implementation is complete and all tests pass \u2014 guides the disciplined process of verifying, documenting, and landing a change on trunk"
     },
     {
-      "name": "mcp-cli",
-      "description": "Use when interacting with MCP servers on-demand via the mcp CLI tool \u2014 discover tools, resources, and prompts without polluting context with pre-loaded integrations"
-    },
-    {
       "name": "refactor-safely",
       "description": "Use when performing significant refactoring \u2014 guides a disciplined process that leverages duplication detection, characterization tests, staged execution, and continuous simplicity review"
-    },
-    {
-      "name": "slack-messaging",
-      "description": "Use when asked to send or read Slack messages, check Slack channels, test Slack integrations, or interact with a Slack workspace from the command line."
     },
     {
       "name": "subagent-driven-development",
@@ -121,11 +101,6 @@
   ],
   "agents": [
     {
-      "name": "agent-native-reviewer",
-      "description": "Reviews code to ensure agent-native parity \u2014 any action a user can take, an agent can also take. Use after adding UI features, agent tools, or system prompts.",
-      "category": "review"
-    },
-    {
       "name": "data-migration-expert",
       "description": "Validates data migrations, backfills, and production data transformations against reality. Use when PRs involve ID mappings, column renames, enum conversions, or schema changes.",
       "category": "review"
@@ -148,10 +123,6 @@
   ],
   "commands": [
     {
-      "name": "agent-native-audit",
-      "description": "Run comprehensive agent-native architecture review with scored principles"
-    },
-    {
       "name": "brainstorm",
       "description": "Structured brainstorm workflow \u2014 4 phases (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan. For freeform brainstorming without phases, use /brainstorming instead."
     },
@@ -172,16 +143,8 @@
       "description": "Create or edit Claude Code skills with expert guidance on structure and best practices"
     },
     {
-      "name": "cross-review",
-      "description": "Alias for interpeer \u2014 cross-AI peer review (Claude \u2194 Codex/Oracle)"
-    },
-    {
       "name": "debate",
       "description": "Run a structured Claude\u2194Codex debate before implementing a complex task"
-    },
-    {
-      "name": "deep-review",
-      "description": "Alias for flux-drive \u2014 intelligent multi-agent document review"
     },
     {
       "name": "doctor",
@@ -194,10 +157,6 @@
     {
       "name": "fixbuild",
       "description": "Run build, capture error, fix it, re-run \u2014 fast loop for type errors and build failures without heavyweight debugging"
-    },
-    {
-      "name": "full-pipeline",
-      "description": "Alias for sprint \u2014 full autonomous engineering workflow"
     },
     {
       "name": "generate-command",
@@ -218,10 +177,6 @@
     {
       "name": "interpeer",
       "description": "Quick cross-AI peer review \u2014 auto-detects host agent and calls the other for a second opinion"
-    },
-    {
-      "name": "lfg",
-      "description": "Alias for sprint \u2014 full autonomous engineering workflow"
     },
     {
       "name": "migration-safety",

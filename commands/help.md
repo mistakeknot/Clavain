@@ -20,8 +20,6 @@ These are the commands you'll use most often:
 | `/clavain:resolve` | Fix findings from TODOs, PR comments, or todo files | `/resolve` |
 | `/clavain:interpeer` | Quick cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
 
-> **Aliases:** `/deep-review` = flux-drive, `/full-pipeline` = sprint, `/lfg` = sprint, `/cross-review` = interpeer
-
 ## By Stage
 
 ### Explore
@@ -51,7 +49,6 @@ These are the commands you'll use most often:
 | `/clavain:review-doc` | Lightweight single-pass document refinement |
 | `/clavain:interpeer` | Cross-AI peer review (quick/deep/council/mine modes) |
 | `/clavain:migration-safety` | Database migration safety checks |
-| `/clavain:agent-native-audit` | Verify agent-native parity |
 | `/clavain:triage-prs` | Batch PR backlog triage with fd-* agents |
 | `/interflux:flux-gen` | Generate domain-specific review agents for your project |
 

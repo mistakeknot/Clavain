@@ -13,7 +13,7 @@ For the compact version, see the `using-clavain` skill.
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster in interflux — adaptive 4-12 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, sprint², resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, interflux:research:git-history-analyzer |
-| **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, agent-native-audit, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
+| **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | interflux:fd-safety |
 | **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, help, doctor, sprint-status, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
@@ -21,14 +21,13 @@ For the compact version, see the `using-clavain` skill.
 
 | Domain | Skills | Agents |
 |--------|--------|--------|
-| **Code** | test-driven-development, finding-duplicate-functions, refactor-safely | interflux:fd-architecture, interflux:fd-quality, agent-native-reviewer |
+| **Code** | test-driven-development, refactor-safely | interflux:fd-architecture, interflux:fd-quality |
 | **Data** | — | interflux:fd-correctness, data-migration-expert |
 | **Deploy** | — | interflux:fd-safety |
 | **Docs** | engineering-docs | interflux:research:framework-docs-researcher, interflux:research:learnings-researcher |
-| **Research** | mcp-cli | interflux:research:best-practices-researcher, interflux:research:repo-research-analyst, interflux:research:git-history-analyzer |
-| **Workflow** | file-todos, slack-messaging, clodex | pr-comment-resolver, sprint-status |
-| **Design** | distinctive-design | — |
-| **Infra** | using-tmux-for-interactive-commands, agent-native-architecture | — |
+| **Research** | — | interflux:research:best-practices-researcher, interflux:research:repo-research-analyst, interflux:research:git-history-analyzer |
+| **Workflow** | file-todos, clodex | pr-comment-resolver, sprint-status |
+| **Infra** | using-tmux-for-interactive-commands | — |
 
 ## Layer 3: What concern? (optional — applies to review stage)
 
@@ -42,7 +41,6 @@ For the compact version, see the `using-clavain` skill.
 | Performance, bottlenecks, scaling | interflux:fd-performance |
 | Game design, balance, pacing, emergent behavior | interflux:fd-game-design |
 | Database migrations | data-migration-expert |
-| Agent-native design | agent-native-reviewer |
 
 ## Which review command?
 
@@ -80,7 +78,7 @@ For Oracle CLI reference, see `interpeer/references/oracle-reference.md`.
 When multiple skills could apply, use this order:
 
 1. **Process skills first** (brainstorming, debugging, TDD) — these determine HOW to approach the task
-2. **Domain skills second** (distinctive-design, refactor-safely) — these guide execution
+2. **Domain skills second** (refactor-safely) — these guide execution
 3. **Meta skills last** (writing-skills, developing-claude-code-plugins) — only when explicitly meta
 
 "Let's build X" → brainstorming first, then domain skills.

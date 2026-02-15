@@ -72,9 +72,6 @@
       "lastSyncedCommit": "897eebf86cf131ef82fe42a6b2991f8ac463f978",
       "basePath": "",
       "fileMap": {
-        "skills/finding-duplicate-functions/SKILL.md": "skills/finding-duplicate-functions/SKILL.md",
-        "skills/mcp-cli/SKILL.md": "skills/mcp-cli/SKILL.md",
-        "skills/slack-messaging/SKILL.md": "skills/slack-messaging/SKILL.md",
         "skills/using-tmux-for-interactive-commands/SKILL.md": "skills/using-tmux-for-interactive-commands/SKILL.md"
       }
     },
@@ -101,8 +98,6 @@
       "lastSyncedCommit": "e8f3bbcb3580862a2715575d609333306ed02ee3",
       "basePath": "plugins/compound-engineering",
       "fileMap": {
-        "skills/agent-native-architecture/SKILL.md": "skills/agent-native-architecture/SKILL.md",
-        "skills/agent-native-architecture/references/*": "skills/agent-native-architecture/references/*",
         "skills/create-agent-skills/SKILL.md": "skills/create-agent-skills/SKILL.md",
         "skills/create-agent-skills/references/*": "skills/create-agent-skills/references/*",
         "skills/create-agent-skills/templates/*": "skills/create-agent-skills/templates/*",
@@ -114,11 +109,9 @@
         "agents/research/git-history-analyzer.md": "agents/research/git-history-analyzer.md",
         "agents/research/learnings-researcher.md": "agents/research/learnings-researcher.md",
         "agents/research/repo-research-analyst.md": "agents/research/repo-research-analyst.md",
-        "agents/review/agent-native-reviewer.md": "agents/review/agent-native-reviewer.md",
         "agents/review/data-migration-expert.md": "agents/review/data-migration-expert.md",
         "agents/workflow/bug-reproduction-validator.md": "agents/workflow/bug-reproduction-validator.md",
         "agents/workflow/pr-comment-resolver.md": "agents/workflow/pr-comment-resolver.md",
-        "commands/agent-native-audit.md": "commands/agent-native-audit.md",
         "commands/changelog.md": "commands/changelog.md",
         "commands/create-agent-skill.md": "commands/create-agent-skill.md",
         "commands/generate_command.md": "commands/generate-command.md",

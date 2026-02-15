@@ -20,7 +20,7 @@ Guide disciplined refactoring that minimizes risk through tests, staged executio
 Before touching code:
 
 1. **Identify what's being refactored and why** — not just "clean up" but a specific goal (extract module, remove duplication, simplify interface, etc.)
-2. **Run `finding-duplicate-functions`** skill to detect semantic duplication in the affected area
+2. **Run `tldr-swinton:finding-duplicate-functions`** skill to detect semantic duplication in the affected area
 3. **Run `fd-architecture`** agent to understand existing patterns and the "house style"
 4. **Map the blast radius** — which files, tests, and consumers are affected?
 
@@ -71,7 +71,7 @@ After all batches:
 
 | Agent | When to Use |
 |-------|-------------|
-| `finding-duplicate-functions` | Step 1 — identify duplication targets |
+| `tldr-swinton:finding-duplicate-functions` | Step 1 — identify duplication targets |
 | `fd-architecture` | Step 1 — understand house patterns, module boundaries |
 | `fd-quality` | Step 4 & 5 — verify each batch is simpler, idiom compliance |
 
