@@ -28,16 +28,8 @@ You are a code review agent. Review the following input and report findings.
 2. Identify issues by severity: P0 (critical/wrong), P1 (important/should fix), P2 (minor/nice to have)
 3. Focus on your domain expertise as $AGENT_NAME
 
-**Output format (JSON only, no other text):**
-\`\`\`json
-{
-  "agent": "$AGENT_NAME",
-  "findings": [
-    {"severity": "P0", "title": "description", "section": "where"},
-    {"severity": "P1", "title": "description", "section": "where"}
-  ]
-}
-\`\`\`
+**Output format — write ONLY valid JSON to your output, no markdown, no explanation:**
+{"agent":"$AGENT_NAME","findings":[{"severity":"P0","title":"...","section":"..."}]}
 PROMPT_EOF
 
 # Dispatch via codex exec
@@ -49,10 +41,10 @@ fi
 if [[ -n "$DISPATCH" ]]; then
     if ! bash "$DISPATCH" \
         --prompt-file "$PROMPT_FILE" \
-        -C "$(dirname "$INPUT")" \
+        -C "$(pwd)" \
         --name "shadow-${AGENT_NAME}" \
         -o "$OUTPUT" \
-        -s workspace-read \
+        -s read-only \
         --tier fast \
         2>/tmp/shadow-review-err-$$.log; then
         echo "WARN: dispatch.sh failed for $AGENT_NAME (see /tmp/shadow-review-err-$$.log)" >&2
