@@ -4,7 +4,7 @@
 
 ## Overview
 
-Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 agents, 38 commands, 12 hooks, 1 MCP server. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination), `interslack` (Slack integration), `interform` (design patterns), `intercraft` (agent-native architecture), `interdev` (developer tooling).
+Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 agents, 41 commands, 12 hooks, 1 MCP server. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination), `interslack` (Slack integration), `interform` (design patterns), `intercraft` (agent-native architecture), `interdev` (developer tooling).
 
 ## Quick Commands
 
@@ -15,7 +15,7 @@ claude --plugin-dir /root/projects/Interverse/hub/clavain
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 23
 ls agents/{review,workflow}/*.md | wc -l  # Should be 4
-ls commands/*.md | wc -l              # Should be 38
+ls commands/*.md | wc -l              # Should be 41
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
 bash -n hooks/dotfiles-sync.sh         # Syntax check
