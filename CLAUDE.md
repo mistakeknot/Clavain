@@ -4,7 +4,7 @@
 
 ## Overview
 
-Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 agents, 33 commands, 8 hooks, 1 MCP server. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination), `interslack` (Slack integration), `interform` (design patterns), `intercraft` (agent-native architecture), `interdev` (developer tooling).
+Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 agents, 38 commands, 12 hooks, 1 MCP server. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination), `interslack` (Slack integration), `interform` (design patterns), `intercraft` (agent-native architecture), `interdev` (developer tooling).
 
 ## Quick Commands
 
@@ -15,7 +15,7 @@ claude --plugin-dir /root/projects/Interverse/hub/clavain
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 22
 ls agents/{review,workflow}/*.md | wc -l  # Should be 4
-ls commands/*.md | wc -l              # Should be 32
+ls commands/*.md | wc -l              # Should be 38
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
 bash -n hooks/dotfiles-sync.sh         # Syntax check
@@ -27,6 +27,10 @@ bash -n hooks/auto-publish.sh          # Syntax check
 bash -n hooks/catalog-reminder.sh      # Syntax check
 bash -n hooks/lib-discovery.sh         # Syntax check (shim → interphase)
 bash -n hooks/lib-gates.sh             # Syntax check (shim → interphase)
+bash -n hooks/lib-interspect.sh        # Syntax check (interspect shared library)
+bash -n hooks/interspect-evidence.sh   # Syntax check (interspect evidence hook)
+bash -n hooks/interspect-session.sh    # Syntax check (interspect session start)
+bash -n hooks/interspect-session-end.sh # Syntax check (interspect session end)
 bash -n scripts/clodex-toggle.sh       # Syntax check
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 ```

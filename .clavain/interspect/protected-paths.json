@@ -1,0 +1,17 @@
+{
+  "protected_paths": [
+    "hooks/*.sh",
+    "hooks/hooks.json",
+    ".clavain/interspect/protected-paths.json",
+    ".clavain/interspect/confidence.json",
+    ".clavain/interspect/shadow-judge-prompt.md",
+    "galiana/**"
+  ],
+  "modification_allow_list": [
+    ".clavain/interspect/overlays/**/*.md",
+    ".claude/routing-overrides.json"
+  ],
+  "always_propose": [
+    ".clavain/interspect/overlays/**/*.md"
+  ]
+}

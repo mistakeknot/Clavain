@@ -15,3 +15,6 @@ __pycache__/
 .claude/clodex-audit.log
 .claude/clodex-toggle.flag
 .clavain/scratch/
+.clavain/interspect/interspect.db
+.clavain/interspect/interspect.db-wal
+.clavain/interspect/interspect.db-shm
