@@ -9,7 +9,7 @@ Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 23 skills, 4 agents, 33 commands, 8 hooks, 1 MCP server |
+| Components | 23 skills, 4 agents, 38 commands, 12 hooks, 1 MCP servers |
 | License | MIT |
 
 ## Runbooks
