@@ -77,6 +77,25 @@ _discover_interwatch_plugin() {
     echo ""
 }
 
+# Discover the interlock companion plugin root directory.
+# Checks INTERLOCK_ROOT env var first, then searches the plugin cache.
+# Output: plugin root path to stdout, or empty string if not found.
+_discover_interlock_plugin() {
+    if [[ -n "${INTERLOCK_ROOT:-}" ]]; then
+        echo "$INTERLOCK_ROOT"
+        return 0
+    fi
+    local f
+    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
+        -path '*/interlock/*/scripts/interlock-register.sh' 2>/dev/null | sort -V | tail -1)
+    if [[ -n "$f" ]]; then
+        # interlock-register.sh is at <root>/scripts/interlock-register.sh, so strip two levels
+        echo "$(dirname "$(dirname "$f")")"
+        return 0
+    fi
+    echo ""
+}
+
 # ─── In-flight agent detection ───────────────────────────────────────────────
 # Detects background agents from previous sessions that may still be running.
 # Used by SessionStart to warn about duplicates and by Stop to write manifests.

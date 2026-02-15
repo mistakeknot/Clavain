@@ -92,6 +92,12 @@ if [[ -n "$interwatch_root" ]]; then
     companions="${companions}\\n- **interwatch**: doc freshness monitoring"
 fi
 
+# interlock — multi-agent coordination companion
+interlock_root=$(_discover_interlock_plugin)
+if [[ -n "$interlock_root" ]]; then
+    companions="${companions}\\n- **interlock**: multi-agent coordination (file reservations, conflict detection)"
+fi
+
 # Clodex — detect persistent toggle state
 CLODEX_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/clodex-toggle.flag"
 if [[ -f "$CLODEX_FLAG" ]]; then

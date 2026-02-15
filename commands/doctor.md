@@ -112,6 +112,30 @@ else
 fi
 ```
 
+### 3g. Multi-Agent Coordination Companion
+
+```bash
+if ls ~/.claude/plugins/cache/*/interlock/*/scripts/interlock-register.sh 2>/dev/null | head -1 >/dev/null; then
+  echo "interlock: installed"
+  # Check if intermute service is running
+  if curl -s --connect-timeout 2 http://127.0.0.1:7338/health >/dev/null 2>&1; then
+    echo "  intermute service: running"
+    # Check if agent is registered for this session
+    if ls /tmp/interlock-agent-*.json 2>/dev/null | head -1 >/dev/null; then
+      echo "  agent: registered"
+    else
+      echo "  agent: not registered (run /interlock:join to participate)"
+    fi
+  else
+    echo "  intermute service: not running"
+    echo "  Run /interlock:setup to install and start intermute"
+  fi
+else
+  echo "interlock: not installed (multi-agent coordination unavailable)"
+  echo "  Install: claude plugin install interlock@interagency-marketplace"
+fi
+```
+
 ### 4. Conflicting Plugins
 
 Check that known conflicting plugins are disabled:
@@ -167,6 +191,7 @@ interphase    [installed|not installed]
 interline     [installed|not installed]
 interpath     [installed|not installed]
 interwatch    [installed|not installed]
+interlock     [installed|not installed]
 .clavain      [initialized|not set up]
 conflicts     [clear|WARN: N active]
 version       v0.X.Y
@@ -178,5 +203,7 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - qmd not installed → "Install qmd for semantic doc search: https://github.com/tobi/qmd"
 - conflicts active → "Run `/clavain:setup` to disable conflicting plugins"
 - beads not initialized → "Run `bd init` to enable issue tracking"
+- interlock not installed → "Install interlock for multi-agent coordination: `claude plugin install interlock@interagency-marketplace`"
+- intermute not running → "Run `/interlock:setup` to install and start the intermute coordination service"
 - .clavain not initialized → "Run `/clavain:init` to set up agent memory"
 - .clavain scratch not gitignored → "Run `/clavain:init` to fix gitignore"

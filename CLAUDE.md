@@ -4,7 +4,7 @@
 
 ## Overview
 
-General-purpose engineering discipline plugin for Claude Code — 27 skills, 5 agents, 37 commands, 8 hooks, 1 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring).
+General-purpose engineering discipline plugin for Claude Code — 27 skills, 5 agents, 37 commands, 8 hooks, 1 MCP server. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination).
 
 ## Quick Commands
 

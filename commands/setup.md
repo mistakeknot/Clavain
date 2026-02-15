@@ -35,6 +35,7 @@ claude plugin install interphase@interagency-marketplace
 claude plugin install interline@interagency-marketplace
 claude plugin install interpath@interagency-marketplace
 claude plugin install interwatch@interagency-marketplace
+claude plugin install interlock@interagency-marketplace
 ```
 
 **From claude-plugins-official:**
@@ -164,6 +165,7 @@ echo "=== Companions ==="
 echo "codex dispatch: $(ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/scripts/dispatch.sh 2>/dev/null | head -1 >/dev/null && echo 'OK' || echo 'MISSING')"
 echo "interline: $(ls ~/.claude/plugins/cache/*/interline/*/scripts/statusline.sh 2>/dev/null | head -1 >/dev/null && echo 'installed' || echo 'not installed')"
 echo "oracle: $(command -v oracle >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
+echo "interlock: $(ls ~/.claude/plugins/cache/*/interlock/*/scripts/interlock-register.sh 2>/dev/null | head -1 >/dev/null && echo 'installed' || echo 'not installed')"
 echo "beads: $(ls .beads/ 2>/dev/null | head -1 >/dev/null && echo 'configured' || echo 'not configured')"
 ```
 

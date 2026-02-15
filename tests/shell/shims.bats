@@ -207,3 +207,23 @@ teardown() {
     assert_success
     assert_output ""
 }
+
+# ─── _discover_interlock_plugin ─────────────────────────────────────
+
+@test "_discover_interlock_plugin: returns INTERLOCK_ROOT when set" {
+    export INTERLOCK_ROOT="/custom/interlock/path"
+    source "$HOOKS_DIR/lib.sh"
+    run _discover_interlock_plugin
+    assert_success
+    assert_output "/custom/interlock/path"
+    unset INTERLOCK_ROOT
+}
+
+@test "_discover_interlock_plugin: returns empty when nothing found" {
+    export INTERLOCK_ROOT=""
+    export HOME="$TEST_PROJECT"
+    source "$HOOKS_DIR/lib.sh"
+    run _discover_interlock_plugin
+    assert_success
+    assert_output ""
+}
