@@ -1,0 +1,41 @@
+{
+  "reviewed": "2026-02-15",
+  "input": "galiana/evals/golden/synth-contradictory-prd/input/prd.md",
+  "findings": [
+    {
+      "severity": "P0",
+      "title": "Contradiction: E2E encryption required but server must read messages for moderation",
+      "section": "Security + Architecture",
+      "agents": ["fd-correctness"],
+      "convergence": 1
+    },
+    {
+      "severity": "P0",
+      "title": "Contradiction: messages must be retained 7 years but users can permanently delete them",
+      "section": "Data",
+      "agents": ["fd-correctness"],
+      "convergence": 1
+    },
+    {
+      "severity": "P1",
+      "title": "Contradiction: audit logs preserve message content but deleted messages must be unrecoverable",
+      "section": "Data",
+      "agents": ["fd-correctness"],
+      "convergence": 1
+    },
+    {
+      "severity": "P1",
+      "title": "Contradiction: WebSocket connections required but all communication must go through REST API gateway",
+      "section": "Architecture",
+      "agents": ["fd-architecture"],
+      "convergence": 1
+    },
+    {
+      "severity": "P1",
+      "title": "Unrealistic timeline: 2-week MVP for full feature set including encryption, moderation, and compliance",
+      "section": "Timeline",
+      "agents": ["fd-user-product"],
+      "convergence": 1
+    }
+  ]
+}

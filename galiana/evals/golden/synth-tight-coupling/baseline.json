@@ -1,0 +1,34 @@
+{
+  "reviewed": "2026-02-15",
+  "input": "galiana/evals/golden/synth-tight-coupling/input/monolith.py",
+  "findings": [
+    {
+      "severity": "P1",
+      "title": "process_order handles 5 responsibilities — parsing, validation, persistence, notification, logging",
+      "section": "process_order",
+      "agents": ["fd-architecture"],
+      "convergence": 1
+    },
+    {
+      "severity": "P1",
+      "title": "Database access interleaved with business logic — no repository pattern",
+      "section": "process_order",
+      "agents": ["fd-architecture"],
+      "convergence": 1
+    },
+    {
+      "severity": "P1",
+      "title": "Email sending silently swallows errors — order confirmed but user never notified",
+      "section": "process_order",
+      "agents": ["fd-correctness"],
+      "convergence": 1
+    },
+    {
+      "severity": "P2",
+      "title": "No transaction wrapping for stock decrement and order insert — partial writes possible",
+      "section": "process_order",
+      "agents": ["fd-correctness"],
+      "convergence": 1
+    }
+  ]
+}

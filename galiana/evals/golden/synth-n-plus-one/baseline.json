@@ -1,0 +1,27 @@
+{
+  "reviewed": "2026-02-15",
+  "input": "galiana/evals/golden/synth-n-plus-one/input/service.py",
+  "findings": [
+    {
+      "severity": "P1",
+      "title": "N+1 query pattern in get_all_users_with_orders — queries orders per user in loop",
+      "section": "get_all_users_with_orders",
+      "agents": ["fd-performance"],
+      "convergence": 1
+    },
+    {
+      "severity": "P1",
+      "title": "N+1 query pattern in get_user_stats — two queries per user instead of aggregate",
+      "section": "get_user_stats",
+      "agents": ["fd-performance"],
+      "convergence": 1
+    },
+    {
+      "severity": "P2",
+      "title": "No connection pooling — opens new connection per call",
+      "section": "get_connection",
+      "agents": ["fd-performance"],
+      "convergence": 1
+    }
+  ]
+}

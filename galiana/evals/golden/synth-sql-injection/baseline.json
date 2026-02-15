@@ -1,0 +1,34 @@
+{
+  "reviewed": "2026-02-15",
+  "input": "galiana/evals/golden/synth-sql-injection/input/handler.go",
+  "findings": [
+    {
+      "severity": "P0",
+      "title": "SQL injection via unsanitized user input in query construction",
+      "section": "getUserHandler",
+      "agents": ["fd-safety"],
+      "convergence": 1
+    },
+    {
+      "severity": "P0",
+      "title": "SQL injection in deleteUserHandler query",
+      "section": "deleteUserHandler",
+      "agents": ["fd-safety"],
+      "convergence": 1
+    },
+    {
+      "severity": "P1",
+      "title": "No authentication or authorization check on delete endpoint",
+      "section": "deleteUserHandler",
+      "agents": ["fd-safety"],
+      "convergence": 1
+    },
+    {
+      "severity": "P1",
+      "title": "No input validation on user ID parameter",
+      "section": "getUserHandler",
+      "agents": ["fd-safety", "fd-correctness"],
+      "convergence": 2
+    }
+  ]
+}

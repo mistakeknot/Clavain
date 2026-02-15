@@ -1,0 +1,25 @@
+{
+  "task_type": "code_review",
+  "description": "Go HTTP handler with SQL injection vulnerability and missing authentication",
+  "expected_properties": [
+    {
+      "agent": "fd-safety",
+      "min_findings": 1,
+      "must_contain_keyword": "injection",
+      "description": "Must detect SQL injection in query construction"
+    },
+    {
+      "agent": "fd-safety",
+      "min_findings": 1,
+      "must_contain_keyword": "auth",
+      "description": "Must detect missing authentication on delete endpoint"
+    },
+    {
+      "severity_at_least": "P0",
+      "min_count": 1,
+      "description": "SQL injection should be rated P0"
+    }
+  ],
+  "tags": ["go", "security", "sql-injection", "auth"],
+  "source": "synthetic"
+}

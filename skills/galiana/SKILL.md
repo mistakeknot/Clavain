@@ -85,6 +85,29 @@ Highlight the "sweet spot" — the smallest topology that achieves >=90% recall.
 
 If fewer than 20 total experiments, add note: "Data still accumulating — run more experiments for reliable patterns."
 
+## Eval Harness Health
+
+If `eval_health.available` is true in the KPI data:
+
+Show a fixture-level results table:
+
+```text
+Eval Harness Health
+──────────────────────────────────────────
+Overall: 85% property pass rate | Avg recall: 0.92 | 20 total runs
+
+Fixture                  Pass Rate  Recall  Runs
+synth-sql-injection      1.00       0.95    4
+synth-n-plus-one         0.75       0.85    4
+synth-tight-coupling     1.00       0.90    4
+synth-contradictory-prd  1.00       0.88    4
+synth-stale-docs         0.80       0.92    4
+```
+
+If any fixture has pass_rate < 1.0, highlight it as needing attention.
+
+If fewer than 10 total runs, add note: "Limited data — run more eval cycles for reliable trends."
+
 ## Offer per-bead drill-down
 
 After the report, offer:

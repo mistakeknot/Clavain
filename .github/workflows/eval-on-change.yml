@@ -1,0 +1,30 @@
+name: Agent Eval (on change)
+on:
+  push:
+    paths:
+      - 'agents/**'
+      - 'skills/flux-drive/**'
+      - 'galiana/topologies.json'
+      - 'galiana/eval.py'
+      - 'galiana/evals/**'
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run eval harness (T4 fast check)
+        run: python3 galiana/eval.py --topologies T4 --no-interbench
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: ~/.clavain/eval-results.jsonl

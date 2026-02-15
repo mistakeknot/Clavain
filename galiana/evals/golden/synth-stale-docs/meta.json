@@ -1,0 +1,19 @@
+{
+  "task_type": "docs",
+  "description": "API README mixing v1 and v2 APIs with inconsistent auth schemes, stale version, and broken links",
+  "expected_properties": [
+    {
+      "agent": "fd-quality",
+      "min_findings": 1,
+      "must_contain_keyword": "inconsisten",
+      "description": "Must detect v1/v2 API inconsistencies in same doc"
+    },
+    {
+      "severity_at_least": "P1",
+      "min_count": 1,
+      "description": "Stale docs are at least P1"
+    }
+  ],
+  "tags": ["docs", "api", "stale", "inconsistent"],
+  "source": "synthetic"
+}

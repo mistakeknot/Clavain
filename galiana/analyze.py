@@ -61,21 +61,7 @@ def safe_rate(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4)
 
 
-def iter_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Load JSONL records; skip blank and invalid lines."""
-    if not path.exists():
-        return []
-    records: list[dict[str, Any]] = []
-    for line in path.read_text().splitlines():
-        if not line.strip():
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(obj, dict):
-            records.append(obj)
-    return records
+from utils import iter_jsonl
 
 
 def load_telemetry_events(
@@ -314,6 +300,7 @@ def compute_findings_metrics(findings_docs: list[dict[str, Any]]) -> tuple[dict[
 
 
 TOPOLOGY_RESULTS_FILE = CLAVAIN_DIR / "topology-results.jsonl"
+EVAL_RESULTS_FILE = CLAVAIN_DIR / "eval-results.jsonl"
 
 
 def load_topology_results(since: datetime, until: datetime) -> list[dict[str, Any]]:
@@ -374,6 +361,63 @@ def compute_topology_efficiency(results: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def load_eval_results(since: datetime, until: datetime) -> list[dict[str, Any]]:
+    """Load eval harness results from eval-results.jsonl."""
+    if not EVAL_RESULTS_FILE.exists():
+        return []
+    results = []
+    for record in iter_jsonl(EVAL_RESULTS_FILE):
+        date_str = record.get("date", "")
+        ts = parse_timestamp(date_str)
+        if ts is None:
+            continue
+        if ts < since or ts > until:
+            continue
+        results.append(record)
+    return results
+
+
+def compute_eval_health(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute eval harness health — property pass rates and recall trends."""
+    if not results:
+        return {"available": False, "note": "No eval results yet. Run /clavain:galiana eval."}
+
+    total_properties = sum(r.get("total_properties", 0) for r in results)
+    passed_properties = sum(r.get("passed_properties", 0) for r in results)
+    overall_pass_rate = safe_rate(passed_properties, total_properties)
+
+    recalls = [r.get("avg_recall") for r in results if r.get("avg_recall") is not None]
+    avg_recall = round(sum(recalls) / len(recalls), 4) if recalls else None
+
+    by_fixture: dict[str, dict[str, Any]] = defaultdict(lambda: {"runs": 0, "passed": 0, "total": 0, "recalls": []})
+    for r in results:
+        fixture = r.get("fixture", "unknown")
+        by_fixture[fixture]["runs"] += 1
+        by_fixture[fixture]["passed"] += r.get("passed_properties", 0)
+        by_fixture[fixture]["total"] += r.get("total_properties", 0)
+        recall = r.get("avg_recall")
+        if recall is not None:
+            by_fixture[fixture]["recalls"].append(recall)
+
+    fixture_summary = {}
+    for fixture in sorted(by_fixture):
+        data = by_fixture[fixture]
+        fixture_recalls = data["recalls"]
+        fixture_summary[fixture] = {
+            "pass_rate": safe_rate(data["passed"], data["total"]),
+            "avg_recall": round(sum(fixture_recalls) / len(fixture_recalls), 4) if fixture_recalls else None,
+            "runs": data["runs"],
+        }
+
+    return {
+        "available": True,
+        "overall_pass_rate": overall_pass_rate,
+        "avg_recall": avg_recall,
+        "total_runs": len(results),
+        "by_fixture": fixture_summary,
+    }
+
+
 def run_analysis(since: datetime, project: Path, bead_filter: str | None = None) -> dict[str, Any]:
     """Compute full KPI payload."""
     until = datetime.now(timezone.utc)
@@ -398,6 +442,9 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
     topology_results = load_topology_results(since, until)
     topology_efficiency = compute_topology_efficiency(topology_results)
 
+    eval_results = load_eval_results(since, until)
+    eval_health = compute_eval_health(eval_results)
+
     advisories: list[dict[str, str]] = [{
         "level": "info",
         "message": "Time-to-first-signal KPI unavailable: signal events don't include bead IDs. Will be enabled in v0.2.",
@@ -419,6 +466,11 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
             "level": "info",
             "message": "No topology experiment data. Run /clavain:galiana experiment to start collecting.",
         })
+    if not eval_results:
+        advisories.append({
+            "level": "info",
+            "message": "No eval harness results. Run /clavain:galiana eval to test golden fixtures.",
+        })
 
     return {
         "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -436,6 +488,7 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
             "time_to_first_signal": compute_time_to_first_signal(),
             "redundant_work_ratio": redundant_work_ratio,
             "topology_efficiency": topology_efficiency,
+            "eval_health": eval_health,
         },
         "agent_scorecard": agent_scorecard,
         "advisories": advisories,

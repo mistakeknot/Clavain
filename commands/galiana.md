@@ -12,7 +12,8 @@ Route by subcommand:
 1. No args: invoke `Skill("galiana")` to render discipline analytics.
 2. `report-defect <bead-id>`: collect defect metadata and log it with Galiana.
 3. `experiment [--date YYYY-MM-DD] [--topologies T2,T4] [--dry-run]`: run topology shadow experiments.
-4. `reset`: delete KPI cache to force regeneration on next run.
+4. `eval [--topologies T2,T4,T6,T8] [--fixtures PATTERN] [--dry-run] [--no-interbench]`: run property-based agent eval harness against golden fixtures.
+5. `reset`: delete KPI cache to force regeneration on next run.
 
 ## report-defect workflow
 
@@ -65,6 +66,25 @@ If subcommand is `experiment` (with optional flags):
    ```
 
 4. Offer to run LLM synthesis on the results.
+
+## eval workflow
+
+If subcommand is `eval` (with optional flags):
+
+1. Locate the eval script:
+   ```bash
+   EVAL_SCRIPT=$(find ~/.claude/plugins/cache -path '*/clavain/*/galiana/eval.py' 2>/dev/null | head -1)
+   [[ -z "$EVAL_SCRIPT" ]] && EVAL_SCRIPT=$(find ~/projects -path '*/hub/clavain/galiana/eval.py' 2>/dev/null | head -1)
+   ```
+
+2. Run it with any provided flags:
+   ```bash
+   python3 "$EVAL_SCRIPT" $FLAGS
+   ```
+
+3. Present the output summary table. If any property checks failed (exit code 1), highlight the failures. If regression detected (exit code 2), flag it prominently.
+
+4. If `--dry-run` was NOT passed, read `~/.clavain/eval-results.jsonl` and present the latest results with fixture-level detail.
 
 ## reset workflow
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from collections import defaultdict
@@ -18,25 +17,10 @@ from pathlib import Path
 from time import time
 from typing import Any
 
+from utils import iter_jsonl, normalize_title, titles_match
+
 CLAVAIN_DIR = Path.home() / ".clavain"
 RESULTS_FILE = CLAVAIN_DIR / "topology-results.jsonl"
-
-
-def iter_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Load JSONL records; skip blank and invalid lines."""
-    if not path.exists():
-        return []
-    records: list[dict[str, Any]] = []
-    for line in path.read_text().splitlines():
-        if not line.strip():
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(obj, dict):
-            records.append(obj)
-    return records
 
 
 def parse_timestamp(raw: Any) -> datetime | None:
@@ -179,28 +163,6 @@ def select_diverse_tasks(reviews: list[tuple[Path, dict[str, Any]]], max_count: 
                 break
 
     return selected[:max_count]
-
-
-def normalize_title(title: str) -> set[str]:
-    """Normalize finding title to word set (lowercase, no punctuation)."""
-    # Strip punctuation
-    cleaned = re.sub(r'[^\w\s]', ' ', title.lower())
-    # Tokenize
-    return {word for word in cleaned.split() if word}
-
-
-def titles_match(t1: str, t2: str, threshold: float = 0.6) -> bool:
-    """Check if two titles match via word overlap."""
-    words1 = normalize_title(t1)
-    words2 = normalize_title(t2)
-
-    if not words1 or not words2:
-        return False
-
-    overlap = len(words1 & words2)
-    min_len = min(len(words1), len(words2))
-
-    return (overlap / min_len) > threshold if min_len > 0 else False
 
 
 def run_shadow_review(

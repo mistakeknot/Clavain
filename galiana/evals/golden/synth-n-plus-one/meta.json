@@ -1,0 +1,19 @@
+{
+  "task_type": "code_review",
+  "description": "Python service with N+1 query pattern — separate DB call per user in a loop",
+  "expected_properties": [
+    {
+      "agent": "fd-performance",
+      "min_findings": 1,
+      "must_contain_keyword": "N+1",
+      "description": "Must detect N+1 query pattern"
+    },
+    {
+      "severity_at_least": "P1",
+      "min_count": 1,
+      "description": "N+1 should be at least P1"
+    }
+  ],
+  "tags": ["python", "performance", "n-plus-one", "database"],
+  "source": "synthetic"
+}

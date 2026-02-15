@@ -1,0 +1,25 @@
+{
+  "task_type": "refactor",
+  "description": "Single function handling 5 responsibilities — parsing, validation, database, email, logging",
+  "expected_properties": [
+    {
+      "agent": "fd-architecture",
+      "min_findings": 1,
+      "must_contain_keyword": "coupling",
+      "description": "Must detect tight coupling / mixed responsibilities"
+    },
+    {
+      "agent": "fd-architecture",
+      "min_findings": 1,
+      "must_contain_keyword": "responsib",
+      "description": "Must flag single-responsibility principle violation"
+    },
+    {
+      "severity_at_least": "P1",
+      "min_count": 2,
+      "description": "Architecture violations should be P1+"
+    }
+  ],
+  "tags": ["python", "architecture", "coupling", "srp"],
+  "source": "synthetic"
+}

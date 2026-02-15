@@ -1,0 +1,19 @@
+{
+  "task_type": "planning",
+  "description": "PRD with multiple contradictory requirements — E2E encryption vs server moderation, permanent storage vs permanent deletion, WebSocket vs REST-only",
+  "expected_properties": [
+    {
+      "agent": "fd-correctness",
+      "min_findings": 1,
+      "must_contain_keyword": "contradict",
+      "description": "Must detect contradictory requirements"
+    },
+    {
+      "severity_at_least": "P0",
+      "min_count": 1,
+      "description": "Contradictions in a PRD are P0 — they make the spec unimplementable"
+    }
+  ],
+  "tags": ["planning", "prd", "contradictions", "requirements"],
+  "source": "synthetic"
+}
