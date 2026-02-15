@@ -64,6 +64,27 @@ Advisories
 - Include the Agent Scorecard table when scorecard data exists.
 - List advisories at the end, preserving severity labels like `[info]`, `[warn]`, `[critical]`.
 
+## Topology Experiment Results
+
+If `topology_efficiency.available` is true in the KPI data:
+
+Show a recall heatmap table:
+
+```text
+Topology Efficiency (recall vs production)
+──────────────────────────────────────────
+Task Type      T2    T4    T6    T8    Samples
+code_review    0.60  0.85  0.95  0.95  12
+planning       0.70  0.90  0.92  0.92  8
+docs           0.55  0.80  0.90  0.92  10
+refactor       0.65  0.88  0.93  0.94  6
+bugfix         0.75  0.92  0.95  0.95  4
+```
+
+Highlight the "sweet spot" — the smallest topology that achieves >=90% recall.
+
+If fewer than 20 total experiments, add note: "Data still accumulating — run more experiments for reliable patterns."
+
 ## Offer per-bead drill-down
 
 After the report, offer:

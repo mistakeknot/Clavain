@@ -139,7 +139,7 @@ def load_tool_time_events(since: datetime, until: datetime) -> list[dict[str, An
 
 def find_findings_files(project_root: Path) -> list[Path]:
     """Discover docs/research/flux-drive/**/findings.json under project."""
-    pattern = project_root / "docs" / "research" / "flux-drive" / "**" / "findings.json"
+    pattern = project_root / "**" / "docs" / "research" / "flux-drive" / "**" / "findings.json"
     return sorted({Path(p).resolve() for p in glob.glob(str(pattern), recursive=True)})
 
 
@@ -313,6 +313,67 @@ def compute_findings_metrics(findings_docs: list[dict[str, Any]]) -> tuple[dict[
     return ratio, dict(sorted(scorecard.items()))
 
 
+TOPOLOGY_RESULTS_FILE = CLAVAIN_DIR / "topology-results.jsonl"
+
+
+def load_topology_results(since: datetime, until: datetime) -> list[dict[str, Any]]:
+    """Load topology experiment results from topology-results.jsonl."""
+    if not TOPOLOGY_RESULTS_FILE.exists():
+        return []
+    results = []
+    for record in iter_jsonl(TOPOLOGY_RESULTS_FILE):
+        date_str = record.get("date", "")
+        ts = parse_timestamp(date_str)
+        if ts is None:
+            continue
+        if ts < since or ts > until:
+            continue
+        results.append(record)
+    return results
+
+
+def compute_topology_efficiency(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute per-topology recall statistics."""
+    if not results:
+        return {"available": False, "note": "No topology experiment data yet. Run /clavain:galiana experiment."}
+
+    by_topology: dict[str, list[float]] = defaultdict(list)
+    by_task_type: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+
+    for r in results:
+        topology = r.get("topology", "unknown")
+        recall = r.get("metrics", {}).get("recall")
+        task_type = r.get("task_type", "unknown")
+        if recall is not None:
+            by_topology[topology].append(recall)
+            by_task_type[task_type][topology].append(recall)
+
+    summary = {}
+    for topo in sorted(by_topology):
+        values = by_topology[topo]
+        summary[topo] = {
+            "avg_recall": round(sum(values) / len(values), 4),
+            "samples": len(values),
+        }
+
+    breakdown = {}
+    for task_type in sorted(by_task_type):
+        breakdown[task_type] = {}
+        for topo in sorted(by_task_type[task_type]):
+            values = by_task_type[task_type][topo]
+            breakdown[task_type][topo] = {
+                "avg_recall": round(sum(values) / len(values), 4),
+                "samples": len(values),
+            }
+
+    return {
+        "available": True,
+        "summary": summary,
+        "by_task_type": breakdown,
+        "total_experiments": len(results),
+    }
+
+
 def run_analysis(since: datetime, project: Path, bead_filter: str | None = None) -> dict[str, Any]:
     """Compute full KPI payload."""
     until = datetime.now(timezone.utc)
@@ -334,6 +395,9 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
     findings_docs = load_findings_docs(findings_files, since, until)
     redundant_work_ratio, agent_scorecard = compute_findings_metrics(findings_docs)
 
+    topology_results = load_topology_results(since, until)
+    topology_efficiency = compute_topology_efficiency(topology_results)
+
     advisories: list[dict[str, str]] = [{
         "level": "info",
         "message": "Time-to-first-signal KPI unavailable: signal events don't include bead IDs. Will be enabled in v0.2.",
@@ -350,6 +414,11 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
         advisories.append({"level": "info", "message": "Install tool-time for cost metrics."})
     if not findings_files:
         advisories.append({"level": "info", "message": "No flux-drive findings for redundancy analysis."})
+    if not topology_results:
+        advisories.append({
+            "level": "info",
+            "message": "No topology experiment data. Run /clavain:galiana experiment to start collecting.",
+        })
 
     return {
         "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -366,6 +435,7 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
             "cost_per_landed_change": cost_per_landed_change,
             "time_to_first_signal": compute_time_to_first_signal(),
             "redundant_work_ratio": redundant_work_ratio,
+            "topology_efficiency": topology_efficiency,
         },
         "agent_scorecard": agent_scorecard,
         "advisories": advisories,

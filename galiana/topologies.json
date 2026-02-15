@@ -1,0 +1,39 @@
+{
+  "T2": {
+    "agents": ["interflux:review:fd-architecture", "interflux:review:fd-quality"],
+    "label": "Core structural pair"
+  },
+  "T4": {
+    "agents": [
+      "interflux:review:fd-architecture",
+      "interflux:review:fd-quality",
+      "interflux:review:fd-safety",
+      "interflux:review:fd-correctness"
+    ],
+    "label": "Trust + data integrity"
+  },
+  "T6": {
+    "agents": [
+      "interflux:review:fd-architecture",
+      "interflux:review:fd-quality",
+      "interflux:review:fd-safety",
+      "interflux:review:fd-correctness",
+      "interflux:review:fd-performance",
+      "interflux:review:fd-user-product"
+    ],
+    "label": "Full cross-cutting"
+  },
+  "T8": {
+    "agents": [
+      "interflux:review:fd-architecture",
+      "interflux:review:fd-quality",
+      "interflux:review:fd-safety",
+      "interflux:review:fd-correctness",
+      "interflux:review:fd-performance",
+      "interflux:review:fd-user-product",
+      "interflux:review:fd-game-design",
+      "clavain:review:data-migration-expert"
+    ],
+    "label": "Maximum coverage"
+  }
+}
