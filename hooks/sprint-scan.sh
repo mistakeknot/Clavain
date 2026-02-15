@@ -259,6 +259,19 @@ sprint_check_coordination() {
         output="${count} agent(s) online: $(echo "$agent_list" | tr '\n' ',' | sed 's/,$//')"
     fi
 
+    # Check for uncommitted changes in the working tree
+    local dirty_count staged_count
+    dirty_count=$(git diff --stat HEAD 2>/dev/null | tail -1 | grep -oP '\d+ file' | grep -oP '\d+') || dirty_count="0"
+    staged_count=$(git diff --cached --stat 2>/dev/null | tail -1 | grep -oP '\d+ file' | grep -oP '\d+') || staged_count="0"
+
+    if [[ "$dirty_count" -gt 0 || "$staged_count" -gt 0 ]]; then
+        if [[ "$count" -gt 0 ]]; then
+            output="${output} | DIRTY TREE: ${dirty_count} unstaged, ${staged_count} staged changes (another agent may be mid-edit)"
+        else
+            output="${output} | DIRTY TREE: ${dirty_count} unstaged, ${staged_count} staged changes (stale from previous session?)"
+        fi
+    fi
+
     echo "$output"
     return 0
 }
