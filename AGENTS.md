@@ -118,6 +118,52 @@ Each cell maps to specific skills, commands, and agents.
 | **Hook** | `hooks/hooks.json` + scripts | JSON registration + bash scripts | Automatic on registered events |
 | **MCP Server** | `.claude-plugin/plugin.json` `mcpServers` | JSON config | Automatic on plugin load |
 
+### Interspect Routing Overrides
+
+Interspect monitors flux-drive agent dispatches and user corrections to learn which agents are consistently irrelevant for a project. When evidence reaches a threshold (>=80% "agent_wrong" corrections), it can propose permanent routing overrides.
+
+**How it works:**
+1. Record corrections with `/interspect:correction <agent> <description>` when an agent produces irrelevant findings
+2. Run `/interspect` to see pattern analysis and eligibility status
+3. Run `/interspect:propose` to review and accept exclusion proposals
+4. Overrides are stored in `.claude/routing-overrides.json` and committed to git
+5. Flux-drive reads overrides at Step 1.2a.0 and excludes agents before triage
+
+**Commands:**
+- `/interspect:propose` — Batch proposals for routing-eligible patterns
+- `/interspect:revert <agent>` — Remove an override (with optional blacklist)
+- `/interspect:unblock <agent>` — Remove from blacklist, allow re-proposal
+- `/interspect:status` — Show overrides, canaries, and modifications
+
+**Manual override:** Edit `.claude/routing-overrides.json` directly:
+```json
+{
+  "version": 1,
+  "overrides": [
+    {
+      "agent": "fd-game-design",
+      "action": "exclude",
+      "reason": "Go backend project, no game simulation",
+      "evidence_ids": [],
+      "created": "2026-02-15T00:00:00Z",
+      "created_by": "human"
+    }
+  ]
+}
+```
+
+**Cross-cutting agents** (`fd-architecture`, `fd-quality`, `fd-safety`, `fd-correctness`) show warnings when excluded — they provide structural/security coverage.
+
+**Canary monitoring:** After applying an override, Interspect monitors for 14 days or 20 uses. If the override causes problems, run `/interspect:revert` to undo.
+
+**Library functions** (in `hooks/lib-interspect.sh`):
+- `_interspect_sql_escape()` — Safe SQL string escaping
+- `_interspect_validate_agent_name()` — Format validation (fd-<name>)
+- `_interspect_is_routing_eligible()` — Threshold + blacklist check
+- `_interspect_read_routing_overrides()` — Read overrides file
+- `_interspect_apply_routing_override()` — Full apply+commit+canary flow
+- `_interspect_validate_overrides_path()` — Path traversal protection
+
 ## Component Conventions
 
 ### Skills
