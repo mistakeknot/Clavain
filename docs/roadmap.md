@@ -9,7 +9,7 @@
 
 ## Where We Are
 
-Clavain is a general-purpose engineering discipline plugin for Claude Code — 27 skills, 5 agents, 37 commands, 8 hooks, 1 MCP server. Six companion plugins shipped (interflux, interphase, interline, interpath, interwatch, interlock); four more planned. 39 beads closed, 51 open.
+Clavain is a recursively self-improving multi-agent rig for Claude Code — 27 skills, 5 agents, 37 commands, 8 hooks, 1 MCP server. Six companion plugins shipped (interflux, interphase, interline, interpath, interwatch, interlock); four more planned. 39 beads closed, 51 open.
 
 ### What's Working
 

@@ -9,7 +9,7 @@
 
 ## 1. Product Definition
 
-Clavain is a general-purpose engineering discipline plugin for Claude Code that codifies the full product development lifecycle — brainstorm to ship — into composable skills, agents, commands, and hooks. It orchestrates heterogeneous AI models (Claude, GPT-5.2 Pro via Oracle, Codex CLI) into a reliable system for building software with disciplined human-in-the-loop oversight.
+Clavain is a recursively self-improving multi-agent rig for Claude Code that codifies the full product development lifecycle — brainstorm to ship — into composable skills, agents, commands, and hooks. It orchestrates heterogeneous AI models (Claude, GPT-5.2 Pro via Oracle, Codex CLI) into a reliable system for building software with disciplined human-in-the-loop oversight.
 
 Clavain is also a proving ground. Capabilities are built tightly integrated, battle-tested through real use, and extracted into companion plugins (the inter-* constellation) when patterns stabilize.
 
