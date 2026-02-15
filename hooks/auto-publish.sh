@@ -6,6 +6,8 @@
 #
 # Loop prevention: sentinel file with 60s TTL prevents re-trigger when this
 # hook itself pushes (the amended commit or the marketplace push).
+# Uses a global sentinel (not per-plugin) to prevent cascade triggers
+# across plugin → marketplace push chains.
 #
 # Input: PostToolUse JSON on stdin (tool_input.command, cwd)
 # Output: JSON with additionalContext on success, empty on skip
@@ -32,7 +34,7 @@ main() {
     # Fast exit: not a git push (~5ms path for 99% of Bash calls)
     [[ "$cmd" == *"git push"* ]] || exit 0
 
-    # Skip force pushes — don't layer auto-publish on top
+    # Skip any force pushes (--force, -f, --force-with-lease, --no-verify)
     [[ "$cmd" != *"--force"* && "$cmd" != *"-f "* ]] || exit 0
 
     # Skip non-main branch pushes
@@ -50,8 +52,9 @@ main() {
     plugin_version="$(jq -r '.version // empty' "$plugin_json" 2>/dev/null || true)"
     [[ -n "$plugin_name" && -n "$plugin_version" ]] || exit 0
 
-    # Sentinel check: prevent re-trigger loop (60s TTL)
-    local sentinel="/tmp/clavain-autopub-${plugin_name}.lock"
+    # Global sentinel: prevent ALL auto-publish re-triggers within 60s.
+    # This covers both the plugin push and the marketplace push in one window.
+    local sentinel="/tmp/clavain-autopub.lock"
     if [[ -f "$sentinel" ]]; then
         local sentinel_age now sentinel_mtime
         now=$(date +%s)
@@ -97,23 +100,35 @@ main() {
         new_version="${major}.${minor}.${patch}"
 
         # Update plugin.json
-        local tmp_plugin
-        tmp_plugin="$(mktemp)"
-        jq --arg v "$new_version" '.version = $v' "$plugin_json" > "$tmp_plugin" && \
-            mv "$tmp_plugin" "$plugin_json"
+        local tmp_file
+        tmp_file="$(mktemp)"
+        jq --arg v "$new_version" '.version = $v' "$plugin_json" > "$tmp_file" && \
+            mv "$tmp_file" "$plugin_json"
+        git -C "$cwd" add .claude-plugin/plugin.json
 
-        # Update agent-rig.json if it exists
-        local rig_json="$cwd/agent-rig.json"
-        if [[ -f "$rig_json" ]]; then
-            local tmp_rig
-            tmp_rig="$(mktemp)"
-            jq --arg v "$new_version" '.version = $v' "$rig_json" > "$tmp_rig" && \
-                mv "$tmp_rig" "$rig_json"
+        # Update all discovered version files (same discovery as interbump.sh)
+        for vf in package.json server/package.json; do
+            if [[ -f "$cwd/$vf" ]]; then
+                tmp_file="$(mktemp)"
+                jq --arg v "$new_version" '.version = $v' "$cwd/$vf" > "$tmp_file" && \
+                    mv "$tmp_file" "$cwd/$vf"
+                git -C "$cwd" add "$vf" 2>/dev/null || true
+            fi
+        done
+
+        if [[ -f "$cwd/pyproject.toml" ]]; then
+            sed -i "s/^version = \"$plugin_version\"/version = \"$new_version\"/" "$cwd/pyproject.toml"
+            git -C "$cwd" add pyproject.toml 2>/dev/null || true
+        fi
+
+        if [[ -f "$cwd/agent-rig.json" ]]; then
+            tmp_file="$(mktemp)"
+            jq --arg v "$new_version" '.version = $v' "$cwd/agent-rig.json" > "$tmp_file" && \
+                mv "$tmp_file" "$cwd/agent-rig.json"
             git -C "$cwd" add agent-rig.json 2>/dev/null || true
         fi
 
         # Amend last commit with version bump, push
-        git -C "$cwd" add .claude-plugin/plugin.json
         git -C "$cwd" commit --amend --no-edit --quiet 2>/dev/null || true
         git -C "$cwd" push --force-with-lease --quiet 2>/dev/null || true
     fi
