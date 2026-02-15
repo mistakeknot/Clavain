@@ -63,7 +63,7 @@ MIGRATE
     mkdir -p "$(dirname "$_INTERSPECT_DB")" 2>/dev/null || return 1
 
     # Create tables + indexes + WAL mode
-    sqlite3 "$_INTERSPECT_DB" <<'SQL'
+    sqlite3 "$_INTERSPECT_DB" <<'SQL' >/dev/null
 PRAGMA journal_mode=WAL;
 
 CREATE TABLE IF NOT EXISTS evidence (
