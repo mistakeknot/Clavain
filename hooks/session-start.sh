@@ -183,6 +183,25 @@ if type discovery_brief_scan &>/dev/null; then
     fi
 fi
 
+# Sprint bead detection (active sprint resume hint)
+sprint_resume_hint=""
+# shellcheck source=hooks/lib-sprint.sh
+source "${SCRIPT_DIR}/lib-sprint.sh" 2>/dev/null || true
+if type sprint_find_active &>/dev/null; then
+    export SPRINT_LIB_PROJECT_DIR="."
+    active_sprints=$(sprint_find_active 2>/dev/null) || active_sprints="[]"
+    sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count=0
+    if [[ "$sprint_count" -gt 0 ]]; then
+        top_sprint=$(echo "$active_sprints" | jq '.[0]')
+        top_id=$(echo "$top_sprint" | jq -r '.id')
+        top_title=$(echo "$top_sprint" | jq -r '.title')
+        top_phase=$(echo "$top_sprint" | jq -r '.phase')
+        next_step=$(sprint_next_step "$top_phase" 2>/dev/null) || next_step="unknown"
+        sprint_resume_hint="\\n• Active sprint: ${top_id} — ${top_title} (phase: ${top_phase}, next: ${next_step}). Resume with /sprint or /sprint ${top_id}"
+        sprint_resume_hint=$(escape_for_json "$sprint_resume_hint")
+    fi
+fi
+
 # Previous session handoff context (.clavain/scratch/handoff.md)
 # session-handoff creates scratch/; we only read here (don't create dirs).
 handoff_context=""
@@ -246,7 +265,7 @@ cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${handoff_context}${inflight_context}"
+    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${sprint_resume_hint}${handoff_context}${inflight_context}"
   }
 }
 EOF

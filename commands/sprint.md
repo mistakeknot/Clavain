@@ -4,9 +4,47 @@ description: Full autonomous engineering workflow — brainstorm, strategize, pl
 argument-hint: "[feature description]"
 ---
 
-## Before Starting — Work Discovery
+## Before Starting — Sprint Resume
 
-If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only):
+Before running discovery, check for an active sprint:
+
+1. Source sprint library:
+   ```bash
+   export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+   ```
+
+2. Find active sprints:
+   ```bash
+   active_sprints=$(sprint_find_active 2>/dev/null) || active_sprints="[]"
+   sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count=0
+   ```
+
+3. Parse the result:
+   - `sprint_count == 0` → no active sprint, fall through to Work Discovery (below)
+   - Single sprint (`sprint_count == 1`) → auto-resume:
+     a. Read sprint ID, state: `sprint_id=$(echo "$active_sprints" | jq -r '.[0].id')` then `sprint_read_state "$sprint_id"`
+     b. Claim session: `sprint_claim "$sprint_id" "$CLAUDE_SESSION_ID"`
+        - If claim fails (returns 1): tell user another session has this sprint, offer to force-claim (by calling `sprint_release` then `sprint_claim`) or start fresh
+     c. Set `CLAVAIN_BEAD_ID="$sprint_id"` (sprint bead is the epic; takes precedence over discovery-selected beads)
+     d. Determine next step: `next=$(sprint_next_step "<phase>")`
+     e. Route to the appropriate command based on the step:
+        - `brainstorm` → `/clavain:brainstorm`
+        - `strategy` → `/clavain:strategy`
+        - `write-plan` → `/clavain:write-plan`
+        - `flux-drive` → `/interflux:flux-drive <plan_path from sprint_artifacts>`
+        - `work` → `/clavain:work <plan_path from sprint_artifacts>`
+        - `ship` → `/clavain:quality-gates`
+        - `done` → tell user "Sprint is complete"
+     f. Display: `Resuming sprint <id> — <title> (phase: <phase>, next: <step>)`
+     g. **After routing to a command, stop.** Do NOT continue to Step 1.
+   - Multiple sprints (`sprint_count > 1`) → AskUserQuestion to choose which to resume, plus "Start fresh" option. Then claim and route as above.
+
+4. If starting fresh (no active sprint or user chose "Start fresh"):
+   Proceed to existing Work Discovery logic below.
+
+## Work Discovery (Fallback)
+
+If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only) AND no active sprint was found:
 
 1. Run the work discovery scanner:
    ```bash
@@ -75,9 +113,15 @@ Run these steps in order. Do not do anything else.
 
 ### Phase Tracking
 
-After each step completes successfully, record the phase transition. If `CLAVAIN_BEAD_ID` is set (from discovery or the user), run:
+After each step completes successfully, record the phase transition. If `CLAVAIN_BEAD_ID` is set (from discovery, sprint resume, or sprint creation), run:
 ```bash
 export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh" && advance_phase "$CLAVAIN_BEAD_ID" "<phase>" "<reason>" "<artifact_path>"
+```
+Additionally, if this is a sprint bead, record the phase completion and artifact:
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+sprint_set_artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
+sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "<phase>"
 ```
 Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
 
@@ -85,6 +129,23 @@ Phase tracking is silent — never block on errors. If no bead ID is available, 
 `/clavain:brainstorm $ARGUMENTS`
 
 **Phase:** After brainstorm doc is created, set `phase=brainstorm` with reason `"Brainstorm: <doc_path>"`.
+
+### Create Sprint Bead
+
+If `CLAVAIN_BEAD_ID` is not set after brainstorm (no sprint bead exists yet):
+
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+SPRINT_ID=$(sprint_create "<feature title>")
+if [[ -n "$SPRINT_ID" ]]; then
+    sprint_set_artifact "$SPRINT_ID" "brainstorm" "<brainstorm_doc_path>"
+    sprint_finalize_init "$SPRINT_ID"
+    sprint_record_phase_completion "$SPRINT_ID" "brainstorm"
+    CLAVAIN_BEAD_ID="$SPRINT_ID"
+fi
+```
+
+Insert `**Bead:** <SPRINT_ID>` on line 2 of the brainstorm doc (after the `# Title` heading).
 
 ## Step 2: Strategize
 `/clavain:strategy`
@@ -117,7 +178,7 @@ If flux-drive finds P0/P1 issues, stop and address them before proceeding to exe
 
 **Gate check:** Before executing, enforce the gate:
 ```bash
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
 if ! enforce_gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
     echo "Gate blocked: plan must be reviewed first. Run /interflux:flux-drive on the plan, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Stop — do NOT proceed to execution
@@ -150,12 +211,14 @@ Run the project's test suite and linting before proceeding to review:
 
 **Gate check + Phase:** After quality gates PASS, enforce the shipping gate before recording:
 ```bash
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
 if ! enforce_gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
     echo "Gate blocked: review findings are stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Do NOT advance to shipping — stop and tell user
 fi
+export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 advance_phase "$CLAVAIN_BEAD_ID" "shipping" "Quality gates passed" ""
+sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "shipping"
 ```
 Do NOT set the phase if gates FAIL.
 

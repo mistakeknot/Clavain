@@ -72,26 +72,47 @@ Ensure `docs/prds/` directory exists before writing.
 
 ## Phase 3: Create Beads
 
-Create a beads epic and child issues for each feature:
+**Sprint-aware bead creation:**
 
-```bash
-bd create --title="<PRD title>" --type=epic --priority=1
-```
+If `CLAVAIN_BEAD_ID` is set (we're inside a sprint):
+- Do NOT create a separate epic. The sprint bead IS the epic.
+- Create feature beads as children of the sprint bead:
+  ```bash
+  bd create --title="F1: <feature name>" --type=feature --priority=2
+  bd dep add <feature-id> <CLAVAIN_BEAD_ID>
+  ```
+- Update sprint state:
+  ```bash
+  export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+  sprint_set_artifact "$CLAVAIN_BEAD_ID" "prd" "<prd_path>"
+  ```
 
-For each feature:
-```bash
-bd create --title="F1: <feature name>" --type=feature --priority=2
-bd dep add <feature-id> <epic-id>
-```
+If `CLAVAIN_BEAD_ID` is NOT set (standalone strategy):
+- Create epic and feature beads as before:
+  ```bash
+  bd create --title="<PRD title>" --type=epic --priority=1
+  ```
+  For each feature:
+  ```bash
+  bd create --title="F1: <feature name>" --type=feature --priority=2
+  bd dep add <feature-id> <epic-id>
+  ```
 
 Report the created beads to the user.
 
 ### Phase 3b: Record Phase
 
-After creating beads, record the phase transition on the epic:
+After creating beads, record the phase transition:
 ```bash
 export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
-advance_phase "<epic_bead_id>" "strategized" "PRD: <prd_path>" ""
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+    advance_phase "$CLAVAIN_BEAD_ID" "strategized" "PRD: <prd_path>" ""
+    export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+    sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "strategized"
+else
+    # Standalone strategy — use the newly created epic bead
+    advance_phase "<epic_bead_id>" "strategized" "PRD: <prd_path>" ""
+fi
 ```
 Also set `phase=strategized` on each child feature bead created:
 ```bash

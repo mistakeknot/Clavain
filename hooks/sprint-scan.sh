@@ -334,6 +334,27 @@ sprint_brief_scan() {
         signals="${signals}• Brainstorms exist but no PRDs — consider running /strategy to bridge the gap.\n"
     fi
 
+    # Active sprint resume hint
+    local _scan_script_dir
+    _scan_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # shellcheck source=hooks/lib-sprint.sh
+    source "${_scan_script_dir}/lib-sprint.sh" 2>/dev/null || true
+    if type sprint_find_active &>/dev/null; then
+        export SPRINT_LIB_PROJECT_DIR="$SPRINT_PROJECT_DIR"
+        local _scan_active_sprints
+        _scan_active_sprints=$(sprint_find_active 2>/dev/null) || _scan_active_sprints="[]"
+        local _scan_sprint_count
+        _scan_sprint_count=$(echo "$_scan_active_sprints" | jq 'length' 2>/dev/null) || _scan_sprint_count=0
+        if [[ "$_scan_sprint_count" -gt 0 ]]; then
+            local _scan_top_id _scan_top_title _scan_top_phase _scan_next_step
+            _scan_top_id=$(echo "$_scan_active_sprints" | jq -r '.[0].id')
+            _scan_top_title=$(echo "$_scan_active_sprints" | jq -r '.[0].title')
+            _scan_top_phase=$(echo "$_scan_active_sprints" | jq -r '.[0].phase')
+            _scan_next_step=$(sprint_next_step "$_scan_top_phase" 2>/dev/null) || _scan_next_step="unknown"
+            signals="${signals}• Active sprint: ${_scan_top_id} — ${_scan_top_title} (phase: ${_scan_top_phase}, next: ${_scan_next_step})\n"
+        fi
+    fi
+
     # Only output if we have signals
     if [[ -n "$signals" ]]; then
         printf "\\n\\n**Sprint status:**\\n%s" "$signals"
@@ -365,6 +386,69 @@ sprint_full_scan() {
         echo "Previous session left unfinished work. Read it before starting."
     else
         echo "Clean — no HANDOFF.md"
+    fi
+    echo ""
+
+    # 1.5. Active Sprints
+    echo "## Active Sprints"
+    local _full_scan_script_dir
+    _full_scan_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # shellcheck source=hooks/lib-sprint.sh
+    source "${_full_scan_script_dir}/lib-sprint.sh" 2>/dev/null || true
+    if type sprint_find_active &>/dev/null; then
+        export SPRINT_LIB_PROJECT_DIR="$SPRINT_PROJECT_DIR"
+        local _full_active_sprints
+        _full_active_sprints=$(sprint_find_active 2>/dev/null) || _full_active_sprints="[]"
+        local _full_sprint_count
+        _full_sprint_count=$(echo "$_full_active_sprints" | jq 'length' 2>/dev/null) || _full_sprint_count=0
+
+        if [[ "$_full_sprint_count" -gt 0 ]]; then
+            local _si=0
+            while [[ $_si -lt $_full_sprint_count ]]; do
+                local _sid _stitle _sphase
+                _sid=$(echo "$_full_active_sprints" | jq -r ".[$_si].id")
+                _stitle=$(echo "$_full_active_sprints" | jq -r ".[$_si].title")
+                _sphase=$(echo "$_full_active_sprints" | jq -r ".[$_si].phase")
+
+                # Build progress bar
+                local _phases=("brainstorm" "strategized" "planned" "plan-reviewed" "executing" "shipping" "done")
+                local _bar=""
+                local _found_current=0
+                local _p
+                for _p in "${_phases[@]}"; do
+                    if [[ $_found_current -eq 1 ]]; then
+                        _bar="${_bar} [${_p} ○]"
+                    elif [[ "$_p" == "$_sphase" ]]; then
+                        _bar="${_bar} [${_p} ▶]"
+                        _found_current=1
+                    else
+                        _bar="${_bar} [${_p} ✓]"
+                    fi
+                done
+
+                # Read artifacts
+                local _state
+                _state=$(sprint_read_state "$_sid" 2>/dev/null) || _state="{}"
+                local _brainstorm_path _prd_path _plan_path _active_session
+                _brainstorm_path=$(echo "$_state" | jq -r '.artifacts.brainstorm // ""')
+                _prd_path=$(echo "$_state" | jq -r '.artifacts.prd // ""')
+                _plan_path=$(echo "$_state" | jq -r '.artifacts.plan // ""')
+                _active_session=$(echo "$_state" | jq -r '.active_session // ""')
+
+                echo "${_sid}: ${_stitle}"
+                echo "  Progress:${_bar}"
+                [[ -n "$_brainstorm_path" ]] && echo "  Brainstorm: ${_brainstorm_path}"
+                [[ -n "$_prd_path" ]] && echo "  PRD: ${_prd_path}"
+                [[ -n "$_plan_path" ]] && echo "  Plan: ${_plan_path}"
+                [[ -n "$_active_session" ]] && echo "  Claimed by session: ${_active_session:0:8}"
+
+                _si=$((_si + 1))
+            done
+        else
+            echo "No active sprints"
+        fi
+    else
+        echo "Sprint library not available"
     fi
     echo ""
 

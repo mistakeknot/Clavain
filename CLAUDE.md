@@ -28,6 +28,7 @@ bash -n hooks/bead-agent-bind.sh       # Syntax check
 bash -n hooks/catalog-reminder.sh      # Syntax check
 bash -n hooks/clodex-audit.sh          # Syntax check
 bash -n hooks/sprint-scan.sh           # Syntax check (utility, not a hook binding)
+bash -n hooks/lib-sprint.sh            # Syntax check (sprint state library)
 bash -n hooks/lib-discovery.sh         # Syntax check (shim → interphase)
 bash -n hooks/lib-gates.sh             # Syntax check (shim → interphase)
 bash -n hooks/lib-interspect.sh        # Syntax check (interspect shared library)
