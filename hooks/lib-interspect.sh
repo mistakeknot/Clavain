@@ -45,8 +45,17 @@ _interspect_project_name() {
 _interspect_ensure_db() {
     _INTERSPECT_DB=$(_interspect_db_path)
 
-    # Fast path — DB already exists
+    # Fast path — DB already exists, but run migrations for new tables
     if [[ -f "$_INTERSPECT_DB" ]]; then
+        sqlite3 "$_INTERSPECT_DB" <<'MIGRATE'
+CREATE TABLE IF NOT EXISTS blacklist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pattern_key TEXT NOT NULL UNIQUE,
+    blacklisted_at TEXT NOT NULL,
+    reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_blacklist_key ON blacklist(pattern_key);
+MIGRATE
         return 0
     fi
 
@@ -120,6 +129,14 @@ CREATE INDEX IF NOT EXISTS idx_canary_file ON canary(file);
 CREATE INDEX IF NOT EXISTS idx_modifications_group ON modifications(group_id);
 CREATE INDEX IF NOT EXISTS idx_modifications_status ON modifications(status);
 CREATE INDEX IF NOT EXISTS idx_modifications_target ON modifications(target_file);
+
+CREATE TABLE IF NOT EXISTS blacklist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pattern_key TEXT NOT NULL UNIQUE,
+    blacklisted_at TEXT NOT NULL,
+    reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_blacklist_key ON blacklist(pattern_key);
 SQL
 }
 
@@ -272,11 +289,13 @@ _interspect_load_confidence() {
     _INTERSPECT_MIN_SESSIONS=3
     _INTERSPECT_MIN_DIVERSITY=2   # projects OR languages
     _INTERSPECT_MIN_EVENTS=5
+    _INTERSPECT_MIN_AGENT_WRONG_PCT=80
 
     if [[ -f "$conf" ]]; then
         _INTERSPECT_MIN_SESSIONS=$(jq -r '.min_sessions // 3' "$conf")
         _INTERSPECT_MIN_DIVERSITY=$(jq -r '.min_diversity // 2' "$conf")
         _INTERSPECT_MIN_EVENTS=$(jq -r '.min_events // 5' "$conf")
+        _INTERSPECT_MIN_AGENT_WRONG_PCT=$(jq -r '.min_agent_wrong_pct // 80' "$conf")
     fi
 }
 
@@ -315,6 +334,372 @@ _interspect_get_classified_patterns() {
         cls=$(_interspect_classify_pattern "$ec" "$sc" "$pc")
         echo "${src}|${evt}|${reason}|${ec}|${sc}|${pc}|${cls}"
     done
+}
+
+# ─── SQL Safety Helpers ──────────────────────────────────────────────────────
+
+# Escape a string for safe use in sqlite3 single-quoted values.
+# Handles single quotes, backslashes, and strips control characters.
+# All SQL queries in routing override code MUST use this helper.
+_interspect_sql_escape() {
+    local val="$1"
+    val="${val//\\/\\\\}"           # Escape backslashes first
+    val="${val//\'/\'\'}"           # Then single quotes
+    printf '%s' "$val" | tr -d '\000-\037\177'  # Strip control chars
+}
+
+# Validate agent name format. Rejects anything that isn't fd-<lowercase-name>.
+# Args: $1=agent_name
+# Returns: 0 if valid, 1 if not
+_interspect_validate_agent_name() {
+    local agent="$1"
+    if [[ ! "$agent" =~ ^fd-[a-z][a-z0-9-]*$ ]]; then
+        echo "ERROR: Invalid agent name '${agent}'. Must match fd-<name> (lowercase, hyphens only)." >&2
+        return 1
+    fi
+    return 0
+}
+
+# ─── Routing Override Helpers ────────────────────────────────────────────────
+
+# Check if a pattern is routing-eligible (for exclusion proposals).
+# Args: $1=agent_name
+# Returns: 0 if routing-eligible, 1 if not
+# Output: "eligible" or "not_eligible:<reason>"
+_interspect_is_routing_eligible() {
+    _interspect_load_confidence
+    local agent="$1"
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    # Validate agent name format
+    if ! _interspect_validate_agent_name "$agent"; then
+        echo "not_eligible:invalid_agent_name"
+        return 1
+    fi
+
+    local escaped
+    escaped=$(_interspect_sql_escape "$agent")
+
+    # Validate config loaded
+    if [[ -z "${_INTERSPECT_MIN_AGENT_WRONG_PCT:-}" ]]; then
+        echo "not_eligible:config_load_failed"
+        return 1
+    fi
+
+    # Check blacklist
+    local blacklisted
+    blacklisted=$(sqlite3 "$db" "SELECT COUNT(*) FROM blacklist WHERE pattern_key = '${escaped}';")
+    if (( blacklisted > 0 )); then
+        echo "not_eligible:blacklisted"
+        return 1
+    fi
+
+    # Get agent_wrong percentage
+    local total wrong pct
+    total=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE source = '${escaped}' AND event = 'override';")
+    wrong=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE source = '${escaped}' AND event = 'override' AND override_reason = 'agent_wrong';")
+
+    if (( total == 0 )); then
+        echo "not_eligible:no_override_events"
+        return 1
+    fi
+
+    pct=$(( wrong * 100 / total ))
+    if (( pct < _INTERSPECT_MIN_AGENT_WRONG_PCT )); then
+        echo "not_eligible:agent_wrong_pct=${pct}%<${_INTERSPECT_MIN_AGENT_WRONG_PCT}%"
+        return 1
+    fi
+
+    echo "eligible"
+    return 0
+}
+
+# Validate FLUX_ROUTING_OVERRIDES_PATH is safe (relative, no traversal).
+# Returns: 0 if safe, 1 if not
+_interspect_validate_overrides_path() {
+    local filepath="$1"
+    if [[ "$filepath" == /* ]]; then
+        echo "ERROR: FLUX_ROUTING_OVERRIDES_PATH must be relative (got: ${filepath})" >&2
+        return 1
+    fi
+    if [[ "$filepath" == *../* ]] || [[ "$filepath" == */../* ]] || [[ "$filepath" == .. ]]; then
+        echo "ERROR: FLUX_ROUTING_OVERRIDES_PATH must not contain '..' (got: ${filepath})" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Read routing-overrides.json. Returns JSON or empty structure.
+# Uses optimistic locking: accepts TOCTOU race for reads (dedup at write time).
+# Args: none (uses FLUX_ROUTING_OVERRIDES_PATH or default)
+_interspect_read_routing_overrides() {
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local filepath="${FLUX_ROUTING_OVERRIDES_PATH:-.claude/routing-overrides.json}"
+
+    # Path traversal protection
+    if ! _interspect_validate_overrides_path "$filepath"; then
+        echo '{"version":1,"overrides":[]}'
+        return 1
+    fi
+
+    local fullpath="${root}/${filepath}"
+
+    if [[ ! -f "$fullpath" ]]; then
+        echo '{"version":1,"overrides":[]}'
+        return 0
+    fi
+
+    if ! jq -e '.' "$fullpath" >/dev/null 2>&1; then
+        echo "WARN: ${filepath} is malformed JSON" >&2
+        echo '{"version":1,"overrides":[]}'
+        return 1
+    fi
+
+    jq '.' "$fullpath"
+}
+
+# Read routing-overrides.json under shared flock (for status display).
+# Prevents torn reads during concurrent apply operations.
+_interspect_read_routing_overrides_locked() {
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local lockdir="${root}/.clavain/interspect"
+    local lockfile="${lockdir}/.git-lock"
+
+    mkdir -p "$lockdir" 2>/dev/null || true
+
+    (
+        # Shared lock allows concurrent reads, blocks on exclusive write lock.
+        # Timeout 1s: if lock unavailable, fall back to unlocked read.
+        if ! flock -s -w 1 9; then
+            echo "WARN: Override file locked (apply in progress). Showing latest available data." >&2
+        fi
+        _interspect_read_routing_overrides
+    ) 9>"$lockfile"
+}
+
+# Write routing-overrides.json atomically (call inside _interspect_flock_git).
+# Uses temp file + rename for crash safety.
+# Args: $1=JSON content to write
+_interspect_write_routing_overrides() {
+    local content="$1"
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local filepath="${FLUX_ROUTING_OVERRIDES_PATH:-.claude/routing-overrides.json}"
+
+    if ! _interspect_validate_overrides_path "$filepath"; then
+        return 1
+    fi
+
+    local fullpath="${root}/${filepath}"
+
+    mkdir -p "$(dirname "$fullpath")" 2>/dev/null || true
+
+    # Atomic write: temp file + rename
+    local tmpfile="${fullpath}.tmp.$$"
+    echo "$content" | jq '.' > "$tmpfile"
+
+    # Validate before replacing
+    if ! jq -e '.' "$tmpfile" >/dev/null 2>&1; then
+        rm -f "$tmpfile"
+        echo "ERROR: Write produced invalid JSON, aborted" >&2
+        return 1
+    fi
+
+    mv "$tmpfile" "$fullpath"
+}
+
+# Check if an override exists for an agent.
+# Args: $1=agent_name
+# Returns: 0 if exists, 1 if not
+_interspect_override_exists() {
+    local agent="$1"
+    local current
+    current=$(_interspect_read_routing_overrides)
+    echo "$current" | jq -e --arg agent "$agent" '.overrides[] | select(.agent == $agent)' >/dev/null 2>&1
+}
+
+# ─── Apply Routing Override ──────────────────────────────────────────────────
+
+# Apply a routing override. Handles the full read-modify-write-commit-record flow.
+# All operations (file write, git commit, DB inserts) run inside flock for atomicity.
+# Args: $1=agent_name $2=reason $3=evidence_ids_json $4=created_by (default "interspect")
+# Returns: 0 on success, 1 on failure
+_interspect_apply_routing_override() {
+    local agent="$1"
+    local reason="$2"
+    local evidence_ids="${3:-[]}"
+    local created_by="${4:-interspect}"
+
+    # --- Pre-flock validation (fast-fail) ---
+
+    # Validate agent name format (prevents injection + catches typos)
+    if ! _interspect_validate_agent_name "$agent"; then
+        return 1
+    fi
+
+    # Validate evidence_ids is a JSON array
+    if ! echo "$evidence_ids" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        echo "ERROR: evidence_ids must be a JSON array (got: ${evidence_ids})" >&2
+        return 1
+    fi
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local filepath="${FLUX_ROUTING_OVERRIDES_PATH:-.claude/routing-overrides.json}"
+
+    # Validate path (no traversal)
+    if ! _interspect_validate_overrides_path "$filepath"; then
+        return 1
+    fi
+
+    local fullpath="${root}/${filepath}"
+
+    # Validate target path is in modification allow-list
+    if ! _interspect_validate_target "$filepath"; then
+        echo "ERROR: ${filepath} is not an allowed modification target" >&2
+        return 1
+    fi
+
+    # --- Write commit message to temp file (avoids shell injection) ---
+
+    local commit_msg_file
+    commit_msg_file=$(mktemp)
+    printf '[interspect] Exclude %s from flux-drive triage\n\nReason: %s\nEvidence: %s\nCreated-by: %s\n' \
+        "$agent" "$reason" "$evidence_ids" "$created_by" > "$commit_msg_file"
+
+    # --- DB path for use inside flock ---
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    # --- Entire read-modify-write-commit-record inside flock ---
+    local flock_output
+    flock_output=$(_interspect_flock_git _interspect_apply_override_locked \
+        "$root" "$filepath" "$fullpath" "$agent" "$reason" \
+        "$evidence_ids" "$created_by" "$commit_msg_file" "$db")
+
+    local exit_code=$?
+    rm -f "$commit_msg_file"
+
+    if (( exit_code != 0 )); then
+        echo "ERROR: Could not apply routing override. Check git status and retry." >&2
+        echo "$flock_output" >&2
+        return 1
+    fi
+
+    # Parse output from locked function
+    local commit_sha
+    commit_sha=$(echo "$flock_output" | tail -1)
+
+    echo "SUCCESS: Excluded ${agent}. Commit: ${commit_sha}"
+    echo "Canary monitoring active. Run /interspect:status after 5-10 sessions to check impact."
+    echo "To undo: /interspect:revert ${agent}"
+    return 0
+}
+
+# Inner function called under flock. Do NOT call directly.
+# All arguments are positional to avoid quote-nesting hell.
+_interspect_apply_override_locked() {
+    set -e
+    local root="$1" filepath="$2" fullpath="$3" agent="$4"
+    local reason="$5" evidence_ids="$6" created_by="$7"
+    local commit_msg_file="$8" db="$9"
+
+    local created
+    created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # 1. Read current file
+    local current
+    if [[ -f "$fullpath" ]]; then
+        current=$(jq '.' "$fullpath" 2>/dev/null || echo '{"version":1,"overrides":[]}')
+    else
+        current='{"version":1,"overrides":[]}'
+    fi
+
+    # 2. Dedup check (inside lock — TOCTOU-safe)
+    local is_new=1
+    if echo "$current" | jq -e --arg agent "$agent" '.overrides[] | select(.agent == $agent)' >/dev/null 2>&1; then
+        echo "INFO: Override for ${agent} already exists, updating metadata." >&2
+        is_new=0
+    fi
+
+    # 3. Build new override using jq --arg (no shell interpolation)
+    local new_override
+    new_override=$(jq -n \
+        --arg agent "$agent" \
+        --arg action "exclude" \
+        --arg reason "$reason" \
+        --argjson evidence_ids "$evidence_ids" \
+        --arg created "$created" \
+        --arg created_by "$created_by" \
+        '{agent:$agent,action:$action,reason:$reason,evidence_ids:$evidence_ids,created:$created,created_by:$created_by}')
+
+    # 4. Merge (unique_by deduplicates, last write wins for metadata)
+    local merged
+    merged=$(echo "$current" | jq --argjson override "$new_override" \
+        '.overrides = (.overrides + [$override] | unique_by(.agent))')
+
+    # 5. Atomic write (temp + rename)
+    mkdir -p "$(dirname "$fullpath")" 2>/dev/null || true
+    local tmpfile="${fullpath}.tmp.$$"
+    echo "$merged" | jq '.' > "$tmpfile"
+
+    if ! jq -e '.' "$tmpfile" >/dev/null 2>&1; then
+        rm -f "$tmpfile"
+        echo "ERROR: Write produced invalid JSON, aborted" >&2
+        return 1
+    fi
+    mv "$tmpfile" "$fullpath"
+
+    # 6. Git add + commit (using -F for commit message — no injection)
+    cd "$root"
+    git add "$filepath"
+    if ! git commit --no-verify -F "$commit_msg_file"; then
+        # Rollback: unstage THEN restore working tree
+        git reset HEAD -- "$filepath" 2>/dev/null || true
+        git restore "$filepath" 2>/dev/null || git checkout -- "$filepath" 2>/dev/null || true
+        echo "ERROR: Git commit failed. Override not applied." >&2
+        return 1
+    fi
+
+    local commit_sha
+    commit_sha=$(git rev-parse HEAD)
+
+    # 7. DB inserts INSIDE flock (atomicity with git commit)
+    local escaped_agent escaped_reason
+    escaped_agent=$(_interspect_sql_escape "$agent")
+    escaped_reason=$(_interspect_sql_escape "$reason")
+
+    # Only insert modification + canary for genuinely NEW overrides
+    if (( is_new == 1 )); then
+        local ts
+        ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+        # Modification record
+        sqlite3 "$db" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
+            VALUES ('${escaped_agent}', '${ts}', 'persistent', 'routing', '${filepath}', '${commit_sha}', 1.0, '${escaped_reason}', 'applied');"
+
+        # Canary record
+        local expires_at
+        expires_at=$(date -u -d "+14 days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+            || date -u -v+14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+        if [[ -z "$expires_at" ]]; then
+            echo "ERROR: date command does not support relative dates" >&2
+            return 1
+        fi
+
+        if ! sqlite3 "$db" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, window_expires_at, status)
+            VALUES ('${filepath}', '${commit_sha}', '${escaped_agent}', '${ts}', 20, '${expires_at}', 'active');"; then
+            # Canary failure is non-fatal but flagged in DB
+            sqlite3 "$db" "UPDATE modifications SET status = 'applied-unmonitored' WHERE commit_sha = '${commit_sha}';" 2>/dev/null || true
+            echo "WARN: Canary monitoring failed — override active but unmonitored." >&2
+        fi
+    else
+        echo "INFO: Metadata updated for existing override. No new canary." >&2
+    fi
+
+    # 8. Output commit SHA (last line, captured by caller)
+    echo "$commit_sha"
 }
 
 # ─── Git Operation Serialization ────────────────────────────────────────────
