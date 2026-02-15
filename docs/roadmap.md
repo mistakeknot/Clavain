@@ -1,6 +1,6 @@
 # Clavain Roadmap
 
-**Version:** 0.6.5
+**Version:** 0.6.13
 **Last updated:** 2026-02-14
 **Vision:** [`docs/vision.md`](vision.md)
 **PRD:** [`docs/PRD.md`](PRD.md)
@@ -9,7 +9,7 @@
 
 ## Where We Are
 
-Clavain is a general-purpose engineering discipline plugin for Claude Code — 27 skills, 5 agents, 37 commands, 7 hooks, 1 MCP server. Five companion plugins shipped (interflux, interphase, interline, interpath, interwatch); four more planned. 278 beads closed, 45 open.
+Clavain is a general-purpose engineering discipline plugin for Claude Code — 27 skills, 5 agents, 37 commands, 8 hooks, 1 MCP server. Six companion plugins shipped (interflux, interphase, interline, interpath, interwatch, interlock); four more planned. 39 beads closed, 51 open.
 
 ### What's Working
 
@@ -21,6 +21,9 @@ Clavain is a general-purpose engineering discipline plugin for Claude Code — 2
 - Parallel dispatch to Codex CLI via `/clodex`
 - Structural test suite (pytest + bats-core) guarding component counts, cross-references, namespace hygiene
 - Companion plugin ecosystem with shim delegation (graceful degradation when companions absent)
+- Multi-agent file coordination via interlock (MCP server wrapping intermute)
+- Self-healing documentation system via interdoc (structural auto-fix, convergence loops, marker system)
+- Signal-based drift detection via interwatch (auto-drift-check Stop hook, lib-signals shared library)
 
 ### What's Not Working Yet
 
@@ -29,6 +32,20 @@ Clavain is a general-purpose engineering discipline plugin for Claude Code — 2
 - **No project-local memory.** Knowledge compounding writes to global plugin state; per-project learnings don't exist.
 - **Token costs are opaque.** No per-run cost reporting, no budget controls, no cost-quality tradeoff visibility.
 - **Companion extractions are intuition-driven.** interflux, interphase, and interline were extracted based on gut feel about stable interfaces, not analytics.
+
+---
+
+## Recent Shipped Work
+
+Since the roadmap was first drafted, these significant features landed:
+
+| Feature | Beads | Description |
+|---------|-------|-------------|
+| **interlock companion** | iv-f8si through iv-uxm0 (12 features) | Full multi-agent file coordination — MCP server, advisory hooks, git pre-commit enforcement, Clavain integration |
+| **Interdoc self-healing** | iv-i82, iv-0hp, iv-65k, iv-cp0, iv-alc, iv-bbu | Structural auto-fix script, unverified/stale markers, convergence loops, fix-mode entry point |
+| **lib-signals.sh extraction** | iv-f5pi (implemented, bead open) | Shared signal detection library used by auto-compound and auto-drift-check |
+| **auto-drift-check hook** | iv-pjfp (implemented, bead open) | Stop hook detecting shipped-work signals and triggering interwatch scans |
+| **Version 0.6.5 → 0.6.13** | — | 8 version bumps, monorepo migration, interlock wiring |
 
 ---
 
@@ -46,7 +63,7 @@ Three phases, sequenced by dependency. Each phase has a clear theme, concrete de
 
 #### P1.1 — Outcome-Based Agent Analytics (v1)
 
-**Bead:** Clavain-mb6u (P1, blocks: Clavain-spad, Clavain-7z28, Clavain-4xqu)
+**Bead:** iv-mb6u (P1, blocks: iv-spad, iv-7z28, iv-4xqu)
 
 Build a unified trace/event system for every workflow run.
 
@@ -69,7 +86,7 @@ Build a unified trace/event system for every workflow run.
 
 #### P1.2 — Agent Evals as CI
 
-**Bead:** Clavain-705b (P1)
+**Bead:** iv-705b (P1)
 
 Design a small corpus of real tasks with expected properties (not exact text matches), run as regression tests.
 
@@ -87,7 +104,7 @@ Design a small corpus of real tasks with expected properties (not exact text mat
 
 #### P1.3 — Topology Experiment
 
-**Bead:** Clavain-7z28 (P1, blocked by: Clavain-mb6u)
+**Bead:** iv-7z28 (P1, blocked by: iv-mb6u)
 
 Run the same tasks with 2, 4, 6, and 8 agents. Plot quality vs. cost vs. time vs. human attention.
 
@@ -103,8 +120,6 @@ Run the same tasks with 2, 4, 6, and 8 agents. Plot quality vs. cost vs. time vs
 **Depends on:** P1.1 (needs analytics to measure quality/cost).
 
 #### P1.4 — Agent Memory Filesystem (`.clavain/`)
-
-**Bead:** Clavain-d4ao (P2, but foundational)
 
 Establish the per-project memory contract that analytics, learnings, and downstream features depend on.
 
@@ -145,7 +160,7 @@ Establish the per-project memory contract that analytics, learnings, and downstr
 
 #### P2.1 — Deep tldrs Integration
 
-**Bead:** Clavain-spad (P2, blocked by: Clavain-mb6u)
+**Bead:** iv-spad (P2, blocked by: iv-mb6u)
 
 tldrs becomes the default token-efficient "eyes" of the system. Every skill/agent that reads code routes through tldrs.
 
@@ -164,10 +179,10 @@ Four planned companions, ordered by self-containment and risk:
 
 | Priority | Companion | Theme | Bead | Coupling | Risk |
 |----------|-----------|-------|------|----------|------|
-| P2.2a | **intercraft** | Claude Code meta-tooling | Clavain-2ley | Very low (zero coupling) | Low — safe to extract first |
-| P2.2b | **intershift** | Cross-AI dispatch engine | Clavain-6ikc | Moderate (flag file shim) | Medium — Oracle/Codex dispatch |
-| P2.2c | **interscribe** | Knowledge compounding | Clavain-sdqv | Moderate (cross-plugin) | Medium — touches auto-compound |
-| P2.2d | **interarch** | Agent-native architecture | Clavain-eff5 | Very low (zero coupling) | Low — standalone skill |
+| P2.2a | **intercraft** | Claude Code meta-tooling | iv-2ley | Very low (zero coupling) | Low — safe to extract first |
+| P2.2b | **intershift** | Cross-AI dispatch engine | iv-6ikc | Moderate (flag file shim) | Medium — Oracle/Codex dispatch |
+| P2.2c | **interscribe** | Knowledge compounding | iv-sdqv | Moderate (cross-plugin) | Medium — touches auto-compound |
+| P2.2d | **interarch** | Agent-native architecture | iv-eff5 | Very low (zero coupling) | Low — standalone skill |
 
 **Extraction criteria (from Oracle):** Don't extract before you have measurement. Each extraction is informed by analytics data showing:
 - Interface stability (did the API between Clavain and this component change in the last N runs?)
@@ -178,23 +193,32 @@ Four planned companions, ordered by self-containment and risk:
 
 #### P2.3 — Flux-Drive Spec Library Extraction
 
-**Beads:** Clavain-ia66, Clavain-0etu, Clavain-e8dg, Clavain-rpso (P2-P3, chained)
+**Beads:** iv-ia66, iv-0etu, iv-e8dg, iv-rpso (P2-P3, chained)
 
 Extract the flux-drive protocol (already spec'd in `docs/spec/` in interflux) into reusable libraries:
 
 | Phase | Bead | Deliverable |
 |-------|------|-------------|
 | Spec Phase 1 | (done) | Protocol spec: 9 docs, 2,309 lines, 3 conformance levels |
-| Spec Phase 2 | Clavain-ia66 | Extract domain detection Python library |
-| Spec Phase 3 | Clavain-0etu | Extract scoring/synthesis Python library |
-| Spec Phase 4 | Clavain-e8dg | Migrate Clavain to consume the library |
-| Spec Phase 5 | Clavain-rpso | Claude Code adapter guide + publish |
+| Spec Phase 2 | iv-ia66 | Extract domain detection Python library |
+| Spec Phase 3 | iv-0etu | Extract scoring/synthesis Python library |
+| Spec Phase 4 | iv-e8dg | Migrate Clavain to consume the library |
+| Spec Phase 5 | iv-rpso | Claude Code adapter guide + publish |
 
-#### P2.4 — Diff/Document Slicing Consolidation
+#### P2.4 — Interwatch Integration Completion
 
-**Bead:** Clavain-496k (P2)
+**Beads:** iv-f5pi, iv-pjfp, iv-rrc2, iv-1626, iv-444d, iv-mqm4
 
-Consolidate slicing logic from 4 files (~499 lines across 5 locations) into a single `phases/slicing.md` (~350 lines). This is a refactoring of markdown instructions — no runtime behavior changes. Clears technical debt before further interflux evolution.
+The interwatch integration is partially shipped (lib-signals and auto-drift-check implemented) but several beads remain open:
+
+| Item | Bead | Status |
+|------|------|--------|
+| Extract lib-signals.sh | iv-f5pi | Implemented (bead open) |
+| Build auto-drift-check.sh | iv-pjfp | Implemented (bead open) |
+| Demo hooks for interwatch | iv-rrc2 | Open |
+| Version-bump → Interwatch signal | iv-1626 | Open |
+| Catalog-reminder → Interwatch escalation | iv-444d | Open |
+| Session-start drift summary injection | iv-mqm4 | Open |
 
 #### P2.5 — Infrastructure Improvements
 
@@ -202,18 +226,20 @@ Smaller items that compound over Phase 2:
 
 | Item | Bead | Priority | Description |
 |------|------|----------|-------------|
-| Split upstreams.json | Clavain-3w1x | P2 | Separate config from state, gitignore state |
-| Consolidate upstream API calls | Clavain-4728 | P2 | 24 → 12 API calls per check |
-| flux-gen UX improvements | Clavain-0d3a | P3 | Onboarding, integration, docs |
-| flux-gen frontmatter | Clavain-ub8n | P3 | Move boilerplate to dispatch-time |
-| `/describe-pr` command | Clavain-l8zk | P3 | Quick PR descriptions |
+| Split upstreams.json | iv-3w1x | P2 | Separate config from state, gitignore state |
+| Consolidate upstream API calls | iv-4728 | P2 | 24 → 12 API calls per check |
+| Extract cache_hints metrics | iv-0lt | P2 | score_tokens.py improvement |
+| Cache-friendly format queries | iv-1gb | P2 | regression_suite.json addition |
+| flux-gen UX improvements | iv-0d3a | P3 | Onboarding, integration, docs |
+| flux-gen frontmatter | iv-ub8n | P3 | Move boilerplate to dispatch-time |
+| `/describe-pr` command | iv-l8zk | P3 | Quick PR descriptions |
 
 #### Phase 2 Exit Criteria
 
 - [ ] tldrs integration measured: token reduction, defect rate, time-to-first-signal
 - [ ] At least 2 companions extracted (intercraft + 1 more)
 - [ ] Domain detection and scoring available as Python libraries
-- [ ] Slicing logic consolidated
+- [ ] Interwatch integration fully wired (all 6 beads closed)
 - [ ] Upstream sync infrastructure simplified
 
 ---
@@ -226,7 +252,7 @@ Smaller items that compound over Phase 2:
 
 #### P3.1 — Adaptive Model Routing
 
-**Bead:** Clavain-4xqu (P3, blocked by: Clavain-mb6u, Clavain-7z28)
+**Bead:** iv-4xqu (P3, blocked by: iv-mb6u, iv-7z28)
 
 Dynamic routing based on measured trust, not static tiers:
 - Agents with low precision (high override rate) get smaller scope
@@ -238,7 +264,7 @@ Dynamic routing based on measured trust, not static tiers:
 
 #### P3.2 — Cross-Project Knowledge Compounding
 
-**Bead:** Clavain-nv7f (P3)
+**Bead:** iv-nv7f (P3)
 
 Knowledge compounding across projects, measured for ROI:
 - Patterns learned in project A inform project B
@@ -250,7 +276,7 @@ Knowledge compounding across projects, measured for ROI:
 
 #### P3.3 — MCP-Native Companion Communication
 
-**Bead:** Clavain-oijz (P3)
+**Bead:** iv-oijz (P3)
 
 Migrate inter-* communication from file-based sideband (`/tmp/clavain-*.json`) to MCP servers:
 - Start with interphase (phase state queries via MCP tool calls instead of file reads)
@@ -260,13 +286,13 @@ Migrate inter-* communication from file-based sideband (`/tmp/clavain-*.json`) t
 
 #### P3.4 — Interactive-to-Autonomous Boundary
 
-**Bead:** Clavain-xweh (P3)
+**Bead:** iv-xweh (P3)
 
 Formalize the shift-work boundary in workflows — when should the system ask for human input vs. proceed autonomously? Informed by P1.1 human override rate data and P3.1 adaptive routing.
 
 #### P3.5 — Deferred Flux-Drive v2 Features
 
-**Bead:** Clavain-9tq (P3, 8 items)
+**Bead:** iv-9tq (P3, 8 items)
 
 Trigger-gated features deferred from the v2 architecture redesign:
 
@@ -306,7 +332,7 @@ Research areas organized by proximity to current capabilities. These are not del
 | Product-native agent orchestration | Is sprint-style lifecycle orchestration genuine whitespace? | P1.3 topology |
 | Agent regression testing | Did this prompt change degrade bug-catching? | P1.2 evals as CI |
 
-**Beads:** Clavain-fzrn, Clavain-jk7q, Clavain-3kee, Clavain-705b
+**Beads:** iv-fzrn, iv-jk7q, iv-3kee, iv-705b
 
 ### Medium-Term (informed by Phase 1 data)
 
@@ -318,7 +344,7 @@ Research areas organized by proximity to current capabilities. These are not del
 | Plan-aware context compression | Give each agent domain-specific context, not everything | P2.1 tldrs integration |
 | Transactional orchestration | How do you handle partial failures and conflicting edits? | P2.3 library extraction |
 
-**Beads:** Clavain-exos, Clavain-l5ap
+**Beads:** iv-exos, iv-l5ap
 
 ### Long-Term (informed by Phase 2+ data)
 
@@ -332,7 +358,7 @@ Research areas organized by proximity to current capabilities. These are not del
 | Prompt/agent supply chain | Versioning, checksums, behavior deltas for agent definitions | P2.2 extractions |
 | Latency budgets as constraints | Time-to-feedback alongside token cost as optimization target | P1.1 analytics |
 
-**Beads:** Clavain-173y, Clavain-8nza, Clavain-icqo, Clavain-mkrh, Clavain-ve1n
+**Beads:** iv-173y, iv-8nza, iv-icqo, iv-mkrh, iv-ve1n
 
 ### Deprioritized (per Oracle, 2026-02-14)
 
@@ -348,11 +374,12 @@ Research areas organized by proximity to current capabilities. These are not del
 
 | Companion | What it crystallized | Status | Location |
 |-----------|---------------------|--------|----------|
-| **interflux** | Multi-agent review is generalizable | Shipped | `/root/projects/interflux/` |
-| **interphase** | Phase tracking and gates are generalizable | Shipped | `/root/projects/interphase/` |
-| **interline** | Statusline rendering is generalizable | Shipped | `/root/projects/interline/` |
-| **interpath** | Product artifact generation is generalizable | Shipped | `/root/projects/interpath/` |
-| **interwatch** | Doc freshness monitoring is generalizable | Shipped | `/root/projects/interwatch/` |
+| **interflux** | Multi-agent review is generalizable | Shipped | `plugins/interflux/` |
+| **interphase** | Phase tracking and gates are generalizable | Shipped | `plugins/interphase/` |
+| **interline** | Statusline rendering is generalizable | Shipped | `plugins/interline/` |
+| **interpath** | Product artifact generation is generalizable | Shipped | `plugins/interpath/` |
+| **interwatch** | Doc freshness monitoring is generalizable | Shipped | `plugins/interwatch/` |
+| **interlock** | Multi-agent file coordination is generalizable | Shipped | `plugins/interlock/` |
 | **intercraft** | Claude Code meta-tooling is generalizable | Planned (P2.2a) | — |
 | **intershift** | Cross-AI dispatch is generalizable | Planned (P2.2b) | — |
 | **interscribe** | Knowledge compounding is generalizable | Planned (P2.2c) | — |
@@ -366,57 +393,76 @@ Research areas organized by proximity to current capabilities. These are not del
 
 | Bead | Title | Blocks |
 |------|-------|--------|
-| Clavain-mb6u | Outcome-based agent analytics v1 (truth engine) | spad, 7z28, 4xqu |
-| Clavain-705b | Design agent evals as CI harness | — |
-| Clavain-7z28 | Topology experiment: 2/4/6/8 agents | Blocked by mb6u |
+| iv-mb6u | Outcome-based agent analytics v1 (truth engine) | spad, 7z28, 4xqu |
+| iv-705b | Design agent evals as CI harness | — |
+| iv-7z28 | Topology experiment: 2/4/6/8 agents | Blocked by mb6u |
 
-### P2 — Should Do (13 beads, Phase 1-2)
+### P2 — Should Do (21 beads, Phase 1-2)
 
 | Bead | Title | Phase |
 |------|-------|-------|
-| Clavain-spad | Deep tldrs integration | P2.1 |
-| Clavain-sdqv | Plan interscribe extraction | P2.2c |
-| Clavain-6ikc | Plan intershift extraction | P2.2b |
-| Clavain-2ley | Plan intercraft extraction | P2.2a |
-| Clavain-ia66 | [flux-drive-spec] Phase 2: domain detection library | P2.3 |
-| Clavain-0etu | [flux-drive-spec] Phase 3: scoring/synthesis library | P2.3 |
-| Clavain-e8dg | [flux-drive-spec] Phase 4: migrate Clavain | P2.3 |
-| Clavain-496k | Diff/document slicing consolidation | P2.4 |
-| Clavain-3w1x | Split upstreams.json config/state | P2.5 |
-| Clavain-4728 | Consolidate upstream API calls | P2.5 |
-| Clavain-l5ap | Research: transactional orchestration | Research |
-| Clavain-jk7q | Research: cognitive load budgets | Research |
-| Clavain-3kee | Research: product-native orchestration | Research |
+| iv-spad | Deep tldrs integration | P2.1 |
+| iv-sdqv | Plan interscribe extraction | P2.2c |
+| iv-6ikc | Plan intershift extraction | P2.2b |
+| iv-2ley | Plan intercraft extraction | P2.2a |
+| iv-ia66 | [flux-drive-spec] Phase 2: domain detection library | P2.3 |
+| iv-0etu | [flux-drive-spec] Phase 3: scoring/synthesis library | P2.3 |
+| iv-e8dg | [flux-drive-spec] Phase 4: migrate Clavain | P2.3 |
+| iv-f5pi | Extract lib-signals.sh (implemented, needs closing) | P2.4 |
+| iv-pjfp | Build auto-drift-check.sh (implemented, needs closing) | P2.4 |
+| iv-rrc2 | Demo hooks for interwatch | P2.4 |
+| iv-1626 | Version-bump → Interwatch signal | P2.4 |
+| iv-444d | Catalog-reminder → Interwatch escalation | P2.4 |
+| iv-mqm4 | Session-start drift summary injection | P2.4 |
+| iv-3w1x | Split upstreams.json config/state | P2.5 |
+| iv-4728 | Consolidate upstream API calls | P2.5 |
+| iv-0lt | Extract cache_hints metrics | P2.5 |
+| iv-1gb | Cache-friendly format queries | P2.5 |
+| iv-l5ap | Research: transactional orchestration | Research |
+| iv-jk7q | Research: cognitive load budgets | Research |
+| iv-3kee | Research: product-native orchestration | Research |
+| iv-exos | Research: bias-aware product decisions | Research |
+| iv-fzrn | Research: multi-agent hallucination cascades | Research |
 
 ### P3 — Nice to Have (15 beads, Phase 2-3)
 
 | Bead | Title | Phase |
 |------|-------|-------|
-| Clavain-4xqu | Adaptive model routing | P3.1 |
-| Clavain-nv7f | Cross-project knowledge compounding | P3.2 |
-| Clavain-oijz | MCP-native companion communication | P3.3 |
-| Clavain-xweh | Interactive-to-autonomous boundary | P3.4 |
-| Clavain-9tq | Deferred flux-drive v2 features (8 items) | P3.5 |
-| Clavain-eff5 | Plan interarch extraction | P2.2d |
-| Clavain-rpso | [flux-drive-spec] Phase 5: adapter guide | P2.3 |
-| Clavain-b683 | Auto-inject past solutions into /sprint execute | P3 |
-| Clavain-l8zk | `/describe-pr` command | P2.5 |
-| Clavain-0d3a | flux-gen UX improvements | P2.5 |
-| Clavain-ub8n | flux-gen frontmatter overhaul | P2.5 |
-| Clavain-173y | Research: guardian agent patterns | Research |
-| Clavain-8nza | Research: latency budgets | Research |
-| Clavain-icqo | Research: ADL extensions | Research |
-| Clavain-mkrh | Research: prompt/agent supply chain | Research |
+| iv-4xqu | Adaptive model routing | P3.1 |
+| iv-nv7f | Cross-project knowledge compounding | P3.2 |
+| iv-oijz | MCP-native companion communication | P3.3 |
+| iv-xweh | Interactive-to-autonomous boundary | P3.4 |
+| iv-9tq | Deferred flux-drive v2 features (8 items) | P3.5 |
+| iv-eff5 | Plan interarch extraction | P2.2d |
+| iv-rpso | [flux-drive-spec] Phase 5: adapter guide | P2.3 |
+| iv-b683 | Auto-inject past solutions into /sprint execute | P3 |
+| iv-l8zk | `/describe-pr` command | P2.5 |
+| iv-3115 | Landing-a-change → doc refresh gate | P3 |
+| iv-0d3a | flux-gen UX improvements | P2.5 |
+| iv-ub8n | flux-gen frontmatter overhaul | P2.5 |
+| iv-173y | Research: guardian agent patterns | Research |
+| iv-8nza | Research: latency budgets | Research |
+| iv-icqo | Research: ADL extensions | Research |
+| iv-mkrh | Research: prompt/agent supply chain | Research |
+| iv-ve1n | Research: security model for tool access | Research |
 
-### P4 — Backlog (5 beads)
+### P4 — Backlog (4 beads)
 
 | Bead | Title |
 |------|-------|
-| Clavain-cam4 | Automated user testing via TUI/browser automation |
-| Clavain-dm1a | Token budget controls + per-run cost reporting |
-| Clavain-hbcw | `/semport` workflow for semantic code porting |
-| Clavain-q703 | Model routing policy + consensus planning |
-| Clavain-ve1n | Research: security model for disciplined tool access |
+| iv-cam4 | Automated user testing via TUI/browser automation |
+| iv-dm1a | Token budget controls + per-run cost reporting |
+| iv-hbcw | `/semport` workflow for semantic code porting |
+| iv-q703 | Model routing policy + consensus planning |
+
+### tldrs Upstream (3 beads)
+
+| Bead | Title |
+|------|-------|
+| iv-ca5 | tldrs: truncation should respect symbol boundaries |
+| iv-dsk | tldrs: ultracompact needs --depth=body variant |
+| iv-19m | tldrs: slice command should optionally include source code |
+| iv-72c | Add cache-friendly run to demo-tldrs.sh |
 
 ---
 
@@ -427,7 +473,7 @@ Phase 1: Measure
   mb6u (analytics v1) ──┬──► 7z28 (topology experiment) ──► 4xqu (adaptive routing) [P3]
                         └──► spad (tldrs integration) [P2]
   705b (evals as CI) ────── independent
-  d4ao (.clavain/ fs) ────── independent (infrastructure)
+  .clavain/ filesystem ──── independent (infrastructure)
 
 Phase 2: Integrate + Extract
   spad (tldrs) ──────────── depends on mb6u
@@ -436,11 +482,11 @@ Phase 2: Integrate + Extract
   sdqv (interscribe) ────── independent
   eff5 (interarch) ──────── independent
   ia66 → 0etu → e8dg → rpso (flux-drive spec library chain)
-  496k (slicing consolidation) ── independent
+  f5pi → pjfp → rrc2 (interwatch integration chain)
 
 Phase 3: Advance
   4xqu (adaptive routing) ── depends on mb6u + 7z28
-  nv7f (cross-project) ──── depends on d4ao + sdqv
+  nv7f (cross-project) ──── depends on .clavain/ + sdqv
   oijz (MCP communication) ── independent
   9tq (deferred fd v2) ──── trigger-gated, no hard dependency
 ```
@@ -462,4 +508,4 @@ The `test_prd.py` structural test validates PRD component counts. This roadmap i
 
 ---
 
-*Synthesized from: [`docs/vision.md`](vision.md), [`docs/PRD.md`](PRD.md), 11 brainstorm docs (2026-02-08 through 2026-02-14), 3 flux-drive synthesis reports, 7 approved PRDs, 45 open beads, and Oracle cross-review (2026-02-14). Sources linked throughout.*
+*Synthesized from: [`docs/vision.md`](vision.md), [`docs/PRD.md`](PRD.md), 11 brainstorm docs (2026-02-08 through 2026-02-14), 3 flux-drive synthesis reports, 7 approved PRDs, 51 open beads, and Oracle cross-review (2026-02-14). Sources linked throughout.*

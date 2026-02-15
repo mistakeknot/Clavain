@@ -49,7 +49,7 @@ Clavain encodes engineering and product discipline into four component types tha
 | **Skills** | 27 | Reusable discipline knowledge | `systematic-debugging`, `writing-plans`, `flux-drive` |
 | **Agents** | 5 | Autonomous specialists (review + workflow) | `plan-reviewer`, `pr-comment-resolver` |
 | **Commands** | 37 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
-| **Hooks** | 7 | Event-driven automation | `session-start.sh`, `auto-compound.sh` |
+| **Hooks** | 8 | Event-driven automation | `session-start.sh`, `auto-compound.sh` |
 | **MCP Servers** | 1 | External tool integration | context7 (runtime doc fetching) |
 
 ### 4.2 Routing System
@@ -86,6 +86,7 @@ Capabilities extracted from Clavain when patterns stabilized:
 | **interline** | Statusline renderer (dispatch state, bead context, phase, clodex mode) | Shipped |
 | **interpath** | Product artifact generation (roadmaps, PRDs, vision docs, changelogs, status reports) | Shipped |
 | **interwatch** | Doc freshness monitoring (drift detection, confidence scoring, auto-refresh) | Shipped |
+| **interlock** | Multi-agent file coordination (MCP server wrapping intermute) | Shipped |
 | **intercraft** | Claude Code meta-tooling | Planned |
 | **intershift** | Cross-AI dispatch engine | Planned |
 | **interscribe** | Knowledge compounding engine | Planned |
