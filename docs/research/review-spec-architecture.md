@@ -53,7 +53,7 @@ Verdict: needs-changes
 - `staging.md` line 228: "Monitoring contract: `skills/flux-drive/phases/shared-contracts.md`"
 - `completion-signal.md` line 93: "Contract is defined in `skills/flux-drive/phases/shared-contracts.md`"
 
-This file does not exist in `docs/spec/contracts/`. It appears to be an Interflux implementation file that leaked into the specification. The contract content is duplicated in `contracts/completion-signal.md` and `contracts/findings-index.md`.
+This file does not exist in `docs/spec/contracts/`. It appears to be an interflux implementation file that leaked into the specification. The contract content is duplicated in `contracts/completion-signal.md` and `contracts/findings-index.md`.
 
 **Recommendation:** Global search-replace to remove `shared-contracts.md` references. Point to the actual contract documents (completion-signal.md, findings-index.md) instead.
 
@@ -104,12 +104,12 @@ Not a functional issue, but reduces consistency.
 
 **Recommendation:** Standardize on markdown links with relative paths. Pattern: `[section name](./path/to/doc.md)` or `[section name](../path/to/doc.md)` depending on directory depth.
 
-### 2.3 Interflux Reference Sections
+### 2.3 interflux Reference Sections
 
 **Strengths:**
-- Every core document includes an "Interflux Reference" section clearly marked as implementation-specific
+- Every core document includes an "interflux Reference" section clearly marked as implementation-specific
 - This boundary is architecturally sound — spec defines protocol, reference shows one way to implement it
-- Prevents conflation of "how flux-drive works" vs "how Interflux implements flux-drive"
+- Prevents conflation of "how flux-drive works" vs "how interflux implements flux-drive"
 
 **Minor issue:** Some references are file paths (good for developers) but not URLs (limits external implementers). Not a P1 issue since this is "reference" not "required reading."
 
@@ -160,7 +160,7 @@ These are implementation details (what buttons does the orchestrator UI present?
 - Defines presentation format — protocol requirement
 - Leaves UI implementation unspecified
 
-**Recommendation:** Move detailed flowcharts to an appendix or Interflux Reference section. Keep the core protocol description at the abstraction level of "orchestrator presents options, user chooses."
+**Recommendation:** Move detailed flowcharts to an appendix or interflux Reference section. Keep the core protocol description at the abstraction level of "orchestrator presents options, user chooses."
 
 ### 3.3 Unnecessary Duplication
 
@@ -213,13 +213,13 @@ This is a weak cycle (both documents can be read independently), but it's worth 
 
 ### 5.1 File Paths in Protocol
 
-**Issue:** Several protocol documents reference Interflux file paths directly in the algorithm descriptions (not just "Interflux Reference" sections):
+**Issue:** Several protocol documents reference interflux file paths directly in the algorithm descriptions (not just "interflux Reference" sections):
 
 - `protocol.md` line 74: "`${OUTPUT_DIR}/domain-detection.json`" — this is an implementation detail (cache location)
 - `protocol.md` line 93: "`${OUTPUT_DIR}/input-profile.json`" — ditto
-- `staging.md` line 213: "Implementation Locations: `skills/flux-drive/phases/launch.md` (lines 146-220)" — this is in the main spec body, not "Interflux Reference"
+- `staging.md` line 213: "Implementation Locations: `skills/flux-drive/phases/launch.md` (lines 146-220)" — this is in the main spec body, not "interflux Reference"
 
-**Recommendation:** Move all `${OUTPUT_DIR}` references to the Interflux Reference sections. The protocol should describe caching conceptually ("detection results MAY be cached in the project directory") without specifying file formats or paths.
+**Recommendation:** Move all `${OUTPUT_DIR}` references to the interflux Reference sections. The protocol should describe caching conceptually ("detection results MAY be cached in the project directory") without specifying file formats or paths.
 
 ### 5.2 Mermaid Diagrams
 
@@ -241,7 +241,7 @@ These are UX decisions, not protocol requirements.
 
 **Strengths:**
 - Semantic versioning defined clearly (README line 80-84)
-- Spec version independent of implementation version (Interflux)
+- Spec version independent of implementation version (interflux)
 - Conformance levels allow incremental adoption
 
 **Observation:** No extension points or hook mechanisms are defined. If a future implementation wants to add a new conformance level (e.g., "Core + Continuous Learning"), they would need to:
@@ -267,7 +267,7 @@ This is acceptable for a 1.0 spec, but worth documenting in a "Future Extensions
 2. **Clear core/extension split:** The three-tier conformance model (Core, Core+Domains, Core+Knowledge) is architecturally sound (pending clarification of AR-003)
 3. **No circular dependencies:** Document structure is acyclic (one weak cycle in scoring ↔ domain-detection, easily resolved)
 4. **Consistent conformance pattern:** RFC 2119 MUST/SHOULD/MAY usage across all documents
-5. **Implementation separation:** Interflux Reference sections cleanly separate protocol from implementation
+5. **Implementation separation:** interflux Reference sections cleanly separate protocol from implementation
 
 ### Weaknesses
 
@@ -283,7 +283,7 @@ This is acceptable for a 1.0 spec, but worth documenting in a "Future Extensions
 3. **Fix AR-006 (P2):** Either add slicing.md content to the spec or remove the reference and inline convergence adjustment rules in synthesis.md.
 4. **Fix AR-002 (P2):** Resolve domain_boost's position in the scoring formula. Either make it core or clearly mark it optional with a fallback.
 5. **Fix AR-001 (P2):** Standardize on markdown link format for all cross-references.
-6. **Fix AR-004 (P2):** Move implementation-level flowcharts to appendices or Interflux Reference sections.
+6. **Fix AR-004 (P2):** Move implementation-level flowcharts to appendices or interflux Reference sections.
 
 ---
 
@@ -369,7 +369,7 @@ flowchart TD
     Synthesize --> Report([Present Results])
 ```
 
-Move detailed state transitions to Interflux Reference or an appendix.
+Move detailed state transitions to interflux Reference or an appendix.
 
 ---
 
@@ -419,4 +419,4 @@ The flux-drive protocol specification is **architecturally sound** with a clear 
 **Next steps:**
 1. Fix P1 issues (conformance clarification, dead references)
 2. Validate all cross-references are clickable
-3. Spot-check with a fresh reader (someone not familiar with Interflux)
+3. Spot-check with a fresh reader (someone not familiar with interflux)

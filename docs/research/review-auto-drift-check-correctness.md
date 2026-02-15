@@ -99,12 +99,12 @@ fi
 2. Shared sentinel check+write (mutual exclusion, MUST be before any heavy work)
 3. Per-repo opt-out (cheap file check, safe after sentinel)
 4. Throttle sentinel (cheap stat, safe after sentinel)
-5. Interwatch discovery (expensive `find`, safe after sentinel)
+5. interwatch discovery (expensive `find`, safe after sentinel)
 6. Transcript analysis (expensive parsing)
 
 ---
 
-### 2. Medium: Missing Test Coverage for Interwatch-Not-Installed
+### 2. Medium: Missing Test Coverage for interwatch-Not-Installed
 
 **Location**: `tests/shell/auto_drift_check.bats` (missing test case)
 
@@ -154,7 +154,7 @@ EOF
 10. ✓ Recovery signals trigger
 
 **Missing**:
-- Interwatch discovery failure (graceful degradation)
+- interwatch discovery failure (graceful degradation)
 - Session ID missing/malformed (would create `/tmp/clavain-stop-unknown`)
 - Transcript path is directory not file (covered by `-f` check, but not tested)
 
@@ -164,7 +164,7 @@ EOF
 
 ---
 
-### 3. Low: Interwatch Discovery Calls `_discover_interwatch_plugin` Without Checking lib.sh Exists
+### 3. Low: interwatch Discovery Calls `_discover_interwatch_plugin` Without Checking lib.sh Exists
 
 **Location**: `hooks/auto-drift-check.sh:59-61`
 
@@ -316,7 +316,7 @@ fi
 | 35-37 | .no-driftcheck opt-out | exit 0 | ✓ |
 | 42-46 | Shared sentinel exists | exit 0 | ✓ |
 | 49-56 | Throttle sentinel recent | exit 0 | ✓ |
-| 61-64 | Interwatch not installed | exit 0 | ✓ |
+| 61-64 | interwatch not installed | exit 0 | ✓ |
 | 66-69 | Transcript missing/empty | exit 0 | ✓ |
 | 72-75 | Recent transcript empty | exit 0 | ✓ |
 | 83-85 | Signal weight < 2 | exit 0 | ✓ |
@@ -388,7 +388,7 @@ fi
 | recovery signals trigger (weight 2) | High-weight signal |
 
 **Missing**:
-- Interwatch discovery failure (see Finding #2)
+- interwatch discovery failure (see Finding #2)
 - SESSION_ID missing/malformed (creates `/tmp/clavain-stop-unknown`)
 - Transcript is directory not file (would fail `-f` check, exit 0)
 - Multiple hooks run in parallel (TOCTOU race, see Finding #1)
@@ -495,7 +495,7 @@ find /tmp -maxdepth 1 \( -name 'clavain-stop-*' -o -name 'clavain-drift-last-*' 
 
 ---
 
-### 9. Graceful Degradation When Interwatch Not Installed
+### 9. Graceful Degradation When interwatch Not Installed
 
 **Code** (auto-drift-check.sh:58-64):
 ```bash

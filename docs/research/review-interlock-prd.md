@@ -26,14 +26,14 @@ This PRD is **well-scoped, technically sound, and ready for implementation**. Th
 **Finding:** Features are independently deliverable with minimal hidden dependencies.
 
 **Evidence:**
-- F1-F5 are purely Intermute enrichments; can ship as a standalone release
+- F1-F5 are purely intermute enrichments; can ship as a standalone release
 - F6 (MCP server) depends only on F1-F5 being stable, not feature-complete
 - F7-F9 (hooks, commands, signals) are orthogonal; any can be disabled without breaking others
 - F10 (git hook) is optional enforcement; system works without it
 
-**Assessment:** Excellent. The two-layer architecture (Intermute + Interlock) cleanly separates concerns. This allows phased rollout: core resilience first (F1-F5), then Claude Code integration (F6-F9), then enforcement (F10).
+**Assessment:** Excellent. The two-layer architecture (intermute + Interlock) cleanly separates concerns. This allows phased rollout: core resilience first (F1-F5), then Claude Code integration (F6-F9), then enforcement (F10).
 
-**Recommendation:** Document this phasing explicitly in the PRD's "Implementation Path" section. Mention that F1-F5 can be released as Intermute v0.5.0, and F6-F13 can follow as Interlock v0.1.0 without blocking each other.
+**Recommendation:** Document this phasing explicitly in the PRD's "Implementation Path" section. Mention that F1-F5 can be released as intermute v0.5.0, and F6-F13 can follow as Interlock v0.1.0 without blocking each other.
 
 ---
 
@@ -110,9 +110,9 @@ This PRD is **well-scoped, technically sound, and ready for implementation**. Th
 **Recommendation:** Clarify in acceptance criteria:
 ```
 - [ ] Signal emission: when stale reservation is deleted, emit event to all listening agents
-      (via Intermute's WebSocket subscribers OR via signal file writes by Interlock)
-- [ ] Fire-and-forget: no retry if signal delivery fails; Intermute logs failure for debugging
-- [ ] Interlock watches Intermute logs/API for deleted-reservation events and writes signal files
+      (via intermute's WebSocket subscribers OR via signal file writes by Interlock)
+- [ ] Fire-and-forget: no retry if signal delivery fails; intermute logs failure for debugging
+- [ ] Interlock watches intermute logs/API for deleted-reservation events and writes signal files
 ```
 
 #### Issue B: F9 — Signal File Rotation
@@ -206,7 +206,7 @@ This PRD is **well-scoped, technically sound, and ready for implementation**. Th
 
 **Scenario:** Two agents both named "BlueTiger" register simultaneously.
 
-**Current spec:** No handling mentioned. Does Intermute reject duplicate names? Allow both?
+**Current spec:** No handling mentioned. Does intermute reject duplicate names? Allow both?
 
 **Recommendation:** Add to F2 or F8 AC:
 ```
@@ -227,9 +227,9 @@ This PRD is **well-scoped, technically sound, and ready for implementation**. Th
 - [ ] On startup, check for orphaned `.1.jsonl` (no current `.jsonl`); rename back
 ```
 
-#### Edge Case C: Intermute Service Crashes During Reservation Hold
+#### Edge Case C: intermute Service Crashes During Reservation Hold
 
-**Scenario:** Agent A reserves `src/router.go`, then Intermute crashes and restarts.
+**Scenario:** Agent A reserves `src/router.go`, then intermute crashes and restarts.
 
 **Current spec:** "Startup sweep: On launch, release ALL reservations >5 minutes old."
 
@@ -318,7 +318,7 @@ Note: git commit will block this file until resolved.
 **Recommendation:** Specify format and placement in F13 AC:
 ```
 - [ ] Indicator format: "${NUM_AGENTS} agents | ${NUM_FILES} reserved"
-- [ ] Placement: Interline statusline, coordination layer
+- [ ] Placement: interline statusline, coordination layer
 - [ ] Shown only when INTERMUTE_AGENT_ID is set (active session)
 - [ ] Tappable to show /interlock:status equivalent (optional UX enhancement)
 ```
@@ -388,7 +388,7 @@ This will validate whether coordination is a critical pain point or a nice-to-ha
 | **F10: Git Hook** | NEEDS UX POLISH | — | Error messages need finalization before rollout |
 | **F11: Skills** | READY | — | Referenced in PRD; content TBD but scope clear |
 | **F12: Clavain Integration** | READY | — | Follows established shim pattern (interphase) |
-| **F13: Interline Integration** | READY | — | Priority placement clear; info density TBD (see concern) |
+| **F13: interline Integration** | READY | — | Priority placement clear; info density TBD (see concern) |
 
 ---
 
@@ -450,24 +450,24 @@ This will validate whether coordination is a critical pain point or a nice-to-ha
 
 ## Dependency Health
 
-### Intermute (`/root/projects/Intermute/`)
+### intermute (`/root/projects/intermute/`)
 
 **Status:** Assumed stable. PRD depends on existing APIs:
 - Agent registry (POST /api/agents, GET /api/agents)
 - File reservations (POST/GET /api/reservations)
 - Messaging (POST/GET /api/messages)
 
-**Risk:** If Intermute APIs change, Interlock MCP tools break.
+**Risk:** If intermute APIs change, Interlock MCP tools break.
 
-**Recommendation:** Lock Intermute version in Interlock's dependencies. Interlock's MCP tools are the contract; don't change Intermute APIs without coordinating.
+**Recommendation:** Lock intermute version in Interlock's dependencies. Interlock's MCP tools are the contract; don't change intermute APIs without coordinating.
 
-### Interline (`/root/projects/interline/`)
+### interline (`/root/projects/interline/`)
 
 **Status:** Assumed stable. PRD depends on signal file reading + statusline priority system.
 
-**Risk:** Interline's priority order or signal file format change → Interlock signals don't display.
+**Risk:** interline's priority order or signal file format change → Interlock signals don't display.
 
-**Recommendation:** Document signal file format in Interline's AGENTS.md. Interlock's signals must match Interline's expected schema.
+**Recommendation:** Document signal file format in interline's AGENTS.md. Interlock's signals must match interline's expected schema.
 
 ---
 
@@ -478,13 +478,13 @@ This will validate whether coordination is a critical pain point or a nice-to-ha
 **Assessment:** Realistic for experienced Go + bash + Claude Code plugin developers.
 
 **Breakdown:**
-- Phase 1 (Intermute core): 1 day — Standard Go + SQL, well-scoped
+- Phase 1 (intermute core): 1 day — Standard Go + SQL, well-scoped
 - Phase 2 (Interlock companion): 1-2 days — CLI tools + MCP server + hooks, requires plugin architecture knowledge
 - Phase 3 (Integration): 0.5 day — Glue code + tests
 
-**Assumption:** Assumes Phase 1 APIs are stable and don't require Intermute schema review.
+**Assumption:** Assumes Phase 1 APIs are stable and don't require intermute schema review.
 
-**Recommendation:** Add integration test early (Phase 2) to catch Intermute API mismatches before final Phase 3 polish.
+**Recommendation:** Add integration test early (Phase 2) to catch intermute API mismatches before final Phase 3 polish.
 
 ---
 
@@ -517,7 +517,7 @@ The PRD is:
 
 ### Recommended prep work (before dev sprint):
 
-1. **Resolve F3 (signal emission):** Define what "fire-and-forget" means — webhook, Intermute event API, or Interlock polling?
+1. **Resolve F3 (signal emission):** Define what "fire-and-forget" means — webhook, intermute event API, or Interlock polling?
 2. **Clarify F7 (onboarding):** Document ~/.config/clavain/intermute-joined creation in /interlock:join flow.
 3. **Pick F9 (rotation):** Either cut signal rotation as post-MVP, or specify archive/retention strategy.
 4. **Draft F10 (error messages):** Provide 2-3 example pre-commit hook error outputs for UX review.
@@ -537,7 +537,7 @@ After clarifications, this PRD is suitable for:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Intermute Enrichments (Phase 1) - Independent              │
+│ intermute Enrichments (Phase 1) - Independent              │
 ├─────────────────────────────────────────────────────────────┤
 │ F1: Circuit Breaker + Retry                                │
 │ F2: Session Identity (survive restarts)                    │
@@ -545,12 +545,12 @@ After clarifications, this PRD is suitable for:
 │ F4: Atomic Check-and-Reserve API                           │
 │ F5: Unix Domain Socket Listener                            │
 └────────────────┬────────────────────────────────────────────┘
-                 │ (depends on stable Intermute APIs)
+                 │ (depends on stable intermute APIs)
                  ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ Interlock Companion (Phase 2) - Semi-Independent           │
 ├─────────────────────────────────────────────────────────────┤
-│ F6: MCP Server (wraps Intermute HTTP/socket)               │
+│ F6: MCP Server (wraps intermute HTTP/socket)               │
 │ F7: Hooks (SessionStart, Stop, PreToolUse:Edit advisory)   │
 │ F8: Commands (join, leave, status, setup)                  │
 │ F9: Signal File Adapter (JSONL append-only)                │
@@ -560,10 +560,10 @@ After clarifications, this PRD is suitable for:
                  │ (depends on Interlock stable)
                  ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ Clavain + Interline Integration (Phase 3) - Glue          │
+│ Clavain + interline Integration (Phase 3) - Glue          │
 ├─────────────────────────────────────────────────────────────┤
 │ F12: Clavain shim delegation + doctor check                │
-│ F13: Interline signal reading + statusline priority        │
+│ F13: interline signal reading + statusline priority        │
 └─────────────────────────────────────────────────────────────┘
 
 Dependency flow: F1-F5 independent → F6-F11 depend on 1-5 → F12-F13 depend on 6-11
@@ -577,7 +577,7 @@ Parallel: F6-F11 can overlap; F12-F13 are blocking only for final integration te
 For dev team: Use this to track acceptance criteria verification.
 
 ```markdown
-## Phase 1: Intermute Enrichments (Intermute v0.5.0)
+## Phase 1: intermute Enrichments (intermute v0.5.0)
 
 ### F1: Circuit Breaker + Retry
 - [ ] CircuitBreaker struct implemented with sync.Mutex

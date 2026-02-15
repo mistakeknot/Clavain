@@ -203,7 +203,7 @@ Cleanup is a shared responsibility. Each hook should clean all Clavain sentinels
 **auto-drift-check.sh (10 tests):**
 - ✅ All guards (stop_hook_active, sentinel, opt-out, throttle)
 - ✅ Threshold behavior (below/above threshold 2)
-- ✅ Interwatch discovery (implicitly tested by running hook)
+- ✅ interwatch discovery (implicitly tested by running hook)
 - ✅ Reason content validation
 
 **auto-compound.sh (12 tests):**

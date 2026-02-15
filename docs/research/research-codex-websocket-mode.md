@@ -175,7 +175,7 @@ Sessions persist by default. No evidence of websocket or streaming beyond JSONL 
 
 **Purpose:** Enable statusline to show "Codex: <name> in <workdir>" while dispatch is active.
 
-### 4.2 Interline Statusline Integration
+### 4.2 interline Statusline Integration
 
 **Pattern (from research-interline-patterns.md):**
 - Plugins write state to `/tmp/clavain-dispatch-*.json` (keyed by PID)

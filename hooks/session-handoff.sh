@@ -45,6 +45,11 @@ if [[ -f "$SENTINEL" ]]; then
     exit 0
 fi
 
+# Write in-flight agent manifest (before signal analysis — runs even if no signals)
+# shellcheck source=hooks/lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh" 2>/dev/null || true
+_write_inflight_manifest "$SESSION_ID" 2>/dev/null || true
+
 # Check for signals that work is incomplete
 SIGNALS=""
 
@@ -61,6 +66,14 @@ if command -v bd &>/dev/null; then
     IN_PROGRESS=$(bd list --status=in_progress 2>/dev/null | grep -c '●' || true)
     if [[ "$IN_PROGRESS" -gt 0 ]]; then
         SIGNALS="${SIGNALS}in-progress-beads(${IN_PROGRESS}),"
+    fi
+fi
+
+# 3. In-flight background agents (from manifest just written)
+if [[ -f ".clavain/scratch/inflight-agents.json" ]]; then
+    INFLIGHT_COUNT=$(jq '.agents | length' ".clavain/scratch/inflight-agents.json" 2>/dev/null) || INFLIGHT_COUNT=0
+    if [[ "$INFLIGHT_COUNT" -gt 0 ]]; then
+        SIGNALS="${SIGNALS}inflight-agents(${INFLIGHT_COUNT}),"
     fi
 fi
 

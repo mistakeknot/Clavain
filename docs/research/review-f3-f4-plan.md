@@ -319,7 +319,7 @@ open_list=$(bd list --status=open --json 2>/dev/null) || {
    - `discovery_brief_scan()` uses 60s cache, outputs 1-2 line summary
    - `/lfg` routing now handles `action: "create_bead"` (step 2.1-2.4)
 
-2. **No interphase MEMORY.md** — Interphase project should have its own memory file documenting:
+2. **No interphase MEMORY.md** — interphase project should have its own memory file documenting:
    - Cache files at `/tmp/clavain-discovery-brief-${DISCOVERY_PROJECT_DIR//\//_}.cache`
    - TTL is 60s (hardcoded)
    - Orphan detection uses header-based matching (not filename-based like sprint-scan)

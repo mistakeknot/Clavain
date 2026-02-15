@@ -5,18 +5,18 @@
 
 ## Problem
 
-The flux-drive multi-agent review protocol exists only as implementation code scattered across Interflux's SKILL.md, phase files, and scripts. There's no standalone specification that someone could read to understand the protocol, implement a compatible system, or verify conformance. The existing core algorithm analysis is research, not spec.
+The flux-drive multi-agent review protocol exists only as implementation code scattered across interflux's SKILL.md, phase files, and scripts. There's no standalone specification that someone could read to understand the protocol, implement a compatible system, or verify conformance. The existing core algorithm analysis is research, not spec.
 
 ## Solution
 
-Write 9 specification documents (README + 4 core + 2 extensions + 2 contracts) in `docs/spec/` within the Interflux repo. Each document is a pragmatic spec with inline rationale, decision tables, and JSON schemas — precise enough to implement against, written in the author's voice, with Interflux as the normative reference implementation.
+Write 9 specification documents (README + 4 core + 2 extensions + 2 contracts) in `docs/spec/` within the interflux repo. Each document is a pragmatic spec with inline rationale, decision tables, and JSON schemas — precise enough to implement against, written in the author's voice, with interflux as the normative reference implementation.
 
 ## Features
 
 ### F1: Spec README + Directory Scaffold
 **What:** Create the `docs/spec/` directory structure and README with spec overview, versioning (semver), and conformance level definitions.
 **Acceptance criteria:**
-- [ ] `docs/spec/README.md` exists with spec version (1.0.0), conformance levels (Core, Core+Domains, Core+Knowledge), and Interflux reference link
+- [ ] `docs/spec/README.md` exists with spec version (1.0.0), conformance levels (Core, Core+Domains, Core+Knowledge), and interflux reference link
 - [ ] Directory structure: `docs/spec/{core,extensions,contracts}/` created
 - [ ] README explains the layered audience (tool developers + contributors)
 - [ ] README includes document index with one-line descriptions
@@ -106,14 +106,14 @@ Write 9 specification documents (README + 4 core + 2 extensions + 2 contracts) i
 
 - **No code changes** — Phase 1 is documentation only. No libraries, packages, or migrations.
 - **No conformance test suite** — describing tests is fine, implementing them is Phase 2+.
-- **No standalone repo** — spec lives in Interflux until adoption warrants extraction.
+- **No standalone repo** — spec lives in interflux until adoption warrants extraction.
 - **No formal grammar (BNF/ABNF)** — pragmatic schemas using JSON examples.
-- **No governance process** — spec changes follow Interflux's normal workflow.
-- **No multi-implementation compatibility matrix** — only Interflux exists today.
+- **No governance process** — spec changes follow interflux's normal workflow.
+- **No multi-implementation compatibility matrix** — only interflux exists today.
 
 ## Dependencies
 
-- **Interflux source code** — the normative reference implementation at `/root/projects/Interflux/`
+- **interflux source code** — the normative reference implementation at `/root/projects/interflux/`
 - **Existing core algorithm analysis** — `docs/research/analyze-flux-drive-core-algorithm.md` as scaffolding
 - **Closed beads** — Clavain-o4ix (extraction) and Clavain-2mmc (clarifications) are both complete
 

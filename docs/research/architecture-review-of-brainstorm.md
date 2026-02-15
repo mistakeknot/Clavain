@@ -1,4 +1,4 @@
-# Architecture Review: Intermute-Clavain Integration Design
+# Architecture Review: intermute-Clavain Integration Design
 
 **Date:** 2026-02-14
 **Reviewer:** fd-architecture agent
@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-The two-layer architecture (Intermute enrichments + Clavain/interlock integration) demonstrates strong boundary separation with clear ownership. The companion plugin decision (Option B: "interlock") aligns with Clavain's established extraction pattern and minimizes coupling. However, the design contains 4 must-fix coupling risks, 2 anti-patterns, and 6 unnecessary abstractions that should be cut before implementation.
+The two-layer architecture (intermute enrichments + Clavain/interlock integration) demonstrates strong boundary separation with clear ownership. The companion plugin decision (Option B: "interlock") aligns with Clavain's established extraction pattern and minimizes coupling. However, the design contains 4 must-fix coupling risks, 2 anti-patterns, and 6 unnecessary abstractions that should be cut before implementation.
 
 **Verdict:** Structurally sound with significant cleanup needed. The core architecture is correct but over-specified.
 
@@ -18,22 +18,22 @@ The two-layer architecture (Intermute enrichments + Clavain/interlock integratio
 
 **Assessment: WELL-SEPARATED with one coupling risk**
 
-**Layer 1 (Intermute Go enrichments):**
+**Layer 1 (intermute Go enrichments):**
 - Circuit breaker, retry logic, signal files, session identity, stale cleanup
-- All changes are internal to Intermute's Go codebase
-- No Clavain-specific logic leaks into Intermute
+- All changes are internal to intermute's Go codebase
+- No Clavain-specific logic leaks into intermute
 - Boundary: HTTP/MCP API surface
 
 **Layer 2 (Clavain/interlock integration):**
 - MCP tools, hooks (SessionStart, PreToolUse, Stop), interline integration
-- All changes are client-side, consume Intermute's API
+- All changes are client-side, consume intermute's API
 - Boundary: HTTP client + MCP protocol
 
 **Coupling Risk Identified:**
 
 **CR-1: MCP Server Placement Creates Dual-Protocol Maintenance**
 
-The design proposes BOTH an HTTP server (existing) AND an MCP server (new) in the same Intermute binary. This creates two protocol surfaces for the same underlying operations:
+The design proposes BOTH an HTTP server (existing) AND an MCP server (new) in the same intermute binary. This creates two protocol surfaces for the same underlying operations:
 
 ```
 Client Path 1: Hook scripts → curl → HTTP API → Store
@@ -42,15 +42,15 @@ Client Path 2: MCP tools → stdio → MCP server → Store
 
 **Problem:** Any schema change to reservations or messaging requires updates to BOTH protocol layers. The MCP server is essentially a duplicate client surface.
 
-**Recommendation:** Keep MCP server SEPARATE from Intermute. Create a thin MCP shim binary that wraps HTTP calls to Intermute. This follows the "dumb edge, smart center" pattern and allows Intermute to remain protocol-agnostic.
+**Recommendation:** Keep MCP server SEPARATE from intermute. Create a thin MCP shim binary that wraps HTTP calls to intermute. This follows the "dumb edge, smart center" pattern and allows intermute to remain protocol-agnostic.
 
 **Revised structure:**
 ```
-Intermute Go binary → HTTP API only
+intermute Go binary → HTTP API only
 interlock companion → MCP server (stdio, wraps HTTP calls)
 ```
 
-This eliminates the dual-protocol maintenance burden and keeps Intermute's scope focused.
+This eliminates the dual-protocol maintenance burden and keeps intermute's scope focused.
 
 ---
 
@@ -61,12 +61,12 @@ This eliminates the dual-protocol maintenance burden and keeps Intermute's scope
 **Why Option B is right:**
 1. Follows established inter* extraction pattern (interphase, interline, interflux, interpath, interwatch)
 2. Keeps Clavain's hook count manageable (already at 7 hooks)
-3. Allows non-Clavain users to adopt Intermute coordination (Autarch already uses Intermute)
-4. Clear ownership boundary: interlock owns coordination UX, Intermute owns state + API
+3. Allows non-Clavain users to adopt intermute coordination (Autarch already uses intermute)
+4. Clear ownership boundary: interlock owns coordination UX, intermute owns state + API
 
 **Why Option A is wrong:**
-- Adding MCP server directly to Intermute violates single-responsibility principle
-- Intermute becomes Claude Code-specific instead of general-purpose coordination service
+- Adding MCP server directly to intermute violates single-responsibility principle
+- intermute becomes Claude Code-specific instead of general-purpose coordination service
 - Autarch's integration would need to bypass the MCP layer (architectural split)
 
 **Why Option C is wrong:**
@@ -78,9 +78,9 @@ This eliminates the dual-protocol maintenance burden and keeps Intermute's scope
 
 ---
 
-### 1.3 Coupling Risks: Intermute ↔ Clavain ↔ interlock ↔ interline
+### 1.3 Coupling Risks: intermute ↔ Clavain ↔ interlock ↔ interline
 
-**CR-2: Interline's Signal File Format Dependency**
+**CR-2: interline's Signal File Format Dependency**
 
 Section 2c proposes interline reads `/tmp/intermute-signal-*.json` directly:
 
@@ -88,7 +88,7 @@ Section 2c proposes interline reads `/tmp/intermute-signal-*.json` directly:
 SIGNAL_TYPE=$(jq -r '.type' "$INTERMUTE_SIGNAL")
 ```
 
-**Problem:** Interline now depends on Intermute's internal signal schema. Any schema change to `SignalEvent` breaks interline's statusline parsing.
+**Problem:** interline now depends on intermute's internal signal schema. Any schema change to `SignalEvent` breaks interline's statusline parsing.
 
 **Fix:** Interlock should provide a normalized schema adapter:
 ```bash
@@ -96,7 +96,7 @@ SIGNAL_TYPE=$(jq -r '.type' "$INTERMUTE_SIGNAL")
 /usr/local/bin/interlock-signal-reader.sh → reads raw signal → outputs normalized format
 ```
 
-Interline reads interlock's normalized format, NOT Intermute's raw signals. This insulates interline from Intermute schema churn.
+interline reads interlock's normalized format, NOT intermute's raw signals. This insulates interline from intermute schema churn.
 
 **Recommended normalized schema:**
 ```json
@@ -108,7 +108,7 @@ Interline reads interlock's normalized format, NOT Intermute's raw signals. This
 }
 ```
 
-Interline's statusline already has a 4-layer priority system. This fits cleanly into its "dispatch state > bead context > workflow phase > clodex mode" hierarchy.
+interline's statusline already has a 4-layer priority system. This fits cleanly into its "dispatch state > bead context > workflow phase > clodex mode" hierarchy.
 
 ---
 
@@ -116,7 +116,7 @@ Interline's statusline already has a 4-layer priority system. This fits cleanly 
 
 Section 2b proposes Clavain's SessionStart hook calls `curl http://localhost:7338/api/agents` directly.
 
-**Problem:** This creates a hard dependency from Clavain → Intermute. If Intermute changes its port, endpoint structure, or auth scheme, Clavain's hook breaks.
+**Problem:** This creates a hard dependency from Clavain → intermute. If intermute changes its port, endpoint structure, or auth scheme, Clavain's hook breaks.
 
 **Fix:** Move agent registration into interlock's SessionStart hook, NOT Clavain's. Clavain's hook should delegate:
 
@@ -141,7 +141,7 @@ Section 2b proposes blocking Edit tool calls with a synchronous HTTP check:
 curl -sf "http://localhost:7338/api/reservations/check?project=$(pwd)&path=${FILE_PATH}"
 ```
 
-**Problem:** This adds network latency (5-50ms) to EVERY edit operation, even when Intermute is not running. This violates the "fast path for common case" principle.
+**Problem:** This adds network latency (5-50ms) to EVERY edit operation, even when intermute is not running. This violates the "fast path for common case" principle.
 
 **Fix:** Make the check async and advisory, not blocking:
 
@@ -162,8 +162,8 @@ curl -sf "http://localhost:7338/api/reservations/check?project=$(pwd)&path=${FIL
 ```
 1. Claude calls Edit tool
 2. PreToolUse:Edit hook fires
-3. Hook calls curl → Intermute /api/reservations/check
-4. Intermute queries SQLite
+3. Hook calls curl → intermute /api/reservations/check
+4. intermute queries SQLite
 5. Returns conflict status
 6. Hook blocks or allows
 7. Edit proceeds (if allowed)
@@ -175,9 +175,9 @@ curl -sf "http://localhost:7338/api/reservations/check?project=$(pwd)&path=${FIL
 2. Edit proceeds immediately
 3. PostToolUse:Edit hook fires (async)
 4. Hook calls interlock-check-conflicts.sh
-5. Interlock calls Intermute HTTP API
+5. Interlock calls intermute HTTP API
 6. If conflict, emit warning + update signal file
-7. Interline shows conflict warning in statusline
+7. interline shows conflict warning in statusline
 ```
 
 **Trace: Agent registers at session start**
@@ -185,7 +185,7 @@ curl -sf "http://localhost:7338/api/reservations/check?project=$(pwd)&path=${FIL
 **Current proposal:**
 ```
 1. Clavain SessionStart hook
-2. Calls curl → Intermute /api/agents
+2. Calls curl → intermute /api/agents
 3. Parses response, writes AGENT_ID to CLAUDE_ENV_FILE
 ```
 
@@ -193,13 +193,13 @@ curl -sf "http://localhost:7338/api/reservations/check?project=$(pwd)&path=${FIL
 ```
 1. Clavain SessionStart hook
 2. Calls interlock-register (if installed)
-3. Interlock calls Intermute HTTP API
+3. Interlock calls intermute HTTP API
 4. Interlock writes /tmp/interlock-agent-${SESSION_ID}.json
 5. Clavain reads file, exports INTERMUTE_AGENT_ID to CLAUDE_ENV_FILE
 ```
 
 **Analysis:** Both traces now have clear ownership boundaries:
-- Intermute: State + API
+- intermute: State + API
 - interlock: Protocol adapter + coordination UX
 - Clavain: Delegation + environment setup
 
@@ -231,13 +231,13 @@ curl -sf "http://localhost:7338/api/reservations/check?project=$(pwd)&path=${FIL
 
 Already covered in CR-1. This is a **dual client interface** anti-pattern. Every feature needs two implementations.
 
-**Fix:** Extract MCP server to interlock companion. Intermute stays HTTP-only.
+**Fix:** Extract MCP server to interlock companion. intermute stays HTTP-only.
 
 ---
 
-**AP-2: God Module Risk in Intermute**
+**AP-2: God Module Risk in intermute**
 
-The design proposes adding 6 major features to Intermute in one pass:
+The design proposes adding 6 major features to intermute in one pass:
 1. Circuit breaker
 2. Retry with jitter
 3. Signal files
@@ -247,14 +247,14 @@ The design proposes adding 6 major features to Intermute in one pass:
 7. Git hook generation
 8. MCP server
 
-**Problem:** This increases Intermute's scope from "coordination service" to "coordination service + resilience layer + notification system + MCP protocol adapter + Git integration."
+**Problem:** This increases intermute's scope from "coordination service" to "coordination service + resilience layer + notification system + MCP protocol adapter + Git integration."
 
 **Evidence of scope creep:**
 - Signal files are a parallel notification channel to WebSocket messages (why two?)
 - Git hook generation is a client-side concern (belongs in interlock)
 - MCP server is a Claude Code-specific protocol (belongs in interlock)
 
-**Fix:** Cut Intermute's scope to ONLY the "must-have" enrichments:
+**Fix:** Cut intermute's scope to ONLY the "must-have" enrichments:
 1. Circuit breaker + retry (resilience)
 2. Session identity (state persistence)
 3. Stale lock cleanup (maintenance)
@@ -265,7 +265,7 @@ Move to interlock:
 - Git hook generation (tooling, not core API)
 - MCP server (protocol adapter)
 
-**Result:** Intermute stays focused on "state + API." Interlock owns "UX + protocol."
+**Result:** intermute stays focused on "state + API." Interlock owns "UX + protocol."
 
 ---
 
@@ -273,7 +273,7 @@ Move to interlock:
 
 **Assessment: GOOD**
 
-- "Intermute" = coordination (existing)
+- "intermute" = coordination (existing)
 - "interlock" = locking/coordination companion (new, fits inter* pattern)
 - Signal files follow `/tmp/<plugin>-<type>-<project>-<id>.json` pattern (matches `/tmp/clavain-dispatch-*.json`)
 - Agent naming: `claude-${SESSION_ID:0:8}` (consistent with existing session ID truncation)
@@ -329,7 +329,7 @@ Section 2d proposes a PostToolUse:Edit hook that auto-reserves files on first ed
 Marked "Nice-to-have" in adaptation checklist. Proposal: store coordination state in BOTH SQLite AND a Git-archived Markdown audit trail.
 
 **Why unnecessary:**
-- Intermute already persists to SQLite
+- intermute already persists to SQLite
 - Audit trail use case is unclear (who reads Markdown logs of reservations?)
 - Adds write complexity (dual-write failure modes)
 - Markdown logs are not queryable (defeats the purpose of SQLite)
@@ -387,23 +387,23 @@ Marked "Nice-to-have." Proposal from mcp_agent_mail: agents specify contact poli
 
 **Current proposal:**
 ```
-Clavain hooks → Intermute HTTP API
+Clavain hooks → intermute HTTP API
 Clavain hooks → interlock (if installed)
-interline → Intermute signal files (direct)
-interlock MCP → Intermute HTTP API
+interline → intermute signal files (direct)
+interlock MCP → intermute HTTP API
 ```
 
 **Revised (after fixing coupling risks):**
 ```
-Clavain hooks → interlock (if installed) → Intermute HTTP API
-interline → interlock signal adapter → Intermute raw signals
-interlock MCP server → Intermute HTTP API
+Clavain hooks → interlock (if installed) → intermute HTTP API
+interline → interlock signal adapter → intermute raw signals
+interlock MCP server → intermute HTTP API
 ```
 
-**Dependency direction:** Always client → interlock → Intermute. No direct client → Intermute calls.
+**Dependency direction:** Always client → interlock → intermute. No direct client → intermute calls.
 
 **Ownership boundaries:**
-- **Intermute:** State persistence, reservation logic, agent registry, messaging
+- **intermute:** State persistence, reservation logic, agent registry, messaging
 - **interlock:** MCP protocol, signal normalization, Git hook generation, coordination UX
 - **Clavain:** Shim delegation, session setup, environment propagation
 - **interline:** Statusline rendering (reads normalized signals only)
@@ -414,7 +414,7 @@ interlock MCP server → Intermute HTTP API
 
 ### 4.2 Integration Seams (Failure Isolation)
 
-**Seam 1: Intermute not running**
+**Seam 1: intermute not running**
 
 **Behavior (current proposal):** `curl -sf` fails silently, hooks skip.
 
@@ -467,7 +467,7 @@ interlock MCP server → Intermute HTTP API
 
 **What's needed to solve "multi-agent same-repo coordination without worktrees":**
 
-**Layer 1 (Intermute enrichments):**
+**Layer 1 (intermute enrichments):**
 1. Circuit breaker + retry (resilience for SQLite contention)
 2. Session identity (survive Claude Code session restarts)
 3. Stale lock cleanup (prevent orphaned locks)
@@ -475,7 +475,7 @@ interlock MCP server → Intermute HTTP API
 
 **Layer 2 (interlock companion):**
 1. MCP server with 9 tools (reserve, release, check, list, send, fetch, status)
-2. SessionStart hook: register agent with Intermute
+2. SessionStart hook: register agent with intermute
 3. Stop hook: release all reservations
 4. Git hook generator script (opt-in, not auto-enabled)
 5. Signal file adapter for interline (normalized schema)
@@ -485,10 +485,10 @@ interlock MCP server → Intermute HTTP API
 2. Environment setup (INTERMUTE_AGENT_ID from interlock's output file)
 
 **Layer 2c (interline):**
-1. Read interlock's normalized signal files (not Intermute's raw signals)
+1. Read interlock's normalized signal files (not intermute's raw signals)
 2. Add coordination layer to statusline priority (between "bead context" and "workflow phase")
 
-**Total: 4 Intermute changes + 9 interlock components + 2 Clavain changes + 1 interline change = 16 components.**
+**Total: 4 intermute changes + 9 interlock components + 2 Clavain changes + 1 interline change = 16 components.**
 
 **Original design: ~25 components (including 6 cut features + dual protocol surface).**
 
@@ -506,7 +506,7 @@ interlock MCP server → Intermute HTTP API
 
 **Q2: Reservation granularity — file-level or directory-level?**
 
-**Answer: BOTH.** Intermute's glob pattern support already handles this. Default to file-level (safest). Allow directory globs when needed (`src/**/*.go`). No new abstraction required.
+**Answer: BOTH.** intermute's glob pattern support already handles this. Default to file-level (safest). Allow directory globs when needed (`src/**/*.go`). No new abstraction required.
 
 ---
 
@@ -516,9 +516,9 @@ interlock MCP server → Intermute HTTP API
 
 ---
 
-**Q4: Intermute as systemd service or start-on-demand?**
+**Q4: intermute as systemd service or start-on-demand?**
 
-**Answer: SYSTEMD SERVICE.** Autarch already uses Intermute as a persistent service. Coordination state (agent registry, reservations) needs to survive individual session restarts. Start-on-demand creates a bootstrapping problem (who starts the server?).
+**Answer: SYSTEMD SERVICE.** Autarch already uses intermute as a persistent service. Coordination state (agent registry, reservations) needs to survive individual session restarts. Start-on-demand creates a bootstrapping problem (who starts the server?).
 
 **Recommendation:** Add `intermute.service` systemd unit to interlock's install script.
 
@@ -526,7 +526,7 @@ interlock MCP server → Intermute HTTP API
 
 **Q5: Graceful degradation — silent skip or warn?**
 
-**Answer: SILENT SKIP.** Matches interphase pattern. Warnings create noise for users who don't need coordination. If Intermute is needed, its absence will be obvious (conflicts happen, no statusline updates).
+**Answer: SILENT SKIP.** Matches interphase pattern. Warnings create noise for users who don't need coordination. If intermute is needed, its absence will be obvious (conflicts happen, no statusline updates).
 
 ---
 
@@ -534,7 +534,7 @@ interlock MCP server → Intermute HTTP API
 
 **Sequence:**
 
-### Phase 1: Intermute Core (No Plugin Changes Yet)
+### Phase 1: intermute Core (No Plugin Changes Yet)
 1. Add circuit breaker + retry to `internal/store/sqlite.go`
 2. Add `session_id` field to agent registration
 3. Add stale lock cleanup goroutine
@@ -577,18 +577,18 @@ interlock MCP server → Intermute HTTP API
 
 ### Must-Fix Boundary Violations
 
-1. **CR-1:** MCP server should be in interlock, NOT Intermute (dual protocol surface)
-2. **CR-3:** Clavain SessionStart hook should delegate to interlock, NOT call Intermute directly
+1. **CR-1:** MCP server should be in interlock, NOT intermute (dual protocol surface)
+2. **CR-3:** Clavain SessionStart hook should delegate to interlock, NOT call intermute directly
 
 ### Must-Fix Coupling Risks
 
-1. **CR-2:** Interline should read normalized signals from interlock, NOT raw Intermute signals
+1. **CR-2:** interline should read normalized signals from interlock, NOT raw intermute signals
 2. **CR-4:** PreToolUse:Edit hook should be async advisory, NOT blocking synchronous check
 
 ### Anti-Patterns
 
 1. **AP-1:** Dual protocol surface (HTTP + MCP in same binary)
-2. **AP-2:** God module risk (Intermute's scope creep to 8 features in one pass)
+2. **AP-2:** God module risk (intermute's scope creep to 8 features in one pass)
 
 ### Unnecessary Abstractions (Cut These)
 
@@ -614,16 +614,16 @@ interlock MCP server → Intermute HTTP API
 **GO/NO-GO:** GO with significant revisions.
 
 **Required changes before implementation:**
-1. Move MCP server from Intermute to interlock
+1. Move MCP server from intermute to interlock
 2. Cut 6 unnecessary abstractions (UA-1 through UA-6)
 3. Fix 4 coupling risks (CR-1 through CR-4)
-4. Reduce Intermute's scope to 4 core enrichments (cut scope creep)
-5. Follow 3-phase migration path (Intermute → interlock → Clavain+interline)
+4. Reduce intermute's scope to 4 core enrichments (cut scope creep)
+5. Follow 3-phase migration path (intermute → interlock → Clavain+interline)
 
 **Estimated scope reduction:** 36% fewer components, 40% fewer features.
 
 **Revised component counts:**
-- Intermute: +4 features (circuit breaker, retry, session identity, stale cleanup)
+- intermute: +4 features (circuit breaker, retry, session identity, stale cleanup)
 - interlock: 9 MCP tools + 2 hooks + 3 scripts + 1 systemd unit = 15 components
 - Clavain: +2 hook modifications
 - interline: +1 signal reader integration

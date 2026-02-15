@@ -350,7 +350,7 @@ Based on comprehensive research, here are targeted opportunities:
 
 ### 9.1 Context Optimization for Multi-Agent Review
 
-**Current State:** Clavain has 7 core review agents (in Interflux companion).
+**Current State:** Clavain has 7 core review agents (in interflux companion).
 
 **Opportunity:**
 - Implement layered context delivery (signatures → call graph → data flow)
@@ -398,7 +398,7 @@ Based on comprehensive research, here are targeted opportunities:
 
 ### 9.5 Speculative Decoding for Research Agents
 
-**Current State:** Research agents (in Interflux) generate detailed findings.
+**Current State:** Research agents (in interflux) generate detailed findings.
 
 **Opportunity:**
 - Draft research findings with smaller models (Haiku)

@@ -215,7 +215,7 @@ There's no test that would catch the version-bump behavior change.
 
 ### 3. Simplicity & YAGNI
 
-#### 3.1 Interwatch Discovery Graceful Degradation - APPROPRIATE
+#### 3.1 interwatch Discovery Graceful Degradation - APPROPRIATE
 
 **Finding:** The auto-drift-check.sh hook includes interwatch discovery (lines 507-513):
 ```bash
@@ -235,7 +235,7 @@ fi
 
 ---
 
-#### 3.2 Demo Hook for Interwatch Repo - POTENTIAL OVERENGINEERING
+#### 3.2 Demo Hook for interwatch Repo - POTENTIAL OVERENGINEERING
 
 **Finding:** Task 6 (lines 656-793) creates a standalone example hook for the interwatch repo with:
 - Inline signal detection (not using lib-signals.sh)

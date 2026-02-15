@@ -60,9 +60,9 @@ A Stop hook in Clavain that detects shipped-work signals and auto-triggers `/int
 
 ## Dependencies
 
-- Interwatch plugin installed (graceful degradation if not)
+- interwatch plugin installed (graceful degradation if not)
 - `_discover_interwatch_plugin()` in `hooks/lib.sh` (already exists)
-- Interwatch `/interwatch:watch` skill (already exists)
+- interwatch `/interwatch:watch` skill (already exists)
 
 ## Open Questions
 

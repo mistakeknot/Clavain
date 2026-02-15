@@ -21,7 +21,7 @@ The plan demonstrates strong attention to detail with TDD methodology, proper se
 
 **Evidence:**
 - `hooks/lib.sh` — shared utilities with discovery functions
-- Interphase has `lib-gates.sh` and `lib-phase.sh`
+- interphase has `lib-gates.sh` and `lib-phase.sh`
 - Pattern: `lib-<domain>.sh` for shared libraries
 
 **Recommendation:** Keep as-is.

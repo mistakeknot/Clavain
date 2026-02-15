@@ -232,7 +232,7 @@ if echo "$text" | grep -iq '"root cause\|"the issue was\|"the problem was\|"turn
 
 ## Additional Observations
 
-### Interwatch Discovery Guard
+### interwatch Discovery Guard
 
 **Location:** Plan Task 4, `hooks/auto-drift-check.sh` lines 508-513
 

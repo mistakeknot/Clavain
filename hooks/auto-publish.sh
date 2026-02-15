@@ -65,7 +65,7 @@ main() {
     fi
 
     # Find marketplace
-    local marketplace_root="${MARKETPLACE_ROOT:-/root/projects/interagency-marketplace}"
+    local marketplace_root="${MARKETPLACE_ROOT:-/root/projects/Interverse/infra/marketplace}"
     local marketplace_json="$marketplace_root/.claude-plugin/marketplace.json"
     [[ -f "$marketplace_json" ]] || exit 0
 

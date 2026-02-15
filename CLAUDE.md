@@ -10,7 +10,7 @@ General-purpose engineering discipline plugin for Claude Code — 27 skills, 5 a
 
 ```bash
 # Test locally
-claude --plugin-dir /root/projects/Clavain
+claude --plugin-dir /root/projects/Interverse/hub/clavain
 
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 27

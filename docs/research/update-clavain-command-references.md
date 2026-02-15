@@ -5,7 +5,7 @@
 
 ## Objective
 
-Replace all flux-drive and flux-gen namespace references from `clavain:` to `interflux:` across command files and the using-clavain skill, reflecting the extraction of flux-drive into the Interflux companion plugin.
+Replace all flux-drive and flux-gen namespace references from `clavain:` to `interflux:` across command files and the using-clavain skill, reflecting the extraction of flux-drive into the interflux companion plugin.
 
 ## Replacements Performed
 

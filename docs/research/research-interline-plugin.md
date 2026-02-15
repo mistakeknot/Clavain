@@ -1,4 +1,4 @@
-# Interline Plugin Research
+# interline Plugin Research
 
 **Date:** 2026-02-12  
 **Plugin Version:** 0.1.0  
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Interline is a minimalist Claude Code plugin that provides a dynamic statusline renderer. It displays workflow context from companion plugins (Clavain, interphase) using a 4-layer priority system. The plugin is extremely lightweight with only 6 files total.
+interline is a minimalist Claude Code plugin that provides a dynamic statusline renderer. It displays workflow context from companion plugins (Clavain, interphase) using a 4-layer priority system. The plugin is extremely lightweight with only 6 files total.
 
 **Name etymology:** "interline" = between lines (statusline rendering). Companion to "interphase" (between phases).
 
@@ -424,9 +424,9 @@ Unlike hooks (defined in `plugin.json` with `hooks.json`), statusline is configu
 - Deleted when dispatch completes (via trap or cleanup)
 - Cleaned up by statusline if process dies without cleanup
 
-**Interline's responsibility:** Detect stale files (process no longer running), remove them.
+**interline's responsibility:** Detect stale files (process no longer running), remove them.
 
-### Interphase Bead Context: `/tmp/clavain-bead-{session_id}.json`
+### interphase Bead Context: `/tmp/clavain-bead-{session_id}.json`
 
 **Filename pattern:** `clavain-bead-{CLAUDE_SESSION_ID}.json`
 
@@ -447,7 +447,7 @@ Unlike hooks (defined in `plugin.json` with `hooks.json`), statusline is configu
 - Persists across sessions (not tied to process)
 - Cleaned up by statusline if >24 hours old
 
-**Interline's responsibility:** Detect stale files (age check), skip them.
+**interline's responsibility:** Detect stale files (age check), skip them.
 
 ## Design Philosophy
 
@@ -459,11 +459,11 @@ Unlike hooks (defined in `plugin.json` with `hooks.json`), statusline is configu
 - **No AGENTS.md** (surface area too small to justify)
 
 ### Separation of Concerns
-- **Interline:** Renders statusline (display layer)
+- **interline:** Renders statusline (display layer)
 - **Clavain:** Writes dispatch state (workflow layer)
-- **Interphase:** Writes bead context (issue tracking layer)
+- **interphase:** Writes bead context (issue tracking layer)
 
-**No tight coupling:** Interline reads sideband files but doesn't depend on plugin APIs. Works if plugins are missing (layers silently disabled).
+**No tight coupling:** interline reads sideband files but doesn't depend on plugin APIs. Works if plugins are missing (layers silently disabled).
 
 ### File-Based IPC
 - **Why not plugin APIs?** Statusline runs on every render cycle (high frequency). API calls would be expensive.
@@ -554,9 +554,9 @@ jq -r '.name // "codex"' 2>/dev/null      # Default value on null/error
 
 **Example:** `\033[38;5;210mC\033[0m` → pink "C"
 
-## Comparison: Interline vs Interphase
+## Comparison: interline vs interphase
 
-| Aspect | Interline | Interphase |
+| Aspect | interline | interphase |
 |--------|-----------|------------|
 | **Purpose** | Statusline rendering | Phase tracking, gates, discovery |
 | **File count** | 6 | ~30+ |
@@ -568,7 +568,7 @@ jq -r '.name // "codex"' 2>/dev/null      # Default value on null/error
 | **Complexity** | Minimal (200 lines main script) | High (phase tracking state machine) |
 | **Tests** | Manual only | 68 automated tests |
 
-**Complementary roles:** Interphase generates state, interline renders it.
+**Complementary roles:** interphase generates state, interline renders it.
 
 ## Integration with Clavain Ecosystem
 
@@ -583,7 +583,7 @@ jq -r '.name // "codex"' 2>/dev/null      # Default value on null/error
 /tmp/clavain-dispatch-*.json
      │
      │    ┌────────────┐
-     │    │ Interphase │ writes bead context
+     │    │ interphase │ writes bead context
      │    └─────┬──────┘
      │          │
      │          v
@@ -593,7 +593,7 @@ jq -r '.name // "codex"' 2>/dev/null      # Default value on null/error
                 │          │
                 v          v
            ┌─────────────────┐
-           │   Interline     │ reads both
+           │   interline     │ reads both
            │  statusline.sh  │
            └────────┬────────┘
                     │
@@ -609,17 +609,17 @@ jq -r '.name // "codex"' 2>/dev/null      # Default value on null/error
 
 ### Cross-Plugin Dependency Analysis
 
-**Interline's dependencies:**
+**interline's dependencies:**
 - **Optional:** Clavain (for dispatch state)
-- **Optional:** Interphase (for bead context)
+- **Optional:** interphase (for bead context)
 - **Required:** Claude Code (statusline API)
 
 **Graceful degradation:**
 - Without Clavain: No dispatch layer, phase layer still works (transcript-based)
-- Without Interphase: No bead layer, other layers still work
+- Without interphase: No bead layer, other layers still work
 - Without both: Still shows `[Model] Project:branch` (git-based)
 
-**No circular dependencies:** Interline only reads, never writes. Clavain/Interphase don't depend on Interline.
+**No circular dependencies:** interline only reads, never writes. Clavain/interphase don't depend on interline.
 
 ## Future Enhancement Opportunities
 
@@ -774,7 +774,7 @@ If colors don't appear, terminal doesn't support 256-color mode.
 
 ## Summary
 
-Interline is a **hyper-focused, minimal plugin** that does one thing well: render a context-aware statusline. Its 200-line script reads state from companion plugins via file-based IPC, applies a 4-layer priority system, and outputs ANSI-formatted text. The entire codebase fits in 6 files with zero dependencies beyond standard tools (bash, jq, git).
+interline is a **hyper-focused, minimal plugin** that does one thing well: render a context-aware statusline. Its 200-line script reads state from companion plugins via file-based IPC, applies a 4-layer priority system, and outputs ANSI-formatted text. The entire codebase fits in 6 files with zero dependencies beyond standard tools (bash, jq, git).
 
 **Key strengths:**
 - **Graceful degradation:** Every layer is optional, works even with missing plugins/config
@@ -787,4 +787,4 @@ Interline is a **hyper-focused, minimal plugin** that does one thing well: rende
 - Hardcoded skill→phase mappings (simplicity over extensibility)
 - No AGENTS.md (too simple to need comprehensive dev guide)
 
-**Ecosystem role:** Display layer for Clavain/Interphase workflow state. Reads their sideband files, never writes. Complements rather than duplicates functionality.
+**Ecosystem role:** Display layer for Clavain/interphase workflow state. Reads their sideband files, never writes. Complements rather than duplicates functionality.

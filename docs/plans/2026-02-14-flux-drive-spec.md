@@ -2,11 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use clavain:executing-plans to implement this plan task-by-task.
 
-**Goal:** Write 9 specification documents for the flux-drive multi-agent review protocol, extracted from the Interflux reference implementation. Pure documentation — no code changes.
+**Goal:** Write 9 specification documents for the flux-drive multi-agent review protocol, extracted from the interflux reference implementation. Pure documentation — no code changes.
 
-**Architecture:** 9 markdown files in `/root/projects/Interflux/docs/spec/{core,extensions,contracts}/`. Each doc follows a consistent template: Overview → Specification → Interflux Reference → Conformance. Contracts first (they define the output format other specs reference), then core (they reference contracts), then extensions, then README (indexes everything).
+**Architecture:** 9 markdown files in `/root/projects/interflux/docs/spec/{core,extensions,contracts}/`. Each doc follows a consistent template: Overview → Specification → interflux Reference → Conformance. Contracts first (they define the output format other specs reference), then core (they reference contracts), then extensions, then README (indexes everything).
 
-**Tech Stack:** Markdown only. Source verification against Interflux Python/YAML/Markdown files.
+**Tech Stack:** Markdown only. Source verification against interflux Python/YAML/Markdown files.
 
 **Bead:** Clavain-vsig
 **Phase:** executing (as of 2026-02-14T17:17:46Z)
@@ -14,7 +14,7 @@
 **PRD:** `docs/prds/2026-02-14-flux-drive-spec.md`
 
 **Source material:**
-- Interflux implementation: `/root/projects/Interflux/` (~2,982 lines across 9 source files)
+- interflux implementation: `/root/projects/interflux/` (~2,982 lines across 9 source files)
 - Core algorithm analysis: `/root/projects/Clavain/docs/research/analyze-flux-drive-core-algorithm.md` (512 lines, scaffolding only — verify against source)
 
 ---
@@ -42,7 +42,7 @@ Every spec document follows this structure. Do not deviate.
 
 > **Why this works:** [1-2 sentences explaining the design decision]
 
-## Interflux Reference
+## interflux Reference
 
 [How the reference implementation handles this. File paths, notable implementation choices, where the code lives.]
 
@@ -58,7 +58,7 @@ Every spec document follows this structure. Do not deviate.
 - Use JSON examples (not formal schemas) for data structures.
 - Mermaid diagrams for lifecycle flows where they aid comprehension.
 - Abstract protocol language: "agent runtime", "orchestrator", "findings collector" — not "Claude Code subagent", "Task tool", "background agent".
-- Name Interflux as the normative reference implementation in the Interflux Reference section.
+- Name interflux as the normative reference implementation in the interflux Reference section.
 
 ---
 
@@ -77,11 +77,11 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 1: Contract — Findings Index Format (F8)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/contracts/findings-index.md`
+- Create: `/root/projects/interflux/docs/spec/contracts/findings-index.md`
 
 **Source files to read and verify against:**
-- `/root/projects/Interflux/skills/flux-drive/phases/shared-contracts.md` (69 lines — findings index section)
-- `/root/projects/Interflux/skills/flux-drive/phases/synthesize.md` (365 lines — how indices are parsed)
+- `/root/projects/interflux/skills/flux-drive/phases/shared-contracts.md` (69 lines — findings index section)
+- `/root/projects/interflux/skills/flux-drive/phases/synthesize.md` (365 lines — how indices are parsed)
 
 **Steps:**
 
@@ -104,11 +104,11 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 2: Contract — Completion Signal (F9)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/contracts/completion-signal.md`
+- Create: `/root/projects/interflux/docs/spec/contracts/completion-signal.md`
 
 **Source files to read and verify against:**
-- `/root/projects/Interflux/skills/flux-drive/phases/shared-contracts.md` (69 lines — completion section)
-- `/root/projects/Interflux/skills/flux-drive/phases/launch.md` (454 lines — monitoring/timeout logic)
+- `/root/projects/interflux/skills/flux-drive/phases/shared-contracts.md` (69 lines — completion section)
+- `/root/projects/interflux/skills/flux-drive/phases/launch.md` (454 lines — monitoring/timeout logic)
 
 **Steps:**
 
@@ -129,13 +129,13 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 3: Core Protocol Spec (F2)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/core/protocol.md`
+- Create: `/root/projects/interflux/docs/spec/core/protocol.md`
 
 **Source files to read and verify against:**
-- `/root/projects/Interflux/skills/flux-drive/SKILL.md` (415 lines — lifecycle overview, first ~100 lines + orchestration flow)
-- `/root/projects/Interflux/skills/flux-drive/phases/launch.md` (phase 2 entry/exit)
-- `/root/projects/Interflux/skills/flux-drive/phases/synthesize.md` (phase 3 entry/exit)
-- `/root/projects/Interflux/skills/flux-drive/phases/slicing.md` (366 lines — content routing, slicing thresholds, synthesis contracts)
+- `/root/projects/interflux/skills/flux-drive/SKILL.md` (415 lines — lifecycle overview, first ~100 lines + orchestration flow)
+- `/root/projects/interflux/skills/flux-drive/phases/launch.md` (phase 2 entry/exit)
+- `/root/projects/interflux/skills/flux-drive/phases/synthesize.md` (phase 3 entry/exit)
+- `/root/projects/interflux/skills/flux-drive/phases/slicing.md` (366 lines — content routing, slicing thresholds, synthesis contracts)
 - `/root/projects/Clavain/docs/research/analyze-flux-drive-core-algorithm.md` (scaffolding — verify claims)
 
 **Steps:**
@@ -163,13 +163,13 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 4: Core Scoring Spec (F3)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/core/scoring.md`
+- Create: `/root/projects/interflux/docs/spec/core/scoring.md`
 
 **Source files to read and verify against:**
-- `/root/projects/Interflux/skills/flux-drive/SKILL.md` (lines 225-332 — scoring algorithm)
-- `/root/projects/Interflux/skills/flux-drive/references/scoring-examples.md` (67 lines)
-- `/root/projects/Interflux/config/flux-drive/domains/index.yaml` (454 lines — domain list and signal scoring rules)
-- `/root/projects/Interflux/config/flux-drive/domains/*.md` (11 domain profiles — injection criteria that determine domain_boost scoring)
+- `/root/projects/interflux/skills/flux-drive/SKILL.md` (lines 225-332 — scoring algorithm)
+- `/root/projects/interflux/skills/flux-drive/references/scoring-examples.md` (67 lines)
+- `/root/projects/interflux/config/flux-drive/domains/index.yaml` (454 lines — domain list and signal scoring rules)
+- `/root/projects/interflux/config/flux-drive/domains/*.md` (11 domain profiles — injection criteria that determine domain_boost scoring)
 
 **Steps:**
 
@@ -199,11 +199,11 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 5: Core Staging Spec (F4)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/core/staging.md`
+- Create: `/root/projects/interflux/docs/spec/core/staging.md`
 
 **Source files to read and verify against:**
-- `/root/projects/Interflux/skills/flux-drive/phases/launch.md` (lines 146-220 — expansion logic)
-- `/root/projects/Interflux/skills/flux-drive/SKILL.md` (stage assignment references)
+- `/root/projects/interflux/skills/flux-drive/phases/launch.md` (lines 146-220 — expansion logic)
+- `/root/projects/interflux/skills/flux-drive/SKILL.md` (stage assignment references)
 
 **Steps:**
 
@@ -227,12 +227,12 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 6: Core Synthesis Spec (F5)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/core/synthesis.md`
+- Create: `/root/projects/interflux/docs/spec/core/synthesis.md`
 
 **Source files to read and verify against:**
-- `/root/projects/Interflux/skills/flux-drive/phases/synthesize.md` (365 lines)
-- `/root/projects/Interflux/skills/flux-drive/phases/slicing.md` (366 lines — convergence adjustment)
-- `/root/projects/Interflux/skills/flux-drive/phases/shared-contracts.md` (contracts context)
+- `/root/projects/interflux/skills/flux-drive/phases/synthesize.md` (365 lines)
+- `/root/projects/interflux/skills/flux-drive/phases/slicing.md` (366 lines — convergence adjustment)
+- `/root/projects/interflux/skills/flux-drive/phases/shared-contracts.md` (contracts context)
 
 **Steps:**
 
@@ -258,11 +258,11 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 7: Extension — Domain Detection Spec (F6)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/extensions/domain-detection.md`
+- Create: `/root/projects/interflux/docs/spec/extensions/domain-detection.md`
 
 **Source files to read and verify against:**
-- `/root/projects/Interflux/scripts/detect-domains.py` (713 lines — detection algorithm)
-- `/root/projects/Interflux/config/flux-drive/domains/index.yaml` (454 lines — signal definitions)
+- `/root/projects/interflux/scripts/detect-domains.py` (713 lines — detection algorithm)
+- `/root/projects/interflux/config/flux-drive/domains/index.yaml` (454 lines — signal definitions)
 
 **Steps:**
 
@@ -277,7 +277,7 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
    - Cache format: `.claude/flux-drive.yaml` with version, structural hash, git state, mtime
    - Staleness detection: when to re-scan (hash changed, git state changed, cache version mismatch)
    - Domain profile integration: how detected domains feed into scoring (domain_boost) and agent prompt injection
-   - Current domains in Interflux reference (11 domains listed)
+   - Current domains in interflux reference (11 domains listed)
    - Rationale: why these signal types, why these weights, why caching matters
    - Conformance section: MUST support weighted signal scoring, MUST support multi-domain, SHOULD implement caching, MAY use different signal types
 
@@ -288,12 +288,12 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 8: Extension — Knowledge Lifecycle Spec (F7)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/extensions/knowledge-lifecycle.md`
+- Create: `/root/projects/interflux/docs/spec/extensions/knowledge-lifecycle.md`
 
 **Source files to read and verify against:**
-- `/root/projects/Interflux/config/flux-drive/knowledge/README.md` (79 lines)
-- Knowledge entry files in `/root/projects/Interflux/config/flux-drive/knowledge/*.md` (frontmatter format)
-- `/root/projects/Interflux/skills/flux-drive/phases/slicing.md` (366 lines — knowledge retrieval and injection into agent prompts)
+- `/root/projects/interflux/config/flux-drive/knowledge/README.md` (79 lines)
+- Knowledge entry files in `/root/projects/interflux/config/flux-drive/knowledge/*.md` (frontmatter format)
+- `/root/projects/interflux/skills/flux-drive/phases/slicing.md` (366 lines — knowledge retrieval and injection into agent prompts)
 
 **Steps:**
 
@@ -317,7 +317,7 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ### Task 9: Spec README (F1)
 
 **Files:**
-- Create: `/root/projects/Interflux/docs/spec/README.md`
+- Create: `/root/projects/interflux/docs/spec/README.md`
 
 **Depends on:** All other tasks (indexes their output)
 
@@ -328,14 +328,14 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
    - Spec title: "Flux-Drive Protocol Specification"
    - Version: 1.0.0
    - One-paragraph overview: what flux-drive is, what this spec defines
-   - Audience section: AI tool developers (framework-agnostic protocol) + Interflux contributors (reference docs)
+   - Audience section: AI tool developers (framework-agnostic protocol) + interflux contributors (reference docs)
    - Document index table: each spec document with one-line description and conformance level
    - Conformance levels:
      - **Core**: protocol, scoring, staging, synthesis, findings-index, completion-signal
      - **Core + Domains**: adds domain-detection
      - **Core + Knowledge**: adds knowledge-lifecycle
    - Versioning policy: semver (major = core protocol changes, minor = extensions, patch = clarifications)
-   - Interflux reference: link to `/root/projects/Interflux/` as the normative reference implementation
+   - interflux reference: link to `/root/projects/interflux/` as the normative reference implementation
    - Directory structure diagram showing `core/`, `extensions/`, `contracts/`
    - Getting started: suggested reading order (README → protocol → contracts → scoring → staging → synthesis → extensions)
 
@@ -346,7 +346,7 @@ Tasks are ordered by dependency: contracts first (other docs reference them), th
 ## Pre-flight Checklist
 
 Before starting execution:
-- [ ] Verify `/root/projects/Interflux/` exists and is accessible
+- [ ] Verify `/root/projects/interflux/` exists and is accessible
 - [ ] Create directory structure: `docs/spec/{core,extensions,contracts}/`
 - [ ] Verify all source files listed above exist and have expected content
 
@@ -356,6 +356,6 @@ After all tasks complete:
 - [ ] All 9 files created in correct locations
 - [ ] All documents follow the template structure
 - [ ] Cross-references between documents are valid (e.g., synthesis references contracts/findings-index)
-- [ ] No Interflux-specific terminology leaks into abstract protocol sections (check for "Claude Code", "subagent", "Task tool", "plugin cache")
-- [ ] Each document has Overview, Specification, Interflux Reference, and Conformance sections
+- [ ] No interflux-specific terminology leaks into abstract protocol sections (check for "Claude Code", "subagent", "Task tool", "plugin cache")
+- [ ] Each document has Overview, Specification, interflux Reference, and Conformance sections
 - [ ] README document index matches actual files created

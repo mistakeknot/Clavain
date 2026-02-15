@@ -372,27 +372,27 @@ On SessionEnd, syncs dotfile changes.
 
 ---
 
-## 8. Interdoc Wiring (Interwatch Integration)
+## 8. interdoc Wiring (interwatch Integration)
 
-### 8.1 Interdoc Marker Discovery
+### 8.1 interdoc Marker Discovery
 
-Interwatch discovers Interdoc via marker file:
+interwatch discovers interdoc via marker file:
 
 **File:** `/root/projects/interdoc/scripts/interdoc-generator.sh`
 
 ```bash
 #!/usr/bin/env bash
-# Marker file for Interwatch generator discovery.
-# Presence of this file signals that Interdoc can handle AGENTS.md generation
-# requests from Interwatch's drift-detection framework.
+# Marker file for interwatch generator discovery.
+# Presence of this file signals that interdoc can handle AGENTS.md generation
+# requests from interwatch's drift-detection framework.
 echo "interdoc-generator marker"
 ```
 
 **Status:** ✅ Marker exists and is discoverable.
 
-### 8.2 Interwatch Watchables Configuration
+### 8.2 interwatch Watchables Configuration
 
-Interwatch monitors 4 documents:
+interwatch monitors 4 documents:
 
 **File:** `/root/projects/interwatch/config/watchables.yaml`
 
@@ -423,7 +423,7 @@ watchables:
 - `interpath:artifact-gen` → generates product docs (roadmap, PRD, vision)
 - `interdoc:interdoc` → generates AGENTS.md
 
-**Status:** ✅ Fully configured. Interwatch knows to call Interdoc for AGENTS.md generation.
+**Status:** ✅ Fully configured. interwatch knows to call interdoc for AGENTS.md generation.
 
 ### 8.3 Signals Monitored
 
@@ -439,11 +439,11 @@ Staleness threshold: 14 days.
 
 ---
 
-## 9. Interpath Configuration
+## 9. interpath Configuration
 
 ### 9.1 Artifact Generation Integration
 
-Interpath is referenced in:
+interpath is referenced in:
 
 1. **Routing tables** (`skills/using-clavain/references/routing-tables.md`, line 28):
    ```
@@ -486,12 +486,12 @@ Companions: `interphase` (phase tracking, gates, discovery),
 
 ---
 
-### 10.2 Gap: Interwatch Not Auto-Triggered
+### 10.2 Gap: interwatch Not Auto-Triggered
 
-**Issue:** Interwatch is discovered and reported in session-start, but **no hook automatically runs interwatch checks** or triggers doc refreshes.
+**Issue:** interwatch is discovered and reported in session-start, but **no hook automatically runs interwatch checks** or triggers doc refreshes.
 
 **Current state:**
-- Interwatch exists and can be manually invoked (`/interwatch:watch`)
+- interwatch exists and can be manually invoked (`/interwatch:watch`)
 - Watchables config is complete (`roadmap`, `prd`, `vision`, `agents-md`)
 - Staleness thresholds are set (7-30 days)
 
@@ -506,17 +506,17 @@ Companions: `interphase` (phase tracking, gates, discovery),
 
 ---
 
-### 10.3 Gap: Interdoc Not Automatically Called
+### 10.3 Gap: interdoc Not Automatically Called
 
-**Issue:** Interdoc is mapped in watchables.yaml but not automatically invoked.
+**Issue:** interdoc is mapped in watchables.yaml but not automatically invoked.
 
 **Current state:**
 - Watchables defines `generator: interdoc:interdoc` for AGENTS.md
-- Interdoc marker file exists
-- No mechanism to trigger Interdoc on file changes
+- interdoc marker file exists
+- No mechanism to trigger interdoc on file changes
 
 **Missing:**
-- No hook or command that calls Interdoc when agents/commands/skills change
+- No hook or command that calls interdoc when agents/commands/skills change
 - AGENTS.md drift detection is passive (interwatch reports staleness, doesn't fix it)
 
 **Opportunity:** Could add:
@@ -566,7 +566,7 @@ Companions: `interphase` (phase tracking, gates, discovery),
 
 ---
 
-### 10.6 Gap: No Phase Tracking Without Interphase
+### 10.6 Gap: No Phase Tracking Without interphase
 
 **Issue:** Phase tracking gates (`check_phase_gate`, `advance_phase`) are no-ops if interphase is absent.
 
@@ -637,7 +637,7 @@ Companions: `interphase` (phase tracking, gates, discovery),
 ✅ Setup (manual install commands listed)  
 ✅ Shim delegation (lib-discovery.sh, lib-gates.sh)  
 ✅ Watchables config (interwatch knows about roadmap, prd, vision, agents-md)  
-✅ Interdoc marker (discovery file exists)  
+✅ interdoc marker (discovery file exists)  
 ✅ Routing tables (27 references to interflux agents)  
 ✅ Cross-documentation (PRD, vision, roadmap all reference companions)
 
@@ -660,7 +660,7 @@ Companions: `interphase` (phase tracking, gates, discovery),
 1. Update CLAUDE.md to list all 5 companions
 2. Add brief descriptions for interpath and interwatch
 
-### Priority 2: Auto-Trigger Interwatch (30 minutes)
+### Priority 2: Auto-Trigger interwatch (30 minutes)
 1. Create new PostToolUse hook: `check-doc-freshness.sh`
 2. Trigger after `/lfg` completion and `/upstream-sync`
 3. Run `interwatch status` and report results

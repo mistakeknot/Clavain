@@ -675,7 +675,7 @@ Create `/root/projects/interwatch/examples/hooks/auto-drift-check-example.sh`:
 # Example: Auto-trigger /interwatch:watch from a Claude Code Stop hook.
 #
 # This is a standalone example showing how to detect work signals
-# and trigger Interwatch drift scanning. It does NOT depend on
+# and trigger interwatch drift scanning. It does NOT depend on
 # Clavain's lib-signals.sh — all signal detection is inline.
 #
 # To use this in your own plugin:

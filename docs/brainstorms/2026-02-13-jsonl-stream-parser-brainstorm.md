@@ -81,7 +81,7 @@ Turns: 3 | Commands: 5 | Messages: 4
 Tokens: 127,431 in / 2,104 out
 ```
 
-## Interline Statusline Changes
+## interline Statusline Changes
 
 The statusline's Layer 1 (dispatch) already reads from the state file. Only change needed: if `activity` field exists, append it to the display:
 

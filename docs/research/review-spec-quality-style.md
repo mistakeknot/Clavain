@@ -9,7 +9,7 @@
 
 ## Review Methodology
 
-1. **Template Adherence:** Verified all documents follow the expected structure (Overview → Specification → Interflux Reference → Conformance)
+1. **Template Adherence:** Verified all documents follow the expected structure (Overview → Specification → interflux Reference → Conformance)
 2. **Rationale Callouts:** Checked format and placement of "> **Why this works:**" blocks
 3. **Terminology Consistency:** Extracted key terms and verified usage across documents
 4. **RFC-2119 Keywords:** Validated MUST/SHOULD/MAY usage in Conformance sections
@@ -41,7 +41,7 @@
 
 **Evidence:**
 - `README.md` structure: What This Is → Audience → Documents → Conformance Levels → Versioning → Reading Order → Directory Structure
-- Other docs: Overview → Specification → Interflux Reference → Conformance
+- Other docs: Overview → Specification → interflux Reference → Conformance
 
 **Impact:**
 The entry-point document has a different structure than all other specification documents. Readers expecting consistent templates will be disoriented.
@@ -49,13 +49,13 @@ The entry-point document has a different structure than all other specification 
 **Recommendation:**
 Accept this divergence and document it explicitly. README.md serves a different purpose (directory navigator, conformance levels definer) than the individual protocol documents. Add a note in the README stating:
 
-> "This README follows a different structure than individual spec documents. Each protocol document uses the template: Overview → Specification → Interflux Reference → Conformance."
+> "This README follows a different structure than individual spec documents. Each protocol document uses the template: Overview → Specification → interflux Reference → Conformance."
 
 **Alternative:**
 Restructure README.md to follow the 4-section template, with:
 - **Overview:** What This Is + Audience
 - **Specification:** Documents table + Conformance levels + Versioning
-- **Interflux Reference:** Reading Order + Directory Structure
+- **interflux Reference:** Reading Order + Directory Structure
 - **Conformance:** (move conformance levels here, or note "See individual documents")
 
 ### P2 — QS-2: Rationale callouts have inconsistent placement
@@ -167,7 +167,7 @@ Then refer to them as "Immediate/Expansion" throughout, not "Stage 1/2". This ma
 Broken reference. Readers following the link will not find the file. This is a **correctness issue**, not just style.
 
 **Root cause:**
-`shared-contracts.md` is an Interflux implementation file (`skills/flux-drive/phases/shared-contracts.md`), not a spec document. The spec should reference the spec-level contract document (`contracts/completion-signal.md`).
+`shared-contracts.md` is an interflux implementation file (`skills/flux-drive/phases/shared-contracts.md`), not a spec document. The spec should reference the spec-level contract document (`contracts/completion-signal.md`).
 
 **Fix:**
 Replace all `shared-contracts.md` references in `staging.md` with:
@@ -387,7 +387,7 @@ No voice inconsistencies detected.
 
 All documents follow the same hierarchy:
 - H1: Document title
-- H2: Major sections (Overview, Specification, Interflux Reference, Conformance)
+- H2: Major sections (Overview, Specification, interflux Reference, Conformance)
 - H3: Subsections within Specification
 - H4: Sub-subsections (rare, only in staging.md and synthesis.md)
 
@@ -425,14 +425,14 @@ All documents use:
 
 **Recommendation:** Verify all cross-references after fixing QS-6.
 
-### Interflux References (Implementation Pointers)
+### interflux References (Implementation Pointers)
 
-All documents include "Interflux Reference" sections pointing to:
+All documents include "interflux Reference" sections pointing to:
 - Skill files: `skills/flux-drive/phases/*.md`
 - Config files: `config/flux-drive/domains/*.md`
 - Script files: `scripts/*.py`
 
-These references are **out-of-scope** for this spec review (they point to implementation, not spec documents). They should be validated separately in an Interflux-specific review.
+These references are **out-of-scope** for this spec review (they point to implementation, not spec documents). They should be validated separately in an interflux-specific review.
 
 ---
 

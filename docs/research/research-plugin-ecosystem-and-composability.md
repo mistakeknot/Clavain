@@ -468,7 +468,7 @@ User-Facing UI
 - Clear separation between synthesis logic (services) and audio rendering (plugin)
 - Cross-platform plugin development (Windows/macOS/Linux) requires careful architecture
 
-**Relevance to Clavain:** Multi-service backend (Interflux, Interphase, Interline) with unified plugin frontend (Clavain) mirrors this pattern.
+**Relevance to Clavain:** Multi-service backend (interflux, interphase, interline) with unified plugin frontend (Clavain) mirrors this pattern.
 
 **Source:** [Modular Microservices Architecture for DAW via VST Plugin](https://www.mdpi.com/1999-5903/17/10/469), [Understanding Plugin Architecture: Building Flexible Systems](https://www.dotcms.com/blog/plugin-achitecture), [Modular Architecture: Scalable & Efficient Design](https://journalwjarr.com/content/modular-architecture-scalable-and-efficient-system-design-approach-enterprise-applications)
 
@@ -483,7 +483,7 @@ User-Facing UI
 **Research Opportunity:** Formalize plugin discovery using MCP-inspired patterns
 
 **Proposed Approach:**
-1. Each companion plugin (Interphase, Interflux, Interline) exposes capability manifest (JSON)
+1. Each companion plugin (interphase, interflux, interline) exposes capability manifest (JSON)
 2. Clavain agent queries manifest at session start
 3. Manifest declares:
    - Plugin name, version, namespace
@@ -502,7 +502,7 @@ User-Facing UI
 
 ### 6.2 Capability Negotiation Between Plugins
 
-**Current State:** Plugins are tightly coupled; if Interphase absent, bead tracking silently fails.
+**Current State:** Plugins are tightly coupled; if interphase absent, bead tracking silently fails.
 
 **Research Opportunity:** Explicit capability negotiation similar to A2A protocol
 
@@ -651,9 +651,9 @@ User-Facing UI
    - Document compatibility ranges and optional dependencies
 
 2. **Implement MCP Server Shims for Companion Plugins**
-   - Interphase: Expose phase/gate/discovery as MCP resources
-   - Interflux: Expose agents/skills/research capabilities as MCP tools
-   - Interline: Expose statusline context as MCP resource
+   - interphase: Expose phase/gate/discovery as MCP resources
+   - interflux: Expose agents/skills/research capabilities as MCP tools
+   - interline: Expose statusline context as MCP resource
 
 3. **Add Plugin Capability Discovery**
    - Query companion plugin manifests at session start
@@ -751,4 +751,4 @@ The next 12-18 months (2026-2027) will likely see consolidation around MCP/A2A s
 
 **Document prepared:** February 14, 2026
 **Classification:** Research / Opportunity Analysis
-**Audience:** Clavain maintainers, Interflux/Interphase/Interline collaborators
+**Audience:** Clavain maintainers, interflux/interphase/interline collaborators

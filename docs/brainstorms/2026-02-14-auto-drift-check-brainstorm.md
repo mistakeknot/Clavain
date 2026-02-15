@@ -78,12 +78,12 @@ The drift-check has a **lower threshold** (weight >= 2) because doc staleness is
 2. **Cross-hook sentinel** — `/tmp/clavain-stop-${SESSION_ID}` (shared with auto-compound)
 3. **Per-repo opt-out** — `.claude/clavain.no-driftcheck`
 4. **Throttle** — `/tmp/clavain-drift-last-${SESSION_ID}`, 10-minute window
-5. **Interwatch discovery** — exit 0 if not installed
+5. **interwatch discovery** — exit 0 if not installed
 
 ## What This Unblocks
 
-- **Clavain-1626** (P2): Version-bump → Interwatch signal — can use the version_bump signal from lib-signals.sh
-- **Clavain-444d** (P2): Catalog-reminder → Interwatch escalation — catalog changes trigger drift check
+- **Clavain-1626** (P2): Version-bump → interwatch signal — can use the version_bump signal from lib-signals.sh
+- **Clavain-444d** (P2): Catalog-reminder → interwatch escalation — catalog changes trigger drift check
 - **Clavain-mqm4** (P2): Session-start drift summary injection — complementary (session start shows stale state, Stop hook triggers refresh)
 
 ## Open Questions

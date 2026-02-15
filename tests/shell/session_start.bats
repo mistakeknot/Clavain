@@ -70,6 +70,44 @@ setup() {
     [[ "$context" != *"Sprint status"* ]]
 }
 
+@test "session-start: includes inflight agents from manifest" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.clavain/scratch"
+    cat > "$tmpdir/.clavain/scratch/inflight-agents.json" <<'ENDJSON'
+{"session_id":"prev-session-123","agents":[{"id":"agent-fd-arch","task":"review architecture"}],"timestamp":1234567890}
+ENDJSON
+    run bash -c "
+        curl() { return 1; }
+        pgrep() { return 1; }
+        export -f curl pgrep
+        cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
+    "
+    rm -rf "$tmpdir"
+    assert_success
+    echo "$output" | jq . >/dev/null 2>&1
+    assert_success
+    context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$context" == *"In-flight agents"* ]]
+    [[ "$context" == *"review architecture"* ]]
+}
+
+@test "session-start: consumes manifest after reading" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.clavain/scratch"
+    echo '{"session_id":"old","agents":[{"id":"agent-1","task":"test"}],"timestamp":0}' > "$tmpdir/.clavain/scratch/inflight-agents.json"
+    bash -c "
+        curl() { return 1; }
+        pgrep() { return 1; }
+        export -f curl pgrep
+        cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
+    " >/dev/null 2>&1
+    # Manifest should be deleted after reading
+    [[ ! -f "$tmpdir/.clavain/scratch/inflight-agents.json" ]]
+    rm -rf "$tmpdir"
+}
+
 @test "session-start: detects HANDOFF.md in sprint scan" {
     local tmpdir
     tmpdir=$(mktemp -d)

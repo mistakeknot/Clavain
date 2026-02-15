@@ -28,7 +28,7 @@ Clavain is a general-purpose engineering discipline plugin for Claude Code — 2
 - **No evals.** Prompt changes, model updates, and agent consolidation happen without regression detection.
 - **No project-local memory.** Knowledge compounding writes to global plugin state; per-project learnings don't exist.
 - **Token costs are opaque.** No per-run cost reporting, no budget controls, no cost-quality tradeoff visibility.
-- **Companion extractions are intuition-driven.** Interflux, interphase, and interline were extracted based on gut feel about stable interfaces, not analytics.
+- **Companion extractions are intuition-driven.** interflux, interphase, and interline were extracted based on gut feel about stable interfaces, not analytics.
 
 ---
 
@@ -180,7 +180,7 @@ Four planned companions, ordered by self-containment and risk:
 
 **Beads:** Clavain-ia66, Clavain-0etu, Clavain-e8dg, Clavain-rpso (P2-P3, chained)
 
-Extract the flux-drive protocol (already spec'd in `docs/spec/` in Interflux) into reusable libraries:
+Extract the flux-drive protocol (already spec'd in `docs/spec/` in interflux) into reusable libraries:
 
 | Phase | Bead | Deliverable |
 |-------|------|-------------|
@@ -348,7 +348,7 @@ Research areas organized by proximity to current capabilities. These are not del
 
 | Companion | What it crystallized | Status | Location |
 |-----------|---------------------|--------|----------|
-| **interflux** | Multi-agent review is generalizable | Shipped | `/root/projects/Interflux/` |
+| **interflux** | Multi-agent review is generalizable | Shipped | `/root/projects/interflux/` |
 | **interphase** | Phase tracking and gates are generalizable | Shipped | `/root/projects/interphase/` |
 | **interline** | Statusline rendering is generalizable | Shipped | `/root/projects/interline/` |
 | **interpath** | Product artifact generation is generalizable | Shipped | `/root/projects/interpath/` |

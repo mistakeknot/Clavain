@@ -27,14 +27,14 @@ Clavain shows mature architectural discipline with clear boundaries between core
 
 ### 1.1 Companion Plugin Boundaries (Clean)
 
-**Interphase** (phase tracking, gates, beads lifecycle):
+**interphase** (phase tracking, gates, beads lifecycle):
 - Discovery via `_discover_beads_plugin()` in `hooks/lib.sh`
 - Shim pattern: Clavain provides stubs, delegates to interphase if installed
 - Zero hard dependency — graceful degradation when missing
 - File-based sideband: `/tmp/clavain-bead-${session_id}.json`
 - **Verdict:** Boundary is well-designed. No further extraction needed.
 
-**Interline** (statusline rendering):
+**interline** (statusline rendering):
 - No hooks.json — Claude Code statusLine configured via `~/.claude/settings.json`
 - Reads dispatch state from `/tmp/clavain-dispatch-*.json` (written by `scripts/dispatch.sh`)
 - Reads bead state from `/tmp/clavain-bead-*.json` (written by interphase)

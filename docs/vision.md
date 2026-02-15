@@ -86,7 +86,7 @@ Tight coupling is a feature during the research phase, not a bug. Capabilities a
 | interscribe | Knowledge compounding is generalizable | Planned |
 | interarch | Agent-native architecture is generalizable | Planned |
 
-The naming convention follows a consistent metaphor: each companion occupies the space *between* two things. Interphase (between phases), interline (between lines), interflux (between flows), interpath (between paths of artifacts), interwatch (between watches of freshness), intershift (between shifts of context). They are bridges and boundary layers, not monoliths.
+The naming convention follows a consistent metaphor: each companion occupies the space *between* two things. interphase (between phases), interline (between lines), interflux (between flows), interpath (between paths of artifacts), interwatch (between watches of freshness), intershift (between shifts of context). They are bridges and boundary layers, not monoliths.
 
 ## What Clavain Is Not
 

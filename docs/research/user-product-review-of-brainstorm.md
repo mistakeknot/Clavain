@@ -1,4 +1,4 @@
-# User & Product Review: Intermute + Clavain Integration Design
+# User & Product Review: intermute + Clavain Integration Design
 
 **Date:** 2026-02-14
 **Reviewer:** flux-drive (user-product perspective)
@@ -92,7 +92,7 @@ With this: agents gracefully defer or negotiate (immediate positive value — ma
 
 ### Problem
 
-Section 2b shows SessionStart hook auto-registering with Intermute if it detects the service running:
+Section 2b shows SessionStart hook auto-registering with intermute if it detects the service running:
 
 ```bash
 if curl -sf http://localhost:7338/health >/dev/null 2>&1; then
@@ -100,7 +100,7 @@ if curl -sf http://localhost:7338/health >/dev/null 2>&1; then
 fi
 ```
 
-**Failure mode:** Human starts a new `cc` session. Intermute is running in the background (started by yesterday's session). The session auto-registers as `claude-a3f8b921`, reserves files, and then the human closes the session without realizing they've left locks behind.
+**Failure mode:** Human starts a new `cc` session. intermute is running in the background (started by yesterday's session). The session auto-registers as `claude-a3f8b921`, reserves files, and then the human closes the session without realizing they've left locks behind.
 
 **UX tension:** Silent registration vs. explicit onboarding.
 
@@ -112,17 +112,17 @@ fi
 ### User Impact
 
 **Scenario 1: First-time user**
-- Starts `cc` in a repo that has Intermute installed
+- Starts `cc` in a repo that has intermute installed
 - Gets auto-registered silently
 - Edits a file, which auto-reserves it (if auto-reserve is enabled)
 - Session crashes or human Ctrl-C's without graceful shutdown
 - 15 minutes later, a second session tries to edit the same file and gets blocked by a "ghost" reservation
 
 **Scenario 2: Experienced user**
-- Knows Intermute is running
+- Knows intermute is running
 - Wants to work solo without coordination (exploratory debugging session)
 - Gets auto-registered anyway
-- Now has to manually opt out or remember to stop Intermute
+- Now has to manually opt out or remember to stop intermute
 
 **Result:** Silent registration optimizes for the wrong case. The single-session solo workflow (most common) gets burdened with coordination overhead. The multi-session workflow (less common, higher value) doesn't get clear onboarding.
 
@@ -139,7 +139,7 @@ fi
    # SessionStart hook
    if [ ! -f ~/.config/clavain/intermute-onboarded ]; then
        if curl -sf http://localhost:7338/health >/dev/null 2>&1; then
-           echo "ℹ️  Intermute coordination is available. Use /interlock:join to enable multi-session coordination, or /interlock:ignore to skip. (This message won't repeat.)"
+           echo "ℹ️  intermute coordination is available. Use /interlock:join to enable multi-session coordination, or /interlock:ignore to skip. (This message won't repeat.)"
            touch ~/.config/clavain/intermute-onboarded
        fi
    fi
@@ -159,7 +159,7 @@ fi
    ```
    /interlock:ignore [--this-session | --always]
    ```
-   Sets an env var or config flag to skip Intermute checks.
+   Sets an env var or config flag to skip intermute checks.
 
 4. **Session-scoped default:**
    Default to NOT auto-registering. Require explicit join. This inverts the risk: multi-session users do one extra step; solo users don't pay coordination tax.
@@ -275,9 +275,9 @@ Skipping auto-reserve removes all of that and focuses on the core value: explici
 
 Open Question 4 asks:
 
-> Should Intermute run as a persistent systemd service (like the upstream sync timer), or start-on-demand when the first agent registers?
+> Should intermute run as a persistent systemd service (like the upstream sync timer), or start-on-demand when the first agent registers?
 
-**This is a false dichotomy.** The real question is: **Who benefits from Intermute being always-on vs. session-scoped?**
+**This is a false dichotomy.** The real question is: **Who benefits from intermute being always-on vs. session-scoped?**
 
 ### User Workflow Analysis
 
@@ -285,22 +285,22 @@ Open Question 4 asks:
 - Human starts 1 `cc` session
 - Works for 30 minutes
 - Closes session
-- **Intermute value:** Zero (no coordination needed)
-- **Intermute cost if always-on:** Wasted memory, orphaned DB locks
+- **intermute value:** Zero (no coordination needed)
+- **intermute cost if always-on:** Wasted memory, orphaned DB locks
 
 **Workflow 2: Concurrent tmux panes (medium frequency)**
 - Human opens 3 tmux panes, each with `cc`
 - Works across all 3 for 2 hours
 - Closes all sessions
-- **Intermute value:** High (prevents conflicts during the 2-hour window)
-- **Intermute cost if session-scoped:** Must start 3 times (but each session can start it idempotently)
+- **intermute value:** High (prevents conflicts during the 2-hour window)
+- **intermute cost if session-scoped:** Must start 3 times (but each session can start it idempotently)
 
 **Workflow 3: Orchestrated dispatch (high value, low frequency)**
 - Human runs `/clodex` to dispatch 5 agents
 - Agents work in parallel for 10-30 minutes
 - All agents finish
-- **Intermute value:** Critical (core use case)
-- **Intermute cost if session-scoped:** Clodex orchestrator must ensure Intermute is running before dispatch
+- **intermute value:** Critical (core use case)
+- **intermute cost if session-scoped:** Clodex orchestrator must ensure intermute is running before dispatch
 
 ### Decision Criteria
 
@@ -312,21 +312,21 @@ Open Question 4 asks:
 
 **Recommendation: Hybrid with idle timeout**
 
-1. **Start Intermute when first agent joins** (via `/interlock:join` or first `intermute_*` tool call).
-2. **Idle timeout: 15 minutes.** If no agents are registered and no heartbeats for 15 minutes, Intermute shuts down.
+1. **Start intermute when first agent joins** (via `/interlock:join` or first `intermute_*` tool call).
+2. **Idle timeout: 15 minutes.** If no agents are registered and no heartbeats for 15 minutes, intermute shuts down.
 3. **Systemd as fallback.** For users who *want* always-on (heavy multi-session users), provide a `systemd/intermute.service` unit they can enable.
 
 ### Why This Reduces Friction
 
-- **Solo users:** Never pay the cost (Intermute doesn't run).
-- **Concurrent users:** Intermute starts on first join, stays alive across sessions, shuts down when done.
-- **Orchestrated users:** Clodex can ensure Intermute is running before dispatch (one health check + start if needed).
+- **Solo users:** Never pay the cost (intermute doesn't run).
+- **Concurrent users:** intermute starts on first join, stays alive across sessions, shuts down when done.
+- **Orchestrated users:** Clodex can ensure intermute is running before dispatch (one health check + start if needed).
 
 ### Alternative: Document the Trade-off
 
 If implementing hybrid idle timeout is too complex for MVP, then:
 - Default to systemd always-on
-- Document the "disable Intermute" command for solo users: `systemctl --user stop intermute`
+- Document the "disable intermute" command for solo users: `systemctl --user stop intermute`
 - Add a setup command: `/interlock:install [--always-on | --on-demand]`
 
 ---
@@ -338,13 +338,13 @@ If implementing hybrid idle timeout is too complex for MVP, then:
 The design proposes:
 1. **Clavain** (core plugin)
 2. **Interlock** (companion plugin for coordination)
-3. **Intermute** (Go service, running separately)
+3. **intermute** (Go service, running separately)
 
 **User journey to enable coordination:**
 1. Install Clavain (already done)
 2. Install Interlock companion from marketplace
-3. Install Intermute Go binary (`go install` or download release)
-4. Start Intermute (systemd or manual)
+3. Install intermute Go binary (`go install` or download release)
+4. Start intermute (systemd or manual)
 5. Join coordination (`/interlock:join`)
 
 **Friction points:**
@@ -370,9 +370,9 @@ The design proposes:
 
 **Must-have for MVP:**
 
-1. **Bundle Intermute binary with Interlock plugin.**
-   - Interlock's install script downloads or compiles Intermute
-   - Intermute binary lives at `~/.claude/plugins/interlock/bin/intermute`
+1. **Bundle intermute binary with Interlock plugin.**
+   - Interlock's install script downloads or compiles intermute
+   - intermute binary lives at `~/.claude/plugins/interlock/bin/intermute`
    - No separate install step
 
 2. **Self-installing setup command:**
@@ -380,9 +380,9 @@ The design proposes:
    /interlock:setup
    ```
    This command:
-   - Checks if Intermute binary exists, downloads if missing
+   - Checks if intermute binary exists, downloads if missing
    - Checks if systemd unit exists, creates if missing (with user confirmation)
-   - Starts Intermute or confirms it's running
+   - Starts intermute or confirms it's running
    - Registers current session
    - Reports status (green checkmarks for each step)
 
@@ -391,20 +391,20 @@ The design proposes:
    ```
    3f. Interlock companion
        ✓ Interlock plugin installed (v0.1.0)
-       ✗ Intermute service not running (run /interlock:setup to install)
+       ✗ intermute service not running (run /interlock:setup to install)
    ```
 
 4. **Graceful degradation messaging:**
-   If a user tries to call `intermute_reserve_files` but Intermute isn't running:
+   If a user tries to call `intermute_reserve_files` but intermute isn't running:
    ```
-   ⚠️  Intermute coordination is not available. File reservations are disabled.
+   ⚠️  intermute coordination is not available. File reservations are disabled.
    Run /interlock:setup to enable multi-session coordination.
    For now, proceed with caution if other agents are active.
    ```
 
 ### Alternative: All-in-One Clavain
 
-Option C from the design: fold Intermute coordination into Clavain directly.
+Option C from the design: fold intermute coordination into Clavain directly.
 
 **Pro:**
 - Zero installation friction (it's just part of Clavain)
@@ -412,8 +412,8 @@ Option C from the design: fold Intermute coordination into Clavain directly.
 
 **Con:**
 - Bundles a Go binary into a Claude Code plugin (unusual, increases plugin size)
-- Couples Clavain releases to Intermute changes
-- Makes Intermute harder to use standalone (outside Claude Code)
+- Couples Clavain releases to intermute changes
+- Makes intermute harder to use standalone (outside Claude Code)
 
 **Recommendation:** Stick with Option B (interlock companion) but make the setup command handle all 3 components transparently.
 
@@ -521,11 +521,11 @@ With this: coordination is transparent. Users can see what's happening and make 
 
 **Recommendation:** Add a "renewal on continued use" pattern. If an agent is actively editing (detected via tool use frequency), auto-renew the reservation before expiry.
 
-### 7b. Network Partition (Intermute Crashes Mid-Session)
+### 7b. Network Partition (intermute Crashes Mid-Session)
 
 **Scenario:**
 - Agent A and Agent B both registered, both have reservations
-- Intermute service crashes (OOM, segfault, manual kill)
+- intermute service crashes (OOM, segfault, manual kill)
 - Agent A tries to edit a file → PreToolUse:Edit hook calls `/api/reservations/check` → connection refused → hook fails → what happens?
 
 **Current design:** `curl -sf` fails silently, hook skips.
@@ -535,11 +535,11 @@ With this: coordination is transparent. Users can see what's happening and make 
 **Recommendation:** Add a "lost coordination" warning:
 ```bash
 if ! curl -sf http://localhost:7338/health >/dev/null 2>&1; then
-    echo "⚠️  Intermute coordination lost. Proceeding without reservation checks. Risk of conflicts."
+    echo "⚠️  intermute coordination lost. Proceeding without reservation checks. Risk of conflicts."
 fi
 ```
 
-Or: fail loudly and force the user to restart Intermute or disable coordination explicitly.
+Or: fail loudly and force the user to restart intermute or disable coordination explicitly.
 
 ### 7c. Git Pre-Commit Hook Fails (Section 1f)
 
@@ -582,11 +582,11 @@ To proceed:
 2. **Plan-level coordination** — Agents negotiate work distribution at plan decomposition time (before file edits), avoiding conflicts upstream.
 3. **Conflict-free operational transforms** — Instead of locking files, use CRDTs or OT to merge concurrent edits automatically.
 
-**Trade-off:** Intermute coordination is a pessimistic locking solution (reserve first, edit later). It works but sacrifices parallelism. A more optimistic approach (edit freely, resolve conflicts automatically) would unlock higher throughput.
+**Trade-off:** intermute coordination is a pessimistic locking solution (reserve first, edit later). It works but sacrifices parallelism. A more optimistic approach (edit freely, resolve conflicts automatically) would unlock higher throughput.
 
 ### Recommendation
 
-**Ship Intermute as MVP** to validate the need for coordination. But:
+**Ship intermute as MVP** to validate the need for coordination. But:
 - Keep it simple (manual reserve only, no auto-reserve, no auto-messaging)
 - Measure how often conflicts actually happen in real workflows
 - If conflicts are rare, deprioritize this work
@@ -602,7 +602,7 @@ To proceed:
 | 2. Silent registration vs. onboarding | Blocker | Yes | Explicit `/interlock:join`, first-session notification, opt-out command |
 | 3. Auto-reserve scope creep | High | Yes | Default to manual reserve only, defer auto-reserve to post-MVP |
 | 4. Systemd vs. on-demand | High | No | Hybrid (idle timeout) or document the trade-off |
-| 5. Installation friction | Medium | Yes | Bundle Intermute, add `/interlock:setup` self-installer, doctor integration |
+| 5. Installation friction | Medium | Yes | Bundle intermute, add `/interlock:setup` self-installer, doctor integration |
 | 6. Discoverability | High | Yes | Persistent statusline, `/interlock:status`, human-readable agent names |
 | 7. Edge cases | Medium | Partial | Add expiry renewal, lost-coordination warning, pre-commit error messaging |
 
@@ -616,7 +616,7 @@ To proceed:
 
 **Why the design is worth building:**
 - Solves a real problem (file conflicts in orchestrated workflows)
-- Builds on proven patterns (mcp_agent_mail, Intermute's existing API)
+- Builds on proven patterns (mcp_agent_mail, intermute's existing API)
 - Fits the inter* companion ecosystem
 
 **Why the design needs refinement:**

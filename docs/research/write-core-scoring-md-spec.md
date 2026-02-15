@@ -2,7 +2,7 @@
 
 ## Task Summary
 
-Wrote `/root/projects/Interflux/docs/spec/core/scoring.md` — the agent selection scoring algorithm specification for flux-drive. This is a "Core" conformance-level spec that defines the foundational algorithm all flux-drive implementations must support.
+Wrote `/root/projects/interflux/docs/spec/core/scoring.md` — the agent selection scoring algorithm specification for flux-drive. This is a "Core" conformance-level spec that defines the foundational algorithm all flux-drive implementations must support.
 
 ## Structure Delivered
 
@@ -101,7 +101,7 @@ Defined MUST/SHOULD/MAY/MUST NOT rules:
 - Exceed hard_maximum=12 slots
 - Assign <2 agents to Stage 1 when ceiling permits
 
-## Interflux Reference Section
+## interflux Reference Section
 
 Mapped spec components to implementation files:
 
@@ -150,7 +150,7 @@ This is "Core" conformance because:
 - [x] Overview (3 sentences explaining algorithm purpose)
 - [x] Specification (6 subsections: formula, base score, boosts, ceiling, stages, selection)
 - [x] Worked examples (3 examples with full scoring tables)
-- [x] Interflux Reference (implementation file paths + notes)
+- [x] interflux Reference (implementation file paths + notes)
 - [x] Conformance (MUST/SHOULD/MAY/MUST NOT)
 - [x] Pragmatic prose with inline rationale callouts
 - [x] Decision tables (13 tables)

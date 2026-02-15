@@ -74,19 +74,19 @@ if command -v oracle &>/dev/null && pgrep -f "Xvfb :99" &>/dev/null; then
     companions="${companions}\\n- **oracle**: available for cross-AI review (GPT-5.2 Pro)"
 fi
 
-# Interflux — multi-agent review engine companion
+# interflux — multi-agent review engine companion
 interflux_root=$(_discover_interflux_plugin)
 if [[ -n "$interflux_root" ]]; then
     companions="${companions}\\n- **interflux**: review engine available (fd-* agents, domain detection, qmd)"
 fi
 
-# Interpath — product artifact generation companion
+# interpath — product artifact generation companion
 interpath_root=$(_discover_interpath_plugin)
 if [[ -n "$interpath_root" ]]; then
     companions="${companions}\\n- **interpath**: product artifact generation (roadmaps, PRDs, vision docs)"
 fi
 
-# Interwatch — doc freshness monitoring companion
+# interwatch — doc freshness monitoring companion
 interwatch_root=$(_discover_interwatch_plugin)
 if [[ -n "$interwatch_root" ]]; then
     companions="${companions}\\n- **interwatch**: doc freshness monitoring"
@@ -156,12 +156,59 @@ if [[ -f ".clavain/scratch/handoff.md" ]]; then
     fi
 fi
 
+# In-flight agent detection (from previous sessions)
+# Two sources: (1) manifest from Stop hook, (2) live filesystem scan
+inflight_context=""
+_current_session=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _current_session=""
+
+# Source 1: Manifest file (written by Stop hook)
+if [[ -f ".clavain/scratch/inflight-agents.json" ]]; then
+    _manifest_agents=""
+    _manifest_session=$(jq -r '.session_id // "unknown"' ".clavain/scratch/inflight-agents.json" 2>/dev/null) || _manifest_session="unknown"
+    while IFS= read -r _agent_line; do
+        [[ -z "$_agent_line" ]] && continue
+        _agent_id=$(echo "$_agent_line" | jq -r '.id // empty' 2>/dev/null) || continue
+        _agent_task=$(echo "$_agent_line" | jq -r '.task // "unknown"' 2>/dev/null) || _agent_task="unknown"
+        # Check if agent is still running by looking at JSONL mtime (modified in last 2 min = likely running)
+        _project_dir=$(_claude_project_dir 2>/dev/null) || _project_dir=""
+        _status="finished"
+        if [[ -n "$_project_dir" ]]; then
+            _agent_jsonl=$(find "$_project_dir/${_manifest_session}" -maxdepth 2 -name "${_agent_id}.jsonl" -mmin -2 2>/dev/null | head -1 || true)
+            [[ -n "$_agent_jsonl" ]] && _status="still running"
+        fi
+        _manifest_agents="${_manifest_agents}\\n  - [${_manifest_session:0:8}] ${_agent_task} (${_status})"
+    done < <(jq -c '.agents[]' ".clavain/scratch/inflight-agents.json" 2>/dev/null)
+    if [[ -n "$_manifest_agents" ]]; then
+        inflight_context="\\n\\n**In-flight agents from previous session:**${_manifest_agents}\\nCheck output before launching similar work."
+    fi
+    # Consume manifest
+    rm -f ".clavain/scratch/inflight-agents.json" 2>/dev/null || true
+fi
+
+# Source 2: Live scan (catches crash/kill without Stop hook)
+if [[ -n "$_current_session" ]]; then
+    _live_agents=""
+    while IFS=' ' read -r _sid _aid _age _task; do
+        [[ -z "$_sid" ]] && continue
+        # Skip agents already reported from manifest
+        [[ "$inflight_context" == *"$_task"* ]] && continue
+        _live_agents="${_live_agents}\\n  - [${_sid:0:8}] ${_task} (${_age}m ago)"
+    done < <(_detect_inflight_agents "$_current_session" 10 2>/dev/null)
+    if [[ -n "$_live_agents" ]]; then
+        if [[ -n "$inflight_context" ]]; then
+            inflight_context="${inflight_context}${_live_agents}"
+        else
+            inflight_context="\\n\\n**In-flight agents detected (from recent sessions):**${_live_agents}\\nCheck output before launching similar work."
+        fi
+    fi
+fi
+
 # Output context injection as JSON
 cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${handoff_context}"
+    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${handoff_context}${inflight_context}"
   }
 }
 EOF

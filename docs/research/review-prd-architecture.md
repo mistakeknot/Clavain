@@ -11,11 +11,11 @@
 
 **Verdict: ARCHITECTURALLY SOUND with 3 boundary clarifications and 1 migration risk.**
 
-The Interlock PRD establishes clean feature boundaries and follows established Clavain companion plugin patterns. All 13 features layer correctly: Intermute resilience (F1-F5) → MCP exposure (F6) → Clavain integration (F7-F12) → statusline integration (F13). However, three design boundaries need explicit clarification in implementation:
+The Interlock PRD establishes clean feature boundaries and follows established Clavain companion plugin patterns. All 13 features layer correctly: intermute resilience (F1-F5) → MCP exposure (F6) → Clavain integration (F7-F12) → statusline integration (F13). However, three design boundaries need explicit clarification in implementation:
 
 1. **F6/F7 boundary:** MCP server ownership vs. plugin manager lifecycle
-2. **F9/F13 boundary:** Signal file format contract between Interlock and Interline
-3. **Phase migration (F1→F2→F3→F4→F5→F6):** Intermute API stability during rollout
+2. **F9/F13 boundary:** Signal file format contract between Interlock and interline
+3. **Phase migration (F1→F2→F3→F4→F5→F6):** intermute API stability during rollout
 
 ---
 
@@ -26,7 +26,7 @@ The Interlock PRD establishes clean feature boundaries and follows established C
 The 13 features organize into 4 coherent tiers:
 
 ```
-TIER 1: Intermute Resilience (F1-F5) — Go service enhancements
+TIER 1: intermute Resilience (F1-F5) — Go service enhancements
   ├─ F1: CircuitBreaker + RetryOnDBLock (SQLite reliability)
   ├─ F2: Session identity reuse (stale session collision detection)
   ├─ F3: Background cleanup (crash recovery)
@@ -39,16 +39,16 @@ TIER 2: MCP Exposure (F6) — Bridge layer
 TIER 3: Agent Lifecycle (F7-F12) — Clavain integration
   ├─ F7: Hooks (SessionStart/PreToolUse/Stop)
   ├─ F8: Commands (/interlock:join, :leave, :status, :setup)
-  ├─ F9: Signal file adapter (sideband to Interline)
+  ├─ F9: Signal file adapter (sideband to interline)
   ├─ F10: Git pre-commit hook (enforcement backstop)
   ├─ F11: Skills (coordination-protocol, conflict-recovery)
   └─ F12: Clavain shim delegation (plugin discovery)
 
 TIER 4: Statusline Rendering (F13) — UI integration
-  └─ F13: Interline signal consumption (persistent coordination status)
+  └─ F13: interline signal consumption (persistent coordination status)
 ```
 
-**Assessment:** Layering is correct. Each tier depends only on lower tiers; no upward dependencies. F6 cleanly separates concerns: MCP protocol handling vs. Intermute HTTP/socket integration.
+**Assessment:** Layering is correct. Each tier depends only on lower tiers; no upward dependencies. F6 cleanly separates concerns: MCP protocol handling vs. intermute HTTP/socket integration.
 
 ### 1.2 Feature Cohesion
 
@@ -56,24 +56,24 @@ Each feature has a single, clear responsibility:
 
 | Feature | Responsibility | Scope | Risk |
 |---------|----------------|-------|------|
-| F1 | SQLite fault tolerance | Intermute only | Low — adds circuit breaker middleware, non-breaking |
-| F2 | Session reuse + collision detection | Intermute API | Low — adds optional field, backward-compatible |
-| F3 | Background cleanup | Intermute only | Low — cleanup always idempotent |
-| F4 | Atomic reserve-or-conflict | Intermute API | **Medium** — NEW endpoint, must coexist with F3 cleanup |
-| F5 | Unix socket transport | Intermute only | Low — parallel to TCP, no interference |
-| F6 | MCP wrapper | Bridge layer | **Medium** — stdio lifecycle must not conflict with Intermute restarts |
+| F1 | SQLite fault tolerance | intermute only | Low — adds circuit breaker middleware, non-breaking |
+| F2 | Session reuse + collision detection | intermute API | Low — adds optional field, backward-compatible |
+| F3 | Background cleanup | intermute only | Low — cleanup always idempotent |
+| F4 | Atomic reserve-or-conflict | intermute API | **Medium** — NEW endpoint, must coexist with F3 cleanup |
+| F5 | Unix socket transport | intermute only | Low — parallel to TCP, no interference |
+| F6 | MCP wrapper | Bridge layer | **Medium** — stdio lifecycle must not conflict with intermute restarts |
 | F7 | Lifecycle hooks | Clavain hooks | Low — graceful degradation if interlock unavailable |
 | F8 | User commands | Claude Code CLI | Low — idempotent operations, safe re-invocation |
 | F9 | Signal file generation | Interlock service | **Medium** — append-only semantics, rotations, permission model |
 | F10 | Pre-commit enforcement | Git hook | Low — blocking, documented escape hatch |
 | F11 | Educational skills | Markdown docs | Low — documentation, no runtime coupling |
 | F12 | Plugin discovery | Clavain hooks | Low — follows interflux/interphase/interpath pattern |
-| F13 | Statusline integration | Interline plugin | **Medium** — depends on F9 signal format contract |
+| F13 | Statusline integration | interline plugin | **Medium** — depends on F9 signal format contract |
 
 **Critical coupling points identified:**
 - **F4 + F3 + heartbeat logic:** F3 sweeps inactive reservations while F4 checks them atomically. Requires explicit state transition semantics.
-- **F6 + Intermute service health:** MCP server must not crash the Claude Code session if Intermute is restarting (F1/F3/F5 trigger this).
-- **F9 + F13:** Signal file format must be versioned; Interline must gracefully handle format evolution.
+- **F6 + intermute service health:** MCP server must not crash the Claude Code session if intermute is restarting (F1/F3/F5 trigger this).
+- **F9 + F13:** Signal file format must be versioned; interline must gracefully handle format evolution.
 
 ### 1.3 Dependency Map
 
@@ -89,10 +89,10 @@ F6: MCP server (9 tools) + Unix socket connection
   ↓
 F9: Signal file adapter (writes to /var/run/intermute/signals/)
   ↓
-F13: Interline reads signals, updates statusline
+F13: interline reads signals, updates statusline
   ↓ (separate flow)
   ↓
-Intermute (Go service)
+intermute (Go service)
 F5: Unix domain socket listener
   ↓
 F4: Atomic check-and-reserve endpoint
@@ -105,13 +105,13 @@ SQLite DB
 ```
 
 **Dependency Assessment:**
-- **Clean dependency direction:** User → Clavain → Interlock → Intermute → SQLite. No upward/circular dependencies.
-- **Optional companion pattern:** Interlock is a companion plugin (like interflux, interphase, interpath, interwatch). Clavain gracefully degrades if absent (F12 shim + all hooks have `if Intermute unavailable { skip }`).
-- **External service dependency:** Intermute is a separate systemd service. F6 includes fallback logic (Unix socket → TCP).
+- **Clean dependency direction:** User → Clavain → Interlock → intermute → SQLite. No upward/circular dependencies.
+- **Optional companion pattern:** Interlock is a companion plugin (like interflux, interphase, interpath, interwatch). Clavain gracefully degrades if absent (F12 shim + all hooks have `if intermute unavailable { skip }`).
+- **External service dependency:** intermute is a separate systemd service. F6 includes fallback logic (Unix socket → TCP).
 
 **Concerns:**
 - **F4 + F3 race window:** Between F3 cleanup and F4 atomic reserve, a stale reservation can be reclaimed. Acceptance criteria should specify TTL semantics for this window. **Recommend:** Clarify that F3 only sweeps reservations >5min old with heartbeat >5min stale — not both conditions independently.
-- **F9 signal permission model:** If Interlock runs as different user than Interline, `/var/run/intermute/signals/` 0700 permissions block reader. **Recommend:** Clarify whether Interlock and Interline share a group or if signals are world-readable.
+- **F9 signal permission model:** If Interlock runs as different user than interline, `/var/run/intermute/signals/` 0700 permissions block reader. **Recommend:** Clarify whether Interlock and interline share a group or if signals are world-readable.
 
 ---
 
@@ -153,32 +153,32 @@ fi
 
 **Interlock PRD alignment:**
 - ✅ F12 discovery function follows pattern exactly
-- ✅ F7 hooks delegate to interlock scripts (not direct curl to Intermute)
+- ✅ F7 hooks delegate to interlock scripts (not direct curl to intermute)
 - ✅ F8 commands use `/interlock:` namespace (companions use `/inter*:`)
-- ✅ Graceful degradation: "All hooks skip silently if Intermute unavailable"
+- ✅ Graceful degradation: "All hooks skip silently if intermute unavailable"
 
 **Assessment:** Perfect pattern consistency. No architectural friction.
 
-### 2.2 Signal-Based Integration (Interline Model)
+### 2.2 Signal-Based Integration (interline Model)
 
-Interline is a companion statusline renderer that reads signal files:
-- Interpath writes to `/tmp/clavain-dispatch-*.json` (product artifacts)
-- Interphase writes to `/tmp/clavain-bead-*.json` (phase tracking)
-- Interline reads these and renders priority-ordered statusline
+interline is a companion statusline renderer that reads signal files:
+- interpath writes to `/tmp/clavain-dispatch-*.json` (product artifacts)
+- interphase writes to `/tmp/clavain-bead-*.json` (phase tracking)
+- interline reads these and renders priority-ordered statusline
 
 **Interlock's F9 follows this pattern:**
 - F9 generates normalized signal files: `/var/run/intermute/signals/{project-slug}-{agent-id}.jsonl`
 - F13 reads them and inserts into priority: `dispatch > **coordination** > bead > workflow > clodex`
 
-**Deviation detected:** Interpath/interphase use `/tmp/` (ephemeral), Interlock uses `/var/run/` (persistent).
+**Deviation detected:** interpath/interphase use `/tmp/` (ephemeral), Interlock uses `/var/run/` (persistent).
 - **Justification in PRD:** "Signal file rotation when >1MB" implies multi-session durability. `/var/run/` is correct.
 - **BUT:** File lifetime must be managed. PRD should specify cleanup policy (e.g., "rotate weekly" or "delete on interlock stop").
 
 **Assessment:** Pattern is sound, but lifecycle management needs explicit spec.
 
-### 2.3 Atomic Operations in SQLite (Intermute's Style)
+### 2.3 Atomic Operations in SQLite (intermute's Style)
 
-Intermute already uses SQLite transactions for atomic operations:
+intermute already uses SQLite transactions for atomic operations:
 - Agent registration (F2 adds `session_id` field)
 - Message delivery
 - Existing reservations API (F4 references "single-statement atomic DELETE")
@@ -187,7 +187,7 @@ Intermute already uses SQLite transactions for atomic operations:
 - "Single SQLite transaction: check conflict + insert reservation"
 - "Concurrent atomic reserves (only one succeeds), idempotent re-reserve by same agent"
 
-**Assessment:** Consistent with Intermute's existing patterns. Tests cover concurrency correctly.
+**Assessment:** Consistent with intermute's existing patterns. Tests cover concurrency correctly.
 
 ---
 
@@ -217,7 +217,7 @@ Phase 3: Clavain integration (F7-F12)
   └─ F12: Clavain shim (plugin discovery)
 
 Phase 4: UI integration (F13)
-  └─ F13: Interline update (depends on F9 signal contract)
+  └─ F13: interline update (depends on F9 signal contract)
 ```
 
 **Rollout risks identified:**
@@ -228,32 +228,32 @@ Phase 4: UI integration (F13)
 | 1 | F2 session reuse + F3 cleanup can race (stale session reclaimed while new session re-registering) | Define clear heartbeat TTL boundaries: cleanup >5min AND stale >5min |
 | 1 | F4 atomic reserve is NEW endpoint; clients must upgrade to use it | F4 is optional; old clients use F2 + manual conflict checking |
 | 1 | F5 Unix socket adds /var/run/ permission model; must not break TCP-only setups | Both listeners run simultaneously; TCP fallback in F6 |
-| 2 | F6 MCP server crashes ≠ Intermute down; Claude Code must handle MCP unavailability | F6 acceptance: "error handling for Intermute unavailable" |
+| 2 | F6 MCP server crashes ≠ intermute down; Claude Code must handle MCP unavailability | F6 acceptance: "error handling for intermute unavailable" |
 | 3 | F7 hooks fire before F9 signal adapter exists | F9 is part of Interlock plugin, available when F7 is discovered |
-| 3 | F10 pre-commit hook blocks pushes if Intermute is down | F10 acceptance: "passes if no Intermute agent is registered" + `--no-verify` escape hatch |
-| 4 | F13 reads F9 signal format; format evolution breaks Interline | Define signal schema version, Interline gracefully handles unknown versions |
+| 3 | F10 pre-commit hook blocks pushes if intermute is down | F10 acceptance: "passes if no intermute agent is registered" + `--no-verify` escape hatch |
+| 4 | F13 reads F9 signal format; format evolution breaks interline | Define signal schema version, interline gracefully handles unknown versions |
 
 **Critical dependency:** F9 signal format MUST be defined before F13 is implemented.
 
 ### 3.2 API Stability During Phased Rollout
 
-**Intermute APIs used by Interlock (F6):**
+**intermute APIs used by Interlock (F6):**
 - `POST /api/reservations?if_not_conflict=true` — NEW in F4
 - `GET /api/reservations/check` — existing, preserved
 - `POST /api/agents` — existing, modified in F2 (session_id field added)
 - Agent heartbeat, message send/fetch — existing, unchanged
 
 **Migration path:**
-1. F1-F5 ship to Intermute; old clients still work (backward-compatible)
-2. F6 Interlock MCP server launches; uses old APIs (no new Intermute calls)
+1. F1-F5 ship to intermute; old clients still work (backward-compatible)
+2. F6 Interlock MCP server launches; uses old APIs (no new intermute calls)
 3. F4 atomic endpoint available; F6 can upgrade to use it (opt-in)
-4. Old Intermute versions (pre-F1-F5) will fail on F6 registration attempt; F6 graceful degradation catches it
+4. Old intermute versions (pre-F1-F5) will fail on F6 registration attempt; F6 graceful degradation catches it
 
-**Recommendation:** Add to F6 acceptance criteria: "MCP tools fail gracefully if Intermute version <X.Y.Z (missing atomic reserve)" — otherwise F6 will incorrectly report success when using non-atomic reserve.
+**Recommendation:** Add to F6 acceptance criteria: "MCP tools fail gracefully if intermute version <X.Y.Z (missing atomic reserve)" — otherwise F6 will incorrectly report success when using non-atomic reserve.
 
 ### 3.3 Backward Compatibility
 
-**F1-F5 (Intermute):** All backward-compatible
+**F1-F5 (intermute):** All backward-compatible
 - F1: Middleware layer, no API changes
 - F2: Optional `session_id` field, defaults to null (old behavior)
 - F3: Cleanup only affects stale records, doesn't touch active ones
@@ -261,17 +261,17 @@ Phase 4: UI integration (F13)
 - F5: Parallel transport, TCP still works
 
 **F6 (MCP server):** New plugin, ships independently
-- No changes to Intermute; MCP server is thin wrapper
+- No changes to intermute; MCP server is thin wrapper
 - If interlock plugin absent, Claude Code sessions work normally
 
 **F7-F12 (Clavain integration):** All gracefully degrade
-- F7 hooks skip if Intermute unavailable
+- F7 hooks skip if intermute unavailable
 - F8 commands error with helpful message if interlock plugin absent
 - F12 shim discovery is optional
 
-**F13 (Interline):** Depends on F9 signal contract
-- If signal file missing/corrupt, Interline gracefully shows no coordination status
-- Version mismatch: Interline should log warning, not crash
+**F13 (interline):** Depends on F9 signal contract
+- If signal file missing/corrupt, interline gracefully shows no coordination status
+- Version mismatch: interline should log warning, not crash
 
 **Assessment:** Phased rollout is sound. All breaking points have documented escape hatches.
 
@@ -310,7 +310,7 @@ Result: Agent A loses its identity mid-session.
 ### 4.2 Git Pre-Commit Hook Blocking Behavior (F10)
 
 **Current specification:**
-- F10: "Hook passes if no Intermute agent is registered (graceful degradation)"
+- F10: "Hook passes if no intermute agent is registered (graceful degradation)"
 - F10: "Hook skippable with `--no-verify` (escape hatch documented)"
 
 **Risk:** Developers unaware of `/interlock:join` step run normal `git push`, hook blocks them.
@@ -319,7 +319,7 @@ Result: Agent A loses its identity mid-session.
 ```bash
 # Developer joins interlock (F8 /interlock:join)
 $ git add . && git commit -m "..."
-# Pre-commit hook (F10) checks files against Intermute
+# Pre-commit hook (F10) checks files against intermute
 # Another agent has file reserved
 # Hook aborts: "cannot commit; file reserved by agent-X"
 # Developer runs git push --no-verify (mistake)
@@ -346,27 +346,27 @@ $ git add . && git commit -m "..."
 - "Reads `/var/run/intermute/signals/{project-slug}-{agent-id}.jsonl` (latest line)"
 - "Coordination layer inserted into priority: dispatch > **coordination** > bead > workflow > clodex"
 
-**Risk:** If F9 emits format that F13 doesn't expect, Interline crashes or silently ignores coordination status.
+**Risk:** If F9 emits format that F13 doesn't expect, interline crashes or silently ignores coordination status.
 
 **Current mitigation:** None specified. PRD lists both as acceptance criteria but doesn't define a versioned schema.
 
 **Recommendation:**
 - Add to F9 acceptance criteria: "Signal schema includes `version: 1` field for forward compatibility"
-- Add to F13 acceptance criteria: "Interline gracefully ignores signals with unknown version or missing required fields; logs warning, doesn't crash"
+- Add to F13 acceptance criteria: "interline gracefully ignores signals with unknown version or missing required fields; logs warning, doesn't crash"
 - Document signal schema in a shared file (e.g., `docs/signals-schema.md`) both plugins reference
 
-### 4.4 Intermute Service Lifecycle (F1 + F3 + F5 + F6)
+### 4.4 intermute Service Lifecycle (F1 + F3 + F5 + F6)
 
 **Risk:** F1 circuit breaker opens, F3 sweeps stale data, F5 socket listener cycles, while F6 MCP clients are connected.
 
 **Scenario:**
 ```
-T0: Intermute serving normally via TCP + Unix socket
+T0: intermute serving normally via TCP + Unix socket
 T1: SQLite locks up (F1 circuit breaker OPEN)
 T2: F3 background sweep is blocked (circuit open)
 T3: MCP client (F6) tries to reserve file
-    → F6 wraps HTTP call to Intermute
-    → Intermute returns 503 (circuit open)
+    → F6 wraps HTTP call to intermute
+    → intermute returns 503 (circuit open)
     → F6 should handle 503 gracefully
 T4: Circuit breaker resets (after 30s F1 timeout)
 T5: F3 sweep runs and cleans up stale data
@@ -374,10 +374,10 @@ T6: MCP client retries reserve
     → Success
 ```
 
-**Current mitigation:** F6 acceptance criteria says "error handling for Intermute unavailable" — vague.
+**Current mitigation:** F6 acceptance criteria says "error handling for intermute unavailable" — vague.
 
 **Recommendation:**
-- Add to F6 acceptance criteria: "MCP tools handle HTTP 5xx errors by returning structured error (not crashing); client sees `{"error":"Intermute unavailable","code":503,"retry_after":30}`"
+- Add to F6 acceptance criteria: "MCP tools handle HTTP 5xx errors by returning structured error (not crashing); client sees `{"error":"intermute unavailable","code":503,"retry_after":30}`"
 - Add to F1 acceptance criteria: "Circuit breaker state is visible via `/health` endpoint so F6 can check readiness before retrying"
 
 ---
@@ -390,11 +390,11 @@ T6: MCP client retries reserve
 |----------|---------------|------------|
 | Auto-reserve on edit | "Creates lock contention, TOCTOU races, false safety" | ✅ Correct — reservations are explicit workflow, not implicit |
 | Tool filtering profiles | "9 MCP tools at ~1,800 tokens is 0.9% of context budget" | ✅ Reasonable — context budget not a constraint |
-| Dual persistence (DB + Git) | "Audit trail without a reader. SQLite is sufficient." | ✅ Correct — Intermute already audits via DB |
+| Dual persistence (DB + Git) | "Audit trail without a reader. SQLite is sufficient." | ✅ Correct — intermute already audits via DB |
 | Commit queue with batching | "No measured bottleneck for commit frequency" | ✅ Reasonable — premature optimization |
 | Contact policies | "Over-engineering for trusted local agents" | ✅ Correct — same machine/network, policy unnecessary |
 | Cross-project product bus | "Premature. Revisit when cross-repo coordination needed" | ✅ Correct — single-repo MVP is right scope |
-| MCP server inside Intermute | "Avoids dual-protocol anti-pattern. Interlock owns MCP layer." | ✅ **Correct — separates concerns cleanly** |
+| MCP server inside intermute | "Avoids dual-protocol anti-pattern. Interlock owns MCP layer." | ✅ **Correct — separates concerns cleanly** |
 | Blocking PreToolUse:Edit | "Advisory only. Git pre-commit hooks provide enforcement." | ✅ Correct — permissive advisory + mandatory enforcement is right model |
 
 **Assessment:** All non-goals are well-justified. No scope creep detected.
@@ -406,40 +406,40 @@ T6: MCP client retries reserve
 ### 6.1 Strengths
 
 1. **Tier-based layering is clean:**
-   - Intermute resilience (F1-F5) stands alone; can ship independently
+   - intermute resilience (F1-F5) stands alone; can ship independently
    - MCP wrapper (F6) is thin and stateless
    - Clavain integration (F7-F12) follows established companion plugin pattern
    - Statusline rendering (F13) is optional enhancement
 
 2. **Dependency direction is correct:**
-   - No upward dependencies; users depend on Clavain depend on Interlock depend on Intermute depend on SQLite
+   - No upward dependencies; users depend on Clavain depend on Interlock depend on intermute depend on SQLite
    - Graceful degradation at every layer: Interlock absent → no coordination, but Clavain works fine
 
 3. **Backward compatibility throughout:**
-   - F1-F5 don't break existing Intermute clients
+   - F1-F5 don't break existing intermute clients
    - F6 is new plugin; existing sessions unaffected
-   - F7-F12 degrade gracefully if Intermute unavailable
+   - F7-F12 degrade gracefully if intermute unavailable
 
 4. **Pattern consistency:**
    - Follows Clavain's companion plugin discovery, shim delegation, and graceful degradation
-   - Matches Interline's signal-file-based integration
-   - Mirrors Intermute's atomic transaction semantics
+   - Matches interline's signal-file-based integration
+   - Mirrors intermute's atomic transaction semantics
 
 5. **Phased rollout is feasible:**
-   - F1-F5 ship independently to Intermute
-   - F6 wraps existing Intermute APIs (no new Intermute version required)
+   - F1-F5 ship independently to intermute
+   - F6 wraps existing intermute APIs (no new intermute version required)
    - F7-F12 ship as separate Interlock plugin
-   - F13 is optional; Interline updates independently
+   - F13 is optional; interline updates independently
 
 ### 6.2 Medium-Severity Concerns
 
 1. **F2 + F3 race condition:** Heartbeat TTL semantics for stale session cleanup need explicit definition. Add test for concurrent reuse + cleanup.
 
-2. **F9 + F13 signal contract:** Schema versioning not specified. Add `version` field to schema; Interline must handle unknown versions gracefully.
+2. **F9 + F13 signal contract:** Schema versioning not specified. Add `version` field to schema; interline must handle unknown versions gracefully.
 
 3. **F10 + user awareness:** Pre-commit hook can block pushes; recovery path (request release, work elsewhere) not fully integrated into F8 commands. Add `/interlock:request-release` command.
 
-4. **F6 Intermute unavailability handling:** MCP tools need explicit error handling spec (HTTP 5xx → structured error, don't crash).
+4. **F6 intermute unavailability handling:** MCP tools need explicit error handling spec (HTTP 5xx → structured error, don't crash).
 
 ### 6.3 Low-Severity Recommendations
 
@@ -451,15 +451,15 @@ T6: MCP client retries reserve
 ### 6.4 Integration Readiness
 
 **Prerequisites before implementation:**
-- [ ] Intermute 0.X.Y+ with F1-F5 complete
-- [ ] Interline companion plugin deployed (for F13 readiness)
+- [ ] intermute 0.X.Y+ with F1-F5 complete
+- [ ] interline companion plugin deployed (for F13 readiness)
 - [ ] F9 signal schema documented + versioned in shared spec
 - [ ] F10 + F8 recovery workflow integrated (request-release command)
 
 **Parallel work streams:**
-- Intermute team: F1-F5 (SQLite resilience layer)
+- intermute team: F1-F5 (SQLite resilience layer)
 - Interlock team: F6 + F7-F12 (MCP server + Clavain integration)
-- Interline team: F13 (signal file consumption)
+- interline team: F13 (signal file consumption)
 
 ---
 
@@ -471,7 +471,7 @@ T6: MCP client retries reserve
 
 2. **F4 + F2:** Clarify: "F4 atomic reserve is recommended for new clients; F2 session reuse is for legacy clients without atomic reserve support."
 
-3. **F6:** Add acceptance criterion: "MCP tools gracefully handle Intermute unavailability; HTTP 5xx → structured `{error, code, retry_after}`, not crash."
+3. **F6:** Add acceptance criterion: "MCP tools gracefully handle intermute unavailability; HTTP 5xx → structured `{error, code, retry_after}`, not crash."
 
 4. **F9:** Add acceptance criterion: "Signal schema includes `version: 1` field; rotation policy documented (e.g., weekly rotation, max 1MB)."
 
@@ -479,21 +479,21 @@ T6: MCP client retries reserve
 
 6. **F13:** Add acceptance criterion: "Gracefully ignores signal files with unknown schema version; logs warning, doesn't crash; falls back to 'no coordination status'."
 
-7. **Add F14 (optional):** Signal schema documentation (`docs/signals-schema.md`) as shared reference for Interlock + Interline.
+7. **Add F14 (optional):** Signal schema documentation (`docs/signals-schema.md`) as shared reference for Interlock + interline.
 
 ### 7.2 Implementation Sequence
 
 ```
-Week 1-2:  Intermute F1-F5 (SQLite resilience + Unix socket)
-           [Dependencies resolved; new Intermute tag ready]
+Week 1-2:  intermute F1-F5 (SQLite resilience + Unix socket)
+           [Dependencies resolved; new intermute tag ready]
 
 Week 3:    Interlock F6 (MCP wrapper)
-           [MCP client can connect to Intermute]
+           [MCP client can connect to intermute]
 
 Week 4-5:  Interlock F7-F12 (Clavain integration + hooks + commands)
            [Interlock plugin ships; Clavain discovers it]
 
-Week 6:    Interline F13 (signal consumption)
+Week 6:    interline F13 (signal consumption)
            [Final UI integration; all 13 features complete]
 
 Week 7:    Testing + documentation
@@ -505,11 +505,11 @@ Week 7:    Testing + documentation
 | Risk | Mitigation |
 |------|-----------|
 | F2 + F3 race condition | Add concurrency tests; define heartbeat TTL explicitly; add integration test: 1000 concurrent reuse + cleanup attempts |
-| F4 Intermute version skew | Add `/health` endpoint check; document minimum Intermute version in F6 README |
+| F4 intermute version skew | Add `/health` endpoint check; document minimum intermute version in F6 README |
 | F9 signal format evolution | Add schema versioning; document backward compatibility policy |
 | F10 developer awareness | Add prominent warning in `/interlock:join` output; link to recovery workflow |
 | F6 MCP server crash | Add supervisor (systemd restart-on-failure or Claude Code plugin health check) |
-| F9 signal file permissions | Document group/ACL model; verify Interline can read signals |
+| F9 signal file permissions | Document group/ACL model; verify interline can read signals |
 
 ---
 
@@ -521,7 +521,7 @@ Week 7:    Testing + documentation
 
 **Recommend:**
 1. Incorporate 7.1 PRD refinements into feature acceptance criteria
-2. Follow 7.2 implementation sequence (Intermute first, then Interlock, then Interline)
+2. Follow 7.2 implementation sequence (intermute first, then Interlock, then interline)
 3. Execute 7.3 risk mitigations concurrently with development
 
 **Architecture rating: 8.5/10**

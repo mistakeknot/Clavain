@@ -1,7 +1,7 @@
 # Analysis: Core Synthesis Spec Writing
 
 ## Task
-Write `/root/projects/Interflux/docs/spec/core/synthesis.md` — the flux-drive findings synthesis specification following the template structure with pragmatic, opinionated prose and inline rationale callouts.
+Write `/root/projects/interflux/docs/spec/core/synthesis.md` — the flux-drive findings synthesis specification following the template structure with pragmatic, opinionated prose and inline rationale callouts.
 
 ## Approach
 
@@ -10,7 +10,7 @@ Used the exact template structure:
 1. Title with conformance tag
 2. Overview (2-3 sentences)
 3. Specification (8 steps with subsections)
-4. Interflux Reference (file paths, implementation notes)
+4. interflux Reference (file paths, implementation notes)
 5. Conformance (MUST/SHOULD/MAY)
 
 ### Content Organization
@@ -77,7 +77,7 @@ Used the exact template structure:
    - "orchestrator" not "flux-drive skill"
    - "findings collector" not "Task tool parser"
 
-### Interflux Reference Section
+### interflux Reference Section
 - 3 subsections: Implementation, Contracts, Domain integration
 - File paths to actual implementation files
 - Line counts for reference (`synthesize.md` is 365 lines)
@@ -113,13 +113,13 @@ All requested content covered:
 - ✓ Human-readable summary (summary.md template)
 - ✓ Report to user (presentation format)
 - ✓ Error handling (6 scenarios)
-- ✓ Interflux reference (file paths, implementation notes)
+- ✓ interflux reference (file paths, implementation notes)
 - ✓ Conformance (MUST/SHOULD/MAY tiers)
 
 ## File Metadata
-- **Path:** `/root/projects/Interflux/docs/spec/core/synthesis.md`
+- **Path:** `/root/projects/interflux/docs/spec/core/synthesis.md`
 - **Lines:** 357
-- **Structure:** 5 top-level sections (Overview, Specification, Interflux Reference, Conformance)
+- **Structure:** 5 top-level sections (Overview, Specification, interflux Reference, Conformance)
 - **Specification subsections:** 8 steps
 - **Tables:** 8 (validation states, confidence levels, verdict computation, findings.json fields, section ordering, error handling, implementation reference, conformance tiers)
 - **JSON examples:** 2 (merged finding, findings.json)
@@ -133,5 +133,5 @@ All requested content covered:
 - ✓ Decision tables for multi-condition logic
 - ✓ JSON examples for contracts
 - ✓ Abstract language (no Claude Code specifics)
-- ✓ Interflux file paths accurate
+- ✓ interflux file paths accurate
 - ✓ Conformance tiers properly organized

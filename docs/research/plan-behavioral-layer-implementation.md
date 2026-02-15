@@ -126,7 +126,7 @@ From `~/.claude/CLAUDE.md`, extract these sections and remove personal/server-sp
 - Oracle server-specific setup (DISPLAY, CHROME_PATH, NoVNC IPs)
 - Plugin development workflow (marketplace names, repo paths)
 - Server infrastructure (ethics-gradient, Hetzner, mutagen)
-- Cross-repo workflows (Intermute/Autarch)
+- Cross-repo workflows (intermute/Autarch)
 - Task tracking preferences (beads vs file-todos)
 
 #### File: `config/CLAUDE.md`

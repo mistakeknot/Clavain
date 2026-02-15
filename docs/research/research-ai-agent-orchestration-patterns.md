@@ -80,7 +80,7 @@ The most urgent research opportunities for Clavain lie in **four neglected domai
 - Formalize **attack surface topology**: which agent in a pipeline is most vulnerable to jailbreak attempts?
 - Create **self-correction safety guarantees**: under what conditions is reflection always safe?
 
-**Why It Matters**: Clavain's review agents (fd-* agents in Interflux) rely on reflection and self-correction. If a corrupted upstream agent feeds bad critique, downstream agents may amplify the error. This is now a known research frontier.
+**Why It Matters**: Clavain's review agents (fd-* agents in interflux) rely on reflection and self-correction. If a corrupted upstream agent feeds bad critique, downstream agents may amplify the error. This is now a known research frontier.
 
 **Reference**: [ICLR 2025: Dissecting Adversarial Robustness of Multimodal LM Agents](https://proceedings.iclr.cc/paper_files/paper/2025/file/460a1d8eac34125dad453b28d6d64446-Paper-Conference.pdf), [Benchmarking Robustness to Adversarially-Induced Harms](https://arxiv.org/html/2508.16481v1)
 
@@ -146,7 +146,7 @@ The most urgent research opportunities for Clavain lie in **four neglected domai
 - Create **capability inference**: can agents infer missing capabilities from examples or partial descriptions?
 - Build **topology adaptation**: dynamically reconfigure agent graph based on observed capabilities and failures
 
-**Why It Matters**: Clavain's current dispatch (Interflux flux-drive) statically assigns agents to phases. Dynamic capability negotiation would enable more flexible, context-aware routing and graceful degradation when agents are unavailable.
+**Why It Matters**: Clavain's current dispatch (interflux flux-drive) statically assigns agents to phases. Dynamic capability negotiation would enable more flexible, context-aware routing and graceful degradation when agents are unavailable.
 
 **Reference**: [Agent2Agent Protocol - Google Developers](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/), [A2A Protocol - Solo.io](https://www.solo.io/topics/ai-infrastructure/what-is-a2a)
 
@@ -250,7 +250,7 @@ The most urgent research opportunities for Clavain lie in **four neglected domai
 
 **Finding**: Agents supervising other agents are critical for real-world reliability. Guardian agents monitor, guide, enforce guardrails.
 
-**Clavain Opportunity**: Formalize guardian agent design; integrate with Interflux review agents to create bidirectional supervision (agent reviews human, human reviews agent review).
+**Clavain Opportunity**: Formalize guardian agent design; integrate with interflux review agents to create bidirectional supervision (agent reviews human, human reviews agent review).
 
 **Reference**: [Guardian Agent Solutions - Wayfound](https://www.wayfound.ai/post/top-10-guardian-agent-solutions-to-evaluate-in-2026)
 
@@ -278,12 +278,12 @@ The most urgent research opportunities for Clavain lie in **four neglected domai
 ### Immediate (Q1 2026)
 
 1. **Coordination Tax Research** (2-3 weeks)
-   - Analyze Interflux orchestrations for coordination overhead
+   - Analyze interflux orchestrations for coordination overhead
    - Measure accuracy saturation curves for agent counts 2-8
    - Develop topology templates (tree, pipeline, mesh, hub-and-spoke)
 
 2. **Adversarial Robustness Audit** (2-3 weeks)
-   - Test reflection mechanisms in Interflux review agents with jailbreak attempts
+   - Test reflection mechanisms in interflux review agents with jailbreak attempts
    - Document attack surface topology
    - Create isolation recommendations
 
@@ -296,7 +296,7 @@ The most urgent research opportunities for Clavain lie in **four neglected domai
 
 4. **Multi-Agent Hallucination Cascade Detection** (3-4 weeks)
    - Formalize error propagation models
-   - Implement cascade detectors in Interflux
+   - Implement cascade detectors in interflux
    - Research voting strategies for correlated agents
 
 5. **Agent Memory & Context Optimization** (3-4 weeks)

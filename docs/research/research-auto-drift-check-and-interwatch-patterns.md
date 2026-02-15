@@ -1,7 +1,7 @@
-# Auto-Drift-Check Hook Research — Patterns from auto-compound.sh and Interwatch
+# Auto-Drift-Check Hook Research — Patterns from auto-compound.sh and interwatch
 
 **Research Date:** 2026-02-14  
-**Scope:** Extract patterns from `auto-compound.sh` Stop hook and Interwatch drift detection system to inform a new `auto-drift-check` Stop hook that monitors doc freshness automatically.
+**Scope:** Extract patterns from `auto-compound.sh` Stop hook and interwatch drift detection system to inform a new `auto-drift-check` Stop hook that monitors doc freshness automatically.
 
 ---
 
@@ -184,7 +184,7 @@ Run at end of hook to prevent `/tmp` bloat.
 
 ---
 
-## 4. Interwatch Discovery and Integration
+## 4. interwatch Discovery and Integration
 
 ### 4.1 Discovery Pattern (hooks/lib.sh)
 
@@ -227,18 +227,18 @@ It's not functional — it's just a discovery sentinel.
 ### 4.2 Session-Start Integration (hooks/session-start.sh)
 
 ```bash
-# Interwatch — doc freshness monitoring companion
+# interwatch — doc freshness monitoring companion
 interwatch_root=$(_discover_interwatch_plugin)
 if [[ -n "$interwatch_root" ]]; then
     companions="${companions}\\n- **interwatch**: doc freshness monitoring"
 fi
 ```
 
-Interwatch is discovered and reported in the SessionStart context injection, but **NOT automatically invoked**. It's purely informational.
+interwatch is discovered and reported in the SessionStart context injection, but **NOT automatically invoked**. It's purely informational.
 
 ---
 
-## 5. Interwatch CLI Usage Patterns
+## 5. interwatch CLI Usage Patterns
 
 ### 5.1 Commands (from using-clavain/SKILL.md)
 
@@ -247,18 +247,18 @@ Interwatch is discovered and reported in the SessionStart context injection, but
 | Check doc freshness | `/interwatch:watch` or `/interwatch:status` |
 | Refresh a stale doc | `/interwatch:refresh` |
 
-**Note:** These are Clavain command wrappers, not direct Interwatch skill invocations. Interwatch commands are NOT in `/root/projects/Clavain/commands/` — they must be in Interwatch's own `commands/` directory.
+**Note:** These are Clavain command wrappers, not direct interwatch skill invocations. interwatch commands are NOT in `/root/projects/Clavain/commands/` — they must be in interwatch's own `commands/` directory.
 
-**Confirmed:** No `interwatch-*.md` files in `/root/projects/Clavain/commands/` (checked via `ls`). The commands are registered by Interwatch plugin itself.
+**Confirmed:** No `interwatch-*.md` files in `/root/projects/Clavain/commands/` (checked via `ls`). The commands are registered by interwatch plugin itself.
 
 ### 5.2 Manual Invocation Only
 
 From `docs/research/trace-integration-points.md`:
 
-> **Issue:** Interwatch is discovered and reported in session-start, but **no hook automatically runs interwatch checks** or triggers doc refreshes.
+> **Issue:** interwatch is discovered and reported in session-start, but **no hook automatically runs interwatch checks** or triggers doc refreshes.
 
 **Current state:**
-- Interwatch exists and can be manually invoked (`/interwatch:watch`)
+- interwatch exists and can be manually invoked (`/interwatch:watch`)
 - Watchables config is complete (roadmap, prd, vision, agents-md)
 - Staleness thresholds are set (7-30 days)
 
@@ -322,7 +322,7 @@ watchables:
 
 ---
 
-## 7. Interwatch Confidence Tiers (skills/doc-watch/phases/assess.md)
+## 7. interwatch Confidence Tiers (skills/doc-watch/phases/assess.md)
 
 ### 7.1 Tier Definitions
 
@@ -361,7 +361,7 @@ Plus staleness check: if `days_since_update > staleness_threshold`, confidence i
 
 ---
 
-## 8. Interwatch Detection Phase (skills/doc-watch/phases/detect.md)
+## 8. interwatch Detection Phase (skills/doc-watch/phases/detect.md)
 
 ### 8.1 Signal Evaluation Functions
 
@@ -447,7 +447,7 @@ Output: `A file.md` (added), `D file.md` (deleted), `R old.md -> new.md` (rename
 
 ---
 
-## 9. Interwatch Refresh Phase (skills/doc-watch/phases/refresh.md)
+## 9. interwatch Refresh Phase (skills/doc-watch/phases/refresh.md)
 
 ### 9.1 Confidence-Based Actions
 
@@ -460,21 +460,21 @@ Output: `A file.md` (added), `D file.md` (deleted), `R old.md -> new.md` (rename
 
 ### 9.2 Generator Invocation
 
-**For product docs (Interpath):**
+**For product docs (interpath):**
 
 ```bash
 # Example: refresh roadmap
 claude plugin run interpath artifact-gen --type=roadmap --output=docs/roadmap.md
 ```
 
-**For code docs (Interdoc):**
+**For code docs (interdoc):**
 
 ```bash
 # Example: refresh AGENTS.md
 claude plugin run interdoc interdoc --output=AGENTS.md
 ```
 
-**Pattern:** Interwatch doesn't contain generator logic — it dispatches to companion plugins (Interpath, Interdoc) via the `generator` field in watchables.yaml.
+**Pattern:** interwatch doesn't contain generator logic — it dispatches to companion plugins (interpath, interdoc) via the `generator` field in watchables.yaml.
 
 ### 9.3 State Tracking
 
@@ -525,9 +525,9 @@ config.yaml         # Beads config
 - Drift-specific throttle: at most once per 10 minutes (longer than compound's 5 min)
 - Per-repo opt-out: `.claude/clavain.no-autodrift`
 
-### 11.2 Integration with Interwatch
+### 11.2 Integration with interwatch
 
-**Discovery:** Use `_discover_interwatch_plugin()` from `hooks/lib.sh` to check if Interwatch is installed. If not installed, hook should exit cleanly (no-op).
+**Discovery:** Use `_discover_interwatch_plugin()` from `hooks/lib.sh` to check if interwatch is installed. If not installed, hook should exit cleanly (no-op).
 
 **State management:**
 - Read `.interwatch/last-scan.json` to get baseline (bead counts, component counts, last watch timestamp)
@@ -621,9 +621,9 @@ Use the existing `STOP_SENTINEL` pattern to prevent cascade loops. Write sentine
 
 Drift detection is slower than compound detection (requires git/beads queries). Use 10-minute throttle (vs compound's 5 min).
 
-### 14.4 Graceful Degradation Without Interwatch
+### 14.4 Graceful Degradation Without interwatch
 
-If Interwatch is not installed, hook should exit cleanly (no-op). This allows Clavain to ship auto-drift-check without requiring Interwatch as a hard dependency.
+If interwatch is not installed, hook should exit cleanly (no-op). This allows Clavain to ship auto-drift-check without requiring interwatch as a hard dependency.
 
 ### 14.5 Preserve Human Oversight for Medium/High
 
@@ -631,14 +631,14 @@ Don't auto-execute refresh commands — inject prompt asking Claude to evaluate.
 
 ### 14.6 State Snapshot in .interwatch/
 
-Store last-scan snapshot in `.interwatch/last-scan.json` (managed by Interwatch skill). Hook reads this to determine what changed since last scan. If file doesn't exist, create initial snapshot and exit (bootstrap mode).
+Store last-scan snapshot in `.interwatch/last-scan.json` (managed by interwatch skill). Hook reads this to determine what changed since last scan. If file doesn't exist, create initial snapshot and exit (bootstrap mode).
 
 ---
 
 ## 15. Open Questions
 
 1. **Should auto-drift-check create .interwatch/ state if it doesn't exist?**  
-   **Answer:** No — let Interwatch skill manage its own state. Hook should exit cleanly if `.interwatch/` is absent. This keeps concerns separated.
+   **Answer:** No — let interwatch skill manage its own state. Hook should exit cleanly if `.interwatch/` is absent. This keeps concerns separated.
 
 2. **Should hook check all 4 watchables or just high-priority ones?**  
    **Answer:** Check all 4, but weight them differently. AGENTS.md and PRD are higher priority than vision (staleness: 14 days vs 30 days). Weight signals accordingly.
@@ -663,11 +663,11 @@ Auto-compound provides a solid template for auto-drift-check:
 - Block + reason prompt (preserve human oversight)
 - Per-repo opt-out (`.claude/clavain.no-autodrift`)
 
-Interwatch provides the domain model:
+interwatch provides the domain model:
 - Watchables registry (declarative config)
 - Signal types (deterministic vs probabilistic)
 - Confidence tiers (Certain/High/Medium/Low/Green)
-- Generator dispatch (Interpath, Interdoc)
+- Generator dispatch (interpath, interdoc)
 - State tracking (`.interwatch/` directory)
 
 **Next step:** Implement `hooks/auto-drift-check.sh` following the pattern above, test with `/claude --plugin-dir`, validate via structural tests, then integrate into hooks.json.

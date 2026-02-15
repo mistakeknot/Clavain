@@ -1,4 +1,4 @@
-# Correctness Review: Intermute-Clavain Integration Brainstorm
+# Correctness Review: intermute-Clavain Integration Brainstorm
 
 **Reviewer:** Julik (fd-correctness agent)
 **Date:** 2026-02-14
@@ -88,10 +88,10 @@ T6                                          marshal JSON for message event
 T7                                          write(fd, message JSON)
       close(fd)                             close(fd)
 
-Result: Signal file contains partial JSON or only the last event. Interline reads corrupted JSON or misses events.
+Result: Signal file contains partial JSON or only the last event. interline reads corrupted JSON or misses events.
 ```
 
-**Root cause:** No synchronization on signal file writes. Multiple goroutines in the Intermute service call `SignalWriter.Emit()` concurrently (Reserve, SendMessage, ReleaseReservation all trigger signals). Standard `os.OpenFile` + `Write` is not atomic for multiple writers.
+**Root cause:** No synchronization on signal file writes. Multiple goroutines in the intermute service call `SignalWriter.Emit()` concurrently (Reserve, SendMessage, ReleaseReservation all trigger signals). Standard `os.OpenFile` + `Write` is not atomic for multiple writers.
 
 **Severity:** HIGH — Corrupted signal files break statusline, cause interline to crash or display stale data.
 
@@ -99,13 +99,13 @@ Result: Signal file contains partial JSON or only the last event. Interline read
 
 **Option 1 (File-per-event):** Write to `/tmp/intermute-signal-{project}-{agent}-{eventID}.json`, rotate/prune old files.
 - Each event gets its own file with monotonic ID (timestamp + UUID suffix)
-- Interline reads all files, sorts by timestamp, displays latest
+- interline reads all files, sorts by timestamp, displays latest
 - Prune files older than 5 minutes
 - **Trade-off:** More filesystem churn, requires cleanup logic in both writer and reader.
 
 **Option 2 (Append-only log with reader cursor):** Signal file is append-only JSONL (one event per line).
 - Use `O_APPEND` flag for atomic writes (kernel guarantees writes <4KB are atomic on Linux)
-- Interline maintains a cursor (line offset or event ID) and reads new lines since last poll
+- interline maintains a cursor (line offset or event ID) and reads new lines since last poll
 - Rotate file when >1MB
 - **Trade-off:** Reader must parse JSONL and track cursor state.
 
@@ -131,7 +131,7 @@ func (sw *SignalWriter) Emit(project, agentID string, event SignalEvent) error {
 }
 ```
 - Serializes writes to each signal file
-- **Trade-off:** Mutex contention if many events for the same agent. Also doesn't help if Intermute is running multiple instances (not currently the case, but possible future).
+- **Trade-off:** Mutex contention if many events for the same agent. Also doesn't help if intermute is running multiple instances (not currently the case, but possible future).
 
 **Recommendation:** Option 2 (append-only JSONL with O_APPEND). It's the most robust for both single-process and multi-process scenarios, and aligns with the "signal file as event stream" mental model.
 
@@ -151,7 +151,7 @@ T0    SessionStart hook fires
       SESSION_ID="abc123def456..."
 T1    POST /api/agents
       {session_id: "abc123def456..."}
-T2    Intermute: check if session_id exists
+T2    intermute: check if session_id exists
       → no match, create new agent
       → returns agent_id=1
 T3                                          SessionStart hook fires
@@ -159,7 +159,7 @@ T3                                          SessionStart hook fires
                                             (collision: same session_id!)
 T4                                          POST /api/agents
                                             {session_id: "abc123def456..."}
-T5                                          Intermute: check if session_id exists
+T5                                          intermute: check if session_id exists
                                             → MATCH (agent_id=1)
                                             → returns agent_id=1 (same!)
 
@@ -186,7 +186,7 @@ func (s *Server) RegisterAgent(req RegisterAgentRequest) (*Agent, error) {
 
 **Option 2 (Composite key):** Use `(session_id, process_pid, hostname)` as the identity tuple.
 - SessionStart hook includes PID and hostname in registration
-- Intermute checks all three fields for match
+- intermute checks all three fields for match
 - **Trade-off:** More complex identity logic, but eliminates collision risk entirely.
 
 **Option 3 (Reject collision):** If session_id exists AND the agent is still active (heartbeat <5min ago), reject the registration.
@@ -300,7 +300,7 @@ T6                                          POST /api/reservations
                                             {path_pattern: "router.go", exclusive: true}
                                             → CONFLICT or duplicate reservation?
 
-Result: If Intermute allows duplicate exclusive reservations, both agents hold locks. If Intermute rejects the second, Agent B's edit already happened but PostToolUse fails. Data corruption either way.
+Result: If intermute allows duplicate exclusive reservations, both agents hold locks. If intermute rejects the second, Agent B's edit already happened but PostToolUse fails. Data corruption either way.
 ```
 
 **Root cause:** Multi-stage race with no atomicity. The PreToolUse check, Edit execution, and PostToolUse reserve are three separate operations with no transaction boundary. The auto-reserve happens AFTER the edit, so the file is already modified before the reservation is created.
@@ -435,7 +435,7 @@ func (cb *CircuitBreaker) Execute(fn func() error) error {
 
 **The Race:**
 ```
-Time  Agent A                              Intermute
+Time  Agent A                              intermute
 ---   ---------------------------------     ---------------------------------
 T0    intermute_fetch_inbox(cursor=10)
 T1                                          Query: SELECT * FROM messages
@@ -490,7 +490,7 @@ T6    intermute_fetch_inbox(cursor=13)
 
 **Recommendation:** Option 3 (client-side cursor with idempotency requirement) for MVP. It's the simplest and aligns with the "signal file" design (agents poll and process, no server-side delivery guarantees). Document the idempotency requirement prominently in the MCP tool description.
 
-**Long-term:** If Intermute evolves to support command messages (e.g., "transfer task X to Agent B"), implement Option 2 (server-side ACK) for exactly-once semantics.
+**Long-term:** If intermute evolves to support command messages (e.g., "transfer task X to Agent B"), implement Option 2 (server-side ACK) for exactly-once semantics.
 
 ---
 
@@ -510,7 +510,7 @@ T6    intermute_fetch_inbox(cursor=13)
 
 **Risk:** Reservation TTL too short for complex workflows.
 
-**Mitigation:** Auto-extend reservation TTL on heartbeat (agent sends heartbeat every 30s, Intermute extends all reservations held by that agent by +60s). Or allow agents to specify custom TTLs.
+**Mitigation:** Auto-extend reservation TTL on heartbeat (agent sends heartbeat every 30s, intermute extends all reservations held by that agent by +60s). Or allow agents to specify custom TTLs.
 
 ### C. Glob Pattern Reservation Ambiguity
 
@@ -518,11 +518,11 @@ T6    intermute_fetch_inbox(cursor=13)
 
 **Risk:** Ambiguous conflict resolution. PreToolUse check might allow edits that violate exclusive reservations.
 
-**Mitigation:** Define precedence rules in Intermute's conflict detection logic. Suggestion: Most specific pattern wins (exact path > glob with `**` > glob with `*`). Document clearly.
+**Mitigation:** Define precedence rules in intermute's conflict detection logic. Suggestion: Most specific pattern wins (exact path > glob with `**` > glob with `*`). Document clearly.
 
 ### D. Stop Hook Failure Modes
 
-**Scenario:** Agent's Stop hook runs `curl -sf -X POST /api/agents/${AGENT_ID}/release-all`. Network timeout, Intermute server down, or agent ID invalid. `curl` fails silently (`-f` flag). Reservations are orphaned.
+**Scenario:** Agent's Stop hook runs `curl -sf -X POST /api/agents/${AGENT_ID}/release-all`. Network timeout, intermute server down, or agent ID invalid. `curl` fails silently (`-f` flag). Reservations are orphaned.
 
 **Risk:** Stale reservations linger until sweep goroutine cleans them up (up to 60s delay).
 
@@ -580,9 +580,9 @@ To validate the fixes for findings 1-7, the following concurrency tests are requ
 
 ## Shutdown and Cleanup Behavior
 
-### Missing: Graceful Shutdown for Intermute Service
+### Missing: Graceful Shutdown for intermute Service
 
-The design does not specify what happens when the Intermute service is stopped (systemd restart, SIGTERM, server crash).
+The design does not specify what happens when the intermute service is stopped (systemd restart, SIGTERM, server crash).
 
 **Critical questions:**
 1. Do in-flight HTTP requests complete, or are they aborted mid-write?
@@ -590,7 +590,7 @@ The design does not specify what happens when the Intermute service is stopped (
 3. Is the sweep goroutine canceled cleanly, or does it leave partial DELETEs?
 4. Are signal files flushed before shutdown?
 
-**Fix:** Intermute must implement graceful shutdown:
+**Fix:** intermute must implement graceful shutdown:
 ```go
 func (s *Server) Shutdown(ctx context.Context) error {
     // 1. Stop accepting new HTTP requests
@@ -612,7 +612,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 ```
 
-**Test:** Send SIGTERM to Intermute, verify all agent signal files are intact, no partial writes, DB is not corrupted.
+**Test:** Send SIGTERM to intermute, verify all agent signal files are intact, no partial writes, DB is not corrupted.
 
 ---
 
@@ -627,7 +627,7 @@ The design lacks instrumentation for detecting and debugging concurrency failure
 4. **Stale reservation sweep stats** — How many reservations are deleted per sweep cycle? Which agents are they from?
 5. **Cursor reprocessing count** — How often do agents re-fetch the same messages? (indicates crash-and-restart frequency)
 
-**Implementation:** Add structured logging (zerolog or zap) to Intermute. Expose Prometheus metrics at `/metrics`.
+**Implementation:** Add structured logging (zerolog or zap) to intermute. Expose Prometheus metrics at `/metrics`.
 
 **Alerting:** If reservation conflict rate >10/min, or circuit breaker opens, send alert (systemd OnFailure hook or external monitoring).
 
@@ -670,7 +670,7 @@ The design lacks instrumentation for detecting and debugging concurrency failure
 
 ## Conclusion
 
-The Intermute-Clavain integration design is architecturally sound (two-layer approach, companion plugin pattern, MCP server exposure), but the concurrency model has **7 critical/high-severity race conditions** that will cause data loss, stale reads, and undefined behavior under concurrent load.
+The intermute-Clavain integration design is architecturally sound (two-layer approach, companion plugin pattern, MCP server exposure), but the concurrency model has **7 critical/high-severity race conditions** that will cause data loss, stale reads, and undefined behavior under concurrent load.
 
 **Primary root causes:**
 1. Multi-step check-then-act patterns with no atomicity (TOCTOU races)

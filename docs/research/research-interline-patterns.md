@@ -1,14 +1,14 @@
-# Research: Interline Statusline Plugin Patterns
+# Research: interline Statusline Plugin Patterns
 
 ## Executive Summary
 
 The **interline** statusline plugin is a minimal companion plugin that renders Claude Code's statusline by reading JSON input from Claude Code's runtime environment and state files written by sister plugins (Clavain, interphase). It uses a 4-layer priority system with file-based sidebands to display dispatch state, bead context, workflow phase, and configuration flags.
 
-**Key insight:** Interline demonstrates a lightweight, decoupled integration pattern: plugins write state files to `/tmp/` using predictable namespaces, and a single renderer reads them without direct function calls or dependencies. This enables real-time context visibility without tight coupling.
+**Key insight:** interline demonstrates a lightweight, decoupled integration pattern: plugins write state files to `/tmp/` using predictable namespaces, and a single renderer reads them without direct function calls or dependencies. This enables real-time context visibility without tight coupling.
 
 ---
 
-## 1. Interline Implementation Details
+## 1. interline Implementation Details
 
 ### Current Architecture
 
@@ -169,12 +169,12 @@ fi
 
 **Why this matters:**
 - If dispatch.sh terminates abnormally (SIGKILL, crash), trap doesn't fire → orphaned file
-- Interline detects this and cleans up automatically
+- interline detects this and cleans up automatically
 - Next dispatch.sh can reuse the same filename if PID recycles
 
 ---
 
-## 3. Interphase Bead State File Protocol
+## 3. interphase Bead State File Protocol
 
 ### File Location and Naming
 
@@ -261,7 +261,7 @@ jq ... > "$state_file" 2>/dev/null || true
 1. User runs `/full-pipeline "describe the architecture"`
 2. Codex generates task descriptions for sub-agents
 3. For each task, `dispatch.sh` writes state file
-4. Interline renders "Clodex: vet" (or other task name) in statusline
+4. interline renders "Clodex: vet" (or other task name) in statusline
 5. User sees progress without verbose logging
 
 ### Setup & Installation
@@ -377,7 +377,7 @@ jq ... > "$state_file" 2>/dev/null || true
 ### 2. Transcript Scanning Performance
 
 **Current state:**
-- Interline scans entire transcript file on every status update (~300ms)
+- interline scans entire transcript file on every status update (~300ms)
 - Uses `tac` (reverse read) + `grep -m1` to find last Skill invocation
 - On large transcripts (>10,000 lines), this is expensive
 
@@ -432,7 +432,7 @@ skill_name=$(cat "/tmp/clavain-skill-${SESSION_ID}.json" 2>/dev/null)
 ### 5. Input JSON Validation
 
 **Current state:**
-- Interline uses loose jq queries with `//` fallbacks
+- interline uses loose jq queries with `//` fallbacks
 - If Claude Code changes input schema, script silently degrades
 
 **Improvement:**
@@ -546,7 +546,7 @@ fi
 ### Path Injection
 
 **Current state:**
-- Interline reads `project_dir` from Claude Code input (untrusted)
+- interline reads `project_dir` from Claude Code input (untrusted)
 - Used to check for `.claude/clodex-toggle.flag`
 
 **Risk:** Malicious project could set a symlink to `/etc/passwd` as `.claude/clodex-toggle.flag` → interline reads it
@@ -558,7 +558,7 @@ fi
 ### Resource Exhaustion
 
 **Current state:**
-- Interline scans entire transcript on every update (no limit)
+- interline scans entire transcript on every update (no limit)
 - Could read arbitrarily large files
 
 **Risk:** Transcript with millions of lines could slow statusline rendering
@@ -641,7 +641,7 @@ echo "$input" | mock_dispatch_state | statusline.sh
 
 ## Conclusion
 
-**Interline exemplifies lightweight companion integration:**
+**interline exemplifies lightweight companion integration:**
 - Single responsibility: render statusline from multiple input sources
 - Decoupled via filesystem: no function calls, no dependencies
 - Fault-tolerant: handles missing/corrupt state files gracefully

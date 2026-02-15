@@ -177,7 +177,7 @@ Flux-drive implements a **Domain-Aware Multi-Agent Review Protocol** — a deter
 - **Output paths**: `{PROJECT_ROOT}/docs/research/flux-drive/{stem}/`
 - **Knowledge paths**: `config/flux-drive/knowledge/*.md` with YAML frontmatter
 - **Compounding agent**: Uses `Task(subagent_type: general-purpose)` with sanitization rules
-- **Phase tracking**: Interphase integration via `phase_infer_bead`, `advance_phase`
+- **Phase tracking**: interphase integration via `phase_infer_bead`, `advance_phase`
 - **Summary template**: Specific markdown structure with Flux Drive branding
 
 ---
@@ -276,7 +276,7 @@ On next review, qmd search retrieves relevant entries → injected into agent pr
 
 **Depends on**:
 - Claude Code: Task API, subagent_type system, plugin hooks
-- Interphase: Phase tracking, bead context (optional)
+- interphase: Phase tracking, bead context (optional)
 - Beads: Issue creation from findings (optional)
 - qmd MCP: Knowledge retrieval (optional)
 - Oracle CLI: Cross-AI reviews (optional)
@@ -309,7 +309,7 @@ To port this protocol to a different environment (not Claude Code), you'd need t
 2. **qmd search**: Remove knowledge injection (agents work without it)
 3. **Domain detection**: Manual domain classification (or skip domain system entirely)
 4. **Oracle CLI**: Remove cross-AI agents (or integrate different model provider)
-5. **Beads/Interphase**: Remove issue tracking and phase gates
+5. **Beads/interphase**: Remove issue tracking and phase gates
 
 ### Protocol-Preserving Simplifications
 

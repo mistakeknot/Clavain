@@ -6,12 +6,12 @@ Multiple Claude Code sessions (human-driven tmux panes or `/clodex` orchestrated
 
 ## Solution
 
-Enrich Intermute with resilience and concurrency primitives, then build an "interlock" companion plugin that provides Claude Code agents with explicit file reservation, messaging, and conflict detection — enforced via git pre-commit hooks as a mandatory backstop.
+Enrich intermute with resilience and concurrency primitives, then build an "interlock" companion plugin that provides Claude Code agents with explicit file reservation, messaging, and conflict detection — enforced via git pre-commit hooks as a mandatory backstop.
 
 ## Features
 
 ### F1: Circuit Breaker + Retry for SQLite Resilience
-**What:** Add a 3-state circuit breaker and exponential-backoff retry with jitter to Intermute's SQLite Store layer.
+**What:** Add a 3-state circuit breaker and exponential-backoff retry with jitter to intermute's SQLite Store layer.
 **Acceptance criteria:**
 - [ ] `CircuitBreaker` struct with `sync.Mutex`, states CLOSED/OPEN/HALF_OPEN, threshold 5, reset 30s
 - [ ] `RetryOnDBLock` function: 7 retries, 0.05s base, 25% jitter, targets "database is locked"
@@ -38,7 +38,7 @@ Enrich Intermute with resilience and concurrency primitives, then build an "inte
 - [ ] Sweep NEVER deletes reservations held by agents with fresh heartbeats (even if expires_at passed — agent may be extending)
 - [ ] On startup, release ALL reservations >5min old (crash recovery). Reservations <5min old preserved (agent may still be active post-crash)
 - [ ] Graceful shutdown: cancel sweep context, checkpoint WAL, close DB cleanly
-- [ ] Signal emission: on reservation deletion, emit an event via Intermute's existing WebSocket/event system. Interlock polls or subscribes to these events and writes signal files (fire-and-forget — no retry if Interlock is offline)
+- [ ] Signal emission: on reservation deletion, emit an event via intermute's existing WebSocket/event system. Interlock polls or subscribes to these events and writes signal files (fire-and-forget — no retry if Interlock is offline)
 - [ ] Tests: sweep deletes expired+inactive, preserves active, startup sweep clears stale, concurrent F2 reuse + F3 sweep is safe
 
 ### F4: Atomic Check-and-Reserve API
@@ -52,9 +52,9 @@ Enrich Intermute with resilience and concurrency primitives, then build an "inte
 - [ ] Tests: concurrent atomic reserves (only one succeeds), idempotent re-reserve by same agent
 
 ### F5: Unix Domain Socket Listener
-**What:** Add Unix domain socket support to Intermute alongside existing TCP listener.
+**What:** Add Unix domain socket support to intermute alongside existing TCP listener.
 **Acceptance criteria:**
-- [ ] `--socket /var/run/intermute.sock` flag on Intermute server
+- [ ] `--socket /var/run/intermute.sock` flag on intermute server
 - [ ] Socket file created with mode 0660 (owner + group read/write)
 - [ ] Socket file removed on graceful shutdown
 - [ ] Health endpoint accessible via `curl --unix-socket`
@@ -62,16 +62,16 @@ Enrich Intermute with resilience and concurrency primitives, then build an "inte
 - [ ] Tests: connect via socket, verify permission enforcement
 
 ### F6: Interlock MCP Server
-**What:** Thin MCP stdio server in interlock companion that wraps Intermute's HTTP/socket API, exposing 9 tools.
+**What:** Thin MCP stdio server in interlock companion that wraps intermute's HTTP/socket API, exposing 9 tools.
 **Acceptance criteria:**
 - [ ] `bin/interlock-mcp` binary (Go or shell+curl wrapper)
 - [ ] 9 MCP tools: reserve_files, release_files, release_all, check_conflicts, my_reservations, send_message, fetch_inbox, list_agents, request_release
-- [ ] Connects to Intermute via Unix socket (fallback to TCP)
+- [ ] Connects to intermute via Unix socket (fallback to TCP)
 - [ ] `.mcp.json` in plugin root with correct `${CLAUDE_PLUGIN_ROOT}` paths
 - [ ] Tools return structured JSON matching MCP protocol
-- [ ] MCP tools handle Intermute HTTP 5xx gracefully: return structured `{"error":"...","code":503,"retry_after":30}`, never crash
-- [ ] MCP tools fail gracefully if Intermute version lacks atomic reserve (fallback to non-atomic)
-- [ ] Tests: each tool returns expected schema, error handling for Intermute unavailable
+- [ ] MCP tools handle intermute HTTP 5xx gracefully: return structured `{"error":"...","code":503,"retry_after":30}`, never crash
+- [ ] MCP tools fail gracefully if intermute version lacks atomic reserve (fallback to non-atomic)
+- [ ] Tests: each tool returns expected schema, error handling for intermute unavailable
 
 ### F7: Interlock Hooks
 **What:** SessionStart, PreToolUse:Edit (advisory), and Stop hooks for agent lifecycle management.
@@ -86,9 +86,9 @@ Enrich Intermute with resilience and concurrency primitives, then build an "inte
   Note: git commit will block until resolved.
   ```
 - [ ] Stop hook: releases all reservations, cleans up temp files
-- [ ] All hooks delegate to `interlock-*` scripts (not direct curl to Intermute)
-- [ ] All hooks skip silently if Intermute unavailable (graceful degradation)
-- [ ] If coordination was active and Intermute becomes unreachable, emit one-time warning: "Intermute coordination lost. Proceeding without reservation checks."
+- [ ] All hooks delegate to `interlock-*` scripts (not direct curl to intermute)
+- [ ] All hooks skip silently if intermute unavailable (graceful degradation)
+- [ ] If coordination was active and intermute becomes unreachable, emit one-time warning: "intermute coordination lost. Proceeding without reservation checks."
 
 ### F8: Interlock Commands
 **What:** Four Claude Code commands for explicit coordination management.
@@ -96,7 +96,7 @@ Enrich Intermute with resilience and concurrency primitives, then build an "inte
 - [ ] `/interlock:join [--name <label>]` — registers agent, sets onboarding flag, shows active agents
 - [ ] `/interlock:leave` — releases all reservations, deregisters, removes onboarding flag
 - [ ] `/interlock:status` — lists active agents with reservations, heartbeat, and human-readable names
-- [ ] `/interlock:setup` — self-installing: checks/downloads Intermute binary, creates systemd unit, starts service
+- [ ] `/interlock:setup` — self-installing: checks/downloads intermute binary, creates systemd unit, starts service
 - [ ] Agent name precedence: user-provided `--name` label > tmux pane title > `claude-{session:0:8}` fallback
 - [ ] `/interlock:join` creates `~/.config/clavain/intermute-joined` flag; `/interlock:leave` removes it
 - [ ] `/interlock:status` shows `(name, agent-id)` pairs to disambiguate name collisions
@@ -118,14 +118,14 @@ Enrich Intermute with resilience and concurrency primitives, then build an "inte
 **Acceptance criteria:**
 - [ ] `interlock-install-hooks` script generates `.git/hooks/pre-commit`
 - [ ] Hook extracts changed files from `git diff --cached --name-only`
-- [ ] Hook checks each file against Intermute's conflict detection API
+- [ ] Hook checks each file against intermute's conflict detection API
 - [ ] Hook aborts commit with clear, actionable error message:
   ```
   ERROR: Cannot commit. Reserved files detected:
     - src/router.go (reserved by claude-tmux-2: "auth refactor", expires in 8m)
   Resolve: (1) /interlock:request-release claude-tmux-2, (2) wait 8m, (3) git commit --no-verify (risk: overwrite)
   ```
-- [ ] Hook passes if no Intermute agent is registered (graceful degradation)
+- [ ] Hook passes if no intermute agent is registered (graceful degradation)
 - [ ] Hook skippable with `--no-verify` (escape hatch documented)
 
 ### F11: Coordination Skills
@@ -141,12 +141,12 @@ Enrich Intermute with resilience and concurrency primitives, then build an "inte
 **Acceptance criteria:**
 - [ ] `_discover_interlock_plugin()` function in `hooks/lib.sh` (env var → find in plugin cache)
 - [ ] SessionStart hook delegates to interlock if installed
-- [ ] Doctor check 3f: interlock plugin installed, Intermute service running, agent registered
+- [ ] Doctor check 3f: interlock plugin installed, intermute service running, agent registered
 - [ ] `commands/setup.md` updated to include interlock installation from marketplace
 - [ ] `INTERLOCK_ROOT` env var support for development override
 
-### F13: Interline Signal Integration
-**What:** Interline reads interlock's normalized signal files and shows persistent coordination status.
+### F13: interline Signal Integration
+**What:** interline reads interlock's normalized signal files and shows persistent coordination status.
 **Acceptance criteria:**
 - [ ] Reads `/var/run/intermute/signals/{project-slug}-{agent-id}.jsonl` (latest line)
 - [ ] Coordination layer inserted into priority: dispatch > **coordination** > bead > workflow > clodex
@@ -182,13 +182,13 @@ Enrich Intermute with resilience and concurrency primitives, then build an "inte
 - **Commit queue with batching** — No measured bottleneck for commit frequency.
 - **Contact policies** — Over-engineering for trusted local agents.
 - **Cross-project product bus** — Premature. Revisit when cross-repo coordination is needed.
-- **MCP server inside Intermute** — Avoids dual-protocol anti-pattern. Interlock owns the MCP layer.
+- **MCP server inside intermute** — Avoids dual-protocol anti-pattern. Interlock owns the MCP layer.
 - **Blocking PreToolUse:Edit** — Advisory only. Git pre-commit hooks provide mandatory enforcement.
 
 ## Dependencies
 
-- **Intermute** (`/root/projects/Intermute/`) — Go 1.24, SQLite, existing agent registry + file reservations API
-- **Interline** (`/root/projects/interline/`) — Statusline renderer, 4-layer priority system
+- **intermute** (`/root/projects/intermute/`) — Go 1.24, SQLite, existing agent registry + file reservations API
+- **interline** (`/root/projects/interline/`) — Statusline renderer, 4-layer priority system
 - **Clavain** (`/root/projects/Clavain/`) — Plugin ecosystem, hooks/lib.sh shim delegation pattern
 - **interagency-marketplace** — For publishing interlock companion
 

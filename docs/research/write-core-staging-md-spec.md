@@ -2,7 +2,7 @@
 
 ## Task Summary
 
-Created `/root/projects/Interflux/docs/spec/core/staging.md` — the flux-drive multi-stage agent dispatch specification. This is the third core protocol document (after scoring.md and monitoring.md).
+Created `/root/projects/interflux/docs/spec/core/staging.md` — the flux-drive multi-stage agent dispatch specification. This is the third core protocol document (after scoring.md and monitoring.md).
 
 ## Analysis
 
@@ -12,7 +12,7 @@ The spec follows the established template:
 1. **Title + conformance tag** — `flux-drive-spec 1.0 | Conformance: Core`
 2. **Overview** — 3-sentence summary of staging purpose
 3. **Specification** — 8 subsections covering the full staging algorithm
-4. **Interflux Reference** — implementation file paths with line numbers
+4. **interflux Reference** — implementation file paths with line numbers
 5. **Conformance** — MUST/SHOULD/MAY requirements
 
 ### Content Coverage
@@ -95,7 +95,7 @@ The spec follows the established template:
 - Expansion scoring example (3 agents with calculations)
 - Multi-agent expansion logic (mixed scores)
 
-### Interflux Reference Section
+### interflux Reference Section
 
 **6 implementation locations:**
 1. Expansion algorithm: `launch.md` lines 146-220
@@ -169,7 +169,7 @@ The spec follows the established template:
 - ✅ Title with conformance tag
 - ✅ Overview (2-3 sentences)
 - ✅ Specification with subsections
-- ✅ Interflux Reference (file paths + notes)
+- ✅ interflux Reference (file paths + notes)
 - ✅ Conformance (MUST/SHOULD/MAY/MUST NOT)
 
 **Style requirements:**

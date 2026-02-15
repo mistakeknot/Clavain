@@ -4,7 +4,7 @@
 
 **Goal:** Add live Codex progress visibility to the statusline and post-run dispatch summaries by parsing the JSONL event stream from `codex exec --json`.
 
-**Architecture:** A background awk coprocess in dispatch.sh reads JSONL events from codex exec's stdout, updates the existing dispatch state file with activity type and counters, and writes a summary file after completion. Interline's statusline reads the new `activity` field from the state file to show live progress.
+**Architecture:** A background awk coprocess in dispatch.sh reads JSONL events from codex exec's stdout, updates the existing dispatch state file with activity type and counters, and writes a summary file after completion. interline's statusline reads the new `activity` field from the state file to show live progress.
 
 **Tech Stack:** bash, awk (JSONL parser), jq (statusline reader), bats-core (tests)
 

@@ -9,13 +9,13 @@
 
 ## What We're Building
 
-A standalone protocol specification for the flux-drive multi-agent review orchestration system, extracted from its reference implementation in Interflux. The spec defines the abstract protocol — the 3-phase lifecycle, scoring algorithm, staging logic, synthesis rules, and structured contracts — in a way that's implementation-agnostic while pointing to Interflux as the normative reference.
+A standalone protocol specification for the flux-drive multi-agent review orchestration system, extracted from its reference implementation in interflux. The spec defines the abstract protocol — the 3-phase lifecycle, scoring algorithm, staging logic, synthesis rules, and structured contracts — in a way that's implementation-agnostic while pointing to interflux as the normative reference.
 
 This is **Phase 1** of a 5-phase extraction project. Phase 1 is documentation-only: no code changes, no library extraction, no migration. Pure specification writing.
 
 ### Deliverables
 
-8 specification documents + 1 README, organized into `docs/spec/` within the Interflux repo:
+8 specification documents + 1 README, organized into `docs/spec/` within the interflux repo:
 
 | Document | Conformance | Purpose |
 |----------|-------------|---------|
@@ -27,7 +27,7 @@ This is **Phase 1** of a 5-phase extraction project. Phase 1 is documentation-on
 | `extensions/knowledge-lifecycle.md` | Extension | Provenance tracking, 60-day decay, accumulation rules |
 | `contracts/findings-index.md` | Core | Required structured output format (~30 lines) |
 | `contracts/completion-signal.md` | Core | How agents signal completion (.partial → complete) |
-| `README.md` | — | Spec overview, versioning, conformance levels, Interflux reference |
+| `README.md` | — | Spec overview, versioning, conformance levels, interflux reference |
 
 ## Why This Approach
 
@@ -37,9 +37,9 @@ The spec serves two audiences with different needs:
 
 1. **Other AI tool developers** — building their own multi-agent review systems. They need framework-agnostic protocol docs they can implement against, even if their agent runtime is completely different (Cursor extensions, VSCode agents, custom CLIs).
 
-2. **Clavain/Interflux contributors** — extending the existing system. They benefit from clear protocol docs that separate "what the protocol requires" from "how Interflux implements it."
+2. **Clavain/interflux contributors** — extending the existing system. They benefit from clear protocol docs that separate "what the protocol requires" from "how interflux implements it."
 
-The layered approach handles both: abstract protocol in the spec, Interflux details in the reference implementation. Phase 5 (a separate bead) adds a Claude Code adapter guide for the second audience.
+The layered approach handles both: abstract protocol in the spec, interflux details in the reference implementation. Phase 5 (a separate bead) adds a Claude Code adapter guide for the second audience.
 
 ### Positioning: Reference Architecture → Interoperability Standard
 
@@ -54,9 +54,9 @@ The trajectory is toward an **interoperability standard**: a protocol that enabl
 - **Inline rationale** for every major design decision — explains *why*, not just *what*
 - Think Stripe API docs meets 12-factor app manifesto
 
-### Location: Inside Interflux
+### Location: Inside interflux
 
-The spec lives at `/root/projects/Interflux/docs/spec/` rather than a standalone repo. Co-locating with the reference implementation:
+The spec lives at `/root/projects/interflux/docs/spec/` rather than a standalone repo. Co-locating with the reference implementation:
 - Keeps spec and implementation in sync during rapid evolution
 - Reduces maintenance burden (one repo to update, not two)
 - Can be extracted to a standalone repo later if external adoption warrants it
@@ -65,7 +65,7 @@ The spec lives at `/root/projects/Interflux/docs/spec/` rather than a standalone
 
 The existing core algorithm analysis (`docs/research/analyze-flux-drive-core-algorithm.md`, 512 lines) covers much of the protocol. The plan:
 1. Use the analysis as scaffolding for structure and coverage
-2. Verify every claim against the actual Interflux source code
+2. Verify every claim against the actual interflux source code
 3. Write the spec documents fresh, grounded in verified source truth
 
 This avoids both "writing from scratch when good analysis exists" and "rubber-stamping analysis that might have drifted from implementation."
@@ -74,9 +74,9 @@ This avoids both "writing from scratch when good analysis exists" and "rubber-st
 
 1. **Conformance levels** — Core (6 docs: protocol, scoring, staging, synthesis, findings-index, completion-signal) vs. Extension (2 docs: domain-detection, knowledge-lifecycle). Implementations can claim "flux-drive-spec 1.0 core" or "flux-drive-spec 1.0 core + domains."
 
-2. **Versioning: Semver** — The spec gets its own version (flux-drive-spec 1.0.0), independent of Interflux's version. Core protocol changes bump major, extensions bump minor, clarifications bump patch.
+2. **Versioning: Semver** — The spec gets its own version (flux-drive-spec 1.0.0), independent of interflux's version. Core protocol changes bump major, extensions bump minor, clarifications bump patch.
 
-3. **Abstraction level** — Abstract protocol concepts (agent runtime, orchestrator, findings collector) with Interflux named as the normative reference implementation. Not a line-by-line description of Interflux code.
+3. **Abstraction level** — Abstract protocol concepts (agent runtime, orchestrator, findings collector) with interflux named as the normative reference implementation. Not a line-by-line description of interflux code.
 
 4. **Inline rationale** — Each major design decision (scoring ranges, expansion thresholds, stage assignment percentages) includes a brief "why this works" explanation. Adds ~30% to document length but makes the spec educational.
 
@@ -89,7 +89,7 @@ This avoids both "writing from scratch when good analysis exists" and "rubber-st
 ### Directory Structure
 
 ```
-/root/projects/Interflux/docs/spec/
+/root/projects/interflux/docs/spec/
 ├── README.md                        # Spec overview, versioning, conformance
 ├── core/
 │   ├── protocol.md                  # 3-phase lifecycle
@@ -106,7 +106,7 @@ This avoids both "writing from scratch when good analysis exists" and "rubber-st
 
 ### Source Mapping
 
-Each spec document maps to specific Interflux source files:
+Each spec document maps to specific interflux source files:
 
 | Spec Document | Primary Sources |
 |---------------|----------------|
@@ -139,7 +139,7 @@ Each spec document follows a consistent structure:
 
 > **Why this works:** [Brief explanation of design decision]
 
-## Interflux Reference
+## interflux Reference
 [How the reference implementation handles this — file paths, notable choices]
 
 ## Conformance
@@ -173,15 +173,15 @@ Each spec document follows a consistent structure:
 
 3. **Contract strictness** — The findings index format is currently loosely specified (pipe-delimited text). Should the spec tighten it with a formal grammar or JSON schema? Tighter contracts enable better tooling but reduce flexibility.
 
-4. **Agent abstraction** — How abstract should the "agent" concept be? Current Interflux agents are Claude Code subagents, but the protocol could work with any callable that produces findings. Should the spec define a minimal agent interface?
+4. **Agent abstraction** — How abstract should the "agent" concept be? Current interflux agents are Claude Code subagents, but the protocol could work with any callable that produces findings. Should the spec define a minimal agent interface?
 
 5. **Extension mechanism** — Should the spec describe how to add new extensions beyond domains and knowledge? Or keep the extension surface implicit until Phase 2-3?
 
 ## Not Building (YAGNI)
 
-- **No standalone repo** — spec lives in Interflux until adoption warrants extraction
+- **No standalone repo** — spec lives in interflux until adoption warrants extraction
 - **No conformance test suite** — that's Phase 2+ work
 - **No migration tooling** — no code changes in Phase 1
 - **No formal grammar** — pragmatic spec, not BNF. Schemas use JSON examples, not formal notation
 - **No multi-implementation compatibility matrix** — only one implementation exists today
-- **No governance process** — spec changes follow Interflux's normal PR process for now
+- **No governance process** — spec changes follow interflux's normal PR process for now
