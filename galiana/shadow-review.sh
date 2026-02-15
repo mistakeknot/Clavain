@@ -16,6 +16,7 @@ OUTPUT="$3"
 AGENT_NAME="${AGENT##*:}"
 
 PROMPT_FILE=$(mktemp /tmp/shadow-review-XXXXXX.md)
+trap 'rm -f "$PROMPT_FILE"' EXIT INT TERM
 
 cat > "$PROMPT_FILE" << PROMPT_EOF
 You are a code review agent. Review the following input and report findings.
@@ -46,16 +47,17 @@ if [[ -z "$DISPATCH" ]]; then
 fi
 
 if [[ -n "$DISPATCH" ]]; then
-    bash "$DISPATCH" \
+    if ! bash "$DISPATCH" \
         --prompt-file "$PROMPT_FILE" \
         -C "$(dirname "$INPUT")" \
         --name "shadow-${AGENT_NAME}" \
         -o "$OUTPUT" \
         -s workspace-read \
         --tier fast \
-        2>/dev/null || true
+        2>/tmp/shadow-review-err-$$.log; then
+        echo "WARN: dispatch.sh failed for $AGENT_NAME (see /tmp/shadow-review-err-$$.log)" >&2
+    fi
+    rm -f "/tmp/shadow-review-err-$$.log"
 else
     echo "WARN: dispatch.sh not found, skipping agent $AGENT_NAME" >&2
 fi
-
-rm -f "$PROMPT_FILE"

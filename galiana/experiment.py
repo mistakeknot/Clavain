@@ -233,13 +233,17 @@ def run_shadow_review(
 
         try:
             # Call shadow-review.sh
-            subprocess.run(
+            result = subprocess.run(
                 [str(shadow_script), agent, input_path, str(output_file)],
                 cwd=project_dir,
                 timeout=300,  # 5 minute timeout per agent
                 capture_output=True,
-                check=False  # Don't raise on non-zero exit
+                text=True,
+                check=False
             )
+
+            if result.returncode != 0:
+                print(f"WARN: Agent {agent_name} exited {result.returncode}: {result.stderr[:200]}", file=sys.stderr)
 
             # Parse output
             if output_file.exists():
