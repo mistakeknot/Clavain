@@ -9,7 +9,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)"
-MARKETPLACE_ROOT="$REPO_ROOT/../interagency-marketplace"
+# Marketplace location: try Interverse monorepo first, fall back to sibling dir
+if [ -f "$REPO_ROOT/../../infra/marketplace/.claude-plugin/marketplace.json" ]; then
+    MARKETPLACE_ROOT="$REPO_ROOT/../../infra/marketplace"
+elif [ -f "$REPO_ROOT/../interagency-marketplace/.claude-plugin/marketplace.json" ]; then
+    MARKETPLACE_ROOT="$REPO_ROOT/../interagency-marketplace"
+else
+    MARKETPLACE_ROOT="${MARKETPLACE_ROOT:-$REPO_ROOT/../interagency-marketplace}"
+fi
 DRY_RUN=false
 
 if [ -t 1 ]; then
