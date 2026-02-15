@@ -106,8 +106,138 @@ CREATE TABLE IF NOT EXISTS modifications (
 );
 
 CREATE INDEX IF NOT EXISTS idx_evidence_session ON evidence(session_id);
-CREATE INDEX IF NOT EXISTS idx_evidence_source_event ON evidence(source, event);
+CREATE INDEX IF NOT EXISTS idx_evidence_source ON evidence(source);
+CREATE INDEX IF NOT EXISTS idx_evidence_project ON evidence(project);
+CREATE INDEX IF NOT EXISTS idx_evidence_event ON evidence(event);
+CREATE INDEX IF NOT EXISTS idx_evidence_ts ON evidence(ts);
+CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project);
+CREATE INDEX IF NOT EXISTS idx_canary_status ON canary(status);
+CREATE INDEX IF NOT EXISTS idx_canary_file ON canary(file);
+CREATE INDEX IF NOT EXISTS idx_modifications_group ON modifications(group_id);
+CREATE INDEX IF NOT EXISTS idx_modifications_status ON modifications(status);
+CREATE INDEX IF NOT EXISTS idx_modifications_target ON modifications(target_file);
 SQL
+}
+
+# ─── Protected paths enforcement ─────────────────────────────────────────────
+
+# Path to the protected-paths manifest. Relative to repo root.
+_INTERSPECT_MANIFEST=".clavain/interspect/protected-paths.json"
+
+# Load the protected-paths manifest and cache the arrays.
+# Sets: _INTERSPECT_PROTECTED_PATHS, _INTERSPECT_ALLOW_LIST, _INTERSPECT_ALWAYS_PROPOSE
+_interspect_load_manifest() {
+    # Cache: only parse once per process
+    [[ -n "${_INTERSPECT_MANIFEST_LOADED:-}" ]] && return 0
+    _INTERSPECT_MANIFEST_LOADED=1
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local manifest="${root}/${_INTERSPECT_MANIFEST}"
+
+    _INTERSPECT_PROTECTED_PATHS=()
+    _INTERSPECT_ALLOW_LIST=()
+    _INTERSPECT_ALWAYS_PROPOSE=()
+
+    if [[ ! -f "$manifest" ]]; then
+        echo "WARN: interspect manifest not found at ${manifest}" >&2
+        return 1
+    fi
+
+    # Parse JSON arrays with jq — one pattern per line
+    local line
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && _INTERSPECT_PROTECTED_PATHS+=("$line")
+    done < <(jq -r '.protected_paths[]? // empty' "$manifest" 2>/dev/null)
+
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && _INTERSPECT_ALLOW_LIST+=("$line")
+    done < <(jq -r '.modification_allow_list[]? // empty' "$manifest" 2>/dev/null)
+
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && _INTERSPECT_ALWAYS_PROPOSE+=("$line")
+    done < <(jq -r '.always_propose[]? // empty' "$manifest" 2>/dev/null)
+
+    return 0
+}
+
+# Check if a file path matches any pattern in a glob array.
+# Uses bash extended globbing for ** support.
+# Args: $1 = file path (relative to repo root), $2... = glob patterns
+# Returns: 0 if matches, 1 if not
+_interspect_matches_any() {
+    local filepath="$1"
+    shift
+
+    # Enable extended globbing for ** patterns
+    local prev_extglob
+    prev_extglob=$(shopt -p extglob 2>/dev/null || true)
+    shopt -s extglob 2>/dev/null || true
+
+    local pattern
+    for pattern in "$@"; do
+        # Convert glob pattern to a regex-like check using bash [[ == ]]
+        # The [[ $str == $pattern ]] does glob matching natively
+        # shellcheck disable=SC2053
+        if [[ "$filepath" == $pattern ]]; then
+            eval "$prev_extglob" 2>/dev/null || true
+            return 0
+        fi
+    done
+
+    eval "$prev_extglob" 2>/dev/null || true
+    return 1
+}
+
+# Check if a path is protected (interspect CANNOT modify it).
+# Args: $1 = file path relative to repo root
+# Returns: 0 if protected, 1 if not
+_interspect_is_protected() {
+    _interspect_load_manifest || return 1
+    _interspect_matches_any "$1" "${_INTERSPECT_PROTECTED_PATHS[@]}"
+}
+
+# Check if a path is in the modification allow-list (interspect CAN modify it).
+# Args: $1 = file path relative to repo root
+# Returns: 0 if allowed, 1 if not
+_interspect_is_allowed() {
+    _interspect_load_manifest || return 1
+    _interspect_matches_any "$1" "${_INTERSPECT_ALLOW_LIST[@]}"
+}
+
+# Check if a path requires propose mode (even in autonomous mode).
+# Args: $1 = file path relative to repo root
+# Returns: 0 if always-propose, 1 if not
+_interspect_is_always_propose() {
+    _interspect_load_manifest || return 1
+    _interspect_matches_any "$1" "${_INTERSPECT_ALWAYS_PROPOSE[@]}"
+}
+
+# Validate a target path for interspect modification.
+# Must be allowed AND not protected. Prints reason on rejection.
+# Args: $1 = file path relative to repo root
+# Returns: 0 if valid target, 1 if rejected
+_interspect_validate_target() {
+    local filepath="$1"
+
+    _interspect_load_manifest || {
+        echo "REJECT: manifest not found" >&2
+        return 1
+    }
+
+    # Check protected first (hard block)
+    if _interspect_matches_any "$filepath" "${_INTERSPECT_PROTECTED_PATHS[@]}"; then
+        echo "REJECT: ${filepath} is a protected path" >&2
+        return 1
+    fi
+
+    # Check allow-list
+    if ! _interspect_matches_any "$filepath" "${_INTERSPECT_ALLOW_LIST[@]}"; then
+        echo "REJECT: ${filepath} is not in the modification allow-list" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 # ─── Evidence helpers ────────────────────────────────────────────────────────
