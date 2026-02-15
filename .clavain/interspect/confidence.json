@@ -1,0 +1,6 @@
+{
+  "min_sessions": 3,
+  "min_diversity": 2,
+  "min_events": 5,
+  "_comment": "Counting-rule thresholds per design §3.3. In protected-paths.json — interspect cannot modify."
+}

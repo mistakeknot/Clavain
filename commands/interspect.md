@@ -23,41 +23,38 @@ _interspect_ensure_db
 DB=$(_interspect_db_path)
 ```
 
-## Pattern Detection
+## Pattern Detection & Classification
 
-Query patterns grouped by (source, event, override_reason):
+Use the lib-interspect.sh confidence gate to query and classify all patterns:
 
 ```bash
-# Pattern summary: source, event, override_reason, event_count, session_count, project_count
-PATTERNS=$(sqlite3 -separator '|' "$DB" "
-    SELECT
-        source,
-        event,
-        COALESCE(override_reason, ''),
-        COUNT(*) as event_count,
-        COUNT(DISTINCT session_id) as session_count,
-        COUNT(DISTINCT project) as project_count
-    FROM evidence
-    GROUP BY source, event, override_reason
-    HAVING COUNT(*) >= 2
-    ORDER BY event_count DESC;
-")
+# Get classified patterns: source|event|reason|event_count|session_count|project_count|classification
+CLASSIFIED=$(_interspect_get_classified_patterns)
 ```
 
-## Counting-Rule Classification
+Thresholds are loaded from `.clavain/interspect/confidence.json` (defaults: 3 sessions, 2 projects, 5 events).
 
-For each pattern, apply thresholds from design §3.3:
+Classification levels:
+- **Ready** (all 3 thresholds met) — "Eligible for proposal in Phase 2."
+- **Growing** (1-2 thresholds met) — Show which criteria are not yet met.
+- **Emerging** (no thresholds met) — "Watching."
 
-| Criterion | Threshold | Field |
-|-----------|-----------|-------|
-| Session diversity | >= 3 sessions | session_count |
-| Cross-project diversity | >= 2 projects OR >= 2 languages | project_count |
-| Event volume | >= 5 events | event_count |
+Parse each row and bucket by classification:
 
-Classify each pattern:
-- **Ready** — ALL three thresholds met. "Eligible for proposal in Phase 2."
-- **Growing** — SOME thresholds met. Show which criteria are not yet met.
-- **Emerging** — BELOW all thresholds. "Watching."
+```bash
+READY_PATTERNS=""
+GROWING_PATTERNS=""
+EMERGING_PATTERNS=""
+
+while IFS='|' read -r src evt reason ec sc pc cls; do
+    [[ -z "$src" ]] && continue
+    case "$cls" in
+        ready)    READY_PATTERNS+="${src}|${evt}|${reason}|${ec}|${sc}|${pc}\n" ;;
+        growing)  GROWING_PATTERNS+="${src}|${evt}|${reason}|${ec}|${sc}|${pc}\n" ;;
+        emerging) EMERGING_PATTERNS+="${src}|${evt}|${reason}|${ec}|${sc}|${pc}\n" ;;
+    esac
+done <<< "$CLASSIFIED"
+```
 
 ## Report Format
 
