@@ -1,7 +1,7 @@
 {
   "name": "clavain",
-  "version": "0.6.13",
-  "description": "General-purpose engineering discipline rig — 4 agents, 32 commands, 22 skills, 1 MCP server. Combines workflow discipline with specialized execution agents. Companions: interphase, interline, interslack, interform, intercraft, interdev.",
+  "version": "0.6.14",
+  "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 4 agents, 32 commands, 22 skills, 1 MCP server. Companions: interphase, interline, interslack, interform, intercraft, interdev.",
   "author": "mistakeknot",
   "license": "MIT",
   "repository": "mistakeknot/Clavain",
@@ -21,7 +21,7 @@
   "plugins": {
     "core": {
       "source": "clavain@interagency-marketplace",
-      "description": "The core Clavain engineering discipline plugin"
+      "description": "The core Clavain multi-agent rig"
     },
     "required": [
       {

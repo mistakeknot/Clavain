@@ -1,21 +1,21 @@
 {
   "name": "clavain",
-  "version": "0.6.13",
-  "description": "General-purpose engineering discipline plugin. 4 agents, 32 commands, 22 skills, 1 MCP server — combining workflow discipline with specialized execution agents. Includes Codex dispatch, cross-AI review (interpeer with quick/deep/council/mine modes), and structured debate. Companions: interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev.",
+  "version": "0.6.14",
+  "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 4 agents, 32 commands, 22 skills, 1 MCP server. Orchestrates heterogeneous AI models through composable workflows. Includes Codex dispatch, cross-AI review (interpeer with quick/deep/council/mine modes), and structured debate. Companions: interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev.",
   "author": {
     "name": "mistakeknot"
   },
   "license": "MIT",
   "keywords": [
-    "engineering-discipline",
-    "code-review",
+    "multi-agent",
+    "self-improving",
     "workflow-automation",
+    "code-review",
+    "cross-ai-review",
+    "brainstorm-to-ship",
     "tdd",
-    "debugging",
     "planning",
     "agents",
-    "general-purpose",
-    "cross-ai-review",
     "oracle",
     "council"
   ],
