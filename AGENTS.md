@@ -1,6 +1,6 @@
 # Clavain — Development Guide
 
-General-purpose engineering discipline plugin for Claude Code. Merged from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
+Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
 ## Quick Reference
 
@@ -9,7 +9,7 @@ General-purpose engineering discipline plugin for Claude Code. Merged from [supe
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 22 skills, 4 agents, 32 commands, 8 hooks, 1 MCP server |
+| Components | 23 skills, 4 agents, 33 commands, 8 hooks, 1 MCP server |
 | License | MIT |
 
 ## Runbooks

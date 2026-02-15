@@ -78,6 +78,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib-signals.sh"
 detect_signals "$RECENT"
 
+# Persist signals for Galiana analytics
+source "${SCRIPT_DIR}/../galiana/lib-galiana.sh" 2>/dev/null || true
+galiana_log_signals "$SESSION_ID" "$CLAVAIN_SIGNALS" "$CLAVAIN_SIGNAL_WEIGHT" \
+    "$([[ "$CLAVAIN_SIGNAL_WEIGHT" -ge 3 ]] && echo true || echo false)" 2>/dev/null || true
+
 # Threshold: need weight >= 3 to trigger compound
 # commit (1) + bead-close (1) = 2, not enough alone.
 # Needs real investigation/resolution/recovery signal.

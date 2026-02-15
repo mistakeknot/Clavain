@@ -15,7 +15,7 @@ For the compact version, see the `using-clavain` skill.
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, interflux:research:git-history-analyzer |
 | **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | interflux:fd-safety |
-| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills | setup, help, doctor, sprint-status, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
+| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills, galiana | setup, help, doctor, sprint-status, galiana, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
 ## Layer 2: What domain?
 
