@@ -261,12 +261,41 @@ if [[ -n "$_current_session" ]]; then
     fi
 fi
 
+# Assemble additionalContext with budget cap.
+# Priority-based shedding: drop lowest-priority sections whole (not byte-level truncation)
+# to avoid breaking mid-escape-sequence in JSON output.
+_context_preamble="You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n"
+_full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${sprint_resume_hint}${handoff_context}${inflight_context}"
+ADDITIONAL_CONTEXT_CAP=6000
+
+# Shed sections in reverse priority order (lowest value first)
+if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
+    inflight_context=""
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${sprint_resume_hint}${handoff_context}"
+fi
+if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
+    handoff_context=""
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${sprint_resume_hint}"
+fi
+if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
+    sprint_resume_hint=""
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}"
+fi
+if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
+    discovery_context=""
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}"
+fi
+if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
+    sprint_context=""
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}"
+fi
+
 # Output context injection as JSON
 cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${sprint_resume_hint}${handoff_context}${inflight_context}"
+    "additionalContext": "${_full_context}"
   }
 }
 EOF

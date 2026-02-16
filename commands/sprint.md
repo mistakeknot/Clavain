@@ -207,8 +207,13 @@ label=$(sprint_complexity_label "$score")
 
 Display to the user: `Complexity: ${score}/5 (${label})`
 
+Cache complexity on the bead (used by `sprint_advance()` for phase skipping):
+```bash
+bd set-state "$CLAVAIN_BEAD_ID" "complexity=$score" 2>/dev/null || true
+```
+
 Score-based routing:
-- **1-2 (trivial/simple):** Skip brainstorm + strategy. Go directly to Step 3 (write-plan). Use Sonnet-only agents.
+- **1-2 (trivial/simple):** Ask user via AskUserQuestion whether to skip brainstorm + strategy and go directly to Step 3 (write-plan). Options: "Skip to plan (Recommended)", "Full workflow", "Override complexity". If skipping, set `force_full_chain=false` on the bead and jump to Step 3. If full workflow, set `force_full_chain=true`. Phase skipping is also enforced automatically in `sprint_advance()` based on cached complexity.
 - **3 (moderate):** Standard workflow, all steps.
 - **4-5 (complex/research):** Full workflow with Opus orchestration, full agent roster.
 

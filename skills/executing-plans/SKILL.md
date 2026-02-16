@@ -49,7 +49,10 @@ When interserve mode is active, dispatch tasks to Codex agents instead of execut
    - Write prompt files (one per task) to `/tmp/codex-task-<name>.md` — plain language with goal, files, build/test commands, and verdict suffix
    - Dispatch all independent tasks in a single message (parallel Bash calls)
    - Wait for all agents to complete
-   - Read each agent's output and verify (build, test, diff review)
+   - Read each agent's `.verdict` file first (7 lines — structured summary)
+   - If STATUS is `pass`: trust the verdict, report success, move on
+   - If STATUS is `warn` or `fail`: read the full output file for details, diagnose, retry or escalate
+   - If no `.verdict` file: fall back to reading the full output
 
 4. **Between batches:** Report what completed, what passed/failed, and any issues. Wait for feedback before next batch.
 

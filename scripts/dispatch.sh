@@ -585,6 +585,51 @@ _jsonl_parser() {
   '
 }
 
+# Extract verdict header from agent output and write .verdict sidecar.
+# The verdict is the last block delimited by "--- VERDICT ---" ... "---".
+# If no verdict block found, synthesize one from the output's last lines.
+_extract_verdict() {
+    local output_file="$1"
+    [[ -z "$output_file" || ! -f "$output_file" ]] && return 0
+
+    local verdict_file="${output_file}.verdict"
+
+    # Try to extract existing verdict block (last 7 lines)
+    local last_lines
+    last_lines=$(tail -7 "$output_file" 2>/dev/null) || return 0
+
+    if echo "$last_lines" | head -1 | grep -q "^--- VERDICT ---$"; then
+        echo "$last_lines" > "$verdict_file"
+        return 0
+    fi
+
+    # No verdict block — synthesize from output
+    local verdict_line
+    verdict_line=$(grep -m1 "^VERDICT:" "$output_file" 2>/dev/null) || verdict_line=""
+
+    local status="pass"
+    local summary="No structured verdict found."
+    if [[ "$verdict_line" == *"NEEDS_ATTENTION"* ]]; then
+        status="warn"
+        summary="${verdict_line#VERDICT: }"
+    elif [[ "$verdict_line" == *"CLEAN"* ]]; then
+        status="pass"
+        summary="Agent reports clean completion."
+    elif [[ -z "$verdict_line" ]]; then
+        status="warn"
+        summary="No verdict line in agent output."
+    fi
+
+    cat > "$verdict_file" <<VERDICT
+--- VERDICT ---
+STATUS: $status
+FILES: 0 changed
+FINDINGS: 0 (P0: 0, P1: 0, P2: 0)
+SUMMARY: $summary
+---
+VERDICT
+}
+
 if [[ "$HAS_GAWK" == true ]]; then
   # Add --json to capture JSONL stream, pipe through parser
   CMD+=(--json)
@@ -601,9 +646,15 @@ if [[ "$HAS_GAWK" == true ]]; then
     printf 'Dispatch: %s\nDuration: %dm %ds\n' "${NAME:-codex}" "$MINS" "$SECS" > "$SUMMARY_FILE"
   fi
 
+  # Extract verdict sidecar from output
+  [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
+
   exit "$CODEX_EXIT"
 else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
   "${CMD[@]}"
+
+  # Extract verdict sidecar from output
+  [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
 fi

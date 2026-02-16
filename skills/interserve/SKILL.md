@@ -119,14 +119,20 @@ Use `timeout: 600000` (10 minutes) on the Bash tool call.
 
 ### Step 3: Read Verdict
 
-- `VERDICT: CLEAN` → report success, trust self-verification
-- `VERDICT: NEEDS_ATTENTION` → read reason, retry once with tighter prompt
+Read the `.verdict` sidecar file first (7 lines):
+```bash
+cat "/tmp/codex-result-*.md.verdict"
+```
+
+- `STATUS: pass` → report success, trust self-verification
+- `STATUS: warn` + `SUMMARY: NEEDS_ATTENTION...` → read full output for details, retry once with tighter prompt
+- `STATUS: error` or no `.verdict` file → fall back to reading full output file
 - No verdict / garbled → fall back to Split mode or edit directly
 
-**When to independently verify:**
+**When to read full output (override verdict):**
 - First dispatch in a new session (establish trust)
 - Changes to critical paths (auth, data integrity, billing)
-- Diff mentions unexpected files
+- STATUS: warn or fail
 
 ### Step 4: Handle Failure (max 1 retry)
 

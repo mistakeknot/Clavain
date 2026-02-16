@@ -230,3 +230,33 @@ escape_for_json() {
     done
     printf '%s' "$s"
 }
+
+# Check skill sizes against budget thresholds.
+# Usage: skill_check_budget <skills_dir> [warn_threshold] [error_threshold]
+# Output: lines of "PASS|WARN|ERROR skill-name size" to stdout
+# Returns: 0 if all pass, 1 if any warn, 2 if any error
+skill_check_budget() {
+    local skills_dir="${1:?skills directory required}"
+    local warn_at="${2:-16000}"
+    local error_at="${3:-32000}"
+    local max_severity=0
+
+    for skill_md in "$skills_dir"/*/SKILL.md; do
+        [[ -f "$skill_md" ]] || continue
+        local skill_name
+        skill_name=$(basename "$(dirname "$skill_md")")
+        local size
+        size=$(wc -c < "$skill_md")
+
+        if [[ $size -gt $error_at ]]; then
+            echo "ERROR $skill_name ${size} bytes (>${error_at})"
+            [[ $max_severity -lt 2 ]] && max_severity=2
+        elif [[ $size -gt $warn_at ]]; then
+            echo "WARN $skill_name ${size} bytes (>${warn_at})"
+            [[ $max_severity -lt 1 ]] && max_severity=1
+        else
+            echo "PASS $skill_name ${size} bytes"
+        fi
+    done
+    return $max_severity
+}

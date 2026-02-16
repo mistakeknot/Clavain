@@ -179,7 +179,31 @@ else:
 "
 ```
 
-### 5. Plugin Version
+### 5. Skill Budget
+
+```bash
+# Check skill sizes against budget thresholds
+CLAVAIN_LIB=$(find ~/.claude/plugins/cache -path '*/clavain/*/hooks/lib.sh' 2>/dev/null | sort -V | tail -1)
+if [[ -n "$CLAVAIN_LIB" ]]; then
+    source "$CLAVAIN_LIB"
+    SKILLS_DIR="$(dirname "$CLAVAIN_LIB")/../skills"
+    budget_status=0
+    budget_output=$(skill_check_budget "$SKILLS_DIR" 16000 32000 2>/dev/null) || budget_status=$?
+    warns=$(echo "$budget_output" | grep -c "^WARN" || true)
+    errors=$(echo "$budget_output" | grep -c "^ERROR" || true)
+    if [[ $errors -gt 0 ]]; then
+        echo "skill budget: ERROR ($errors skills over 32K)"
+        echo "$budget_output" | grep "^ERROR"
+    elif [[ $warns -gt 0 ]]; then
+        echo "skill budget: WARN ($warns skills over 16K)"
+        echo "$budget_output" | grep "^WARN"
+    else
+        echo "skill budget: PASS (all skills under 16K)"
+    fi
+fi
+```
+
+### 6. Plugin Version
 
 ```bash
 # Compare installed vs published
@@ -206,6 +230,7 @@ interwatch    [installed|not installed]
 interlock     [installed|not installed]
 .clavain      [initialized|not set up]
 conflicts     [clear|WARN: N active]
+skill budget  [PASS|WARN: N over 16K|ERROR: N over 32K]
 version       v0.X.Y
 ──────────────────────────────────
 ```
@@ -219,3 +244,4 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - intermute not running → "Run `/clavain:setup --scope interlock` to install and start the intermute coordination service"
 - .clavain not initialized → "Run `/clavain:init` to set up agent memory"
 - .clavain scratch not gitignored → "Run `/clavain:init` to fix gitignore"
+- skill budget WARN/ERROR → "Trim skills over 16K chars by moving verbose sections to references/ subdirectory"

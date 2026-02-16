@@ -479,6 +479,20 @@ sprint_advance() {
     next_phase=$(_sprint_transition_table "$current_phase")
     [[ -z "$next_phase" || "$next_phase" == "$current_phase" ]] && return 1
 
+    # Phase skipping: check if next_phase should be skipped for this complexity
+    local complexity
+    complexity=$(bd state "$sprint_id" complexity 2>/dev/null) || complexity="3"
+    [[ -z "$complexity" || "$complexity" == "null" ]] && complexity="3"
+
+    local force_full
+    force_full=$(bd state "$sprint_id" force_full_chain 2>/dev/null) || force_full="false"
+
+    if [[ "$force_full" != "true" ]] && sprint_should_skip "$next_phase" "$complexity"; then
+        next_phase=$(sprint_next_required_phase "$current_phase" "$complexity")
+        [[ -z "$next_phase" ]] && next_phase="done"
+        echo "Phase: skipping to $next_phase (complexity $complexity)" >&2
+    fi
+
     # Acquire lock for atomic read-check-write (same pattern as sprint_set_artifact)
     local lock_dir="/tmp/sprint-advance-lock-${sprint_id}"
     local retries=0
@@ -685,6 +699,69 @@ sprint_complexity_label() {
         complex) echo "complex" ;;
         *) echo "moderate" ;;
     esac
+}
+
+# ─── Phase Skipping ──────────────────────────────────────────────
+
+# Return the list of required phases for a given complexity tier.
+# Phases not in this list should be skipped by the sprint orchestrator.
+# Output: space-separated phase names (whitelist)
+sprint_phase_whitelist() {
+    local complexity="${1:-3}"
+    case "$complexity" in
+        1) echo "planned executing shipping done" ;;
+        2) echo "planned plan-reviewed executing shipping done" ;;
+        3|4|5) echo "brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping done" ;;
+        *) echo "brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping done" ;;
+    esac
+}
+
+# Check if a phase should be skipped for the given complexity tier.
+# Returns 0 if phase should be SKIPPED, 1 if it should be executed.
+# (Convention: 0 = skip, 1 = execute — mnemonic: "0 = yes, skip")
+sprint_should_skip() {
+    local phase="${1:?phase required}"
+    local complexity="${2:-3}"
+
+    local whitelist
+    whitelist=$(sprint_phase_whitelist "$complexity")
+
+    # Check if phase is in whitelist
+    case " $whitelist " in
+        *" $phase "*) return 1 ;;  # In whitelist → don't skip
+        *) return 0 ;;             # Not in whitelist → skip
+    esac
+}
+
+# Find the next non-skipped phase from current_phase for the given complexity.
+# Walks the transition table, skipping phases not in the whitelist.
+# Output: the next phase that IS in the whitelist (or "done" if none remain)
+sprint_next_required_phase() {
+    local current_phase="${1:?current phase required}"
+    local complexity="${2:-3}"
+
+    local phase="$current_phase"
+    local next_phase
+    local steps=0
+
+    # Walk forward through the transition table until we find a whitelisted phase
+    while true; do
+        next_phase=$(_sprint_transition_table "$phase")
+        [[ -z "$next_phase" || "$next_phase" == "$phase" ]] && { echo "done"; return 0; }
+
+        # Hard cap to prevent infinite loops (transition table has ~9 phases)
+        steps=$((steps + 1))
+        [[ $steps -gt 20 ]] && { echo "done"; return 0; }
+
+        if ! sprint_should_skip "$next_phase" "$complexity"; then
+            # Phase is in whitelist — this is the next required phase
+            echo "$next_phase"
+            return 0
+        fi
+
+        # Phase should be skipped — keep walking
+        phase="$next_phase"
+    done
 }
 
 # ─── Checkpointing ───────────────────────────────────────────────
