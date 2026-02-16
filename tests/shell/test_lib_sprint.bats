@@ -20,7 +20,7 @@ setup() {
     unset _SPRINT_LOADED _GATES_LOADED _PHASE_LOADED _DISCOVERY_LOADED _LIB_LOADED
 
     # Clean up lock dirs from previous tests
-    rm -rf /tmp/sprint-lock-* /tmp/sprint-claim-lock-* 2>/dev/null || true
+    rm -rf /tmp/sprint-lock-* /tmp/sprint-claim-lock-* /tmp/sprint-advance-lock-* 2>/dev/null || true
 
     # Clean up discovery caches
     rm -f /tmp/clavain-discovery-brief-*.cache 2>/dev/null || true
@@ -32,7 +32,7 @@ setup() {
 
 teardown() {
     rm -rf "$TEST_PROJECT" 2>/dev/null || true
-    rm -rf /tmp/sprint-lock-* /tmp/sprint-claim-lock-* 2>/dev/null || true
+    rm -rf /tmp/sprint-lock-* /tmp/sprint-claim-lock-* /tmp/sprint-advance-lock-* 2>/dev/null || true
     rm -f /tmp/clavain-discovery-brief-*.cache 2>/dev/null || true
     unset -f bd 2>/dev/null || true
 }
@@ -570,12 +570,16 @@ _source_sprint_lib() {
 @test "sprint_next_step maps all phases correctly" {
     _source_sprint_lib
 
+    # Empty/unknown phase → brainstorm (start from beginning)
     run sprint_next_step ""
     assert_output "brainstorm"
 
+    # Phase 2: sprint_next_step returns the NEXT command (for auto-advance)
+    # brainstorm is done → next is strategy
     run sprint_next_step "brainstorm"
-    assert_output "brainstorm"
+    assert_output "strategy"
 
+    # brainstorm-reviewed → strategized → strategy command produces it
     run sprint_next_step "brainstorm-reviewed"
     assert_output "strategy"
 
@@ -588,11 +592,13 @@ _source_sprint_lib() {
     run sprint_next_step "plan-reviewed"
     assert_output "work"
 
+    # executing → shipping → ship
     run sprint_next_step "executing"
-    assert_output "work"
-
-    run sprint_next_step "shipping"
     assert_output "ship"
+
+    # shipping → done → done
+    run sprint_next_step "shipping"
+    assert_output "done"
 
     run sprint_next_step "done"
     assert_output "done"
@@ -674,4 +680,323 @@ _source_sprint_lib() {
     run enforce_gate "iv-test1" "planned" "/tmp/artifact.md"
     assert_success
     assert_output "gate_called: iv-test1 planned /tmp/artifact.md"
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 2 Tests: Auto-Advance, Pause, Complexity Classification
+# ═══════════════════════════════════════════════════════════════════
+
+# ─── 24. _sprint_transition_table maps all phases correctly ────────────
+
+@test "_sprint_transition_table maps all phases correctly" {
+    bd() { return 0; }
+    export -f bd
+    _source_sprint_lib
+
+    run _sprint_transition_table "brainstorm"
+    assert_output "brainstorm-reviewed"
+
+    run _sprint_transition_table "brainstorm-reviewed"
+    assert_output "strategized"
+
+    run _sprint_transition_table "strategized"
+    assert_output "planned"
+
+    run _sprint_transition_table "planned"
+    assert_output "plan-reviewed"
+
+    run _sprint_transition_table "plan-reviewed"
+    assert_output "executing"
+
+    run _sprint_transition_table "executing"
+    assert_output "shipping"
+
+    run _sprint_transition_table "shipping"
+    assert_output "done"
+}
+
+# ─── 25. _sprint_transition_table returns empty for unknown phase ──────
+
+@test "_sprint_transition_table returns empty for unknown phase" {
+    bd() { return 0; }
+    export -f bd
+    _source_sprint_lib
+
+    run _sprint_transition_table "nonexistent"
+    assert_output ""
+}
+
+# ─── 26. _sprint_transition_table done→done (terminal) ────────────────
+
+@test "_sprint_transition_table done→done (terminal)" {
+    bd() { return 0; }
+    export -f bd
+    _source_sprint_lib
+
+    run _sprint_transition_table "done"
+    assert_output "done"
+}
+
+# ─── 27. sprint_should_pause returns 1 when auto_advance=true ─────────
+
+@test "sprint_should_pause returns 1 when auto_advance=true" {
+    bd() {
+        case "$1" in
+            state)
+                case "$3" in
+                    auto_advance) echo "true" ;;
+                    *) echo "" ;;
+                esac
+                ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    run sprint_should_pause "iv-test1" "strategized"
+    assert_failure  # returns 1 = continue (no pause)
+    assert_output ""
+}
+
+# ─── 28. sprint_should_pause returns 0 when auto_advance=false ────────
+
+@test "sprint_should_pause returns 0 when auto_advance=false" {
+    bd() {
+        case "$1" in
+            state)
+                case "$3" in
+                    auto_advance) echo "false" ;;
+                    *) echo "" ;;
+                esac
+                ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    run sprint_should_pause "iv-test1" "strategized"
+    assert_success  # returns 0 = pause
+    assert_output "manual_pause|strategized|auto_advance=false"
+}
+
+# ─── 29. sprint_should_pause returns 0 when gate blocks ───────────────
+
+@test "sprint_should_pause returns 0 when gate blocks" {
+    bd() {
+        case "$1" in
+            state)
+                case "$3" in
+                    auto_advance) echo "true" ;;
+                    *) echo "" ;;
+                esac
+                ;;
+        esac
+    }
+    export -f bd
+
+    _source_sprint_lib
+
+    # Override enforce_gate to simulate gate failure
+    enforce_gate() { return 1; }
+
+    run sprint_should_pause "iv-test1" "executing"
+    assert_success  # returns 0 = pause
+    assert_output "gate_blocked|executing|Gate prerequisites not met"
+}
+
+# ─── 30. sprint_advance succeeds and advances phase ───────────────────
+
+@test "sprint_advance succeeds and advances phase" {
+    local _set_state_calls=""
+    bd() {
+        case "$1" in
+            state)
+                case "$3" in
+                    auto_advance) echo "true" ;;
+                    phase) echo "brainstorm" ;;
+                    phase_history) echo "{}" ;;
+                    *) echo "" ;;
+                esac
+                ;;
+            set-state)
+                echo "bd set-state $*" >> "$BD_CALL_LOG"
+                return 0
+                ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    # sprint_advance sends status to stderr; BATS `run` merges stderr into $output
+    run sprint_advance "iv-test1" "brainstorm"
+    assert_success
+    # Status message appears in output (BATS captures stderr via 2>&1)
+    assert_output "Phase: brainstorm → brainstorm-reviewed (auto-advancing)"
+
+    # Verify phase was set
+    grep -q "phase=brainstorm-reviewed" "$BD_CALL_LOG"
+}
+
+# ─── 31. sprint_advance pauses on manual override ─────────────────────
+
+@test "sprint_advance pauses on manual override" {
+    bd() {
+        case "$1" in
+            state)
+                case "$3" in
+                    auto_advance) echo "false" ;;
+                    *) echo "" ;;
+                esac
+                ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    run sprint_advance "iv-test1" "brainstorm"
+    assert_failure  # returns 1 = paused
+    assert_output "manual_pause|brainstorm-reviewed|auto_advance=false"
+}
+
+# ─── 32. sprint_advance returns 1 for unknown phase ──────────────────
+
+@test "sprint_advance returns 1 for unknown phase" {
+    bd() { return 0; }
+    export -f bd
+    _source_sprint_lib
+
+    run sprint_advance "iv-test1" "nonexistent"
+    assert_failure
+}
+
+# ─── 33. sprint_classify_complexity returns simple for short descriptions
+
+@test "sprint_classify_complexity returns simple for short descriptions" {
+    bd() {
+        case "$1" in
+            state) echo "" ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    run sprint_classify_complexity "" "Add a logout button to the header"
+    assert_output "simple"
+}
+
+# ─── 34. sprint_classify_complexity returns complex for long+ambiguous ─
+
+@test "sprint_classify_complexity returns complex for long descriptions with ambiguity" {
+    bd() {
+        case "$1" in
+            state) echo "" ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    # Generate a 120-word description with ambiguity signals
+    local desc="We need to implement a new authentication system. There are several approach options to consider. We could use OAuth or JWT or session tokens. The alternative of using SAML vs OpenID is also worth exploring. Each approach has tradeoffs. The system should handle login logout registration password reset email verification two factor authentication social login guest access API keys service accounts webhook authentication rate limiting IP blocking geo restrictions audit logging compliance reporting GDPR consent management data export account deletion team management roles permissions"
+    run sprint_classify_complexity "" "$desc"
+    assert_output "complex"
+}
+
+# ─── 35. sprint_classify_complexity respects manual override ──────────
+
+@test "sprint_classify_complexity respects manual override on bead" {
+    bd() {
+        case "$1" in
+            state)
+                case "$3" in
+                    complexity) echo "complex" ;;
+                esac
+                ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    # Even though description is short, manual override wins
+    run sprint_classify_complexity "iv-test1" "Simple task"
+    assert_output "complex"
+}
+
+# ─── 36. sprint_classify_complexity returns medium for empty description
+
+@test "sprint_classify_complexity returns medium for empty description" {
+    bd() {
+        case "$1" in
+            state) echo "" ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    run sprint_classify_complexity "" ""
+    assert_output "medium"
+}
+
+# ─── 37. sprint_classify_complexity respects simplicity signals ────────
+
+@test "sprint_classify_complexity respects simplicity signals" {
+    bd() {
+        case "$1" in
+            state) echo "" ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    # 40 words (medium by word count) but heavy simplicity signals should pull to simple
+    local desc="This is just like the existing login page, similar to what we already have. Just add a simple straightforward existing pattern. Like the similar existing approach we just used for the other simple feature"
+    run sprint_classify_complexity "" "$desc"
+    assert_output "simple"
+}
+
+# ─── 38. sprint_classify_complexity vacuous (<5 words) returns medium ──
+
+@test "sprint_classify_complexity vacuous (<5 words) returns medium" {
+    bd() {
+        case "$1" in
+            state) echo "" ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    run sprint_classify_complexity "" "Make it better"
+    assert_output "medium"
+}
+
+# ─── 39. sprint_classify_complexity boundary: 30 words = medium ────────
+
+@test "sprint_classify_complexity boundary: exactly 30 words = medium" {
+    bd() {
+        case "$1" in
+            state) echo "" ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    # Generate exactly 30 words
+    local desc="one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twentyone twentytwo twentythree twentyfour twentyfive twentysix twentyseven twentyeight twentynine thirty"
+    run sprint_classify_complexity "" "$desc"
+    assert_output "medium"
+}
+
+# ─── 40. sprint_advance rejects terminal→terminal (done→done) ─────────
+
+@test "sprint_advance rejects terminal→terminal (done→done)" {
+    bd() {
+        case "$1" in
+            state) echo "done" ;;
+            set-state) return 0 ;;
+        esac
+    }
+    export -f bd
+    _source_sprint_lib
+
+    run sprint_advance "iv-test1" "done"
+    assert_failure
 }

@@ -35,6 +35,25 @@ Evaluate whether brainstorming is needed based on the feature description.
 **If requirements are already clear:**
 Use **AskUserQuestion tool** to suggest: "Your requirements seem detailed enough to proceed directly to planning. Should I run `/clavain:write-plan` instead, or would you like to explore the idea further?"
 
+### Phase 0.5: Complexity Classification (Sprint Only)
+
+If inside a sprint (check: `bd state "$CLAVAIN_BEAD_ID" sprint` returns `"true"`):
+
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+complexity=$(sprint_classify_complexity "$CLAVAIN_BEAD_ID" "<feature_description>")
+```
+
+Route based on complexity:
+
+- **Simple** (`complexity == "simple"`): Skip Phase 1 collaborative dialogue. Do a brief repo scan, then present ONE consolidated AskUserQuestion confirming the approach. Proceed directly to Phase 3 (Capture).
+- **Medium** (`complexity == "medium"`): Do Phase 1 repo scan, propose 2-3 approaches (Phase 2), ask ONE question to choose. Proceed to Phase 3.
+- **Complex** (`complexity == "complex"`): Full dialogue — run all phases as normal.
+
+**Invariant:** Even simple features get exactly one question. Never zero.
+
+If NOT inside a sprint: skip classification, run all phases as normal (existing behavior).
+
 ### Phase 1: Understand the Idea
 
 #### 1.1 Repository Research (Lightweight)
@@ -90,6 +109,11 @@ If `CLAVAIN_BEAD_ID` is set in the environment, that takes priority. If no bead 
 
 ### Phase 4: Handoff
 
+**If inside a sprint** (check: `bd state "$CLAVAIN_BEAD_ID" sprint` returns `"true"`):
+- Skip the handoff question. Sprint auto-advance handles the next step.
+- Display the output summary (below) and return to the caller.
+
+**If standalone** (no sprint context):
 Use **AskUserQuestion tool** to present next steps:
 
 **Question:** "Brainstorm captured. What would you like to do next?"

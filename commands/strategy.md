@@ -131,6 +131,11 @@ This catches scope creep, missing acceptance criteria, and architectural risks b
 
 ## Phase 5: Handoff
 
+**If inside a sprint** (check: `bd state "$CLAVAIN_BEAD_ID" sprint` returns `"true"`):
+- Skip the handoff question. Sprint auto-advance handles the next step.
+- Display the output summary (below) and return to the caller.
+
+**If standalone** (no sprint context):
 Present next steps with AskUserQuestion:
 
 > "Strategy complete. What's next?"

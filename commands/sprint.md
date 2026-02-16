@@ -111,6 +111,41 @@ If invoked WITH arguments (`$ARGUMENTS` is not empty):
 
 Run these steps in order. Do not do anything else.
 
+### Auto-Advance Protocol
+
+When transitioning between steps, use auto-advance instead of manual routing:
+
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+# Validate sprint bead before advancing
+is_sprint=$(bd state "$CLAVAIN_BEAD_ID" sprint 2>/dev/null) || is_sprint=""
+if [[ "$is_sprint" == "true" ]]; then
+    pause_reason=$(sprint_advance "$CLAVAIN_BEAD_ID" "<current_phase>" "<artifact_path>")
+    if [[ $? -ne 0 ]]; then
+        # Parse structured pause reason: type|phase|detail
+        reason_type="${pause_reason%%|*}"
+        case "$reason_type" in
+            gate_blocked)
+                # AskUserQuestion: "Gate blocked. Options: Fix issues, Skip gate, Stop sprint"
+                ;;
+            manual_pause)
+                # AskUserQuestion: "Sprint paused (auto_advance=false). Options: Continue, Stop"
+                ;;
+            stale_phase)
+                # Another session already advanced — re-read state and continue from new phase
+                ;;
+        esac
+    fi
+fi
+```
+
+**Status messages:** At each auto-advance, display: `Phase: <current> → <next> (auto-advancing)`
+
+**No "what next?" prompts between steps.** Sprint proceeds automatically unless:
+1. `sprint_should_pause()` returns a pause trigger
+2. A step fails (test failure, gate block)
+3. User set `auto_advance=false` on the sprint bead
+
 ### Phase Tracking
 
 After each step completes successfully, record the phase transition. If `CLAVAIN_BEAD_ID` is set (from discovery, sprint resume, or sprint creation), run:

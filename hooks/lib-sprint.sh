@@ -31,6 +31,9 @@ if ! command -v jq &>/dev/null; then
     sprint_release() { return 0; }
     sprint_next_step() { echo "brainstorm"; }
     sprint_invalidate_caches() { return 0; }
+    sprint_should_pause() { return 1; }
+    sprint_advance() { return 1; }
+    sprint_classify_complexity() { echo "medium"; }
     return 0
 fi
 
@@ -379,24 +382,238 @@ enforce_gate() {
     fi
 }
 
-# ─── Phase Routing ─────────────────────────────────────────────────
+# ─── Auto-Advance (Phase 2) ──────────────────────────────────────
+
+# Strict phase transition table. Returns the NEXT phase given the CURRENT phase.
+# Every phase has exactly one successor. No skip paths.
+# CORRECTNESS: This is the single source of truth for phase sequencing.
+# sprint_next_step() derives from this table — do NOT maintain phase order elsewhere.
+_sprint_transition_table() {
+    local current="$1"
+    case "$current" in
+        brainstorm)          echo "brainstorm-reviewed" ;;
+        brainstorm-reviewed) echo "strategized" ;;
+        strategized)         echo "planned" ;;
+        planned)             echo "plan-reviewed" ;;
+        plan-reviewed)       echo "executing" ;;
+        executing)           echo "shipping" ;;
+        shipping)            echo "done" ;;
+        done)                echo "done" ;;
+        *)                   echo "" ;;
+    esac
+}
 
 # Determine the next command for a sprint based on its current phase.
 # Output: command name (e.g., "brainstorm", "write-plan", "work")
+# CORRECTNESS: Derives from _sprint_transition_table so the phase
+# sequence is defined in one place. If phases change, update only the table.
 sprint_next_step() {
     local phase="$1"
+    local next_phase
+    next_phase=$(_sprint_transition_table "$phase")
 
-    case "$phase" in
-        ""|brainstorm)           echo "brainstorm" ;;
-        brainstorm-reviewed)     echo "strategy" ;;
-        strategized)             echo "write-plan" ;;
-        planned)                 echo "flux-drive" ;;
-        plan-reviewed)           echo "work" ;;
-        executing)               echo "work" ;;
-        shipping)                echo "ship" ;;
-        done)                    echo "done" ;;
-        *)                       echo "brainstorm" ;;
+    # Map next-phase to the command that PRODUCES that phase.
+    # brainstorm-reviewed is produced by review-doc (optional), but the
+    # primary command is strategy (which also produces strategized).
+    # So both brainstorm-reviewed and strategized map to strategy.
+    case "$next_phase" in
+        brainstorm-reviewed|strategized) echo "strategy" ;;
+        planned)             echo "write-plan" ;;
+        plan-reviewed)       echo "flux-drive" ;;
+        executing)           echo "work" ;;
+        shipping)            echo "ship" ;;
+        done)                echo "done" ;;
+        *)                   echo "brainstorm" ;;  # Handles "" and unknown
     esac
+}
+
+# Check if sprint should pause before advancing to target_phase.
+# RETURN CONVENTION (intentionally inverted for ergonomic reason-reporting):
+#   Returns 0 WITH STRUCTURED PAUSE REASON ON STDOUT if pause trigger found.
+#   Returns 1 (no output) if should continue.
+# Reason format: type|phase|detail
+# Usage: pause_reason=$(sprint_should_pause ...) && { handle pause }
+# Pause triggers: manual override (auto_advance=false), gate failure.
+sprint_should_pause() {
+    local sprint_id="$1"
+    local target_phase="$2"
+
+    [[ -z "$sprint_id" || -z "$target_phase" ]] && return 1
+
+    # Manual override: auto_advance=false pauses at every transition
+    local auto_advance
+    auto_advance=$(bd state "$sprint_id" auto_advance 2>/dev/null) || auto_advance="true"
+    if [[ "$auto_advance" == "false" ]]; then
+        echo "manual_pause|$target_phase|auto_advance=false"
+        return 0
+    fi
+
+    # Gate failure check: if enforce_gate would block, pause
+    if ! enforce_gate "$sprint_id" "$target_phase" "" 2>/dev/null; then
+        echo "gate_blocked|$target_phase|Gate prerequisites not met"
+        return 0
+    fi
+
+    # No pause trigger — continue
+    return 1
+}
+
+# Advance sprint to the next phase. Uses strict transition table.
+# If should_pause triggers, returns 1 with structured pause reason on stdout.
+# Otherwise advances and returns 0. Status messages go to stderr.
+# CORRECTNESS: ALL phase transitions MUST go through this function.
+# Direct `bd set-state sprint_id phase=X` calls bypass the lock and can cause
+# inconsistent state (phase field doesn't match phase_history timestamps).
+# Uses mkdir lock to serialize concurrent advance attempts.
+# Also verifies current phase hasn't changed (guards against stale-phase races).
+sprint_advance() {
+    local sprint_id="$1"
+    local current_phase="$2"
+    local artifact_path="${3:-}"
+
+    [[ -z "$sprint_id" || -z "$current_phase" ]] && return 1
+
+    local next_phase
+    next_phase=$(_sprint_transition_table "$current_phase")
+    [[ -z "$next_phase" || "$next_phase" == "$current_phase" ]] && return 1
+
+    # Acquire lock for atomic read-check-write (same pattern as sprint_set_artifact)
+    local lock_dir="/tmp/sprint-advance-lock-${sprint_id}"
+    local retries=0
+    while ! mkdir "$lock_dir" 2>/dev/null; do
+        retries=$((retries + 1))
+        [[ $retries -gt 10 ]] && {
+            # Force-break stale lock (>5s old)
+            local lock_mtime
+            lock_mtime=$(stat -c %Y "$lock_dir" 2>/dev/null) || {
+                rmdir "$lock_dir" 2>/dev/null || true
+                return 1
+            }
+            local now
+            now=$(date +%s)
+            if [[ $((now - lock_mtime)) -gt 5 ]]; then
+                rmdir "$lock_dir" 2>/dev/null || rm -rf "$lock_dir" 2>/dev/null || true
+                mkdir "$lock_dir" 2>/dev/null || return 1
+                break
+            fi
+            return 1
+        }
+        sleep 0.1
+    done
+
+    # Check pause triggers (under lock)
+    local pause_reason
+    pause_reason=$(sprint_should_pause "$sprint_id" "$next_phase" 2>/dev/null) && {
+        rmdir "$lock_dir" 2>/dev/null || true
+        echo "$pause_reason"
+        return 1
+    }
+
+    # Verify current phase hasn't changed (guard against concurrent advance)
+    local actual_phase
+    actual_phase=$(bd state "$sprint_id" phase 2>/dev/null) || actual_phase=""
+    if [[ -n "$actual_phase" && "$actual_phase" != "$current_phase" ]]; then
+        rmdir "$lock_dir" 2>/dev/null || true
+        echo "stale_phase|$current_phase|Phase already advanced to $actual_phase"
+        return 1
+    fi
+
+    # Advance: set phase on bead, record completion, invalidate caches
+    bd set-state "$sprint_id" "phase=$next_phase" 2>/dev/null || true
+    sprint_record_phase_completion "$sprint_id" "$next_phase"
+
+    rmdir "$lock_dir" 2>/dev/null || true
+
+    # Log transition (stderr — stdout reserved for data/error reasons)
+    echo "Phase: $current_phase → $next_phase (auto-advancing)" >&2
+    return 0
+}
+
+# ─── Tiered Brainstorming ────────────────────────────────────────
+
+# Classify feature complexity from description text.
+# Output: "simple" | "medium" | "complex"
+# Heuristics:
+#   - Word count: <5 = medium (too short to classify), <30 = simple, 30-100 = medium, >100 = complex
+#   - Ambiguity signals: "or", "vs", "alternative", "tradeoff" → bump up
+#   - Simplicity signals: "like", "similar", "existing", "just" → bump down
+#   - Override: if sprint has complexity state set, use that
+sprint_classify_complexity() {
+    local sprint_id="${1:-}"
+    local description="${2:-}"
+
+    # Check for manual override on sprint bead
+    if [[ -n "$sprint_id" ]]; then
+        local override
+        override=$(bd state "$sprint_id" complexity 2>/dev/null) || override=""
+        if [[ -n "$override" && "$override" != "null" ]]; then
+            echo "$override"
+            return 0
+        fi
+    fi
+
+    [[ -z "$description" ]] && { echo "medium"; return 0; }
+
+    # Word count
+    local word_count
+    word_count=$(echo "$description" | wc -w | tr -d ' ')
+
+    # Vacuous descriptions (<5 words) are too short to classify
+    if [[ $word_count -lt 5 ]]; then
+        echo "medium"
+        return 0
+    fi
+
+    # Ambiguity signals (awk for POSIX portability — no GNU grep \b needed)
+    local ambiguity_count
+    ambiguity_count=$(echo "$description" | awk -v IGNORECASE=1 '
+        BEGIN { count=0 }
+        {
+            for (i=1; i<=NF; i++) {
+                word = $i
+                gsub(/[^a-zA-Z-]/, "", word)
+                if (word ~ /^(or|vs|versus|alternative|tradeoff|trade-off|either|approach|option)$/) count++
+            }
+        }
+        END { print count }
+    ')
+
+    # Simplicity signals
+    local simplicity_count
+    simplicity_count=$(echo "$description" | awk -v IGNORECASE=1 '
+        BEGIN { count=0 }
+        {
+            for (i=1; i<=NF; i++) {
+                word = $i
+                gsub(/[^a-zA-Z-]/, "", word)
+                if (word ~ /^(like|similar|existing|just|simple|straightforward)$/) count++
+            }
+        }
+        END { print count }
+    ')
+
+    # Score: start with word-count tier, adjust with signals
+    local score=0
+    if [[ $word_count -lt 30 ]]; then
+        score=1  # simple
+    elif [[ $word_count -lt 100 ]]; then
+        score=2  # medium
+    else
+        score=3  # complex
+    fi
+
+    # Adjust: >2 signals indicates a real pattern, not noise from common words
+    if [[ $ambiguity_count -gt 2 ]]; then
+        score=$((score + 1))
+    fi
+    if [[ $simplicity_count -gt 2 ]]; then
+        score=$((score - 1))
+    fi
+
+    # Clamp and map
+    [[ $score -le 1 ]] && { echo "simple"; return 0; }
+    [[ $score -ge 3 ]] && { echo "complex"; return 0; }
+    echo "medium"
 }
 
 # ─── Invalidation ─────────────────────────────────────────────────
