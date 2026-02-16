@@ -117,7 +117,9 @@ main() {
         done
 
         if [[ -f "$cwd/pyproject.toml" ]]; then
-            sed -i "s/^version = \"$plugin_version\"/version = \"$new_version\"/" "$cwd/pyproject.toml"
+            # Match any version string, not just $plugin_version — pyproject.toml
+            # may already be out of sync with plugin.json.
+            sed -i 's/^version = "[0-9][0-9.]*"/version = "'"$new_version"'"/' "$cwd/pyproject.toml"
             git -C "$cwd" add pyproject.toml 2>/dev/null || true
         fi
 
