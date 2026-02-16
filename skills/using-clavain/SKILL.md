@@ -11,7 +11,7 @@ description: Use when starting any conversation - establishes how to find and us
 
 **In Codex CLI:** Install Clavain skills with `bash ~/.codex/clavain/scripts/install-codex.sh install`. Codex discovers them from `~/.agents/skills/clavain/` on startup, so restart Codex after install.
 
-# Quick Router — 23 skills, 4 agents, and 41 commands
+# Quick Router — 23 skills, 4 agents, and 42 commands
 
 | You want to... | Run this |
 |----------------|----------|
@@ -26,6 +26,7 @@ description: Use when starting any conversation - establishes how to find and us
 | Generate domain-specific reviewers | `/interflux:flux-gen` |
 | Check project health | `/clavain:doctor` or `/clavain:sprint-status` |
 | View discipline analytics | `/clavain:galiana` |
+| Refresh Codex install state | `/clavain:codex-bootstrap` |
 | Generate a roadmap | `/interpath:roadmap` |
 | Generate a PRD | `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` or `/interwatch:status` |

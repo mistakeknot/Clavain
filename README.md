@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 23 skills, 4 agents, 41 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 23 skills, 4 agents, 42 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -28,8 +28,7 @@ Clavain can also run in Codex via native skill discovery and generated prompt wr
 Quick path:
 
 ```bash
-git clone https://github.com/mistakeknot/Clavain.git ~/.codex/clavain
-bash ~/.codex/clavain/scripts/install-codex.sh install
+curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/hub/clavain/.codex/agent-install.sh | bash -s -- --update --json
 ```
 
 Then restart Codex.
@@ -154,7 +153,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (41)
+### Commands (42)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -181,6 +180,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/changelog` | Generate changelog from recent merges |
 | `/clodex-toggle` | Toggle Codex-first execution mode |
 | `/model-routing` | Toggle subagent model tier (economy vs quality) |
+| `/codex-bootstrap` | Refresh Codex discovery links and run health checks |
 | `/triage` | Categorize and prioritize findings |
 | `/resolve` | Resolve findings from any source (auto-detects TODOs, PR comments, or todo files) |
 | `/create-agent-skill` | Create new skills or agents |

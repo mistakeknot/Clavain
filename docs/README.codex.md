@@ -23,7 +23,7 @@ Or set up manually:
 ```bash
 cd ~/.codex
 git clone https://github.com/mistakeknot/Clavain.git clavain
-bash ~/.codex/clavain/.codex/agent-install.sh --json
+bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ```
 
 Restart Codex after install. The installer is idempotent and removes stale `clavain-*.md` wrappers.
@@ -42,6 +42,9 @@ make codex-refresh
 make codex-doctor
 # Machine-readable output:
 make codex-doctor-json
+make codex-bootstrap       # install/repair + doctor
+# Machine-readable bootstrap:
+make codex-bootstrap-json
 ```
 
 For unattended updates, use the new autonomous helper:
@@ -89,6 +92,7 @@ make codex-refresh
 make codex-doctor
 # Machine-readable output:
 make codex-doctor-json
+make codex-bootstrap       # quick refresh + health check
 ```
 and restart Codex.
 
@@ -102,6 +106,7 @@ For automation, use JSON output:
 
 ```bash
 bash ~/.codex/clavain/scripts/install-codex.sh doctor --json
+bash ~/.codex/clavain/scripts/codex-bootstrap.sh --json
 ```
 
 Checks:
@@ -109,6 +114,7 @@ Checks:
 - Optional legacy skill link in `~/.codex/skills/clavain` (only when `CLAVAIN_LEGACY_SKILLS_LINK=1`)
 - Prompt wrappers in `~/.codex/prompts` (including stale/missing checks)
 - Codex CLI availability
+- For Codex sessions, you can run `make codex-bootstrap` to repair + validate state before work.
 
 If checks fail, `install-codex.sh doctor` exits non-zero.
 
@@ -120,13 +126,13 @@ make codex-refresh
 make codex-doctor
 # Machine-readable output:
 make codex-doctor-json
+make codex-bootstrap       # repair + doctor in one step
 ```
 
 ## Update
 
 ```bash
-cd ~/.codex/clavain && git pull --ff-only
-bash ~/.codex/clavain/scripts/install-codex.sh install
+bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ```
 
 ## Uninstall
@@ -150,7 +156,7 @@ rm -rf ~/.codex/clavain
    ```
 2. Re-run installer:
    ```bash
-   bash ~/.codex/clavain/scripts/install-codex.sh install
+   bash ~/.codex/clavain/.codex/agent-install.sh --update --json
    ```
 3. Restart Codex.
 
@@ -159,7 +165,7 @@ rm -rf ~/.codex/clavain
 Regenerate wrappers:
 
 ```bash
-bash ~/.codex/clavain/scripts/install-codex.sh install
+bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ls ~/.codex/prompts/clavain-*.md
 ```
 

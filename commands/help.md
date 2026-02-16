@@ -68,6 +68,7 @@ These are the commands you'll use most often:
 |---|---|
 | `/clavain:help` | This command |
 | `/clavain:doctor` | Health check — MCP servers, tools, beads, plugin conflicts |
+| `/clavain:codex-bootstrap` | Keep Codex Clavain installation fresh (install + doctor + wrappers) |
 | `/clavain:create-agent-skill` | Create new agent skills |
 | `/clavain:generate-command` | Scaffold a new command |
 | `/clavain:heal-skill` | Fix broken skills |

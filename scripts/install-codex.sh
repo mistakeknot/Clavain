@@ -252,10 +252,9 @@ json_escape() {
 
 install_all() {
   resolve_source_dir
-  if [[ "$SOURCE_DIR" != "$CLONE_DIR" ]]; then
-    # Keep ~/.codex/clavain in sync so docs and future updates are predictable.
-    ensure_clone
-  fi
+  # Refresh ~/.codex/clavain on every install to keep wrappers and links in sync.
+  # This also repairs stale installations when `install` is run against an existing clone.
+  ensure_clone
 
   local skills_target="$SOURCE_DIR/skills"
   if [[ ! -d "$skills_target" ]]; then

@@ -64,13 +64,15 @@ make codex-refresh
 make codex-doctor
 # Machine-readable output:
 make codex-doctor-json
+make codex-bootstrap       # install/repair + health check
+# Machine-readable bootstrap:
+make codex-bootstrap-json
 ```
 
 ## Update
 
 ```bash
-cd ~/.codex/clavain && git pull --ff-only
-bash ~/.codex/clavain/.codex/agent-install.sh --json
+bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ```
 
 ## Uninstall
