@@ -1,6 +1,6 @@
 {
   "name": "clavain",
-  "version": "0.6.23",
+  "version": "0.6.24",
   "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 4 agents, 41 commands, 23 skills, 1 MCP servers. Companions: interphase, interline, interslack, interform, intercraft, interdev.",
   "author": "mistakeknot",
   "license": "MIT",
