@@ -48,6 +48,12 @@ dispatch.sh supports `--tier fast|deep` to resolve model names from `config/disp
 | **fast** | `gpt-5.3-codex-spark` | Read-only exploration, verification, quick reviews |
 | **deep** | `gpt-5.3-codex` | Implementation, complex reasoning, debates |
 
+In Clavain clodex mode (`.claude/clodex-toggle.flag` present), Clavain maps:
+- default fast/deep mapping remains `gpt-5.3-codex-spark` / `gpt-5.3-codex`
+- For x-high routing, set `CLAVAIN_DISPATCH_PROFILE=clavain` when invoking dispatch:
+  `CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" ...`
+- Then `fast` → `gpt-5.3-codex-spark-xhigh`, `deep` → `gpt-5.3-codex-xhigh`
+
 - `--tier` and `-m` are mutually exclusive — `-m` is the escape hatch for one-off overrides
 - If `tiers.yaml` is missing, `--tier` degrades gracefully (warning, uses config.toml default)
 - Change model names in one place (`tiers.yaml`) when new models ship
@@ -101,7 +107,7 @@ Save to: `/tmp/codex-task-$(date +%s).md`
 ### Step 2: Dispatch
 
 ```bash
-bash "$DISPATCH" \
+CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" \
   --prompt-file "$TASK_FILE" \
   -C "$PROJECT_DIR" \
   -o "/tmp/codex-result-$(date +%s).md" \
@@ -172,7 +178,7 @@ Write one prompt file per task (same format as megaprompt Step 1). Each should i
 Launch all Bash calls **in a single message** (multiple tool calls). Set `timeout: 600000` on each.
 
 ```bash
-bash "$DISPATCH" \
+CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" \
   --prompt-file /tmp/task1.md \
   -C "$PROJECT_DIR" \
   --name fix-auth -o /tmp/codex-{name}.md \

@@ -12,11 +12,18 @@ Tell Codex:
 Fetch and follow instructions from https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/INSTALL.md
 ```
 
-Or run manually:
+For quick bootstrap, run:
 
 ```bash
-git clone https://github.com/mistakeknot/Clavain.git ~/.codex/clavain
-bash ~/.codex/clavain/scripts/install-codex.sh install
+curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/hub/clavain/.codex/agent-install.sh | bash -s -- --update --json
+```
+
+Or set up manually:
+
+```bash
+cd ~/.codex
+git clone https://github.com/mistakeknot/Clavain.git clavain
+bash ~/.codex/clavain/.codex/agent-install.sh --json
 ```
 
 Restart Codex after install. The installer is idempotent and removes stale `clavain-*.md` wrappers.
@@ -31,7 +38,10 @@ From a local checkout of this repo, you can also run:
 
 ```bash
 make codex-refresh
+# Human-readable output:
 make codex-doctor
+# Machine-readable output:
+make codex-doctor-json
 ```
 
 For unattended updates, use the new autonomous helper:
@@ -69,7 +79,18 @@ Then restart Codex.
    - `clavain-write-plan`
    - `clavain-work`
    - `clavain-review`
-3. Use `scripts/dispatch.sh` when you want Codex-agent delegation behavior from `clodex`.
+3. Use `scripts/dispatch.sh` when you want Codex-agent delegation behavior from `codex`.
+
+If commands, skills, or dispatch/debate helpers change, run:
+
+```bash
+make codex-refresh
+# Human-readable output:
+make codex-doctor
+# Machine-readable output:
+make codex-doctor-json
+```
+and restart Codex.
 
 ## Verify
 
@@ -77,16 +98,28 @@ Then restart Codex.
 bash ~/.codex/clavain/scripts/install-codex.sh doctor
 ```
 
+For automation, use JSON output:
+
+```bash
+bash ~/.codex/clavain/scripts/install-codex.sh doctor --json
+```
+
 Checks:
-- Skill links in `~/.agents/skills` and `~/.codex/skills`
-- Prompt wrappers in `~/.codex/prompts`
+- Primary skill link in `~/.agents/skills/clavain`
+- Optional legacy skill link in `~/.codex/skills/clavain` (only when `CLAVAIN_LEGACY_SKILLS_LINK=1`)
+- Prompt wrappers in `~/.codex/prompts` (including stale/missing checks)
 - Codex CLI availability
+
+If checks fail, `install-codex.sh doctor` exits non-zero.
 
 From this repo checkout, the preferred refresh path is:
 
 ```bash
 make codex-refresh
+# Human-readable output:
 make codex-doctor
+# Machine-readable output:
+make codex-doctor-json
 ```
 
 ## Update
@@ -107,9 +140,13 @@ rm -rf ~/.codex/clavain
 
 ### Skills not showing up
 
-1. Check link exists:
+1. Check primary link exists:
    ```bash
    ls -la ~/.agents/skills/clavain
+   ```
+   If you enabled the legacy link, also verify:
+   ```bash
+   ls -la ~/.codex/skills/clavain
    ```
 2. Re-run installer:
    ```bash
@@ -128,4 +165,6 @@ ls ~/.codex/prompts/clavain-*.md
 
 ### Existing non-symlink path blocks install
 
-If you already have a real directory/file at `~/.agents/skills/clavain` or `~/.codex/skills/clavain`, move it aside first, then run install again.
+If you already have a real directory/file at `~/.agents/skills/clavain` (or `~/.codex/skills/clavain` when legacy mode is enabled), move it aside first, then run install again.
+
+When legacy mode is off, the installer now removes an existing `~/.codex/skills/clavain` symlink automatically.

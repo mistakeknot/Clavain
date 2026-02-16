@@ -3,7 +3,7 @@
 #
 # What this script sets up:
 # - ~/.agents/skills/clavain  -> <clavain>/skills
-# - ~/.codex/skills/clavain   -> <clavain>/skills (best-effort compatibility)
+# - ~/.codex/skills/clavain   -> <clavain>/skills (legacy compatibility, optional)
 # - ~/.codex/prompts/clavain-*.md prompt wrappers generated from commands/*.md
 
 set -euo pipefail
@@ -19,17 +19,24 @@ CLONE_DIR="${CLAVAIN_CLONE_DIR:-$HOME/.codex/clavain}"
 REPO_URL="${CLAVAIN_REPO_URL:-$REPO_URL_DEFAULT}"
 INSTALL_PROMPTS=1
 REMOVE_CLONE=0
+DOCTOR_JSON=0
 
 AGENTS_SKILLS_DIR="${AGENTS_SKILLS_DIR:-$HOME/.agents/skills}"
 CODEX_SKILLS_DIR="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 CODEX_PROMPTS_DIR="${CODEX_PROMPTS_DIR:-$HOME/.codex/prompts}"
+CREATE_LEGACY_CODEX_SKILLS_LINK=0
+if [[ "${CLAVAIN_LEGACY_SKILLS_LINK:-0}" == "1" ]]; then
+  CREATE_LEGACY_CODEX_SKILLS_LINK=1
+elif [[ "$CODEX_SKILLS_DIR" != "$HOME/.codex/skills" ]]; then
+  CREATE_LEGACY_CODEX_SKILLS_LINK=1
+fi
 
 usage() {
   cat <<'EOF'
 Usage:
   install-codex.sh install [options]
   install-codex.sh update [options]
-  install-codex.sh doctor
+  install-codex.sh doctor [--json]
   install-codex.sh uninstall [--remove-clone]
 
 Options:
@@ -38,7 +45,11 @@ Options:
   --repo-url <url>     Repo URL for clone/update.
   --no-prompts         Skip generating prompt wrappers in ~/.codex/prompts.
   --remove-clone       With uninstall, delete clone dir too.
+  --json               Output doctor check results as JSON.
   -h, --help           Show this help.
+
+Environment:
+  CLAVAIN_LEGACY_SKILLS_LINK=1  Create ~/.codex/skills/clavain symlink too.
 EOF
 }
 
@@ -62,6 +73,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --remove-clone)
       REMOVE_CLONE=1
+      shift
+      ;;
+    --json)
+      DOCTOR_JSON=1
       shift
       ;;
     -h|--help)
@@ -139,6 +154,22 @@ safe_link() {
   echo "Linked: $link_path -> $target"
 }
 
+cleanup_legacy_codex_skills_link() {
+  local legacy_link="$CODEX_SKILLS_DIR/clavain"
+  if [[ -L "$legacy_link" ]]; then
+    rm -f "$legacy_link"
+    echo "Removed legacy codex skills symlink: $legacy_link"
+    return 0
+  fi
+
+  if [[ -e "$legacy_link" ]]; then
+    echo "Legacy codex skills path exists as non-symlink; skipped auto cleanup: $legacy_link" >&2
+    return 1
+  fi
+
+  return 0
+}
+
 strip_frontmatter() {
   local file="$1"
   awk '
@@ -209,6 +240,16 @@ remove_prompts() {
   echo "Removed $removed prompt wrappers from $CODEX_PROMPTS_DIR"
 }
 
+json_escape() {
+  local input="$1"
+  input="${input//\\/\\\\}"
+  input="${input//\"/\\\"}"
+  input="${input//$'\n'/\\n}"
+  input="${input//$'\r'/}"
+  input="${input//$'\t'/\\t}"
+  printf '%s' "$input"
+}
+
 install_all() {
   resolve_source_dir
   if [[ "$SOURCE_DIR" != "$CLONE_DIR" ]]; then
@@ -223,7 +264,11 @@ install_all() {
   fi
 
   safe_link "$skills_target" "$AGENTS_SKILLS_DIR/clavain" || true
-  safe_link "$skills_target" "$CODEX_SKILLS_DIR/clavain" || true
+  if [[ "$CREATE_LEGACY_CODEX_SKILLS_LINK" -eq 1 ]]; then
+    safe_link "$skills_target" "$CODEX_SKILLS_DIR/clavain" || true
+  else
+    cleanup_legacy_codex_skills_link || true
+  fi
 
   if [[ "$INSTALL_PROMPTS" -eq 1 ]]; then
     generate_prompts
@@ -239,33 +284,221 @@ install_all() {
 doctor() {
   resolve_source_dir
   local skills_target="$SOURCE_DIR/skills"
+  local commands_dir="$SOURCE_DIR/commands"
+  local scripts_dir="$SOURCE_DIR/scripts"
   local agents_link="$AGENTS_SKILLS_DIR/clavain"
   local codex_link="$CODEX_SKILLS_DIR/clavain"
+  local status=0
+  local skill_dir_count=0
+  local command_count=0
+  local expected_wrappers=0
+  local present_wrappers=0
+  local missing_wrappers=0
+  local stale_wrappers=0
+  local wrapper_count=0
+  local source_agents_link=""
+  local source_codex_link=""
+  local issues=()
+  local legacy_codex_skills_check="$CREATE_LEGACY_CODEX_SKILLS_LINK"
+  local helper_dispatch_status="missing"
+  local helper_debate_status="missing"
+  local command_file
+  local wrapper_file
+  local command_name
+  local wrapper_name
+  local required_helper
+  local root_ok="false"
+  local agents_link_ok="false"
+  local agents_link_match="false"
+  local codex_link_ok="false"
+  local codex_link_match="false"
+  local codex_present="false"
+  local command_dir_ok="false"
+  local prompts_dir_ok="false"
+  local issue
+  local status_text="fail"
 
-  echo "== Clavain Codex Doctor =="
-  echo "Source dir: $SOURCE_DIR"
-  echo
+  if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+    echo "== Clavain Codex Doctor =="
+    echo "Source dir: $SOURCE_DIR"
+    echo
+  fi
+
+  if ! is_clavain_root "$SOURCE_DIR"; then
+    issues+=("Source dir missing required Clavain structure: $SOURCE_DIR")
+    status=1
+  else
+    root_ok="true"
+  fi
 
   if [[ -L "$agents_link" ]]; then
-    echo "agents skills link: $agents_link -> $(readlink "$agents_link")"
+    agents_link_ok="true"
+    source_agents_link="$(readlink -f "$agents_link" 2>/dev/null || readlink "$agents_link")"
+    if [[ "$source_agents_link" == "$skills_target" ]]; then
+      agents_link_match="true"
+      if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+        echo "agents skills link: $agents_link -> $source_agents_link"
+      fi
+    else
+      issues+=("agents skills link target mismatch: $agents_link -> $source_agents_link (expected $skills_target)")
+      status=1
+    fi
   else
-    echo "agents skills link missing: $agents_link"
+    issues+=("agents skills link missing: $agents_link")
+    status=1
   fi
 
-  if [[ -L "$codex_link" ]]; then
-    echo "codex skills link:  $codex_link -> $(readlink "$codex_link")"
+  if [[ "$legacy_codex_skills_check" -eq 1 ]]; then
+    if [[ -L "$codex_link" ]]; then
+      codex_link_ok="true"
+      source_codex_link="$(readlink -f "$codex_link" 2>/dev/null || readlink "$codex_link")"
+      if [[ "$source_codex_link" == "$skills_target" ]]; then
+        codex_link_match="true"
+        if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+          echo "codex skills link:  $codex_link -> $source_codex_link"
+        fi
+      else
+        issues+=("codex skills link target mismatch: $codex_link -> $source_codex_link (expected $skills_target)")
+        status=1
+      fi
+    else
+      issues+=("codex skills link missing: $codex_link")
+      status=1
+    fi
   else
-    echo "codex skills link missing: $codex_link"
+    codex_link_ok="true"
+    codex_link_match="true"
+    if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+      echo "codex skills link:  intentionally skipped (set CLAVAIN_LEGACY_SKILLS_LINK=1 for legacy link)"
+    fi
   fi
 
-  echo "skill dirs in source: $(find "$skills_target" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
-  echo "prompt wrappers:      $(find "$CODEX_PROMPTS_DIR" -maxdepth 1 -type f -name 'clavain-*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  for required_helper in dispatch.sh debate.sh; do
+    if [[ ! -f "$scripts_dir/$required_helper" ]]; then
+      issues+=("required helper missing: $scripts_dir/$required_helper")
+      status=1
+    else
+      if [[ "$required_helper" == "dispatch.sh" ]]; then
+        helper_dispatch_status="present"
+      else
+        helper_debate_status="present"
+      fi
+    fi
+  done
 
   if command -v codex >/dev/null 2>&1; then
-    echo "codex CLI:            present"
-  else
-    echo "codex CLI:            missing"
+    codex_present="true"
   fi
+
+  if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+    if [[ "$codex_present" == "true" ]]; then
+      echo "codex CLI:            present"
+    else
+      echo "codex CLI:            missing"
+    fi
+  fi
+
+  if [[ -d "$skills_target" ]]; then
+    skill_dir_count="$(find "$skills_target" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  fi
+
+  if [[ -d "$commands_dir" ]]; then
+    command_dir_ok="true"
+    while IFS= read -r command_file; do
+      [[ -f "$command_file" ]] || continue
+      command_name="$(basename "$command_file" .md)"
+      command_count=$((command_count + 1))
+      expected_wrappers=$((expected_wrappers + 1))
+      if [[ -f "$CODEX_PROMPTS_DIR/clavain-$command_name.md" ]]; then
+        present_wrappers=$((present_wrappers + 1))
+      else
+        missing_wrappers=$((missing_wrappers + 1))
+        status=1
+        issues+=("missing wrapper:        $CODEX_PROMPTS_DIR/clavain-$command_name.md")
+      fi
+    done < <(find "$commands_dir" -maxdepth 1 -type f -name '*.md')
+  else
+    status=1
+    issues+=("commands dir missing:   $commands_dir")
+  fi
+
+  if [[ -d "$CODEX_PROMPTS_DIR" ]]; then
+    prompts_dir_ok="true"
+    wrapper_count="$(find "$CODEX_PROMPTS_DIR" -maxdepth 1 -type f -name 'clavain-*.md' | wc -l | tr -d ' ')"
+    while IFS= read -r wrapper_file; do
+      [[ -f "$wrapper_file" ]] || continue
+      wrapper_name="$(basename "$wrapper_file" .md)"
+      command_name="${wrapper_name#clavain-}"
+      if [[ ! -f "$commands_dir/$command_name.md" ]]; then
+        stale_wrappers=$((stale_wrappers + 1))
+        status=1
+        issues+=("stale wrapper:         $wrapper_file")
+      fi
+    done < <(find "$CODEX_PROMPTS_DIR" -maxdepth 1 -type f -name 'clavain-*.md')
+  else
+    wrapper_count=0
+  fi
+
+  if [[ "$DOCTOR_JSON" -eq 1 ]]; then
+    if [[ "$status" -eq 0 ]]; then
+      status_text="ok"
+    fi
+
+    printf '{\n'
+    printf '  "status":"%s",\n' "$status_text"
+    printf '  "source_dir":"%s",\n' "$(json_escape "$SOURCE_DIR")"
+    printf '  "issues_count":%s,\n' "${#issues[@]}"
+    printf '  "checks":{\n'
+    printf '    "clavain_root":%s,\n' "$root_ok"
+    printf '    "agents_skills_link_exists":%s,\n' "$agents_link_ok"
+    printf '    "agents_skills_link_match":%s,\n' "$agents_link_match"
+    printf '    "agents_skills_link_target":"%s",\n' "$(json_escape "$source_agents_link")"
+    printf '    "codex_skills_link_exists":%s,\n' "$codex_link_ok"
+    printf '    "codex_skills_link_match":%s,\n' "$codex_link_match"
+    printf '    "codex_skills_link_target":"%s",\n' "$(json_escape "$source_codex_link")"
+    printf '    "helpers":{\n'
+    printf '      "dispatch.sh":"%s",\n' "$helper_dispatch_status"
+    printf '      "debate.sh":"%s"\n' "$helper_debate_status"
+    printf '    },\n'
+    printf '    "codex_cli_present":%s,\n' "$codex_present"
+    printf '    "commands_dir_exists":%s,\n' "$command_dir_ok"
+    printf '    "prompts_dir_exists":%s\n' "$prompts_dir_ok"
+    printf '  },\n'
+    printf '  "counts":{\n'
+    printf '    "skill_dirs":%s,\n' "$skill_dir_count"
+    printf '    "command_count":%s,\n' "$command_count"
+    printf '    "expected_wrappers":%s,\n' "$expected_wrappers"
+    printf '    "present_wrappers":%s,\n' "$present_wrappers"
+    printf '    "missing_wrappers":%s,\n' "$missing_wrappers"
+    printf '    "stale_wrappers":%s,\n' "$stale_wrappers"
+    printf '    "prompt_wrapper_total":%s\n' "$wrapper_count"
+    printf '  },\n'
+    printf '  "issues":['
+    local comma=""
+    for issue in "${issues[@]}"; do
+      printf '%s\n    "%s"' "$comma" "$(json_escape "$issue")"
+      comma=","
+    done
+    printf '\n  ]\n'
+    printf '}\n'
+  else
+    echo
+    echo "skill dirs in source:   $skill_dir_count"
+    echo "commands in source:     $command_count"
+    echo "prompt wrappers:        $present_wrappers/$expected_wrappers present; $missing_wrappers missing; $stale_wrappers stale; $wrapper_count total"
+    echo
+    if [[ "$status" -eq 0 ]]; then
+      echo "Doctor checks passed."
+      return 0
+    fi
+    echo "Doctor checks completed with issues."
+    return 1
+  fi
+
+  if [[ "$status" -eq 0 ]]; then
+    return 0
+  fi
+  return 1
 }
 
 uninstall_all() {

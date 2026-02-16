@@ -1,4 +1,4 @@
-.PHONY: codex-refresh codex-doctor
+.PHONY: codex-refresh codex-doctor codex-doctor-json
 
 codex-refresh:
 	@bash scripts/install-codex.sh install --source "$(PWD)"
@@ -6,3 +6,6 @@ codex-refresh:
 
 codex-doctor:
 	@bash scripts/install-codex.sh doctor --source "$(PWD)"
+
+codex-doctor-json:
+	@bash scripts/install-codex.sh doctor --source "$(PWD)" --json

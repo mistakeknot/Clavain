@@ -209,7 +209,7 @@ PROMPT
 
 echo "Dispatching Codex for Round 1 analysis..." >&2
 
-bash "$DISPATCH" \
+CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" \
   --inject-docs -C "$WORKDIR" \
   --name "debate-r1-${TOPIC}" \
   -o "$ROUND1_OUTPUT" \
@@ -286,7 +286,7 @@ PROMPT
 
 echo "Dispatching Codex for Round 2 rebuttal..." >&2
 
-bash "$DISPATCH" \
+CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" \
   --inject-docs -C "$WORKDIR" \
   --name "debate-r2-${TOPIC}" \
   -o "$OUTPUT" \

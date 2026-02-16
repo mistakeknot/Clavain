@@ -5,10 +5,19 @@ tiers:
   fast:
     model: gpt-5.3-codex-spark
     description: Scoped read-only tasks, exploration, verification, quick reviews
+  fast-clavain:
+    model: gpt-5.3-codex-spark-xhigh
+    description: Clavain clodex-mode default for read-only/administrative tasks
   deep:
     model: gpt-5.3-codex
     description: Generative tasks, implementation, complex reasoning, debates
+  deep-clavain:
+    model: gpt-5.3-codex-xhigh
+    description: Clavain clodex-mode high-complexity/research/flux-drive dispatch
+
 
 # Fallback if Spark is unavailable (API returns model_not_found)
 fallback:
   fast: deep  # fast falls back to deep tier's model
+  fast-clavain: deep-clavain
+  deep-clavain: deep

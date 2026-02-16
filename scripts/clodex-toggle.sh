@@ -41,5 +41,10 @@ else
   echo 'Direct-edit OK: .md, .json, .yaml, .yml, .toml, .txt, .csv, .xml, .html, .css, .svg, .lock, .cfg, .ini, .conf, .env, /tmp/*'
   echo 'Bash: read-only for source files (no redirects, sed -i, tee). Git and test/build commands are fine.'
   echo ''
+  echo 'Clavain-clodex routing policy is available:'
+  echo '- Default clodex mode keeps --tier fast|deep as configured in config/dispatch/tiers.yaml.'
+  echo '- For Clavain-in-Codex routing, set `CLAVAIN_DISPATCH_PROFILE=clavain` before dispatch calls.'
+  echo '- Then --tier fast resolves to gpt-5.3-codex-spark-xhigh; --tier deep resolves to gpt-5.3-codex-xhigh.'
+  echo ''
   echo 'Run /clodex-toggle to turn off.'
 fi

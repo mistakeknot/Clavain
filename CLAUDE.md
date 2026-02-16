@@ -4,7 +4,7 @@
 
 ## Overview
 
-Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 agents, 41 commands, 12 hooks, 1 MCP server. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination), `interslack` (Slack integration), `interform` (design patterns), `intercraft` (agent-native architecture), `interdev` (developer tooling).
+Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 agents, 41 commands, 12 hooks, 1 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination), `interslack` (Slack integration), `interform` (design patterns), `intercraft` (agent-native architecture), `interdev` (developer tooling).
 
 ## Quick Commands
 
@@ -48,4 +48,8 @@ python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manif
 - 3-layer routing: Stage → Domain → Concern
 - Trunk-based development — no branches/worktrees skills
 - `docs-sp-reference/` is historical archive from source plugins — don't modify
-- **Always publish after pushing** — use `/interpub:release <version>` or `scripts/bump-version.sh <version>` to bump plugin.json + marketplace.json atomically, commit, and push
+- **Always publish after pushing** — documented in `AGENTS.md` under **Release workflow**.
+
+### Release workflow
+
+For publishing a release, use `scripts/bump-version.sh <version>` (or `/interpub:release <version>` in Claude Code).

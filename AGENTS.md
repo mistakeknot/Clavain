@@ -12,6 +12,16 @@ Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [
 | Components | 23 skills, 4 agents, 41 commands, 12 hooks, 1 MCP servers |
 | License | MIT |
 
+### Release workflow
+
+- Run `scripts/bump-version.sh <version>` (or `/interpub:release <version>` in Claude Code) for any released changes.
+- The bump updates these files atomically:
+  - `.claude-plugin/plugin.json`
+  - `infra/marketplace/.claude-plugin/marketplace.json`
+  - other discovered versioned artifacts
+- The command commits and pushes both plugin and marketplace repos.
+- For routine updates, use patch bumps (`0.6.x -> 0.6.x+1`).
+
 ## Runbooks
 
 - Codex sync operations: `docs/runbooks/codex-sync.md`

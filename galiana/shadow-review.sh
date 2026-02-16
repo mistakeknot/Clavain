@@ -39,7 +39,7 @@ if [[ -z "$DISPATCH" ]]; then
 fi
 
 if [[ -n "$DISPATCH" ]]; then
-    if ! bash "$DISPATCH" \
+    if ! CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" \
         --prompt-file "$PROMPT_FILE" \
         -C "$(pwd)" \
         --name "shadow-${AGENT_NAME}" \

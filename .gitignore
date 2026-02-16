@@ -18,3 +18,4 @@ __pycache__/
 .clavain/interspect/interspect.db
 .clavain/interspect/interspect.db-wal
 .clavain/interspect/interspect.db-shm
+.clavain/interspect/.git-lock

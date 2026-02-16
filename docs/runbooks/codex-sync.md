@@ -17,7 +17,7 @@ From the Clavain repo root:
 ```bash
 git pull --rebase origin main
 make codex-refresh
-make codex-doctor
+make codex-doctor-json
 ```
 
 Restart Codex after `codex-refresh`.
@@ -118,7 +118,7 @@ launchctl load -w ~/Library/LaunchAgents/com.local.clavain.codex-refresh.plist
    ```
 3. Validate links and wrappers:
    ```bash
-   make codex-doctor
+   make codex-doctor-json
    ```
 4. Restart Codex CLI.
 
@@ -133,7 +133,7 @@ When `.github/workflows/sync.yml` merges upstream content:
 2. Run:
    ```bash
    make codex-refresh
-   make codex-doctor
+   make codex-doctor-json
    ```
 3. Spot-check a few generated prompt wrappers:
    ```bash
@@ -175,21 +175,13 @@ For any upstream-sync PR:
 
 ## CI Reminder Behavior
 
-Workflow: `.github/workflows/codex-refresh-reminder.yml`
+If you have reminder automation configured outside this repository, use it to call:
 
-- Trigger: every push to `main`
-- If Codex-facing files changed, the workflow writes a commit comment reminder to run:
-  - `make codex-refresh`
-  - `make codex-doctor`
-  - restart Codex
+- `make codex-refresh`
+- `make codex-doctor-json`
+- restart Codex
 
-This does not mutate repo content; it is an operator reminder only.
-
-Workflow: `.github/workflows/codex-refresh-reminder-pr.yml`
-
-- Trigger: PR activity against `main` (`opened`, `reopened`, `synchronize`, `labeled`)
-- Scope: upstream-sync PRs (label, branch name, or title match)
-- Behavior: upserts one PR comment reminding operators to run refresh steps after merge
+This repository does not ship reminder workflows by default, so operators should run these checks after Codex-facing edits.
 
 ## GitHub Web PR Agent Commands
 
@@ -240,12 +232,20 @@ Note: approving Codex in ChatGPT settings is separate from GitHub Actions secret
 
 ## Troubleshooting
 
+For interactive troubleshooting, use `make codex-doctor` for human-readable output instead of JSON.
+
 ### Existing path blocks symlink
 
-If `~/.agents/skills/clavain` or `~/.codex/skills/clavain` is a real directory/file, move it aside and rerun:
+If `~/.agents/skills/clavain` is a real directory/file, move it aside and rerun:
 
 ```bash
 mv ~/.agents/skills/clavain ~/.agents/skills/clavain.backup.$(date +%s) 2>/dev/null || true
+make codex-refresh
+```
+
+If you have enabled the legacy link (`CLAVAIN_LEGACY_SKILLS_LINK=1`), also move:
+
+```bash
 mv ~/.codex/skills/clavain ~/.codex/skills/clavain.backup.$(date +%s) 2>/dev/null || true
 make codex-refresh
 ```
@@ -262,5 +262,5 @@ ls ~/.codex/prompts/clavain-*.md | wc -l
 ```bash
 bash scripts/install-codex.sh uninstall
 make codex-refresh
-make codex-doctor
+make codex-doctor-json
 ```

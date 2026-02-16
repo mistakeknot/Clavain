@@ -38,7 +38,7 @@ From a local clone:
 
 ```bash
 make codex-refresh
-make codex-doctor
+make codex-doctor-json
 ```
 
 Detailed guide: `docs/README.codex.md`  

@@ -18,6 +18,8 @@ WORKDIR=""
 OUTPUT=""
 MODEL=""
 TIER=""
+CLAVAIN_CLODEX_MODE=false
+CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_CLODEX_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
 NAME=""
 DRY_RUN=false
@@ -79,14 +81,29 @@ resolve_tier_model() {
   local config_file=""
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local source_dir="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-}}"
+  local config_root=""
+  local resolved_tier="$tier"
+  local target_tier
+  local fallback_tier="$tier"
 
-  # Find tiers.yaml — relative to script first (works in both plugin cache and dev checkout),
-  # then fall back to explicit find
+  if [[ "$CLAVAIN_CLODEX_MODE" == true && "$tier" == "fast" ]]; then
+    target_tier="fast-clavain"
+  elif [[ "$CLAVAIN_CLODEX_MODE" == true && "$tier" == "deep" ]]; then
+    target_tier="deep-clavain"
+  else
+    target_tier="$tier"
+  fi
+
+  # Find tiers.yaml relative to dispatch script first, then optional source override,
+  # then cached plugin installs.
   if [[ -f "$script_dir/../config/dispatch/tiers.yaml" ]]; then
     config_file="$script_dir/../config/dispatch/tiers.yaml"
+  elif [[ -n "$source_dir" && -d "$source_dir" && -f "$source_dir/config/dispatch/tiers.yaml" ]]; then
+    config_file="$source_dir/config/dispatch/tiers.yaml"
   else
-    config_file=$(find ~/.claude/plugins/cache -path '*/clavain/*/config/dispatch/tiers.yaml' 2>/dev/null | head -1)
-    [[ -z "$config_file" ]] && config_file=$(find /root/projects/Clavain -path '*/config/dispatch/tiers.yaml' 2>/dev/null | head -1)
+    config_root="$(find ~/.claude/plugins/cache -path '*/clavain/*/config/dispatch/tiers.yaml' 2>/dev/null | head -1)"
+    [[ -n "$config_root" ]] && config_file="$config_root"
   fi
 
   if [[ -z "$config_file" ]]; then
@@ -94,35 +111,61 @@ resolve_tier_model() {
     return 1
   fi
 
-  # Parse YAML: find tier block under "tiers:", then read its "model:" value
-  local in_tiers=false
-  local in_tier=false
+  # Parse YAML: find tier block under "tiers:", then read its "model:" value.
+  # For Clavain clodex mode, prefer fast-clavain/deep-clavain and fall back to fast/deep.
+  local candidate_tiers=("$target_tier")
+  if [[ "$target_tier" != "$fallback_tier" ]]; then
+    candidate_tiers+=("$fallback_tier")
+  fi
   local model=""
-  while IFS= read -r line; do
-    # Detect top-level "tiers:" section
-    if [[ "$line" =~ ^tiers: ]]; then
-      in_tiers=true
-      continue
-    fi
-    # Exit tiers section on next top-level key
-    if [[ "$in_tiers" == true && "$line" =~ ^[a-z] ]]; then
+  local found=""
+  local tier_lookup
+
+  for tier_lookup in "${candidate_tiers[@]}"; do
+    # Parse every candidate from scratch to keep this function easy to audit.
+    local in_tiers=false
+    local in_tier=false
+    local current_model=""
+    while IFS= read -r line; do
+      # Detect top-level "tiers:" section
+      if [[ "$line" =~ ^tiers: ]]; then
+        in_tiers=true
+        continue
+      fi
+      # Exit tiers section on next top-level key
+      if [[ "$in_tiers" == true && "$line" =~ ^[a-z] ]]; then
+        break
+      fi
+      # Match the requested tier (e.g. "  fast:")
+      if [[ "$in_tiers" == true && "$line" =~ ^[[:space:]]+${tier_lookup}:[[:space:]]*$ ]]; then
+        in_tier=true
+        continue
+      fi
+      # Read model value from within the tier block
+      if [[ "$in_tier" == true && "$line" =~ ^[[:space:]]+model:[[:space:]]*(.+) ]]; then
+        current_model="${BASH_REMATCH[1]}"
+        break
+      fi
+      # Hit a sibling tier key — stop
+      if [[ "$in_tier" == true && "$line" =~ ^[[:space:]]+[a-z][a-z0-9_-]*:[[:space:]]*$ ]]; then
+        break
+      fi
+    done < "$config_file"
+
+    if [[ -n "$current_model" ]]; then
+      model="$current_model"
+      found="$tier_lookup"
       break
     fi
-    # Match the requested tier (e.g. "  fast:")
-    if [[ "$in_tiers" == true && "$line" =~ ^[[:space:]]+${tier}:[[:space:]]*$ ]]; then
-      in_tier=true
-      continue
+
+    if [[ "$tier_lookup" != "$fallback_tier" ]]; then
+      echo "Note: tier '$tier_lookup' not found in $config_file. Trying '$fallback_tier'." >&2
     fi
-    # Read model value from within the tier block
-    if [[ "$in_tier" == true && "$line" =~ ^[[:space:]]+model:[[:space:]]*(.+) ]]; then
-      model="${BASH_REMATCH[1]}"
-      break
-    fi
-    # Hit a sibling tier key — stop
-    if [[ "$in_tier" == true && "$line" =~ ^[[:space:]]+[a-z]+:[[:space:]]*$ ]]; then
-      break
-    fi
-  done < "$config_file"
+  done
+
+  if [[ -n "$found" && "$found" != "$tier" ]]; then
+    echo "Note: tier '$tier' mapped to '$found' for Clavain clodex mode." >&2
+  fi
 
   if [[ -z "$model" ]]; then
     echo "Warning: tier '$tier' not found in $config_file" >&2
@@ -236,6 +279,18 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Detect whether Clavain-specific tier remapping should be used. This is opt-in via:
+# - explicit CLAVAIN_DISPATCH_PROFILE=clavain
+# - legacy alias CLAVAIN_CLODEX_PROFILE=clavain
+# and only active when clodex mode is on.
+if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/clodex-toggle.flag" ]]; } || { [[ -z "${WORKDIR}" && -f ".claude/clodex-toggle.flag" ]]; }; then
+  case "${CLAVAIN_DISPATCH_PROFILE,,}" in
+    clavain|xhigh|codex)
+      CLAVAIN_CLODEX_MODE=true
+      ;;
+  esac
+fi
 
 # Resolve --tier to a model name (mutually exclusive with -m)
 if [[ -n "$TIER" ]]; then
