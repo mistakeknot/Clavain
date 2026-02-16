@@ -1,10 +1,10 @@
 {
-  "generated": "2026-02-14T23:32:16Z",
+  "generated": "2026-02-16T01:27:49Z",
   "counts": {
-    "skills": 22,
+    "skills": 23,
     "agents": 4,
-    "commands": 32,
-    "hooks": 8,
+    "commands": 41,
+    "hooks": 12,
     "mcp_servers": 1,
     "review": 2,
     "workflow": 2
@@ -45,6 +45,10 @@
     {
       "name": "file-todos",
       "description": "This skill should be used when managing the file-based todo tracking system in the todos/ directory. It provides workflows for creating todos, managing status and dependencies, conducting triage, and integrating with slash commands and code review processes."
+    },
+    {
+      "name": "galiana",
+      "description": "Show discipline analytics \u2014 defect escape rate, override rate, cost metrics, and agent scorecard"
     },
     {
       "name": "interpeer",
@@ -159,6 +163,10 @@
       "description": "Run build, capture error, fix it, re-run \u2014 fast loop for type errors and build failures without heavyweight debugging"
     },
     {
+      "name": "galiana",
+      "description": "Discipline analytics \u2014 view KPIs, report defects, or reset cache"
+    },
+    {
       "name": "generate-command",
       "description": "Create a new custom slash command following conventions and best practices"
     },
@@ -177,6 +185,38 @@
     {
       "name": "interpeer",
       "description": "Quick cross-AI peer review \u2014 auto-detects host agent and calls the other for a second opinion"
+    },
+    {
+      "name": "interspect",
+      "description": "Analyze Interspect evidence \u2014 detect patterns, classify by counting-rule thresholds, report readiness"
+    },
+    {
+      "name": "interspect-correction",
+      "description": "Record that an agent got something wrong \u2014 high-quality manual evidence for Interspect"
+    },
+    {
+      "name": "interspect-evidence",
+      "description": "Detailed evidence view for a specific agent \u2014 event breakdown, timeline, recent events"
+    },
+    {
+      "name": "interspect-health",
+      "description": "Signal collection diagnostics \u2014 check evidence channels, dark sessions, DB health"
+    },
+    {
+      "name": "interspect-propose",
+      "description": "Detect routing-eligible patterns and propose agent exclusions"
+    },
+    {
+      "name": "interspect-revert",
+      "description": "Revert a routing override and optionally blacklist the pattern"
+    },
+    {
+      "name": "interspect-status",
+      "description": "Interspect overview \u2014 session counts, evidence stats, active canaries, and modifications"
+    },
+    {
+      "name": "interspect-unblock",
+      "description": "Remove a pattern from the routing override blacklist"
     },
     {
       "name": "migration-safety",

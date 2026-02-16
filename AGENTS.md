@@ -34,7 +34,7 @@ Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 27 discipline skills
+├── skills/                        # 23 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -54,11 +54,11 @@ Clavain/
 │   │   └── examples/
 │   └── ...                        # Each skill is a directory with SKILL.md
 ├── agents/
-│   ├── review/                    # 3 review agents
+│   ├── review/                    # 2 review agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 37 slash commands
+├── commands/                      # 41 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 35 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 39 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
@@ -284,7 +284,7 @@ Quick validation:
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 23
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 38
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 41
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"

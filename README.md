@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 23 skills, 4 agents, 38 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 23 skills, 4 agents, 41 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -106,7 +106,7 @@ I use this before any architectural decision I'm uncertain about. The debate its
 
 ## What's Included
 
-### Skills (22)
+### Skills (23)
 
 Skills are workflow disciplines — they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -154,7 +154,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (32)
+### Commands (41)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -196,7 +196,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
-### Hooks (8)
+### Hooks (12)
 
 - **SessionStart** — Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When clodex mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
 - **PostToolUse** — Clodex audit: logs source code writes when clodex mode is active for post-session review (`clodex-audit.sh`). Auto-publish: detects `git push` in plugin repos and auto-bumps version + syncs marketplace (`auto-publish.sh`).
@@ -237,7 +237,7 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 | Plugin | Clavain Replacement |
 |--------|-------------------|
-| code-review | `/review` + `/flux-drive` + 3 review agents |
+| code-review | `/review` + `/flux-drive` + 2 review agents |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster |
 | code-simplifier | `interflux:review:fd-quality` agent |
 | commit-commands | `landing-a-change` skill |
@@ -261,9 +261,9 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 22 discipline skills (SKILL.md each)
+skills/       # 23 discipline skills (SKILL.md each)
 agents/       # 4 agents (review/ + workflow/)
-commands/     # 32 slash commands
+commands/     # 41 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync
