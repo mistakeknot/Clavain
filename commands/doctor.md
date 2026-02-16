@@ -1,11 +1,23 @@
 ---
 name: doctor
 description: Quick health check — verifies MCP servers, external tools, beads, and plugin configuration without making changes
+argument-hint: "[optional: --scope=clavain|interpath|interwatch|interlock|notion|all, --check-only]"
 ---
 
 # Clavain Doctor
 
 Run a quick diagnostic to verify everything Clavain depends on is healthy. Unlike `/setup` (which bootstraps), `/doctor` only checks — it never makes changes.
+
+## Scope
+
+- `clavain` (default): run full Clavain system checks only.
+- `interlock`: run interlock coordination checks.
+- `interwatch`: check doc drift companion health.
+- `interpath`: check artifact workflow companion health.
+- `notion`: run Notion-specific health checks via `interkasten`.
+- `all`: run every scope in sequence.
+
+You can pass multiple scopes in one run (space-separated), or use `--check-only` in all scopes.
 
 Run all checks in parallel where possible, then present results.
 
@@ -128,7 +140,7 @@ if ls ~/.claude/plugins/cache/*/interlock/*/scripts/interlock-register.sh 2>/dev
     fi
   else
     echo "  intermute service: not running"
-    echo "  Run /interlock:setup to install and start intermute"
+    echo "  Run /clavain:setup --scope interlock to install and start intermute"
   fi
 else
   echo "interlock: not installed (multi-agent coordination unavailable)"
@@ -204,6 +216,6 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - conflicts active → "Run `/clavain:setup` to disable conflicting plugins"
 - beads not initialized → "Run `bd init` to enable issue tracking"
 - interlock not installed → "Install interlock for multi-agent coordination: `claude plugin install interlock@interagency-marketplace`"
-- intermute not running → "Run `/interlock:setup` to install and start the intermute coordination service"
+- intermute not running → "Run `/clavain:setup --scope interlock` to install and start the intermute coordination service"
 - .clavain not initialized → "Run `/clavain:init` to set up agent memory"
 - .clavain scratch not gitignored → "Run `/clavain:init` to fix gitignore"

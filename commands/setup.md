@@ -1,7 +1,7 @@
 ---
 name: setup
 description: Bootstrap the Clavain modpack — install required plugins, disable conflicts, verify MCP servers, configure hooks
-argument-hint: "[optional: --check-only to verify without making changes]"
+argument-hint: "[optional: --check-only to verify without making changes, --scope=clavain|interlock|all]"
 ---
 
 # Clavain Modpack Setup
@@ -13,6 +13,10 @@ Bootstrap the full Clavain engineering rig from a fresh Claude Code install. Run
 <setup_args> #$ARGUMENTS </setup_args>
 
 If `--check-only` is in the arguments, only verify the configuration — do not make changes.
+
+`--scope=interlock` focuses on intermute service install/health only, while
+`--scope=clavain` (default) runs the full Clavain modpack setup flow. Use
+`--scope=all` to force both.
 
 ## Step 1: Verify Clavain Itself
 

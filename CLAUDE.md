@@ -4,7 +4,7 @@
 
 ## Overview
 
-Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 agents, 51 commands, 12 hooks, 1 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination), `interslack` (Slack integration), `interform` (design patterns), `intercraft` (agent-native architecture), `interdev` (developer tooling).
+Recursively self-improving multi-agent rig — brainstorm to ship. 23 skills, 4 agents, 52 commands, 12 hooks, 1 MCP servers. Companions: `interphase` (phase tracking, gates, discovery), `interline` (statusline renderer), `interflux` (multi-agent review + research engine), `interpath` (product artifact generation), `interwatch` (doc freshness monitoring), `interlock` (multi-agent coordination), `interslack` (Slack integration), `interform` (design patterns), `intercraft` (agent-native architecture), `interdev` (developer tooling).
 
 ## Quick Commands
 
