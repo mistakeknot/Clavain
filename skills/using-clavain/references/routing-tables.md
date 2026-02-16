@@ -11,7 +11,7 @@ For the compact version, see the `using-clavain` skill.
 | **Explore** | brainstorming | brainstorm | interflux:research:repo-research-analyst, interflux:research:best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | interflux:fd-architecture, plan-reviewer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster in interflux — adaptive 4-12 agents)¹ |
-| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, clodex | work, execute-plan, sprint², resolve, debate | — |
+| **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, interserve | work, execute-plan, sprint², resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, interflux:research:git-history-analyzer |
 | **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | interflux:fd-safety |
@@ -26,7 +26,7 @@ For the compact version, see the `using-clavain` skill.
 | **Deploy** | — | interflux:fd-safety |
 | **Docs** | engineering-docs | interflux:research:framework-docs-researcher, interflux:research:learnings-researcher |
 | **Research** | — | interflux:research:best-practices-researcher, interflux:research:repo-research-analyst, interflux:research:git-history-analyzer |
-| **Workflow** | file-todos, clodex | pr-comment-resolver, sprint-status |
+| **Workflow** | file-todos, interserve | pr-comment-resolver, sprint-status |
 | **Infra** | using-tmux-for-interactive-commands | — |
 
 ## Layer 3: What concern? (optional — applies to review stage)

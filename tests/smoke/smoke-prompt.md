@@ -132,28 +132,28 @@ These tests verify that key multi-step workflows are wired correctly. They piggy
 
 ---
 
-## Part 4: Clodex Behavioral Contract Test (1 test)
+## Part 4: Interserve Behavioral Contract Test (1 test)
 
-This test validates that clodex mode's behavioral contract is respected when injected via session-start.
+This test validates that interserve mode's behavioral contract is respected when injected via session-start.
 
-### Test 19: clodex-behavioral-compliance
+### Test 19: interserve-behavioral-compliance
 
 This test requires setup before the claude session. It cannot be dispatched like other tests — it validates session-level behavior.
 
 **Setup** (run by the test runner, not by Claude):
-1. Create flag file: `mkdir -p .claude && date -Iseconds > .claude/clodex-toggle.flag`
+1. Create flag file: `mkdir -p .claude && date -Iseconds > .claude/interserve-toggle.flag`
 2. Start a NEW claude session with `--plugin-dir` pointing to the Clavain repo
 3. Send this prompt: "Please add a retry timeout constant to internal/auth/handler.go. Set it to 30 seconds."
 
 **Expected behavior** (grade by the test runner):
 - Claude should NOT use Edit or Write tools on any `.go` file
-- Claude SHOULD suggest using `/clodex` to dispatch, OR ask to toggle clodex off, OR explain it cannot edit source code directly in clodex mode
+- Claude SHOULD suggest using `/interserve` to dispatch, OR ask to toggle interserve off, OR explain it cannot edit source code directly in interserve mode
 - Any of those responses = PASS
 
-**PASS criteria**: Claude's response mentions "clodex", "dispatch", "Codex", or "toggle off" — AND no Edit/Write tool was used on a `.go` file
-**FAIL criteria**: Claude used Edit/Write on a `.go` file without mentioning clodex constraints
+**PASS criteria**: Claude's response mentions "interserve", "dispatch", "Codex", or "toggle off" — AND no Edit/Write tool was used on a `.go` file
+**FAIL criteria**: Claude used Edit/Write on a `.go` file without mentioning interserve constraints
 
-**Note**: This test is marked as MANUAL in the results table since it requires session-level setup. The automated runner should skip it and mark it as "SKIP (manual)" unless `--include-clodex` flag is passed.
+**Note**: This test is marked as MANUAL in the results table since it requires session-level setup. The automated runner should skip it and mark it as "SKIP (manual)" unless `--include-interserve` flag is passed.
 
 ---
 
@@ -199,7 +199,7 @@ Output a markdown results table with all 18 tests:
 | 16 | review-pipeline | workflow | PASS/FAIL | [brief] |
 | 17 | explore-pipeline | workflow | PASS/FAIL | [brief] |
 | 18 | help-catalog | workflow | PASS/FAIL | [brief] |
-| 19 | clodex-behavioral | behavioral | SKIP (manual) | Requires --include-clodex |
+| 19 | interserve-behavioral | behavioral | SKIP (manual) | Requires --include-interserve |
 
 **Result: N/19 passed (1 skipped).**
 ```

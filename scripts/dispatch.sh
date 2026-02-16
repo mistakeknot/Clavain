@@ -18,8 +18,8 @@ WORKDIR=""
 OUTPUT=""
 MODEL=""
 TIER=""
-CLAVAIN_CLODEX_MODE=false
-CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_CLODEX_PROFILE:-}}"
+CLAVAIN_INTERSERVE_MODE=false
+CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
 NAME=""
 DRY_RUN=false
@@ -87,9 +87,9 @@ resolve_tier_model() {
   local target_tier
   local fallback_tier="$tier"
 
-  if [[ "$CLAVAIN_CLODEX_MODE" == true && "$tier" == "fast" ]]; then
+  if [[ "$CLAVAIN_INTERSERVE_MODE" == true && "$tier" == "fast" ]]; then
     target_tier="fast-clavain"
-  elif [[ "$CLAVAIN_CLODEX_MODE" == true && "$tier" == "deep" ]]; then
+  elif [[ "$CLAVAIN_INTERSERVE_MODE" == true && "$tier" == "deep" ]]; then
     target_tier="deep-clavain"
   else
     target_tier="$tier"
@@ -112,7 +112,7 @@ resolve_tier_model() {
   fi
 
   # Parse YAML: find tier block under "tiers:", then read its "model:" value.
-  # For Clavain clodex mode, prefer fast-clavain/deep-clavain and fall back to fast/deep.
+  # For Clavain interserve mode, prefer fast-clavain/deep-clavain and fall back to fast/deep.
   local candidate_tiers=("$target_tier")
   if [[ "$target_tier" != "$fallback_tier" ]]; then
     candidate_tiers+=("$fallback_tier")
@@ -164,7 +164,7 @@ resolve_tier_model() {
   done
 
   if [[ -n "$found" && "$found" != "$tier" ]]; then
-    echo "Note: tier '$tier' mapped to '$found' for Clavain clodex mode." >&2
+    echo "Note: tier '$tier' mapped to '$found' for Clavain interserve mode." >&2
   fi
 
   if [[ -z "$model" ]]; then
@@ -281,13 +281,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Detect whether Clavain-specific tier remapping should be used. This is opt-in via:
-# - explicit CLAVAIN_DISPATCH_PROFILE=clavain
-# - legacy alias CLAVAIN_CLODEX_PROFILE=clavain
-# and only active when clodex mode is on.
-if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/clodex-toggle.flag" ]]; } || { [[ -z "${WORKDIR}" && -f ".claude/clodex-toggle.flag" ]]; }; then
+# - explicit CLAVAIN_DISPATCH_PROFILE=interserve (or legacy: clavain)
+# - legacy alias CLAVAIN_INTERSERVE_PROFILE=interserve
+# and only active when interserve mode is on.
+if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/interserve-toggle.flag" ]]; } || { [[ -z "${WORKDIR}" && -f ".claude/interserve-toggle.flag" ]]; }; then
   case "${CLAVAIN_DISPATCH_PROFILE,,}" in
-    clavain|xhigh|codex)
-      CLAVAIN_CLODEX_MODE=true
+    interserve|clavain|xhigh|codex)
+      CLAVAIN_INTERSERVE_MODE=true
       ;;
   esac
 fi

@@ -9,7 +9,7 @@ Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 23 skills, 4 agents, 41 commands, 12 hooks, 1 MCP servers |
+| Components | 23 skills, 4 agents, 51 commands, 12 hooks, 1 MCP servers |
 | License | MIT |
 
 ### Release workflow
@@ -56,15 +56,15 @@ Clavain/
 ├── agents/
 │   ├── review/                    # 2 review agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 41 slash commands
+├── commands/                      # 51 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 39 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 49 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
 │   ├── sprint-scan.sh             # Sprint awareness scanner (sourced by session-start + sprint-status)
 │   ├── session-start.sh           # Context injection + upstream staleness + sprint awareness
-│   ├── clodex-audit.sh             # Clodex mode source code write audit (PostToolUse Edit/Write)
+│   ├── interserve-audit.sh             # Interserve mode source code write audit (PostToolUse Edit/Write)
 │   ├── lib-gates.sh               # Phase gate shim (delegates to interphase; no-op stub if absent)
 │   ├── lib-discovery.sh           # Plugin discovery shim (delegates to interphase; no-op stub if absent)
 │   ├── auto-publish.sh            # Auto-publish after git push (PostToolUse Bash)
@@ -219,9 +219,9 @@ Categories:
 - Registration in `hooks/hooks.json` — specifies event, matcher regex, and command
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
-  - `session-start.sh` — injects `using-clavain` skill content, clodex behavioral contract (when active), upstream staleness warnings
+  - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
-  - `clodex-audit.sh` — logs source code writes when clodex mode is active (audit only, no denial)
+  - `interserve-audit.sh` — logs source code writes when interserve mode is active (audit only, no denial)
 - **PostToolUse** (matcher: `Bash`):
   - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace (60s TTL sentinel prevents loops)
 - **Stop**:
@@ -274,7 +274,7 @@ When making changes, verify:
 - [ ] `hooks/session-handoff.sh` passes `bash -n` syntax check
 - [ ] `hooks/dotfiles-sync.sh` passes `bash -n` syntax check
 - [ ] `hooks/auto-publish.sh` passes `bash -n` syntax check
-- [ ] `hooks/clodex-audit.sh` passes `bash -n` syntax check
+- [ ] `hooks/interserve-audit.sh` passes `bash -n` syntax check
 - [ ] No references to dropped namespaces (`superpowers:`, `compound-engineering:`)
 - [ ] No references to dropped components (Rails, Ruby, Every.to, Figma, Xcode)
 - [ ] Routing table in `using-clavain/SKILL.md` is consistent with actual components
@@ -284,7 +284,7 @@ Quick validation:
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 23
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 41
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 51
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
@@ -301,7 +301,7 @@ bash -n hooks/auto-compound.sh && echo "auto-compound.sh OK"
 bash -n hooks/session-handoff.sh && echo "session-handoff.sh OK"
 bash -n hooks/dotfiles-sync.sh && echo "dotfiles-sync.sh OK"
 bash -n hooks/auto-publish.sh && echo "auto-publish.sh OK"
-bash -n hooks/clodex-audit.sh && echo "clodex-audit.sh OK"
+bash -n hooks/interserve-audit.sh && echo "interserve-audit.sh OK"
 bash -n scripts/upstream-check.sh && echo "Upstream check OK"
 
 # Test upstream check (no network calls with --json, but needs gh)
@@ -329,7 +329,7 @@ Extracted subsystems that Clavain delegates to via namespace routing.
 |--------|--------|-----------------|
 | **interflux** | interagency-marketplace | Multi-agent review + research engine. 7 fd-* review agents, 5 research agents, flux-drive/flux-research skills, qmd + exa MCP servers. Protocol spec in `docs/spec/`. |
 | **interphase** | interagency-marketplace | Phase tracking, gates, and work discovery. lib-phase.sh, lib-gates.sh, lib-discovery.sh. Clavain shims delegate to interphase when installed. |
-| **interline** | interagency-marketplace | Statusline renderer. Shows dispatch state, bead context, workflow phase, clodex mode. |
+| **interline** | interagency-marketplace | Statusline renderer. Shows dispatch state, bead context, workflow phase, interserve mode. |
 
 ### Recommended
 

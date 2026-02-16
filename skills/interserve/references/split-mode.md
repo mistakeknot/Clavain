@@ -6,7 +6,7 @@ When the megaprompt approach fails (agent goes off-track, verification fails twi
 2. **Implement agent** (`--tier deep` + `-s workspace-write`): Make the change based on explore findings, run build
 3. **Verify agent** (`--tier fast` + `-s read-only`): Run tests, review diff, report verdict
 
-When Clavain clodex mode is enabled (`.claude/clodex-toggle.flag` exists) and `CLAVAIN_DISPATCH_PROFILE=clavain` is set, fast/deep map to `-xhigh` variants in `config/dispatch/tiers.yaml`.
+When Clavain interserve mode is enabled (`.claude/interserve-toggle.flag` exists) and `CLAVAIN_DISPATCH_PROFILE=interserve` is set, fast/deep map to `-xhigh` variants in `config/dispatch/tiers.yaml`.
 
 Claude reads each agent's output between steps and adjusts the next agent's prompt accordingly. This gives more control at the cost of 3x dispatch overhead — but the fast tier on explore/verify phases significantly reduces wall-clock time.
 

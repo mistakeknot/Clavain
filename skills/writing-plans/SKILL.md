@@ -176,9 +176,9 @@ AskUserQuestion:
 - **REQUIRED SUB-SKILL:** New session uses clavain:executing-plans
 
 **If Codex Delegation chosen:**
-- **REQUIRED SUB-SKILL:** Use clavain:clodex
+- **REQUIRED SUB-SKILL:** Use clavain:interserve
 - Claude stays as orchestrator — planning, dispatching, reviewing, integrating
 - Codex agents execute tasks in parallel sandboxes
 - Best when tasks are independent, well-scoped, and benefit from parallel execution
 - When running under `/sprint`, this step subsumes `/work` — the plan is executed here via Codex, so `/sprint` skips the `/work` step
-- The subsequent `/flux-drive` step also dispatches review agents through Codex when clodex mode is active, creating a consistent Codex pipeline
+- The subsequent `/flux-drive` step also dispatches review agents through Codex when interserve mode is active, creating a consistent Codex pipeline

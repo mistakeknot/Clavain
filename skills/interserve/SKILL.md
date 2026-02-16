@@ -1,11 +1,11 @@
 ---
-name: clodex
+name: interserve
 description: Dispatch tasks to Codex CLI agents — single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation.
 version: 0.4.0
 user-invocable: false
 ---
 
-# Clodex — Codex Dispatch
+# Interserve — Codex Dispatch
 
 Dispatch tasks to Codex CLI agents (`codex exec`). Claude acts as orchestrator — planning, dispatching, verifying, and committing. Works for single tasks (megaprompt) and multi-task parallel execution (delegation).
 
@@ -48,10 +48,10 @@ dispatch.sh supports `--tier fast|deep` to resolve model names from `config/disp
 | **fast** | `gpt-5.3-codex-spark` | Read-only exploration, verification, quick reviews |
 | **deep** | `gpt-5.3-codex` | Implementation, complex reasoning, debates |
 
-In Clavain clodex mode (`.claude/clodex-toggle.flag` present), Clavain maps:
+In Clavain interserve mode (`.claude/interserve-toggle.flag` present), Clavain maps:
 - default fast/deep mapping remains `gpt-5.3-codex-spark` / `gpt-5.3-codex`
-- For x-high routing, set `CLAVAIN_DISPATCH_PROFILE=clavain` when invoking dispatch:
-  `CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" ...`
+- For x-high routing, set `CLAVAIN_DISPATCH_PROFILE=interserve` when invoking dispatch:
+  `CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" ...`
 - Then `fast` → `gpt-5.3-codex-spark-xhigh`, `deep` → `gpt-5.3-codex-xhigh`
 
 - `--tier` and `-m` are mutually exclusive — `-m` is the escape hatch for one-off overrides
@@ -107,7 +107,7 @@ Save to: `/tmp/codex-task-$(date +%s).md`
 ### Step 2: Dispatch
 
 ```bash
-CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" \
+CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" \
   --prompt-file "$TASK_FILE" \
   -C "$PROJECT_DIR" \
   -o "/tmp/codex-result-$(date +%s).md" \
@@ -178,7 +178,7 @@ Write one prompt file per task (same format as megaprompt Step 1). Each should i
 Launch all Bash calls **in a single message** (multiple tool calls). Set `timeout: 600000` on each.
 
 ```bash
-CLAVAIN_DISPATCH_PROFILE=clavain bash "$DISPATCH" \
+CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" \
   --prompt-file /tmp/task1.md \
   -C "$PROJECT_DIR" \
   --name fix-auth -o /tmp/codex-{name}.md \

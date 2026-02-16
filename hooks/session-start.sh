@@ -50,7 +50,7 @@ using_clavain_content=$(cat "${PLUGIN_ROOT}/skills/using-clavain/SKILL.md" 2>/de
 using_clavain_escaped=$(escape_for_json "$using_clavain_content")
 
 # Detect companion plugins — store as env var for on-demand access, inject only
-# critical awareness context (clodex mode, active agents) into additionalContext.
+# critical awareness context (interserve mode, active agents) into additionalContext.
 companion_list=""
 companion_context=""
 
@@ -124,11 +124,11 @@ if [[ -n "$interlock_root" ]]; then
     fi
 fi
 
-# Clodex — always inject when active (changes agent behavior)
-CLODEX_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/clodex-toggle.flag"
-if [[ -f "$CLODEX_FLAG" ]]; then
-    companion_list="${companion_list}clodex,"
-    companion_context="${companion_context}\\n- **CLODEX MODE: ON** — Route source code changes through Codex (preserves Claude token budget for orchestration).\\n  1. Plan: Read/Grep/Glob freely\\n  2. Prompt: Write task to /tmp/, dispatch via /clodex\\n  3. Verify: read output, run tests, review diffs\\n  4. Git ops (add/commit/push) are yours — do directly\\n  Bash: read-only for source files (no redirects, sed -i, tee). Git + test/build OK.\\n  Direct-edit OK: .md/.json/.yaml/.yml/.toml/.txt/.csv/.xml/.html/.css/.svg/.lock/.cfg/.ini/.conf/.env, /tmp/*\\n  Everything else (code files): dispatch via /clodex."
+# Interserve — always inject when active (changes agent behavior)
+INTERSERVE_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/interserve-toggle.flag"
+if [[ -f "$INTERSERVE_FLAG" ]]; then
+    companion_list="${companion_list}interserve,"
+    companion_context="${companion_context}\\n- **INTERSERVE MODE: ON** — Route source code changes through Codex (preserves Claude token budget for orchestration).\\n  1. Plan: Read/Grep/Glob freely\\n  2. Prompt: Write task to /tmp/, dispatch via /interserve\\n  3. Verify: read output, run tests, review diffs\\n  4. Git ops (add/commit/push) are yours — do directly\\n  Bash: read-only for source files (no redirects, sed -i, tee). Git + test/build OK.\\n  Direct-edit OK: .md/.json/.yaml/.yml/.toml/.txt/.csv/.xml/.html/.css/.svg/.lock/.cfg/.ini/.conf/.env, /tmp/*\\n  Everything else (code files): dispatch via /interserve."
 fi
 
 # Persist companion list as env var for on-demand access by skills

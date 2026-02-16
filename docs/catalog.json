@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-16T01:27:49Z",
+  "generated": "2026-02-16T07:33:56Z",
   "counts": {
     "skills": 23,
     "agents": 4,
-    "commands": 41,
+    "commands": 51,
     "hooks": 12,
     "mcp_servers": 1,
     "review": 2,
@@ -15,7 +15,7 @@
       "description": "Freeform brainstorming mode \u2014 loads collaborative dialogue style (one question at a time, multiple choice, incremental design). Use for open-ended exploration without structured phases. For a guided workflow with repo research, use /brainstorm instead."
     },
     {
-      "name": "clodex",
+      "name": "interserve",
       "description": "Dispatch tasks to Codex CLI agents \u2014 single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation."
     },
     {
@@ -135,8 +135,24 @@
       "description": "Create engaging changelogs for recent merges to main branch"
     },
     {
-      "name": "clodex-toggle",
-      "description": "Toggle clodex execution mode"
+      "name": "interserve",
+      "description": "Run Codex-first execution flow for larger scope work"
+    },
+    {
+      "name": "interserve-toggle",
+      "description": "Toggle interserve execution mode"
+    },
+    {
+      "name": "code-review",
+      "description": "Run disciplined code review and feedback triage"
+    },
+    {
+      "name": "codex-bootstrap",
+      "description": "Bootstrap or check Clavain Codex installation health (install + wrapper sync + doctor)"
+    },
+    {
+      "name": "codex-sprint",
+      "description": "Run the full phase-gated sprint workflow in Codex, with explicit fallback when interphase hooks are unavailable"
     },
     {
       "name": "compound",
@@ -149,6 +165,10 @@
     {
       "name": "debate",
       "description": "Run a structured Claude\u2194Codex debate before implementing a complex task"
+    },
+    {
+      "name": "docs",
+      "description": "Capture and refine engineering knowledge in searchable docs"
     },
     {
       "name": "doctor",
@@ -219,6 +239,10 @@
       "description": "Remove a pattern from the routing override blacklist"
     },
     {
+      "name": "land",
+      "description": "Run the landing workflow for trunk-based handoff"
+    },
+    {
       "name": "migration-safety",
       "description": "Orchestrate database migration and data-risk work with consistent safety checks \u2014 combines data integrity, migration, and deployment verification agents"
     },
@@ -233,6 +257,10 @@
     {
       "name": "quality-gates",
       "description": "Auto-select and run the right reviewer agents based on what changed \u2014 one command for comprehensive quality review"
+    },
+    {
+      "name": "refactor",
+      "description": "Plan and execute safe refactors with explicit risk controls"
     },
     {
       "name": "repro-first-debugging",
@@ -271,6 +299,14 @@
       "description": "Structure brainstorm output into a PRD with features, create beads for tracking, and validate before detailed planning"
     },
     {
+      "name": "tdd",
+      "description": "Run disciplined test-driven development (RED-GREEN-REFACTOR) for a task"
+    },
+    {
+      "name": "todos",
+      "description": "Create and maintain file-based todo tracking"
+    },
+    {
       "name": "triage",
       "description": "Triage and categorize findings for the CLI todo system"
     },
@@ -281,6 +317,10 @@
     {
       "name": "upstream-sync",
       "description": "Check upstream repos (beads, oracle, superpowers, compound-engineering) for updates and generate upgrade checklist"
+    },
+    {
+      "name": "verify",
+      "description": "Run completion verification before claiming work is done"
     },
     {
       "name": "work",

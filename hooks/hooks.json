@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/clodex-audit.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/interserve-audit.sh",
             "timeout": 5
           }
         ]

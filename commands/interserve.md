@@ -1,9 +1,9 @@
 ---
-name: clodex
+name: interserve
 description: Run Codex-first execution flow for larger scope work
 argument-hint: "[task for Codex-orchestrated execution]"
-allowed-tools: Skill(clodex)
+allowed-tools: Skill(interserve)
 ---
 
-Invoke the clodex skill for: $ARGUMENTS
+Invoke the interserve skill for: $ARGUMENTS
 

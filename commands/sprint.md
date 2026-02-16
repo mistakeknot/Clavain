@@ -250,7 +250,7 @@ Structures the brainstorm into a PRD, creates beads for tracking, and validates 
 
 Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it's needed in Step 4.
 
-**Note:** When clodex mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 5 (execute) — the plan has already been executed.
+**Note:** When interserve mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 5 (execute) — the plan has already been executed.
 
 **Phase:** After plan is written, set `phase=planned` with reason `"Plan: <plan_path>"`.
 
@@ -278,7 +278,7 @@ Run `/clavain:work <plan-file-from-step-3>`
 
 **Phase:** At the START of execution (before work begins), set `phase=executing` with reason `"Executing: <plan_path>"`.
 
-**Parallel execution:** When the plan has independent modules, dispatch them in parallel using the `dispatching-parallel-agents` skill. This is automatic when clodex mode is active (executing-plans detects the flag and dispatches Codex agents).
+**Parallel execution:** When the plan has independent modules, dispatch them in parallel using the `dispatching-parallel-agents` skill. This is automatic when interserve mode is active (executing-plans detects the flag and dispatches Codex agents).
 
 ## Step 6: Test & Verify
 
@@ -323,7 +323,7 @@ Do NOT set the phase if gates FAIL.
 
 ## Step 8: Resolve Issues
 
-Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, or code TODOs) and handles clodex mode automatically.
+Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, or code TODOs) and handles interserve mode automatically.
 
 **After resolving:** If quality-gates found patterns that could recur in other code (e.g., format injection, portability issues, race conditions), compound them:
 - Run `/clavain:compound` to document the pattern in `config/flux-drive/knowledge/`

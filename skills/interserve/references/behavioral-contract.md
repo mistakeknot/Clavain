@@ -1,11 +1,11 @@
-# Clodex Behavioral Contract
+# Interserve Behavioral Contract
 
 > This contract is enforced purely through session-start context injection. There is no PreToolUse hook.
 
 ## Three Rules
 
 1. **Plan freely** — Read, Grep, Glob are unrestricted
-2. **Dispatch source code changes** — Use /clodex to send implementation tasks to Codex agents
+2. **Dispatch source code changes** — Use /interserve to send implementation tasks to Codex agents
 3. **Edit non-code directly** — .md, .json, .yaml, .yml, .toml, .txt, .csv, .xml, .html, .css, .svg, .lock, .cfg, .ini, .conf, .env, /tmp/*
 
 ## Bash Restriction
@@ -19,4 +19,4 @@ Git operations (add, commit, push) are Claude's responsibility — do them direc
 
 ## When Codex is Unavailable
 
-If Codex CLI is not installed, fall back to /subagent-driven-development or run /clodex-toggle to turn off.
+If Codex CLI is not installed, fall back to /subagent-driven-development or run /interserve-toggle to turn off.

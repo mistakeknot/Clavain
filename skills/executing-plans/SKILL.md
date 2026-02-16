@@ -24,16 +24,16 @@ Load plan, review critically, execute tasks in batches, report for review betwee
 ### Step 2: Check Execution Mode
 
 ```bash
-FLAG_FILE="$(pwd)/.claude/clodex-toggle.flag"
-[ -f "$FLAG_FILE" ] && echo "CLODEX_ACTIVE" || echo "DIRECT_MODE"
+FLAG_FILE="$(pwd)/.claude/interserve-toggle.flag"
+[ -f "$FLAG_FILE" ] && echo "INTERSERVE_ACTIVE" || echo "DIRECT_MODE"
 ```
 
-- **CLODEX_ACTIVE** → Go to Step 2A (Codex Dispatch)
+- **INTERSERVE_ACTIVE** → Go to Step 2A (Codex Dispatch)
 - **DIRECT_MODE** → Go to Step 2B (Direct Execution)
 
-### Step 2A: Codex Dispatch (clodex mode)
+### Step 2A: Codex Dispatch (interserve mode)
 
-When clodex mode is active, dispatch tasks to Codex agents instead of executing directly. This enables parallelization — independent tasks run concurrently.
+When interserve mode is active, dispatch tasks to Codex agents instead of executing directly. This enables parallelization — independent tasks run concurrently.
 
 1. **Classify tasks** from the plan into:
    - **Independent** — no shared files, can run in parallel → Codex agents
@@ -45,7 +45,7 @@ When clodex mode is active, dispatch tasks to Codex agents instead of executing 
    - Sequential tasks go in consecutive batches
    - Max 5 agents per batch (to avoid overwhelming resources)
 
-3. **For each batch**, use the `clavain:clodex` skill:
+3. **For each batch**, use the `clavain:interserve` skill:
    - Write prompt files (one per task) to `/tmp/codex-task-<name>.md` — plain language with goal, files, build/test commands, and verdict suffix
    - Dispatch all independent tasks in a single message (parallel Bash calls)
    - Wait for all agents to complete
@@ -119,4 +119,4 @@ After all tasks complete and verified:
 **Required workflow skills:**
 - **clavain:writing-plans** - Creates the plan this skill executes
 - **clavain:landing-a-change** - Complete development after all tasks
-- **clavain:clodex** - Codex dispatch (used when clodex mode is active)
+- **clavain:interserve** - Codex dispatch (used when interserve mode is active)

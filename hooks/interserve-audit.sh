@@ -4,8 +4,8 @@ set -euo pipefail
 main() {
   local project_dir flag_file log_file payload file_path base
   project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  flag_file="$project_dir/.claude/clodex-toggle.flag"
-  log_file="$project_dir/.claude/clodex-audit.log"
+  flag_file="$project_dir/.claude/interserve-toggle.flag"
+  log_file="$project_dir/.claude/interserve-audit.log"
 
   [[ -f "$flag_file" ]] || exit 0
   command -v jq >/dev/null 2>&1 || exit 0

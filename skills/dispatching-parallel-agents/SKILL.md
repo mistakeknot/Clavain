@@ -195,7 +195,7 @@ need Claude's deep architectural reasoning, consider dispatching Codex agents in
 - Tasks are exploratory (research, investigation)
 - Tasks involve complex architectural decisions
 
-**To dispatch Codex agents:** Use the `clavain:clodex` skill, which provides
+**To dispatch Codex agents:** Use the `clavain:interserve` skill, which provides
 the full delegation protocol (prompt crafting, dispatch, monitoring, verification).
 It translates plan tasks directly into Codex dispatch format.
 

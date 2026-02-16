@@ -87,11 +87,11 @@ if [[ "${1:-}" == "--dry-run" ]]; then
   exit 0
 fi
 
-# Check for --include-clodex flag
-INCLUDE_CLODEX=false
+# Check for --include-interserve flag
+INCLUDE_INTERSERVE=false
 for arg in "$@"; do
-  if [[ "$arg" == "--include-clodex" ]]; then
-    INCLUDE_CLODEX=true
+  if [[ "$arg" == "--include-interserve" ]]; then
+    INCLUDE_INTERSERVE=true
   fi
 done
 
@@ -102,11 +102,11 @@ if ! command -v claude &>/dev/null; then
   exit 1
 fi
 
-# Set up clodex flag if --include-clodex
-if [[ "$INCLUDE_CLODEX" == true ]]; then
+# Set up interserve flag if --include-interserve
+if [[ "$INCLUDE_INTERSERVE" == true ]]; then
   mkdir -p "$PROJECT_ROOT/.claude"
-  date -Iseconds > "$PROJECT_ROOT/.claude/clodex-toggle.flag"
-  echo "Clodex behavioral test enabled."
+  date -Iseconds > "$PROJECT_ROOT/.claude/interserve-toggle.flag"
+  echo "Interserve behavioral test enabled."
   echo ""
 fi
 
@@ -122,8 +122,8 @@ claude --print \
 
 # Cleanup
 rm -f "$PROJECT_ROOT"/docs/research/smoke-test-*.md 2>/dev/null || true
-if [[ "$INCLUDE_CLODEX" == true ]]; then
-  rm -f "$PROJECT_ROOT/.claude/clodex-toggle.flag"
+if [[ "$INCLUDE_INTERSERVE" == true ]]; then
+  rm -f "$PROJECT_ROOT/.claude/interserve-toggle.flag"
   echo ""
-  echo "Clodex flag cleaned up."
+  echo "Interserve flag cleaned up."
 fi

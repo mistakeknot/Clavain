@@ -12,8 +12,8 @@ __pycache__/
 .beads/dolt/
 .beads/dolt-access.lock
 .claude/flux-drive.yaml
-.claude/clodex-audit.log
-.claude/clodex-toggle.flag
+.claude/interserve-audit.log
+.claude/interserve-toggle.flag
 .clavain/scratch/
 .clavain/verdicts/
 .clavain/checkpoint.json

@@ -40,9 +40,9 @@ def test_hooks_json_expected_event_types(hooks_json):
 
 
 def test_hooks_json_no_pretooluse(hooks_json):
-    """PreToolUse hook must not be registered (removed in clodex overhaul)."""
+    """PreToolUse hook must not be registered (removed in interserve overhaul)."""
     assert "PreToolUse" not in hooks_json["hooks"], (
-        "PreToolUse hook should not exist — clodex uses behavioral contract, not deny-gate"
+        "PreToolUse hook should not exist — interserve uses behavioral contract, not deny-gate"
     )
 
 
@@ -93,10 +93,10 @@ def test_hooks_json_matchers_valid(hooks_json):
                     )
 
 
-def test_session_start_clodex_injection(project_root):
-    """session-start.sh contains the clodex behavioral contract injection."""
+def test_session_start_interserve_injection(project_root):
+    """session-start.sh contains the interserve behavioral contract injection."""
     session_start = project_root / "hooks" / "session-start.sh"
     content = session_start.read_text()
-    assert "CLODEX MODE" in content, (
-        "session-start.sh should contain 'CLODEX MODE' for behavioral contract injection"
+    assert "INTERSERVE MODE" in content, (
+        "session-start.sh should contain 'INTERSERVE MODE' for behavioral contract injection"
     )

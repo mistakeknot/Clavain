@@ -7,7 +7,7 @@ DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
   oracle --wait \
   -p "Review this technical decision. [summary]" \
   -f 'relevant/files/**' \
-  --write-output /tmp/oracle-clodex-${TOPIC}.md
+  --write-output /tmp/oracle-interserve-${TOPIC}.md
 ```
 
 After Oracle: map all three positions, synthesize, present to user.
