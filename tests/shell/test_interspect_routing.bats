@@ -21,7 +21,7 @@ setup() {
 
     # Create minimal confidence.json
     cat > "$TEST_DIR/.clavain/interspect/confidence.json" << 'EOF'
-{"min_sessions":3,"min_diversity":2,"min_events":5,"min_agent_wrong_pct":80}
+{"min_sessions":3,"min_diversity":2,"min_events":5,"min_agent_wrong_pct":80,"canary_window_uses":20,"canary_window_days":14,"canary_min_baseline":15,"canary_alert_pct":20,"canary_noise_floor":0.1}
 EOF
 
     # Create minimal protected-paths.json
@@ -242,4 +242,299 @@ teardown() {
     # Verify table was created (even though DB already existed from setup)
     result=$(sqlite3 "$DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='blacklist';")
     [ "$result" = "blacklist" ]
+}
+
+# ─── Canary samples table ─────────────────────────────────────────
+
+@test "canary_samples table exists after ensure_db" {
+    DB=$(_interspect_db_path)
+    result=$(sqlite3 "$DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='canary_samples';")
+    [ "$result" = "canary_samples" ]
+}
+
+@test "canary_samples unique constraint prevents duplicates" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 'active');"
+    sqlite3 "$DB" "INSERT INTO canary_samples (canary_id, session_id, ts, override_rate, fp_rate, finding_density) VALUES (1, 's1', '2026-01-01', 1.0, 0.5, 3.0);"
+
+    # Second insert should fail due to UNIQUE constraint
+    run sqlite3 "$DB" "INSERT INTO canary_samples (canary_id, session_id, ts, override_rate, fp_rate, finding_density) VALUES (1, 's1', '2026-01-02', 2.0, 0.6, 4.0);"
+    [ "$status" -ne 0 ]
+}
+
+# ─── Canary baseline computation ──────────────────────────────────
+
+@test "compute_canary_baseline returns null with no sessions" {
+    result=$(_interspect_compute_canary_baseline "2026-02-16T00:00:00Z")
+    [ "$result" = "null" ]
+}
+
+@test "compute_canary_baseline returns null with insufficient sessions" {
+    DB=$(_interspect_db_path)
+    # Insert 10 sessions (below min_baseline of 15)
+    for i in $(seq 1 10); do
+        sqlite3 "$DB" "INSERT INTO sessions (session_id, start_ts, project) VALUES ('s${i}', '2026-01-$(printf '%02d' $i)T00:00:00Z', 'proj1');"
+    done
+    result=$(_interspect_compute_canary_baseline "2026-02-01T00:00:00Z")
+    [ "$result" = "null" ]
+}
+
+@test "compute_canary_baseline returns metrics with sufficient sessions" {
+    DB=$(_interspect_db_path)
+    # Insert 20 sessions with some evidence
+    for i in $(seq 1 20); do
+        local day
+        day=$(printf '%02d' $((i % 28 + 1)))
+        sqlite3 "$DB" "INSERT INTO sessions (session_id, start_ts, project) VALUES ('s${i}', '2026-01-${day}T0${i}:00:00Z', 'proj1');"
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s${i}', 1, '2026-01-${day}T0${i}:00:00Z', 'fd-test', 'override', 'agent_wrong', '{}', 'proj1');"
+    done
+
+    result=$(_interspect_compute_canary_baseline "2026-02-01T00:00:00Z")
+    [ "$result" != "null" ]
+
+    # Check JSON structure
+    echo "$result" | jq -e '.override_rate' >/dev/null
+    echo "$result" | jq -e '.fp_rate' >/dev/null
+    echo "$result" | jq -e '.finding_density' >/dev/null
+    echo "$result" | jq -e '.session_count' >/dev/null
+    echo "$result" | jq -e '.window' >/dev/null
+}
+
+@test "compute_canary_baseline override_rate is correct" {
+    DB=$(_interspect_db_path)
+    # 20 sessions, 10 with overrides → override_rate = 10/20 = 0.5
+    for i in $(seq 1 20); do
+        sqlite3 "$DB" "INSERT INTO sessions (session_id, start_ts, project) VALUES ('s${i}', '2026-01-$(printf '%02d' $i)T00:00:00Z', 'proj1');"
+    done
+    for i in $(seq 1 10); do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s${i}', 1, '2026-01-$(printf '%02d' $i)T00:00:00Z', 'fd-test', 'override', 'agent_wrong', '{}', 'proj1');"
+    done
+
+    result=$(_interspect_compute_canary_baseline "2026-02-01T00:00:00Z")
+    rate=$(echo "$result" | jq '.override_rate')
+    # 10 overrides / 20 sessions = 0.5 (may be formatted as 0.5 or 0.5000)
+    [[ "$rate" == 0.5* ]]
+}
+
+# ─── Canary sample collection ─────────────────────────────────────
+
+@test "record_canary_sample skips sessions with no evidence" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 'active');"
+
+    _interspect_record_canary_sample "empty_session"
+
+    count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary_samples;")
+    [ "$count" -eq 0 ]
+}
+
+@test "record_canary_sample inserts sample for active canary" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 'active');"
+    sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, context, project) VALUES ('test_session', 1, '2026-01-15', 'fd-test', 'agent_dispatch', '{}', 'proj1');"
+
+    _interspect_record_canary_sample "test_session"
+
+    count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary_samples;")
+    [ "$count" -eq 1 ]
+}
+
+@test "record_canary_sample skips non-active canaries" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 'passed');"
+    sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, context, project) VALUES ('test_session', 1, '2026-01-15', 'fd-test', 'agent_dispatch', '{}', 'proj1');"
+
+    _interspect_record_canary_sample "test_session"
+
+    count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary_samples;")
+    [ "$count" -eq 0 ]
+}
+
+@test "record_canary_sample deduplicates via INSERT OR IGNORE" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 'active');"
+    sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, context, project) VALUES ('test_session', 1, '2026-01-15', 'fd-test', 'agent_dispatch', '{}', 'proj1');"
+
+    _interspect_record_canary_sample "test_session"
+    _interspect_record_canary_sample "test_session"
+
+    count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary_samples;")
+    [ "$count" -eq 1 ]
+}
+
+# ─── Canary evaluation ────────────────────────────────────────────
+
+@test "evaluate_canary returns monitoring for incomplete window" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 5, '2026-12-31T00:00:00Z', 0.5, 0.3, 2.0, 'active');"
+
+    result=$(_interspect_evaluate_canary 1)
+    status_val=$(echo "$result" | jq -r '.status')
+    [ "$status_val" = "monitoring" ]
+}
+
+@test "evaluate_canary returns monitoring for NULL baseline" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 3, '2026-12-31T00:00:00Z', 'active');"
+
+    result=$(_interspect_evaluate_canary 1)
+    status_val=$(echo "$result" | jq -r '.status')
+    [ "$status_val" = "monitoring" ]
+    reason=$(echo "$result" | jq -r '.reason')
+    [[ "$reason" == *"baseline"* ]]
+}
+
+@test "evaluate_canary returns passed when metrics within threshold" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 5, 5, '2026-12-31T00:00:00Z', 1.0, 0.5, 3.0, 'active');"
+
+    # Insert 5 samples with similar metrics (within 20% threshold)
+    for i in 1 2 3 4 5; do
+        sqlite3 "$DB" "INSERT INTO canary_samples (canary_id, session_id, ts, override_rate, fp_rate, finding_density) VALUES (1, 's${i}', '2026-01-0${i}', 1.1, 0.55, 2.8);"
+    done
+
+    result=$(_interspect_evaluate_canary 1)
+    status_val=$(echo "$result" | jq -r '.status')
+    [ "$status_val" = "passed" ]
+
+    # Verify DB updated
+    db_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE id = 1;")
+    [ "$db_status" = "passed" ]
+}
+
+@test "evaluate_canary returns alert when override rate degrades >20%" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 5, 5, '2026-12-31T00:00:00Z', 1.0, 0.3, 3.0, 'active');"
+
+    # Insert 5 samples with significantly higher override rate (100% increase)
+    for i in 1 2 3 4 5; do
+        sqlite3 "$DB" "INSERT INTO canary_samples (canary_id, session_id, ts, override_rate, fp_rate, finding_density) VALUES (1, 's${i}', '2026-01-0${i}', 2.0, 0.35, 2.8);"
+    done
+
+    result=$(_interspect_evaluate_canary 1)
+    status_val=$(echo "$result" | jq -r '.status')
+    [ "$status_val" = "alert" ]
+
+    # Verify DB updated
+    db_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE id = 1;")
+    [ "$db_status" = "alert" ]
+}
+
+@test "evaluate_canary returns alert when finding density drops >20%" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 5, 5, '2026-12-31T00:00:00Z', 1.0, 0.3, 5.0, 'active');"
+
+    # Insert 5 samples with much lower finding density (3.0 vs 5.0 = 40% drop)
+    for i in 1 2 3 4 5; do
+        sqlite3 "$DB" "INSERT INTO canary_samples (canary_id, session_id, ts, override_rate, fp_rate, finding_density) VALUES (1, 's${i}', '2026-01-0${i}', 1.0, 0.3, 3.0);"
+    done
+
+    result=$(_interspect_evaluate_canary 1)
+    status_val=$(echo "$result" | jq -r '.status')
+    [ "$status_val" = "alert" ]
+}
+
+@test "evaluate_canary ignores differences below noise floor" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 5, 5, '2026-12-31T00:00:00Z', 0.05, 0.03, 0.5, 'active');"
+
+    # Small differences (within noise floor of 0.1 absolute)
+    for i in 1 2 3 4 5; do
+        sqlite3 "$DB" "INSERT INTO canary_samples (canary_id, session_id, ts, override_rate, fp_rate, finding_density) VALUES (1, 's${i}', '2026-01-0${i}', 0.07, 0.04, 0.48);"
+    done
+
+    result=$(_interspect_evaluate_canary 1)
+    status_val=$(echo "$result" | jq -r '.status')
+    [ "$status_val" = "passed" ]
+}
+
+@test "evaluate_canary expired_unused when no samples exist" {
+    DB=$(_interspect_db_path)
+    # Window expired (past date), baseline present, no samples
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 0, '2025-01-01T00:00:00Z', 1.0, 0.5, 3.0, 'active');"
+
+    result=$(_interspect_evaluate_canary 1)
+    status_val=$(echo "$result" | jq -r '.status')
+    [ "$status_val" = "expired_unused" ]
+
+    db_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE id = 1;")
+    [ "$db_status" = "expired_unused" ]
+}
+
+# ─── Check canaries ───────────────────────────────────────────────
+
+@test "check_canaries returns empty array when no canaries ready" {
+    result=$(_interspect_check_canaries)
+    [ "$result" = "[]" ]
+}
+
+@test "check_canaries evaluates canary with completed window" {
+    DB=$(_interspect_db_path)
+    # Canary with full uses window
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 3, 3, '2026-12-31T00:00:00Z', 1.0, 0.5, 3.0, 'active');"
+
+    for i in 1 2 3; do
+        sqlite3 "$DB" "INSERT INTO canary_samples (canary_id, session_id, ts, override_rate, fp_rate, finding_density) VALUES (1, 's${i}', '2026-01-0${i}', 1.0, 0.5, 3.0);"
+    done
+
+    result=$(_interspect_check_canaries)
+    count=$(echo "$result" | jq 'length')
+    [ "$count" -eq 1 ]
+
+    verdict=$(echo "$result" | jq -r '.[0].status')
+    [ "$verdict" = "passed" ]
+}
+
+# ─── Canary summary ───────────────────────────────────────────────
+
+@test "get_canary_summary returns empty for no canaries" {
+    result=$(_interspect_get_canary_summary)
+    # sqlite3 -json returns empty string for zero rows; fallback returns "[]"
+    [[ -z "$result" ]] || [ "$result" = "[]" ]
+}
+
+@test "get_canary_summary returns canary details" {
+    DB=$(_interspect_db_path)
+    sqlite3 "$DB" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, uses_so_far, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, status) VALUES ('test', 'abc', 'fd-test', '2026-01-01', 20, 5, '2026-02-01', 1.0, 0.5, 3.0, 'active');"
+
+    result=$(_interspect_get_canary_summary)
+    count=$(echo "$result" | jq 'length')
+    [ "$count" -eq 1 ]
+
+    agent=$(echo "$result" | jq -r '.[0].agent')
+    [ "$agent" = "fd-test" ]
+
+    status_val=$(echo "$result" | jq -r '.[0].status')
+    [ "$status_val" = "active" ]
+}
+
+# ─── Confidence loading with canary fields ─────────────────────────
+
+@test "load_confidence sets canary defaults" {
+    # Reset to reload
+    unset _INTERSPECT_CONFIDENCE_LOADED
+    _interspect_load_confidence
+
+    [ "$_INTERSPECT_CANARY_WINDOW_USES" -eq 20 ]
+    [ "$_INTERSPECT_CANARY_WINDOW_DAYS" -eq 14 ]
+    [ "$_INTERSPECT_CANARY_MIN_BASELINE" -eq 15 ]
+    [ "$_INTERSPECT_CANARY_ALERT_PCT" -eq 20 ]
+}
+
+@test "load_confidence bounds-checks canary values" {
+    DB=$(_interspect_db_path)
+    local root
+    root=$(git rev-parse --show-toplevel)
+
+    # Write extreme values
+    echo '{"canary_window_uses":99999,"canary_window_days":9999,"canary_min_baseline":-1,"canary_alert_pct":200}' > "$root/.clavain/interspect/confidence.json"
+
+    unset _INTERSPECT_CONFIDENCE_LOADED
+    _interspect_load_confidence
+
+    # Should be clamped to bounds
+    [ "$_INTERSPECT_CANARY_WINDOW_USES" -le 1000 ]
+    [ "$_INTERSPECT_CANARY_WINDOW_DAYS" -le 365 ]
+    [ "$_INTERSPECT_CANARY_MIN_BASELINE" -ge 1 ]
+    [ "$_INTERSPECT_CANARY_ALERT_PCT" -le 100 ]
 }

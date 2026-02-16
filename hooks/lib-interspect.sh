@@ -55,6 +55,17 @@ CREATE TABLE IF NOT EXISTS blacklist (
     reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_blacklist_key ON blacklist(pattern_key);
+CREATE TABLE IF NOT EXISTS canary_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    canary_id INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    override_rate REAL,
+    fp_rate REAL,
+    finding_density REAL,
+    UNIQUE(canary_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_canary_samples_canary ON canary_samples(canary_id);
 MIGRATE
         return 0
     fi
@@ -137,6 +148,18 @@ CREATE TABLE IF NOT EXISTS blacklist (
     reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_blacklist_key ON blacklist(pattern_key);
+
+CREATE TABLE IF NOT EXISTS canary_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    canary_id INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    override_rate REAL,
+    fp_rate REAL,
+    finding_density REAL,
+    UNIQUE(canary_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_canary_samples_canary ON canary_samples(canary_id);
 SQL
 }
 
@@ -291,11 +314,43 @@ _interspect_load_confidence() {
     _INTERSPECT_MIN_EVENTS=5
     _INTERSPECT_MIN_AGENT_WRONG_PCT=80
 
+    # Canary monitoring defaults
+    _INTERSPECT_CANARY_WINDOW_USES=20
+    _INTERSPECT_CANARY_WINDOW_DAYS=14
+    _INTERSPECT_CANARY_MIN_BASELINE=15
+    _INTERSPECT_CANARY_ALERT_PCT=20
+    _INTERSPECT_CANARY_NOISE_FLOOR="0.1"
+
     if [[ -f "$conf" ]]; then
         _INTERSPECT_MIN_SESSIONS=$(jq -r '.min_sessions // 3' "$conf")
         _INTERSPECT_MIN_DIVERSITY=$(jq -r '.min_diversity // 2' "$conf")
         _INTERSPECT_MIN_EVENTS=$(jq -r '.min_events // 5' "$conf")
         _INTERSPECT_MIN_AGENT_WRONG_PCT=$(jq -r '.min_agent_wrong_pct // 80' "$conf")
+
+        # Canary monitoring thresholds (§canary PRD F5)
+        _INTERSPECT_CANARY_WINDOW_USES=$(jq -r '.canary_window_uses // 20' "$conf")
+        _INTERSPECT_CANARY_WINDOW_DAYS=$(jq -r '.canary_window_days // 14' "$conf")
+        _INTERSPECT_CANARY_MIN_BASELINE=$(jq -r '.canary_min_baseline // 15' "$conf")
+        _INTERSPECT_CANARY_ALERT_PCT=$(jq -r '.canary_alert_pct // 20' "$conf")
+        _INTERSPECT_CANARY_NOISE_FLOOR=$(jq -r '.canary_noise_floor // 0.1' "$conf")
+    fi
+
+    # Bounds-check canary config (review P0-3: prevent unbounded SQL LIMIT values)
+    _interspect_clamp_int() {
+        local val="$1" lo="$2" hi="$3" default="$4"
+        # Non-numeric → default
+        [[ "$val" =~ ^[0-9]+$ ]] || { printf '%s' "$default"; return; }
+        (( val < lo )) && val=$lo
+        (( val > hi )) && val=$hi
+        printf '%s' "$val"
+    }
+    _INTERSPECT_CANARY_WINDOW_USES=$(_interspect_clamp_int "${_INTERSPECT_CANARY_WINDOW_USES:-20}" 1 1000 20)
+    _INTERSPECT_CANARY_WINDOW_DAYS=$(_interspect_clamp_int "${_INTERSPECT_CANARY_WINDOW_DAYS:-14}" 1 365 14)
+    _INTERSPECT_CANARY_MIN_BASELINE=$(_interspect_clamp_int "${_INTERSPECT_CANARY_MIN_BASELINE:-15}" 1 1000 15)
+    _INTERSPECT_CANARY_ALERT_PCT=$(_interspect_clamp_int "${_INTERSPECT_CANARY_ALERT_PCT:-20}" 1 100 20)
+    # Noise floor is a float — validate with awk
+    if ! awk "BEGIN{v=${_INTERSPECT_CANARY_NOISE_FLOOR:-0.1}+0; exit (v>0 && v<10)?0:1}" 2>/dev/null; then
+        _INTERSPECT_CANARY_NOISE_FLOOR="0.1"
     fi
 }
 
@@ -679,17 +734,44 @@ _interspect_apply_override_locked() {
         sqlite3 "$db" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
             VALUES ('${escaped_agent}', '${ts}', 'persistent', 'routing', '${filepath}', '${commit_sha}', 1.0, '${escaped_reason}', 'applied');"
 
-        # Canary record
+        # Canary record — compute baseline BEFORE insert
+        _interspect_load_confidence
+        local baseline_json
+        baseline_json=$(_interspect_compute_canary_baseline "$ts" "" 2>/dev/null || echo "null")
+
+        local b_override_rate b_fp_rate b_finding_density b_window
+        if [[ "$baseline_json" != "null" ]]; then
+            b_override_rate=$(echo "$baseline_json" | jq -r '.override_rate')
+            b_fp_rate=$(echo "$baseline_json" | jq -r '.fp_rate')
+            b_finding_density=$(echo "$baseline_json" | jq -r '.finding_density')
+            b_window=$(echo "$baseline_json" | jq -r '.window')
+        else
+            b_override_rate="NULL"
+            b_fp_rate="NULL"
+            b_finding_density="NULL"
+            b_window="NULL"
+        fi
+
         local expires_at
-        expires_at=$(date -u -d "+14 days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-            || date -u -v+14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+        expires_at=$(date -u -d "+${_INTERSPECT_CANARY_WINDOW_DAYS:-14} days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+            || date -u -v+"${_INTERSPECT_CANARY_WINDOW_DAYS:-14}"d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
         if [[ -z "$expires_at" ]]; then
             echo "ERROR: date command does not support relative dates" >&2
             return 1
         fi
 
-        if ! sqlite3 "$db" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, window_expires_at, status)
-            VALUES ('${filepath}', '${commit_sha}', '${escaped_agent}', '${ts}', 20, '${expires_at}', 'active');"; then
+        # Build INSERT with conditional NULLs for baseline
+        local baseline_values
+        if [[ "$b_override_rate" == "NULL" ]]; then
+            baseline_values="NULL, NULL, NULL, NULL"
+        else
+            local escaped_bwindow
+            escaped_bwindow=$(_interspect_sql_escape "$b_window")
+            baseline_values="${b_override_rate}, ${b_fp_rate}, ${b_finding_density}, '${escaped_bwindow}'"
+        fi
+
+        if ! sqlite3 "$db" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, baseline_window, status)
+            VALUES ('${filepath}', '${commit_sha}', '${escaped_agent}', '${ts}', ${_INTERSPECT_CANARY_WINDOW_USES:-20}, '${expires_at}', ${baseline_values}, 'active');"; then
             # Canary failure is non-fatal but flagged in DB
             sqlite3 "$db" "UPDATE modifications SET status = 'applied-unmonitored' WHERE commit_sha = '${commit_sha}';" 2>/dev/null || true
             echo "WARN: Canary monitoring failed — override active but unmonitored." >&2
@@ -700,6 +782,353 @@ _interspect_apply_override_locked() {
 
     # 8. Output commit SHA (last line, captured by caller)
     echo "$commit_sha"
+}
+
+# ─── Canary Monitoring ──────────────────────────────────────────────────────
+
+# Compute canary baseline metrics from historical evidence.
+# Uses the last N sessions (configurable) before a given timestamp.
+# Args: $1=before_ts (ISO 8601), $2=project (optional, filters by project)
+# Output: JSON object with baseline metrics or "null" if insufficient data
+_interspect_compute_canary_baseline() {
+    _interspect_load_confidence
+    local before_ts="$1"
+    local project="${2:-}"
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+    local min_baseline="${_INTERSPECT_CANARY_MIN_BASELINE:-15}"
+    local window_size="${_INTERSPECT_CANARY_WINDOW_USES:-20}"
+
+    # SQL-escape before_ts (review P0-1: prevent SQL injection)
+    local escaped_ts
+    escaped_ts=$(_interspect_sql_escape "$before_ts")
+
+    # Build optional project filter
+    local project_filter=""
+    if [[ -n "$project" ]]; then
+        local escaped_project
+        escaped_project=$(_interspect_sql_escape "$project")
+        project_filter="AND project = '${escaped_project}'"
+    fi
+
+    # Count available sessions
+    local session_count
+    session_count=$(sqlite3 "$db" "SELECT COUNT(*) FROM sessions WHERE start_ts < '${escaped_ts}' ${project_filter};")
+
+    if (( session_count < min_baseline )); then
+        echo "null"
+        return 0
+    fi
+
+    # Session IDs in the window (reused subquery)
+    local session_ids_sql="SELECT session_id FROM sessions WHERE start_ts < '${escaped_ts}' ${project_filter} ORDER BY start_ts DESC LIMIT ${window_size}"
+
+    # Window boundaries
+    local window_start window_end
+    window_end="$before_ts"
+    window_start=$(sqlite3 "$db" "SELECT start_ts FROM sessions WHERE start_ts < '${escaped_ts}' ${project_filter} ORDER BY start_ts DESC LIMIT 1 OFFSET $((window_size - 1));" 2>/dev/null)
+    [[ -z "$window_start" ]] && window_start=$(sqlite3 "$db" "SELECT MIN(start_ts) FROM sessions WHERE start_ts < '${escaped_ts}' ${project_filter};")
+    # Guard: if window_start is still empty (shouldn't happen given session_count >= min_baseline), bail
+    [[ -z "$window_start" ]] && { echo "null"; return 0; }
+
+    # Count sessions actually in window
+    local total_sessions_in_window
+    total_sessions_in_window=$(sqlite3 "$db" "SELECT COUNT(*) FROM (${session_ids_sql});")
+    if (( total_sessions_in_window == 0 )); then
+        echo "null"
+        return 0
+    fi
+
+    # Override rate: overrides per session
+    local total_overrides override_rate
+    total_overrides=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE event = 'override' AND session_id IN (${session_ids_sql});")
+    override_rate=$(awk "BEGIN {printf \"%.4f\", ${total_overrides} / ${total_sessions_in_window}}")
+
+    # FP rate: agent_wrong / total overrides
+    local agent_wrong_count fp_rate
+    agent_wrong_count=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE event = 'override' AND override_reason = 'agent_wrong' AND session_id IN (${session_ids_sql});")
+    if (( total_overrides == 0 )); then
+        fp_rate="0.0000"
+    else
+        fp_rate=$(awk "BEGIN {printf \"%.4f\", ${agent_wrong_count} / ${total_overrides}}")
+    fi
+
+    # Finding density: total evidence events per session
+    local total_evidence finding_density
+    total_evidence=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE session_id IN (${session_ids_sql});")
+    finding_density=$(awk "BEGIN {printf \"%.4f\", ${total_evidence} / ${total_sessions_in_window}}")
+
+    # Output as JSON
+    jq -n \
+        --argjson override_rate "$override_rate" \
+        --argjson fp_rate "$fp_rate" \
+        --argjson finding_density "$finding_density" \
+        --arg window "${window_start}..${window_end}" \
+        --argjson session_count "$total_sessions_in_window" \
+        '{override_rate:$override_rate,fp_rate:$fp_rate,finding_density:$finding_density,window:$window,session_count:$session_count}'
+}
+
+# Record a canary sample for the current session.
+# Computes per-session metrics and stores them in canary_samples.
+# Args: $1=session_id
+# Returns: 0 on success (or no work to do), 1 on error
+_interspect_record_canary_sample() {
+    local session_id="$1"
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+    local escaped_sid
+    escaped_sid=$(_interspect_sql_escape "$session_id")
+
+    # Skip sessions with no evidence events (not a flux-drive "use")
+    local event_count
+    event_count=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE session_id = '${escaped_sid}';")
+    if (( event_count == 0 )); then
+        return 0
+    fi
+
+    # Get active canaries
+    local canary_ids
+    canary_ids=$(sqlite3 "$db" "SELECT id FROM canary WHERE status = 'active';")
+    [[ -z "$canary_ids" ]] && return 0
+
+    # Compute per-session metrics
+    local override_count agent_wrong_count override_rate fp_rate finding_density
+    override_count=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE session_id = '${escaped_sid}' AND event = 'override';")
+    agent_wrong_count=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE session_id = '${escaped_sid}' AND event = 'override' AND override_reason = 'agent_wrong';")
+
+    # Override rate: raw count for this session
+    override_rate=$(awk "BEGIN {printf \"%.4f\", ${override_count} + 0}")
+
+    # FP rate: agent_wrong / total overrides (for this session)
+    if (( override_count == 0 )); then
+        fp_rate="0.0000"
+    else
+        fp_rate=$(awk "BEGIN {printf \"%.4f\", ${agent_wrong_count} / ${override_count}}")
+    fi
+
+    # Finding density: total events in this session
+    finding_density=$(awk "BEGIN {printf \"%.4f\", ${event_count} + 0}")
+
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # Insert sample for each active canary + increment uses_so_far
+    local canary_id
+    while IFS= read -r canary_id; do
+        [[ -z "$canary_id" ]] && continue
+
+        # Dedup: INSERT OR IGNORE + conditional increment in single transaction (review P1: TOCTOU fix)
+        # changes() must be checked in same sqlite3 invocation as the INSERT
+        sqlite3 "$db" "
+            INSERT OR IGNORE INTO canary_samples (canary_id, session_id, ts, override_rate, fp_rate, finding_density)
+                VALUES (${canary_id}, '${escaped_sid}', '${ts}', ${override_rate}, ${fp_rate}, ${finding_density});
+            UPDATE canary SET uses_so_far = uses_so_far + 1 WHERE id = ${canary_id} AND changes() > 0;
+        " 2>/dev/null || true
+    done <<< "$canary_ids"
+
+    return 0
+}
+
+# Evaluate a single canary — compare samples against baseline.
+# Args: $1=canary_id
+# Output: JSON object with verdict
+_interspect_evaluate_canary() {
+    _interspect_load_confidence
+    local canary_id="$1"
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+    local alert_pct="${_INTERSPECT_CANARY_ALERT_PCT:-20}"
+    local noise_floor="${_INTERSPECT_CANARY_NOISE_FLOOR:-0.1}"
+
+    # Get canary record
+    local canary_row
+    canary_row=$(sqlite3 -separator '|' "$db" "SELECT group_id, baseline_override_rate, baseline_fp_rate, baseline_finding_density, uses_so_far, window_uses, status FROM canary WHERE id = ${canary_id};")
+    [[ -z "$canary_row" ]] && { echo '{"error":"canary_not_found"}'; return 1; }
+
+    local agent b_or b_fp b_fd uses_so_far window_uses current_status
+    IFS='|' read -r agent b_or b_fp b_fd uses_so_far window_uses current_status <<< "$canary_row"
+
+    # Already resolved
+    if [[ "$current_status" != "active" ]]; then
+        jq -n --argjson id "$canary_id" --arg agent "$agent" --arg status "$current_status" --arg reason "Already resolved" \
+            '{canary_id:$id,agent:$agent,status:$status,reason:$reason}'
+        return 0
+    fi
+
+    # Insufficient baseline (NULL columns come through as empty strings from sqlite3)
+    if [[ -z "$b_or" ]]; then
+        jq -n --argjson id "$canary_id" --arg agent "$agent" --argjson uses "$uses_so_far" --argjson window "$window_uses" \
+            '{canary_id:$id,agent:$agent,status:"monitoring",reason:"Insufficient baseline — collecting data",uses_so_far:$uses,window_uses:$window}'
+        return 0
+    fi
+
+    # Not enough samples yet — check time-based expiry
+    if (( uses_so_far < window_uses )); then
+        local expires_at now
+        expires_at=$(sqlite3 "$db" "SELECT window_expires_at FROM canary WHERE id = ${canary_id};")
+        now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        if [[ "$now" < "$expires_at" ]]; then
+            jq -n --argjson id "$canary_id" --arg agent "$agent" --argjson uses "$uses_so_far" --argjson window "$window_uses" \
+                --arg reason "${uses_so_far}/${window_uses} uses" \
+                '{canary_id:$id,agent:$agent,status:"monitoring",reason:$reason,uses_so_far:$uses,window_uses:$window}'
+            return 0
+        fi
+        # Time expired — evaluate with what we have
+    fi
+
+    # No samples collected (expired unused)
+    local sample_count
+    sample_count=$(sqlite3 "$db" "SELECT COUNT(*) FROM canary_samples WHERE canary_id = ${canary_id};")
+    if (( sample_count == 0 )); then
+        sqlite3 "$db" "UPDATE canary SET status = 'expired_unused', verdict_reason = 'No sessions during monitoring window' WHERE id = ${canary_id};"
+        jq -n --argjson id "$canary_id" --arg agent "$agent" \
+            '{canary_id:$id,agent:$agent,status:"expired_unused",reason:"No sessions during monitoring window"}'
+        return 0
+    fi
+
+    # Compute averages from samples
+    local avg_or avg_fp avg_fd
+    avg_or=$(sqlite3 "$db" "SELECT printf('%.4f', AVG(override_rate)) FROM canary_samples WHERE canary_id = ${canary_id};")
+    avg_fp=$(sqlite3 "$db" "SELECT printf('%.4f', AVG(fp_rate)) FROM canary_samples WHERE canary_id = ${canary_id};")
+    avg_fd=$(sqlite3 "$db" "SELECT printf('%.4f', AVG(finding_density)) FROM canary_samples WHERE canary_id = ${canary_id};")
+
+    # Compare each metric against baseline
+    local verdict="passed"
+    local reasons=""
+
+    # Helper: check if metric degraded beyond threshold
+    # For override_rate and fp_rate: INCREASE = degradation
+    # For finding_density: DECREASE = degradation
+    _canary_check_metric() {
+        local metric_name="$1" baseline="$2" current="$3" direction="$4"
+        local abs_diff threshold
+
+        abs_diff=$(awk "BEGIN {d = ${current} - ${baseline}; if (d < 0) d = -d; printf \"%.4f\", d}")
+
+        # Below noise floor — ignore
+        if awk "BEGIN {exit (${abs_diff} < ${noise_floor}) ? 0 : 1}" 2>/dev/null; then
+            return 0  # no degradation
+        fi
+
+        # Compute threshold
+        threshold=$(awk "BEGIN {printf \"%.4f\", ${baseline} * ${alert_pct} / 100}")
+
+        if [[ "$direction" == "increase" ]]; then
+            # Alert if current > baseline + threshold
+            if awk "BEGIN {exit (${current} > ${baseline} + ${threshold}) ? 0 : 1}" 2>/dev/null; then
+                local pct_change
+                pct_change=$(awk "BEGIN {if (${baseline} > 0) printf \"%.0f\", (${current} - ${baseline}) / ${baseline} * 100; else print \"inf\"}")
+                reasons="${reasons}${metric_name}: ${baseline} -> ${current} (+${pct_change}%); "
+                return 1  # degradation detected
+            fi
+        else
+            # Alert if current < baseline - threshold
+            if awk "BEGIN {exit (${current} < ${baseline} - ${threshold}) ? 0 : 1}" 2>/dev/null; then
+                local pct_change
+                pct_change=$(awk "BEGIN {if (${baseline} > 0) printf \"%.0f\", (${current} - ${baseline}) / ${baseline} * 100; else print \"-inf\"}")
+                reasons="${reasons}${metric_name}: ${baseline} -> ${current} (${pct_change}%); "
+                return 1  # degradation detected
+            fi
+        fi
+
+        return 0  # no degradation
+    }
+
+    if ! _canary_check_metric "override_rate" "$b_or" "$avg_or" "increase"; then
+        verdict="alert"
+    fi
+    if ! _canary_check_metric "fp_rate" "$b_fp" "$avg_fp" "increase"; then
+        verdict="alert"
+    fi
+    if ! _canary_check_metric "finding_density" "$b_fd" "$avg_fd" "decrease"; then
+        verdict="alert"
+    fi
+
+    # Store verdict
+    local verdict_reason
+    if [[ "$verdict" == "passed" ]]; then
+        verdict_reason="All metrics within threshold (${alert_pct}% tolerance, ${noise_floor} floor)"
+    else
+        verdict_reason="${reasons}"
+    fi
+
+    local escaped_verdict_reason
+    escaped_verdict_reason=$(_interspect_sql_escape "$verdict_reason")
+    sqlite3 "$db" "UPDATE canary SET status = '${verdict}', verdict_reason = '${escaped_verdict_reason}' WHERE id = ${canary_id};"
+
+    # Check for multiple active canaries (confounding note)
+    local active_count
+    active_count=$(sqlite3 "$db" "SELECT COUNT(*) FROM canary WHERE status = 'active' AND id != ${canary_id};")
+    if (( active_count > 0 )); then
+        verdict_reason="${verdict_reason} Note: ${active_count} other override(s) active during monitoring — individual impact unclear."
+    fi
+
+    jq -n \
+        --argjson canary_id "$canary_id" \
+        --arg agent "$agent" \
+        --arg status "$verdict" \
+        --arg reason "$verdict_reason" \
+        --argjson baseline_or "$b_or" \
+        --argjson baseline_fp "$b_fp" \
+        --argjson baseline_fd "$b_fd" \
+        --argjson current_or "$avg_or" \
+        --argjson current_fp "$avg_fp" \
+        --argjson current_fd "$avg_fd" \
+        --argjson sample_count "$sample_count" \
+        '{canary_id:$canary_id,agent:$agent,status:$status,reason:$reason,metrics:{baseline:{override_rate:$baseline_or,fp_rate:$baseline_fp,finding_density:$baseline_fd},current:{override_rate:$current_or,fp_rate:$current_fp,finding_density:$current_fd}},sample_count:$sample_count}'
+}
+
+# Check all active canaries and evaluate those whose window has completed.
+# Returns: JSON array of verdicts
+_interspect_check_canaries() {
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+    local now
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # Find canaries ready for evaluation
+    local ready_ids
+    ready_ids=$(sqlite3 "$db" "SELECT id FROM canary WHERE status = 'active' AND (uses_so_far >= window_uses OR window_expires_at <= '${now}');")
+
+    if [[ -z "$ready_ids" ]]; then
+        echo "[]"
+        return 0
+    fi
+
+    local results="["
+    local first=1
+    local canary_id
+    while IFS= read -r canary_id; do
+        [[ -z "$canary_id" ]] && continue
+        local result
+        result=$(_interspect_evaluate_canary "$canary_id")
+        if (( first )); then
+            first=0
+        else
+            results+=","
+        fi
+        results+="$result"
+    done <<< "$ready_ids"
+    results+="]"
+
+    echo "$results"
+}
+
+# Get a summary of all canaries (for status display).
+# Returns: JSON array of canary status objects
+_interspect_get_canary_summary() {
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    local result
+    result=$(sqlite3 -json "$db" "
+        SELECT c.id, c.group_id as agent, c.status, c.uses_so_far, c.window_uses,
+               c.baseline_override_rate, c.baseline_fp_rate, c.baseline_finding_density,
+               c.applied_at, c.window_expires_at, c.verdict_reason,
+               (SELECT COUNT(*) FROM canary_samples cs WHERE cs.canary_id = c.id) as sample_count,
+               (SELECT printf('%.4f', AVG(cs.override_rate)) FROM canary_samples cs WHERE cs.canary_id = c.id) as avg_override_rate,
+               (SELECT printf('%.4f', AVG(cs.fp_rate)) FROM canary_samples cs WHERE cs.canary_id = c.id) as avg_fp_rate,
+               (SELECT printf('%.4f', AVG(cs.finding_density)) FROM canary_samples cs WHERE cs.canary_id = c.id) as avg_finding_density
+        FROM canary c ORDER BY c.applied_at DESC;
+    " 2>/dev/null) || true
+    # sqlite3 -json returns empty string for zero rows
+    [[ -z "$result" ]] && result="[]"
+    echo "$result"
 }
 
 # ─── Git Operation Serialization ────────────────────────────────────────────

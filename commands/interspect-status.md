@@ -42,10 +42,20 @@ DISPATCH_COUNT=$(sqlite3 "$DB" "SELECT COUNT(*) FROM evidence WHERE event = 'age
 # Top agents by evidence count
 TOP_AGENTS=$(sqlite3 -separator ' | ' "$DB" "SELECT source, COUNT(*) as cnt, COUNT(DISTINCT session_id) as sessions FROM evidence GROUP BY source ORDER BY cnt DESC LIMIT 10;")
 
-# Active canaries (Phase 1: always 0)
+# Active canaries
 ACTIVE_CANARIES=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary WHERE status = 'active';")
+ALERT_CANARIES=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary WHERE status = 'alert';")
 
-# Active modifications (Phase 1: always 0)
+# Get canary summary using shared function
+CANARY_SUMMARY=$(_interspect_get_canary_summary 2>/dev/null || echo "[]")
+CANARY_COUNT=$(echo "$CANARY_SUMMARY" | jq 'length' 2>/dev/null || echo "0")
+
+# Evaluate completed canaries on-demand
+_interspect_check_canaries >/dev/null 2>&1 || true
+# Re-query after evaluation
+CANARY_SUMMARY=$(_interspect_get_canary_summary 2>/dev/null || echo "[]")
+
+# Active modifications
 ACTIVE_MODS=$(sqlite3 "$DB" "SELECT COUNT(*) FROM modifications WHERE status = 'applied';")
 ```
 
@@ -53,8 +63,6 @@ Present as:
 
 ```
 ## Interspect Status
-
-**Phase 1: Evidence + Reporting** (no modifications applied)
 
 ### Sessions
 - Total: {total_sessions}
@@ -71,7 +79,36 @@ Present as:
 |-------|--------|----------|
 {top_agents rows}
 
-### Canaries: {active_canaries} active
+### Canaries: {canary_count} total ({active_canaries} active, {alert_canaries} alerting)
+
+{for each canary in CANARY_SUMMARY (parse with jq):
+  **{agent}** [{status}]
+  - Applied: {applied_at}
+  - Window: {uses_so_far}/{window_uses} uses
+  - Expires: {window_expires_at}
+  - Baseline: OR={baseline_override_rate}, FP={baseline_fp_rate}, FD={baseline_finding_density}
+    {if baseline values are null: "(insufficient historical data — collecting)"}
+  - Current:  OR={avg_override_rate}, FP={avg_fp_rate}, FD={avg_finding_density}
+    {if sample_count == 0: "(no samples yet)"}
+  - Samples: {sample_count}
+  - Verdict: {verdict_reason}
+  - {if status == "active" and uses_so_far > 0:
+      Progress: [generate progress bar using uses_so_far/window_uses]}
+  - Next action: {
+      status == "active": "Monitoring in progress"
+      status == "passed": "Override confirmed safe. No action needed."
+      status == "alert": "Review quality may have degraded. Consider /interspect:revert {agent}."
+      status == "expired_unused": "Window expired without usage. Override remains."
+      status == "reverted": "Override was reverted. Canary closed."
+    }
+}
+
+{if alert_canaries > 0:
+  "**Action required:** {alert_canaries} canary alert(s) detected. Review overrides above and consider reverting."}
+
+{if canary_count == 0:
+  "No canaries. Canaries are created automatically when routing overrides are applied."}
+
 ### Modifications: {active_mods} applied
 ```
 

@@ -40,4 +40,17 @@ sqlite3 "$_INTERSPECT_DB" \
     "INSERT OR IGNORE INTO sessions (session_id, start_ts, project) VALUES ('${E_SID}', '${TS}', '${E_PROJECT}');" \
     2>/dev/null || true
 
+# Check for canary alerts — evaluate completed canaries first
+_interspect_check_canaries >/dev/null 2>&1 || true
+
+# If any canaries are in alert state, inject warning into session context
+ALERT_COUNT=$(sqlite3 "$_INTERSPECT_DB" "SELECT COUNT(*) FROM canary WHERE status = 'alert';" 2>/dev/null || echo "0")
+
+if (( ALERT_COUNT > 0 )); then
+    ALERT_AGENTS=$(sqlite3 -separator ', ' "$_INTERSPECT_DB" "SELECT group_id FROM canary WHERE status = 'alert';" 2>/dev/null || echo "")
+    ALERT_MSG="WARNING: Canary alert: routing override(s) for ${ALERT_AGENTS} may have degraded review quality. Run /interspect:status for details or /interspect:revert <agent> to undo."
+    # Output as additionalContext JSON for session-start injection (safe via jq — prevents JSON injection from agent names)
+    jq -n --arg ctx "$ALERT_MSG" '{"additionalContext":$ctx}'
+fi
+
 exit 0

@@ -3,5 +3,10 @@
   "min_diversity": 2,
   "min_events": 5,
   "min_agent_wrong_pct": 80,
-  "_comment": "Counting-rule thresholds per design §3.3. min_agent_wrong_pct gates routing override proposals."
+  "canary_window_uses": 20,
+  "canary_window_days": 14,
+  "canary_min_baseline": 15,
+  "canary_alert_pct": 20,
+  "canary_noise_floor": 0.1,
+  "_comment": "Counting-rule thresholds per design §3.3. min_agent_wrong_pct gates routing override proposals. Canary thresholds per §canary PRD F5."
 }
