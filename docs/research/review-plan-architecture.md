@@ -1,418 +1,633 @@
-# Architecture Review: Auto-Drift-Check Implementation Plan
+# Flux-Drive Architecture Review: Token-Efficient Skill Loading Plan
 
-**Reviewer:** Flux-drive Architecture & Design Reviewer
-**Date:** 2026-02-14
-**Plan:** docs/plans/2026-02-14-auto-drift-check.md
-**Bead:** Clavain-iwuy
+**Reviewer:** Claude Opus 4.6 (Flux-Drive Architecture)
+**Date:** 2026-02-15
+**Target:** [`docs/plans/2026-02-15-token-efficient-skill-loading.md`](../../../docs/plans/2026-02-15-token-efficient-skill-loading.md)
+**PRD:** [`docs/prds/2026-02-15-token-efficient-skill-loading.md`](../../../docs/prds/2026-02-15-token-efficient-skill-loading.md)
+
+---
 
 ## Summary
 
-The plan extracts signal detection from auto-compound.sh into a shared library (lib-signals.sh), refactors two existing Stop hooks to use per-hook sentinels, and introduces a new auto-drift-check.sh Stop hook. Overall architecture is sound with good separation of concerns. Three areas require attention: sentinel coupling across hooks, redundant validation logic, and potential race conditions in the Stop hook cascade.
+This plan introduces a dual-strategy token optimization: **compact skill files** (tiered loading) + **pre-computation scripts** (move deterministic work out of LLM context). The design distributes new artifacts across 3 plugin repos while centralizing generation tooling in the monorepo's `scripts/` directory.
 
-## Findings
+**Architectural Verdict:** **APPROVED with P0 fix required**
 
-### 1. Boundaries & Coupling
+The module boundary design is sound but has one critical coupling issue: `gen-compact.sh` hard-codes the CLI invocation method (`claude -p`), creating cross-layer dependency on a specific runtime environment.
 
-#### 1.1 Shared Library Extraction - APPROVED
+**Core strengths:**
+- Boundary placement is correct: compact files live alongside SKILL.md (discoverability, atomicity)
+- Convention-based loader is appropriate for this context (agents are cooperative, not adversarial)
+- Cross-plugin consistency is enforced through shared tooling (good DRY)
+- Freshness tracking via `.compact-manifest` prevents drift
 
-**Finding:** The extraction of signal detection into lib-signals.sh is a clean module boundary. The library:
-- Exposes a single public function (`detect_signals()`)
-- Uses output variables (`CLAVAIN_SIGNALS`, `CLAVAIN_SIGNAL_WEIGHT`) as a clear contract
-- Contains no side effects beyond variable assignment
-- Has guard against double-sourcing (`_LIB_SIGNALS_LOADED`)
+**Critical fixes:**
+- P0: Abstract LLM invocation from `gen-compact.sh` to support multiple execution contexts (clavain, MCP, CI/CD, standalone)
+
+**Optional improvements:**
+- Consider extracting `gen-compact.sh` prompt template to a separate file
+- Add semantic versioning to compact file format for future migrations
+- Clarify ownership of `scripts/gen-compact.sh` — is this Interverse-wide or interflux-specific?
+
+---
+
+## 1. Boundaries & Coupling
+
+### 1.1 Module Boundary Design (APPROVED)
+
+**Decision:** Compact files (`SKILL-compact.md`) live **alongside** their source (`SKILL.md`) in each plugin's skill directory.
+
+**Analysis:**
+
+This is the right boundary for these reasons:
+
+1. **Discoverability** — No special paths or configuration. If `SKILL.md` exists, `SKILL-compact.md` is either next to it or doesn't exist. Zero magic.
+
+2. **Atomic commits** — Editing a skill and regenerating its compact version are logically coupled (same PR, same commit). Co-location makes this natural. Alternative designs (centralizing all compact files) would split logically atomic changes across repos.
+
+3. **Plugin independence** — Each plugin owns its own compact representations. No shared state, no cross-plugin dependencies on compact file locations.
+
+4. **Skill structure already heterogeneous** — Some skills are single-file (brainstorming: 53 lines), others are multi-file with phase dirs (flux-drive: 1,985 lines across 9 files). Compact files are just another structural variant in this design space.
+
+**Trade-off acknowledged:** This creates 3 copies of the compact file pattern (interwatch, interpath, interflux), but the duplication is **intentional** — each plugin's compact file evolves independently based on its own complexity profile. The pattern is shared via tooling (`gen-compact.sh`), not via a shared artifact location.
+
+**Comparison to alternatives:**
+
+| Boundary | Pros | Cons | Verdict |
+|----------|------|------|---------|
+| **Alongside SKILL.md (chosen)** | Discoverable, atomic commits, plugin-independent | Pattern duplicated 3x (mitigated by shared tooling) | ✅ Correct |
+| Centralized in Interverse/compact/ | Single source of truth | Breaks plugin independence, non-atomic commits, requires path config | ❌ Violates plugin boundary |
+| One shared compact file for all plugins | Maximum DRY | Destroys modularity, all plugins couple to one file | ❌ Anti-pattern |
+
+### 1.2 Loader Mechanism (APPROVED)
+
+**Decision:** Convention-based loader via HTML comment preamble in `SKILL.md`:
+
+```markdown
+<!-- compact: SKILL-compact.md -->
+```
+
+The agent reads this hint and chooses to load the compact file instead of following multi-file read chains.
+
+**Analysis:**
+
+This is appropriate for this context because:
+
+1. **Agents are cooperative, not adversarial** — Claude Code's skill loader is designed to follow instructions in SKILL.md. This isn't a security boundary; it's a performance optimization for a cooperating system.
+
+2. **Graceful degradation** — If an agent ignores the hint (old Claude Code version, or an agent that doesn't understand the convention), it falls back to reading the full SKILL.md and following the multi-file read chain. No breakage.
+
+3. **Zero tooling changes** — No Claude Code platform modifications needed. This ships today.
+
+4. **Audit trail** — The HTML comment is visible in source control. Reviewers can see when compact mode was added and verify the compact file exists.
+
+**Alternative considered: Enforcement via SKILL.md structure**
+
+The plan could have proposed replacing the full instructions in `SKILL.md` with just a redirect:
+
+```markdown
+# Doc Watch
+
+**Compact mode:** This skill loads `SKILL-compact.md` by default.
+The full modular instructions are in `phases/` for reference.
+```
+
+**Why convention is better than enforcement here:**
+
+- Enforcement would make SKILL.md unreadable as standalone documentation. The current design preserves SKILL.md as the canonical, human-readable source.
+- Convention allows gradual rollout: compact files can be added to one skill at a time without breaking unmodified skills.
+- Convention allows experimentation: if compact mode proves problematic for a specific skill, it can be reverted by deleting the HTML comment — no code changes needed.
+
+**Risk acknowledged:** Agents might ignore the convention. **Mitigation:** Task 7 (freshness tests) includes a test to verify the preamble exists. If an agent consistently ignores compact mode, the team will notice via token usage metrics and can escalate to a SKILL.md structure change.
+
+### 1.3 Cross-Plugin Dependency Graph (SOUND)
+
+The plan introduces new dependencies between components:
+
+```
+gen-compact.sh (shared script)
+├── depends on: claude CLI (implicit)
+├── called by: Task 2, 3, 4 (one-time generation)
+├── called by: (future) CI/CD freshness checks
+└── produces: SKILL-compact.md (per-plugin)
+
+interwatch-scan.sh (interwatch-specific)
+├── depends on: bd CLI, git, jq, sqlite3
+├── called by: doc-watch skill (runtime)
+└── produces: JSON drift report
+
+SKILL-compact.md (per-plugin artifact)
+├── depends on: SKILL.md + phases/*.md + references/*.md (source)
+├── loaded by: skill invocation (runtime)
+└── validated by: test_compact_freshness.bats (CI)
+```
+
+**Dependency direction check:**
+
+✅ `gen-compact.sh` (build-time tool) depends on source files (SKILL.md, phases/*.md) — correct direction (tools depend on data, not vice versa)
+
+✅ `SKILL-compact.md` (derived artifact) depends on source files — correct direction (derived depends on canonical)
+
+✅ Skills (runtime) optionally load compact files — correct direction (runtime adapts to presence/absence of optimization artifact)
+
+❌ **P0 ISSUE:** `gen-compact.sh` hard-codes invocation of `claude -p` CLI — creates coupling to a specific execution context (see Section 1.4)
+
+### 1.4 CLI Coupling (P0 ISSUE)
+
+**Problem:** Task 5 specifies:
+
+> Script that:
+> 3. Calls Claude (via `claude -p`) with a summarization prompt
+
+**Why this is a boundary violation:**
+
+The `claude -p` CLI is a **delivery mechanism**, not a domain concept. Hardcoding it in `gen-compact.sh` couples the build system to:
+
+1. A specific Claude Code installation location
+2. A specific execution context (local dev machine with Claude Code installed)
+3. A specific authentication state (assumes user is logged in)
+
+**Impact:**
+
+This breaks the following use cases:
+
+- **CI/CD pipelines** — Cannot run `gen-compact.sh` in GitHub Actions without installing full Claude Code
+- **MCP-based generation** — Cannot reuse the prompt template in an MCP server that generates compact files on-demand
+- **Clavain agent execution** — Cannot generate compact files from within a Claude Code session (recursive invocation conflicts)
+- **Standalone distribution** — Cannot ship `gen-compact.sh` as a reusable tool for external projects
+
+**Recommended fix:**
+
+Extract LLM invocation to an abstraction layer:
+
+```bash
+# gen-compact.sh now delegates to a pluggable backend
+llm_invoke() {
+  local prompt_file="$1"
+  local backend="${COMPACT_GEN_BACKEND:-claude-cli}"
+
+  case "$backend" in
+    claude-cli)
+      claude -p "$(cat "$prompt_file")"
+      ;;
+    mcp)
+      # Call mcp__plugin_foo_bar__summarize tool via jq + curl to MCP server
+      ;;
+    api)
+      # Call Anthropic API directly via curl + jq
+      ;;
+    *)
+      echo "Unknown backend: $backend" >&2
+      exit 1
+      ;;
+  esac
+}
+```
+
+**Alternative (simpler):** Accept prompt on stdin, emit markdown on stdout. Let the caller choose the LLM:
+
+```bash
+# gen-compact.sh produces a prompt, doesn't invoke the LLM
+gen_prompt() {
+  cat <<EOF
+Summarize this skill into a single compact instruction file (50-200 lines depending on complexity).
+Keep: algorithm steps, decision points, output contracts, tables, code blocks.
+Remove: examples, rationale, verbose descriptions, "why" explanations.
+Add: "For edge cases or full reference, read SKILL.md" at the bottom.
+
+Source files:
+$(cat phases/*.md references/*.md)
+EOF
+}
+
+# Caller chooses LLM
+gen_prompt | claude -p "$(cat)" > SKILL-compact.md
+gen_prompt | curl -X POST api.anthropic.com/v1/messages ... > SKILL-compact.md
+gen_prompt | mcp_call summarize_skill > SKILL-compact.md
+```
+
+**Migration path:**
+
+Phase 1 (ship blocker): Extract prompt template to `prompts/compact-skill.txt`, keep `claude -p` invocation in `gen-compact.sh`
+
+Phase 2 (post-ship): Refactor to backend abstraction once CI/CD use case materializes
+
+### 1.5 Ownership Boundaries (CLARIFY)
+
+**Ambiguity:** The plan places `gen-compact.sh` in `scripts/` but doesn't specify **which** `scripts/` directory:
+
+- `Interverse/scripts/` (monorepo-wide, like `interbump.sh`)
+- `plugins/interflux/scripts/` (interflux-owned, like `detect-domains.py`)
+- `hub/clavain/scripts/` (clavain-owned, like `gen-catalog.py`)
+
+**Recommendation:**
+
+Place in `Interverse/scripts/` for these reasons:
+
+1. **Shared utility** — Used by 3 plugins (interwatch, interpath, interflux), not owned by any single one
+2. **Precedent** — `interbump.sh` lives in `Interverse/scripts/` for the same reason (shared by all plugins)
+3. **Discoverability** — Developers working in any plugin can find it via `../../scripts/`
+
+**Implication:**
+
+Interverse monorepo must be cloned for compact file generation to work. This is already true for version bumping (requires `interbump.sh`), so no new dependency is introduced.
+
+**Document this explicitly** in the plan's Task 5 section:
+
+```diff
+- **Location:** `scripts/gen-compact.sh`
++ **Location:** `Interverse/scripts/gen-compact.sh` (shared utility, used by interwatch, interpath, interflux)
+```
+
+---
+
+## 2. Pattern Analysis
+
+### 2.1 Derived Artifact Pattern (CORRECT)
+
+The plan treats `SKILL-compact.md` as a **derived artifact**, not a source file. This is the right pattern.
 
 **Evidence:**
-- Plan lines 134-214 show the library has no external dependencies beyond bash/grep
-- Both consumers (auto-compound.sh line 260-268, auto-drift-check.sh line 526-537) use identical sourcing and invocation patterns
-- Tests at lines 40-122 validate the contract without coupling to hook logic
 
-**Recommendation:** None. This is textbook library extraction.
+- Task 5: `.compact-manifest` tracks source file hashes (establishes source → derived relationship)
+- Task 7: Tests validate compact file is up-to-date with sources
+- PRD Section 5: "The full SKILL.md remains the canonical source. SKILL-compact.md is a derived artifact."
 
----
+**Pattern compliance:**
 
-#### 1.2 Per-Hook Sentinel Namespace - PARTIALLY PROBLEMATIC
+✅ Single source of truth: SKILL.md + phases/*.md + references/*.md are canonical
 
-**Finding:** The plan correctly identifies that the current shared sentinel (`/tmp/clavain-stop-${SESSION_ID}`) creates cross-hook coupling where the first Stop hook to fire blocks all others in the same cycle. The proposed fix uses per-hook sentinels:
-- auto-compound: `/tmp/clavain-stop-compound-${SESSION_ID}` (line 243)
-- auto-drift-check: `/tmp/clavain-stop-drift-${SESSION_ID}` (line 491)
-- session-handoff: `/tmp/clavain-stop-handoff-${SESSION_ID}` (line 310)
+✅ Derived artifact is regenerated from source: `gen-compact.sh` is deterministic
 
-**Problem:** This fixes the namespace collision but **preserves the original architectural mistake**. Look at the existing hooks:
+✅ Freshness is testable: `.compact-manifest` hash comparison
 
-**auto-compound.sh line 47-52:**
-```bash
-STOP_SENTINEL="/tmp/clavain-stop-${SESSION_ID}"
-if [[ -f "$STOP_SENTINEL" ]]; then
-    exit 0
-fi
-touch "$STOP_SENTINEL"
+✅ Version control: Compact files are committed (not gitignored) so they're always in sync with source
+
+**Anti-pattern avoided:** The plan does NOT propose editing `SKILL-compact.md` directly. All edits go to source files, then regeneration is triggered.
+
+### 2.2 Convention Over Configuration (APPROPRIATE)
+
+The plan uses convention (HTML comment) over configuration (JSON schema, loader plugin, etc.).
+
+**When convention is correct:**
+
+- The system is **cooperative** (agents follow instructions, not adversarial users bypassing rules)
+- The pattern is **simple** (one file → another file)
+- The fallback is **safe** (ignoring the hint just loads the full file)
+
+**All three conditions hold here.** This is appropriate use of convention.
+
+**Comparison to configuration-based alternative:**
+
+A configuration-based approach would add a `skill.json` manifest:
+
+```json
+{
+  "skill": "doc-watch",
+  "loader": {
+    "mode": "compact",
+    "file": "SKILL-compact.md"
+  }
+}
 ```
 
-**session-handoff.sh line 35-40:**
-```bash
-STOP_SENTINEL="/tmp/clavain-stop-${SESSION_ID}"
-if [[ -f "$STOP_SENTINEL" ]]; then
-    exit 0
-fi
-touch "$STOP_SENTINEL"
+**Why convention is better here:**
+
+- **Simplicity:** One HTML comment vs. a new JSON schema + loader logic
+- **Discoverability:** Grep for `<!-- compact:` vs. parsing JSON across all skills
+- **Rollback:** Delete one line vs. editing JSON + validating schema
+
+### 2.3 Pre-Computation Pattern (SOUND)
+
+Task 1 (interwatch-scan.sh) applies the **pre-computation** pattern correctly:
+
+**Pattern:** Move deterministic computation from LLM context to shell scripts. LLM reads pre-computed JSON and makes decisions.
+
+**Before:**
+
+```
+LLM context:
+1. Read signal definitions (79 lines)
+2. Run bead count: bd list --status=closed | wc -l
+3. Run git log: git rev-list --count
+4. Run version comparison: jq vs grep
+5. Compute drift score
+6. Map to confidence tier
+7. Decide action
 ```
 
-Both hooks check for AND write the same sentinel. This is a **distributed mutual exclusion lock** that prevents cascading Stop hooks. The plan changes the sentinel names but keeps this pattern. The new auto-drift-check.sh (line 491-494) does the same thing.
+**After:**
 
-**Architectural Question:** What is the actual requirement?
+```
+Shell script (interwatch-scan.sh):
+1-6. All signal evaluation, scoring, tier mapping
 
-1. **If the goal is "only one Stop hook fires per cycle"**: Then the shared sentinel is CORRECT and the per-hook refactor breaks the design. The current auto-compound line 47 comment says "if another Stop hook already fired this cycle, don't cascade" — this is explicit mutual exclusion.
-
-2. **If the goal is "each Stop hook decides independently"**: Then per-hook sentinels are correct, but the cross-hook check should be removed entirely. Each hook should only check its own sentinel.
-
-**Current plan is incoherent:** It adds per-hook sentinels (suggesting independent decisions) but keeps the mutual exclusion guard logic (suggesting only one hook should fire). The new auto-drift-check.sh line 491 still checks for a sentinel before firing, which means if auto-compound runs first and sets its sentinel, auto-drift-check will still exit early if it checks the OLD shared sentinel logic.
-
-**Wait — re-reading the plan:** The plan DOES update the sentinel variable names in all three hooks (Task 2 Step 2 line 243, Task 3 line 310, Task 4 Step 3 line 491). So each hook will check its OWN per-hook sentinel, not a shared one. That's correct for independent operation.
-
-**But:** The comment at auto-compound.sh line 46-49 says "if another Stop hook already fired this cycle, don't cascade" and the guard logic is `if [[ -f "$STOP_SENTINEL" ]]; then exit 0; fi`. After the refactor, this check will only prevent **the same hook** from firing twice in one cycle (which the throttle sentinel already prevents). It will NOT prevent cascading across hooks. The comment is now misleading and the guard logic is redundant with the throttle.
-
-**Conclusion:** The plan fixes the namespace collision but leaves behind vestigial guard logic that no longer serves its original purpose. This is accidental complexity.
-
-**Recommendation:**
-- **Clarify the requirement:** Do Stop hooks need mutual exclusion (only one fires per cycle) or independent operation (all can fire)?
-- **If independent:** Remove the "STOP_SENTINEL" guard entirely from all three hooks. The per-hook throttle sentinels (lines 55-62 in auto-compound, 498-505 in auto-drift-check) already prevent double-firing within a session. The STOP_SENTINEL check (lines 47-52 in current, 491-494 in new) is now redundant.
-- **If mutual exclusion is needed:** Keep a shared sentinel, don't rename it. Document WHY mutual exclusion is required (I suspect it's to prevent Claude from seeing 3 separate "block" decisions in one Stop cycle, which could be confusing).
-
-**Best guess:** The original design wanted mutual exclusion to avoid overwhelming Claude with multiple Stop prompts. If that's still the goal, the plan should KEEP the shared sentinel name and ADD per-hook throttle sentinels. If hooks should run independently, DELETE the STOP_SENTINEL logic entirely.
-
----
-
-#### 1.3 Auto-Drift-Check Hook Design - GOOD WITH CAVEATS
-
-**Finding:** The new hook follows the same pattern as auto-compound:
-- Reads hook JSON from stdin
-- Checks guards (stop_hook_active, opt-out file, sentinel, throttle)
-- Analyzes transcript using lib-signals.sh
-- Returns JSON decision
-- Exits 0 always
-
-**Differences from auto-compound:**
-- Lower threshold (2 vs 3) — justified by the comment "doc drift checking is cheap and important" (line 458)
-- Additional guard: interwatch discovery (line 507-513) with graceful degradation
-- Different throttle window (600s vs 300s) — doc drift is less urgent than compounding
-
-**Coupling Risk:** The hook depends on:
-1. lib-signals.sh (via source, line 527) — acceptable, shared library
-2. lib.sh (via source, line 509) — acceptable, already used by other hooks
-3. interwatch plugin (via `_discover_interwatch_plugin()`, line 510) — acceptable, gracefully degrades if missing
-
-**Recommendation:** None. The dependency chain is clean and progressive enhancement is correctly implemented.
-
----
-
-### 2. Pattern Analysis
-
-#### 2.1 Duplicated Guard Logic - CODE SMELL
-
-**Finding:** All three Stop hooks (auto-compound, session-handoff, auto-drift-check) implement identical guard patterns with minor variations:
-
-**Guard sequence (all three hooks):**
-1. Check jq availability
-2. Read stdin JSON
-3. Check `stop_hook_active` flag
-4. Check per-repo opt-out file
-5. Extract session_id
-6. Check STOP_SENTINEL (per-hook after refactor)
-7. Write STOP_SENTINEL
-8. Check throttle sentinel
-9. (hook-specific logic)
-10. Return JSON decision
-11. Clean up stale sentinels
-
-**Evidence:**
-- auto-compound.sh lines 25-62
-- session-handoff.sh lines 19-46
-- auto-drift-check.sh (plan) lines 467-524
-
-**Pattern Violation:** The plan extracts signal detection (domain logic) into a shared library but leaves guard boilerplate (cross-cutting concern) duplicated. This is inconsistent abstraction level.
-
-**Counter-argument:** Guard logic is ~40 lines per hook and varies slightly:
-- auto-compound opt-out: `.claude/clavain.no-autocompound` (line 40)
-- auto-drift-check opt-out: `.claude/clavain.no-driftcheck` (line 484)
-- session-handoff: no opt-out file (relies only on sentinels)
-- Throttle windows: 300s (compound), 600s (drift), none (handoff)
-
-Extracting guards into a shared function would require parameterizing opt-out file names and throttle windows, which might be more complex than duplication.
-
-**Recommendation:** Accept duplication for now. The guard logic is simple and the variations are meaningful. If a 4th Stop hook is added, revisit and extract a `_stop_hook_guards()` function in lib.sh that takes opt-out filename and throttle seconds as parameters.
-
----
-
-#### 2.2 Sentinel Cleanup Pattern - GOOD
-
-**Finding:** All three hooks use the same cleanup pattern at the end:
-```bash
-find /tmp -maxdepth 1 -name 'clavain-stop-*' -mmin +60 -delete 2>/dev/null || true
+LLM context:
+7. Read JSON, decide action
 ```
 
-This appears in:
-- auto-compound.sh line 148 (current)
-- session-handoff.sh line 117 (current)
-- auto-drift-check.sh line 558 (plan)
+**Token savings:** ~290 lines of instruction + signal evaluation → ~20 lines of JSON reading
 
-**Problem:** After the per-hook sentinel refactor, this cleanup glob will match:
-- `/tmp/clavain-stop-compound-*`
-- `/tmp/clavain-stop-drift-*`
-- `/tmp/clavain-stop-handoff-*`
+**Correctness preserved:** The algorithm is the same, just executed in a different layer. The LLM still makes the final decision (refresh vs. suggest vs. report).
 
-All three hooks will clean up each other's sentinels. This is correct because the cleanup is scoped to **any** session older than 60 minutes. The glob pattern still works.
+**Boundary check:**
 
-**But:** The throttle sentinels use different patterns:
-- auto-compound: `/tmp/clavain-compound-last-*` (line 55)
-- auto-drift-check: `/tmp/clavain-drift-last-*` (line 498)
-- session-handoff: no throttle
+✅ Shell script handles **deterministic** computation (counting, comparing, arithmetic)
 
-These are NOT cleaned up by the current cleanup command. Stale throttle sentinels will accumulate in /tmp.
+✅ LLM handles **judgment** (should we refresh this doc given the signals?)
 
-**Recommendation:** Add throttle sentinel cleanup to the cleanup block:
-```bash
-find /tmp -maxdepth 1 \( -name 'clavain-stop-*' -o -name 'clavain-compound-last-*' -o -name 'clavain-drift-last-*' \) -mmin +60 -delete 2>/dev/null || true
+✅ No policy leakage: The action matrix (Certain → auto-refresh, Medium → suggest) stays in LLM context, not hardcoded in shell script
+
+### 2.4 Cross-Plugin Consistency (ENFORCED)
+
+The plan applies the same pattern to 3 plugins with different complexity levels:
+
+| Plugin | Skill | Source files | Source lines | Target compact lines | Complexity |
+|--------|-------|--------------|--------------|---------------------|------------|
+| interwatch | doc-watch | 7 | 364 | 60-80 | Low (deterministic algorithm) |
+| interpath | artifact-gen | 9 | 460 | 60-80 | Medium (5 artifact types) |
+| interflux | flux-drive | 9 | 1,985 | 150-200 | High (scoring algorithm, agent roster) |
+
+**Consistency check:**
+
+✅ All use the same loader convention (HTML comment preamble)
+
+✅ All use the same generation tool (`gen-compact.sh`)
+
+✅ All use the same freshness mechanism (`.compact-manifest`)
+
+✅ All preserve the same fallback (full SKILL.md remains readable)
+
+**Variation is justified:** The target compact line counts scale with algorithmic complexity:
+
+- **doc-watch (60-80 lines):** Simple 4-phase pipeline, fixed action matrix
+- **artifact-gen (60-80 lines):** Shared discovery + 5 artifact-type paragraphs
+- **flux-drive (150-200 lines):** Triage algorithm, scoring formula, 13-agent roster, domain detection
+
+**No artificial homogenization:** The plan doesn't force flux-drive into 60 lines just to match the others. Compact size is driven by essential complexity, not an arbitrary target.
+
+---
+
+## 3. Simplicity & YAGNI
+
+### 3.1 Scope Discipline (EXCELLENT)
+
+The plan explicitly excludes several plausible features:
+
+**Out of Scope (from PRD Section 3):**
+
+- Compact files for low-overhead skills (brainstorming, writing-plans — already inline)
+- Cross-session caching (requires Claude Code platform changes)
+- Rewriting flux-drive scoring as Python (too complex for v1)
+- Per-invocation token budgets
+
+**Analysis:** All exclusions are justified:
+
+1. **Low-overhead skills:** Brainstorming is 53 lines, already optimal. No win from compacting.
+2. **Cross-session caching:** Platform feature, not plugin feature. Out of scope for this team.
+3. **Python scoring:** Algorithmic rewrite would change behavior, not just presentation. High risk, unclear benefit.
+4. **Token budgets:** Solves a different problem (hard caps vs. optimization). Separate feature.
+
+**No YAGNI violations detected.** The plan doesn't add speculative hooks, plugin systems, or extensibility points.
+
+### 3.2 Premature Abstraction Check (PASS)
+
+**Question:** Is `gen-compact.sh` premature? Could Task 2/3/4 just manually write the compact files?
+
+**Answer:** No, the script is justified because:
+
+1. **Deterministic generation:** The same prompt + source files should always produce the same compact file. Manual editing would drift.
+2. **Freshness validation:** The `.compact-manifest` pattern requires scripted generation to compute hashes.
+3. **Three consumers:** Used by 3 plugins, not a one-off.
+
+**Evidence the abstraction is needed NOW:** Task 7 (freshness tests) depends on `.compact-manifest` format, which only makes sense if generation is scripted.
+
+### 3.3 Necessary vs. Accidental Complexity
+
+**Necessary complexity (domain-driven, can't be removed):**
+
+- Multi-file skill structure (flux-drive: 1,985 lines across 9 files) — driven by genuine algorithmic complexity (triage → domain detection → agent selection → synthesis → scoring)
+- Hash-based freshness tracking — only reliable way to detect source drift without running LLM summarization on every CI run
+- Per-plugin compact files — each plugin's complexity profile is different, can't be homogenized
+
+**Accidental complexity (structure-driven, could be simplified):**
+
+- ❌ **P0 issue:** `gen-compact.sh` hardcodes `claude -p` invocation (see Section 1.4)
+- ⚠️ **Minor:** HTML comment convention requires agents to parse comments (could use YAML frontmatter instead)
+
+**Verdict:** 1 P0 issue (CLI coupling), rest is necessary complexity.
+
+### 3.4 Can Anything Be Deleted?
+
+**Question:** Could the plan ship with fewer tasks?
+
+**Dependency analysis:**
+
+```
+Task 1 (interwatch-scan.sh) — independent, ship separately
+Task 2 (compact interwatch)  ─┐
+Task 3 (compact interpath)   ─┤
+Task 4 (compact interflux)   ─┴─→ Task 6 (wire loader) → Task 7 (tests)
+                               │
+                               └─→ Task 5 (gen-compact.sh)
 ```
 
-Or use a single pattern if sentinels are renamed consistently:
-```bash
-find /tmp -maxdepth 1 -name 'clavain-*-*' -mmin +60 -delete 2>/dev/null || true
+**Minimal viable scope:** Tasks 2-3-4-5-6-7 (compact files + generator + wiring + tests)
+
+**Excluded from minimal:** Task 1 (interwatch-scan.sh) — pre-computation is orthogonal to compact loading
+
+**Recommendation:** Ship all 7 tasks. Task 1 is low-risk and high-value (moves deterministic work out of LLM context), and it's already scoped to a single plugin.
+
+---
+
+## 4. Critical Findings
+
+### P0 (Must Fix Before Shipping)
+
+#### P0-1: CLI Coupling in gen-compact.sh
+
+**Issue:** Task 5 hardcodes `claude -p` invocation, coupling the build system to a specific Claude Code installation.
+
+**Impact:** Breaks CI/CD, MCP-based generation, and standalone distribution.
+
+**Fix:** Extract LLM invocation to a pluggable backend (see Section 1.4 for implementation).
+
+**Location:** `Interverse/scripts/gen-compact.sh` (Task 5)
+
+**Acceptance criteria:**
+
+- `gen-compact.sh` accepts `--backend` flag (claude-cli, mcp, api)
+- Default backend is `claude-cli` (preserves current behavior)
+- Prompt template is extracted to a separate file or heredoc (reusable across backends)
+
+---
+
+## 5. Recommended Improvements (Optional)
+
+### P1 (Strongly Recommended)
+
+#### P1-1: Clarify gen-compact.sh Ownership
+
+**Issue:** Plan doesn't specify whether `gen-compact.sh` lives in `Interverse/scripts/` vs. `plugins/interflux/scripts/` vs. `hub/clavain/scripts/`.
+
+**Recommendation:** Place in `Interverse/scripts/` (monorepo-wide shared utility, like `interbump.sh`).
+
+**Why:** Used by 3 plugins, not owned by any single one. Precedent exists (`interbump.sh`).
+
+**Update required:** Revise Task 5's "Location" field to say `Interverse/scripts/gen-compact.sh`.
+
+#### P1-2: Version Compact File Format
+
+**Issue:** No versioning for compact file format. If the preamble convention changes (e.g., from `<!-- compact: ... -->` to YAML frontmatter), no migration path exists.
+
+**Recommendation:** Add a version marker to compact files:
+
+```markdown
+<!-- compact-version: 1 -->
+# Doc Watch (Compact)
+...
 ```
 
----
+**Why:** Enables safe evolution. If v2 compact files use a different structure, loaders can detect and handle both.
 
-#### 2.3 Signal Detection Completeness - ASYMMETRY
+**Update required:** Add to Task 5's prompt template: "Include `<!-- compact-version: 1 -->` as the first line."
 
-**Finding:** The signal detection patterns in lib-signals.sh (lines 167-210) detect 7 signals:
-1. commit (weight 1)
-2. resolution (weight 2)
-3. investigation (weight 2)
-4. bead-closed (weight 1)
-5. insight (weight 1)
-6. recovery (weight 2)
-7. version-bump (weight 2)
+### P2 (Nice to Have)
 
-**Missing from original auto-compound.sh:** The version-bump signal (lines 205-209 in lib-signals.sh) is NEW. It was not present in the original auto-compound.sh signal detection (lines 75-116).
+#### P2-1: Extract Prompt Template to Separate File
 
-**Impact:** After refactoring to use lib-signals.sh, auto-compound.sh will now trigger on version bumps. A version bump (weight 2) + commit (weight 1) = 3, which meets the compound threshold. This is a **behavior change**, not a pure refactor.
+**Issue:** Task 5 embeds the summarization prompt in the shell script as a heredoc. This couples the prompt design to the script implementation.
 
-**Justification:** The plan Task 2 Step 3 says "verify no regression" and expects "All 10 tests PASS (identical behavior)" (line 277). But the tests at lines 337-374 don't include a version-bump fixture. The auto_compound.bats tests only cover:
-- commit + bead-close (lines 370-374)
-- single commit (lines 376-380)
-- no signal (lines 382-386)
-- recovery (lines 432-437)
+**Recommendation:** Extract to `Interverse/prompts/compact-skill.txt`:
 
-There's no test that would catch the version-bump behavior change.
-
-**Is this a bug or a feature?** The PRD (referenced line 13) might justify adding version-bump signals. Version bumps often correlate with shipped work that should trigger drift checking. But it's not documented as an intentional change in the plan.
-
-**Recommendation:**
-- Add a test case for version-bump signals to `tests/shell/auto_compound.bats`
-- Document in the commit message that refactoring to lib-signals.sh adds version-bump detection to auto-compound as a side effect
-- OR: Remove version-bump from lib-signals.sh if it should only apply to drift-check
-
----
-
-### 3. Simplicity & YAGNI
-
-#### 3.1 interwatch Discovery Graceful Degradation - APPROPRIATE
-
-**Finding:** The auto-drift-check.sh hook includes interwatch discovery (lines 507-513):
-```bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
-INTERWATCH_ROOT=$(_discover_interwatch_plugin)
-if [[ -z "$INTERWATCH_ROOT" ]]; then
-    exit 0
-fi
+```
+Summarize this skill into a single compact instruction file (50-200 lines depending on complexity).
+Keep: algorithm steps, decision points, output contracts, tables, code blocks.
+Remove: examples, rationale, verbose descriptions, "why" explanations.
+Add: "For edge cases or full reference, read SKILL.md" at the bottom.
 ```
 
-**Question:** Is this premature? The hook's entire purpose is to trigger `/interwatch:watch`. If interwatch isn't installed, the hook does nothing. Why register the hook at all?
+**Why:**
 
-**Counter-argument:** Clavain is a standalone plugin that CAN work without interwatch. The hook provides progressive enhancement: if interwatch is present, auto-trigger drift checks; if not, no-op. This is the same pattern used elsewhere (e.g., interphase discovery in other hooks).
+- Prompt can be edited without modifying shell script
+- Prompt can be reused across backends (MCP, API, standalone)
+- Prompt can be versioned independently (if LLM quality improves, update prompt without touching script)
 
-**Recommendation:** Accept. This is consistent with Clavain's companion plugin architecture.
+**Update required:** Add `Interverse/prompts/` directory, move prompt template there, update Task 5 to reference it.
 
----
+#### P2-2: Parallel Generation in gen-compact.sh
 
-#### 3.2 Demo Hook for interwatch Repo - POTENTIAL OVERENGINEERING
+**Issue:** If `gen-compact.sh` is extended to regenerate all compact files in the monorepo (e.g., `gen-compact.sh --all`), sequential LLM calls will be slow (3 skills × ~30s/skill = 90s).
 
-**Finding:** Task 6 (lines 656-793) creates a standalone example hook for the interwatch repo with:
-- Inline signal detection (not using lib-signals.sh)
-- Configurable threshold and throttle
-- 119 lines of code
+**Recommendation:** Support parallel generation:
 
-**Purpose:** Show interwatch users how to auto-trigger `/interwatch:watch` from their own plugins.
-
-**Question:** Does this example add value or create maintenance burden?
-
-**Analysis:** The demo hook duplicates signal detection logic (lines 746-763) that already exists in lib-signals.sh. If signal patterns change (new signals added, weights adjusted), the demo will drift from the canonical implementation. Users might copy-paste outdated patterns.
-
-**Counter-argument:** The demo is intentionally standalone so users don't need Clavain as a dependency. Inline signal detection is a feature, not a bug.
-
-**Recommendation:**
-- Keep the demo but add a comment: "This example uses simplified signal detection. For production use, consider extracting signals into a shared library like Clavain's lib-signals.sh."
-- Link to lib-signals.sh in a comment so users can reference the canonical patterns
-- Mark the demo as "example-only, not maintained for production use"
-
----
-
-#### 3.3 STOP_SENTINEL Redundancy (Revisited)
-
-**Finding:** As noted in section 1.2, the per-hook STOP_SENTINEL logic (lines 491-494 in auto-drift-check.sh) is redundant with the throttle sentinel logic (lines 498-505). Both prevent double-firing within a session, but the throttle has a time-based expiry while STOP_SENTINEL is per-cycle.
-
-**Simplification Opportunity:** If the STOP_SENTINEL is truly per-hook (not cross-hook mutual exclusion), then its only purpose is to prevent multiple fires in the same Stop event cycle. But Stop hooks are called once per cycle by Claude Code, so re-entry isn't possible unless a hook calls itself recursively (which none of these do).
-
-**The sentinel's real purpose:** Looking at auto-compound.sh line 46-52 and the comment "if another Stop hook already fired this cycle, don't cascade" — the original design was for cross-hook mutual exclusion. The plan preserves the sentinel but changes the namespace, which breaks the mutual exclusion without removing the logic.
-
-**Recommendation (repeated from 1.2):** Decide the requirement, then simplify:
-- If mutual exclusion is needed: keep shared sentinel, document why
-- If independent operation: delete STOP_SENTINEL logic entirely, rely only on throttle
-
----
-
-### 4. Correctness Concerns
-
-#### 4.1 Race Condition in Sentinel Write Order
-
-**Finding:** All three hooks write the STOP_SENTINEL BEFORE running their analysis logic:
-
-**auto-compound.sh lines 46-52:**
 ```bash
-STOP_SENTINEL="/tmp/clavain-stop-${SESSION_ID}"
-if [[ -f "$STOP_SENTINEL" ]]; then
-    exit 0
-fi
-# Write sentinel NOW — before transcript analysis — to minimize TOCTOU window
-touch "$STOP_SENTINEL"
+gen-compact.sh --all --parallel
 ```
 
-**Purpose:** The comment says "minimize TOCTOU window" (time-of-check to time-of-use). This prevents a race where two hooks check the sentinel simultaneously, both see it missing, and both proceed to write it.
+Launches 3 `claude -p` subprocesses in parallel, waits for all to complete.
 
-**Problem:** Claude Code calls Stop hooks in sequence (not parallel), so this race condition doesn't exist. The hooks.json Stop array (lines 49-60) is processed one at a time. The sentinel write is defensive against a non-existent threat.
+**Why:** CI/CD freshness checks will eventually need to regenerate all compact files. Parallel execution keeps build times reasonable.
 
-**Counter-argument:** If Claude Code's hook runner is refactored in the future to run Stop hooks in parallel, this sentinel ordering would become critical. It's future-proofing.
-
-**Recommendation:** Accept the defensive pattern but add a comment explaining it's for theoretical parallel execution, not current behavior.
+**Update required:** Add to Task 5's acceptance criteria: "Support `--parallel` flag for batch generation."
 
 ---
 
-#### 4.2 Transcript Tail Window Consistency
+## 6. Architectural Principles Applied
 
-**Finding:** All hooks use `tail -80` to extract recent transcript context:
-- auto-compound.sh line 70
-- auto-drift-check.sh (plan) line 521
+This review evaluated the plan against the following principles:
 
-**Question:** Why 80 lines? Is this enough to capture all signals?
+### 6.1 Boundaries & Coupling
 
-**Analysis:** The longest signal pattern is "recovery" (lines 198-202 in lib-signals.sh), which requires detecting both a failure and a subsequent pass in the same transcript window. If a test fails at line -100 and passes at line -10, the failure won't be in the tail-80 window.
+✅ **Module boundaries respected:** Compact files live in their owning plugin's skill directory, not centralized
 
-**Impact:** Recovery signals might be missed if the failure->pass cycle spans more than 80 transcript lines.
+✅ **Dependency direction correct:** Tools depend on data (gen-compact.sh depends on SKILL.md), not vice versa
 
-**Counter-argument:** 80 lines is ~4-8 turns of conversation (10-20 lines per turn). If debugging takes more than 8 turns, the failure is probably stale and not worth compounding anyway.
+❌ **P0 violation:** `gen-compact.sh` couples to `claude` CLI (specific delivery mechanism)
 
-**Recommendation:** Document the 80-line window assumption in lib-signals.sh comments. Add a test case with a failure->pass cycle at the boundary (line -85 to line -5) to verify behavior.
+### 6.2 Cohesion
 
----
+✅ **High cohesion:** Each compact file is paired with its source (`SKILL.md` + `SKILL-compact.md` in same dir)
 
-### 5. Missing Abstractions
+✅ **Single responsibility:** `gen-compact.sh` does one thing (generate compact files), `interwatch-scan.sh` does one thing (evaluate signals)
 
-#### 5.1 No Signal Weight Configuration
+### 6.3 Abstraction Quality
 
-**Finding:** Signal weights are hardcoded in lib-signals.sh:
-- commit: 1
-- resolution: 2
-- investigation: 2
-- bead-closed: 1
-- insight: 1
-- recovery: 2
-- version-bump: 2
+✅ **Appropriate abstraction level:** HTML comment convention is simple, auditable, and reversible
 
-**Observation:** Different hooks use different thresholds (compound: 3, drift: 2) but consume the same weights. If a project wants to adjust weights (e.g., make commits weight 2 because they're rare in that repo), they must fork lib-signals.sh.
+⚠️ **Leaky abstraction (minor):** Agents must parse HTML comments to discover compact files (could use frontmatter instead)
 
-**YAGNI Check:** Is weight configuration needed now? No evidence in the plan or PRD that users have requested this. All current hooks use the same signals with different thresholds, which works.
+✅ **No premature abstraction:** No plugin systems, no extensibility hooks, no speculative features
 
-**Recommendation:** Accept hardcoded weights. If a 3rd consumer with different weight needs emerges, refactor to pass weights as parameters.
+### 6.4 Simplicity
 
----
+✅ **YAGNI compliance:** Out-of-scope list is well-justified (cross-session caching, Python scoring, token budgets)
 
-### 6. Integration Risks
+✅ **Minimal viable scope:** 7 tasks, all necessary
 
-#### 6.1 Hook Ordering in hooks.json
+✅ **Necessary complexity only:** Hash-based freshness tracking is the simplest reliable solution
 
-**Finding:** Task 4 Step 5 (lines 569-589) specifies the new Stop hooks order:
-1. auto-compound.sh (threshold 3, throttle 5min)
-2. auto-drift-check.sh (threshold 2, throttle 10min) — NEW
-3. session-handoff.sh (no threshold, checks uncommitted work)
+### 6.5 Naming & Conventions
 
-**Analysis:** If hooks run sequentially and independently (per-hook sentinels), order doesn't matter. But if the original mutual exclusion design is preserved, the first hook to fire will block the others.
+✅ **Consistent naming:** `SKILL-compact.md` follows existing `SKILL.md` convention
 
-**Scenario:** User commits code (weight 1) + closes bead (weight 1) = weight 2.
-- auto-compound: threshold 3, does NOT fire
-- auto-drift-check: threshold 2, FIRES and prompts for `/interwatch:watch`
-- session-handoff: would fire (uncommitted work), but if shared sentinel is used, auto-drift-check already blocked it
+✅ **Discoverable:** HTML comment `<!-- compact: SKILL-compact.md -->` is greppable and human-readable
 
-**Problem:** With shared sentinel, auto-drift-check can suppress session-handoff, which is dangerous — handoff prevents lost work.
-
-**Recommendation:**
-- If mutual exclusion is kept: move session-handoff to position 1 (highest priority)
-- If independent operation: document that all three hooks can fire in one cycle and Claude might see 3 separate prompts (design decision)
+✅ **Conventional:** `.compact-manifest` follows existing dotfile patterns (`.git`, `.claude`, `.beads`)
 
 ---
 
-#### 6.2 Test Coverage for Multi-Hook Scenarios
+## 7. Decision Ledger
 
-**Finding:** The plan includes tests for each hook in isolation:
-- lib_signals.bats (12 tests)
-- auto_compound.bats (10 tests, updated for new sentinel)
-- auto_drift_check.bats (10 tests)
-
-**Missing:** Integration tests that verify:
-- Hook ordering in hooks.json
-- Behavior when multiple hooks should fire in the same cycle
-- Sentinel isolation (per-hook sentinels don't block each other)
-- Shared sentinel cleanup doesn't break per-hook sentinels
-
-**Recommendation:** Add a shell integration test that:
-1. Simulates a Stop cycle with a transcript that triggers both auto-compound (weight 3+) and auto-drift-check (weight 2+)
-2. Runs both hooks in sequence
-3. Verifies both produce "block" decisions
-4. Verifies sentinels are namespaced correctly
+| Decision | Rationale | Alternatives Considered | Verdict |
+|----------|-----------|------------------------|---------|
+| Compact files live alongside SKILL.md | Discoverability, atomic commits, plugin independence | Centralized in `Interverse/compact/` (rejected: breaks plugin boundaries) | ✅ Correct |
+| Convention-based loader (HTML comment) | Agents are cooperative, graceful fallback, zero tooling changes | Enforcement via SKILL.md structure (rejected: destroys standalone readability) | ✅ Appropriate for context |
+| Shared `gen-compact.sh` in `Interverse/scripts/` | Used by 3 plugins, precedent exists (`interbump.sh`) | Per-plugin scripts (rejected: unnecessary duplication) | ✅ Correct |
+| LLM invocation via `claude -p` | Simple, works today | Backend abstraction (recommended: enables CI/CD, MCP, API) | ❌ P0 issue |
+| Hash-based freshness tracking | Deterministic, fast, no LLM calls | Git mtime (rejected: unreliable after rebases) | ✅ Correct |
+| Compact file format versioning | Enables safe evolution | No versioning (current plan) | ⚠️ P1 recommendation |
 
 ---
 
-## Summary of Recommendations
+## 8. Recommendations Summary
 
-### Must-Fix (Architectural Correctness)
+### Must Fix (P0)
 
-1. **Clarify sentinel mutual exclusion requirement** (section 1.2): Document whether Stop hooks need mutual exclusion or independent operation. If independent, remove STOP_SENTINEL logic entirely. If mutual exclusion, revert to shared sentinel and document why.
+1. **Abstract LLM invocation in gen-compact.sh** — Extract to pluggable backend (claude-cli, mcp, api) to support CI/CD and standalone distribution.
 
-2. **Fix hook ordering if mutual exclusion is kept** (section 6.1): Move session-handoff to position 1 to prevent auto-drift-check from suppressing handoff prompts.
+### Strongly Recommended (P1)
 
-3. **Document version-bump behavior change** (section 2.3): The refactor adds version-bump signals to auto-compound.sh. Either add a test for this or remove version-bump from lib-signals.sh.
+1. **Clarify gen-compact.sh ownership** — Document that it lives in `Interverse/scripts/` as a monorepo-wide shared utility.
+2. **Version compact file format** — Add `<!-- compact-version: 1 -->` to enable future migrations.
 
-### Should-Fix (Reduces Complexity)
+### Nice to Have (P2)
 
-4. **Add throttle sentinel cleanup** (section 2.2): Include `clavain-*-last-*` in the cleanup glob to prevent /tmp accumulation.
-
-5. **Add integration test for multi-hook scenarios** (section 6.2): Verify sentinel isolation and hook ordering in a single test.
-
-### Nice-to-Have (Future-Proofing)
-
-6. **Add boundary test for transcript tail window** (section 4.2): Verify recovery signal detection when failure is at line -85.
-
-7. **Mark demo hook as example-only** (section 3.2): Add disclaimer that inline signal detection is simplified and link to canonical lib-signals.sh.
+1. **Extract prompt template** — Move summarization prompt to `Interverse/prompts/compact-skill.txt` for reusability.
+2. **Support parallel generation** — Add `--parallel` flag to `gen-compact.sh --all` for CI/CD performance.
 
 ---
 
-## Verdict
+## 9. Verdict
 
-**Overall Assessment:** The plan is architecturally sound with good module boundaries (lib-signals.sh extraction is clean). The primary issue is ambiguity around sentinel semantics — the refactor changes sentinel namespaces without resolving whether mutual exclusion is required. This creates vestigial guard logic that no longer serves its original purpose.
+**Overall:** APPROVED with P0 fix required.
 
-**Recommended Action Before Implementation:**
-1. Decide: Do Stop hooks need mutual exclusion?
-2. Update the plan accordingly (keep shared sentinel OR delete cross-hook checks)
-3. Add integration test for multi-hook scenarios
-4. Document version-bump signal addition to auto-compound
+**Strengths:**
 
-**Risk Level:** Medium. The sentinel ambiguity could cause unexpected behavior (hooks blocking each other or all firing at once), but it's unlikely to break functionality completely. The worst case is UX degradation (Claude sees multiple Stop prompts or misses handoff).
+- Module boundaries are well-designed (co-location, plugin independence)
+- Convention-based loader is appropriate for cooperative agents
+- Cross-plugin consistency is enforced through shared tooling
+- Scope discipline is excellent (no YAGNI violations)
+
+**Critical fix:**
+
+- P0: Abstract LLM invocation from `gen-compact.sh` to support multiple execution contexts
+
+**When fixed, this design will:**
+
+- Reduce token overhead by 60-70% for high-ceremony skills
+- Preserve plugin modularity and independence
+- Enable safe evolution via versioning and freshness tracking
+- Support CI/CD, MCP, and standalone distribution
+
+**Recommendation:** Fix P0 before implementation. Consider P1 recommendations strongly. Ship without P2 (can add post-launch).
