@@ -1,7 +1,7 @@
 {
   "name": "clavain",
-  "version": "0.6.25",
-  "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 4 agents, 41 commands, 23 skills, 1 MCP servers. Orchestrates heterogeneous AI models through composable workflows. Includes Codex dispatch, cross-AI review (interpeer with quick/deep/council/mine modes), and structured debate. Companions: interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev.",
+  "version": "0.6.26",
+  "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 4 agents, 42 commands, 23 skills, 1 MCP servers. Orchestrates heterogeneous AI models through composable workflows. Includes Codex dispatch, cross-AI review (interpeer with quick/deep/council/mine modes), and structured debate. Companions: interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev.",
   "author": {
     "name": "mistakeknot"
   },
