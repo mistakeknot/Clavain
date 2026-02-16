@@ -39,7 +39,17 @@ Before running discovery, check for an active sprint:
      g. **After routing to a command, stop.** Do NOT continue to Step 1.
    - Multiple sprints (`sprint_count > 1`) → AskUserQuestion to choose which to resume, plus "Start fresh" option. Then claim and route as above.
 
-4. If starting fresh (no active sprint or user chose "Start fresh"):
+4. **Checkpoint recovery** (supplements sprint state): After claiming, check for a local checkpoint:
+   ```bash
+   checkpoint=$(checkpoint_read)
+   ```
+   If a checkpoint exists for this sprint:
+   - Run `checkpoint_validate` — warn (don't block) if git SHA changed
+   - Use `checkpoint_completed_steps` to determine which steps are already done
+   - Display: `Resuming from checkpoint. Completed: [<steps>]`
+   - Route to the first *incomplete* step (overrides `sprint_next_step` when checkpoint has more detail)
+
+5. If starting fresh (no active sprint or user chose "Start fresh"):
    Proceed to existing Work Discovery logic below.
 
 ## Work Discovery (Fallback)
@@ -99,6 +109,8 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only) AND no a
 8. **After routing to a command, stop.** Do NOT continue to Step 1 — the routed command handles the workflow from here.
 
 If invoked WITH arguments (`$ARGUMENTS` is not empty):
+- **If `$ARGUMENTS` contains `--resume`**: Read checkpoint with `checkpoint_read`. If a checkpoint exists, validate with `checkpoint_validate`, display completed steps, and skip to the first incomplete step. If no checkpoint, fall through to Work Discovery.
+- **If `$ARGUMENTS` contains `--from-step <n>`**: Skip directly to step `<n>` regardless of checkpoint state. Step names: brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, ship.
 - **If `$ARGUMENTS` matches a bead ID** (format: `[A-Za-z]+-[a-z0-9]+`):
   ```bash
   # Verify bead exists
@@ -110,6 +122,29 @@ If invoked WITH arguments (`$ARGUMENTS` is not empty):
 ---
 
 Run these steps in order. Do not do anything else.
+
+### Session Checkpointing
+
+After each step completes successfully, write a checkpoint:
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+checkpoint_write "$CLAVAIN_BEAD_ID" "<phase>" "<step_name>" "<plan_path>"
+```
+
+Step names: `brainstorm`, `strategy`, `plan`, `plan-review`, `execute`, `test`, `quality-gates`, `resolve`, `ship`.
+
+When resuming (via Sprint Resume above or `--resume`):
+1. Read checkpoint: `checkpoint_read`
+2. Validate git SHA: `checkpoint_validate` (warn on mismatch, don't block)
+3. Get completed steps: `checkpoint_completed_steps`
+4. Display: `Resuming from step <next>. Completed: [<steps>]`
+5. Skip completed steps — jump to the first incomplete one
+6. Load agent verdicts from `.clavain/verdicts/` if present
+
+When the sprint completes (Step 9 Ship), clear the checkpoint:
+```bash
+checkpoint_clear
+```
 
 ### Auto-Advance Protocol
 
@@ -159,6 +194,25 @@ sprint_set_artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
 sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "<phase>"
 ```
 Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
+
+## Pre-Step: Complexity Assessment
+
+Before starting, classify the task complexity:
+
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+score=$(sprint_classify_complexity "$CLAVAIN_BEAD_ID" "$ARGUMENTS")
+label=$(sprint_complexity_label "$score")
+```
+
+Display to the user: `Complexity: ${score}/5 (${label})`
+
+Score-based routing:
+- **1-2 (trivial/simple):** Skip brainstorm + strategy. Go directly to Step 3 (write-plan). Use Sonnet-only agents.
+- **3 (moderate):** Standard workflow, all steps.
+- **4-5 (complex/research):** Full workflow with Opus orchestration, full agent roster.
+
+The user can override with `--skip-to <step>` or `--complexity <1-5>`.
 
 ## Step 1: Brainstorm
 `/clavain:brainstorm $ARGUMENTS`
@@ -244,6 +298,16 @@ Run the project's test suite and linting before proceeding to review:
 
 **Parallel opportunity:** Quality gates and resolve can overlap — quality-gates spawns review agents while resolve addresses already-known findings. If you have known TODOs from execution, start `/clavain:resolve` in parallel with quality-gates.
 
+**Verdict consumption:** After quality-gates completes, read structured verdicts instead of raw agent output:
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-verdict.sh"
+verdict_parse_all    # Summary table: STATUS  AGENT  SUMMARY
+verdict_count_by_status  # e.g., "3 CLEAN, 1 NEEDS_ATTENTION"
+```
+- If all CLEAN: proceed (one-line summary in context)
+- If any NEEDS_ATTENTION: read only those agents' detail files via `verdict_get_attention`
+- Report per-agent STATUS in sprint summary
+
 **Gate check + Phase:** After quality gates PASS, enforce the shipping gate before recording:
 ```bash
 export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
@@ -270,6 +334,16 @@ Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, 
 Use the `clavain:landing-a-change` skill to verify, document, and commit the completed work.
 
 **Phase:** After successful ship, set `phase=done` with reason `"Shipped"`. Also close the bead: `bd close "$CLAVAIN_BEAD_ID" 2>/dev/null || true`.
+
+**Sprint summary:** At completion, display:
+```
+Sprint Summary:
+- Bead: <CLAVAIN_BEAD_ID>
+- Steps completed: <n>/9
+- Agents dispatched: <count>
+- Verdicts: <verdict_count_by_status output>
+- Estimated tokens: <verdict_total_tokens output>
+```
 
 ## Error Recovery
 

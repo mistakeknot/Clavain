@@ -82,3 +82,20 @@ Key principles:
 - Consider the reviewer's perspective and make it easy for them to verify the resolution
 
 If you encounter a comment that requires clarification or seems to conflict with project standards, pause and explain the situation before proceeding with changes.
+
+## Output Contract
+
+End your report with this structured header:
+
+```
+TYPE: implementation
+STATUS: COMPLETE | PARTIAL | FAILED
+MODEL: sonnet
+TOKENS_SPENT: <estimated>
+FILES_CHANGED: [<list of modified files>]
+FINDINGS_COUNT: 0
+SUMMARY: <one-line summary of changes made>
+DETAIL_PATH: .clavain/verdicts/pr-comment-resolver.md
+```
+
+See `using-clavain/references/agent-contracts.md` for the full schema.

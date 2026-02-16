@@ -110,3 +110,20 @@ For each issue found, cite:
 - **Fix** - Specific code change needed
 
 Refuse approval until there is a written verification + rollback plan.
+
+## Output Contract
+
+End your review with this structured header:
+
+```
+TYPE: verdict
+STATUS: CLEAN | NEEDS_ATTENTION
+MODEL: sonnet
+TOKENS_SPENT: <estimated>
+FILES_CHANGED: []
+FINDINGS_COUNT: <number of issues found>
+SUMMARY: <one-line summary>
+DETAIL_PATH: .clavain/verdicts/data-migration-expert.md
+```
+
+See `using-clavain/references/agent-contracts.md` for the full schema.

@@ -323,19 +323,21 @@ sprint_claim() {
 
     if [[ -n "$current_claim" && "$current_claim" != "$session_id" ]]; then
         # Check TTL (60 minutes)
-        if [[ -n "$claim_ts" ]]; then
+        if [[ -n "$claim_ts" && "$claim_ts" != "null" ]]; then
             local claim_epoch now_epoch age_minutes
-            claim_epoch=$(date -d "$claim_ts" +%s 2>/dev/null || echo 0)
-            now_epoch=$(date +%s)
-            age_minutes=$(( (now_epoch - claim_epoch) / 60 ))
-            if [[ $age_minutes -lt 60 ]]; then
-                echo "Sprint $sprint_id is active in session ${current_claim:0:8} (${age_minutes}m ago)" >&2
-                rmdir "$claim_lock" 2>/dev/null || true
-                return 1
+            claim_epoch=$(date -d "$claim_ts" +%s 2>/dev/null) || claim_epoch=0
+            if [[ $claim_epoch -gt 0 ]]; then
+                now_epoch=$(date +%s)
+                age_minutes=$(( (now_epoch - claim_epoch) / 60 ))
+                if [[ $age_minutes -lt 60 ]]; then
+                    echo "Sprint $sprint_id is active in session ${current_claim:0:8} (${age_minutes}m ago)" >&2
+                    rmdir "$claim_lock" 2>/dev/null || true
+                    return 1
+                fi
             fi
-            # Expired — take over
+            # Expired or unparseable — take over
         else
-            # No timestamp — might be stale. Allow takeover.
+            # No timestamp or null — might be stale. Allow takeover.
             true
         fi
     fi
@@ -532,15 +534,20 @@ sprint_advance() {
 # ─── Tiered Brainstorming ────────────────────────────────────────
 
 # Classify feature complexity from description text.
-# Output: "simple" | "medium" | "complex"
+# Output: integer 1-5 (or legacy string if override is a string)
+# Scale: 1=trivial, 2=simple, 3=moderate, 4=complex, 5=research
 # Heuristics:
-#   - Word count: <5 = medium (too short to classify), <30 = simple, 30-100 = medium, >100 = complex
+#   - Word count: <5 = 3 (too short to classify), <30 = 2, 30-100 = 3, >100 = 4
 #   - Ambiguity signals: "or", "vs", "alternative", "tradeoff" → bump up
 #   - Simplicity signals: "like", "similar", "existing", "just" → bump down
+#   - Trivial keywords: "rename", "format", "typo", "bump", "fix typo" → floor at 1
+#   - Research keywords: "explore", "investigate", "research", "brainstorm" → bump to 5
+#   - File count: 0-1 → lower, 10+ → higher
 #   - Override: if sprint has complexity state set, use that
 sprint_classify_complexity() {
     local sprint_id="${1:-}"
     local description="${2:-}"
+    local file_count="${3:-0}"
 
     # Check for manual override on sprint bead
     if [[ -n "$sprint_id" ]]; then
@@ -552,7 +559,7 @@ sprint_classify_complexity() {
         fi
     fi
 
-    [[ -z "$description" ]] && { echo "medium"; return 0; }
+    [[ -z "$description" ]] && { echo "3"; return 0; }
 
     # Word count
     local word_count
@@ -560,7 +567,45 @@ sprint_classify_complexity() {
 
     # Vacuous descriptions (<5 words) are too short to classify
     if [[ $word_count -lt 5 ]]; then
-        echo "medium"
+        echo "3"
+        return 0
+    fi
+
+    # Trivial keywords — floor at 1
+    local trivial_count
+    trivial_count=$(echo "$description" | awk -v IGNORECASE=1 '
+        BEGIN { count=0 }
+        {
+            for (i=1; i<=NF; i++) {
+                word = $i
+                gsub(/[^a-zA-Z-]/, "", word)
+                if (word ~ /^(rename|format|typo|bump|reformat|formatting)$/) count++
+            }
+        }
+        END { print count }
+    ')
+
+    if [[ $trivial_count -gt 0 && $word_count -lt 20 ]]; then
+        echo "1"
+        return 0
+    fi
+
+    # Research keywords — ceiling at 5
+    local research_count
+    research_count=$(echo "$description" | awk -v IGNORECASE=1 '
+        BEGIN { count=0 }
+        {
+            for (i=1; i<=NF; i++) {
+                word = $i
+                gsub(/[^a-zA-Z-]/, "", word)
+                if (word ~ /^(explore|investigate|research|brainstorm|evaluate|survey|analyze)$/) count++
+            }
+        }
+        END { print count }
+    ')
+
+    if [[ $research_count -gt 1 ]]; then
+        echo "5"
         return 0
     fi
 
@@ -595,11 +640,11 @@ sprint_classify_complexity() {
     # Score: start with word-count tier, adjust with signals
     local score=0
     if [[ $word_count -lt 30 ]]; then
-        score=1  # simple
+        score=2  # simple
     elif [[ $word_count -lt 100 ]]; then
-        score=2  # medium
+        score=3  # moderate
     else
-        score=3  # complex
+        score=4  # complex
     fi
 
     # Adjust: >2 signals indicates a real pattern, not noise from common words
@@ -610,10 +655,145 @@ sprint_classify_complexity() {
         score=$((score - 1))
     fi
 
-    # Clamp and map
-    [[ $score -le 1 ]] && { echo "simple"; return 0; }
-    [[ $score -ge 3 ]] && { echo "complex"; return 0; }
-    echo "medium"
+    # File count adjustment
+    if [[ $file_count -gt 0 ]]; then
+        if [[ $file_count -le 1 ]]; then
+            score=$((score - 1))
+        elif [[ $file_count -ge 10 ]]; then
+            score=$((score + 1))
+        fi
+    fi
+
+    # Clamp to 1-5
+    [[ $score -lt 1 ]] && score=1
+    [[ $score -gt 5 ]] && score=5
+    echo "$score"
+}
+
+# Human-readable label for complexity score.
+sprint_complexity_label() {
+    local score="${1:-3}"
+    case "$score" in
+        1) echo "trivial" ;;
+        2) echo "simple" ;;
+        3) echo "moderate" ;;
+        4) echo "complex" ;;
+        5) echo "research" ;;
+        # Legacy string values
+        simple) echo "simple" ;;
+        medium) echo "moderate" ;;
+        complex) echo "complex" ;;
+        *) echo "moderate" ;;
+    esac
+}
+
+# ─── Checkpointing ───────────────────────────────────────────────
+
+CHECKPOINT_FILE="${CLAVAIN_CHECKPOINT_FILE:-.clavain/checkpoint.json}"
+
+# Write or update a checkpoint after a sprint step completes.
+# Uses filesystem lock to prevent concurrent write races (lost-update problem).
+# Usage: checkpoint_write <bead_id> <phase> <step_name> [plan_path] [key_decision]
+checkpoint_write() {
+    local bead="${1:?bead_id required}"
+    local phase="${2:?phase required}"
+    local step="${3:?step_name required}"
+    local plan_path="${4:-}"
+    local key_decision="${5:-}"
+
+    local git_sha
+    git_sha=$(git rev-parse HEAD 2>/dev/null) || git_sha="unknown"
+    local timestamp
+    timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    mkdir -p "$(dirname "$CHECKPOINT_FILE")" 2>/dev/null || true
+
+    # Acquire lock (same pattern as sprint_set_artifact)
+    local lock_dir="/tmp/checkpoint-lock-$(echo "$CHECKPOINT_FILE" | tr '/' '-')"
+    local retries=0
+    while ! mkdir "$lock_dir" 2>/dev/null; do
+        retries=$((retries + 1))
+        [[ $retries -gt 10 ]] && return 0  # Fail-safe: give up after 1s
+        sleep 0.1
+    done
+
+    # Read existing or create new (under lock)
+    local existing="{}"
+    [[ -f "$CHECKPOINT_FILE" ]] && existing=$(cat "$CHECKPOINT_FILE" 2>/dev/null) || existing="{}"
+
+    # Build updated checkpoint with jq
+    local tmp="${CHECKPOINT_FILE}.tmp"
+    echo "$existing" | jq \
+        --arg bead "$bead" \
+        --arg phase "$phase" \
+        --arg step "$step" \
+        --arg plan_path "$plan_path" \
+        --arg git_sha "$git_sha" \
+        --arg timestamp "$timestamp" \
+        --arg key_decision "$key_decision" \
+        '
+        .bead = $bead |
+        .phase = $phase |
+        .plan_path = (if $plan_path != "" then $plan_path else (.plan_path // "") end) |
+        .git_sha = $git_sha |
+        .updated_at = $timestamp |
+        .completed_steps = ((.completed_steps // []) + [$step] | unique) |
+        .key_decisions = (if $key_decision != "" then ((.key_decisions // []) + [$key_decision] | unique | .[-5:]) else (.key_decisions // []) end)
+        ' > "$tmp" 2>/dev/null && mv "$tmp" "$CHECKPOINT_FILE" 2>/dev/null || true
+
+    rmdir "$lock_dir" 2>/dev/null || true
+}
+
+# Read the current checkpoint.
+# Output: JSON checkpoint or "{}" (empty object, never empty string — avoids jq null-slice errors)
+checkpoint_read() {
+    [[ -f "$CHECKPOINT_FILE" ]] && cat "$CHECKPOINT_FILE" 2>/dev/null || echo "{}"
+}
+
+# Validate checkpoint git SHA matches current HEAD.
+# Returns: 0 if match (or no checkpoint), 1 if mismatch (prints warning)
+checkpoint_validate() {
+    local checkpoint
+    checkpoint=$(checkpoint_read)
+    [[ "$checkpoint" == "{}" ]] && return 0
+
+    local saved_sha
+    saved_sha=$(echo "$checkpoint" | jq -r '.git_sha // ""' 2>/dev/null) || saved_sha=""
+    [[ -z "$saved_sha" || "$saved_sha" == "unknown" ]] && return 0
+
+    local current_sha
+    current_sha=$(git rev-parse HEAD 2>/dev/null) || current_sha="unknown"
+
+    if [[ "$saved_sha" != "$current_sha" ]]; then
+        echo "WARNING: Code changed since checkpoint (was ${saved_sha:0:8}, now ${current_sha:0:8})"
+        return 1
+    fi
+    return 0
+}
+
+# Get completed steps from checkpoint.
+# Output: JSON array of step names, or "[]"
+checkpoint_completed_steps() {
+    local checkpoint
+    checkpoint=$(checkpoint_read)
+    [[ "$checkpoint" == "{}" ]] && { echo "[]"; return 0; }
+    echo "$checkpoint" | jq -r '(.completed_steps // [])' 2>/dev/null || echo "[]"
+}
+
+# Check if a specific step is completed in the checkpoint.
+# Usage: checkpoint_step_done <step_name>
+# Returns: 0 if done, 1 if not
+checkpoint_step_done() {
+    local step="${1:?step_name required}"
+    local checkpoint
+    checkpoint=$(checkpoint_read)
+    [[ "$checkpoint" == "{}" ]] && return 1
+    echo "$checkpoint" | jq -e --arg s "$step" '(.completed_steps // []) | index($s) != null' &>/dev/null
+}
+
+# Clear checkpoint (at sprint start or after shipping).
+checkpoint_clear() {
+    rm -f "$CHECKPOINT_FILE" "${CHECKPOINT_FILE}.tmp" 2>/dev/null || true
 }
 
 # ─── Invalidation ─────────────────────────────────────────────────

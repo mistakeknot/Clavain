@@ -80,3 +80,20 @@ Key Principles:
 - If you cannot reproduce after reasonable attempts, clearly state what you tried
 
 When you cannot access certain resources or need additional information, explicitly state what would help validate the bug further. Your goal is to provide definitive validation of whether the reported issue is a genuine bug requiring a fix.
+
+## Output Contract
+
+End your report with this structured header:
+
+```
+TYPE: implementation
+STATUS: COMPLETE | PARTIAL | FAILED
+MODEL: sonnet
+TOKENS_SPENT: <estimated>
+FILES_CHANGED: []
+FINDINGS_COUNT: <number of issues found>
+SUMMARY: <one-line summary of reproduction result>
+DETAIL_PATH: .clavain/verdicts/bug-reproduction-validator.md
+```
+
+See `using-clavain/references/agent-contracts.md` for the full schema.

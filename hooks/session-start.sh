@@ -49,12 +49,14 @@ using_clavain_content=$(cat "${PLUGIN_ROOT}/skills/using-clavain/SKILL.md" 2>/de
 
 using_clavain_escaped=$(escape_for_json "$using_clavain_content")
 
-# Detect companion plugins and build integration context
-companions=""
+# Detect companion plugins — store as env var for on-demand access, inject only
+# critical awareness context (clodex mode, active agents) into additionalContext.
+companion_list=""
+companion_context=""
 
-# Beads — detect if project uses beads
+# Beads
 if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
-    companions="${companions}\\n- **beads**: .beads/ detected — use \`bd\` for task tracking (not TaskCreate)"
+    companion_list="${companion_list}beads,"
     # Surface beads health warnings (bd doctor --json is local-only, typically <100ms)
     if command -v bd &>/dev/null; then
         beads_issues=$( (bd doctor --json 2>/dev/null || true) | python3 -c "
@@ -64,64 +66,56 @@ try:
     print(sum(1 for c in d.get('checks',[]) if c.get('status') in ('warning','error')))
 except: print(0)" 2>/dev/null) || beads_issues="0"
         if [[ "$beads_issues" -gt 0 ]]; then
-            companions="${companions}\\n  - beads doctor found ${beads_issues} issue(s) — run \`bd doctor --fix\` to repair"
+            companion_context="${companion_context}\\n- beads doctor: ${beads_issues} issue(s) — run \`bd doctor --fix\`"
         fi
     fi
 fi
 
-# Oracle — check if available for cross-AI review
+# Oracle
 if command -v oracle &>/dev/null && pgrep -f "Xvfb :99" &>/dev/null; then
-    companions="${companions}\\n- **oracle**: available for cross-AI review (GPT-5.2 Pro)"
+    companion_list="${companion_list}oracle,"
 fi
 
-# interflux — multi-agent review engine companion
+# interflux
 interflux_root=$(_discover_interflux_plugin)
-if [[ -n "$interflux_root" ]]; then
-    companions="${companions}\\n- **interflux**: review engine available (fd-* agents, domain detection, qmd)"
-fi
+[[ -n "$interflux_root" ]] && companion_list="${companion_list}interflux,"
 
-# interpath — product artifact generation companion
+# interpath
 interpath_root=$(_discover_interpath_plugin)
-if [[ -n "$interpath_root" ]]; then
-    companions="${companions}\\n- **interpath**: product artifact generation (roadmaps, PRDs, vision docs)"
-fi
+[[ -n "$interpath_root" ]] && companion_list="${companion_list}interpath,"
 
-# interwatch — doc freshness monitoring companion
+# interwatch
 interwatch_root=$(_discover_interwatch_plugin)
-if [[ -n "$interwatch_root" ]]; then
-    companions="${companions}\\n- **interwatch**: doc freshness monitoring"
-fi
+[[ -n "$interwatch_root" ]] && companion_list="${companion_list}interwatch,"
 
-# interlock — multi-agent coordination companion
+# interlock + Intermute auto-join
 interlock_root=$(_discover_interlock_plugin)
 if [[ -n "$interlock_root" ]]; then
-    companions="${companions}\\n- **interlock**: multi-agent coordination (file reservations, conflict detection)"
+    companion_list="${companion_list}interlock,"
 
     # Auto-join Intermute if reachable and in a git repo
-    # This replaces the need for manual /interlock:join
     _intermute_url="${INTERMUTE_URL:-http://127.0.0.1:7338}"
     if git rev-parse --is-inside-work-tree &>/dev/null; then
         if curl -sf --connect-timeout 1 --max-time 2 "${_intermute_url}/health" >/dev/null 2>&1; then
-            # Ensure join flag exists (interlock hooks gate on this)
             _join_flag="${HOME}/.config/clavain/intermute-joined"
             mkdir -p "$(dirname "$_join_flag")" 2>/dev/null || true
             touch "$_join_flag" 2>/dev/null || true
 
-            # Query active agents for awareness context
+            # Active agents — inject only if others are online (coordination-critical)
             _agents_json=$(curl -sf --max-time 2 "${_intermute_url}/api/agents?project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")" 2>/dev/null) || _agents_json=""
             if [[ -n "$_agents_json" ]]; then
                 _agent_count=$(echo "$_agents_json" | jq '.agents | length' 2>/dev/null) || _agent_count="0"
                 if [[ "$_agent_count" -gt 0 ]]; then
                     _agent_names=$(echo "$_agents_json" | jq -r '[.agents[].name] | join(", ")' 2>/dev/null) || _agent_names=""
-                    companions="${companions}\\n  - Intermute: ${_agent_count} agent(s) online (${_agent_names})"
+                    _agent_names=$(escape_for_json "$_agent_names")
+                    companion_context="${companion_context}\\n- Intermute: ${_agent_count} agent(s) online (${_agent_names})"
 
-                    # Show active reservations summary
                     _reservations_json=$(curl -sf --max-time 2 "${_intermute_url}/api/reservations?project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")" 2>/dev/null) || _reservations_json=""
                     if [[ -n "$_reservations_json" ]]; then
                         _res_count=$(echo "$_reservations_json" | jq '[.reservations[]? | select(.is_active == true)] | length' 2>/dev/null) || _res_count="0"
                         if [[ "$_res_count" -gt 0 ]]; then
                             _res_summary=$(echo "$_reservations_json" | jq -r '[.reservations[]? | select(.is_active == true) | "\(.agent_id[:8])→\(.path_pattern)"] | join(", ")' 2>/dev/null) || _res_summary=""
-                            companions="${companions}\\n  - Active reservations (${_res_count}): ${_res_summary}"
+                            companion_context="${companion_context}\\n  - Active reservations (${_res_count}): ${_res_summary}"
                         fi
                     fi
                 fi
@@ -130,15 +124,22 @@ if [[ -n "$interlock_root" ]]; then
     fi
 fi
 
-# Clodex — detect persistent toggle state
+# Clodex — always inject when active (changes agent behavior)
 CLODEX_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/clodex-toggle.flag"
 if [[ -f "$CLODEX_FLAG" ]]; then
-    companions="${companions}\\n- **CLODEX MODE: ON** — Route source code changes through Codex (preserves Claude token budget for orchestration).\\n  1. Plan: Read/Grep/Glob freely\\n  2. Prompt: Write task to /tmp/, dispatch via /clodex\\n  3. Verify: read output, run tests, review diffs\\n  4. Git ops (add/commit/push) are yours — do directly\\n  Bash: read-only for source files (no redirects, sed -i, tee). Git + test/build OK.\\n  Direct-edit OK: .md/.json/.yaml/.yml/.toml/.txt/.csv/.xml/.html/.css/.svg/.lock/.cfg/.ini/.conf/.env, /tmp/*\\n  Everything else (code files): dispatch via /clodex. If Codex unavailable: /clodex-toggle off, or use /subagent-driven-development.\\n  **Token savings:** For understanding code, prefer codex_query(question, files) over Read for files >200 lines.\\n  Modes: 'answer' (focused response), 'summarize' (structural overview), 'extract' (specific snippets).\\n  Read is still fine for: small files, config/docs, exact content needed for editing, targeted reads with offset."
+    companion_list="${companion_list}clodex,"
+    companion_context="${companion_context}\\n- **CLODEX MODE: ON** — Route source code changes through Codex (preserves Claude token budget for orchestration).\\n  1. Plan: Read/Grep/Glob freely\\n  2. Prompt: Write task to /tmp/, dispatch via /clodex\\n  3. Verify: read output, run tests, review diffs\\n  4. Git ops (add/commit/push) are yours — do directly\\n  Bash: read-only for source files (no redirects, sed -i, tee). Git + test/build OK.\\n  Direct-edit OK: .md/.json/.yaml/.yml/.toml/.txt/.csv/.xml/.html/.css/.svg/.lock/.cfg/.ini/.conf/.env, /tmp/*\\n  Everything else (code files): dispatch via /clodex."
 fi
 
-companion_context=""
-if [[ -n "$companions" ]]; then
-    companion_context="\\n\\nDetected companions (FYI):${companions}"
+# Persist companion list as env var for on-demand access by skills
+companion_list="${companion_list%,}"  # trim trailing comma
+if [[ -n "${CLAUDE_ENV_FILE:-}" && -n "$companion_list" ]]; then
+    echo "export CLAVAIN_COMPANIONS=${companion_list}" >> "$CLAUDE_ENV_FILE"
+fi
+
+# Only inject companion context if there's something actionable (not just "detected X")
+if [[ -n "$companion_context" ]]; then
+    companion_context="\\n\\nActive companion alerts:${companion_context}"
 fi
 
 # Core conventions reminder (full version in config/CLAUDE.md)
