@@ -1,6 +1,6 @@
 {
   "name": "clavain",
-  "version": "0.6.30",
+  "version": "0.6.31",
   "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 4 agents, 52 commands, 23 skills, 1 MCP servers. Companions: interphase, interline, interslack, interform, intercraft, interdev.",
   "author": "mistakeknot",
   "license": "MIT",
@@ -39,32 +39,60 @@
         "description": "AGENTS.md generation"
       },
       {
-        "source": "interclode@interagency-marketplace",
-        "description": "Codex CLI dispatch infrastructure"
+        "source": "interflux@interagency-marketplace",
+        "description": "Multi-agent review engine (flux-drive)"
       },
       {
-        "source": "auracoil@interagency-marketplace",
-        "description": "Cross-AI AGENTS.md review"
+        "source": "interphase@interagency-marketplace",
+        "description": "Phase tracking, gates, and discovery",
+        "doctorCheck": {
+          "label": "Beads Lifecycle Companion",
+          "probe": "hooks/lib-gates.sh",
+          "notInstalledMsg": "phase tracking disabled"
+        }
+      },
+      {
+        "source": "interline@interagency-marketplace",
+        "description": "Dynamic statusline renderer",
+        "doctorCheck": {
+          "label": "Statusline Companion",
+          "probe": "scripts/statusline.sh",
+          "notInstalledMsg": "statusline rendering unavailable"
+        }
+      },
+      {
+        "source": "interpath@interagency-marketplace",
+        "description": "Product artifact generation",
+        "doctorCheck": {
+          "label": "Artifact Generation Companion",
+          "probe": "scripts/interpath.sh",
+          "notInstalledMsg": "product artifact generation unavailable"
+        }
+      },
+      {
+        "source": "interwatch@interagency-marketplace",
+        "description": "Doc freshness monitoring",
+        "doctorCheck": {
+          "label": "Doc Freshness Companion",
+          "probe": "scripts/interwatch.sh",
+          "notInstalledMsg": "doc drift detection unavailable"
+        }
+      },
+      {
+        "source": "interlock@interagency-marketplace",
+        "description": "Multi-agent file coordination"
+      },
+      {
+        "source": "intercheck@interagency-marketplace",
+        "description": "Code quality guards and session health"
+      },
+      {
+        "source": "tldr-swinton@interagency-marketplace",
+        "description": "Token-efficient code context (MCP)"
       },
       {
         "source": "tool-time@interagency-marketplace",
         "description": "Tool usage analytics"
-      },
-      {
-        "source": "agent-sdk-dev@claude-plugins-official",
-        "description": "Agent SDK development tools"
-      },
-      {
-        "source": "plugin-dev@claude-plugins-official",
-        "description": "Plugin development tools"
-      },
-      {
-        "source": "serena@claude-plugins-official",
-        "description": "Semantic coding tools"
-      },
-      {
-        "source": "security-guidance@claude-plugins-official",
-        "description": "Security best practices"
       },
       {
         "source": "interslack@interagency-marketplace",
@@ -81,6 +109,68 @@
       {
         "source": "interdev@interagency-marketplace",
         "description": "MCP CLI and developer tooling"
+      },
+      {
+        "source": "agent-sdk-dev@claude-plugins-official",
+        "description": "Agent SDK development tools"
+      },
+      {
+        "source": "plugin-dev@claude-plugins-official",
+        "description": "Plugin development tools"
+      },
+      {
+        "source": "serena@claude-plugins-official",
+        "description": "Semantic coding tools"
+      },
+      {
+        "source": "security-guidance@claude-plugins-official",
+        "description": "Security best practices"
+      }
+    ],
+    "optional": [
+      {
+        "source": "interfluence@interagency-marketplace",
+        "description": "Voice profile and style adaptation"
+      },
+      {
+        "source": "interject@interagency-marketplace",
+        "description": "Ambient discovery and research engine (MCP)"
+      },
+      {
+        "source": "internext@interagency-marketplace",
+        "description": "Work prioritization and tradeoff analysis"
+      },
+      {
+        "source": "interstat@interagency-marketplace",
+        "description": "Token efficiency benchmarking"
+      },
+      {
+        "source": "interkasten@interagency-marketplace",
+        "description": "Notion sync and documentation"
+      },
+      {
+        "source": "interlens@interagency-marketplace",
+        "description": "Cognitive augmentation lenses (MCP)"
+      },
+      {
+        "source": "intersearch@interagency-marketplace",
+        "description": "Shared embedding and Exa search library"
+      },
+      {
+        "source": "interserve@interagency-marketplace",
+        "description": "Codex spark classifier and context compression (MCP)"
+      },
+      {
+        "source": "interpub@interagency-marketplace",
+        "description": "Plugin publishing automation"
+      },
+      {
+        "source": "tuivision@interagency-marketplace",
+        "description": "TUI automation and visual testing (MCP)"
+      },
+      {
+        "source": "intermux@interagency-marketplace",
+        "description": "Agent activity visibility and tmux monitoring (MCP)"
       }
     ],
     "infrastructure": [
