@@ -203,12 +203,22 @@ if type sprint_find_active &>/dev/null; then
     fi
 fi
 
-# Previous session handoff context (.clavain/scratch/handoff.md)
-# session-handoff creates scratch/; we only read here (don't create dirs).
+# Previous session handoff context
+# session-handoff writes timestamped files + handoff-latest.md symlink.
+# Fallback chain: handoff-latest.md → handoff.md (legacy) → newest handoff-*.md
 handoff_context=""
-if [[ -f ".clavain/scratch/handoff.md" ]]; then
+handoff_file=""
+if [[ -f ".clavain/scratch/handoff-latest.md" ]]; then
+    handoff_file=".clavain/scratch/handoff-latest.md"
+elif [[ -f ".clavain/scratch/handoff.md" ]]; then
+    handoff_file=".clavain/scratch/handoff.md"
+elif ls .clavain/scratch/handoff-*.md &>/dev/null; then
+    # No symlink yet — pick the newest timestamped file
+    handoff_file=$(ls -1t .clavain/scratch/handoff-*.md 2>/dev/null | head -1)
+fi
+if [[ -n "$handoff_file" ]]; then
     # Cap at 40 lines to prevent context bloat
-    handoff_content=$(head -40 ".clavain/scratch/handoff.md" 2>/dev/null) || handoff_content=""
+    handoff_content=$(head -40 "$handoff_file" 2>/dev/null) || handoff_content=""
     if [[ -n "$handoff_content" ]]; then
         handoff_context="\\n\\n**Previous session context:**\\n$(escape_for_json "$handoff_content")"
     fi

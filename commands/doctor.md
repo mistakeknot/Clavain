@@ -109,13 +109,25 @@ if [ -d .clavain ]; then
     echo "  WARN: .clavain/scratch/ not in .gitignore"
   fi
   # Check for stale handoff (portable stat with existence guard)
-  if [ -f .clavain/scratch/handoff.md ]; then
-    mtime=$(stat -c %Y .clavain/scratch/handoff.md 2>/dev/null || stat -f %m .clavain/scratch/handoff.md 2>/dev/null || echo 0)
+  # Prefer handoff-latest.md symlink, fall back to legacy handoff.md
+  _handoff_file=""
+  if [ -f .clavain/scratch/handoff-latest.md ]; then
+    _handoff_file=".clavain/scratch/handoff-latest.md"
+  elif [ -f .clavain/scratch/handoff.md ]; then
+    _handoff_file=".clavain/scratch/handoff.md"
+  fi
+  if [ -n "$_handoff_file" ]; then
+    mtime=$(stat -c %Y "$_handoff_file" 2>/dev/null || stat -f %m "$_handoff_file" 2>/dev/null || echo 0)
     if [ "$mtime" -gt 0 ]; then
       age=$(( ($(date +%s) - mtime) / 86400 ))
       if [ "$age" -gt 7 ]; then
         echo "  WARN: stale handoff (${age} days old)"
       fi
+    fi
+    # Count accumulated handoffs
+    handoff_count=$(ls -1 .clavain/scratch/handoff-2*.md 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$handoff_count" -gt 0 ]; then
+      echo "  OK: ${handoff_count} handoff(s) in scratch/"
     fi
   fi
   # Count learnings entries

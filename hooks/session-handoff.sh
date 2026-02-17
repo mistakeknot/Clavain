@@ -89,10 +89,17 @@ SIGNALS="${SIGNALS%,}"
 
 # Determine handoff target: .clavain/scratch/ if available, else project root.
 # Hooks run from project root (set by Claude Code), so relative paths are safe.
+# Uses timestamped filenames so handoffs from concurrent/sequential sessions
+# don't overwrite each other. A symlink (handoff-latest.md) points to the newest.
 HANDOFF_PATH="HANDOFF.md"
 if [[ -d ".clavain" ]]; then
     mkdir -p ".clavain/scratch" 2>/dev/null || true
-    HANDOFF_PATH=".clavain/scratch/handoff.md"
+    TIMESTAMP=$(date +%Y-%m-%dT%H%M)
+    SESSION_SHORT="${SESSION_ID:0:8}"
+    HANDOFF_PATH=".clavain/scratch/handoff-${TIMESTAMP}-${SESSION_SHORT}.md"
+    # Prune old handoffs: keep last 10 timestamped files
+    # shellcheck disable=SC2012
+    ls -1t .clavain/scratch/handoff-*.md 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/null || true
 fi
 
 # Build the handoff prompt
@@ -104,12 +111,15 @@ REASON="Session handoff check: detected incomplete work signals [${SIGNALS}]. Be
    - **Next**: Concrete next steps for the next session
    - **Context**: Any gotchas or decisions the next session needs to know
 
-2. Update any in-progress beads with current status:
+2. Update the latest-handoff symlink so session-start finds it:
+   \`ln -sf \"\$(basename '${HANDOFF_PATH}')\" .clavain/scratch/handoff-latest.md\`
+
+3. Update any in-progress beads with current status:
    \`bd update <id> --notes=\"<current status>\"\`
 
-3. Run \`bd sync --from-main\` to sync beads state
+4. Run \`bd sync --from-main\` to sync beads state
 
-4. Stage and commit your work (even if incomplete):
+5. Stage and commit your work (even if incomplete):
    \`git add <files> && git commit -m \"wip: <what was done>\"\`
 
 Keep it brief — the handoff file should be 10-20 lines, not a report."
