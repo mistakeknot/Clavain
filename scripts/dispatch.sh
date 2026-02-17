@@ -27,6 +27,80 @@ PROMPT_FILE=""
 TEMPLATE_FILE=""
 IMAGES=()
 EXTRA_ARGS=()
+DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INTERBAND_DISPATCH_FILE=""
+DISPATCH_SESSION_ID="${CLAUDE_SESSION_ID:-}"
+
+_load_interband_lib() {
+  local candidate
+  for candidate in \
+    "${INTERBAND_LIB:-}" \
+    "${DISPATCH_SCRIPT_DIR}/../../../infra/interband/lib/interband.sh"
+  do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      # shellcheck source=/dev/null
+      source "$candidate" && return 0
+    fi
+  done
+  return 1
+}
+
+_dispatch_write_state_files() {
+  local name="${1:-codex}" workdir="${2:-.}" started="${3:-0}" activity="${4:-starting}" turns="${5:-0}" commands="${6:-0}" messages="${7:-0}"
+
+  # Legacy state path for current interline compatibility.
+  local legacy_tmp="${STATE_FILE}.tmp"
+  printf '{"name":"%s","workdir":"%s","started":%d,"activity":"%s","turns":%d,"commands":%d,"messages":%d}\n' \
+    "$name" "$workdir" "$started" "$activity" "$turns" "$commands" "$messages" \
+    > "$legacy_tmp" 2>/dev/null && mv -f "$legacy_tmp" "$STATE_FILE" 2>/dev/null || true
+
+  # Preferred structured sideband path.
+  if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]] && type interband_write >/dev/null 2>&1; then
+    local payload_json
+    payload_json=$(jq -n -c \
+      --arg name "$name" \
+      --arg workdir "$workdir" \
+      --arg activity "$activity" \
+      --arg started "$started" \
+      --arg turns "$turns" \
+      --arg commands "$commands" \
+      --arg messages "$messages" \
+      '{
+        name:$name,
+        workdir:$workdir,
+        started:($started|tonumber),
+        activity:$activity,
+        turns:($turns|tonumber),
+        commands:($commands|tonumber),
+        messages:($messages|tonumber)
+      }' 2>/dev/null) || payload_json=""
+    if [[ -n "$payload_json" ]]; then
+      interband_write "$INTERBAND_DISPATCH_FILE" "clavain" "dispatch" "$DISPATCH_SESSION_ID" "$payload_json" \
+        2>/dev/null || true
+    fi
+  fi
+}
+
+_dispatch_sync_interband_from_legacy() {
+  [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]] || return 0
+  type interband_write >/dev/null 2>&1 || return 0
+  [[ -f "$STATE_FILE" ]] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+
+  local payload_json
+  payload_json=$(jq -c '.' "$STATE_FILE" 2>/dev/null) || payload_json=""
+  if [[ -n "$payload_json" ]]; then
+    interband_write "$INTERBAND_DISPATCH_FILE" "clavain" "dispatch" "$DISPATCH_SESSION_ID" "$payload_json" \
+      2>/dev/null || true
+  fi
+}
+
+_dispatch_cleanup_state() {
+  rm -f "$STATE_FILE" "${STATE_FILE}.tmp" 2>/dev/null || true
+  if [[ -n "${INTERBAND_DISPATCH_FILE:-}" ]]; then
+    rm -f "$INTERBAND_DISPATCH_FILE" "${INTERBAND_DISPATCH_FILE}.tmp" 2>/dev/null || true
+  fi
+}
 
 show_help() {
   cat <<'HELP'
@@ -504,11 +578,14 @@ fi
 
 # Write dispatch state file for statusline visibility
 STATE_FILE="/tmp/clavain-dispatch-$$.json"
+if _load_interband_lib && type interband_path >/dev/null 2>&1; then
+  INTERBAND_DISPATCH_FILE=$(interband_path "clavain" "dispatch" "$$" 2>/dev/null || echo "")
+fi
 SUMMARY_FILE=""
 if [[ -n "$OUTPUT" ]]; then
   SUMMARY_FILE="${OUTPUT}.summary"
 fi
-trap 'rm -f "$STATE_FILE" "${STATE_FILE}.tmp"' EXIT INT TERM
+trap _dispatch_cleanup_state EXIT INT TERM
 
 # Validate state file path is writable
 if ! touch "$STATE_FILE" 2>/dev/null; then
@@ -519,8 +596,7 @@ fi
 STARTED_TS="$(date +%s)"
 
 # Initial state
-printf '{"name":"%s","workdir":"%s","started":%d,"activity":"starting","turns":0,"commands":0,"messages":0}\n' \
-  "${NAME:-codex}" "${WORKDIR:-.}" "$STARTED_TS" > "$STATE_FILE"
+_dispatch_write_state_files "${NAME:-codex}" "${WORKDIR:-.}" "$STARTED_TS" "starting" "0" "0" "0"
 
 # Check if gawk is available for JSONL streaming (match() with capture groups + systime() are gawk extensions)
 HAS_GAWK=false
@@ -649,11 +725,16 @@ if [[ "$HAS_GAWK" == true ]]; then
   # Extract verdict sidecar from output
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
 
+  # Keep structured sideband in sync even when parser wrote only legacy state.
+  _dispatch_sync_interband_from_legacy
+
   exit "$CODEX_EXIT"
 else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
   "${CMD[@]}"
+
+  _dispatch_sync_interband_from_legacy
 
   # Extract verdict sidecar from output
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
