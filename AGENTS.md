@@ -12,6 +12,12 @@ Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [
 | Components | 23 skills, 4 agents, 52 commands, 12 hooks, 1 MCP servers |
 | License | MIT |
 
+### North Star for New Work
+
+- Improve at least one frontier axis: orchestration, reasoning quality, or token efficiency.
+- Avoid measurable regressions on the other two axes unless offset by a larger quantified gain.
+- Prefer changes with observable signals in routing, review precision, or resource-to-outcome ratio.
+
 ### Release workflow
 
 - Run `scripts/bump-version.sh <version>` (or `/interpub:release <version>` in Claude Code) for any released changes.
@@ -381,6 +387,45 @@ These plugins overlap with Clavain's opinionated equivalents. Keeping both cause
 | hookify | Clavain manages hooks directly | **OFF** |
 
 Full audit rationale: `docs/plugin-audit.md`
+
+## Operational Notes
+
+### Upstream Sync
+- 6 upstreams: superpowers, superpowers-lab, superpowers-dev, compound-engineering, beads, oracle
+- All cloned to `/root/projects/upstreams/<name>/` (read-only mirrors)
+- `scripts/pull-upstreams.sh` — daily pull with `--pull`, `--status`, `--diff` modes
+- Sync state tracked in `upstreams.json` (commit hashes per upstream + fileMap)
+- **sprint.md is canonical pipeline command** (renamed from lfg.md). lfg.md is alias
+- **Post-sync checklist**: grep `compound-engineering:|/workflows:|ralph-wiggum:|/deepen-plan` in agents/commands/skills
+
+### File Mapping Gotchas
+- `using-superpowers/SKILL.md` → `using-clavain/SKILL.md` (namespace rename)
+- `data-integrity-guardian.md` → `data-integrity-reviewer.md` (local rename)
+- `agents/code-reviewer.md` → `agents/review/plan-reviewer.md` (restructured path)
+- compound-engineering agents under `plugins/compound-engineering/agents/` not root
+- Skip deleted agents during sync — 9 deleted (consolidated into fd-*), 3 commands deleted
+
+### Test Suite Details
+- 3-tier: structural (pytest), shell (bats-core), smoke (Claude Code subagents)
+- Tests in `tests/{structural,shell,smoke,fixtures}/`
+- Config: `tests/pyproject.toml`, use `uv run` not pip
+- Agent globs MUST use explicit category dirs (review/research/workflow), not recursive
+- Counts: 5 agents, 27 skills, 37 commands (hardcoded regression guards)
+- **Review agents can report wrong counts** — always verify against filesystem/test suite
+
+### Interserve Dispatch
+- dispatch.sh does NOT support `--template` — use `--prompt-file`
+- Codex CLI v0.101.0: `--approval-mode` replaced by `-s`/`--sandbox`. Prompt is positional, NOT `-p`
+- Use `codex exec -s danger-full-access -- "prompt"`
+
+### using-clavain Split
+- SKILL.md reduced from 117 to 41 lines (compact Quick Router table)
+- Full routing tables in `skills/using-clavain/references/routing-tables.md`
+- gen-catalog.py expects pattern `\d+ skills, \d+ agents, and \d+ commands`
+
+### Conventions
+- Uses pnpm, not npm
+- `docs-sp-reference/` is read-only historical archive
 
 ## Known Constraints
 
