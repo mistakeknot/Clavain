@@ -51,6 +51,7 @@ else
 fi
 ```
 
+<!-- agent-rig:begin:companion-checks -->
 ### 3b. Beads Lifecycle Companion
 
 ```bash
@@ -94,6 +95,7 @@ else
   echo "  Install: claude plugin install interwatch@interagency-marketplace"
 fi
 ```
+<!-- agent-rig:end:companion-checks -->
 
 ### 3f. Agent Memory
 
@@ -152,6 +154,7 @@ fi
 
 Check that known conflicting plugins are disabled:
 
+<!-- agent-rig:begin:doctor-conflicts -->
 ```bash
 python3 -c "
 import json, os
@@ -178,6 +181,7 @@ else:
     print('  All conflicts disabled')
 "
 ```
+<!-- agent-rig:end:doctor-conflicts -->
 
 ### 5. Skill Budget
 
@@ -215,6 +219,7 @@ echo "installed: v${INSTALLED}"
 
 Present results as a table:
 
+<!-- agent-rig:begin:doctor-output -->
 ```
 Clavain Doctor
 ──────────────────────────────────
@@ -234,6 +239,7 @@ skill budget  [PASS|WARN: N over 16K|ERROR: N over 32K]
 version       v0.X.Y
 ──────────────────────────────────
 ```
+<!-- agent-rig:end:doctor-output -->
 
 If any check shows FAIL or WARN, add a **Recommendations** section with one-line fixes:
 - context7 fail → "Restart Claude Code session — context7 is bundled with Clavain"

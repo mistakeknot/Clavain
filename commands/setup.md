@@ -26,43 +26,76 @@ Confirm this plugin is installed and active:
 ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/skills/using-clavain/SKILL.md
 ```
 
-## Step 2: Install Required Plugins
+## Step 2: Install Required & Recommended Plugins
+
+> Self-heal: If the plugin lists below appear stale, read `agent-rig.json` directly and derive install commands from the `plugins` object.
 
 Install these plugins from their marketplaces. Skip any already installed.
 
 **From interagency-marketplace:**
+<!-- agent-rig:begin:install-interagency -->
 ```bash
 claude plugin install interdoc@interagency-marketplace
-claude plugin install auracoil@interagency-marketplace
-claude plugin install tool-time@interagency-marketplace
+claude plugin install interflux@interagency-marketplace
 claude plugin install interphase@interagency-marketplace
 claude plugin install interline@interagency-marketplace
 claude plugin install interpath@interagency-marketplace
 claude plugin install interwatch@interagency-marketplace
 claude plugin install interlock@interagency-marketplace
+claude plugin install intercheck@interagency-marketplace
+claude plugin install tldr-swinton@interagency-marketplace
+claude plugin install tool-time@interagency-marketplace
+claude plugin install interslack@interagency-marketplace
+claude plugin install interform@interagency-marketplace
+claude plugin install intercraft@interagency-marketplace
+claude plugin install interdev@interagency-marketplace
 ```
+<!-- agent-rig:end:install-interagency -->
 
 **From claude-plugins-official:**
+<!-- agent-rig:begin:install-official -->
 ```bash
 claude plugin install context7@claude-plugins-official
+claude plugin install explanatory-output-style@claude-plugins-official
 claude plugin install agent-sdk-dev@claude-plugins-official
 claude plugin install plugin-dev@claude-plugins-official
 claude plugin install serena@claude-plugins-official
 claude plugin install security-guidance@claude-plugins-official
-claude plugin install explanatory-output-style@claude-plugins-official
 ```
+<!-- agent-rig:end:install-official -->
 
 **Language servers (install based on what languages you work with):**
 Use AskUserQuestion to ask which languages to enable:
+<!-- agent-rig:begin:install-infrastructure -->
 - Go → `claude plugin install gopls-lsp@claude-plugins-official`
 - Python → `claude plugin install pyright-lsp@claude-plugins-official`
 - TypeScript → `claude plugin install typescript-lsp@claude-plugins-official`
 - Rust → `claude plugin install rust-analyzer-lsp@claude-plugins-official`
+<!-- agent-rig:end:install-infrastructure -->
+
+## Step 2b: Optional Plugins
+
+These plugins provide additional capabilities. Use AskUserQuestion to ask which to install:
+
+<!-- agent-rig:begin:install-optional -->
+- `interfluence@interagency-marketplace` — Voice profile and style adaptation
+- `interject@interagency-marketplace` — Ambient discovery and research engine (MCP)
+- `internext@interagency-marketplace` — Work prioritization and tradeoff analysis
+- `interstat@interagency-marketplace` — Token efficiency benchmarking
+- `interkasten@interagency-marketplace` — Notion sync and documentation
+- `interlens@interagency-marketplace` — Cognitive augmentation lenses (MCP)
+- `intersearch@interagency-marketplace` — Shared embedding and Exa search library
+- `interserve@interagency-marketplace` — Codex spark classifier and context compression (MCP)
+- `interpub@interagency-marketplace` — Plugin publishing automation
+- `tuivision@interagency-marketplace` — TUI automation and visual testing (MCP)
+- `intermux@interagency-marketplace` — Agent activity visibility and tmux monitoring (MCP)
+<!-- agent-rig:end:install-optional -->
 
 ## Step 3: Disable Conflicting Plugins
 
 These plugins overlap with Clavain and must be disabled to avoid duplicate agents:
 
+<!-- agent-rig:begin:disable-conflicts -->
 ```bash
 claude plugin disable code-review@claude-plugins-official
 claude plugin disable pr-review-toolkit@claude-plugins-official
@@ -73,6 +106,7 @@ claude plugin disable claude-md-management@claude-plugins-official
 claude plugin disable frontend-design@claude-plugins-official
 claude plugin disable hookify@claude-plugins-official
 ```
+<!-- agent-rig:end:disable-conflicts -->
 
 ## Step 4: Verify MCP Servers
 
@@ -104,6 +138,7 @@ If `.beads/` doesn't exist, ask: "Initialize beads issue tracking for this proje
 
 Run a final verification. This script reads `~/.claude/settings.json` to check actual enabled/disabled state (plugins missing from `enabledPlugins` are enabled by default — only explicit `false` means disabled):
 
+<!-- agent-rig:begin:verify-script -->
 ```bash
 python3 -c "
 import json, os, subprocess
@@ -114,27 +149,38 @@ with open(settings_path) as f:
 
 # Required plugins: absent = enabled (default), True = enabled, False = disabled
 required = {
-    'clavain@interagency-marketplace',
-    'interdoc@interagency-marketplace',
-    'auracoil@interagency-marketplace',
-    'tool-time@interagency-marketplace',
-    'context7@claude-plugins-official',
     'agent-sdk-dev@claude-plugins-official',
-    'plugin-dev@claude-plugins-official',
-    'serena@claude-plugins-official',
-    'security-guidance@claude-plugins-official',
+    'clavain@interagency-marketplace',
+    'context7@claude-plugins-official',
     'explanatory-output-style@claude-plugins-official',
+    'intercheck@interagency-marketplace',
+    'intercraft@interagency-marketplace',
+    'interdev@interagency-marketplace',
+    'interdoc@interagency-marketplace',
+    'interflux@interagency-marketplace',
+    'interform@interagency-marketplace',
+    'interline@interagency-marketplace',
+    'interlock@interagency-marketplace',
+    'interpath@interagency-marketplace',
+    'interphase@interagency-marketplace',
+    'interslack@interagency-marketplace',
+    'interwatch@interagency-marketplace',
+    'plugin-dev@claude-plugins-official',
+    'security-guidance@claude-plugins-official',
+    'serena@claude-plugins-official',
+    'tldr-swinton@interagency-marketplace',
+    'tool-time@interagency-marketplace',
 }
 
 conflicts = {
+    'claude-md-management@claude-plugins-official',
     'code-review@claude-plugins-official',
-    'pr-review-toolkit@claude-plugins-official',
     'code-simplifier@claude-plugins-official',
     'commit-commands@claude-plugins-official',
     'feature-dev@claude-plugins-official',
-    'claude-md-management@claude-plugins-official',
     'frontend-design@claude-plugins-official',
     'hookify@claude-plugins-official',
+    'pr-review-toolkit@claude-plugins-official',
 }
 
 print('=== Required Plugins ===')
@@ -157,6 +203,7 @@ for p in sorted(conflicts):
 print(f'  ({conf_ok}/{len(conflicts)} disabled)')
 "
 ```
+<!-- agent-rig:end:verify-script -->
 
 Then check MCP servers and companions:
 

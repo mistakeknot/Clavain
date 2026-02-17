@@ -55,52 +55,24 @@ Major features that landed since the 0.6.13 roadmap:
 
 ## Roadmap
 
-The original 3-phase roadmap (Measure → Integrate + Extract → Advance) remains the strategic direction. All execution beads from the previous roadmap are closed. The next wave of work requires creating new beads.
+### Now (P0-P1)
+- [CV-N1] **Outcome-based analytics v1** — instrument per-agent token traces, per-gate pass/fail, and per-run cost summaries.
+- [CV-N2] **Agent evals as CI** — add regression corpus and automated CI run that evaluates agent workflows before merge.
+- [CV-N3] **Topology experiment** — compare 2/4/6/8 agent rosters to quantify quality vs. cost.
+- [CV-N4] **KPI dashboard** — publish defect escape rate, override rate, cost per change, time-to-first-signal, redundant work ratio.
+- [CV-N5] **`clavain` session memory contracts** — define `.clavain/` lifecycle for cross-sprint learnings and run state.
 
-### Phase 1: Measure (unchanged priority — infrastructure gap)
+### Next (P2)
+- [CV-NXT1] **Deep tldrs integration in Clavain stages** — route code-reading-heavy stages to tldr-swinton defaults by policy.
+- [CV-NXT2] **Agent trust model** — score routing outcomes by historical precision and override rate.
+- [CV-NXT3] **Interflux spec reuse contracts** — expose stable findings/signal contracts for Clavain consumers.
+- [CV-NXT4] **Clavain/flux-drive interoperability hardening** — align command discoverability, error semantics, and artifact cleanup.
+- [CV-L1] **Adaptive dispatch policy** — automatic roster selection with explicit override controls.
+- [CV-L2] **Companion extraction program** — complete remaining planned companions once measurable gates are stable.
 
-**Theme:** Build outcome-based agent analytics. Without measurement, everything else is guesswork.
-
-**Status:** The interspect system provides the _evidence collection_ layer but not the _analytics_ layer. Interspect records per-agent override events; what's missing is per-run cost tracking, KPI computation, and eval harness.
-
-| Item | What it needs | Blocked by |
-|------|--------------|------------|
-| Outcome-based analytics v1 | Per-agent token traces, per-gate pass/fail, per-run cost summaries | — |
-| Agent evals as CI | Corpus of tasks with expected properties, regression harness | — |
-| Topology experiment | Run 2/4/6/8 agents on same tasks, measure quality vs. cost | Analytics v1 |
-| `.clavain/` filesystem | Per-project memory contract for analytics, learnings, scratch state | — |
-
-**Five discipline KPIs** (from Oracle's 2026-02-14 recommendation):
-
-1. **Defect escape rate** — findings caught in review that would have shipped
-2. **Human override rate** — % of agent recommendations overridden, by agent and domain
-3. **Cost per landed change** — total token cost for brainstorm-to-merge
-4. **Time-to-first-signal** — seconds from `/flux-drive` to first actionable finding
-5. **Redundant work ratio** — % of agent findings that are duplicates across agents
-
-### Phase 2: Integrate + Extract
-
-**Theme:** Deep tldrs integration measured against Phase 1 baselines. Extract remaining planned companions.
-
-| Item | What it needs | Depends on |
-|------|--------------|------------|
-| Deep tldrs integration | Route all code-reading through tldrs, measure token/defect impact | Analytics v1 |
-| Flux-drive spec library | Extract domain detection + scoring as Python libraries | — |
-| Companion extractions | intershift (cross-AI dispatch), interscribe (knowledge compounding) — the two remaining planned companions not yet shipped | Analytics data |
-
-**Note:** intercraft and interarch (previously planned P2.2a/P2.2d) have already been shipped as companion plugins.
-
-### Phase 3: Advance
-
-**Theme:** Automation multipliers — adaptive routing, cross-project learning, MCP-native communication.
-
-| Item | What it needs | Depends on |
-|------|--------------|------------|
-| Adaptive model routing | Dynamic routing based on measured agent trust scores | Analytics + topology |
-| Cross-project knowledge | Patterns learned in project A inform project B | `.clavain/` + interscribe |
-| MCP-native communication | Replace file-based sideband with MCP tool calls | — |
-| Interactive-to-autonomous boundary | Formalize when to ask human vs. proceed | Analytics override rate |
-| Deferred flux-drive v2 | 8 trigger-gated features (two-tier knowledge, ad-hoc agents, etc.) | Various triggers |
+### Later (P3-P4)
+- [CV-L3] **Cross-project knowledge compounding** — pilot interscribe-style pattern sharing behind evaluation gates.
+- [CV-L4] **MCP-native coordination plane** — reduce file-based sideband contracts with explicit tool-level contracts.
 
 ---
 
@@ -200,3 +172,11 @@ Run `/interpath:roadmap` to regenerate from current project state.
 ---
 
 *Synthesized from: [`docs/vision.md`](vision.md), [`docs/PRD.md`](PRD.md), 7 brainstorm docs (2026-02-14 through 2026-02-15), 13 plan docs, 364 closed beads, 19 companion plugins, and Oracle cross-review (2026-02-14). Sources linked throughout.*
+
+## From Interverse Roadmap
+
+Items from the [Interverse roadmap](../../../docs/roadmap.json) that involve this module:
+
+- **iv-zyym** [Next] Evaluate Claude Hub for event-driven GitHub agent dispatch
+- **iv-wrae** [Next] Evaluate Container Use (Dagger) for sandboxed agent dispatch
+- **iv-quk4** [Next] Hierarchical dispatch — meta-agent for N-agent fan-out

@@ -49,6 +49,42 @@ Every agent action should emit traceable events: inputs, outputs, cost, latency,
 ### 9. Contracts > cleverness
 Prefer typed interfaces, schemas, manifests, and declarative specs over prompt sorcery. Composition only works when boundaries are explicit. Agent definitions, plugin capabilities, and inter-plugin communication should be formally specifiable, not implicitly assumed.
 
+### 10. Push the frontier
+
+Clavain is not just a stable workflow stack; it is an active platform for advancing what AI-assisted engineering can do. That includes:
+- **Agent orchestration frontier**: robust multi-agent topology, adaptive selection, and context-sensitive dispatch.
+- **Reasoning and coding quality frontier**: stronger review signals, measurable defect prevention, and repeatable collaboration patterns that improve correctness over time.
+- **Token-efficiency frontier**: reducing token spend *and* improving outcomes per token through smarter partitioning, context slicing, and quality-aware automation.
+
+All roadmap decisions should be filtered by these three outcomes before adding new modules or changing core flows.
+
+### Frontier Compass (Structured)
+
+```yaml
+frontier_objective:
+  primary_axes:
+    - orchestration
+    - reasoning_quality
+    - token_efficiency
+  decision_rule: "Prioritize initiatives that improve at least two frontier axes without materially weakening the third."
+  scoring_targets:
+    orchestration:
+      preferred_signals:
+        - coordination_quality
+        - adaptive_routing_success
+        - dispatch_reliability
+    reasoning_quality:
+      preferred_signals:
+        - defect_escape_reduction
+        - review_signal_precision
+        - repeatable_validation_coverage
+    token_efficiency:
+      preferred_signals:
+        - tokens_per_impact
+        - cost_per_landable_change
+        - duplicate_work_ratio
+```
+
 ## Scope
 
 Clavain covers the full product development lifecycle, not just the code-writing phase:

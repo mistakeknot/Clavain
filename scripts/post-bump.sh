@@ -14,3 +14,12 @@ if command -v python3 &>/dev/null && [ -f "$REPO_ROOT/scripts/gen-catalog.py" ];
         python3 "$REPO_ROOT/scripts/gen-catalog.py"
     fi
 fi
+
+# Sync agent-rig plugin lists into setup.md and doctor.md
+if command -v python3 &>/dev/null && [ -f "$REPO_ROOT/scripts/gen-rig-sync.py" ]; then
+    if [[ "${1:-}" == "--check" ]] || [[ "${DRY_RUN:-}" == "true" ]]; then
+        python3 "$REPO_ROOT/scripts/gen-rig-sync.py" --check || true
+    else
+        python3 "$REPO_ROOT/scripts/gen-rig-sync.py"
+    fi
+fi

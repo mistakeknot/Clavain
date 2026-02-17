@@ -13,6 +13,24 @@ Clavain is a recursively self-improving multi-agent rig for Claude Code that cod
 
 Clavain is also a proving ground. Capabilities are built tightly integrated, battle-tested through real use, and extracted into companion plugins (the inter-* constellation) when patterns stabilize.
 
+Clavain has an explicit frontier objective: advancing **agent orchestration**, **coding/reasoning quality**, and **token efficiency** together, not independently. New work should be judged by how it improves: coordination quality, confidence in correctness, and measurable quality-per-token outcomes.
+
+```yaml
+frontier_objective:
+  title: "Clavain Frontier Scorecard"
+  axes:
+    - id: orchestration
+      goal: "Faster, safer, more adaptive multi-agent coordination."
+    - id: reasoning_quality
+      goal: "Stronger correctness and defect-prevention outcomes."
+    - id: token_efficiency
+      goal: "Higher engineering impact per token consumed."
+  accept_criteria:
+    - "Improve at least one frontier axis."
+    - "Avoid regression on the other two axes unless offset by clear, measurable gain."
+    - "Prefer signals that are testable and observable."
+```
+
 ### What Clavain Is Not
 
 - **Not a framework.** An opinionated rig with opinions, not a reusable SDK.
