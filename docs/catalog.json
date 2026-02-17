@@ -1,7 +1,7 @@
 {
   "generated": "2026-02-16T07:33:56Z",
   "counts": {
-    "skills": 23,
+    "skills": 15,
     "agents": 4,
     "commands": 51,
     "hooks": 12,
@@ -21,14 +21,6 @@
     {
       "name": "code-review-discipline",
       "description": "Use when requesting or receiving code review \u2014 covers dispatching reviewer subagents, handling feedback with technical rigor, and avoiding performative agreement"
-    },
-    {
-      "name": "create-agent-skills",
-      "description": "Expert guidance for creating Claude Code skills and slash commands. Use when working with SKILL.md files, authoring new skills, improving existing skills, creating slash commands, or understanding skill structure and best practices."
-    },
-    {
-      "name": "developing-claude-code-plugins",
-      "description": "Use when working on Claude Code plugins (creating, modifying, testing, releasing, or maintaining) - provides streamlined workflows, patterns, and examples for the complete plugin lifecycle"
     },
     {
       "name": "dispatching-parallel-agents",
@@ -51,10 +43,6 @@
       "description": "Show discipline analytics \u2014 defect escape rate, override rate, cost metrics, and agent scorecard"
     },
     {
-      "name": "interpeer",
-      "description": "Cross-AI peer review with escalation modes \u2014 quick (Claude\u2194Codex), deep (reviewed Oracle query, formerly prompterpeer), council (multi-model synthesis, formerly winterpeer), mine (disagreement extraction, formerly splinterpeer). Auto-detects host agent."
-    },
-    {
       "name": "landing-a-change",
       "description": "Use when implementation is complete and all tests pass \u2014 guides the disciplined process of verifying, documenting, and landing a change on trunk"
     },
@@ -65,14 +53,6 @@
     {
       "name": "subagent-driven-development",
       "description": "Use when executing implementation plans with independent tasks in the current session"
-    },
-    {
-      "name": "systematic-debugging",
-      "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes"
-    },
-    {
-      "name": "test-driven-development",
-      "description": "Use when implementing any feature or bugfix, before writing implementation code"
     },
     {
       "name": "upstream-sync",
@@ -87,20 +67,8 @@
       "description": "Use when you need to run interactive CLI tools (vim, git rebase -i, Python REPL, etc.) that require real-time input/output - provides tmux-based approach for controlling interactive sessions through detached sessions and send-keys"
     },
     {
-      "name": "verification-before-completion",
-      "description": "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always"
-    },
-    {
-      "name": "working-with-claude-code",
-      "description": "Use when working with Claude Code CLI, plugins, hooks, MCP servers, skills, configuration, or any Claude Code feature - provides comprehensive official documentation for all aspects of Claude Code"
-    },
-    {
       "name": "writing-plans",
       "description": "Use when you have a spec or requirements for a multi-step task, before touching code"
-    },
-    {
-      "name": "writing-skills",
-      "description": "Use when creating new skills, editing existing skills, or verifying skills work before deployment"
     }
   ],
   "agents": [

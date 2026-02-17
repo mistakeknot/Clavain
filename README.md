@@ -4,7 +4,7 @@ Clavain, named after one of the protagonists from Alastair Reynolds's [Revelatio
 
 I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
 
-With 23 skills, 4 agents, 52 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 15 skills, 4 agents, 52 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -105,7 +105,7 @@ I use this before any architectural decision I'm uncertain about. The debate its
 
 ## What's Included
 
-### Skills (23)
+### Skills (15)
 
 Skills are workflow disciplines — they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -115,35 +115,23 @@ Skills are workflow disciplines — they guide **how** you work, not what tools 
 | `brainstorming` | Structured exploration before planning |
 | `writing-plans` | Create implementation plans with bite-sized tasks |
 | `executing-plans` | Execute plans with review checkpoints |
-| `verification-before-completion` | Verify before claiming done |
 | `landing-a-change` | Trunk-based finish checklist |
 | **Code Discipline** | |
-| `test-driven-development` | RED-GREEN-REFACTOR cycle |
-| `systematic-debugging` | Evidence-first bug investigation |
 | `refactor-safely` | Disciplined refactoring with duplication detection |
 | **Multi-Agent** | |
-| `flux-drive` | Intelligent document/repo review with agent triage |
 | `subagent-driven-development` | Parallel subagent execution |
 | `dispatching-parallel-agents` | When and how to parallelize |
 | `code-review-discipline` | Request reviews and handle feedback with technical rigor |
-| **Cross-AI** | |
-| `interpeer` | Cross-AI peer review with 4 modes: quick, deep (Oracle), council (multi-model), mine (disagreement extraction) |
-| `prompterpeer` | Oracle prompt optimizer — builds and reviews prompts for GPT-5.2 Pro (interpeer deep mode) |
-| `winterpeer` | LLM Council review — multi-model consensus for critical decisions (interpeer council mode) |
-| `splinterpeer` | Disagreement mining — extracts model conflicts into tests, specs, and questions (interpeer mine mode) |
 | `interserve` | Codex dispatch — megaprompt, parallel delegation, debate, Oracle escalation |
 | **Knowledge & Docs** | |
 | `engineering-docs` | Capture solved problems as searchable docs |
 | `file-todos` | File-based todo tracking across sessions |
-| **Plugin Development** | |
-| `create-agent-skills` | Write Claude Code skills and agents |
-| `developing-claude-code-plugins` | Plugin development patterns |
-| `working-with-claude-code` | Claude Code CLI reference |
-| `writing-skills` | TDD for skill documentation |
 | **Utilities** | |
 | `using-clavain` | Bootstrap routing — maps tasks to the right component |
 | `using-tmux-for-interactive-commands` | Interactive CLI tools in tmux |
 | `upstream-sync` | Track updates from upstream tool repos |
+
+Skills extracted to companion plugins: **interpeer** (cross-AI review: interpeer, prompterpeer, winterpeer, splinterpeer), **intertest** (quality disciplines: systematic-debugging, test-driven-development, verification-before-completion), **interdev** (meta-tooling: working-with-claude-code, developing-claude-code-plugins, create-agent-skills, writing-skills).
 
 ### Agents (4)
 
@@ -233,6 +221,9 @@ Clavain is designed as an **agent rig**, inspired by [PC game mod packs](https:/
 
 | Plugin | What it adds |
 |--------|-------------|
+| [interpeer](https://github.com/mistakeknot/interpeer) | Cross-AI peer review — quick, deep (Oracle), council, mine |
+| [intertest](https://github.com/mistakeknot/intertest) | Quality disciplines — TDD, systematic debugging, verification gates |
+| [interdev](https://github.com/mistakeknot/interdev) | Developer tooling — Claude Code reference, skill/plugin authoring |
 | [interdoc](https://github.com/interagency-marketplace) | AGENTS.md generation for any repo |
 | [interclode](https://github.com/interagency-marketplace) | Codex CLI dispatch infrastructure — powers `/interserve` |
 | [agent-sdk-dev](https://github.com/claude-plugins-official) | Agent SDK scaffolding |
@@ -270,7 +261,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 23 discipline skills (SKILL.md each)
+skills/       # 15 discipline skills (SKILL.md each)
 agents/       # 4 agents (review/ + workflow/)
 commands/     # 51 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
