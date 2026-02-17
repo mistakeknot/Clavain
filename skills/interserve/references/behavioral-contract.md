@@ -19,4 +19,4 @@ Git operations (add, commit, push) are Claude's responsibility — do them direc
 
 ## When Codex is Unavailable
 
-If Codex CLI is not installed, fall back to /subagent-driven-development or run /interserve-toggle to turn off.
+If Codex CLI is not installed, fall back to /subagent-driven-development or run /clodex-toggle to turn off.

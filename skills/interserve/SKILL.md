@@ -48,7 +48,7 @@ dispatch.sh supports `--tier fast|deep` to resolve model names from `config/disp
 | **fast** | `gpt-5.3-codex-spark` | Read-only exploration, verification, quick reviews |
 | **deep** | `gpt-5.3-codex` | Implementation, complex reasoning, debates |
 
-In Clavain interserve mode (`.claude/interserve-toggle.flag` present), Clavain maps:
+In Clavain interserve mode (`.claude/clodex-toggle.flag` present), Clavain maps:
 - default fast/deep mapping remains `gpt-5.3-codex-spark` / `gpt-5.3-codex`
 - For x-high routing, set `CLAVAIN_DISPATCH_PROFILE=interserve` when invoking dispatch:
   `CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" ...`

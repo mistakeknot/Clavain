@@ -284,7 +284,7 @@ done
 # - explicit CLAVAIN_DISPATCH_PROFILE=interserve (or legacy: clavain)
 # - legacy alias CLAVAIN_INTERSERVE_PROFILE=interserve
 # and only active when interserve mode is on.
-if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/interserve-toggle.flag" ]]; } || { [[ -z "${WORKDIR}" && -f ".claude/interserve-toggle.flag" ]]; }; then
+if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/clodex-toggle.flag" ]]; } || { [[ -z "${WORKDIR}" && -f ".claude/clodex-toggle.flag" ]]; }; then
   case "${CLAVAIN_DISPATCH_PROFILE,,}" in
     interserve|clavain|xhigh|codex)
       CLAVAIN_INTERSERVE_MODE=true

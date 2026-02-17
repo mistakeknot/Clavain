@@ -185,7 +185,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/compound` | Document solved problems |
 | `/changelog` | Generate changelog from recent merges |
 | `/docs` | Capture engineering knowledge in searchable docs |
-| `/interserve-toggle` | Toggle Codex-first execution mode |
+| `/clodex-toggle` | Toggle Codex-first execution mode |
 | `/model-routing` | Toggle subagent model tier (economy vs quality) |
 | `/codex-bootstrap` | Refresh Codex discovery links and run health checks |
 | `/todos` | Manage file-based todo tracking |

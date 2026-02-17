@@ -125,7 +125,7 @@ if [[ -n "$interlock_root" ]]; then
 fi
 
 # Interserve — always inject when active (changes agent behavior)
-INTERSERVE_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/interserve-toggle.flag"
+INTERSERVE_FLAG="${CLAUDE_PROJECT_DIR:-.}/.claude/clodex-toggle.flag"
 if [[ -f "$INTERSERVE_FLAG" ]]; then
     companion_list="${companion_list}interserve,"
     companion_context="${companion_context}\\n- **INTERSERVE MODE: ON** — Route source code changes through Codex (preserves Claude token budget for orchestration).\\n  1. Plan: Read/Grep/Glob freely\\n  2. Prompt: Write task to /tmp/, dispatch via /interserve\\n  3. Verify: read output, run tests, review diffs\\n  4. Git ops (add/commit/push) are yours — do directly\\n  Bash: read-only for source files (no redirects, sed -i, tee). Git + test/build OK.\\n  Direct-edit OK: .md/.json/.yaml/.yml/.toml/.txt/.csv/.xml/.html/.css/.svg/.lock/.cfg/.ini/.conf/.env, /tmp/*\\n  Everything else (code files): dispatch via /interserve."

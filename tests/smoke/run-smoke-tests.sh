@@ -105,7 +105,7 @@ fi
 # Set up interserve flag if --include-interserve
 if [[ "$INCLUDE_INTERSERVE" == true ]]; then
   mkdir -p "$PROJECT_ROOT/.claude"
-  date -Iseconds > "$PROJECT_ROOT/.claude/interserve-toggle.flag"
+  date -Iseconds > "$PROJECT_ROOT/.claude/clodex-toggle.flag"
   echo "Interserve behavioral test enabled."
   echo ""
 fi
@@ -123,7 +123,7 @@ claude --print \
 # Cleanup
 rm -f "$PROJECT_ROOT"/docs/research/smoke-test-*.md 2>/dev/null || true
 if [[ "$INCLUDE_INTERSERVE" == true ]]; then
-  rm -f "$PROJECT_ROOT/.claude/interserve-toggle.flag"
+  rm -f "$PROJECT_ROOT/.claude/clodex-toggle.flag"
   echo ""
   echo "Interserve flag cleaned up."
 fi

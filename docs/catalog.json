@@ -139,7 +139,7 @@
       "description": "Run Codex-first execution flow for larger scope work"
     },
     {
-      "name": "interserve-toggle",
+      "name": "clodex-toggle",
       "description": "Toggle interserve execution mode"
     },
     {

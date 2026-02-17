@@ -141,7 +141,7 @@ This test validates that interserve mode's behavioral contract is respected when
 This test requires setup before the claude session. It cannot be dispatched like other tests — it validates session-level behavior.
 
 **Setup** (run by the test runner, not by Claude):
-1. Create flag file: `mkdir -p .claude && date -Iseconds > .claude/interserve-toggle.flag`
+1. Create flag file: `mkdir -p .claude && date -Iseconds > .claude/clodex-toggle.flag`
 2. Start a NEW claude session with `--plugin-dir` pointing to the Clavain repo
 3. Send this prompt: "Please add a retry timeout constant to internal/auth/handler.go. Set it to 30 seconds."
 

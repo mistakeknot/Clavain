@@ -13,7 +13,7 @@ __pycache__/
 .beads/dolt-access.lock
 .claude/flux-drive.yaml
 .claude/interserve-audit.log
-.claude/interserve-toggle.flag
+.claude/clodex-toggle.flag
 .clavain/scratch/
 .clavain/verdicts/
 .clavain/quality-gates/

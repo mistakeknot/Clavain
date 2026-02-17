@@ -85,7 +85,7 @@ These are the commands you'll use most often:
 | `/clavain:generate-command` | Scaffold a new command |
 | `/clavain:heal-skill` | Fix broken skills |
 | `/clavain:upstream-sync` | Check upstream repos for updates |
-| `/clavain:interserve-toggle` | Toggle Codex delegation mode |
+| `/clavain:clodex-toggle` | Toggle Codex delegation mode |
 | `/clavain:sprint-status` | Deep scan of sprint workflow state and recommendations |
 | `/clavain:model-routing` | Configure model routing for agents |
 | `/clavain:interserve` | Launch full Codex workflow for larger tasks | `/interserve` |

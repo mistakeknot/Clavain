@@ -24,7 +24,7 @@ Load plan, review critically, execute tasks in batches, report for review betwee
 ### Step 2: Check Execution Mode
 
 ```bash
-FLAG_FILE="$(pwd)/.claude/interserve-toggle.flag"
+FLAG_FILE="$(pwd)/.claude/clodex-toggle.flag"
 [ -f "$FLAG_FILE" ] && echo "INTERSERVE_ACTIVE" || echo "DIRECT_MODE"
 ```
 

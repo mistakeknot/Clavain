@@ -35,7 +35,7 @@ bash -n hooks/lib-interspect.sh        # Syntax check (interspect shared library
 bash -n hooks/interspect-evidence.sh   # Syntax check (interspect evidence hook)
 bash -n hooks/interspect-session.sh    # Syntax check (interspect session start)
 bash -n hooks/interspect-session-end.sh # Syntax check (interspect session end)
-bash -n scripts/interserve-toggle.sh   # Syntax check
+bash -n scripts/clodex-toggle.sh   # Syntax check
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 ```
 

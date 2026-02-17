@@ -16,7 +16,7 @@ if [[ ! -d "$PROJECT_DIR" ]]; then
   exit 1
 fi
 
-FLAG_FILE="$PROJECT_DIR/.claude/interserve-toggle.flag"
+FLAG_FILE="$PROJECT_DIR/.claude/clodex-toggle.flag"
 
 if [[ -f "$FLAG_FILE" ]]; then
   # Currently ON → turn OFF
@@ -46,5 +46,5 @@ else
   echo '- For Clavain-in-Codex routing, set `CLAVAIN_DISPATCH_PROFILE=interserve` before dispatch calls.'
   echo '- Then --tier fast resolves to gpt-5.3-codex-spark-xhigh; --tier deep resolves to gpt-5.3-codex-xhigh.'
   echo ''
-  echo 'Run /interserve-toggle to turn off.'
+  echo 'Run /clodex-toggle to turn off.'
 fi
