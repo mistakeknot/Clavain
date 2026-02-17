@@ -16,6 +16,8 @@ __pycache__/
 .claude/interserve-toggle.flag
 .clavain/scratch/
 .clavain/verdicts/
+.clavain/quality-gates/
+.clavain/reviews/
 .clavain/checkpoint.json
 .clavain/interspect/interspect.db
 .clavain/interspect/interspect.db-wal

@@ -45,14 +45,20 @@ Based on analysis, invoke the appropriate agents in parallel:
 
 **Threshold:** Don't run more than 5 agents total. Prioritize by risk.
 
-### Phase 3: Gather Context for Agents
+### Phase 3: Gather Context and Prepare Output Directory
 
-Before launching agents, gather the diff context they will review:
+Before launching agents, prepare the diff and output infrastructure:
 
 ```bash
 # Unified diff (staged + unstaged)
-git diff HEAD > /tmp/qg-diff.txt
-git diff --cached >> /tmp/qg-diff.txt
+TS=$(date +%s)
+git diff HEAD > /tmp/qg-diff-${TS}.txt
+git diff --cached >> /tmp/qg-diff-${TS}.txt
+
+# Output directory for agent findings (cleaned each run, gitignored)
+OUTPUT_DIR="${PROJECT_ROOT}/.clavain/quality-gates"
+mkdir -p "$OUTPUT_DIR"
+rm -f "$OUTPUT_DIR"/*.md "$OUTPUT_DIR"/*.md.partial 2>/dev/null
 
 # Changed file list with reasons for agent selection
 git diff --name-only HEAD
@@ -61,45 +67,67 @@ git diff --cached --name-only
 
 ### Phase 4: Run Agents in Parallel
 
-Launch selected agents using the Task tool with `run_in_background: true`. Each agent prompt MUST include:
+Launch selected agents using the Task tool with `run_in_background: true`.
 
-1. **The unified diff** — paste the content of `/tmp/qg-diff.txt` (or inline the diff if small)
+**Critical: File-based output contract.** Each agent prompt MUST include this output section:
+
+```
+## Output Contract
+
+Write ALL findings to `{OUTPUT_DIR}/{agent-name}.md`.
+Do NOT return findings in your response text.
+Your response text should be a single line: "Findings written to {OUTPUT_DIR}/{agent-name}.md"
+
+File structure:
+
+### Findings Index
+- SEVERITY | ID | "Section" | Title
+Verdict: safe|needs-changes|risky
+
+### Summary
+[3-5 lines]
+
+### Issues Found
+[ID. SEVERITY: Title — 1-2 sentences with evidence. Reference file:line or hunk headers.]
+
+### Improvements
+[ID. Title — 1 sentence with rationale]
+
+Zero findings: empty index + verdict: safe.
+```
+
+Each agent prompt MUST also include:
+
+1. **The diff file path** — tell agents to Read `/tmp/qg-diff-{TS}.txt` as their first action
 2. **Changed file list** — with why each file was selected for this agent
 3. **Relevant config files** — if any were touched (e.g., go.mod, tsconfig.json, Cargo.toml)
 
-Ask agents to **reference diff hunks** in findings (file:line or hunk header like `@@ -10,5 +10,7 @@`).
+**Polling for completion** (after dispatch):
+1. Check `{OUTPUT_DIR}/` every 30 seconds for `.md` files (not `.md.partial`)
+2. Report progress: `[2/4 agents complete]`
+3. After 5 minutes, report any agents still pending
+4. If an agent has no `.md` file after timeout, check its background task output for errors
+
+### Phase 5: Synthesize Results via Subagent
+
+**Do NOT read agent output files yourself.** Delegate synthesis to a subagent so agent prose never enters the host context.
+
+Launch the **intersynth synthesis agent** (foreground, not background — you need its result):
 
 ```
-Task(interflux:review:fd-architecture): "Review this diff for structural issues. [paste diff]. Reference specific hunks."
-Task(interflux:review:fd-quality): "Review this diff for naming, conventions, and idioms. [paste diff]. Reference file:line."
-Task(interflux:review:fd-safety): "Scan this diff for security vulnerabilities. [paste diff]. Reference specific hunks."
+Task(intersynth:synthesize-review):
+  prompt: |
+    OUTPUT_DIR={OUTPUT_DIR}
+    VERDICT_LIB={CLAUDE_PLUGIN_ROOT}/hooks/lib-verdict.sh
+    MODE=quality-gates
+    CONTEXT="{X files changed across Y languages. Risk domains: [list]}"
 ```
 
-### Phase 5: Synthesize Results
+The intersynth agent reads all agent output files, validates structure, deduplicates findings, writes verdict JSON files, and returns a compact summary. See the agent's built-in instructions for the full protocol.
 
-Collect all agent findings and present:
-
-```markdown
-## Quality Gates Report
-
-### Changes Analyzed
-- X files changed across Y languages
-- Risk domains detected: [safety, correctness, performance, etc.]
-
-### Agents Invoked
-1. interflux:fd-architecture — [pass/findings]
-2. interflux:fd-quality — [pass/findings]
-3. interflux:fd-safety — [pass/findings]
-
-### Findings Summary
-- P1 CRITICAL: [count] — must fix
-- P2 IMPORTANT: [count] — should fix
-- P3 NICE-TO-HAVE: [count] — optional
-
-### Gate Result: [PASS / FAIL]
-
-[If FAIL: list P1 items that must be addressed]
-```
+After the synthesis subagent returns:
+1. Read `{OUTPUT_DIR}/synthesis.md` and present it to the user (this is the compact report, ~30-50 lines)
+2. The gate result (PASS/FAIL) comes from the subagent's return value — no additional file reading needed
 
 ### Phase 5b: Gate Check + Record Phase (on PASS only)
 
