@@ -21,14 +21,14 @@ FLAG_FILE="$PROJECT_DIR/.claude/clodex-toggle.flag"
 if [[ -f "$FLAG_FILE" ]]; then
   # Currently ON → turn OFF
   rm "$FLAG_FILE"
-  echo 'Interserve mode: **OFF**'
+  echo 'Clodex mode: **OFF**'
   echo ''
   echo 'Direct file editing restored. Edit/Write will work normally for all files.'
 else
   # Currently OFF → turn ON
   mkdir -p "$PROJECT_DIR/.claude"
   date -Iseconds > "$FLAG_FILE"
-  echo 'Interserve mode: **ON**'
+  echo 'Clodex mode: **ON**'
   echo ''
   echo 'Route source code changes through Codex (preserves Claude token budget for orchestration).'
   echo ''
