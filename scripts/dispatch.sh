@@ -32,10 +32,16 @@ INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${CLAUDE_SESSION_ID:-}"
 
 _load_interband_lib() {
+  local repo_root=""
+  repo_root="$(git -C "$DISPATCH_SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+
   local candidate
   for candidate in \
     "${INTERBAND_LIB:-}" \
-    "${DISPATCH_SCRIPT_DIR}/../../../infra/interband/lib/interband.sh"
+    "${DISPATCH_SCRIPT_DIR}/../../../infra/interband/lib/interband.sh" \
+    "${DISPATCH_SCRIPT_DIR}/../../../interband/lib/interband.sh" \
+    "${repo_root}/../interband/lib/interband.sh" \
+    "${HOME}/.local/share/interband/lib/interband.sh"
   do
     if [[ -n "$candidate" && -f "$candidate" ]]; then
       # shellcheck source=/dev/null

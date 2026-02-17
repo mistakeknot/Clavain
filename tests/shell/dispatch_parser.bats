@@ -23,18 +23,16 @@ teardown() {
     unset _PARSER_SCRIPT
 }
 
-# Helper: extract _jsonl_parser function body using brace-depth-aware awk.
+# Helper: extract _jsonl_parser function body.
 # Written to a temp file once per test to avoid re-extraction.
 _extract_parser() {
     if [[ -z "${_PARSER_SCRIPT:-}" ]]; then
         _PARSER_SCRIPT="$(mktemp)"
         awk '
-            /^_jsonl_parser\(\)/ { in_func=1; depth=0 }
+            /^_jsonl_parser\(\)[[:space:]]*\{/ { in_func=1 }
             in_func {
                 print
-                depth += gsub(/{/, "&")
-                depth -= gsub(/}/, "&")
-                if (depth == 0 && NR > 1) exit
+                if ($0 ~ /^}[[:space:]]*$/) exit
             }
         ' "$DISPATCH_SCRIPT" > "$_PARSER_SCRIPT"
     fi
