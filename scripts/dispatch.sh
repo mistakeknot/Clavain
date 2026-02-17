@@ -83,6 +83,9 @@ _dispatch_write_state_files() {
     if [[ -n "$payload_json" ]]; then
       interband_write "$INTERBAND_DISPATCH_FILE" "clavain" "dispatch" "$DISPATCH_SESSION_ID" "$payload_json" \
         2>/dev/null || true
+      if type interband_prune_channel >/dev/null 2>&1; then
+        interband_prune_channel "clavain" "dispatch" 2>/dev/null || true
+      fi
     fi
   fi
 }
