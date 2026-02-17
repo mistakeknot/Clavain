@@ -9,7 +9,7 @@ Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 23 skills, 4 agents, 52 commands, 12 hooks, 1 MCP servers |
+| Components | 15 skills, 4 agents, 52 commands, 12 hooks, 1 MCP servers |
 | License | MIT |
 
 ### North Star for New Work
@@ -40,7 +40,7 @@ Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 23 discipline skills
+├── skills/                        # 15 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -62,9 +62,9 @@ Clavain/
 ├── agents/
 │   ├── review/                    # 2 review agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 51 slash commands
+├── commands/                      # 52 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 49 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 50 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
@@ -288,9 +288,9 @@ When making changes, verify:
 Quick validation:
 ```bash
 # Count components
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 23
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 15
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 51
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 52
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"

@@ -141,7 +141,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (51)
+### Commands (52)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -263,7 +263,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ```
 skills/       # 15 discipline skills (SKILL.md each)
 agents/       # 4 agents (review/ + workflow/)
-commands/     # 51 slash commands
+commands/     # 52 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync

@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-16T07:33:56Z",
+  "generated": "2026-02-17T19:12:55Z",
   "counts": {
     "skills": 15,
     "agents": 4,
-    "commands": 51,
+    "commands": 52,
     "hooks": 12,
     "mcp_servers": 1,
     "review": 2,
@@ -13,10 +13,6 @@
     {
       "name": "brainstorming",
       "description": "Freeform brainstorming mode \u2014 loads collaborative dialogue style (one question at a time, multiple choice, incremental design). Use for open-ended exploration without structured phases. For a guided workflow with repo research, use /brainstorm instead."
-    },
-    {
-      "name": "interserve",
-      "description": "Dispatch tasks to Codex CLI agents \u2014 single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation."
     },
     {
       "name": "code-review-discipline",
@@ -41,6 +37,10 @@
     {
       "name": "galiana",
       "description": "Show discipline analytics \u2014 defect escape rate, override rate, cost metrics, and agent scorecard"
+    },
+    {
+      "name": "interserve",
+      "description": "Dispatch tasks to Codex CLI agents \u2014 single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation."
     },
     {
       "name": "landing-a-change",
@@ -101,10 +101,6 @@
     {
       "name": "changelog",
       "description": "Create engaging changelogs for recent merges to main branch"
-    },
-    {
-      "name": "interserve",
-      "description": "Run Codex-first execution flow for larger scope work"
     },
     {
       "name": "clodex-toggle",
@@ -173,6 +169,10 @@
     {
       "name": "interpeer",
       "description": "Quick cross-AI peer review \u2014 auto-detects host agent and calls the other for a second opinion"
+    },
+    {
+      "name": "interserve",
+      "description": "Run Codex-first execution flow for larger scope work"
     },
     {
       "name": "interspect",
@@ -261,6 +261,10 @@
     {
       "name": "sprint-status",
       "description": "Deep scan of sprint workflow state \u2014 session continuity, pipeline health, plan progress, beads, and recommendations"
+    },
+    {
+      "name": "status",
+      "description": "Unified status view across Clavain, artifact generation, doc drift, and coordination"
     },
     {
       "name": "strategy",

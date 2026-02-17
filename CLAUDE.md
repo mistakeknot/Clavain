@@ -15,7 +15,7 @@ claude --plugin-dir /root/projects/Interverse/hub/clavain
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 15
 ls agents/{review,workflow}/*.md | wc -l  # Should be 4
-ls commands/*.md | wc -l              # Should be 51
+ls commands/*.md | wc -l              # Should be 52
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
 bash -n hooks/dotfiles-sync.sh         # Syntax check
