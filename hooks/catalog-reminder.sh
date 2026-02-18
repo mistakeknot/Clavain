@@ -17,10 +17,12 @@ case "$FILE_PATH" in
     ;;
 esac
 
-# One reminder per session
-SENTINEL="/tmp/clavain-catalog-remind-${CLAUDE_SESSION_ID:-unknown}.lock"
-[ -f "$SENTINEL" ] && exit 0
-touch "$SENTINEL"
+# Source intercore wrappers (fail-safe: falls back to temp files)
+source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
+
+# One reminder per session (intercore sentinel or temp file fallback)
+_SID="${CLAUDE_SESSION_ID:-unknown}"
+intercore_check_or_die "catalog_remind" "$_SID" 0 "/tmp/clavain-catalog-remind-${_SID}.lock"
 
 BASENAME="$(basename "$FILE_PATH")"
 DIRNAME="$(basename "$(dirname "$FILE_PATH")")"

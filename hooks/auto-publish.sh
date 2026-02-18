@@ -19,6 +19,9 @@ main() {
     # Guard: jq required for JSON parsing
     command -v jq &>/dev/null || exit 0
 
+    # Source intercore sentinel wrappers (fail-open if unavailable)
+    source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
+
     # Read hook input
     local payload
     payload="$(cat || true)"
@@ -53,19 +56,8 @@ main() {
     [[ -n "$plugin_name" && -n "$plugin_version" ]] || exit 0
 
     # Global sentinel: prevent ALL auto-publish re-triggers within 60s.
-    # This covers both the plugin push and the marketplace push in one window.
-    local sentinel="/tmp/clavain-autopub.lock"
-    if [[ -f "$sentinel" ]]; then
-        local sentinel_age now sentinel_mtime
-        now=$(date +%s)
-        sentinel_mtime=$(stat -c %Y "$sentinel" 2>/dev/null || stat -f %m "$sentinel" 2>/dev/null || echo "0")
-        sentinel_age=$((now - sentinel_mtime))
-        if [[ "$sentinel_age" -lt 60 ]]; then
-            exit 0
-        fi
-        # Expired — remove and continue
-        rm -f "$sentinel"
-    fi
+    # Uses intercore sentinel with legacy temp-file fallback.
+    intercore_check_or_die "autopub" "global" 60 "/tmp/clavain-autopub.lock"
 
     # Find marketplace
     local marketplace_root="${MARKETPLACE_ROOT:-/root/projects/Interverse/infra/marketplace}"
@@ -86,9 +78,6 @@ main() {
         # Developer didn't bump — auto-increment patch
         action="bump"
     fi
-
-    # Write sentinel BEFORE any push to prevent re-trigger
-    touch "$sentinel"
 
     local new_version="$plugin_version"
 

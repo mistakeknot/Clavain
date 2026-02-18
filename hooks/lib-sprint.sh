@@ -8,6 +8,9 @@
 [[ -n "${_SPRINT_LOADED:-}" ]] && return 0
 _SPRINT_LOADED=1
 
+# Source intercore state primitives (cache invalidation, sentinel checks)
+source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
+
 SPRINT_LIB_PROJECT_DIR="${SPRINT_LIB_PROJECT_DIR:-.}"
 
 # Source interphase phase primitives (via Clavain shim)
@@ -877,5 +880,9 @@ checkpoint_clear() {
 
 # Invalidate discovery caches. Called automatically by sprint_record_phase_completion.
 sprint_invalidate_caches() {
-    rm -f /tmp/clavain-discovery-brief-*.cache 2>/dev/null || true
+    if type intercore_state_delete_all &>/dev/null; then
+        intercore_state_delete_all "discovery_brief" "/tmp/clavain-discovery-brief-*.cache"
+    else
+        rm -f /tmp/clavain-discovery-brief-*.cache 2>/dev/null || true
+    fi
 }

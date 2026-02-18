@@ -16,6 +16,7 @@
 # Exit: 0 always
 
 set -euo pipefail
+source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
 
 # Guard: fail-open if jq is not available
 if ! command -v jq &>/dev/null; then
@@ -38,22 +39,11 @@ fi
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
-# Guard: shared sentinel — only one Stop hook returns "block" per cycle
-STOP_SENTINEL="/tmp/clavain-stop-${SESSION_ID}"
-if [[ -f "$STOP_SENTINEL" ]]; then
-    exit 0
-fi
-touch "$STOP_SENTINEL"
+# Claim stop sentinel FIRST (before throttle check)
+intercore_check_or_die "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" 0 "/tmp/clavain-stop-${SESSION_ID}"
 
-# Guard: throttle — at most once per 10 minutes
-THROTTLE_SENTINEL="/tmp/clavain-drift-last-${SESSION_ID}"
-if [[ -f "$THROTTLE_SENTINEL" ]]; then
-    THROTTLE_MTIME=$(stat -c %Y "$THROTTLE_SENTINEL" 2>/dev/null || stat -f %m "$THROTTLE_SENTINEL" 2>/dev/null || date +%s)
-    THROTTLE_NOW=$(date +%s)
-    if [[ $((THROTTLE_NOW - THROTTLE_MTIME)) -lt 600 ]]; then
-        exit 0
-    fi
-fi
+# THEN check throttle (10-min cooldown specific to this hook)
+intercore_check_or_die "drift_throttle" "$SESSION_ID" 600 "/tmp/clavain-drift-last-${SESSION_ID}"
 
 # Guard: interwatch must be installed
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -90,9 +80,6 @@ WEIGHT="$CLAVAIN_SIGNAL_WEIGHT"
 # Build the reason prompt
 REASON="Auto-drift-check: detected shipped-work signals [${SIGNALS}] (weight ${WEIGHT}). Documentation may be stale. Run /interwatch:watch using the Skill tool to scan for doc drift. If interwatch finds drift, follow its recommendations (auto-refresh for Certain/High confidence, suggest for Medium)."
 
-# Write throttle sentinel
-touch "$THROTTLE_SENTINEL"
-
 # Return block decision
 if command -v jq &>/dev/null; then
     jq -n --arg reason "$REASON" '{"decision":"block","reason":$reason}'
@@ -104,9 +91,5 @@ else
 }
 ENDJSON
 fi
-
-# Clean up stale sentinels from previous sessions (>1 hour old)
-# Covers shared stop sentinel, per-hook throttle sentinels from all hooks
-find /tmp -maxdepth 1 \( -name 'clavain-stop-*' -o -name 'clavain-drift-last-*' -o -name 'clavain-compound-last-*' \) -mmin +60 -delete 2>/dev/null || true
 
 exit 0

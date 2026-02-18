@@ -15,6 +15,9 @@
 
 set -euo pipefail
 
+# shellcheck source=hooks/lib-intercore.sh
+source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
+
 # Guard: fail-open if jq is not available
 if ! command -v jq &>/dev/null; then
     exit 0
@@ -31,19 +34,14 @@ fi
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
-# Guard: if another Stop hook already fired this cycle, don't cascade
-STOP_SENTINEL="/tmp/clavain-stop-${SESSION_ID}"
-if [[ -f "$STOP_SENTINEL" ]]; then
-    exit 0
-fi
-# Write sentinel NOW — before signal analysis — to minimize TOCTOU window
-touch "$STOP_SENTINEL"
+# CRITICAL: Stop sentinel must be written unconditionally to prevent hook cascade.
+# The wrapper handles DB-vs-file internally, but if the wrapper is unavailable
+# (e.g., lib-intercore.sh failed to source), intercore_check_or_die falls back
+# to inline temp file logic.
+intercore_check_or_die "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" 0 "/tmp/clavain-stop-${SESSION_ID}"
 
-# Guard: only fire once per session (sentinel in /tmp)
-SENTINEL="/tmp/clavain-handoff-${SESSION_ID}"
-if [[ -f "$SENTINEL" ]]; then
-    exit 0
-fi
+# Guard: only fire once per session
+intercore_check_or_die "handoff" "$SESSION_ID" 0 "/tmp/clavain-handoff-${SESSION_ID}"
 
 # Write in-flight agent manifest (before signal analysis — runs even if no signals)
 # shellcheck source=hooks/lib.sh
@@ -81,9 +79,6 @@ fi
 if [[ -z "$SIGNALS" ]]; then
     exit 0
 fi
-
-# Write sentinel so we don't fire again this session
-touch "$SENTINEL"
 
 SIGNALS="${SIGNALS%,}"
 
@@ -137,6 +132,10 @@ ENDJSON
 fi
 
 # Clean up stale sentinels from previous sessions
-find /tmp -maxdepth 1 -name 'clavain-stop-*' -mmin +60 -delete 2>/dev/null || true
+if type intercore_cleanup_stale &>/dev/null; then
+    intercore_cleanup_stale
+else
+    find /tmp -maxdepth 1 -name 'clavain-stop-*' -mmin +60 -delete 2>/dev/null || true
+fi
 
 exit 0

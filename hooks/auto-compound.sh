@@ -22,6 +22,7 @@
 # Exit: 0 always
 
 set -euo pipefail
+source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
 
 # Guard: fail-open if jq is not available
 if ! command -v jq &>/dev/null; then
@@ -44,23 +45,12 @@ fi
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
-# Guard: if another Stop hook already fired this cycle, don't cascade
-STOP_SENTINEL="/tmp/clavain-stop-${SESSION_ID}"
-if [[ -f "$STOP_SENTINEL" ]]; then
-    exit 0
-fi
-# Write sentinel NOW — before transcript analysis — to minimize TOCTOU window
-touch "$STOP_SENTINEL"
+# Claim stop sentinel FIRST (before throttle check) to prevent other hooks
+# from analyzing the transcript, even if this hook exits due to throttle.
+intercore_check_or_die "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" 0 "/tmp/clavain-stop-${SESSION_ID}"
 
-# Guard: throttle — at most once per 5 minutes
-THROTTLE_SENTINEL="/tmp/clavain-compound-last-${SESSION_ID}"
-if [[ -f "$THROTTLE_SENTINEL" ]]; then
-    THROTTLE_MTIME=$(stat -c %Y "$THROTTLE_SENTINEL" 2>/dev/null || stat -f %m "$THROTTLE_SENTINEL" 2>/dev/null || date +%s)
-    THROTTLE_NOW=$(date +%s)
-    if [[ $((THROTTLE_NOW - THROTTLE_MTIME)) -lt 300 ]]; then
-        exit 0
-    fi
-fi
+# THEN check throttle (5-min cooldown specific to this hook)
+intercore_check_or_die "compound_throttle" "$SESSION_ID" 300 "/tmp/clavain-compound-last-${SESSION_ID}"
 
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 if [[ -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]]; then
@@ -96,9 +86,6 @@ WEIGHT="$CLAVAIN_SIGNAL_WEIGHT"
 # Build the reason prompt — this is what Claude sees
 REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] (weight ${WEIGHT}) in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."
 
-# Write throttle sentinel
-touch "$THROTTLE_SENTINEL"
-
 # Return block decision to inject the evaluation prompt
 if command -v jq &>/dev/null; then
     jq -n --arg reason "$REASON" '{"decision":"block","reason":$reason}'
@@ -111,9 +98,5 @@ else
 }
 ENDJSON
 fi
-
-# Clean up stale sentinels from previous sessions (>1 hour old)
-# Covers shared stop sentinel, per-hook throttle sentinels from all hooks
-find /tmp -maxdepth 1 \( -name 'clavain-stop-*' -o -name 'clavain-drift-last-*' -o -name 'clavain-compound-last-*' \) -mmin +60 -delete 2>/dev/null || true
 
 exit 0
