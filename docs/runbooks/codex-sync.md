@@ -170,6 +170,7 @@ For any upstream-sync PR:
 3. If Clavain base workflows are affected, explicitly document decisions under:
    - `## Base Workflow Decisions`
    - `### Base Workflow Change Decisions`
+   - Keep `lfg` changes as intentional divergence unless explicitly adopted: Clavain uses `/clavain:sprint` as the canonical pipeline and does not sync `commands/lfg.md` by default.
 4. Set `Gate: approved` only after decisions are explicit and actionable.
 5. Commit to the PR branch and re-run checks.
 

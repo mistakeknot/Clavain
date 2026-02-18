@@ -116,7 +116,6 @@
         "commands/create-agent-skill.md": "commands/create-agent-skill.md",
         "commands/generate_command.md": "commands/generate-command.md",
         "commands/heal-skill.md": "commands/heal-skill.md",
-        "commands/lfg.md": "commands/lfg.md",
         "commands/plan_review.md": "commands/plan-review.md",
         "commands/triage.md": "commands/triage.md"
       }

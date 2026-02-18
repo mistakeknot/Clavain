@@ -121,7 +121,7 @@ If invoked WITH arguments (`$ARGUMENTS` is not empty):
 
 ---
 
-Run these steps in order. Do not do anything else.
+Run these steps in order. Do not do anything else. Do not stop between steps unless a defined pause trigger occurs (gate block, step failure, or manual pause setting).
 
 ### Session Checkpointing
 

@@ -54,6 +54,7 @@ Every upstream-sync PR must include a decision record:
    ```
 2. Fill per-upstream decisions (`adopt-now`, `defer`, `ignore`) and rationale
 3. If base workflows are affected, document intervention decisions under `## Base Workflow Decisions`
+   - Note: Clavain intentionally supersedes upstream `lfg` with `/clavain:sprint`; do not reintroduce `commands/lfg.md` via fileMap sync.
 4. Set `Gate: approved` and commit to the PR branch
 
 ### If no GitHub issues (manual fallback)
