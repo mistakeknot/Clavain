@@ -78,9 +78,10 @@ def collect_impact(upstream: dict[str, Any]) -> dict[str, Any]:
     name = upstream["name"]
     repo = repo_from_url(upstream["url"])
     branch = upstream.get("branch", "main")
-    base_commit = upstream["lastSyncedCommit"]
+    floating = bool(upstream.get("floating", False)) and not bool(upstream.get("fileMap", {}))
 
     head = run_gh_json(f"repos/{repo}/commits/{branch}")["sha"]
+    base_commit = head if floating else upstream["lastSyncedCommit"]
     compare = run_gh_json(f"repos/{repo}/compare/{base_commit}...{head}")
 
     changed_files = [entry["filename"] for entry in compare.get("files", [])]
@@ -102,10 +103,13 @@ def collect_impact(upstream: dict[str, Any]) -> dict[str, Any]:
             breaking_signals.append(item)
 
     meaningful_change = bool(mapped_changed or feature_commits or breaking_signals)
+    if floating:
+        meaningful_change = False
 
     return {
         "name": name,
         "repo": repo,
+        "tracking_mode": "floating-head" if floating else "pinned",
         "base_commit": base_commit,
         "head_commit": head,
         "ahead_commits": compare.get("total_commits", 0),
@@ -125,12 +129,12 @@ def to_markdown(report: list[dict[str, Any]]) -> str:
     lines: list[str] = []
     lines.append(f"Generated: {utc_now_iso()}")
     lines.append("")
-    lines.append("| Upstream | Commits | Files Changed | Mapped Changed | Feature Signals | Breaking Signals |")
-    lines.append("|---|---:|---:|---:|---:|---:|")
+    lines.append("| Upstream | Tracking | Commits | Files Changed | Mapped Changed | Feature Signals | Breaking Signals |")
+    lines.append("|---|---|---:|---:|---:|---:|---:|")
 
     for row in report:
         lines.append(
-            "| `{name}` | {ahead_commits} | {changed_file_count} | {mapped_changed_count} | {feature_signal_count} | {breaking_signal_count} |".format(
+            "| `{name}` | {tracking_mode} | {ahead_commits} | {changed_file_count} | {mapped_changed_count} | {feature_signal_count} | {breaking_signal_count} |".format(
                 **row
             )
         )

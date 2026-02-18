@@ -90,20 +90,28 @@ def sync_upstream(
     head_commit = get_head_commit(clone_dir)
     head_short = head_commit[:7]
 
-    if head_commit == upstream.last_synced_commit:
-        print(f"  {GREEN}No new commits (HEAD: {head_short}){NC}")
+    floating = bool(upstream.floating) and len(upstream.file_map) == 0
+    if upstream.floating and not floating:
+        print(
+            f"  {YELLOW}floating=true ignored for {upstream.name} because fileMap is not empty{NC}"
+        )
+    base_commit = head_commit if floating else upstream.last_synced_commit
+
+    if head_commit == base_commit:
+        suffix = " — floating HEAD" if floating else ""
+        print(f"  {GREEN}No new commits (HEAD: {head_short}){NC}{suffix}")
         return []
 
-    if not commit_is_reachable(clone_dir, upstream.last_synced_commit):
-        print(f"  {RED}Last synced commit {upstream.last_synced_commit} not reachable — skipping{NC}")
+    if not commit_is_reachable(clone_dir, base_commit):
+        print(f"  {RED}Last synced commit {base_commit} not reachable — skipping{NC}")
         return []
 
-    new_count = count_new_commits(clone_dir, upstream.last_synced_commit)
-    print(f"  {CYAN}{new_count} new commits{NC} ({upstream.last_synced_commit[:7]} → {head_short})")
+    new_count = count_new_commits(clone_dir, base_commit)
+    print(f"  {CYAN}{new_count} new commits{NC} ({base_commit[:7]} → {head_short})")
 
     # Get changed files
     diff_path = upstream.base_path if upstream.base_path else "."
-    changed_files = get_changed_files(clone_dir, upstream.last_synced_commit, diff_path)
+    changed_files = get_changed_files(clone_dir, base_commit, diff_path)
 
     if not changed_files:
         print("  No mapped files changed")
@@ -137,7 +145,7 @@ def sync_upstream(
         if upstream_content is None:
             continue  # File listed in diff but not readable at commit
         ancestor_content = get_ancestor_content(
-            clone_dir, upstream.last_synced_commit, upstream.base_path, filepath
+            clone_dir, base_commit, upstream.base_path, filepath
         )
 
         # Classify

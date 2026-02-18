@@ -12,6 +12,7 @@ class Upstream:
     name: str
     url: str
     branch: str
+    floating: bool
     last_synced_commit: str
     base_path: str
     file_map: dict[str, str]
@@ -43,6 +44,7 @@ def load_config(path: Path) -> UpstreamConfig:
             name=u["name"],
             url=u["url"],
             branch=u.get("branch", "main"),
+            floating=bool(u.get("floating", False)),
             last_synced_commit=u["lastSyncedCommit"],
             base_path=u.get("basePath", ""),
             file_map=u.get("fileMap", {}),

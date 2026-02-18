@@ -14,6 +14,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VERSIONS_FILE="${REPO_ROOT}/docs/upstream-versions.json"
+UPSTREAMS_JSON="${REPO_ROOT}/upstreams.json"
 
 # Upstream repos to track
 # Format: "owner/repo|skill1,skill2,..."
@@ -25,6 +26,38 @@ UPSTREAMS=(
   "obra/superpowers-developing-for-claude-code|developing-claude-code-plugins,working-with-claude-code"
   "EveryInc/compound-engineering-plugin|multiple (founding source)"
 )
+
+# Repos configured as floating in upstreams.json (tracked at HEAD for commit drift)
+if [[ -f "$UPSTREAMS_JSON" ]]; then
+  FLOATING_REPOS=$(python3 - <<PY
+import json
+from urllib.parse import urlparse
+
+with open("$UPSTREAMS_JSON", "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+for u in data.get("upstreams", []):
+    if bool(u.get("floating", False)) and not bool(u.get("fileMap", {})):
+        url = u.get("url", "")
+        if url.endswith(".git"):
+            url = url[:-4]
+        if url.startswith("https://github.com/"):
+            print(url.removeprefix("https://github.com/"))
+        elif url.startswith("git@github.com:"):
+            print(url.removeprefix("git@github.com:"))
+PY
+)
+else
+  FLOATING_REPOS=""
+fi
+
+is_floating_repo() {
+  local repo="$1"
+  if [[ -z "$FLOATING_REPOS" ]]; then
+    return 1
+  fi
+  grep -Fxq "$repo" <<<"$FLOATING_REPOS"
+}
 
 # Parse flags
 JSON_MODE=false
@@ -65,6 +98,12 @@ for entry in "${UPSTREAMS[@]}"; do
   # Compare against saved state
   synced_release=$(echo "$EXISTING" | jq -r --arg r "$repo" '.[$r].synced_release // "none"')
   synced_commit=$(echo "$EXISTING" | jq -r --arg r "$repo" '.[$r].synced_commit // "unknown"')
+  tracking_mode="pinned"
+  if is_floating_repo "$repo"; then
+    tracking_mode="floating-head"
+    # Floating repos intentionally track commit HEAD; suppress commit drift alerts.
+    synced_commit="$latest_commit"
+  fi
 
   release_changed=false
   commit_changed=false
@@ -87,11 +126,13 @@ for entry in "${UPSTREAMS[@]}"; do
     --arg latest_commit_msg "$latest_commit_msg" \
     --arg latest_commit_date "$latest_commit_date" \
     --arg synced_commit "$synced_commit" \
+    --arg tracking_mode "$tracking_mode" \
     --argjson release_changed "$release_changed" \
     --argjson commit_changed "$commit_changed" \
     '{
       repo: $repo,
       skills: $skills,
+      tracking_mode: $tracking_mode,
       latest_release: $latest_release,
       synced_release: $synced_release,
       release_changed: $release_changed,

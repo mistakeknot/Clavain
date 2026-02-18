@@ -79,3 +79,5 @@ Every upstream-sync PR must include a decision record:
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux` (remaining skills moved to companion plugins) |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | multiple |
+
+`beads` is configured as a floating upstream (track `main` HEAD) because Clavain consumes it via companion integration rather than fileMap content sync.

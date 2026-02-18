@@ -4,6 +4,7 @@
       "name": "beads",
       "url": "https://github.com/steveyegge/beads.git",
       "branch": "main",
+      "floating": true,
       "lastSyncedCommit": "4a904961367d2ee66b70bee3a4e2095645203d74",
       "basePath": "",
       "fileMap": {}

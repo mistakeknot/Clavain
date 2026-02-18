@@ -95,6 +95,20 @@ print('')
 "
 }
 
+get_tracking_mode() {
+  local name="$1"
+  python3 -c "
+import json, sys
+data = json.load(open('$UPSTREAMS_JSON'))
+for u in data['upstreams']:
+    if u['name'] == '$name':
+        is_floating = bool(u.get('floating', False)) and not bool(u.get('fileMap', {}))
+        print('floating' if is_floating else 'pinned')
+        sys.exit(0)
+print('pinned')
+"
+}
+
 echo "=== Clavain Upstream Repos ==="
 echo "Upstreams dir: $UPSTREAMS_DIR"
 echo ""
@@ -115,6 +129,7 @@ for dir in "$UPSTREAMS_DIR"/*/; do
 
   synced=$(get_synced_commit "$upstream_name")
   synced_full=$(get_synced_commit_full "$upstream_name")
+  tracking_mode=$(get_tracking_mode "$upstream_name")
 
   if [[ "$mode" == "--pull" ]]; then
     # Fetch and fast-forward
@@ -128,8 +143,10 @@ for dir in "$UPSTREAMS_DIR"/*/; do
       printf "  %-25s up to date (HEAD: %s)" "$dir_name" "$head_short"
     fi
 
-    # Count commits since last Clavain sync
-    if [[ -n "$synced_full" ]] && git -C "$dir" cat-file -e "$synced_full" 2>/dev/null; then
+    # Count commits since last Clavain sync (or track HEAD for floating upstreams)
+    if [[ "$tracking_mode" == "floating" ]]; then
+      printf " — ${GREEN}tracking HEAD (floating)${NC}\n"
+    elif [[ -n "$synced_full" ]] && git -C "$dir" cat-file -e "$synced_full" 2>/dev/null; then
       new_count=$(git -C "$dir" rev-list --count "${synced_full}..HEAD" 2>/dev/null || echo 0)
       if [[ "$new_count" -gt 0 ]]; then
         printf " — ${YELLOW}%s new since sync %s${NC}\n" "$new_count" "$synced"
@@ -144,6 +161,11 @@ for dir in "$UPSTREAMS_DIR"/*/; do
   elif [[ "$mode" == "--status" ]]; then
     head_short=$(git -C "$dir" rev-parse --short HEAD)
     synced_full=$(get_synced_commit_full "$upstream_name")
+
+    if [[ "$tracking_mode" == "floating" ]]; then
+      printf "  ${GREEN}%-25s HEAD: %s — floating HEAD (no pin)${NC}\n" "$dir_name" "$head_short"
+      continue
+    fi
 
     if [[ -z "$synced_full" ]] || [[ "$synced_full" == "" ]]; then
       printf "  ${YELLOW}%-25s HEAD: %s — not tracked in upstreams.json${NC}\n" "$dir_name" "$head_short"
@@ -167,6 +189,11 @@ for dir in "$UPSTREAMS_DIR"/*/; do
   elif [[ "$mode" == "--diff" ]]; then
     synced_full=$(get_synced_commit_full "$upstream_name")
     head_short=$(git -C "$dir" rev-parse --short HEAD)
+
+    if [[ "$tracking_mode" == "floating" ]]; then
+      printf "  ${GREEN}%-25s — floating HEAD (no baseline diff)${NC}\n" "$dir_name"
+      continue
+    fi
 
     if [[ -z "$synced_full" ]]; then
       printf "  ${YELLOW}%-25s — not tracked in upstreams.json${NC}\n" "$dir_name"
