@@ -112,7 +112,7 @@ REASON="Session handoff check: detected incomplete work signals [${SIGNALS}]. Be
 3. Update any in-progress beads with current status:
    \`bd update <id> --notes=\"<current status>\"\`
 
-4. Run \`bd sync --from-main\` to sync beads state
+4. Run \`bd sync\` to flush beads state (compatibility no-op on beads >=0.51)
 
 5. Stage and commit your work (even if incomplete):
    \`git add <files> && git commit -m \"wip: <what was done>\"\`

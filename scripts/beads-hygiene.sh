@@ -24,7 +24,7 @@ echo "[$LOG_TAG] === Interverse ==="
 # 2. Cleanup — delete closed issues older than 30 days
 (cd "$PROJECT_ROOT" && bd admin cleanup --older-than 30 --force 2>&1) || echo "[$LOG_TAG] WARNING: bd admin cleanup failed"
 
-# 3. Sync — commit any changes to git
+# 3. Sync — compatibility step for mixed beads versions (no-op on >=0.51)
 (cd "$PROJECT_ROOT" && bd sync 2>&1) || echo "[$LOG_TAG] WARNING: bd sync failed"
 
 echo ""

@@ -82,8 +82,8 @@ bd close <issue-ids>
 # Stage relevant files (NOT git add .)
 git add <specific files>
 
-# Sync beads state
-bd sync --from-main
+# Sync beads state (compatibility no-op on beads >=0.51)
+bd sync
 
 # Commit with conventional message
 git commit -m "feat(scope): description of what and why

@@ -480,7 +480,7 @@ gh workflow run sync.yml
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   bd sync              # compatibility sync step (0.50.x syncs, 0.51+ no-op)
    git push
    git status  # MUST show "up to date with origin"
    ```
