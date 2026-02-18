@@ -6,7 +6,7 @@
 # Source in hooks: source "$(dirname "$0")/lib-intercore.sh"
 # shellcheck shell=bash
 
-INTERCORE_WRAPPER_VERSION="0.1.0"
+INTERCORE_WRAPPER_VERSION="0.2.0"
 
 # Shared sentinel for Stop hook anti-cascade protocol.
 # All Stop hooks MUST check this sentinel before doing work to prevent
@@ -170,4 +170,57 @@ intercore_cleanup_stale() {
     fi
     # Fallback: clean legacy temp files
     find /tmp -maxdepth 1 \( -name 'clavain-stop-*' -o -name 'clavain-drift-last-*' -o -name 'clavain-compound-last-*' \) -mmin +60 -delete 2>/dev/null || true
+}
+
+# --- Dispatch wrappers ---
+
+# intercore_dispatch_spawn — Spawn an agent dispatch.
+# Args: $1=type, $2=project_dir, $3=prompt_file, $4=output (optional), $5=name (optional)
+# Prints: dispatch ID to stdout (for capture by caller)
+# Returns: 0 on success, 1 on failure
+intercore_dispatch_spawn() {
+    local type="$1" project="$2" prompt_file="$3" output="${4:-}" name="${5:-codex}"
+    if ! intercore_available; then return 1; fi
+    local args=(dispatch spawn --type="$type" --project="$project" --prompt-file="$prompt_file" --name="$name")
+    if [[ -n "$output" ]]; then
+        args+=(--output="$output")
+    fi
+    "$INTERCORE_BIN" "${args[@]}"
+}
+
+# intercore_dispatch_status — Get dispatch status as JSON.
+# Args: $1=dispatch_id
+# Prints: JSON status to stdout
+intercore_dispatch_status() {
+    local id="$1"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" dispatch status "$id" --json
+}
+
+# intercore_dispatch_wait — Wait for dispatch completion.
+# Args: $1=dispatch_id, $2=timeout (optional, e.g. "5m")
+# Returns: 0 if completed successfully, 1 if failed/timeout
+intercore_dispatch_wait() {
+    local id="$1" timeout="${2:-}"
+    if ! intercore_available; then return 1; fi
+    local args=(dispatch wait "$id")
+    if [[ -n "$timeout" ]]; then
+        args+=(--timeout="$timeout")
+    fi
+    "$INTERCORE_BIN" "${args[@]}" >/dev/null
+}
+
+# intercore_dispatch_list_active — List active dispatches.
+# Prints: tab-separated list (id, status, type, name) to stdout
+intercore_dispatch_list_active() {
+    if ! intercore_available; then return 0; fi
+    "$INTERCORE_BIN" dispatch list --active
+}
+
+# intercore_dispatch_kill — Kill a running dispatch.
+# Args: $1=dispatch_id
+intercore_dispatch_kill() {
+    local id="$1"
+    if ! intercore_available; then return 0; fi
+    "$INTERCORE_BIN" dispatch kill "$id" >/dev/null 2>&1 || true
 }
