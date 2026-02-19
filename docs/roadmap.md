@@ -1,7 +1,7 @@
 # Clavain Roadmap
 
-**Version:** 0.6.22
-**Last updated:** 2026-02-15
+**Version:** 0.6.42
+**Last updated:** 2026-02-19
 **Vision:** [`docs/vision.md`](vision.md)
 **PRD:** [`docs/PRD.md`](PRD.md)
 
@@ -9,107 +9,153 @@
 
 ## Where We Are
 
-Clavain is a recursively self-improving multi-agent rig for Claude Code — 23 skills, 4 agents, 41 commands, 19 hooks, 1 MCP server. 19 companion plugins shipped. 364 beads closed, 0 open. Average lead time: 8.8 hours.
+Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 21 hooks, 1 MCP server. 31 companion plugins in the inter-* constellation. 925 beads tracked, 590 closed, 334 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
 
 ### What's Working
 
-- Full product lifecycle coverage: brainstorm, strategy, plan, execute, review, test, ship, learn
-- 3-layer routing (Stage/Domain/Concern) injected every session via SessionStart hook
-- Multi-agent review engine (interflux) with 7 fd-* review agents + 5 research agents, domain detection across 11 profiles, diff/document slicing, and knowledge compounding
-- Phase-gated `/sprint` pipeline with work discovery, sprint bead lifecycle, and session claim atomicity
+- Full product lifecycle: Discover → Design → Build → Ship, each a sub-agency with model routing
+- Three-layer architecture: Kernel (Intercore) → OS (Clavain) → Drivers (companion plugins)
+- Multi-agent review engine (interflux) with 7 fd-* review agents + 5 research agents
+- Phase-gated `/sprint` pipeline with work discovery, bead lifecycle, session claim atomicity
 - Cross-AI peer review via Oracle (GPT-5.2 Pro) with quick/deep/council/mine modes
-- Parallel dispatch to Codex CLI via `/clodex` with clodex-toggle mode switching
-- Structural test suite: 165 tests (pytest + bats-core) guarding component counts, cross-references, namespace hygiene, routing overrides, sprint lifecycle
-- 19 companion plugins covering review, phase tracking, statusline, artifacts, drift detection, coordination, Slack, design patterns, agent-native architecture, dev tooling, code quality, ambient research, work prioritization, publishing, search, code context, tool analytics, and TUI testing
+- Parallel dispatch to Codex CLI via `/clodex` with mode switching
+- Structural test suite: 165 tests (pytest + bats-core)
 - Multi-agent file coordination via interlock (MCP server wrapping intermute Go service)
-- Self-healing documentation system via interdoc (structural auto-fix, convergence loops, marker system)
-- Signal-based drift detection via interwatch (auto-drift-check Stop hook, lib-signals shared library)
-- Interspect analytics system: SQLite evidence store, 3-tier analysis (evidence → patterns → routing overrides), confidence thresholds, blacklist protection, flock-based atomic commits
-- Sprint resilience: lib-sprint.sh with bead lifecycle CRUD, session claims via mkdir atomicity, phase routing, discovery integration
+- Signal-based drift detection via interwatch
+- Interspect analytics: SQLite evidence store, 3-tier analysis, confidence thresholds
+- Intercore kernel: Go CLI + SQLite, runs/phases/gates/dispatches/events as durable state
 
 ### What's Not Working Yet
 
-- **No outcome measurement.** Agent output is qualitatively useful but unquantified. Can't answer: are 8 agents better than 4? Which agents have high override rates? What's the cost per landed change?
-- **No evals.** Prompt changes, model updates, and agent consolidation happen without regression detection.
-- **Token costs are opaque.** No per-run cost reporting, no budget controls, no cost-quality tradeoff visibility.
-- **Interspect has data but no action.** Evidence collection and routing eligibility checks are built, but no override has been applied yet — the system needs real-world signal accumulation.
+- **Intercore integration incomplete.** Kernel primitives are built (E1-E2 done), but Clavain still uses shell-based state management. Hook cutover (E3) is the critical next step.
+- **No adaptive model routing.** Static routing exists (stage→model mapping), but no complexity-aware or outcome-driven selection.
+- **Agency architecture is implicit.** Sub-agencies (Discover/Design/Build/Ship) are encoded in skills and hooks, not in declarative specs or a fleet registry.
+- **Outcome measurement limited.** Interspect collects evidence but no override has been applied. Cost-per-change and quality metrics are unquantified.
 
 ---
 
 ## Shipped Since Last Roadmap
 
-Major features that landed since the 0.6.13 roadmap:
+Major features that landed since the 0.6.22 roadmap:
 
 | Feature | Description |
 |---------|-------------|
-| **Interspect routing overrides** | Producer-consumer flow: interspect collects agent override evidence → confidence thresholds → routing-overrides.json → flux-drive reads at Step 1.2a.0 and excludes agents. Includes blacklist protection, SQL safety, 27 shell tests. |
-| **Sprint bead lifecycle** | lib-sprint.sh (408 lines) — sprint beads as type=epic with sprint=true state, session claims via mkdir atomicity, phase routing, discovery integration. 23 shell tests. |
-| **13 new companion plugins** | interslack, interform, intercraft, interdev, intercheck, interject, internext, interpub, intersearch, tldr-swinton, tool-time, tuivision, interdoc |
-| **Monorepo consolidation** | Physical monorepo at /root/projects/Interverse with compat symlinks, each subproject keeping own .git |
-| **Auto-drift-check** | Stop hook detecting shipped-work signals and triggering interwatch scans |
-| **Interspect Phase 1-2** | SQLite evidence store, protected paths, confidence thresholds, session tracking |
-| **Interlock + intermute** | Full multi-agent file coordination — MCP server, advisory hooks, git pre-commit enforcement |
-| **Version 0.6.13 → 0.6.22** | 9 version bumps |
+| **Intercore kernel (E1-E2)** | Go CLI + SQLite — runs, phases, gates, dispatches, events as durable state. Kernel primitives and event reactor shipped. |
+| **Vision rewrite** | New identity: autonomous software agency with three-layer architecture (Kernel/OS/Drivers) |
+| **12 new companions** | intermap, intermem, intersynth, interlens, interleave, interserve, interpeer, intertest, interkasten, interstat, interfluence, interphase v2 |
+| **Monorepo consolidation** | Physical monorepo at /root/projects/Interverse with 31 companion plugins |
+| **Hierarchical dispatch plan** | Meta-agent for N-agent fan-out (planned, iv-quk4) |
+| **tldrs LongCodeZip** | Block-level compression for token-efficient code context (planned, iv-2izz) |
+| **Version 0.6.22 → 0.6.42** | 20 version bumps |
 
 ---
 
-## Roadmap
+## Roadmap: Three Parallel Tracks
 
-### Now (P0-P1)
-- [CV-N1] **Outcome-based analytics v1** — instrument per-agent token traces, per-gate pass/fail, and per-run cost summaries.
-- [CV-N2] **Agent evals as CI** — add regression corpus and automated CI run that evaluates agent workflows before merge.
-- [CV-N3] **Topology experiment** — compare 2/4/6/8 agent rosters to quantify quality vs. cost.
-- [CV-N4] **KPI dashboard** — publish defect escape rate, override rate, cost per change, time-to-first-signal, redundant work ratio.
-- [CV-N5] **`clavain` session memory contracts** — define `.clavain/` lifecycle for cross-sprint learnings and run state.
+The roadmap progresses on three independent tracks that converge toward autonomous self-building sprints.
 
-### Next (P2)
-- [CV-NXT1] **Deep tldrs integration in Clavain stages** — route code-reading-heavy stages to tldr-swinton defaults by policy.
-- [CV-NXT2] **Agent trust model** — score routing outcomes by historical precision and override rate.
-- [CV-NXT3] **Interflux spec reuse contracts** — expose stable findings/signal contracts for Clavain consumers.
-- [CV-NXT4] **Clavain/flux-drive interoperability hardening** — align command discoverability, error semantics, and artifact cleanup.
-- [CV-L1] **Adaptive dispatch policy** — automatic roster selection with explicit override controls.
-- [CV-L2] **Companion extraction program** — complete remaining planned companions once measurable gates are stable.
+### Track A: Kernel Integration
 
-### Later (P3-P4)
-- [CV-L3] **Cross-project knowledge compounding** — pilot interscribe-style pattern sharing behind evaluation gates.
-- [CV-L4] **MCP-native coordination plane** — reduce file-based sideband contracts with explicit tool-level contracts.
+Migrate Clavain from ephemeral state management to durable kernel-backed orchestration.
+
+| Step | What | Bead | Status | Depends On |
+|------|------|------|--------|------------|
+| A1 | **Hook cutover** — all Clavain hooks call `ic` instead of temp files | iv-ngvy | Open (P1) | Intercore E1-E2 (done) |
+| A2 | **Sprint handover** — sprint skill becomes kernel-driven (hybrid → handover → kernel-driven) | — | Not yet created | A1 |
+| A3 | **Event-driven advancement** — phase transitions trigger automatic agent dispatch | — | Not yet created | A2 |
+
+### Track B: Model Routing
+
+Build the multi-model routing infrastructure from static to adaptive.
+
+| Step | What | Bead | Status | Depends On |
+|------|------|------|--------|------------|
+| B1 | **Static routing table** — phase→model mapping declared in config, applied at dispatch | — | Not yet created | — |
+| B2 | **Complexity-aware routing** — task complexity drives model selection within phases | — | Not yet created | Intercore token tracking (E1) |
+| B3 | **Adaptive routing** — Interspect outcome data drives model/agent selection | — | Not yet created | Interspect kernel integration (iv-thp7) |
+
+### Track C: Agency Architecture
+
+Build the agency composition layer that makes Clavain a fleet of specialized sub-agencies.
+
+| Step | What | Bead | Status | Depends On |
+|------|------|------|--------|------------|
+| C1 | **Agency specs** — declarative per-stage config: agents, models, tools, artifacts, gates | — | Not yet created | — |
+| C2 | **Agent fleet registry** — capability + cost profiles per agent×model combination | — | Not yet created | B1 |
+| C3 | **Composer** — matches agency specs to fleet registry within budget constraints | — | Not yet created | C1, C2 |
+| C4 | **Cross-phase handoff** — structured protocol for how Discover's output becomes Design's input | — | Not yet created | C1 |
+| C5 | **Self-building loop** — Clavain uses its own agency specs to run its own development sprints | — | Not yet created | C3, C4, A3 |
+
+### Convergence
+
+The three tracks converge at C5: a self-building Clavain that autonomously orchestrates its own development sprints using kernel-backed state, multi-model routing, and fleet-optimized agent dispatch.
+
+```
+Track A (Kernel)      Track B (Routing)     Track C (Agency)
+    A1                    B1                    C1
+    │                     │                     │
+    A2                    B2───────────────→    C2
+    │                     │                     │
+    A3                    B3                    C3
+    │                                           │
+    └───────────────────────────────────────→   C4
+                                                │
+                                               C5 ← convergence
+                                          (self-building)
+```
+
+### Supporting Epics (Intercore)
+
+These Intercore epics are prerequisites for the tracks above:
+
+| Epic | What | Bead | Status |
+|------|------|------|--------|
+| E3 | Hook cutover — big-bang Clavain migration | iv-ngvy | Open (P1) |
+| E4 | Level 3 Adapt — Interspect kernel event integration | iv-thp7 | Open (P2) |
+| E5 | Discovery pipeline — kernel primitives for research intake | iv-fra3 | Open (P2) |
+| E6 | Rollback and recovery — three-layer revert | iv-0k8s | Open (P2) |
+| E7 | Autarch Phase 1 — Bigend migration + `ic tui` | iv-ishl | Open (P2) |
 
 ---
 
 ## Research Agenda
 
-Research areas organized by proximity to current capabilities. These are open questions, not deliverables.
+Research areas organized by proximity to current capabilities and aligned with the [Frontier Compass](vision.md#frontier-compass-structured). These are open questions, not deliverables.
 
-### Near-Term
+### Near-Term (informed by current work)
 
-| Area | Key question |
-|------|-------------|
-| Agent measurement & analytics | What metrics predict human override? |
-| Multi-agent failure taxonomy | How do hallucination cascades propagate? |
-| Cognitive load budgets | How to present multi-agent output for fast, confident review? |
-| Agent regression testing | Did this prompt change degrade bug-catching? |
+| Area | Key question | Frontier axes |
+|------|-------------|---------------|
+| Multi-model composition theory | Principled framework for which model to use when | Token efficiency, Orchestration |
+| Agent measurement & analytics | What metrics predict human override? What signals indicate token waste? | Reasoning quality |
+| Multi-agent failure taxonomy | How do hallucination cascades, coordination tax, and model mismatch propagate? | Orchestration |
+| Cognitive load budgets | How to present multi-agent output for fast, confident review? | Reasoning quality |
+| Agent regression testing | Evals as CI — did this prompt change degrade bug-catching? | Reasoning quality |
 
-### Medium-Term
+### Medium-Term (informed by Track B data)
 
-| Area | Key question |
-|------|-------------|
-| Optimal human-in-the-loop frequency | How much attention per sprint produces the best outcomes? |
-| Multi-model composition theory | When should you use Claude vs. Codex vs. GPT-5.2? |
-| Bias-aware product decisions | LLM judges show 40-57% systematic bias — how to mitigate? |
-| Plan-aware context compression | Give each agent domain-specific context, not everything |
+| Area | Key question | Frontier axes |
+|------|-------------|---------------|
+| Optimal human-in-the-loop frequency | How much attention per sprint produces the best outcomes? | Orchestration |
+| Bias-aware product decisions | LLM judges show systematic bias — how to mitigate in brainstorm/strategy? | Reasoning quality |
+| Plan-aware context compression | Give each agent domain-specific context via tldrs, not everything | Token efficiency |
+| Transactional orchestration | Idempotency, rollback, conflict resolution across distributed agent execution | Orchestration |
+| Fleet topology optimization | How many agents per phase? Which combinations produce the best outcomes? | Orchestration, Token efficiency |
 
-### Long-Term
+### Long-Term (informed by Track C data)
 
-| Area | Key question |
-|------|-------------|
-| Knowledge compounding dynamics | Does cross-project learning improve outcomes or add noise? |
-| Emergent multi-agent behavior | Can you predict interactions in 7+ agent constellations? |
-| Guardian agent patterns | Can quality-gates be formalized with instruction adherence metrics? |
-| Security model for tool access | Capability boundaries, prompt injection, supply chain risk |
+| Area | Key question | Frontier axes |
+|------|-------------|---------------|
+| Knowledge compounding dynamics | Does cross-project learning improve outcomes or add noise? | Reasoning quality |
+| Emergent multi-agent behavior | Can you predict interactions in 7+ agent constellations across multiple models? | Orchestration |
+| Guardian agent patterns | Can quality-gates be formalized with instruction adherence metrics? | Reasoning quality |
+| Self-improvement feedback loops | How to prevent reward hacking ("skip reviews because it speeds runs")? | Orchestration |
+| Security model for autonomous agents | Capability boundaries, prompt injection, supply chain risk, sandbox compliance | All axes |
+| Latency budgets | Time-to-feedback as first-class constraint alongside token cost | Token efficiency |
 
-### Deprioritized (per Oracle, 2026-02-14)
+### Deprioritized
 
-- Speculative decoding (can't control inference stack from a plugin)
+- Speculative decoding (can't control inference stack from outside)
 - Vision-centric token compression (overkill for code-centric workflows)
 - Theoretical minimum token cost (empirical cost-quality curves are more useful)
 - Full marketplace/recommendation engine (not where Clavain wins)
@@ -118,43 +164,59 @@ Research areas organized by proximity to current capabilities. These are open qu
 
 ## Companion Constellation
 
-| Companion | Version | What it crystallized | Location |
-|-----------|---------|---------------------|----------|
-| **interflux** | 0.2.0 | Multi-agent review + research engine | `plugins/interflux/` |
-| **interphase** | 0.3.2 | Phase tracking + gate validation | `plugins/interphase/` |
-| **interline** | 0.2.1 | Statusline rendering | `plugins/interline/` |
-| **interpath** | 0.1.1 | Product artifact generation | `plugins/interpath/` |
-| **interwatch** | 0.1.1 | Doc freshness monitoring | `plugins/interwatch/` |
-| **interlock** | 0.1.1 | Multi-agent file coordination (MCP) | `plugins/interlock/` |
-| **interslack** | 0.1.0 | Slack integration | `plugins/interslack/` |
-| **interform** | 0.1.0 | Design patterns + visual quality | `plugins/interform/` |
-| **intercraft** | 0.1.0 | Agent-native architecture patterns | `plugins/intercraft/` |
-| **interdev** | 0.1.0 | MCP CLI developer tooling | `plugins/interdev/` |
-| **intercheck** | 0.1.0 | Code quality guards + session health | `plugins/intercheck/` |
-| **interject** | 0.1.2 | Ambient discovery + research engine (MCP) | `plugins/interject/` |
-| **internext** | 0.1.0 | Work prioritization + tradeoff analysis | `plugins/internext/` |
-| **interpub** | 0.1.0 | Plugin publishing | `plugins/interpub/` |
-| **intersearch** | — | Shared embedding + Exa search | `plugins/intersearch/` |
-| **interdoc** | 5.1.0 | AGENTS.md generator + Oracle critique | `plugins/interdoc/` |
-| **tldr-swinton** | 0.7.6 | Token-efficient code context (MCP) | `plugins/tldr-swinton/` |
-| **tool-time** | 0.3.1 | Tool usage analytics | `plugins/tool-time/` |
-| **tuivision** | 0.1.2 | TUI automation + visual testing (MCP) | `plugins/tuivision/` |
+| Companion | Version | What it crystallized | Status |
+|-----------|---------|---------------------|--------|
+| **intercore** | — | Orchestration state is a kernel concern | Active development |
+| **interspect** | — | Self-improvement needs a profiler, not ad-hoc scripts | Active development |
+| **interflux** | 0.2.16 | Multi-agent review + research engine | Shipped |
+| **interphase** | 0.3.2 | Phase tracking + gate validation | Shipped |
+| **interline** | 0.2.4 | Statusline rendering | Shipped |
+| **interpath** | 0.2.2 | Product artifact generation | Shipped |
+| **interwatch** | 0.1.2 | Doc freshness monitoring | Shipped |
+| **interlock** | 0.2.1 | Multi-agent file coordination (MCP) | Shipped |
+| **interject** | 0.1.6 | Ambient discovery + research engine (MCP) | Shipped |
+| **interdoc** | 5.1.1 | AGENTS.md generator + Oracle critique | Shipped |
+| **intermux** | 0.1.1 | Agent visibility (MCP) | Shipped |
+| **interslack** | 0.1.0 | Slack integration | Shipped |
+| **interform** | 0.1.0 | Design patterns + visual quality | Shipped |
+| **intercraft** | 0.1.0 | Agent-native architecture patterns | Shipped |
+| **interdev** | 0.2.0 | MCP CLI + developer tooling | Shipped |
+| **intercheck** | 0.1.4 | Code quality guards + session health | Shipped |
+| **internext** | 0.1.2 | Work prioritization + tradeoff analysis | Shipped |
+| **interpub** | 0.1.2 | Plugin publishing | Shipped |
+| **intersearch** | 0.1.1 | Shared embedding + Exa search | Shipped |
+| **interstat** | 0.2.2 | Token efficiency benchmarking | Shipped |
+| **intersynth** | 0.1.2 | Multi-agent synthesis engine | Shipped |
+| **intermap** | 0.1.3 | Project-level code mapping (MCP) | Shipped |
+| **intermem** | 0.2.1 | Memory synthesis + tiered promotion | Shipped |
+| **interkasten** | 0.4.2 | Notion sync + documentation | Shipped |
+| **interfluence** | 0.2.3 | Voice profile + style adaptation | Shipped |
+| **interlens** | 2.2.4 | Cognitive augmentation lenses | Shipped |
+| **interleave** | 0.1.1 | Deterministic skeleton + LLM islands | Shipped |
+| **interserve** | 0.1.1 | Codex spark classifier + context compression (MCP) | Shipped |
+| **interpeer** | 0.1.0 | Cross-AI peer review (Oracle/GPT escalation) | Shipped |
+| **intertest** | 0.1.1 | Engineering quality disciplines | Shipped |
+| **tldr-swinton** | 0.7.14 | Token-efficient code context (MCP) | Shipped |
+| **tool-time** | 0.3.2 | Tool usage analytics | Shipped |
+| **tuivision** | 0.1.4 | TUI automation + visual testing (MCP) | Shipped |
 | **intershift** | — | Cross-AI dispatch engine | Planned |
 | **interscribe** | — | Knowledge compounding | Planned |
 
 ---
 
-## Open Beads Summary
-
-**All 364 beads are closed.** The backlog is empty. The next wave of work requires creating new beads from the Phase 1-3 roadmap items above.
+## Bead Summary
 
 | Metric | Value |
 |--------|-------|
-| Total beads | 364 |
-| Closed | 364 |
-| Open | 0 |
-| In progress | 0 |
-| Avg lead time | 8.8 hours |
+| Total beads | 925 |
+| Closed | 590 |
+| Open | 334 |
+| In progress | 1 |
+
+Key active epics:
+- **iv-66so** — Vision refresh: autonomous software agency (P1, in progress)
+- **iv-ngvy** — E3: Hook cutover — big-bang Clavain migration to `ic` (P1)
+- **iv-yeka** — Update roadmap.md for new vision + parallel tracks (P1)
 
 ---
 
@@ -164,14 +226,15 @@ Run `/interpath:roadmap` to regenerate from current project state.
 
 | Trigger | What to update |
 |---------|---------------|
-| New bead created | Add to appropriate phase section |
+| Track step completed | Update status in track table |
+| New bead created for a track step | Add bead ID to track table |
 | Companion extraction completed | Update Constellation table |
-| Phase 1 analytics built | Move items to "shipped", create Phase 2 beads |
 | Research insight changes direction | Add/modify items, document rationale |
+| Vision doc updated | Re-align tracks and research agenda |
 
 ---
 
-*Synthesized from: [`docs/vision.md`](vision.md), [`docs/PRD.md`](PRD.md), 7 brainstorm docs (2026-02-14 through 2026-02-15), 13 plan docs, 364 closed beads, 19 companion plugins, and Oracle cross-review (2026-02-14). Sources linked throughout.*
+*Synthesized from: [`docs/vision.md`](vision.md), [`docs/PRD.md`](PRD.md), 925 beads, 31 companion plugins, and the Intercore kernel vision. Sources linked throughout.*
 
 ## From Interverse Roadmap
 
