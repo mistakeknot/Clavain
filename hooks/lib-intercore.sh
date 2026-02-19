@@ -6,7 +6,7 @@
 # Source in hooks: source "$(dirname "$0")/lib-intercore.sh"
 # shellcheck shell=bash
 
-INTERCORE_WRAPPER_VERSION="0.4.0"
+INTERCORE_WRAPPER_VERSION="0.5.0"
 
 # Shared sentinel for Stop hook anti-cascade protocol.
 # All Stop hooks MUST check this sentinel before doing work to prevent
@@ -272,6 +272,34 @@ intercore_run_artifact_add() {
     local run_id="$1" artifact_phase="$2" artifact_path="$3" artifact_type="${4:-file}"
     if ! intercore_available; then return 1; fi
     "$INTERCORE_BIN" run artifact add "$run_id" --phase="$artifact_phase" --path="$artifact_path" --type="$artifact_type" 2>/dev/null
+}
+
+# --- Gate wrappers ---
+
+# intercore_gate_check — Dry-run gate evaluation for the next transition.
+# Args: $1=run_id
+# Returns: 0=pass, 1=fail, 2+=error/fallthrough
+intercore_gate_check() {
+    local run_id="$1"
+    if intercore_available; then
+        local rc=0
+        "$INTERCORE_BIN" gate check "$run_id" ${INTERCORE_DB:+--db="$INTERCORE_DB"} >/dev/null || rc=$?
+        return $rc
+    fi
+    return 0  # fail-open: no intercore = gates disabled
+}
+
+# intercore_gate_override — Force advance past a failing gate.
+# Args: $1=run_id, $2=reason
+# Returns: 0=success, 1=terminal, 2+=error
+intercore_gate_override() {
+    local run_id="$1" reason="$2"
+    if intercore_available; then
+        "$INTERCORE_BIN" gate override "$run_id" --reason="$reason" \
+            ${INTERCORE_DB:+--db="$INTERCORE_DB"} || return $?
+        return 0
+    fi
+    return 0  # fail-open
 }
 
 # --- Lock wrappers ---
