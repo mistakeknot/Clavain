@@ -71,7 +71,7 @@ Build the multi-model routing infrastructure from static to adaptive.
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
 | B1 | **Static routing table** — phase→model mapping declared in config, applied at dispatch | — | Not yet created | — |
-| B2 | **Complexity-aware routing** — task complexity drives model selection within phases | — | Not yet created | Intercore token tracking (E1) |
+| B2 | **Complexity-aware routing** — task complexity drives model selection within phases. Design with zero-cost abstraction (disabled = static path, no overhead) and shadow mode for safe rollout. See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §3. | — | Not yet created | Intercore token tracking (E1) |
 | B3 | **Adaptive routing** — Interspect outcome data drives model/agent selection | — | Not yet created | Interspect kernel integration (iv-thp7) |
 
 ### Track C: Agency Architecture
@@ -80,7 +80,7 @@ Build the agency composition layer that makes Clavain a fleet of specialized sub
 
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
-| C1 | **Agency specs** — declarative per-stage config: agents, models, tools, artifacts, gates | — | Not yet created | — |
+| C1 | **Agency specs** — declarative per-stage config: agents, models, tools, artifacts, gates. Include companion capability declarations (`capabilities` field in manifests). See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §2. | — | Not yet created | — |
 | C2 | **Agent fleet registry** — capability + cost profiles per agent×model combination | — | Not yet created | B1 |
 | C3 | **Composer** — matches agency specs to fleet registry within budget constraints | — | Not yet created | C1, C2 |
 | C4 | **Cross-phase handoff** — structured protocol for how Discover's output becomes Design's input | — | Not yet created | C1 |
