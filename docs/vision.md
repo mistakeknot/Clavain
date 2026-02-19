@@ -48,6 +48,8 @@ Profiler: Interspect
 
 The guiding principle: the real magic is in the agency logic and the kernel beneath it. Apps are swappable. Drivers are swappable. The OS is portable. The kernel is permanent. If a host platform disappears, you lose UX convenience but not capability. For details on the apps layer, see the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md).
 
+> **Current state vs target state.** Today, Clavain ships as a Claude Code plugin (52 slash commands, 21 hooks, 1 MCP server) because that surface is available and productive now. Autarch's TUI tools exist but are not yet the primary interface. The kernel (Intercore) is in active development with gates, events, and dispatches working; the hook cutover from temp files to `ic` is the v1.5 milestone. The architecture above describes the target design — what each layer is converging toward. Where the target differs from today's reality, the gap is acknowledged in the relevant section.
+
 ## Audience
 
 Clavain serves three concentric circles, and the priority is explicit: inner circle first, then prove it works, then open the platform.
@@ -252,21 +254,21 @@ The brainstorm and strategy phases are real product capabilities, not engineerin
 
 ## Model Routing Architecture
 
-Model routing operates at three layers, each building on the one below:
+Model routing operates at three stages, each building on the one below:
 
-### Layer 1: Kernel Mechanism
+### Stage 1: Kernel Mechanism
 
 All dispatches flow through `ic dispatch spawn` with an explicit model parameter. The kernel records which model was used, tracks token consumption, and emits events. This is the durable system of record for every model decision.
 
-### Layer 2: OS Policy
+### Stage 2: OS Policy
 
 Plugins declare default model preferences (fd-architecture defaults to Opus, fd-quality defaults to Haiku). Clavain's routing table can override these per-project, per-run, or per-complexity-level. Not everything needs Opus — a style-checking agent on Haiku catches the same issues at 1/20th the cost.
 
-### Layer 3: Adaptive Optimization
+### Stage 3: Adaptive Optimization
 
 The agent fleet registry stores cost/quality profiles per agent×model combination. The composer optimizes the entire fleet dispatch within a budget constraint. "Run this review with $5 budget" → the composer allocates Opus to the 2 highest-impact agents and Haiku to the rest. Interspect's outcome data drives profile updates — models that consistently underperform for a task type get downweighted.
 
-These three layers are staged on the roadmap: static routing ships first, complexity-aware routing follows, adaptive optimization comes with measurement infrastructure.
+These three stages are staged on the roadmap: static routing ships first, complexity-aware routing follows, adaptive optimization comes with measurement infrastructure. The kernel mechanism (Stage 1) is described fully in the [Intercore vision doc](../../../infra/intercore/docs/product/intercore-vision.md) — the kernel records dispatch details, model selection, and token consumption; the OS configures routing policy on top.
 
 ## Development Model
 
@@ -319,6 +321,28 @@ Migrate Clavain from ephemeral state management to durable kernel-backed orchest
 | A1 | **Hook cutover** — all Clavain hooks call `ic` instead of temp files | Intercore E1-E2 |
 | A2 | **Sprint handover** — sprint skill becomes kernel-driven (hybrid → handover → kernel-driven) | A1 |
 | A3 | **Event-driven advancement** — phase transitions trigger automatic agent dispatch and advancement | A2 |
+
+#### Event Reactor Lifecycle (A3 Detail)
+
+At Level 2 autonomy, the OS runs an event reactor that drives automatic phase advancement. The reactor is an OS component — not a kernel daemon. The kernel remains stateless between CLI calls.
+
+**Process model.** The reactor runs as a long-lived process that polls the kernel event bus: `ic events tail -f --consumer=clavain-reactor --poll-interval=500ms`. It subscribes to `dispatch.completed`, `gate.passed`, and `gate.failed` events, and calls `ic run advance` when conditions are met.
+
+**Lifecycle management.** The reactor can be deployed in three modes, each with increasing reliability:
+- **Session-scoped** (simplest): A Clavain hook starts the reactor at session start; it dies when the session ends. Suitable for interactive development where overnight runs are not expected.
+- **Systemd unit** (recommended for Level 2): `clavain-reactor.service` with `Restart=on-failure`. Survives session ends. Requires installation.
+- **Hook-triggered** (hybrid): Each `dispatch.completed` event triggers an `ic run advance` attempt from a Clavain hook. No persistent process. Reliable within sessions but no overnight advancement.
+
+**Gate failure behavior.** When the reactor receives `gate.failed` for an automatic advancement attempt, it must:
+1. Transition the run to `paused` state via `ic run pause <id> --reason="gate failed: <evidence>"`
+2. Emit a `run.paused` event with the gate failure evidence
+3. Surface the pause in Bigend/TUI/inbox as requiring human action
+
+A paused run does not auto-resume. The human reviews the failure, resolves the issue, and runs `ic run advance <id>` to continue manually. The reactor picks up from the advanced state on its next poll.
+
+**Manual recovery.** If the reactor is down and runs are stuck, `ic run advance <id>` always works from any terminal. This is the escape hatch — the reactor automates advancement, but manual advancement via the kernel CLI is always available.
+
+**Stalled dispatch handling.** A dispatch killed without self-reporting (`kill -9`, OOM) remains in `running` state. The reconciliation engine detects orphaned dispatches and emits `reconciliation.anomaly` events. The `agents_complete` gate must accept dispatches confirmed dead by reconciliation as terminal states. The reconciliation polling interval (default: 60s) determines how quickly stalled dispatches are detected.
 
 ### Track B: Model Routing
 
@@ -400,7 +424,7 @@ Clavain is well-positioned to explore open questions at the intersection of mult
 
 **Not a coding assistant.** That's what Cursor and similar tools do. Clavain doesn't help you write code; it *builds software* — the full lifecycle from problem discovery through shipped, reviewed, tested, compounded code. The coding is one phase of four.
 
-**Not a Claude Code plugin.** Clavain runs on its own TUI (Autarch). It dispatches to Claude, Codex, Gemini, GPT-5.2, and other models as execution backends. The Claude Code plugin interface is one driver among several — a UX adapter, not the identity.
+**Not primarily a Claude Code plugin — by design.** Clavain's identity is an autonomous software agency. Autarch (TUI) is the target primary interface; today it ships as a Claude Code plugin because that surface is available now. The architecture is designed to outlive any single host platform. Clavain dispatches to Claude, Codex, Gemini, GPT-5.2, and other models as execution backends. The Claude Code plugin interface is one driver among several — a UX adapter, not the identity.
 
 **Not for non-builders.** Clavain is for people who build software with agents. It is not a no-code tool, not an AI assistant for non-technical users, not a chatbot framework.
 
