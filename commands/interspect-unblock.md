@@ -26,8 +26,7 @@ DB=$(_interspect_db_path)
 if ! _interspect_validate_agent_name "$AGENT"; then
     exit 1
 fi
-ESCAPED=$(_interspect_sql_escape "$AGENT")
-DELETED=$(sqlite3 "$DB" "DELETE FROM blacklist WHERE pattern_key = '${ESCAPED}'; SELECT changes();")
+_interspect_unblacklist_pattern "$AGENT"
 ```
 
 Report: "Unblocked {agent}. Interspect may propose this exclusion again if evidence warrants it." or "No blacklist entry found for {agent}."

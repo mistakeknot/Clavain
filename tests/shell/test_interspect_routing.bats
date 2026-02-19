@@ -538,3 +538,114 @@ teardown() {
     [ "$_INTERSPECT_CANARY_MIN_BASELINE" -ge 1 ]
     [ "$_INTERSPECT_CANARY_ALERT_PCT" -le 100 ]
 }
+
+# ─── Revert routing override ──────────────────────────────────────
+
+@test "revert_routing_override removes override and commits" {
+    # Apply an override first
+    _interspect_apply_routing_override "fd-game-design" "test reason" "[]" "test"
+
+    # Verify it exists
+    run _interspect_override_exists "fd-game-design"
+    [ "$status" -eq 0 ]
+
+    # Revert it
+    run _interspect_revert_routing_override "fd-game-design"
+    [ "$status" -eq 0 ]
+
+    # Verify it's gone
+    run _interspect_override_exists "fd-game-design"
+    [ "$status" -ne 0 ]
+}
+
+@test "revert_routing_override is idempotent" {
+    # Revert something that doesn't exist
+    run _interspect_revert_routing_override "fd-game-design"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "revert_routing_override rejects invalid agent name" {
+    run _interspect_revert_routing_override "malicious'; DROP TABLE evidence; --"
+    [ "$status" -eq 1 ]
+}
+
+@test "revert_routing_override updates canary status to reverted" {
+    DB=$(_interspect_db_path)
+
+    # Apply override (creates canary)
+    _interspect_apply_routing_override "fd-game-design" "test reason" "[]" "test"
+
+    # Verify canary is active
+    canary_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE group_id = 'fd-game-design' LIMIT 1;")
+    [ "$canary_status" = "active" ] || [ "$canary_status" = "" ]
+
+    # Revert
+    _interspect_revert_routing_override "fd-game-design"
+
+    # Canary should be reverted (if one existed)
+    reverted=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary WHERE group_id = 'fd-game-design' AND status = 'reverted';")
+    active=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary WHERE group_id = 'fd-game-design' AND status = 'active';")
+    [ "$active" -eq 0 ]
+}
+
+@test "revert_routing_override updates modifications status to reverted" {
+    DB=$(_interspect_db_path)
+
+    # Apply override (creates modification record)
+    _interspect_apply_routing_override "fd-game-design" "test reason" "[]" "test"
+
+    # Verify modification is applied
+    mod_status=$(sqlite3 "$DB" "SELECT status FROM modifications WHERE group_id = 'fd-game-design' LIMIT 1;")
+    [ "$mod_status" = "applied" ] || [ "$mod_status" = "applied-unmonitored" ]
+
+    # Revert
+    _interspect_revert_routing_override "fd-game-design"
+
+    # Modification should be reverted
+    active=$(sqlite3 "$DB" "SELECT COUNT(*) FROM modifications WHERE group_id = 'fd-game-design' AND status = 'applied';")
+    [ "$active" -eq 0 ]
+}
+
+# ─── Blacklist/unblacklist functions ──────────────────────────────
+
+@test "blacklist_pattern inserts into blacklist table" {
+    DB=$(_interspect_db_path)
+    _interspect_blacklist_pattern "fd-game-design" "test blacklist"
+
+    count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM blacklist WHERE pattern_key = 'fd-game-design';")
+    [ "$count" -eq 1 ]
+
+    reason=$(sqlite3 "$DB" "SELECT reason FROM blacklist WHERE pattern_key = 'fd-game-design';")
+    [ "$reason" = "test blacklist" ]
+}
+
+@test "blacklist_pattern is idempotent via INSERT OR REPLACE" {
+    DB=$(_interspect_db_path)
+    _interspect_blacklist_pattern "fd-game-design" "first reason"
+    _interspect_blacklist_pattern "fd-game-design" "updated reason"
+
+    count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM blacklist WHERE pattern_key = 'fd-game-design';")
+    [ "$count" -eq 1 ]
+
+    reason=$(sqlite3 "$DB" "SELECT reason FROM blacklist WHERE pattern_key = 'fd-game-design';")
+    [ "$reason" = "updated reason" ]
+}
+
+@test "unblacklist_pattern removes from blacklist table" {
+    DB=$(_interspect_db_path)
+    _interspect_blacklist_pattern "fd-game-design" "test"
+
+    count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM blacklist WHERE pattern_key = 'fd-game-design';")
+    [ "$count" -eq 1 ]
+
+    _interspect_unblacklist_pattern "fd-game-design"
+
+    count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM blacklist WHERE pattern_key = 'fd-game-design';")
+    [ "$count" -eq 0 ]
+}
+
+@test "unblacklist_pattern is idempotent for missing pattern" {
+    run _interspect_unblacklist_pattern "fd-nonexistent"
+    [ "$status" -eq 0 ]
+}

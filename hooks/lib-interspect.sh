@@ -787,6 +787,142 @@ _interspect_apply_override_locked() {
     echo "$commit_sha"
 }
 
+# ─── Revert Routing Override ─────────────────────────────────────────────────
+
+# Revert a routing override. Handles the full read-modify-write-commit-record flow.
+# All operations (file write, git commit, DB updates) run inside flock for atomicity.
+# Args: $1=agent_name
+# Returns: 0 on success, 1 on failure
+_interspect_revert_routing_override() {
+    local agent="$1"
+
+    # --- Pre-flock validation (fast-fail) ---
+
+    if ! _interspect_validate_agent_name "$agent"; then
+        return 1
+    fi
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local filepath="${FLUX_ROUTING_OVERRIDES_PATH:-.claude/routing-overrides.json}"
+
+    if ! _interspect_validate_overrides_path "$filepath"; then
+        return 1
+    fi
+
+    local fullpath="${root}/${filepath}"
+
+    # Idempotency check: verify override exists
+    if ! _interspect_override_exists "$agent"; then
+        echo "INFO: Override for ${agent} not found. Already removed or never existed." >&2
+        return 0
+    fi
+
+    # --- Write commit message to temp file (avoids shell injection) ---
+
+    local commit_msg_file
+    commit_msg_file=$(mktemp)
+    printf '[interspect] Revert routing override for %s\n\nReason: User requested revert via /interspect:revert\n' \
+        "$agent" > "$commit_msg_file"
+
+    # --- DB path for use inside flock ---
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    # --- Entire read-modify-write-commit-record inside flock ---
+    local flock_output
+    flock_output=$(_interspect_flock_git _interspect_revert_override_locked \
+        "$root" "$filepath" "$fullpath" "$agent" "$commit_msg_file" "$db")
+
+    local exit_code=$?
+    rm -f "$commit_msg_file"
+
+    if (( exit_code != 0 )); then
+        echo "ERROR: Could not revert routing override. Check git status and retry." >&2
+        echo "$flock_output" >&2
+        return 1
+    fi
+
+    echo "SUCCESS: Reverted routing override for ${agent}."
+    return 0
+}
+
+# Inner function called under flock. Do NOT call directly.
+_interspect_revert_override_locked() {
+    set -e
+    local root="$1" filepath="$2" fullpath="$3" agent="$4"
+    local commit_msg_file="$5" db="$6"
+
+    # Re-check inside flock (TOCTOU-safe)
+    if [[ ! -f "$fullpath" ]]; then
+        echo "INFO: Override file does not exist (concurrent removal)" >&2
+        return 0
+    fi
+
+    local current
+    current=$(jq '.' "$fullpath" 2>/dev/null || echo '{"version":1,"overrides":[]}')
+
+    if ! echo "$current" | jq -e --arg agent "$agent" '.overrides[] | select(.agent == $agent)' >/dev/null 2>&1; then
+        echo "INFO: Override for ${agent} already removed (concurrent revert)" >&2
+        return 0
+    fi
+
+    # Remove the override entry
+    local updated
+    updated=$(echo "$current" | jq --arg agent "$agent" 'del(.overrides[] | select(.agent == $agent))')
+    echo "$updated" | jq '.' > "$fullpath"
+
+    # Git add + commit
+    cd "$root"
+    git add "$filepath"
+    if ! git commit --no-verify -F "$commit_msg_file"; then
+        # Rollback: unstage + restore
+        git reset HEAD -- "$filepath" 2>/dev/null || true
+        git restore "$filepath" 2>/dev/null || git checkout -- "$filepath" 2>/dev/null || true
+        echo "ERROR: Git commit failed. Revert not applied." >&2
+        return 1
+    fi
+
+    # Update DB records INSIDE flock
+    local escaped_agent
+    escaped_agent=$(_interspect_sql_escape "$agent")
+    sqlite3 "$db" "UPDATE canary SET status = 'reverted' WHERE group_id = '${escaped_agent}' AND status = 'active';" 2>/dev/null || true
+    sqlite3 "$db" "UPDATE modifications SET status = 'reverted' WHERE group_id = '${escaped_agent}' AND status = 'applied';" 2>/dev/null || true
+}
+
+# ─── Blacklist Management ────────────────────────────────────────────────────
+
+# Add a pattern to the blacklist. Prevents interspect from re-proposing
+# the same exclusion or overlay for this agent/pattern.
+# Args: $1=pattern_key (agent name or agent/overlay_id), $2=reason
+# Returns: 0 on success, 1 on failure
+_interspect_blacklist_pattern() {
+    local pattern_key="$1"
+    local reason="${2:-User requested blacklist}"
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    local escaped_key escaped_reason
+    escaped_key=$(_interspect_sql_escape "$pattern_key")
+    escaped_reason=$(_interspect_sql_escape "$reason")
+
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    sqlite3 "$db" "INSERT OR REPLACE INTO blacklist (pattern_key, blacklisted_at, reason) VALUES ('${escaped_key}', '${ts}', '${escaped_reason}');"
+}
+
+# Remove a pattern from the blacklist.
+# Args: $1=pattern_key
+# Returns: 0 on success (even if not found)
+_interspect_unblacklist_pattern() {
+    local pattern_key="$1"
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    local escaped_key
+    escaped_key=$(_interspect_sql_escape "$pattern_key")
+
+    sqlite3 "$db" "DELETE FROM blacklist WHERE pattern_key = '${escaped_key}';"
+}
+
 # ─── Canary Monitoring ──────────────────────────────────────────────────────
 
 # Compute canary baseline metrics from historical evidence.
