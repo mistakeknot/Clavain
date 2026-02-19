@@ -6,7 +6,7 @@
 # Source in hooks: source "$(dirname "$0")/lib-intercore.sh"
 # shellcheck shell=bash
 
-INTERCORE_WRAPPER_VERSION="0.5.0"
+INTERCORE_WRAPPER_VERSION="0.6.0"
 
 # Shared sentinel for Stop hook anti-cascade protocol.
 # All Stop hooks MUST check this sentinel before doing work to prevent
@@ -379,4 +379,47 @@ intercore_lock_clean() {
     find /tmp/intercore/locks -mindepth 2 -maxdepth 2 -type d -not -newermt "${_secs} seconds ago" \
         -exec sh -c 'rm -f "$1/owner.json" && rmdir "$1"' _ {} \; 2>/dev/null || true
     return 0
+}
+
+# --- Event bus wrappers (v0.6.0) ---
+
+# intercore_events_tail <run_id> [--since-phase=N] [--since-dispatch=N]
+# One-shot event dump. Returns JSON lines to stdout.
+intercore_events_tail() {
+    intercore_available || return 0
+    local run_id="$1"; shift
+    $INTERCORE_BIN events tail "$run_id" "$@" 2>/dev/null
+}
+
+# intercore_events_tail_all [--since-phase=N] [--since-dispatch=N]
+# One-shot event dump across all runs.
+intercore_events_tail_all() {
+    intercore_available || return 0
+    $INTERCORE_BIN events tail --all "$@" 2>/dev/null
+}
+
+# intercore_events_cursor_get <consumer>
+# Returns cursor JSON payload or empty string.
+# Uses `ic events cursor list` rather than reading state directly,
+# so cursor format changes don't silently break the wrapper.
+intercore_events_cursor_get() {
+    intercore_available || { echo ""; return 0; }
+    local consumer="$1"
+    $INTERCORE_BIN events cursor list 2>/dev/null | grep -P "^${consumer}\t" | cut -f2 || echo ""
+}
+
+# intercore_events_cursor_set <consumer> <phase_id> <dispatch_id>
+# Manually set cursor position.
+intercore_events_cursor_set() {
+    intercore_available || return 0
+    local consumer="$1" phase_id="$2" dispatch_id="$3"
+    echo "{\"phase\":${phase_id},\"dispatch\":${dispatch_id}}" | \
+        $INTERCORE_BIN state set "cursor" "$consumer" --ttl=24h 2>/dev/null
+}
+
+# intercore_events_cursor_reset <consumer>
+# Reset a consumer's cursor.
+intercore_events_cursor_reset() {
+    intercore_available || return 0
+    $INTERCORE_BIN events cursor reset "$1" 2>/dev/null
 }
