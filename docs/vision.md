@@ -55,40 +55,28 @@ Clavain serves three concentric circles, and the priority is explicit: inner cir
 
 ## Operating Principles
 
-### 1. Refinement > production
-The review phases matter more than the building phases. Every moment spent refining and reviewing is worth far more than the actual building itself. A core goal is to resolve all open questions before execution, because it is far more expensive to deal with ambiguity during execution than during planning.
+### 1. Discipline before speed
+The review phases matter more than the building phases. Resolve all open questions before execution — ambiguity is far more expensive to handle during building than during planning. Encode judgment into checks before removing the human. Agents without discipline ship slop. Automation multipliers (adaptive routing, cross-project learning) should come after observability and measurement, not before.
 
-### 2. Composition > integration
-Small, focused tools composed together beat large integrated platforms. The inter-* constellation, Unix philosophy, modpack metaphor; it's turtles all the way down. Each companion does one thing well and composes with others through explicit interfaces.
+### 2. Compose through contracts
+Small, focused tools composed together beat large integrated platforms. The inter-* constellation, Unix philosophy, modpack metaphor; it's turtles all the way down. Each companion does one thing well and composes with others through explicit interfaces. Prefer typed interfaces, schemas, manifests, and declarative specs over prompt sorcery — composition only works when boundaries are explicit. Agent definitions, plugin capabilities, and inter-plugin communication should be formally specifiable, not implicitly assumed.
 
-### 3. Outcome efficiency enables scale
-If you can't afford to run it, it doesn't matter how good it is. But cost alone is a vanity metric; the goal is outcomes per dollar: defects caught per token, merge-ready changes per session, time-to-first-signal per gate. Token efficiency is a means, not an end. 12 agents should cost less than 8 via orchestration optimization, *and* catch more bugs.
+### 3. Measure what matters
+If you can't afford to run it, it doesn't matter how good it is. But cost alone is a vanity metric; the goal is outcomes per dollar: defects caught per token, merge-ready changes per session, time-to-first-signal per gate. 12 agents should cost less than 8 via orchestration optimization, *and* catch more bugs. This requires pervasive observability — every agent action should emit traceable events: inputs, outputs, cost, latency, decision rationale, and downstream outcomes. If it can't be traced, it can't be trusted. The kernel's event bus is the backbone; every state change produces a typed, durable event. You can't refine what you can't see, and you can't extract what you can't measure.
 
 ### 4. Human attention is the bottleneck
 Optimize for the human's time, not the agent's. The human's focus, attention, and product sense are the scarce resource; agents are in service of that. Token efficiency does not equal attention efficiency; multi-agent output must be presented so humans can review quickly and confidently, not just cheaply.
 
-### 5. Building builds building
-Capability is forged through practice, not absorbed through reading. Like guitar, you can read all the theory books you want, but none of that matters as much as applied, active practice.
+### 5. Self-building through practice
+Capability is forged through practice, not absorbed through reading. Like guitar, you can read all the theory books you want, but none of that matters as much as applied, active practice. Every feature must be testable by Clavain building Clavain. Dogfooding is a design constraint, not a marketing exercise. If the agency can't use a capability to improve itself, the capability isn't ready. Self-building is the highest-fidelity eval: it tests the full stack under real conditions with real stakes.
 
-### 6. Discipline before automation
-Encode judgment into checks before removing the human. Agents without discipline ship slop. Automation multipliers (adaptive routing, cross-project learning) should come after observability and measurement, not before.
-
-### 7. Right model, right task
+### 6. Right model, right task
 No one model is best at everything. The agency's intelligence includes knowing *which* intelligence to apply. Gemini's long context window for exploration and research. Opus for reasoning, strategy, and design. Codex for parallel implementation. Haiku for quick checks and linting. Oracle (GPT-5.2 Pro) for high-complexity cross-validation. Model selection is a first-class routing decision at every level — macro-stage, phase, agent, and individual tool call.
 
-### 8. Agency drives, human decides where
+### 7. Agency drives, human decides where
 The agency handles execution mechanics: which model, which agents, what sequence, when to advance, what to review. The human retains strategic control: what to build, which tradeoffs to make, when to ship, where to intervene. Quality gates surface issues; the human decides whether they're blockers. The sprint runs autonomously; the human decides whether to start it. This is not "human in the loop" — it's "human above the loop."
 
-### 9. The system builds itself
-Every feature must be testable by Clavain building Clavain. Dogfooding is a design constraint, not a marketing exercise. If the agency can't use a capability to improve itself, the capability isn't ready. Self-building is the highest-fidelity eval: it tests the full stack under real conditions with real stakes.
-
-### 10. Observability is a feature, not a bolt-on
-Every agent action should emit traceable events: inputs, outputs, cost, latency, decision rationale, and downstream outcomes. If it can't be traced, it can't be trusted. Measurement is the foundation for everything else; you can't refine what you can't see, and you can't extract what you can't measure. The kernel's event bus is the backbone — every state change produces a typed, durable event.
-
-### 11. Contracts > cleverness
-Prefer typed interfaces, schemas, manifests, and declarative specs over prompt sorcery. Composition only works when boundaries are explicit. Agent definitions, plugin capabilities, and inter-plugin communication should be formally specifiable, not implicitly assumed.
-
-### 12. Push the frontier
+### 8. Push the frontier
 
 Clavain is not just a stable workflow stack; it is an active platform for advancing what AI-assisted engineering can do. That includes:
 - **Agent orchestration frontier**: robust multi-model topology, adaptive selection, and context-sensitive dispatch across heterogeneous AI backends.
