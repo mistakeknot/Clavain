@@ -117,3 +117,72 @@ If user accepts, proceed to apply the override:
 ## On Decline
 
 Skip this pattern. It will re-propose next session if still eligible. Do not blacklist.
+
+## Prompt Tuning Proposals (Type 1)
+
+After routing override proposals, check for overlay-eligible patterns. These have a **different threshold band** from routing overrides:
+
+**Overlay eligibility criteria:**
+- Pattern classified as "ready" (same min_sessions, min_diversity, min_events thresholds)
+- `agent_wrong_pct` is 40-79% (between "sometimes wrong" and "almost always wrong")
+  - Below 40%: too noisy, not enough signal for a tuning instruction
+  - 80%+: should be a routing override instead (agent is almost always wrong)
+- Pattern has specific, actionable context (from evidence `context` field) that could sharpen the agent
+
+```bash
+# Filter classified patterns for overlay eligibility (40-79% wrong)
+for each pattern in CLASSIFIED where status == "ready":
+    agent_wrong_pct = pattern.agent_wrong_pct
+    if agent_wrong_pct >= 40 && agent_wrong_pct < 80:
+        # Check no active overlay already exists for this agent
+        existing=$(_interspect_read_overlays "$agent")
+        if [[ -n "$existing" ]]; then
+            # Agent already has overlays — show in table but note "has overlay"
+        fi
+        # Eligible for overlay proposal
+```
+
+If no overlay-eligible patterns exist, skip this section silently.
+
+If eligible patterns exist, present after the routing override section:
+
+```
+### Prompt Tuning Proposals (Type 1)
+
+These agents produce SOME useful findings but have recurring blind spots. Overlays can sharpen their focus without removing the agent.
+
+| Agent | Events | Wrong% | Proposed Adjustment |
+|-------|--------|--------|---------------------|
+```
+
+### Auto-Draft Overlay Content
+
+For each overlay-eligible pattern, draft the tuning instruction:
+
+1. Query recent evidence context:
+```bash
+local escaped
+escaped=$(_interspect_sql_escape "$agent")
+CONTEXTS=$(sqlite3 "$DB" "SELECT context FROM evidence WHERE source = '${escaped}' AND event = 'override' AND override_reason = 'agent_wrong' ORDER BY ts DESC LIMIT 10;")
+EVIDENCE_IDS=$(sqlite3 "$DB" "SELECT id FROM evidence WHERE source = '${escaped}' AND event = 'override' AND override_reason = 'agent_wrong' ORDER BY ts DESC LIMIT 10;")
+```
+
+2. Summarize the pattern: analyze what the agent gets wrong and in what contexts
+3. Draft a 2-3 sentence instruction for the overlay
+4. **Sanitize the draft BEFORE presenting to user** (F8): Run `_interspect_sanitize` on the LLM-generated text so the user approves exactly what will be written
+5. Present sanitized draft to user for approval/editing via AskUserQuestion
+
+### On Accept (Overlay)
+
+1. Generate overlay ID: `overlay-$(head -c 4 /dev/urandom | xxd -p)`
+2. Collect evidence IDs as JSON array: `echo "$EVIDENCE_IDS" | jq -R -s 'split("\n") | map(select(length > 0))'`
+3. Call `_interspect_write_overlay "$agent" "$overlay_id" "$content" "$evidence_ids_json" "interspect"`
+4. Report success with canary info:
+```
+Overlay **{overlay_id}** created for {agent}.
+- Content: "{first 80 chars of content}..."
+- Token estimate: {tokens}
+- Canary monitoring: active (20-use window, 14-day expiry)
+
+The agent will receive this tuning instruction in future reviews.
+```

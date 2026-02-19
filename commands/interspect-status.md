@@ -140,14 +140,76 @@ Present routing overrides with actionable context:
 > You can also hand-edit `.claude/routing-overrides.json` — set `"created_by": "human"` for custom overrides.
 ```
 
+## Active Overlays
+
+Check for overlay files using shared parsers (F4, F10):
+
+```bash
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+OVERLAY_DIR="${ROOT}/.clavain/interspect/overlays"
+TOTAL_ACTIVE=0
+AGENT_COUNT=0
+
+if [[ -d "$OVERLAY_DIR" ]]; then
+    for agent_dir in "$OVERLAY_DIR"/*/; do
+        [[ -d "$agent_dir" ]] || continue
+        agent=$(basename "$agent_dir")
+        active_count=0
+        total_count=0
+        token_est=0
+        for overlay in "$agent_dir"*.md; do
+            [[ -f "$overlay" ]] || continue
+            total_count=$((total_count + 1))
+            if _interspect_overlay_is_active "$overlay"; then
+                active_count=$((active_count + 1))
+                body=$(_interspect_overlay_body "$overlay")
+                tokens=$(_interspect_count_overlay_tokens "$body")
+                token_est=$((token_est + tokens))
+            fi
+        done
+        if [[ $total_count -gt 0 ]]; then
+            AGENT_COUNT=$((AGENT_COUNT + 1))
+            TOTAL_ACTIVE=$((TOTAL_ACTIVE + active_count))
+            # Query canary status for this agent's overlays
+            escaped_agent=$(_interspect_sql_escape "$agent")
+            canary_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE group_id LIKE '${escaped_agent}/%' AND status = 'active' LIMIT 1;" 2>/dev/null || echo "none")
+            # Store row: agent, active_count, total_count, token_est, canary_status
+        fi
+    done
+fi
+```
+
+Present:
+
+```
+### Overlays: {TOTAL_ACTIVE} active across {AGENT_COUNT} agents
+
+| Agent | Active | Total | Est. Tokens | Canary | Next Action |
+|-------|--------|-------|-------------|--------|-------------|
+{for each agent with overlays:
+  - Canary column: "monitoring", "passed", "alert", or "none"
+  - Next Action:
+    canary == "active": "Monitoring ({uses}/{window} uses)"
+    canary == "alert": "Review — run /interspect:revert {agent}"
+    canary == "passed": "Stable"
+    canary == "none": "No canary (manual overlay?)"
+  - Token budget warning if token_est > 400: " ⚠ near budget (500)"
+}
+
+{if TOTAL_ACTIVE == 0 and OVERLAY_DIR exists:
+  "No active overlays. Use `/interspect:propose` to detect tuning-eligible patterns."}
+{if not -d OVERLAY_DIR:
+  "Overlays directory not initialized. Run any interspect command to create it."}
+```
+
 ## Navigation
 
 ```
 Run `/interspect` for pattern analysis.
 Run `/interspect:evidence <agent>` for detailed agent evidence.
 Run `/interspect:health` for signal diagnostics.
-Run `/interspect:propose` for routing override proposals.
-Run `/interspect:revert <agent>` to remove an override.
+Run `/interspect:propose` for routing override or overlay proposals.
+Run `/interspect:revert <agent>` to remove an override or disable overlays.
 ```
 
 ## Detailed View (agent name provided)

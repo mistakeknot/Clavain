@@ -67,11 +67,14 @@ CREATE TABLE IF NOT EXISTS canary_samples (
 );
 CREATE INDEX IF NOT EXISTS idx_canary_samples_canary ON canary_samples(canary_id);
 MIGRATE
+        # Ensure overlays directory exists (Type 1 modifications)
+        mkdir -p "$(dirname "$_INTERSPECT_DB")/overlays" 2>/dev/null || true
         return 0
     fi
 
-    # Ensure directory exists
+    # Ensure directory exists (including overlays subdirectory for Type 1 modifications)
     mkdir -p "$(dirname "$_INTERSPECT_DB")" 2>/dev/null || return 1
+    mkdir -p "$(dirname "$_INTERSPECT_DB")/overlays" 2>/dev/null || true
 
     # Create tables + indexes + WAL mode
     sqlite3 "$_INTERSPECT_DB" <<'SQL' >/dev/null
@@ -595,7 +598,7 @@ _interspect_apply_routing_override() {
     fi
 
     # Validate evidence_ids is a JSON array
-    if ! echo "$evidence_ids" | jq -e 'type == "array"' >/dev/null 2>&1; then
+    if ! printf '%s\n' "$evidence_ids" | jq -e 'type == "array"' >/dev/null 2>&1; then
         echo "ERROR: evidence_ids must be a JSON array (got: ${evidence_ids})" >&2
         return 1
     fi
@@ -1135,9 +1138,11 @@ _interspect_get_canary_summary() {
 
 _INTERSPECT_GIT_LOCK_TIMEOUT=30
 
-# Execute a command under the interspect git lock.
+# Execute a command or shell function under the interspect git lock.
+# Accepts any command, including shell functions defined in this library
+# (functions run in the same sourced context, NOT as a subprocess).
 # Usage: _interspect_flock_git git add <file>
-# Usage: _interspect_flock_git git commit -m "[interspect] ..."
+# Usage: _interspect_flock_git _interspect_write_overlay_locked arg1 arg2 ...
 _interspect_flock_git() {
     local root
     root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -1196,6 +1201,7 @@ _interspect_redact_secrets() {
 # Output: sanitized string on stdout
 _interspect_sanitize() {
     local input="$1"
+    local max_chars="${2:-500}"  # Default 500 chars; overlays use 2000
 
     # 1. Strip ANSI escape sequences
     input=$(printf '%s' "$input" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g')
@@ -1203,13 +1209,14 @@ _interspect_sanitize() {
     # 2. Strip control characters (0x00-0x08, 0x0B-0x0C, 0x0E-0x1F)
     input=$(printf '%s' "$input" | tr -d '\000-\010\013-\014\016-\037')
 
-    # 3. Truncate to 500 chars (prevents DoS from massive strings)
-    input="${input:0:500}"
+    # 3. Truncate to max_chars (prevents DoS from massive strings)
+    input="${input:0:$max_chars}"
 
     # 4. Redact secrets (after truncate to limit scan surface)
     input=$(_interspect_redact_secrets "$input")
 
     # 5. Reject instruction-like patterns (case-insensitive)
+    # Returns empty string + exit 1 on injection match so callers can hard-fail.
     local lower="${input,,}"
     if [[ "$lower" == *"<system>"* ]] || \
        [[ "$lower" == *"<instructions>"* ]] || \
@@ -1217,8 +1224,7 @@ _interspect_sanitize() {
        [[ "$lower" == *"you are now"* ]] || \
        [[ "$lower" == *"disregard"* ]] || \
        [[ "$lower" == *"system:"* ]]; then
-        printf '%s' "[REDACTED]"
-        return 0
+        return 1
     fi
 
     printf '%s' "$input"
@@ -1288,4 +1294,426 @@ _interspect_insert_evidence() {
     local e_version="${source_version//\'/\'\'}"
 
     sqlite3 "$db" "INSERT INTO evidence (ts, session_id, seq, source, source_version, event, override_reason, context, project, project_lang, project_type) VALUES ('${ts}', '${e_session}', ${seq}, '${e_source}', '${e_version}', '${e_event}', '${e_reason}', '${e_context}', '${e_project}', NULL, NULL);"
+}
+
+# ─── Overlay System (Type 1 Modifications) ──────────────────────────────────
+#
+# Overlays augment agent prompts with learned context. Unlike routing overrides
+# (Type 2) which exclude agents entirely, overlays sharpen an agent's focus.
+#
+# File format: .clavain/interspect/overlays/<agent>/<overlay-id>.md
+#   ---
+#   active: true
+#   created: <ISO 8601>
+#   created_by: <source>
+#   evidence_ids: [1, 2, 3]
+#   ---
+#   <overlay body — injected into agent prompt>
+
+# ─── Shared YAML Frontmatter Parsers ────────────────────────────────────────
+# Single source of truth for frontmatter parsing. All overlay code MUST use
+# these helpers — never parse frontmatter inline (review finding F4).
+
+# Check if an overlay file has active: true in its YAML frontmatter.
+# Uses awk delimiter state machine — safe against body content containing
+# "active: true" or "---" horizontal rules.
+# Args: $1=overlay_file_path
+# Returns: 0 if active, 1 if not
+_interspect_overlay_is_active() {
+    local filepath="$1"
+    [[ -f "$filepath" ]] || return 1
+    awk '/^---$/ { if (++delim == 2) exit } delim == 1 && /^active: true$/ { found=1 } END { exit !found }' "$filepath"
+}
+
+# Extract the body content from an overlay file (everything after second ---).
+# Args: $1=overlay_file_path
+# Returns: body on stdout, empty if no body or malformed frontmatter
+_interspect_overlay_body() {
+    local filepath="$1"
+    [[ -f "$filepath" ]] || return 0
+    awk '/^---$/ { if (++delim == 2) { body=1; next } } body { print }' "$filepath"
+}
+
+# ─── Overlay Read/Count ─────────────────────────────────────────────────────
+
+# Read all active overlays for an agent. Returns concatenated body content.
+# Args: $1=agent_name
+# Output: overlay content on stdout, empty if none active
+_interspect_read_overlays() {
+    local agent="$1"
+    if ! _interspect_validate_agent_name "$agent" 2>/dev/null; then
+        return 1
+    fi
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local overlay_dir="${root}/.clavain/interspect/overlays/${agent}"
+
+    [[ -d "$overlay_dir" ]] || return 0
+
+    local content=""
+    local overlay_file
+    # Sort alphabetically for deterministic ordering
+    while IFS= read -r overlay_file; do
+        [[ -f "$overlay_file" ]] || continue
+        if _interspect_overlay_is_active "$overlay_file"; then
+            local body
+            body=$(_interspect_overlay_body "$overlay_file")
+            if [[ -n "$body" ]]; then
+                [[ -n "$content" ]] && content+=$'\n\n'
+                content+="$body"
+            fi
+        fi
+    done < <(printf '%s\n' "${overlay_dir}"/*.md | sort)
+
+    printf '%s' "$content"
+}
+
+# Estimate token count for overlay content.
+# Canonical implementation: wc -w * 1.3 (must match everywhere — review finding F12).
+# Args: $1=content_string
+# Output: integer token estimate on stdout
+_interspect_count_overlay_tokens() {
+    local content="$1"
+    [[ -z "$content" ]] && { echo "0"; return 0; }
+    local word_count
+    word_count=$(printf '%s' "$content" | wc -w | tr -d ' ')
+    # Validate integer (defense against unexpected wc output)
+    if ! [[ "$word_count" =~ ^[0-9]+$ ]]; then
+        echo "0"
+        return 0
+    fi
+    # Multiply by 1.3, truncate to integer (use -v to avoid injection)
+    awk -v wc="$word_count" 'BEGIN { printf "%d", wc * 1.3 }'
+}
+
+# ─── Overlay Write ──────────────────────────────────────────────────────────
+
+# Validate overlay ID format. Must be lowercase alphanumeric + hyphens only.
+# Args: $1=overlay_id
+# Returns: 0 if valid, 1 if not
+_interspect_validate_overlay_id() {
+    local overlay_id="$1"
+    if [[ ! "$overlay_id" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        echo "ERROR: Invalid overlay ID '${overlay_id}'. Must match [a-z0-9][a-z0-9-]*." >&2
+        return 1
+    fi
+    return 0
+}
+
+# Write a new overlay file atomically inside flock.
+# All budget checks, file writes, git commits, and DB inserts happen inside
+# a single flock acquisition (review finding F1: TOCTOU safety).
+# Args: $1=agent_name $2=overlay_id $3=content $4=evidence_ids_json $5=created_by
+# Returns: 0 on success, 1 on failure
+_interspect_write_overlay() {
+    local agent="$1"
+    local overlay_id="$2"
+    local content="$3"
+    local evidence_ids="${4:-[]}"
+    local created_by="${5:-interspect}"
+
+    # --- Pre-flock validation (fast-fail) ---
+
+    if ! _interspect_validate_agent_name "$agent"; then
+        return 1
+    fi
+    if ! _interspect_validate_overlay_id "$overlay_id"; then
+        return 1
+    fi
+    if ! printf '%s\n' "$evidence_ids" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        echo "ERROR: evidence_ids must be a JSON array (got: ${evidence_ids})" >&2
+        return 1
+    fi
+
+    # Sanitize content (F3: prevent prompt injection in overlay body)
+    # Use 2000-char limit (matches 500-token budget at ~4 chars/token)
+    # _interspect_sanitize already calls _interspect_redact_secrets internally
+    if ! content=$(_interspect_sanitize "$content" 2000); then
+        echo "ERROR: Overlay content rejected — contains instruction-like patterns (prompt injection)" >&2
+        return 1
+    fi
+    if [[ -z "$content" ]]; then
+        echo "ERROR: Overlay content is empty after sanitization" >&2
+        return 1
+    fi
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+    # Assemble path from validated components (F9)
+    local rel_path=".clavain/interspect/overlays/${agent}/${overlay_id}.md"
+    local fullpath="${root}/${rel_path}"
+
+    # Containment assertion (F9): resolved path must stay within overlays dir
+    local overlays_root="${root}/.clavain/interspect/overlays/"
+    case "$fullpath" in
+        "${overlays_root}"*) ;; # OK
+        *)
+            echo "ERROR: Path escapes overlay directory: ${fullpath}" >&2
+            return 1
+            ;;
+    esac
+
+    if ! _interspect_validate_target "$rel_path"; then
+        echo "ERROR: ${rel_path} is not an allowed modification target" >&2
+        return 1
+    fi
+
+    # Write commit message to temp file (avoids shell injection)
+    local commit_msg_file
+    commit_msg_file=$(mktemp)
+    printf '[interspect] Add overlay %s for %s\n\nOverlay-ID: %s\nEvidence: %s\nCreated-by: %s\n' \
+        "$overlay_id" "$agent" "$overlay_id" "$evidence_ids" "$created_by" > "$commit_msg_file"
+
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    # --- Everything inside flock (F1: budget + write + DB atomically) ---
+    local flock_output
+    flock_output=$(_interspect_flock_git _interspect_write_overlay_locked \
+        "$root" "$rel_path" "$fullpath" "$agent" "$overlay_id" \
+        "$content" "$evidence_ids" "$created_by" "$commit_msg_file" "$db")
+
+    local exit_code=$?
+    rm -f "$commit_msg_file"
+
+    if (( exit_code != 0 )); then
+        echo "ERROR: Could not write overlay. Check git status and retry." >&2
+        echo "$flock_output" >&2
+        return 1
+    fi
+
+    local commit_sha
+    commit_sha=$(echo "$flock_output" | tail -1)
+    echo "SUCCESS: Overlay ${overlay_id} written for ${agent}. Commit: ${commit_sha}"
+    echo "Canary monitoring active. Run /interspect:status to check impact."
+    echo "To undo: /interspect:revert ${agent}"
+    return 0
+}
+
+# Inner function called under flock. Do NOT call directly.
+_interspect_write_overlay_locked() {
+    set -e
+    local root="$1" rel_path="$2" fullpath="$3" agent="$4"
+    local overlay_id="$5" content="$6" evidence_ids="$7"
+    local created_by="$8" commit_msg_file="$9" db="${10}"
+
+    # Dedup check (F6): reject if file already exists
+    if [[ -f "$fullpath" ]]; then
+        echo "ERROR: Overlay ${overlay_id} already exists for ${agent}. Use a different ID." >&2
+        return 1
+    fi
+
+    # Token budget check (F1: inside flock, TOCTOU-safe)
+    local existing_content
+    existing_content=$(_interspect_read_overlays "$agent")
+    local combined="${existing_content}"
+    [[ -n "$combined" ]] && combined+=$'\n\n'
+    combined+="$content"
+
+    local total_tokens
+    total_tokens=$(_interspect_count_overlay_tokens "$combined")
+    if (( total_tokens > 500 )); then
+        local existing_tokens
+        existing_tokens=$(_interspect_count_overlay_tokens "$existing_content")
+        echo "ERROR: Token budget exceeded. Existing: ${existing_tokens}, new: $(_interspect_count_overlay_tokens "$content"), total: ${total_tokens} > 500." >&2
+        return 1
+    fi
+
+    local created
+    created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # Create agent overlay directory if needed
+    mkdir -p "$(dirname "$fullpath")" 2>/dev/null || true
+
+    # Atomic write: temp file → mv (quoted printf, not heredoc — no shell expansion)
+    local tmpfile="${fullpath}.tmp.$$"
+    trap 'rm -f "$tmpfile"' RETURN
+    {
+        printf '%s\n' '---'
+        printf 'active: true\n'
+        printf 'created: %s\n' "$created"
+        printf 'created_by: %s\n' "$created_by"
+        printf 'evidence_ids: %s\n' "$evidence_ids"
+        printf '%s\n' '---'
+        printf '%s\n' "$content"
+    } > "$tmpfile"
+
+    mv "$tmpfile" "$fullpath"
+
+    # Git add + commit
+    cd "$root"
+    git add "$rel_path"
+    if ! git commit --no-verify -F "$commit_msg_file"; then
+        # Rollback: remove file + unstage (F11)
+        rm -f "$fullpath"
+        git reset HEAD -- "$rel_path" 2>/dev/null || true
+        echo "ERROR: Git commit failed. Overlay not applied." >&2
+        return 1
+    fi
+
+    local commit_sha
+    commit_sha=$(git rev-parse HEAD)
+
+    # DB inserts INSIDE flock (atomicity with git commit)
+    local escaped_agent escaped_overlay_id
+    escaped_agent=$(_interspect_sql_escape "$agent")
+    escaped_overlay_id=$(_interspect_sql_escape "$overlay_id")
+    local group_id="${escaped_agent}/${escaped_overlay_id}"
+
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    local escaped_created_by
+    escaped_created_by=$(_interspect_sql_escape "$created_by")
+
+    # Modification record (F5: compound group_id)
+    sqlite3 "$db" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
+        VALUES ('${group_id}', '${ts}', 'persistent', 'prompt_tuning', '$(_interspect_sql_escape "$rel_path")', '${commit_sha}', 1.0, '${escaped_created_by}', 'applied');"
+
+    # Canary record (F5: compound group_id)
+    # Disable set -e for canary setup — git commit already succeeded, so overlay
+    # is active. Canary failure should warn, not abort (C-02 fix).
+    set +e
+    _interspect_load_confidence 2>/dev/null
+    local baseline_json
+    baseline_json=$(_interspect_compute_canary_baseline "$ts" "" 2>/dev/null || echo "null")
+
+    local b_override_rate b_fp_rate b_finding_density b_window
+    if [[ "$baseline_json" != "null" ]]; then
+        b_override_rate=$(echo "$baseline_json" | jq -r '.override_rate')
+        b_fp_rate=$(echo "$baseline_json" | jq -r '.fp_rate')
+        b_finding_density=$(echo "$baseline_json" | jq -r '.finding_density')
+        b_window=$(echo "$baseline_json" | jq -r '.window')
+    else
+        b_override_rate="NULL"
+        b_fp_rate="NULL"
+        b_finding_density="NULL"
+        b_window="NULL"
+    fi
+
+    local expires_at
+    expires_at=$(date -u -d "+${_INTERSPECT_CANARY_WINDOW_DAYS:-14} days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -v+"${_INTERSPECT_CANARY_WINDOW_DAYS:-14}"d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+    if [[ -z "$expires_at" ]]; then
+        echo "ERROR: date command does not support relative dates" >&2
+        return 1
+    fi
+
+    local baseline_values
+    if [[ "$b_override_rate" == "NULL" ]]; then
+        baseline_values="NULL, NULL, NULL, NULL"
+    else
+        local escaped_bwindow
+        escaped_bwindow=$(_interspect_sql_escape "$b_window")
+        baseline_values="${b_override_rate}, ${b_fp_rate}, ${b_finding_density}, '${escaped_bwindow}'"
+    fi
+
+    if ! sqlite3 "$db" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, baseline_window, status)
+        VALUES ('$(_interspect_sql_escape "$rel_path")', '${commit_sha}', '${group_id}', '${ts}', ${_INTERSPECT_CANARY_WINDOW_USES:-20}, '${expires_at}', ${baseline_values}, 'active');"; then
+        sqlite3 "$db" "UPDATE modifications SET status = 'applied-unmonitored' WHERE commit_sha = '${commit_sha}';" 2>/dev/null || true
+        echo "WARN: Canary monitoring failed — overlay active but unmonitored." >&2
+    fi
+
+    echo "$commit_sha"
+}
+
+# ─── Overlay Disable ────────────────────────────────────────────────────────
+
+# Disable an overlay by setting active: false in frontmatter.
+# Uses awk state machine to only modify within frontmatter (F2: safe against
+# body content containing "active: true").
+# Args: $1=agent_name $2=overlay_id
+# Returns: 0 on success, 1 on failure
+_interspect_disable_overlay() {
+    local agent="$1"
+    local overlay_id="$2"
+
+    if ! _interspect_validate_agent_name "$agent"; then
+        return 1
+    fi
+    if ! _interspect_validate_overlay_id "$overlay_id"; then
+        return 1
+    fi
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local rel_path=".clavain/interspect/overlays/${agent}/${overlay_id}.md"
+    local fullpath="${root}/${rel_path}"
+
+    if [[ ! -f "$fullpath" ]]; then
+        echo "ERROR: Overlay ${overlay_id} not found for ${agent}" >&2
+        return 1
+    fi
+
+    if ! _interspect_overlay_is_active "$fullpath"; then
+        echo "INFO: Overlay ${overlay_id} is already inactive" >&2
+        return 0
+    fi
+
+    local commit_msg_file
+    commit_msg_file=$(mktemp)
+    printf '[interspect] Disable overlay %s for %s\n\nReason: User requested disable via /interspect:revert\n' \
+        "$overlay_id" "$agent" > "$commit_msg_file"
+
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    local flock_output
+    flock_output=$(_interspect_flock_git _interspect_disable_overlay_locked \
+        "$root" "$rel_path" "$fullpath" "$agent" "$overlay_id" "$commit_msg_file" "$db")
+
+    local exit_code=$?
+    rm -f "$commit_msg_file"
+
+    if (( exit_code != 0 )); then
+        echo "ERROR: Could not disable overlay." >&2
+        echo "$flock_output" >&2
+        return 1
+    fi
+
+    echo "SUCCESS: Overlay ${overlay_id} disabled for ${agent}."
+    return 0
+}
+
+# Inner function called under flock. Do NOT call directly.
+_interspect_disable_overlay_locked() {
+    set -e
+    local root="$1" rel_path="$2" fullpath="$3" agent="$4"
+    local overlay_id="$5" commit_msg_file="$6" db="$7"
+
+    # Re-check active status inside flock (prevents TOCTOU re-enable — C-03)
+    if ! _interspect_overlay_is_active "$fullpath"; then
+        echo "INFO: Overlay ${overlay_id} already inactive (concurrent disable)" >&2
+        return 0
+    fi
+
+    # Toggle active: true → active: false using awk state machine (F2)
+    # Only modifies within frontmatter (between first and second ---)
+    local tmpfile="${fullpath}.tmp.$$"
+    trap 'rm -f "$tmpfile"' RETURN
+    awk '
+        /^---$/ { delim++ }
+        delim == 1 && /^active: true$/ { $0 = "active: false" }
+        { print }
+    ' "$fullpath" > "$tmpfile"
+
+    mv "$tmpfile" "$fullpath"
+
+    cd "$root"
+    git add "$rel_path"
+    if ! git commit --no-verify -F "$commit_msg_file"; then
+        # Rollback: restore file from git (F11)
+        git reset HEAD -- "$rel_path" 2>/dev/null || true
+        git restore "$rel_path" 2>/dev/null || git checkout -- "$rel_path" 2>/dev/null || true
+        echo "ERROR: Git commit failed. Overlay not disabled." >&2
+        return 1
+    fi
+
+    # Update DB records (F5: compound group_id)
+    local escaped_agent escaped_overlay_id
+    escaped_agent=$(_interspect_sql_escape "$agent")
+    escaped_overlay_id=$(_interspect_sql_escape "$overlay_id")
+    local group_id="${escaped_agent}/${escaped_overlay_id}"
+
+    sqlite3 "$db" "UPDATE modifications SET status = 'reverted' WHERE group_id = '${group_id}' AND status = 'applied';" 2>/dev/null || true
+    sqlite3 "$db" "UPDATE canary SET status = 'reverted' WHERE group_id = '${group_id}' AND status = 'active';" 2>/dev/null || true
 }
