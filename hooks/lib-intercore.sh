@@ -6,7 +6,7 @@
 # Source in hooks: source "$(dirname "$0")/lib-intercore.sh"
 # shellcheck shell=bash
 
-INTERCORE_WRAPPER_VERSION="0.2.0"
+INTERCORE_WRAPPER_VERSION="0.4.0"
 
 # Shared sentinel for Stop hook anti-cascade protocol.
 # All Stop hooks MUST check this sentinel before doing work to prevent
@@ -223,4 +223,132 @@ intercore_dispatch_kill() {
     local id="$1"
     if ! intercore_available; then return 0; fi
     "$INTERCORE_BIN" dispatch kill "$id" >/dev/null 2>&1 || true
+}
+
+# --- Run wrappers ---
+
+# intercore_run_current — Get the active run ID for a project.
+# Args: $1=project_dir (optional, defaults to CWD)
+# Prints: run ID to stdout
+# Returns: 0 if found, 1 if no active run or ic unavailable
+intercore_run_current() {
+    local project="${1:-$(pwd)}"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run current --project="$project" 2>/dev/null
+}
+
+# intercore_run_phase — Get the current phase of a run.
+# Args: $1=run_id
+# Prints: phase name to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_phase() {
+    local id="$1"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run phase "$id" 2>/dev/null
+}
+
+# intercore_run_agent_add — Add an agent to a run.
+# Args: $1=run_id, $2=agent_type, $3=name (optional), $4=dispatch_id (optional)
+# Prints: agent ID to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_agent_add() {
+    local run_id="$1" agent_type="$2" name="${3:-}" dispatch_id="${4:-}"
+    if ! intercore_available; then return 1; fi
+    local args=(run agent add "$run_id" --type="$agent_type")
+    if [[ -n "$name" ]]; then
+        args+=(--name="$name")
+    fi
+    if [[ -n "$dispatch_id" ]]; then
+        args+=(--dispatch-id="$dispatch_id")
+    fi
+    "$INTERCORE_BIN" "${args[@]}" 2>/dev/null
+}
+
+# intercore_run_artifact_add — Add an artifact to a run.
+# Args: $1=run_id, $2=phase, $3=path, $4=type (optional, defaults to 'file')
+# Prints: artifact ID to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_artifact_add() {
+    local run_id="$1" artifact_phase="$2" artifact_path="$3" artifact_type="${4:-file}"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run artifact add "$run_id" --phase="$artifact_phase" --path="$artifact_path" --type="$artifact_type" 2>/dev/null
+}
+
+# --- Lock wrappers ---
+
+# intercore_lock_available — Check if ic binary exists (no DB health check).
+# Lock commands are filesystem-only — they work even when the DB is broken.
+# This avoids the intercore_available() DB health check that would silently
+# force all lock operations into the dumber bash fallback.
+INTERCORE_LOCK_BIN=""
+
+intercore_lock_available() {
+    if [[ -n "$INTERCORE_LOCK_BIN" ]]; then return 0; fi
+    INTERCORE_LOCK_BIN=$(command -v ic 2>/dev/null || command -v intercore 2>/dev/null)
+    [[ -n "$INTERCORE_LOCK_BIN" ]]
+}
+
+# intercore_lock — Acquire a named lock with spin-wait.
+# Args: $1=name, $2=scope, $3=timeout (optional, default "1s")
+# Returns: 0 if acquired, 1 if timeout/contention
+# Uses 3-way exit code split: 0=acquired, 1=contention, 2+=fallthrough to fallback
+intercore_lock() {
+    local name="$1" scope="$2" timeout="${3:-1s}"
+    local _owner="$$:$(hostname -s 2>/dev/null || echo unknown)"
+    if intercore_lock_available; then
+        local rc=0
+        "$INTERCORE_LOCK_BIN" lock acquire "$name" "$scope" --timeout="$timeout" \
+            --owner="$_owner" >/dev/null 2>&1 || rc=$?
+        if [[ $rc -eq 0 ]]; then return 0; fi   # acquired
+        if [[ $rc -eq 1 ]]; then return 1; fi   # contention
+        # Exit 2+ = binary error — fall through to legacy
+    fi
+    # Fallback: direct mkdir with minimal owner.json for ic lock clean visibility
+    local lock_dir="/tmp/intercore/locks/${name}/${scope}"
+    mkdir -p "$(dirname "$lock_dir")" 2>/dev/null || true
+    local retries=0 max_retries=10
+    while ! mkdir "$lock_dir" 2>/dev/null; do
+        retries=$((retries + 1))
+        [[ $retries -gt $max_retries ]] && return 1
+        sleep 0.1
+    done
+    # Write owner.json so ic lock clean can detect and remove stale fallback locks
+    printf '{"pid":%d,"host":"%s","owner":"%s","created":%d}\n' \
+        "$$" "$(hostname -s 2>/dev/null || echo unknown)" "$_owner" "$(date +%s)" \
+        > "$lock_dir/owner.json" 2>/dev/null || true
+    return 0
+}
+
+# intercore_unlock — Release a named lock.
+# Args: $1=name, $2=scope
+# Returns: 0 always (fail-safe: never block on unlock failure)
+intercore_unlock() {
+    local name="$1" scope="$2"
+    local _owner="$$:$(hostname -s 2>/dev/null || echo unknown)"
+    if intercore_lock_available; then
+        "$INTERCORE_LOCK_BIN" lock release "$name" "$scope" --owner="$_owner" >/dev/null 2>&1 || true
+        return 0
+    fi
+    # Fallback: rm owner.json + rmdir (no owner check in fallback)
+    rm -f "/tmp/intercore/locks/${name}/${scope}/owner.json" 2>/dev/null || true
+    rmdir "/tmp/intercore/locks/${name}/${scope}" 2>/dev/null || true
+    return 0
+}
+
+# intercore_lock_clean — Remove stale locks.
+# Args: $1=max_age (optional, default "5s")
+# Returns: 0 always (fail-safe)
+intercore_lock_clean() {
+    local max_age="${1:-5s}"
+    if intercore_lock_available; then
+        "$INTERCORE_LOCK_BIN" lock clean --older-than="$max_age" >/dev/null 2>&1 || true
+        return 0
+    fi
+    # Fallback: find + rm stale lock dirs. Parse max_age to seconds for date offset.
+    local _secs
+    _secs=$(echo "$max_age" | sed -E 's/([0-9]+)s$/\1/; s/([0-9]+)m$/\1*60/; s/([0-9]+)h$/\1*3600/' | bc 2>/dev/null) || _secs=5
+    [[ -z "$_secs" || "$_secs" -eq 0 ]] && _secs=5
+    find /tmp/intercore/locks -mindepth 2 -maxdepth 2 -type d -not -newermt "${_secs} seconds ago" \
+        -exec sh -c 'rm -f "$1/owner.json" && rmdir "$1"' _ {} \; 2>/dev/null || true
+    return 0
 }

@@ -203,12 +203,10 @@ sprint_read_state() {
           complexity: $complexity, auto_advance: $auto_advance, active_session: $active_session}'
 }
 
-# Update a single artifact path with filesystem locking.
+# Update a single artifact path with intercore locking.
 # CORRECTNESS: ALL updates to sprint_artifacts MUST go through this function.
 # Direct `bd set-state` calls bypass the lock and cause lost-update races.
-# Lock cleanup: Stale locks (>5s old) are force-broken. If process is killed
-# while holding lock, next caller after timeout will take over. During timeout
-# window, updates fail silently (fail-safe design).
+# Uses intercore_lock/intercore_unlock (ic lock acquire/release with fallback).
 sprint_set_artifact() {
     local sprint_id="$1"
     local artifact_type="$2"
@@ -216,31 +214,8 @@ sprint_set_artifact() {
 
     [[ -z "$sprint_id" || -z "$artifact_type" || -z "$artifact_path" ]] && return 0
 
-    local lock_dir="/tmp/sprint-lock-${sprint_id}"
-
-    # Acquire lock (mkdir is atomic on all POSIX systems)
-    local retries=0
-    while ! mkdir "$lock_dir" 2>/dev/null; do
-        retries=$((retries + 1))
-        [[ $retries -gt 10 ]] && {
-            # Force-break stale lock (older than 5 seconds — artifact updates are <1s)
-            local lock_mtime
-            lock_mtime=$(stat -c %Y "$lock_dir" 2>/dev/null)
-            if [[ -z "$lock_mtime" ]]; then
-                echo "sprint_set_artifact: lock stat failed for $lock_dir" >&2
-                return 0
-            fi
-            local now
-            now=$(date +%s)
-            if [[ $((now - lock_mtime)) -gt 5 ]]; then
-                rmdir "$lock_dir" 2>/dev/null || rm -rf "$lock_dir" 2>/dev/null || true
-                mkdir "$lock_dir" 2>/dev/null || return 0
-                break
-            fi
-            return 0  # Give up — fail-safe
-        }
-        sleep 0.1
-    done
+    # Acquire lock via intercore (fail-safe: give up silently on timeout)
+    intercore_lock "sprint" "$sprint_id" "1s" || return 0
 
     # Read-modify-write under lock
     local current
@@ -254,7 +229,7 @@ sprint_set_artifact() {
     bd set-state "$sprint_id" "sprint_artifacts=$updated" 2>/dev/null || true
 
     # Release lock
-    rmdir "$lock_dir" 2>/dev/null || true
+    intercore_unlock "sprint" "$sprint_id"
 }
 
 # Record phase completion timestamp in phase_history.
@@ -265,13 +240,8 @@ sprint_record_phase_completion() {
 
     [[ -z "$sprint_id" || -z "$phase" ]] && return 0
 
-    local lock_dir="/tmp/sprint-lock-${sprint_id}"
-    local retries=0
-    while ! mkdir "$lock_dir" 2>/dev/null; do
-        retries=$((retries + 1))
-        [[ $retries -gt 10 ]] && return 0
-        sleep 0.1
-    done
+    # Acquire lock via intercore (same lock as sprint_set_artifact — both mutate sprint state)
+    intercore_lock "sprint" "$sprint_id" "1s" || return 0
 
     local current
     current=$(bd state "$sprint_id" phase_history 2>/dev/null) || current="{}"
@@ -285,7 +255,7 @@ sprint_record_phase_completion() {
 
     bd set-state "$sprint_id" "phase_history=$updated" 2>/dev/null || true
 
-    rmdir "$lock_dir" 2>/dev/null || true
+    intercore_unlock "sprint" "$sprint_id"
 
     # Invalidate discovery caches so session-start picks up the new phase
     sprint_invalidate_caches
@@ -296,7 +266,7 @@ sprint_record_phase_completion() {
 # Claim a sprint for this session. Prevents concurrent resume.
 # Returns 0 if claimed, 1 if another session holds it.
 # NOT fail-safe — returns 1 on conflict so callers can handle gracefully.
-# CORRECTNESS: This uses mkdir lock + write-then-verify to serialize claims.
+# CORRECTNESS: This uses intercore lock + write-then-verify to serialize claims.
 # Two sessions can pass the TTL check simultaneously and race on the write.
 # The lock + verify detects the loser, but callers MUST handle claim failure.
 sprint_claim() {
@@ -305,9 +275,8 @@ sprint_claim() {
 
     [[ -z "$sprint_id" || -z "$session_id" ]] && return 0
 
-    # Acquire claim lock to serialize concurrent claim attempts
-    local claim_lock="/tmp/sprint-claim-lock-${sprint_id}"
-    if ! mkdir "$claim_lock" 2>/dev/null; then
+    # Acquire claim lock to serialize concurrent claim attempts (NOT fail-safe — returns 1 on conflict)
+    if ! intercore_lock "sprint-claim" "$sprint_id" "500ms"; then
         # Another session is claiming right now — wait briefly then check
         sleep 0.3
         local current_claim
@@ -334,7 +303,7 @@ sprint_claim() {
                 age_minutes=$(( (now_epoch - claim_epoch) / 60 ))
                 if [[ $age_minutes -lt 60 ]]; then
                     echo "Sprint $sprint_id is active in session ${current_claim:0:8} (${age_minutes}m ago)" >&2
-                    rmdir "$claim_lock" 2>/dev/null || true
+                    intercore_unlock "sprint-claim" "$sprint_id"
                     return 1
                 fi
             fi
@@ -354,7 +323,7 @@ sprint_claim() {
     # Verify claim
     local verify
     verify=$(bd state "$sprint_id" active_session 2>/dev/null) || verify=""
-    rmdir "$claim_lock" 2>/dev/null || true
+    intercore_unlock "sprint-claim" "$sprint_id"
 
     if [[ "$verify" != "$session_id" ]]; then
         echo "Failed to claim sprint $sprint_id (write verification failed)" >&2
@@ -469,7 +438,7 @@ sprint_should_pause() {
 # CORRECTNESS: ALL phase transitions MUST go through this function.
 # Direct `bd set-state sprint_id phase=X` calls bypass the lock and can cause
 # inconsistent state (phase field doesn't match phase_history timestamps).
-# Uses mkdir lock to serialize concurrent advance attempts.
+# Uses intercore lock to serialize concurrent advance attempts.
 # Also verifies current phase hasn't changed (guards against stale-phase races).
 sprint_advance() {
     local sprint_id="$1"
@@ -496,34 +465,13 @@ sprint_advance() {
         echo "Phase: skipping to $next_phase (complexity $complexity)" >&2
     fi
 
-    # Acquire lock for atomic read-check-write (same pattern as sprint_set_artifact)
-    local lock_dir="/tmp/sprint-advance-lock-${sprint_id}"
-    local retries=0
-    while ! mkdir "$lock_dir" 2>/dev/null; do
-        retries=$((retries + 1))
-        [[ $retries -gt 10 ]] && {
-            # Force-break stale lock (>5s old)
-            local lock_mtime
-            lock_mtime=$(stat -c %Y "$lock_dir" 2>/dev/null) || {
-                rmdir "$lock_dir" 2>/dev/null || true
-                return 1
-            }
-            local now
-            now=$(date +%s)
-            if [[ $((now - lock_mtime)) -gt 5 ]]; then
-                rmdir "$lock_dir" 2>/dev/null || rm -rf "$lock_dir" 2>/dev/null || true
-                mkdir "$lock_dir" 2>/dev/null || return 1
-                break
-            fi
-            return 1
-        }
-        sleep 0.1
-    done
+    # Acquire lock for atomic read-check-write (NOT fail-safe — returns 1 on conflict)
+    intercore_lock "sprint-advance" "$sprint_id" "1s" || return 1
 
     # Check pause triggers (under lock)
     local pause_reason
     pause_reason=$(sprint_should_pause "$sprint_id" "$next_phase" 2>/dev/null) && {
-        rmdir "$lock_dir" 2>/dev/null || true
+        intercore_unlock "sprint-advance" "$sprint_id"
         echo "$pause_reason"
         return 1
     }
@@ -532,16 +480,18 @@ sprint_advance() {
     local actual_phase
     actual_phase=$(bd state "$sprint_id" phase 2>/dev/null) || actual_phase=""
     if [[ -n "$actual_phase" && "$actual_phase" != "$current_phase" ]]; then
-        rmdir "$lock_dir" 2>/dev/null || true
+        intercore_unlock "sprint-advance" "$sprint_id"
         echo "stale_phase|$current_phase|Phase already advanced to $actual_phase"
         return 1
     fi
 
     # Advance: set phase on bead, record completion, invalidate caches
+    # NOTE: sprint_record_phase_completion acquires "sprint" lock inside this "sprint-advance" lock.
+    # Lock ordering: sprint-advance > sprint. Do not reverse.
     bd set-state "$sprint_id" "phase=$next_phase" 2>/dev/null || true
     sprint_record_phase_completion "$sprint_id" "$next_phase"
 
-    rmdir "$lock_dir" 2>/dev/null || true
+    intercore_unlock "sprint-advance" "$sprint_id"
 
     # Log transition (stderr — stdout reserved for data/error reasons)
     echo "Phase: $current_phase → $next_phase (auto-advancing)" >&2
@@ -788,14 +738,10 @@ checkpoint_write() {
 
     mkdir -p "$(dirname "$CHECKPOINT_FILE")" 2>/dev/null || true
 
-    # Acquire lock (same pattern as sprint_set_artifact)
-    local lock_dir="/tmp/checkpoint-lock-$(echo "$CHECKPOINT_FILE" | tr '/' '-')"
-    local retries=0
-    while ! mkdir "$lock_dir" 2>/dev/null; do
-        retries=$((retries + 1))
-        [[ $retries -gt 10 ]] && return 0  # Fail-safe: give up after 1s
-        sleep 0.1
-    done
+    # Acquire lock via intercore (fail-safe: give up silently on timeout)
+    local _ckpt_scope
+    _ckpt_scope=$(echo "$CHECKPOINT_FILE" | tr '/' '-')
+    intercore_lock "checkpoint" "$_ckpt_scope" "1s" || return 0
 
     # Read existing or create new (under lock)
     local existing="{}"
@@ -821,7 +767,7 @@ checkpoint_write() {
         .key_decisions = (if $key_decision != "" then ((.key_decisions // []) + [$key_decision] | unique | .[-5:]) else (.key_decisions // []) end)
         ' > "$tmp" 2>/dev/null && mv "$tmp" "$CHECKPOINT_FILE" 2>/dev/null || true
 
-    rmdir "$lock_dir" 2>/dev/null || true
+    intercore_unlock "checkpoint" "$_ckpt_scope"
 }
 
 # Read the current checkpoint.
