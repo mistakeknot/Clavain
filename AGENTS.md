@@ -1,6 +1,6 @@
 # Clavain — Development Guide
 
-Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code using heterogeneous AI models. Runs on Autarch TUI, backed by Intercore kernel and Interspect profiler. Originated from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
 ## Quick Reference
 
@@ -9,7 +9,7 @@ Recursively self-improving multi-agent rig — brainstorm to ship. Merged from [
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 15 skills, 4 agents, 52 commands, 12 hooks, 1 MCP servers |
+| Components | 15 skills, 4 agents, 52 commands, 21 hooks, 1 MCP servers |
 | License | MIT |
 
 ### North Star for New Work
@@ -226,15 +226,22 @@ Categories:
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
   - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings
+  - `interspect-session.sh` — initializes Interspect session tracking
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
   - `interserve-audit.sh` — logs source code writes when interserve mode is active (audit only, no denial)
 - **PostToolUse** (matcher: `Bash`):
   - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace (60s TTL sentinel prevents loops)
+- **PostToolUse** (matcher: `Task`):
+  - `interspect-evidence.sh` — records agent dispatch evidence for routing optimization
+  - `bead-agent-bind.sh` — binds agent dispatches to active bead context
 - **Stop**:
   - `auto-compound.sh` — detects compoundable signals (commits, resolutions, insights), prompts knowledge capture
+  - `auto-drift-check.sh` — detects shipped-work signals and triggers interwatch scans
   - `session-handoff.sh` — detects uncommitted work or in-progress beads, prompts HANDOFF.md creation (once per session)
+  - `catalog-reminder.sh` — reminds about catalog updates when components change
 - **SessionEnd**:
   - `dotfiles-sync.sh` — syncs dotfile changes at end of session
+  - `interspect-session-end.sh` — finalizes Interspect session tracking
 - Scripts must output valid JSON to stdout
 - Use `set -euo pipefail` in all hook scripts
 
@@ -274,13 +281,7 @@ When making changes, verify:
 - [ ] Agent `description` includes `<example>` blocks with `<commentary>`
 - [ ] Command `name` in frontmatter matches filename (minus `.md`)
 - [ ] `hooks/hooks.json` is valid JSON
-- [ ] `hooks/lib.sh` passes `bash -n` syntax check
-- [ ] `hooks/session-start.sh` passes `bash -n` syntax check
-- [ ] `hooks/auto-compound.sh` passes `bash -n` syntax check
-- [ ] `hooks/session-handoff.sh` passes `bash -n` syntax check
-- [ ] `hooks/dotfiles-sync.sh` passes `bash -n` syntax check
-- [ ] `hooks/auto-publish.sh` passes `bash -n` syntax check
-- [ ] `hooks/interserve-audit.sh` passes `bash -n` syntax check
+- [ ] All hook scripts pass `bash -n` syntax check (21 `.sh` files in `hooks/`)
 - [ ] No references to dropped namespaces (`superpowers:`, `compound-engineering:`)
 - [ ] No references to dropped components (Rails, Ruby, Every.to, Figma, Xcode)
 - [ ] Routing table in `using-clavain/SKILL.md` is consistent with actual components
@@ -289,8 +290,9 @@ Quick validation:
 ```bash
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 15
-echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"
+echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"  # Should be 4
 echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 52
+echo "Hooks: $(ls hooks/*.sh | wc -l)"              # Should be 21
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
@@ -300,14 +302,8 @@ grep -r 'compound-engineering:' skills/ agents/ commands/ hooks/ || echo "Clean"
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json')); print('Manifest OK')"
 python3 -c "import json; json.load(open('hooks/hooks.json')); print('Hooks OK')"
 
-# Syntax check scripts
-bash -n hooks/lib.sh && echo "lib.sh OK"
-bash -n hooks/session-start.sh && echo "session-start.sh OK"
-bash -n hooks/auto-compound.sh && echo "auto-compound.sh OK"
-bash -n hooks/session-handoff.sh && echo "session-handoff.sh OK"
-bash -n hooks/dotfiles-sync.sh && echo "dotfiles-sync.sh OK"
-bash -n hooks/auto-publish.sh && echo "auto-publish.sh OK"
-bash -n hooks/interserve-audit.sh && echo "interserve-audit.sh OK"
+# Syntax check all hook scripts
+for f in hooks/*.sh; do bash -n "$f" && echo "$(basename $f) OK"; done
 bash -n scripts/upstream-check.sh && echo "Upstream check OK"
 
 # Test upstream check (no network calls with --json, but needs gh)
@@ -410,7 +406,7 @@ Full audit rationale: `docs/plugin-audit.md`
 - Tests in `tests/{structural,shell,smoke,fixtures}/`
 - Config: `tests/pyproject.toml`, use `uv run` not pip
 - Agent globs MUST use explicit category dirs (review/research/workflow), not recursive
-- Counts: 5 agents, 27 skills, 37 commands (hardcoded regression guards)
+- Counts: 4 agents, 15 skills, 52 commands (hardcoded regression guards — update when components change)
 - **Review agents can report wrong counts** — always verify against filesystem/test suite
 
 ### Interserve Dispatch

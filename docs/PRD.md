@@ -1,7 +1,7 @@
 # Clavain — Product Requirements Document
 
-**Version:** 0.6.39
-**Last updated:** 2026-02-15
+**Version:** 0.6.42
+**Last updated:** 2026-02-19
 **Vision:** [`docs/vision.md`](vision.md)
 **Dev guide:** [`AGENTS.md`](../AGENTS.md)
 
@@ -9,9 +9,9 @@
 
 ## 1. Product Definition
 
-Clavain is a recursively self-improving multi-agent rig for Claude Code that codifies the full product development lifecycle — brainstorm to ship — into composable skills, agents, commands, and hooks. It orchestrates heterogeneous AI models (Claude, GPT-5.2 Pro via Oracle, Codex CLI) into a reliable system for building software with disciplined human-in-the-loop oversight.
+Clavain is an autonomous software agency that orchestrates the full development lifecycle — from problem discovery through shipped code — using heterogeneous AI models selected for cost, capability, and task fit. Each phase of development is a sub-agency with its own model routing, agent composition, and quality gates. The agency drives execution; the human decides direction.
 
-Clavain is also a proving ground. Capabilities are built tightly integrated, battle-tested through real use, and extracted into companion plugins (the inter-* constellation) when patterns stabilize.
+Clavain runs on its own TUI (Autarch), backed by a durable orchestration kernel (Intercore) and an adaptive profiler (Interspect). Companion plugins are drivers — each wraps one capability and extends the agency through kernel primitives. Capabilities are built tightly integrated, battle-tested through real use, and extracted into the inter-* constellation when patterns stabilize.
 
 Clavain has an explicit frontier objective: advancing **agent orchestration**, **coding/reasoning quality**, and **token efficiency** together, not independently. New work should be judged by how it improves: coordination quality, confidence in correctness, and measurable quality-per-token outcomes.
 
@@ -33,9 +33,11 @@ frontier_objective:
 
 ### What Clavain Is Not
 
-- **Not a framework.** An opinionated rig with opinions, not a reusable SDK.
+- **Not a platform.** That's Intercore. Clavain is the opinionated agency built on the platform.
+- **Not a general AI gateway.** Clavain orchestrates software development with opinions about quality at every phase.
+- **Not a coding assistant.** Clavain builds software — the full lifecycle from problem discovery through shipped code.
+- **Not a Claude Code plugin.** Clavain runs on its own TUI (Autarch). Claude Code is one driver among several.
 - **Not for non-builders.** For engineers who build software with agents.
-- **Not vendor-neutral.** Platform-native to Claude Code; uses Codex and Oracle as complements.
 
 ## 2. Users
 
@@ -64,10 +66,10 @@ Clavain encodes engineering and product discipline into four component types tha
 
 | Type | Count | Purpose | Example |
 |------|-------|---------|---------|
-| **Skills** | 23 | Reusable discipline knowledge | `systematic-debugging`, `writing-plans`, `flux-drive` |
+| **Skills** | 15 | Reusable discipline knowledge | `systematic-debugging`, `writing-plans`, `flux-drive` |
 | **Agents** | 4 | Autonomous specialists (review + workflow) | `plan-reviewer`, `pr-comment-resolver` |
-| **Commands** | 41 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
-| **Hooks** | 12 | Event-driven automation | `session-start.sh`, `auto-compound.sh`, `interspect-evidence.sh` |
+| **Commands** | 52 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
+| **Hooks** | 21 | Event-driven automation | `session-start.sh`, `auto-compound.sh`, `interspect-evidence.sh` |
 | **MCP Servers** | 1 | External tool integration | context7 (runtime doc fetching) |
 
 ### 4.2 Routing System
@@ -99,7 +101,9 @@ Capabilities extracted from Clavain when patterns stabilized:
 
 | Companion | What it does | Status |
 |-----------|-------------|--------|
-| **interflux** | Multi-agent review + research engine (7 fd-* agents, 5 research agents, 2 skills, 2 MCP servers) | Shipped |
+| **intercore** | Orchestration kernel — durable state for runs, phases, gates, dispatches, events | Active development |
+| **interspect** | Adaptive profiler — outcome analysis, routing optimization | Active development |
+| **interflux** | Multi-agent review + research engine (7 fd-* agents, 5 research agents, 2 MCP servers) | Shipped |
 | **interphase** | Phase tracking, gates, and work discovery | Shipped |
 | **interline** | Statusline renderer (dispatch state, bead context, phase, clodex mode) | Shipped |
 | **interpath** | Product artifact generation (roadmaps, PRDs, vision docs, changelogs, status reports) | Shipped |
@@ -108,13 +112,24 @@ Capabilities extracted from Clavain when patterns stabilized:
 | **interslack** | Slack integration | Shipped |
 | **interform** | Design patterns + visual quality | Shipped |
 | **intercraft** | Agent-native architecture patterns | Shipped |
-| **interdev** | MCP CLI developer tooling | Shipped |
+| **interdev** | MCP CLI + developer tooling | Shipped |
 | **intercheck** | Code quality guards + session health | Shipped |
 | **interject** | Ambient discovery + research engine (MCP) | Shipped |
 | **internext** | Work prioritization + tradeoff analysis | Shipped |
 | **interpub** | Plugin publishing | Shipped |
 | **intersearch** | Shared embedding + Exa search | Shipped |
 | **interdoc** | AGENTS.md generator + Oracle critique | Shipped |
+| **interstat** | Token efficiency benchmarking | Shipped |
+| **intersynth** | Multi-agent synthesis engine (verdict aggregation) | Shipped |
+| **intermap** | Project-level code mapping (MCP) | Shipped |
+| **intermem** | Memory synthesis + tiered promotion | Shipped |
+| **interkasten** | Notion sync + documentation | Shipped |
+| **interfluence** | Voice profile + style adaptation | Shipped |
+| **interlens** | Cognitive augmentation lenses | Shipped |
+| **interleave** | Deterministic skeleton + LLM islands | Shipped |
+| **interserve** | Codex spark classifier + context compression (MCP) | Shipped |
+| **interpeer** | Cross-AI peer review (Oracle/GPT escalation) | Shipped |
+| **intertest** | Engineering quality disciplines (TDD, debugging, verification) | Shipped |
 | **tldr-swinton** | Token-efficient code context (MCP) | Shipped |
 | **tool-time** | Tool usage analytics | Shipped |
 | **tuivision** | TUI automation + visual testing (MCP) | Shipped |
@@ -165,7 +180,7 @@ Lightweight review from `git diff` — faster than flux-drive, suitable for incr
 - Shell tests pass (hook syntax, escape functions, shim delegation)
 - Companion plugins installed and functional
 
-### 7.2 Target (Phase 1 roadmap — analytics)
+### 7.2 Target (Track B/C — analytics + routing)
 
 | Metric | Definition | Target |
 |--------|-----------|--------|
@@ -177,46 +192,24 @@ Lightweight review from `git diff` — faster than flux-drive, suitable for incr
 
 ## 8. Roadmap
 
-> Full detail in [`docs/vision.md`](vision.md) Roadmap section.
+> Full detail in [`docs/roadmap.md`](roadmap.md) and [`docs/vision.md`](vision.md).
 
-### Phase 1: Measure (next priority)
+Three parallel tracks converge toward autonomous self-building sprints:
 
-Build the truth engine. Without measurement, everything else is guesswork. Interspect provides evidence collection but not the analytics layer.
+| Track | Focus | Next Step |
+|-------|-------|-----------|
+| **A: Kernel Integration** | Migrate from shell state to durable kernel-backed orchestration | A1: Hook cutover (iv-ngvy, P1) |
+| **B: Model Routing** | Static → complexity-aware → adaptive model selection | B1: Static routing table |
+| **C: Agency Architecture** | Declarative agency specs, fleet registry, composer, self-building loop | C1: Agency specs |
 
-| Item | Status | Priority |
-|------|--------|----------|
-| Outcome-based agent analytics | Not started (beads needed) | P1 |
-| Agent evals as CI | Not started (beads needed) | P1 |
-| Topology experiment (2/4/6/8 agents) | Not started (blocked by analytics) | P1 |
-
-### Phase 2: Integrate + Extract
-
-Deep tldrs integration measured against Phase 1 baselines. Extract intershift, interscribe — the two remaining planned companions.
-
-| Item | Status | Priority |
-|------|--------|----------|
-| Deep tldrs integration | Not started (blocked by analytics) | P2 |
-| Flux-drive spec library | Not started (beads needed) | P2 |
-| intershift extraction | Planned | P2 |
-| interscribe extraction | Planned | P2 |
-
-**Note:** intercraft and interarch have already been shipped as companion plugins.
-
-### Phase 3: Advance
-
-Adaptive model routing, cross-project knowledge, MCP-native companion communication.
-
-| Item | Status | Priority |
-|------|--------|----------|
-| Adaptive model routing | Not started | P3 |
-| Cross-project knowledge | Not started | P3 |
-| MCP-native communication | Not started | P3 |
+Convergence point: C5 (self-building loop) — Clavain uses its own agency specs to run its own development sprints, backed by kernel state and adaptive routing.
 
 ## 9. Dependencies
 
 | Dependency | What it provides | Required? |
 |-----------|-----------------|-----------|
-| Claude Code | Plugin host, agent runtime | Yes |
+| Intercore (`ic` CLI) | Durable orchestration kernel — runs, phases, gates, dispatches, events | Yes (Track A) |
+| Claude Code | Plugin host, agent runtime (one of several UX drivers) | Yes (current primary) |
 | Beads (`bd` CLI) | Issue tracking, state management | Yes |
 | Oracle | GPT-5.2 Pro access for cross-AI review | For `/interpeer` |
 | Codex CLI | Alternative agent dispatch | For `/clodex`, `/debate` |
