@@ -1,8 +1,8 @@
 # Clavain
 
-Clavain, named after one of the protagonists from Alastair Reynolds's [Revelation Space series](https://en.wikipedia.org/wiki/Revelation_Space_series), is a **highly** opinionated Claude Code agent rig that encapsulates how I personally like to use Claude Code to build things. An agent rig, as I define it, is a collection of plugins, skills, and integrations that serves as a cohesive system for working with agents.
+Clavain is a **highly** opinionated, self-improving Claude Code agent rig that codifies product and engineering discipline into composable workflows for building software from brainstorm to ship. It orchestrates heterogeneous AI models — Claude, Codex, GPT-5.2 Pro via Oracle — into a reliable system for getting things built, where the review phases matter more than the building phases. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
+The point of agents isn't to remove humans from the loop; it's to make every moment in the loop count.
 
 With 15 skills, 4 agents, 52 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
@@ -28,7 +28,7 @@ Clavain can also run in Codex via native skill discovery and generated prompt wr
 Quick path:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/hub/clavain/.codex/agent-install.sh | bash -s -- --update --json
+curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/agent-install.sh | bash -s -- --update --json
 ```
 
 Then restart Codex.
@@ -42,6 +42,56 @@ make codex-doctor-json
 
 Detailed guide: `docs/README.codex.md`  
 Single-file bootstrap target: `.codex/INSTALL.md`
+
+## Who This Is For
+
+Clavain serves three concentric circles, inner circle first:
+
+1. **Personal rig.** Optimized relentlessly for one product-minded engineer's workflow. The primary goal is to make a single person as effective as a full team without losing the fun parts of building.
+2. **Reference implementation.** Shows what's possible with disciplined multi-agent engineering and sets conventions for plugin structure, skill design, and agent orchestration.
+3. **Research artifact.** Demonstrates what disciplined human-AI collaboration looks like in practice by solving real problems under real constraints and publishing the results.
+
+I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
+
+## Philosophy
+
+Most agent tools skip the product phases — brainstorm, strategy, specification — and jump straight to code generation. Clavain makes them first-class. The brainstorm and strategy phases are real product capabilities, not engineering context-setting.
+
+A few operating principles that shape every design decision:
+
+**Refinement > production.** The review phases matter more than the building phases. Resolving ambiguity during planning is far cheaper than dealing with it during execution.
+
+**Composition > integration.** Small, focused tools composed together beat large integrated platforms. The inter-\* constellation, Unix philosophy, modpack metaphor — it's turtles all the way down.
+
+**Human attention is the bottleneck.** Optimize for the human's time, not the agent's. Multi-agent output must be presented so humans can review quickly and confidently, not just cheaply.
+
+**Multi-AI > single-vendor.** No one model is best at everything. Clavain is built on Claude Code and uses Codex and Oracle as complements — architecturally multi-model while remaining platform-native.
+
+**Discipline before automation.** Encode judgment into checks before removing the human. Agents without discipline ship slop.
+
+The full set of operating principles and the project roadmap live in [`docs/vision.md`](docs/vision.md).
+
+## Development Model
+
+**Clavain-first, then generalize out.** Capabilities are built tightly integrated, battle-tested through real use, and only extracted into companion plugins when the patterns stabilize. The inter-\* constellation represents crystallized research outputs — each companion started as a tightly-coupled feature inside Clavain that earned its independence through repeated, successful use.
+
+This inverts the typical "design the API first" approach: build too-tightly-coupled on purpose, discover the natural seams through practice, and only then extract.
+
+| Companion | Crystallized Insight |
+|---|---|
+| interphase | Phase tracking and gates are generalizable |
+| interflux | Multi-agent review is generalizable |
+| interline | Statusline rendering is generalizable |
+| interpath | Product artifact generation is generalizable |
+| interwatch | Doc freshness monitoring is generalizable |
+
+## What Clavain Is Not
+
+**Not a framework.** The inter-\* constellation offers composable pieces anyone can adopt independently, but Clavain itself is not designed to be "framework-agnostic" or "configurable for any workflow." It is an opinionated rig that also happens to produce reusable components.
+
+**Not for non-builders.** Clavain is for people who build software with agents. It is not a no-code tool, not an AI assistant for non-technical users, not a chatbot framework.
+
+**Platform-native, not vendor-neutral.** Clavain is built on Claude Code. It dispatches to Codex CLI, GPT-5.2 Pro (via Oracle), and other models as complements, but it is not trying to be a universal agent orchestrator for any LLM platform.
 
 ## My Workflow
 
@@ -283,7 +333,7 @@ This routes to the right skill, agent, or command for each task. You don't need 
 
 ## Credits
 
-Built on the work of:
+Named after one of the protagonists from Alastair Reynolds's [Revelation Space series](https://en.wikipedia.org/wiki/Revelation_Space_series). Built on the work of:
 
 - **Jesse Vincent** ([@obra](https://github.com/obra)) — [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code)
 - **Kieran Klaassen** ([@kieranklaassen](https://github.com/kieranklaassen)) — [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin) at [Every](https://every.to)

@@ -15,7 +15,7 @@ Fetch and follow instructions from https://raw.githubusercontent.com/mistakeknot
 For quick bootstrap, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/hub/clavain/.codex/agent-install.sh | bash -s -- --update --json
+curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/agent-install.sh | bash -s -- --update --json
 ```
 
 Or set up manually:

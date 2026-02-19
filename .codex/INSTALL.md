@@ -11,7 +11,7 @@ Enable Clavain in Codex using native skill discovery, plus optional command prom
 
 1. Install with one command (from anywhere):
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/hub/clavain/.codex/agent-install.sh | bash -s -- --update --json
+   curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/agent-install.sh | bash -s -- --update --json
    ```
 
 If this is your first time, this script clones `https://github.com/mistakeknot/Clavain.git` into `~/.codex/clavain` and runs the Codex installer.

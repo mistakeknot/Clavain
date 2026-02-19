@@ -163,7 +163,7 @@ The roadmap follows Oracle's prescription: build the truth engine first, then le
 Clavain is well-positioned to explore open questions at the intersection of multi-agent systems, product development, and engineering discipline. These are organized by proximity to current capabilities:
 
 ### Near-term (informed by current work)
-- **Agent measurement and analytics** (Ashpool + tldrs integration)
+- **Agent measurement and analytics** (interbench + tldrs integration)
 - **Multi-agent failure taxonomy** (hallucination cascades, coordination tax, partial failures)
 - **Cognitive load budgets and review UX** (progressive disclosure, time-to-first-signal)
 - **Product-native agent orchestration** (Clavain's sprint pipeline is genuine whitespace)

@@ -106,7 +106,7 @@ Each inter-* companion is a crystallized research output:
 
 | Priority | Capability | Description |
 |---|---|---|
-| P1 | Agent performance analytics | Token cost per outcome, agent accuracy/override rate, workflow bottleneck detection. What you can't measure, you can't optimize. Ashpool should contribute measurement capabilities here. |
+| P1 | Agent performance analytics | Token cost per outcome, agent accuracy/override rate, workflow bottleneck detection. What you can't measure, you can't optimize. interbench should contribute measurement capabilities here. |
 | P2 | Deep tldrs integration | tldrs becomes the default token-efficient "eyes" of the system. Every skill/agent that reads code routes through tldrs. Code analysis feeds into analytics. Clavain as flagship demo of tight tldrs integration, with generalizable patterns extracted into inter-* modules. |
 | P3 | Adaptive model routing | Dynamically route subagent tasks to the cheapest model that can handle them based on task complexity signals. Token efficiency taken to its logical conclusion. |
 | P4 | Cross-project learning | Knowledge compounding across projects. Patterns learned in project A inform project B. |
@@ -132,7 +132,7 @@ When you compose 7+ specialized agents, unexpected interactions emerge. How do y
 ### 6. Skill and Discipline Transfer
 Can disciplines codified for one domain (e.g., TDD for code) transfer to non-code domains (e.g., TDD for product specs, TDD for design docs)? What is the right abstraction layer that makes engineering disciplines portable across domains?
 
-### 7. Agent Measurement (via Ashpool + tldrs)
+### 7. Agent Measurement (via interbench + tldrs)
 How do you build calibrated confidence in different agents for different task types? What metrics predict whether an agent's output will need human override? Can you create feedback loops where measurement data automatically improves agent selection and routing?
 
 ### 8. Multi-Agent Failure Taxonomy & Hallucination Cascades
@@ -252,13 +252,13 @@ Full research reports saved by flux-research agents (2026-02-14):
 7. **Companion name:** "intershift" (not "intercodex") for cross-AI dispatch
 8. **tldrs integration:** Deep, not optional; Clavain is the flagship demo of tldrs
 9. **Agent analytics (P1 capability):** Most urgently needed new capability — Oracle strongly agrees, proposes specific v1 deliverable (trace log + 5 KPIs + feedback loop + topology experiment)
-10. **Ashpool:** Should contribute to agent measurement research
+10. **interbench:** Should contribute to agent measurement research
 11. **Oracle review (2026-02-14):** Proposed 2 new principles (observability, contracts > cleverness), 6 new research areas (#15-20), identified 5 tensions to resolve, recommended deprioritizing 6 research threads, and argued analytics must come before or alongside extraction (not after)
 
 ## Open Questions
 
 1. What does the Codex port of Clavain look like as it grows? Is it a first-class citizen or a read-only mirror?
-2. How should Ashpool's measurement capabilities integrate with Clavain's analytics roadmap?
+2. How should interbench's measurement capabilities integrate with Clavain's analytics roadmap?
 3. Should interarch merge with intercraft, or stay standalone?
 4. What is the right boundary between "Clavain core" and "companion" as the system evolves?
 5. How do you version/release a constellation of 7+ tightly-related plugins without coordination hell?
@@ -274,7 +274,7 @@ Full research reports saved by flux-research agents (2026-02-14):
 - Create bead for outcome-based agent analytics v1 (trace log + 5 KPIs + feedback loop)
 - Design unified trace/event schema (per-agent, per-gate, per-human-touch)
 - Run topology experiment: same tasks with 2/4/6/8 agents, measure quality vs. cost vs. time
-- Research Ashpool's current capabilities for measurement integration
+- Research interbench's current capabilities for measurement integration
 
 **Priority 2: Formalize the vision**
 - Resolve open questions #6-10 (Oracle tensions)
