@@ -14,9 +14,14 @@ The point of agents isn't to remove humans from the loop; it's to make every mom
 
 ## Architecture
 
-Clavain is the operating system in a three-layer stack:
+Clavain is the operating system in a layered stack:
 
 ```
+Apps (Autarch)
+├── Interactive TUI surfaces: Bigend, Gurgeh, Coldwine, Pollard
+├── Renders OS opinions into interactive experiences
+└── Swappable — Autarch is one set of apps, not the only possible set
+
 Layer 3: Drivers (Companion Plugins)
 ├── Each wraps one capability (review, coordination, code mapping, research)
 ├── Call the kernel directly for shared state — no Clavain bottleneck
@@ -25,7 +30,7 @@ Layer 3: Drivers (Companion Plugins)
 Layer 2: OS (Clavain)
 ├── The autonomous software agency — macro-stages, quality gates, model routing
 ├── Orchestrates by calling kernel (state/gates/events) and drivers (capabilities)
-├── Provides the developer experience: TUI, slash commands, session hooks
+├── Provides the developer experience: slash commands, session hooks, routing tables
 └── If the host platform changes, opinions survive; UX wrappers are rewritten
 
 Layer 1: Kernel (Intercore)
@@ -41,7 +46,7 @@ Profiler: Interspect
 └── Never modifies the kernel — only the OS layer
 ```
 
-The guiding principle: the real magic is in the agency logic and the kernel beneath it. Drivers are swappable. The OS is portable. The kernel is permanent. If a host platform disappears, you lose UX convenience but not capability.
+The guiding principle: the real magic is in the agency logic and the kernel beneath it. Apps are swappable. Drivers are swappable. The OS is portable. The kernel is permanent. If a host platform disappears, you lose UX convenience but not capability. For details on the apps layer, see the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md).
 
 ## Audience
 
@@ -130,6 +135,81 @@ Research, brainstorming, and problem definition. The agency scans the landscape,
 | Collaborative brainstorming | Opus (reasoning) |
 | **Output** | Problem definition, opportunity assessment, research briefings |
 
+#### Discovery → Backlog Pipeline
+
+The Discover macro-stage includes an autonomous research pipeline that closes the loop between **what the world knows** and **what the system is working on**. The kernel provides the discovery primitives (scored records, confidence gates, events); Clavain provides the pipeline workflow.
+
+```
+Sources                     Scoring & Triage           Backlog Actions
+─────────────────          ──────────────────         ──────────────────
+arXiv (Atom feeds)    ┐
+Hacker News (API)     │     Embedding-based           High confidence:
+GitHub (releases,     │     relevance scoring    ──→    auto-create bead
+  issues, READMEs)    ├──→  against learned             + briefing doc
+Exa (semantic web     │     interest profile
+  search)             │                               Medium confidence:
+Anthropic docs        │     Confidence tiers:    ──→    propose to human
+  (change detection)  │     high / medium /              (inbox review)
+RSS/Atom feeds        │     low / discard
+  (general)           │                               Low confidence:
+User submissions      ┘     Adaptive thresholds  ──→    log only
+                            (shift with feedback)
+
+Internal signals                                      Backlog refinement:
+─────────────────                                     ──────────────────
+Beads history              Feedback loop:              merge duplicates
+Solution docs        ──→   promotions strengthen ──→   update priorities
+Error patterns             dismissals weaken           suggest dependencies
+Session telemetry          source trust adapts          decay stale items
+Kernel events              thresholds shift             link related work
+```
+
+**Source configuration (OS policy).** Which RSS feeds, arXiv categories, GitHub repos, and search queries to monitor. Sources are configured per-project with global defaults.
+
+**Three trigger modes.** The pipeline can be triggered three ways, all producing the same kernel event stream:
+
+- **Scheduled (background).** A systemd timer runs the scanner at configurable intervals (default: 4x daily with randomized jitter). Each scan queries all configured sources, scores discoveries against the interest profile, routes through the kernel's confidence gate, and emits events.
+- **Event-driven (reactive).** The scanner registers as a kernel event bus consumer. `run.completed` triggers search for related prior art. `bead.created` checks for existing research. `dispatch.completed` with novel techniques triggers prior art search. `discovery.promoted` triggers related-discovery search. Event-driven scans are targeted (using triggering event context); scheduled scans cast a wide net.
+- **User-initiated (on-demand).** `ic discovery scan` triggers a full scan. `ic discovery submit` submits a topic for triage. `ic discovery search` does semantic search across stored discoveries. User submissions receive a source trust bonus (default 0.2).
+
+**Confidence-tiered autonomy policy.** The kernel enforces tier boundaries; the OS decides the policy at each tier:
+
+| Tier | Score Range | OS Policy |
+|---|---|---|
+| **High** | ≥ 0.8 | Auto-create bead (P3 default), write briefing doc, notify in session inbox |
+| **Medium** | 0.5 – 0.8 | Write briefing draft, surface in inbox for human promote/dismiss/adjust |
+| **Low** | 0.3 – 0.5 | Log only, searchable via `ic discovery search` |
+| **Discard** | < 0.3 | Record with `discarded` status for negative signal |
+
+**Adaptive thresholds.** Tier boundaries shift based on the promotion-to-discovery ratio. If humans consistently promote Medium items (>30% rate), the High threshold lowers by 0.02 per feedback cycle. If humans consistently dismiss High items (<10% rate), the threshold rises. Convergence toward human judgment is tracked by Interspect.
+
+**Backlog refinement rules.** The OS applies refinement policy using kernel primitives:
+- **Deduplication** — kernel enforces cosine similarity threshold (default 0.85); duplicates link as evidence to existing beads
+- **Priority escalation** — 3+ independent sources within 7 days triggers priority bump
+- **Dependency suggestion** — cross-references between discoveries propose bead dependency links (human confirms)
+- **Staleness decay** — kernel decays priority on inactive beads (default: one level per 30 days); fresh evidence reverses decay
+- **Weekly digest** — periodic rollup of research activity, promotions, trends, and profile learning for human review
+
+**The feedback loop.** Human actions feed back into the scoring model:
+
+```
+Discovery scored → Human promotes → Profile vector shifts toward discovery embedding
+                                     Source trust for that source increases
+                                     Adaptive threshold adjusts
+
+Discovery scored → Human dismisses → Profile vector shifts away from discovery embedding
+                                      Source trust for that source decreases
+                                      If pattern: source deprioritized
+
+Bead shipped     → Feedback signal → Discovery marked "validated"
+                                      Source gets trust bonus
+                                      Similar future discoveries score higher
+```
+
+This extends the autonomy ladder with a capability that precedes Level 0: **Level -1: Discover.** Before the system can record, enforce, or react to work, it must find work worth doing.
+
+**What already exists.** The interject plugin implements the core discovery engine: source adapters (arXiv, HN, GitHub, Anthropic docs, Exa), embedding-based scoring (all-MiniLM-L6-v2, 384 dims), adaptive thresholds, and bead/briefing output. The intersearch library provides shared embedding and Exa search infrastructure. What's missing is kernel integration — discovery events through the event bus, event-driven scan triggers, kernel-enforced confidence tiers, and backlog refinement.
+
 ### Design
 
 Strategy, specification, planning, and plan review. The agency designs the solution and validates it through multi-perspective review before any code is written.
@@ -196,10 +276,19 @@ Tight coupling is a feature during the research phase, not a bug. Capabilities a
 
 ### The inter-* constellation
 
+The ecosystem has three tiers: infrastructure (kernel + profiler), drivers (companion plugins), and apps (Autarch TUI tools).
+
+**Infrastructure (Layer 1)**
+
+| Module | Role | Status |
+|---|---|---|
+| intercore | Orchestration kernel — runs, phases, gates, dispatches, events | Active development |
+| interspect | Adaptive profiler — reads kernel events, proposes OS config changes | Active development |
+
+**Drivers (Layer 3)**
+
 | Companion | Crystallized Insight | Status |
 |---|---|---|
-| intercore | Orchestration state is a kernel concern | Active development |
-| interspect | Self-improvement needs a profiler, not ad-hoc scripts | Active development |
 | interflux | Multi-agent review is generalizable | Shipped |
 | interphase | Phase tracking and gates are generalizable | Shipped |
 | interline | Statusline rendering is generalizable | Shipped |
@@ -212,6 +301,8 @@ Tight coupling is a feature during the research phase, not a bug. Capabilities a
 | tldr-swinton | Token-efficient code context is generalizable | Shipped |
 | intershift | Cross-AI dispatch is generalizable | Planned |
 | interscribe | Knowledge compounding is generalizable | Planned |
+
+**Apps (Autarch)** — Bigend (monitoring), Gurgeh (PRD generation), Coldwine (task orchestration), Pollard (research intelligence). See the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md).
 
 The naming convention follows a consistent metaphor: each companion occupies the space *between* two things. interphase (between phases), interline (between lines), interflux (between flows), interpath (between paths of artifacts), interwatch (between watches of freshness), intershift (between shifts of context). They are bridges and boundary layers, not monoliths.
 
