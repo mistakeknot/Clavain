@@ -187,15 +187,11 @@ fi
 
 ### Phase Tracking
 
-After each step completes successfully, record the phase transition. If `CLAVAIN_BEAD_ID` is set (from discovery, sprint resume, or sprint creation), run:
-```bash
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh" && advance_phase "$CLAVAIN_BEAD_ID" "<phase>" "<reason>" "<artifact_path>"
-```
-Additionally, if this is a sprint bead, record the phase completion and artifact:
+After each step completes successfully, record the phase transition via `sprint_advance()`. If `CLAVAIN_BEAD_ID` is set (from discovery, sprint resume, or sprint creation), run:
 ```bash
 export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
 sprint_set_artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
-sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "<phase>"
+sprint_advance "$CLAVAIN_BEAD_ID" "<current_phase>"
 ```
 Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
 
@@ -237,7 +233,6 @@ export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprin
 SPRINT_ID=$(sprint_create "<feature title>")
 if [[ -n "$SPRINT_ID" ]]; then
     sprint_set_artifact "$SPRINT_ID" "brainstorm" "<brainstorm_doc_path>"
-    sprint_finalize_init "$SPRINT_ID"
     sprint_record_phase_completion "$SPRINT_ID" "brainstorm"
     CLAVAIN_BEAD_ID="$SPRINT_ID"
 fi
@@ -344,8 +339,7 @@ if ! enforce_gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
     echo "Gate blocked: review findings are stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Do NOT advance to shipping — stop and tell user
 fi
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
-advance_phase "$CLAVAIN_BEAD_ID" "shipping" "Quality gates passed" ""
+sprint_advance "$CLAVAIN_BEAD_ID" "shipping"
 sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "shipping"
 ```
 Do NOT set the phase if gates FAIL.
@@ -369,7 +363,7 @@ sprint_advance "$CLAVAIN_BEAD_ID" "shipping"
 
 Run `/reflect` — it captures learnings (complexity-scaled), registers the artifact, and advances `reflect → done`.
 
-**Phase-advance ownership:** `/reflect` owns both artifact registration AND the `reflect → done` advance. Do NOT call `sprint_advance` or `advance_phase` after `/reflect` returns.
+**Phase-advance ownership:** `/reflect` owns both artifact registration AND the `reflect → done` advance. Do NOT call `sprint_advance` after `/reflect` returns.
 
 **Soft gate:** Gate hardness is soft for the initial rollout (emit warning but allow advance if no reflect artifact exists). Graduation to hard gate is tracked separately.
 
