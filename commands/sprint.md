@@ -170,6 +170,9 @@ if [[ "$is_sprint" == "true" ]]; then
             stale_phase)
                 # Another session already advanced — re-read state and continue from new phase
                 ;;
+            budget_exceeded)
+                # AskUserQuestion: "Budget exceeded (<detail>). Options: Continue (override), Stop sprint, Adjust budget"
+                ;;
         esac
     fi
 fi
@@ -261,6 +264,16 @@ Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it'
 **Phase:** After plan is written, set `phase=planned` with reason `"Plan: <plan_path>"`.
 
 ## Step 4: Review Plan (gates execution)
+
+**Budget context:** Before invoking flux-drive, compute remaining budget:
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+remaining=$(sprint_budget_remaining "$CLAVAIN_BEAD_ID")
+if [[ "$remaining" -gt 0 ]]; then
+    export FLUX_BUDGET_REMAINING="$remaining"
+fi
+```
+
 `/interflux:flux-drive <plan-file-from-step-3>`
 
 Pass the plan file path from Step 3 as the flux-drive target. Review happens **before** execution so plan-level risks are caught early.
@@ -300,6 +313,16 @@ Run the project's test suite and linting before proceeding to review:
 **If no test command exists:** Note this and proceed — quality-gates will still run reviewer agents.
 
 ## Step 7: Quality Gates
+
+**Budget context:** Before invoking quality-gates, compute remaining budget:
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+remaining=$(sprint_budget_remaining "$CLAVAIN_BEAD_ID")
+if [[ "$remaining" -gt 0 ]]; then
+    export FLUX_BUDGET_REMAINING="$remaining"
+fi
+```
+
 `/clavain:quality-gates`
 
 **Parallel opportunity:** Quality gates and resolve can overlap — quality-gates spawns review agents while resolve addresses already-known findings. If you have known TODOs from execution, start `/clavain:resolve` in parallel with quality-gates.
@@ -361,6 +384,7 @@ Use the `clavain:landing-a-change` skill to verify, document, and commit the com
 Sprint Summary:
 - Bead: <CLAVAIN_BEAD_ID>
 - Steps completed: <n>/10
+- Budget: <tokens_spent>k / <token_budget>k (<percentage>%)
 - Agents dispatched: <count>
 - Verdicts: <verdict_count_by_status output>
 - Estimated tokens: <verdict_total_tokens output>
