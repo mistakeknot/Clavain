@@ -72,9 +72,11 @@ MIGRATE
         # Ensure overlays directory exists (Type 1 modifications)
         mkdir -p "$(dirname "$_INTERSPECT_DB")/overlays" 2>/dev/null || true
         # Ensure durable cursor for kernel event consumer (E4.2/E4.5)
-        # Idempotent — register is a no-op if cursor already exists
+        # Only register if cursor doesn't exist yet (register resets position to 0)
         if command -v ic &>/dev/null; then
-            ic events cursor register interspect-consumer --durable 2>/dev/null || true
+            if ! ic events cursor list 2>/dev/null | grep -q 'interspect-consumer'; then
+                ic events cursor register interspect-consumer --durable 2>/dev/null || true
+            fi
         fi
         return 0
     fi
@@ -173,8 +175,11 @@ CREATE TABLE IF NOT EXISTS canary_samples (
 CREATE INDEX IF NOT EXISTS idx_canary_samples_canary ON canary_samples(canary_id);
 SQL
     # Ensure durable cursor for kernel event consumer (E4.2/E4.5)
+    # Only register if cursor doesn't exist yet (register resets position to 0)
     if command -v ic &>/dev/null; then
-        ic events cursor register interspect-consumer --durable 2>/dev/null || true
+        if ! ic events cursor list 2>/dev/null | grep -q 'interspect-consumer'; then
+            ic events cursor register interspect-consumer --durable 2>/dev/null || true
+        fi
     fi
 }
 
