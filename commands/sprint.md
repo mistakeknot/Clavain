@@ -34,6 +34,7 @@ Before running discovery, check for an active sprint:
         - `flux-drive` → `/interflux:flux-drive <plan_path from sprint_artifacts>`
         - `work` → `/clavain:work <plan_path from sprint_artifacts>`
         - `ship` → `/clavain:quality-gates`
+        - `reflect` → `/reflect`
         - `done` → tell user "Sprint is complete"
      f. Display: `Resuming sprint <id> — <title> (phase: <phase>, next: <step>)`
      g. **After routing to a command, stop.** Do NOT continue to Step 1.
@@ -131,7 +132,7 @@ export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprin
 checkpoint_write "$CLAVAIN_BEAD_ID" "<phase>" "<step_name>" "<plan_path>"
 ```
 
-Step names: `brainstorm`, `strategy`, `plan`, `plan-review`, `execute`, `test`, `quality-gates`, `resolve`, `ship`.
+Step names: `brainstorm`, `strategy`, `plan`, `plan-review`, `execute`, `test`, `quality-gates`, `resolve`, `reflect`, `ship`.
 
 When resuming (via Sprint Resume above or `--resume`):
 1. Read checkpoint: `checkpoint_read`
@@ -334,7 +335,22 @@ Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, 
 - Run `/clavain:compound` to document the pattern in `config/flux-drive/knowledge/`
 - If findings revealed a plan-level mistake, annotate the plan file with a `## Lessons Learned` section so future similar plans benefit
 
-## Step 9: Ship
+## Step 9: Reflect
+
+Advance the sprint from `shipping` to `reflect`, then invoke `/reflect`:
+
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
+sprint_advance "$CLAVAIN_BEAD_ID" "shipping"
+```
+
+Run `/reflect` — it captures learnings (complexity-scaled), registers the artifact, and advances `reflect → done`.
+
+**Phase-advance ownership:** `/reflect` owns both artifact registration AND the `reflect → done` advance. Do NOT call `sprint_advance` or `advance_phase` after `/reflect` returns.
+
+**Soft gate:** Gate hardness is soft for the initial rollout (emit warning but allow advance if no reflect artifact exists). Graduation to hard gate is tracked separately.
+
+## Step 10: Ship
 
 Use the `clavain:landing-a-change` skill to verify, document, and commit the completed work.
 
@@ -344,7 +360,7 @@ Use the `clavain:landing-a-change` skill to verify, document, and commit the com
 ```
 Sprint Summary:
 - Bead: <CLAVAIN_BEAD_ID>
-- Steps completed: <n>/9
+- Steps completed: <n>/10
 - Agents dispatched: <count>
 - Verdicts: <verdict_count_by_status output>
 - Estimated tokens: <verdict_total_tokens output>

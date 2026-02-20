@@ -166,9 +166,9 @@ Clavain is a **single-operator system through v2**. One human, one agency, one m
 
 Multi-user collaboration is a v3+ concern, gated on Intercore's multi-project portfolio support and a proper permission model.
 
-## Scope: Four Macro-Stages
+## Scope: Five Macro-Stages
 
-Clavain covers the full product development lifecycle through four macro-stages. Each macro-stage is a sub-agency — a team of models and agents selected for the work at hand.
+Clavain covers the full product development lifecycle through five macro-stages. Each macro-stage is a sub-agency — a team of models and agents selected for the work at hand.
 
 ### Discover (Optional Until Core Loop Stabilizes)
 
@@ -293,15 +293,27 @@ Final review, deployment, and knowledge capture. The agency validates the change
 | Critical path analysis | Oracle (GPT-5.2 Pro) |
 | Landing and deployment | Landing discipline agents |
 | Knowledge compounding | Auto-compound (learnings → memory) |
-| **Output** | Landed change + compounded learnings |
+| **Output** | Landed change |
 
-Each macro-stage maps to sub-phases internally — Discover includes research and brainstorm; Design includes strategy, plan, and plan-review; Build includes execute and test; Ship includes review, deploy, and learn. The macro-stages provide the mental model; the sub-phases provide the granularity. Phase chains are configurable per-run via the kernel.
+### Reflect
+
+Capture what was learned. The agency documents patterns discovered, mistakes caught, decisions validated, and complexity calibration data. This closes the recursive learning loop — every sprint feeds knowledge back into the system.
+
+| Capability | Models / Agents |
+|---|---|
+| C1-C2 lightweight learnings | Haiku (quick memory notes) |
+| C3+ engineering documentation | Opus (full solution docs) |
+| Complexity calibration | Automatic (estimated vs actual comparison) |
+| **Output** | Learning artifacts (memory notes, solution docs, calibration data) |
+
+Each macro-stage maps to sub-phases internally — Discover includes research and brainstorm; Design includes strategy, plan, and plan-review; Build includes execute and test; Ship includes review and deploy; Reflect includes learning capture and complexity calibration. The macro-stages provide the mental model; the sub-phases provide the granularity. Phase chains are configurable per-run via the kernel.
 
 **Macro-stage handoff contracts.** Each macro-stage produces typed artifacts that become the next stage's input:
 - **Discover → Design:** Problem definition doc, research briefings, opportunity assessment. Design reads these as context for strategy.
 - **Design → Build:** Approved plan with gate-verified artifacts (PRD, architecture doc, task breakdown). Build reads the plan as its work order.
 - **Build → Ship:** Tested code (passing CI), review artifacts (verdicts). Ship reads these for final validation.
-- **Ship → (next cycle):** Compounded learnings, shipped artifacts. Feed back into Discover for the next iteration.
+- **Ship → Reflect:** Shipped code, review verdicts, agent telemetry. Reflect reads these as evidence for what worked and what didn't.
+- **Reflect → (next cycle):** Compounded learnings, complexity calibration data, updated memory. Feed back into Discover for the next iteration.
 
 The kernel enforces handoff via `artifact_exists` gates at macro-stage boundaries. The OS defines which artifact types satisfy each gate.
 
@@ -533,7 +545,7 @@ Clavain's value is measurable. These metrics define what "working" means at each
 
 **Not a general AI gateway.** That's what projects like OpenClaw (general-purpose AI message routing) do. Clavain doesn't route arbitrary messages to arbitrary agents. It orchestrates software development — it has opinions about what "good" looks like at every phase, and those opinions are encoded in gates, review agents, and quality disciplines.
 
-**Not a coding assistant.** That's what Cursor and similar tools do. Clavain doesn't help you write code; it *builds software* — the full lifecycle from problem discovery through shipped, reviewed, tested, compounded code. The coding is one phase of four.
+**Not a coding assistant.** That's what Cursor and similar tools do. Clavain doesn't help you write code; it *builds software* — the full lifecycle from problem discovery through shipped, reviewed, tested, compounded code. The coding is one phase of five.
 
 **Not primarily a Claude Code plugin — by design.** Clavain's identity is an autonomous software agency. Autarch (TUI) is the target primary interface; today it ships as a Claude Code plugin because that surface is available now. The architecture is designed to outlive any single host platform. Clavain dispatches to Claude, Codex, Gemini, GPT-5.2, and other models as execution backends. The Claude Code plugin interface is one driver among several — a UX adapter, not the identity.
 
