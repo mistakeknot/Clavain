@@ -42,6 +42,19 @@ fi
 
 # ─── Sprint CRUD ────────────────────────────────────────────────────
 
+# Default token budgets by complexity tier (billing tokens: input + output).
+# Override per-sprint with: bd set-state <sprint> token_budget=N
+_sprint_default_budget() {
+    local complexity="${1:-3}"
+    case "$complexity" in
+        1) echo "50000" ;;
+        2) echo "100000" ;;
+        3) echo "250000" ;;
+        4) echo "500000" ;;
+        5|*) echo "1000000" ;;
+    esac
+}
+
 # Create a sprint bead + ic run. Returns bead ID to stdout.
 # The ic run is linked to the bead via --scope-id.
 # Caller MUST call sprint_finalize_init() after all setup.
@@ -76,8 +89,13 @@ sprint_create() {
 
     # Create ic run linked to bead via scope-id
     local phases_json='["brainstorm","brainstorm-reviewed","strategized","planned","plan-reviewed","executing","shipping","reflect","done"]'
+    local complexity
+    complexity=$(bd state "$sprint_id" complexity 2>/dev/null) || complexity="3"
+    [[ -z "$complexity" || "$complexity" == "null" ]] && complexity="3"
+    local token_budget
+    token_budget=$(_sprint_default_budget "$complexity")
     local run_id
-    run_id=$(intercore_run_create "$(pwd)" "$title" "$phases_json" "$sprint_id") || run_id=""
+    run_id=$(intercore_run_create "$(pwd)" "$title" "$phases_json" "$sprint_id" "$complexity" "$token_budget") || run_id=""
 
     if [[ -z "$run_id" ]]; then
         echo "sprint_create: ic run create failed, cancelling bead $sprint_id" >&2
@@ -85,6 +103,9 @@ sprint_create() {
         echo ""
         return 0
     fi
+
+    # Store run_id and budget on bead for fallback queries
+    bd set-state "$sprint_id" "token_budget=$token_budget" >/dev/null 2>&1 || true
 
     # Store run_id on bead — CRITICAL: this is the join key that makes ic path work.
     # If this write fails, the ic run is unreachable through sprint API.
@@ -265,6 +286,17 @@ sprint_read_state() {
                 active_session=$(echo "$agents_json" | jq -r '[.[] | select(.status == "active")] | .[0].name // ""')
             fi
 
+            # Token budget and spend (billing tokens: input + output)
+            local token_budget tokens_spent
+            token_budget=$(echo "$run_json" | jq -r '.token_budget // 0')
+            local token_agg
+            token_agg=$("$INTERCORE_BIN" run tokens "$run_id" --json 2>/dev/null) || token_agg=""
+            if [[ -n "$token_agg" ]]; then
+                tokens_spent=$(echo "$token_agg" | jq -r '(.total_in // 0) + (.total_out // 0)')
+            else
+                tokens_spent="0"
+            fi
+
             jq -n -c \
                 --arg id "$sprint_id" \
                 --arg phase "$phase" \
@@ -273,8 +305,11 @@ sprint_read_state() {
                 --arg complexity "$complexity" \
                 --arg auto_advance "$auto_advance" \
                 --arg active_session "$active_session" \
+                --arg token_budget "$token_budget" \
+                --arg tokens_spent "$tokens_spent" \
                 '{id: $id, phase: $phase, artifacts: $artifacts, history: $history,
-                  complexity: $complexity, auto_advance: $auto_advance, active_session: $active_session}'
+                  complexity: $complexity, auto_advance: $auto_advance, active_session: $active_session,
+                  token_budget: ($token_budget | tonumber), tokens_spent: ($tokens_spent | tonumber)}'
             return 0
         fi
     fi
@@ -287,6 +322,11 @@ sprint_read_state() {
     complexity=$(bd state "$sprint_id" complexity 2>/dev/null) || complexity=""
     auto_advance=$(bd state "$sprint_id" auto_advance 2>/dev/null) || auto_advance="true"
     active_session=$(bd state "$sprint_id" active_session 2>/dev/null) || active_session=""
+    local token_budget tokens_spent
+    token_budget=$(bd state "$sprint_id" token_budget 2>/dev/null) || token_budget="0"
+    tokens_spent=$(bd state "$sprint_id" tokens_spent 2>/dev/null) || tokens_spent="0"
+    [[ -z "$token_budget" || "$token_budget" == "null" ]] && token_budget="0"
+    [[ -z "$tokens_spent" || "$tokens_spent" == "null" ]] && tokens_spent="0"
     echo "$sprint_artifacts" | jq empty 2>/dev/null || sprint_artifacts="{}"
     echo "$phase_history" | jq empty 2>/dev/null || phase_history="{}"
     jq -n -c \
@@ -294,8 +334,10 @@ sprint_read_state() {
         --argjson artifacts "$sprint_artifacts" --argjson history "$phase_history" \
         --arg complexity "$complexity" --arg auto_advance "$auto_advance" \
         --arg active_session "$active_session" \
+        --arg token_budget "$token_budget" --arg tokens_spent "$tokens_spent" \
         '{id: $id, phase: $phase, artifacts: $artifacts, history: $history,
-          complexity: $complexity, auto_advance: $auto_advance, active_session: $active_session}'
+          complexity: $complexity, auto_advance: $auto_advance, active_session: $active_session,
+          token_budget: ($token_budget | tonumber), tokens_spent: ($tokens_spent | tonumber)}'
 }
 
 # Record an artifact for the current phase. Uses ic run artifact add (atomic).
@@ -356,6 +398,103 @@ sprint_record_phase_completion() {
     bd set-state "$sprint_id" "phase_history=$updated" >/dev/null 2>&1 || true
     intercore_unlock "sprint" "$sprint_id"
     sprint_invalidate_caches
+}
+
+# ─── Token Budget ──────────────────────────────────────────────────
+
+# Estimated billing tokens per phase (used when interstat actuals unavailable).
+_sprint_phase_cost_estimate() {
+    local phase="${1:-}"
+    case "$phase" in
+        brainstorm)          echo "30000" ;;
+        brainstorm-reviewed) echo "15000" ;;
+        strategized)         echo "25000" ;;
+        planned)             echo "35000" ;;
+        plan-reviewed)       echo "50000" ;;
+        executing)           echo "150000" ;;
+        shipping)            echo "100000" ;;
+        reflect)             echo "10000" ;;
+        done)                echo "5000" ;;
+        *)                   echo "30000" ;;
+    esac
+}
+
+# Write token usage for a completed phase to intercore dispatch records.
+# Tries interstat for actual data first, falls back to estimates.
+sprint_record_phase_tokens() {
+    local sprint_id="$1" phase="$2"
+    [[ -z "$sprint_id" || -z "$phase" ]] && return 0
+
+    local run_id
+    run_id=$(bd state "$sprint_id" ic_run_id 2>/dev/null) || run_id=""
+    [[ -z "$run_id" ]] && {
+        # Beads-only: update running total with estimate
+        local estimate
+        estimate=$(_sprint_phase_cost_estimate "$phase")
+        local current_spent
+        current_spent=$(bd state "$sprint_id" tokens_spent 2>/dev/null) || current_spent="0"
+        [[ -z "$current_spent" || "$current_spent" == "null" ]] && current_spent="0"
+        local new_total=$(( current_spent + estimate ))
+        bd set-state "$sprint_id" "tokens_spent=$new_total" >/dev/null 2>&1 || true
+        return 0
+    }
+    intercore_available || return 0
+
+    # Try actual data from interstat (session-scoped billing tokens)
+    local actual_tokens=""
+    if command -v sqlite3 &>/dev/null; then
+        local db_path="${HOME}/.claude/interstat/metrics.db"
+        if [[ -f "$db_path" ]]; then
+            actual_tokens=$(sqlite3 "$db_path" \
+                "SELECT COALESCE(SUM(COALESCE(input_tokens,0) + COALESCE(output_tokens,0)), 0) FROM agent_runs WHERE session_id='${CLAUDE_SESSION_ID:-none}'" 2>/dev/null) || actual_tokens=""
+        fi
+    fi
+
+    local in_tokens out_tokens
+    if [[ -n "$actual_tokens" && "$actual_tokens" != "0" ]]; then
+        in_tokens=$(( actual_tokens * 60 / 100 ))
+        out_tokens=$(( actual_tokens - in_tokens ))
+    else
+        local estimate
+        estimate=$(_sprint_phase_cost_estimate "$phase")
+        in_tokens=$(( estimate * 60 / 100 ))
+        out_tokens=$(( estimate - in_tokens ))
+    fi
+
+    # Create a synthetic dispatch for this phase and set tokens
+    local dispatch_id
+    dispatch_id=$("$INTERCORE_BIN" dispatch create "$run_id" --agent="phase-${phase}" --json 2>/dev/null \
+        | jq -r '.id // ""' 2>/dev/null) || dispatch_id=""
+    if [[ -n "$dispatch_id" ]]; then
+        "$INTERCORE_BIN" dispatch tokens "$dispatch_id" --set --in="$in_tokens" --out="$out_tokens" 2>/dev/null || true
+        "$INTERCORE_BIN" dispatch update "$dispatch_id" --status=completed 2>/dev/null || true
+    fi
+
+    # Also update beads fallback running total
+    local current_spent
+    current_spent=$(bd state "$sprint_id" tokens_spent 2>/dev/null) || current_spent="0"
+    [[ -z "$current_spent" || "$current_spent" == "null" ]] && current_spent="0"
+    local new_total=$(( current_spent + in_tokens + out_tokens ))
+    bd set-state "$sprint_id" "tokens_spent=$new_total" >/dev/null 2>&1 || true
+}
+
+# Get remaining token budget for a sprint.
+# Output: integer (0 if no budget set or beads-only without budget)
+sprint_budget_remaining() {
+    local sprint_id="$1"
+    [[ -z "$sprint_id" ]] && { echo "0"; return 0; }
+
+    local state
+    state=$(sprint_read_state "$sprint_id") || { echo "0"; return 0; }
+
+    local budget spent
+    budget=$(echo "$state" | jq -r '.token_budget // 0' 2>/dev/null) || budget="0"
+    spent=$(echo "$state" | jq -r '.tokens_spent // 0' 2>/dev/null) || spent="0"
+    [[ "$budget" == "0" || "$budget" == "null" ]] && { echo "0"; return 0; }
+
+    local remaining=$(( budget - spent ))
+    [[ $remaining -lt 0 ]] && remaining=0
+    echo "$remaining"
 }
 
 # ─── Session Claim ─────────────────────────────────────────────────
@@ -658,6 +797,20 @@ sprint_advance() {
     run_id=$(bd state "$sprint_id" ic_run_id 2>/dev/null) || run_id=""
 
     if [[ -n "$run_id" ]] && intercore_available; then
+        # Budget check: warn or pause if budget exceeded (skip with CLAVAIN_SKIP_BUDGET)
+        if [[ -z "${CLAVAIN_SKIP_BUDGET:-}" ]]; then
+            "$INTERCORE_BIN" run budget "$run_id" 2>/dev/null
+            local budget_rc=$?
+            if [[ $budget_rc -eq 1 ]]; then
+                local token_json spent budget_val
+                token_json=$("$INTERCORE_BIN" run tokens "$run_id" --json 2>/dev/null) || token_json="{}"
+                spent=$(echo "$token_json" | jq -r '(.total_in // 0) + (.total_out // 0)' 2>/dev/null) || spent="?"
+                budget_val=$("$INTERCORE_BIN" run show "$run_id" --json 2>/dev/null | jq -r '.token_budget // "?"' 2>/dev/null) || budget_val="?"
+                echo "budget_exceeded|$current_phase|${spent}/${budget_val} billing tokens"
+                return 1
+            fi
+        fi
+
         # ic run advance handles: phase chain, gate checks, optimistic concurrency,
         # auto_advance, phase skipping (via force_full + complexity on run)
         local result
@@ -697,6 +850,7 @@ sprint_advance() {
         to_phase=$(echo "$result" | jq -r '.to_phase // ""' 2>/dev/null) || to_phase=""
 
         sprint_invalidate_caches
+        sprint_record_phase_tokens "$sprint_id" "$current_phase" 2>/dev/null || true
         echo "Phase: $from_phase → $to_phase (auto-advancing)" >&2
         return 0
     fi
@@ -733,6 +887,7 @@ sprint_advance() {
     fi
     bd set-state "$sprint_id" "phase=$next_phase" >/dev/null 2>&1 || true
     sprint_record_phase_completion "$sprint_id" "$next_phase"
+    sprint_record_phase_tokens "$sprint_id" "$current_phase" 2>/dev/null || true
     intercore_unlock "sprint-advance" "$sprint_id"
     echo "Phase: $current_phase → $next_phase (auto-advancing)" >&2
     return 0

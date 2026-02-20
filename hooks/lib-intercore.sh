@@ -223,7 +223,7 @@ intercore_run_artifact_add() {
 # Prints: run ID to stdout
 # Returns: 0 on success, 1 on failure
 intercore_run_create() {
-    local project="$1" goal="$2" _phases="${3:-}" scope_id="${4:-}" complexity="${5:-3}"
+    local project="$1" goal="$2" _phases="${3:-}" scope_id="${4:-}" complexity="${5:-3}" token_budget="${6:-}"
     if ! intercore_available; then return 1; fi
     local args=(run create --project="$project" --goal="$goal" --complexity="$complexity")
     if [[ -n "$_phases" ]]; then
@@ -231,6 +231,9 @@ intercore_run_create() {
     fi
     if [[ -n "$scope_id" ]]; then
         args+=(--scope-id="$scope_id")
+    fi
+    if [[ -n "$token_budget" && "$token_budget" != "0" ]]; then
+        args+=(--token-budget="$token_budget" --budget-warn-pct=80)
     fi
     "$INTERCORE_BIN" "${args[@]}" 2>/dev/null
 }
