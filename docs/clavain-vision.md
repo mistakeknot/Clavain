@@ -352,17 +352,38 @@ The ecosystem has three layers — kernel (infrastructure), OS (agency + compani
 
 | Companion | Crystallized Insight | Status |
 |---|---|---|
-| interflux | Multi-agent review is generalizable | Shipped |
-| interphase | Phase tracking and gates are generalizable (compatibility shim — delegates to `ic` primitives, no independent state) | Shipped (legacy) |
+| interflux | Multi-agent review + research dispatch is generalizable | Shipped |
+| interphase | Phase tracking and gates are generalizable (shim — delegates to `ic`) | Shipped |
 | interline | Statusline rendering is generalizable | Shipped |
 | interpath | Product artifact generation is generalizable | Shipped |
 | interwatch | Doc freshness monitoring is generalizable | Shipped |
 | interlock | Multi-agent file coordination is generalizable | Shipped |
-| interject | Ambient research is generalizable | Shipped |
+| interject | Ambient discovery + research engine is generalizable | Shipped |
 | interdoc | Documentation generation is generalizable | Shipped |
 | intermux | Agent visibility is generalizable | Shipped |
 | tldr-swinton | Token-efficient code context is generalizable | Shipped |
-| intershift | Cross-AI dispatch is generalizable | Planned |
+| intercheck | Code quality guards + session health are generalizable | Shipped |
+| interdev | MCP CLI + developer tooling is generalizable | Shipped |
+| intercraft | Agent-native architecture patterns are generalizable | Shipped |
+| interform | Design patterns + visual quality are generalizable | Shipped |
+| interslack | Slack integration is generalizable | Shipped |
+| internext | Work prioritization + tradeoff analysis is generalizable | Shipped |
+| interpub | Plugin publishing is generalizable | Shipped |
+| intersearch | Shared embedding + Exa search is generalizable | Shipped |
+| interstat | Token efficiency benchmarking is generalizable | Shipped |
+| intersynth | Multi-agent synthesis (verdict aggregation) is generalizable | Shipped |
+| intermap | Project-level code mapping is generalizable | Shipped |
+| intermem | Memory synthesis + tiered promotion is generalizable | Shipped |
+| interkasten | Notion sync + documentation is generalizable | Shipped |
+| interfluence | Voice profile + style adaptation is generalizable | Shipped |
+| interlens | Cognitive augmentation lenses are generalizable | Shipped |
+| interleave | Deterministic skeleton + LLM islands is generalizable | Shipped |
+| interserve | Codex spark classifier + context compression is generalizable | Shipped |
+| interpeer | Cross-AI peer review is generalizable | Shipped |
+| intertest | Engineering quality disciplines are generalizable | Shipped |
+| tool-time | Tool usage analytics is generalizable | Shipped |
+| tuivision | TUI automation + visual testing is generalizable | Shipped |
+| intershift | Cross-AI dispatch engine is generalizable | Planned |
 | interscribe | Knowledge compounding is generalizable | Planned |
 
 **Apps (Autarch)** — Bigend (monitoring), Gurgeh (PRD generation), Coldwine (task orchestration), Pollard (research intelligence). See the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md) (planned).

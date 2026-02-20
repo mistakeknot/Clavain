@@ -164,7 +164,7 @@ Lightweight review from `git diff` — faster than flux-drive, suitable for incr
 
 ## 6. Non-Goals
 
-- **No GUI/dashboard** — CLI + AskUserQuestion is sufficient
+- **No web GUI** — Autarch TUI is the target surface; no browser-based dashboard
 - **No domain-specific components** — no Rails, Ruby, Every.to, Figma, Xcode
 - **No vendor neutrality** — Claude Code native; multi-model via dispatch, not abstraction
 - **No framework mode** — Clavain is a rig, not an SDK for building other rigs
@@ -198,7 +198,7 @@ Three parallel tracks converge toward autonomous self-building sprints:
 
 | Track | Focus | Next Step |
 |-------|-------|-----------|
-| **A: Kernel Integration** | Migrate from shell state to durable kernel-backed orchestration | A1: Hook cutover (iv-ngvy, P1) |
+| **A: Kernel Integration** | Migrate from shell state to durable kernel-backed orchestration | A2: Sprint handover — sprint skill becomes kernel-driven (A1 hook cutover done) |
 | **B: Model Routing** | Static → complexity-aware → adaptive model selection | B1: Static routing table |
 | **C: Agency Architecture** | Declarative agency specs, fleet registry, composer, self-building loop | C1: Agency specs |
 

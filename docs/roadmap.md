@@ -9,7 +9,7 @@
 
 ## Where We Are
 
-Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 21 hooks, 1 MCP server. 31 companion plugins in the inter-* constellation. 1000 beads tracked, 660 closed, 339 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
+Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 22 hooks, 1 MCP server. 31 companion plugins in the inter-* constellation. 1000 beads tracked, 660 closed, 339 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
 
 ### What's Working
 
@@ -217,9 +217,11 @@ Key completed epics:
 - **iv-ngvy** — E3: Hook cutover — big-bang Clavain migration to `ic` (P1, done)
 
 Key active work:
-- **iv-yeka** — Update roadmap.md for new vision + parallel tracks (P1, in progress)
-- **iv-cyrw** — Create umbrella Interverse vision doc (P2, unblocked)
 - **iv-thp7** — E4: Level 3 Adapt — Interspect kernel event integration (P2)
+
+Recently closed:
+- **iv-yeka** — Update roadmap.md for new vision + parallel tracks (P1, done)
+- **iv-cyrw** — Create umbrella Interverse vision doc (P2, done)
 
 ---
 
