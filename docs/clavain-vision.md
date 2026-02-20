@@ -168,7 +168,7 @@ Kernel events              thresholds shift             link related work
 
 **Three trigger modes.** The pipeline can be triggered three ways, all producing the same kernel event stream:
 
-- **Scheduled (background).** A managed timer runs the scanner at configurable intervals (default: 4x daily with randomized jitter). Each scan queries all configured sources, scores discoveries against the interest profile, routes through the kernel's confidence gate, and emits events.
+- **Scheduled (background).** A managed timer runs the scanner at configurable intervals (default: 4x daily with randomized jitter). Each scan queries all configured sources, scores discoveries against the interest profile, and submits them to the kernel via `ic discovery add`. The kernel evaluates its confidence gate and emits the resulting events.
 - **Event-driven (reactive).** The scanner registers as a kernel event bus consumer. Run completions trigger search for related prior art. Work item creation checks for existing research. Dispatch completions with novel techniques trigger prior art search. Event-driven scans are targeted (using triggering event context); scheduled scans cast a wide net.
 - **User-initiated (on-demand).** The user triggers a full scan, submits a topic for triage, or searches stored discoveries via the kernel discovery API. User submissions receive a source trust bonus.
 
@@ -248,6 +248,14 @@ Final review, deployment, and knowledge capture. The agency validates the change
 
 Each macro-stage maps to sub-phases internally — Discover includes research and brainstorm; Design includes strategy, plan, and plan-review; Build includes execute and test; Ship includes review, deploy, and learn. The macro-stages provide the mental model; the sub-phases provide the granularity. Phase chains are configurable per-run via the kernel.
 
+**Macro-stage handoff contracts.** Each macro-stage produces typed artifacts that become the next stage's input:
+- **Discover → Design:** Problem definition doc, research briefings, opportunity assessment. Design reads these as context for strategy.
+- **Design → Build:** Approved plan with gate-verified artifacts (PRD, architecture doc, task breakdown). Build reads the plan as its work order.
+- **Build → Ship:** Tested code (passing CI), review artifacts (verdicts). Ship reads these for final validation.
+- **Ship → (next cycle):** Compounded learnings, shipped artifacts. Feed back into Discover for the next iteration.
+
+The kernel enforces handoff via `artifact_exists` gates at macro-stage boundaries. The OS defines which artifact types satisfy each gate.
+
 The brainstorm and strategy phases are real product capabilities, not engineering context-setting. Most agent tools pretend product work is prompt fluff; Clavain makes it first-class.
 
 ## Model Routing Architecture
@@ -267,6 +275,12 @@ Plugins declare default model preferences (fd-architecture defaults to Opus, fd-
 The agent fleet registry stores cost/quality profiles per agent×model combination. The composer optimizes the entire fleet dispatch within a budget constraint. "Run this review with $5 budget" → the composer allocates Opus to the 2 highest-impact agents and Haiku to the rest. Interspect's outcome data drives profile updates — models that consistently underperform for a task type get downweighted.
 
 These three stages are staged on the roadmap: static routing ships first, complexity-aware routing follows, adaptive optimization comes with measurement infrastructure. The kernel mechanism (Stage 1) is described fully in the [Intercore vision doc](../../../infra/intercore/docs/product/intercore-vision.md) — the kernel records dispatch details, model selection, and token consumption; the OS configures routing policy on top.
+
+**Routing precedence.** When multiple stages provide a model preference, higher stages override lower: adaptive override (Stage 3) > OS routing table (Stage 2) > plugin default (Stage 2) > kernel default (Stage 1, none — model is required). If adaptive routing has no data for a task type, it defers to the OS routing table.
+
+**Failure handling.** If the selected model is unavailable (API error, rate limit), the OS retries with the next model in the routing table's fallback chain. If no fallback is configured, the dispatch fails. The kernel records the original model selection and the actual model used (if fallback occurred) for Interspect analysis.
+
+**Budget semantics.** Token budgets on runs (`--token-budget`) are soft caps: the kernel emits `budget.warning` at the configured threshold percentage and `budget.exceeded` when the cap is crossed. The OS decides the response — kill, downgrade, or continue. Budgets are not hard enforcement in v1; they are observability signals.
 
 ## Development Model
 
@@ -324,7 +338,7 @@ Migrate Clavain from ephemeral state management to durable kernel-backed orchest
 
 At Level 2 autonomy, the OS runs an event reactor that drives automatic phase advancement. The reactor is an OS component — not a kernel daemon. The kernel remains stateless between CLI calls.
 
-**Process model.** The reactor runs as a long-lived process that tails the kernel event log via a consumer cursor. It subscribes to `dispatch.completed`, `gate.passed`, and `gate.failed` events, and invokes the kernel's run-advance operation when conditions are met. The OS does not poll state tables — it tails the event log.
+**Process model.** The reactor runs as a long-lived process that tails the kernel event log via a consumer cursor. It filters for `dispatch.completed`, `gate.passed`, and `gate.failed` events, and invokes the kernel's run-advance operation when conditions are met. The OS does not poll state tables — it tails the event log.
 
 **Lifecycle management.** The reactor can be deployed in three modes, each with increasing reliability:
 - **Session-scoped** (simplest): A Clavain hook starts the reactor at session start; it dies when the session ends. Suitable for interactive development where overnight runs are not expected.
@@ -340,7 +354,16 @@ A paused run does not auto-resume. The human reviews the failure, resolves the i
 
 **Manual recovery.** If the reactor is down and runs are stuck, manual advancement via the kernel CLI always works from any terminal. The reactor automates advancement, but the kernel CLI is always the escape hatch.
 
-**Stalled dispatch handling.** A dispatch killed without self-reporting (`kill -9`, OOM) remains in `running` state. The reconciliation engine detects orphaned dispatches and emits `reconciliation.anomaly` events. The `agents_complete` gate must accept dispatches confirmed dead by reconciliation as terminal states. The reconciliation polling interval (default: 60s) determines how quickly stalled dispatches are detected.
+**Stalled dispatch handling.** A dispatch killed without self-reporting (`kill -9`, OOM) remains in `running` state. The OS calls `ic dispatch reconcile` periodically (default: 60s), which detects orphaned dispatches and emits `reconciliation.anomaly` events. The `agents_complete` gate must accept dispatches confirmed dead by reconciliation as terminal states.
+
+**Operational contracts.**
+
+- **Idempotency of advance calls.** The kernel's optimistic concurrency (`WHERE phase = ?`) makes `ic run advance` idempotent at the kernel level — a duplicate advance receives `ErrStalePhase` and no state changes. The reactor must handle `ErrStalePhase` as a benign race (log and continue), not an error requiring intervention.
+- **Concurrent reactor safety.** Only one reactor instance per project should be active. Multiple reactors tailing the same event log would race on advance calls — the kernel prevents double-advancement, but the losing reactor wastes work. The managed service mode enforces single-instance via its service unit. Session-scoped mode is naturally single-instance per session.
+- **Causal ordering.** The reactor processes events in `rowid` order (insertion order within the event log). The kernel guarantees that state mutations and their events are written in the same transaction, so a `dispatch.completed` event is never visible before its state table update. The reactor can rely on event ordering matching causal ordering.
+- **Backoff and flapping prevention.** If the reactor receives repeated `gate.failed` events for the same run within a short window (e.g., 3 failures in 60 seconds), it must back off — stop attempting advancement for that run until a human intervenes or a qualifying event (new artifact, new dispatch completion) resets the failure count. Without backoff, a misconfigured gate could cause the reactor to spin on advance-fail-advance cycles.
+- **Consumer checkpoint recovery.** On restart, the reactor resumes from its durable cursor position (`ic events tail --consumer=clavain-reactor --durable`). Events between the last checkpoint and the crash are replayed. Because advance calls are idempotent, replaying already-processed events is safe — the kernel rejects duplicate transitions. The reactor should checkpoint its cursor after each successfully processed event batch.
+- **Reconciliation ownership.** The reconciliation loop (calling `ic dispatch reconcile`) runs in the same process as the reactor when deployed as a managed service, or as a periodic hook when deployed in session-scoped mode. It is an OS responsibility — the kernel provides the primitive, the OS schedules it.
 
 ### Track B: Model Routing
 
