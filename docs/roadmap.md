@@ -1,15 +1,15 @@
 # Clavain Roadmap
 
-**Version:** 0.6.42
-**Last updated:** 2026-02-19
-**Vision:** [`docs/vision.md`](vision.md)
+**Version:** 0.6.43
+**Last updated:** 2026-02-20
+**Vision:** [`docs/clavain-vision.md`](clavain-vision.md)
 **PRD:** [`docs/PRD.md`](PRD.md)
 
 ---
 
 ## Where We Are
 
-Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 21 hooks, 1 MCP server. 31 companion plugins in the inter-* constellation. 925 beads tracked, 590 closed, 334 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
+Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 21 hooks, 1 MCP server. 31 companion plugins in the inter-* constellation. 1000 beads tracked, 660 closed, 339 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
 
 ### What's Working
 
@@ -27,7 +27,7 @@ Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 2
 
 ### What's Not Working Yet
 
-- **Intercore integration incomplete.** Kernel primitives are built (E1-E2 done), but Clavain still uses shell-based state management. Hook cutover (E3) is the critical next step.
+- **Hook cutover complete, sprint handover pending.** E3 hook cutover shipped — all sprint state management uses `ic` CLI with beads fallback. Next: make the sprint skill fully kernel-driven (A2).
 - **No adaptive model routing.** Static routing exists (stage→model mapping), but no complexity-aware or outcome-driven selection.
 - **Agency architecture is implicit.** Sub-agencies (Discover/Design/Build/Ship) are encoded in skills and hooks, not in declarative specs or a fleet registry.
 - **Outcome measurement limited.** Interspect collects evidence but no override has been applied. Cost-per-change and quality metrics are unquantified.
@@ -40,13 +40,12 @@ Major features that landed since the 0.6.22 roadmap:
 
 | Feature | Description |
 |---------|-------------|
+| **E3 Hook cutover** | Clavain sprint state management migrated from beads-only to ic-primary with beads fallback. Sprint CRUD, agent tracking, phase advancement all flow through intercore. Migration script + event reactor hooks. |
 | **Intercore kernel (E1-E2)** | Go CLI + SQLite — runs, phases, gates, dispatches, events as durable state. Kernel primitives and event reactor shipped. |
-| **Vision rewrite** | New identity: autonomous software agency with three-layer architecture (Kernel/OS/Drivers) |
+| **Vision rewrite** | New identity: autonomous software agency with three-layer architecture (Kernel/OS/Drivers). 13 spec gaps closed. |
 | **12 new companions** | intermap, intermem, intersynth, interlens, interleave, interserve, interpeer, intertest, interkasten, interstat, interfluence, interphase v2 |
 | **Monorepo consolidation** | Physical monorepo at /root/projects/Interverse with 31 companion plugins |
-| **Hierarchical dispatch plan** | Meta-agent for N-agent fan-out (planned, iv-quk4) |
-| **tldrs LongCodeZip** | Block-level compression for token-efficient code context (planned, iv-2izz) |
-| **Version 0.6.22 → 0.6.42** | 20 version bumps |
+| **Version 0.6.22 → 0.6.43** | 21 version bumps |
 
 ---
 
@@ -60,8 +59,8 @@ Migrate Clavain from ephemeral state management to durable kernel-backed orchest
 
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
-| A1 | **Hook cutover** — all Clavain hooks call `ic` instead of temp files | iv-ngvy | Open (P1) | Intercore E1-E2 (done) |
-| A2 | **Sprint handover** — sprint skill becomes kernel-driven (hybrid → handover → kernel-driven) | — | Not yet created | A1 |
+| A1 | **Hook cutover** — all Clavain hooks call `ic` instead of temp files. ic-primary with beads fallback across sprint CRUD, agent tracking, and phase advancement. | iv-ngvy | **Done** | Intercore E1-E2 (done) |
+| A2 | **Sprint handover** — sprint skill becomes kernel-driven (hybrid → handover → kernel-driven) | — | Not yet created | A1 (done) |
 | A3 | **Event-driven advancement** — phase transitions trigger automatic agent dispatch | — | Not yet created | A2 |
 
 ### Track B: Model Routing
@@ -110,7 +109,7 @@ These Intercore epics are prerequisites for the tracks above:
 
 | Epic | What | Bead | Status |
 |------|------|------|--------|
-| E3 | Hook cutover — big-bang Clavain migration | iv-ngvy | Open (P1) |
+| E3 | Hook cutover — big-bang Clavain migration | iv-ngvy | **Done** |
 | E4 | Level 3 Adapt — Interspect kernel event integration | iv-thp7 | Open (P2) |
 | E5 | Discovery pipeline — kernel primitives for research intake | iv-fra3 | Open (P2) |
 | E6 | Rollback and recovery — three-layer revert | iv-0k8s | Open (P2) |
@@ -208,15 +207,19 @@ Research areas organized by proximity to current capabilities and aligned with t
 
 | Metric | Value |
 |--------|-------|
-| Total beads | 925 |
-| Closed | 590 |
-| Open | 334 |
+| Total beads | 1000 |
+| Closed | 660 |
+| Open | 339 |
 | In progress | 1 |
 
-Key active epics:
-- **iv-66so** — Vision refresh: autonomous software agency (P1, in progress)
-- **iv-ngvy** — E3: Hook cutover — big-bang Clavain migration to `ic` (P1)
-- **iv-yeka** — Update roadmap.md for new vision + parallel tracks (P1)
+Key completed epics:
+- **iv-66so** — Vision refresh: autonomous software agency (P1, done)
+- **iv-ngvy** — E3: Hook cutover — big-bang Clavain migration to `ic` (P1, done)
+
+Key active work:
+- **iv-yeka** — Update roadmap.md for new vision + parallel tracks (P1, in progress)
+- **iv-cyrw** — Create umbrella Interverse vision doc (P2, unblocked)
+- **iv-thp7** — E4: Level 3 Adapt — Interspect kernel event integration (P2)
 
 ---
 
@@ -234,7 +237,7 @@ Run `/interpath:roadmap` to regenerate from current project state.
 
 ---
 
-*Synthesized from: [`docs/vision.md`](vision.md), [`docs/PRD.md`](PRD.md), 925 beads, 31 companion plugins, and the Intercore kernel vision. Sources linked throughout.*
+*Synthesized from: [`docs/clavain-vision.md`](clavain-vision.md), [`docs/PRD.md`](PRD.md), 1000 beads, 31 companion plugins, and the Intercore kernel vision. Sources linked throughout.*
 
 ## From Interverse Roadmap
 
