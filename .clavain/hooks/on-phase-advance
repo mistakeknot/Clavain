@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Intercore event reactor: on-phase-advance
+# Receives Event JSON on stdin from ic's HookHandler.
+# Logs phase transitions for observability. Does NOT drive workflow.
+set -euo pipefail
+
+event=$(cat 2>/dev/null) || exit 0
+[[ -z "$event" ]] && exit 0
+
+run_id=$(echo "$event" | jq -r '.run_id // empty' 2>/dev/null) || exit 0
+from=$(echo "$event" | jq -r '.from_state // "?"' 2>/dev/null) || from="?"
+to=$(echo "$event" | jq -r '.to_state // "?"' 2>/dev/null) || to="?"
+reason=$(echo "$event" | jq -r '.reason // ""' 2>/dev/null) || reason=""
+
+printf '[ic-event] phase: %s → %s (run: %s)\n' "$from" "$to" "${run_id:0:12}" >&2
+if [[ -n "$reason" ]]; then
+    printf '[ic-event]   reason: %s\n' "$reason" >&2
+fi
+
+exit 0

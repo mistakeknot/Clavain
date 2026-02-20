@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Intercore event reactor: on-dispatch-change
+# Receives Event JSON on stdin from ic's HookHandler.
+# Logs dispatch lifecycle events for observability.
+set -euo pipefail
+
+event=$(cat 2>/dev/null) || exit 0
+[[ -z "$event" ]] && exit 0
+
+run_id=$(echo "$event" | jq -r '.run_id // empty' 2>/dev/null) || exit 0
+from=$(echo "$event" | jq -r '.from_state // "?"' 2>/dev/null) || from="?"
+to=$(echo "$event" | jq -r '.to_state // "?"' 2>/dev/null) || to="?"
+
+printf '[ic-event] dispatch: %s → %s (run: %s)\n' "$from" "$to" "${run_id:0:12}" >&2
+
+exit 0
