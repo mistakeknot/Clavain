@@ -75,8 +75,14 @@ if [[ -f ".clavain/scratch/inflight-agents.json" ]]; then
     fi
 fi
 
-# No signals — clean exit, no handoff needed
+# No signals — clean exit, no handoff needed.
+# Release the shared stop sentinel so compound/drift hooks can still fire.
 if [[ -z "$SIGNALS" ]]; then
+    if type intercore_sentinel_reset_or_legacy &>/dev/null; then
+        intercore_sentinel_reset_or_legacy "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" "/tmp/clavain-stop-${SESSION_ID}"
+    else
+        rm -f "/tmp/clavain-stop-${SESSION_ID}" 2>/dev/null || true
+    fi
     exit 0
 fi
 

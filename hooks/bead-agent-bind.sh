@@ -34,9 +34,12 @@ EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_result.exit_code // .stdout // ""' 2>/d
 ISSUE_ID=$(echo "$COMMAND" | grep -oP '(?<=bd (?:update|claim) )\S+' 2>/dev/null) || exit 0
 [[ -n "$ISSUE_ID" ]] || exit 0
 
+# Check if command succeeded — don't bind on failed claims
+[[ "$EXIT_CODE" == "0" || -z "$EXIT_CODE" ]] || exit 0
+
 # Check existing agent metadata for conflicts
-CURRENT_META=$(bd show "$ISSUE_ID" --format '{{.Metadata}}' 2>/dev/null) || CURRENT_META=""
-EXISTING_AGENT=$(echo "$CURRENT_META" | grep -oP '"agent_id"\s*:\s*"\K[^"]+' 2>/dev/null) || EXISTING_AGENT=""
+CURRENT_META=$(bd show "$ISSUE_ID" --json 2>/dev/null | jq -r '.metadata // empty' 2>/dev/null) || CURRENT_META=""
+EXISTING_AGENT=$(echo "$CURRENT_META" | jq -r '.agent_id // empty' 2>/dev/null) || EXISTING_AGENT=""
 
 # If same agent already bound, nothing to do
 if [[ -n "$EXISTING_AGENT" && "$EXISTING_AGENT" == "$INTERMUTE_AGENT_ID" ]]; then
@@ -45,7 +48,8 @@ fi
 
 # If a *different* agent is already bound, check if they're still online and warn
 if [[ -n "$EXISTING_AGENT" && "$EXISTING_AGENT" != "$INTERMUTE_AGENT_ID" ]]; then
-    EXISTING_NAME=$(echo "$CURRENT_META" | grep -oP '"agent_name"\s*:\s*"\K[^"]+' 2>/dev/null) || EXISTING_NAME="${EXISTING_AGENT:0:8}"
+    EXISTING_NAME=$(echo "$CURRENT_META" | jq -r '.agent_name // empty' 2>/dev/null) || EXISTING_NAME="${EXISTING_AGENT:0:8}"
+    [[ -n "$EXISTING_NAME" ]] || EXISTING_NAME="${EXISTING_AGENT:0:8}"
     OVERLAP_WARNING=""
 
     # Check if the other agent is still online

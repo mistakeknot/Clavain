@@ -5,7 +5,7 @@ set -euo pipefail
 
 INPUT="$(cat)"
 
-FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)" || true
+FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.edits[0].file_path // empty' 2>/dev/null)" || true
 [ -z "$FILE_PATH" ] && exit 0
 
 # Match component file patterns

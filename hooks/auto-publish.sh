@@ -37,8 +37,13 @@ main() {
     # Fast exit: not a git push (~5ms path for 99% of Bash calls)
     [[ "$cmd" == *"git push"* ]] || exit 0
 
+    # Skip if the original push failed
+    local exit_code
+    exit_code="$(jq -r '.tool_result.exit_code // "0"' <<<"$payload" 2>/dev/null || true)"
+    [[ "$exit_code" == "0" ]] || exit 0
+
     # Skip any force pushes (--force, -f, --force-with-lease, --no-verify)
-    [[ "$cmd" != *"--force"* && "$cmd" != *"-f "* ]] || exit 0
+    [[ "$cmd" != *"--force"* && "$cmd" != *"-f "* && "$cmd" != *"--no-verify"* ]] || exit 0
 
     # Skip non-main branch pushes
     local branch

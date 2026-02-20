@@ -23,9 +23,22 @@ fi
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
-# Check if Stop handoff already fired — if so, nothing to do
+# Check if Stop handoff already fired — if so, nothing to do.
+# Check both temp file (legacy) and IC sentinel (when available).
 if [[ -f "/tmp/clavain-handoff-${SESSION_ID}" ]]; then
     exit 0
+fi
+# shellcheck source=hooks/lib-intercore.sh
+source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
+if intercore_available 2>/dev/null; then
+    # IC sentinel was claimed by session-handoff.sh — check if it exists
+    if ! intercore_sentinel_check_or_legacy "handoff" "$SESSION_ID" 0 "/tmp/clavain-handoff-${SESSION_ID}" 2>/dev/null; then
+        # Sentinel exists (throttled) — Stop handoff already ran
+        exit 0
+    fi
+    # If we got here, sentinel didn't exist — Stop handoff didn't fire.
+    # Reset the sentinel we just claimed so this check doesn't interfere.
+    intercore_sentinel_reset_or_legacy "handoff" "$SESSION_ID" "/tmp/clavain-handoff-${SESSION_ID}" 2>/dev/null || true
 fi
 
 # Check if .clavain directory exists (we're in a Clavain-aware project)

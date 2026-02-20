@@ -47,7 +47,7 @@ intercore_check_or_die "drift_throttle" "$SESSION_ID" 600 "/tmp/clavain-drift-la
 
 # Guard: interwatch must be installed
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib.sh"
+source "${SCRIPT_DIR}/lib.sh" 2>/dev/null || true
 INTERWATCH_ROOT=$(_discover_interwatch_plugin)
 if [[ -z "$INTERWATCH_ROOT" ]]; then
     exit 0
