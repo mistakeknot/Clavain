@@ -1,6 +1,8 @@
 # Clavain: Vision and Philosophy
 
 > **Reading context.** Cross-doc links in this document use relative paths within the [Interverse monorepo](https://github.com/mistakeknot/Interverse). If reading outside the repo, refer to the linked docs by name in their respective subprojects.
+>
+> **See also:** [Architecture diagram](../../../docs/architecture.md)
 
 ## What Clavain Is
 
