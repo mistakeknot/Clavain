@@ -1,5 +1,7 @@
 # Clavain: Vision and Philosophy
 
+> **Reading context.** Cross-doc links in this document use relative paths within the [Interverse monorepo](https://github.com/mistakeknot/Interverse). If reading outside the repo, refer to the linked docs by name in their respective subprojects.
+
 ## What Clavain Is
 
 Clavain is an autonomous software agency. It orchestrates the full development lifecycle — from problem discovery through shipped code — using heterogeneous AI models selected for cost, capability, and task fit. Each phase of development is a sub-agency with its own model routing, agent composition, and quality gates. The agency drives execution; the human decides direction.
@@ -42,7 +44,7 @@ Interspect (Profiler) — cross-cutting
 └── Never modifies the kernel — only the OS layer
 ```
 
-The guiding principle: the system of record is in the kernel; the policy authority is in the OS; the interactive surfaces are swappable apps. If a host platform disappears, you lose UX convenience but not capability. For details on the apps layer, see the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md). For term definitions, see the [shared glossary](../../../infra/intercore/docs/product/glossary.md).
+The guiding principle: the system of record is in the kernel; the policy authority is in the OS; the interactive surfaces are swappable apps. If a host platform disappears, you lose UX convenience but not capability. For details on the apps layer, see the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md) (planned). For term definitions, see the [shared glossary](../../../infra/intercore/docs/product/glossary.md).
 
 **Write-path contract.** The OS is the sole policy authority for kernel mutations. Companion plugins produce capability results (artifacts, evidence, telemetry) but do not create/advance runs or define gate rules. Apps submit intents to the OS — they do not call kernel primitives for policy-governing operations. See the [Intercore vision doc](../../../infra/intercore/docs/product/intercore-vision.md) for the full write-path contract table.
 
@@ -181,10 +183,10 @@ Kernel events              thresholds shift             link related work
 | **Low** | 0.3 – 0.5 | Log only, searchable via kernel discovery API |
 | **Discard** | < 0.3 | Record with `discarded` status for negative signal |
 
-**Adaptive thresholds.** Tier boundaries shift based on the promotion-to-discovery ratio. If humans consistently promote Medium items (>30% rate), the High threshold lowers by 0.02 per feedback cycle. If humans consistently dismiss High items (<10% rate), the threshold rises. Convergence toward human judgment is tracked by Interspect.
+**Adaptive thresholds.** Tier boundaries shift based on the promotion-to-discovery ratio. If humans consistently promote Medium items (>30% promotion rate — chosen as the point where manual triage cost exceeds auto-triage risk), the High threshold lowers by 0.02 per feedback cycle (small step to prevent oscillation). If humans consistently dismiss High items (<10% rate), the threshold rises. These defaults are tunable per-project. Convergence toward human judgment is tracked by Interspect.
 
 **Backlog refinement rules.** The OS applies refinement policy using kernel primitives:
-- **Deduplication** — kernel enforces cosine similarity threshold (default 0.85); duplicates link as evidence to existing beads
+- **Deduplication** — kernel enforces cosine similarity threshold (default 0.85, empirically tuned against interject's all-MiniLM-L6-v2 embeddings — adjust per embedding model); duplicates link as evidence to existing beads
 - **Priority escalation** — 3+ independent sources within 7 days triggers priority bump
 - **Dependency suggestion** — cross-references between discoveries propose bead dependency links (human confirms)
 - **Staleness decay** — kernel decays priority on inactive beads (default: one level per 30 days); fresh evidence reverses decay
@@ -316,7 +318,7 @@ The ecosystem has three layers — kernel (infrastructure), OS (agency + compani
 | intershift | Cross-AI dispatch is generalizable | Planned |
 | interscribe | Knowledge compounding is generalizable | Planned |
 
-**Apps (Autarch)** — Bigend (monitoring), Gurgeh (PRD generation), Coldwine (task orchestration), Pollard (research intelligence). See the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md).
+**Apps (Autarch)** — Bigend (monitoring), Gurgeh (PRD generation), Coldwine (task orchestration), Pollard (research intelligence). See the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md) (planned).
 
 The naming convention follows a consistent metaphor: each companion occupies the space *between* two things. interphase (between phases), interline (between lines), interflux (between flows), interpath (between paths of artifacts), interwatch (between watches of freshness), intershift (between shifts of context). They are bridges and boundary layers, not monoliths.
 
@@ -354,7 +356,7 @@ A paused run does not auto-resume. The human reviews the failure, resolves the i
 
 **Manual recovery.** If the reactor is down and runs are stuck, manual advancement via the kernel CLI always works from any terminal. The reactor automates advancement, but the kernel CLI is always the escape hatch.
 
-**Stalled dispatch handling.** A dispatch killed without self-reporting (`kill -9`, OOM) remains in `running` state. The OS calls `ic dispatch reconcile` periodically (default: 60s), which detects orphaned dispatches and emits `reconciliation.anomaly` events. The `agents_complete` gate must accept dispatches confirmed dead by reconciliation as terminal states.
+**Stalled dispatch handling.** A dispatch killed without self-reporting (`kill -9`, OOM) remains in `running` state. The OS calls `ic dispatch reconcile` periodically (default: 60s — fast enough to catch most stalls within one phase transition, cheap enough to run continuously), which detects orphaned dispatches and emits `reconciliation.anomaly` events. The `agents_complete` gate must accept dispatches confirmed dead by reconciliation as terminal states.
 
 **Operational contracts.**
 
@@ -441,7 +443,7 @@ Clavain is well-positioned to explore open questions at the intersection of mult
 
 **Not a platform.** That's Intercore. Clavain is the opinionated agency built on the platform. The inter-* constellation offers composable pieces that anyone can adopt independently, but the agency as a whole is not designed to be "framework-agnostic" or "configurable for any workflow."
 
-**Not a general AI gateway.** That's what OpenClaw does. Clavain doesn't route arbitrary messages to arbitrary agents. It orchestrates software development — it has opinions about what "good" looks like at every phase, and those opinions are encoded in gates, review agents, and quality disciplines.
+**Not a general AI gateway.** That's what projects like OpenClaw (general-purpose AI message routing) do. Clavain doesn't route arbitrary messages to arbitrary agents. It orchestrates software development — it has opinions about what "good" looks like at every phase, and those opinions are encoded in gates, review agents, and quality disciplines.
 
 **Not a coding assistant.** That's what Cursor and similar tools do. Clavain doesn't help you write code; it *builds software* — the full lifecycle from problem discovery through shipped, reviewed, tested, compounded code. The coding is one phase of four.
 
