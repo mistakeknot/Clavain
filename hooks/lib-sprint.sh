@@ -68,11 +68,11 @@ sprint_create() {
         return 0
     fi
 
-    bd set-state "$sprint_id" "sprint=true" 2>/dev/null || {
-        bd update "$sprint_id" --status=cancelled 2>/dev/null || true
+    bd set-state "$sprint_id" "sprint=true" >/dev/null 2>&1 || {
+        bd update "$sprint_id" --status=cancelled >/dev/null 2>&1 || true
         echo ""; return 0
     }
-    bd update "$sprint_id" --status=in_progress 2>/dev/null || true
+    bd update "$sprint_id" --status=in_progress >/dev/null 2>&1 || true
 
     # Create ic run linked to bead via scope-id
     local phases_json='["brainstorm","brainstorm-reviewed","strategized","planned","plan-reviewed","executing","shipping","done"]'
@@ -81,17 +81,17 @@ sprint_create() {
 
     if [[ -z "$run_id" ]]; then
         echo "sprint_create: ic run create failed, cancelling bead $sprint_id" >&2
-        bd update "$sprint_id" --status=cancelled 2>/dev/null || true
+        bd update "$sprint_id" --status=cancelled >/dev/null 2>&1 || true
         echo ""
         return 0
     fi
 
     # Store run_id on bead — CRITICAL: this is the join key that makes ic path work.
     # If this write fails, the ic run is unreachable through sprint API.
-    bd set-state "$sprint_id" "ic_run_id=$run_id" 2>/dev/null || {
+    bd set-state "$sprint_id" "ic_run_id=$run_id" >/dev/null 2>&1 || {
         echo "sprint_create: failed to write ic_run_id to bead, cancelling" >&2
         "$INTERCORE_BIN" run cancel "$run_id" 2>/dev/null || true
-        bd update "$sprint_id" --status=cancelled 2>/dev/null || true
+        bd update "$sprint_id" --status=cancelled >/dev/null 2>&1 || true
         echo ""
         return 0
     }
@@ -101,7 +101,7 @@ sprint_create() {
     verify_phase=$(intercore_run_phase "$run_id") || verify_phase=""
     if [[ "$verify_phase" != "brainstorm" ]]; then
         echo "sprint_create: ic run verification failed, cancelling bead $sprint_id" >&2
-        bd update "$sprint_id" --status=cancelled 2>/dev/null || true
+        bd update "$sprint_id" --status=cancelled >/dev/null 2>&1 || true
         echo ""
         return 0
     fi
@@ -115,7 +115,7 @@ sprint_create() {
 sprint_finalize_init() {
     local sprint_id="$1"
     [[ -z "$sprint_id" ]] && return 0
-    bd set-state "$sprint_id" "sprint_initialized=true" 2>/dev/null || true
+    bd set-state "$sprint_id" "sprint_initialized=true" >/dev/null 2>&1 || true
     # NOTE: bead→run link is already stored via ic_run_id on bead + scope_id on run.
     # No redundant sprint_link ic state write needed (YAGNI — removed per arch review).
 }
@@ -311,7 +311,7 @@ sprint_set_artifact() {
     if [[ -n "$run_id" ]] && intercore_available; then
         local phase
         phase=$(intercore_run_phase "$run_id") || phase="unknown"
-        intercore_run_artifact_add "$run_id" "$phase" "$artifact_path" "$artifact_type" 2>/dev/null || true
+        intercore_run_artifact_add "$run_id" "$phase" "$artifact_path" "$artifact_type" >/dev/null 2>&1 || true
         return 0
     fi
 
@@ -322,7 +322,7 @@ sprint_set_artifact() {
     echo "$current" | jq empty 2>/dev/null || current="{}"
     local updated
     updated=$(echo "$current" | jq --arg type "$artifact_type" --arg path "$artifact_path" '.[$type] = $path')
-    bd set-state "$sprint_id" "sprint_artifacts=$updated" 2>/dev/null || true
+    bd set-state "$sprint_id" "sprint_artifacts=$updated" >/dev/null 2>&1 || true
     intercore_unlock "sprint" "$sprint_id"
 }
 
@@ -352,7 +352,7 @@ sprint_record_phase_completion() {
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     key="${phase}_at"
     updated=$(echo "$current" | jq --arg key "$key" --arg ts "$ts" '.[$key] = $ts')
-    bd set-state "$sprint_id" "phase_history=$updated" 2>/dev/null || true
+    bd set-state "$sprint_id" "phase_history=$updated" >/dev/null 2>&1 || true
     intercore_unlock "sprint" "$sprint_id"
     sprint_invalidate_caches
 }
@@ -406,11 +406,11 @@ sprint_claim() {
             # Stale — mark old agent as failed, then claim
             local old_agent_id
             old_agent_id=$(echo "$active_agents" | jq -r '.[0].id')
-            intercore_run_agent_update "$old_agent_id" "failed" 2>/dev/null || true
+            intercore_run_agent_update "$old_agent_id" "failed" >/dev/null 2>&1 || true
         fi
 
         # Register this session as an agent
-        intercore_run_agent_add "$run_id" "session" "$session_id" 2>/dev/null || true
+        intercore_run_agent_add "$run_id" "session" "$session_id" >/dev/null 2>&1 || true
         intercore_unlock "sprint-claim" "$sprint_id"
         return 0
     fi
@@ -444,8 +444,8 @@ sprint_claim() {
     fi
     local ts
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    bd set-state "$sprint_id" "active_session=$session_id" 2>/dev/null || true
-    bd set-state "$sprint_id" "claim_timestamp=$ts" 2>/dev/null || true
+    bd set-state "$sprint_id" "active_session=$session_id" >/dev/null 2>&1 || true
+    bd set-state "$sprint_id" "claim_timestamp=$ts" >/dev/null 2>&1 || true
     local verify
     verify=$(bd state "$sprint_id" active_session 2>/dev/null) || verify=""
     intercore_unlock "sprint-claim" "$sprint_id"
@@ -471,14 +471,14 @@ sprint_release() {
         agents_json=$(intercore_run_agent_list "$run_id") || agents_json="[]"
         echo "$agents_json" | jq -r '.[] | select(.status == "active" and .agent_type == "session") | .id' | \
             while read -r agent_id; do
-                intercore_run_agent_update "$agent_id" "completed" 2>/dev/null || true
+                intercore_run_agent_update "$agent_id" "completed" >/dev/null 2>&1 || true
             done
         return 0
     fi
 
     # Fallback: beads-based
-    bd set-state "$sprint_id" "active_session=" 2>/dev/null || true
-    bd set-state "$sprint_id" "claim_timestamp=" 2>/dev/null || true
+    bd set-state "$sprint_id" "active_session=" >/dev/null 2>&1 || true
+    bd set-state "$sprint_id" "claim_timestamp=" >/dev/null 2>&1 || true
 }
 
 # ─── Agent Tracking ──────────────────────────────────────────────
@@ -515,7 +515,7 @@ sprint_complete_agent() {
     [[ -z "$agent_id" ]] && return 0
 
     if intercore_available; then
-        intercore_run_agent_update "$agent_id" "$status" 2>/dev/null || true
+        intercore_run_agent_update "$agent_id" "$status" >/dev/null 2>&1 || true
     fi
 }
 
@@ -719,7 +719,7 @@ sprint_advance() {
         echo "stale_phase|$current_phase|Phase already advanced to $actual_phase"
         return 1
     fi
-    bd set-state "$sprint_id" "phase=$next_phase" 2>/dev/null || true
+    bd set-state "$sprint_id" "phase=$next_phase" >/dev/null 2>&1 || true
     sprint_record_phase_completion "$sprint_id" "$next_phase"
     intercore_unlock "sprint-advance" "$sprint_id"
     echo "Phase: $current_phase → $next_phase (auto-advancing)" >&2

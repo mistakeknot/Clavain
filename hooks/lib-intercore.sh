@@ -218,16 +218,16 @@ intercore_run_artifact_add() {
 }
 
 # intercore_run_create — Create a new run.
-# Args: $1=project_dir, $2=goal, $3=phases_json (optional), $4=scope_id (optional), $5=complexity (optional)
+# Args: $1=project_dir, $2=goal, $3=phases_json (ignored — ic uses DefaultPhaseChain),
+#       $4=scope_id (optional), $5=complexity (optional)
 # Prints: run ID to stdout
 # Returns: 0 on success, 1 on failure
 intercore_run_create() {
-    local project="$1" goal="$2" phases="${3:-}" scope_id="${4:-}" complexity="${5:-3}"
+    local project="$1" goal="$2" _phases="${3:-}" scope_id="${4:-}" complexity="${5:-3}"
     if ! intercore_available; then return 1; fi
     local args=(run create --project="$project" --goal="$goal" --complexity="$complexity")
-    if [[ -n "$phases" ]]; then
-        args+=(--phases="$phases")
-    fi
+    # NOTE: --phases is not a valid ic flag. The sprint phase chain matches
+    # intercore's DefaultPhaseChain, so no custom phases needed.
     if [[ -n "$scope_id" ]]; then
         args+=(--scope-id="$scope_id")
     fi
