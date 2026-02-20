@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# DEPRECATED: Gate enforcement now uses ic gate check/override via lib-intercore.sh.
+# This shim is retained for backward compatibility with non-sprint code that
+# still calls check_phase_gate or advance_phase directly.
+# Sprint gate enforcement goes through enforce_gate() in lib-sprint.sh → intercore_gate_check.
+#
 # Shim: delegates to interphase plugin if installed, otherwise provides no-op stubs.
 # Original implementation lives in the interphase companion plugin.
 

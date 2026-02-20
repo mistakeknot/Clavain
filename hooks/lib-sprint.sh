@@ -17,9 +17,9 @@ SPRINT_LIB_PROJECT_DIR="${SPRINT_LIB_PROJECT_DIR:-.}"
 _SPRINT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SPRINT_LIB_DIR}/lib.sh" 2>/dev/null || true
 
-# Source gates for advance_phase (via shim → interphase)
+# Gate enforcement now uses ic gate check via enforce_gate() → intercore_gate_check.
+# lib-gates.sh is deprecated — no longer sourced here.
 export GATES_PROJECT_DIR="$SPRINT_LIB_PROJECT_DIR"
-source "${_SPRINT_LIB_DIR}/lib-gates.sh" 2>/dev/null || true
 
 # ─── jq dependency check ─────────────────────────────────────────
 # jq is required for all JSON operations. Stub out functions if missing.
