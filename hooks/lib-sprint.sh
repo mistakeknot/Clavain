@@ -101,6 +101,7 @@ sprint_create() {
     verify_phase=$(intercore_run_phase "$run_id") || verify_phase=""
     if [[ "$verify_phase" != "brainstorm" ]]; then
         echo "sprint_create: ic run verification failed, cancelling bead $sprint_id" >&2
+        "$INTERCORE_BIN" run cancel "$run_id" 2>/dev/null || true
         bd update "$sprint_id" --status=cancelled >/dev/null 2>&1 || true
         echo ""
         return 0
@@ -409,8 +410,12 @@ sprint_claim() {
             intercore_run_agent_update "$old_agent_id" "failed" >/dev/null 2>&1 || true
         fi
 
-        # Register this session as an agent
-        intercore_run_agent_add "$run_id" "session" "$session_id" >/dev/null 2>&1 || true
+        # Register this session as an agent — failure must not silently succeed
+        if ! intercore_run_agent_add "$run_id" "session" "$session_id" >/dev/null 2>&1; then
+            echo "sprint_claim: failed to register session agent for $sprint_id" >&2
+            intercore_unlock "sprint-claim" "$sprint_id"
+            return 1
+        fi
         intercore_unlock "sprint-claim" "$sprint_id"
         return 0
     fi
@@ -467,12 +472,13 @@ sprint_release() {
     if [[ -n "$run_id" ]] && intercore_available; then
         # Mark all active session agents as completed.
         # NOTE: release failure is recoverable via the 60-minute staleness TTL in sprint_claim.
-        local agents_json
+        local agents_json agent_ids
         agents_json=$(intercore_run_agent_list "$run_id") || agents_json="[]"
-        echo "$agents_json" | jq -r '.[] | select(.status == "active" and .agent_type == "session") | .id' | \
-            while read -r agent_id; do
-                intercore_run_agent_update "$agent_id" "completed" >/dev/null 2>&1 || true
-            done
+        agent_ids=$(echo "$agents_json" | jq -r '.[] | select(.status == "active" and .agent_type == "session") | .id' 2>/dev/null) || agent_ids=""
+        while read -r agent_id; do
+            [[ -z "$agent_id" ]] && continue
+            intercore_run_agent_update "$agent_id" "completed" >/dev/null 2>&1 || true
+        done <<< "$agent_ids"
         return 0
     fi
 

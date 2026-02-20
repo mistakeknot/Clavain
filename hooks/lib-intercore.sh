@@ -56,7 +56,7 @@ intercore_sentinel_check() {
 # Args: $1=name, $2=scope_id, $3=interval, $4=legacy_file (ignored)
 # Returns: 0 if allowed, 1 if throttled
 intercore_sentinel_check_or_legacy() {
-    local name="$1" scope_id="$2" interval="$3"
+    local name="$1" scope_id="$2" interval="$3" _legacy_file="${4:-}"
     if ! intercore_available; then
         # No ic = no throttle (fail-open for non-critical hooks)
         return 0
@@ -71,7 +71,7 @@ intercore_sentinel_check_or_legacy() {
 # intercore_check_or_die — check sentinel, exit 0 if throttled.
 # Args: $1=name, $2=scope_id, $3=interval, $4=legacy_path (ignored)
 intercore_check_or_die() {
-    local name="$1" scope_id="$2" interval="$3"
+    local name="$1" scope_id="$2" interval="$3" _legacy_path="${4:-}"
     if intercore_available; then
         intercore_sentinel_check "$name" "$scope_id" "$interval" || exit 0
         return 0
@@ -83,7 +83,7 @@ intercore_check_or_die() {
 # intercore_sentinel_reset_or_legacy — reset sentinel via ic.
 # Args: $1=name, $2=scope_id, $3=legacy_glob (ignored)
 intercore_sentinel_reset_or_legacy() {
-    local name="$1" scope_id="$2"
+    local name="$1" scope_id="$2" _legacy_glob="${3:-}"
     if ! intercore_available; then return 0; fi
     "$INTERCORE_BIN" sentinel reset "$name" "$scope_id" >/dev/null 2>&1 || true
 }

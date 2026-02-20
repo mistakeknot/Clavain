@@ -70,13 +70,16 @@ for (( i=0; i<count; i++ )); do
     orphan_count=$(echo "$existing_json" | jq 'length' 2>/dev/null) || orphan_count=0
     if [[ "$orphan_count" -gt 0 ]]; then
         echo "  WARN: Found $orphan_count orphaned ic run(s) for $bead_id, cancelling"
-        echo "$existing_json" | jq -r '.[].id' | while read -r orphan_id; do
+        local orphan_ids
+        orphan_ids=$(echo "$existing_json" | jq -r '.[].id' 2>/dev/null) || orphan_ids=""
+        while read -r orphan_id; do
+            [[ -z "$orphan_id" ]] && continue
             ic run cancel "$orphan_id" 2>/dev/null || true
-        done
+        done <<< "$orphan_ids"
     fi
 
-    # Create ic run
-    run_id=$(ic run create --project="$(pwd)" --goal="$title" --phases="$PHASES_JSON" --scope-id="$bead_id" 2>/dev/null) || run_id=""
+    # Create ic run (no --phases: sprint chain matches DefaultPhaseChain)
+    run_id=$(ic run create --project="$(pwd)" --goal="$title" --scope-id="$bead_id" 2>/dev/null) || run_id=""
     if [[ -z "$run_id" ]]; then
         echo "  ERROR: ic run create failed"
         ERRORS=$((ERRORS + 1))
@@ -95,10 +98,14 @@ for (( i=0; i<count; i++ )); do
         [[ "$p" == "$phase" ]] && break
         [[ "$p" == "$current_ic_phase" ]] || continue
         ic run skip "$run_id" "$p" --reason="historical-migration" 2>/dev/null || { skip_failed=true; break; }
-        # Find the next phase in the array
+        # Find the next phase in the array (bounds-checked)
         for (( j=0; j<${#phases_array[@]}; j++ )); do
             if [[ "${phases_array[$j]}" == "$p" ]]; then
-                current_ic_phase="${phases_array[$((j+1))]}"
+                if (( j+1 < ${#phases_array[@]} )); then
+                    current_ic_phase="${phases_array[$((j+1))]}"
+                else
+                    current_ic_phase="done"
+                fi
                 break
             fi
         done
