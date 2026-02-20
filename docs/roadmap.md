@@ -30,7 +30,7 @@ Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 2
 - **Hook cutover complete, sprint handover pending.** E3 hook cutover shipped — all sprint state management uses `ic` CLI with beads fallback. Next: make the sprint skill fully kernel-driven (A2).
 - **No adaptive model routing.** Static routing exists (stage→model mapping), but no complexity-aware or outcome-driven selection.
 - **Agency architecture is implicit.** Sub-agencies (Discover/Design/Build/Ship) are encoded in skills and hooks, not in declarative specs or a fleet registry.
-- **Outcome measurement limited.** Interspect collects evidence but no override has been applied. Cost-per-change and quality metrics are unquantified.
+- **Outcome measurement limited.** Interspect collects evidence but no override has been applied. Cost-per-change and quality metrics are unquantified. (Token budgets now tracked per-sprint via iv-pbmc, done.)
 
 ---
 
@@ -60,8 +60,8 @@ Migrate Clavain from ephemeral state management to durable kernel-backed orchest
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
 | A1 | **Hook cutover** — all Clavain hooks call `ic` instead of temp files. ic-primary with beads fallback across sprint CRUD, agent tracking, and phase advancement. | iv-ngvy | **Done** | Intercore E1-E2 (done) |
-| A2 | **Sprint handover** — sprint skill becomes kernel-driven (hybrid → handover → kernel-driven) | — | Not yet created | A1 (done) |
-| A3 | **Event-driven advancement** — phase transitions trigger automatic agent dispatch | — | Not yet created | A2 |
+| A2 | **Sprint handover** — sprint skill becomes kernel-driven (hybrid → handover → kernel-driven) | iv-kj6w | Open (P1) | A1 (done) |
+| A3 | **Event-driven advancement** — phase transitions trigger automatic agent dispatch | iv-r9j2 | Open (P2) | A2 |
 
 ### Track B: Model Routing
 
@@ -69,9 +69,9 @@ Build the multi-model routing infrastructure from static to adaptive.
 
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
-| B1 | **Static routing table** — phase→model mapping declared in config, applied at dispatch | — | Not yet created | — |
-| B2 | **Complexity-aware routing** — task complexity drives model selection within phases. Design with zero-cost abstraction (disabled = static path, no overhead) and shadow mode for safe rollout. See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §3. | — | Not yet created | Intercore token tracking (E1) |
-| B3 | **Adaptive routing** — Interspect outcome data drives model/agent selection | — | Not yet created | Interspect kernel integration (iv-thp7) |
+| B1 | **Static routing table** — phase→model mapping declared in config, applied at dispatch | iv-dd9q | Open (P2) | — |
+| B2 | **Complexity-aware routing** — task complexity drives model selection within phases. Design with zero-cost abstraction (disabled = static path, no overhead) and shadow mode for safe rollout. See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §3. | iv-k8xn | Open (P2) | B1 |
+| B3 | **Adaptive routing** — Interspect outcome data drives model/agent selection | iv-i198 | Open (P3) | B2, Interspect (iv-thp7) |
 
 ### Track C: Agency Architecture
 
@@ -79,11 +79,11 @@ Build the agency composition layer that makes Clavain a fleet of specialized sub
 
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
-| C1 | **Agency specs** — declarative per-stage config: agents, models, tools, artifacts, gates. Include companion capability declarations (`capabilities` field in manifests). See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §2. | — | Not yet created | — |
-| C2 | **Agent fleet registry** — capability + cost profiles per agent×model combination | — | Not yet created | B1 |
-| C3 | **Composer** — matches agency specs to fleet registry within budget constraints | — | Not yet created | C1, C2 |
-| C4 | **Cross-phase handoff** — structured protocol for how Discover's output becomes Design's input | — | Not yet created | C1 |
-| C5 | **Self-building loop** — Clavain uses its own agency specs to run its own development sprints | — | Not yet created | C3, C4, A3 |
+| C1 | **Agency specs** — declarative per-stage config: agents, models, tools, artifacts, gates. Include companion capability declarations (`capabilities` field in manifests). See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §2. | iv-asfy | Open (P2) | — |
+| C2 | **Agent fleet registry** — capability + cost profiles per agent×model combination | iv-lx00 | Open (P2) | B1, C1 |
+| C3 | **Composer** — matches agency specs to fleet registry within budget constraints | iv-240m | Open (P3) | C1, C2 |
+| C4 | **Cross-phase handoff** — structured protocol for how Discover's output becomes Design's input | iv-1vny | Open (P3) | C1 |
+| C5 | **Self-building loop** — Clavain uses its own agency specs to run its own development sprints | iv-6ixw | Open (P3) | C3, C4, A3 |
 
 ### Convergence
 
@@ -217,11 +217,13 @@ Key completed epics:
 - **iv-ngvy** — E3: Hook cutover — big-bang Clavain migration to `ic` (P1, done)
 
 Key active work:
+- **iv-kj6w** — A2: Sprint handover — sprint skill becomes kernel-driven (P1)
 - **iv-thp7** — E4: Level 3 Adapt — Interspect kernel event integration (P2)
 
 Recently closed:
+- **iv-pbmc** — Cost-aware agent scheduling with token budgets (P1, done)
+- **iv-3krg** — Wire /reflect step into sprint.md orchestration (P2, done)
 - **iv-yeka** — Update roadmap.md for new vision + parallel tracks (P1, done)
-- **iv-cyrw** — Create umbrella Interverse vision doc (P2, done)
 
 ---
 
