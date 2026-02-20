@@ -6,6 +6,9 @@ set -euo pipefail
 # Read hook input from stdin (must happen before anything else consumes it)
 HOOK_INPUT=$(cat)
 
+# Detect trigger type (startup, resume, clear, compact)
+_hook_source=$(echo "$HOOK_INPUT" | jq -r '.source // "startup"' 2>/dev/null) || _hook_source="startup"
+
 # Determine plugin root directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -225,48 +228,53 @@ if [[ -n "$handoff_file" ]]; then
 fi
 
 # In-flight agent detection (from previous sessions)
-# Two sources: (1) manifest from Stop hook, (2) live filesystem scan
+# Skip on compact — agents were already delivered this session; re-detecting
+# them produces stale notifications that flood the context.
 inflight_context=""
-_current_session=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _current_session=""
+if [[ "$_hook_source" == "compact" ]]; then
+    inflight_context="\\n\\n**Context was compacted.** Task-notifications from background agents received after this point may reference work already completed or reviewed. Check agent output freshness before re-actioning."
+else
+    _current_session=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _current_session=""
 
-# Source 1: Manifest file (written by Stop hook)
-if [[ -f ".clavain/scratch/inflight-agents.json" ]]; then
-    _manifest_agents=""
-    _manifest_session=$(jq -r '.session_id // "unknown"' ".clavain/scratch/inflight-agents.json" 2>/dev/null) || _manifest_session="unknown"
-    while IFS= read -r _agent_line; do
-        [[ -z "$_agent_line" ]] && continue
-        _agent_id=$(echo "$_agent_line" | jq -r '.id // empty' 2>/dev/null) || continue
-        _agent_task=$(echo "$_agent_line" | jq -r '.task // "unknown"' 2>/dev/null) || _agent_task="unknown"
-        # Check if agent is still running by looking at JSONL mtime (modified in last 2 min = likely running)
-        _project_dir=$(_claude_project_dir 2>/dev/null) || _project_dir=""
-        _status="finished"
-        if [[ -n "$_project_dir" ]]; then
-            _agent_jsonl=$(find "$_project_dir/${_manifest_session}" -maxdepth 2 -name "${_agent_id}.jsonl" -mmin -2 2>/dev/null | head -1 || true)
-            [[ -n "$_agent_jsonl" ]] && _status="still running"
+    # Source 1: Manifest file (written by Stop hook)
+    if [[ -f ".clavain/scratch/inflight-agents.json" ]]; then
+        _manifest_agents=""
+        _manifest_session=$(jq -r '.session_id // "unknown"' ".clavain/scratch/inflight-agents.json" 2>/dev/null) || _manifest_session="unknown"
+        while IFS= read -r _agent_line; do
+            [[ -z "$_agent_line" ]] && continue
+            _agent_id=$(echo "$_agent_line" | jq -r '.id // empty' 2>/dev/null) || continue
+            _agent_task=$(echo "$_agent_line" | jq -r '.task // "unknown"' 2>/dev/null) || _agent_task="unknown"
+            # Check if agent is still running by looking at JSONL mtime (modified in last 2 min = likely running)
+            _project_dir=$(_claude_project_dir 2>/dev/null) || _project_dir=""
+            _status="finished"
+            if [[ -n "$_project_dir" ]]; then
+                _agent_jsonl=$(find "$_project_dir/${_manifest_session}" -maxdepth 2 -name "${_agent_id}.jsonl" -mmin -2 2>/dev/null | head -1 || true)
+                [[ -n "$_agent_jsonl" ]] && _status="still running"
+            fi
+            _manifest_agents="${_manifest_agents}\\n  - [${_manifest_session:0:8}] ${_agent_task} (${_status})"
+        done < <(jq -c '.agents[]' ".clavain/scratch/inflight-agents.json" 2>/dev/null)
+        if [[ -n "$_manifest_agents" ]]; then
+            inflight_context="\\n\\n**In-flight agents from previous session:**${_manifest_agents}\\nCheck output before launching similar work."
         fi
-        _manifest_agents="${_manifest_agents}\\n  - [${_manifest_session:0:8}] ${_agent_task} (${_status})"
-    done < <(jq -c '.agents[]' ".clavain/scratch/inflight-agents.json" 2>/dev/null)
-    if [[ -n "$_manifest_agents" ]]; then
-        inflight_context="\\n\\n**In-flight agents from previous session:**${_manifest_agents}\\nCheck output before launching similar work."
+        # Consume manifest
+        rm -f ".clavain/scratch/inflight-agents.json" 2>/dev/null || true
     fi
-    # Consume manifest
-    rm -f ".clavain/scratch/inflight-agents.json" 2>/dev/null || true
-fi
 
-# Source 2: Live scan (catches crash/kill without Stop hook)
-if [[ -n "$_current_session" ]]; then
-    _live_agents=""
-    while IFS=' ' read -r _sid _aid _age _task; do
-        [[ -z "$_sid" ]] && continue
-        # Skip agents already reported from manifest
-        [[ "$inflight_context" == *"$_task"* ]] && continue
-        _live_agents="${_live_agents}\\n  - [${_sid:0:8}] ${_task} (${_age}m ago)"
-    done < <(_detect_inflight_agents "$_current_session" 10 2>/dev/null)
-    if [[ -n "$_live_agents" ]]; then
-        if [[ -n "$inflight_context" ]]; then
-            inflight_context="${inflight_context}${_live_agents}"
-        else
-            inflight_context="\\n\\n**In-flight agents detected (from recent sessions):**${_live_agents}\\nCheck output before launching similar work."
+    # Source 2: Live scan (catches crash/kill without Stop hook)
+    if [[ -n "$_current_session" ]]; then
+        _live_agents=""
+        while IFS=' ' read -r _sid _aid _age _task; do
+            [[ -z "$_sid" ]] && continue
+            # Skip agents already reported from manifest
+            [[ "$inflight_context" == *"$_task"* ]] && continue
+            _live_agents="${_live_agents}\\n  - [${_sid:0:8}] ${_task} (${_age}m ago)"
+        done < <(_detect_inflight_agents "$_current_session" 10 2>/dev/null)
+        if [[ -n "$_live_agents" ]]; then
+            if [[ -n "$inflight_context" ]]; then
+                inflight_context="${inflight_context}${_live_agents}"
+            else
+                inflight_context="\\n\\n**In-flight agents detected (from recent sessions):**${_live_agents}\\nCheck output before launching similar work."
+            fi
         fi
     fi
 fi
