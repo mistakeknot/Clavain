@@ -111,7 +111,7 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only) AND no a
 
 If invoked WITH arguments (`$ARGUMENTS` is not empty):
 - **If `$ARGUMENTS` contains `--resume`**: Read checkpoint with `checkpoint_read`. If a checkpoint exists, validate with `checkpoint_validate`, display completed steps, and skip to the first incomplete step. If no checkpoint, fall through to Work Discovery.
-- **If `$ARGUMENTS` contains `--from-step <n>`**: Skip directly to step `<n>` regardless of checkpoint state. Step names: brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, ship.
+- **If `$ARGUMENTS` contains `--from-step <n>`**: Skip directly to step `<n>` regardless of checkpoint state. Step names: brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, reflect, ship.
 - **If `$ARGUMENTS` matches a bead ID** (format: `[A-Za-z]+-[a-z0-9]+`):
   ```bash
   # Verify bead exists
@@ -142,7 +142,7 @@ When resuming (via Sprint Resume above or `--resume`):
 5. Skip completed steps — jump to the first incomplete one
 6. Load agent verdicts from `.clavain/verdicts/` if present
 
-When the sprint completes (Step 9 Ship), clear the checkpoint:
+When the sprint completes (Step 10 Ship), clear the checkpoint:
 ```bash
 checkpoint_clear
 ```
