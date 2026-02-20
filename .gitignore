@@ -23,5 +23,9 @@ __pycache__/
 .clavain/interspect/interspect.db-wal
 .clavain/interspect/interspect.db-shm
 .clavain/interspect/.git-lock
+.clavain/intercore.db
+.clavain/intercore.db-wal
+.clavain/intercore.db-shm
+.clavain/intercore.db.backup-*
 
 .intermem/
