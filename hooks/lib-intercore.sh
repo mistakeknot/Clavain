@@ -227,6 +227,70 @@ intercore_dispatch_kill() {
 
 # --- Run wrappers ---
 
+# intercore_run_create — Create a new run.
+# Args: $1=project_dir, $2=goal, $3=phases_json (optional), $4=scope_id (optional),
+#       $5=complexity (optional, default 3), $6=token_budget (optional)
+# Prints: run ID to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_create() {
+    local project="$1" goal="$2" phases_json="${3:-}" scope_id="${4:-}"
+    local complexity="${5:-3}" token_budget="${6:-}"
+    if ! intercore_available; then return 1; fi
+    local args=(run create --project="$project" --goal="$goal" --complexity="$complexity")
+    [[ -n "$phases_json" ]] && args+=(--phases="$phases_json")
+    [[ -n "$scope_id" ]] && args+=(--scope-id="$scope_id")
+    [[ -n "$token_budget" ]] && args+=(--token-budget="$token_budget")
+    "$INTERCORE_BIN" "${args[@]}" 2>/dev/null
+}
+
+# intercore_run_list — List runs with optional filters.
+# Args: any ic run list flags (e.g., "--active")
+# Prints: JSON array to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_list() {
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run list "$@" --json 2>/dev/null
+}
+
+# intercore_run_status — Get full run status as JSON.
+# Args: $1=run_id
+# Prints: JSON object to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_status() {
+    local id="$1"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run status "$id" --json 2>/dev/null
+}
+
+# intercore_run_advance — Advance a run to the next phase.
+# Args: $1=run_id
+# Prints: JSON object with from_phase, to_phase, advanced fields
+# Returns: 0 on success (advanced=true), 1 on block/pause/failure
+intercore_run_advance() {
+    local id="$1"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run advance "$id" --json 2>/dev/null
+}
+
+# intercore_run_agent_list — List agents for a run.
+# Args: $1=run_id
+# Prints: JSON array to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_agent_list() {
+    local run_id="$1"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run agent list "$run_id" --json 2>/dev/null
+}
+
+# intercore_run_agent_update — Update an agent's status.
+# Args: $1=agent_id, $2=status
+# Returns: 0 on success, 1 on failure
+intercore_run_agent_update() {
+    local agent_id="$1" status="$2"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run agent update "$agent_id" --status="$status" 2>/dev/null
+}
+
 # intercore_run_current — Get the active run ID for a project.
 # Args: $1=project_dir (optional, defaults to CWD)
 # Prints: run ID to stdout
