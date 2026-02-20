@@ -121,13 +121,58 @@ frontier_objective:
         - model_cost_optimization_ratio
 ```
 
+## Day-1 Workflow
+
+The minimum workflow a new user experiences on first install. Everything else is progressive enhancement.
+
+**The core loop:** `brainstorm → plan → review plan → execute → test → quality gates → ship`. This is the Design → Build → Ship pipeline — the three macro-stages that are shipped and proven. A user types `/sprint "add user auth"` and the agency walks them through this sequence.
+
+**What's available on Day 1:**
+- Sprint workflow with complexity-aware phase skipping (trivial tasks skip brainstorm + strategy)
+- Multi-agent plan review via flux-drive (7 review agents, parallel dispatch)
+- Quality gates with automatic agent selection based on change risk
+- Incremental commits on trunk with conventional commit messages
+- Session checkpointing — resume where you left off across sessions
+
+**What's NOT available on Day 1 (and shouldn't be promised):**
+- Discovery pipeline (requires Intercore v3 + interject)
+- Adaptive model routing (requires Interspect + outcome data)
+- Cross-project portfolio runs (requires Intercore v4)
+- Fully autonomous overnight sprints (requires Level 2 reactor + managed service deployment)
+
+**First sprint experience target:** A user with a Go or TypeScript project can run `/sprint "fix the flaky test in auth_test.go"`, get a brainstorm, plan, plan-review, execution, tests, quality gates, and a landed commit — in under 30 minutes for a simple fix.
+
+## Safety Posture by Macro-Stage
+
+Each macro-stage has a different risk profile and corresponding safety controls:
+
+| Stage | Risk Profile | Safety Controls |
+|-------|-------------|-----------------|
+| **Discover** | Low — read-only research, no mutations | No gates required. Outputs are proposals, not actions. |
+| **Design** | Low-medium — generates plans, not code | Flux-drive plan review catches scope creep and architectural risks before execution. |
+| **Build** | High — writes code, modifies files | Gate enforcement: plan must be reviewed before execution. Tests run continuously. Incremental commits enable rollback. Sandbox specs constrain agent file access (future). |
+| **Ship** | Highest — pushes to remote, closes work items | Quality gates must pass. Human explicitly approves push. No auto-push without confirmation. Override audit trail. |
+
+**Invariant:** The system never pushes code to a remote repository without human confirmation. This holds regardless of autonomy level.
+
+## Collaboration Stance
+
+Clavain is a **single-operator system through v2**. One human, one agency, one machine. The architecture does not prevent multi-user operation, but it is not designed for it and does not address:
+- Concurrent human operators with conflicting intents
+- Permission models for shared kernel databases
+- Merge conflict resolution between parallel human-directed sprints
+
+Multi-user collaboration is a v3+ concern, gated on Intercore's multi-project portfolio support and a proper permission model.
+
 ## Scope: Four Macro-Stages
 
 Clavain covers the full product development lifecycle through four macro-stages. Each macro-stage is a sub-agency — a team of models and agents selected for the work at hand.
 
-### Discover
+### Discover (Optional Until Core Loop Stabilizes)
 
 Research, brainstorming, and problem definition. The agency scans the landscape, identifies opportunities, and frames the problem worth solving.
+
+> **Current status:** The Discover stage is a future capability — the discovery pipeline, source adapters, and confidence-tiered autonomy depend on Intercore's discovery subsystem (v3). Today, work discovery is manual (beads backlog + human input). The Design → Build → Ship loop is the core product; Discover extends it once the core is proven. A sprint can begin at any macro-stage — `--from-step brainstorm` or `--from-step plan` skips Discover entirely.
 
 | Capability | Models / Agents |
 |---|---|
@@ -438,6 +483,26 @@ Clavain is well-positioned to explore open questions at the intersection of mult
 - Vision-centric token compression (overkill for code-centric workflows)
 - Theoretical minimum token cost (empirical cost-quality curves are more useful)
 - Full marketplace/recommendation engine (not where Clavain wins)
+
+## Success Metrics
+
+Clavain's value is measurable. These metrics define what "working" means at each maturity level:
+
+**Core loop metrics (measurable now):**
+- **Sprint completion rate** — % of sprints that reach Ship without abandonment. Target: >70% for complexity ≤3.
+- **Gate pass rate** — % of phase transitions that pass gates on first attempt. Low rates indicate miscalibrated gates or poor planning.
+- **Time-to-first-signal** — wall-clock time from sprint start to first quality gate result. Target: <15 min for simple, <45 min for complex.
+- **Defect escape rate** — bugs found after Ship that were present during Build. Lower is better. Measured by Interspect once correction events are available.
+- **Override rate** — % of gate failures that are manually overridden. High rates indicate gates are too strict or poorly calibrated. Tracked per gate type.
+
+**Efficiency metrics (measurable with token tracking):**
+- **Tokens per landable change** — total token spend for a sprint that produces a merged commit. Lower is better, but only meaningful when quality is held constant.
+- **Agent utilization** — % of dispatched agents whose output contributes to the final change. Low utilization suggests over-dispatching.
+- **Cost per finding** — token cost of quality gate findings that are actually actionable (not false positives).
+
+**Maturity metrics (measurable with Interspect):**
+- **Routing accuracy** — % of model selections that match the outcome-optimal model for that task type. Requires Interspect data.
+- **Self-improvement rate** — frequency of OS configuration changes proposed by Interspect that improve metrics when applied. This is the "is the system actually learning?" metric.
 
 ## What Clavain Is Not
 
