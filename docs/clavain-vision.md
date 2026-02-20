@@ -17,19 +17,15 @@ The point of agents isn't to remove humans from the loop; it's to make every mom
 Clavain is the operating system in a layered stack:
 
 ```
-Apps (Autarch)
+Layer 3: Apps (Autarch)
 ├── Interactive TUI surfaces: Bigend, Gurgeh, Coldwine, Pollard
 ├── Renders OS opinions into interactive experiences
-└── Swappable — Autarch is one set of apps, not the only possible set
-
-Layer 3: Drivers (Companion Plugins)
-├── Each wraps one capability (review, coordination, code mapping, research)
-├── Call the kernel directly for shared state — no Clavain bottleneck
-└── Examples: interflux (review), interlock (coordination), interject (research)
+└── Swappable — Autarch is one set of apps, not the only possible set (see Autarch vision doc for transitional caveats)
 
 Layer 2: OS (Clavain)
 ├── The autonomous software agency — macro-stages, quality gates, model routing
-├── Orchestrates by calling kernel (state/gates/events) and drivers (capabilities)
+├── Orchestrates by calling kernel (state/gates/events) and companion plugins (capabilities)
+├── Companion plugins (interflux, interlock, interject, etc.) are OS extensions — each wraps one capability
 ├── Provides the developer experience: slash commands, session hooks, routing tables
 └── If the host platform changes, opinions survive; UX wrappers are rewritten
 
@@ -39,16 +35,18 @@ Layer 1: Kernel (Intercore)
 ├── If the UX layer disappears, the kernel and all its data survive untouched
 └── Mechanism, not policy — the kernel doesn't know what "brainstorm" means
 
-Profiler: Interspect
+Interspect (Profiler) — cross-cutting
 ├── Reads kernel events (phase results, gate evidence, dispatch outcomes)
 ├── Correlates with human corrections and outcome data
 ├── Proposes changes to OS configuration (routing, agent selection, gate rules)
 └── Never modifies the kernel — only the OS layer
 ```
 
-The guiding principle: the real magic is in the agency logic and the kernel beneath it. Apps are swappable. Drivers are swappable. The OS is portable. The kernel is permanent. If a host platform disappears, you lose UX convenience but not capability. For details on the apps layer, see the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md).
+The guiding principle: the system of record is in the kernel; the policy authority is in the OS; the interactive surfaces are swappable apps. If a host platform disappears, you lose UX convenience but not capability. For details on the apps layer, see the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md). For term definitions, see the [shared glossary](../../../infra/intercore/docs/product/glossary.md).
 
-> **Current state vs target state.** Today, Clavain ships as a Claude Code plugin (52 slash commands, 21 hooks, 1 MCP server) because that surface is available and productive now. Autarch's TUI tools exist but are not yet the primary interface. The kernel (Intercore) is in active development with gates, events, and dispatches working; the hook cutover from temp files to `ic` is the v1.5 milestone. The architecture above describes the target design — what each layer is converging toward. Where the target differs from today's reality, the gap is acknowledged in the relevant section.
+**Write-path contract.** The OS is the sole policy authority for kernel mutations. Companion plugins produce capability results (artifacts, evidence, telemetry) but do not create/advance runs or define gate rules. Apps submit intents to the OS — they do not call kernel primitives for policy-governing operations. See the [Intercore vision doc](../../../infra/intercore/docs/product/intercore-vision.md) for the full write-path contract table.
+
+> **Current state vs target state.** Today, Clavain ships as a Claude Code plugin (dozens of slash commands, hooks, and an MCP server) because that surface is available and productive now. Autarch's TUI tools exist but are not yet the primary interface. The kernel (Intercore) is in active development with gates, events, and dispatches working; the hook cutover from temp files to `ic` is the v1.5 milestone. The architecture above describes the target design — what each layer is converging toward. Where the target differs from today's reality, the gap is acknowledged in the relevant section.
 
 ## Audience
 
@@ -170,9 +168,9 @@ Kernel events              thresholds shift             link related work
 
 **Three trigger modes.** The pipeline can be triggered three ways, all producing the same kernel event stream:
 
-- **Scheduled (background).** A systemd timer runs the scanner at configurable intervals (default: 4x daily with randomized jitter). Each scan queries all configured sources, scores discoveries against the interest profile, routes through the kernel's confidence gate, and emits events.
-- **Event-driven (reactive).** The scanner registers as a kernel event bus consumer. `run.completed` triggers search for related prior art. `bead.created` checks for existing research. `dispatch.completed` with novel techniques triggers prior art search. `discovery.promoted` triggers related-discovery search. Event-driven scans are targeted (using triggering event context); scheduled scans cast a wide net.
-- **User-initiated (on-demand).** `ic discovery scan` triggers a full scan. `ic discovery submit` submits a topic for triage. `ic discovery search` does semantic search across stored discoveries. User submissions receive a source trust bonus (default 0.2).
+- **Scheduled (background).** A managed timer runs the scanner at configurable intervals (default: 4x daily with randomized jitter). Each scan queries all configured sources, scores discoveries against the interest profile, routes through the kernel's confidence gate, and emits events.
+- **Event-driven (reactive).** The scanner registers as a kernel event bus consumer. Run completions trigger search for related prior art. Work item creation checks for existing research. Dispatch completions with novel techniques trigger prior art search. Event-driven scans are targeted (using triggering event context); scheduled scans cast a wide net.
+- **User-initiated (on-demand).** The user triggers a full scan, submits a topic for triage, or searches stored discoveries via the kernel discovery API. User submissions receive a source trust bonus.
 
 **Confidence-tiered autonomy policy.** The kernel enforces tier boundaries; the OS decides the policy at each tier:
 
@@ -180,7 +178,7 @@ Kernel events              thresholds shift             link related work
 |---|---|---|
 | **High** | ≥ 0.8 | Auto-create bead (P3 default), write briefing doc, notify in session inbox |
 | **Medium** | 0.5 – 0.8 | Write briefing draft, surface in inbox for human promote/dismiss/adjust |
-| **Low** | 0.3 – 0.5 | Log only, searchable via `ic discovery search` |
+| **Low** | 0.3 – 0.5 | Log only, searchable via kernel discovery API |
 | **Discard** | < 0.3 | Record with `discarded` status for negative signal |
 
 **Adaptive thresholds.** Tier boundaries shift based on the promotion-to-discovery ratio. If humans consistently promote Medium items (>30% rate), the High threshold lowers by 0.02 per feedback cycle. If humans consistently dismiss High items (<10% rate), the threshold rises. Convergence toward human judgment is tracked by Interspect.
@@ -258,7 +256,7 @@ Model routing operates at three stages, each building on the one below:
 
 ### Stage 1: Kernel Mechanism
 
-All dispatches flow through `ic dispatch spawn` with an explicit model parameter. The kernel records which model was used, tracks token consumption, and emits events. This is the durable system of record for every model decision.
+All dispatches flow through the kernel dispatch primitive with an explicit model parameter. The kernel records which model was used, tracks token consumption, and emits events. This is the durable system of record for every model decision.
 
 ### Stage 2: OS Policy
 
@@ -278,7 +276,7 @@ Tight coupling is a feature during the research phase, not a bug. Capabilities a
 
 ### The inter-* constellation
 
-The ecosystem has three tiers: infrastructure (kernel + profiler), drivers (companion plugins), and apps (Autarch TUI tools).
+The ecosystem has three layers — kernel (infrastructure), OS (agency + companion plugins), and apps (Autarch TUI tools) — plus a cross-cutting profiler.
 
 **Infrastructure (Layer 1)**
 
@@ -287,12 +285,12 @@ The ecosystem has three tiers: infrastructure (kernel + profiler), drivers (comp
 | intercore | Orchestration kernel — runs, phases, gates, dispatches, events | Active development |
 | interspect | Adaptive profiler — reads kernel events, proposes OS config changes | Active development |
 
-**Drivers (Layer 3)**
+**Companion Plugins (OS Extensions)**
 
 | Companion | Crystallized Insight | Status |
 |---|---|---|
 | interflux | Multi-agent review is generalizable | Shipped |
-| interphase | Phase tracking and gates are generalizable | Shipped |
+| interphase | Phase tracking and gates are generalizable (compatibility shim — delegates to `ic` primitives, no independent state) | Shipped (legacy) |
 | interline | Statusline rendering is generalizable | Shipped |
 | interpath | Product artifact generation is generalizable | Shipped |
 | interwatch | Doc freshness monitoring is generalizable | Shipped |
@@ -326,21 +324,21 @@ Migrate Clavain from ephemeral state management to durable kernel-backed orchest
 
 At Level 2 autonomy, the OS runs an event reactor that drives automatic phase advancement. The reactor is an OS component — not a kernel daemon. The kernel remains stateless between CLI calls.
 
-**Process model.** The reactor runs as a long-lived process that polls the kernel event bus: `ic events tail -f --consumer=clavain-reactor --poll-interval=500ms`. It subscribes to `dispatch.completed`, `gate.passed`, and `gate.failed` events, and calls `ic run advance` when conditions are met.
+**Process model.** The reactor runs as a long-lived process that tails the kernel event log via a consumer cursor. It subscribes to `dispatch.completed`, `gate.passed`, and `gate.failed` events, and invokes the kernel's run-advance operation when conditions are met. The OS does not poll state tables — it tails the event log.
 
 **Lifecycle management.** The reactor can be deployed in three modes, each with increasing reliability:
 - **Session-scoped** (simplest): A Clavain hook starts the reactor at session start; it dies when the session ends. Suitable for interactive development where overnight runs are not expected.
-- **Systemd unit** (recommended for Level 2): `clavain-reactor.service` with `Restart=on-failure`. Survives session ends. Requires installation.
-- **Hook-triggered** (hybrid): Each `dispatch.completed` event triggers an `ic run advance` attempt from a Clavain hook. No persistent process. Reliable within sessions but no overnight advancement.
+- **Managed service** (recommended for Level 2): A service unit with auto-restart. Survives session ends. Requires installation.
+- **Hook-triggered** (hybrid): Each `dispatch.completed` event triggers a run-advance attempt from a Clavain hook. No persistent process. Reliable within sessions but no overnight advancement.
 
 **Gate failure behavior.** When the reactor receives `gate.failed` for an automatic advancement attempt, it must:
-1. Transition the run to `paused` state via `ic run pause <id> --reason="gate failed: <evidence>"`
-2. Emit a `run.paused` event with the gate failure evidence
-3. Surface the pause in Bigend/TUI/inbox as requiring human action
+1. Request the kernel to transition the run to `paused` state with gate failure evidence
+2. The kernel emits a `run.paused` event (the kernel is the event authority, not the OS)
+3. Surface the pause in the app layer (Bigend/TUI/inbox) as requiring human action
 
-A paused run does not auto-resume. The human reviews the failure, resolves the issue, and runs `ic run advance <id>` to continue manually. The reactor picks up from the advanced state on its next poll.
+A paused run does not auto-resume. The human reviews the failure, resolves the issue, and manually advances the run via the kernel CLI. The reactor picks up from the advanced state on its next poll.
 
-**Manual recovery.** If the reactor is down and runs are stuck, `ic run advance <id>` always works from any terminal. This is the escape hatch — the reactor automates advancement, but manual advancement via the kernel CLI is always available.
+**Manual recovery.** If the reactor is down and runs are stuck, manual advancement via the kernel CLI always works from any terminal. The reactor automates advancement, but the kernel CLI is always the escape hatch.
 
 **Stalled dispatch handling.** A dispatch killed without self-reporting (`kill -9`, OOM) remains in `running` state. The reconciliation engine detects orphaned dispatches and emits `reconciliation.anomaly` events. The `agents_complete` gate must accept dispatches confirmed dead by reconciliation as terminal states. The reconciliation polling interval (default: 60s) determines how quickly stalled dispatches are detected.
 
