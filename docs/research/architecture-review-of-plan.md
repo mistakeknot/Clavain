@@ -1,504 +1,295 @@
-# Architecture Review: Work Discovery Plan (M1 F1+F2)
+# Architecture Review: Sprint Handover — Kernel-Driven Sprint Skill
 
-**Date:** 2026-02-12
-**Reviewer:** fd-architecture
-**Target:** `/root/projects/Clavain/docs/plans/2026-02-12-work-discovery.md`
-**Context:** Phase-gated /lfg epic (Clavain-tayp), M1 features 1-2 only
-
-## Executive Summary
-
-The plan is **structurally sound** with minor integration risks and one simplification opportunity. The shared library approach is correct, the LLM-parses-text integration is acceptable for v1, and the lfg.md modification is well-bounded. Three recommendations below reduce coupling and improve testability.
-
-**Verdict:** APPROVE with recommendations for iteration 2.
+**Date:** 2026-02-20
+**Reviewer:** Flux-drive Architecture & Design Reviewer
+**Plan:** `/root/projects/Interverse/docs/plans/2026-02-20-sprint-handover-kernel-driven.md`
+**Brainstorm:** `/root/projects/Interverse/docs/brainstorms/2026-02-20-sprint-handover-kernel-driven-brainstorm.md`
+**Source:** `/root/projects/Interverse/hub/clavain/hooks/lib-sprint.sh` (1276 lines)
 
 ---
 
-## 1. Shared Library Pattern (`hooks/lib-discovery.sh`)
+## Summary
 
-### Analysis
+The plan's central design decisions are sound. Removing ~600 lines of beads fallback code is architecturally correct — the dual-path branching is the primary source of complexity and bit-rot risk in lib-sprint.sh. The bead-as-identity / run-as-engine layering is clean and well-reasoned. The run ID caching strategy is the right fix for the per-call `bd state ic_run_id` overhead.
 
-**Question:** Is the shared library pattern the right abstraction?
-
-**Answer:** YES, with a minor caveat about premature abstraction for session-start.
-
-#### Strengths
-
-1. **Established precedent:** Follows existing pattern of `hooks/lib.sh` (JSON utilities) and `hooks/sprint-scan.sh` (scanner functions sourced by multiple consumers). This is not speculative — it aligns with existing codebase conventions.
-
-2. **Known consumers:** The plan identifies three consumers:
-   - `commands/lfg.md` (immediate, this milestone)
-   - `hooks/session-start.sh` (F4, future milestone)
-   - `hooks/sprint-scan.sh` (potential future refactor to reuse discovery logic)
-
-3. **Separation of concerns:** Library handles data gathering/inference, command file handles UI presentation. Clean boundary.
-
-#### Risks
-
-1. **Premature abstraction for session-start:** F4 (session-start light scan) is in a FUTURE milestone but is used as justification for the library. If F4 changes or gets cut, the abstraction may have only one real consumer (lfg.md). The plan doesn't specify what the "light scan" will actually do differently from the full scan.
-
-2. **sprint-scan.sh overlap:** The plan mentions sprint-scan.sh as a consumer but doesn't specify the integration point. Current sprint-scan.sh has `sprint_beads_summary()` which already calls `bd stats`. There's potential duplication risk if both libraries query beads independently.
-
-#### Recommendation
-
-**Accept the library pattern** because:
-- It has one confirmed consumer (lfg.md) NOW
-- F4 is in the same epic and PRD (high confidence it will ship)
-- The functions are cohesive (all about work discovery)
-- Cost is low (~80 lines)
-
-**Mitigate premature abstraction risk:**
-- Ship M1 with the library used ONLY by lfg.md
-- Add session-start integration in F4 milestone, not speculatively now
-- Document in lib-discovery.sh header: "Currently used by lfg.md; session-start integration in F4"
-
-**Address sprint-scan overlap:**
-- sprint-scan.sh should NOT import lib-discovery.sh in v1
-- Keep them separate until there's proven duplication (YAGNI)
-- If they need to share beads queries later, extract a `hooks/lib-beads.sh` with just the `bd` CLI wrappers
+Five concrete concerns require attention before implementation. Two are blocking correctness risks. Three are structural issues that will create follow-on bugs or confusion if not addressed in this pass.
 
 ---
 
-## 2. LLM-Parses-Structured-Text Approach
+## 1. Boundaries and Coupling
 
-### Analysis
+### 1.1 [BLOCKING] lib-gates.sh sourcing in sprint.md — incomplete removal plan
 
-**Question:** Is structured text output (scanner→LLM→AskUserQuestion) the right integration, or should it be different?
+The plan (Task 13) correctly identifies two `lib-gates.sh` source lines in `sprint.md` (lines 192-193 and 347-348) and instructs removing them. However, the grep evidence shows `advance_phase` is called from eight other command files that are not in scope for this plan:
 
-**Answer:** ACCEPTABLE for v1, with a known limitation and a path to improvement.
+- `commands/strategy.md` (3 calls: lines 107, 109, 114, 119)
+- `commands/execute-plan.md` (lines 10, 16)
+- `commands/write-plan.md` (lines 10, 12)
+- `commands/brainstorm.md` (lines 104, 106)
+- `commands/review-doc.md` (lines 64, 66)
+- `commands/quality-gates.md` (lines 136, 143)
+- `commands/work.md` (lines 54, 60)
+- `commands/codex-sprint.md` (line 65)
 
-#### Current Approach
+None of these are touched by this plan. Task 13's verification step checks only `sprint.md` and will produce a pass signal even though `advance_phase` continues operating in eight other commands via the lib-gates shim.
 
-The plan specifies:
-```
-DISCOVERY_RESULTS
-bead:Clavain-abc|title:Fix auth timeout|priority:1|action:execute|stale:no
-bead:Clavain-def|title:Add dark mode|priority:2|action:plan|stale:yes
-END_DISCOVERY
-```
+This is not a problem introduced by A2 — those commands worked before and will continue to work after, because `hooks/lib-gates.sh` is retained as a no-op shim. The problem is that the plan's success criterion "Sprint skill does not source lib-gates.sh" is accurate but could be misread as a system-wide migration when it is only sprint.md-scoped. A future implementer reading the success criteria and finding `advance_phase` in `commands/work.md` will be confused about whether the migration is incomplete.
 
-The LLM in `lfg.md` reads this output and constructs the AskUserQuestion call (question text, options array, etc.).
+**Minimum fix:** Reword Task 13's success criteria and verification step to make the scope explicit: "sprint.md no longer sources lib-gates.sh directly — other workflow commands still call advance_phase via the shim and are unaffected." Do not attempt to remove lib-gates from other commands in this pass — that is a separate workstream.
 
-#### Strengths
+### 1.2 [BLOCKING] sprint_finalize_init deletion order creates a broken intermediate state
 
-1. **Simple data format:** Pipe-delimited text is easy to parse in bash, easy to read in logs, and easy for the LLM to interpret.
-2. **Handles variable-length data:** The number of beads is unknown at plan-time. Structured text scales from 0 to 50 beads without schema changes.
-3. **Minimal coupling:** The scanner doesn't need to know about AskUserQuestion's exact schema. The LLM acts as an adapter layer.
-4. **Testable:** Bash tests can verify the scanner output format; smoke tests can verify the LLM correctly interprets it.
-
-#### Weaknesses
-
-1. **Two parsing steps:** Scanner emits text → LLM parses text → LLM emits AskUserQuestion JSON. This is less direct than scanner→JSON→LLM. But the extra step has negligible cost (LLMs parse text well) and keeps bash simple.
-
-2. **Schema drift risk:** If the LLM misinterprets the format or forgets to include a field, the UI will break. Mitigation: the format is simple (5 fields, pipe-delimited), and the plan includes shell tests to verify the format.
-
-3. **No JSON contract:** Unlike `bd list --json`, the scanner output isn't machine-parseable by downstream tools. If future features need to query discovery results programmatically, they'll need to parse the text format or refactor the scanner to emit JSON.
-
-#### Alternative Considered (Implicit)
-
-**Scanner emits JSON, command file passes it to AskUserQuestion:**
+The plan marks `sprint_finalize_init` for deletion in Task 2 (rewrite sprint_create). `commands/sprint.md` line 240 still calls it:
 
 ```bash
-# In lib-discovery.sh
-discovery_scan_beads() {
-  bd list --status=open --json | jq -r '
-    # ... jq transform to AskUserQuestion schema ...
-  '
+sprint_finalize_init "$SPRINT_ID"
+```
+
+Task 13, Step 1 does instruct removing this call from sprint.md, but Task 2 runs first (Tasks 2 through 12 all touch lib-sprint.sh, Task 13 touches sprint.md last). Between Task 2's commit and Task 13's commit, the sprint skill will call a function that no longer exists. If any partial test runs, syntax-check passes, or integration smoke tests happen mid-implementation, this window will produce a silent error (function not found — bash returns non-zero silently when a sourced function is missing).
+
+The underlying flag (`sprint_initialized=true`) is read only by the now-deleted beads fallback in `sprint_find_active` (current lib-sprint.sh lines 224-225). That fallback is removed in Task 3. So by the time the system is in a fully committed state after all 15 tasks, the flag is unreachable. The deletion is architecturally correct. The ordering is the problem.
+
+**Minimum fix:** Add a Task 2, Step 0 that edits sprint.md to remove the `sprint_finalize_init "$SPRINT_ID"` call (line 240) before the function is deleted from lib-sprint.sh. Alternatively, re-sequence: move the sprint.md cleanup from Task 13 to immediately after Task 2. The safest sequence is: edit sprint.md first, then delete the function.
+
+### 1.3 [BLOCKING] Session-scoped run ID cache creates cross-bead contamination in multi-sprint sessions
+
+`_SPRINT_RUN_ID` is a module-level variable with no bead ID tracking. The plan's `_sprint_resolve_run_id` implementation:
+
+```bash
+_SPRINT_RUN_ID=""  # Session-scoped cache: resolved once at claim time
+
+_sprint_resolve_run_id() {
+    local bead_id="$1"
+    ...
+    # Cache hit
+    if [[ -n "$_SPRINT_RUN_ID" ]]; then
+        echo "$_SPRINT_RUN_ID"
+        return 0
+    fi
+    ...
 }
-
-# In lfg.md
-AskUserQuestion(options=$(source lib-discovery.sh && discovery_scan_beads))
 ```
 
-**Why the plan didn't choose this:**
-- Harder to test bash-generated JSON (escaping, quotes)
-- Locks the scanner to AskUserQuestion's schema (breaks if schema changes)
-- Harder to read in logs (JSON is verbose)
+Once populated from any bead, the cache serves the same run_id to all subsequent calls regardless of which bead_id is passed. This is correct for single-sprint sessions (the common case). It is incorrect when multiple sprints are rendered in the same shell session.
 
-**Why this might be better:**
-- No LLM parsing step
-- Direct contract between scanner and UI
-- Easier to extend with new fields
+This is not a theoretical concern. `hooks/sprint-scan.sh` sources `lib-sprint.sh` and then calls `sprint_find_active` (which returns multiple sprints) followed by `sprint_read_state` for each sprint. Under the new plan, `sprint_read_state` calls `_sprint_resolve_run_id`. When sprint-scan renders sprint 2 in a session where sprint 1 was already resolved, it will read sprint 1's ic state and display it under sprint 2's identity.
 
-#### Recommendation
+`hooks/session-start.sh` (line 194-196) and `hooks/sprint-scan.sh` (lines 342-355, 398-401) both call `sprint_find_active` and iterate over results — both will hit this bug.
 
-**Accept the structured-text approach for v1** because:
-- It's simple, testable, and works
-- The extra LLM parsing step is not a performance or correctness risk
-- The plan includes tests to prevent schema drift
+**Minimum fix:** Track which bead_id the cache belongs to:
 
-**Plan for iteration 2** (when JSON becomes necessary):
-- If a second consumer (e.g., API, dashboard, Codex agent) needs discovery results, refactor `discovery_scan_beads()` to emit JSON
-- Keep a `discovery_format_for_llm()` wrapper that converts JSON → text for the lfg.md LLM parsing path
-- This preserves the existing integration while adding a JSON contract for programmatic consumers
-
-**Document the tradeoff** in lib-discovery.sh:
 ```bash
-# Output format: structured text (not JSON) for LLM parsing.
-# If you need JSON for programmatic consumption, refactor to emit JSON
-# and add a _format_for_llm() wrapper for the lfg.md integration.
+_SPRINT_RUN_ID=""
+_SPRINT_RUN_BEAD_ID=""
+
+_sprint_resolve_run_id() {
+    local bead_id="$1"
+    [[ -z "$bead_id" ]] && { echo ""; return 1; }
+
+    # Cache hit — only valid for the same bead
+    if [[ -n "$_SPRINT_RUN_ID" && "$_SPRINT_RUN_BEAD_ID" == "$bead_id" ]]; then
+        echo "$_SPRINT_RUN_ID"
+        return 0
+    fi
+
+    local run_id
+    run_id=$(bd state "$bead_id" ic_run_id 2>/dev/null) || run_id=""
+    if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+        echo ""
+        return 1
+    fi
+
+    _SPRINT_RUN_ID="$run_id"
+    _SPRINT_RUN_BEAD_ID="$bead_id"
+    echo "$run_id"
+}
 ```
+
+This preserves the performance benefit for the single-sprint (claim-time) hot path while preventing cross-bead reads in multi-sprint scans.
+
+### 1.4 [INFORMATIONAL] GATES_PROJECT_DIR export is not dead — other commands depend on it
+
+Current `lib-sprint.sh` line 22:
+
+```bash
+export GATES_PROJECT_DIR="$SPRINT_LIB_PROJECT_DIR"
+```
+
+The comment above it states lib-gates.sh is deprecated and no longer sourced from lib-sprint.sh. After A2, this export serves no purpose within lib-sprint.sh's own execution path. However, `commands/strategy.md`, `commands/work.md`, and others source lib-gates.sh directly (without first sourcing lib-sprint.sh). When those commands run in a session that has sourced lib-sprint.sh already, GATES_PROJECT_DIR will already be set. When they run in a fresh session without lib-sprint.sh, they set GATES_PROJECT_DIR themselves.
+
+The export is harmless to leave. Remove it only when the lib-gates.sh migration is complete across all commands.
+
+**No action required in A2.** Add comment: `# Retained for non-sprint commands that source lib-gates.sh directly.`
 
 ---
 
-## 3. Integration Surface (lfg.md Modification)
+## 2. Pattern Analysis
 
-### Analysis
+### 2.1 [STRUCTURAL] sprint_create silent failure when bead creation fails but ic run succeeds
 
-**Question:** Is the lfg.md modification well-bounded?
+The plan makes bead creation non-fatal in sprint_create. This is the right directional change. However, the return value contract creates a silent failure mode:
 
-**Answer:** YES, with excellent backward compatibility.
+When bead creation fails but ic run creation succeeds, `sprint_id` is empty and `sprint_create` returns `""`. The caller in `commands/sprint.md` line 237-243:
 
-#### Proposed Change
-
-Add a "Before Starting" section at the top of lfg.md:
-- If `$ARGUMENTS` is empty → run discovery, present AskUserQuestion, route to command
-- If `$ARGUMENTS` is non-empty → skip discovery, proceed to Step 1 (existing pipeline)
-
-#### Strengths
-
-1. **Backward compatible:** Existing users who invoke `/lfg "build a feature"` see no change. The 9-step pipeline runs as before.
-
-2. **Single responsibility:** The new section handles discovery routing. The existing steps handle the pipeline. No mixing.
-
-3. **Clear branching:** `$ARGUMENTS` is a simple, reliable gate. No complex conditionals.
-
-4. **Exit points defined:** Discovery either routes to another command (exit lfg.md) or falls through to Step 1 (no-op discovery). Clean control flow.
-
-5. **Testable:** Smoke tests can verify:
-   - `/lfg` with no args triggers discovery
-   - `/lfg "feature"` skips discovery
-   - Selecting a bead routes to the correct command
-
-#### Risks
-
-1. **Command routing complexity:** The discovery section must know which command to invoke for each action type:
-   ```
-   action:continue → /clavain:work <plan-path>
-   action:execute → /clavain:work <plan-path>
-   action:plan → /clavain:write-plan
-   action:strategize → /clavain:strategy
-   action:brainstorm → /clavain:brainstorm
-   ```
-   This hardcodes the mapping between action types and commands. If commands are renamed or the routing changes, lfg.md must be updated.
-
-   **Severity:** Low. The mapping is stable (these are core workflow commands unlikely to change). If it does become a maintenance burden, extract to a library function.
-
-2. **AskUserQuestion placement:** The command file (markdown) must construct the AskUserQuestion call inline. This means the LLM has to parse the discovery results, format them, present the UI, read the response, and route — all in one turn. If the user's selection is ambiguous or the LLM misroutes, there's no retry logic.
-
-   **Severity:** Low. AskUserQuestion is robust, and the options are distinct (bead IDs are unique). If misrouting happens in practice, add a confirmation step.
-
-3. **No discovery caching:** Every `/lfg` invocation runs the full beads scan. For large projects (100+ beads), this could be slow (1-2 seconds). The plan mentions a 60-second cache for F4 (session-start) but not for the on-demand lfg discovery.
-
-   **Severity:** Low for v1. If scan time exceeds 2 seconds, add caching in iteration 2.
-
-#### Recommendation
-
-**Accept the lfg.md modification as-is** because:
-- Clean branching on `$ARGUMENTS`
-- Backward compatible
-- Well-defined exit points
-- Risks are low-severity and can be addressed post-launch if needed
-
-**Optional improvement for iteration 2:**
-- Extract command routing to `discovery_route_to_command()` in lib-discovery.sh (mentioned in plan but not implemented in v1):
-  ```bash
-  discovery_route_to_command() {
-    local action="$1"
-    local bead_id="$2"
-    case "$action" in
-      continue|execute) echo "/clavain:work <plan-path>" ;;
-      plan) echo "/clavain:write-plan" ;;
-      strategize) echo "/clavain:strategy" ;;
-      brainstorm) echo "/clavain:brainstorm" ;;
-      *) echo "/clavain:sprint-status" ;;  # fallback
-    esac
-  }
-  ```
-  This centralizes routing logic and makes it testable. But it's not necessary for v1 — the inline mapping is fine.
-
----
-
-## 4. Missing Components
-
-### Analysis
-
-**Question:** Are there missing components or integration points?
-
-**Answer:** Two minor gaps, neither blocking.
-
-#### Gap 1: Plan Path Resolution
-
-The discovery scanner infers recommended actions (continue, execute, plan, strategize, brainstorm) but doesn't resolve the PLAN FILE PATH for `action:execute` or `action:continue`.
-
-**Where this matters:**
-- `action:execute` routes to `/clavain:work <plan-path>`
-- `action:continue` routes to `/clavain:work <plan-path>`
-
-But the scanner output is:
-```
-bead:Clavain-abc|title:Fix auth|priority:1|action:execute|stale:no
-```
-
-Where's the plan path?
-
-**Plan's approach (lines 77-82):**
 ```bash
-# Fallback: check filesystem for artifacts mentioning this bead
-if ! $has_plan; then
-    grep -rl "Bead.*${bead_id}" docs/plans/ 2>/dev/null | head -1 | grep -q . && has_plan=true
+SPRINT_ID=$(sprint_create "<feature title>")
+if [[ -n "$SPRINT_ID" ]]; then
+    sprint_set_artifact "$SPRINT_ID" "brainstorm" "<brainstorm_doc_path>"
+    sprint_finalize_init "$SPRINT_ID"
+    sprint_record_phase_completion "$SPRINT_ID" "brainstorm"
+    CLAVAIN_BEAD_ID="$SPRINT_ID"
 fi
 ```
 
-This detects WHETHER a plan exists, but doesn't CAPTURE the path. The LLM in lfg.md will have to run the same grep again to get the path.
+If bead creation fails, `SPRINT_ID` is empty, the `if` block does not execute, and `CLAVAIN_BEAD_ID` is never set. The ic run was created (with `scope_id=sprint-<epoch>`) and is active in ic's database, but it has no handle visible to the rest of the session. All subsequent sprint operations (sprint_claim, sprint_advance, sprint_read_state) will fail silently because they receive no sprint ID. The sprint is effectively orphaned in ic.
 
-**Impact:** Minor duplication. The scanner runs `grep -rl` to detect plan existence, then lfg.md runs it again to get the path.
+This is worse than the current behavior, which treats bead creation failure as fatal and returns early.
 
-**Fix:** Extend the scanner output to include the plan path:
-```
-bead:Clavain-abc|title:Fix auth|priority:1|action:execute|plan:docs/plans/2026-02-12-auth-fix.md|stale:no
-```
+**Minimum fix (two options, choose one):**
 
-If no plan exists, `plan:` is empty. The LLM can then pass this directly to `/clavain:work`.
+Option A — Keep bead creation fatal for this pass. The E3 migration should have ensured all environments with ic installed also have bd available. The "bead creation non-fatal" design can be enabled in a later pass when there is a concrete ic-only-no-bd deployment target:
 
-#### Gap 2: Stale Beads vs Stale Plans
-
-The plan defines staleness as "bead updated >2 days ago" (line 44). But beads have TWO timestamps:
-- Bead's `updated` field (from `bd show --json`)
-- Plan file's mtime (from `stat`)
-
-Which one should determine staleness?
-
-**Scenario:**
-- Bead created 5 days ago, last `bd edit` was 5 days ago → bead updated=5d
-- Plan file modified 1 day ago (you edited it yesterday) → plan mtime=1d
-
-Is this bead stale? The bead metadata says yes (5d). The artifact says no (1d).
-
-**Recommended behavior:**
-- If the recommended action is `execute` or `continue` (work on an existing plan), use the PLAN file's mtime for staleness.
-- If the recommended action is `plan`, `strategize`, or `brainstorm` (no plan exists yet), use the BEAD's updated timestamp.
-
-This aligns staleness with "time since last work on this task" rather than "time since bead metadata was touched."
-
-**Impact:** Low. The staleness flag is informational only in v1 (just adds a marker to the UI). If the heuristic is wrong, users ignore it. But getting it right improves ranking quality.
-
-#### Recommendation
-
-**Gap 1 (plan path):** Add `plan:<path>` to scanner output. Avoids duplicate grep. 5 lines of code.
-
-**Gap 2 (staleness):** Use plan mtime when plan exists, bead updated when plan doesn't. 10 lines of code.
-
-Both are small, low-risk additions. Include in v1 if time permits; defer to iteration 2 if not.
-
----
-
-## 5. Coupling Risks
-
-### Analysis
-
-**Question:** Are there hidden coupling risks?
-
-**Answer:** One moderate risk — beads CLI schema changes.
-
-#### Risk 1: bd CLI Schema Dependency
-
-The scanner depends on `bd list --status=open --json` output schema. Current schema (inferred from sprint-scan.sh and plan):
-```json
-{
-  "id": "Clavain-abc",
-  "title": "Fix auth timeout",
-  "priority": 1,
-  "status": "open",
-  "updated": "2026-02-10T12:00:00Z",
-  "notes": "Brainstorm: docs/brainstorms/...\nPRD: docs/prds/..."
-}
-```
-
-**If beads changes the schema** (field renamed, removed, or nested), the scanner breaks.
-
-**Mitigation in plan:** Lines 111-112 say "Handle `bd` unavailable gracefully (print warning, fall through to normal `/lfg` pipeline)". This handles MISSING beads, but not BROKEN schema.
-
-**Better mitigation:**
-- Wrap all `bd` calls in error handlers that catch jq parse failures
-- If schema parse fails, fall back to text-based parsing or skip that bead
-- Log a warning: "bd schema unexpected, update lib-discovery.sh"
-
-**Cost:** 10 lines per `bd` call site. Worth it to prevent hard failures when beads updates.
-
-#### Risk 2: AskUserQuestion API Changes
-
-If Claude Code changes the AskUserQuestion tool's schema or behavior, the LLM's parsing logic in lfg.md might break.
-
-**Severity:** LOW. AskUserQuestion is a stable Claude Code primitive. Schema changes are rare and backward-compatible.
-
-**Mitigation:** Smoke tests catch this (test verifies AskUserQuestion is presented correctly).
-
-#### Risk 3: Command Routing Stability
-
-As noted in Section 3, the action→command mapping is hardcoded in lfg.md. If `/clavain:work`, `/clavain:strategy`, etc. are renamed or removed, discovery routing breaks.
-
-**Mitigation:** These are core Clavain commands unlikely to change. If they do, a grep for "action:" in lfg.md finds the routing logic immediately.
-
-#### Recommendation
-
-**Add robust error handling for `bd` CLI calls:**
 ```bash
-discovery_scan_beads() {
-  if ! command -v bd &>/dev/null; then
-    echo "DISCOVERY_UNAVAILABLE: bd not installed" >&2
-    return 1
-  fi
-
-  local bd_output
-  if ! bd_output=$(bd list --status=open --json 2>&1); then
-    echo "DISCOVERY_UNAVAILABLE: bd query failed: $bd_output" >&2
-    return 1
-  fi
-
-  # Validate JSON parse works
-  if ! echo "$bd_output" | jq -e 'type == "array"' &>/dev/null; then
-    echo "DISCOVERY_UNAVAILABLE: bd output not valid JSON" >&2
-    return 1
-  fi
-
-  # ... rest of scanner logic
+sprint_create() {
+    ...
+    if [[ -z "$sprint_id" ]]; then
+        echo "sprint_create: bead creation failed" >&2
+        echo ""
+        return 1
+    fi
+    ...
 }
 ```
 
-This ensures the scanner fails gracefully rather than crashing with cryptic jq errors.
+Option B — Return a synthetic handle when bead creation fails, so CLAVAIN_BEAD_ID can still be set and the session can continue against the ic run:
 
----
-
-## 6. Simplification Opportunities
-
-### Analysis
-
-**Question:** Is there unnecessary complexity?
-
-**Answer:** One minor opportunity — over-engineered fallback logic.
-
-#### Complexity Point: Dual-Source Artifact Detection
-
-The plan's `infer_bead_action()` function (lines 62-96) checks BOTH:
-1. Bead notes field: `[[ "$notes" == *"Plan:"* ]]`
-2. Filesystem grep: `grep -rl "Bead.*${bead_id}" docs/plans/`
-
-**Rationale (implicit):** Beads notes might be outdated, so check filesystem as fallback.
-
-**Problem:** This creates two sources of truth and no clear priority. What if:
-- Bead notes say `Plan: docs/plans/old-plan.md` (deleted file)
-- Filesystem grep finds `docs/plans/new-plan.md` (new file, bead notes not updated)
-
-Which is correct?
-
-**YAGNI violation:** The plan doesn't show evidence that bead notes will be stale in practice. The fallback might be solving a problem that doesn't exist.
-
-#### Recommendation
-
-**Simplify in v1:**
-- Use ONLY the filesystem grep: `grep -rl "Bead.*${bead_id}" docs/plans/`
-- Delete the notes-parsing logic
-- Rationale: Filesystem is the source of truth for artifacts. Beads notes are freeform text, not structured metadata.
-
-**If notes-parsing is desired later:**
-- Add it as an OPTIMIZATION in iteration 2 (faster than grep)
-- But treat filesystem as authoritative — if they conflict, filesystem wins
-- Document the priority explicitly
-
-**Estimated savings:** 10 lines of code, simpler tests, one fewer coupling point.
-
----
-
-## 7. Test Coverage
-
-### Analysis
-
-The plan includes:
-- Shell tests (bats) for scanner output format, sorting, staleness
-- Structural tests (pytest) for file existence
-- Manual smoke tests for end-to-end discovery flow
-
-**Strengths:**
-- Covers the critical path (scanner → output format → LLM parsing → routing)
-- Unit tests for sorting/staleness logic
-- Graceful-fallback test (bd unavailable)
-
-**Gaps:**
-1. **No test for action inference logic** — the core `infer_bead_action()` function determines routing, but there's no test verifying it returns the correct action for each scenario (in_progress → continue, has plan → execute, etc.). This is tested indirectly via the full scanner, but a unit test would make failures easier to debug.
-
-2. **No test for grep-based artifact detection** — if the grep pattern `"Bead.*${bead_id}"` fails to match a real bead reference (e.g., `**Bead:** Clavain-abc` with extra formatting), the scanner will misclassify the bead. A test with fixture markdown files would catch this.
-
-3. **No telemetry test** — the plan adds `discovery_log_selection()` for telemetry but doesn't test it. If the telemetry path is unwritable or the JSON is malformed, it should fail silently (per plan line 172), but a test should verify the happy path works.
-
-#### Recommendation
-
-**Add to tests/shell/test_discovery.bats:**
 ```bash
-@test "infer_bead_action returns correct action for each state" {
-  # Mock bd show --json output for each scenario
-  # Verify: in_progress → continue, has plan → execute, etc.
-}
+# If bead creation failed, use a synthetic handle derived from the run_id
+local effective_id="${sprint_id:-ic-${run_id:0:8}}"
+_SPRINT_RUN_ID="$run_id"
+_SPRINT_RUN_BEAD_ID="$effective_id"
+echo "$effective_id"
+```
 
-@test "grep pattern matches beads metadata in markdown" {
-  # Create fixture files with various bead reference formats
-  # Verify grep finds them all
-}
+This requires teaching `_sprint_resolve_run_id` to recognize `ic-` prefixed IDs and return the cached run_id directly without a `bd state` lookup. Option A is simpler and recommended for this pass.
 
-@test "telemetry logging writes valid JSON" {
-  # Call discovery_log_selection with mock data
-  # Verify telemetry.jsonl contains valid JSON line
+### 2.2 [STRUCTURAL] sprint_next_step decouples from the phase chain but plan wording is misleading
+
+The brainstorm success criteria state: "sprint_next_step reads chain from ic instead of hardcoded table." The Task 9 implementation is:
+
+```bash
+sprint_next_step() {
+    local phase="$1"
+    case "$phase" in
+        brainstorm)          echo "strategy" ;;
+        brainstorm-reviewed) echo "strategy" ;;
+        strategized)         echo "write-plan" ;;
+        ...
+    esac
 }
 ```
 
-**Estimated cost:** 30 lines of test code. High value for debugging and preventing regressions.
+This does not read from ic. It is a new hardcoded mapping. The old implementation derived the mapping through `_sprint_transition_table`. The new implementation removes the intermediate function but replaces it with an equivalent inline case statement. This is simpler (correct) but not "reading from ic."
+
+This is not a code defect — the phase-to-command mapping is inherently Clavain-specific and cannot be derived from ic's generic phase list. The implementation is correct. The documentation wording is inaccurate and should be corrected so future readers understand what is actually happening.
+
+There is also a subtle behavioral difference to note: the old `sprint_next_step` derived `brainstorm → strategy` by mapping `brainstorm → brainstorm-reviewed` (via transition table) then `brainstorm-reviewed → strategy` (via next-phase mapping). The new implementation maps `brainstorm → strategy` directly, collapsing two steps. The `brainstorm-reviewed` phase still exists in ic's phase chain but has no unique command mapping from `sprint_next_step`. This was true in the old implementation as well (brainstorm-reviewed and strategized both mapped to strategy). No regression — just worth documenting.
+
+**Minimum fix:** Update brainstorm success criteria to read "sprint_next_step uses a static phase-to-command map; the dynamic phase chain lives in ic." No code change required.
+
+### 2.3 [INFORMATIONAL] sprint.md complexity section references deleted phase-skipping behavior
+
+`commands/sprint.md` Pre-Step complexity assessment section (line 220) says:
+
+> Phase skipping is also enforced automatically in sprint_advance() based on cached complexity.
+
+After A2, `sprint_advance` no longer reads `force_full_chain` from beads or calls `sprint_should_skip`. This statement becomes false. For low-complexity sprints (score 1-2), the user will be asked whether to skip brainstorm+strategy, but there is no automatic enforcement in sprint_advance.
+
+The plan's Task 13 should include updating this line. Without it, future implementers will look for non-existent phase-skipping enforcement in sprint_advance and waste time debugging.
+
+**Minimum fix:** Add to Task 13 Step 1: update the "Phase skipping is also enforced automatically in sprint_advance()" line in sprint.md to: "Phase skipping for low-complexity sprints uses a shorter ic run --phases chain passed at sprint creation time."
 
 ---
 
-## 8. Summary of Recommendations
+## 3. Simplicity and YAGNI
 
-| Issue | Severity | Action | When |
-|-------|----------|--------|------|
-| Sprint-scan overlap | Low | Keep libraries separate; extract lib-beads.sh only if duplication proven | Iteration 2 |
-| LLM-parses-text limitations | Low | Accept for v1; add JSON output when 2nd consumer needs it | Iteration 2 |
-| Command routing coupling | Low | Extract to lib function only if mapping becomes complex | Iteration 2 |
-| Plan path missing from output | Medium | Add `plan:<path>` field to scanner output | V1 (if time permits) |
-| Staleness logic ambiguity | Medium | Use plan mtime when plan exists, bead updated otherwise | V1 (if time permits) |
-| bd CLI error handling | High | Add robust error handling for bd calls (fallback to unavailable) | V1 (required) |
-| Dual-source artifact detection | Medium | Simplify to filesystem-only; delete notes-parsing fallback | V1 (simplification) |
-| Action inference tests | Medium | Add unit tests for infer_bead_action logic | V1 (if time permits) |
-| Telemetry tests | Low | Add happy-path test for discovery_log_selection | Iteration 2 |
+### 3.1 CHECKPOINT_FILE removal — safe, no backward compat risk
 
-### P0 for V1 Shipment
+Question 4 from context: the CHECKPOINT_FILE constant removal is safe. A grep of the full codebase confirms `$CHECKPOINT_FILE` is referenced only within `lib-sprint.sh` itself. No external script, hook, or command reads this variable. The plan correctly inlines the default path in `checkpoint_clear`:
 
-1. **Robust bd error handling** (prevents hard crashes)
-2. **Simplify to filesystem-only artifact detection** (reduces complexity)
+```bash
+rm -f "${CLAVAIN_CHECKPOINT_FILE:-.clavain/checkpoint.json}" 2>/dev/null || true
+```
 
-### P1 for V1 (Ship if Time Permits)
+The only subtlety: the lock scope derivation in the old fallback (`echo "$CHECKPOINT_FILE" | tr '/' '-'`) is eliminated because Task 10's new `checkpoint_write` has no file-based fallback at all. The lock scope for checkpoints disappears entirely. This is correct — ic state writes are handled by ic's own concurrency primitives.
 
-3. **Add plan path to scanner output** (avoids duplicate grep)
-4. **Fix staleness logic** (use plan mtime when available)
-5. **Add action inference tests** (improves debuggability)
+**No action required.** Removal is safe and correct.
 
-### Defer to Iteration 2
+### 3.2 Task 12 stub change — sprint_classify_complexity returns integer, not "medium"
 
-6. **JSON output alternative** (when 2nd consumer needs it)
-7. **Extract command routing** (if mapping becomes complex)
-8. **Telemetry tests** (nice-to-have, not critical path)
+Task 12 updates the jq-missing stub from `echo "medium"` to `echo "3"`. This is correct. `sprint_classify_complexity` returns integers (1-5) in all non-stub paths. The legacy string fallback in `sprint_complexity_label` (`medium → "moderate"`) will never be exercised via the integer path but remains harmless dead code.
+
+**No action required.**
+
+### 3.3 Double cache invalidation after sprint_advance is harmless but worth noting
+
+After A2, the phase advance sequence is:
+
+1. `sprint_advance` calls `intercore_run_advance` (which advances the phase in ic)
+2. `sprint_advance` calls `sprint_invalidate_caches` (clears discovery cache)
+3. `sprint_advance` calls `sprint_record_phase_tokens`
+4. Caller in sprint.md also calls `sprint_record_phase_completion` (which calls `sprint_invalidate_caches` again)
+
+The double cache invalidation (steps 2 and 4) is harmless — the second call is a no-op after the first. However, it creates confusion about which call is authoritative. The long-term fix is to remove `sprint_record_phase_completion` calls from sprint.md when it becomes a complete no-op. That is a separate cleanup pass.
+
+**No action required in A2.**
 
 ---
 
-## Final Verdict
+## 4. Questions From Context — Direct Answers
 
-**APPROVE** with 2 required changes for v1 (bd error handling, simplify artifact detection) and 3 recommended enhancements (plan path, staleness fix, action tests).
+**Q1: Is removing lib-gates.sh sourcing from sprint.md correct? Are there other callers that might break?**
 
-The plan demonstrates solid architectural thinking:
-- Library pattern aligns with existing precedent
-- Integration surface is well-bounded
-- Backward compatibility preserved
-- Test coverage is good (with minor gaps)
+Removing it from sprint.md is correct. The lib-gates shim (`hooks/lib-gates.sh`) is retained with no-op stubs and interphase delegation, so all other command files that source it directly (strategy, work, write-plan, brainstorm, review-doc, quality-gates, codex-sprint) will continue working without change. The risk is documentation confusion, not a runtime break (see 1.1 above).
 
-The LLM-parses-text approach is pragmatic and works for v1. The structured-text format is simple and testable. The lfg.md modification is clean.
+**Q2: Is the bead-as-identity / run-as-internal layering clean?**
 
-**Risk level:** LOW. The main risks (bd schema changes, command routing coupling) are mitigated by error handling and clear documentation.
+Yes. This is the most architecturally sound decision in the entire plan. `CLAVAIN_BEAD_ID` remaining a bead ID preserves the user-visible contract across all workflow commands. The ic run ID as a session-cached internal detail is the correct model — it is an execution context analogous to a CI pipeline run, not a ticket number. The join key (`ic_run_id` stored on the bead) is the right seam. The one structural issue is the single-variable cache creating cross-bead contamination in multi-sprint sessions (addressed in 1.3 above).
 
-**Ship confidence:** HIGH after P0 changes applied.
+**Q3: sprint_create still does bd operations — should they be extracted?**
+
+No, not in this pass. Extracting bead creation into a separate function would apply YAGNI unnecessarily — there is no second consumer of the bead-creation logic. The non-fatal change is architecturally correct directionally, but the return-value contract creates a silent failure mode that must be resolved first (see 2.1 above). Make bead creation fatal for this pass; revisit the non-fatal design when ic-only deployments are a concrete target.
+
+**Q4: CHECKPOINT_FILE constant removal — any backward compat risk?**
+
+None. The constant is used only within lib-sprint.sh. Removal is safe. See 3.1 above.
+
+**Q5: Phase skipping functions deleted — is anything depending on them outside lib-sprint.sh?**
+
+Confirmed safe to delete. `sprint_phase_whitelist`, `sprint_should_skip`, and `sprint_next_required_phase` are referenced only in lib-sprint.sh itself (internal use only), historical plan documents (not executable), and research docs. No active command docs, hooks, or tests call these functions except the bats test suite, which Task 14 correctly addresses.
+
+---
+
+## 5. Must-Fix vs. Optional
+
+### Must fix before beginning implementation
+
+1. **[1.2] Task ordering:** Add a Task 2 pre-step that removes the `sprint_finalize_init "$SPRINT_ID"` call from `commands/sprint.md` before the function is deleted from lib-sprint.sh. Prevents a broken intermediate state during multi-task implementation.
+
+2. **[1.3] Cache key scope:** Add `_SPRINT_RUN_BEAD_ID` tracking to `_sprint_resolve_run_id` to prevent cross-bead state contamination in multi-sprint sessions (sprint-scan, session-start).
+
+3. **[2.1] sprint_create return value:** Decide whether bead creation is fatal (recommended for this pass) or requires a synthetic handle strategy. The current plan leaves CLAVAIN_BEAD_ID unset on bead failure, orphaning the ic run.
+
+### Should fix in this pass — low cost, prevents confusion
+
+4. **[1.1] Task 13 verification scope:** Clarify success criteria so "Sprint skill does not source lib-gates.sh" is understood as sprint.md-specific, not system-wide.
+
+5. **[2.3] sprint.md phase-skipping reference:** Update the "phase skipping is also enforced automatically in sprint_advance()" claim to reflect the new reality (ic run --phases chain set at creation time).
+
+### Defer to a later pass
+
+6. **[2.2] sprint_next_step documentation wording:** Correct "reads chain from ic" to "uses a static phase-to-command map." No code change needed.
+
+7. **[1.4] GATES_PROJECT_DIR export:** Leave in place, add clarifying comment.
+
+8. **[3.2, 3.3] Minor dead code and double invalidation:** Harmless. Clean up when sprint_record_phase_completion is fully retired.
