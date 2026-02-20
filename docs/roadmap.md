@@ -1,6 +1,6 @@
 # Clavain Roadmap
 
-**Version:** 0.6.47
+**Version:** 0.6.48
 **Last updated:** 2026-02-20
 **Vision:** [`docs/clavain-vision.md`](clavain-vision.md)
 **PRD:** [`docs/PRD.md`](PRD.md)
