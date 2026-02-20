@@ -67,8 +67,15 @@ CREATE TABLE IF NOT EXISTS canary_samples (
 );
 CREATE INDEX IF NOT EXISTS idx_canary_samples_canary ON canary_samples(canary_id);
 MIGRATE
+        # Add run_id column to sessions (E4.3: session-to-run correlation)
+        sqlite3 "$_INTERSPECT_DB" "ALTER TABLE sessions ADD COLUMN run_id TEXT;" 2>/dev/null || true
         # Ensure overlays directory exists (Type 1 modifications)
         mkdir -p "$(dirname "$_INTERSPECT_DB")/overlays" 2>/dev/null || true
+        # Ensure durable cursor for kernel event consumer (E4.2/E4.5)
+        # Idempotent — register is a no-op if cursor already exists
+        if command -v ic &>/dev/null; then
+            ic events cursor register interspect-consumer --durable 2>/dev/null || true
+        fi
         return 0
     fi
 
@@ -99,7 +106,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     start_ts TEXT NOT NULL,
     end_ts TEXT,
-    project TEXT
+    project TEXT,
+    run_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS canary (
@@ -164,6 +172,10 @@ CREATE TABLE IF NOT EXISTS canary_samples (
 );
 CREATE INDEX IF NOT EXISTS idx_canary_samples_canary ON canary_samples(canary_id);
 SQL
+    # Ensure durable cursor for kernel event consumer (E4.2/E4.5)
+    if command -v ic &>/dev/null; then
+        ic events cursor register interspect-consumer --durable 2>/dev/null || true
+    fi
 }
 
 # ─── Protected paths enforcement ─────────────────────────────────────────────
@@ -1249,6 +1261,57 @@ _interspect_check_canaries() {
     echo "$results"
 }
 
+# ─── Kernel Event Consumer ───────────────────────────────────────────────────
+
+# Consume kernel events (phase/dispatch) from intercore event store (one-shot batch).
+# Called at session start to catch up on events since last session.
+# Uses ic events tail with --consumer for automatic cursor tracking.
+# Args: $1=session_id
+_interspect_consume_kernel_events() {
+    local session_id="$1"
+    command -v ic &>/dev/null || return 0
+
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+    [[ -f "$db" ]] || return 0
+
+    # One-shot query: events since last consumer cursor position
+    local events_json
+    events_json=$(ic events tail --all --consumer=interspect-consumer --limit=100 2>/dev/null) || return 0
+    [[ -z "$events_json" ]] && return 0
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+
+        local event_id run_id event_source event_type from_state to_state timestamp
+        event_id=$(echo "$line" | jq -r '.id // 0' 2>/dev/null) || continue
+        run_id=$(echo "$line" | jq -r '.run_id // empty' 2>/dev/null) || continue
+        event_source=$(echo "$line" | jq -r '.source // empty' 2>/dev/null) || continue
+        event_type=$(echo "$line" | jq -r '.type // empty' 2>/dev/null) || continue
+        from_state=$(echo "$line" | jq -r '.from_state // ""' 2>/dev/null) || from_state=""
+        to_state=$(echo "$line" | jq -r '.to_state // ""' 2>/dev/null) || to_state=""
+        timestamp=$(echo "$line" | jq -r '.timestamp // ""' 2>/dev/null) || timestamp=""
+
+        [[ -z "$event_source" || -z "$event_type" ]] && continue
+
+        # Build enriched context
+        local enriched_context
+        enriched_context=$(jq -n \
+            --argjson kernel_event_id "$event_id" \
+            --arg run_id "$run_id" \
+            --arg from_state "$from_state" \
+            --arg to_state "$to_state" \
+            --arg timestamp "$timestamp" \
+            '{kernel_event_id:$kernel_event_id,run_id:$run_id,from_state:$from_state,to_state:$to_state,timestamp:$timestamp}' \
+            2>/dev/null) || continue
+
+        # Materialize into interspect.db evidence
+        _interspect_insert_evidence \
+            "$session_id" "kernel-${event_source}" "${event_type}" \
+            "" "$enriched_context" "interspect-consumer" \
+            2>/dev/null || true
+    done <<< "$events_json"
+}
+
 # Get a summary of all canaries (for status display).
 # Returns: JSON array of canary status objects
 _interspect_get_canary_summary() {
@@ -1372,7 +1435,7 @@ _interspect_sanitize() {
 _interspect_validate_hook_id() {
     local hook_id="$1"
     case "$hook_id" in
-        interspect-evidence|interspect-session-start|interspect-session-end|interspect-correction)
+        interspect-evidence|interspect-session-start|interspect-session-end|interspect-correction|interspect-consumer)
             return 0
             ;;
         *)

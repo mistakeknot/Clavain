@@ -23,6 +23,22 @@ _interspect_ensure_db
 DB=$(_interspect_db_path)
 ```
 
+## Kernel Evidence (dual-read)
+
+Also query the Intercore kernel's `interspect_events` table for corrections that may not yet be in the legacy store:
+
+```bash
+KERNEL_COUNT=0
+if command -v ic &>/dev/null; then
+    KERNEL_EVENTS=$(ic interspect query --limit=200 2>/dev/null) || KERNEL_EVENTS=""
+    if [[ -n "$KERNEL_EVENTS" ]]; then
+        KERNEL_COUNT=$(echo "$KERNEL_EVENTS" | wc -l)
+    fi
+fi
+```
+
+The kernel consumer (E4.5) materializes kernel events into the legacy DB at session start, so `_interspect_get_classified_patterns` already reflects most kernel data. The dual-read here provides visibility into any events not yet consumed.
+
 ## Pattern Detection & Classification
 
 Use the lib-interspect.sh confidence gate to query and classify all patterns:
@@ -90,6 +106,7 @@ Present the analysis as:
 - Total evidence events: {total}
 - Override events: {overrides} ({override_pct}%)
 - Agent dispatch events: {dispatches}
+- Kernel events (interspect_events): {kernel_count} (via `ic interspect query`)
 - Active sessions (last 7d): {recent}
 - Dark sessions: {dark}
 

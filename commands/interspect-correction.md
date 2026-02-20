@@ -59,6 +59,27 @@ _interspect_insert_evidence \
     "interspect-correction"
 ```
 
+## Kernel Dual-Write (best-effort)
+
+After the legacy write succeeds, also write to the Intercore kernel's `interspect_events` table so corrections are visible to kernel-side consumers:
+
+```bash
+# Dual-write to intercore kernel (fail-open)
+if command -v ic &>/dev/null; then
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    RUN_ID=$(ic run current --project="$PROJECT_ROOT" 2>/dev/null) || RUN_ID=""
+    ic interspect record \
+        --agent="$AGENT_NAME" \
+        --type="correction" \
+        --reason="$OVERRIDE_REASON" \
+        --context="$CONTEXT" \
+        --session="$CLAUDE_SESSION_ID" \
+        --project="$PROJECT_ROOT" \
+        ${RUN_ID:+--run="$RUN_ID"} \
+        2>/dev/null || true
+fi
+```
+
 ## Confirm
 
 After inserting, query the total count for this agent:

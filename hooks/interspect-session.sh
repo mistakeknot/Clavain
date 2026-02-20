@@ -40,6 +40,24 @@ sqlite3 "$_INTERSPECT_DB" \
     "INSERT OR IGNORE INTO sessions (session_id, start_ts, project) VALUES ('${E_SID}', '${TS}', '${E_PROJECT}');" \
     2>/dev/null || true
 
+# Resolve active ic run for this project (fail-open)
+RUN_ID=""
+if command -v ic &>/dev/null; then
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    RUN_ID=$(ic run current --project="$PROJECT_ROOT" 2>/dev/null) || RUN_ID=""
+fi
+
+# Store run_id if available (UPDATE is harmless if empty)
+if [[ -n "$RUN_ID" ]]; then
+    E_RUN_ID="${RUN_ID//\'/\'\'}"
+    sqlite3 "$_INTERSPECT_DB" \
+        "UPDATE sessions SET run_id = '${E_RUN_ID}' WHERE session_id = '${E_SID}';" \
+        2>/dev/null || true
+fi
+
+# Consume kernel events (catch up since last session)
+_interspect_consume_kernel_events "$SESSION_ID" 2>/dev/null || true
+
 # Check for canary alerts — evaluate completed canaries first
 _interspect_check_canaries >/dev/null 2>&1 || true
 
