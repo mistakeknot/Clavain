@@ -274,6 +274,82 @@ intercore_run_artifact_add() {
     "$INTERCORE_BIN" run artifact add "$run_id" --phase="$artifact_phase" --path="$artifact_path" --type="$artifact_type" 2>/dev/null
 }
 
+# intercore_run_create — Create a new run.
+# Args: $1=project_dir, $2=goal, $3=phases_json (optional), $4=scope_id (optional), $5=complexity (optional)
+# Prints: run ID to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_create() {
+    local project="$1" goal="$2" phases="${3:-}" scope_id="${4:-}" complexity="${5:-3}"
+    if ! intercore_available; then return 1; fi
+    local args=(run create --project="$project" --goal="$goal" --complexity="$complexity")
+    if [[ -n "$phases" ]]; then
+        args+=(--phases="$phases")
+    fi
+    if [[ -n "$scope_id" ]]; then
+        args+=(--scope-id="$scope_id")
+    fi
+    "$INTERCORE_BIN" "${args[@]}" 2>/dev/null
+}
+
+# intercore_run_advance — Advance run to next phase.
+# Args: $1=run_id, $2=priority (optional, default 4=no gates), $3=skip_reason (optional)
+# Prints: JSON result to stdout (with --json)
+# Returns: 0=advanced, 1=blocked/not-found, 2+=error
+intercore_run_advance() {
+    local run_id="$1" priority="${2:-4}" skip_reason="${3:-}"
+    if ! intercore_available; then return 1; fi
+    local args=(run advance "$run_id" --priority="$priority" --json)
+    if [[ -n "$skip_reason" ]]; then
+        args+=(--skip-reason="$skip_reason")
+    fi
+    "$INTERCORE_BIN" "${args[@]}" 2>/dev/null
+}
+
+# intercore_run_status — Get full run details as JSON.
+# Args: $1=run_id
+# Prints: JSON run object to stdout
+# Returns: 0 on success, 1 on not found
+intercore_run_status() {
+    local run_id="$1"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run status "$run_id" --json 2>/dev/null
+}
+
+# intercore_run_list — List runs with optional filtering.
+# Args: flags (e.g., "--active", "--active" "--scope=<id>")
+# Prints: JSON array of run objects to stdout
+# Returns: 0 always
+intercore_run_list() {
+    if ! intercore_available; then echo "[]"; return 0; fi
+    "$INTERCORE_BIN" run list --json "$@" 2>/dev/null || echo "[]"
+}
+
+# intercore_run_set — Update run settings.
+# Args: $1=run_id, rest=flags (e.g., --complexity=4, --force-full=true)
+# Returns: 0 on success, 1 on failure
+intercore_run_set() {
+    local run_id="$1"; shift
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run set "$run_id" "$@" 2>/dev/null
+}
+
+# intercore_run_agent_list — List agents for a run.
+# Args: $1=run_id
+# Prints: JSON array to stdout
+intercore_run_agent_list() {
+    local run_id="$1"
+    if ! intercore_available; then echo "[]"; return 0; fi
+    "$INTERCORE_BIN" run agent list "$run_id" --json 2>/dev/null || echo "[]"
+}
+
+# intercore_run_agent_update — Update an agent's status.
+# Args: $1=agent_id, $2=status
+intercore_run_agent_update() {
+    local agent_id="$1" status="$2"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run agent update "$agent_id" --status="$status" 2>/dev/null
+}
+
 # --- Gate wrappers ---
 
 # intercore_gate_check — Dry-run gate evaluation for the next transition.
