@@ -4,7 +4,7 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 15 skills, 4 agents, 52 commands, 21 hooks, 1 MCP server. 31 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 15 skills, 4 agents, 52 commands, 22 hooks, 1 MCP server. 31 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
 
 ## Quick Commands
 
@@ -35,6 +35,7 @@ bash -n hooks/lib-interspect.sh        # Syntax check (interspect shared library
 bash -n hooks/interspect-evidence.sh   # Syntax check (interspect evidence hook)
 bash -n hooks/interspect-session.sh    # Syntax check (interspect session start)
 bash -n hooks/interspect-session-end.sh # Syntax check (interspect session end)
+bash -n hooks/session-end-handoff.sh  # Syntax check (SessionEnd backup handoff)
 bash -n scripts/clodex-toggle.sh   # Syntax check
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 ```
