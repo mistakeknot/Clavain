@@ -411,7 +411,7 @@ sprint_full_scan() {
                 _sphase=$(echo "$_full_active_sprints" | jq -r ".[$_si].phase")
 
                 # Build progress bar
-                local _phases=("brainstorm" "strategized" "planned" "plan-reviewed" "executing" "shipping" "done")
+                local _phases=("brainstorm" "strategized" "planned" "plan-reviewed" "executing" "shipping" "reflect" "done")
                 local _bar=""
                 local _found_current=0
                 local _p

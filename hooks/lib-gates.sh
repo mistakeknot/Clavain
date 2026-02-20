@@ -22,7 +22,7 @@ if [[ -n "$_BEADS_ROOT" && -f "${_BEADS_ROOT}/hooks/lib-gates.sh" ]]; then
     export GATES_PROJECT_DIR="${GATES_PROJECT_DIR:-.}"; source "${_BEADS_ROOT}/hooks/lib-gates.sh"
 else
     # No-op stubs — all functions are fail-safe (never block workflow)
-    CLAVAIN_PHASES=(brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping done)
+    CLAVAIN_PHASES=(brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping reflect done)
     VALID_TRANSITIONS=()
     ARTIFACT_PHASE_DIRS=()
     is_valid_transition() { return 1; }

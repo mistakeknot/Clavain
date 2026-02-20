@@ -75,7 +75,7 @@ sprint_create() {
     bd update "$sprint_id" --status=in_progress >/dev/null 2>&1 || true
 
     # Create ic run linked to bead via scope-id
-    local phases_json='["brainstorm","brainstorm-reviewed","strategized","planned","plan-reviewed","executing","shipping","done"]'
+    local phases_json='["brainstorm","brainstorm-reviewed","strategized","planned","plan-reviewed","executing","shipping","reflect","done"]'
     local run_id
     run_id=$(intercore_run_create "$(pwd)" "$title" "$phases_json" "$sprint_id") || run_id=""
 
@@ -556,9 +556,13 @@ enforce_gate() {
 
 # ─── Auto-Advance (Phase 2) ──────────────────────────────────────
 
+# DEPRECATED: Fallback transition table for beads-only mode (no intercore).
+# Primary path: ic run advance (kernel walks the phase chain stored on the run).
+# This table is only used by sprint_advance()'s beads fallback and sprint_next_required_phase().
+# When intercore is available, sprint_advance() delegates to intercore_run_advance() and
+# this table is never consulted.
 # Strict phase transition table. Returns the NEXT phase given the CURRENT phase.
 # Every phase has exactly one successor. No skip paths.
-# CORRECTNESS: This is the single source of truth for phase sequencing.
 # sprint_next_step() derives from this table — do NOT maintain phase order elsewhere.
 _sprint_transition_table() {
     local current="$1"
@@ -569,7 +573,8 @@ _sprint_transition_table() {
         planned)             echo "plan-reviewed" ;;
         plan-reviewed)       echo "executing" ;;
         executing)           echo "shipping" ;;
-        shipping)            echo "done" ;;
+        shipping)            echo "reflect" ;;
+        reflect)             echo "done" ;;
         done)                echo "done" ;;
         *)                   echo "" ;;
     esac
@@ -594,6 +599,7 @@ sprint_next_step() {
         plan-reviewed)       echo "flux-drive" ;;
         executing)           echo "work" ;;
         shipping)            echo "ship" ;;
+        reflect)             echo "reflect" ;;
         done)                echo "done" ;;
         *)                   echo "brainstorm" ;;  # Handles "" and unknown
     esac
@@ -897,16 +903,17 @@ sprint_complexity_label() {
 
 # ─── Phase Skipping ──────────────────────────────────────────────
 
+# DEPRECATED: Beads-only fallback. Primary path uses ic run skip + short --phases chains.
 # Return the list of required phases for a given complexity tier.
 # Phases not in this list should be skipped by the sprint orchestrator.
 # Output: space-separated phase names (whitelist)
 sprint_phase_whitelist() {
     local complexity="${1:-3}"
     case "$complexity" in
-        1) echo "planned executing shipping done" ;;
-        2) echo "planned plan-reviewed executing shipping done" ;;
-        3|4|5) echo "brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping done" ;;
-        *) echo "brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping done" ;;
+        1) echo "planned executing shipping reflect done" ;;
+        2) echo "planned plan-reviewed executing shipping reflect done" ;;
+        3|4|5) echo "brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping reflect done" ;;
+        *) echo "brainstorm brainstorm-reviewed strategized planned plan-reviewed executing shipping reflect done" ;;
     esac
 }
 
