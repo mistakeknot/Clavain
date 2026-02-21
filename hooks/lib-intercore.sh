@@ -227,70 +227,6 @@ intercore_dispatch_kill() {
 
 # --- Run wrappers ---
 
-# intercore_run_create — Create a new run.
-# Args: $1=project_dir, $2=goal, $3=phases_json (optional), $4=scope_id (optional),
-#       $5=complexity (optional, default 3), $6=token_budget (optional)
-# Prints: run ID to stdout
-# Returns: 0 on success, 1 on failure
-intercore_run_create() {
-    local project="$1" goal="$2" phases_json="${3:-}" scope_id="${4:-}"
-    local complexity="${5:-3}" token_budget="${6:-}"
-    if ! intercore_available; then return 1; fi
-    local args=(run create --project="$project" --goal="$goal" --complexity="$complexity")
-    [[ -n "$phases_json" ]] && args+=(--phases="$phases_json")
-    [[ -n "$scope_id" ]] && args+=(--scope-id="$scope_id")
-    [[ -n "$token_budget" ]] && args+=(--token-budget="$token_budget")
-    "$INTERCORE_BIN" "${args[@]}" 2>/dev/null
-}
-
-# intercore_run_list — List runs with optional filters.
-# Args: any ic run list flags (e.g., "--active")
-# Prints: JSON array to stdout
-# Returns: 0 on success, 1 on failure
-intercore_run_list() {
-    if ! intercore_available; then return 1; fi
-    "$INTERCORE_BIN" run list "$@" --json 2>/dev/null
-}
-
-# intercore_run_status — Get full run status as JSON.
-# Args: $1=run_id
-# Prints: JSON object to stdout
-# Returns: 0 on success, 1 on failure
-intercore_run_status() {
-    local id="$1"
-    if ! intercore_available; then return 1; fi
-    "$INTERCORE_BIN" run status "$id" --json 2>/dev/null
-}
-
-# intercore_run_advance — Advance a run to the next phase.
-# Args: $1=run_id
-# Prints: JSON object with from_phase, to_phase, advanced fields
-# Returns: 0 on success (advanced=true), 1 on block/pause/failure
-intercore_run_advance() {
-    local id="$1"
-    if ! intercore_available; then return 1; fi
-    "$INTERCORE_BIN" run advance "$id" --json 2>/dev/null
-}
-
-# intercore_run_agent_list — List agents for a run.
-# Args: $1=run_id
-# Prints: JSON array to stdout
-# Returns: 0 on success, 1 on failure
-intercore_run_agent_list() {
-    local run_id="$1"
-    if ! intercore_available; then return 1; fi
-    "$INTERCORE_BIN" run agent list "$run_id" --json 2>/dev/null
-}
-
-# intercore_run_agent_update — Update an agent's status.
-# Args: $1=agent_id, $2=status
-# Returns: 0 on success, 1 on failure
-intercore_run_agent_update() {
-    local agent_id="$1" status="$2"
-    if ! intercore_available; then return 1; fi
-    "$INTERCORE_BIN" run agent update "$agent_id" --status="$status" 2>/dev/null
-}
-
 # intercore_run_current — Get the active run ID for a project.
 # Args: $1=project_dir (optional, defaults to CWD)
 # Prints: run ID to stdout
@@ -566,4 +502,63 @@ intercore_run_code_rollback() {
     local args=(run rollback "$run_id" --layer=code)
     [[ -n "$filter_phase" ]] && args+=(--phase="$filter_phase")
     "$INTERCORE_BIN" "${args[@]}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# --- Phase Action wrappers ---
+
+# intercore_run_action_add — Register a phase action for a run.
+# Args: $1=run_id, $2=phase, $3=command, $4=mode (optional), $5=args_json (optional)
+# Prints: JSON with id
+# Returns: 0 on success, 1 on duplicate, 2+ on error
+intercore_run_action_add() {
+    local run_id="$1" phase="$2" command="$3" mode="${4:-interactive}" args_json="${5:-}"
+    if ! intercore_available; then return 1; fi
+    local cmd_args=(--json run action add "$run_id" --phase="$phase" --command="$command" --mode="$mode")
+    [[ -n "$args_json" ]] && cmd_args+=(--args="$args_json")
+    "$INTERCORE_BIN" "${cmd_args[@]}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# intercore_run_action_list — List actions for a run, optionally filtered by phase.
+# Args: $1=run_id, $2=phase (optional)
+# Prints: JSON array of actions
+# Returns: 0 on success, 1 on failure
+intercore_run_action_list() {
+    local run_id="$1" phase="${2:-}"
+    if ! intercore_available; then return 1; fi
+    local cmd_args=(--json run action list "$run_id")
+    [[ -n "$phase" ]] && cmd_args+=(--phase="$phase")
+    "$INTERCORE_BIN" "${cmd_args[@]}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# intercore_run_action_update — Update a phase action's args, mode, or priority.
+# Args: $1=run_id, $2=phase, $3=command, $4=field=value pairs (--args=, --mode=, --priority=)
+# Returns: 0 on success, 1 on not found
+intercore_run_action_update() {
+    local run_id="$1" phase="$2" command="$3"
+    shift 3
+    if ! intercore_available; then return 1; fi
+    local cmd_args=(run action update "$run_id" --phase="$phase" --command="$command")
+    cmd_args+=("$@")
+    "$INTERCORE_BIN" "${cmd_args[@]}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# intercore_run_action_delete — Delete a phase action.
+# Args: $1=run_id, $2=phase, $3=command
+# Returns: 0 on success, 1 on not found
+intercore_run_action_delete() {
+    local run_id="$1" phase="$2" command="$3"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run action delete "$run_id" --phase="$phase" --command="$command" \
+        ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# intercore_run_advance — Advance a run to the next phase.
+# Args: $1=run_id, $2=priority (optional, default 0)
+# Prints: JSON with from_phase, to_phase, advanced, actions, etc.
+# Returns: 0 on success (advanced), 1 on blocked/not found
+intercore_run_advance() {
+    local run_id="$1" priority="${2:-0}"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" --json run advance "$run_id" --priority="$priority" \
+        ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
 }

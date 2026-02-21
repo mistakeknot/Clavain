@@ -511,6 +511,40 @@ enforce_gate() {
 # Phase chain lives in ic (passed at creation time). This just maps phases to commands.
 sprint_next_step() {
     local phase="$1"
+
+    # Query kernel for registered phase actions (if run exists)
+    if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+        local run_id
+        run_id=$(_sprint_resolve_run_id "$CLAVAIN_BEAD_ID" 2>/dev/null) || run_id=""
+        if [[ -n "$run_id" ]]; then
+            local actions
+            actions=$(intercore_run_action_list "$run_id" "$phase" 2>/dev/null) || actions="[]"
+            local count
+            count=$(echo "$actions" | jq 'length' 2>/dev/null) || count=0
+            if [[ "$count" -gt 0 ]]; then
+                # Return the highest-priority action's command
+                local cmd
+                cmd=$(echo "$actions" | jq -r '.[0].command' 2>/dev/null) || cmd=""
+                if [[ -n "$cmd" ]]; then
+                    # Map command names to sprint step names
+                    case "$cmd" in
+                        /clavain:brainstorm)       echo "brainstorm" ;;
+                        /clavain:strategy)         echo "strategy" ;;
+                        /clavain:write-plan)       echo "write-plan" ;;
+                        /interflux:flux-drive)     echo "flux-drive" ;;
+                        /clavain:work)             echo "work" ;;
+                        /clavain:quality-gates)    echo "quality-gates" ;;
+                        /clavain:resolve)          echo "ship" ;;
+                        /reflect|/clavain:reflect) echo "reflect" ;;
+                        *)                         echo "$cmd" ;;
+                    esac
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+    # Fallback: static phase→step mapping
     case "$phase" in
         brainstorm)          echo "strategy" ;;
         brainstorm-reviewed) echo "strategy" ;;
