@@ -99,8 +99,10 @@ _sprint_default_budget() {
 # Create a sprint: ic run (required) + bead (tracking, fatal if bd available).
 # Returns bead ID to stdout (for CLAVAIN_BEAD_ID).
 # REQUIRES: intercore available. Bead creation failure is fatal (when bd installed).
+# $1: title, $2: complexity (default 3), $3: lane name (optional)
 sprint_create() {
     local title="${1:-Sprint}"
+    local lane="${3:-}"
 
     sprint_require_ic || { echo ""; return 1; }
 
@@ -116,6 +118,10 @@ sprint_create() {
         fi
         bd set-state "$sprint_id" "sprint=true" >/dev/null 2>&1 || true
         bd update "$sprint_id" --status=in_progress >/dev/null 2>&1 || true
+        # Tag with lane label if specified
+        if [[ -n "$lane" ]]; then
+            bd label add "$sprint_id" "lane:${lane}" >/dev/null 2>&1 || true
+        fi
     fi
 
     # Use bead ID as scope_id if available, otherwise generate a placeholder

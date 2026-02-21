@@ -59,7 +59,7 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only) AND no a
 
 1. Run the work discovery scanner:
    ```bash
-   export DISCOVERY_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_scan_beads
+   export DISCOVERY_PROJECT_DIR="."; export DISCOVERY_LANE="${DISCOVERY_LANE:-}"; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_scan_beads
    ```
 
 2. Parse the output:
@@ -110,6 +110,7 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only) AND no a
 8. **After routing to a command, stop.** Do NOT continue to Step 1 — the routed command handles the workflow from here.
 
 If invoked WITH arguments (`$ARGUMENTS` is not empty):
+- **If `$ARGUMENTS` contains `--lane=<name>`**: Extract the lane name and set `DISCOVERY_LANE=<name>` before any discovery calls. Display: `Lane: <name> — filtering to lane-scoped beads`. When creating a new sprint bead, also tag it: `bd label add "$SPRINT_ID" "lane:${SPRINT_LANE}"`.
 - **If `$ARGUMENTS` contains `--resume`**: Read checkpoint with `checkpoint_read`. If a checkpoint exists, validate with `checkpoint_validate`, display completed steps, and skip to the first incomplete step. If no checkpoint, fall through to Work Discovery.
 - **If `$ARGUMENTS` contains `--from-step <n>`**: Skip directly to step `<n>` regardless of checkpoint state. Step names: brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, reflect, ship.
 - **If `$ARGUMENTS` matches a bead ID** (format: `[A-Za-z]+-[a-z0-9]+`):
