@@ -1,0 +1,67 @@
+# Model routing policy for Clavain (Track B1: Static Routing Table)
+#
+# Two namespaces:
+#   subagents: Claude Code agents (haiku/sonnet/opus/inherit)
+#   dispatch:  Codex CLI agents (concrete model IDs)
+#
+# Subagent resolution order (highest priority first):
+#   overrides[agent] > phases[phase].categories[cat] > phases[phase].model > defaults.categories[cat] > defaults.model
+#
+# Dispatch resolution:
+#   tiers[name].model, with fallback chain if tier not found
+#
+# When this file is absent, all consumers fall back to their existing defaults.
+
+subagents:
+  defaults:
+    model: sonnet
+    categories:
+      research: haiku
+      review: sonnet
+      workflow: sonnet
+      synthesis: haiku
+
+  phases:
+    brainstorm:
+      model: opus
+      categories:
+        # Research agents stay cheap even during brainstorm
+        research: haiku
+    brainstorm-reviewed:
+      model: opus
+    strategized:
+      model: opus
+    planned:
+      model: sonnet
+    executing:
+      model: sonnet
+      categories:
+        # Review agents get opus during execution (quality gates run here)
+        review: opus
+    shipping:
+      model: sonnet
+    reflect:
+      model: sonnet
+    done:
+      model: sonnet
+
+dispatch:
+  tiers:
+    fast:
+      model: gpt-5.3-codex-spark
+      description: Scoped read-only tasks, exploration, verification, quick reviews
+    fast-clavain:
+      model: gpt-5.3-codex-spark-xhigh
+      description: Clavain interserve-mode default for read-only/administrative tasks
+    deep:
+      model: gpt-5.3-codex
+      description: Generative tasks, implementation, complex reasoning, debates
+    deep-clavain:
+      model: gpt-5.3-codex-xhigh
+      description: Clavain interserve-mode high-complexity/research/flux-drive dispatch
+
+  # Fallback if a tier is unavailable (API returns model_not_found)
+  fallback:
+    fast: deep
+    fast-clavain: deep-clavain
+    deep-clavain: deep

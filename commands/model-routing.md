@@ -1,12 +1,12 @@
 ---
 name: model-routing
-description: Toggle subagent model routing between economy (smart defaults) and quality (all Opus) mode
+description: Toggle subagent model routing between economy (smart defaults) and quality (all opus) mode
 argument-hint: "[economy|quality|status]"
 ---
 
 # Model Routing
 
-Toggle how subagents pick their model tier.
+Toggle how subagents pick their model tier. Reads from `config/routing.yaml` — the single source of truth for all model routing policy.
 
 ## Current Mode
 
@@ -14,21 +14,28 @@ Toggle how subagents pick their model tier.
 
 ### `status` (or no argument)
 
-Report the current routing by reading all agent frontmatter:
+Source `scripts/lib-routing.sh` and call `routing_list_mappings` to show the full routing table.
 
-```bash
-grep -r '^model:' agents/{review,research,workflow}/*.md
+Determine the mode label by inspecting `config/routing.yaml`:
+- If `defaults.model` is `sonnet` and categories match economy defaults → **economy**
+- If `defaults.model` is `opus` and all categories are `opus` → **quality**
+- Otherwise → **custom**
+
+Display phase overrides that differ from the default model. Only show phases where the model or a category override deviates.
+
+Output format:
+
 ```
+Mode: economy
 
-Summarize as:
+Defaults:
+  research: haiku | review: sonnet | workflow: sonnet | synthesis: haiku
 
-```
-Model Routing Status:
-  Research (5): [model] — best-practices, framework-docs, git-history, learnings, repo-research
-  Review (2+7): [model] — plan-reviewer, data-migration (clavain) + fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance (interflux) + agent-native (intercraft)
-  Workflow (2):  [model] — bug-reproduction, pr-comment-resolver
-
-Mode: [economy|quality|mixed]
+Phase overrides:
+  brainstorm:          opus (all categories)
+  brainstorm-reviewed: opus (all categories)
+  strategized:         opus (all categories)
+  executing:           review → opus
 ```
 
 ### `economy` (default)
@@ -37,27 +44,79 @@ Set smart defaults optimized for cost:
 
 | Category | Model | Rationale |
 |----------|-------|-----------|
-| Research (5) | `haiku` | Grep, read, summarize — doesn't need reasoning |
-| Review (9) | `sonnet` | Structured analysis with good judgment |
-| Workflow (2) | `sonnet` | Code changes need reliable execution |
+| Research | `haiku` | Grep, read, summarize — doesn't need reasoning |
+| Review | `sonnet` | Structured analysis with good judgment |
+| Workflow | `sonnet` | Code changes need reliable execution |
+| Synthesis | `haiku` | Aggregation tasks — pattern matching, not reasoning |
 
-Apply by editing each agent's frontmatter `model:` line:
+Update `config/routing.yaml` subagents defaults section:
 
 ```bash
-# Research → haiku
-sed -i 's/^model: .*$/model: haiku/' agents/research/*.md
+sed -i '/^subagents:/,/^dispatch:/{
+  /^  defaults:/,/^  phases:/{
+    s/^\(    model:\).*/\1 sonnet/
+    /^    categories:/,/^  [a-z]/{
+      s/^\(      research:\).*/\1 haiku/
+      s/^\(      review:\).*/\1 sonnet/
+      s/^\(      workflow:\).*/\1 sonnet/
+      s/^\(      synthesis:\).*/\1 haiku/
+    }
+  }
+}' config/routing.yaml
+```
 
-# Review + Workflow → sonnet
-sed -i 's/^model: .*$/model: sonnet/' agents/review/*.md agents/workflow/*.md
+Also reset all phase models to their standard economy values:
+
+```bash
+sed -i '/^  phases:/,/^dispatch:/{
+  /^\(      model:\).*/s//\1 sonnet/
+  /brainstorm:/{n;s/^\(      model:\).*/\1 opus/}
+  /brainstorm-reviewed:/{n;s/^\(      model:\).*/\1 opus/}
+  /strategized:/{n;s/^\(      model:\).*/\1 opus/}
+}' config/routing.yaml
 ```
 
 ### `quality`
 
-Maximum quality — all agents use the parent session's model (typically Opus):
+Maximum quality — all resolution paths return `opus`:
+
+Update `config/routing.yaml`:
+
+1. Set all defaults to `opus`:
 
 ```bash
-sed -i 's/^model: .*$/model: inherit/' agents/{review,research,workflow}/*.md
+sed -i '/^subagents:/,/^dispatch:/{
+  /^  defaults:/,/^  phases:/{
+    s/^\(    model:\).*/\1 opus/
+    /^    categories:/,/^  [a-z]/{
+      s/^\(      research:\).*/\1 opus/
+      s/^\(      review:\).*/\1 opus/
+      s/^\(      workflow:\).*/\1 opus/
+      s/^\(      synthesis:\).*/\1 opus/
+    }
+  }
+}' config/routing.yaml
 ```
+
+2. Set all phase models to `inherit` (so defaults.model=opus flows through):
+
+```bash
+sed -i '/^  phases:/,/^dispatch:/{
+  s/^\(      model:\).*/\1 inherit/
+}' config/routing.yaml
+```
+
+3. Set all phase category overrides to `inherit`:
+
+```bash
+sed -i '/^  phases:/,/^dispatch:/{
+  /^        [a-z].*:/{
+    s/^\(        [a-z][a-z0-9_-]*:\).*/\1 inherit/
+  }
+}' config/routing.yaml
+```
+
+**Result:** `resolve_model` at any phase + category returns `opus` (via inherit → defaults.model=opus fallback chain).
 
 **Use when:** Critical reviews, production deployments, complex architectural decisions where you want maximum reasoning on every agent.
 
@@ -67,3 +126,4 @@ sed -i 's/^model: .*$/model: inherit/' agents/{review,research,workflow}/*.md
 - Does not affect agents already running
 - Economy mode saves ~5x on research and ~3x on review vs. quality mode
 - Individual agents can still be overridden with `model: <tier>` in the Task tool call
+- `config/routing.yaml` is the single source of truth — no agent frontmatter involved

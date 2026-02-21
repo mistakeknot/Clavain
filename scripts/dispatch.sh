@@ -27,9 +27,16 @@ PROMPT_FILE=""
 TEMPLATE_FILE=""
 IMAGES=()
 EXTRA_ARGS=()
+PHASE=""
 DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${CLAUDE_SESSION_ID:-}"
+
+# Source routing library (shared with model-routing command)
+# shellcheck source=lib-routing.sh
+if [[ -f "${DISPATCH_SCRIPT_DIR}/lib-routing.sh" ]]; then
+  source "${DISPATCH_SCRIPT_DIR}/lib-routing.sh"
+fi
 
 _load_interband_lib() {
   local repo_root=""
@@ -124,8 +131,9 @@ Options:
   -o, --output-last-message <FILE>  Output file ({name} replaced by --name value)
   -s, --sandbox <MODE>          Sandbox: read-only | workspace-write | danger-full-access
   -m, --model <MODEL>           Override model (default: from ~/.codex/config.toml)
-  --tier <fast|deep>            Resolve model from config/dispatch/tiers.yaml
+  --tier <fast|deep>            Resolve model from config/routing.yaml dispatch section
                                   Mutually exclusive with -m (use -m to override)
+  --phase <NAME>                Sprint phase context (stored for future phase-aware dispatch)
   -i, --image <FILE>            Attach image to prompt (repeatable)
   --inject-docs[=SCOPE]         Prepend docs from working dir to prompt
                                   (no value)  CLAUDE.md only (recommended — Codex reads AGENTS.md natively)
@@ -158,100 +166,42 @@ require_arg() {
   fi
 }
 
-# Resolve a tier name to a model string from tiers.yaml
+# Resolve a tier name to a model string via routing.yaml (dispatch: section).
+# Handles interserve mode remapping (fast→fast-clavain, deep→deep-clavain).
 resolve_tier_model() {
   local tier="$1"
-  local config_file=""
-  local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local source_dir="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-}}"
-  local config_root=""
-  local resolved_tier="$tier"
-  local target_tier
-  local fallback_tier="$tier"
+  local target_tier="$tier"
+  local model=""
+  local used_interserve=false
 
+  # Interserve mode: prefer clavain-specific tiers
   if [[ "$CLAVAIN_INTERSERVE_MODE" == true && "$tier" == "fast" ]]; then
     target_tier="fast-clavain"
   elif [[ "$CLAVAIN_INTERSERVE_MODE" == true && "$tier" == "deep" ]]; then
     target_tier="deep-clavain"
-  else
-    target_tier="$tier"
   fi
 
-  # Find tiers.yaml relative to dispatch script first, then optional source override,
-  # then cached plugin installs.
-  if [[ -f "$script_dir/../config/dispatch/tiers.yaml" ]]; then
-    config_file="$script_dir/../config/dispatch/tiers.yaml"
-  elif [[ -n "$source_dir" && -d "$source_dir" && -f "$source_dir/config/dispatch/tiers.yaml" ]]; then
-    config_file="$source_dir/config/dispatch/tiers.yaml"
-  else
-    config_root="$(find ~/.claude/plugins/cache -path '*/clavain/*/config/dispatch/tiers.yaml' 2>/dev/null | head -1)"
-    [[ -n "$config_root" ]] && config_file="$config_root"
-  fi
+  # Try routing.yaml via lib-routing.sh (handles fallback chain internally)
+  if declare -f routing_resolve_dispatch_tier >/dev/null 2>&1; then
+    model="$(routing_resolve_dispatch_tier "$target_tier" 2>/dev/null)" || model=""
 
-  if [[ -z "$config_file" ]]; then
-    echo "Warning: tiers.yaml not found — --tier ignored, using default model" >&2
-    return 1
-  fi
-
-  # Parse YAML: find tier block under "tiers:", then read its "model:" value.
-  # For Clavain interserve mode, prefer fast-clavain/deep-clavain and fall back to fast/deep.
-  local candidate_tiers=("$target_tier")
-  if [[ "$target_tier" != "$fallback_tier" ]]; then
-    candidate_tiers+=("$fallback_tier")
-  fi
-  local model=""
-  local found=""
-  local tier_lookup
-
-  for tier_lookup in "${candidate_tiers[@]}"; do
-    # Parse every candidate from scratch to keep this function easy to audit.
-    local in_tiers=false
-    local in_tier=false
-    local current_model=""
-    while IFS= read -r line; do
-      # Detect top-level "tiers:" section
-      if [[ "$line" =~ ^tiers: ]]; then
-        in_tiers=true
-        continue
-      fi
-      # Exit tiers section on next top-level key
-      if [[ "$in_tiers" == true && "$line" =~ ^[a-z] ]]; then
-        break
-      fi
-      # Match the requested tier (e.g. "  fast:")
-      if [[ "$in_tiers" == true && "$line" =~ ^[[:space:]]+${tier_lookup}:[[:space:]]*$ ]]; then
-        in_tier=true
-        continue
-      fi
-      # Read model value from within the tier block
-      if [[ "$in_tier" == true && "$line" =~ ^[[:space:]]+model:[[:space:]]*(.+) ]]; then
-        current_model="${BASH_REMATCH[1]}"
-        break
-      fi
-      # Hit a sibling tier key — stop
-      if [[ "$in_tier" == true && "$line" =~ ^[[:space:]]+[a-z][a-z0-9_-]*:[[:space:]]*$ ]]; then
-        break
-      fi
-    done < "$config_file"
-
-    if [[ -n "$current_model" ]]; then
-      model="$current_model"
-      found="$tier_lookup"
-      break
+    if [[ -n "$model" && "$target_tier" != "$tier" ]]; then
+      used_interserve=true
     fi
 
-    if [[ "$tier_lookup" != "$fallback_tier" ]]; then
-      echo "Note: tier '$tier_lookup' not found in $config_file. Trying '$fallback_tier'." >&2
+    # If interserve tier not found, fall back to base tier
+    if [[ -z "$model" && "$target_tier" != "$tier" ]]; then
+      echo "Note: tier '$target_tier' not found. Trying '$tier'." >&2
+      model="$(routing_resolve_dispatch_tier "$tier" 2>/dev/null)" || model=""
     fi
-  done
+  fi
 
-  if [[ -n "$found" && "$found" != "$tier" ]]; then
-    echo "Note: tier '$tier' mapped to '$found' for Clavain interserve mode." >&2
+  if [[ "$used_interserve" == true ]]; then
+    echo "Note: tier '$tier' mapped to '$target_tier' for Clavain interserve mode." >&2
   fi
 
   if [[ -z "$model" ]]; then
-    echo "Warning: tier '$tier' not found in $config_file" >&2
+    echo "Warning: tier '$tier' not resolved from routing.yaml — using default model" >&2
     return 1
   fi
 
@@ -287,6 +237,11 @@ while [[ $# -gt 0 ]]; do
     --tier)
       require_arg "$1" "${2:-}"
       TIER="$2"
+      shift 2
+      ;;
+    --phase)
+      require_arg "$1" "${2:-}"
+      PHASE="$2"
       shift 2
       ;;
     -i|--image)
@@ -386,6 +341,11 @@ if [[ -n "$TIER" ]]; then
     echo "Tier '$TIER' resolved to model: $MODEL" >&2
   fi
   # If resolution fails, warning already printed — MODEL stays empty (uses config.toml default)
+fi
+
+# Log phase context (stored for future B2 phase-aware dispatch)
+if [[ -n "$PHASE" ]]; then
+  echo "Phase context: $PHASE" >&2
 fi
 
 # Resolve prompt: positional arg, --prompt-file, or error

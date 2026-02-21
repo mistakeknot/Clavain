@@ -19,7 +19,8 @@
 
 | Flag | Purpose |
 |------|---------|
-| `--tier <fast\|deep>` | Resolve model from `config/dispatch/tiers.yaml` (mutually exclusive with `-m`) |
+| `--tier <fast\|deep>` | Resolve model from `config/routing.yaml` dispatch section (mutually exclusive with `-m`) |
+| `--phase <NAME>` | Sprint phase context (for future phase-aware dispatch) |
 | `--inject-docs[=SCOPE]` | Prepend CLAUDE.md/AGENTS.md to prompt |
 | `--name <LABEL>` | Label for `{name}` substitution in output path |
 | `--prompt-file <FILE>` | Read prompt from file instead of positional arg |

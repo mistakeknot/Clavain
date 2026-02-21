@@ -41,7 +41,7 @@ See `references/cli-reference.md` for the full flag reference and `references/tr
 
 ## Model Tiers
 
-dispatch.sh supports `--tier fast|deep` to resolve model names from `config/dispatch/tiers.yaml`:
+dispatch.sh supports `--tier fast|deep` to resolve model names from `config/routing.yaml` (dispatch section):
 
 | Tier | Model | Use for |
 |------|-------|---------|
@@ -55,8 +55,9 @@ In Clavain interserve mode (`.claude/clodex-toggle.flag` present), Clavain maps:
 - Then `fast` → `gpt-5.3-codex-spark-xhigh`, `deep` → `gpt-5.3-codex-xhigh`
 
 - `--tier` and `-m` are mutually exclusive — `-m` is the escape hatch for one-off overrides
-- If `tiers.yaml` is missing, `--tier` degrades gracefully (warning, uses config.toml default)
-- Change model names in one place (`tiers.yaml`) when new models ship
+- `--phase <name>` passes sprint phase context (stored for future B2 phase-aware dispatch)
+- If `routing.yaml` is missing, `--tier` degrades gracefully (warning, uses config.toml default)
+- Change model names in one place (`config/routing.yaml`) when new models ship
 
 ## Dispatch Routing
 

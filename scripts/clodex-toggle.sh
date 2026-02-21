@@ -42,7 +42,7 @@ else
   echo 'Bash: read-only for source files (no redirects, sed -i, tee). Git and test/build commands are fine.'
   echo ''
   echo 'Clavain-interserve routing policy is available:'
-  echo '- Default interserve mode keeps --tier fast|deep as configured in config/dispatch/tiers.yaml.'
+  echo '- Default interserve mode keeps --tier fast|deep as configured in config/routing.yaml.'
   echo '- For Clavain-in-Codex routing, set `CLAVAIN_DISPATCH_PROFILE=interserve` before dispatch calls.'
   echo '- Then --tier fast resolves to gpt-5.3-codex-spark-xhigh; --tier deep resolves to gpt-5.3-codex-xhigh.'
   echo ''
