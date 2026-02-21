@@ -1,7 +1,7 @@
 # Clavain Roadmap
 
-**Version:** 0.6.48
-**Last updated:** 2026-02-20
+**Version:** 0.6.60
+**Last updated:** 2026-02-21
 **Vision:** [`docs/clavain-vision.md`](clavain-vision.md)
 **PRD:** [`docs/PRD.md`](PRD.md)
 
@@ -9,7 +9,7 @@
 
 ## Where We Are
 
-Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 22 hooks, 1 MCP server. 31 companion plugins in the inter-* constellation. 1000 beads tracked, 660 closed, 339 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
+Clavain is an autonomous software agency — 16 skills, 4 agents, 53 commands, 22 hooks, 1 MCP server. 31 companion plugins in the inter-* constellation. 1419 beads tracked, 1098 closed, 321 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
 
 ### What's Working
 
@@ -27,10 +27,9 @@ Clavain is an autonomous software agency — 15 skills, 4 agents, 52 commands, 2
 
 ### What's Not Working Yet
 
-- **Hook cutover complete, sprint handover pending.** E3 hook cutover shipped — all sprint state management uses `ic` CLI with beads fallback. Next: make the sprint skill fully kernel-driven (A2).
-- **No adaptive model routing.** Static routing exists (stage→model mapping), but no complexity-aware or outcome-driven selection.
+- **No adaptive model routing.** Static routing (B1) and complexity-aware routing (B2) shipped. Next: Interspect outcome data driving model selection (B3).
 - **Agency architecture is implicit.** Sub-agencies (Discover/Design/Build/Ship) are encoded in skills and hooks, not in declarative specs or a fleet registry.
-- **Outcome measurement limited.** Interspect collects evidence but no override has been applied. Cost-per-change and quality metrics are unquantified. (Token budgets now tracked per-sprint via iv-pbmc, done.)
+- **Outcome measurement limited.** Interspect collects evidence but no override has been applied. Cost-per-change and quality metrics are unquantified.
 
 ---
 
@@ -40,12 +39,19 @@ Major features that landed since the 0.6.22 roadmap:
 
 | Feature | Description |
 |---------|-------------|
-| **E3 Hook cutover** | Clavain sprint state management migrated from beads-only to ic-primary with beads fallback. Sprint CRUD, agent tracking, phase advancement all flow through intercore. Migration script + event reactor hooks. |
-| **Intercore kernel (E1-E2)** | Go CLI + SQLite — runs, phases, gates, dispatches, events as durable state. Kernel primitives and event reactor shipped. |
-| **Vision rewrite** | New identity: autonomous software agency with three-layer architecture (Kernel/OS/Drivers). 13 spec gaps closed. |
-| **12 new companions** | intermap, intermem, intersynth, interlens, interleave, interserve, interpeer, intertest, interkasten, interstat, interfluence, interphase v2 |
-| **Monorepo consolidation** | Physical monorepo at /root/projects/Interverse with 31 companion plugins |
-| **Version 0.6.22 → 0.6.43** | 21 version bumps |
+| **A2 Sprint handover** | Sprint skill fully kernel-driven — hybrid → handover → kernel-driven pipeline. |
+| **A3 Event-driven advancement** | Schema v14 `phase_actions` table, action CRUD, CLI, template resolution, `sprint_next_step()` queries kernel actions, default actions registered at sprint creation. |
+| **B1 Static routing** | Phase→model mapping declared in config, applied at dispatch. |
+| **B2 Complexity-aware routing** | C1-C5 classification, zero-cost bypass, shadow mode, enforce mode. 22 new routing tests. |
+| **E3 Hook cutover** | Sprint state management migrated from beads-only to ic-primary with beads fallback. |
+| **E4 Interspect kernel integration** | Evidence events flow through Intercore event bus. |
+| **E5 Discovery pipeline** | Kernel primitives for research intake — submit, score, promote, dismiss, decay, semantic search. |
+| **E6 Rollback and recovery** | Three-layer revert — workflow state, code query, completed run rollback. |
+| **E7 Autarch Phase 1** | Bigend TUI migration — dashboard, run pane, activity feed, aggregator dedup. |
+| **Intercore kernel (E1-E2)** | Go CLI + SQLite — runs, phases, gates, dispatches, events as durable state. |
+| **Vision rewrite** | Autonomous software agency with three-layer architecture (Kernel/OS/Drivers). |
+| **31 companion plugins** | intermap, intermem, intersynth, interlens, interleave, interserve, interpeer, intertest, interkasten, interstat, interfluence, interphase v2, and more |
+| **Version 0.6.22 → 0.6.60** | 38 version bumps |
 
 ---
 
@@ -60,8 +66,8 @@ Migrate Clavain from ephemeral state management to durable kernel-backed orchest
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
 | A1 | **Hook cutover** — all Clavain hooks call `ic` instead of temp files. ic-primary with beads fallback across sprint CRUD, agent tracking, and phase advancement. | iv-ngvy | **Done** | Intercore E1-E2 (done) |
-| A2 | **Sprint handover** — sprint skill becomes kernel-driven (hybrid → handover → kernel-driven) | iv-kj6w | Open (P1) | A1 (done) |
-| A3 | **Event-driven advancement** — phase transitions trigger automatic agent dispatch | iv-r9j2 | Open (P2) | A2 |
+| A2 | **Sprint handover** — sprint skill becomes kernel-driven (hybrid → handover → kernel-driven) | iv-kj6w | **Done** | A1 (done) |
+| A3 | **Event-driven advancement** — phase transitions trigger automatic agent dispatch. Schema v14: `phase_actions` table, action CRUD store, CLI (`ic run action`), template resolution (`${artifact:*}`, `${run_id}`, `${project_dir}`), advance output includes resolved actions, `sprint_next_step()` queries kernel first, default actions registered at sprint creation. | iv-r9j2 | **Done** | A2 (done) |
 
 ### Track B: Model Routing
 
@@ -69,9 +75,9 @@ Build the multi-model routing infrastructure from static to adaptive.
 
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
-| B1 | **Static routing table** — phase→model mapping declared in config, applied at dispatch | iv-dd9q | Open (P2) | — |
-| B2 | **Complexity-aware routing** — task complexity drives model selection within phases. Design with zero-cost abstraction (disabled = static path, no overhead) and shadow mode for safe rollout. See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §3. | iv-k8xn | Open (P2) | B1 |
-| B3 | **Adaptive routing** — Interspect outcome data drives model/agent selection | iv-i198 | Open (P3) | B2, Interspect (iv-thp7) |
+| B1 | **Static routing table** — phase→model mapping declared in config, applied at dispatch | iv-dd9q | **Done** | — |
+| B2 | **Complexity-aware routing** — C1-C5 classification, zero-cost bypass (disabled = static path), shadow mode, enforce mode. 22 new tests. | iv-k8xn | **Done** | B1 (done) |
+| B3 | **Adaptive routing** — Interspect outcome data drives model/agent selection | iv-i198 | Open (P3) | B2 (done), Interspect E4 (done) |
 
 ### Track C: Agency Architecture
 
@@ -80,10 +86,10 @@ Build the agency composition layer that makes Clavain a fleet of specialized sub
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
 | C1 | **Agency specs** — declarative per-stage config: agents, models, tools, artifacts, gates. Include companion capability declarations (`capabilities` field in manifests). See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §2. | iv-asfy | Open (P2) | — |
-| C2 | **Agent fleet registry** — capability + cost profiles per agent×model combination | iv-lx00 | Open (P2) | B1, C1 |
+| C2 | **Agent fleet registry** — capability + cost profiles per agent×model combination | iv-lx00 | Open (P2) | B1 (done), C1 |
 | C3 | **Composer** — matches agency specs to fleet registry within budget constraints | iv-240m | Open (P3) | C1, C2 |
 | C4 | **Cross-phase handoff** — structured protocol for how Discover's output becomes Design's input | iv-1vny | Open (P3) | C1 |
-| C5 | **Self-building loop** — Clavain uses its own agency specs to run its own development sprints | iv-6ixw | Open (P3) | C3, C4, A3 |
+| C5 | **Self-building loop** — Clavain uses its own agency specs to run its own development sprints | iv-6ixw | Open (P3) | C3, C4, A3 (done) |
 
 ### Convergence
 
@@ -91,11 +97,11 @@ The three tracks converge at C5: a self-building Clavain that autonomously orche
 
 ```
 Track A (Kernel)      Track B (Routing)     Track C (Agency)
-    A1                    B1                    C1
+    A1 ✓                  B1 ✓                  C1
     │                     │                     │
-    A2                    B2───────────────→    C2
+    A2 ✓                  B2 ✓─────────────→    C2
     │                     │                     │
-    A3                    B3                    C3
+    A3 ✓                  B3                    C3
     │                                           │
     └───────────────────────────────────────→   C4
                                                 │
@@ -110,10 +116,10 @@ These Intercore epics are prerequisites for the tracks above:
 | Epic | What | Bead | Status |
 |------|------|------|--------|
 | E3 | Hook cutover — big-bang Clavain migration | iv-ngvy | **Done** |
-| E4 | Level 3 Adapt — Interspect kernel event integration | iv-thp7 | Open (P2) |
-| E5 | Discovery pipeline — kernel primitives for research intake | iv-fra3 | Open (P2) |
-| E6 | Rollback and recovery — three-layer revert | iv-0k8s | Open (P2) |
-| E7 | Autarch Phase 1 — Bigend migration + `ic tui` | iv-ishl | Open (P2) |
+| E4 | Level 3 Adapt — Interspect kernel event integration | iv-thp7 | **Done** |
+| E5 | Discovery pipeline — kernel primitives for research intake | iv-fra3 | **Done** |
+| E6 | Rollback and recovery — three-layer revert | iv-0k8s | **Done** |
+| E7 | Autarch Phase 1 — Bigend migration + `ic tui` | iv-ishl | **Done** |
 
 ---
 
@@ -207,23 +213,29 @@ Research areas organized by proximity to current capabilities and aligned with t
 
 | Metric | Value |
 |--------|-------|
-| Total beads | 1000 |
-| Closed | 660 |
-| Open | 339 |
-| In progress | 1 |
+| Total beads | 1419 |
+| Closed | 1098 |
+| Open | 321 |
+| In progress | 0 |
 
 Key completed epics:
 - **iv-66so** — Vision refresh: autonomous software agency (P1, done)
 - **iv-ngvy** — E3: Hook cutover — big-bang Clavain migration to `ic` (P1, done)
+- **iv-kj6w** — A2: Sprint handover — kernel-driven sprint pipeline (P1, done)
+- **iv-lype** — A3: Event-driven advancement — phase actions (P2, done)
+- **iv-thp7** — E4: Interspect kernel integration (P1, done)
+- **iv-fra3** — E5: Discovery pipeline (P2, done)
+- **iv-0k8s** — E6: Rollback and recovery (P1, done)
+- **iv-ishl** — E7: Autarch Phase 1 — Bigend TUI (P1, done)
 
 Key active work:
-- **iv-kj6w** — A2: Sprint handover — sprint skill becomes kernel-driven (P1)
-- **iv-thp7** — E4: Level 3 Adapt — Interspect kernel event integration (P2)
+- **iv-asfy** — C1: Agency specs — declarative per-stage config (P2)
+- **iv-i198** — B3: Adaptive routing — Interspect-driven model selection (P3)
 
 Recently closed:
-- **iv-pbmc** — Cost-aware agent scheduling with token budgets (P1, done)
-- **iv-3krg** — Wire /reflect step into sprint.md orchestration (P2, done)
-- **iv-yeka** — Update roadmap.md for new vision + parallel tracks (P1, done)
+- **iv-r9j2** — A3: Event-driven advancement — kernel-driven routing with fallback (P2, done)
+- **iv-k8xn** — B2: Complexity-aware routing with zero-cost bypass (P2, done)
+- **iv-dd9q** — B1: Static routing table (P2, done)
 
 ---
 
@@ -241,7 +253,7 @@ Run `/interpath:roadmap` to regenerate from current project state.
 
 ---
 
-*Synthesized from: [`docs/clavain-vision.md`](clavain-vision.md), [`docs/PRD.md`](PRD.md), 1000 beads, 31 companion plugins, and the Intercore kernel vision. Sources linked throughout.*
+*Synthesized from: [`docs/clavain-vision.md`](clavain-vision.md), [`docs/PRD.md`](PRD.md), 1419 beads, 31 companion plugins, and the Intercore kernel vision. Sources linked throughout.*
 
 ## From Interverse Roadmap
 
