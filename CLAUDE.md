@@ -19,8 +19,7 @@ ls commands/*.md | wc -l              # Should be 52
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
 bash -n hooks/dotfiles-sync.sh         # Syntax check
-bash -n hooks/auto-compound.sh         # Syntax check
-bash -n hooks/auto-drift-check.sh      # Syntax check
+bash -n hooks/auto-stop-actions.sh     # Syntax check (compound + drift, merged)
 bash -n hooks/lib-signals.sh           # Syntax check
 bash -n hooks/session-handoff.sh       # Syntax check
 bash -n hooks/auto-publish.sh          # Syntax check

@@ -74,12 +74,7 @@
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-compound.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-drift-check.sh",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-stop-actions.sh",
             "timeout": 5
           },
           {
