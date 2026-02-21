@@ -73,7 +73,8 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only) AND no a
    - **Options 2-3:** Next highest-ranked beads, same label format.
    - **Second-to-last option:** `"Start fresh brainstorm"` — proceeds to Step 1 below.
    - **Last option:** `"Show full backlog"` — runs `/clavain:sprint-status`.
-   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm", ship → "Ship", closed → "Closed", create_bead → "Link orphan:"
+   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm", ship → "Ship", closed → "Closed", create_bead → "Link orphan:", verify_done → "Verify (parent closed):"
+   - **Stale-parent entries** (action: "verify_done"): Label format: `"Verify (parent closed): <bead-id> — <title> (P<priority>, parent: <parent_closed_epic>)"`. These are beads whose parent epic is closed — they may already be complete.
    - **Orphan entries** (action: "create_bead", id: null): Label format: `"Link orphan: <title> (<type>)"`. These are untracked artifacts in docs/ that have no bead. Description: "Create a bead and link it to this artifact."
 
 4. **Pre-flight check** (guards against stale scan results): Before routing, verify the selected bead still exists:
@@ -92,6 +93,10 @@ If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only) AND no a
    - `brainstorm` → `/clavain:brainstorm`
    - `ship` → `/clavain:quality-gates` (bead is in shipping phase — run final gates)
    - `closed` → Tell user "This bead is already done" and re-run discovery
+   - `verify_done` → Parent epic is closed. Tell user: "Parent epic <parent_closed_epic> is closed. This bead may already be complete." Then AskUserQuestion with options:
+     1. "Close this bead (work is done)" → `bd close <id> --reason="Completed as part of parent <parent_closed_epic>"`
+     2. "Review code before closing" → Read the bead description and relevant source files, then re-ask
+     3. "Cascade-close all siblings" → Run `bd-cascade-close <parent_closed_epic>` to close all open children of the parent epic
    - `create_bead` (orphan artifact) → Create bead and link:
      1. Run `bd create --title="<artifact title>" --type=task --priority=3` and capture the new bead ID from stdout
      2. **Validate** the bead ID matches format `[A-Za-z]+-[a-z0-9]+`. If `bd create` failed or returned invalid output, tell the user "Failed to create bead — try `bd create` manually" and stop.
