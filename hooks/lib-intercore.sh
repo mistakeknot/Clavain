@@ -227,6 +227,23 @@ intercore_dispatch_kill() {
 
 # --- Run wrappers ---
 
+# intercore_run_create — Create a new ic run.
+# Args: $1=project_dir, $2=goal, $3=phases_json, $4=scope_id (optional),
+#       $5=complexity (optional, default 3), $6=token_budget (optional),
+#       $7=actions_json (optional, e.g. '{"planned":{"command":"/clavain:work","mode":"interactive"}}')
+# Prints: run ID to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_create() {
+    local project="$1" goal="$2" phases_json="$3" scope_id="${4:-}" complexity="${5:-3}" token_budget="${6:-}" actions_json="${7:-}"
+    if ! intercore_available; then return 1; fi
+    local args=(run create --project="$project" --goal="$goal" --complexity="$complexity")
+    [[ -n "$phases_json" ]] && args+=(--phases="$phases_json")
+    [[ -n "$scope_id" ]] && args+=(--scope-id="$scope_id")
+    [[ -n "$token_budget" ]] && args+=(--token-budget="$token_budget")
+    [[ -n "$actions_json" ]] && args+=(--actions="$actions_json")
+    "$INTERCORE_BIN" "${args[@]}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
 # intercore_run_current — Get the active run ID for a project.
 # Args: $1=project_dir (optional, defaults to CWD)
 # Prints: run ID to stdout

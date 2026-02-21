@@ -132,8 +132,14 @@ sprint_create() {
     local complexity="${2:-3}"
     local token_budget
     token_budget=$(_sprint_default_budget "$complexity")
+
+    # Default phase actions for kernel-driven routing (matches sprint_next_step fallback table)
+    # Keys = phase where you ARE, values = command to run at that phase
+    # Args is a string containing a JSON array (ic CLI expects *string, not raw array)
+    local default_actions='{"brainstorm":{"command":"/clavain:strategy","mode":"interactive"},"strategized":{"command":"/clavain:write-plan","mode":"interactive"},"planned":{"command":"/interflux:flux-drive","args":"[\"${artifact:plan}\"]","mode":"interactive"},"plan-reviewed":{"command":"/clavain:work","args":"[\"${artifact:plan}\"]","mode":"both"},"executing":{"command":"/clavain:quality-gates","mode":"interactive"},"shipping":{"command":"/clavain:reflect","mode":"interactive"}}'
+
     local run_id
-    run_id=$(intercore_run_create "$(pwd)" "$title" "$phases_json" "$scope_id" "$complexity" "$token_budget") || run_id=""
+    run_id=$(intercore_run_create "$(pwd)" "$title" "$phases_json" "$scope_id" "$complexity" "$token_budget" "$default_actions") || run_id=""
 
     if [[ -z "$run_id" ]]; then
         echo "sprint_create: ic run create failed" >&2
