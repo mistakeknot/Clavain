@@ -20,6 +20,8 @@ subagents:
       review: sonnet
       workflow: sonnet
       synthesis: haiku
+      explore: haiku
+      general-purpose: sonnet
 
   phases:
     brainstorm:
