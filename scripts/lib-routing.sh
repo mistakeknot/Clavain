@@ -2,10 +2,15 @@
 # lib-routing.sh — Read config/routing.yaml and resolve model tiers.
 # Source this file; do not execute directly.
 #
-# Public API:
+# Public API (B1 — static routing):
 #   routing_resolve_model --phase <phase> [--category <cat>] [--agent <name>]
 #   routing_resolve_dispatch_tier <tier-name>
 #   routing_list_mappings
+#
+# Public API (B2 — complexity-aware routing):
+#   routing_classify_complexity --prompt-tokens <n> [--file-count <n>] [--reasoning-depth <n>]
+#   routing_resolve_model_complex --complexity <tier> [--phase ...] [--category ...] [--agent ...]
+#   routing_resolve_dispatch_tier_complex --complexity <tier> <tier-name>
 
 # Guard: only load once per shell process
 [[ -n "${_ROUTING_LOADED:-}" ]] && return 0
@@ -21,6 +26,15 @@ declare -gA _ROUTING_DISPATCH_DESC=()     # [tier]=description
 declare -gA _ROUTING_DISPATCH_FALLBACK=() # [tier]=fallback_tier
 declare -g _ROUTING_CONFIG_PATH=""
 declare -g _ROUTING_CACHE_POPULATED=""
+
+# --- B2: Complexity cache ---
+declare -g _ROUTING_CX_MODE=""                  # off | shadow | enforce
+declare -gA _ROUTING_CX_PROMPT_TOKENS=()       # [C1..C5]=threshold
+declare -gA _ROUTING_CX_FILE_COUNT=()           # [C1..C5]=threshold
+declare -gA _ROUTING_CX_REASONING_DEPTH=()      # [C1..C5]=threshold
+declare -gA _ROUTING_CX_DESC=()                 # [C1..C5]=description
+declare -gA _ROUTING_CX_SUBAGENT_MODEL=()       # [C1..C5]=model|inherit
+declare -gA _ROUTING_CX_DISPATCH_TIER=()        # [C1..C5]=tier|inherit
 
 # --- Find routing.yaml ---
 _routing_find_config() {
@@ -64,11 +78,12 @@ _routing_load_cache() {
   }
 
   # State machine for line-by-line YAML parsing (max 3 levels)
-  local section=""        # subagents | dispatch
-  local subsection=""     # defaults | phases | overrides | tiers | fallback
+  local section=""        # subagents | dispatch | complexity
+  local subsection=""     # defaults | phases | overrides | tiers | fallback | cx_tiers | cx_overrides
   local current_phase=""
   local in_categories=""  # true when inside a categories: block
   local current_tier=""
+  local current_cx_tier=""  # B2: current complexity tier being parsed
 
   while IFS= read -r line; do
     # Skip comments and blank lines
@@ -82,6 +97,10 @@ _routing_load_cache() {
     fi
     if [[ "$line" =~ ^dispatch: ]]; then
       section="dispatch"; subsection=""; current_phase=""; in_categories=""; current_tier=""
+      continue
+    fi
+    if [[ "$line" =~ ^complexity: ]]; then
+      section="complexity"; subsection=""; current_cx_tier=""
       continue
     fi
     # Another top-level key — reset
@@ -223,6 +242,71 @@ _routing_load_cache() {
         fi
       fi
     fi
+
+    # --- complexity section (B2) ---
+    if [[ "$section" == "complexity" ]]; then
+      # mode: off|shadow|enforce (2-space indent)
+      if [[ "$line" =~ ^[[:space:]]{2}mode:[[:space:]]*(.+) ]]; then
+        _ROUTING_CX_MODE="${BASH_REMATCH[1]%%[[:space:]#]*}"
+        continue
+      fi
+      # tiers: subsection
+      if [[ "$line" =~ ^[[:space:]]{2}tiers: ]]; then
+        subsection="cx_tiers"; current_cx_tier=""
+        continue
+      fi
+      # overrides: subsection
+      if [[ "$line" =~ ^[[:space:]]{2}overrides: ]]; then
+        subsection="cx_overrides"; current_cx_tier=""
+        continue
+      fi
+
+      # --- complexity tiers ---
+      if [[ "$subsection" == "cx_tiers" ]]; then
+        # Tier name (4-space indent, e.g. "    C5:")
+        if [[ "$line" =~ ^[[:space:]]{4}(C[1-5]):[[:space:]]*$ ]]; then
+          current_cx_tier="${BASH_REMATCH[1]}"
+          continue
+        fi
+        if [[ -n "$current_cx_tier" ]]; then
+          if [[ "$line" =~ ^[[:space:]]{6}description:[[:space:]]*(.+) ]]; then
+            _ROUTING_CX_DESC["$current_cx_tier"]="${BASH_REMATCH[1]%%[[:space:]#]*}"
+            continue
+          fi
+          if [[ "$line" =~ ^[[:space:]]{6}prompt_tokens:[[:space:]]*([0-9]+) ]]; then
+            _ROUTING_CX_PROMPT_TOKENS["$current_cx_tier"]="${BASH_REMATCH[1]}"
+            continue
+          fi
+          if [[ "$line" =~ ^[[:space:]]{6}file_count:[[:space:]]*([0-9]+) ]]; then
+            _ROUTING_CX_FILE_COUNT["$current_cx_tier"]="${BASH_REMATCH[1]}"
+            continue
+          fi
+          if [[ "$line" =~ ^[[:space:]]{6}reasoning_depth:[[:space:]]*([1-5]) ]]; then
+            _ROUTING_CX_REASONING_DEPTH["$current_cx_tier"]="${BASH_REMATCH[1]}"
+            continue
+          fi
+        fi
+      fi
+
+      # --- complexity overrides ---
+      if [[ "$subsection" == "cx_overrides" ]]; then
+        # Tier name (4-space indent)
+        if [[ "$line" =~ ^[[:space:]]{4}(C[1-5]):[[:space:]]*$ ]]; then
+          current_cx_tier="${BASH_REMATCH[1]}"
+          continue
+        fi
+        if [[ -n "$current_cx_tier" ]]; then
+          if [[ "$line" =~ ^[[:space:]]{6}subagent_model:[[:space:]]*(.+) ]]; then
+            _ROUTING_CX_SUBAGENT_MODEL["$current_cx_tier"]="${BASH_REMATCH[1]%%[[:space:]#]*}"
+            continue
+          fi
+          if [[ "$line" =~ ^[[:space:]]{6}dispatch_tier:[[:space:]]*(.+) ]]; then
+            _ROUTING_CX_DISPATCH_TIER["$current_cx_tier"]="${BASH_REMATCH[1]%%[[:space:]#]*}"
+            continue
+          fi
+        fi
+      fi
+    fi
   done < "$_ROUTING_CONFIG_PATH"
 
   # Warn if config exists but nothing was parsed (likely malformed)
@@ -291,6 +375,161 @@ routing_resolve_model() {
 
   [[ -n "$result" ]] && echo "$result"
   return 0
+}
+
+# --- Public (B2): classify task complexity → C1..C5 ---
+# Returns the highest complexity tier whose ANY threshold is met.
+# Evaluates top-down (C5 first). Returns empty string if complexity is off.
+routing_classify_complexity() {
+  _routing_load_cache
+
+  # Zero-cost bypass: if mode is off or not set, return immediately
+  if [[ "${_ROUTING_CX_MODE:-off}" == "off" ]]; then
+    return 0
+  fi
+
+  local prompt_tokens=0 file_count=0 reasoning_depth=1
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --prompt-tokens)    prompt_tokens="$2"; shift 2 ;;
+      --file-count)       file_count="$2"; shift 2 ;;
+      --reasoning-depth)  reasoning_depth="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  # Evaluate top-down: C5, C4, C3, C2, C1
+  local tier
+  for tier in C5 C4 C3 C2 C1; do
+    local thresh_pt="${_ROUTING_CX_PROMPT_TOKENS[$tier]:-}"
+    local thresh_fc="${_ROUTING_CX_FILE_COUNT[$tier]:-}"
+    local thresh_rd="${_ROUTING_CX_REASONING_DEPTH[$tier]:-}"
+
+    # Skip tiers with no thresholds defined
+    [[ -z "$thresh_pt" && -z "$thresh_fc" && -z "$thresh_rd" ]] && continue
+
+    # ANY threshold met → this tier matches
+    if [[ -n "$thresh_pt" && "$prompt_tokens" -ge "$thresh_pt" ]]; then
+      echo "$tier"; return 0
+    fi
+    if [[ -n "$thresh_fc" && "$file_count" -ge "$thresh_fc" ]]; then
+      echo "$tier"; return 0
+    fi
+    if [[ -n "$thresh_rd" && "$reasoning_depth" -ge "$thresh_rd" ]]; then
+      echo "$tier"; return 0
+    fi
+  done
+
+  # No tier matched — default to C1 (lowest)
+  echo "C1"
+  return 0
+}
+
+# --- Public (B2): resolve subagent model with complexity override ---
+# Wraps routing_resolve_model with complexity tier overrides.
+# In shadow mode: resolves both, logs difference to stderr, returns base result.
+# In enforce mode: returns complexity-overridden result.
+# When complexity is off or tier is empty: delegates directly to routing_resolve_model.
+routing_resolve_model_complex() {
+  _routing_load_cache
+
+  local complexity="" phase="" category="" agent=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --complexity) complexity="$2"; shift 2 ;;
+      --phase)      phase="$2"; shift 2 ;;
+      --category)   category="$2"; shift 2 ;;
+      --agent)      agent="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  # Build args for base resolver
+  local base_args=()
+  [[ -n "$phase" ]]    && base_args+=(--phase "$phase")
+  [[ -n "$category" ]] && base_args+=(--category "$category")
+  [[ -n "$agent" ]]    && base_args+=(--agent "$agent")
+
+  # Get base B1 result
+  local base_result
+  base_result="$(routing_resolve_model "${base_args[@]+"${base_args[@]}"}")"
+
+  # Zero-cost bypass: no complexity tier or mode is off
+  if [[ -z "$complexity" || "${_ROUTING_CX_MODE:-off}" == "off" ]]; then
+    [[ -n "$base_result" ]] && echo "$base_result"
+    return 0
+  fi
+
+  # Look up complexity override for subagent model
+  local cx_model="${_ROUTING_CX_SUBAGENT_MODEL[$complexity]:-}"
+  local final_result="$base_result"
+
+  if [[ -n "$cx_model" && "$cx_model" != "inherit" ]]; then
+    final_result="$cx_model"
+  fi
+
+  # Shadow mode: log but return base result
+  if [[ "${_ROUTING_CX_MODE}" == "shadow" ]]; then
+    if [[ "$final_result" != "$base_result" ]]; then
+      echo "[B2-shadow] complexity=$complexity would change model: $base_result → $final_result (phase=$phase category=$category)" >&2
+    fi
+    [[ -n "$base_result" ]] && echo "$base_result"
+    return 0
+  fi
+
+  # Enforce mode: return overridden result
+  # Guard: never return "inherit"
+  [[ "$final_result" == "inherit" ]] && final_result="$base_result"
+  [[ -n "$final_result" ]] && echo "$final_result"
+  return 0
+}
+
+# --- Public (B2): resolve dispatch tier with complexity override ---
+# In enforce mode, complexity tier can promote/demote the dispatch tier.
+# In shadow mode, logs what would change. When off, delegates to base.
+routing_resolve_dispatch_tier_complex() {
+  _routing_load_cache
+
+  local complexity="" tier=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --complexity) complexity="$2"; shift 2 ;;
+      *) [[ -z "$tier" ]] && tier="$1"; shift ;;
+    esac
+  done
+
+  # Zero-cost bypass
+  if [[ -z "$complexity" || "${_ROUTING_CX_MODE:-off}" == "off" ]]; then
+    routing_resolve_dispatch_tier "$tier"
+    return $?
+  fi
+
+  # Get base result
+  local base_result
+  base_result="$(routing_resolve_dispatch_tier "$tier" 2>/dev/null)" || base_result=""
+
+  # Look up complexity dispatch tier override
+  local cx_tier="${_ROUTING_CX_DISPATCH_TIER[$complexity]:-}"
+  local final_tier="$tier"
+
+  if [[ -n "$cx_tier" && "$cx_tier" != "inherit" ]]; then
+    final_tier="$cx_tier"
+  fi
+
+  # Shadow mode
+  if [[ "${_ROUTING_CX_MODE}" == "shadow" ]]; then
+    if [[ "$final_tier" != "$tier" ]]; then
+      local shadow_result
+      shadow_result="$(routing_resolve_dispatch_tier "$final_tier" 2>/dev/null)" || shadow_result=""
+      echo "[B2-shadow] complexity=$complexity would change dispatch: $tier($base_result) → $final_tier($shadow_result)" >&2
+    fi
+    [[ -n "$base_result" ]] && echo "$base_result"
+    return 0
+  fi
+
+  # Enforce mode: resolve the overridden tier
+  routing_resolve_dispatch_tier "$final_tier"
+  return $?
 }
 
 # --- Public: resolve dispatch tier to model ---
@@ -394,6 +633,29 @@ routing_list_mappings() {
     echo "  Fallback:"
     for k in "${!_ROUTING_DISPATCH_FALLBACK[@]}"; do
       echo "    ${k} → ${_ROUTING_DISPATCH_FALLBACK[$k]}"
+    done
+  fi
+
+  # B2: Complexity routing
+  echo ""
+  echo "Complexity Routing (B2):"
+  echo "  Mode: ${_ROUTING_CX_MODE:-off}"
+  if [[ "${_ROUTING_CX_MODE:-off}" != "off" ]]; then
+    echo "  Tiers:"
+    local cx_tier
+    for cx_tier in C5 C4 C3 C2 C1; do
+      local cx_desc="${_ROUTING_CX_DESC[$cx_tier]:-}"
+      local cx_pt="${_ROUTING_CX_PROMPT_TOKENS[$cx_tier]:-}"
+      local cx_fc="${_ROUTING_CX_FILE_COUNT[$cx_tier]:-}"
+      local cx_rd="${_ROUTING_CX_REASONING_DEPTH[$cx_tier]:-}"
+      local cx_sm="${_ROUTING_CX_SUBAGENT_MODEL[$cx_tier]:-}"
+      local cx_dt="${_ROUTING_CX_DISPATCH_TIER[$cx_tier]:-}"
+      if [[ -n "$cx_pt" || -n "$cx_fc" || -n "$cx_rd" ]]; then
+        local thresh="tokens≥${cx_pt:-_} files≥${cx_fc:-_} depth≥${cx_rd:-_}"
+        local override="subagent=${cx_sm:-inherit} dispatch=${cx_dt:-inherit}"
+        echo "    ${cx_tier}: ${thresh} → ${override}"
+        [[ -n "$cx_desc" ]] && echo "         ${cx_desc}"
+      fi
     done
   fi
 }

@@ -1,14 +1,15 @@
-# Model routing policy for Clavain (Track B1: Static Routing Table)
+# Model routing policy for Clavain (Track B1+B2: Static + Complexity-Aware Routing)
 #
-# Two namespaces:
-#   subagents: Claude Code agents (haiku/sonnet/opus/inherit)
-#   dispatch:  Codex CLI agents (concrete model IDs)
+# Three namespaces:
+#   subagents:   Claude Code agents (haiku/sonnet/opus/inherit)
+#   dispatch:    Codex CLI agents (concrete model IDs)
+#   complexity:  Task complexity → model override layer (B2)
 #
 # Subagent resolution order (highest priority first):
-#   overrides[agent] > phases[phase].categories[cat] > phases[phase].model > defaults.categories[cat] > defaults.model
+#   complexity override (if enabled+matching) > overrides[agent] > phases[phase].categories[cat] > phases[phase].model > defaults.categories[cat] > defaults.model
 #
 # Dispatch resolution:
-#   tiers[name].model, with fallback chain if tier not found
+#   complexity tier promotion/demotion (if enabled) > tiers[name].model, with fallback chain
 #
 # When this file is absent, all consumers fall back to their existing defaults.
 
@@ -67,3 +68,69 @@ dispatch:
     fast: deep
     fast-clavain: deep-clavain
     deep-clavain: deep
+
+# Complexity-aware routing (Track B2)
+#
+# When enabled, task complexity signals (token count, file scope, reasoning depth)
+# classify each task into a tier (C1-C5). Tiers can override the base model selection
+# from subagents: and promote/demote dispatch tiers.
+#
+# mode:
+#   off     — Zero-cost bypass. Complexity section is not parsed. (default)
+#   shadow  — Classify and log what *would* change, but apply base routing.
+#   enforce — Classify and apply complexity overrides.
+#
+# Zero-cost guarantee: when mode=off, routing_resolve_model behaves identically
+# to B1 with no extra function calls, no config parsing, no overhead.
+complexity:
+  mode: off
+
+  # Classification thresholds — a task's complexity tier is the highest tier
+  # whose ANY threshold is met. Evaluated top-down (C5 first).
+  # Signals: prompt_tokens (int), file_count (int), reasoning_depth (1-5 scale)
+  tiers:
+    C5:
+      description: Architectural — multi-system design, novel algorithms, cross-cutting concerns
+      prompt_tokens: 4000
+      file_count: 15
+      reasoning_depth: 5
+    C4:
+      description: Complex — multi-file implementation, significant refactoring
+      prompt_tokens: 2000
+      file_count: 8
+      reasoning_depth: 4
+    C3:
+      description: Moderate — single-component feature, standard patterns
+      prompt_tokens: 800
+      file_count: 4
+      reasoning_depth: 3
+    C2:
+      description: Simple — focused change, well-understood scope
+      prompt_tokens: 300
+      file_count: 2
+      reasoning_depth: 2
+    C1:
+      description: Trivial — typo fix, config tweak, single-line change
+      prompt_tokens: 0
+      file_count: 0
+      reasoning_depth: 1
+
+  # Per-tier model overrides. These layer on TOP of base B1 resolution.
+  # Only specified fields override; unspecified fields inherit from B1.
+  # "inherit" means "use B1 result" (explicit passthrough).
+  overrides:
+    C5:
+      subagent_model: opus
+      dispatch_tier: deep
+    C4:
+      subagent_model: opus
+      dispatch_tier: deep
+    C3:
+      subagent_model: inherit
+      dispatch_tier: inherit
+    C2:
+      subagent_model: haiku
+      dispatch_tier: fast
+    C1:
+      subagent_model: haiku
+      dispatch_tier: fast
