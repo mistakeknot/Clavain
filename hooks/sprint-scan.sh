@@ -285,19 +285,19 @@ sprint_brief_scan() {
     local coord_status
     coord_status=$(sprint_check_coordination 2>/dev/null) || coord_status=""
     if [[ -n "$coord_status" ]]; then
-        signals="${signals}• Coordination: ${coord_status}\n"
+        signals="${signals}• Coordination: ${coord_status}"$'\n'
     fi
 
     # HANDOFF.md — always show (highest priority)
     if sprint_check_handoff &>/dev/null; then
-        signals="${signals}• HANDOFF.md found — previous session left unfinished work. Read it before starting.\n"
+        signals="${signals}• HANDOFF.md found — previous session left unfinished work. Read it before starting."$'\n'
     fi
 
     # Orphaned brainstorms — only if ≥2
     local orphan_count
     orphan_count=$(sprint_count_orphaned_brainstorms 2>/dev/null) || orphan_count="0"
     if [[ "$orphan_count" -ge 2 ]] 2>/dev/null; then
-        signals="${signals}• ${orphan_count} brainstorms without matching plans — consider running /write-plan or closing them.\n"
+        signals="${signals}• ${orphan_count} brainstorms without matching plans — consider running /write-plan or closing them."$'\n'
     fi
 
     # Incomplete plans — only if <50% complete and older than 1 day
@@ -316,7 +316,7 @@ sprint_brief_scan() {
                 file_mtime=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null || echo "$now")
                 age_days=$(( (now - file_mtime) / 86400 ))
                 if [[ $age_days -ge 1 ]]; then
-                    signals="${signals}• Plan $(basename "$file") is ${pct}% complete (${checked}/${total} items) and ${age_days}d old.\n"
+                    signals="${signals}• Plan $(basename "$file") is ${pct}% complete (${checked}/${total} items) and ${age_days}d old."$'\n'
                 fi
             fi
         done
@@ -326,12 +326,12 @@ sprint_brief_scan() {
     local stale_count
     stale_count=$(sprint_stale_beads 2>/dev/null) || stale_count="0"
     if [[ "$stale_count" -gt 0 ]] 2>/dev/null; then
-        signals="${signals}• ${stale_count} stale beads (in-progress with no recent activity). Run \`bd stale\` to review.\n"
+        signals="${signals}• ${stale_count} stale beads (in-progress with no recent activity). Run \`bd stale\` to review."$'\n'
     fi
 
     # Strategy gap — brainstorms exist but no PRDs
     if sprint_check_strategy_gap 2>/dev/null; then
-        signals="${signals}• Brainstorms exist but no PRDs — consider running /strategy to bridge the gap.\n"
+        signals="${signals}• Brainstorms exist but no PRDs — consider running /strategy to bridge the gap."$'\n'
     fi
 
     # Active sprint resume hint
@@ -351,7 +351,7 @@ sprint_brief_scan() {
             _scan_top_title=$(echo "$_scan_active_sprints" | jq -r '.[0].title')
             _scan_top_phase=$(echo "$_scan_active_sprints" | jq -r '.[0].phase')
             _scan_next_step=$(sprint_next_step "$_scan_top_phase" 2>/dev/null) || _scan_next_step="unknown"
-            signals="${signals}• Active sprint: ${_scan_top_id} — ${_scan_top_title} (phase: ${_scan_top_phase}, next: ${_scan_next_step})\n"
+            signals="${signals}• Active sprint: ${_scan_top_id} — ${_scan_top_title} (phase: ${_scan_top_phase}, next: ${_scan_next_step})"$'\n'
         fi
     fi
 

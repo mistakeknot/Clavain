@@ -169,7 +169,7 @@ fi
 # shellcheck source=hooks/sprint-scan.sh
 source "${SCRIPT_DIR}/sprint-scan.sh"
 sprint_context=$(sprint_brief_scan 2>/dev/null) || sprint_context=""
-# sprint_brief_scan outputs \\n literals; escape any remaining JSON-unsafe chars
+# sprint_brief_scan outputs real newlines; escape for JSON embedding
 if [[ -n "$sprint_context" ]]; then
     sprint_context=$(escape_for_json "$sprint_context")
 fi
