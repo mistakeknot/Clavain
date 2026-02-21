@@ -878,6 +878,39 @@ checkpoint_clear() {
     rm -f "${CLAVAIN_CHECKPOINT_FILE:-.clavain/checkpoint.json}" 2>/dev/null || true
 }
 
+# ─── Close Sweep ──────────────────────────────────────────────────
+
+# Auto-close open beads that are blocked by a completed epic.
+# Prevents the "bulk audit→bead" anti-pattern where child beads stay
+# open after the parent epic ships them as part of its plan.
+# Usage: sprint_close_children <epic_id> [reason]
+# Returns: count of closed beads to stdout
+sprint_close_children() {
+    local epic_id="${1:?epic_id required}"
+    local reason="${2:-Auto-closed: parent epic $epic_id shipped}"
+    command -v bd &>/dev/null || { echo "0"; return 0; }
+
+    # Parse BLOCKS section from bd show — only open beads (← ○)
+    local blocked_ids
+    blocked_ids=$(bd show "$epic_id" 2>/dev/null \
+        | awk '/^BLOCKS$/,/^(DEPENDS ON|CHILDREN|LABELS|NOTES|DESCRIPTION|$)/' \
+        | grep '← ○' \
+        | sed 's/.*← ○ //' \
+        | cut -d: -f1 \
+        | tr -d ' ' \
+        | grep -E '^[A-Za-z]+-[A-Za-z0-9]+$') || blocked_ids=""
+
+    [[ -z "$blocked_ids" ]] && { echo "0"; return 0; }
+
+    local closed=0
+    while IFS= read -r child_id; do
+        [[ -z "$child_id" ]] && continue
+        bd close "$child_id" --reason="$reason" >/dev/null 2>&1 && closed=$((closed + 1))
+    done <<< "$blocked_ids"
+
+    echo "$closed"
+}
+
 # ─── Invalidation ─────────────────────────────────────────────────
 
 # Invalidate discovery caches. Called automatically by sprint_record_phase_completion.

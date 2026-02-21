@@ -373,6 +373,16 @@ Use the `clavain:landing-a-change` skill to verify, document, and commit the com
 
 **Phase:** After successful ship, set `phase=done` with reason `"Shipped"`. Also close the bead: `bd close "$CLAVAIN_BEAD_ID" 2>/dev/null || true`.
 
+**Close sweep:** After closing the sprint bead, auto-close any open beads that were blocked by it:
+
+```bash
+export SPRINT_LIB_PROJECT_DIR="."; source "/home/mk/.claude/plugins/cache/interagency-marketplace/clavain/0.6.56/hooks/lib-sprint.sh"
+swept=$(sprint_close_children "$CLAVAIN_BEAD_ID" "Shipped with parent epic $CLAVAIN_BEAD_ID")
+if [[ "$swept" -gt 0 ]]; then
+    echo "Auto-closed $swept child beads"
+fi
+```
+
 **Sprint summary:** At completion, display:
 ```
 Sprint Summary:
@@ -382,6 +392,7 @@ Sprint Summary:
 - Agents dispatched: <count>
 - Verdicts: <verdict_count_by_status output>
 - Estimated tokens: <verdict_total_tokens output>
+- Swept: <swept> child beads auto-closed
 ```
 
 ## Error Recovery
