@@ -423,6 +423,16 @@ Full audit rationale: `docs/plugin-audit.md`
 - Uses pnpm, not npm
 - `docs-sp-reference/` is read-only historical archive
 
+### Bulk Audit → Bead Creation
+
+When creating beads from multi-agent review findings (flux-drive, code review, etc.), **verify each finding before creating a bead**:
+
+1. `git log --oneline -5 -- <file>` — was the flagged code recently modified?
+2. `bd list | grep <keyword>` — does a bead already exist for this issue?
+3. Read the current code — is the issue actually still present?
+
+Flux-drive agents analyze code snapshots that may be stale — fixes may have landed earlier in the same session or in a previous session. Skipping verification causes wasted beads (in one session, 6 of 7 audit-generated beads were already resolved).
+
 ## Known Constraints
 
 - **No build step** — pure markdown/JSON/bash plugin, nothing to compile
