@@ -211,6 +211,10 @@ Categories:
 - **review/** — Review specialists (2): plan-reviewer and data-migration-expert. The 7 core fd-* agents live in the **interflux** companion plugin. The 5 research agents also moved to interflux. The agent-native-reviewer lives in **intercraft**.
 - **workflow/** — Process automation (2): PR comments, bug reproduction
 
+### Renaming/Deleting Agents
+
+Grep sweep checklist (10 locations): `agents/*/`, `skills/*/SKILL.md`, `commands/*.md`, `hooks/*.sh`, `hooks/lib-*.sh`, `plugin.json`, `CLAUDE.md`, `AGENTS.md`, dispatch templates, test fixtures. Do NOT update historical records (solution docs, sprint logs).
+
 ### Commands
 
 - Flat `.md` files in `commands/`
