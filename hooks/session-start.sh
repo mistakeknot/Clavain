@@ -139,6 +139,29 @@ if [[ -f "$INTERSERVE_FLAG" ]]; then
     companion_context="${companion_context}\\n- **INTERSERVE MODE: ON** — Route source code changes through Codex (preserves Claude token budget for orchestration).\\n  1. Plan: Read/Grep/Glob freely\\n  2. Prompt: Write task to /tmp/, dispatch via /interserve\\n  3. Verify: read output, run tests, review diffs\\n  4. Git ops (add/commit/push) are yours — do directly\\n  Bash: read-only for source files (no redirects, sed -i, tee). Git + test/build OK.\\n  Direct-edit OK: .md/.json/.yaml/.yml/.toml/.txt/.csv/.xml/.html/.css/.svg/.lock/.cfg/.ini/.conf/.env, /tmp/*\\n  Everything else (code files): dispatch via /interserve."
 fi
 
+# Drift summary injection (iv-mqm4) — surface stale docs at session start
+# Reads .interwatch/drift.json and injects Medium+ confidence items
+_drift_file=".interwatch/drift.json"
+if [[ -n "$interwatch_root" && -f "$_drift_file" ]]; then
+    _drift_json=$(cat "$_drift_file" 2>/dev/null) || _drift_json=""
+    if [[ -n "$_drift_json" ]]; then
+        # Extract Medium/High/Certain watchables, sorted by score desc, capped at 3
+        _drift_items=$(echo "$_drift_json" | jq -r '
+            [.watchables | to_entries[]
+             | select(.value.confidence == "Medium" or .value.confidence == "High" or .value.confidence == "Certain")
+             | {name: .key, score: .value.score, confidence: .value.confidence, path: .value.path}]
+            | sort_by(-.score)
+            | .[:3]
+            | map("\(.name) (\(.path), \(.confidence), score \(.score))")
+            | join(", ")
+        ' 2>/dev/null) || _drift_items=""
+        if [[ -n "$_drift_items" ]]; then
+            _drift_items=$(escape_for_json "$_drift_items")
+            companion_context="${companion_context}\\n- Drift detected: ${_drift_items}. Run /interwatch:watch to refresh."
+        fi
+    fi
+fi
+
 # Persist companion list as env var for on-demand access by skills
 companion_list="${companion_list%,}"  # trim trailing comma
 if [[ -n "${CLAUDE_ENV_FILE:-}" && -n "$companion_list" ]]; then

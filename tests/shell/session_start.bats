@@ -108,6 +108,115 @@ ENDJSON
     rm -rf "$tmpdir"
 }
 
+@test "session-start: injects drift summary for Medium+ confidence" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.interwatch"
+    cat > "$tmpdir/.interwatch/drift.json" <<'ENDJSON'
+{"scan_date":"2026-02-20T10:00:00","watchables":{"roadmap":{"path":"docs/roadmap.md","exists":true,"score":5,"confidence":"Medium","stale":false,"signals":{},"recommended_action":"suggest-refresh","generator":"interpath:artifact-gen","generator_args":{"type":"roadmap"}},"vision":{"path":"docs/vision.md","exists":false,"score":0,"confidence":"Green","stale":false,"signals":{},"recommended_action":"none","generator":"interpath:artifact-gen","generator_args":{"type":"vision"}}}}
+ENDJSON
+    run bash -c "
+        curl() { return 1; }
+        pgrep() { return 1; }
+        export -f curl pgrep
+        # Fake interwatch detection so drift code activates
+        export INTERWATCH_ROOT='/tmp/fake-interwatch'
+        cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
+    "
+    rm -rf "$tmpdir"
+    assert_success
+    echo "$output" | jq . >/dev/null 2>&1
+    assert_success
+    context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$context" == *"Drift detected"* ]]
+    [[ "$context" == *"roadmap"* ]]
+    # Green items should NOT appear
+    [[ "$context" != *"vision"* ]]
+}
+
+@test "session-start: no drift injection when all items are Green/Low" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.interwatch"
+    cat > "$tmpdir/.interwatch/drift.json" <<'ENDJSON'
+{"scan_date":"2026-02-20T10:00:00","watchables":{"roadmap":{"path":"docs/roadmap.md","exists":true,"score":1,"confidence":"Low","stale":false,"signals":{},"recommended_action":"none","generator":"interpath:artifact-gen","generator_args":{"type":"roadmap"}},"vision":{"path":"docs/vision.md","exists":false,"score":0,"confidence":"Green","stale":false,"signals":{},"recommended_action":"none","generator":"interpath:artifact-gen","generator_args":{"type":"vision"}}}}
+ENDJSON
+    run bash -c "
+        curl() { return 1; }
+        pgrep() { return 1; }
+        export -f curl pgrep
+        export INTERWATCH_ROOT='/tmp/fake-interwatch'
+        cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
+    "
+    rm -rf "$tmpdir"
+    assert_success
+    context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$context" != *"Drift detected"* ]]
+}
+
+@test "session-start: no drift injection when drift.json is missing" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    # No .interwatch directory at all
+    run bash -c "
+        curl() { return 1; }
+        pgrep() { return 1; }
+        export -f curl pgrep
+        export INTERWATCH_ROOT='/tmp/fake-interwatch'
+        cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
+    "
+    rm -rf "$tmpdir"
+    assert_success
+    echo "$output" | jq . >/dev/null 2>&1
+    assert_success
+    context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$context" != *"Drift detected"* ]]
+}
+
+@test "session-start: handles malformed drift.json gracefully" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.interwatch"
+    echo "not valid json {{{" > "$tmpdir/.interwatch/drift.json"
+    run bash -c "
+        curl() { return 1; }
+        pgreg() { return 1; }
+        export -f curl pgreg
+        export INTERWATCH_ROOT='/tmp/fake-interwatch'
+        cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
+    "
+    rm -rf "$tmpdir"
+    assert_success
+    echo "$output" | jq . >/dev/null 2>&1
+    assert_success
+    context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$context" != *"Drift detected"* ]]
+}
+
+@test "session-start: drift injection caps at 3 watchables" {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/.interwatch"
+    cat > "$tmpdir/.interwatch/drift.json" <<'ENDJSON'
+{"scan_date":"2026-02-20T10:00:00","watchables":{"a":{"path":"a.md","exists":true,"score":8,"confidence":"High","stale":false,"signals":{},"recommended_action":"auto-refresh","generator":"x","generator_args":{}},"b":{"path":"b.md","exists":true,"score":6,"confidence":"High","stale":false,"signals":{},"recommended_action":"auto-refresh","generator":"x","generator_args":{}},"c":{"path":"c.md","exists":true,"score":4,"confidence":"Medium","stale":false,"signals":{},"recommended_action":"suggest-refresh","generator":"x","generator_args":{}},"d":{"path":"d.md","exists":true,"score":3,"confidence":"Medium","stale":false,"signals":{},"recommended_action":"suggest-refresh","generator":"x","generator_args":{}}}}
+ENDJSON
+    run bash -c "
+        curl() { return 1; }
+        pgrep() { return 1; }
+        export -f curl pgrep
+        export INTERWATCH_ROOT='/tmp/fake-interwatch'
+        cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
+    "
+    rm -rf "$tmpdir"
+    assert_success
+    context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    # Should contain a, b, c (top 3 by score) but NOT d
+    [[ "$context" == *"a ("* ]]
+    [[ "$context" == *"b ("* ]]
+    [[ "$context" == *"c ("* ]]
+    [[ "$context" != *"d ("* ]]
+}
+
 @test "session-start: detects HANDOFF.md in sprint scan" {
     local tmpdir
     tmpdir=$(mktemp -d)
