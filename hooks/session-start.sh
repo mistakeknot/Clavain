@@ -105,7 +105,10 @@ if [[ -n "$interlock_root" ]]; then
             touch "$_join_flag" 2>/dev/null || true
 
             # Active agents — inject only if others are online (coordination-critical)
-            _agents_json=$(curl -sf --max-time 2 "${_intermute_url}/api/agents?project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")" 2>/dev/null) || _agents_json=""
+            # Cache responses for sprint_check_coordination to avoid redundant fetches (iv-kcf6)
+            _intermute_project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")
+            _agents_json=$(curl -sf --connect-timeout 1 --max-time 2 "${_intermute_url}/api/agents?project=${_intermute_project}" 2>/dev/null) || _agents_json=""
+            _INTERMUTE_AGENTS_CACHE="$_agents_json"
             if [[ -n "$_agents_json" ]]; then
                 _agent_count=$(echo "$_agents_json" | jq '.agents | length' 2>/dev/null) || _agent_count="0"
                 if [[ "$_agent_count" -gt 0 ]]; then
@@ -113,7 +116,8 @@ if [[ -n "$interlock_root" ]]; then
                     _agent_names=$(escape_for_json "$_agent_names")
                     companion_context="${companion_context}\\n- Intermute: ${_agent_count} agent(s) online (${_agent_names})"
 
-                    _reservations_json=$(curl -sf --max-time 2 "${_intermute_url}/api/reservations?project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")" 2>/dev/null) || _reservations_json=""
+                    _reservations_json=$(curl -sf --connect-timeout 1 --max-time 2 "${_intermute_url}/api/reservations?project=${_intermute_project}" 2>/dev/null) || _reservations_json=""
+                    _INTERMUTE_RESERVATIONS_CACHE="$_reservations_json"
                     if [[ -n "$_reservations_json" ]]; then
                         _res_count=$(echo "$_reservations_json" | jq '[.reservations[]? | select(.is_active == true)] | length' 2>/dev/null) || _res_count="0"
                         if [[ "$_res_count" -gt 0 ]]; then
@@ -123,6 +127,7 @@ if [[ -n "$interlock_root" ]]; then
                     fi
                 fi
             fi
+            _INTERMUTE_HEALTH_OK=1
         fi
     fi
 fi

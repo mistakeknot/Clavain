@@ -212,25 +212,34 @@ sprint_check_skipped_phases() {
 
 # Check Intermute for active agents and reservations.
 # Prints coordination summary. Returns 0 if agents found, 1 otherwise.
+# Uses _INTERMUTE_*_CACHE vars if set by session-start.sh to avoid redundant fetches.
 sprint_check_coordination() {
     local intermute_url="${INTERMUTE_URL:-http://127.0.0.1:7338}"
-    # Quick health check (1s timeout — don't slow down sprint scan)
-    curl -sf --connect-timeout 1 --max-time 1 "${intermute_url}/health" >/dev/null 2>&1 || return 1
     command -v jq &>/dev/null || return 1
+
+    # Use cached health result if available, otherwise probe
+    if [[ -z "${_INTERMUTE_HEALTH_OK:-}" ]]; then
+        curl -sf --connect-timeout 1 --max-time 1 "${intermute_url}/health" >/dev/null 2>&1 || return 1
+    fi
 
     local project
     project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null) || return 1
     [[ -n "$project" ]] || return 1
 
-    local agents_json
-    agents_json=$(curl -sf --max-time 2 "${intermute_url}/api/agents?project=${project}" 2>/dev/null) || return 1
+    # Use cached agents response if available, otherwise fetch
+    local agents_json="${_INTERMUTE_AGENTS_CACHE:-}"
+    if [[ -z "$agents_json" ]]; then
+        agents_json=$(curl -sf --connect-timeout 1 --max-time 2 "${intermute_url}/api/agents?project=${project}" 2>/dev/null) || return 1
+    fi
     local count
     count=$(echo "$agents_json" | jq '.agents | length' 2>/dev/null) || return 1
     [[ "$count" -gt 0 ]] || return 1
 
-    # Build agent summary with reservations
-    local reservations_json
-    reservations_json=$(curl -sf --max-time 2 "${intermute_url}/api/reservations?project=${project}" 2>/dev/null) || reservations_json=""
+    # Use cached reservations response if available, otherwise fetch
+    local reservations_json="${_INTERMUTE_RESERVATIONS_CACHE:-}"
+    if [[ -z "$reservations_json" ]]; then
+        reservations_json=$(curl -sf --connect-timeout 1 --max-time 2 "${intermute_url}/api/reservations?project=${project}" 2>/dev/null) || reservations_json=""
+    fi
 
     local output="${count} agent(s) online: "
     local agent_list
