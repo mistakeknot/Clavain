@@ -4,7 +4,7 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 15 skills, 4 agents, 52 commands, 22 hooks, 1 MCP server. 31 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 15 skills, 4 agents, 52 commands, 12 hooks, 1 MCP server. 31 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
 
 ## Quick Commands
 
