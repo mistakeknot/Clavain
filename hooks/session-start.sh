@@ -62,12 +62,7 @@ if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     companion_list="${companion_list}beads,"
     # Surface beads health warnings (bd doctor --json is local-only, typically <100ms)
     if command -v bd &>/dev/null; then
-        beads_issues=$( (bd doctor --json 2>/dev/null || true) | python3 -c "
-import sys,json
-try:
-    d=json.load(sys.stdin)
-    print(sum(1 for c in d.get('checks',[]) if c.get('status') in ('warning','error')))
-except: print(0)" 2>/dev/null) || beads_issues="0"
+        beads_issues=$( (bd doctor --json 2>/dev/null || true) | jq '[.checks[]? | select(.status == "warning" or .status == "error")] | length' 2>/dev/null) || beads_issues="0"
         if [[ "$beads_issues" -gt 0 ]]; then
             companion_context="${companion_context}\\n- beads doctor: ${beads_issues} issue(s) — run \`bd doctor --fix\`"
         fi
@@ -233,8 +228,8 @@ elif ls .clavain/scratch/handoff-*.md &>/dev/null; then
     handoff_file=$(ls -1t .clavain/scratch/handoff-*.md 2>/dev/null | head -1)
 fi
 if [[ -n "$handoff_file" ]]; then
-    # Cap at 40 lines to prevent context bloat
-    handoff_content=$(head -40 "$handoff_file" 2>/dev/null) || handoff_content=""
+    # Cap at 20 lines to prevent context bloat (handoff instructions target 10-20 lines)
+    handoff_content=$(head -20 "$handoff_file" 2>/dev/null) || handoff_content=""
     if [[ -n "$handoff_content" ]]; then
         handoff_context="\\n\\n**Previous session context:**\\n$(escape_for_json "$handoff_content")"
     fi

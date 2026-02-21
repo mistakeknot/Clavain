@@ -5,7 +5,12 @@
 # Checks INTERPHASE_ROOT env var first, then searches the plugin cache.
 # Output: plugin root path to stdout, or empty string if not found.
 _discover_beads_plugin() {
+    if [[ -n "${_CACHED_INTERPHASE_ROOT+set}" ]]; then
+        echo "$_CACHED_INTERPHASE_ROOT"
+        return 0
+    fi
     if [[ -n "${INTERPHASE_ROOT:-}" ]]; then
+        _CACHED_INTERPHASE_ROOT="$INTERPHASE_ROOT"
         echo "$INTERPHASE_ROOT"
         return 0
     fi
@@ -14,9 +19,11 @@ _discover_beads_plugin() {
         -path '*/interphase/*/hooks/lib-gates.sh' 2>/dev/null | sort -V | tail -1)
     if [[ -n "$f" ]]; then
         # lib-gates.sh is at <root>/hooks/lib-gates.sh, so strip two levels
-        echo "$(dirname "$(dirname "$f")")"
+        _CACHED_INTERPHASE_ROOT="$(dirname "$(dirname "$f")")"
+        echo "$_CACHED_INTERPHASE_ROOT"
         return 0
     fi
+    _CACHED_INTERPHASE_ROOT=""
     echo ""
 }
 
@@ -24,7 +31,12 @@ _discover_beads_plugin() {
 # Checks INTERFLUX_ROOT env var first, then searches the plugin cache.
 # Output: plugin root path to stdout, or empty string if not found.
 _discover_interflux_plugin() {
+    if [[ -n "${_CACHED_INTERFLUX_ROOT+set}" ]]; then
+        echo "$_CACHED_INTERFLUX_ROOT"
+        return 0
+    fi
     if [[ -n "${INTERFLUX_ROOT:-}" ]]; then
+        _CACHED_INTERFLUX_ROOT="$INTERFLUX_ROOT"
         echo "$INTERFLUX_ROOT"
         return 0
     fi
@@ -33,9 +45,11 @@ _discover_interflux_plugin() {
         -path '*/interflux/*/.claude-plugin/plugin.json' 2>/dev/null | sort -V | tail -1)
     if [[ -n "$f" ]]; then
         # plugin.json is at <root>/.claude-plugin/plugin.json, so strip two levels
-        echo "$(dirname "$(dirname "$f")")"
+        _CACHED_INTERFLUX_ROOT="$(dirname "$(dirname "$f")")"
+        echo "$_CACHED_INTERFLUX_ROOT"
         return 0
     fi
+    _CACHED_INTERFLUX_ROOT=""
     echo ""
 }
 
@@ -43,7 +57,12 @@ _discover_interflux_plugin() {
 # Checks INTERPATH_ROOT env var first, then searches the plugin cache.
 # Output: plugin root path to stdout, or empty string if not found.
 _discover_interpath_plugin() {
+    if [[ -n "${_CACHED_INTERPATH_ROOT+set}" ]]; then
+        echo "$_CACHED_INTERPATH_ROOT"
+        return 0
+    fi
     if [[ -n "${INTERPATH_ROOT:-}" ]]; then
+        _CACHED_INTERPATH_ROOT="$INTERPATH_ROOT"
         echo "$INTERPATH_ROOT"
         return 0
     fi
@@ -52,9 +71,11 @@ _discover_interpath_plugin() {
         -path '*/interpath/*/scripts/interpath.sh' 2>/dev/null | sort -V | tail -1)
     if [[ -n "$f" ]]; then
         # interpath.sh is at <root>/scripts/interpath.sh, so strip two levels
-        echo "$(dirname "$(dirname "$f")")"
+        _CACHED_INTERPATH_ROOT="$(dirname "$(dirname "$f")")"
+        echo "$_CACHED_INTERPATH_ROOT"
         return 0
     fi
+    _CACHED_INTERPATH_ROOT=""
     echo ""
 }
 
@@ -62,7 +83,12 @@ _discover_interpath_plugin() {
 # Checks INTERWATCH_ROOT env var first, then searches the plugin cache.
 # Output: plugin root path to stdout, or empty string if not found.
 _discover_interwatch_plugin() {
+    if [[ -n "${_CACHED_INTERWATCH_ROOT+set}" ]]; then
+        echo "$_CACHED_INTERWATCH_ROOT"
+        return 0
+    fi
     if [[ -n "${INTERWATCH_ROOT:-}" ]]; then
+        _CACHED_INTERWATCH_ROOT="$INTERWATCH_ROOT"
         echo "$INTERWATCH_ROOT"
         return 0
     fi
@@ -71,9 +97,11 @@ _discover_interwatch_plugin() {
         -path '*/interwatch/*/scripts/interwatch.sh' 2>/dev/null | sort -V | tail -1)
     if [[ -n "$f" ]]; then
         # interwatch.sh is at <root>/scripts/interwatch.sh, so strip two levels
-        echo "$(dirname "$(dirname "$f")")"
+        _CACHED_INTERWATCH_ROOT="$(dirname "$(dirname "$f")")"
+        echo "$_CACHED_INTERWATCH_ROOT"
         return 0
     fi
+    _CACHED_INTERWATCH_ROOT=""
     echo ""
 }
 
@@ -81,7 +109,12 @@ _discover_interwatch_plugin() {
 # Checks INTERLOCK_ROOT env var first, then searches the plugin cache.
 # Output: plugin root path to stdout, or empty string if not found.
 _discover_interlock_plugin() {
+    if [[ -n "${_CACHED_INTERLOCK_ROOT+set}" ]]; then
+        echo "$_CACHED_INTERLOCK_ROOT"
+        return 0
+    fi
     if [[ -n "${INTERLOCK_ROOT:-}" ]]; then
+        _CACHED_INTERLOCK_ROOT="$INTERLOCK_ROOT"
         echo "$INTERLOCK_ROOT"
         return 0
     fi
@@ -90,9 +123,11 @@ _discover_interlock_plugin() {
         -path '*/interlock/*/scripts/interlock-register.sh' 2>/dev/null | sort -V | tail -1)
     if [[ -n "$f" ]]; then
         # interlock-register.sh is at <root>/scripts/interlock-register.sh, so strip two levels
-        echo "$(dirname "$(dirname "$f")")"
+        _CACHED_INTERLOCK_ROOT="$(dirname "$(dirname "$f")")"
+        echo "$_CACHED_INTERLOCK_ROOT"
         return 0
     fi
+    _CACHED_INTERLOCK_ROOT=""
     echo ""
 }
 
