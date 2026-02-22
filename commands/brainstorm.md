@@ -40,8 +40,7 @@ Use **AskUserQuestion tool** to suggest: "Your requirements seem detailed enough
 If inside a sprint (check: `bd state "$CLAVAIN_BEAD_ID" sprint` returns `"true"`):
 
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-complexity=$(sprint_classify_complexity "$CLAVAIN_BEAD_ID" "<feature_description>")
+complexity=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" classify-complexity "$CLAVAIN_BEAD_ID" "<feature_description>")
 ```
 
 Route based on complexity:
@@ -101,9 +100,8 @@ Ensure `docs/brainstorms/` directory exists before writing.
 
 After writing the brainstorm document, record the phase transition:
 ```bash
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
-BEAD_ID=$(phase_infer_bead "<brainstorm_doc_path>")
-advance_phase "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>" "<brainstorm_doc_path>"
+BEAD_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" infer-bead "<brainstorm_doc_path>")
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>" "<brainstorm_doc_path>"
 ```
 If `CLAVAIN_BEAD_ID` is set in the environment, that takes priority. If no bead ID is found, skip silently.
 

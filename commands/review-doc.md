@@ -61,9 +61,8 @@ Apply fixes to the document.
 
 If the reviewed document is in `docs/brainstorms/`, record the phase transition:
 ```bash
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
-BEAD_ID=$(phase_infer_bead "<reviewed_doc_path>")
-advance_phase "$BEAD_ID" "brainstorm-reviewed" "Reviewed: <reviewed_doc_path>" "<reviewed_doc_path>"
+BEAD_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" infer-bead "<reviewed_doc_path>")
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "brainstorm-reviewed" "Reviewed: <reviewed_doc_path>" "<reviewed_doc_path>"
 ```
 Only set `brainstorm-reviewed` for brainstorm docs. PRDs and plans have their own phase transitions in other commands.
 

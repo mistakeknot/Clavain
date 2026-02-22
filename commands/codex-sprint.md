@@ -10,16 +10,10 @@ Run the full `/clavain:sprint` workflow as an explicit Codex-safe sequence:
 
 ```bash
 export CLAVAIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${HOME}/.codex/clavain}"
-export GATES_PROJECT_DIR="."
-export SPRINT_LIB_PROJECT_DIR="."
-if [[ -f "$CLAVAIN_ROOT/hooks/lib-gates.sh" ]]; then
-  source "$CLAVAIN_ROOT/hooks/lib-gates.sh"
-fi
-if [[ -f "$CLAVAIN_ROOT/hooks/lib-sprint.sh" ]]; then
-  source "$CLAVAIN_ROOT/hooks/lib-sprint.sh"
-fi
+export CLAVAIN_CLI="${CLAVAIN_ROOT}/bin/clavain-cli"
+# Discovery still needs direct sourcing (not in dispatcher)
 if [[ -f "$CLAVAIN_ROOT/hooks/lib-discovery.sh" ]]; then
-  source "$CLAVAIN_ROOT/hooks/lib-discovery.sh"
+  export DISCOVERY_PROJECT_DIR="."; source "$CLAVAIN_ROOT/hooks/lib-discovery.sh"
 fi
 ```
 
@@ -35,7 +29,7 @@ bd show "$ARGUMENTS"
 
 - If valid, set `CLAVAIN_BEAD_ID="$ARGUMENTS"` and continue from inferred phase.
 - If invalid/missing:
-  - Find an active sprint via `sprint_find_active` when available.
+  - Find an active sprint via `"$CLAVAIN_CLI" sprint-find-active` when available.
   - Otherwise run discovery (`discovery_scan_beads`) and prompt selection.
   - Otherwise fall back to `/clavain:brainstorm` for a fresh start.
 
@@ -62,9 +56,9 @@ Use your existing flow from `/clavain:sprint`, but do it explicitly and keep Cod
 After each completed phase (when a bead is active), attempt:
 
 ```bash
-advance_phase "$CLAVAIN_BEAD_ID" "<phase>" "<reason>" "<artifact>"
-sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "<phase>"
-sprint_set_artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
+"$CLAVAIN_CLI" advance-phase "$CLAVAIN_BEAD_ID" "<phase>" "<reason>" "<artifact>"
+"$CLAVAIN_CLI" record-phase "$CLAVAIN_BEAD_ID" "<phase>"
+"$CLAVAIN_CLI" set-artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
 ```
 
 If `CLAVAIN_BEAD_ID` is unavailable or helper functions are missing, continue without blocking.
@@ -85,13 +79,13 @@ If `CLAVAIN_BEAD_ID` is unavailable or helper functions are missing, continue wi
 Before executing work:
 
 ```bash
-enforce_gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"
+"$CLAVAIN_CLI" enforce-gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"
 ```
 
 Before shipping:
 
 ```bash
-enforce_gate "$CLAVAIN_BEAD_ID" "shipping" ""
+"$CLAVAIN_CLI" enforce-gate "$CLAVAIN_BEAD_ID" "shipping" ""
 ```
 
 If gate checks fail, stop, fix the blockers, then rerun the blocked command.

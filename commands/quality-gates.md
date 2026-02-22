@@ -133,14 +133,13 @@ After the synthesis subagent returns:
 
 If the gate result is **PASS**, enforce the shipping gate and record the phase transition:
 ```bash
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 BEAD_ID="${CLAVAIN_BEAD_ID:-}"
 if [[ -n "$BEAD_ID" ]]; then
-    if ! enforce_gate "$BEAD_ID" "shipping" ""; then
+    if ! "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" enforce-gate "$BEAD_ID" "shipping" ""; then
         echo "Gate blocked: review findings are stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
         # Do NOT advance phase — stop and tell user
     else
-        advance_phase "$BEAD_ID" "shipping" "Quality gates passed" ""
+        "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "shipping" "Quality gates passed" ""
     fi
 fi
 ```

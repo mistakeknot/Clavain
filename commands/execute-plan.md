@@ -7,13 +7,12 @@ description: Execute plan in batches with review checkpoints
 
 **Before starting execution**, enforce the gate and record the phase transition:
 ```bash
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
-BEAD_ID=$(phase_infer_bead "<plan_file_path>")
-if ! enforce_gate "$BEAD_ID" "executing" "<plan_file_path>"; then
+BEAD_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" infer-bead "<plan_file_path>")
+if ! "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" enforce-gate "$BEAD_ID" "executing" "<plan_file_path>"; then
     echo "Gate blocked: run /interflux:flux-drive on the plan first, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Stop and tell user — do NOT proceed to execution
 fi
-advance_phase "$BEAD_ID" "executing" "Executing: <plan_file_path>" "<plan_file_path>"
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "executing" "Executing: <plan_file_path>" "<plan_file_path>"
 ```
 
 Invoke the clavain:executing-plans skill and follow it exactly as presented to you

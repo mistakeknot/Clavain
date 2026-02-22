@@ -8,25 +8,20 @@ argument-hint: "[feature description]"
 
 Before running discovery, check for an active sprint:
 
-1. Source sprint library:
+1. Find active sprints:
    ```bash
-   export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-   ```
-
-2. Find active sprints:
-   ```bash
-   active_sprints=$(sprint_find_active 2>/dev/null) || active_sprints="[]"
+   active_sprints=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-find-active 2>/dev/null) || active_sprints="[]"
    sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count=0
    ```
 
 3. Parse the result:
    - `sprint_count == 0` → no active sprint, fall through to Work Discovery (below)
    - Single sprint (`sprint_count == 1`) → auto-resume:
-     a. Read sprint ID, state: `sprint_id=$(echo "$active_sprints" | jq -r '.[0].id')` then `sprint_read_state "$sprint_id"`
-     b. Claim session: `sprint_claim "$sprint_id" "$CLAUDE_SESSION_ID"`
-        - If claim fails (returns 1): tell user another session has this sprint, offer to force-claim (by calling `sprint_release` then `sprint_claim`) or start fresh
+     a. Read sprint ID, state: `sprint_id=$(echo "$active_sprints" | jq -r '.[0].id')` then `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-read-state "$sprint_id"`
+     b. Claim session: `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-claim "$sprint_id" "$CLAUDE_SESSION_ID"`
+        - If claim fails (returns 1): tell user another session has this sprint, offer to force-claim (by calling `clavain-cli sprint-release` then `clavain-cli sprint-claim`) or start fresh
      c. Set `CLAVAIN_BEAD_ID="$sprint_id"` (sprint bead is the epic; takes precedence over discovery-selected beads)
-     d. Determine next step: `next=$(sprint_next_step "<phase>")`
+     d. Determine next step: `next=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-next-step "<phase>")`
      e. Route to the appropriate command based on the step:
         - `brainstorm` → `/clavain:brainstorm`
         - `strategy` → `/clavain:strategy`
@@ -42,11 +37,11 @@ Before running discovery, check for an active sprint:
 
 4. **Checkpoint recovery** (supplements sprint state): After claiming, check for a local checkpoint:
    ```bash
-   checkpoint=$(checkpoint_read)
+   checkpoint=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-read)
    ```
    If a checkpoint exists for this sprint:
-   - Run `checkpoint_validate` — warn (don't block) if git SHA changed
-   - Use `checkpoint_completed_steps` to determine which steps are already done
+   - Run `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-validate` — warn (don't block) if git SHA changed
+   - Use `checkpoint_completed_steps` from the checkpoint data to determine which steps are already done
    - Display: `Resuming from checkpoint. Completed: [<steps>]`
    - Route to the first *incomplete* step (overrides `sprint_next_step` when checkpoint has more detail)
 
@@ -134,8 +129,7 @@ Run these steps in order. Do not do anything else. Do not stop between steps unl
 
 After each step completes successfully, write a checkpoint:
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-checkpoint_write "$CLAVAIN_BEAD_ID" "<phase>" "<step_name>" "<plan_path>"
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-write "$CLAVAIN_BEAD_ID" "<phase>" "<step_name>" "<plan_path>"
 ```
 
 Step names: `brainstorm`, `strategy`, `plan`, `plan-review`, `execute`, `test`, `quality-gates`, `resolve`, `reflect`, `ship`.
@@ -150,7 +144,7 @@ When resuming (via Sprint Resume above or `--resume`):
 
 When the sprint completes (Step 10 Ship), clear the checkpoint:
 ```bash
-checkpoint_clear
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-clear
 ```
 
 ### Auto-Advance Protocol
@@ -158,11 +152,10 @@ checkpoint_clear
 When transitioning between steps, use auto-advance instead of manual routing:
 
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
 # Validate sprint bead before advancing
 is_sprint=$(bd state "$CLAVAIN_BEAD_ID" sprint 2>/dev/null) || is_sprint=""
 if [[ "$is_sprint" == "true" ]]; then
-    pause_reason=$(sprint_advance "$CLAVAIN_BEAD_ID" "<current_phase>" "<artifact_path>")
+    pause_reason=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>" "<artifact_path>")
     if [[ $? -ne 0 ]]; then
         # Parse structured pause reason: type|phase|detail
         reason_type="${pause_reason%%|*}"
@@ -195,9 +188,8 @@ fi
 
 After each step completes successfully, record the phase transition via `sprint_advance()`. If `CLAVAIN_BEAD_ID` is set (from discovery, sprint resume, or sprint creation), run:
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-sprint_set_artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
-sprint_advance "$CLAVAIN_BEAD_ID" "<current_phase>"
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" set-artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>"
 ```
 Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
 
@@ -206,9 +198,8 @@ Phase tracking is silent — never block on errors. If no bead ID is available, 
 Before starting, classify the task complexity:
 
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-score=$(sprint_classify_complexity "$CLAVAIN_BEAD_ID" "$ARGUMENTS")
-label=$(sprint_complexity_label "$score")
+score=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" classify-complexity "$CLAVAIN_BEAD_ID" "$ARGUMENTS")
+label=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" complexity-label "$score")
 ```
 
 Display to the user: `Complexity: ${score}/5 (${label})`
@@ -235,11 +226,10 @@ The user can override with `--skip-to <step>` or `--complexity <1-5>`.
 If `CLAVAIN_BEAD_ID` is not set after brainstorm (no sprint bead exists yet):
 
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-SPRINT_ID=$(sprint_create "<feature title>")
+SPRINT_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-create "<feature title>")
 if [[ -n "$SPRINT_ID" ]]; then
-    sprint_set_artifact "$SPRINT_ID" "brainstorm" "<brainstorm_doc_path>"
-    sprint_record_phase_completion "$SPRINT_ID" "brainstorm"
+    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" set-artifact "$SPRINT_ID" "brainstorm" "<brainstorm_doc_path>"
+    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-phase "$SPRINT_ID" "brainstorm"
     CLAVAIN_BEAD_ID="$SPRINT_ID"
 fi
 ```
@@ -268,8 +258,7 @@ Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it'
 
 **Budget context:** Before invoking flux-drive, compute remaining budget:
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-remaining=$(sprint_budget_remaining "$CLAVAIN_BEAD_ID")
+remaining=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 if [[ "$remaining" -gt 0 ]]; then
     export FLUX_BUDGET_REMAINING="$remaining"
 fi
@@ -287,8 +276,7 @@ If flux-drive finds P0/P1 issues, stop and address them before proceeding to exe
 
 **Gate check:** Before executing, enforce the gate:
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-if ! enforce_gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
+if ! "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" enforce-gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
     echo "Gate blocked: plan must be reviewed first. Run /interflux:flux-drive on the plan, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Stop — do NOT proceed to execution
 fi
@@ -317,8 +305,7 @@ Run the project's test suite and linting before proceeding to review:
 
 **Budget context:** Before invoking quality-gates, compute remaining budget:
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-remaining=$(sprint_budget_remaining "$CLAVAIN_BEAD_ID")
+remaining=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 if [[ "$remaining" -gt 0 ]]; then
     export FLUX_BUDGET_REMAINING="$remaining"
 fi
@@ -340,13 +327,12 @@ verdict_count_by_status  # e.g., "3 CLEAN, 1 NEEDS_ATTENTION"
 
 **Gate check + Phase:** After quality gates PASS, enforce the shipping gate before recording:
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-if ! enforce_gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
+if ! "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" enforce-gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
     echo "Gate blocked: review findings are stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     # Do NOT advance to shipping — stop and tell user
 fi
-sprint_advance "$CLAVAIN_BEAD_ID" "shipping"
-sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "shipping"
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "shipping"
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-phase "$CLAVAIN_BEAD_ID" "shipping"
 ```
 Do NOT set the phase if gates FAIL.
 
@@ -363,8 +349,7 @@ Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, 
 Advance the sprint from `shipping` to `reflect`, then invoke `/reflect`:
 
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-sprint_advance "$CLAVAIN_BEAD_ID" "shipping"
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "shipping"
 ```
 
 Run `/reflect` — it captures learnings (complexity-scaled), registers the artifact, and advances `reflect → done`.
@@ -382,8 +367,7 @@ Use the `clavain:landing-a-change` skill to verify, document, and commit the com
 **Close sweep:** After closing the sprint bead, auto-close any open beads that were blocked by it:
 
 ```bash
-export SPRINT_LIB_PROJECT_DIR="."; source "/home/mk/.claude/plugins/cache/interagency-marketplace/clavain/0.6.56/hooks/lib-sprint.sh"
-swept=$(sprint_close_children "$CLAVAIN_BEAD_ID" "Shipped with parent epic $CLAVAIN_BEAD_ID")
+swept=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" close-children "$CLAVAIN_BEAD_ID" "Shipped with parent epic $CLAVAIN_BEAD_ID")
 if [[ "$swept" -gt 0 ]]; then
     echo "Auto-closed $swept child beads"
 fi

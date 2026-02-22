@@ -15,7 +15,7 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
 
 ## Execution
 
-1. **Identify the active sprint.** Use `sprint_find_active` (sourced from lib-sprint.sh) to find the current sprint and confirm it is in the `reflect` phase. (The sprint command advances `shipping → reflect` before invoking `/reflect`.)
+1. **Identify the active sprint.** Use `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-find-active` to find the current sprint and confirm it is in the `reflect` phase. (The sprint command advances `shipping → reflect` before invoking `/reflect`.)
 
 2. **Check for existing reflect artifact.** Before invoking engineering-docs, check if a reflect artifact is already registered:
    ```bash
@@ -28,8 +28,7 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
 
    Check sprint complexity:
    ```bash
-   source os/clavain/hooks/lib-sprint.sh
-   state=$(sprint_read_state "<sprint_id>" 2>/dev/null) || state="{}"
+   state=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-read-state "<sprint_id>" 2>/dev/null) || state="{}"
    complexity=$(echo "$state" | jq -r '.complexity // "3"' 2>/dev/null) || complexity="3"
    ```
 
@@ -41,14 +40,13 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
 
 4. **Register the artifact.** After the learning artifact is written, register it as a reflect-phase artifact:
    ```bash
-   source os/clavain/hooks/lib-sprint.sh
-   sprint_set_artifact "<sprint_id>" "reflect" "<path_to_doc>"
+   "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" set-artifact "<sprint_id>" "reflect" "<path_to_doc>"
    ```
    (`sprint_set_artifact` handles both kernel registration via `ic run artifact add` and beads fallback automatically.)
 
 5. **Advance the sprint.** Move from `reflect` → `done`:
    ```bash
-   sprint_advance "<sprint_id>" "reflect"
+   "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "<sprint_id>" "reflect"
    ```
 
 The reflect gate requires at least one artifact registered for the reflect phase. The learning artifact (memory note or engineering doc) satisfies this gate.

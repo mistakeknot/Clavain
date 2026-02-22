@@ -83,8 +83,7 @@ If `CLAVAIN_BEAD_ID` is set (we're inside a sprint):
   ```
 - Update sprint state:
   ```bash
-  export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-  sprint_set_artifact "$CLAVAIN_BEAD_ID" "prd" "<prd_path>"
+  "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" set-artifact "$CLAVAIN_BEAD_ID" "prd" "<prd_path>"
   ```
 
 If `CLAVAIN_BEAD_ID` is NOT set (standalone strategy):
@@ -104,19 +103,17 @@ Report the created beads to the user.
 
 After creating beads, record the phase transition:
 ```bash
-export GATES_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-gates.sh"
 if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
-    advance_phase "$CLAVAIN_BEAD_ID" "strategized" "PRD: <prd_path>" ""
-    export SPRINT_LIB_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh"
-    sprint_record_phase_completion "$CLAVAIN_BEAD_ID" "strategized"
+    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$CLAVAIN_BEAD_ID" "strategized" "PRD: <prd_path>" ""
+    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-phase "$CLAVAIN_BEAD_ID" "strategized"
 else
     # Standalone strategy — use the newly created epic bead
-    advance_phase "<epic_bead_id>" "strategized" "PRD: <prd_path>" ""
+    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "<epic_bead_id>" "strategized" "PRD: <prd_path>" ""
 fi
 ```
 Also set `phase=strategized` on each child feature bead created:
 ```bash
-advance_phase "<feature_bead_id>" "strategized" "PRD: <prd_path>" ""
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "<feature_bead_id>" "strategized" "PRD: <prd_path>" ""
 ```
 
 ## Phase 4: Validate
