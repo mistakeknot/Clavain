@@ -488,7 +488,7 @@ vs
 
 ### P3.3 — Deep relative links make the kernel doc brittle
 
-> “[Clavain vision doc](../../../../hub/clavain/docs/clavain-vision.md)”
+> “[Clavain vision doc](../../../../os/clavain/docs/clavain-vision.md)”
 
 Kernel vision docs tend to get copied/read outside the repo layout; these paths will break.
 

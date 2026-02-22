@@ -14,7 +14,7 @@ Show the current state of Interspect's evidence collection and (future) modifica
 
 ```bash
 INTERSPECT_LIB=$(find ~/.claude/plugins/cache -path '*/clavain/*/hooks/lib-interspect.sh' 2>/dev/null | head -1)
-[[ -z "$INTERSPECT_LIB" ]] && INTERSPECT_LIB=$(find ~/projects -path '*/hub/clavain/hooks/lib-interspect.sh' 2>/dev/null | head -1)
+[[ -z "$INTERSPECT_LIB" ]] && INTERSPECT_LIB=$(find ~/projects -path '*/os/clavain/hooks/lib-interspect.sh' 2>/dev/null | head -1)
 if [[ -z "$INTERSPECT_LIB" ]]; then
     echo "Error: Could not locate hooks/lib-interspect.sh" >&2
     exit 1

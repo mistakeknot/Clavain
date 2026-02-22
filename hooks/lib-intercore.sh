@@ -1,6 +1,6 @@
 # lib-intercore.sh — Bash wrappers for intercore CLI
 # Version: 0.1.0 (source: infra/intercore/lib-intercore.sh)
-# Re-copy to hub/clavain/hooks/ on major intercore updates; version is pinned to plugin release.
+# Re-copy to os/clavain/hooks/ on major intercore updates; version is pinned to plugin release.
 # This file is SOURCED by hooks. Do NOT use set -e here — it would exit
 # the parent shell on any failure.
 # Source in hooks: source "$(dirname "$0")/lib-intercore.sh"

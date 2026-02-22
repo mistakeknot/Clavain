@@ -23,7 +23,7 @@ Additionally, the plan calls `ic` CLI subcommands (`dispatch create`, `dispatch 
 run_id=$(intercore_run_create "$(pwd)" "$title" "$phases_json" "$scope_id" "$complexity" "$token_budget") || run_id=""
 ```
 
-**Status:** This function is NOT defined in `lib-intercore.sh` (checked `/root/projects/Interverse/hub/clavain/hooks/lib-intercore.sh` and `/root/projects/Interverse/infra/intercore/lib-intercore.sh`). It is called in the existing `lib-sprint.sh:98` but was never implemented as a wrapper.
+**Status:** This function is NOT defined in `lib-intercore.sh` (checked `/root/projects/Interverse/os/clavain/hooks/lib-intercore.sh` and `/root/projects/Interverse/infra/intercore/lib-intercore.sh`). It is called in the existing `lib-sprint.sh:98` but was never implemented as a wrapper.
 
 **The ic CLI does accept `ic run create`** with flags `--project=`, `--goal=`, `--phases=`, `--scope-id=`, `--complexity=`, `--token-budget=`, `--budget-warn-pct=`. But the wrapper function that translates the positional args to these flags does not exist.
 

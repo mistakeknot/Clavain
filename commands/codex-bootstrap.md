@@ -12,7 +12,7 @@ SCRIPT_PATH="${CLAVAIN_SOURCE_DIR:-$HOME/.codex/clavain}/scripts/codex-bootstrap
 if [[ ! -f "$SCRIPT_PATH" ]]; then
   # fallback for local clone locations commonly used during development
   for candidate in \
-    "$HOME/projects/Interverse/hub/clavain/scripts/codex-bootstrap.sh" \
+    "$HOME/projects/Interverse/os/clavain/scripts/codex-bootstrap.sh" \
     "$HOME/projects/Clavain/scripts/codex-bootstrap.sh" \
     "$HOME/.codex/clavain/scripts/codex-bootstrap.sh"; do
     if [[ -f "$candidate" ]]; then

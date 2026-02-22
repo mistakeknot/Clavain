@@ -9,9 +9,9 @@
 
 ## Files Reviewed
 
-- `/root/projects/Interverse/hub/clavain/scripts/lib-routing.sh` — 379 lines, new shell library
-- `/root/projects/Interverse/hub/clavain/scripts/dispatch.sh` — modified to source lib-routing.sh and simplified resolve_tier_model
-- `/root/projects/Interverse/hub/clavain/config/routing.yaml` — new unified routing config (71 lines)
+- `/root/projects/Interverse/os/clavain/scripts/lib-routing.sh` — 379 lines, new shell library
+- `/root/projects/Interverse/os/clavain/scripts/dispatch.sh` — modified to source lib-routing.sh and simplified resolve_tier_model
+- `/root/projects/Interverse/os/clavain/config/routing.yaml` — new unified routing config (71 lines)
 
 ---
 

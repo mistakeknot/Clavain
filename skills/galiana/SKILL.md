@@ -13,7 +13,7 @@ Locate the analyzer in plugin cache first, then in local dev checkouts:
 
 ```bash
 GALIANA_SCRIPT=$(find ~/.claude/plugins/cache -path '*/clavain/*/galiana/analyze.py' 2>/dev/null | head -1)
-[[ -z "$GALIANA_SCRIPT" ]] && GALIANA_SCRIPT=$(find ~/projects -path '*/hub/clavain/galiana/analyze.py' 2>/dev/null | head -1)
+[[ -z "$GALIANA_SCRIPT" ]] && GALIANA_SCRIPT=$(find ~/projects -path '*/os/clavain/galiana/analyze.py' 2>/dev/null | head -1)
 ```
 
 If found, run:

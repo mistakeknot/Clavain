@@ -287,29 +287,47 @@ else
     fi
 fi
 
+# Record baseline snapshots for session-handoff.sh comparison.
+# These let the Stop hook distinguish pre-existing dirty state from
+# changes made during this session, preventing false-positive handoff triggers.
+_session_id_for_snapshot=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _session_id_for_snapshot=""
+if [[ -n "$_session_id_for_snapshot" ]]; then
+    # Git status snapshot (tracked files only, excludes untracked '??')
+    if command -v git &>/dev/null && git rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
+        git status --porcelain 2>/dev/null | grep -v '^\?\?' | sort > "/tmp/clavain-git-snapshot-${_session_id_for_snapshot}" 2>/dev/null || true
+    fi
+    # Beads in-progress snapshot
+    if command -v bd &>/dev/null; then
+        bd list --status=in_progress 2>/dev/null | grep '●' | sort > "/tmp/clavain-beads-snapshot-${_session_id_for_snapshot}" 2>/dev/null || true
+    fi
+fi
+
 # Assemble additionalContext with budget cap.
 # Priority-based shedding: drop lowest-priority sections whole (not byte-level truncation)
 # to avoid breaking mid-escape-sequence in JSON output.
 _context_preamble="You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n"
 _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${handoff_context}${inflight_context}"
-ADDITIONAL_CONTEXT_CAP=6000
+ADDITIONAL_CONTEXT_CAP=10000
 
-# Shed sections in reverse priority order (lowest value first)
+# Shed sections in reverse priority order (lowest value dropped first).
+# Handoff context is high-priority — it carries continuity from the previous session.
+# Shedding order: inflight → discovery → sprint → upstream → setup → handoff (last dropped)
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     inflight_context=""
     _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${handoff_context}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
-    handoff_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}"
-fi
-if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     discovery_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${handoff_context}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     sprint_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${handoff_context}"
+fi
+if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
+    upstream_warning=""
+    setup_hint=""
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${handoff_context}"
 fi
 
 # Output context injection as JSON

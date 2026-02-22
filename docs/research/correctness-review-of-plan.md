@@ -2,7 +2,7 @@
 
 **Plan:** `/root/projects/Interverse/docs/plans/2026-02-20-sprint-handover-kernel-driven.md`
 **PRD:** `/root/projects/Interverse/docs/prds/2026-02-20-sprint-handover-kernel-driven.md`
-**Source:** `/root/projects/Interverse/hub/clavain/hooks/lib-sprint.sh`
+**Source:** `/root/projects/Interverse/os/clavain/hooks/lib-sprint.sh`
 **Date:** 2026-02-20
 **Reviewer:** Julik, Flux-drive Correctness Reviewer
 

@@ -40,7 +40,7 @@ The PRD deliverables include "Document budget convention in AGENTS.md" under F1,
 ```
 ### Task 1.4: Document budget convention in AGENTS.md
 
-**File:** `hub/clavain/AGENTS.md`
+**File:** `os/clavain/AGENTS.md`
 
 Add section under "## Sprint Workflow" or "## Agent Orchestration":
 

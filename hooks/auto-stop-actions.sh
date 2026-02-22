@@ -63,11 +63,11 @@ SIGNALS="$CLAVAIN_SIGNALS"
 WEIGHT="$CLAVAIN_SIGNAL_WEIGHT"
 
 # Tiered decision: compound > drift check
-# Weight >= 3: non-trivial problem-solving → compound
-# Weight >= 2: shipped work → drift check
-# Weight < 2: nothing to do
+# Weight >= 4: non-trivial problem-solving → compound (raised from 3)
+# Weight >= 3: shipped work → drift check (raised from 2)
+# Weight < 3: nothing to do
 
-if [[ "$WEIGHT" -ge 3 ]]; then
+if [[ "$WEIGHT" -ge 4 ]]; then
     # Check per-repo opt-out for compound
     if [[ -f ".claude/clavain.no-autocompound" ]]; then
         exit 0
@@ -77,7 +77,7 @@ if [[ "$WEIGHT" -ge 3 ]]; then
 
     REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] (weight ${WEIGHT}) in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."
 
-elif [[ "$WEIGHT" -ge 2 ]]; then
+elif [[ "$WEIGHT" -ge 3 ]]; then
     # Check per-repo opt-out for drift check
     if [[ -f ".claude/clavain.no-driftcheck" ]]; then
         exit 0

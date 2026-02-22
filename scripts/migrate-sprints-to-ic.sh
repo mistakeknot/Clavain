@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-time migration: existing sprint beads → ic runs
 # Idempotent: skips beads that already have an ic_run_id.
-# Usage: bash hub/clavain/scripts/migrate-sprints-to-ic.sh [--dry-run]
+# Usage: bash os/clavain/scripts/migrate-sprints-to-ic.sh [--dry-run]
 set -euo pipefail
 
 DRY_RUN=false

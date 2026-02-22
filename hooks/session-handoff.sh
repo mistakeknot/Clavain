@@ -48,30 +48,72 @@ intercore_check_or_die "handoff" "$SESSION_ID" 0 "/tmp/clavain-handoff-${SESSION
 source "${BASH_SOURCE[0]%/*}/lib.sh" 2>/dev/null || true
 _write_inflight_manifest "$SESSION_ID" 2>/dev/null || true
 
-# Check for signals that work is incomplete
+# Check for signals that work is incomplete.
+# Only trigger on NEW signals from this session, not pre-existing stale state.
 SIGNALS=""
 
-# 1. Uncommitted changes
+# 1. Uncommitted changes — only if the working tree changed DURING this session.
+# Session-start records a snapshot of git status; we compare against it.
+SNAPSHOT="/tmp/clavain-git-snapshot-${SESSION_ID}"
 if command -v git &>/dev/null && git rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
-    DIRTY=$(git status --porcelain 2>/dev/null | grep -v '^\?\?' | head -1 || true)
-    if [[ -n "$DIRTY" ]]; then
+    CURRENT_DIRTY=$(git status --porcelain 2>/dev/null | grep -v '^\?\?' | sort || true)
+    if [[ -f "$SNAPSHOT" ]]; then
+        PREV_DIRTY=$(sort "$SNAPSHOT" 2>/dev/null || true)
+        # Only signal if there are NEW uncommitted changes not in the snapshot
+        NEW_CHANGES=$(comm -23 <(echo "$CURRENT_DIRTY") <(echo "$PREV_DIRTY") | head -1 || true)
+        if [[ -n "$NEW_CHANGES" ]]; then
+            SIGNALS="${SIGNALS}uncommitted-changes,"
+        fi
+    elif [[ -n "$CURRENT_DIRTY" ]]; then
+        # No snapshot (session-start didn't run?) — fall back to original behavior
         SIGNALS="${SIGNALS}uncommitted-changes,"
     fi
 fi
 
-# 2. In-progress beads
+# 2. In-progress beads — only if they were touched this session.
+# Check if any beads were updated/created during this session by comparing
+# against the session-start snapshot.
+BEAD_SNAPSHOT="/tmp/clavain-beads-snapshot-${SESSION_ID}"
 if command -v bd &>/dev/null; then
-    IN_PROGRESS=$(bd list --status=in_progress 2>/dev/null | grep -c '●' || true)
-    if [[ "$IN_PROGRESS" -gt 0 ]]; then
-        SIGNALS="${SIGNALS}in-progress-beads(${IN_PROGRESS}),"
+    CURRENT_IN_PROGRESS=$(bd list --status=in_progress 2>/dev/null | grep '●' | sort || true)
+    if [[ -f "$BEAD_SNAPSHOT" ]]; then
+        PREV_IN_PROGRESS=$(sort "$BEAD_SNAPSHOT" 2>/dev/null || true)
+        # Only signal if there are NEW in-progress beads not in the snapshot
+        NEW_BEADS=$(comm -23 <(echo "$CURRENT_IN_PROGRESS") <(echo "$PREV_IN_PROGRESS") | head -1 || true)
+        if [[ -n "$NEW_BEADS" ]]; then
+            IN_PROGRESS=$(echo "$CURRENT_IN_PROGRESS" | grep -c '●' || true)
+            SIGNALS="${SIGNALS}in-progress-beads(${IN_PROGRESS}),"
+        fi
+    else
+        # No snapshot — fall back to original behavior
+        IN_PROGRESS=$(echo "$CURRENT_IN_PROGRESS" | grep -c '●' || true)
+        if [[ "$IN_PROGRESS" -gt 0 ]]; then
+            SIGNALS="${SIGNALS}in-progress-beads(${IN_PROGRESS}),"
+        fi
     fi
 fi
 
-# 3. In-flight background agents (from manifest just written)
+# 3. In-flight background agents — only count agents whose JSONL was modified
+# in the last 30 seconds (actually still running, not just recently finished).
+# The manifest writer uses -mmin -1 (60s) which catches already-finished agents.
 if [[ -f ".clavain/scratch/inflight-agents.json" ]]; then
-    INFLIGHT_COUNT=$(jq '.agents | length' ".clavain/scratch/inflight-agents.json" 2>/dev/null) || INFLIGHT_COUNT=0
-    if [[ "$INFLIGHT_COUNT" -gt 0 ]]; then
-        SIGNALS="${SIGNALS}inflight-agents(${INFLIGHT_COUNT}),"
+    MANIFEST_SESSION=$(jq -r '.session_id // "unknown"' ".clavain/scratch/inflight-agents.json" 2>/dev/null) || MANIFEST_SESSION="unknown"
+    # shellcheck source=hooks/lib.sh
+    source "${BASH_SOURCE[0]%/*}/lib.sh" 2>/dev/null || true
+    PROJECT_DIR=$(_claude_project_dir 2>/dev/null) || PROJECT_DIR=""
+    STILL_RUNNING=0
+    if [[ -n "$PROJECT_DIR" ]]; then
+        while IFS= read -r _agent_line; do
+            [[ -z "$_agent_line" ]] && continue
+            _aid=$(echo "$_agent_line" | jq -r '.id // empty' 2>/dev/null) || continue
+            [[ -z "$_aid" ]] && continue
+            # Check if JSONL was modified in last 30 seconds (actually running)
+            _jsonl=$(find "${PROJECT_DIR}/${MANIFEST_SESSION}" -maxdepth 2 -name "${_aid}.jsonl" -newermt '30 seconds ago' 2>/dev/null | head -1 || true)
+            [[ -n "$_jsonl" ]] && STILL_RUNNING=$((STILL_RUNNING + 1))
+        done < <(jq -c '.agents[]' ".clavain/scratch/inflight-agents.json" 2>/dev/null)
+    fi
+    if [[ "$STILL_RUNNING" -gt 0 ]]; then
+        SIGNALS="${SIGNALS}inflight-agents(${STILL_RUNNING}),"
     fi
 fi
 
@@ -137,11 +179,13 @@ else
 ENDJSON
 fi
 
-# Clean up stale sentinels from previous sessions
+# Clean up stale sentinels and snapshots from previous sessions
 if type intercore_cleanup_stale &>/dev/null; then
     intercore_cleanup_stale
 else
     find /tmp -maxdepth 1 -name 'clavain-stop-*' -mmin +60 -delete 2>/dev/null || true
 fi
+find /tmp -maxdepth 1 -name 'clavain-git-snapshot-*' -mmin +60 -delete 2>/dev/null || true
+find /tmp -maxdepth 1 -name 'clavain-beads-snapshot-*' -mmin +60 -delete 2>/dev/null || true
 
 exit 0

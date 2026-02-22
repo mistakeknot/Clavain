@@ -9,7 +9,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 15 skills, 4 agents, 52 commands, 21 hooks, 1 MCP servers |
+| Components | 16 skills, 4 agents, 53 commands, 12 hooks, 1 MCP servers |
 | License | MIT |
 
 ### North Star for New Work
@@ -40,7 +40,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 15 discipline skills
+├── skills/                        # 16 discipline skills
 │   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
 │   ├── brainstorming/SKILL.md     # Explore phase
 │   ├── writing-plans/SKILL.md     # Plan phase
@@ -62,9 +62,9 @@ Clavain/
 ├── agents/
 │   ├── review/                    # 2 review agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 52 slash commands
+├── commands/                      # 53 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 50 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 51 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
@@ -293,9 +293,9 @@ When making changes, verify:
 Quick validation:
 ```bash
 # Count components
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 15
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 16
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"  # Should be 4
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 52
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 53
 echo "Hooks: $(ls hooks/*.sh | wc -l)"              # Should be 21
 
 # Check for phantom namespace references

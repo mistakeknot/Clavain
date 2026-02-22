@@ -218,7 +218,7 @@ Phase 2 (post-ship): Refactor to backend abstraction once CI/CD use case materia
 
 - `Interverse/scripts/` (monorepo-wide, like `interbump.sh`)
 - `plugins/interflux/scripts/` (interflux-owned, like `detect-domains.py`)
-- `hub/clavain/scripts/` (clavain-owned, like `gen-catalog.py`)
+- `os/clavain/scripts/` (clavain-owned, like `gen-catalog.py`)
 
 **Recommendation:**
 
@@ -468,7 +468,7 @@ Task 4 (compact interflux)   ─┴─→ Task 6 (wire loader) → Task 7 (tests
 
 #### P1-1: Clarify gen-compact.sh Ownership
 
-**Issue:** Plan doesn't specify whether `gen-compact.sh` lives in `Interverse/scripts/` vs. `plugins/interflux/scripts/` vs. `hub/clavain/scripts/`.
+**Issue:** Plan doesn't specify whether `gen-compact.sh` lives in `Interverse/scripts/` vs. `plugins/interflux/scripts/` vs. `os/clavain/scripts/`.
 
 **Recommendation:** Place in `Interverse/scripts/` (monorepo-wide shared utility, like `interbump.sh`).
 

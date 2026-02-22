@@ -13,8 +13,8 @@ Modules that don't start with "inter" use proper case (like "Clavain"). Therefor
 
 These files already use proper case correctly:
 - `plugins/clodex/CLAUDE.md` — uses lowercase "clodex" appropriately (title, commands, technical refs)
-- `hub/clavain/hooks/clodex-audit.sh` — script name (lowercase correct)
-- `hub/clavain/scripts/clodex-toggle.sh` — script name (lowercase correct), but user messages use "Clodex" properly
+- `os/clavain/hooks/clodex-audit.sh` — script name (lowercase correct)
+- `os/clavain/scripts/clodex-toggle.sh` — script name (lowercase correct), but user messages use "Clodex" properly
 
 ## Instances Requiring Changes
 
@@ -84,7 +84,7 @@ mcp.WithDescription("Ask Clodex to analyze file(s) and return a compact answer. 
 
 ---
 
-### 4. **hub/clavain/hooks/session-start.sh**
+### 4. **os/clavain/hooks/session-start.sh**
 
 **Line 136** (companion context message — USER-FACING):
 ```bash
@@ -149,6 +149,6 @@ These are stderr messages for developers, not end users — lowercase is accepta
 1. `plugins/clodex/hooks/pre-read-intercept.sh` — 2 instances (lines 2, 67)
 2. `plugins/clodex/internal/tools/tools.go` — 3 instances (lines 17, 72, 108)
 3. `plugins/clodex/.claude-plugin/plugin.json` — 1 instance (line 4)
-4. `hub/clavain/hooks/session-start.sh` — 1 instance (line 136, with multiple "Codex" → "Clodex" substitutions within)
+4. `os/clavain/hooks/session-start.sh` — 1 instance (line 136, with multiple "Codex" → "Clodex" substitutions within)
 
 **Pattern**: All changes are in user-facing descriptions, hook reason messages, and session context — never in technical identifiers, file names, or code structure.

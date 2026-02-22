@@ -1,6 +1,6 @@
 # Fix-Conflict Analysis: Vision Document Content Move Recommendations
 
-**Source:** `hub/clavain/docs/research/synthesis-vision-review.md`
+**Source:** `os/clavain/docs/research/synthesis-vision-review.md`
 **Scope:** All 46 findings across 6 agent reports
 **Date:** 2026-02-19
 **Analyst:** fd-architecture (Flux-Drive)
@@ -13,7 +13,7 @@ The synthesis lists 46 findings (4 P0, 11 P1, 17 P2, 14 P3). Not all findings ar
 
 The three documents:
 - `infra/intercore/docs/product/intercore-vision.md` (kernel — mechanism, primitives, durability)
-- `hub/clavain/docs/vision.md` (OS — policy, workflow, agency)
+- `os/clavain/docs/vision.md` (OS — policy, workflow, agency)
 - `infra/intercore/docs/product/autarch-vision.md` (apps — TUI surfaces)
 
 ---

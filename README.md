@@ -4,7 +4,7 @@ Clavain is a **highly** opinionated, self-improving Claude Code agent rig that c
 
 The point of agents isn't to remove humans from the loop; it's to make every moment in the loop count.
 
-With 15 skills, 4 agents, 52 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 16 skills, 4 agents, 53 commands, 12 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -155,7 +155,7 @@ I use this before any architectural decision I'm uncertain about. The debate its
 
 ## What's Included
 
-### Skills (15)
+### Skills (16)
 
 Skills are workflow disciplines — they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -191,7 +191,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (52)
+### Commands (53)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -311,9 +311,9 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 15 discipline skills (SKILL.md each)
+skills/       # 16 discipline skills (SKILL.md each)
 agents/       # 4 agents (review/ + workflow/)
-commands/     # 52 slash commands
+commands/     # 53 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync

@@ -1,7 +1,7 @@
 # Code Quality Review: evaluation harness
 
 **Date:** 2026-02-15
-**Scope:** `/root/projects/Interverse/hub/clavain/galiana/eval.py`
+**Scope:** `/root/projects/Interverse/os/clavain/galiana/eval.py`
 **Comparison files:** `analyze.py`, `experiment.py`
 
 ## Executive Summary

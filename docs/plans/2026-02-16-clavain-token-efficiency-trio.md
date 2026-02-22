@@ -13,7 +13,7 @@
 
 ### Task 1.1: Add additionalContext cap to session-start.sh
 
-**File:** `hub/clavain/hooks/session-start.sh`
+**File:** `os/clavain/hooks/session-start.sh`
 
 At line 265, before the `cat <<EOF` output block, add a length check on the assembled `additionalContext` string. If it exceeds 6000 chars, truncate and append a notice.
 
@@ -38,7 +38,7 @@ fi
 
 ### Task 1.2: Add skill_check_budget() to lib.sh
 
-**File:** `hub/clavain/hooks/lib.sh`
+**File:** `os/clavain/hooks/lib.sh`
 
 Add a function that checks all SKILL.md files under a given directory for size compliance:
 
@@ -78,7 +78,7 @@ skill_check_budget() {
 
 ### Task 1.3: Integrate budget check into /clavain:doctor
 
-**File:** `hub/clavain/commands/doctor.md`
+**File:** `os/clavain/commands/doctor.md`
 
 Add a new check section **"6. Skill Budget"** after the existing Plugin Version check (section 5):
 
@@ -115,7 +115,7 @@ Add to recommendations: `skill budget WARN/ERROR → "Trim skills over 16K chars
 
 ### Task 1.4: Trim writing-skills SKILL.md to under 16K
 
-**File:** `hub/clavain/skills/writing-skills/SKILL.md` (currently 18,646 bytes)
+**File:** `os/clavain/skills/writing-skills/SKILL.md` (currently 18,646 bytes)
 
 Need to remove ~3K bytes. Move these sections to new reference files:
 
@@ -182,7 +182,7 @@ For flux-drive reviews, the orchestrator reads:
 
 ### Task 2.2: Add verdict extraction to dispatch.sh
 
-**File:** `hub/clavain/scripts/dispatch.sh`
+**File:** `os/clavain/scripts/dispatch.sh`
 
 After the Codex exec completes (line 604 success path, line 608 fallback path), extract the verdict header from the output file and write a `.verdict` sidecar:
 
@@ -249,7 +249,7 @@ VERDICT
 
 ### Task 2.3: Update executing-plans to use verdict-first reading
 
-**File:** `hub/clavain/skills/executing-plans/SKILL.md`
+**File:** `os/clavain/skills/executing-plans/SKILL.md`
 
 In Step 2A (Codex Dispatch), update the verification step (currently "Read each agent's output and verify"):
 
@@ -265,7 +265,7 @@ Replace the instruction at line 52 with:
 
 ### Task 2.4: Update interserve skill for verdict-first reading
 
-**File:** `hub/clavain/skills/interserve/SKILL.md`
+**File:** `os/clavain/skills/interserve/SKILL.md`
 
 In Step 3 "Read Verdict" (line 120-124), update to reference the `.verdict` sidecar:
 
@@ -299,7 +299,7 @@ cat "/tmp/codex-result-*.md.verdict"
 
 ### Task 3.1: Add sprint_phase_whitelist() to lib-sprint.sh
 
-**File:** `hub/clavain/hooks/lib-sprint.sh`
+**File:** `os/clavain/hooks/lib-sprint.sh`
 
 Add after the `sprint_complexity_label()` function (line 688), before the Checkpointing section:
 
@@ -375,7 +375,7 @@ sprint_next_required_phase "brainstorm" 3  # → "brainstorm-reviewed"
 
 ### Task 3.2: Modify sprint_advance() to support phase skipping
 
-**File:** `hub/clavain/hooks/lib-sprint.sh`
+**File:** `os/clavain/hooks/lib-sprint.sh`
 
 In `sprint_advance()` (line 471), after computing `next_phase` from the transition table (line 479), add a complexity check that may jump further ahead:
 
@@ -405,9 +405,9 @@ This integrates cleanly because `sprint_advance()` already does the phase transi
 
 ### Task 3.3: Add complexity classification and skip confirmation to sprint skill
 
-The sprint skill is loaded via `/clavain:sprint` — it's the SKILL.md content embedded in the sprint command. The sprint command is at `hub/clavain/commands/sprint.md`.
+The sprint skill is loaded via `/clavain:sprint` — it's the SKILL.md content embedded in the sprint command. The sprint command is at `os/clavain/commands/sprint.md`.
 
-**File:** `hub/clavain/commands/sprint.md`
+**File:** `os/clavain/commands/sprint.md`
 
 In the sprint command's Step 1 (Brainstorm), **before** invoking `/clavain:brainstorm`, add complexity classification and skip logic:
 

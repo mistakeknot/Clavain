@@ -16,7 +16,7 @@ You are a software architecture analyst who evaluates whether a layered system's
 Check for project documentation:
 1. `CLAUDE.md` in the project root
 2. `AGENTS.md` in the project root
-3. Domain-relevant docs: The three vision documents (`infra/intercore/docs/product/intercore-vision.md`, `hub/clavain/docs/vision.md`, `infra/intercore/docs/product/autarch-vision.md`), plus architecture decision records and design docs
+3. Domain-relevant docs: The three vision documents (`infra/intercore/docs/product/intercore-vision.md`, `os/clavain/docs/vision.md`, `infra/intercore/docs/product/autarch-vision.md`), plus architecture decision records and design docs
 
 If docs exist, operate in codebase-aware mode:
 - Ground every finding in the project's stated principles and architecture decisions

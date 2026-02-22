@@ -150,19 +150,19 @@ The Clavain workflow implements a **9-phase trunk-based development pipeline** w
 ### Category 1: Discovery & Routing (Pre-Workflow)
 
 **Point 1: Work Discovery Scan**
-- **File:** `hub/clavain/hooks/sprint-scan.sh` (discovery_scan_beads)
+- **File:** `os/clavain/hooks/sprint-scan.sh` (discovery_scan_beads)
 - **Trigger:** `/clavain:sprint` with no args
 - **Event:** `discovery.scan_start`, `discovery.scan_complete`
 - **Context:** bead count, action distribution, orphan count
 
 **Point 2: User Selection**
-- **File:** `hub/clavain/commands/sprint.md` (Step 3)
+- **File:** `os/clavain/commands/sprint.md` (Step 3)
 - **Trigger:** AskUserQuestion response
 - **Event:** `discovery.selection`
 - **Context:** selected bead ID, action, recommended flag, position in list
 
 **Point 3: Routing Decision**
-- **File:** `hub/clavain/commands/sprint.md` (Step 6)
+- **File:** `os/clavain/commands/sprint.md` (Step 6)
 - **Trigger:** Route based on action (brainstorm/strategize/plan/execute/ship)
 - **Event:** `workflow.route`
 - **Context:** from phase, to command, bead ID
@@ -172,19 +172,19 @@ The Clavain workflow implements a **9-phase trunk-based development pipeline** w
 ### Category 2: Brainstorm Phase
 
 **Point 4: Brainstorm Start**
-- **File:** `hub/clavain/commands/brainstorm.md` (Phase 0)
+- **File:** `os/clavain/commands/brainstorm.md` (Phase 0)
 - **Trigger:** Command invocation
 - **Event:** `phase.brainstorm.start`
 - **Context:** feature description length, clarity assessment
 
 **Point 5: Repo Research Dispatch**
-- **File:** `hub/clavain/commands/brainstorm.md` (Phase 1.1)
+- **File:** `os/clavain/commands/brainstorm.md` (Phase 1.1)
 - **Trigger:** Task(repo-research-analyst)
 - **Event:** `agent.dispatch.research`
 - **Context:** agent type, query
 
 **Point 6: Brainstorm Document Written**
-- **File:** `hub/clavain/commands/brainstorm.md` (Phase 3)
+- **File:** `os/clavain/commands/brainstorm.md` (Phase 3)
 - **Trigger:** Write to docs/brainstorms/
 - **Event:** `phase.brainstorm.complete`
 - **Context:** doc path, section count, decision count
@@ -194,13 +194,13 @@ The Clavain workflow implements a **9-phase trunk-based development pipeline** w
 ### Category 3: Strategy Phase
 
 **Point 7: Strategy Start**
-- **File:** `hub/clavain/commands/strategy.md` (Input resolution)
+- **File:** `os/clavain/commands/strategy.md` (Input resolution)
 - **Trigger:** Command invocation
 - **Event:** `phase.strategy.start`
 - **Context:** input type (file/recent/none), brainstorm path
 
 **Point 8: Beads Created**
-- **File:** `hub/clavain/commands/strategy.md` (Phase 3)
+- **File:** `os/clavain/commands/strategy.md` (Phase 3)
 - **Trigger:** bd create (epic + features)
 - **Event:** `beads.created`
 - **Context:** epic ID, feature IDs, feature count
@@ -210,13 +210,13 @@ The Clavain workflow implements a **9-phase trunk-based development pipeline** w
 ### Category 4: Plan Phase
 
 **Point 9: Plan Start**
-- **File:** `hub/clavain/skills/writing-plans/SKILL.md`
+- **File:** `os/clavain/skills/writing-plans/SKILL.md`
 - **Trigger:** Skill invocation
 - **Event:** `phase.plan.start`
 - **Context:** inferred context (PRD, beads, docs)
 
 **Point 10: Plan Written**
-- **File:** `hub/clavain/commands/write-plan.md` (after skill completes)
+- **File:** `os/clavain/commands/write-plan.md` (after skill completes)
 - **Trigger:** Write to docs/plans/
 - **Event:** `phase.plan.complete`
 - **Context:** plan path, task count, module count
@@ -278,13 +278,13 @@ The Clavain workflow implements a **9-phase trunk-based development pipeline** w
 ### Category 6: Execute Phase
 
 **Point 19: Execution Start (with Gate Check)**
-- **File:** `hub/clavain/commands/work.md` (Phase 1b)
+- **File:** `os/clavain/commands/work.md` (Phase 1b)
 - **Trigger:** enforce_gate("executing")
 - **Event:** `phase.execute.start`, `gate.check`
 - **Context:** bead ID, gate result (pass/skip/blocked), plan path
 
 **Point 20: Subagent Dispatch**
-- **File:** `hub/clavain/skills/dispatching-parallel-agents/SKILL.md` or `subagent-driven-development/SKILL.md`
+- **File:** `os/clavain/skills/dispatching-parallel-agents/SKILL.md` or `subagent-driven-development/SKILL.md`
 - **Trigger:** Task() calls for implementation/review
 - **Event:** `agent.dispatch.implementation` or `agent.dispatch.review`
 - **Context:** agent type, task scope, parallel count
@@ -294,13 +294,13 @@ The Clavain workflow implements a **9-phase trunk-based development pipeline** w
 ### Category 7: Quality Gates Phase
 
 **Point 21: Quality Gates Start**
-- **File:** `hub/clavain/commands/quality-gates.md` (Phase 1)
+- **File:** `os/clavain/commands/quality-gates.md` (Phase 1)
 - **Trigger:** Command invocation
 - **Event:** `phase.quality_gates.start`
 - **Context:** change file count, risk domains detected
 
 **Point 22: Quality Gates Result (with Gate Check)**
-- **File:** `hub/clavain/commands/quality-gates.md` (Phase 5b)
+- **File:** `os/clavain/commands/quality-gates.md` (Phase 5b)
 - **Trigger:** Synthesis complete + enforce_gate("shipping")
 - **Event:** `phase.quality_gates.complete`, `gate.check`
 - **Context:** verdict (pass/fail), P0/P1/P2 counts, gate result
@@ -310,7 +310,7 @@ The Clavain workflow implements a **9-phase trunk-based development pipeline** w
 ### Category 8: Ship Phase
 
 **Point 23: Ship Complete**
-- **File:** `hub/clavain/skills/landing-a-change/SKILL.md` (Step 5)
+- **File:** `os/clavain/skills/landing-a-change/SKILL.md` (Step 5)
 - **Trigger:** Commit + push (or user choice)
 - **Event:** `phase.ship.complete`
 - **Context:** commit SHA, bead closed, changelog generated
@@ -539,23 +539,23 @@ CLAVAIN_PHASES = [
 ## File Paths Reference
 
 ### Commands (23 decision points)
-- `/root/projects/Interverse/hub/clavain/commands/sprint.md` — Discovery + routing
-- `/root/projects/Interverse/hub/clavain/commands/brainstorm.md` — Brainstorm orchestration
-- `/root/projects/Interverse/hub/clavain/commands/strategy.md` — PRD + beads creation
-- `/root/projects/Interverse/hub/clavain/commands/write-plan.md` — Plan generation
-- `/root/projects/Interverse/hub/clavain/commands/execute-plan.md` — Batch execution
-- `/root/projects/Interverse/hub/clavain/commands/work.md` — Autonomous execution
-- `/root/projects/Interverse/hub/clavain/commands/quality-gates.md` — Auto-reviewer selection
-- `/root/projects/Interverse/hub/clavain/commands/resolve.md` — Finding resolution
+- `/root/projects/Interverse/os/clavain/commands/sprint.md` — Discovery + routing
+- `/root/projects/Interverse/os/clavain/commands/brainstorm.md` — Brainstorm orchestration
+- `/root/projects/Interverse/os/clavain/commands/strategy.md` — PRD + beads creation
+- `/root/projects/Interverse/os/clavain/commands/write-plan.md` — Plan generation
+- `/root/projects/Interverse/os/clavain/commands/execute-plan.md` — Batch execution
+- `/root/projects/Interverse/os/clavain/commands/work.md` — Autonomous execution
+- `/root/projects/Interverse/os/clavain/commands/quality-gates.md` — Auto-reviewer selection
+- `/root/projects/Interverse/os/clavain/commands/resolve.md` — Finding resolution
 
 ### Skills (workflow logic)
-- `/root/projects/Interverse/hub/clavain/skills/brainstorming/SKILL.md`
-- `/root/projects/Interverse/hub/clavain/skills/writing-plans/SKILL.md`
-- `/root/projects/Interverse/hub/clavain/skills/executing-plans/SKILL.md`
-- `/root/projects/Interverse/hub/clavain/skills/dispatching-parallel-agents/SKILL.md`
-- `/root/projects/Interverse/hub/clavain/skills/subagent-driven-development/SKILL.md`
-- `/root/projects/Interverse/hub/clavain/skills/landing-a-change/SKILL.md`
-- `/root/projects/Interverse/hub/clavain/skills/verification-before-completion/SKILL.md`
+- `/root/projects/Interverse/os/clavain/skills/brainstorming/SKILL.md`
+- `/root/projects/Interverse/os/clavain/skills/writing-plans/SKILL.md`
+- `/root/projects/Interverse/os/clavain/skills/executing-plans/SKILL.md`
+- `/root/projects/Interverse/os/clavain/skills/dispatching-parallel-agents/SKILL.md`
+- `/root/projects/Interverse/os/clavain/skills/subagent-driven-development/SKILL.md`
+- `/root/projects/Interverse/os/clavain/skills/landing-a-change/SKILL.md`
+- `/root/projects/Interverse/os/clavain/skills/verification-before-completion/SKILL.md`
 
 ### flux-drive (multi-agent review)
 - `/root/projects/Interverse/plugins/interflux/skills/flux-drive/SKILL.md` — Main orchestrator
@@ -570,9 +570,9 @@ CLAVAIN_PHASES = [
 - `/root/projects/Interverse/plugins/interphase/hooks/lib-discovery.sh` — Work scanner
 
 ### Hooks (infrastructure)
-- `/root/projects/Interverse/hub/clavain/hooks/session-start.sh` — Session init
-- `/root/projects/Interverse/hub/clavain/hooks/sprint-scan.sh` — Discovery scanner
-- `/root/projects/Interverse/hub/clavain/hooks/lib.sh` — Shared utilities
+- `/root/projects/Interverse/os/clavain/hooks/session-start.sh` — Session init
+- `/root/projects/Interverse/os/clavain/hooks/sprint-scan.sh` — Discovery scanner
+- `/root/projects/Interverse/os/clavain/hooks/lib.sh` — Shared utilities
 
 ---
 

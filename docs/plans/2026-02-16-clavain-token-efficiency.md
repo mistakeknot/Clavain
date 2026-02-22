@@ -13,7 +13,7 @@
 
 ### Task 2.1: Create compact catalog
 
-**File:** `hub/clavain/skills/using-clavain/SKILL.md`
+**File:** `os/clavain/skills/using-clavain/SKILL.md`
 
 Replace the current 49-line SKILL.md with a compact catalog (~25 lines, <500 tokens) that contains:
 1. The "Quick Router" table (14 rows, ~300 tokens) — this IS the discoverability surface
@@ -26,7 +26,7 @@ Remove from always-loaded context:
 
 ### Task 2.2: Trim SessionStart context injection
 
-**File:** `hub/clavain/hooks/session-start.sh`
+**File:** `os/clavain/hooks/session-start.sh`
 
 Currently the hook injects using-clavain content + companion discovery results + handoff context + sprint scan. Changes:
 1. Companion discovery: store results in `CLAVAIN_COMPANIONS` env var (comma-separated list of detected companions), NOT in additionalContext. Skills that need companion info read the env var.
@@ -54,7 +54,7 @@ Run a session with the changes and check `/context` output. Clavain overhead sho
 
 ### Task 3.1: Define verdict schema
 
-**File:** `hub/clavain/skills/using-clavain/references/agent-contracts.md` (new)
+**File:** `os/clavain/skills/using-clavain/references/agent-contracts.md` (new)
 
 Define the universal verdict format:
 
@@ -73,7 +73,7 @@ Include examples for each TYPE and STATUS combination. Document the `.clavain/ve
 
 ### Task 3.2: Create verdict writer utility
 
-**File:** `hub/clavain/hooks/lib-verdict.sh` (new, ~40 lines)
+**File:** `os/clavain/hooks/lib-verdict.sh` (new, ~40 lines)
 
 Bash functions for agents to call:
 - `verdict_init()` — create `.clavain/verdicts/` if missing, add to `.gitignore`
@@ -83,7 +83,7 @@ Bash functions for agents to call:
 
 ### Task 3.3: Update flux-drive agent prompts
 
-**Files:** Core fd-* agents live in `plugins/interflux/agents/review/fd-*.md`. Clavain has generated domain agents in `hub/clavain/.claude/agents/fd-*.md`. Update both locations.
+**Files:** Core fd-* agents live in `plugins/interflux/agents/review/fd-*.md`. Clavain has generated domain agents in `os/clavain/.claude/agents/fd-*.md`. Update both locations.
 
 Add to each agent's instructions:
 ```
@@ -99,7 +99,7 @@ Note: This only applies to Clavain's copy of fd-* agents. The interflux original
 
 ### Task 3.4: Add .clavain/verdicts/ to .gitignore
 
-**File:** `hub/clavain/.gitignore`
+**File:** `os/clavain/.gitignore`
 
 Add `.clavain/verdicts/` entry.
 
@@ -118,10 +118,10 @@ Add `.clavain/verdicts/` entry.
 ### Task 1.1: Add model declarations to all agents
 
 **Files:**
-- `hub/clavain/agents/review/plan-reviewer.md` — already has `model: sonnet` ✓
-- `hub/clavain/agents/review/data-migration-expert.md` — already has `model: sonnet` ✓
-- `hub/clavain/agents/workflow/bug-reproduction-validator.md` — already has `model: sonnet` ✓
-- `hub/clavain/agents/workflow/pr-comment-resolver.md` — already has `model: sonnet` ✓
+- `os/clavain/agents/review/plan-reviewer.md` — already has `model: sonnet` ✓
+- `os/clavain/agents/review/data-migration-expert.md` — already has `model: sonnet` ✓
+- `os/clavain/agents/workflow/bug-reproduction-validator.md` — already has `model: sonnet` ✓
+- `os/clavain/agents/workflow/pr-comment-resolver.md` — already has `model: sonnet` ✓
 
 All 4 agents already declare model. Task: verify each uses the right tier:
 - plan-reviewer: sonnet (correct — review task)
@@ -178,7 +178,7 @@ Already done in Task 3.1 — this task just links to it from the agent .md files
 
 ### Task 4.1: Extract verdict parsing library
 
-**File:** `hub/clavain/hooks/lib-verdict.sh` (extend from Task 3.2)
+**File:** `os/clavain/hooks/lib-verdict.sh` (extend from Task 3.2)
 
 Add functions:
 - `verdict_parse_all()` — reads all `.clavain/verdicts/*.json`, outputs a summary table (STATUS, AGENT, SUMMARY — one line per agent)
@@ -187,7 +187,7 @@ Add functions:
 
 ### Task 4.2: Update sprint command to use verdicts
 
-**File:** `hub/clavain/commands/sprint.md` (NOT skills/sprint/SKILL.md — sprint is a command)
+**File:** `os/clavain/commands/sprint.md` (NOT skills/sprint/SKILL.md — sprint is a command)
 
 After quality-gates dispatches review agents, instead of reading raw agent output:
 1. Call `verdict_parse_all` to get the summary table
@@ -207,7 +207,7 @@ Audit and add `max_turns` to every Task dispatch:
 
 ### Task 4.4: Sprint summary with token tracking
 
-**File:** `hub/clavain/commands/sprint.md`
+**File:** `os/clavain/commands/sprint.md`
 
 Add a summary section at sprint completion:
 ```
@@ -234,7 +234,7 @@ Token tracking is estimated (from verdict TOKENS_SPENT fields), not measured. Pr
 
 ### Task 5.1: Extend existing complexity classifier
 
-**File:** `hub/clavain/hooks/lib-sprint.sh` (extend `sprint_classify_complexity` at line 541)
+**File:** `os/clavain/hooks/lib-sprint.sh` (extend `sprint_classify_complexity` at line 541)
 
 `sprint_classify_complexity` already exists and returns "simple"/"medium"/"complex". Extend it to:
 1. Add a file_count parameter (currently only uses description word count)
@@ -250,7 +250,7 @@ The existing heuristic uses word count + ambiguity/simplicity signals. Add:
 
 ### Task 5.2: Add phase skipping to sprint
 
-**File:** `hub/clavain/commands/sprint.md`
+**File:** `os/clavain/commands/sprint.md`
 
 Before Step 1 (brainstorm), run complexity classifier. Add to sprint skill:
 
@@ -291,7 +291,7 @@ When dispatching flux-drive agents, use complexity score:
 
 ### Task 6.1: Define checkpoint schema
 
-**File:** `hub/clavain/hooks/lib-sprint.sh` (extend)
+**File:** `os/clavain/hooks/lib-sprint.sh` (extend)
 
 ```bash
 # checkpoint_write <bead_id> <phase> <step_name> <plan_path>
@@ -328,7 +328,7 @@ checkpoint_validate() {
 
 ### Task 6.2: Add checkpoint writes to sprint skill
 
-**File:** `hub/clavain/commands/sprint.md`
+**File:** `os/clavain/commands/sprint.md`
 
 After each step completes, call checkpoint_write. The sprint skill instructions should include:
 
@@ -341,7 +341,7 @@ After each step completes successfully:
 
 ### Task 6.3: Add --resume to sprint
 
-**File:** `hub/clavain/commands/sprint.md`
+**File:** `os/clavain/commands/sprint.md`
 
 At the top of sprint skill, before Step 1:
 
@@ -360,7 +360,7 @@ If invoked with --from-step <n>:
 
 ### Task 6.4: Add .clavain/checkpoint.json to .gitignore
 
-**File:** `hub/clavain/.gitignore`
+**File:** `os/clavain/.gitignore`
 
 Add `.clavain/checkpoint.json` entry (may already be covered by the verdicts addition in F3).
 

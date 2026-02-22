@@ -30,7 +30,7 @@ If subcommand is `report-defect <bead-id>`:
 
 ```bash
 GALIANA_LIB=$(find ~/.claude/plugins/cache -path '*/clavain/*/galiana/lib-galiana.sh' 2>/dev/null | head -1)
-[[ -z "$GALIANA_LIB" ]] && GALIANA_LIB=$(find ~/projects -path '*/hub/clavain/galiana/lib-galiana.sh' 2>/dev/null | head -1)
+[[ -z "$GALIANA_LIB" ]] && GALIANA_LIB=$(find ~/projects -path '*/os/clavain/galiana/lib-galiana.sh' 2>/dev/null | head -1)
 if [[ -z "$GALIANA_LIB" ]]; then
   echo "Error: Could not locate galiana/lib-galiana.sh" >&2
   exit 1
@@ -46,7 +46,7 @@ If subcommand is `experiment` (with optional flags):
 1. Locate the experiment script:
    ```bash
    EXPERIMENT_SCRIPT=$(find ~/.claude/plugins/cache -path '*/clavain/*/galiana/experiment.py' 2>/dev/null | head -1)
-   [[ -z "$EXPERIMENT_SCRIPT" ]] && EXPERIMENT_SCRIPT=$(find ~/projects -path '*/hub/clavain/galiana/experiment.py' 2>/dev/null | head -1)
+   [[ -z "$EXPERIMENT_SCRIPT" ]] && EXPERIMENT_SCRIPT=$(find ~/projects -path '*/os/clavain/galiana/experiment.py' 2>/dev/null | head -1)
    ```
 
 2. Run it with any provided flags:
@@ -74,7 +74,7 @@ If subcommand is `eval` (with optional flags):
 1. Locate the eval script:
    ```bash
    EVAL_SCRIPT=$(find ~/.claude/plugins/cache -path '*/clavain/*/galiana/eval.py' 2>/dev/null | head -1)
-   [[ -z "$EVAL_SCRIPT" ]] && EVAL_SCRIPT=$(find ~/projects -path '*/hub/clavain/galiana/eval.py' 2>/dev/null | head -1)
+   [[ -z "$EVAL_SCRIPT" ]] && EVAL_SCRIPT=$(find ~/projects -path '*/os/clavain/galiana/eval.py' 2>/dev/null | head -1)
    ```
 
 2. Run it with any provided flags:

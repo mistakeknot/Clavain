@@ -15,7 +15,7 @@
 ### Task 1: Create the Topology Configuration
 
 **Files:**
-- Create: `hub/clavain/galiana/topologies.json`
+- Create: `os/clavain/galiana/topologies.json`
 
 **Step 1: Write topology definitions**
 
@@ -64,7 +64,7 @@
 **Step 2: Commit**
 
 ```bash
-git add hub/clavain/galiana/topologies.json
+git add os/clavain/galiana/topologies.json
 git commit -m "feat(galiana): add fixed topology definitions for experiment"
 ```
 
@@ -73,7 +73,7 @@ git commit -m "feat(galiana): add fixed topology definitions for experiment"
 ### Task 2: Create the Experiment Runner
 
 **Files:**
-- Create: `hub/clavain/galiana/experiment.py` (~250 lines)
+- Create: `os/clavain/galiana/experiment.py` (~250 lines)
 
 This is the core script. It:
 1. Finds yesterday's production `findings.json` files
@@ -179,13 +179,13 @@ python3 experiment.py [--date YYYY-MM-DD] [--topologies T2,T4,T6,T8] [--dry-run]
 **Step 2: Verify syntax**
 
 ```bash
-python3 -c "import py_compile; py_compile.compile('hub/clavain/galiana/experiment.py', doraise=True)"
+python3 -c "import py_compile; py_compile.compile('os/clavain/galiana/experiment.py', doraise=True)"
 ```
 
 **Step 3: Test with --dry-run**
 
 ```bash
-python3 hub/clavain/galiana/experiment.py --dry-run --project /root/projects/Interverse/hub/clavain
+python3 os/clavain/galiana/experiment.py --dry-run --project /root/projects/Interverse/os/clavain
 ```
 
 Expected: Lists found reviews and planned shadow runs without dispatching agents.
@@ -193,7 +193,7 @@ Expected: Lists found reviews and planned shadow runs without dispatching agents
 **Step 4: Commit**
 
 ```bash
-git add hub/clavain/galiana/experiment.py
+git add os/clavain/galiana/experiment.py
 git commit -m "feat(galiana): add topology experiment runner"
 ```
 
@@ -202,7 +202,7 @@ git commit -m "feat(galiana): add topology experiment runner"
 ### Task 3: Create the Shadow Review Dispatcher
 
 **Files:**
-- Create: `hub/clavain/galiana/shadow-review.sh` (~60 lines)
+- Create: `os/clavain/galiana/shadow-review.sh` (~60 lines)
 
 Shell script that dispatches a single review agent against a target input and captures its findings output. Called by `experiment.py` for each agent in a topology.
 
@@ -275,8 +275,8 @@ rm -f "$PROMPT_FILE"
 **Step 2: Make executable and commit**
 
 ```bash
-chmod +x hub/clavain/galiana/shadow-review.sh
-git add hub/clavain/galiana/shadow-review.sh
+chmod +x os/clavain/galiana/shadow-review.sh
+git add os/clavain/galiana/shadow-review.sh
 git commit -m "feat(galiana): add shadow review dispatcher script"
 ```
 
@@ -285,7 +285,7 @@ git commit -m "feat(galiana): add shadow review dispatcher script"
 ### Task 4: Add Experiment Command to Galiana
 
 **Files:**
-- Modify: `hub/clavain/commands/galiana.md` — add `experiment` subcommand
+- Modify: `os/clavain/commands/galiana.md` — add `experiment` subcommand
 
 **Step 1: Update the command file**
 
@@ -299,7 +299,7 @@ If subcommand is `experiment` (with optional flags):
 1. Locate the experiment script:
    ```bash
    EXPERIMENT_SCRIPT=$(find ~/.claude/plugins/cache -path '*/clavain/*/galiana/experiment.py' 2>/dev/null | head -1)
-   [[ -z "$EXPERIMENT_SCRIPT" ]] && EXPERIMENT_SCRIPT=$(find ~/projects -path '*/hub/clavain/galiana/experiment.py' 2>/dev/null | head -1)
+   [[ -z "$EXPERIMENT_SCRIPT" ]] && EXPERIMENT_SCRIPT=$(find ~/projects -path '*/os/clavain/galiana/experiment.py' 2>/dev/null | head -1)
    ```
 
 2. Run it with any provided flags:
@@ -324,7 +324,7 @@ If subcommand is `experiment` (with optional flags):
 **Step 2: Commit**
 
 ```bash
-git add hub/clavain/commands/galiana.md
+git add os/clavain/commands/galiana.md
 git commit -m "feat(galiana): add experiment subcommand to galiana"
 ```
 
@@ -333,7 +333,7 @@ git commit -m "feat(galiana): add experiment subcommand to galiana"
 ### Task 5: Add Topology Results to Galiana Analyzer
 
 **Files:**
-- Modify: `hub/clavain/galiana/analyze.py` — add topology results reading and KPI
+- Modify: `os/clavain/galiana/analyze.py` — add topology results reading and KPI
 
 **Step 1: Add topology results loader**
 
@@ -431,15 +431,15 @@ And add to the return dict's `kpis`:
 **Step 4: Verify**
 
 ```bash
-python3 -c "import py_compile; py_compile.compile('hub/clavain/galiana/analyze.py', doraise=True)"
-python3 hub/clavain/galiana/analyze.py
+python3 -c "import py_compile; py_compile.compile('os/clavain/galiana/analyze.py', doraise=True)"
+python3 os/clavain/galiana/analyze.py
 python3 -m json.tool ~/.clavain/galiana-kpis.json | grep -A5 topology
 ```
 
 **Step 5: Commit**
 
 ```bash
-git add hub/clavain/galiana/analyze.py
+git add os/clavain/galiana/analyze.py
 git commit -m "feat(galiana): add topology efficiency KPI to analyzer"
 ```
 
@@ -448,7 +448,7 @@ git commit -m "feat(galiana): add topology efficiency KPI to analyzer"
 ### Task 6: Update Galiana Skill to Show Topology Results
 
 **Files:**
-- Modify: `hub/clavain/skills/galiana/SKILL.md` — add topology results section
+- Modify: `os/clavain/skills/galiana/SKILL.md` — add topology results section
 
 **Step 1: Add topology rendering**
 
@@ -480,7 +480,7 @@ If fewer than 20 total experiments, add note: "Data still accumulating — run m
 **Step 2: Commit**
 
 ```bash
-git add hub/clavain/skills/galiana/SKILL.md
+git add os/clavain/skills/galiana/SKILL.md
 git commit -m "feat(galiana): add topology results to skill presentation"
 ```
 
@@ -490,9 +490,9 @@ git commit -m "feat(galiana): add topology results to skill presentation"
 
 After all tasks complete:
 
-1. **Config**: `cat hub/clavain/galiana/topologies.json | python3 -m json.tool` — valid JSON
-2. **Experiment dry-run**: `python3 hub/clavain/galiana/experiment.py --dry-run` — lists tasks and topologies
-3. **Shadow dispatcher**: `bash -n hub/clavain/galiana/shadow-review.sh` — no syntax errors
-4. **Analyzer**: `python3 hub/clavain/galiana/analyze.py` — includes topology_efficiency in output
+1. **Config**: `cat os/clavain/galiana/topologies.json | python3 -m json.tool` — valid JSON
+2. **Experiment dry-run**: `python3 os/clavain/galiana/experiment.py --dry-run` — lists tasks and topologies
+3. **Shadow dispatcher**: `bash -n os/clavain/galiana/shadow-review.sh` — no syntax errors
+4. **Analyzer**: `python3 os/clavain/galiana/analyze.py` — includes topology_efficiency in output
 5. **Command**: galiana.md includes experiment routing
 6. **Skill**: SKILL.md includes topology rendering section

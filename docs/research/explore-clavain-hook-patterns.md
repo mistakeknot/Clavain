@@ -160,7 +160,7 @@ Commands that need shared functions use this pattern:
 
 ```bash
 GALIANA_LIB=$(find ~/.claude/plugins/cache -path '*/clavain/*/galiana/lib-galiana.sh' 2>/dev/null | head -1)
-[[ -z "$GALIANA_LIB" ]] && GALIANA_LIB=$(find ~/projects -path '*/hub/clavain/galiana/lib-galiana.sh' 2>/dev/null | head -1)
+[[ -z "$GALIANA_LIB" ]] && GALIANA_LIB=$(find ~/projects -path '*/os/clavain/galiana/lib-galiana.sh' 2>/dev/null | head -1)
 if [[ -z "$GALIANA_LIB" ]]; then
   echo "Error: Could not locate galiana/lib-galiana.sh" >&2
   exit 1

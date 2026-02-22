@@ -28,7 +28,7 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
 
    Check sprint complexity:
    ```bash
-   source hub/clavain/hooks/lib-sprint.sh
+   source os/clavain/hooks/lib-sprint.sh
    state=$(sprint_read_state "<sprint_id>" 2>/dev/null) || state="{}"
    complexity=$(echo "$state" | jq -r '.complexity // "3"' 2>/dev/null) || complexity="3"
    ```
@@ -41,7 +41,7 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
 
 4. **Register the artifact.** After the learning artifact is written, register it as a reflect-phase artifact:
    ```bash
-   source hub/clavain/hooks/lib-sprint.sh
+   source os/clavain/hooks/lib-sprint.sh
    sprint_set_artifact "<sprint_id>" "reflect" "<path_to_doc>"
    ```
    (`sprint_set_artifact` handles both kernel registration via `ic run artifact add` and beads fallback automatically.)

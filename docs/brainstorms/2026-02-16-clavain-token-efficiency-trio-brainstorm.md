@@ -158,20 +158,20 @@ When complexity suggests a phase can be skipped, ask the user: "Complexity 2 —
 ### Files Modified
 
 **iv-ked1:**
-- `hub/clavain/hooks/session-start.sh` — add additionalContext cap
-- `hub/clavain/scripts/validate-plugin.sh` (or new lint script) — skill size validation
-- `hub/clavain/AGENTS.md` — document budget convention
+- `os/clavain/hooks/session-start.sh` — add additionalContext cap
+- `os/clavain/scripts/validate-plugin.sh` (or new lint script) — skill size validation
+- `os/clavain/AGENTS.md` — document budget convention
 
 **iv-hyza:**
-- `hub/clavain/scripts/dispatch.sh` — post-process output for verdict header
+- `os/clavain/scripts/dispatch.sh` — post-process output for verdict header
 - `plugins/interflux/skills/flux-drive/phases/shared-contracts.md` — extend contract
-- `hub/clavain/skills/executing-plans/SKILL.md` — reference verdict extraction
-- `hub/clavain/skills/interserve/SKILL.md` — update result reading instructions
+- `os/clavain/skills/executing-plans/SKILL.md` — reference verdict extraction
+- `os/clavain/skills/interserve/SKILL.md` — update result reading instructions
 
 **iv-kmyj:**
-- `hub/clavain/hooks/lib-sprint.sh` — add phase whitelist function, modify sprint_advance
+- `os/clavain/hooks/lib-sprint.sh` — add phase whitelist function, modify sprint_advance
 - Sprint skill (loaded by /clavain:sprint) — add complexity check before phase commands
-- `hub/clavain/skills/executing-plans/SKILL.md` — reference skip behavior
+- `os/clavain/skills/executing-plans/SKILL.md` — reference skip behavior
 
 ## Risks and Mitigations
 

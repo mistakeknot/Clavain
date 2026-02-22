@@ -20,7 +20,7 @@ The Interverse monorepo has **14 plugins** and **1 core hub (Clavain)** with a v
 ## 1. Version Locations per Plugin (Multi-Location Fragmentation)
 
 ### Clavain (Hub) - 4 Locations
-Located at `/root/projects/Interverse/hub/clavain/`
+Located at `/root/projects/Interverse/os/clavain/`
 
 1. `.claude-plugin/plugin.json` → **0.6.13**
 2. `agent-rig.json` → **0.6.13**
@@ -143,7 +143,7 @@ Located at `/root/projects/Interverse/hub/clavain/`
 
 ## 3. Clavain's bump-version.sh — Orchestration & Cache Management
 
-**Location:** `/root/projects/Interverse/hub/clavain/scripts/bump-version.sh`
+**Location:** `/root/projects/Interverse/os/clavain/scripts/bump-version.sh`
 
 ### What It Does Beyond Simple Replacement
 
@@ -207,7 +207,7 @@ Located at `/root/projects/Interverse/hub/clavain/`
 
 ## 4. gen-catalog.py — Drift Detection & Auto-Update
 
-**Location:** `/root/projects/Interverse/hub/clavain/scripts/gen-catalog.py`
+**Location:** `/root/projects/Interverse/os/clavain/scripts/gen-catalog.py`
 
 ### What It Does
 

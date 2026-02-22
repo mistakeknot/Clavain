@@ -14,16 +14,16 @@ Remove 4 alias commands and extract 5 domain-specific skills (plus 1 agent and 1
 ### Task 1: Remove alias commands from Clavain
 
 **Files to delete:**
-- `hub/clavain/commands/lfg.md`
-- `hub/clavain/commands/full-pipeline.md`
-- `hub/clavain/commands/cross-review.md`
-- `hub/clavain/commands/deep-review.md`
+- `os/clavain/commands/lfg.md`
+- `os/clavain/commands/full-pipeline.md`
+- `os/clavain/commands/cross-review.md`
+- `os/clavain/commands/deep-review.md`
 
 **Files to update:**
-- `hub/clavain/.claude-plugin/plugin.json` — update `description` counts only (uses directory discovery, no arrays)
-- `hub/clavain/agent-rig.json` — update description counts, update postInstall message (references `/lfg`)
-- `hub/clavain/README.md` — update command count from 37 to 33 (we'll adjust further after skill moves)
-- `hub/clavain/commands/help.md` — MUST remove aliases line (line 23: `> **Aliases:** /deep-review = ...`)
+- `os/clavain/.claude-plugin/plugin.json` — update `description` counts only (uses directory discovery, no arrays)
+- `os/clavain/agent-rig.json` — update description counts, update postInstall message (references `/lfg`)
+- `os/clavain/README.md` — update command count from 37 to 33 (we'll adjust further after skill moves)
+- `os/clavain/commands/help.md` — MUST remove aliases line (line 23: `> **Aliases:** /deep-review = ...`)
 
 **Verification:** `ls commands/*.md | wc -l` should decrease by 4
 
@@ -36,8 +36,8 @@ plugins/interslack/
     plugin.json
   skills/
     slack-messaging/
-      SKILL.md       (moved from hub/clavain/skills/slack-messaging/SKILL.md)
-      scripts/       (moved from hub/clavain/skills/slack-messaging/scripts/)
+      SKILL.md       (moved from os/clavain/skills/slack-messaging/SKILL.md)
+      scripts/       (moved from os/clavain/skills/slack-messaging/scripts/)
   CLAUDE.md
   .gitignore
 ```
@@ -67,7 +67,7 @@ plugins/interform/
     plugin.json
   skills/
     distinctive-design/
-      SKILL.md       (moved from hub/clavain/skills/distinctive-design/SKILL.md)
+      SKILL.md       (moved from os/clavain/skills/distinctive-design/SKILL.md)
   CLAUDE.md
   .gitignore
 ```
@@ -97,13 +97,13 @@ plugins/intercraft/
     plugin.json
   skills/
     agent-native-architecture/
-      SKILL.md       (moved from hub/clavain/skills/agent-native-architecture/SKILL.md)
+      SKILL.md       (moved from os/clavain/skills/agent-native-architecture/SKILL.md)
       references/    (moved — 14 reference documents)
   agents/
     review/
-      agent-native-reviewer.md  (moved from hub/clavain/agents/review/agent-native-reviewer.md)
+      agent-native-reviewer.md  (moved from os/clavain/agents/review/agent-native-reviewer.md)
   commands/
-    agent-native-audit.md       (moved from hub/clavain/commands/agent-native-audit.md)
+    agent-native-audit.md       (moved from os/clavain/commands/agent-native-audit.md)
   CLAUDE.md
   .gitignore
 ```
@@ -137,7 +137,7 @@ plugins/interdev/
     plugin.json
   skills/
     mcp-cli/
-      SKILL.md       (moved from hub/clavain/skills/mcp-cli/SKILL.md)
+      SKILL.md       (moved from os/clavain/skills/mcp-cli/SKILL.md)
   CLAUDE.md
   .gitignore
 ```
@@ -162,7 +162,7 @@ plugins/interdev/
 
 **Move files:**
 ```
-hub/clavain/skills/finding-duplicate-functions/ → plugins/tldr-swinton/skills/finding-duplicate-functions/
+os/clavain/skills/finding-duplicate-functions/ → plugins/tldr-swinton/skills/finding-duplicate-functions/
 ```
 
 This includes SKILL.md, scripts/ directory (5 scripts + extract-tokens directory).
@@ -179,39 +179,39 @@ This includes SKILL.md, scripts/ directory (5 scripts + extract-tokens directory
 ```bash
 # Find all references to deleted aliases
 grep -rn "lfg\|full-pipeline\|cross-review\|deep-review" \
-  hub/clavain/{commands,skills,agents,README.md,CLAUDE.md,agent-rig.json}
+  os/clavain/{commands,skills,agents,README.md,CLAUDE.md,agent-rig.json}
 
 # Find all references to moved command
 grep -rn "agent-native-audit" \
-  hub/clavain/{commands,skills,agents,README.md,CLAUDE.md}
+  os/clavain/{commands,skills,agents,README.md,CLAUDE.md}
 
 # Find all references to moved skills
 grep -rn "slack-messaging\|distinctive-design\|agent-native-architecture\|finding-duplicate-functions\|mcp-cli" \
-  hub/clavain/{commands,README.md,CLAUDE.md,agent-rig.json}
+  os/clavain/{commands,README.md,CLAUDE.md,agent-rig.json}
 ```
 Fix ALL matches before proceeding.
 
 After audit, update:
 
-1. **`hub/clavain/.claude-plugin/plugin.json`:**
+1. **`os/clavain/.claude-plugin/plugin.json`:**
    - Update `description` counts: change "5 agents, 37 commands, 27 skills" to "4 agents, 32 commands, 22 skills"
    - Update companions list in description: add "interslack, interform, intercraft, interdev"
    - No array updates needed (Clavain uses directory discovery)
 
-2. **`hub/clavain/agent-rig.json`:**
+2. **`os/clavain/agent-rig.json`:**
    - Update description counts
    - Add 4 new plugins to `recommended` array
    - Fix postInstall message (remove `/lfg` reference, use `/sprint`)
 
-3. **`hub/clavain/README.md`:**
+3. **`os/clavain/README.md`:**
    - Update counts in opening paragraph
    - Update skill/command lists if present
 
-4. **`hub/clavain/CLAUDE.md`:**
+4. **`os/clavain/CLAUDE.md`:**
    - Update validation commands (skill count should be 22, commands 32, agents 4)
    - Update companion list
 
-5. **`hub/clavain/commands/help.md`:**
+5. **`os/clavain/commands/help.md`:**
    - Delete aliases line (line 23: `> **Aliases:** ...`)
    - Remove agent-native-audit from command table
 
@@ -234,12 +234,12 @@ For each new plugin (interslack, interform, intercraft, interdev):
 ### Task 10: Validate
 
 **File count validation:**
-- `ls hub/clavain/commands/*.md | wc -l` → 32
-- `ls hub/clavain/skills/*/SKILL.md | wc -l` → 22
-- `ls hub/clavain/agents/{review,workflow}/*.md | wc -l` → 4
+- `ls os/clavain/commands/*.md | wc -l` → 32
+- `ls os/clavain/skills/*/SKILL.md | wc -l` → 22
+- `ls os/clavain/agents/{review,workflow}/*.md | wc -l` → 4
 
 **JSON validity:**
-- `python3 -c "import json; json.load(open('hub/clavain/.claude-plugin/plugin.json'))"` → valid
+- `python3 -c "import json; json.load(open('os/clavain/.claude-plugin/plugin.json'))"` → valid
 - For each new plugin: `python3 -c "import json; json.load(open('plugins/<name>/.claude-plugin/plugin.json'))"` → valid
 
 **Script syntax:**

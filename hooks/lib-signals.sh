@@ -15,9 +15,11 @@
 #   resolution      (weight 2) — debugging resolution phrases
 #   investigation   (weight 2) — root cause / investigation language
 #   bead-closed     (weight 1) — bd close in transcript
-#   insight         (weight 1) — ★ Insight block marker
 #   recovery        (weight 2) — test/build failure followed by pass
 #   version-bump    (weight 2) — bump-version.sh or interpub:release
+#
+# Removed: insight (weight 1) — ★ Insight block marker. This is a style artifact
+# from explanatory output mode, always present, and inflated signal weight.
 
 # Guard against re-parsing function definitions (performance optimization).
 # Note: detect_signals() resets output vars on each call — no persistent state.
@@ -56,13 +58,7 @@ detect_signals() {
         CLAVAIN_SIGNAL_WEIGHT=$((CLAVAIN_SIGNAL_WEIGHT + 1))
     fi
 
-    # 5. Insight block (weight 1)
-    if echo "$text" | grep -q 'Insight ─'; then
-        CLAVAIN_SIGNALS="${CLAVAIN_SIGNALS}insight,"
-        CLAVAIN_SIGNAL_WEIGHT=$((CLAVAIN_SIGNAL_WEIGHT + 1))
-    fi
-
-    # 6. Build/test recovery (weight 2)
+    # 5. Build/test recovery (weight 2)
     if echo "$text" | grep -iq 'FAIL\|FAILED\|ERROR.*build\|error.*compile\|test.*failed'; then
         if echo "$text" | grep -iq 'passed\|BUILD SUCCESSFUL\|build succeeded\|tests pass\|all.*pass'; then
             CLAVAIN_SIGNALS="${CLAVAIN_SIGNALS}recovery,"
@@ -70,7 +66,7 @@ detect_signals() {
         fi
     fi
 
-    # 7. Version bump (weight 2)
+    # 6. Version bump (weight 2)
     if echo "$text" | grep -q 'bump-version\|interpub:release'; then
         CLAVAIN_SIGNALS="${CLAVAIN_SIGNALS}version-bump,"
         CLAVAIN_SIGNAL_WEIGHT=$((CLAVAIN_SIGNAL_WEIGHT + 2))

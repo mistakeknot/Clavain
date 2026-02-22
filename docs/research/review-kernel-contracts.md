@@ -4,7 +4,7 @@
 **Date:** 2026-02-19
 **Documents evaluated:**
 - `infra/intercore/docs/product/intercore-vision.md` (v1.6)
-- `hub/clavain/docs/vision.md`
+- `os/clavain/docs/vision.md`
 - `infra/intercore/CLAUDE.md` + `AGENTS.md`
 
 ---

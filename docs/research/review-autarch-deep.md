@@ -12,7 +12,7 @@
 - `hub/autarch/pkg/contract/types.go` (Initiative/Epic/Story/Task types)
 - `hub/autarch/pkg/events/store.go` (separate `~/.autarch/events.db`)
 - `hub/autarch/internal/coldwine/` (TUI model.go: 2,219 lines)
-- `hub/clavain/docs/vision.md` (OS-layer intent)
+- `os/clavain/docs/vision.md` (OS-layer intent)
 
 ---
 
@@ -20,7 +20,7 @@
 
 The vision document is coherent and internally consistent as a narrative. Its architecture claims are correct at a high level. The problems are in the execution layer: the migration ordering has two load-bearing dependencies on infrastructure that does not exist yet, the "apps are swappable" claim breaks down for exactly the two tools where it matters most, the `ic tui` proposal inverts the dependency graph without acknowledging it, and the `pkg/tui` component list is incomplete in ways that will cause rework. None of these are fatal to the vision; all require explicit resolution before the migration plan can be committed to.
 
-**Primary user for this change:** A single product-minded engineer (the inner circle described in `hub/clavain/docs/vision.md` line 55) who wants observable, reproducible, kernel-backed agent orchestration across four interactive tools.
+**Primary user for this change:** A single product-minded engineer (the inner circle described in `os/clavain/docs/vision.md` line 55) who wants observable, reproducible, kernel-backed agent orchestration across four interactive tools.
 
 ---
 

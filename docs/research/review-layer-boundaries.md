@@ -4,7 +4,7 @@
 **Date:** 2026-02-19
 **Documents reviewed:**
 - `/root/projects/Interverse/infra/intercore/docs/product/intercore-vision.md` (v1.6)
-- `/root/projects/Interverse/hub/clavain/docs/vision.md` (undated, revised 2026-02-19)
+- `/root/projects/Interverse/os/clavain/docs/vision.md` (undated, revised 2026-02-19)
 - `/root/projects/Interverse/infra/intercore/docs/product/autarch-vision.md` (v1.0)
 
 ---
@@ -180,7 +180,7 @@ The specific weights (completeness 20%, consistency 25%, specificity 20%, resear
 
 Additionally, lines 573 of the same section:
 
-> "Additional backlog refinement (priority escalation, dependency suggestion, weekly digests, feedback loops) is OS-level policy. See the [Clavain vision doc](../../../../hub/clavain/docs/vision.md) for the full discovery → backlog pipeline workflow, including source configuration, trigger modes, and backlog refinement rules."
+> "Additional backlog refinement (priority escalation, dependency suggestion, weekly digests, feedback loops) is OS-level policy. See the [Clavain vision doc](../../../../os/clavain/docs/vision.md) for the full discovery → backlog pipeline workflow, including source configuration, trigger modes, and backlog refinement rules."
 
 This correctly defers to the OS doc — but the sentence immediately preceding it (the bead decay sentence) contradicts it by describing OS-level bead behavior inside the kernel doc.
 
@@ -190,7 +190,7 @@ This correctly defers to the OS doc — but the sentence immediately preceding i
 
 ### P2-3 — Clavain doc duplicates the kernel mechanism table
 
-**Document:** `hub/clavain/docs/vision.md`
+**Document:** `os/clavain/docs/vision.md`
 **Section:** "Model Routing Architecture → Layer 1: Kernel Mechanism"
 **Lines:** 257–260
 
@@ -283,7 +283,7 @@ These are the same components referred to by three slightly different names acro
 **Documents:** `intercore-vision.md` line 573, `autarch-vision.md` line 93
 **Observation:** Both the Intercore and Autarch docs contain explicit links to the Clavain vision doc for the "full discovery → backlog pipeline workflow." The Clavain vision doc does not link to the Intercore vision doc except via the architecture diagram reference in its opening section. The "Discovery → Backlog Pipeline" section in Clavain (lines 138–211) describes itself as the authoritative pipeline definition but does not cite the Intercore doc as the source of the kernel primitives it relies on.
 
-**Minimum fix:** Add a cross-reference at the top of the "Discovery → Backlog Pipeline" section in `hub/clavain/docs/vision.md`: "This section defines OS-level pipeline policy. The underlying kernel primitives (discovery records, confidence scoring, event types, dedup enforcement) are defined in the [Intercore vision doc](../../../infra/intercore/docs/product/intercore-vision.md)."
+**Minimum fix:** Add a cross-reference at the top of the "Discovery → Backlog Pipeline" section in `os/clavain/docs/vision.md`: "This section defines OS-level pipeline policy. The underlying kernel primitives (discovery records, confidence scoring, event types, dedup enforcement) are defined in the [Intercore vision doc](../../../infra/intercore/docs/product/intercore-vision.md)."
 
 ---
 

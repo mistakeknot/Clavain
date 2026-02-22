@@ -4,7 +4,7 @@
 **Date:** 2026-02-19
 
 ## Inputs
-- Vision brainstorm (P2 capability): `hub/clavain/docs/brainstorms/2026-02-14-clavain-vision-philosophy-brainstorm.md`
+- Vision brainstorm (P2 capability): `os/clavain/docs/brainstorms/2026-02-14-clavain-vision-philosophy-brainstorm.md`
 - Related context-efficiency research: `docs/research/token-efficiency-agent-orchestration-2026.md`
 
 ## Goal

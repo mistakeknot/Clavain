@@ -24,7 +24,7 @@
 
 ## F1: JSON Truncation Mid-Escape Sequence [CRITICAL]
 
-**File:** `hub/clavain/hooks/session-start.sh:269`
+**File:** `os/clavain/hooks/session-start.sh:269`
 
 ### Problem
 
@@ -95,7 +95,7 @@ companion_context="${companion_context:0:2000}"
 
 ## F2: verdict_parse_all File Existence Check Race [HIGH]
 
-**File:** `hub/clavain/hooks/lib-verdict.sh:63-74`
+**File:** `os/clavain/hooks/lib-verdict.sh:63-74`
 
 ### Problem
 
@@ -290,7 +290,7 @@ This prevents the TOCTOU issue **if complexity is stable**. But if complexity ch
 
 ## F4: Checkpoint Lock Timeout Silently Fails [MEDIUM]
 
-**File:** `hub/clavain/hooks/lib-sprint.sh:716`
+**File:** `os/clavain/hooks/lib-sprint.sh:716`
 
 ### Problem
 
@@ -374,7 +374,7 @@ echo "WARNING: checkpoint lock timeout, breaking stale lock (age: ${age}s)" >&2
 
 ## F5: Verdict JSON Schema Validation Missing [LOW]
 
-**File:** `hub/clavain/hooks/lib-verdict.sh:58` (verdict_read) and `:71` (verdict_parse_all)
+**File:** `os/clavain/hooks/lib-verdict.sh:58` (verdict_read) and `:71` (verdict_parse_all)
 
 ### Problem
 

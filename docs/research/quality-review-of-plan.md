@@ -2,8 +2,8 @@
 
 **Target:** `/root/projects/Interverse/docs/plans/2026-02-20-sprint-handover-kernel-driven.md`
 **Source files reviewed:**
-- `/root/projects/Interverse/hub/clavain/hooks/lib-sprint.sh` (1276 lines, current)
-- `/root/projects/Interverse/hub/clavain/tests/shell/test_lib_sprint.bats` (1003 lines, current)
+- `/root/projects/Interverse/os/clavain/hooks/lib-sprint.sh` (1276 lines, current)
+- `/root/projects/Interverse/os/clavain/tests/shell/test_lib_sprint.bats` (1003 lines, current)
 **Date:** 2026-02-20
 
 ---
@@ -384,7 +384,7 @@ sprint_budget_remaining() { echo "0"; }
 The plan correctly notes the change. However, `sprint_complexity_label` is a downstream consumer that handles both forms (lines 1051-1054 of the existing file handle legacy string values). No callers need updating. But the plan should verify this explicitly — a grep for callers of `sprint_classify_complexity` that compare against `"medium"` is warranted:
 
 ```bash
-grep -r 'sprint_classify_complexity' hub/clavain/commands/ hub/clavain/hooks/
+grep -r 'sprint_classify_complexity' os/clavain/commands/ os/clavain/hooks/
 ```
 
 If any command file compares the result to `"medium"` rather than passing through `sprint_complexity_label`, it will break.

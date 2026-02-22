@@ -4,7 +4,7 @@
 **Reviewer:** Flux-drive Architecture & Design Reviewer
 **Plan:** `/root/projects/Interverse/docs/plans/2026-02-20-sprint-handover-kernel-driven.md`
 **Brainstorm:** `/root/projects/Interverse/docs/brainstorms/2026-02-20-sprint-handover-kernel-driven-brainstorm.md`
-**Source:** `/root/projects/Interverse/hub/clavain/hooks/lib-sprint.sh` (1276 lines)
+**Source:** `/root/projects/Interverse/os/clavain/hooks/lib-sprint.sh` (1276 lines)
 
 ---
 

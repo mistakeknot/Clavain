@@ -4,7 +4,7 @@
 **Date:** 2026-02-19
 **Documents Reviewed:**
 - `infra/intercore/docs/product/intercore-vision.md` (v1.6, 2026-02-19)
-- `hub/clavain/docs/vision.md` (no version header, revised 2026-02-19)
+- `os/clavain/docs/vision.md` (no version header, revised 2026-02-19)
 - `infra/intercore/docs/product/autarch-vision.md` (v1.0, 2026-02-19)
 
 ---
@@ -49,7 +49,7 @@ Autarch (Apps) — interactive TUI surfaces (see [Autarch vision doc](autarch-vi
 
 ### P1-1: "Not a Claude Code plugin" contradicts current reality
 
-**Document:** `hub/clavain/docs/vision.md`
+**Document:** `os/clavain/docs/vision.md`
 **Line:** 403
 **Problem:** The "What Clavain Is Not" section states:
 
@@ -67,7 +67,7 @@ Readers who encounter this section will be confused: Clavain has a plugin.json, 
 
 **Document:** `infra/intercore/docs/product/intercore-vision.md`
 **Line:** 85–89
-**Document:** `hub/clavain/docs/vision.md`
+**Document:** `os/clavain/docs/vision.md`
 **Line:** 49
 
 **Problem:** The intercore vision's Layer 1 description says:
@@ -188,7 +188,7 @@ Profiler: Interspect (cross-cutting)
 
 **Document:** `infra/intercore/docs/product/intercore-vision.md`
 **Line:** 74 (Three-Layer Architecture diagram)
-**Document:** `hub/clavain/docs/vision.md`
+**Document:** `os/clavain/docs/vision.md`
 **Line:** 28
 
 **Problem:** The same "Layer 3 examples" bullet in the three-layer diagram uses different third examples:
@@ -231,7 +231,7 @@ or, since the section body uses a different framing:
 
 ### P2-4: "Layer 1/2/3" labels repurposed for Model Routing within Clavain vision
 
-**Document:** `hub/clavain/docs/vision.md`
+**Document:** `os/clavain/docs/vision.md`
 **Lines:** 255–268
 
 **Problem:** The document establishes `Layer 1 = Kernel (Intercore)`, `Layer 2 = OS (Clavain)`, `Layer 3 = Drivers` as the architectural stack terminology. Then, in the "Model Routing Architecture" section, the same labels are reused for a completely different taxonomy:
@@ -264,7 +264,7 @@ or use completely different vocabulary:
 
 ### P2-5: inter-* constellation table omits Layer 2 (OS/Clavain)
 
-**Document:** `hub/clavain/docs/vision.md`
+**Document:** `os/clavain/docs/vision.md`
 **Lines:** 279–305
 
 **Problem:** The table organizes companions by layer:
@@ -343,7 +343,7 @@ These framings are not contradictory at a technical level (Interspect reads kern
 
 ### P2-8: Clavain vision diagram's "Apps" block omits pkg/tui, Autarch diagram's "Apps" block includes it
 
-**Document:** `hub/clavain/docs/vision.md`
+**Document:** `os/clavain/docs/vision.md`
 **Lines:** 21–23
 **Document:** `infra/intercore/docs/product/autarch-vision.md`
 **Lines:** 18
@@ -377,7 +377,7 @@ The Clavain vision also omits mention of `pkg/tui` entirely (zero occurrences in
 
 ### P3-1: "Interactive TUI surfaces" vs "Interactive TUI tools"
 
-**Document:** `hub/clavain/docs/vision.md` line 21: `Interactive TUI surfaces`
+**Document:** `os/clavain/docs/vision.md` line 21: `Interactive TUI surfaces`
 **Document:** `infra/intercore/docs/product/autarch-vision.md` line 17: `Interactive TUI tools`
 
 Both autarch diagram instances in intercore-vision.md (line ~21) use "surfaces". The autarch-vision.md itself uses "tools". Pick one and apply consistently. "Tools" aligns with how the four applications are described throughout the autarch doc.
@@ -411,13 +411,13 @@ These are the same sentiment but framed differently. "UX layer" is more general 
 The link to the Clavain vision doc does not include a heading anchor:
 
 ```
-(see [Clavain vision doc](../../../../hub/clavain/docs/vision.md) for the full pipeline workflow)
+(see [Clavain vision doc](../../../../os/clavain/docs/vision.md) for the full pipeline workflow)
 ```
 
 The clavain vision has a specific section "Discovery → Backlog Pipeline" that this should link to. A fragment anchor would make navigation faster:
 
 ```
-(see [Clavain vision doc](../../../../hub/clavain/docs/vision.md#discovery--backlog-pipeline) for the full pipeline workflow)
+(see [Clavain vision doc](../../../../os/clavain/docs/vision.md#discovery--backlog-pipeline) for the full pipeline workflow)
 ```
 
 Similarly, the intercore-vision.md line 573 could benefit from the same anchor.
@@ -469,11 +469,11 @@ All relative links were resolved against the actual filesystem:
 | Link | Source File | Target Path (resolved) | Exists |
 |---|---|---|---|
 | `[Autarch vision doc](autarch-vision.md)` | intercore-vision.md (×2) | `/root/projects/Interverse/infra/intercore/docs/product/autarch-vision.md` | Yes |
-| `[Clavain vision doc](../../../../hub/clavain/docs/vision.md)` | intercore-vision.md | `/root/projects/Interverse/hub/clavain/docs/vision.md` | Yes |
+| `[Clavain vision doc](../../../../os/clavain/docs/vision.md)` | intercore-vision.md | `/root/projects/Interverse/os/clavain/docs/vision.md` | Yes |
 | `[Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md)` | clavain/docs/vision.md (×2) | `/root/projects/Interverse/infra/intercore/docs/product/autarch-vision.md` | Yes |
-| `[Clavain vision doc](../../../../hub/clavain/docs/vision.md)` | autarch-vision.md | `/root/projects/Interverse/hub/clavain/docs/vision.md` | Yes |
+| `[Clavain vision doc](../../../../os/clavain/docs/vision.md)` | autarch-vision.md | `/root/projects/Interverse/os/clavain/docs/vision.md` | Yes |
 
-No broken links. All eight relative links resolve correctly. The depth counts (4 levels from `infra/intercore/docs/product/` to Interverse root; 3 levels from `hub/clavain/docs/` to Interverse root) are correct.
+No broken links. All eight relative links resolve correctly. The depth counts (4 levels from `infra/intercore/docs/product/` to Interverse root; 3 levels from `os/clavain/docs/` to Interverse root) are correct.
 
 ---
 

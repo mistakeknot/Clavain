@@ -20,7 +20,7 @@ B1 is **partially implemented**. Previous work shipped:
 
 ### Task 1: Fix `config/routing.yaml` schema
 
-**Files:** `hub/clavain/config/routing.yaml`
+**Files:** `os/clavain/config/routing.yaml`
 **Bead:** iv-i64p (F1)
 **Phase:** planned (as of 2026-02-21T04:24:15Z)
 
@@ -35,7 +35,7 @@ Changes:
 
 ### Task 2: Add `inherit` sentinel handling to `lib-routing.sh`
 
-**Files:** `hub/clavain/scripts/lib-routing.sh`
+**Files:** `os/clavain/scripts/lib-routing.sh`
 **Bead:** iv-jayq (F2)
 **Phase:** planned (as of 2026-02-21T04:24:15Z)
 
@@ -62,7 +62,7 @@ echo "$result"
 
 ### Task 3: Add `CLAVAIN_ROUTING_CONFIG` env var support
 
-**Files:** `hub/clavain/scripts/lib-routing.sh`
+**Files:** `os/clavain/scripts/lib-routing.sh`
 **Bead:** iv-jayq (F2)
 **Phase:** planned (as of 2026-02-21T04:24:15Z)
 
@@ -79,7 +79,7 @@ fi
 
 ### Task 4: Add malformed config warning
 
-**Files:** `hub/clavain/scripts/lib-routing.sh`
+**Files:** `os/clavain/scripts/lib-routing.sh`
 **Bead:** iv-jayq (F2)
 **Phase:** planned (as of 2026-02-21T04:24:15Z)
 
@@ -94,7 +94,7 @@ fi
 
 ### Task 5: Fix resolution when `--category` is omitted
 
-**Files:** `hub/clavain/scripts/lib-routing.sh`
+**Files:** `os/clavain/scripts/lib-routing.sh`
 **Bead:** iv-jayq (F2)
 **Phase:** planned (as of 2026-02-21T04:24:15Z)
 
@@ -106,7 +106,7 @@ Current behavior: `routing_resolve_model --phase brainstorm` correctly falls thr
 
 ### Task 6: Write bats-core tests for `lib-routing.sh`
 
-**Files:** `hub/clavain/tests/shell/test_routing.bats` (new file)
+**Files:** `os/clavain/tests/shell/test_routing.bats` (new file)
 **Bead:** iv-jayq (F2)
 **Phase:** planned (as of 2026-02-21T04:24:15Z)
 
@@ -130,7 +130,7 @@ Pattern: Follow existing bats test structure in `test_lib_sprint.bats` — use `
 
 ### Task 7: Update `commands/model-routing.md`
 
-**Files:** `hub/clavain/commands/model-routing.md`
+**Files:** `os/clavain/commands/model-routing.md`
 **Bead:** iv-sz5b (F4)
 **Phase:** planned (as of 2026-02-21T04:24:15Z)
 

@@ -16,7 +16,7 @@ You are a documentation integrity analyst who ensures that a set of related visi
 Check for project documentation:
 1. `CLAUDE.md` in the project root
 2. `AGENTS.md` in the project root
-3. Domain-relevant docs: The three vision documents (`infra/intercore/docs/product/intercore-vision.md`, `hub/clavain/docs/vision.md`, `infra/intercore/docs/product/autarch-vision.md`)
+3. Domain-relevant docs: The three vision documents (`infra/intercore/docs/product/intercore-vision.md`, `os/clavain/docs/vision.md`, `infra/intercore/docs/product/autarch-vision.md`)
 
 If docs exist, operate in codebase-aware mode:
 - Ground every finding in the project's actual document structure and established terminology
@@ -33,7 +33,7 @@ If docs don't exist, operate in generic mode:
 
 - Verify all relative markdown links between the three documents resolve to existing files
 - Check that link targets point to the correct document (e.g., a "see Clavain vision doc" link actually points to the Clavain doc, not the Intercore doc)
-- Validate relative path depth: files in `hub/clavain/docs/` need `../../../infra/intercore/docs/` to reach Intercore docs (3 levels up), not `../../` (2 levels)
+- Validate relative path depth: files in `os/clavain/docs/` need `../../../infra/intercore/docs/` to reach Intercore docs (3 levels up), not `../../` (2 levels)
 - Flag dead links, mispointed links, and links with incorrect relative depth
 
 ### 2. Terminology Consistency

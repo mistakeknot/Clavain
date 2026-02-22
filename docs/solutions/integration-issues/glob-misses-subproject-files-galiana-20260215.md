@@ -16,10 +16,10 @@ tags: [glob, monorepo, findings, python, path-discovery]
 # Troubleshooting: Glob Pattern Misses Subproject Files in Monorepo
 
 ## Problem
-Galiana's `find_findings_files()` found 0 `findings.json` files when run from the Interverse monorepo root, even though 5 files existed under subprojects like `hub/clavain/docs/research/flux-drive/` and `plugins/interkasten/docs/research/flux-drive/`.
+Galiana's `find_findings_files()` found 0 `findings.json` files when run from the Interverse monorepo root, even though 5 files existed under subprojects like `os/clavain/docs/research/flux-drive/` and `plugins/interkasten/docs/research/flux-drive/`.
 
 ## Environment
-- Module: Galiana (hub/clavain/galiana/analyze.py)
+- Module: Galiana (os/clavain/galiana/analyze.py)
 - Python: 3.x with `glob.glob(recursive=True)`
 - Affected Component: KPI analysis — redundant_work_ratio and agent_scorecard
 - Date: 2026-02-15
@@ -47,7 +47,7 @@ pattern = project_root / "**" / "docs" / "research" / "flux-drive" / "**" / "fin
 ```
 
 The leading `**` allows the glob to match at any depth within the project tree:
-- `hub/clavain/docs/research/flux-drive/Clavain/findings.json`
+- `os/clavain/docs/research/flux-drive/Clavain/findings.json`
 - `plugins/interkasten/docs/research/flux-drive/PRD-MVP/findings.json`
 
 ## Why This Works

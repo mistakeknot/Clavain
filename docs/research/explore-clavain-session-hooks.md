@@ -1,7 +1,7 @@
 # Clavain Hub: SessionStart Hooks & Intermute Integration Analysis
 
 **Date:** 2026-02-15  
-**Scope:** /root/projects/Interverse/hub/clavain/
+**Scope:** /root/projects/Interverse/os/clavain/
 
 ---
 
@@ -14,7 +14,7 @@ Clavain's SessionStart hook (session-start.sh) is highly sophisticated with exte
 ## 1. SessionStart Hooks: What Exists
 
 ### Hook Registration
-File: /root/projects/Interverse/hub/clavain/hooks/hooks.json (lines 1-14)
+File: /root/projects/Interverse/os/clavain/hooks/hooks.json (lines 1-14)
 
 **Trigger:** Fires on startup, resume, clear, or compact events.
 **Async:** Yes (non-blocking)
@@ -22,7 +22,7 @@ File: /root/projects/Interverse/hub/clavain/hooks/hooks.json (lines 1-14)
 SessionStart hook runs session-start.sh via command matcher for startup/resume/clear/compact.
 
 ### Main Hook Implementation
-File: /root/projects/Interverse/hub/clavain/hooks/session-start.sh (370 lines)
+File: /root/projects/Interverse/os/clavain/hooks/session-start.sh (370 lines)
 
 **Key sections:**
 
@@ -72,7 +72,7 @@ The doctor command offers guidance to join (/interlock:join) but SessionStart ho
 ## 3. CLAUDE_ENV_FILE Exports in SessionStart
 
 ### Current Exports
-File: /root/projects/Interverse/hub/clavain/hooks/session-start.sh (lines 18-22)
+File: /root/projects/Interverse/os/clavain/hooks/session-start.sh (lines 18-22)
 
 Single export:
 ```bash
@@ -102,7 +102,7 @@ lib.sh provides _claude_project_dir() to encode CWD to session dir path for agen
 - Interlock plugin discovered & announced in companion context
 
 ### Interlock Plugin Architecture
-File: /root/projects/Interverse/hub/clavain/docs/prds/2026-02-14-interlock-multi-agent-coordination.md
+File: /root/projects/Interverse/os/clavain/docs/prds/2026-02-14-interlock-multi-agent-coordination.md
 
 **Components:**
 1. **intermute** (Go service) - SQLite-backed coordination server on TCP 127.0.0.1:7338
@@ -114,7 +114,7 @@ File: /root/projects/Interverse/hub/clavain/docs/prds/2026-02-14-interlock-multi
 ## 5. Hook Dependencies & Library Structure
 
 ### lib.sh: Shared Utilities
-File: /root/projects/Interverse/hub/clavain/hooks/lib.sh (233 lines)
+File: /root/projects/Interverse/os/clavain/hooks/lib.sh (233 lines)
 
 **Key functions:**
 - _discover_*_plugin() x5 - Find companion plugins in cache
@@ -125,7 +125,7 @@ File: /root/projects/Interverse/hub/clavain/hooks/lib.sh (233 lines)
 - escape_for_json() - Safe JSON string escaping
 
 ### sprint-scan.sh: Sprint Context Library
-File: /root/projects/Interverse/hub/clavain/hooks/sprint-scan.sh (350+ lines)
+File: /root/projects/Interverse/os/clavain/hooks/sprint-scan.sh (350+ lines)
 
 **sprint_brief_scan()** (used by SessionStart) checks:
 - HANDOFF.md presence
@@ -140,7 +140,7 @@ File: /root/projects/Interverse/hub/clavain/hooks/sprint-scan.sh (350+ lines)
 
 ## 6. Stop Hook: Session Handoff
 
-File: /root/projects/Interverse/hub/clavain/hooks/session-handoff.sh (100+ lines)
+File: /root/projects/Interverse/os/clavain/hooks/session-handoff.sh (100+ lines)
 
 **Triggers on incomplete work:**
 - Uncommitted git changes
@@ -179,7 +179,7 @@ session-handoff.sh (Stop hook)
 ## 8. File Paths: Where to Add Auto-Join Logic
 
 ### Option A: SessionStart Hook (RECOMMENDED)
-File: /root/projects/Interverse/hub/clavain/hooks/session-start.sh
+File: /root/projects/Interverse/os/clavain/hooks/session-start.sh
 
 **Insert after line 99** (after interlock discovery):
 ```bash
@@ -202,19 +202,19 @@ fi
 - Graceful failure if intermute not running
 
 ### Option B: Sprint Pre-Flight Context
-File: /root/projects/Interverse/hub/clavain/hooks/sprint-scan.sh
+File: /root/projects/Interverse/os/clavain/hooks/sprint-scan.sh
 
 Add function sprint_coordination_check() to detect interlock+intermute readiness and inject status into SessionStart context.
 
 ### Option C: New Coordination Skill
-Create /root/projects/Interverse/hub/clavain/skills/multi-agent-sprint-startup/SKILL.md for /clavain:multi-agent-sprint-startup command.
+Create /root/projects/Interverse/os/clavain/skills/multi-agent-sprint-startup/SKILL.md for /clavain:multi-agent-sprint-startup command.
 
 ---
 
 ## 9. Discovery Function Details
 
 ### _discover_interlock_plugin() Implementation
-File: /root/projects/Interverse/hub/clavain/hooks/lib.sh (lines 83-97)
+File: /root/projects/Interverse/os/clavain/hooks/lib.sh (lines 83-97)
 
 **Returns:** Interlock plugin root directory, or empty if not found.
 

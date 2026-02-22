@@ -3,7 +3,7 @@
 **Date:** 2026-02-19
 **Reviewer role:** Multi-agent orchestration specialist
 **Documents reviewed:**
-- `/root/projects/Interverse/hub/clavain/docs/vision.md` (Clavain OS — model routing, macro-stages, fleet)
+- `/root/projects/Interverse/os/clavain/docs/vision.md` (Clavain OS — model routing, macro-stages, fleet)
 - `/root/projects/Interverse/infra/intercore/docs/product/intercore-vision.md` (Intercore kernel)
 - `/root/projects/Interverse/infra/intercore/docs/product/autarch-vision.md` (Autarch apps)
 - Supporting implementation: `internal/dispatch/dispatch.go`, `internal/dispatch/spawn.go`, `cmd/ic/dispatch.go`, `internal/budget/budget.go`, `config/dispatch/tiers.yaml`, `skills/using-clavain/references/routing-tables.md`

@@ -4,7 +4,7 @@
 **Date:** 2026-02-19
 **Documents reviewed:**
 - `/root/projects/Interverse/infra/intercore/docs/product/intercore-vision.md` (v1.6)
-- `/root/projects/Interverse/hub/clavain/docs/vision.md`
+- `/root/projects/Interverse/os/clavain/docs/vision.md`
 - `/root/projects/Interverse/infra/intercore/docs/product/autarch-vision.md` (v1.0)
 
 ---

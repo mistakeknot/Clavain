@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-17T19:12:55Z",
+  "generated": "2026-02-22T21:30:04Z",
   "counts": {
-    "skills": 15,
+    "skills": 16,
     "agents": 4,
-    "commands": 52,
+    "commands": 53,
     "hooks": 12,
     "mcp_servers": 1,
     "review": 2,
@@ -45,6 +45,10 @@
     {
       "name": "landing-a-change",
       "description": "Use when implementation is complete and all tests pass \u2014 guides the disciplined process of verifying, documenting, and landing a change on trunk"
+    },
+    {
+      "name": "lane",
+      "description": "Manage thematic work lanes \u2014 discover, create, tag beads, show velocity and starvation scores"
     },
     {
       "name": "refactor-safely",
@@ -216,7 +220,7 @@
     },
     {
       "name": "model-routing",
-      "description": "Toggle subagent model routing between economy (smart defaults) and quality (all Opus) mode"
+      "description": "Toggle subagent model routing between economy (smart defaults) and quality (all opus) mode"
     },
     {
       "name": "plan-review",
@@ -229,6 +233,10 @@
     {
       "name": "refactor",
       "description": "Plan and execute safe refactors with explicit risk controls"
+    },
+    {
+      "name": "reflect",
+      "description": "Capture sprint learnings and advance from reflect to done"
     },
     {
       "name": "repro-first-debugging",
