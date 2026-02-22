@@ -1,0 +1,87 @@
+# Agency spec: Build stage
+# Phases: planned, executing
+# Purpose: Review plan, implement code changes
+
+meta:
+  stage: build
+  description: Review plan, implement code changes
+  phases: [planned, executing]
+
+agents:
+  - phase: planned
+    command: /interflux:flux-drive
+    args: ["${artifact:plan}"]
+    mode: interactive
+    priority: 0
+    description: Review implementation plan before execution
+
+  - phase: executing
+    command: /clavain:work
+    args: ["${artifact:plan}"]
+    mode: both
+    priority: 0
+    description: Execute the implementation plan
+
+  - phase: executing
+    command: /clavain:quality-gates
+    mode: both
+    priority: 10
+    description: Run quality gates after implementation
+
+models:
+  planned:
+    default: sonnet
+    categories:
+      review: opus
+  executing:
+    default: sonnet
+    categories:
+      review: opus
+
+tools:
+  review:
+    allow: [Read, Grep, Glob, Bash, WebFetch]
+    deny: [Edit, Write]
+  workflow:
+    allow: ["*"]
+
+artifacts:
+  required:
+    - type: plan
+      phase: planned
+      description: Implementation plan from Design stage
+  produces:
+    - type: code
+      phase: executing
+      description: Implementation code committed to repository
+    - type: verdict
+      phase: executing
+      description: Quality gate verdict from review agents
+
+gates:
+  entry:
+    - check: artifact_exists
+      phase: planned
+      tier: hard
+      description: Plan must exist before building
+  exit:
+    - check: agents_complete
+      tier: hard
+      description: All dispatched agents must complete
+    - check: verdict_exists
+      tier: soft
+      description: At least one review verdict should exist
+
+budget:
+  allocation: 0.50
+  max_agents: 5
+  warn_threshold: 0.80
+
+capabilities:
+  review:
+    kernel: [events.tail, dispatch.status]
+    filesystem: [read]
+  workflow:
+    kernel: [events.tail, dispatch.spawn, dispatch.status, run.advance]
+    filesystem: [read, write]
+    dispatch: [spawn]

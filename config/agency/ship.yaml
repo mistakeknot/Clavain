@@ -1,0 +1,59 @@
+# Agency spec: Ship stage
+# Phases: review, polish
+# Purpose: Quality gates, resolve findings, land change
+
+meta:
+  stage: ship
+  description: Quality gates, resolve findings, land change
+  phases: [review, polish]
+
+agents:
+  - phase: review
+    command: /clavain:resolve
+    mode: interactive
+    priority: 0
+    description: Resolve review findings and quality gate issues
+
+  - phase: polish
+    command: /clavain:land
+    mode: interactive
+    priority: 0
+    description: Land the change (commit, verify, push)
+
+models:
+  review:
+    default: sonnet
+    categories:
+      review: opus
+  polish:
+    default: sonnet
+
+artifacts:
+  required:
+    - type: verdict
+      phase: executing
+      description: Quality gate verdict from Build stage
+  produces:
+    - type: resolution
+      phase: review
+      description: Resolved findings
+
+gates:
+  entry:
+    - check: verdict_exists
+      tier: soft
+      description: Should have a review verdict before shipping
+  exit: []
+
+budget:
+  allocation: 0.15
+  max_agents: 3
+  warn_threshold: 0.80
+
+capabilities:
+  review:
+    kernel: [events.tail, dispatch.status]
+    filesystem: [read]
+  workflow:
+    kernel: [events.tail, run.advance]
+    filesystem: [read, write]

@@ -1,0 +1,56 @@
+# Agency spec: Design stage
+# Phases: strategized, planned
+# Purpose: Structure solution, write implementation plan
+
+meta:
+  stage: design
+  description: Structure solution, write implementation plan
+  phases: [strategized, planned]
+
+agents:
+  - phase: strategized
+    command: /clavain:write-plan
+    mode: interactive
+    priority: 0
+    description: Write detailed implementation plan from strategy/PRD
+
+models:
+  strategized:
+    default: opus
+  planned:
+    default: sonnet
+
+artifacts:
+  required:
+    - type: brainstorm
+      phase: brainstorm
+      description: Brainstorm from Discover stage
+  produces:
+    - type: strategy
+      phase: strategized
+      description: PRD with feature breakdown
+    - type: plan
+      phase: planned
+      description: Implementation plan with tasks
+
+gates:
+  entry:
+    - check: artifact_exists
+      phase: brainstorm
+      tier: hard
+      description: Brainstorm must exist before designing
+  exit:
+    - check: artifact_exists
+      phase: planned
+      tier: hard
+      description: Plan must exist before leaving design
+
+budget:
+  allocation: 0.15
+  max_agents: 3
+  warn_threshold: 0.80
+
+capabilities:
+  workflow:
+    kernel: [events.tail]
+    filesystem: [read, write]

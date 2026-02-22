@@ -85,10 +85,10 @@ Build the agency composition layer that makes Clavain a fleet of specialized sub
 
 | Step | What | Bead | Status | Depends On |
 |------|------|------|--------|------------|
-| C1 | **Agency specs** — declarative per-stage config: agents, models, tools, artifacts, gates. Include companion capability declarations (`capabilities` field in manifests). See [pi_agent_rust lessons](brainstorms/2026-02-19-pi-agent-rust-lessons-brainstorm.md) §2. | iv-asfy | Open (P2) | — |
-| C2 | **Agent fleet registry** — capability + cost profiles per agent×model combination | iv-lx00 | Open (P2) | B1 (done), C1 |
-| C3 | **Composer** — matches agency specs to fleet registry within budget constraints | iv-240m | Open (P3) | C1, C2 |
-| C4 | **Cross-phase handoff** — structured protocol for how Discover's output becomes Design's input | iv-1vny | Open (P3) | C1 |
+| C1 | **Agency specs** — declarative per-stage config: agents, models, tools, artifacts, gates, budget, capabilities. YAML schema + Go parser/validator, 5 default spec files, `ic agency` CLI, model routing integration, config-driven gates, capability storage (shadow mode). | iv-asfy | **Done** | — |
+| C2 | **Agent fleet registry** — capability + cost profiles per agent×model combination | iv-lx00 | Open (P2) | B1 (done), C1 (done) |
+| C3 | **Composer** — matches agency specs to fleet registry within budget constraints | iv-240m | Open (P3) | C1 (done), C2 |
+| C4 | **Cross-phase handoff** — structured protocol for how Discover's output becomes Design's input | iv-1vny | Open (P3) | C1 (done) |
 | C5 | **Self-building loop** — Clavain uses its own agency specs to run its own development sprints | iv-6ixw | Open (P3) | C3, C4, A3 (done) |
 
 ### Convergence

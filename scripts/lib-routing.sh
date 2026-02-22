@@ -335,6 +335,23 @@ routing_resolve_model() {
 
   local result=""
 
+  # 0. Kernel-stored per-run model overrides (from agency specs)
+  if [[ -z "$result" && -n "${CLAVAIN_RUN_ID:-}" && -n "$phase" ]]; then
+    local kernel_model
+    kernel_model=$(intercore_state_get "agency.models.${phase}" "$CLAVAIN_RUN_ID" 2>/dev/null) || kernel_model=""
+    if [[ -n "$kernel_model" ]]; then
+      local km_result=""
+      if [[ -n "$category" ]]; then
+        km_result=$(printf '%s' "$kernel_model" | jq -r ".categories.\"$category\" // .default // empty" 2>/dev/null) || km_result=""
+      else
+        km_result=$(printf '%s' "$kernel_model" | jq -r ".default // empty" 2>/dev/null) || km_result=""
+      fi
+      if [[ -n "$km_result" && "$km_result" != "inherit" ]]; then
+        result="$km_result"
+      fi
+    fi
+  fi
+
   # 1. Per-agent override
   if [[ -z "$result" && -n "$agent" && -n "${_ROUTING_SA_OVERRIDE[$agent]:-}" ]]; then
     result="${_ROUTING_SA_OVERRIDE[$agent]}"

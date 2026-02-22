@@ -1,0 +1,46 @@
+# Agency spec: Reflect stage
+# Phases: reflect, done
+# Purpose: Capture learnings, close sprint
+
+meta:
+  stage: reflect
+  description: Capture learnings, close sprint
+  phases: [reflect, done]
+
+agents:
+  - phase: reflect
+    command: /clavain:reflect
+    mode: interactive
+    priority: 0
+    description: Capture sprint learnings and advance to done
+
+models:
+  reflect:
+    default: sonnet
+  done:
+    default: sonnet
+
+artifacts:
+  required: []
+  produces:
+    - type: learnings
+      phase: reflect
+      description: Sprint retrospective and learnings document
+
+gates:
+  entry: []
+  exit:
+    - check: artifact_exists
+      phase: reflect
+      tier: soft
+      description: Reflect artifact should exist (soft gate for initial rollout)
+
+budget:
+  allocation: 0.10
+  max_agents: 2
+  warn_threshold: 0.80
+
+capabilities:
+  workflow:
+    kernel: [events.tail, run.advance]
+    filesystem: [read, write]

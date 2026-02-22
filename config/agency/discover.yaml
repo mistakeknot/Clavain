@@ -1,0 +1,48 @@
+# Agency spec: Discover stage
+# Phases: brainstorm, brainstorm-reviewed
+# Purpose: Explore problem space, clarify requirements
+
+meta:
+  stage: discover
+  description: Explore problem space, clarify requirements
+  phases: [brainstorm, brainstorm-reviewed]
+
+agents:
+  - phase: brainstorm-reviewed
+    command: /clavain:strategy
+    mode: interactive
+    priority: 0
+    description: Structure brainstorm into strategy and PRD
+
+models:
+  brainstorm:
+    default: opus
+    categories:
+      research: haiku
+  brainstorm-reviewed:
+    default: opus
+
+artifacts:
+  required: []
+  produces:
+    - type: brainstorm
+      phase: brainstorm
+      description: Brainstorm document exploring problem space
+
+gates:
+  entry: []
+  exit:
+    - check: artifact_exists
+      phase: brainstorm
+      tier: hard
+      description: Brainstorm document must exist before leaving discover
+
+budget:
+  allocation: 0.10
+  max_agents: 2
+  warn_threshold: 0.80
+
+capabilities:
+  workflow:
+    kernel: [events.tail]
+    filesystem: [read, write]

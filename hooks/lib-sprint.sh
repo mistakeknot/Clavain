@@ -174,6 +174,14 @@ sprint_create() {
         bd set-state "$sprint_id" "token_budget=$token_budget" >/dev/null 2>&1 || true
     fi
 
+    # Load default agency specs if available
+    local agency_dir="${CLAVAIN_CONFIG_DIR:-}/agency"
+    if [[ -d "$agency_dir" ]]; then
+        if ! intercore_agency_load "$run_id" "$agency_dir" >/dev/null 2>&1; then
+            echo "warning: agency spec load failed for run $run_id (non-blocking)" >&2
+        fi
+    fi
+
     # Cache the run ID for this session
     _SPRINT_RUN_ID_CACHE["$scope_id"]="$run_id"
 
