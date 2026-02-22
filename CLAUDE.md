@@ -4,18 +4,18 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 15 skills, 4 agents, 52 commands, 12 hooks, 1 MCP server. 31 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 16 skills, 4 agents, 53 commands, 12 hooks, 1 MCP server. 31 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
 
 ## Quick Commands
 
 ```bash
 # Test locally
-claude --plugin-dir /root/projects/Interverse/hub/clavain
+claude --plugin-dir /home/mk/projects/Demarch/os/clavain
 
 # Validate structure
-ls skills/*/SKILL.md | wc -l          # Should be 15
+ls skills/*/SKILL.md | wc -l          # Should be 16
 ls agents/{review,workflow}/*.md | wc -l  # Should be 4
-ls commands/*.md | wc -l              # Should be 52
+ls commands/*.md | wc -l              # Should be 53
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
 bash -n hooks/dotfiles-sync.sh         # Syntax check
