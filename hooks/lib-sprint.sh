@@ -11,6 +11,9 @@ _SPRINT_LOADED=1
 # Source intercore state primitives (cache invalidation, sentinel checks)
 source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
 
+# Source agency spec loader (C1: declarative per-stage config)
+source "${BASH_SOURCE[0]%/*}/lib-spec.sh" 2>/dev/null || true
+
 SPRINT_LIB_PROJECT_DIR="${SPRINT_LIB_PROJECT_DIR:-.}"
 
 # Source interphase phase primitives (via Clavain shim)
@@ -394,6 +397,133 @@ sprint_budget_remaining() {
     echo "$remaining"
 }
 
+# ─── Per-Stage Budget (C1: Agency Spec) ──────────────────────────────
+
+# Get total budget for a sprint (reads token_budget from sprint state).
+sprint_budget_total() {
+    local sprint_id="$1"
+    [[ -z "$sprint_id" ]] && { echo "0"; return 0; }
+    local state
+    state=$(sprint_read_state "$sprint_id") || { echo "0"; return 0; }
+    local budget
+    budget=$(echo "$state" | jq -r '.token_budget // 0' 2>/dev/null) || budget="0"
+    [[ "$budget" == "null" || -z "$budget" ]] && budget="0"
+    echo "$budget"
+}
+
+# Private: sum allocations for all 5 stages (for overallocation cap).
+_sprint_sum_all_stage_allocations() {
+    local sprint_id="$1"
+    local total_budget
+    total_budget=$(sprint_budget_total "$sprint_id")
+    [[ "$total_budget" == "0" || -z "$total_budget" ]] && { echo "0"; return 0; }
+    local sum=0
+    local stage
+    for stage in discover design build ship reflect; do
+        local stage_json share min_tokens alloc
+        stage_json=$(spec_get_budget "$stage" 2>/dev/null) || continue
+        share=$(echo "$stage_json" | jq -r '.share // 20' 2>/dev/null)
+        min_tokens=$(echo "$stage_json" | jq -r '.min_tokens // 1000' 2>/dev/null)
+        [[ "$share" =~ ^[0-9]+$ ]] || share=20
+        [[ "$min_tokens" =~ ^[0-9]+$ ]] || min_tokens=1000
+        alloc=$(( total_budget * share / 100 ))
+        [[ $alloc -lt $min_tokens ]] && alloc=$min_tokens
+        sum=$(( sum + alloc ))
+    done
+    echo "$sum"
+}
+
+# Get allocated budget for a stage.
+sprint_budget_stage() {
+    local sprint_id="$1" stage="$2"
+    [[ -z "$sprint_id" || -z "$stage" ]] && { echo "0"; return 0; }
+    local total_budget
+    total_budget=$(sprint_budget_total "$sprint_id") || { echo "0"; return 0; }
+    [[ "$total_budget" == "0" || -z "$total_budget" ]] && { echo "0"; return 0; }
+
+    # Without spec, return total budget (no per-stage breakdown)
+    if ! spec_available; then
+        echo "$total_budget"
+        return 0
+    fi
+
+    local stage_budget_json
+    stage_budget_json=$(spec_get_budget "$stage") || { echo "$total_budget"; return 0; }
+    local share min_tokens
+    share=$(echo "$stage_budget_json" | jq -r '.share // 20' 2>/dev/null)
+    min_tokens=$(echo "$stage_budget_json" | jq -r '.min_tokens // 1000' 2>/dev/null)
+
+    # Guard non-numeric values
+    [[ "$share" =~ ^[0-9]+$ ]] || share=20
+    [[ "$min_tokens" =~ ^[0-9]+$ ]] || min_tokens=1000
+
+    local allocated
+    allocated=$(( total_budget * share / 100 ))
+    [[ $allocated -lt $min_tokens ]] && allocated=$min_tokens
+
+    # Cap: if all stages' min_tokens push total above budget, scale down
+    local uncapped_sum
+    uncapped_sum=$(_sprint_sum_all_stage_allocations "$sprint_id")
+    if [[ $uncapped_sum -gt $total_budget && $uncapped_sum -gt 0 ]]; then
+        allocated=$(( allocated * total_budget / uncapped_sum ))
+    fi
+
+    echo "$allocated"
+}
+
+# Sum tokens spent across all phases belonging to a stage.
+sprint_stage_tokens_spent() {
+    local sprint_id="$1" stage="$2"
+    [[ -z "$sprint_id" || -z "$stage" ]] && { echo "0"; return 0; }
+    local run_id
+    run_id=$(_sprint_resolve_run_id "$sprint_id") || { echo "0"; return 0; }
+    local phase_tokens_json
+    phase_tokens_json=$(intercore_state_get "phase_tokens" "$run_id" 2>/dev/null) || phase_tokens_json="{}"
+    [[ -z "$phase_tokens_json" ]] && phase_tokens_json="{}"
+    local total=0
+    local phase
+    while IFS= read -r phase; do
+        [[ -z "$phase" ]] && continue
+        local phase_stage
+        phase_stage=$(_sprint_phase_to_stage "$phase")
+        if [[ "$phase_stage" == "$stage" ]]; then
+            local phase_total
+            phase_total=$(echo "$phase_tokens_json" | jq -r \
+                --arg p "$phase" '(.[($p)].input_tokens // 0) + (.[($p)].output_tokens // 0)' 2>/dev/null) || phase_total=0
+            [[ "$phase_total" =~ ^[0-9]+$ ]] || phase_total=0
+            total=$(( total + phase_total ))
+        fi
+    done <<< "$(echo "$phase_tokens_json" | jq -r 'keys[]' 2>/dev/null)"
+    echo "$total"
+}
+
+# Get remaining budget for a stage.
+sprint_budget_stage_remaining() {
+    local sprint_id="$1" stage="$2"
+    [[ -z "$sprint_id" || -z "$stage" ]] && { echo "0"; return 0; }
+    local allocated spent remaining
+    allocated=$(sprint_budget_stage "$sprint_id" "$stage")
+    spent=$(sprint_stage_tokens_spent "$sprint_id" "$stage")
+    [[ "$allocated" =~ ^[0-9]+$ ]] || allocated=0
+    [[ "$spent" =~ ^[0-9]+$ ]] || spent=0
+    remaining=$(( allocated - spent ))
+    [[ $remaining -lt 0 ]] && remaining=0
+    echo "$remaining"
+}
+
+# Check and warn if stage budget exceeded. Returns 1 if exceeded.
+sprint_budget_stage_check() {
+    local sprint_id="$1" stage="$2"
+    [[ -z "$sprint_id" || -z "$stage" ]] && return 0
+    local remaining
+    remaining=$(sprint_budget_stage_remaining "$sprint_id" "$stage")
+    if [[ "$remaining" -le 0 ]]; then
+        echo "budget_exceeded|$stage|stage budget depleted" >&2
+        return 1
+    fi
+    return 0
+}
+
 # ─── Session Claim ─────────────────────────────────────────────────
 
 # Claim a sprint for this session. Returns 0 if claimed, 1 if conflict.
@@ -499,15 +629,178 @@ sprint_complete_agent() {
 
 # ─── Gate Wrapper ──────────────────────────────────────────────────
 
+# Map sprint phase names to macro-stage names.
+_sprint_phase_to_stage() {
+    case "$1" in
+        brainstorm) echo "discover" ;;
+        brainstorm-reviewed|strategized|planned|plan-reviewed) echo "design" ;;
+        executing) echo "build" ;;
+        shipping) echo "ship" ;;
+        reflect) echo "reflect" ;;
+        done) echo "done" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+# Evaluate spec-defined gates for a stage.
+# Args: $1=gates_json, $2=bead_id, $3=target_phase, $4=artifact_path, $5=mode (enforce|shadow)
+# Returns: 0 if all pass, 1 if any fail (in enforce mode)
+_sprint_evaluate_spec_gates() {
+    local gates_json="$1" bead_id="$2" target_phase="$3" artifact_path="$4" mode="$5"
+    local any_failed=0
+
+    local gate_names
+    gate_names=$(echo "$gates_json" | jq -r 'keys[]' 2>/dev/null) || return 0
+
+    while IFS= read -r gate_name; do
+        [[ -z "$gate_name" ]] && continue
+
+        local gate
+        gate=$(echo "$gates_json" | jq -c --arg g "$gate_name" '.[$g]' 2>/dev/null) || continue
+
+        # Skip disabled gates
+        local disabled
+        disabled=$(echo "$gate" | jq -r '.disabled // false' 2>/dev/null) || disabled="false"
+        [[ "$disabled" == "true" ]] && continue
+
+        local gate_type
+        gate_type=$(echo "$gate" | jq -r '.type // ""' 2>/dev/null) || gate_type=""
+
+        local passed=true
+        case "$gate_type" in
+            artifact_reviewed)
+                local artifact_name min_agents
+                artifact_name=$(echo "$gate" | jq -r '.artifact // ""' 2>/dev/null) || artifact_name=""
+                min_agents=$(echo "$gate" | jq -r '.min_agents // 1' 2>/dev/null) || min_agents=1
+                [[ "$min_agents" =~ ^[0-9]+$ ]] || min_agents=1
+
+                # Check if artifact exists in sprint state
+                local artifacts
+                artifacts=$(bd state "$bead_id" sprint_artifacts 2>/dev/null) || artifacts="{}"
+                local art_path
+                art_path=$(echo "$artifacts" | jq -r --arg a "$artifact_name" '.[$a] // ""' 2>/dev/null) || art_path=""
+
+                if [[ -z "$art_path" ]]; then
+                    passed=false
+                else
+                    # Check verdict count in .clavain/verdicts/
+                    local verdict_count=0
+                    if [[ -d ".clavain/verdicts" ]]; then
+                        verdict_count=$(ls .clavain/verdicts/*.json 2>/dev/null | wc -l) || verdict_count=0
+                    fi
+                    [[ $verdict_count -lt $min_agents ]] && passed=false
+                fi
+                ;;
+            command)
+                local cmd expected_exit
+                cmd=$(echo "$gate" | jq -r '.command // ""' 2>/dev/null) || cmd=""
+                expected_exit=$(echo "$gate" | jq -r '.exit_code // 0' 2>/dev/null) || expected_exit=0
+                [[ "$expected_exit" =~ ^[0-9]+$ ]] || expected_exit=0
+
+                if [[ -n "$cmd" ]]; then
+                    # SECURITY: command comes from agency-spec.yaml (admin-controlled config).
+                    # eval is required to support shell features in gate commands (pipes, var expansion).
+                    # Project overrides at .clavain/agency-spec.yaml are trusted — same trust level as Makefiles.
+                    local actual_exit
+                    eval "$cmd" >/dev/null 2>&1
+                    actual_exit=$?
+                    [[ $actual_exit -ne $expected_exit ]] && passed=false
+                fi
+                ;;
+            phase_completed)
+                local required_phase
+                required_phase=$(echo "$gate" | jq -r '.phase // ""' 2>/dev/null) || required_phase=""
+                if [[ -n "$required_phase" && -n "$bead_id" ]]; then
+                    local run_id
+                    run_id=$(_sprint_resolve_run_id "$bead_id") || run_id=""
+                    if [[ -n "$run_id" ]]; then
+                        local events
+                        events=$("$INTERCORE_BIN" run events "$run_id" --json 2>/dev/null) || events="[]"
+                        local phase_reached
+                        phase_reached=$(echo "$events" | jq --arg p "$required_phase" \
+                            '[.[] | select(.event_type == "advance" and .to_phase == $p)] | length > 0' 2>/dev/null) || phase_reached="false"
+                        [[ "$phase_reached" != "true" ]] && passed=false
+                    fi
+                fi
+                ;;
+            verdict_clean)
+                local max_attention
+                max_attention=$(echo "$gate" | jq -r '.max_needs_attention // 0' 2>/dev/null) || max_attention=0
+                [[ "$max_attention" =~ ^[0-9]+$ ]] || max_attention=0
+                if [[ -d ".clavain/verdicts" ]]; then
+                    local attention_count=0
+                    local verdict_file
+                    for verdict_file in .clavain/verdicts/*.json; do
+                        [[ -f "$verdict_file" ]] || continue
+                        local status
+                        status=$(jq -r '.status // "CLEAN"' "$verdict_file" 2>/dev/null) || status="CLEAN"
+                        [[ "$status" == "NEEDS_ATTENTION" ]] && attention_count=$((attention_count + 1))
+                    done
+                    [[ $attention_count -gt $max_attention ]] && passed=false
+                fi
+                ;;
+            *)
+                # Unknown gate type — log and skip (fail-open)
+                echo "spec: unknown gate type '$gate_type' for gate '$gate_name'" >&2
+                continue
+                ;;
+        esac
+
+        if [[ "$passed" != "true" ]]; then
+            if [[ "$mode" == "shadow" ]]; then
+                echo "spec: gate '$gate_name' ($gate_type) would block at $target_phase [shadow mode]" >&2
+            else
+                echo "spec: gate '$gate_name' ($gate_type) blocked at $target_phase" >&2
+                any_failed=1
+            fi
+        fi
+    done <<< "$gate_names"
+
+    return $any_failed
+}
+
 # Gate enforcement. Returns 0 if gate passes, 1 if blocked.
+# ic gates are mandatory precondition; spec gates are additive.
 enforce_gate() {
     local bead_id="$1"
     local target_phase="$2"
     local artifact_path="${3:-}"
 
+    # Check gate mode from agency spec
+    local gate_mode
+    gate_mode=$(spec_get_default "gate_mode") || gate_mode="enforce"
+    [[ "$gate_mode" == "off" ]] && return 0
+
+    # ALWAYS run ic gate check first (existing invariant — never bypassed)
     local run_id
-    run_id=$(_sprint_resolve_run_id "$bead_id") || return 0
-    intercore_gate_check "$run_id"
+    run_id=$(_sprint_resolve_run_id "$bead_id") || {
+        echo "spec: enforce_gate skipped — no ic run for bead '$bead_id'" >&2
+        return 0
+    }
+    if ! intercore_gate_check "$run_id"; then
+        return 1  # ic gate blocked — spec gates cannot override
+    fi
+
+    # Additionally check spec-defined gates if spec loaded successfully
+    if ! spec_available; then
+        return 0  # No spec — ic gate passed, we're done
+    fi
+
+    local stage
+    stage=$(_sprint_phase_to_stage "$target_phase")
+    local gates_json
+    gates_json=$(spec_get_stage_gates "$stage") || return 0
+
+    local has_gates
+    has_gates=$(echo "$gates_json" | jq 'length > 0' 2>/dev/null) || has_gates="false"
+    [[ "$has_gates" != "true" ]] && return 0
+
+    if [[ "$gate_mode" == "shadow" ]]; then
+        _sprint_evaluate_spec_gates "$gates_json" "$bead_id" "$target_phase" "$artifact_path" "shadow" || true
+        return 0  # Shadow: always pass
+    fi
+
+    _sprint_evaluate_spec_gates "$gates_json" "$bead_id" "$target_phase" "$artifact_path" "enforce"
 }
 
 # ─── Auto-Advance (Phase 2) ──────────────────────────────────────

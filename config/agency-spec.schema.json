@@ -1,0 +1,269 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agency-spec.schema.json",
+  "title": "Clavain Agency Spec",
+  "description": "Declarative per-stage configuration for Clavain sprint pipeline. Defines agents, models, gates, and budgets for each macro-stage.",
+  "type": "object",
+  "required": ["version", "stages"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Schema version (e.g. '1.0')"
+    },
+    "defaults": {
+      "$ref": "#/definitions/defaults"
+    },
+    "stages": {
+      "type": "object",
+      "description": "Macro-stage definitions. Standard stages: discover, design, build, ship, reflect.",
+      "additionalProperties": {
+        "$ref": "#/definitions/stage"
+      },
+      "minProperties": 1
+    },
+    "companions": {
+      "type": "object",
+      "description": "Companion plugin capability declarations.",
+      "additionalProperties": {
+        "$ref": "#/definitions/companion"
+      }
+    }
+  },
+  "definitions": {
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "budget_allocation": {
+          "type": "string",
+          "enum": ["proportional", "fixed", "uncapped"],
+          "default": "proportional"
+        },
+        "gate_mode": {
+          "type": "string",
+          "enum": ["enforce", "shadow", "off"],
+          "default": "enforce"
+        },
+        "model_routing": {
+          "type": "string",
+          "description": "Path to routing.yaml (reference, not consumed by agency spec loader)"
+        },
+        "capability_mode": {
+          "type": "string",
+          "enum": ["enforce", "shadow", "off"],
+          "default": "shadow",
+          "description": "Whether companion capability checks are enforced, logged, or disabled"
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "required": ["description", "phases"],
+      "additionalProperties": true,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "phases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "requires": {
+          "$ref": "#/definitions/stage_requires"
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/artifact_spec"
+          }
+        },
+        "gates": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/gate_spec"
+          }
+        },
+        "budget": {
+          "$ref": "#/definitions/budget_spec"
+        },
+        "agents": {
+          "$ref": "#/definitions/agent_roster"
+        }
+      }
+    },
+    "stage_requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "artifact_spec": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["markdown", "json", "git_diff", "test_output", "verdict_json", "git_commit"]
+        },
+        "path_pattern": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "gate_spec": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["artifact_reviewed", "command", "phase_completed", "verdict_clean"]
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Set to true in project overrides to remove a default gate"
+        },
+        "artifact": {
+          "type": "string",
+          "description": "For artifact_reviewed: which artifact must be reviewed"
+        },
+        "min_agents": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "For artifact_reviewed: minimum number of review agents"
+        },
+        "max_p0_findings": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "For artifact_reviewed: maximum P0 findings allowed"
+        },
+        "max_p1_findings": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "For artifact_reviewed: maximum P1 findings allowed"
+        },
+        "command": {
+          "type": "string",
+          "description": "For command gate: shell command to run (must be idempotent and read-only)"
+        },
+        "exit_code": {
+          "type": "integer",
+          "default": 0,
+          "description": "For command gate: expected exit code"
+        },
+        "phase": {
+          "type": "string",
+          "description": "For phase_completed: which phase must be completed"
+        },
+        "max_needs_attention": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "For verdict_clean: maximum agents with NEEDS_ATTENTION status"
+        },
+        "condition": {
+          "type": "string",
+          "description": "Optional condition expression. Inert in C1 — evaluated by C3 Composer.",
+          "x-note": "Evaluated by C3 Composer, inert in C1"
+        }
+      }
+    },
+    "budget_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "share": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of total sprint budget allocated to this stage"
+        },
+        "min_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum token allocation regardless of share"
+        },
+        "model_tier_hint": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus", "oracle", "codex"],
+          "description": "Suggested model tier for this stage. routing.yaml takes precedence."
+        }
+      }
+    },
+    "agent_roster": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/agent_spec" }
+        },
+        "optional": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/agent_spec" }
+        }
+      }
+    },
+    "agent_spec": {
+      "type": "object",
+      "required": ["role"],
+      "additionalProperties": true,
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "Agent role identifier (e.g. 'fd-architecture', 'test-runner')"
+        },
+        "description": {
+          "type": "string"
+        },
+        "model_tier": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus", "oracle", "codex"]
+        },
+        "count": {
+          "type": "string",
+          "pattern": "^[0-9]+(-[0-9]+)?$",
+          "default": "1",
+          "description": "Agent count: 'N' or 'N-M' range. C3 may split to min_count/max_count."
+        },
+        "condition": {
+          "type": "string",
+          "description": "Optional condition. Inert in C1 — evaluated by C3 Composer."
+        }
+      }
+    },
+    "companion": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["central", "self-declared"],
+          "default": "central",
+          "description": "How capabilities are declared. C1 uses central only; C2 adds self-declared."
+        },
+        "provides": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Abstract capabilities this companion provides"
+        }
+      }
+    }
+  }
+}

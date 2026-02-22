@@ -1,0 +1,278 @@
+# Clavain Agency Spec — Declarative Per-Stage Configuration
+# Encodes what each macro-stage needs: agents, gates, budgets, artifacts.
+# Sprint pipeline reads this instead of hardcoding behavior.
+#
+# Schema: agency-spec.schema.json
+# Override: place .clavain/agency-spec.yaml in project root for per-project customization.
+# Merge semantics: arrays replace, dicts merge, set disabled:true on gates to remove defaults.
+#
+# Budget shares sum to 100%. Min tokens sum to 23000 (floor for meaningful per-stage budgets).
+
+version: "1.0"
+
+defaults:
+  budget_allocation: proportional
+  gate_mode: shadow  # Start in shadow mode; graduate to enforce after validation
+  model_routing: config/routing.yaml
+  capability_mode: shadow
+
+stages:
+  discover:
+    description: "Brainstorm and explore the problem space"
+    phases:
+      - brainstorm
+    requires:
+      capabilities:
+        - multi_perspective
+      tools:
+        - web_search
+        - codebase_search
+    artifacts:
+      brainstorm:
+        type: markdown
+        path_pattern: "docs/brainstorms/*.md"
+        required: true
+    gates: {}
+    budget:
+      share: 10
+      min_tokens: 2000
+      model_tier_hint: sonnet
+    agents:
+      required:
+        - role: brainstorm-facilitator
+          description: "Structured brainstorm with research and synthesis"
+          model_tier: sonnet
+      optional:
+        - role: research-agent
+          description: "Deep-dive web and codebase research"
+          model_tier: haiku
+          count: "1-3"
+
+  design:
+    description: "Structure ideas into PRDs and implementation plans"
+    phases:
+      - brainstorm-reviewed
+      - strategized
+      - planned
+      - plan-reviewed
+    requires:
+      capabilities:
+        - artifact_generation
+        - multi_perspective
+        - domain_review
+      tools:
+        - codebase_search
+        - file_read
+    artifacts:
+      prd:
+        type: markdown
+        path_pattern: "docs/prds/*.md"
+        required: true
+      plan:
+        type: markdown
+        path_pattern: "docs/plans/*.md"
+        required: true
+    gates:
+      plan_reviewed:
+        type: artifact_reviewed
+        artifact: plan
+        min_agents: 2
+        max_p0_findings: 0
+        max_p1_findings: 3
+      prd_exists:
+        type: phase_completed
+        phase: strategized
+    budget:
+      share: 25
+      min_tokens: 5000
+      model_tier_hint: opus
+    agents:
+      required:
+        - role: strategist
+          description: "Structures brainstorm into PRD with features and acceptance criteria"
+          model_tier: opus
+        - role: plan-writer
+          description: "Creates detailed implementation plan from PRD"
+          model_tier: opus
+      optional:
+        - role: fd-architecture
+          description: "Architecture review of plan"
+          model_tier: sonnet
+        - role: fd-correctness
+          description: "Correctness review of plan"
+          model_tier: sonnet
+        - role: fd-quality
+          description: "Quality/style review of plan"
+          model_tier: sonnet
+
+  build:
+    description: "Execute the implementation plan"
+    phases:
+      - executing
+    requires:
+      capabilities:
+        - multi_agent_coordination
+        - file_reservation
+        - test_discipline
+      tools:
+        - file_read
+        - file_write
+        - bash
+        - codebase_search
+    artifacts:
+      code:
+        type: git_diff
+        required: true
+      tests:
+        type: test_output
+        required: false
+    gates:
+      plan_gate:
+        type: phase_completed
+        phase: plan-reviewed
+    budget:
+      share: 40
+      min_tokens: 10000
+      model_tier_hint: opus
+    agents:
+      required:
+        - role: implementer
+          description: "Executes plan tasks, writes code"
+          model_tier: opus
+      optional:
+        - role: parallel-worker
+          description: "Independent module execution via Codex or subagents"
+          model_tier: sonnet
+          count: "1-4"
+        - role: test-runner
+          description: "Runs test suite after implementation"
+          model_tier: haiku
+
+  ship:
+    description: "Quality gates, code review, and shipping"
+    phases:
+      - shipping
+    requires:
+      capabilities:
+        - domain_review
+        - multi_perspective
+        - verdict_aggregation
+        - multi_agent_synthesis
+      tools:
+        - codebase_search
+        - file_read
+        - bash
+    artifacts:
+      verdicts:
+        type: verdict_json
+        path_pattern: ".clavain/verdicts/*.json"
+        required: true
+      commit:
+        type: git_commit
+        required: true
+    gates:
+      review_clean:
+        type: verdict_clean
+        max_needs_attention: 0
+      tests_pass:
+        type: command
+        command: "bash -c 'cd \"${PROJECT_DIR:-.}\" && if [ -f Makefile ] && grep -q test Makefile; then make test; elif [ -f package.json ]; then npm test; elif [ -f go.mod ]; then go test ./...; else exit 0; fi'"
+        exit_code: 0
+    budget:
+      share: 20
+      min_tokens: 5000
+      model_tier_hint: sonnet
+    agents:
+      required:
+        - role: fd-architecture
+          description: "Architecture review of implementation"
+          model_tier: sonnet
+        - role: fd-correctness
+          description: "Correctness review — race conditions, data consistency"
+          model_tier: sonnet
+        - role: fd-quality
+          description: "Code quality and style review"
+          model_tier: sonnet
+      optional:
+        - role: fd-safety
+          description: "Security review — credentials, trust boundaries"
+          model_tier: sonnet
+          condition: "has_security_surface"
+        - role: fd-performance
+          description: "Performance review — hot paths, N+1 queries"
+          model_tier: sonnet
+          condition: "has_performance_surface"
+        - role: synthesis
+          description: "Aggregate multi-agent verdicts into unified report"
+          model_tier: haiku
+
+  reflect:
+    description: "Capture learnings and close the sprint"
+    phases:
+      - reflect
+    requires:
+      capabilities: []
+      tools:
+        - file_write
+    artifacts:
+      reflection:
+        type: markdown
+        path_pattern: "docs/solutions/**/*.md"
+        required: false
+    gates: {}
+    budget:
+      share: 5
+      min_tokens: 1000
+      model_tier_hint: haiku
+    agents:
+      required:
+        - role: reflector
+          description: "Captures learnings, updates memory and documentation"
+          model_tier: haiku
+      optional: []
+
+# ─── Companion Capability Declarations ─────────────────────────────
+# C1 scope: abstract 'provides' only. Per-agent detail deferred to C2 self-declaration.
+companions:
+  interflux:
+    source: central
+    provides:
+      - multi_perspective
+      - artifact_generation
+      - domain_review
+  interlock:
+    source: central
+    provides:
+      - multi_agent_coordination
+      - file_reservation
+      - conflict_detection
+  interphase:
+    source: central
+    provides:
+      - phase_tracking
+      - gate_validation
+  interpeer:
+    source: central
+    provides:
+      - cross_ai_review
+  interpath:
+    source: central
+    provides:
+      - artifact_generation
+      - roadmap_generation
+  interwatch:
+    source: central
+    provides:
+      - drift_detection
+      - freshness_monitoring
+  intertest:
+    source: central
+    provides:
+      - test_discipline
+      - debugging
+      - verification
+  intersynth:
+    source: central
+    provides:
+      - verdict_aggregation
+      - multi_agent_synthesis
