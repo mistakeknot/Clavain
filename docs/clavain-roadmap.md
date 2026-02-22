@@ -9,7 +9,7 @@
 
 ## Where We Are
 
-Clavain is an autonomous software agency — 16 skills, 4 agents, 53 commands, 22 hooks, 1 MCP server. 31 companion plugins in the inter-* constellation. 1419 beads tracked, 1098 closed, 321 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
+Clavain is an autonomous software agency — 16 skills, 4 agents, 53 commands, 22 hooks, 1 MCP server. 35 companion plugins in the inter-* constellation (33 shipped/active, 2 planned). 1419 beads tracked, 1098 closed, 321 open. Runs on its own TUI (Autarch), backed by Intercore kernel and Interspect profiler.
 
 ### What's Working
 
@@ -50,7 +50,7 @@ Major features that landed since the 0.6.22 roadmap:
 | **E7 Autarch Phase 1** | Bigend TUI migration — dashboard, run pane, activity feed, aggregator dedup. |
 | **Intercore kernel (E1-E2)** | Go CLI + SQLite — runs, phases, gates, dispatches, events as durable state. |
 | **Vision rewrite** | Autonomous software agency with three-layer architecture (Kernel/OS/Drivers). |
-| **31 companion plugins** | intermap, intermem, intersynth, interlens, interleave, interserve, interpeer, intertest, interkasten, interstat, interfluence, interphase v2, and more |
+| **35 companion plugins** | intermap, intermem, intersynth, interlens, interleave, interserve, interpeer, intertest, interkasten, interstat, interfluence, interphase v2, and more (33 shipped/active, 2 planned) |
 | **Version 0.6.22 → 0.6.60** | 38 version bumps |
 
 ---
@@ -108,6 +108,18 @@ Track A (Kernel)      Track B (Routing)     Track C (Agency)
                                                C5 ← convergence
                                           (self-building)
 ```
+
+### Autonomy Ladder Mapping
+
+The three tracks map to the [Demarch Autonomy Ladder](../../../docs/demarch-vision.md#the-autonomy-ladder) (L0 Record, L1 Enforce, L2 React, L3 Auto-remediate, L4 Auto-ship):
+
+| Steps | Track | Autonomy Level | Rationale |
+|-------|-------|---------------|-----------|
+| A1-A3 (done) | Kernel Integration | Enabled L0-L2 (Record, Enforce, React) | Hook cutover gives durable state (L0), sprint handover adds gate enforcement (L1), event-driven advancement enables automatic reactions (L2). |
+| B1-B2 (done) | Model Routing | Supports L2 (React) | Routing decisions applied automatically at dispatch time — the system reacts to task complexity without human model selection. |
+| B3 (open) | Model Routing | Prerequisite for L3 (Auto-remediate) | Interspect-driven model selection means the system adjusts its own routing based on outcome data, a form of self-remediation. |
+| C1-C4 (open) | Agency Architecture | Foundation for L3 (Auto-remediate) | Agency specs, fleet registry, composer, and cross-phase handoff give the system the vocabulary to retry with different agents, substitute models, and adjust parameters autonomously. |
+| C5 (open) | Agency Architecture | Gateway to L4 (Auto-ship) | The self-building loop — Clavain using its own agency specs to run its own sprints — is the entry point to fully autonomous shipping. |
 
 ### Supporting Epics (Intercore)
 
@@ -253,7 +265,7 @@ Run `/interpath:roadmap` to regenerate from current project state.
 
 ---
 
-*Synthesized from: [`docs/clavain-vision.md`](clavain-vision.md), [`docs/PRD.md`](PRD.md), 1419 beads, 31 companion plugins, and the Intercore kernel vision. Sources linked throughout.*
+*Synthesized from: [`docs/clavain-vision.md`](clavain-vision.md), [`docs/PRD.md`](PRD.md), 1419 beads, 35 companion plugins, and the Intercore kernel vision. Sources linked throughout.*
 
 ## From Interverse Roadmap
 
