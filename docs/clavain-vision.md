@@ -46,9 +46,9 @@ Interspect (Profiler) — cross-cutting
 └── Never modifies the kernel — only the OS layer
 ```
 
-The guiding principle: the system of record is in the kernel; the policy authority is in the OS; the interactive surfaces are swappable apps. If a host platform disappears, you lose UX convenience but not capability. For details on the apps layer, see the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md) (planned). For term definitions, see the [shared glossary](../../../infra/intercore/docs/product/glossary.md).
+The guiding principle: the system of record is in the kernel; the policy authority is in the OS; the interactive surfaces are swappable apps. If a host platform disappears, you lose UX convenience but not capability. For details on the apps layer, see the [Autarch vision doc](../../../apps/autarch/docs/autarch-vision.md). For term definitions, see the [shared glossary](../../../core/intercore/docs/product/glossary.md).
 
-**Write-path contract.** The OS is the sole policy authority for kernel mutations. Companion plugins produce capability results (artifacts, evidence, telemetry) but do not create/advance runs or define gate rules. Apps submit intents to the OS — they do not call kernel primitives for policy-governing operations. See the [Intercore vision doc](../../../infra/intercore/docs/product/intercore-vision.md) for the full write-path contract table.
+**Write-path contract.** The OS is the sole policy authority for kernel mutations. Companion plugins produce capability results (artifacts, evidence, telemetry) but do not create/advance runs or define gate rules. Apps submit intents to the OS — they do not call kernel primitives for policy-governing operations. See the [Intercore vision doc](../../../core/intercore/docs/product/intercore-vision.md) for the full write-path contract table.
 
 > **Current state vs target state.** Today, Clavain ships as a Claude Code plugin (dozens of slash commands, hooks, and an MCP server) because that surface is available and productive now. Autarch's TUI tools exist but are not yet the primary interface. The kernel (Intercore) is in active development with gates, events, and dispatches working; the hook cutover from temp files to `ic` is the v1.5 milestone. The architecture above describes the target design — what each layer is converging toward. Where the target differs from today's reality, the gap is acknowledged in the relevant section.
 
@@ -60,7 +60,7 @@ Clavain serves three concentric circles, and the priority is explicit: inner cir
 
 2. **Proof by demonstration.** Build Clavain with Clavain. Use the agency to run its own development sprints — research improvements, brainstorm features, plan execution, write code, review changes, compound learnings. Every capability must survive contact with its own development process. This is the credibility engine: a system that autonomously builds itself is a more convincing proof than any benchmark.
 
-3. **Platform play.** Once dogfooding proves the model works, open Intercore as infrastructure for anyone building autonomous coding agents, and position Clavain as the reference OS. AI labs get the kernel. Developers get the agency. Both are open source. The differentiation from general-purpose AI gateways is that this stack is purpose-built for building software.
+3. **Platform play.** Once dogfooding proves the model works, open the Demarch platform — Intercore as infrastructure for anyone building autonomous software development agencies, and Clavain as the reference agency. AI labs get the kernel. Developers get the agency. Both are open source. The differentiation from general-purpose AI gateways is that this stack is purpose-built for building software.
 
 ## Operating Principles
 
@@ -137,7 +137,7 @@ The minimum workflow a new user experiences on first install. Everything else is
 - Session checkpointing — resume where you left off across sessions
 
 **What's NOT available on Day 1 (and shouldn't be promised):**
-- Discovery pipeline (requires Intercore v3 + interject)
+- Discovery pipeline (kernel primitives shipped in E5; OS integration with interject pending)
 - Adaptive model routing (requires Interspect + outcome data)
 - Cross-project portfolio runs (requires Intercore v4)
 - Fully autonomous overnight sprints (requires Level 2 reactor + managed service deployment)
@@ -174,7 +174,7 @@ Clavain covers the full product development lifecycle through five macro-stages.
 
 Research, brainstorming, and problem definition. The agency scans the landscape, identifies opportunities, and frames the problem worth solving.
 
-> **Current status:** The Discover stage is a future capability — the discovery pipeline, source adapters, and confidence-tiered autonomy depend on Intercore's discovery subsystem (v3). Today, work discovery is manual (beads backlog + human input). The Design → Build → Ship loop is the core product; Discover extends it once the core is proven. A sprint can begin at any macro-stage — `--from-step brainstorm` or `--from-step plan` skips Discover entirely.
+> **Current status:** The kernel discovery primitives are shipped (E5): `ic discovery` CLI with submit, score, promote, dismiss, feedback, decay, rollback, and embedding search. The interject plugin implements source adapters (arXiv, HN, GitHub, Anthropic docs, Exa) with embedding-based scoring. What's **not** shipped is the OS-level pipeline integration: interject emitting kernel events, event-driven scan triggers, automated backlog refinement, and confidence-tiered autonomy policy. Today, work discovery is manual (beads backlog + human input). The Design → Build → Ship loop is the core product; the full Discover pipeline extends it once the OS integration lands. A sprint can begin at any macro-stage — `--from-step brainstorm` or `--from-step plan` skips Discover entirely.
 
 | Capability | Models / Agents |
 |---|---|
@@ -255,9 +255,9 @@ Bead shipped     → Feedback signal → Discovery marked "validated"
                                       Similar future discoveries score higher
 ```
 
-This extends the autonomy ladder with a capability that precedes Level 0: **Level -1: Discover.** Before the system can record, enforce, or react to work, it must find work worth doing.
+Discovery is a capability track orthogonal to the autonomy ladder (see the [Demarch vision](../../../docs/demarch-vision.md) for the full ladder and capability track definitions). It operates at any autonomy level — the pipeline that finds work before it can be recorded.
 
-**What already exists.** The interject plugin implements the core discovery engine: source adapters (arXiv, HN, GitHub, Anthropic docs, Exa), embedding-based scoring (all-MiniLM-L6-v2, 384 dims), adaptive thresholds, and bead/briefing output. The intersearch library provides shared embedding and Exa search infrastructure. What's missing is kernel integration — discovery events through the event bus, event-driven scan triggers, kernel-enforced confidence tiers, and backlog refinement.
+**What already exists.** The interject plugin implements the core discovery engine: source adapters (arXiv, HN, GitHub, Anthropic docs, Exa), embedding-based scoring (all-MiniLM-L6-v2, 384 dims), adaptive thresholds, and bead/briefing output. The intersearch library provides shared embedding and Exa search infrastructure. What's missing is OS pipeline integration — feeding interject discoveries into the kernel event bus, event-driven scan triggers, and automated backlog refinement. The kernel primitives (discovery storage, confidence tiers, scoring, promotion/dismissal) shipped in E5.
 
 ### Design
 
@@ -268,7 +268,7 @@ Strategy, specification, planning, and plan review. The agency designs the solut
 | Strategy and system design | Opus (deep reasoning) |
 | PRD generation and validation | Gurgeh (confidence-scored spec sprint) |
 | Cross-AI design review | Oracle (GPT-5.2 Pro) |
-| Multi-perspective plan review | Flux-drive (7 review agents, model-per-agent optimized) |
+| Multi-perspective plan review | Flux-drive with formalized cognitive lenses (e.g., security, resilience) to combat AI consensus bias |
 | **Output** | Approved plan with gate-verified artifacts |
 
 ### Build
@@ -289,7 +289,7 @@ Final review, deployment, and knowledge capture. The agency validates the change
 
 | Capability | Models / Agents |
 |---|---|
-| Final multi-agent review | Interflux fleet (model-per-agent optimized) |
+| Final multi-agent review | Interflux fleet deploying explicit cognitive diversity lenses (combating consensus bias) |
 | Critical path analysis | Oracle (GPT-5.2 Pro) |
 | Landing and deployment | Landing discipline agents |
 | Knowledge compounding | Auto-compound (learnings → memory) |
@@ -331,11 +331,11 @@ All dispatches flow through the kernel dispatch primitive with an explicit model
 
 Plugins declare default model preferences (fd-architecture defaults to Opus, fd-quality defaults to Haiku). Clavain's routing table can override these per-project, per-run, or per-complexity-level. Not everything needs Opus — a style-checking agent on Haiku catches the same issues at 1/20th the cost.
 
-### Stage 3: Adaptive Optimization
+### Stage 3: Adaptive Optimization (The Meta-Learning Loop)
 
-The agent fleet registry stores cost/quality profiles per agent×model combination. The composer optimizes the entire fleet dispatch within a budget constraint. "Run this review with $5 budget" → the composer allocates Opus to the 2 highest-impact agents and Haiku to the rest. Interspect's outcome data drives profile updates — models that consistently underperform for a task type get downweighted.
+The agent fleet registry stores cost/quality profiles per agent×model combination. The composer optimizes the entire fleet dispatch within a budget constraint. "Run this review with $5 budget" → the composer allocates Opus to the 2 highest-impact agents and Haiku to the rest. Interspect's outcome data drives profile updates — models that consistently underperform for a task type get downweighted. Crucially, this meta-learning loop features manual routing overrides, counterfactual shadow evaluations, and circuit breakers as first-class citizens of the OS's safety model, ensuring the system learns safely from its own history.
 
-These three stages are staged on the roadmap: static routing ships first, complexity-aware routing follows, adaptive optimization comes with measurement infrastructure. The kernel mechanism (Stage 1) is described fully in the [Intercore vision doc](../../../infra/intercore/docs/product/intercore-vision.md) — the kernel records dispatch details, model selection, and token consumption; the OS configures routing policy on top.
+These three stages are staged on the roadmap: static routing ships first, complexity-aware routing follows, adaptive optimization comes with measurement infrastructure. The kernel mechanism (Stage 1) is described fully in the [Intercore vision doc](../../../core/intercore/docs/product/intercore-vision.md) — the kernel records dispatch details, model selection, and token consumption; the OS configures routing policy on top.
 
 **Routing precedence.** When multiple stages provide a model preference, higher stages override lower: adaptive override (Stage 3) > OS routing table (Stage 2) > plugin default (Stage 2) > kernel default (Stage 1, none — model is required). If adaptive routing has no data for a task type, it defers to the OS routing table.
 
@@ -398,7 +398,7 @@ The ecosystem has three layers — kernel (infrastructure), OS (agency + compani
 | intershift | Cross-AI dispatch engine is generalizable | Planned |
 | interscribe | Knowledge compounding is generalizable | Planned |
 
-**Apps (Autarch)** — Bigend (monitoring), Gurgeh (PRD generation), Coldwine (task orchestration), Pollard (research intelligence). See the [Autarch vision doc](../../../infra/intercore/docs/product/autarch-vision.md) (planned).
+**Apps (Autarch)** — Bigend (monitoring), Gurgeh (PRD generation), Coldwine (task orchestration), Pollard (research intelligence). See the [Autarch vision doc](../../../apps/autarch/docs/autarch-vision.md).
 
 The naming convention follows a consistent metaphor: each companion occupies the space *between* two things. interphase (between phases), interline (between lines), interflux (between flows), interpath (between paths of artifacts), interwatch (between watches of freshness), intershift (between shifts of context). They are bridges and boundary layers, not monoliths.
 
@@ -541,7 +541,7 @@ Clavain's value is measurable. These metrics define what "working" means at each
 
 ## What Clavain Is Not
 
-**Not a platform.** That's Intercore. Clavain is the opinionated agency built on the platform. The inter-* constellation offers composable pieces that anyone can adopt independently, but the agency as a whole is not designed to be "framework-agnostic" or "configurable for any workflow."
+**Not the platform.** That's Demarch. Clavain is the opinionated reference agency built on the platform. The inter-* constellation offers composable pieces that anyone can adopt independently, but the agency as a whole is not designed to be "framework-agnostic" or "configurable for any workflow."
 
 **Not a general AI gateway.** That's what projects like OpenClaw (general-purpose AI message routing) do. Clavain doesn't route arbitrary messages to arbitrary agents. It orchestrates software development — it has opinions about what "good" looks like at every phase, and those opinions are encoded in gates, review agents, and quality disciplines.
 
