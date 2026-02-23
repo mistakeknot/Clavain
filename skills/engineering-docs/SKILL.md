@@ -11,6 +11,8 @@ preconditions:
   - Solution has been verified working
 ---
 
+<!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same 7-step documentation capture workflow in a single file. -->
+
 # engineering-docs Skill
 
 **Purpose:** Automatically document solved problems to build searchable institutional knowledge with category-based organization (enum-validated problem types).

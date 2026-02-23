@@ -5,6 +5,8 @@ version: 0.4.0
 user-invocable: false
 ---
 
+<!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same dispatch protocol in a single file. For debate mode, Oracle escalation, or CLI reference, read the references/ directory. -->
+
 # Interserve — Codex Dispatch
 
 Dispatch tasks to Codex CLI agents (`codex exec`). Claude acts as orchestrator — planning, dispatching, verifying, and committing. Works for single tasks (megaprompt) and multi-task parallel execution (delegation).

@@ -3,6 +3,8 @@ name: landing-a-change
 description: Use when implementation is complete and all tests pass — guides the disciplined process of verifying, documenting, and landing a change on trunk
 ---
 
+<!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same verify → review → document → commit → confirm process. -->
+
 # Landing a Change
 
 ## Overview

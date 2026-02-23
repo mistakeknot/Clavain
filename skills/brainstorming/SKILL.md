@@ -3,6 +3,8 @@ name: brainstorming
 description: Freeform brainstorming mode — loads collaborative dialogue style (one question at a time, multiple choice, incremental design). Use for open-ended exploration without structured phases. For a guided workflow with repo research, use /brainstorm instead.
 ---
 
+<!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same collaborative dialogue process. -->
+
 # Brainstorming Ideas Into Designs
 
 ## Overview

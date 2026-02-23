@@ -3,6 +3,8 @@ name: code-review-discipline
 description: Use when requesting or receiving code review — covers dispatching reviewer subagents, handling feedback with technical rigor, and avoiding performative agreement
 ---
 
+<!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same request/receive review protocol. -->
+
 # Code Review Discipline
 
 Two sides of one workflow: requesting reviews and receiving feedback.
