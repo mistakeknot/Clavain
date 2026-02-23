@@ -5,7 +5,7 @@ description: Use when starting any conversation - establishes how to find and us
 
 **Proactive skill invocation is required.** When a skill matches the current task — even partially — invoke it before responding.
 
-# Quick Router — 16 skills, 4 agents, and 53 commands
+# Quick Router — 16 skills, 4 agents, and 54 commands
 
 | You want to... | Run this |
 |----------------|----------|
@@ -20,6 +20,7 @@ description: Use when starting any conversation - establishes how to find and us
 | Check project health | `/clavain:doctor` or `/clavain:sprint-status` |
 | Generate a roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` |
+| Not sure where to start | `/clavain:route` |
 | See all commands | `/clavain:help` |
 
 ## Routing Heuristic
