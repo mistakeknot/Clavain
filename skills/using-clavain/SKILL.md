@@ -9,7 +9,8 @@ description: Use when starting any conversation - establishes how to find and us
 
 | You want to... | Run this |
 |----------------|----------|
-| Build a feature end-to-end | `/clavain:sprint` |
+| Build a feature end-to-end | `/clavain:route` |
+| Force full lifecycle | `/clavain:sprint` |
 | Review code, docs, or plans | `/interflux:flux-drive` |
 | Quick review from git diff | `/clavain:quality-gates` |
 | Cross-AI second opinion | `/clavain:interpeer` |
@@ -20,7 +21,6 @@ description: Use when starting any conversation - establishes how to find and us
 | Check project health | `/clavain:doctor` or `/clavain:sprint-status` |
 | Generate a roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` |
-| Not sure where to start | `/clavain:route` |
 | See all commands | `/clavain:help` |
 
 ## Routing Heuristic

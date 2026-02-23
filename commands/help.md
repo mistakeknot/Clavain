@@ -11,7 +11,7 @@ These are the commands you'll use most often:
 
 | Command | What it does | Example |
 |---------|-------------|---------|
-| `/clavain:sprint` | Full autonomous workflow — brainstorm → plan → execute → review → ship | `/sprint build a caching layer` |
+| `/clavain:route` | Adaptive entry point — discovers work, classifies, dispatches | `/route build a caching layer` |
 | `/clavain:brainstorm` | Structured 4-phase brainstorm with auto-handoff to write-plan | `/brainstorm how should we handle auth?` |
 | `/clavain:write-plan` | Create detailed implementation plan with bite-sized tasks | `/write-plan` (after brainstorm) |
 | `/clavain:tdd` | Run RED-GREEN-REFACTOR for a task before coding | `/tdd implement auth refresh flow` |
@@ -35,8 +35,9 @@ These are the commands you'll use most often:
 | `/clavain:plan-review` | Lightweight 3-agent plan review |
 
 ### Execute
-| `/clavain:work` | Execute plans with quality checkpoints |
+| `/clavain:route` | Adaptive entry — routes to sprint or work automatically |
 |---|---|
+| `/clavain:work` | Execute plans with quality checkpoints |
 | `/clavain:execute-plan` | Execute plan in separate session with review checkpoints |
 | `/clavain:sprint` | Full autonomous pipeline (brainstorm through ship) |
 | `/clavain:codex-sprint` | Full sprint flow with Codex-first execution |
