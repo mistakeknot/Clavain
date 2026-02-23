@@ -24,6 +24,16 @@ subagents:
       explore: haiku
       general-purpose: sonnet
 
+  # Agent-level overrides (highest priority in resolution chain).
+  # Safety floors: interstat data shows fd-safety on Haiku 47%, fd-correctness 26%.
+  # These must NEVER run below Sonnet regardless of phase or category routing.
+  # Evidence: iv-jocaw routing experiment, iv-dthn Loop 2/4 thresholds.
+  overrides:
+    interflux:review:fd-safety: sonnet
+    interflux:review:fd-correctness: sonnet
+    interflux:fd-safety: sonnet
+    interflux:fd-correctness: sonnet
+
   phases:
     brainstorm:
       model: opus

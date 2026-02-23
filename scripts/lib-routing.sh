@@ -189,8 +189,8 @@ _routing_load_cache() {
 
       # --- overrides section ---
       if [[ "$subsection" == "overrides" ]]; then
-        # agent: model (4-space indent)
-        if [[ "$line" =~ ^[[:space:]]{4}([a-z][a-z0-9_-]*):[[:space:]]*(.+) ]]; then
+        # agent: model (4-space indent, allows colons in agent name for namespaced agents)
+        if [[ "$line" =~ ^[[:space:]]{4}([a-z][a-z0-9_:-]*):[[:space:]]*(.+) ]]; then
           local agent_name="${BASH_REMATCH[1]}"
           local agent_val="${BASH_REMATCH[2]%%[[:space:]#]*}"
           [[ -n "$agent_val" ]] && _ROUTING_SA_OVERRIDE["$agent_name"]="$agent_val"
