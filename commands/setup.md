@@ -94,6 +94,11 @@ If the script is unavailable, use the fallback list:
 - `interpub@interagency-marketplace` — Plugin publishing automation
 - `tuivision@interagency-marketplace` — TUI automation and visual testing (MCP)
 - `intermux@interagency-marketplace` — Agent activity visibility and tmux monitoring (MCP)
+- `interleave@interagency-marketplace` — Deterministic skeleton + LLM islands pattern
+- `intermem@interagency-marketplace` — Memory synthesis (auto-memory → AGENTS.md/CLAUDE.md)
+- `interlearn@interagency-marketplace` — Cross-repo institutional knowledge index
+- `intercache@interagency-marketplace` — Cross-session semantic cache (MCP)
+- `interchart@interagency-marketplace` — Interactive ecosystem diagram generator
 <!-- agent-rig:end:install-optional -->
 
 ## Step 3: Disable Conflicting Plugins
@@ -170,9 +175,13 @@ required = {
     'interform@interagency-marketplace',
     'interline@interagency-marketplace',
     'interlock@interagency-marketplace',
+    'intermap@interagency-marketplace',
     'interpath@interagency-marketplace',
+    'interpeer@interagency-marketplace',
     'interphase@interagency-marketplace',
     'interslack@interagency-marketplace',
+    'intersynth@interagency-marketplace',
+    'intertest@interagency-marketplace',
     'interwatch@interagency-marketplace',
     'plugin-dev@claude-plugins-official',
     'security-guidance@claude-plugins-official',

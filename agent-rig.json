@@ -125,6 +125,22 @@
       {
         "source": "security-guidance@claude-plugins-official",
         "description": "Security best practices"
+      },
+      {
+        "source": "intertest@interagency-marketplace",
+        "description": "Engineering quality disciplines (TDD, debugging, verification)"
+      },
+      {
+        "source": "interpeer@interagency-marketplace",
+        "description": "Cross-AI peer review (Claude/Codex/Oracle)"
+      },
+      {
+        "source": "intersynth@interagency-marketplace",
+        "description": "Multi-agent synthesis engine (verdict aggregation)"
+      },
+      {
+        "source": "intermap@interagency-marketplace",
+        "description": "Project-level code mapping and architecture analysis (MCP)"
       }
     ],
     "optional": [
@@ -171,6 +187,26 @@
       {
         "source": "intermux@interagency-marketplace",
         "description": "Agent activity visibility and tmux monitoring (MCP)"
+      },
+      {
+        "source": "interleave@interagency-marketplace",
+        "description": "Deterministic skeleton + LLM islands pattern"
+      },
+      {
+        "source": "intermem@interagency-marketplace",
+        "description": "Memory synthesis — graduates auto-memory to AGENTS.md/CLAUDE.md"
+      },
+      {
+        "source": "interlearn@interagency-marketplace",
+        "description": "Cross-repo institutional knowledge index"
+      },
+      {
+        "source": "intercache@interagency-marketplace",
+        "description": "Cross-session semantic cache (MCP)"
+      },
+      {
+        "source": "interchart@interagency-marketplace",
+        "description": "Interactive ecosystem diagram generator"
       }
     ],
     "infrastructure": [
