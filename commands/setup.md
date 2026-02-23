@@ -28,41 +28,34 @@ ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/skills/using-clavai
 
 ## Step 2: Install Required & Recommended Plugins
 
-> Self-heal: If the plugin lists below appear stale, read `agent-rig.json` directly and derive install commands from the `plugins` object.
+> **Automated install:** Use `scripts/modpack-install.sh` which reads `agent-rig.json` at runtime — no hardcoded lists to go stale.
 
-Install these plugins from their marketplaces. Skip any already installed.
-
-**From interagency-marketplace:**
-<!-- agent-rig:begin:install-interagency -->
+Locate the modpack install script:
 ```bash
-claude plugin install interdoc@interagency-marketplace
-claude plugin install interflux@interagency-marketplace
-claude plugin install interphase@interagency-marketplace
-claude plugin install interline@interagency-marketplace
-claude plugin install interpath@interagency-marketplace
-claude plugin install interwatch@interagency-marketplace
-claude plugin install interlock@interagency-marketplace
-claude plugin install intercheck@interagency-marketplace
-claude plugin install tldr-swinton@interagency-marketplace
-claude plugin install tool-time@interagency-marketplace
-claude plugin install interslack@interagency-marketplace
-claude plugin install interform@interagency-marketplace
-claude plugin install intercraft@interagency-marketplace
-claude plugin install interdev@interagency-marketplace
+CLAVAIN_DIR=$(dirname "$(ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/agent-rig.json 2>/dev/null | head -1)")
+INSTALL_SCRIPT="${CLAVAIN_DIR}/scripts/modpack-install.sh"
 ```
-<!-- agent-rig:end:install-interagency -->
 
-**From claude-plugins-official:**
-<!-- agent-rig:begin:install-official -->
+If `--check-only` was passed, use dry-run mode:
 ```bash
-claude plugin install context7@claude-plugins-official
-claude plugin install explanatory-output-style@claude-plugins-official
-claude plugin install agent-sdk-dev@claude-plugins-official
-claude plugin install plugin-dev@claude-plugins-official
-claude plugin install serena@claude-plugins-official
-claude plugin install security-guidance@claude-plugins-official
+# Check-only: report what would change without installing
+result=$("$INSTALL_SCRIPT" --dry-run --quiet)
 ```
-<!-- agent-rig:end:install-official -->
+
+Otherwise, install required and recommended plugins automatically:
+```bash
+# Install core + required + recommended, disable conflicts — all in one pass
+result=$("$INSTALL_SCRIPT" --quiet)
+```
+
+Parse the result JSON and report to the user:
+- **installed**: plugins that were just installed (list them)
+- **already_present**: plugins that were already installed (report count)
+- **failed**: plugins that failed to install (warn about each one)
+- **disabled**: conflicting plugins that were disabled
+- **optional_available**: optional plugins not yet installed (presented in Step 2b)
+
+If `$INSTALL_SCRIPT` is not found or `jq` is not available, fall back to the manual lists below.
 
 **Language servers (install based on what languages you work with):**
 Use AskUserQuestion to ask which languages to enable:
@@ -75,7 +68,19 @@ Use AskUserQuestion to ask which languages to enable:
 
 ## Step 2b: Optional Plugins
 
-These plugins provide additional capabilities. Use AskUserQuestion to ask which to install:
+Check the `optional_available` field from the install result above. If any optional plugins are not yet installed, present them via AskUserQuestion (multi-select) with descriptions from `agent-rig.json`:
+
+```bash
+# Get optional plugins not yet installed
+optional=$("$INSTALL_SCRIPT" --dry-run --quiet --category=optional | jq -r '.optional_available[]')
+```
+
+For each plugin the user selects, install it:
+```bash
+claude plugin install <selected-plugin>
+```
+
+If the script is unavailable, use the fallback list:
 
 <!-- agent-rig:begin:install-optional -->
 - `interfluence@interagency-marketplace` — Voice profile and style adaptation
@@ -93,7 +98,11 @@ These plugins provide additional capabilities. Use AskUserQuestion to ask which 
 
 ## Step 3: Disable Conflicting Plugins
 
-These plugins overlap with Clavain and must be disabled to avoid duplicate agents:
+> Conflicts are handled automatically by `modpack-install.sh` in Step 2. This step only runs if the script was unavailable.
+
+If the automated install ran, conflicts are already disabled — skip to Step 4.
+
+Otherwise, manually disable these plugins:
 
 <!-- agent-rig:begin:disable-conflicts -->
 ```bash
