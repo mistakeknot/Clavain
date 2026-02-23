@@ -1,125 +1,35 @@
 ---
 name: sprint
-description: Full autonomous engineering workflow — brainstorm, strategize, plan, execute, review, ship
-argument-hint: "[feature description]"
+description: Phase sequencer — brainstorm, strategize, plan, execute, review, ship. Use /route for smart dispatch.
+argument-hint: "[feature description or --from-step <step>]"
 ---
 
-## Before Starting — Sprint Resume
+# Sprint — Phase Sequencer
 
-Before running discovery, check for an active sprint:
+Runs the full 10-phase development lifecycle from brainstorm to ship. Normally invoked via `/route` which handles discovery, resume, and classification. Can be invoked directly to force the full lifecycle.
 
-1. Find active sprints:
-   ```bash
-   active_sprints=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-find-active 2>/dev/null) || active_sprints="[]"
-   sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count=0
-   ```
+**Expects:** `CLAVAIN_BEAD_ID` set by caller (`/route` or manual). If not set, sprint runs without bead tracking.
 
-3. Parse the result:
-   - `sprint_count == 0` → no active sprint, fall through to Work Discovery (below)
-   - Single sprint (`sprint_count == 1`) → auto-resume:
-     a. Read sprint ID, state: `sprint_id=$(echo "$active_sprints" | jq -r '.[0].id')` then `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-read-state "$sprint_id"`
-     b. Claim session: `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-claim "$sprint_id" "$CLAUDE_SESSION_ID"`
-        - If claim fails (returns 1): tell user another session has this sprint, offer to force-claim (by calling `clavain-cli sprint-release` then `clavain-cli sprint-claim`) or start fresh
-     c. Set `CLAVAIN_BEAD_ID="$sprint_id"` (sprint bead is the epic; takes precedence over discovery-selected beads)
-     d. Determine next step: `next=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-next-step "<phase>")`
-     e. Route to the appropriate command based on the step:
-        - `brainstorm` → `/clavain:brainstorm`
-        - `strategy` → `/clavain:strategy`
-        - `write-plan` → `/clavain:write-plan`
-        - `flux-drive` → `/interflux:flux-drive <plan_path from sprint_artifacts>`
-        - `work` → `/clavain:work <plan_path from sprint_artifacts>`
-        - `ship` → `/clavain:quality-gates`
-        - `reflect` → `/reflect`
-        - `done` → tell user "Sprint is complete"
-     f. Display: `Resuming sprint <id> — <title> (phase: <phase>, next: <step>)`
-     g. **After routing to a command, stop.** Do NOT continue to Step 1.
-   - Multiple sprints (`sprint_count > 1`) → AskUserQuestion to choose which to resume, plus "Start fresh" option. Then claim and route as above.
+## Arguments
 
-4. **Checkpoint recovery** (supplements sprint state): After claiming, check for a local checkpoint:
-   ```bash
-   checkpoint=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-read)
-   ```
-   If a checkpoint exists for this sprint:
-   - Run `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-validate` — warn (don't block) if git SHA changed
-   - Use `checkpoint_completed_steps` from the checkpoint data to determine which steps are already done
-   - Display: `Resuming from checkpoint. Completed: [<steps>]`
-   - Route to the first *incomplete* step (overrides `sprint_next_step` when checkpoint has more detail)
+- **`--from-step <n>`**: Skip directly to step `<n>`. Step names: brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, reflect, ship.
+- **Otherwise**: `$ARGUMENTS` is treated as a feature description for Step 1 (Brainstorm).
 
-5. If starting fresh (no active sprint or user chose "Start fresh"):
-   Proceed to existing Work Discovery logic below.
+## Complexity (Read from Bead)
 
-## Work Discovery (Fallback)
+Read cached complexity (set by `/route`):
 
-If invoked with no arguments (`$ARGUMENTS` is empty or whitespace-only) AND no active sprint was found:
+```bash
+complexity=$(bd state "$CLAVAIN_BEAD_ID" complexity 2>/dev/null) || complexity="3"
+label=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" complexity-label "$complexity" 2>/dev/null) || label="moderate"
+```
 
-1. Run the work discovery scanner:
-   ```bash
-   export DISCOVERY_PROJECT_DIR="."; export DISCOVERY_LANE="${DISCOVERY_LANE:-}"; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_scan_beads
-   ```
+Display to the user: `Complexity: ${complexity}/5 (${label})`
 
-2. Parse the output:
-   - `DISCOVERY_UNAVAILABLE` → skip discovery, proceed to Step 1 (bd not installed)
-   - `DISCOVERY_ERROR` → skip discovery, proceed to Step 1 (bd query failed)
-   - `[]` → no open beads, proceed to Step 1
-   - JSON array → present options (continue to step 3)
-
-3. Present the top results via **AskUserQuestion**:
-   - **First option (recommended):** Top-ranked bead. Label format: `"<Action> <bead-id> — <title> (P<priority>)"`. Add `", stale"` if stale is true. Mark as `(Recommended)`.
-   - **Options 2-3:** Next highest-ranked beads, same label format.
-   - **Second-to-last option:** `"Start fresh brainstorm"` — proceeds to Step 1 below.
-   - **Last option:** `"Show full backlog"` — runs `/clavain:sprint-status`.
-   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm", ship → "Ship", closed → "Closed", create_bead → "Link orphan:", verify_done → "Verify (parent closed):"
-   - **Stale-parent entries** (action: "verify_done"): Label format: `"Verify (parent closed): <bead-id> — <title> (P<priority>, parent: <parent_closed_epic>)"`. These are beads whose parent epic is closed — they may already be complete.
-   - **Orphan entries** (action: "create_bead", id: null): Label format: `"Link orphan: <title> (<type>)"`. These are untracked artifacts in docs/ that have no bead. Description: "Create a bead and link it to this artifact."
-
-4. **Pre-flight check** (guards against stale scan results): Before routing, verify the selected bead still exists:
-   ```bash
-   bd show <selected_bead_id> 2>/dev/null
-   ```
-   If `bd show` fails (bead was closed/deleted since scan), tell the user "That bead is no longer available" and re-run discovery from step 1.
-   **Skip this check for orphan entries** (action: "create_bead") — they have no bead ID yet.
-
-5. **Set bead context** for phase tracking: remember the selected bead ID as `CLAVAIN_BEAD_ID` for this session. All subsequent workflow commands use this to record phase transitions.
-
-6. Based on selection, route to the appropriate command:
-   - `continue` or `execute` with a `plan_path` → `/clavain:work <plan_path>`
-   - `plan` → `/clavain:write-plan`
-   - `strategize` → `/clavain:strategy`
-   - `brainstorm` → `/clavain:brainstorm`
-   - `ship` → `/clavain:quality-gates` (bead is in shipping phase — run final gates)
-   - `closed` → Tell user "This bead is already done" and re-run discovery
-   - `verify_done` → Parent epic is closed. Tell user: "Parent epic <parent_closed_epic> is closed. This bead may already be complete." Then AskUserQuestion with options:
-     1. "Close this bead (work is done)" → `bd close <id> --reason="Completed as part of parent <parent_closed_epic>"`
-     2. "Review code before closing" → Read the bead description and relevant source files, then re-ask
-     3. "Cascade-close all siblings" → Run `bd-cascade-close <parent_closed_epic>` to close all open children of the parent epic
-   - `create_bead` (orphan artifact) → Create bead and link:
-     1. Run `bd create --title="<artifact title>" --type=task --priority=3` and capture the new bead ID from stdout
-     2. **Validate** the bead ID matches format `[A-Za-z]+-[a-z0-9]+`. If `bd create` failed or returned invalid output, tell the user "Failed to create bead — try `bd create` manually" and stop.
-     3. Insert `**Bead:** <new-id>` on line 2 of the artifact file (after the `# Title` heading). Use the Edit tool: old_string = first line of file, new_string = first line + newline + `**Bead:** <new-id>`
-     4. Set `CLAVAIN_BEAD_ID` to the new bead ID
-     5. Route based on artifact type: brainstorm → `/clavain:strategy`, prd → `/clavain:write-plan`, plan → `/clavain:work <plan_path>`
-   - "Start fresh brainstorm" → proceed to Step 1
-   - "Show full backlog" → `/clavain:sprint-status`
-
-7. Log the selection for telemetry:
-   ```bash
-   export DISCOVERY_PROJECT_DIR="."; source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh" && discovery_log_selection "<bead_id>" "<action>" <true|false>
-   ```
-   Where `true` = user picked the first (recommended) option, `false` = user picked a different option.
-
-8. **After routing to a command, stop.** Do NOT continue to Step 1 — the routed command handles the workflow from here.
-
-If invoked WITH arguments (`$ARGUMENTS` is not empty):
-- **If `$ARGUMENTS` contains `--lane=<name>`**: Extract the lane name and set `DISCOVERY_LANE=<name>` before any discovery calls. Display: `Lane: <name> — filtering to lane-scoped beads`. When creating a new sprint bead, also tag it: `bd label add "$SPRINT_ID" "lane:${SPRINT_LANE}"`.
-- **If `$ARGUMENTS` contains `--resume`**: Read checkpoint with `checkpoint_read`. If a checkpoint exists, validate with `checkpoint_validate`, display completed steps, and skip to the first incomplete step. If no checkpoint, fall through to Work Discovery.
-- **If `$ARGUMENTS` contains `--from-step <n>`**: Skip directly to step `<n>` regardless of checkpoint state. Step names: brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, reflect, ship.
-- **If `$ARGUMENTS` matches a bead ID** (format: `[A-Za-z]+-[a-z0-9]+`):
-  ```bash
-  # Verify bead exists
-  bd show "$ARGUMENTS" 2>/dev/null
-  ```
-  If valid: set `CLAVAIN_BEAD_ID="$ARGUMENTS"`, read its phase with `phase_get`, call `infer_bead_action` to determine the action, then route per step 6 above. If `bd show` fails: tell user "Bead not found" and proceed to Step 1.
-- **Otherwise**: Treat `$ARGUMENTS` as a feature description and proceed directly to Step 1.
+Score-based routing:
+- **1-2 (trivial/simple):** Ask user via AskUserQuestion whether to skip brainstorm + strategy and go directly to Step 3 (write-plan). Options: "Skip to plan (Recommended)", "Full workflow". If skipping, jump to Step 3.
+- **3 (moderate):** Standard workflow, all steps.
+- **4-5 (complex/research):** Full workflow with Opus orchestration, full agent roster.
 
 ---
 
@@ -134,7 +44,7 @@ After each step completes successfully, write a checkpoint:
 
 Step names: `brainstorm`, `strategy`, `plan`, `plan-review`, `execute`, `test`, `quality-gates`, `resolve`, `reflect`, `ship`.
 
-When resuming (via Sprint Resume above or `--resume`):
+When resuming (via `/route` sprint resume):
 1. Read checkpoint: `checkpoint_read`
 2. Validate git SHA: `checkpoint_validate` (warn on mismatch, don't block)
 3. Get completed steps: `checkpoint_completed_steps`
@@ -186,55 +96,17 @@ fi
 
 ### Phase Tracking
 
-After each step completes successfully, record the phase transition via `sprint_advance()`. If `CLAVAIN_BEAD_ID` is set (from discovery, sprint resume, or sprint creation), run:
+After each step completes successfully, record the phase transition via `sprint_advance()`. If `CLAVAIN_BEAD_ID` is set (from `/route` or manual), run:
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" set-artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
 "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>"
 ```
 Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
 
-## Pre-Step: Complexity Assessment
-
-Before starting, classify the task complexity:
-
-```bash
-score=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" classify-complexity "$CLAVAIN_BEAD_ID" "$ARGUMENTS")
-label=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" complexity-label "$score")
-```
-
-Display to the user: `Complexity: ${score}/5 (${label})`
-
-Cache complexity on the bead (used by `sprint_advance()` for phase skipping):
-```bash
-bd set-state "$CLAVAIN_BEAD_ID" "complexity=$score" 2>/dev/null || true
-```
-
-Score-based routing:
-- **1-2 (trivial/simple):** Ask user via AskUserQuestion whether to skip brainstorm + strategy and go directly to Step 3 (write-plan). Options: "Skip to plan (Recommended)", "Full workflow", "Override complexity". If skipping, set `force_full_chain=false` on the bead and jump to Step 3. If full workflow, set `force_full_chain=true`. Phase skipping is also enforced automatically in `sprint_advance()` based on cached complexity.
-- **3 (moderate):** Standard workflow, all steps.
-- **4-5 (complex/research):** Full workflow with Opus orchestration, full agent roster.
-
-The user can override with `--skip-to <step>` or `--complexity <1-5>`.
-
 ## Step 1: Brainstorm
 `/clavain:brainstorm $ARGUMENTS`
 
 **Phase:** After brainstorm doc is created, set `phase=brainstorm` with reason `"Brainstorm: <doc_path>"`.
-
-### Create Sprint Bead
-
-If `CLAVAIN_BEAD_ID` is not set after brainstorm (no sprint bead exists yet):
-
-```bash
-SPRINT_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-create "<feature title>")
-if [[ -n "$SPRINT_ID" ]]; then
-    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" set-artifact "$SPRINT_ID" "brainstorm" "<brainstorm_doc_path>"
-    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-phase "$SPRINT_ID" "brainstorm"
-    CLAVAIN_BEAD_ID="$SPRINT_ID"
-fi
-```
-
-Insert `**Bead:** <SPRINT_ID>` on line 2 of the brainstorm doc (after the `# Title` heading).
 
 ## Step 2: Strategize
 `/clavain:strategy`
@@ -396,6 +268,6 @@ If any step fails:
    - The error or unexpected output
    - What was completed successfully before the failure
 
-To **resume from a specific step**, re-invoke `/clavain:sprint` and manually skip completed steps by running their slash commands directly (e.g., start from Step 6 by running `/clavain:quality-gates`).
+To **resume from a specific step**, re-invoke `/clavain:route` which will detect the active sprint and resume from the right phase. Or use `/clavain:sprint --from-step <step>` to skip directly.
 
 Start with Step 1 now.
