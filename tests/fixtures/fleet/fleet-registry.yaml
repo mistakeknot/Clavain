@@ -1,0 +1,118 @@
+version: "1.0"
+
+capability_vocabulary:
+  - domain_review
+  - multi_perspective
+  - verdict_aggregation
+  - debugging
+
+agents:
+  test-reviewer-a:
+    source: test-plugin
+    category: review
+    description: "Test reviewer agent A"
+    capabilities:
+      - domain_review
+      - multi_perspective
+    roles:
+      - fd-architecture
+      - test-reviewer
+    runtime:
+      mode: subagent
+      subagent_type: "test-plugin:review:test-reviewer-a"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  test-reviewer-b:
+    source: test-plugin
+    category: review
+    description: "Test reviewer agent B"
+    capabilities:
+      - domain_review
+    roles:
+      - fd-correctness
+    runtime:
+      mode: subagent
+      subagent_type: "test-plugin:review:test-reviewer-b"
+    models:
+      preferred: sonnet
+      supported: [sonnet, opus]
+    tools: [Read, Grep, Bash]
+    cold_start_tokens: 400
+    tags: []
+
+  test-researcher:
+    source: other-plugin
+    category: research
+    description: "Test research agent"
+    capabilities:
+      - multi_perspective
+    roles:
+      - research-agent
+    runtime:
+      mode: subagent
+      subagent_type: "other-plugin:research:test-researcher"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    tools: [Read, WebSearch]
+    cold_start_tokens: 300
+    tags: []
+
+  test-researcher-b:
+    source: other-plugin
+    category: research
+    description: "Test research agent B"
+    capabilities: []
+    roles:
+      - research-agent
+    runtime:
+      mode: subagent
+      subagent_type: "other-plugin:research:test-researcher-b"
+    models:
+      preferred: haiku
+      supported: [haiku]
+    tools: [Read]
+    cold_start_tokens: 200
+    tags: []
+
+  test-workflow:
+    source: test-plugin
+    category: workflow
+    description: "Test workflow agent"
+    capabilities:
+      - debugging
+    roles:
+      - implementer
+    runtime:
+      mode: subagent
+      subagent_type: "test-plugin:workflow:test-workflow"
+    models:
+      preferred: sonnet
+      supported: [sonnet, opus]
+    tools: [Read, Edit, Write, Bash]
+    cold_start_tokens: 600
+    tags: []
+
+  test-orphaned:
+    source: old-plugin
+    category: review
+    description: "This agent has been orphaned"
+    capabilities:
+      - domain_review
+    roles:
+      - old-reviewer
+    runtime:
+      mode: subagent
+      subagent_type: "old-plugin:review:test-orphaned"
+    models:
+      preferred: sonnet
+      supported: [sonnet]
+    tools: [Read]
+    cold_start_tokens: 500
+    tags: []
+    orphaned_at: "2026-01-15"

@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fleet-registry.schema.json",
+  "title": "Clavain Fleet Registry",
+  "description": "Catalog of all available agents with capability, cost, and invocation profiles. Consumed by C3 Composer and lib-fleet.sh query library.",
+  "type": "object",
+  "required": ["version", "capability_vocabulary", "agents"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "capability_vocabulary": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Closed set of capability strings. Agent capabilities must be drawn from this list."
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/agent_entry"
+      },
+      "minProperties": 1
+    }
+  },
+  "definitions": {
+    "agent_entry": {
+      "type": "object",
+      "required": ["source", "category", "description", "runtime"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Plugin or origin that owns this agent (e.g., 'interflux', 'clavain', 'local')"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["review", "research", "workflow", "synthesis"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Catalog description — what this agent does (not the Task tool invocation hint)"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Capability strings from capability_vocabulary"
+        },
+        "roles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Agency-spec role labels this agent can fulfill"
+        },
+        "runtime": {
+          "$ref": "#/definitions/runtime_spec"
+        },
+        "models": {
+          "$ref": "#/definitions/model_spec"
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Tools this agent needs access to"
+        },
+        "cold_start_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 500,
+          "description": "Estimated prompt overhead before useful output"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Free-form tags for future filtering"
+        },
+        "orphaned_at": {
+          "type": "string",
+          "format": "date",
+          "description": "ISO date when scan-fleet.sh could no longer find this agent's source file. Consumers must exclude orphaned entries."
+        }
+      }
+    },
+    "runtime_spec": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["subagent", "command", "codex"],
+          "description": "How to invoke: subagent (Claude Code Task tool), command (slash command), codex (Codex CLI dispatch)"
+        },
+        "subagent_type": {
+          "type": "string",
+          "description": "Claude Code Task tool subagent_type value (when mode=subagent)"
+        },
+        "command": {
+          "type": "string",
+          "description": "Slash command to invoke (when mode=command)"
+        }
+      }
+    },
+    "model_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preferred": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus"],
+          "default": "sonnet"
+        },
+        "supported": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["haiku", "sonnet", "opus"]
+          },
+          "default": ["haiku", "sonnet", "opus"]
+        }
+      }
+    }
+  }
+}

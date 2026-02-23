@@ -1,0 +1,506 @@
+# Clavain Fleet Registry — Agent Capability & Cost Profiles
+#
+# Track C2: Catalogs all available agents for C3 Composer consumption.
+# Schema: fleet-registry.schema.json (JSON Schema draft-07)
+#
+# Capability join model:
+#   - agency-spec.yaml companions declare plugin-level capability bundles
+#   - This registry declares per-agent capability granularity
+#   - C3 Composer joins on capability strings: selects agents whose union covers stage requirements
+#
+# Maintenance:
+#   - scan-fleet.sh auto-discovers agents and merges generated fields
+#   - Hand-curated fields (capabilities, roles, models, cold_start_tokens, tags) survive scans
+#   - Orphaned entries get orphaned_at timestamp; consumers must exclude them
+#
+# Query API: source scripts/lib-fleet.sh
+
+version: "1.0"
+
+capability_vocabulary:
+  - artifact_generation
+  - conflict_detection
+  - cross_ai_review
+  - debugging
+  - domain_review
+  - drift_detection
+  - file_reservation
+  - freshness_monitoring
+  - gate_validation
+  - multi_agent_coordination
+  - multi_agent_synthesis
+  - multi_perspective
+  - phase_tracking
+  - roadmap_generation
+  - test_discipline
+  - verdict_aggregation
+  - verification
+
+agents:
+
+  # ─── Interflux Review Agents (12) ──────────────────────────────────
+
+  fd-architecture:
+    source: interflux
+    category: review
+    description: "Architecture & design reviewer — module boundaries, coupling, design patterns, anti-patterns, code duplication"
+    capabilities:
+      - domain_review
+      - multi_perspective
+    roles:
+      - fd-architecture
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-architecture"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  fd-correctness:
+    source: interflux
+    category: review
+    description: "Correctness reviewer — data consistency, transaction safety, race conditions, async bugs, concurrency"
+    capabilities:
+      - domain_review
+    roles:
+      - fd-correctness
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-correctness"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  fd-quality:
+    source: interflux
+    category: review
+    description: "Quality & style reviewer — naming, conventions, test approach, error handling, language-specific idioms"
+    capabilities:
+      - domain_review
+    roles:
+      - fd-quality
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-quality"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  fd-safety:
+    source: interflux
+    category: review
+    description: "Safety reviewer — security threats, credential handling, trust boundaries, deployment risk, migration safety"
+    capabilities:
+      - domain_review
+    roles:
+      - fd-safety
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-safety"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  fd-performance:
+    source: interflux
+    category: review
+    description: "Performance reviewer — rendering bottlenecks, data access patterns, algorithmic complexity, memory, resource consumption"
+    capabilities:
+      - domain_review
+    roles:
+      - fd-performance
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-performance"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  fd-user-product:
+    source: interflux
+    category: review
+    description: "User & product reviewer — user flows, UX friction, value proposition, problem validation, scope creep, edge cases"
+    capabilities:
+      - domain_review
+      - multi_perspective
+    roles:
+      - fd-user-product
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-user-product"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  fd-game-design:
+    source: interflux
+    category: review
+    description: "Game design reviewer — balance, pacing, player psychology, feedback loops, emergent behavior, procedural content"
+    capabilities:
+      - domain_review
+    roles:
+      - fd-game-design
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-game-design"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  fd-decisions:
+    source: interflux
+    category: review
+    description: "Decision quality reviewer — decision traps, cognitive biases, uncertainty handling, strategic paradoxes, option framing"
+    capabilities:
+      - domain_review
+      - multi_perspective
+    roles:
+      - fd-decisions
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-decisions"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [cognitive]
+
+  fd-people:
+    source: interflux
+    category: review
+    description: "Human systems reviewer — trust dynamics, power structures, communication patterns, team culture, leadership gaps"
+    capabilities:
+      - domain_review
+      - multi_perspective
+    roles:
+      - fd-people
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-people"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [cognitive]
+
+  fd-perception:
+    source: interflux
+    category: review
+    description: "Sensemaking reviewer — mental models, information quality, temporal reasoning, perceptual blind spots"
+    capabilities:
+      - domain_review
+      - multi_perspective
+    roles:
+      - fd-perception
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-perception"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [cognitive]
+
+  fd-resilience:
+    source: interflux
+    category: review
+    description: "Adaptive capacity reviewer — antifragility, creative constraints, resource allocation, innovation dynamics, failure recovery"
+    capabilities:
+      - domain_review
+      - multi_perspective
+    roles:
+      - fd-resilience
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-resilience"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [cognitive]
+
+  fd-systems:
+    source: interflux
+    category: review
+    description: "Systems thinking reviewer — feedback loops, emergence, causal reasoning, unintended consequences, systems dynamics"
+    capabilities:
+      - domain_review
+      - multi_perspective
+    roles:
+      - fd-systems
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:review:fd-systems"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, WebFetch]
+    cold_start_tokens: 800
+    tags: [cognitive]
+
+  # ─── Interflux Research Agents (5) ─────────────────────────────────
+
+  best-practices-researcher:
+    source: interflux
+    category: research
+    description: "Researches and synthesizes external best practices, documentation, and examples for any technology or framework"
+    capabilities:
+      - multi_perspective
+    roles:
+      - research-agent
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:research:best-practices-researcher"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    tools: [Read, Grep, Glob, WebFetch, WebSearch]
+    cold_start_tokens: 400
+    tags: []
+
+  framework-docs-researcher:
+    source: interflux
+    category: research
+    description: "Gathers comprehensive documentation and best practices for frameworks, libraries, or dependencies"
+    capabilities:
+      - multi_perspective
+    roles:
+      - research-agent
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:research:framework-docs-researcher"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    tools: [Read, Grep, Glob, WebFetch, WebSearch]
+    cold_start_tokens: 400
+    tags: []
+
+  git-history-analyzer:
+    source: interflux
+    category: research
+    description: "Archaeological analysis of git history — trace code evolution, identify contributors, understand why code patterns exist"
+    capabilities: []
+    roles:
+      - research-agent
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:research:git-history-analyzer"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    tools: [Read, Grep, Glob, Bash]
+    cold_start_tokens: 400
+    tags: []
+
+  learnings-researcher:
+    source: interflux
+    category: research
+    description: "Searches docs/solutions/ for relevant past solutions by frontmatter metadata to surface institutional knowledge"
+    capabilities: []
+    roles:
+      - research-agent
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:research:learnings-researcher"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    tools: [Read, Grep, Glob]
+    cold_start_tokens: 300
+    tags: []
+
+  repo-research-analyst:
+    source: interflux
+    category: research
+    description: "Thorough research on repository structure, documentation, conventions, and implementation patterns"
+    capabilities:
+      - multi_perspective
+    roles:
+      - research-agent
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:research:repo-research-analyst"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    tools: [Read, Grep, Glob, Bash]
+    cold_start_tokens: 400
+    tags: []
+
+  # ─── Interfluence Agents (1) ───────────────────────────────────────
+
+  voice-analyzer:
+    source: interfluence
+    category: research
+    description: "Deep analysis agent for generating voice profiles from writing corpora"
+    capabilities: []
+    roles:
+      - voice-analyzer
+    runtime:
+      mode: subagent
+      subagent_type: "interfluence:voice-analyzer"
+    models:
+      preferred: opus
+      supported: [sonnet, opus]
+    tools: [Read, Grep, Glob]
+    cold_start_tokens: 600
+    tags: []
+
+  # ─── Intercraft Agents (1) ────────────────────────────────────────
+
+  agent-native-reviewer:
+    source: intercraft
+    category: review
+    description: "Reviews code for agent-native parity — ensures any user action can also be performed by an agent"
+    capabilities:
+      - domain_review
+    roles:
+      - agent-native-reviewer
+    runtime:
+      mode: subagent
+      subagent_type: "intercraft:review:agent-native-reviewer"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    tools: [Read, Grep, Glob, Bash]
+    cold_start_tokens: 800
+    tags: [technical]
+
+  # ─── Intersynth Agents (2) ────────────────────────────────────────
+
+  synthesize-review:
+    source: intersynth
+    category: synthesis
+    description: "Aggregates multi-agent review output — deduplicates findings, writes verdict JSON, produces summary report"
+    capabilities:
+      - verdict_aggregation
+      - multi_agent_synthesis
+    roles:
+      - synthesis
+    runtime:
+      mode: subagent
+      subagent_type: "intersynth:synthesize-review"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    tools: [Read, Grep, Glob, Bash]
+    cold_start_tokens: 500
+    tags: []
+
+  synthesize-research:
+    source: intersynth
+    category: synthesis
+    description: "Merges multi-agent research findings with source attribution, ranks sources, produces compact answer"
+    capabilities:
+      - multi_agent_synthesis
+    roles:
+      - synthesis
+    runtime:
+      mode: subagent
+      subagent_type: "intersynth:synthesize-research"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    tools: [Read, Grep, Glob, Bash]
+    cold_start_tokens: 500
+    tags: []
+
+  # ─── Clavain Agents (4) ───────────────────────────────────────────
+
+  data-migration-expert:
+    source: clavain
+    category: review
+    description: "Validates data migrations, backfills, and production data transformations — ID mappings, column renames, enum conversions"
+    capabilities:
+      - domain_review
+    roles:
+      - data-migration-expert
+    runtime:
+      mode: subagent
+      subagent_type: "clavain:review:data-migration-expert"
+    models:
+      preferred: sonnet
+      supported: [sonnet, opus]
+    tools: [Read, Grep, Glob, Bash]
+    cold_start_tokens: 600
+    tags: []
+
+  plan-reviewer:
+    source: clavain
+    category: review
+    description: "Reviews completed implementation steps against the original plan and coding standards"
+    capabilities:
+      - domain_review
+    roles:
+      - plan-reviewer
+    runtime:
+      mode: subagent
+      subagent_type: "clavain:review:plan-reviewer"
+    models:
+      preferred: sonnet
+      supported: [sonnet, opus]
+    tools: [Read, Grep, Glob, Bash]
+    cold_start_tokens: 600
+    tags: []
+
+  bug-reproduction-validator:
+    source: clavain
+    category: workflow
+    description: "Systematically reproduces and validates bug reports to confirm whether reported behavior is an actual bug"
+    capabilities:
+      - debugging
+      - verification
+    roles:
+      - bug-reproduction-validator
+    runtime:
+      mode: subagent
+      subagent_type: "clavain:workflow:bug-reproduction-validator"
+    models:
+      preferred: sonnet
+      supported: [sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, Edit, Write]
+    cold_start_tokens: 600
+    tags: []
+
+  pr-comment-resolver:
+    source: clavain
+    category: workflow
+    description: "Implements requested changes from PR review comments and reports resolutions"
+    capabilities: []
+    roles:
+      - pr-comment-resolver
+    runtime:
+      mode: subagent
+      subagent_type: "clavain:workflow:pr-comment-resolver"
+    models:
+      preferred: sonnet
+      supported: [sonnet, opus]
+    tools: [Read, Grep, Glob, Bash, Edit, Write]
+    cold_start_tokens: 600
+    tags: []
