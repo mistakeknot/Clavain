@@ -525,13 +525,38 @@ _interspect_read_routing_overrides() {
         return 0
     fi
 
-    if ! jq -e '.' "$fullpath" >/dev/null 2>&1; then
+    # Parse JSON
+    local content
+    if ! content=$(jq '.' "$fullpath" 2>/dev/null); then
         echo "WARN: ${filepath} is malformed JSON" >&2
         echo '{"version":1,"overrides":[]}'
         return 1
     fi
 
-    jq '.' "$fullpath"
+    # Validate version
+    local version
+    version=$(echo "$content" | jq -r '.version // empty')
+    if [[ -z "$version" ]] || (( version > 1 )); then
+        echo "WARN: ${filepath} has unsupported version (${version:-missing}), ignoring" >&2
+        echo '{"version":1,"overrides":[]}'
+        return 1
+    fi
+
+    # Validate overrides is array
+    if ! echo "$content" | jq -e '.overrides | type == "array"' >/dev/null 2>&1; then
+        echo "WARN: ${filepath} .overrides is not an array, ignoring" >&2
+        echo '{"version":1,"overrides":[]}'
+        return 1
+    fi
+
+    # Warn about entries missing required fields (non-blocking)
+    local missing_count
+    missing_count=$(echo "$content" | jq '[.overrides[] | select(.agent == null or .action == null)] | length')
+    if (( missing_count > 0 )); then
+        echo "WARN: ${filepath} has ${missing_count} override(s) missing agent or action field" >&2
+    fi
+
+    echo "$content"
 }
 
 # Read routing-overrides.json under shared flock (for status display).
@@ -698,7 +723,35 @@ _interspect_apply_override_locked() {
         is_new=0
     fi
 
-    # 3. Build new override using jq --arg (no shell interpolation)
+    # 3. Compute confidence from evidence (inside lock — TOCTOU-safe)
+    local escaped_agent
+    escaped_agent=$(_interspect_sql_escape "$agent")
+    _interspect_load_confidence
+    local total wrong confidence
+    total=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE source = '${escaped_agent}' AND event = 'override';")
+    wrong=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE source = '${escaped_agent}' AND event = 'override' AND override_reason = 'agent_wrong';")
+    if (( total > 0 )); then
+        confidence=$(awk -v w="$wrong" -v t="$total" 'BEGIN {printf "%.2f", w/t}')
+    else
+        confidence="1.0"
+    fi
+
+    # 4. Build canary snapshot for JSON (DB remains authoritative for live state)
+    local canary_window_uses="${_INTERSPECT_CANARY_WINDOW_USES:-20}"
+    local canary_expires_at
+    canary_expires_at=$(date -u -d "+${_INTERSPECT_CANARY_WINDOW_DAYS:-14} days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -v+"${_INTERSPECT_CANARY_WINDOW_DAYS:-14}"d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+
+    local canary_json="null"
+    if [[ -n "$canary_expires_at" ]]; then
+        canary_json=$(jq -n \
+            --arg status "active" \
+            --argjson window_uses "$canary_window_uses" \
+            --arg expires_at "$canary_expires_at" \
+            '{status:$status,window_uses:$window_uses,expires_at:$expires_at}')
+    fi
+
+    # 5. Build new override using jq --arg (no shell interpolation)
     local new_override
     new_override=$(jq -n \
         --arg agent "$agent" \
@@ -707,14 +760,16 @@ _interspect_apply_override_locked() {
         --argjson evidence_ids "$evidence_ids" \
         --arg created "$created" \
         --arg created_by "$created_by" \
-        '{agent:$agent,action:$action,reason:$reason,evidence_ids:$evidence_ids,created:$created,created_by:$created_by}')
+        --argjson confidence "$confidence" \
+        --argjson canary "$canary_json" \
+        '{agent:$agent,action:$action,reason:$reason,evidence_ids:$evidence_ids,created:$created,created_by:$created_by,confidence:$confidence} + (if $canary != null then {canary:$canary} else {} end)')
 
-    # 4. Merge (unique_by deduplicates, last write wins for metadata)
+    # 6. Merge (unique_by deduplicates, last write wins for metadata)
     local merged
     merged=$(echo "$current" | jq --argjson override "$new_override" \
         '.overrides = (.overrides + [$override] | unique_by(.agent))')
 
-    # 5. Atomic write (temp + rename)
+    # 7. Atomic write (temp + rename)
     mkdir -p "$(dirname "$fullpath")" 2>/dev/null || true
     local tmpfile="${fullpath}.tmp.$$"
     echo "$merged" | jq '.' > "$tmpfile"
@@ -726,7 +781,7 @@ _interspect_apply_override_locked() {
     fi
     mv "$tmpfile" "$fullpath"
 
-    # 6. Git add + commit (using -F for commit message — no injection)
+    # 8. Git add + commit (using -F for commit message — no injection)
     cd "$root"
     git add "$filepath"
     if ! git commit --no-verify -F "$commit_msg_file"; then
@@ -740,9 +795,7 @@ _interspect_apply_override_locked() {
     local commit_sha
     commit_sha=$(git rev-parse HEAD)
 
-    # 7. DB inserts INSIDE flock (atomicity with git commit)
-    local escaped_agent escaped_reason
-    escaped_agent=$(_interspect_sql_escape "$agent")
+    # 9. DB inserts INSIDE flock (atomicity with git commit)
     escaped_reason=$(_interspect_sql_escape "$reason")
 
     # Only insert modification + canary for genuinely NEW overrides
@@ -750,12 +803,12 @@ _interspect_apply_override_locked() {
         local ts
         ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-        # Modification record
+        # Modification record (confidence from evidence computation above)
         sqlite3 "$db" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
-            VALUES ('${escaped_agent}', '${ts}', 'persistent', 'routing', '${filepath}', '${commit_sha}', 1.0, '${escaped_reason}', 'applied');"
+            VALUES ('${escaped_agent}', '${ts}', 'persistent', 'routing', '${filepath}', '${commit_sha}', ${confidence}, '${escaped_reason}', 'applied');"
 
         # Canary record — compute baseline BEFORE insert
-        _interspect_load_confidence
+        # (_interspect_load_confidence already called in step 3 above)
         local baseline_json
         baseline_json=$(_interspect_compute_canary_baseline "$ts" "" 2>/dev/null || echo "null")
 
@@ -800,7 +853,7 @@ _interspect_apply_override_locked() {
         echo "INFO: Metadata updated for existing override. No new canary." >&2
     fi
 
-    # 8. Output commit SHA (last line, captured by caller)
+    # 10. Output commit SHA (last line, captured by caller)
     echo "$commit_sha"
 }
 

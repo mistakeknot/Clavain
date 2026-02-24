@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "routing-overrides.schema.json",
+  "title": "Interspect Routing Overrides",
+  "description": "Agent exclusion and override configuration for flux-drive triage. Written by Interspect (lib-interspect.sh), read by flux-drive (SKILL.md Step 1.2a.0).",
+  "type": "object",
+  "required": ["version", "overrides"],
+  "additionalProperties": true,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Readers must reject version > 1."
+    },
+    "overrides": {
+      "type": "array",
+      "description": "Agent-level routing overrides. Each entry modifies how flux-drive dispatches one agent.",
+      "items": {
+        "$ref": "#/definitions/override"
+      }
+    },
+    "overlays": {
+      "type": "array",
+      "description": "Prompt tuning overlays (placeholder — not yet implemented). Reserved for iv-6liz.",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    }
+  },
+  "definitions": {
+    "override": {
+      "type": "object",
+      "required": ["agent", "action"],
+      "additionalProperties": true,
+      "properties": {
+        "agent": {
+          "type": "string",
+          "pattern": "^fd-[a-z][a-z0-9-]*$",
+          "description": "Agent name to override. Must match fd-<name> format."
+        },
+        "action": {
+          "type": "string",
+          "enum": ["exclude", "propose"],
+          "description": "Override action. 'exclude' removes agent from triage. 'propose' marks a proposed-but-not-yet-active exclusion (used by /interspect:propose)."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Human-readable explanation of why this override exists."
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Interspect evidence IDs that motivated this override."
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when override was created."
+        },
+        "created_by": {
+          "type": "string",
+          "description": "Who created this override (e.g., 'interspect', 'manual')."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Evidence strength at creation time (agent_wrong_pct / 100). Snapshot — does not update."
+        },
+        "scope": {
+          "$ref": "#/definitions/scope",
+          "description": "Optional scope restriction. When absent, override applies globally."
+        },
+        "canary": {
+          "$ref": "#/definitions/canary_snapshot",
+          "description": "Canary monitoring snapshot at creation time. DB is authoritative for live state."
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Domain names from flux-drive domain detection (e.g., 'claude-code-plugin', 'tui-app'). Override only applies when detected domain matches."
+        },
+        "file_patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Glob patterns for file paths (e.g., 'interverse/**'). Override only applies when input files match. Patterns must not contain '..' or start with '/'."
+        }
+      }
+    },
+    "canary_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["active", "passed", "failed", "expired"],
+          "description": "Canary status at creation time. This is a snapshot — check /interspect:status for live state."
+        },
+        "window_uses": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of uses in the canary monitoring window."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the canary monitoring window expires."
+        }
+      }
+    }
+  }
+}
