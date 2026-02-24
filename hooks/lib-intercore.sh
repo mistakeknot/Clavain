@@ -274,6 +274,62 @@ intercore_run_artifact_add() {
     "$INTERCORE_BIN" run artifact add "$run_id" --phase="$artifact_phase" --path="$artifact_path" --type="$artifact_type" 2>/dev/null
 }
 
+# intercore_run_create — Create a new run.
+# Args: $1=project, $2=goal, $3=phases_json (optional), $4=scope_id (optional),
+#       $5=complexity (optional, default 3), $6=token_budget (optional), $7=actions_json (optional)
+# Prints: run ID to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_create() {
+    local project="$1" goal="$2" phases_json="${3:-}" scope_id="${4:-}"
+    local complexity="${5:-3}" token_budget="${6:-}" actions_json="${7:-}"
+    if ! intercore_available; then return 1; fi
+    local args=(run create --project="$project" --goal="$goal" --complexity="$complexity")
+    [[ -n "$phases_json" ]] && args+=(--phases="$phases_json")
+    [[ -n "$scope_id" ]] && args+=(--scope-id="$scope_id")
+    [[ -n "$token_budget" ]] && args+=(--token-budget="$token_budget")
+    [[ -n "$actions_json" ]] && args+=(--actions="$actions_json")
+    "$INTERCORE_BIN" "${args[@]}" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# intercore_run_list — List runs. Passes all args through to ic run list.
+# Always outputs JSON (for jq parsing by lib-sprint.sh).
+# Args: variadic (e.g. "--active", "--scope=<s>")
+# Prints: JSON array to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_list() {
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" --json run list "$@" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# intercore_run_status — Get full run details as JSON.
+# Args: $1=run_id
+# Prints: JSON object to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_status() {
+    local run_id="$1"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" --json run status "$run_id" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# intercore_run_agent_list — List agents for a run as JSON.
+# Args: $1=run_id
+# Prints: JSON array to stdout
+# Returns: 0 on success, 1 on failure
+intercore_run_agent_list() {
+    local run_id="$1"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" --json run agent list "$run_id" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
+# intercore_run_agent_update — Update an agent's status.
+# Args: $1=agent_id, $2=status (active|completed|failed)
+# Returns: 0 on success, 1 on failure
+intercore_run_agent_update() {
+    local agent_id="$1" status="$2"
+    if ! intercore_available; then return 1; fi
+    "$INTERCORE_BIN" run agent update "$agent_id" --status="$status" ${INTERCORE_DB:+--db="$INTERCORE_DB"} 2>/dev/null
+}
+
 # --- Gate wrappers ---
 
 # intercore_gate_check — Dry-run gate evaluation for the next transition.
