@@ -398,17 +398,42 @@ _interspect_get_classified_patterns() {
     [[ -f "$db" ]] || return 1
     _interspect_load_confidence
 
+    # Query with normalization: merge interflux:fd-X and interflux:review:fd-X
+    # into fd-X for routing-eligible patterns. Non-fd-* sources pass through unchanged.
     sqlite3 -separator '|' "$db" "
-        SELECT source, event, COALESCE(override_reason,''),
-               COUNT(*) as ec, COUNT(DISTINCT session_id) as sc,
-               COUNT(DISTINCT project) as pc
-        FROM evidence GROUP BY source, event, override_reason
+        SELECT
+            CASE
+                WHEN source LIKE 'interflux:review:fd-%' THEN SUBSTR(source, 19)
+                WHEN source LIKE 'interflux:fd-%' THEN SUBSTR(source, 11)
+                ELSE source
+            END as norm_source,
+            event, COALESCE(override_reason,''),
+            COUNT(*) as ec, COUNT(DISTINCT session_id) as sc,
+            COUNT(DISTINCT project) as pc
+        FROM evidence
+        GROUP BY norm_source, event, override_reason
         HAVING COUNT(*) >= 2 ORDER BY ec DESC;
     " | while IFS='|' read -r src evt reason ec sc pc; do
         local cls
         cls=$(_interspect_classify_pattern "$ec" "$sc" "$pc")
         echo "${src}|${evt}|${reason}|${ec}|${sc}|${pc}|${cls}"
     done
+}
+
+# ─── Agent Name Normalization ────────────────────────────────────────────────
+
+# Normalize agent source names to canonical fd-* format for routing.
+# Strips interflux: and interflux:review: prefixes.
+# Non-fd-* names pass through unchanged.
+# Args: $1=source_name
+# Output: normalized name on stdout
+_interspect_normalize_agent_name() {
+    local name="$1"
+    # Strip interflux:review: prefix first (more specific)
+    name="${name#interflux:review:}"
+    # Strip interflux: prefix
+    name="${name#interflux:}"
+    printf '%s' "$name"
 }
 
 # ─── SQL Safety Helpers ──────────────────────────────────────────────────────
@@ -446,7 +471,10 @@ _interspect_is_routing_eligible() {
     local agent="$1"
     local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
 
-    # Validate agent name format
+    # Normalize agent name (accept interflux:fd-* format, convert to fd-*)
+    agent=$(_interspect_normalize_agent_name "$agent")
+
+    # Validate normalized agent name format
     if ! _interspect_validate_agent_name "$agent"; then
         echo "not_eligible:invalid_agent_name"
         return 1
@@ -469,10 +497,10 @@ _interspect_is_routing_eligible() {
         return 1
     fi
 
-    # Get agent_wrong percentage
+    # Get agent_wrong percentage — query all name variants (fd-X, interflux:fd-X, interflux:review:fd-X)
     local total wrong pct
-    total=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE source = '${escaped}' AND event = 'override';")
-    wrong=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE source = '${escaped}' AND event = 'override' AND override_reason = 'agent_wrong';")
+    total=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE (source = '${escaped}' OR source = 'interflux:${escaped}' OR source = 'interflux:review:${escaped}') AND event = 'override';")
+    wrong=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE (source = '${escaped}' OR source = 'interflux:${escaped}' OR source = 'interflux:review:${escaped}') AND event = 'override' AND override_reason = 'agent_wrong';")
 
     if (( total == 0 )); then
         echo "not_eligible:no_override_events"
