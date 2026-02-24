@@ -18,6 +18,17 @@ This command takes a work document (plan, specification, or todo file) and execu
 
 <input_document> #$ARGUMENTS </input_document>
 
+<BEHAVIORAL-RULES>
+These rules are non-negotiable for this orchestration command:
+
+1. **Execute steps in order.** Do not skip, reorder, or parallelize phases unless the phase explicitly allows it. Each phase's output feeds into later phases.
+2. **Write output to files, read from files.** Every phase that produces an artifact MUST write it to disk (docs/, .clavain/, etc.). Later phases read from these files, not from conversation context. This ensures recoverability and auditability.
+3. **Stop at checkpoints for user approval.** When a phase defines a gate, checkpoint, or AskUserQuestion — stop and wait. Never auto-approve on behalf of the user.
+4. **Halt on failure and present error.** If a phase fails (test failure, gate block, tool error), stop immediately. Report what failed, what succeeded before it, and what the user can do. Do not retry silently or skip the failed phase.
+5. **Local agents by default.** Use local subagents (Task tool) for dispatch. External agents (Codex, interserve) require explicit user opt-in or an active interserve-mode flag. Never silently escalate to external dispatch.
+6. **Never enter plan mode autonomously.** Do not call EnterPlanMode during orchestration. The plan was already created before this command runs. If scope changes mid-execution, stop and ask the user.
+</BEHAVIORAL-RULES>
+
 ## Execution Workflow
 
 ### Phase 1: Quick Start

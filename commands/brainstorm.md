@@ -20,6 +20,17 @@ Brainstorming helps answer **WHAT** to build through collaborative dialogue. It 
 
 Do not proceed until you have a feature description from the user.
 
+<BEHAVIORAL-RULES>
+These rules are non-negotiable for this orchestration command:
+
+1. **Execute phases in order.** Do not skip, reorder, or parallelize phases unless the phase explicitly allows it. Each phase's output feeds into later phases.
+2. **Write output to files, read from files.** The brainstorm document MUST be written to disk (docs/brainstorms/). Later phases and downstream commands read from this file, not from conversation context.
+3. **Stop at checkpoints for user approval.** When a phase defines a gate, AskUserQuestion, or design validation — stop and wait. Never auto-approve on behalf of the user.
+4. **Halt on failure and present error.** If a phase fails (tool error, research agent failure), stop immediately. Report what failed and what the user can do. Do not skip the failed phase.
+5. **Local agents by default.** Use local subagents (Task tool) for research dispatch. External agents (Codex, interserve) require explicit user opt-in. Never silently escalate to external dispatch.
+6. **Never enter plan mode autonomously.** Do not call EnterPlanMode during brainstorming. If the user wants to plan, hand off to `/clavain:write-plan`.
+</BEHAVIORAL-RULES>
+
 ## Execution Flow
 
 ### Phase 0: Assess Requirements Clarity
