@@ -111,55 +111,19 @@ def gen_disable_conflicts(entries: list[dict]) -> str:
 
 
 def gen_verify_script(rig: dict) -> str:
-    """Generate the Python verification script for setup.md."""
-    # Collect all required + recommended as 'required' for verification
-    core = get_tier_entries(rig, "core")
-    required = get_tier_entries(rig, "required")
-    recommended = get_tier_entries(rig, "recommended")
-    all_required = core + required + recommended
+    """Generate a shell call to verify-config.sh for setup.md.
 
-    required_sources = sorted(entry["source"] for entry in all_required)
-    conflict_sources = sorted(entry["source"] for entry in get_tier_entries(rig, "conflicts"))
-
-    req_lines = ",\n    ".join(f"'{s}'" for s in required_sources)
-    conf_lines = ",\n    ".join(f"'{s}'" for s in conflict_sources)
-
-    return f'''```bash
-python3 -c "
-import json, os, subprocess
-
-settings_path = os.path.expanduser('~/.claude/settings.json')
-with open(settings_path) as f:
-    plugins = json.load(f).get('enabledPlugins', {{}})
-
-# Required plugins: absent = enabled (default), True = enabled, False = disabled
-required = {{
-    {req_lines},
-}}
-
-conflicts = {{
-    {conf_lines},
-}}
-
-print('=== Required Plugins ===')
-req_ok = 0
-for p in sorted(required):
-    enabled = plugins.get(p, True)  # absent = enabled by default
-    status = 'enabled' if enabled else 'DISABLED'
-    if enabled: req_ok += 1
-    print(f'  {{p}}: {{status}}')
-print(f'  ({{req_ok}}/{{len(required)}} enabled)')
-
-print()
-print('=== Conflicting Plugins ===')
-conf_ok = 0
-for p in sorted(conflicts):
-    enabled = plugins.get(p, True)
-    status = 'STILL ENABLED' if enabled else 'disabled'
-    if not enabled: conf_ok += 1
-    print(f'  {{p}}: {{status}}')
-print(f'  ({{conf_ok}}/{{len(conflicts)}} disabled)')
-"
+    Uses jq/shell instead of python3 to avoid silent stdout swallowing
+    on some environments (see GitHub #2).
+    """
+    return '''```bash
+# Resolve script path relative to plugin cache (works from any cwd)
+VERIFY_SCRIPT="$(dirname "$(ls ~/.claude/plugins/cache/*/clavain/*/scripts/verify-config.sh 2>/dev/null | head -1)")/verify-config.sh"
+if [[ -x "$VERIFY_SCRIPT" ]]; then
+    bash "$VERIFY_SCRIPT"
+else
+    echo "ERROR: verify-config.sh not found in plugin cache. Try reinstalling clavain."
+fi
 ```'''
 
 

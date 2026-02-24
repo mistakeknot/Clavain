@@ -201,73 +201,13 @@ Run a final verification. This script reads `~/.claude/settings.json` to check a
 
 <!-- agent-rig:begin:verify-script -->
 ```bash
-python3 -c "
-import json, os, subprocess
-
-settings_path = os.path.expanduser('~/.claude/settings.json')
-with open(settings_path) as f:
-    plugins = json.load(f).get('enabledPlugins', {})
-
-# Required plugins: absent = enabled (default), True = enabled, False = disabled
-required = {
-    'agent-sdk-dev@claude-plugins-official',
-    'clavain@interagency-marketplace',
-    'context7@claude-plugins-official',
-    'explanatory-output-style@claude-plugins-official',
-    'intercheck@interagency-marketplace',
-    'intercraft@interagency-marketplace',
-    'interdev@interagency-marketplace',
-    'interdoc@interagency-marketplace',
-    'interflux@interagency-marketplace',
-    'interform@interagency-marketplace',
-    'interline@interagency-marketplace',
-    'interlock@interagency-marketplace',
-    'intermap@interagency-marketplace',
-    'internext@interagency-marketplace',
-    'interpath@interagency-marketplace',
-    'interpeer@interagency-marketplace',
-    'interphase@interagency-marketplace',
-    'interslack@interagency-marketplace',
-    'intersynth@interagency-marketplace',
-    'intertest@interagency-marketplace',
-    'interwatch@interagency-marketplace',
-    'plugin-dev@claude-plugins-official',
-    'security-guidance@claude-plugins-official',
-    'serena@claude-plugins-official',
-    'tldr-swinton@interagency-marketplace',
-    'tool-time@interagency-marketplace',
-}
-
-conflicts = {
-    'claude-md-management@claude-plugins-official',
-    'code-review@claude-plugins-official',
-    'code-simplifier@claude-plugins-official',
-    'commit-commands@claude-plugins-official',
-    'feature-dev@claude-plugins-official',
-    'frontend-design@claude-plugins-official',
-    'hookify@claude-plugins-official',
-    'pr-review-toolkit@claude-plugins-official',
-}
-
-print('=== Required Plugins ===')
-req_ok = 0
-for p in sorted(required):
-    enabled = plugins.get(p, True)  # absent = enabled by default
-    status = 'enabled' if enabled else 'DISABLED'
-    if enabled: req_ok += 1
-    print(f'  {p}: {status}')
-print(f'  ({req_ok}/{len(required)} enabled)')
-
-print()
-print('=== Conflicting Plugins ===')
-conf_ok = 0
-for p in sorted(conflicts):
-    enabled = plugins.get(p, True)
-    status = 'STILL ENABLED' if enabled else 'disabled'
-    if not enabled: conf_ok += 1
-    print(f'  {p}: {status}')
-print(f'  ({conf_ok}/{len(conflicts)} disabled)')
-"
+# Resolve script path relative to plugin cache (works from any cwd)
+VERIFY_SCRIPT="$(dirname "$(ls ~/.claude/plugins/cache/*/clavain/*/scripts/verify-config.sh 2>/dev/null | head -1)")/verify-config.sh"
+if [[ -x "$VERIFY_SCRIPT" ]]; then
+    bash "$VERIFY_SCRIPT"
+else
+    echo "ERROR: verify-config.sh not found in plugin cache. Try reinstalling clavain."
+fi
 ```
 <!-- agent-rig:end:verify-script -->
 

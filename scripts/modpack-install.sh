@@ -107,12 +107,20 @@ install_plugin() {
     fi
 
     log "  [installing] $source ..."
-    if claude plugin install "$source" &>/dev/null; then
+    local output
+    if output=$(claude plugin install "$source" 2>&1); then
         installed+=("$source")
         log "  [installed] $source"
+        # Show any output from claude CLI (it may be silent — see GitHub #3)
+        if [[ -n "$output" ]]; then
+            log "    $output"
+        fi
     else
         failed+=("$source")
         log "  [FAILED] $source"
+        if [[ -n "$output" ]]; then
+            log "    $output"
+        fi
     fi
 }
 
@@ -133,7 +141,8 @@ disable_plugin() {
     fi
 
     log "  [disabling] $source ..."
-    if claude plugin disable "$source" &>/dev/null; then
+    local output
+    if output=$(claude plugin disable "$source" 2>&1); then
         disabled+=("$source")
         log "  [disabled] $source"
     else
