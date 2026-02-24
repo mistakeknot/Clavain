@@ -1350,10 +1350,12 @@ _interspect_approve_override_locked() {
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     local escaped_reason
     escaped_reason=$(_interspect_sql_escape "Promoted from proposal to active exclusion")
+    local escaped_filepath
+    escaped_filepath=$(_interspect_sql_escape "$filepath")
 
     # Modification record (guarded — git commit already succeeded, DB failure is non-fatal)
     if ! sqlite3 "$db" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
-        VALUES ('${escaped_agent}', '${ts}', 'persistent', 'routing', '${filepath}', '${commit_sha}', ${confidence}, '${escaped_reason}', 'applied');"; then
+        VALUES ('${escaped_agent}', '${ts}', 'persistent', 'routing', '${escaped_filepath}', '${commit_sha}', ${confidence}, '${escaped_reason}', 'applied');"; then
         echo "WARN: Modification record insert failed — override is active but untracked." >&2
     fi
 
@@ -1393,7 +1395,7 @@ _interspect_approve_override_locked() {
     fi
 
     if ! sqlite3 "$db" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, baseline_window, status)
-        VALUES ('${filepath}', '${commit_sha}', '${escaped_agent}', '${ts}', ${_INTERSPECT_CANARY_WINDOW_USES:-20}, '${expires_at}', ${baseline_values}, 'active');"; then
+        VALUES ('${escaped_filepath}', '${commit_sha}', '${escaped_agent}', '${ts}', ${_INTERSPECT_CANARY_WINDOW_USES:-20}, '${expires_at}', ${baseline_values}, 'active');"; then
         # Canary failure is non-fatal but flagged in DB
         sqlite3 "$db" "UPDATE modifications SET status = 'applied-unmonitored' WHERE commit_sha = '${commit_sha}';" 2>/dev/null || true
         echo "WARN: Canary monitoring failed — override active but unmonitored." >&2
