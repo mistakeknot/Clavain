@@ -148,6 +148,54 @@ ls .beads/ 2>/dev/null
 ```
 If `.beads/` doesn't exist, ask: "Initialize beads issue tracking for this project? (bd init)"
 
+## Step 5b: Build Intercore Kernel (ic)
+
+Check if the `ic` binary is available:
+```bash
+command -v ic && ic health
+```
+
+If `ic` is not found or health check fails:
+
+1. Check for Go toolchain:
+```bash
+go version
+```
+If Go is not found: warn "Go >= 1.22 is required to build ic. Install from https://go.dev/dl/" and skip this step.
+
+2. Find the intercore source. Check these paths in order:
+```bash
+# If in the Demarch monorepo
+ls core/intercore/cmd/ic/main.go 2>/dev/null
+# If in a subproject with Demarch parent
+ls ../core/intercore/cmd/ic/main.go 2>/dev/null
+ls ../../core/intercore/cmd/ic/main.go 2>/dev/null
+# Standard clone location
+ls ~/projects/Demarch/core/intercore/cmd/ic/main.go 2>/dev/null
+```
+
+If source not found: warn "intercore source not found. Clone https://github.com/mistakeknot/Demarch and re-run setup." and skip this step.
+
+3. Build and install:
+```bash
+mkdir -p ~/.local/bin
+go build -C <intercore_source_dir> -mod=readonly -o ~/.local/bin/ic ./cmd/ic
+```
+
+4. Initialize and verify:
+```bash
+ic init
+ic health
+```
+
+5. PATH check:
+```bash
+echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"
+```
+If not on PATH: warn "Add ~/.local/bin to your PATH: export PATH=\"$HOME/.local/bin:$PATH\""
+
+If `ic` is already present and healthy: report "ic kernel: healthy (version X.Y.Z)"
+
 ## Step 6: Verify Configuration
 
 Run a final verification. This script reads `~/.claude/settings.json` to check actual enabled/disabled state (plugins missing from `enabledPlugins` are enabled by default — only explicit `false` means disabled):
@@ -236,6 +284,7 @@ echo "interline: $(ls ~/.claude/plugins/cache/*/interline/*/scripts/statusline.s
 echo "oracle: $(command -v oracle >/dev/null 2>&1 && echo 'installed' || echo 'not installed')"
 echo "interlock: $(ls ~/.claude/plugins/cache/*/interlock/*/scripts/interlock-register.sh 2>/dev/null | head -1 >/dev/null && echo 'installed' || echo 'not installed')"
 echo "beads: $(ls .beads/ 2>/dev/null | head -1 >/dev/null && echo 'configured' || echo 'not configured')"
+echo "ic kernel: $(command -v ic >/dev/null 2>&1 && ic health >/dev/null 2>&1 && echo 'healthy' || echo 'not available')"
 ```
 
 ## Step 7: Summary
@@ -251,6 +300,7 @@ Language servers:   [list enabled]
 MCP servers:       context7 ✓ | qmd [status]
 Infrastructure:    oracle [status]
 Beads:             [status]
+ic kernel:         [healthy/not available]
 
 Next steps:
 - Try `/clavain:brainstorm improve error handling in this project` for a quick demo

@@ -14,6 +14,7 @@ INTERCORE_WRAPPER_VERSION="1.1.0"
 INTERCORE_STOP_DEDUP_SENTINEL="stop"
 
 INTERCORE_BIN=""
+INTERCORE_WARNED=false
 
 intercore_available() {
     # Returns 0 (available) or 1 (unavailable).
@@ -22,6 +23,10 @@ intercore_available() {
     if [[ -n "$INTERCORE_BIN" ]]; then return 0; fi
     INTERCORE_BIN=$(command -v ic 2>/dev/null || command -v intercore 2>/dev/null)
     if [[ -z "$INTERCORE_BIN" ]]; then
+        if [[ "$INTERCORE_WARNED" != true ]]; then
+            printf 'ic: not found — run install.sh or /clavain:setup\n' >&2
+            INTERCORE_WARNED=true
+        fi
         return 1
     fi
     # Binary exists — check health
@@ -35,19 +40,19 @@ intercore_available() {
 
 intercore_state_set() {
     local key="$1" scope_id="$2" json="$3"
-    if ! intercore_available; then return 0; fi
-    printf '%s\n' "$json" | "$INTERCORE_BIN" state set "$key" "$scope_id" || return 0
+    if ! intercore_available; then return 1; fi
+    printf '%s\n' "$json" | "$INTERCORE_BIN" state set "$key" "$scope_id" || return 1
 }
 
 intercore_state_get() {
     local key="$1" scope_id="$2"
-    if ! intercore_available; then printf ''; return; fi
+    if ! intercore_available; then printf ''; return 1; fi
     "$INTERCORE_BIN" state get "$key" "$scope_id" 2>/dev/null || printf ''
 }
 
 intercore_sentinel_check() {
     local name="$1" scope_id="$2" interval="$3"
-    if ! intercore_available; then return 0; fi
+    if ! intercore_available; then return 1; fi
     "$INTERCORE_BIN" sentinel check "$name" "$scope_id" --interval="$interval" >/dev/null
 }
 
