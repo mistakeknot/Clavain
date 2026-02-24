@@ -345,6 +345,12 @@ _interspect_load_confidence() {
     _INTERSPECT_CANARY_ALERT_PCT=20
     _INTERSPECT_CANARY_NOISE_FLOOR="0.1"
 
+    # Autonomy mode (F6): default off — propose mode
+    _INTERSPECT_AUTONOMY=false
+    # Circuit breaker: max reverts before disabling autonomy for a target
+    _INTERSPECT_CIRCUIT_BREAKER_MAX=3
+    _INTERSPECT_CIRCUIT_BREAKER_DAYS=30
+
     if [[ -f "$conf" ]]; then
         _INTERSPECT_MIN_SESSIONS=$(jq -r '.min_sessions // 3' "$conf")
         _INTERSPECT_MIN_DIVERSITY=$(jq -r '.min_diversity // 2' "$conf")
@@ -357,6 +363,15 @@ _interspect_load_confidence() {
         _INTERSPECT_CANARY_MIN_BASELINE=$(jq -r '.canary_min_baseline // 15' "$conf")
         _INTERSPECT_CANARY_ALERT_PCT=$(jq -r '.canary_alert_pct // 20' "$conf")
         _INTERSPECT_CANARY_NOISE_FLOOR=$(jq -r '.canary_noise_floor // 0.1' "$conf")
+
+        # Autonomy mode (F6)
+        local autonomy_val
+        autonomy_val=$(jq -r '.autonomy // false' "$conf")
+        [[ "$autonomy_val" == "true" ]] && _INTERSPECT_AUTONOMY=true || _INTERSPECT_AUTONOMY=false
+
+        # Circuit breaker thresholds (F6)
+        _INTERSPECT_CIRCUIT_BREAKER_MAX=$(jq -r '.circuit_breaker_max // 3' "$conf")
+        _INTERSPECT_CIRCUIT_BREAKER_DAYS=$(jq -r '.circuit_breaker_days // 30' "$conf")
     fi
 
     # Bounds-check canary config (review P0-3: prevent unbounded SQL LIMIT values)
@@ -376,6 +391,10 @@ _interspect_load_confidence() {
     if ! awk "BEGIN{v=${_INTERSPECT_CANARY_NOISE_FLOOR:-0.1}+0; exit (v>0 && v<10)?0:1}" 2>/dev/null; then
         _INTERSPECT_CANARY_NOISE_FLOOR="0.1"
     fi
+
+    # Circuit breaker bounds (F6)
+    _INTERSPECT_CIRCUIT_BREAKER_MAX=$(_interspect_clamp_int "${_INTERSPECT_CIRCUIT_BREAKER_MAX:-3}" 1 100 3)
+    _INTERSPECT_CIRCUIT_BREAKER_DAYS=$(_interspect_clamp_int "${_INTERSPECT_CIRCUIT_BREAKER_DAYS:-30}" 1 365 30)
 }
 
 # Classify a pattern. Args: $1=event_count $2=session_count $3=project_count
@@ -787,12 +806,21 @@ _interspect_apply_routing_override() {
     local reason="$2"
     local evidence_ids="${3:-[]}"
     local created_by="${4:-interspect}"
+    local scope_json="${5:-}"  # Optional JSON scope object (F5: manual override)
 
     # --- Pre-flock validation (fast-fail) ---
 
     # Validate agent name format (prevents injection + catches typos)
     if ! _interspect_validate_agent_name "$agent"; then
         return 1
+    fi
+
+    # Validate scope_json if provided
+    if [[ -n "$scope_json" ]]; then
+        if ! printf '%s\n' "$scope_json" | jq -e 'type == "object"' >/dev/null 2>&1; then
+            echo "ERROR: scope must be a JSON object (got: ${scope_json})" >&2
+            return 1
+        fi
     fi
 
     # Validate evidence_ids is a JSON array
@@ -832,7 +860,7 @@ _interspect_apply_routing_override() {
     local flock_output
     flock_output=$(_interspect_flock_git _interspect_apply_override_locked \
         "$root" "$filepath" "$fullpath" "$agent" "$reason" \
-        "$evidence_ids" "$created_by" "$commit_msg_file" "$db")
+        "$evidence_ids" "$created_by" "$commit_msg_file" "$db" "$scope_json")
 
     local exit_code=$?
     rm -f "$commit_msg_file"
@@ -859,7 +887,7 @@ _interspect_apply_override_locked() {
     set -e
     local root="$1" filepath="$2" fullpath="$3" agent="$4"
     local reason="$5" evidence_ids="$6" created_by="$7"
-    local commit_msg_file="$8" db="$9"
+    local commit_msg_file="$8" db="$9" scope_json="${10:-}"
 
     local created
     created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -908,6 +936,9 @@ _interspect_apply_override_locked() {
     fi
 
     # 5. Build new override using jq --arg (no shell interpolation)
+    local scope_arg="null"
+    [[ -n "$scope_json" ]] && scope_arg="$scope_json"
+
     local new_override
     new_override=$(jq -n \
         --arg agent "$agent" \
@@ -918,7 +949,8 @@ _interspect_apply_override_locked() {
         --arg created_by "$created_by" \
         --argjson confidence "$confidence" \
         --argjson canary "$canary_json" \
-        '{agent:$agent,action:$action,reason:$reason,evidence_ids:$evidence_ids,created:$created,created_by:$created_by,confidence:$confidence} + (if $canary != null then {canary:$canary} else {} end)')
+        --argjson scope "$scope_arg" \
+        '{agent:$agent,action:$action,reason:$reason,evidence_ids:$evidence_ids,created:$created,created_by:$created_by,confidence:$confidence} + (if $canary != null then {canary:$canary} else {} end) + (if $scope != null then {scope:$scope} else {} end)')
 
     # 6. Merge (unique_by deduplicates, last write wins for metadata)
     local merged
@@ -1539,6 +1571,111 @@ _interspect_unblacklist_pattern() {
     escaped_key=$(_interspect_sql_escape "$pattern_key")
 
     sqlite3 "$db" "DELETE FROM blacklist WHERE pattern_key = '${escaped_key}';"
+}
+
+# ─── Autonomy Mode (F6) ────────────────────────────────────────────────────
+
+# Check if autonomous mode is enabled.
+# Returns: 0 if autonomous, 1 if propose mode (default)
+_interspect_is_autonomous() {
+    _interspect_load_confidence
+    [[ "${_INTERSPECT_AUTONOMY:-false}" == "true" ]]
+}
+
+# Set autonomy mode. Writes to confidence.json (human-owned, protected).
+# Args: $1=true|false
+# Returns: 0 on success, 1 on failure
+_interspect_set_autonomy() {
+    local enabled="$1"
+    if [[ "$enabled" != "true" && "$enabled" != "false" ]]; then
+        echo "ERROR: autonomy must be 'true' or 'false' (got: ${enabled})" >&2
+        return 1
+    fi
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local conf="${root}/${_INTERSPECT_CONFIDENCE_JSON}"
+
+    if [[ ! -f "$conf" ]]; then
+        echo "ERROR: confidence.json not found at ${conf}" >&2
+        return 1
+    fi
+
+    # Update the JSON file
+    local updated
+    updated=$(jq --argjson val "$enabled" '.autonomy = $val' "$conf")
+    echo "$updated" | jq '.' > "$conf"
+
+    # Reset loaded flag so next load picks up the change
+    unset _INTERSPECT_CONFIDENCE_LOADED
+    _INTERSPECT_AUTONOMY="$enabled"
+
+    return 0
+}
+
+# Check circuit breaker: has a target been reverted too many times recently?
+# If a target is reverted >= circuit_breaker_max times within circuit_breaker_days,
+# autonomous modifications are blocked for that target.
+# Args: $1=group_id (agent name or agent/overlay_id)
+# Returns: 0 if circuit breaker TRIPPED (should block), 1 if clear
+_interspect_circuit_breaker_tripped() {
+    _interspect_load_confidence
+    local group_id="$1"
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    local escaped_group
+    escaped_group=$(_interspect_sql_escape "$group_id")
+    local max_reverts="${_INTERSPECT_CIRCUIT_BREAKER_MAX:-3}"
+    local days="${_INTERSPECT_CIRCUIT_BREAKER_DAYS:-30}"
+
+    local revert_count
+    revert_count=$(sqlite3 "$db" "SELECT COUNT(*) FROM modifications WHERE group_id = '${escaped_group}' AND status = 'reverted' AND ts > datetime('now', '-${days} days');" 2>/dev/null || echo "0")
+
+    (( revert_count >= max_reverts ))
+}
+
+# Check if an override should auto-apply (autonomy mode + safety checks).
+# This is the gateway function called by propose flow to decide propose vs apply.
+# Args: $1=agent_name $2=mod_type ("routing" or "prompt_tuning")
+# Returns: 0 if should auto-apply, 1 if should propose
+_interspect_should_auto_apply() {
+    local agent="$1"
+    local mod_type="${2:-routing}"
+
+    # Must be in autonomous mode
+    if ! _interspect_is_autonomous; then
+        return 1
+    fi
+
+    # Type 3 (prompt tuning overlays) always require propose mode
+    # Type 1-2 (routing, overlays with routing effect) can auto-apply
+    # Per design: overlays are "always_propose" in protected-paths.json
+    if [[ "$mod_type" == "prompt_tuning" ]]; then
+        return 1
+    fi
+
+    # Circuit breaker: too many reverts → force propose
+    if _interspect_circuit_breaker_tripped "$agent"; then
+        echo "INFO: Circuit breaker tripped for ${agent} — forcing propose mode." >&2
+        return 1
+    fi
+
+    # Baseline check: need sufficient historical data for canary
+    _interspect_load_confidence
+    local min_baseline="${_INTERSPECT_CANARY_MIN_BASELINE:-15}"
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+    local escaped_agent
+    escaped_agent=$(_interspect_sql_escape "$agent")
+
+    local session_count
+    session_count=$(sqlite3 "$db" "SELECT COUNT(DISTINCT session_id) FROM evidence WHERE source = '${escaped_agent}';" 2>/dev/null || echo "0")
+
+    if (( session_count < min_baseline )); then
+        echo "INFO: Insufficient baseline for ${agent} (${session_count}/${min_baseline} sessions) — forcing propose mode." >&2
+        return 1
+    fi
+
+    return 0
 }
 
 # ─── Canary Monitoring ──────────────────────────────────────────────────────

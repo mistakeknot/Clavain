@@ -26,7 +26,7 @@ EOF
 
     # Create minimal protected-paths.json
     cat > "$TEST_DIR/.clavain/interspect/protected-paths.json" << 'EOF'
-{"protected_paths":[],"modification_allow_list":[".claude/routing-overrides.json"],"always_propose":[]}
+{"protected_paths":[],"modification_allow_list":[".claude/routing-overrides.json",".clavain/interspect/overlays/*/*"],"always_propose":[]}
 EOF
 
     # Reset guard variables so lib can be re-sourced
@@ -843,4 +843,534 @@ EOF
     local canary_count
     canary_count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary WHERE group_id = 'fd-test-propose';")
     [ "$canary_count" -eq 0 ]
+}
+
+# ─── Overlay Helpers ──────────────────────────────────────────────
+
+# Helper: create a raw overlay file directly (bypasses write_overlay validation/git)
+_create_test_overlay() {
+    local agent="$1" overlay_id="$2" active="${3:-true}" body="${4:-Test overlay content}"
+    local dir="${TEST_DIR}/.clavain/interspect/overlays/${agent}"
+    mkdir -p "$dir"
+    cat > "${dir}/${overlay_id}.md" << EOF
+---
+active: ${active}
+created: 2026-01-01T00:00:00Z
+created_by: test
+evidence_ids: []
+---
+${body}
+EOF
+    cd "$TEST_DIR"
+    git add ".clavain/interspect/overlays/${agent}/${overlay_id}.md"
+    git commit -q -m "add test overlay ${overlay_id}"
+}
+
+@test "overlay_is_active returns 0 for active overlay" {
+    _create_test_overlay "fd-quality" "tune-001" "true"
+    local filepath="${TEST_DIR}/.clavain/interspect/overlays/fd-quality/tune-001.md"
+    run _interspect_overlay_is_active "$filepath"
+    [ "$status" -eq 0 ]
+}
+
+@test "overlay_is_active returns 1 for inactive overlay" {
+    _create_test_overlay "fd-quality" "tune-002" "false"
+    local filepath="${TEST_DIR}/.clavain/interspect/overlays/fd-quality/tune-002.md"
+    run _interspect_overlay_is_active "$filepath"
+    [ "$status" -eq 1 ]
+}
+
+@test "overlay_is_active returns 1 for missing file" {
+    run _interspect_overlay_is_active "/nonexistent/path.md"
+    [ "$status" -eq 1 ]
+}
+
+@test "overlay_is_active ignores active: true in body" {
+    local dir="${TEST_DIR}/.clavain/interspect/overlays/fd-quality"
+    mkdir -p "$dir"
+    cat > "${dir}/tune-003.md" << 'EOF'
+---
+active: false
+created: 2026-01-01T00:00:00Z
+created_by: test
+evidence_ids: []
+---
+This body contains active: true but it should be ignored.
+EOF
+    cd "$TEST_DIR"
+    git add ".clavain/interspect/overlays/fd-quality/tune-003.md"
+    git commit -q -m "add overlay with tricky body"
+
+    run _interspect_overlay_is_active "${dir}/tune-003.md"
+    [ "$status" -eq 1 ]
+}
+
+@test "overlay_body extracts content after frontmatter" {
+    _create_test_overlay "fd-quality" "tune-004" "true" "Line one of body
+Line two of body"
+    local filepath="${TEST_DIR}/.clavain/interspect/overlays/fd-quality/tune-004.md"
+    result=$(_interspect_overlay_body "$filepath")
+    [[ "$result" == *"Line one of body"* ]]
+    [[ "$result" == *"Line two of body"* ]]
+}
+
+@test "overlay_body returns empty for missing file" {
+    result=$(_interspect_overlay_body "/nonexistent/path.md")
+    [ -z "$result" ]
+}
+
+@test "overlay_body excludes frontmatter" {
+    _create_test_overlay "fd-quality" "tune-005" "true" "Just body"
+    local filepath="${TEST_DIR}/.clavain/interspect/overlays/fd-quality/tune-005.md"
+    result=$(_interspect_overlay_body "$filepath")
+    [[ "$result" != *"active:"* ]]
+    [[ "$result" != *"created_by:"* ]]
+    [[ "$result" == *"Just body"* ]]
+}
+
+@test "count_overlay_tokens returns 0 for empty content" {
+    result=$(_interspect_count_overlay_tokens "")
+    [ "$result" -eq 0 ]
+}
+
+@test "count_overlay_tokens estimates based on word count" {
+    # "one two three four five" = 5 words * 1.3 = 6.5 → 6 (truncated)
+    result=$(_interspect_count_overlay_tokens "one two three four five")
+    [ "$result" -eq 6 ]
+}
+
+@test "count_overlay_tokens handles multiline content" {
+    content="first line has four words
+second line also four words
+third"
+    result=$(_interspect_count_overlay_tokens "$content")
+    # 11 words * 1.3 = 14.3 → 14
+    [ "$result" -eq 14 ]
+}
+
+@test "read_overlays returns empty for no overlays" {
+    result=$(_interspect_read_overlays "fd-quality")
+    [ -z "$result" ]
+}
+
+@test "read_overlays returns body of active overlay" {
+    _create_test_overlay "fd-quality" "tune-006" "true" "Active overlay body"
+    result=$(_interspect_read_overlays "fd-quality")
+    [[ "$result" == *"Active overlay body"* ]]
+}
+
+@test "read_overlays skips inactive overlays" {
+    _create_test_overlay "fd-quality" "tune-active" "true" "Should appear"
+    _create_test_overlay "fd-quality" "tune-inactive" "false" "Should not appear"
+    result=$(_interspect_read_overlays "fd-quality")
+    [[ "$result" == *"Should appear"* ]]
+    [[ "$result" != *"Should not appear"* ]]
+}
+
+@test "read_overlays concatenates multiple active overlays" {
+    _create_test_overlay "fd-quality" "tune-aaa" "true" "First overlay"
+    _create_test_overlay "fd-quality" "tune-bbb" "true" "Second overlay"
+    result=$(_interspect_read_overlays "fd-quality")
+    [[ "$result" == *"First overlay"* ]]
+    [[ "$result" == *"Second overlay"* ]]
+}
+
+@test "read_overlays rejects invalid agent name" {
+    run _interspect_read_overlays "malicious'; DROP TABLE--"
+    [ "$status" -eq 1 ]
+}
+
+@test "validate_overlay_id accepts valid IDs" {
+    run _interspect_validate_overlay_id "tune-001"
+    [ "$status" -eq 0 ]
+    run _interspect_validate_overlay_id "fix-false-positives"
+    [ "$status" -eq 0 ]
+    run _interspect_validate_overlay_id "a"
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_overlay_id rejects invalid IDs" {
+    run _interspect_validate_overlay_id "UPPERCASE"
+    [ "$status" -eq 1 ]
+    run _interspect_validate_overlay_id "../escape"
+    [ "$status" -eq 1 ]
+    run _interspect_validate_overlay_id ""
+    [ "$status" -eq 1 ]
+}
+
+# ─── Overlay Write + Disable (integration) ───────────────────────
+
+@test "write_overlay creates file and commits" {
+    run _interspect_write_overlay "fd-quality" "tune-int" "Test integration body" '[]' "test"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SUCCESS"* ]]
+
+    local filepath="${TEST_DIR}/.clavain/interspect/overlays/fd-quality/tune-int.md"
+    [ -f "$filepath" ]
+    run _interspect_overlay_is_active "$filepath"
+    [ "$status" -eq 0 ]
+}
+
+@test "write_overlay rejects duplicate overlay ID" {
+    _interspect_write_overlay "fd-quality" "tune-dup" "First" '[]' "test"
+
+    run _interspect_write_overlay "fd-quality" "tune-dup" "Second" '[]' "test"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"already exists"* ]]
+}
+
+@test "write_overlay creates canary record" {
+    DB=$(_interspect_db_path)
+    _interspect_write_overlay "fd-quality" "tune-canary" "Canary test body" '[]' "test"
+
+    canary_count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary WHERE group_id = 'fd-quality/tune-canary';")
+    [ "$canary_count" -eq 1 ]
+
+    canary_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE group_id = 'fd-quality/tune-canary';")
+    [ "$canary_status" = "active" ]
+}
+
+@test "write_overlay enforces 500-token budget" {
+    # Create a large overlay that uses most of the budget
+    # 350 words * 1.3 = 455 tokens (fits under 500)
+    local big_body
+    big_body=$(printf 'word %.0s' {1..350})
+    _interspect_write_overlay "fd-quality" "tune-big" "$big_body" '[]' "test"
+
+    # Second overlay pushes over: 100 words * 1.3 = 130 tokens → 455+130=585 > 500
+    local more_body
+    more_body=$(printf 'extra %.0s' {1..100})
+    run _interspect_write_overlay "fd-quality" "tune-over" "$more_body" '[]' "test"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"budget"* ]]
+}
+
+@test "disable_overlay sets active to false" {
+    _create_test_overlay "fd-quality" "tune-dis" "true" "Will be disabled"
+    local filepath="${TEST_DIR}/.clavain/interspect/overlays/fd-quality/tune-dis.md"
+
+    # Verify active
+    run _interspect_overlay_is_active "$filepath"
+    [ "$status" -eq 0 ]
+
+    # Disable
+    run _interspect_disable_overlay "fd-quality" "tune-dis"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SUCCESS"* ]]
+
+    # Verify inactive
+    run _interspect_overlay_is_active "$filepath"
+    [ "$status" -eq 1 ]
+}
+
+@test "disable_overlay is idempotent" {
+    _create_test_overlay "fd-quality" "tune-idem" "false" "Already inactive"
+
+    run _interspect_disable_overlay "fd-quality" "tune-idem"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"already inactive"* ]]
+}
+
+@test "disable_overlay rejects missing overlay" {
+    run _interspect_disable_overlay "fd-quality" "nonexistent"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "disable_overlay preserves body content" {
+    _create_test_overlay "fd-quality" "tune-body" "true" "Important instructions here"
+    local filepath="${TEST_DIR}/.clavain/interspect/overlays/fd-quality/tune-body.md"
+
+    _interspect_disable_overlay "fd-quality" "tune-body"
+
+    body=$(_interspect_overlay_body "$filepath")
+    [[ "$body" == *"Important instructions here"* ]]
+}
+
+@test "disable_overlay does not touch active: true in body" {
+    local dir="${TEST_DIR}/.clavain/interspect/overlays/fd-quality"
+    mkdir -p "$dir"
+    cat > "${dir}/tune-tricky.md" << 'EOF'
+---
+active: true
+created: 2026-01-01T00:00:00Z
+created_by: test
+evidence_ids: []
+---
+This body says active: true and should not be changed.
+EOF
+    cd "$TEST_DIR"
+    git add ".clavain/interspect/overlays/fd-quality/tune-tricky.md"
+    git commit -q -m "add tricky overlay"
+
+    _interspect_disable_overlay "fd-quality" "tune-tricky"
+
+    # Frontmatter should be false
+    run _interspect_overlay_is_active "${dir}/tune-tricky.md"
+    [ "$status" -eq 1 ]
+
+    # Body should still contain the string
+    body=$(_interspect_overlay_body "${dir}/tune-tricky.md")
+    [[ "$body" == *"active: true"* ]]
+}
+
+@test "disable_overlay updates canary and modification status" {
+    DB=$(_interspect_db_path)
+
+    # Use write_overlay to get proper DB records
+    _interspect_write_overlay "fd-quality" "tune-db" "DB tracking test" '[]' "test"
+
+    # Verify canary is active
+    canary_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE group_id = 'fd-quality/tune-db' LIMIT 1;")
+    [ "$canary_status" = "active" ]
+
+    # Disable
+    _interspect_disable_overlay "fd-quality" "tune-db"
+
+    # Canary should be reverted
+    canary_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE group_id = 'fd-quality/tune-db' LIMIT 1;")
+    [ "$canary_status" = "reverted" ]
+
+    # Modification should be reverted
+    mod_status=$(sqlite3 "$DB" "SELECT status FROM modifications WHERE group_id = 'fd-quality/tune-db' LIMIT 1;")
+    [ "$mod_status" = "reverted" ]
+}
+
+@test "disable_overlay rejects invalid agent name" {
+    run _interspect_disable_overlay "INVALID" "tune-001"
+    [ "$status" -eq 1 ]
+}
+
+@test "disable_overlay rejects invalid overlay ID" {
+    run _interspect_disable_overlay "fd-quality" "../ESCAPE"
+    [ "$status" -eq 1 ]
+}
+
+# ─── Manual Override (F5) ────────────────────────────────────────
+
+@test "apply_routing_override with created_by=human works" {
+    run _interspect_apply_routing_override "fd-game-design" "Not relevant to this project" '[]' "human"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SUCCESS"* ]]
+
+    # Verify created_by is stored
+    ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    FILEPATH="${ROOT}/.claude/routing-overrides.json"
+    created_by=$(jq -r '.overrides[0].created_by' "$FILEPATH")
+    [ "$created_by" = "human" ]
+}
+
+@test "apply_routing_override with scope persists scope in JSON" {
+    local scope='{"file_patterns":["interverse/**"]}'
+    run _interspect_apply_routing_override "fd-game-design" "Only for interverse" '[]' "human" "$scope"
+    [ "$status" -eq 0 ]
+
+    ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    FILEPATH="${ROOT}/.claude/routing-overrides.json"
+    file_pattern=$(jq -r '.overrides[0].scope.file_patterns[0]' "$FILEPATH")
+    [ "$file_pattern" = "interverse/**" ]
+}
+
+@test "apply_routing_override with domain scope persists" {
+    local scope='{"domains":["claude-code-plugin"]}'
+    run _interspect_apply_routing_override "fd-performance" "Not relevant for plugins" '[]' "human" "$scope"
+    [ "$status" -eq 0 ]
+
+    ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    FILEPATH="${ROOT}/.claude/routing-overrides.json"
+    domain=$(jq -r '.overrides[0].scope.domains[0]' "$FILEPATH")
+    [ "$domain" = "claude-code-plugin" ]
+}
+
+@test "apply_routing_override without scope omits scope field" {
+    run _interspect_apply_routing_override "fd-game-design" "test" '[]' "interspect"
+    [ "$status" -eq 0 ]
+
+    ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    FILEPATH="${ROOT}/.claude/routing-overrides.json"
+    has_scope=$(jq '.overrides[0] | has("scope")' "$FILEPATH")
+    [ "$has_scope" = "false" ]
+}
+
+@test "apply_routing_override rejects invalid scope JSON" {
+    run _interspect_apply_routing_override "fd-game-design" "test" '[]' "human" "not-json"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"scope must be a JSON object"* ]]
+}
+
+@test "apply_routing_override rejects scope that is not an object" {
+    run _interspect_apply_routing_override "fd-game-design" "test" '[]' "human" '["array"]'
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"scope must be a JSON object"* ]]
+}
+
+@test "manual override creates canary even with no evidence" {
+    DB=$(_interspect_db_path)
+    _interspect_apply_routing_override "fd-game-design" "Manual exclusion" '[]' "human"
+
+    canary_count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary WHERE group_id = 'fd-game-design';")
+    [ "$canary_count" -eq 1 ]
+
+    canary_status=$(sqlite3 "$DB" "SELECT status FROM canary WHERE group_id = 'fd-game-design';")
+    [ "$canary_status" = "active" ]
+}
+
+@test "manual override confidence is 1.0 when no evidence exists" {
+    _interspect_apply_routing_override "fd-game-design" "Manual" '[]' "human"
+
+    ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    FILEPATH="${ROOT}/.claude/routing-overrides.json"
+    confidence=$(jq '.overrides[0].confidence' "$FILEPATH")
+    # jq preserves "1.0" from printf "%.2f"
+    [[ "$confidence" == "1" || "$confidence" == "1.0" ]]
+}
+
+# ─── Autonomy Mode (F6) ─────────────────────────────────────────
+
+@test "is_autonomous returns 1 by default" {
+    run _interspect_is_autonomous
+    [ "$status" -eq 1 ]
+}
+
+@test "set_autonomy enables autonomous mode" {
+    _interspect_set_autonomy "true"
+    run _interspect_is_autonomous
+    [ "$status" -eq 0 ]
+}
+
+@test "set_autonomy disables autonomous mode" {
+    _interspect_set_autonomy "true"
+    run _interspect_is_autonomous
+    [ "$status" -eq 0 ]
+
+    _interspect_set_autonomy "false"
+    run _interspect_is_autonomous
+    [ "$status" -eq 1 ]
+}
+
+@test "set_autonomy persists to confidence.json" {
+    _interspect_set_autonomy "true"
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local val
+    val=$(jq -r '.autonomy' "${root}/.clavain/interspect/confidence.json")
+    [ "$val" = "true" ]
+}
+
+@test "set_autonomy rejects invalid values" {
+    run _interspect_set_autonomy "maybe"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"must be 'true' or 'false'"* ]]
+}
+
+@test "load_confidence reads autonomy flag" {
+    # Write autonomy=true directly to config
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local conf="${root}/.clavain/interspect/confidence.json"
+    jq '.autonomy = true' "$conf" > "${conf}.tmp" && mv "${conf}.tmp" "$conf"
+
+    # Reset and reload
+    unset _INTERSPECT_CONFIDENCE_LOADED
+    _interspect_load_confidence
+    [ "$_INTERSPECT_AUTONOMY" = "true" ]
+}
+
+@test "circuit_breaker_tripped returns 1 when no reverts" {
+    DB=$(_interspect_db_path)
+    run _interspect_circuit_breaker_tripped "fd-game-design"
+    [ "$status" -eq 1 ]
+}
+
+@test "circuit_breaker_tripped returns 0 after 3 reverts" {
+    DB=$(_interspect_db_path)
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # Insert 3 revert records
+    for i in 1 2 3; do
+        sqlite3 "$DB" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
+            VALUES ('fd-game-design', '${ts}', 'persistent', 'routing', '.claude/routing-overrides.json', 'sha${i}', 1.0, 'test', 'reverted');"
+    done
+
+    run _interspect_circuit_breaker_tripped "fd-game-design"
+    [ "$status" -eq 0 ]
+}
+
+@test "circuit_breaker ignores old reverts" {
+    DB=$(_interspect_db_path)
+
+    # Insert 3 revert records from 60 days ago (outside 30-day window)
+    for i in 1 2 3; do
+        sqlite3 "$DB" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
+            VALUES ('fd-game-design', datetime('now', '-60 days'), 'persistent', 'routing', '.claude/routing-overrides.json', 'old${i}', 1.0, 'test', 'reverted');"
+    done
+
+    run _interspect_circuit_breaker_tripped "fd-game-design"
+    [ "$status" -eq 1 ]
+}
+
+@test "should_auto_apply returns 1 in propose mode" {
+    run _interspect_should_auto_apply "fd-game-design" "routing"
+    [ "$status" -eq 1 ]
+}
+
+@test "should_auto_apply returns 1 for prompt_tuning even in autonomous mode" {
+    _interspect_set_autonomy "true"
+    run _interspect_should_auto_apply "fd-game-design" "prompt_tuning"
+    [ "$status" -eq 1 ]
+}
+
+@test "should_auto_apply returns 1 when circuit breaker tripped" {
+    DB=$(_interspect_db_path)
+    _interspect_set_autonomy "true"
+
+    # Trip the circuit breaker
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    for i in 1 2 3; do
+        sqlite3 "$DB" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
+            VALUES ('fd-game-design', '${ts}', 'persistent', 'routing', '.claude/routing-overrides.json', 'cb${i}', 1.0, 'test', 'reverted');"
+    done
+
+    run _interspect_should_auto_apply "fd-game-design" "routing"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Circuit breaker"* ]]
+}
+
+@test "should_auto_apply returns 1 when insufficient baseline" {
+    _interspect_set_autonomy "true"
+    # No evidence inserted → 0 sessions < 15 minimum
+    run _interspect_should_auto_apply "fd-game-design" "routing"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Insufficient baseline"* ]]
+}
+
+@test "should_auto_apply returns 0 when all checks pass" {
+    DB=$(_interspect_db_path)
+    _interspect_set_autonomy "true"
+
+    # Insert enough evidence (15+ distinct sessions)
+    for i in $(seq 1 16); do
+        sqlite3 "$DB" "INSERT INTO sessions (session_id, start_ts, project) VALUES ('session-${i}', datetime('now', '-${i} days'), 'test-project');"
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, source, event, override_reason, ts, context, project)
+            VALUES ('session-${i}', 1, 'fd-game-design', 'override', 'agent_wrong', datetime('now', '-${i} days'), '{}', 'test-project');"
+    done
+
+    run _interspect_should_auto_apply "fd-game-design" "routing"
+    [ "$status" -eq 0 ]
+}
+
+@test "load_confidence bounds-checks circuit breaker values" {
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local conf="${root}/.clavain/interspect/confidence.json"
+    # -5 is non-numeric (has sign) → falls through to default 3
+    # 9999 is numeric but > 365 → clamped to 365
+    jq '.circuit_breaker_max = -5 | .circuit_breaker_days = 9999' "$conf" > "${conf}.tmp" && mv "${conf}.tmp" "$conf"
+
+    unset _INTERSPECT_CONFIDENCE_LOADED
+    _interspect_load_confidence
+    [ "$_INTERSPECT_CIRCUIT_BREAKER_MAX" -eq 3 ]    # -5 is non-numeric → default 3
+    [ "$_INTERSPECT_CIRCUIT_BREAKER_DAYS" -eq 365 ]  # 9999 clamped to max 365
 }
