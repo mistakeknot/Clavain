@@ -141,6 +141,10 @@
       {
         "source": "intermap@interagency-marketplace",
         "description": "Project-level code mapping and architecture analysis (MCP)"
+      },
+      {
+        "source": "internext@interagency-marketplace",
+        "description": "Work prioritization and tradeoff analysis"
       }
     ],
     "optional": [
@@ -151,10 +155,6 @@
       {
         "source": "interject@interagency-marketplace",
         "description": "Ambient discovery and research engine (MCP)"
-      },
-      {
-        "source": "internext@interagency-marketplace",
-        "description": "Work prioritization and tradeoff analysis"
       },
       {
         "source": "interstat@interagency-marketplace",

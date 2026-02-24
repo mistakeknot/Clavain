@@ -85,7 +85,6 @@ If the script is unavailable, use the fallback list:
 <!-- agent-rig:begin:install-optional -->
 - `interfluence@interagency-marketplace` — Voice profile and style adaptation
 - `interject@interagency-marketplace` — Ambient discovery and research engine (MCP)
-- `internext@interagency-marketplace` — Work prioritization and tradeoff analysis
 - `interstat@interagency-marketplace` — Token efficiency benchmarking
 - `interkasten@interagency-marketplace` — Notion sync and documentation
 - `interlens@interagency-marketplace` — Cognitive augmentation lenses (MCP)
@@ -224,6 +223,7 @@ required = {
     'interline@interagency-marketplace',
     'interlock@interagency-marketplace',
     'intermap@interagency-marketplace',
+    'internext@interagency-marketplace',
     'interpath@interagency-marketplace',
     'interpeer@interagency-marketplace',
     'interphase@interagency-marketplace',
