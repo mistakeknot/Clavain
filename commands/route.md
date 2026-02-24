@@ -118,7 +118,16 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
    If `bd show` fails: "That bead is no longer available" → re-run discovery from step 1.
    **Skip this check for orphan entries** (action: "create_bead") — they have no bead ID yet.
 
-5. **Set bead context:** Remember the selected bead ID as `CLAVAIN_BEAD_ID` for this session.
+5. **Claim bead and track in session:**
+   - Remember the selected bead ID as `CLAVAIN_BEAD_ID` for this session.
+   - **Claim the bead** (skip for `closed`, `verify_done`, and `create_bead` actions):
+     ```bash
+     bd update "$CLAVAIN_BEAD_ID" --status=in_progress
+     ```
+   - **Add to session tasks** using TaskCreate:
+     - Title: `<bead_id> — <title>`
+     - Status: `in_progress`
+     This gives the session a visible checklist entry for the active work.
 
 6. **Route based on selection:**
    - `continue` or `execute` with `plan_path` → `/clavain:work <plan_path>`
@@ -218,7 +227,16 @@ Parse the JSON response. If parsing fails, default to `/sprint` (safer fallback 
    bd set-state "$CLAVAIN_BEAD_ID" "complexity=$complexity" 2>/dev/null || true
    ```
 
-3. **Display the verdict:**
+3. **Claim bead and track in session:** If `CLAVAIN_BEAD_ID` is set:
+   - **Claim the bead:**
+     ```bash
+     bd update "$CLAVAIN_BEAD_ID" --status=in_progress
+     ```
+   - **Add to session tasks** using TaskCreate:
+     - Title: `<bead_id> — <title or description>`
+     - Status: `in_progress`
+
+4. **Display the verdict:**
    ```
    Route: /work (0.92) — Plan exists and scope is clear
    ```
@@ -227,9 +245,9 @@ Parse the JSON response. If parsing fails, default to `/sprint` (safer fallback 
    Route: /sprint (heuristic, 0.9) — Needs brainstorm first
    ```
 
-4. **Auto-dispatch** — invoke the chosen command via the Skill tool:
+5. **Auto-dispatch** — invoke the chosen command via the Skill tool:
    - If routing to `/clavain:sprint`: pass `$ARGUMENTS` (bead ID or feature text)
    - If routing to `/clavain:work`: pass the plan path if available, otherwise pass `$ARGUMENTS`
    - **Do not ask for confirmation** — the whole point is auto-routing
 
-5. **Stop after dispatch.** The invoked command handles everything from here.
+6. **Stop after dispatch.** The invoked command handles everything from here.
