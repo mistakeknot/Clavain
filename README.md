@@ -1,12 +1,8 @@
 # Clavain
 
-Clavain is a **highly** opinionated, self-improving Claude Code agent rig that codifies product and engineering discipline into composable workflows for building software from brainstorm to ship. It orchestrates heterogeneous AI models — Claude, Codex, GPT-5.2 Pro via Oracle — into a reliable system for getting things built, where the review phases matter more than the building phases. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
+Clavain is an opinionated, self-improving Claude Code agent rig that codifies product and engineering discipline into composable workflows for building software from brainstorm to ship. It orchestrates heterogeneous AI models — Claude, Codex, GPT-5.2 Pro via Oracle — into a reliable system for getting things built, where the review phases matter more than the building phases. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-The point of agents isn't to remove humans from the loop; it's to make every moment in the loop count.
-
-With 16 skills, 4 agents, 54 commands, 10 hooks, and 1 MCP servers, there is a lot here (and it is constantly changing). Before installing, I recommend you point Claude Code to this directory and ask it to review this plugin against how you like to work. It's especially helpful if [you run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
-
-Merged, modified, and maintained with updates from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
+With 16 skills, 4 agents, 55 commands, 10 hooks, and 1 MCP server, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -51,7 +47,7 @@ Clavain serves three concentric circles, inner circle first:
 2. **Reference implementation.** Shows what's possible with disciplined multi-agent engineering and sets conventions for plugin structure, skill design, and agent orchestration.
 3. **Research artifact.** Demonstrates what disciplined human-AI collaboration looks like in practice by solving real problems under real constraints and publishing the results.
 
-I do not think Clavain is the best workflow for everyone, but it works very well for me and I hope it can, at the very least, provide some inspiration for your own experiences with Claude Code.
+Clavain is not the best workflow for everyone, but it can, at the very least, provide some inspiration for your own approach to Claude Code.
 
 ## Philosophy
 
@@ -93,11 +89,11 @@ This inverts the typical "design the API first" approach: build too-tightly-coup
 
 **Platform-native, not vendor-neutral.** Clavain is built on Claude Code. It dispatches to Codex CLI, GPT-5.2 Pro (via Oracle), and other models as complements, but it is not trying to be a universal agent orchestrator for any LLM platform.
 
-## My Workflow
+## Workflow
 
-For simple requests, I use `/sprint add user export feature` and Clavain orchestrates Claude Code via hooks, commands, skills, and subagents to brainstorm the approach, write a plan, review the plan with multiple subagents, implement the code, review the implementation, resolve any issues, and run quality gates. While Clavain runs through all of these phases, I focus on the usual suspects: product strategy, user pain points, and finding new [leverage points](https://donellameadows.org/archives/leverage-points-places-to-intervene-in-a-system/).
+For simple requests, `/sprint add user export feature` orchestrates the full lifecycle — brainstorm, plan, review the plan with multiple subagents, implement, review the implementation, resolve issues, and run quality gates. The human focuses on the usual suspects: product strategy, user pain points, and finding new [leverage points](https://donellameadows.org/archives/leverage-points-places-to-intervene-in-a-system/).
 
-For more complex endeavors (or new projects), I use Clavain's pieces individually depending on what I'm doing. The following review of the `/sprint` lifecycle provides a brief explanation of all the different parts of Clavain:
+For more complex endeavors (or new projects), each piece works standalone. The following review of the `/sprint` lifecycle provides a brief explanation of all the different parts of Clavain:
 
 ### The `/sprint` Lifecycle
 
@@ -110,11 +106,11 @@ For more complex endeavors (or new projects), I use Clavain's pieces individuall
 * When interserve mode is active, /write-plan executes via Codex Delegation and /work is skipped.
 ```
 
-Even when I think I know what I want, I usually start with `/brainstorm` because it forces me to articulate and trace through requirements and user journeys before touching code; Clavain often catches edge cases I hadn't considered. `/strategy` then structures the brainstorm into a PRD with discrete features and creates beads for tracking — this convergent step catches scope creep and missing acceptance criteria before any planning starts. After that, `/write-plan` creates a structured implementation plan — and when interserve mode is active, it also dispatches execution through Codex agents, making the `/work` step unnecessary. `/flux-drive` then reviews the plan (or, under interserve, the executed result) with up to 4 tiers of agents before the code review phase.
+Even with clear requirements, starting with `/brainstorm` forces articulation of requirements and user journeys before touching code — Clavain often catches edge cases that weren't considered. `/strategy` then structures the brainstorm into a PRD with discrete features and creates beads for tracking — this convergent step catches scope creep and missing acceptance criteria before any planning starts. After that, `/write-plan` creates a structured implementation plan — and when interserve mode is active, it also dispatches execution through Codex agents, making the `/work` step unnecessary. `/flux-drive` then reviews the plan (or, under interserve, the executed result) with up to 4 tiers of agents before the code review phase.
 
 ### Reviewing Things with `/flux-drive`
 
-`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is probably the command I use most often on its own. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from three categories of review agents:
+`/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is the most versatile standalone command. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from three categories of review agents:
 
 - **Project Agents** — Per-project `fd-*.md` agents that live in your repo and know your specific codebase (bootstrapped via Codex when interserve mode is active)
 - **Plugin Agents** — 7 core agents (Architecture & Design, Safety, Correctness, Quality & Style, User & Product, Performance, Game Design) that auto-detect project docs: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices
@@ -126,7 +122,7 @@ When Oracle is part of the review, `flux-drive` chains into the **interpeer stac
 
 ### Cross-Agent Review with `/interpeer`
 
-Because different models and agents genuinely see different things, and the disagreements between them are often more valuable than what either finds alone, I find cross-agent review with `/interpeer` to be incredibly valuable, especially after a `flux-drive` run.
+Different models and agents genuinely see different things, and the disagreements between them are often more valuable than what either finds alone. Cross-agent review with `/interpeer` is especially valuable after a `flux-drive` run.
 
 The `/interpeer` stack escalates in depth:
 
@@ -139,7 +135,7 @@ The `/interpeer` stack escalates in depth:
 
 `/interpeer` defaults to quick mode — it auto-detects whether you're running in Claude Code or Codex CLI and calls the other one. For deeper analysis, `deep` mode builds optimized prompts for Oracle (GPT-5.2 Pro) and shows you the enhanced prompt before sending. `council` mode runs a full multi-model review when the stakes are high — critical architecture or security decisions where you want genuine consensus, not just one model's opinion.
 
-I find `mine` mode to be particularly useful for complex, ambiguous contexts. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions.
+`mine` mode is particularly useful for complex, ambiguous contexts. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions.
 
 ### Token Efficiency with `/interserve`
 
@@ -151,7 +147,7 @@ For multi-task work, `/interserve` parallelizes naturally. Five independent chan
 
 `/debate` runs a structured 2-round argument between Claude and Codex before implementing a complex task. Each writes an independent position, then responds to the other's. If they fundamentally disagree on architecture or security, Oracle gets called in as a tiebreaker. The output is a synthesis with clear options for you to choose from.
 
-I use this before any architectural decision I'm uncertain about. The debate itself costs less than building the wrong thing.
+Worth running before any architectural decision with genuine uncertainty. The debate itself costs less than building the wrong thing.
 
 ## What's Included
 
@@ -191,7 +187,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (54)
+### Commands (55)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -313,7 +309,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ```
 skills/       # 16 discipline skills (SKILL.md each)
 agents/       # 4 agents (review/ + workflow/)
-commands/     # 54 slash commands
+commands/     # 55 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync
