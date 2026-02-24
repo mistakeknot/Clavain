@@ -17,6 +17,10 @@
 #   _interspect_validate_hook_id — allowlist hook IDs
 #   _interspect_classify_pattern — counting-rule confidence gate
 #   _interspect_get_classified_patterns — query + classify all patterns
+#   _interspect_get_routing_eligible — agents eligible for routing override proposals (ready + >=80% wrong)
+#   _interspect_get_overlay_eligible — agents eligible for overlay proposals (ready + 40-79% wrong)
+#   _interspect_is_cross_cutting — check if agent is structural/cross-cutting
+#   _interspect_apply_propose — write "propose" entry to routing-overrides.json
 #   _interspect_flock_git     — serialized git operations via flock
 
 # Guard against re-parsing (same pattern as lib-signals.sh)
@@ -517,6 +521,130 @@ _interspect_is_routing_eligible() {
     return 0
 }
 
+# Get agents eligible for routing override proposals.
+# Filters classified patterns for: ready + routing-eligible + not already overridden.
+# Output: pipe-delimited rows: agent|event_count|session_count|project_count|agent_wrong_pct
+# Note: _interspect_is_routing_eligible handles multi-variant source names
+#       (fd-X, interflux:fd-X, interflux:review:fd-X) so pct is always correct.
+_interspect_get_routing_eligible() {
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+    [[ -f "$db" ]] || return 0
+
+    _interspect_load_confidence
+
+    local -A seen_agents
+    _interspect_get_classified_patterns | while IFS='|' read -r src evt reason ec sc pc cls; do
+        # Only "ready" patterns with override/agent_wrong events
+        [[ "$cls" == "ready" ]] || continue
+        [[ "$evt" == "override" ]] || continue
+        [[ "$reason" == "agent_wrong" ]] || continue
+
+        # Dedup: only emit each agent once (first ready+agent_wrong row wins)
+        [[ -z "${seen_agents[$src]+x}" ]] || continue
+        seen_agents[$src]=1
+
+        # Must be a valid fd-* agent
+        _interspect_validate_agent_name "$src" 2>/dev/null || continue
+
+        # Check routing eligibility (blacklist + >=80% wrong via multi-variant query)
+        local eligible_result
+        eligible_result=$(_interspect_is_routing_eligible "$src")
+        [[ "$eligible_result" == "eligible" ]] || continue
+
+        # Skip if already overridden (exclude or propose)
+        if _interspect_override_exists "$src"; then
+            continue
+        fi
+
+        # Get pct from multi-variant query (same as _interspect_is_routing_eligible uses)
+        local escaped
+        escaped=$(_interspect_sql_escape "$src")
+        local total wrong pct
+        total=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE (source = '${escaped}' OR source = 'interflux:${escaped}' OR source = 'interflux:review:${escaped}') AND event = 'override';")
+        wrong=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE (source = '${escaped}' OR source = 'interflux:${escaped}' OR source = 'interflux:review:${escaped}') AND event = 'override' AND override_reason = 'agent_wrong';")
+        pct=$(( total > 0 ? wrong * 100 / total : 0 ))
+
+        echo "${src}|${ec}|${sc}|${pc}|${pct}"
+    done
+}
+
+# Get agents eligible for prompt tuning overlay proposals.
+# Filters for: has at least one "ready" row + 40-<routing_threshold>% agent_wrong + not overlaid.
+# Accumulates ALL override rows (not just "ready") for correct pct denominator.
+# Output: pipe-delimited rows: agent|event_count|session_count|project_count|agent_wrong_pct
+_interspect_get_overlay_eligible() {
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+    [[ -f "$db" ]] || return 0
+
+    _interspect_load_confidence
+
+    # Accumulate ALL override events per agent (not just "ready"),
+    # but track which agents have at least one "ready" row.
+    local -A agent_total agent_wrong agent_sessions agent_projects agent_has_ready
+    while IFS='|' read -r src evt reason ec sc pc cls; do
+        [[ "$evt" == "override" ]] || continue
+        _interspect_validate_agent_name "$src" 2>/dev/null || continue
+
+        # Accumulate totals using +=
+        agent_total[$src]=$(( ${agent_total[$src]:-0} + ec ))
+        if [[ "$reason" == "agent_wrong" ]]; then
+            agent_wrong[$src]=$(( ${agent_wrong[$src]:-0} + ec ))
+        fi
+        # Track max sessions/projects across rows
+        if (( sc > ${agent_sessions[$src]:-0} )); then
+            agent_sessions[$src]=$sc
+        fi
+        if (( pc > ${agent_projects[$src]:-0} )); then
+            agent_projects[$src]=$pc
+        fi
+        # Track if any row for this agent is "ready"
+        if [[ "$cls" == "ready" ]]; then
+            agent_has_ready[$src]=1
+        fi
+    done < <(_interspect_get_classified_patterns)
+
+    local src
+    for src in "${!agent_total[@]}"; do
+        # Must have at least one "ready"-classified row
+        [[ "${agent_has_ready[$src]:-}" == "1" ]] || continue
+
+        local total=${agent_total[$src]}
+        local wrong=${agent_wrong[$src]:-0}
+        (( total > 0 )) || continue
+
+        local pct=$(( wrong * 100 / total ))
+
+        # Overlay band: 40% to below routing threshold (config-driven)
+        (( pct >= 40 && pct < _INTERSPECT_MIN_AGENT_WRONG_PCT )) || continue
+
+        # Skip if already has routing override
+        if _interspect_override_exists "$src"; then
+            continue
+        fi
+
+        echo "${src}|${agent_total[$src]}|${agent_sessions[$src]}|${agent_projects[$src]}|${pct}"
+    done
+}
+
+# Check if an agent is cross-cutting (structural coverage agents).
+# Cross-cutting agents get extra safety gates in the propose flow —
+# they provide foundational review coverage that should not be silently excluded.
+# This list is intentionally static and NOT derived from the agent registry or DB.
+# Source of truth: Demarch CLAUDE.md "7 core review agents" — these 4 are the
+# structural subset (architecture, quality, safety, correctness) vs domain-specific
+# (user-product, performance, game-design).
+# When adding or reclassifying agents, update this list AND the /interspect:propose
+# command spec (os/clavain/commands/interspect-propose.md).
+# Args: $1=agent_name
+# Returns: 0 if cross-cutting, 1 if not
+_interspect_is_cross_cutting() {
+    local agent="$1"
+    case "$agent" in
+        fd-architecture|fd-quality|fd-safety|fd-correctness) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Validate FLUX_ROUTING_OVERRIDES_PATH is safe (relative, no traversal).
 # Returns: 0 if safe, 1 if not
 _interspect_validate_overrides_path() {
@@ -883,6 +1011,148 @@ _interspect_apply_override_locked() {
 
     # 10. Output commit SHA (last line, captured by caller)
     echo "$commit_sha"
+}
+
+# ─── Propose Routing Override ────────────────────────────────────────────────
+
+# Write a "propose" entry to routing-overrides.json.
+# Proposals are informational — flux-drive shows them in triage but does NOT exclude.
+# No canary monitoring or modification record (lighter than apply_routing_override).
+# Args: $1=agent_name $2=reason $3=evidence_ids_json $4=created_by
+# Returns: 0 on success (including dedup skip), 1 on failure
+_interspect_apply_propose() {
+    local agent="$1"
+    local reason="$2"
+    local evidence_ids="${3:-[]}"
+    local created_by="${4:-interspect}"
+
+    # Pre-flock validation
+    if ! _interspect_validate_agent_name "$agent"; then
+        return 1
+    fi
+    if ! printf '%s\n' "$evidence_ids" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        echo "ERROR: evidence_ids must be a JSON array (got: ${evidence_ids})" >&2
+        return 1
+    fi
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local filepath="${FLUX_ROUTING_OVERRIDES_PATH:-.claude/routing-overrides.json}"
+
+    if ! _interspect_validate_overrides_path "$filepath"; then
+        return 1
+    fi
+
+    local fullpath="${root}/${filepath}"
+
+    if ! _interspect_validate_target "$filepath"; then
+        echo "ERROR: ${filepath} is not an allowed modification target" >&2
+        return 1
+    fi
+
+    # Sanitize reason to prevent credential leakage and control chars in commit message
+    local sanitized_reason
+    sanitized_reason=$(_interspect_sanitize "$reason" 500)
+
+    local commit_msg_file
+    commit_msg_file=$(mktemp)
+    printf '[interspect] Propose excluding %s from flux-drive triage\n\nReason: %s\nEvidence: %s\nCreated-by: %s\n' \
+        "$agent" "$sanitized_reason" "$evidence_ids" "$created_by" > "$commit_msg_file"
+
+    local flock_output
+    flock_output=$(_interspect_flock_git _interspect_apply_propose_locked \
+        "$root" "$filepath" "$fullpath" "$agent" "$sanitized_reason" \
+        "$evidence_ids" "$created_by" "$commit_msg_file")
+
+    local exit_code=$?
+    rm -f "$commit_msg_file"
+
+    # Exit code 2 = dedup skip (already exists), not an error
+    if (( exit_code == 2 )); then
+        echo "INFO: Override for ${agent} already exists. Skipping."
+        return 0
+    fi
+
+    if (( exit_code != 0 )); then
+        echo "ERROR: Could not write proposal. Check git status and retry." >&2
+        echo "$flock_output" >&2
+        return 1
+    fi
+
+    local commit_sha
+    commit_sha=$(echo "$flock_output" | tail -1)
+
+    echo "SUCCESS: Proposed excluding ${agent}. Commit: ${commit_sha}"
+    echo "Visible in /interspect:status and flux-drive triage notes."
+    echo "To apply: /interspect:approve ${agent} (or re-run /interspect:propose)"
+    return 0
+}
+
+# Inner function called under flock. Do NOT call directly.
+_interspect_apply_propose_locked() {
+    set -e
+    local root="$1" filepath="$2" fullpath="$3" agent="$4"
+    local reason="$5" evidence_ids="$6" created_by="$7"
+    local commit_msg_file="$8"
+
+    local created
+    created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # 1. Read current file
+    local current
+    if [[ -f "$fullpath" ]]; then
+        current=$(jq '.' "$fullpath" 2>/dev/null || echo '{"version":1,"overrides":[]}')
+    else
+        current='{"version":1,"overrides":[]}'
+    fi
+
+    # 2. Dedup check (inside lock — TOCTOU-safe)
+    #    Exit code 2 = skip (already exists). Caller handles this distinctly from error (1).
+    if echo "$current" | jq -e --arg agent "$agent" '.overrides[] | select(.agent == $agent)' >/dev/null 2>&1; then
+        return 2
+    fi
+
+    # 3. Build new propose entry (no confidence or canary — proposals are informational)
+    local new_override
+    new_override=$(jq -n \
+        --arg agent "$agent" \
+        --arg action "propose" \
+        --arg reason "$reason" \
+        --argjson evidence_ids "$evidence_ids" \
+        --arg created "$created" \
+        --arg created_by "$created_by" \
+        '{agent:$agent,action:$action,reason:$reason,evidence_ids:$evidence_ids,created:$created,created_by:$created_by}')
+
+    # 4. Merge
+    local merged
+    merged=$(echo "$current" | jq --argjson override "$new_override" \
+        '.overrides = (.overrides + [$override])')
+
+    # 5. Atomic write
+    mkdir -p "$(dirname "$fullpath")" 2>/dev/null || true
+    local tmpfile="${fullpath}.tmp.$$"
+    echo "$merged" | jq '.' > "$tmpfile"
+
+    if ! jq -e '.' "$tmpfile" >/dev/null 2>&1; then
+        rm -f "$tmpfile"
+        echo "ERROR: Write produced invalid JSON, aborted" >&2
+        return 1
+    fi
+    mv "$tmpfile" "$fullpath"
+
+    # 6. Git add + commit (use git -C to avoid cd side-effect under set -e)
+    git -C "$root" add "$filepath"
+    if ! git -C "$root" commit --no-verify -F "$commit_msg_file"; then
+        git -C "$root" reset HEAD -- "$filepath" 2>/dev/null || true
+        git -C "$root" restore "$filepath" 2>/dev/null || git -C "$root" checkout -- "$filepath" 2>/dev/null || true
+        echo "ERROR: Git commit failed. Proposal not applied." >&2
+        return 1
+    fi
+
+    # No canary or modification records for proposals
+
+    # 7. Output commit SHA
+    git -C "$root" rev-parse HEAD
 }
 
 # ─── Revert Routing Override ─────────────────────────────────────────────────

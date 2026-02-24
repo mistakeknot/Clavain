@@ -649,3 +649,198 @@ teardown() {
     run _interspect_unblacklist_pattern "fd-nonexistent"
     [ "$status" -eq 0 ]
 }
+
+# ─── Pattern Detection Helpers ──────────────────────────────────────
+
+@test "get_routing_eligible returns agents meeting all criteria" {
+    DB=$(_interspect_db_path)
+    # Insert 6 agent_wrong events across 3 sessions and 3 projects for fd-game-design
+    for i in 1 2 3 4 5 6; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$i', $i, '2026-01-0${i}', 'fd-game-design', 'override', 'agent_wrong', '{}', 'proj$((i % 3 + 1))');"
+    done
+
+    result=$(_interspect_get_routing_eligible)
+    echo "result: $result"
+    [ -n "$result" ]
+    echo "$result" | grep -q "fd-game-design"
+}
+
+@test "get_routing_eligible excludes agents below 80% wrong" {
+    DB=$(_interspect_db_path)
+    # 3 agent_wrong + 3 deprioritized = 50% wrong (below 80%)
+    for i in 1 2 3; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$i', $i, '2026-01-0${i}', 'fd-test-agent', 'override', 'agent_wrong', '{}', 'proj$((i % 3 + 1))');"
+    done
+    for i in 4 5 6; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$i', $i, '2026-01-0${i}', 'fd-test-agent', 'override', 'deprioritized', '{}', 'proj$((i % 3 + 1))');"
+    done
+
+    result=$(_interspect_get_routing_eligible)
+    echo "result: $result"
+    # Should NOT contain fd-test-agent (50% < 80%)
+    ! echo "$result" | grep -q "fd-test-agent"
+}
+
+@test "get_routing_eligible excludes already-overridden agents" {
+    DB=$(_interspect_db_path)
+    # Insert enough evidence to be eligible
+    for i in 1 2 3 4 5 6; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$i', $i, '2026-01-0${i}', 'fd-game-design', 'override', 'agent_wrong', '{}', 'proj$((i % 3 + 1))');"
+    done
+    # Create an existing override
+    mkdir -p "$TEST_DIR/.claude"
+    cat > "$TEST_DIR/.claude/routing-overrides.json" << 'EOF'
+{"version":1,"overrides":[{"agent":"fd-game-design","action":"exclude","reason":"test"}]}
+EOF
+    git add .claude/routing-overrides.json && git commit -q -m "add override"
+
+    result=$(_interspect_get_routing_eligible)
+    echo "result: $result"
+    # Should be empty — agent already overridden
+    [ -z "$result" ]
+}
+
+@test "get_routing_eligible returns empty on no evidence" {
+    result=$(_interspect_get_routing_eligible)
+    [ -z "$result" ]
+}
+
+# ─── Overlay Eligible ──────────────────────────────────────────────
+
+@test "get_overlay_eligible returns agents in 40-79% wrong band" {
+    DB=$(_interspect_db_path)
+    # Need "ready" classification on at least one row: >=5 events, >=3 sessions, >=2 projects.
+    # Insert 10 events: 6 agent_wrong + 4 deprioritized = 60% wrong (in 40-79% band)
+    # agent_wrong: 6 events across s1-s6, projects proj1-proj3 → ready (6>=5, 6>=3, 3>=2)
+    for i in 1 2 3 4 5 6; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$i', $i, '2026-01-0${i}', 'fd-overlay-test', 'override', 'agent_wrong', '{}', 'proj$((i % 3 + 1))');"
+    done
+    # deprioritized: 4 events across s7-s10 → growing (4<5 events)
+    for i in 7 8 9; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$((i))', $i, '2026-01-0${i}', 'fd-overlay-test', 'override', 'deprioritized', '{}', 'proj$((i % 3 + 1))');"
+    done
+    sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s10', 10, '2026-01-10', 'fd-overlay-test', 'override', 'deprioritized', '{}', 'proj1');"
+
+    result=$(_interspect_get_overlay_eligible)
+    echo "result: $result"
+    [ -n "$result" ]
+    echo "$result" | grep -q "fd-overlay-test"
+}
+
+@test "get_overlay_eligible excludes agents at 80%+ (routing territory)" {
+    DB=$(_interspect_db_path)
+    # Insert 6 agent_wrong events = 100% wrong (should be routing, not overlay)
+    for i in 1 2 3 4 5 6; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$i', $i, '2026-01-0${i}', 'fd-too-wrong', 'override', 'agent_wrong', '{}', 'proj$((i % 3 + 1))');"
+    done
+
+    result=$(_interspect_get_overlay_eligible)
+    echo "result: $result"
+    ! echo "$result" | grep -q "fd-too-wrong"
+}
+
+@test "get_overlay_eligible excludes agents below 40%" {
+    DB=$(_interspect_db_path)
+    # Insert 6 events: 2 agent_wrong + 4 deprioritized = 33% wrong (below 40%)
+    for i in 1 2; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$i', $i, '2026-01-0${i}', 'fd-low-wrong', 'override', 'agent_wrong', '{}', 'proj$((i % 3 + 1))');"
+    done
+    for i in 3 4 5 6; do
+        sqlite3 "$DB" "INSERT INTO evidence (session_id, seq, ts, source, event, override_reason, context, project) VALUES ('s$i', $i, '2026-01-0${i}', 'fd-low-wrong', 'override', 'deprioritized', '{}', 'proj$((i % 3 + 1))');"
+    done
+
+    result=$(_interspect_get_overlay_eligible)
+    echo "result: $result"
+    ! echo "$result" | grep -q "fd-low-wrong"
+}
+
+# ─── Cross-Cutting Detection ──────────────────────────────────────
+
+@test "is_cross_cutting identifies architecture agent" {
+    run _interspect_is_cross_cutting "fd-architecture"
+    [ "$status" -eq 0 ]
+}
+
+@test "is_cross_cutting identifies safety agent" {
+    run _interspect_is_cross_cutting "fd-safety"
+    [ "$status" -eq 0 ]
+}
+
+@test "is_cross_cutting identifies quality agent" {
+    run _interspect_is_cross_cutting "fd-quality"
+    [ "$status" -eq 0 ]
+}
+
+@test "is_cross_cutting identifies correctness agent" {
+    run _interspect_is_cross_cutting "fd-correctness"
+    [ "$status" -eq 0 ]
+}
+
+@test "is_cross_cutting rejects non-cross-cutting agent" {
+    run _interspect_is_cross_cutting "fd-game-design"
+    [ "$status" -eq 1 ]
+}
+
+# ─── Propose Writer ─────────────────────────────────────────────────
+
+@test "apply_propose writes propose action to routing-overrides.json" {
+    _interspect_apply_propose "fd-game-design" "Agent produces irrelevant findings" '["ev1","ev2"]' "interspect"
+
+    local root
+    root=$(git rev-parse --show-toplevel)
+    local overrides
+    overrides=$(cat "$root/.claude/routing-overrides.json")
+
+    # Verify action is "propose" not "exclude"
+    local action
+    action=$(echo "$overrides" | jq -r '.overrides[0].action')
+    [ "$action" = "propose" ]
+
+    # Verify agent name
+    local agent
+    agent=$(echo "$overrides" | jq -r '.overrides[0].agent')
+    [ "$agent" = "fd-game-design" ]
+
+    # Verify it was committed
+    local log
+    log=$(git log --oneline -1)
+    echo "$log" | grep -q "Propose excluding fd-game-design"
+}
+
+@test "apply_propose skips if override already exists" {
+    # Create an existing exclude override
+    mkdir -p "$TEST_DIR/.claude"
+    cat > "$TEST_DIR/.claude/routing-overrides.json" << 'EOF'
+{"version":1,"overrides":[{"agent":"fd-game-design","action":"exclude","reason":"test"}]}
+EOF
+    git add .claude/routing-overrides.json && git commit -q -m "add override"
+
+    run _interspect_apply_propose "fd-game-design" "test" '[]' "interspect"
+    echo "output: $output"
+    # Exit 0 (skip is not an error) and stdout says "already exists"
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -qi "already exists"
+}
+
+@test "apply_propose skips if propose already exists" {
+    # Create an existing propose override
+    mkdir -p "$TEST_DIR/.claude"
+    cat > "$TEST_DIR/.claude/routing-overrides.json" << 'EOF'
+{"version":1,"overrides":[{"agent":"fd-game-design","action":"propose","reason":"test"}]}
+EOF
+    git add .claude/routing-overrides.json && git commit -q -m "add propose"
+
+    run _interspect_apply_propose "fd-game-design" "test" '[]' "interspect"
+    echo "output: $output"
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -qi "already exists"
+}
+
+@test "apply_propose does not create canary record" {
+    DB=$(_interspect_db_path)
+    _interspect_apply_propose "fd-test-propose" "test reason" '[]' "interspect"
+
+    local canary_count
+    canary_count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM canary WHERE group_id = 'fd-test-propose';")
+    [ "$canary_count" -eq 0 ]
+}
