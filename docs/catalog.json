@@ -1,10 +1,10 @@
 {
-  "generated": "2026-02-22T21:30:04Z",
+  "generated": "2026-02-23T09:29:09Z",
   "counts": {
     "skills": 16,
     "agents": 4,
-    "commands": 53,
-    "hooks": 12,
+    "commands": 54,
+    "hooks": 10,
     "mcp_servers": 1,
     "review": 2,
     "workflow": 2
@@ -255,6 +255,10 @@
       "description": "Quick single-pass document refinement \u2014 assess clarity, score quality, fix issues, offer iteration"
     },
     {
+      "name": "route",
+      "description": "Universal entry point \u2014 discovers work, resumes sprints, classifies tasks, and dispatches to /sprint or /work"
+    },
+    {
       "name": "setup",
       "description": "Bootstrap the Clavain modpack \u2014 install required plugins, disable conflicts, verify MCP servers, configure hooks"
     },
@@ -264,7 +268,7 @@
     },
     {
       "name": "sprint",
-      "description": "Full autonomous engineering workflow \u2014 brainstorm, strategize, plan, execute, review, ship"
+      "description": "Phase sequencer \u2014 brainstorm, strategize, plan, execute, review, ship. Use /route for smart dispatch."
     },
     {
       "name": "sprint-status",
