@@ -8,7 +8,6 @@
       "lastSyncedCommit": "4a904961367d2ee66b70bee3a4e2095645203d74",
       "basePath": "",
       "fileMap": {}
-
     },
     {
       "name": "oracle",
@@ -35,7 +34,7 @@
       "name": "superpowers",
       "url": "https://github.com/obra/superpowers.git",
       "branch": "main",
-      "lastSyncedCommit": "a98c5dfc9de0df5318f4980d91d24780a566ee60",
+      "lastSyncedCommit": "e4a2375cb705ca5800f0833528ce36a3faf9017a",
       "basePath": "",
       "fileMap": {
         "skills/brainstorming/SKILL.md": "skills/brainstorming/SKILL.md",

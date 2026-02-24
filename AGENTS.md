@@ -9,7 +9,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 16 skills, 4 agents, 53 commands, 12 hooks, 1 MCP servers |
+| Components | 16 skills, 4 agents, 54 commands, 10 hooks, 1 MCP servers |
 | License | MIT |
 
 ### North Star for New Work
@@ -62,9 +62,9 @@ Clavain/
 ├── agents/
 │   ├── review/                    # 2 review agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 53 slash commands
+├── commands/                      # 54 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 51 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 52 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)
@@ -295,7 +295,7 @@ Quick validation:
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 16
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"  # Should be 4
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 53
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 54
 echo "Hooks: $(ls hooks/*.sh | wc -l)"              # Should be 21
 
 # Check for phantom namespace references

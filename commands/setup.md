@@ -95,7 +95,7 @@ If the script is unavailable, use the fallback list:
 - `tuivision@interagency-marketplace` — TUI automation and visual testing (MCP)
 - `intermux@interagency-marketplace` — Agent activity visibility and tmux monitoring (MCP)
 - `interleave@interagency-marketplace` — Deterministic skeleton + LLM islands pattern
-- `intermem@interagency-marketplace` — Memory synthesis (auto-memory → AGENTS.md/CLAUDE.md)
+- `intermem@interagency-marketplace` — Memory synthesis — graduates auto-memory to AGENTS.md/CLAUDE.md
 - `interlearn@interagency-marketplace` — Cross-repo institutional knowledge index
 - `intercache@interagency-marketplace` — Cross-session semantic cache (MCP)
 - `interchart@interagency-marketplace` — Interactive ecosystem diagram generator
