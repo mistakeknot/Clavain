@@ -145,6 +145,10 @@
       {
         "source": "internext@interagency-marketplace",
         "description": "Work prioritization and tradeoff analysis"
+      },
+      {
+        "source": "intermem@interagency-marketplace",
+        "description": "Memory synthesis — graduates auto-memory to AGENTS.md/CLAUDE.md"
       }
     ],
     "optional": [
@@ -191,10 +195,6 @@
       {
         "source": "interleave@interagency-marketplace",
         "description": "Deterministic skeleton + LLM islands pattern"
-      },
-      {
-        "source": "intermem@interagency-marketplace",
-        "description": "Memory synthesis — graduates auto-memory to AGENTS.md/CLAUDE.md"
       },
       {
         "source": "interlearn@interagency-marketplace",
