@@ -1155,6 +1155,254 @@ _interspect_apply_propose_locked() {
     git -C "$root" rev-parse HEAD
 }
 
+# ─── Approve (Promote propose → exclude) ────────────────────────────────────
+
+# Promote a "propose" entry to "exclude" in routing-overrides.json.
+# In-place promotion: preserves original created/created_by/evidence_ids,
+# adds confidence, canary snapshot, approved timestamp.
+# Handles full read-modify-write-commit-record flow under flock.
+# Args: $1=agent_name
+# Returns: 0 on success (including idempotent skip), 1 on failure
+_interspect_approve_override() {
+    local agent="$1"
+
+    # --- Pre-flock validation (fast-fail) ---
+
+    if ! _interspect_validate_agent_name "$agent"; then
+        return 1
+    fi
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    local filepath="${FLUX_ROUTING_OVERRIDES_PATH:-.claude/routing-overrides.json}"
+
+    if ! _interspect_validate_overrides_path "$filepath"; then
+        return 1
+    fi
+
+    local fullpath="${root}/${filepath}"
+
+    if ! _interspect_validate_target "$filepath"; then
+        echo "ERROR: ${filepath} is not an allowed modification target" >&2
+        return 1
+    fi
+
+    # Pre-check: verify a propose entry exists (fast-fail before flock)
+    if [[ -f "$fullpath" ]]; then
+        if ! jq -e --arg agent "$agent" '.overrides[] | select(.agent == $agent and .action == "propose")' "$fullpath" >/dev/null 2>&1; then
+            # Check if already excluded (idempotent)
+            if jq -e --arg agent "$agent" '.overrides[] | select(.agent == $agent and .action == "exclude")' "$fullpath" >/dev/null 2>&1; then
+                echo "INFO: ${agent} is already excluded. Nothing to approve."
+                return 0
+            fi
+            echo "ERROR: No proposal found for ${agent}. Run /interspect:propose first." >&2
+            return 1
+        fi
+    else
+        echo "ERROR: ${fullpath} does not exist. No proposals to approve." >&2
+        return 1
+    fi
+
+    # --- Write commit message to temp file (avoids shell injection) ---
+
+    local commit_msg_file
+    commit_msg_file=$(mktemp)
+    printf '[interspect] Approve: exclude %s from flux-drive triage\n\nPromoted from proposal to active exclusion.\nAgent: %s\n' \
+        "$agent" "$agent" > "$commit_msg_file"
+
+    # --- DB path for use inside flock ---
+    local db="${_INTERSPECT_DB:-$(_interspect_db_path)}"
+
+    # --- Entire promote-write-commit-record inside flock ---
+    local flock_output
+    flock_output=$(_interspect_flock_git _interspect_approve_override_locked \
+        "$root" "$filepath" "$fullpath" "$agent" "$commit_msg_file" "$db")
+
+    local exit_code=$?
+    rm -f "$commit_msg_file"
+
+    # Exit code 2 = already excluded (idempotent)
+    if (( exit_code == 2 )); then
+        echo "INFO: ${agent} is already excluded. Nothing to approve."
+        return 0
+    fi
+
+    if (( exit_code != 0 )); then
+        echo "ERROR: Could not approve override. Check git status and retry." >&2
+        echo "$flock_output" >&2
+        return 1
+    fi
+
+    # Parse output from locked function
+    local commit_sha
+    commit_sha=$(echo "$flock_output" | tail -1)
+
+    echo "SUCCESS: Approved exclusion for ${agent}. Commit: ${commit_sha}"
+    echo "Canary monitoring active. Run /interspect:status after 5-10 sessions to check impact."
+    echo "To undo: /interspect:revert ${agent}"
+    return 0
+}
+
+# Inner function called under flock. Do NOT call directly.
+# All arguments are positional to avoid quote-nesting hell.
+_interspect_approve_override_locked() {
+    set -e
+    local root="$1" filepath="$2" fullpath="$3" agent="$4"
+    local commit_msg_file="$5" db="$6"
+
+    local approved_at
+    approved_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # 1. Read current file
+    local current
+    if [[ -f "$fullpath" ]]; then
+        current=$(jq '.' "$fullpath" 2>/dev/null || echo '{"version":1,"overrides":[]}')
+    else
+        echo "ERROR: routing-overrides.json does not exist" >&2
+        return 1
+    fi
+
+    # 2. Find propose entry (inside lock — TOCTOU-safe)
+    if ! echo "$current" | jq -e --arg agent "$agent" '.overrides[] | select(.agent == $agent and .action == "propose")' >/dev/null 2>&1; then
+        # Check if already excluded (race: another session approved between our pre-check and flock)
+        if echo "$current" | jq -e --arg agent "$agent" '.overrides[] | select(.agent == $agent and .action == "exclude")' >/dev/null 2>&1; then
+            return 2
+        fi
+        echo "ERROR: No proposal for ${agent} in routing-overrides.json" >&2
+        return 1
+    fi
+
+    # 3. Compute confidence from evidence (inside lock — TOCTOU-safe)
+    #    Query all name variants: fd-X, interflux:fd-X, interflux:review:fd-X
+    #    Evidence is recorded under prefixed names; routing uses short fd-X format.
+    local escaped_agent
+    escaped_agent=$(_interspect_sql_escape "$agent")
+    local escaped_prefixed escaped_review_prefixed
+    escaped_prefixed=$(_interspect_sql_escape "interflux:${agent}")
+    escaped_review_prefixed=$(_interspect_sql_escape "interflux:review:${agent}")
+    _interspect_load_confidence
+    local total wrong confidence
+    total=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE source IN ('${escaped_agent}', '${escaped_prefixed}', '${escaped_review_prefixed}') AND event = 'override';")
+    wrong=$(sqlite3 "$db" "SELECT COUNT(*) FROM evidence WHERE source IN ('${escaped_agent}', '${escaped_prefixed}', '${escaped_review_prefixed}') AND event = 'override' AND override_reason = 'agent_wrong';")
+    if (( total > 0 )); then
+        confidence=$(awk -v w="$wrong" -v t="$total" 'BEGIN {printf "%.2f", w/t}')
+    else
+        confidence="1.0"
+    fi
+
+    # 4. Build canary snapshot for JSON (DB remains authoritative for live state)
+    local canary_window_uses="${_INTERSPECT_CANARY_WINDOW_USES:-20}"
+    local canary_expires_at
+    canary_expires_at=$(date -u -d "+${_INTERSPECT_CANARY_WINDOW_DAYS:-14} days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -v+"${_INTERSPECT_CANARY_WINDOW_DAYS:-14}"d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+
+    local canary_json="null"
+    if [[ -n "$canary_expires_at" ]]; then
+        canary_json=$(jq -n \
+            --arg status "active" \
+            --argjson window_uses "$canary_window_uses" \
+            --arg expires_at "$canary_expires_at" \
+            '{status:$status,window_uses:$window_uses,expires_at:$expires_at}')
+    fi
+
+    # 5. In-place promote: action→exclude, add confidence, canary, approved timestamp
+    local merged
+    merged=$(echo "$current" | jq \
+        --arg agent "$agent" \
+        --arg approved "$approved_at" \
+        --argjson confidence "$confidence" \
+        --argjson canary "$canary_json" \
+        '(.overrides |= map(
+            if .agent == $agent and .action == "propose" then
+                .action = "exclude"
+                | .approved = $approved
+                | .confidence = $confidence
+                | (if $canary != null then .canary = $canary else . end)
+            else . end
+        ))')
+
+    # 6. Atomic write (temp + rename)
+    mkdir -p "$(dirname "$fullpath")" 2>/dev/null || true
+    local tmpfile="${fullpath}.tmp.$$"
+    echo "$merged" | jq '.' > "$tmpfile"
+
+    if ! jq -e '.' "$tmpfile" >/dev/null 2>&1; then
+        rm -f "$tmpfile"
+        echo "ERROR: Write produced invalid JSON, aborted" >&2
+        return 1
+    fi
+    mv "$tmpfile" "$fullpath"
+
+    # 7. Git add + commit (using git -C to avoid cd side-effect under set -e)
+    git -C "$root" add "$filepath"
+    if ! git -C "$root" commit --no-verify -F "$commit_msg_file"; then
+        git -C "$root" reset HEAD -- "$filepath" 2>/dev/null || true
+        git -C "$root" restore "$filepath" 2>/dev/null || git -C "$root" checkout -- "$filepath" 2>/dev/null || true
+        echo "ERROR: Git commit failed. Approval not applied." >&2
+        return 1
+    fi
+
+    local commit_sha
+    commit_sha=$(git -C "$root" rev-parse HEAD)
+
+    # 8. DB inserts INSIDE flock (atomicity with git commit)
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    local escaped_reason
+    escaped_reason=$(_interspect_sql_escape "Promoted from proposal to active exclusion")
+
+    # Modification record (guarded — git commit already succeeded, DB failure is non-fatal)
+    if ! sqlite3 "$db" "INSERT INTO modifications (group_id, ts, tier, mod_type, target_file, commit_sha, confidence, evidence_summary, status)
+        VALUES ('${escaped_agent}', '${ts}', 'persistent', 'routing', '${filepath}', '${commit_sha}', ${confidence}, '${escaped_reason}', 'applied');"; then
+        echo "WARN: Modification record insert failed — override is active but untracked." >&2
+    fi
+
+    # 9. Canary record — compute baseline BEFORE insert
+    local baseline_json
+    baseline_json=$(_interspect_compute_canary_baseline "$ts" "" 2>/dev/null || echo "null")
+
+    local b_override_rate b_fp_rate b_finding_density b_window
+    if [[ "$baseline_json" != "null" ]]; then
+        b_override_rate=$(echo "$baseline_json" | jq -r '.override_rate')
+        b_fp_rate=$(echo "$baseline_json" | jq -r '.fp_rate')
+        b_finding_density=$(echo "$baseline_json" | jq -r '.finding_density')
+        b_window=$(echo "$baseline_json" | jq -r '.window')
+    else
+        b_override_rate="NULL"
+        b_fp_rate="NULL"
+        b_finding_density="NULL"
+        b_window="NULL"
+    fi
+
+    local expires_at
+    expires_at=$(date -u -d "+${_INTERSPECT_CANARY_WINDOW_DAYS:-14} days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -v+"${_INTERSPECT_CANARY_WINDOW_DAYS:-14}"d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+    if [[ -z "$expires_at" ]]; then
+        echo "ERROR: date command does not support relative dates" >&2
+        return 1
+    fi
+
+    # Build INSERT with conditional NULLs for baseline
+    local baseline_values
+    if [[ "$b_override_rate" == "NULL" ]]; then
+        baseline_values="NULL, NULL, NULL, NULL"
+    else
+        local escaped_bwindow
+        escaped_bwindow=$(_interspect_sql_escape "$b_window")
+        baseline_values="${b_override_rate}, ${b_fp_rate}, ${b_finding_density}, '${escaped_bwindow}'"
+    fi
+
+    if ! sqlite3 "$db" "INSERT INTO canary (file, commit_sha, group_id, applied_at, window_uses, window_expires_at, baseline_override_rate, baseline_fp_rate, baseline_finding_density, baseline_window, status)
+        VALUES ('${filepath}', '${commit_sha}', '${escaped_agent}', '${ts}', ${_INTERSPECT_CANARY_WINDOW_USES:-20}, '${expires_at}', ${baseline_values}, 'active');"; then
+        # Canary failure is non-fatal but flagged in DB
+        sqlite3 "$db" "UPDATE modifications SET status = 'applied-unmonitored' WHERE commit_sha = '${commit_sha}';" 2>/dev/null || true
+        echo "WARN: Canary monitoring failed — override active but unmonitored." >&2
+    fi
+
+    # 10. Output commit SHA (last line, captured by caller)
+    echo "$commit_sha"
+}
+
 # ─── Revert Routing Override ─────────────────────────────────────────────────
 
 # Revert a routing override. Handles the full read-modify-write-commit-record flow.

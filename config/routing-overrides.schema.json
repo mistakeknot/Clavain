@@ -72,6 +72,11 @@
           "$ref": "#/definitions/scope",
           "description": "Optional scope restriction. When absent, override applies globally."
         },
+        "approved": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when a proposal was promoted to exclude. Only present on entries that went through the propose→approve flow."
+        },
         "canary": {
           "$ref": "#/definitions/canary_snapshot",
           "description": "Canary monitoring snapshot at creation time. DB is authoritative for live state."

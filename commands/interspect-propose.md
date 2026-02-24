@@ -111,7 +111,7 @@ For patterns that are "growing" (not yet ready), show progress:
 ## On Accept
 
 If user accepts, proceed to apply the override:
-1. Call `_interspect_apply_routing_override "$agent" "$reason" "$evidence_ids" "interspect"` for each selected agent
+1. Call `_interspect_approve_override "$agent"` for each selected agent (promotes the existing propose entry to exclude with canary monitoring)
 2. Report result to user
 
 ## On Decline
