@@ -36,7 +36,12 @@ case "${1:-help}" in
     complexity-label)    shift; sprint_complexity_label "$@" ;;
 
     # ── Child bead management ────────────────────────────────────
-    close-children)      shift; sprint_close_children "$@" ;;
+    close-children)           shift; sprint_close_children "$@" ;;
+    close-parent-if-done)     shift; sprint_close_parent_if_done "$@" ;;
+
+    # ── Bead claiming ──────────────────────────────────────────────
+    bead-claim)              shift; bead_claim "$@" ;;
+    bead-release)            shift; bead_release "$@" ;;
 
     # ── Checkpoint commands ──────────────────────────────────────
     checkpoint-write)    shift; checkpoint_write "$@" ;;
@@ -70,7 +75,12 @@ Complexity:
   complexity-label    <score>
 
 Children:
-  close-children      <bead_id> <reason>
+  close-children           <bead_id> <reason>
+  close-parent-if-done     <bead_id> [reason]
+
+Bead Claiming:
+  bead-claim              <bead_id> [session_id]
+  bead-release            <bead_id>
 
 Checkpoints:
   checkpoint-write    <bead_id> <phase> <step> <plan_path>

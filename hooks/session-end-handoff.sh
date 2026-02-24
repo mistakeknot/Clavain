@@ -116,6 +116,12 @@ ln -sf "$(basename "$HANDOFF_PATH")" ".clavain/scratch/handoff-latest.md" 2>/dev
 # shellcheck disable=SC2012
 ls -1t .clavain/scratch/handoff-*.md 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/null || true
 
+# Release any bead claims held by this session
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]] && command -v bd &>/dev/null; then
+    source "${BASH_SOURCE[0]%/*}/lib-sprint.sh" 2>/dev/null || true
+    bead_release "$CLAVAIN_BEAD_ID" 2>/dev/null || true
+fi
+
 # Sync beads if available
 if command -v bd &>/dev/null; then
     bd sync 2>/dev/null || true

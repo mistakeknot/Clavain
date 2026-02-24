@@ -587,6 +587,8 @@ sprint_claim() {
         return 1
     fi
     intercore_unlock "sprint-claim" "$sprint_id"
+    # Also set bd claim for cross-session visibility
+    bead_claim "$sprint_id" "$session_id" || true
     return 0
 }
 
@@ -594,6 +596,9 @@ sprint_claim() {
 sprint_release() {
     local sprint_id="$1"
     [[ -z "$sprint_id" ]] && return 0
+
+    # Release bd claim
+    bead_release "$sprint_id" || true
 
     local run_id
     run_id=$(_sprint_resolve_run_id "$sprint_id") || return 0
@@ -1255,7 +1260,94 @@ sprint_close_children() {
         bd close "$child_id" --reason="$reason" >/dev/null 2>&1 && closed=$((closed + 1))
     done <<< "$blocked_ids"
 
+    # After closing children, try closing parent if all siblings are done
+    sprint_close_parent_if_done "$epic_id" "All children completed under epic $epic_id" || true
+
     echo "$closed"
+}
+
+# Auto-close parent bead if all its children are now closed.
+# Called after sprint ship to propagate completion upward (one level only).
+# Usage: sprint_close_parent_if_done <bead_id> [reason]
+# Returns: parent bead ID if closed, empty otherwise
+sprint_close_parent_if_done() {
+    local bead_id="${1:?bead_id required}"
+    local reason="${2:-Auto-closed: all children completed}"
+    command -v bd &>/dev/null || return 0
+
+    # Get parent from bd show PARENT section
+    local parent_id
+    parent_id=$(bd show "$bead_id" 2>/dev/null \
+        | awk '/^PARENT$/,/^(DEPENDS|CHILDREN|LABELS|NOTES|BLOCKS|DESCRIPTION|COMMENTS|$)/' \
+        | grep '↑' \
+        | sed 's/.*↑ [○◐●✓❄] //' \
+        | cut -d: -f1 \
+        | tr -d ' ' \
+        | grep -E '^[A-Za-z]+-[A-Za-z0-9]+$' \
+        | head -1) || parent_id=""
+
+    [[ -z "$parent_id" ]] && return 0
+
+    # Check if parent is still open (not already closed/deferred)
+    local parent_status
+    parent_status=$(bd show "$parent_id" 2>/dev/null | head -1) || return 0
+    echo "$parent_status" | grep -qE "OPEN|IN_PROGRESS" || return 0
+
+    # Check if all children of parent are closed
+    local open_children
+    open_children=$(bd show "$parent_id" 2>/dev/null \
+        | awk '/^CHILDREN$/,/^(DEPENDS|PARENT|LABELS|NOTES|BLOCKS|DESCRIPTION|COMMENTS|$)/' \
+        | grep -cE '↳ [○◐]' 2>/dev/null) || open_children=0
+
+    if [[ "$open_children" -eq 0 ]]; then
+        bd close "$parent_id" --reason="$reason" >/dev/null 2>&1 && echo "$parent_id"
+    fi
+}
+
+# ─── Bead Claiming ──────────────────────────────────────────────────
+
+# Claim a bead for the current session (advisory lock via bd set-state).
+# Usage: bead_claim <bead_id> [session_id]
+# Returns: 0 if claimed, 1 if already claimed by another active session
+bead_claim() {
+    local bead_id="${1:?bead_id required}"
+    local session_id="${2:-${CLAUDE_SESSION_ID:-unknown}}"
+    command -v bd &>/dev/null || return 0
+
+    # Check existing claim
+    local existing_claim existing_at now_epoch age_seconds
+    existing_claim=$(bd state "$bead_id" claimed_by 2>/dev/null) || existing_claim=""
+
+    if [[ -n "$existing_claim" && "$existing_claim" != "(no claimed_by state set)" ]]; then
+        # Same session? Already claimed by us.
+        [[ "$existing_claim" == "$session_id" ]] && return 0
+
+        # Check staleness (2h = 7200s)
+        existing_at=$(bd state "$bead_id" claimed_at 2>/dev/null) || existing_at=""
+        if [[ -n "$existing_at" && "$existing_at" != "(no claimed_at state set)" ]]; then
+            now_epoch=$(date +%s)
+            age_seconds=$(( now_epoch - existing_at ))
+            if [[ $age_seconds -lt 7200 ]]; then
+                local short_session="${existing_claim:0:8}"
+                local age_min=$(( age_seconds / 60 ))
+                echo "Bead $bead_id claimed by session ${short_session} (${age_min}m ago)" >&2
+                return 1
+            fi
+        fi
+    fi
+
+    bd set-state "$bead_id" "claimed_by=$session_id" >/dev/null 2>&1 || true
+    bd set-state "$bead_id" "claimed_at=$(date +%s)" >/dev/null 2>&1 || true
+    return 0
+}
+
+# Release a bead claim.
+# Usage: bead_release <bead_id>
+bead_release() {
+    local bead_id="${1:?bead_id required}"
+    command -v bd &>/dev/null || return 0
+    bd set-state "$bead_id" "claimed_by=" >/dev/null 2>&1 || true
+    bd set-state "$bead_id" "claimed_at=" >/dev/null 2>&1 || true
 }
 
 # ─── Invalidation ─────────────────────────────────────────────────
