@@ -5,7 +5,7 @@ description: Use when starting any conversation - establishes how to find and us
 
 **Proactive skill invocation is required.** When a skill matches the current task — even partially — invoke it before responding.
 
-# Quick Router — 16 skills, 4 agents, and 54 commands
+# Quick Router — 16 skills, 4 agents, and 58 commands
 
 | You want to... | Run this |
 |----------------|----------|

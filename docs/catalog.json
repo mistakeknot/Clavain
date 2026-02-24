@@ -1,9 +1,9 @@
 {
-  "generated": "2026-02-23T09:29:09Z",
+  "generated": "2026-02-24T21:37:54Z",
   "counts": {
     "skills": 16,
     "agents": 4,
-    "commands": 54,
+    "commands": 58,
     "hooks": 10,
     "mcp_servers": 1,
     "review": 2,
@@ -183,8 +183,20 @@
       "description": "Analyze Interspect evidence \u2014 detect patterns, classify by counting-rule thresholds, report readiness"
     },
     {
+      "name": "interspect-approve",
+      "description": "Promote pending proposals to active routing overrides"
+    },
+    {
       "name": "interspect-correction",
       "description": "Record that an agent got something wrong \u2014 high-quality manual evidence for Interspect"
+    },
+    {
+      "name": "interspect-disable-autonomy",
+      "description": "Disable autonomous mode \u2014 all overrides require explicit approval"
+    },
+    {
+      "name": "interspect-enable-autonomy",
+      "description": "Enable autonomous mode \u2014 low/medium-risk overrides auto-apply with canary monitoring"
     },
     {
       "name": "interspect-evidence",
@@ -193,6 +205,10 @@
     {
       "name": "interspect-health",
       "description": "Signal collection diagnostics \u2014 check evidence channels, dark sessions, DB health"
+    },
+    {
+      "name": "interspect-override",
+      "description": "Manually exclude an agent from flux-drive triage \u2014 bypasses evidence requirements"
     },
     {
       "name": "interspect-propose",

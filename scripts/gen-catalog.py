@@ -178,6 +178,10 @@ def count_mcp_servers(root: Path) -> int:
     raise ValueError(".claude-plugin/plugin.json has invalid 'mcpServers' shape")
 
 
+def _mcp_label(n: int) -> str:
+    return "MCP server" if n == 1 else "MCP servers"
+
+
 def replace_once(text: str, pattern: str, replacement: str, path: Path) -> str:
     compiled = re.compile(pattern, re.MULTILINE)
     if not compiled.search(text):
@@ -186,20 +190,22 @@ def replace_once(text: str, pattern: str, replacement: str, path: Path) -> str:
 
 
 def update_plugin_json_counts(text: str, counts: dict[str, int], path: Path) -> str:
+    mcp = counts["mcp_servers"]
     return replace_once(
         text,
-        r"\d+ agents, \d+ commands, \d+ skills, \d+ MCP servers",
-        f"{counts['agents']} agents, {counts['commands']} commands, {counts['skills']} skills, {counts['mcp_servers']} MCP servers",
+        r"\d+ agents, \d+ commands, \d+ skills, \d+ MCP servers?",
+        f"{counts['agents']} agents, {counts['commands']} commands, {counts['skills']} skills, {mcp} {_mcp_label(mcp)}",
         path,
     )
 
 
 def update_agents_md_counts(text: str, counts: dict[str, int], path: Path) -> str:
+    mcp = counts["mcp_servers"]
     others = max(counts["commands"] - 2, 0)
     updated = replace_once(
         text,
-        r"\d+ skills, \d+ agents, \d+ commands, \d+ hooks, \d+ MCP servers",
-        f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, {counts['mcp_servers']} MCP servers",
+        r"\d+ skills, \d+ agents, \d+ commands, \d+ hooks, \d+ MCP servers?",
+        f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, {mcp} {_mcp_label(mcp)}",
         path,
     )
     updated = replace_once(updated, r"# \d+ discipline skills", f"# {counts['skills']} discipline skills", path)
@@ -224,10 +230,11 @@ def update_agents_md_counts(text: str, counts: dict[str, int], path: Path) -> st
 
 
 def update_claude_md_counts(text: str, counts: dict[str, int], path: Path) -> str:
+    mcp = counts["mcp_servers"]
     updated = replace_once(
         text,
-        r"\d+ skills, \d+ agents, \d+ commands, \d+ hooks, \d+ MCP servers",
-        f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, {counts['mcp_servers']} MCP servers",
+        r"\d+ skills, \d+ agents, \d+ commands, \d+ hooks, \d+ MCP servers?",
+        f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, {mcp} {_mcp_label(mcp)}",
         path,
     )
     updated = replace_once(
@@ -240,10 +247,11 @@ def update_claude_md_counts(text: str, counts: dict[str, int], path: Path) -> st
 
 
 def update_readme_counts(text: str, counts: dict[str, int], path: Path) -> str:
+    mcp = counts["mcp_servers"]
     updated = replace_once(
         text,
-        r"\d+ skills, \d+ agents, \d+ commands, \d+ hooks, and \d+ MCP servers",
-        f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, and {counts['mcp_servers']} MCP servers",
+        r"\d+ skills, \d+ agents, \d+ commands, \d+ hooks, and \d+ MCP servers?",
+        f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, and {mcp} {_mcp_label(mcp)}",
         path,
     )
     updated = replace_once(updated, r"### Skills \(\d+\)", f"### Skills ({counts['skills']})", path)
