@@ -15,7 +15,7 @@ claude --plugin-dir /home/mk/projects/Demarch/os/clavain
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 16
 ls agents/{review,workflow}/*.md | wc -l  # Should be 4
-ls commands/*.md | wc -l              # Should be 54
+ls commands/*.md | wc -l              # Should be 55
 bash -n hooks/lib.sh                   # Syntax check
 bash -n hooks/session-start.sh         # Syntax check
 bash -n hooks/dotfiles-sync.sh         # Syntax check
