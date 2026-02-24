@@ -1,6 +1,6 @@
 # PaymentService API
 
-## Quick Start
+## Quick start
 
 ```bash
 pip install payment-service==1.2.3
@@ -67,7 +67,7 @@ Create a payment intent.
 }
 ```
 
-## Error Handling
+## Error handling
 
 All errors return HTTP 400 with a JSON body:
 
@@ -82,7 +82,7 @@ All errors return HTTP 400 with a JSON body:
 
 Note: v2 errors use a different format (see v2 migration guide, link TBD).
 
-## Rate Limits
+## Rate limits
 
 - Free tier: 100 requests/minute
 - Pro tier: 1000 requests/minute
