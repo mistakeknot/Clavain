@@ -63,8 +63,26 @@ main() {
     # Global sentinel: prevent ALL auto-publish re-triggers within 60s.
     intercore_check_or_die "autopub" "global" 60
 
-    # Find marketplace
-    local marketplace_root="${MARKETPLACE_ROOT:-/root/projects/Interverse/infra/marketplace}"
+    # Find marketplace — walk up from plugin looking for core/marketplace/ (monorepo layout)
+    local marketplace_root="${MARKETPLACE_ROOT:-}"
+    if [[ -z "$marketplace_root" ]]; then
+        local search_dir="$cwd"
+        for _ in 1 2 3 4; do
+            search_dir="$(dirname "$search_dir")"
+            if [[ -f "$search_dir/core/marketplace/.claude-plugin/marketplace.json" ]]; then
+                marketplace_root="$search_dir/core/marketplace"
+                break
+            fi
+        done
+    fi
+    # Fall back to Claude Code's own marketplace checkout
+    if [[ -z "$marketplace_root" ]]; then
+        local cc_marketplace="$HOME/.claude/plugins/marketplaces/interagency-marketplace"
+        if [[ -f "$cc_marketplace/.claude-plugin/marketplace.json" ]]; then
+            marketplace_root="$cc_marketplace"
+        fi
+    fi
+    [[ -n "$marketplace_root" ]] || exit 0
     local marketplace_json="$marketplace_root/.claude-plugin/marketplace.json"
     [[ -f "$marketplace_json" ]] || exit 0
 
@@ -140,6 +158,45 @@ main() {
     git -C "$marketplace_root" add .claude-plugin/marketplace.json
     git -C "$marketplace_root" commit -m "chore: bump $plugin_name to v$new_version" --quiet 2>/dev/null || true
     git -C "$marketplace_root" push --quiet 2>/dev/null || true
+
+    # Sync Claude Code's own marketplace checkout if it differs from monorepo copy
+    local cc_marketplace="$HOME/.claude/plugins/marketplaces/interagency-marketplace"
+    if [[ "$marketplace_root" != "$cc_marketplace" && -f "$cc_marketplace/.claude-plugin/marketplace.json" ]]; then
+        local cc_ver
+        cc_ver="$(jq -r --arg name "$plugin_name" \
+            '.plugins[] | select(.name == $name) | .version // empty' \
+            "$cc_marketplace/.claude-plugin/marketplace.json" 2>/dev/null || true)"
+        if [[ "$cc_ver" != "$new_version" ]]; then
+            local tmp_cc
+            tmp_cc="$(mktemp)"
+            jq --arg name "$plugin_name" --arg v "$new_version" \
+                '(.plugins[] | select(.name == $name)).version = $v' \
+                "$cc_marketplace/.claude-plugin/marketplace.json" > "$tmp_cc" && \
+                mv "$tmp_cc" "$cc_marketplace/.claude-plugin/marketplace.json"
+            git -C "$cc_marketplace" add .claude-plugin/marketplace.json 2>/dev/null || true
+            git -C "$cc_marketplace" commit -m "chore: bump $plugin_name to v$new_version" --quiet 2>/dev/null || true
+            git -C "$cc_marketplace" push --quiet 2>/dev/null || true
+        fi
+    fi
+
+    # Rebuild plugin cache so next session picks up the new version immediately
+    local cache_dir="$HOME/.claude/plugins/cache/interagency-marketplace/$plugin_name/$new_version"
+    if [[ ! -d "$cache_dir" ]]; then
+        cp -a "$cwd" "$cache_dir" 2>/dev/null || true
+    fi
+
+    # Update installed_plugins.json to point at the new cache
+    local installed_json="$HOME/.claude/plugins/installed_plugins.json"
+    if [[ -f "$installed_json" ]]; then
+        local tmp_inst
+        tmp_inst="$(mktemp)"
+        local plugin_key="${plugin_name}@interagency-marketplace"
+        jq --arg key "$plugin_key" --arg v "$new_version" \
+            --arg path "$cache_dir" \
+            '(.plugins[$key][0].version = $v) | (.plugins[$key][0].installPath = $path)' \
+            "$installed_json" > "$tmp_inst" 2>/dev/null && \
+            mv "$tmp_inst" "$installed_json" || true
+    fi
 
     # Report what happened
     local msg
