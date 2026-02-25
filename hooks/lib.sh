@@ -35,6 +35,7 @@ _discover_all_companions() {
                     INTERWATCH)  _CACHED_INTERWATCH_ROOT="$_val" ;;
                     INTERLOCK)   _CACHED_INTERLOCK_ROOT="$_val" ;;
                     INTERJECT)   _CACHED_INTERJECT_ROOT="$_val" ;;
+                    INTERSPECT)  _CACHED_INTERSPECT_ROOT="$_val" ;;
                 esac
             done < "$_COMPANION_CACHE_FILE"
             _COMPANIONS_DISCOVERED=1
@@ -49,8 +50,9 @@ _discover_all_companions() {
     _CACHED_INTERWATCH_ROOT=""
     _CACHED_INTERLOCK_ROOT=""
     _CACHED_INTERJECT_ROOT=""
+    _CACHED_INTERSPECT_ROOT=""
 
-    # Single find with all 6 patterns OR'd together
+    # Single find with all 7 patterns OR'd together
     local _line
     while IFS= read -r _line; do
         [[ -z "$_line" ]] && continue
@@ -79,6 +81,10 @@ _discover_all_companions() {
                 local _r; _r="$(dirname "$(dirname "$_line")")"
                 [[ -z "$_CACHED_INTERJECT_ROOT" || "$_r" > "$_CACHED_INTERJECT_ROOT" ]] && _CACHED_INTERJECT_ROOT="$_r"
                 ;;
+            */interspect/*/hooks/lib-interspect.sh)
+                local _r; _r="$(dirname "$(dirname "$_line")")"
+                [[ -z "$_CACHED_INTERSPECT_ROOT" || "$_r" > "$_CACHED_INTERSPECT_ROOT" ]] && _CACHED_INTERSPECT_ROOT="$_r"
+                ;;
         esac
     done < <(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \( \
         -path '*/interphase/*/hooks/lib-gates.sh' -o \
@@ -86,7 +92,8 @@ _discover_all_companions() {
         -path '*/interpath/*/scripts/interpath.sh' -o \
         -path '*/interwatch/*/scripts/interwatch.sh' -o \
         -path '*/interlock/*/scripts/interlock-register.sh' -o \
-        -path '*/interject/*/bin/launch-mcp.sh' \
+        -path '*/interject/*/bin/launch-mcp.sh' -o \
+        -path '*/interspect/*/hooks/lib-interspect.sh' \
     \) 2>/dev/null)
 
     # Write file cache (atomic: write temp, then mv)
@@ -100,6 +107,7 @@ _discover_all_companions() {
         echo "INTERWATCH=${_CACHED_INTERWATCH_ROOT}"
         echo "INTERLOCK=${_CACHED_INTERLOCK_ROOT}"
         echo "INTERJECT=${_CACHED_INTERJECT_ROOT}"
+        echo "INTERSPECT=${_CACHED_INTERSPECT_ROOT}"
     } > "$_tmp" 2>/dev/null && mv -f "$_tmp" "$_COMPANION_CACHE_FILE" 2>/dev/null || rm -f "$_tmp" 2>/dev/null
     _COMPANIONS_DISCOVERED=1
 }
@@ -183,6 +191,18 @@ _discover_interject_plugin() {
     fi
     _discover_all_companions
     echo "$_CACHED_INTERJECT_ROOT"
+}
+
+_discover_interspect_plugin() {
+    if [[ -n "${_CACHED_INTERSPECT_ROOT+set}" ]]; then
+        echo "$_CACHED_INTERSPECT_ROOT"; return 0
+    fi
+    if [[ -n "${INTERSPECT_ROOT:-}" ]]; then
+        _CACHED_INTERSPECT_ROOT="$INTERSPECT_ROOT"
+        echo "$INTERSPECT_ROOT"; return 0
+    fi
+    _discover_all_companions
+    echo "$_CACHED_INTERSPECT_ROOT"
 }
 
 # ─── In-flight agent detection ───────────────────────────────────────────────

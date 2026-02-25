@@ -1,7 +1,7 @@
 {
   "name": "clavain",
   "version": "0.6.85",
-  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, and monitors its own docs. Orchestrates Claude, Codex, and GPT-5.2 Pro through 4 agents, 58 commands, 16 skills, 1 MCP server. Companions: interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
+  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, and monitors its own docs. Orchestrates Claude, Codex, and GPT-5.2 Pro through 4 agents, 46 commands, 16 skills, 1 MCP server. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
   "author": {
     "name": "mistakeknot"
   },
@@ -58,18 +58,6 @@
     "./commands/init.md",
     "./commands/interpeer.md",
     "./commands/interserve.md",
-    "./commands/interspect-approve.md",
-    "./commands/interspect-correction.md",
-    "./commands/interspect-disable-autonomy.md",
-    "./commands/interspect-enable-autonomy.md",
-    "./commands/interspect-evidence.md",
-    "./commands/interspect-health.md",
-    "./commands/interspect.md",
-    "./commands/interspect-override.md",
-    "./commands/interspect-propose.md",
-    "./commands/interspect-revert.md",
-    "./commands/interspect-status.md",
-    "./commands/interspect-unblock.md",
     "./commands/land.md",
     "./commands/migration-safety.md",
     "./commands/model-routing.md",

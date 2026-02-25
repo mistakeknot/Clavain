@@ -8,11 +8,6 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
             "async": true
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/interspect-session.sh",
-            "async": true
           }
         ]
       }
@@ -52,16 +47,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/interspect-evidence.sh",
-            "timeout": 5
-          }
-        ]
       }
     ],
     "Stop": [
@@ -70,11 +55,6 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-stop-actions.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/interspect-session-end.sh",
             "timeout": 5
           }
         ]
