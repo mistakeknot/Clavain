@@ -131,6 +131,32 @@ _discover_interlock_plugin() {
     echo ""
 }
 
+# Discover the interject companion plugin root directory.
+# Checks INTERJECT_ROOT env var first, then searches the plugin cache.
+# Output: plugin root path to stdout, or empty string if not found.
+_discover_interject_plugin() {
+    if [[ -n "${_CACHED_INTERJECT_ROOT+set}" ]]; then
+        echo "$_CACHED_INTERJECT_ROOT"
+        return 0
+    fi
+    if [[ -n "${INTERJECT_ROOT:-}" ]]; then
+        _CACHED_INTERJECT_ROOT="$INTERJECT_ROOT"
+        echo "$INTERJECT_ROOT"
+        return 0
+    fi
+    local f
+    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
+        -path '*/interject/*/bin/launch-mcp.sh' 2>/dev/null | sort -V | tail -1)
+    if [[ -n "$f" ]]; then
+        # launch-mcp.sh is at <root>/bin/launch-mcp.sh, so strip two levels
+        _CACHED_INTERJECT_ROOT="$(dirname "$(dirname "$f")")"
+        echo "$_CACHED_INTERJECT_ROOT"
+        return 0
+    fi
+    _CACHED_INTERJECT_ROOT=""
+    echo ""
+}
+
 # ─── In-flight agent detection ───────────────────────────────────────────────
 # Detects background agents from previous sessions that may still be running.
 # Used by SessionStart to warn about duplicates and by Stop to write manifests.
