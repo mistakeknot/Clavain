@@ -36,7 +36,7 @@ fi
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
 # Claim stop sentinel FIRST — prevents other Stop hooks from duplicate work
-intercore_check_or_die "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" 0 "/tmp/clavain-stop-${SESSION_ID}"
+intercore_check_or_die "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" 0
 
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 if [[ -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]]; then
@@ -73,7 +73,7 @@ if [[ "$WEIGHT" -ge 4 ]]; then
         exit 0
     fi
     # Check compound-specific throttle (5-min cooldown)
-    intercore_check_or_die "compound_throttle" "$SESSION_ID" 300 "/tmp/clavain-compound-last-${SESSION_ID}"
+    intercore_check_or_die "compound_throttle" "$SESSION_ID" 300
 
     REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] (weight ${WEIGHT}) in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."
 
@@ -83,7 +83,7 @@ elif [[ "$WEIGHT" -ge 3 ]]; then
         exit 0
     fi
     # Check drift-specific throttle (10-min cooldown)
-    intercore_check_or_die "drift_throttle" "$SESSION_ID" 600 "/tmp/clavain-drift-last-${SESSION_ID}"
+    intercore_check_or_die "drift_throttle" "$SESSION_ID" 600
 
     # Guard: interwatch must be installed
     source "${SCRIPT_DIR}/lib.sh" 2>/dev/null || true

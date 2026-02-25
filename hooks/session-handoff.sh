@@ -38,10 +38,10 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 # The wrapper handles DB-vs-file internally, but if the wrapper is unavailable
 # (e.g., lib-intercore.sh failed to source), intercore_check_or_die falls back
 # to inline temp file logic.
-intercore_check_or_die "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" 0 "/tmp/clavain-stop-${SESSION_ID}"
+intercore_check_or_die "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" 0
 
 # Guard: only fire once per session
-intercore_check_or_die "handoff" "$SESSION_ID" 0 "/tmp/clavain-handoff-${SESSION_ID}"
+intercore_check_or_die "handoff" "$SESSION_ID" 0
 
 # Write in-flight agent manifest (before signal analysis — runs even if no signals)
 # shellcheck source=hooks/lib.sh
@@ -53,31 +53,28 @@ _write_inflight_manifest "$SESSION_ID" 2>/dev/null || true
 SIGNALS=""
 
 # 1. Uncommitted changes — only if the working tree changed DURING this session.
-# Session-start records a snapshot of git status; we compare against it.
-SNAPSHOT="/tmp/clavain-git-snapshot-${SESSION_ID}"
+# Session-start records a snapshot to ic state; we compare against it.
 if command -v git &>/dev/null && git rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
     CURRENT_DIRTY=$(git status --porcelain 2>/dev/null | grep -v '^\?\?' | sort || true)
-    if [[ -f "$SNAPSHOT" ]]; then
-        PREV_DIRTY=$(sort "$SNAPSHOT" 2>/dev/null || true)
+    PREV_DIRTY=$(intercore_state_get "git_snapshot" "$SESSION_ID" 2>/dev/null) || PREV_DIRTY=""
+    if [[ -n "$PREV_DIRTY" ]]; then
         # Only signal if there are NEW uncommitted changes not in the snapshot
         NEW_CHANGES=$(comm -23 <(echo "$CURRENT_DIRTY") <(echo "$PREV_DIRTY") | head -1 || true)
         if [[ -n "$NEW_CHANGES" ]]; then
             SIGNALS="${SIGNALS}uncommitted-changes,"
         fi
     elif [[ -n "$CURRENT_DIRTY" ]]; then
-        # No snapshot (session-start didn't run?) — fall back to original behavior
+        # No snapshot (session-start didn't run or ic unavailable) — fall back
         SIGNALS="${SIGNALS}uncommitted-changes,"
     fi
 fi
 
 # 2. In-progress beads — only if they were touched this session.
-# Check if any beads were updated/created during this session by comparing
-# against the session-start snapshot.
-BEAD_SNAPSHOT="/tmp/clavain-beads-snapshot-${SESSION_ID}"
+# Session-start records a snapshot to ic state; we compare against it.
 if command -v bd &>/dev/null; then
     CURRENT_IN_PROGRESS=$(bd list --status=in_progress 2>/dev/null | grep '●' | sort || true)
-    if [[ -f "$BEAD_SNAPSHOT" ]]; then
-        PREV_IN_PROGRESS=$(sort "$BEAD_SNAPSHOT" 2>/dev/null || true)
+    PREV_IN_PROGRESS=$(intercore_state_get "beads_snapshot" "$SESSION_ID" 2>/dev/null) || PREV_IN_PROGRESS=""
+    if [[ -n "$PREV_IN_PROGRESS" ]]; then
         # Only signal if there are NEW in-progress beads not in the snapshot
         NEW_BEADS=$(comm -23 <(echo "$CURRENT_IN_PROGRESS") <(echo "$PREV_IN_PROGRESS") | head -1 || true)
         if [[ -n "$NEW_BEADS" ]]; then
@@ -121,9 +118,7 @@ fi
 # Release the shared stop sentinel so compound/drift hooks can still fire.
 if [[ -z "$SIGNALS" ]]; then
     if type intercore_sentinel_reset_or_legacy &>/dev/null; then
-        intercore_sentinel_reset_or_legacy "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID" "/tmp/clavain-stop-${SESSION_ID}"
-    else
-        rm -f "/tmp/clavain-stop-${SESSION_ID}" 2>/dev/null || true
+        intercore_sentinel_reset_or_legacy "$INTERCORE_STOP_DEDUP_SENTINEL" "$SESSION_ID"
     fi
     exit 0
 fi
@@ -179,13 +174,9 @@ else
 ENDJSON
 fi
 
-# Clean up stale sentinels and snapshots from previous sessions
+# Clean up stale sentinels from previous sessions
 if type intercore_cleanup_stale &>/dev/null; then
     intercore_cleanup_stale
-else
-    find /tmp -maxdepth 1 -name 'clavain-stop-*' -mmin +60 -delete 2>/dev/null || true
 fi
-find /tmp -maxdepth 1 -name 'clavain-git-snapshot-*' -mmin +60 -delete 2>/dev/null || true
-find /tmp -maxdepth 1 -name 'clavain-beads-snapshot-*' -mmin +60 -delete 2>/dev/null || true
 
 exit 0

@@ -1355,8 +1355,6 @@ bead_release() {
 # Invalidate discovery caches. Called automatically by sprint_record_phase_completion.
 sprint_invalidate_caches() {
     if type intercore_state_delete_all &>/dev/null; then
-        intercore_state_delete_all "discovery_brief" "/tmp/clavain-discovery-brief-*.cache"
-    else
-        rm -f /tmp/clavain-discovery-brief-*.cache 2>/dev/null || true
+        intercore_state_delete_all "discovery_brief"
     fi
 }

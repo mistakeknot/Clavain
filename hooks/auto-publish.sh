@@ -61,8 +61,7 @@ main() {
     [[ -n "$plugin_name" && -n "$plugin_version" ]] || exit 0
 
     # Global sentinel: prevent ALL auto-publish re-triggers within 60s.
-    # Uses intercore sentinel with legacy temp-file fallback.
-    intercore_check_or_die "autopub" "global" 60 "/tmp/clavain-autopub.lock"
+    intercore_check_or_die "autopub" "global" 60
 
     # Find marketplace
     local marketplace_root="${MARKETPLACE_ROOT:-/root/projects/Interverse/infra/marketplace}"

@@ -216,6 +216,26 @@ fi
 # Removed duplicate sprint_find_active call here (iv-zlht).
 sprint_resume_hint=""
 
+# Capture session-start snapshots for handoff diff detection (iv-fd7l0).
+# Only on real startup — compact/resume sessions inherit the original snapshots.
+if [[ "$_hook_source" == "startup" ]]; then
+    # shellcheck source=hooks/lib-intercore.sh
+    source "${SCRIPT_DIR}/lib-intercore.sh" 2>/dev/null || true
+    _snap_session=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _snap_session=""
+    if [[ -n "$_snap_session" ]] && intercore_available 2>/dev/null; then
+        # Git status snapshot (tracked files only, sorted for diffing)
+        if command -v git &>/dev/null && git rev-parse --is-inside-work-tree &>/dev/null 2>&1; then
+            _git_snap=$(git status --porcelain 2>/dev/null | grep -v '^\?\?' | sort || true)
+            intercore_state_set "git_snapshot" "$_snap_session" "$_git_snap" 2>/dev/null || true
+        fi
+        # In-progress beads snapshot
+        if command -v bd &>/dev/null; then
+            _bead_snap=$(bd list --status=in_progress 2>/dev/null | grep '●' | sort || true)
+            intercore_state_set "beads_snapshot" "$_snap_session" "$_bead_snap" 2>/dev/null || true
+        fi
+    fi
+fi
+
 # In-flight agent detection (from previous sessions)
 # Skip on compact — agents were already delivered this session; re-detecting
 # them produces stale notifications that flood the context.

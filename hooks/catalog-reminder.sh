@@ -22,7 +22,7 @@ source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
 
 # One reminder per session (intercore sentinel or temp file fallback)
 _SID="${CLAUDE_SESSION_ID:-unknown}"
-intercore_check_or_die "catalog_remind" "$_SID" 0 "/tmp/clavain-catalog-remind-${_SID}.lock"
+intercore_check_or_die "catalog_remind" "$_SID" 0
 
 BASENAME="$(basename "$FILE_PATH")"
 DIRNAME="$(basename "$(dirname "$FILE_PATH")")"
