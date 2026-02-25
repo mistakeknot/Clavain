@@ -1,160 +1,188 @@
 #!/usr/bin/env bash
 # Shared utilities for Clavain hook scripts
 
-# Discover the interphase companion plugin root directory.
-# Checks INTERPHASE_ROOT env var first, then searches the plugin cache.
-# Output: plugin root path to stdout, or empty string if not found.
+# ─── Companion plugin discovery ──────────────────────────────────────────────
+# Batch-discovers all companion plugin root directories with a single `find`
+# call, then caches results both in-process (_CACHED_* vars) and on disk
+# (~/.cache/clavain/companion-roots.env) for cross-hook reuse.
+#
+# Individual _discover_*_plugin() functions are thin wrappers: they check
+# the in-process cache, then the env-var override, then trigger the batch
+# discover which populates everything at once.
+
+_COMPANION_CACHE_DIR="${HOME}/.cache/clavain"
+_COMPANION_CACHE_FILE="${_COMPANION_CACHE_DIR}/companion-roots.env"
+
+# Batch-discover all companions in a single find traversal.
+# Populates all _CACHED_* variables and writes the file cache.
+_discover_all_companions() {
+    # Already ran this session (in-process)? Skip.
+    [[ -n "${_COMPANIONS_DISCOVERED+set}" ]] && return 0
+
+    # Try file cache first (written by a previous hook in this session).
+    if [[ -f "$_COMPANION_CACHE_FILE" ]]; then
+        local _cache_sid
+        _cache_sid=$(head -1 "$_COMPANION_CACHE_FILE" 2>/dev/null) || _cache_sid=""
+        if [[ "$_cache_sid" == "# session=${CLAUDE_SESSION_ID:-}" && -n "${CLAUDE_SESSION_ID:-}" ]]; then
+            # Cache is from this session — read it
+            while IFS='=' read -r _key _val; do
+                [[ "$_key" == \#* ]] && continue
+                [[ -z "$_key" ]] && continue
+                case "$_key" in
+                    INTERPHASE)  _CACHED_INTERPHASE_ROOT="$_val" ;;
+                    INTERFLUX)   _CACHED_INTERFLUX_ROOT="$_val" ;;
+                    INTERPATH)   _CACHED_INTERPATH_ROOT="$_val" ;;
+                    INTERWATCH)  _CACHED_INTERWATCH_ROOT="$_val" ;;
+                    INTERLOCK)   _CACHED_INTERLOCK_ROOT="$_val" ;;
+                    INTERJECT)   _CACHED_INTERJECT_ROOT="$_val" ;;
+                esac
+            done < "$_COMPANION_CACHE_FILE"
+            _COMPANIONS_DISCOVERED=1
+            return 0
+        fi
+    fi
+
+    # Initialize all caches to empty
+    _CACHED_INTERPHASE_ROOT=""
+    _CACHED_INTERFLUX_ROOT=""
+    _CACHED_INTERPATH_ROOT=""
+    _CACHED_INTERWATCH_ROOT=""
+    _CACHED_INTERLOCK_ROOT=""
+    _CACHED_INTERJECT_ROOT=""
+
+    # Single find with all 6 patterns OR'd together
+    local _line
+    while IFS= read -r _line; do
+        [[ -z "$_line" ]] && continue
+        case "$_line" in
+            */interphase/*/hooks/lib-gates.sh)
+                local _r; _r="$(dirname "$(dirname "$_line")")"
+                [[ -z "$_CACHED_INTERPHASE_ROOT" || "$_r" > "$_CACHED_INTERPHASE_ROOT" ]] && _CACHED_INTERPHASE_ROOT="$_r"
+                ;;
+            */interflux/*/.claude-plugin/plugin.json)
+                local _r; _r="$(dirname "$(dirname "$_line")")"
+                [[ -z "$_CACHED_INTERFLUX_ROOT" || "$_r" > "$_CACHED_INTERFLUX_ROOT" ]] && _CACHED_INTERFLUX_ROOT="$_r"
+                ;;
+            */interpath/*/scripts/interpath.sh)
+                local _r; _r="$(dirname "$(dirname "$_line")")"
+                [[ -z "$_CACHED_INTERPATH_ROOT" || "$_r" > "$_CACHED_INTERPATH_ROOT" ]] && _CACHED_INTERPATH_ROOT="$_r"
+                ;;
+            */interwatch/*/scripts/interwatch.sh)
+                local _r; _r="$(dirname "$(dirname "$_line")")"
+                [[ -z "$_CACHED_INTERWATCH_ROOT" || "$_r" > "$_CACHED_INTERWATCH_ROOT" ]] && _CACHED_INTERWATCH_ROOT="$_r"
+                ;;
+            */interlock/*/scripts/interlock-register.sh)
+                local _r; _r="$(dirname "$(dirname "$_line")")"
+                [[ -z "$_CACHED_INTERLOCK_ROOT" || "$_r" > "$_CACHED_INTERLOCK_ROOT" ]] && _CACHED_INTERLOCK_ROOT="$_r"
+                ;;
+            */interject/*/bin/launch-mcp.sh)
+                local _r; _r="$(dirname "$(dirname "$_line")")"
+                [[ -z "$_CACHED_INTERJECT_ROOT" || "$_r" > "$_CACHED_INTERJECT_ROOT" ]] && _CACHED_INTERJECT_ROOT="$_r"
+                ;;
+        esac
+    done < <(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \( \
+        -path '*/interphase/*/hooks/lib-gates.sh' -o \
+        -path '*/interflux/*/.claude-plugin/plugin.json' -o \
+        -path '*/interpath/*/scripts/interpath.sh' -o \
+        -path '*/interwatch/*/scripts/interwatch.sh' -o \
+        -path '*/interlock/*/scripts/interlock-register.sh' -o \
+        -path '*/interject/*/bin/launch-mcp.sh' \
+    \) 2>/dev/null)
+
+    # Write file cache (atomic: write temp, then mv)
+    mkdir -p "$_COMPANION_CACHE_DIR" 2>/dev/null || true
+    local _tmp="${_COMPANION_CACHE_FILE}.$$"
+    {
+        echo "# session=${CLAUDE_SESSION_ID:-}"
+        echo "INTERPHASE=${_CACHED_INTERPHASE_ROOT}"
+        echo "INTERFLUX=${_CACHED_INTERFLUX_ROOT}"
+        echo "INTERPATH=${_CACHED_INTERPATH_ROOT}"
+        echo "INTERWATCH=${_CACHED_INTERWATCH_ROOT}"
+        echo "INTERLOCK=${_CACHED_INTERLOCK_ROOT}"
+        echo "INTERJECT=${_CACHED_INTERJECT_ROOT}"
+    } > "$_tmp" 2>/dev/null && mv -f "$_tmp" "$_COMPANION_CACHE_FILE" 2>/dev/null || rm -f "$_tmp" 2>/dev/null
+    _COMPANIONS_DISCOVERED=1
+}
+
+# Invalidate the file cache (call after plugin version cleanup).
+_invalidate_companion_cache() {
+    rm -f "$_COMPANION_CACHE_FILE" 2>/dev/null || true
+    unset _COMPANIONS_DISCOVERED 2>/dev/null || true
+}
+
+# Individual discover functions — thin wrappers around the batch cache.
+# Each checks: (1) in-process cache, (2) env-var override, (3) batch discover.
+
 _discover_beads_plugin() {
     if [[ -n "${_CACHED_INTERPHASE_ROOT+set}" ]]; then
-        echo "$_CACHED_INTERPHASE_ROOT"
-        return 0
+        echo "$_CACHED_INTERPHASE_ROOT"; return 0
     fi
     if [[ -n "${INTERPHASE_ROOT:-}" ]]; then
         _CACHED_INTERPHASE_ROOT="$INTERPHASE_ROOT"
-        echo "$INTERPHASE_ROOT"
-        return 0
+        echo "$INTERPHASE_ROOT"; return 0
     fi
-    local f
-    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
-        -path '*/interphase/*/hooks/lib-gates.sh' 2>/dev/null | sort -V | tail -1)
-    if [[ -n "$f" ]]; then
-        # lib-gates.sh is at <root>/hooks/lib-gates.sh, so strip two levels
-        _CACHED_INTERPHASE_ROOT="$(dirname "$(dirname "$f")")"
-        echo "$_CACHED_INTERPHASE_ROOT"
-        return 0
-    fi
-    _CACHED_INTERPHASE_ROOT=""
-    echo ""
+    _discover_all_companions
+    echo "$_CACHED_INTERPHASE_ROOT"
 }
 
-# Discover the interflux companion plugin root directory.
-# Checks INTERFLUX_ROOT env var first, then searches the plugin cache.
-# Output: plugin root path to stdout, or empty string if not found.
 _discover_interflux_plugin() {
     if [[ -n "${_CACHED_INTERFLUX_ROOT+set}" ]]; then
-        echo "$_CACHED_INTERFLUX_ROOT"
-        return 0
+        echo "$_CACHED_INTERFLUX_ROOT"; return 0
     fi
     if [[ -n "${INTERFLUX_ROOT:-}" ]]; then
         _CACHED_INTERFLUX_ROOT="$INTERFLUX_ROOT"
-        echo "$INTERFLUX_ROOT"
-        return 0
+        echo "$INTERFLUX_ROOT"; return 0
     fi
-    local f
-    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
-        -path '*/interflux/*/.claude-plugin/plugin.json' 2>/dev/null | sort -V | tail -1)
-    if [[ -n "$f" ]]; then
-        # plugin.json is at <root>/.claude-plugin/plugin.json, so strip two levels
-        _CACHED_INTERFLUX_ROOT="$(dirname "$(dirname "$f")")"
-        echo "$_CACHED_INTERFLUX_ROOT"
-        return 0
-    fi
-    _CACHED_INTERFLUX_ROOT=""
-    echo ""
+    _discover_all_companions
+    echo "$_CACHED_INTERFLUX_ROOT"
 }
 
-# Discover the interpath companion plugin root directory.
-# Checks INTERPATH_ROOT env var first, then searches the plugin cache.
-# Output: plugin root path to stdout, or empty string if not found.
 _discover_interpath_plugin() {
     if [[ -n "${_CACHED_INTERPATH_ROOT+set}" ]]; then
-        echo "$_CACHED_INTERPATH_ROOT"
-        return 0
+        echo "$_CACHED_INTERPATH_ROOT"; return 0
     fi
     if [[ -n "${INTERPATH_ROOT:-}" ]]; then
         _CACHED_INTERPATH_ROOT="$INTERPATH_ROOT"
-        echo "$INTERPATH_ROOT"
-        return 0
+        echo "$INTERPATH_ROOT"; return 0
     fi
-    local f
-    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
-        -path '*/interpath/*/scripts/interpath.sh' 2>/dev/null | sort -V | tail -1)
-    if [[ -n "$f" ]]; then
-        # interpath.sh is at <root>/scripts/interpath.sh, so strip two levels
-        _CACHED_INTERPATH_ROOT="$(dirname "$(dirname "$f")")"
-        echo "$_CACHED_INTERPATH_ROOT"
-        return 0
-    fi
-    _CACHED_INTERPATH_ROOT=""
-    echo ""
+    _discover_all_companions
+    echo "$_CACHED_INTERPATH_ROOT"
 }
 
-# Discover the interwatch companion plugin root directory.
-# Checks INTERWATCH_ROOT env var first, then searches the plugin cache.
-# Output: plugin root path to stdout, or empty string if not found.
 _discover_interwatch_plugin() {
     if [[ -n "${_CACHED_INTERWATCH_ROOT+set}" ]]; then
-        echo "$_CACHED_INTERWATCH_ROOT"
-        return 0
+        echo "$_CACHED_INTERWATCH_ROOT"; return 0
     fi
     if [[ -n "${INTERWATCH_ROOT:-}" ]]; then
         _CACHED_INTERWATCH_ROOT="$INTERWATCH_ROOT"
-        echo "$INTERWATCH_ROOT"
-        return 0
+        echo "$INTERWATCH_ROOT"; return 0
     fi
-    local f
-    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
-        -path '*/interwatch/*/scripts/interwatch.sh' 2>/dev/null | sort -V | tail -1)
-    if [[ -n "$f" ]]; then
-        # interwatch.sh is at <root>/scripts/interwatch.sh, so strip two levels
-        _CACHED_INTERWATCH_ROOT="$(dirname "$(dirname "$f")")"
-        echo "$_CACHED_INTERWATCH_ROOT"
-        return 0
-    fi
-    _CACHED_INTERWATCH_ROOT=""
-    echo ""
+    _discover_all_companions
+    echo "$_CACHED_INTERWATCH_ROOT"
 }
 
-# Discover the interlock companion plugin root directory.
-# Checks INTERLOCK_ROOT env var first, then searches the plugin cache.
-# Output: plugin root path to stdout, or empty string if not found.
 _discover_interlock_plugin() {
     if [[ -n "${_CACHED_INTERLOCK_ROOT+set}" ]]; then
-        echo "$_CACHED_INTERLOCK_ROOT"
-        return 0
+        echo "$_CACHED_INTERLOCK_ROOT"; return 0
     fi
     if [[ -n "${INTERLOCK_ROOT:-}" ]]; then
         _CACHED_INTERLOCK_ROOT="$INTERLOCK_ROOT"
-        echo "$INTERLOCK_ROOT"
-        return 0
+        echo "$INTERLOCK_ROOT"; return 0
     fi
-    local f
-    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
-        -path '*/interlock/*/scripts/interlock-register.sh' 2>/dev/null | sort -V | tail -1)
-    if [[ -n "$f" ]]; then
-        # interlock-register.sh is at <root>/scripts/interlock-register.sh, so strip two levels
-        _CACHED_INTERLOCK_ROOT="$(dirname "$(dirname "$f")")"
-        echo "$_CACHED_INTERLOCK_ROOT"
-        return 0
-    fi
-    _CACHED_INTERLOCK_ROOT=""
-    echo ""
+    _discover_all_companions
+    echo "$_CACHED_INTERLOCK_ROOT"
 }
 
-# Discover the interject companion plugin root directory.
-# Checks INTERJECT_ROOT env var first, then searches the plugin cache.
-# Output: plugin root path to stdout, or empty string if not found.
 _discover_interject_plugin() {
     if [[ -n "${_CACHED_INTERJECT_ROOT+set}" ]]; then
-        echo "$_CACHED_INTERJECT_ROOT"
-        return 0
+        echo "$_CACHED_INTERJECT_ROOT"; return 0
     fi
     if [[ -n "${INTERJECT_ROOT:-}" ]]; then
         _CACHED_INTERJECT_ROOT="$INTERJECT_ROOT"
-        echo "$INTERJECT_ROOT"
-        return 0
+        echo "$INTERJECT_ROOT"; return 0
     fi
-    local f
-    f=$(find "${HOME}/.claude/plugins/cache" -maxdepth 5 \
-        -path '*/interject/*/bin/launch-mcp.sh' 2>/dev/null | sort -V | tail -1)
-    if [[ -n "$f" ]]; then
-        # launch-mcp.sh is at <root>/bin/launch-mcp.sh, so strip two levels
-        _CACHED_INTERJECT_ROOT="$(dirname "$(dirname "$f")")"
-        echo "$_CACHED_INTERJECT_ROOT"
-        return 0
-    fi
-    _CACHED_INTERJECT_ROOT=""
-    echo ""
+    _discover_all_companions
+    echo "$_CACHED_INTERJECT_ROOT"
 }
 
 # ─── In-flight agent detection ───────────────────────────────────────────────

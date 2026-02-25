@@ -45,6 +45,8 @@ if [[ -d "$CACHE_PARENT" ]] && [[ "$CACHE_PARENT" == *"/plugins/cache/"* ]]; the
             ln -sf "$CURRENT_VERSION_DIR" "$old_path" 2>/dev/null || true
         fi
     done
+    # Plugin versions changed — invalidate companion discovery cache
+    _invalidate_companion_cache
 fi
 
 # Read using-clavain content (fail gracefully — don't mix stderr into injected context)
