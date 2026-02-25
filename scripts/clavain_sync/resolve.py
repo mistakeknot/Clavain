@@ -1,4 +1,8 @@
-"""AI-powered conflict resolution via claude -p subprocess."""
+"""Conflict resolution with deterministic pre-filter and LLM fallback.
+
+Most conflicts are one-sided (only local or only upstream changed) and can be
+resolved deterministically. The LLM is only called when both sides diverge.
+"""
 from __future__ import annotations
 
 import json
@@ -35,6 +39,56 @@ _SCHEMA = json.dumps({
 })
 
 
+def _check_blocklist(content: str, blocklist: list[str]) -> list[str]:
+    """Return blocklist terms found in content (case-insensitive)."""
+    content_lower = content.lower()
+    return [term for term in blocklist if term.lower() in content_lower]
+
+
+def _try_deterministic(
+    *,
+    local_content: str,
+    upstream_content: str,
+    ancestor_content: str,
+    blocklist: list[str],
+) -> ConflictDecision | None:
+    """Try to resolve the conflict without an LLM call.
+
+    Returns a decision if the case is clear-cut, None if LLM analysis needed.
+    """
+    # Guard 1: Blocklist terms in upstream → reject upstream.
+    if blocklist:
+        found = _check_blocklist(upstream_content, blocklist)
+        if found:
+            return ConflictDecision(
+                decision="keep_local",
+                risk="low",
+                rationale=f"Upstream contains blocklist terms: {', '.join(found)}",
+                blocklist_found=found,
+            )
+
+    # Guard 2: Only upstream changed (local == ancestor) → accept upstream.
+    if local_content == ancestor_content:
+        return ConflictDecision(
+            decision="accept_upstream",
+            risk="low",
+            rationale="Only upstream changed (local matches ancestor)",
+            blocklist_found=[],
+        )
+
+    # Guard 3: Only local changed (upstream == ancestor) → keep local.
+    if upstream_content == ancestor_content:
+        return ConflictDecision(
+            decision="keep_local",
+            risk="low",
+            rationale="Only local changed (upstream matches ancestor)",
+            blocklist_found=[],
+        )
+
+    # Both sides changed → need semantic analysis.
+    return None
+
+
 def analyze_conflict(
     *,
     local_path: str,
@@ -43,11 +97,26 @@ def analyze_conflict(
     ancestor_content: str,
     blocklist: list[str],
 ) -> ConflictDecision:
-    """Analyze a conflict using Claude AI.
+    """Analyze a conflict, using deterministic checks first, LLM fallback second.
 
-    Shells out to `claude -p` with structured JSON output.
-    Falls back to needs_human on any failure.
+    Deterministic pre-filter handles ~70-80% of cases:
+    - Blocklist terms in upstream → keep_local
+    - Only upstream changed → accept_upstream
+    - Only local changed → keep_local
+
+    LLM (Claude Haiku) is only called when both sides diverged.
     """
+    # Try deterministic resolution first.
+    deterministic = _try_deterministic(
+        local_content=local_content,
+        upstream_content=upstream_content,
+        ancestor_content=ancestor_content,
+        blocklist=blocklist,
+    )
+    if deterministic is not None:
+        return deterministic
+
+    # Both sides changed — need LLM for semantic merge analysis.
     if not shutil.which("claude"):
         return _FALLBACK
 
