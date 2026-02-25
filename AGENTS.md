@@ -9,7 +9,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 16 skills, 4 agents, 58 commands, 10 hooks, 1 MCP server |
+| Components | 16 skills, 4 agents, 46 commands, 8 hooks, 1 MCP server |
 | License | MIT |
 
 ### North Star for New Work
@@ -62,7 +62,7 @@ Clavain/
 ├── agents/
 │   ├── review/                    # 2 review agents
 │   └── workflow/                  # 2 workflow agents
-├── commands/                      # 58 slash commands
+├── commands/                      # 46 slash commands
 │   ├── setup.md               # Modpack installer
 │   └── interpeer.md           # Quick cross-AI peer review (+ 56 others)
 ├── hooks/
@@ -74,8 +74,11 @@ Clavain/
 │   ├── lib-gates.sh               # Phase gate shim (delegates to interphase; no-op stub if absent)
 │   ├── lib-discovery.sh           # Plugin discovery shim (delegates to interphase; no-op stub if absent)
 │   ├── auto-publish.sh            # Auto-publish after git push (PostToolUse Bash)
-│   ├── auto-compound.sh           # Auto-compound knowledge capture on Stop
+│   ├── bead-agent-bind.sh         # Bind agent identity to claimed beads (PostToolUse Bash)
+│   ├── bead-auto-close.sh         # Auto-close beads mentioned in pushed commits (PostToolUse Bash)
+│   ├── auto-stop-actions.sh       # Compound + drift check on Stop (merged)
 │   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
+│   ├── session-end-handoff.sh     # SessionEnd backup handoff
 │   └── dotfiles-sync.sh           # Sync dotfile changes on session end
 ├── config/
 │   └── dispatch/                  # Codex dispatch configuration
@@ -230,22 +233,18 @@ Grep sweep checklist (10 locations): `agents/*/`, `skills/*/SKILL.md`, `commands
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
   - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings
-  - `interspect-session.sh` — initializes Interspect session tracking
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
   - `interserve-audit.sh` — logs source code writes when interserve mode is active (audit only, no denial)
+- **PostToolUse** (matcher: `Edit|Write|MultiEdit`):
+  - `catalog-reminder.sh` — reminds about catalog updates when components change
 - **PostToolUse** (matcher: `Bash`):
   - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace (60s TTL sentinel prevents loops)
-- **PostToolUse** (matcher: `Task`):
-  - `interspect-evidence.sh` — records agent dispatch evidence for routing optimization
-  - `bead-agent-bind.sh` — binds agent dispatches to active bead context
+  - `bead-agent-bind.sh` — binds agent identity to beads claimed with bd update/claim (warns on overlap, notifies other agent)
+  - `bead-auto-close.sh` — detects `git push`, extracts bead IDs from commit messages, auto-closes open beads
 - **Stop**:
-  - `auto-compound.sh` — detects compoundable signals (commits, resolutions, insights), prompts knowledge capture
-  - `auto-drift-check.sh` — detects shipped-work signals and triggers interwatch scans
-  - `session-handoff.sh` — detects uncommitted work or in-progress beads, prompts HANDOFF.md creation (once per session)
-  - `catalog-reminder.sh` — reminds about catalog updates when components change
+  - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh, weight >= 4 triggers /clavain:compound, weight >= 3 triggers /interwatch:watch (merged from auto-compound.sh + auto-drift-check.sh)
 - **SessionEnd**:
   - `dotfiles-sync.sh` — syncs dotfile changes at end of session
-  - `interspect-session-end.sh` — finalizes Interspect session tracking
 - Scripts must output valid JSON to stdout
 - Use `set -euo pipefail` in all hook scripts
 
@@ -285,7 +284,7 @@ When making changes, verify:
 - [ ] Agent `description` includes `<example>` blocks with `<commentary>`
 - [ ] Command `name` in frontmatter matches filename (minus `.md`)
 - [ ] `hooks/hooks.json` is valid JSON
-- [ ] All hook scripts pass `bash -n` syntax check (21 `.sh` files in `hooks/`)
+- [ ] All hook scripts pass `bash -n` syntax check
 - [ ] No references to dropped namespaces (`superpowers:`, `compound-engineering:`)
 - [ ] No references to dropped components (Rails, Ruby, Every.to, Figma, Xcode)
 - [ ] Routing table in `using-clavain/SKILL.md` is consistent with actual components
@@ -295,8 +294,8 @@ Quick validation:
 # Count components
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 16
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"  # Should be 4
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 58
-echo "Hooks: $(ls hooks/*.sh | wc -l)"              # Should be 21
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 46
+echo "Hooks: $(ls hooks/*.sh | wc -l)"              # Should be ~15 (includes libs)
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
@@ -410,7 +409,7 @@ Full audit rationale: `docs/plugin-audit.md`
 - Tests in `tests/{structural,shell,smoke,fixtures}/`
 - Config: `tests/pyproject.toml`, use `uv run` not pip
 - Agent globs MUST use explicit category dirs (review/research/workflow), not recursive
-- Counts: 4 agents, 15 skills, 52 commands (hardcoded regression guards — update when components change)
+- Counts: 4 agents, 16 skills, 46 commands (hardcoded regression guards — update when components change)
 - **Review agents can report wrong counts** — always verify against filesystem/test suite
 
 ### Interserve Dispatch
