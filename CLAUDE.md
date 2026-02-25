@@ -4,7 +4,7 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 16 skills, 4 agents, 46 commands, 7 hooks, 1 MCP server. 32 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 16 skills, 4 agents, 46 commands, 8 hooks, 1 MCP server. 32 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
 
 ## Quick Commands
 
@@ -24,6 +24,7 @@ bash -n hooks/lib-signals.sh           # Syntax check
 bash -n hooks/session-handoff.sh       # Syntax check
 bash -n hooks/auto-publish.sh          # Syntax check
 bash -n hooks/bead-agent-bind.sh       # Syntax check
+bash -n hooks/bead-auto-close.sh       # Syntax check (auto-close beads on push)
 bash -n hooks/catalog-reminder.sh      # Syntax check
 bash -n hooks/interserve-audit.sh       # Syntax check
 bash -n hooks/sprint-scan.sh           # Syntax check (utility, not a hook binding)
