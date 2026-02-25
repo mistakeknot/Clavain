@@ -118,7 +118,7 @@ def gen_verify_script(rig: dict) -> str:
     """
     return '''```bash
 # Resolve script path relative to plugin cache (works from any cwd)
-VERIFY_SCRIPT="$(dirname "$(ls ~/.claude/plugins/cache/*/clavain/*/scripts/verify-config.sh 2>/dev/null | head -1)")/verify-config.sh"
+VERIFY_SCRIPT="$(dirname "$(ls "$HOME/.claude/plugins/cache"/*/clavain/*/scripts/verify-config.sh 2>/dev/null | head -1)")/verify-config.sh"
 if [[ -x "$VERIFY_SCRIPT" ]]; then
     bash "$VERIFY_SCRIPT"
 else
@@ -149,7 +149,7 @@ def gen_companion_checks(entries: list[dict]) -> str:
         sections.append(f"""### 3{section_label}. {label}
 
 ```bash
-if ls ~/.claude/plugins/cache/*/{name}/*/{probe} 2>/dev/null | head -1 >/dev/null; then
+if ls "$HOME/.claude/plugins/cache"/*/{name}/*/{probe} 2>/dev/null | head -1 >/dev/null; then
   echo "{name}: installed"
 else
   echo "{name}: not installed ({not_installed_msg})"

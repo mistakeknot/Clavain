@@ -58,11 +58,9 @@ _routing_find_config() {
     echo "$source_dir/config/routing.yaml"
     return 0
   fi
-  # 3. Plugin cache
-  local cached
-  cached="$(find ~/.claude/plugins/cache -path '*/clavain/*/config/routing.yaml' 2>/dev/null | head -1)"
-  if [[ -n "$cached" ]]; then
-    echo "$cached"
+  # 3. CLAUDE_PLUGIN_ROOT (set by Claude Code for the active plugin)
+  if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "$CLAUDE_PLUGIN_ROOT/config/routing.yaml" ]]; then
+    echo "$CLAUDE_PLUGIN_ROOT/config/routing.yaml"
     return 0
   fi
   return 1

@@ -15,6 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RIG_FILE="${SCRIPT_DIR}/../agent-rig.json"
+# Central plugin cache path — see hooks/lib.sh:_plugin_cache_base()
 CACHE_DIR="${HOME}/.claude/plugins/cache"
 
 # Parse arguments

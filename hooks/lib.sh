@@ -205,6 +205,42 @@ _discover_interspect_plugin() {
     echo "$_CACHED_INTERSPECT_ROOT"
 }
 
+# ─── Plugin cache helpers ────────────────────────────────────────────────────
+# Centralized access to the plugin cache directory. Callers should use these
+# instead of hardcoding ~/.claude/plugins/cache paths.
+
+# Returns the plugin cache base directory.
+_plugin_cache_base() {
+    echo "${HOME}/.claude/plugins/cache"
+}
+
+# Check if a plugin is installed in the cache. Returns 0 if found.
+# Usage: _plugin_is_installed <plugin-name>
+_plugin_is_installed() {
+    local name="$1"
+    local base; base="$(_plugin_cache_base)"
+    for d in "$base"/*/"$name"; do
+        [[ -d "$d" ]] && return 0
+    done
+    return 1
+}
+
+# Find a plugin's root directory in the cache (highest version wins).
+# Usage: _plugin_find_root <plugin-name>
+# Output: absolute path to stdout, or empty string if not found.
+_plugin_find_root() {
+    local name="$1"
+    local base; base="$(_plugin_cache_base)"
+    local best=""
+    for d in "$base"/*/"$name"/*/; do
+        [[ -d "$d" ]] || continue
+        [[ -L "${d%/}" ]] && continue  # skip symlinks
+        local candidate="${d%/}"
+        [[ -z "$best" || "$candidate" > "$best" ]] && best="$candidate"
+    done
+    [[ -n "$best" ]] && echo "$best"
+}
+
 # ─── In-flight agent detection ───────────────────────────────────────────────
 # Detects background agents from previous sessions that may still be running.
 # Used by SessionStart to warn about duplicates and by Stop to write manifests.
