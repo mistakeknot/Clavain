@@ -70,3 +70,29 @@ Commit changes. For each source type:
 - **Todo files**: Mark resolved todos as complete by renaming the file status prefix
 - **PR comments**: Use `gh api` to resolve PR review threads. Verify with `gh pr view --comments`. If unresolved remain, repeat from step 1
 - **Code TODOs**: Verify the TODO comment was removed. Commit with conventional message
+
+### 5. Record Trust Feedback
+
+After resolving findings, emit trust evidence for each finding that was acted on. This feeds the agent trust scoring system (interspect).
+
+**Only emit when findings came from flux-drive review** (check: `.clavain/quality-gates/findings.json` exists).
+
+```bash
+FINDINGS_JSON=".clavain/quality-gates/findings.json"
+if [[ -f "$FINDINGS_JSON" ]]; then
+    INTERSPECT_PLUGIN=$(find ~/.claude/plugins/cache -path "*/interspect/*/hooks/lib-trust.sh" 2>/dev/null | head -1)
+    if [[ -n "$INTERSPECT_PLUGIN" ]]; then
+        source "$INTERSPECT_PLUGIN"
+        PROJECT=$(_interspect_project_name)
+        SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+    fi
+fi
+```
+
+For each finding resolved in step 3:
+- If the finding was **fixed** (code changed to address it): `_trust_record_outcome "$SESSION_ID" "<agent>" "$PROJECT" "<finding_id>" "<severity>" "accepted" "<review_run_id>"`
+- If the finding was **dismissed** (skipped, wont_fix, or deemed irrelevant): `_trust_record_outcome "$SESSION_ID" "<agent>" "$PROJECT" "<finding_id>" "<severity>" "discarded" "<review_run_id>"`
+
+The `agent` comes from `findings.json` `.findings[].agents[0]` (primary attribution). The `review_run_id` comes from `.synthesis_timestamp`. The `severity` comes from `.findings[].severity`.
+
+**Silent failures:** If lib-trust.sh is not found or any call fails, continue normally. Trust feedback is opportunistic, never blocking.
