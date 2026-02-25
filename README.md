@@ -29,6 +29,8 @@ curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/age
 
 Then restart Codex.
 
+> **Migrating from superpowers or compound-engineering?** The ecosystem installer (`install-codex-interverse.sh install`) automatically removes legacy prompt wrappers and skill symlinks. The superpowers clone at `~/.codex/superpowers` can be removed manually: `rm -rf ~/.codex/superpowers`.
+
 From a local clone:
 
 ```bash
@@ -283,6 +285,8 @@ Clavain replaces these plugins with its own opinionated equivalents. Keeping bot
 
 | Plugin | Clavain Replacement |
 |--------|-------------------|
+| superpowers | Clavain is the successor — all skills, commands, and workflows superseded |
+| compound-engineering | Clavain is the successor — all workflows superseded |
 | code-review | `/review` + `/flux-drive` + 2 review agents |
 | pr-review-toolkit | Same agent types exist in Clavain's review roster |
 | code-simplifier | `interflux:review:fd-quality` agent |

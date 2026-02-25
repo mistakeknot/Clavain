@@ -259,6 +259,14 @@
       {
         "source": "hookify@claude-plugins-official",
         "reason": "Conflicts with hook management"
+      },
+      {
+        "source": "superpowers@superpowers-marketplace",
+        "reason": "Clavain is the successor to superpowers"
+      },
+      {
+        "source": "compound-engineering@every-marketplace",
+        "reason": "Clavain is the successor to compound-engineering"
       }
     ]
   },
