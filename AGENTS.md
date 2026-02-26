@@ -1,6 +1,6 @@
 # Clavain — Development Guide
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code using heterogeneous AI models. Runs on Autarch TUI, backed by Intercore kernel and Interspect profiler. Originated from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code using heterogeneous AI models. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) for state management and Autarch (L3 apps) for TUI rendering. Originated from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
 ## Quick Reference
 
@@ -9,8 +9,9 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 16 skills, 4 agents, 46 commands, 7 hooks, 1 MCP server |
+| Components | 16 skills, 4 agents, 46 commands, 6 hook bindings, 1 MCP server |
 | License | MIT |
+| Layer | L2 (OS) — depends on Intercore (L1), consumed by Autarch (L3) |
 
 ### North Star for New Work
 
@@ -41,67 +42,95 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
 ├── skills/                        # 16 discipline skills
-│   ├── using-clavain/SKILL.md     # Bootstrap routing (injected via SessionStart hook)
-│   ├── brainstorming/SKILL.md     # Explore phase
-│   ├── writing-plans/SKILL.md     # Plan phase
-│   ├── executing-plans/SKILL.md   # Execute phase
-│   ├── test-driven-development/SKILL.md
-│   ├── systematic-debugging/SKILL.md
-│   ├── flux-drive/                # Has sub-resources (phases/, references/)
-│   │   ├── SKILL.md
-│   │   ├── phases/                # Phase-specific instructions (launch, synthesis, etc.)
-│   │   └── references/            # Extracted reference material
-│   │       ├── agent-roster.md    # Agent categories, invocation, Oracle CLI usage
-│   │       └── scoring-examples.md # Worked triage scoring examples
-│   ├── writing-skills/            # Has sub-resources (examples/, references)
-│   │   ├── SKILL.md
-│   │   ├── testing-skills-with-subagents.md
-│   │   ├── persuasion-principles.md
-│   │   └── examples/
-│   └── ...                        # Each skill is a directory with SKILL.md
+│   ├── brainstorming/             # Freeform exploration mode
+│   ├── code-review-discipline/    # Review dispatch + feedback handling
+│   ├── dispatching-parallel-agents/ # Independent task parallelism
+│   ├── engineering-docs/          # Solution doc capture
+│   ├── executing-plans/           # Plan execution with review checkpoints
+│   ├── file-todos/                # File-based todo tracking (todos/ directory)
+│   ├── galiana/                   # Discipline analytics + agent scorecard
+│   ├── interserve/                # Codex CLI dispatch (megaprompt + parallel)
+│   ├── landing-a-change/          # Verify, document, land on trunk
+│   ├── lane/                      # Thematic work lanes + velocity tracking
+│   ├── refactor-safely/           # Staged refactoring with safety nets
+│   ├── subagent-driven-development/ # In-session parallel agent execution
+│   ├── upstream-sync/             # Upstream repo change tracking
+│   ├── using-clavain/             # Bootstrap routing (injected via SessionStart)
+│   │   └── references/            # Routing tables, agent contracts, dispatch patterns
+│   ├── using-tmux-for-interactive-commands/ # tmux for interactive CLIs
+│   └── writing-plans/             # Multi-step task planning
 ├── agents/
-│   ├── review/                    # 2 review agents
-│   └── workflow/                  # 2 workflow agents
+│   ├── review/                    # 2 review agents (plan-reviewer, data-migration-expert)
+│   └── workflow/                  # 2 workflow agents (bug-reproduction-validator, pr-comment-resolver)
 ├── commands/                      # 46 slash commands
-│   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 44 others)
+│   ├── setup.md                   # Modpack installer
+│   └── interpeer.md              # Quick cross-AI peer review (+ 44 others)
 ├── hooks/
-│   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
-│   ├── lib.sh                     # Shared utilities (escape_for_json)
-│   ├── sprint-scan.sh             # Sprint awareness scanner (sourced by session-start + sprint-status)
-│   ├── session-start.sh           # Context injection + upstream staleness + sprint awareness
-│   ├── interserve-audit.sh             # Interserve mode source code write audit (PostToolUse Edit/Write)
-│   ├── lib-gates.sh               # Phase gate shim (delegates to interphase; no-op stub if absent)
-│   ├── lib-discovery.sh           # Plugin discovery shim (delegates to interphase; no-op stub if absent)
-│   ├── auto-publish.sh            # Auto-publish after git push (PostToolUse Bash)
-│   ├── bead-agent-bind.sh         # Bind agent identity to claimed beads (PostToolUse Bash)
-│   ├── bead-auto-close.sh         # Auto-close beads mentioned in pushed commits (PostToolUse Bash)
-│   ├── auto-stop-actions.sh       # Compound + drift check on Stop (merged)
-│   ├── session-handoff.sh         # HANDOFF.md generation on incomplete work
-│   ├── session-end-handoff.sh     # SessionEnd backup handoff
-│   └── dotfiles-sync.sh           # Sync dotfile changes on session end
+│   ├── hooks.json                 # Hook registration (4 event types, 6 bindings)
+│   ├── session-start.sh           # Context injection + sprint awareness
+│   ├── interserve-audit.sh        # Source code write audit (interserve mode)
+│   ├── catalog-reminder.sh        # Catalog update reminder on component changes
+│   ├── auto-publish.sh            # Auto-publish after git push (60s TTL dedup)
+│   ├── bead-agent-bind.sh         # Bind agent identity to claimed beads
+│   ├── auto-stop-actions.sh       # Post-turn signal detection + compound/drift triggers
+│   ├── dotfiles-sync.sh           # Sync dotfile changes at session end
+│   ├── sprint-scan.sh             # Sprint awareness scanner (sourced by session-start)
+│   ├── session-handoff.sh         # HANDOFF.md generation (inactive — not in hooks.json)
+│   ├── session-end-handoff.sh     # SessionEnd backup handoff (inactive — not in hooks.json)
+│   ├── lib.sh                     # Shared utilities (escape_for_json, plugin discovery)
+│   ├── lib-intercore.sh           # Intercore CLI wrappers (ic build/run/state/etc.)
+│   ├── lib-sprint.sh              # Sprint state library (phase, gate, budget queries)
+│   ├── lib-signals.sh             # Signal detection for auto-stop-actions
+│   ├── lib-spec.sh                # Agency spec loader (reads config/agency-spec.yaml)
+│   ├── lib-verdict.sh             # Verdict file utilities for structured handoffs
+│   ├── lib-gates.sh               # Phase gate shim (delegates to interphase)
+│   └── lib-discovery.sh           # Plugin discovery shim (delegates to interphase)
+├── cmd/
+│   └── clavain-cli/               # Go CLI binary (budget, checkpoint, claim, phase, sprint)
 ├── config/
-│   └── dispatch/                  # Codex dispatch configuration
+│   ├── agency/                    # Phase-specific agency YAML (build, design, discover, reflect, ship)
+│   ├── agency-spec.yaml           # Agency specification
+│   ├── agency-spec.schema.json    # Schema for agency spec
+│   ├── fleet-registry.yaml        # Agent fleet registry
+│   ├── fleet-registry.schema.json # Schema for fleet registry
+│   ├── routing-overrides.schema.json # Routing overrides schema (read by interspect)
+│   ├── routing.yaml               # Model routing configuration
+│   └── CLAUDE.md                  # Engineering conventions (installed by agent-rig)
 ├── scripts/
-│   ├── debate.sh                  # Structured 2-round Claude↔Codex debate
+│   ├── bump-version.sh            # Bump version across plugin.json + marketplace.json
+│   ├── build-clavain-cli.sh       # Build the Go clavain-cli binary
+│   ├── orchestrate.py             # DAG-based Codex agent dispatch
 │   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
+│   ├── debate.sh                  # Structured 2-round Claude/Codex debate
+│   ├── gen-catalog.py             # Generate skill/agent/command catalog
+│   ├── scan-fleet.sh              # Auto-discover agents, update fleet-registry.yaml
+│   ├── lib-fleet.sh               # Fleet registry query library
+│   ├── lib-routing.sh             # Routing config reader
+│   ├── verify-config.sh           # Plugin enabled/disabled state verifier
+│   ├── modpack-install.sh         # Companion plugin installer
+│   ├── bead-land.sh               # Close orphaned beads (replaced auto-close hook)
+│   ├── beads-hygiene.sh           # Beads cleanup utilities
+│   ├── upstream-check.sh          # Checks upstream repos via gh api
+│   ├── upstream-impact-report.py  # Impact digest for upstream PRs
 │   ├── install-codex.sh           # Codex skill installer
 │   ├── codex-auto-refresh.sh      # Automated local Codex sync helper
-│   ├── gen-catalog.py             # Generate skill/agent/command catalog
-│   ├── bump-version.sh            # Bump version across plugin.json + marketplace.json
-│   ├── upstream-check.sh          # Checks 7 upstream repos via gh api
-│   └── upstream-impact-report.py  # Generates impact digest for upstream PRs
+│   ├── clavain_sync/              # Python package for upstream sync classification
+│   └── validate-gitleaks-waivers.sh # Secret scan waiver validation
 ├── docs/
 │   └── upstream-versions.json     # Baseline for upstream sync tracking
+├── tests/
+│   ├── structural/                # pytest — component counts, frontmatter, cross-refs
+│   ├── shell/                     # bats-core — hook scripts, lib functions
+│   ├── smoke/                     # Claude Code subagent smoke tests
+│   └── run-tests.sh              # Unified test runner
 └── .github/workflows/
-    ├── upstream-check.yml              # Daily cron: opens GitHub issues on upstream changes
-    ├── sync.yml                        # Weekly cron: Claude Code + Codex auto-merge upstream
-    ├── upstream-impact.yml             # PR impact digest for upstream-sync changes
-    ├── upstream-decision-gate.yml      # Human decision gate for upstream-sync PRs
-    ├── pr-agent-commands.yml           # Issue comment dispatch for /review and /codex-review
-    ├── upstream-sync-issue-command.yml # Issue comment dispatch for /sync
-    ├── codex-refresh-reminder.yml      # Push-triggered Codex skill freshness check
-    └── codex-refresh-reminder-pr.yml   # PR-triggered Codex skill freshness check
+    ├── eval-daily.yml             # Daily evaluation run
+    ├── eval-on-change.yml         # Eval on code changes
+    ├── pr-agent-commands.yml      # Issue comment dispatch for /review and /codex-review
+    ├── secret-scan.yml            # Secret scanning
+    ├── sync.yml                   # Weekly upstream auto-merge
+    ├── test.yml                   # CI test suite
+    └── upstream-check.yml         # Daily upstream change detection
 ```
 
 ## How It Works
@@ -139,49 +168,7 @@ Each cell maps to specific skills, commands, and agents.
 
 ### Interspect Routing Overrides
 
-Interspect monitors flux-drive agent dispatches and user corrections to learn which agents are consistently irrelevant for a project. When evidence reaches a threshold (>=80% "agent_wrong" corrections), it can propose permanent routing overrides.
-
-**How it works:**
-1. Record corrections with `/interspect:correction <agent> <description>` when an agent produces irrelevant findings
-2. Run `/interspect` to see pattern analysis and eligibility status
-3. Run `/interspect:propose` to review and accept exclusion proposals
-4. Overrides are stored in `.claude/routing-overrides.json` and committed to git
-5. Flux-drive reads overrides at Step 1.2a.0 and excludes agents before triage
-
-**Commands:**
-- `/interspect:propose` — Batch proposals for routing-eligible patterns
-- `/interspect:revert <agent>` — Remove an override (with optional blacklist)
-- `/interspect:unblock <agent>` — Remove from blacklist, allow re-proposal
-- `/interspect:status` — Show overrides, canaries, and modifications
-
-**Manual override:** Edit `.claude/routing-overrides.json` directly:
-```json
-{
-  "version": 1,
-  "overrides": [
-    {
-      "agent": "fd-game-design",
-      "action": "exclude",
-      "reason": "Go backend project, no game simulation",
-      "evidence_ids": [],
-      "created": "2026-02-15T00:00:00Z",
-      "created_by": "human"
-    }
-  ]
-}
-```
-
-**Cross-cutting agents** (`fd-architecture`, `fd-quality`, `fd-safety`, `fd-correctness`) show warnings when excluded — they provide structural/security coverage.
-
-**Canary monitoring:** After applying an override, Interspect monitors for 14 days or 20 uses. If the override causes problems, run `/interspect:revert` to undo.
-
-**Library functions** (in `hooks/lib-interspect.sh`):
-- `_interspect_sql_escape()` — Safe SQL string escaping
-- `_interspect_validate_agent_name()` — Format validation (fd-<name>)
-- `_interspect_is_routing_eligible()` — Threshold + blacklist check
-- `_interspect_read_routing_overrides()` — Read overrides file
-- `_interspect_apply_routing_override()` — Full apply+commit+canary flow
-- `_interspect_validate_overrides_path()` — Path traversal protection
+Interspect (companion plugin) monitors flux-drive agent dispatches and user corrections. When evidence reaches a threshold, it proposes permanent routing overrides stored in `.claude/routing-overrides.json`. See the interspect plugin's own AGENTS.md for full details on commands (`/interspect:propose`, `/interspect:revert`, `/interspect:status`), library functions, and canary monitoring.
 
 ## Component Conventions
 
@@ -197,8 +184,8 @@ Interspect monitors flux-drive agent dispatches and user corrections to learn wh
 Example frontmatter:
 ```yaml
 ---
-name: systematic-debugging
-description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes
+name: refactor-safely
+description: Use when performing significant refactoring — guides a disciplined process that leverages duplication detection, characterization tests, staged execution, and continuous simplicity review
 ---
 ```
 
@@ -211,7 +198,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 - Agents are dispatched via `Task` tool — they run as subagents with their own context
 
 Categories:
-- **review/** — Review specialists (2): plan-reviewer and data-migration-expert. The 7 core fd-* agents live in the **interflux** companion plugin. The 5 research agents also moved to interflux. The agent-native-reviewer lives in **intercraft**.
+- **review/** — Review specialists (2): plan-reviewer and data-migration-expert. The 7 core fd-* agents live in the **interflux** companion plugin. The agent-native-reviewer lives in **intercraft**.
 - **workflow/** — Process automation (2): PR comments, bug reproduction
 
 ### Renaming/Deleting Agents
@@ -232,7 +219,7 @@ Grep sweep checklist (10 locations): `agents/*/`, `skills/*/SKILL.md`, `commands
 - Registration in `hooks/hooks.json` — specifies event, matcher regex, and command
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
-  - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings
+  - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings. Sources `sprint-scan.sh` for sprint awareness.
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
   - `interserve-audit.sh` — logs source code writes when interserve mode is active (audit only, no denial)
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit`):
@@ -240,13 +227,27 @@ Grep sweep checklist (10 locations): `agents/*/`, `skills/*/SKILL.md`, `commands
 - **PostToolUse** (matcher: `Bash`):
   - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace (60s TTL sentinel prevents loops)
   - `bead-agent-bind.sh` — binds agent identity to beads claimed with bd update/claim (warns on overlap, notifies other agent)
-  - `bead-auto-close.sh` — detects `git push`, extracts bead IDs from commit messages, auto-closes open beads
 - **Stop**:
-  - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh, weight >= 4 triggers /clavain:compound, weight >= 3 triggers /interwatch:watch (merged from auto-compound.sh + auto-drift-check.sh)
+  - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh, weight >= 4 triggers /clavain:compound, weight >= 3 triggers /interwatch:watch
 - **SessionEnd**:
   - `dotfiles-sync.sh` — syncs dotfile changes at end of session
 - Scripts must output valid JSON to stdout
 - Use `set -euo pipefail` in all hook scripts
+
+### Hook Libraries
+
+Sourced by hook scripts, not registered as hooks themselves:
+
+| Library | Purpose |
+|---------|---------|
+| `lib.sh` | Shared utilities (escape_for_json, plugin path discovery) |
+| `lib-intercore.sh` | Intercore CLI wrappers (ic run/state/sprint/coordination) |
+| `lib-sprint.sh` | Sprint state queries (phase, gate, budget, artifact) |
+| `lib-signals.sh` | Signal detection engine for auto-stop-actions |
+| `lib-spec.sh` | Agency spec loader — reads `config/agency-spec.yaml` at runtime |
+| `lib-verdict.sh` | Verdict file write/read utilities for structured agent handoffs |
+| `lib-gates.sh` | Phase gate shim — delegates to interphase when installed, no-op stub otherwise |
+| `lib-discovery.sh` | Plugin discovery shim — delegates to interphase when installed, no-op stub otherwise |
 
 ## Adding Components
 
@@ -254,7 +255,7 @@ Grep sweep checklist (10 locations): `agents/*/`, `skills/*/SKILL.md`, `commands
 
 1. Create `skills/<name>/SKILL.md` with frontmatter
 2. Add to the routing table in `skills/using-clavain/SKILL.md` (appropriate stage/domain row)
-3. Update `plugin.json` description count if needed
+3. Add to `plugin.json` skills array
 4. Update `README.md` skills table
 
 ### Add an Agent
@@ -267,8 +268,9 @@ Grep sweep checklist (10 locations): `agents/*/`, `skills/*/SKILL.md`, `commands
 ### Add a Command
 
 1. Create `commands/<name>.md` with frontmatter
-2. Reference relevant skills in the body
-3. Update `README.md` commands table
+2. Add to `plugin.json` commands array
+3. Reference relevant skills in the body
+4. Update `README.md` commands table
 
 ### Add an MCP Server
 
@@ -295,7 +297,6 @@ Quick validation:
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 16
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"  # Should be 4
 echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 46
-echo "Hooks: $(ls hooks/*.sh | wc -l)"              # Should be ~15 (includes libs)
 
 # Check for phantom namespace references
 grep -r 'superpowers:' skills/ agents/ commands/ hooks/ || echo "Clean"
@@ -307,10 +308,9 @@ python3 -c "import json; json.load(open('hooks/hooks.json')); print('Hooks OK')"
 
 # Syntax check all hook scripts
 for f in hooks/*.sh; do bash -n "$f" && echo "$(basename $f) OK"; done
-bash -n scripts/upstream-check.sh && echo "Upstream check OK"
 
-# Test upstream check (no network calls with --json, but needs gh)
-bash scripts/upstream-check.sh 2>&1; echo "Exit: $?"  # 0=changes, 1=no changes, 2=error
+# Run structural tests
+uv run -m pytest tests/structural/ -v
 ```
 
 ## Modpack — Companion Plugins
@@ -332,8 +332,9 @@ Extracted subsystems that Clavain delegates to via namespace routing.
 
 | Plugin | Source | What It Provides |
 |--------|--------|-----------------|
-| **interflux** | interagency-marketplace | Multi-agent review + research engine. 7 fd-* review agents, 5 research agents, flux-drive/flux-research skills, qmd + exa MCP servers. Protocol spec in `docs/spec/`. |
+| **interflux** | interagency-marketplace | Multi-agent review + research engine. 7 fd-* review agents, 5 research agents, flux-drive/flux-research skills, qmd + exa MCP servers. |
 | **interphase** | interagency-marketplace | Phase tracking, gates, and work discovery. lib-phase.sh, lib-gates.sh, lib-discovery.sh. Clavain shims delegate to interphase when installed. |
+| **interspect** | interagency-marketplace | Agent profiler — evidence collection, classification, routing overrides, canary monitoring. |
 | **interline** | interagency-marketplace | Statusline renderer. Shows dispatch state, bead context, workflow phase, interserve mode. |
 
 ### Recommended
@@ -346,8 +347,8 @@ These enhance the rig significantly but aren't hard dependencies.
 | **plugin-dev** | claude-plugins-official | Plugin development: 7 skills, 3 agents including agent-creator and skill-reviewer. |
 | **interdoc** | interagency-marketplace | AGENTS.md generation for any repo. |
 | **tool-time** | interagency-marketplace | Tool usage analytics across sessions. |
-| **security-guidance** | claude-plugins-official | Security warning hooks on file edits. Complements Clavain's fd-safety agent. |
-| **serena** | claude-plugins-official | Semantic code analysis via LSP-like tools. Different tool class from Clavain's agents. |
+| **security-guidance** | claude-plugins-official | Security warning hooks on file edits. Complements fd-safety agent. |
+| **serena** | claude-plugins-official | Semantic code analysis via LSP-like tools. |
 
 ### Infrastructure (language servers)
 
@@ -371,109 +372,48 @@ Enable based on which languages you work with.
 
 ### Conflicts — Disabled by Clavain
 
-These plugins overlap with Clavain's opinionated equivalents. Keeping both causes duplicate agents in the Task tool roster and confusing routing.
+Plugins that overlap with Clavain's equivalents (duplicate agents cause confusing routing):
 
-| Plugin | Clavain Replacement | Status |
-|--------|-------------------|--------|
-| code-review | `/review` + `/flux-drive` + 10 review agents | **OFF** |
-| pr-review-toolkit | Same agent types exist in Clavain's review roster | **OFF** |
-| code-simplifier | `interflux:review:fd-quality` agent | **OFF** |
-| commit-commands | `landing-a-change` skill | **OFF** |
-| feature-dev | `/work` + `/sprint` + `/brainstorm` | **OFF** |
-| claude-md-management | `engineering-docs` skill | **OFF** |
-| frontend-design | `interform:distinctive-design` skill | **OFF** |
-| hookify | Clavain manages hooks directly | **OFF** |
-
-Full audit rationale: `docs/plugin-audit.md`
+code-review, pr-review-toolkit, code-simplifier, commit-commands, feature-dev, claude-md-management, frontend-design, hookify. Full rationale: `docs/plugin-audit.md`
 
 ## Operational Notes
 
 ### Upstream Sync
-- 6 upstreams: superpowers, superpowers-lab, superpowers-dev, compound-engineering, beads, oracle
-- All cloned to `/root/projects/upstreams/<name>/` (read-only mirrors)
-- `scripts/pull-upstreams.sh` — daily pull with `--pull`, `--status`, `--diff` modes
-- Sync state tracked in `upstreams.json` (commit hashes per upstream + fileMap)
+- Sync state in `upstreams.json` (commit hashes per upstream + fileMap)
 - **sprint.md is canonical pipeline command** (renamed from lfg.md). lfg.md is alias
 - **Post-sync checklist**: grep `compound-engineering:|/workflows:|ralph-wiggum:|/deepen-plan` in agents/commands/skills
-
-### File Mapping Gotchas
-- `using-superpowers/SKILL.md` → `using-clavain/SKILL.md` (namespace rename)
-- `data-integrity-guardian.md` → `data-integrity-reviewer.md` (local rename)
-- `agents/code-reviewer.md` → `agents/review/plan-reviewer.md` (restructured path)
-- compound-engineering agents under `plugins/compound-engineering/agents/` not root
-- Skip deleted agents during sync — 9 deleted (consolidated into fd-*), 3 commands deleted
-
-### Test Suite Details
-- 3-tier: structural (pytest), shell (bats-core), smoke (Claude Code subagents)
-- Tests in `tests/{structural,shell,smoke,fixtures}/`
-- Config: `tests/pyproject.toml`, use `uv run` not pip
-- Agent globs MUST use explicit category dirs (review/research/workflow), not recursive
-- Counts: 4 agents, 16 skills, 46 commands (hardcoded regression guards — update when components change)
-- **Review agents can report wrong counts** — always verify against filesystem/test suite
 
 ### Interserve Dispatch
 - dispatch.sh does NOT support `--template` — use `--prompt-file`
 - Codex CLI v0.101.0: `--approval-mode` replaced by `-s`/`--sandbox`. Prompt is positional, NOT `-p`
-- Use `codex exec -s danger-full-access -- "prompt"`
-
-### using-clavain Split
-- SKILL.md reduced from 117 to 41 lines (compact Quick Router table)
-- Full routing tables in `skills/using-clavain/references/routing-tables.md`
-- gen-catalog.py expects pattern `\d+ skills, \d+ agents, and \d+ commands`
 
 ### Conventions
 - Uses pnpm, not npm
 - `docs-sp-reference/` is read-only historical archive
+- Full routing tables in `skills/using-clavain/references/routing-tables.md`
+- gen-catalog.py expects pattern `\d+ skills, \d+ agents, and \d+ commands`
 
 ### Bulk Audit → Bead Creation
 
-When creating beads from multi-agent review findings (flux-drive, code review, etc.), **verify each finding before creating a bead**:
-
-1. `git log --oneline -5 -- <file>` — was the flagged code recently modified?
-2. `bd list | grep <keyword>` — does a bead already exist for this issue?
-3. Read the current code — is the issue actually still present?
-
-Flux-drive agents analyze code snapshots that may be stale — fixes may have landed earlier in the same session or in a previous session. Skipping verification causes wasted beads (in one session, 6 of 7 audit-generated beads were already resolved).
+When creating beads from review findings, **verify each finding before creating a bead**: check `git log` for recent fixes, `bd list` for duplicates, and read current code for staleness.
 
 ## Known Constraints
 
-- **No build step** — pure markdown/JSON/bash plugin, nothing to compile
+- **No build step** — pure markdown/JSON/bash plugin, nothing to compile (except optional `cmd/clavain-cli/` Go binary)
 - **3-tier test suite** — structural (pytest), shell (bats-core), smoke (Claude Code subagents). Run via `tests/run-tests.sh`
 - **General-purpose only** — no domain-specific components (Rails, Ruby gems, Every.to, Figma, Xcode, browser-automation)
 - **Trunk-based** — no branch/worktree skills; commit directly to `main`
 
 ## Upstream Tracking
 
-Clavain bundles knowledge from 6 actively-developed upstream tools. Two systems keep them in sync:
+6 upstreams tracked: superpowers, superpowers-lab, superpowers-dev, compound-engineering, beads, oracle. Two systems keep them in sync:
 
-**1. Check System** (lightweight detection):
-- `.github/workflows/upstream-check.yml` — daily cron, checks repos via `gh api`, opens/updates issues with `upstream-sync` label
-- `scripts/upstream-check.sh` — local runner for same check
-- State: `docs/upstream-versions.json`
+- **Check:** `upstream-check.yml` (daily cron) + `scripts/upstream-check.sh` (local). State in `docs/upstream-versions.json`.
+- **Sync:** `sync.yml` (weekly cron) + `upstreams.json` (file mappings). Work dir: `.upstream-work/` (gitignored).
 
-**2. Sync System** (automated merging):
-- `.github/workflows/sync.yml` — weekly cron + manual dispatch, uses Claude Code + Codex CLI to auto-merge upstream changes
-- File mappings: `upstreams.json` (source→local path mappings with glob support)
-- Work dir: `.upstream-work/` (gitignored)
-- `.github/workflows/upstream-impact.yml` — posts upstream impact digest on `upstream-sync` PRs
-- `.github/workflows/upstream-decision-gate.yml` — requires human decision record before merge
-- Decision records: `docs/upstream-decisions/pr-<PR_NUMBER>.md` (template: `docs/templates/upstream-decision-record.md`)
-
-| Tool | Repo | Clavain Skills Affected |
-|------|------|------------------------|
-| Beads | `steveyegge/beads` | `interphase` companion plugin — phase tracking, gates, discovery. Default backend is Dolt (version-controlled SQL with cell-level merge); JSONL maintained for git portability; SQLite removed |
-| Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
-| superpowers | `obra/superpowers` | Multiple (founding source) |
-| superpowers-lab | `obra/superpowers-lab` | `using-tmux` (remaining skills moved to companion plugins) |
-| superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
-| compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |
-
-Manual sync check:
 ```bash
-# Check for upstream updates (local — no file changes)
-bash scripts/upstream-check.sh
-# Trigger full auto-merge (GitHub Action — creates PR)
-gh workflow run sync.yml
+bash scripts/upstream-check.sh        # Local check (no file changes)
+gh workflow run sync.yml               # Trigger auto-merge (creates PR)
 ```
 
 ## Landing the Plane (Session Completion)
