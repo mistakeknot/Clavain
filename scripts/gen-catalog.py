@@ -18,6 +18,7 @@ TARGET_FILES = (
     ROOT / "README.md",
     ROOT / "skills" / "using-clavain" / "SKILL.md",
     ROOT / "agent-rig.json",
+    ROOT / "docs" / "PRD.md",
 )
 
 
@@ -278,6 +279,19 @@ def update_using_clavain_counts(text: str, counts: dict[str, int], path: Path) -
     )
 
 
+def update_prd_version(text: str, path: Path) -> str:
+    plugin_json = json.loads(read_text(ROOT / ".claude-plugin" / "plugin.json"))
+    version = plugin_json.get("version", "")
+    if not version:
+        return text
+    return replace_once(
+        text,
+        r"\*\*Version:\*\* \S+",
+        f"**Version:** {version}",
+        path,
+    )
+
+
 def update_count_strings(path: Path, text: str, counts: dict[str, int]) -> str:
     relative = path.relative_to(ROOT).as_posix()
     if relative == ".claude-plugin/plugin.json":
@@ -292,6 +306,8 @@ def update_count_strings(path: Path, text: str, counts: dict[str, int]) -> str:
         return update_readme_counts(text, counts, path)
     if relative == "skills/using-clavain/SKILL.md":
         return update_using_clavain_counts(text, counts, path)
+    if relative == "docs/PRD.md":
+        return update_prd_version(text, path)
     raise ValueError(f"Unexpected target file: {path}")
 
 
