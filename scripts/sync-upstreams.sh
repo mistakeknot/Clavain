@@ -867,13 +867,13 @@ with open('$UPSTREAMS_JSON', 'r+') as f:
           fi
 
         elif [[ "$MODE" == "interactive" ]]; then
-          local ai_json="null"
+          ai_json="null"
           if [[ "$USE_AI" == true ]]; then
             printf "           Analyzing with AI...\n"
             ai_json=$(analyze_conflict "$local_path" "$upstream_file" "$clone_dir" "$last_commit" "$base_path" "$filepath")
 
             # Record AI decision for report
-            local int_decision int_risk int_rationale
+            int_decision="" int_risk="" int_rationale=""
             int_decision=$(echo "$ai_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('decision','needs_human'))" 2>/dev/null || echo "needs_human")
             int_risk=$(echo "$ai_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('risk','high'))" 2>/dev/null || echo "high")
             int_rationale=$(echo "$ai_json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('rationale',''))" 2>/dev/null || echo "")

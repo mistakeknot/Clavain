@@ -191,6 +191,7 @@ sprint_check_skipped_phases() {
     local found=0
     while IFS= read -r line; do
         local hash msg
+        # shellcheck disable=SC2034
         hash="${line%% *}"
         msg="${line#* }"
         # Skip if commit message references a plan, bead, PR, or review

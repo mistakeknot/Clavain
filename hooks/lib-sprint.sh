@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck: sourced library — no set -euo pipefail (would alter caller's error policy)
 # Sprint-specific state library for Clavain.
 # Sprint beads are type=epic beads with sprint=true state.
 # All functions are fail-safe (return 0 on error, never block workflow)

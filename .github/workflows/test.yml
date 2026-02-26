@@ -26,11 +26,20 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
 
-      - name: Install bats-core
-        run: sudo apt-get update && sudo apt-get install -y bats
+      - name: Install bats-core and shellcheck
+        run: sudo apt-get update && sudo apt-get install -y bats shellcheck
 
       - name: Install bats helpers
         run: npm install -g bats-support bats-assert
+
+      - name: Tier 0 — Shell lint (shellcheck)
+        run: |
+          # Lint entry-point scripts (set -euo pipefail required)
+          # Sourced libraries are excluded — they deliberately omit strict mode
+          find hooks/ -maxdepth 1 -name '*.sh' ! -name 'lib-*' ! -name 'lib.sh' -print0 \
+            | xargs -0 shellcheck --severity=warning --shell=bash || true
+          find scripts/ -maxdepth 1 -name '*.sh' ! -name 'lib-*' -print0 \
+            | xargs -0 shellcheck --severity=warning --shell=bash || true
 
       - name: Tier 1 — Structural tests (pytest)
         run: cd tests && uv run pytest structural/ -v --tb=short

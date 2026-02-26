@@ -26,8 +26,6 @@ MIGRATED=0
 SKIPPED=0
 ERRORS=0
 
-PHASES_JSON='["brainstorm","brainstorm-reviewed","strategized","planned","plan-reviewed","executing","shipping","done"]'
-
 echo "=== Sprint Migration: beads → ic runs ==="
 echo "Dry run: $DRY_RUN"
 echo ""
@@ -70,7 +68,7 @@ for (( i=0; i<count; i++ )); do
     orphan_count=$(echo "$existing_json" | jq 'length' 2>/dev/null) || orphan_count=0
     if [[ "$orphan_count" -gt 0 ]]; then
         echo "  WARN: Found $orphan_count orphaned ic run(s) for $bead_id, cancelling"
-        local orphan_ids
+        orphan_ids=""
         orphan_ids=$(echo "$existing_json" | jq -r '.[].id' 2>/dev/null) || orphan_ids=""
         while read -r orphan_id; do
             [[ -z "$orphan_id" ]] && continue

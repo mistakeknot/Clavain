@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck: sourced library — no set -euo pipefail (would alter caller's error policy)
 # Shim: delegates to interphase plugin if installed, otherwise provides no-op stubs.
 # Original implementation lives in the interphase companion plugin.
 

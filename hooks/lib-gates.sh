@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck: sourced library — no set -euo pipefail (would alter caller's error policy)
 # DEPRECATED: Gate enforcement now uses ic gate check/override via lib-intercore.sh.
 # This shim is retained for backward compatibility with non-sprint code that
 # still calls check_phase_gate or advance_phase directly.

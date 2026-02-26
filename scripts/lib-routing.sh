@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck: sourced library — no set -euo pipefail (would alter caller's error policy)
 # lib-routing.sh — Read config/routing.yaml and resolve model tiers.
 # Source this file; do not execute directly.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck: sourced library — no set -euo pipefail (would alter caller's error policy)
 # Shared utilities for Clavain hook scripts
 
 # ─── Companion plugin discovery ──────────────────────────────────────────────

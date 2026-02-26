@@ -214,6 +214,7 @@ fi
 
 # Sprint resume hint is already included in sprint_brief_scan output (sprint-scan.sh:346-365).
 # Removed duplicate sprint_find_active call here (iv-zlht).
+# shellcheck disable=SC2034
 sprint_resume_hint=""
 
 # Capture session-start snapshots for handoff diff detection (iv-fd7l0).
