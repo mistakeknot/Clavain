@@ -25,12 +25,18 @@ Load plan, review critically, execute tasks in batches, report for review betwee
 
 ### Step 2: Check Execution Mode
 
+Check for an execution manifest alongside the plan file. Replace the plan's `.md` extension with `.exec.yaml` — if that file exists, use Orchestrated Mode (Step 2C). This takes priority over the other modes.
+
+If no manifest exists, check for the interserve flag:
+
 ```bash
 FLAG_FILE="$(pwd)/.claude/clodex-toggle.flag"
 [ -f "$FLAG_FILE" ] && echo "INTERSERVE_ACTIVE" || echo "DIRECT_MODE"
 ```
 
-- **INTERSERVE_ACTIVE** → Go to Step 2A (Codex Dispatch)
+Fallback chain:
+- **ORCHESTRATED_MODE** (manifest exists) → Go to Step 2C (Orchestrated Execution)
+- **INTERSERVE_ACTIVE** (flag exists, no manifest) → Go to Step 2A (Codex Dispatch)
 - **DIRECT_MODE** → Go to Step 2B (Direct Execution)
 
 ### Step 2A: Codex Dispatch (interserve mode)
@@ -72,6 +78,44 @@ For each task:
 2. Follow each step exactly (plan has bite-sized steps)
 3. Run verifications as specified
 4. Mark as completed
+
+### Step 2C: Orchestrated Execution (manifest exists)
+
+When a `.exec.yaml` manifest exists alongside the plan, use the Python orchestrator for dependency-aware dispatch.
+
+1. **Locate the orchestrator:**
+   ```bash
+   ORCHESTRATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/orchestrate.py' 2>/dev/null | head -1)
+   [ -z "$ORCHESTRATE" ] && ORCHESTRATE=$(find ~/projects -name orchestrate.py -path '*/clavain/scripts/*' 2>/dev/null | head -1)
+   ```
+
+2. **Validate the manifest:**
+   Run: `python3 "$ORCHESTRATE" --validate "$MANIFEST"`
+   If validation fails, report errors and fall back to Step 2A or 2B.
+
+3. **Show the execution plan:**
+   Run: `python3 "$ORCHESTRATE" --dry-run "$MANIFEST"`
+   Present the wave breakdown to the user.
+
+4. **Ask for approval** via AskUserQuestion:
+   - "Approve" — dispatch as shown
+   - "Edit mode" — override execution mode (all-parallel, all-sequential, etc.)
+   - "Skip to manual" — fall back to Step 2A/2B
+
+5. **Execute:**
+   Run: `python3 "$ORCHESTRATE" "$MANIFEST" --plan "$PLAN_PATH" --project-dir "$(pwd)"`
+   Use `timeout: 600000` on the Bash tool call (10 minutes).
+
+6. **Read the orchestrator's summary.** For each task:
+   - `pass` → trust the result, report success
+   - `warn` → read the full output, assess severity
+   - `fail` or `error` → offer retry, manual execution, or skip
+   - `skipped` → report which dependency failure caused the skip
+
+7. **On partial failure:** If some tasks succeeded and others failed, offer:
+   - Fix the failing tasks and re-run orchestrator (it will re-dispatch only unfinished work if outputs exist)
+   - Execute failed tasks directly (fall back to Step 2B for those tasks)
+   - Skip and continue
 
 ### Step 3: Report
 When batch complete:

@@ -19,6 +19,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
+**Save execution manifest to:** `docs/plans/YYYY-MM-DD-<feature-name>.exec.yaml` (generated alongside the plan — see "Execution Manifest" section below)
+
 ## Bite-Sized Task Granularity
 
 **Each step is one action (2-5 minutes):**
@@ -89,6 +91,50 @@ git commit -m "feat: add specific feature"
 ```
 ````
 
+## Execution Manifest
+
+After saving the plan markdown, also generate a companion `.exec.yaml` manifest at the same path (replacing `.md` with `.exec.yaml`). This manifest tells `orchestrate.py` how to dispatch Codex agents for the plan.
+
+**Choose `mode` based on plan analysis:**
+
+| Plan shape | Mode |
+|-----------|------|
+| 3+ tasks with declared dependencies | `dependency-driven` |
+| All tasks share state or files heavily | `all-sequential` |
+| All tasks fully independent, no deps | `all-parallel` |
+| Mixed, but stages are clear boundaries | `manual-batching` |
+
+**Manifest template:**
+
+```yaml
+version: 1
+mode: dependency-driven     # or all-parallel, all-sequential, manual-batching
+tier: deep                   # default tier: fast or deep
+max_parallel: 5              # max concurrent agents (1-10)
+timeout_per_task: 300        # seconds
+
+stages:
+  - name: "Stage Name"
+    tasks:
+      - id: task-1
+        title: "Short task description"
+        files: [path/to/file.go]     # files this task reads/modifies
+        depends: []                   # explicit deps (additive to stage barrier)
+      - id: task-2
+        title: "Another task"
+        files: [path/to/other.go]
+        depends: [task-1]            # intra-stage dependency
+        tier: fast                   # override default tier
+```
+
+**Rules:**
+- Task IDs must match `task-N` pattern and be unique
+- `depends` is additive to stage barriers — every task implicitly depends on ALL tasks from prior stages
+- Group tasks into stages by natural workflow phases
+- Use `tier: fast` for verification-only tasks (tests, linting)
+- The `tier` field uses dispatch.sh values (`fast`/`deep`), NOT model names (`sonnet`/`opus`)
+- If the plan has <3 tasks or all tasks are tightly coupled, skip the manifest — the executing-plans skill will fall back to direct execution
+
 ## Remember
 - Exact file paths always
 - Complete code in plan (not "add validation")
@@ -109,8 +155,9 @@ Evaluate the plan you just wrote:
 | <3 tasks, or tasks share files/state | Subagent-Driven |
 | Tasks are exploratory/research/architectural | Subagent-Driven |
 | User wants manual checkpoints between batches | Parallel Session |
-| 3+ independent implementation tasks | Codex Delegation |
-| Tasks have clear file lists + test commands | Codex Delegation |
+| 3+ tasks with dependencies + `.exec.yaml` generated | Orchestrated Delegation |
+| 3+ independent implementation tasks (no manifest) | Codex Delegation |
+| Tasks have clear file lists + test commands | Codex Delegation or Orchestrated |
 | Codex CLI not available (`which codex` fails) | Subagent-Driven |
 
 ### Step 2: Check Codex Availability
@@ -177,7 +224,13 @@ AskUserQuestion:
 - Guide them to open new session in worktree
 - **REQUIRED SUB-SKILL:** New session uses clavain:executing-plans
 
-**If Codex Delegation chosen:**
+**If Orchestrated Delegation chosen (manifest exists):**
+- The executing-plans skill auto-detects the `.exec.yaml` manifest and invokes `orchestrate.py`
+- The orchestrator handles dependency ordering, parallel dispatch, output routing between tasks, and failure propagation
+- Claude reviews the orchestrator's summary and handles any failures
+- Best when tasks have declared dependencies and benefit from mixed sequential/parallel execution
+
+**If Codex Delegation chosen (no manifest):**
 - **REQUIRED SUB-SKILL:** Use clavain:interserve
 - Claude stays as orchestrator — planning, dispatching, reviewing, integrating
 - Codex agents execute tasks in parallel sandboxes

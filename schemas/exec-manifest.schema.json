@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Execution Manifest",
+  "description": "Machine-readable execution plan for orchestrate.py. Companion to a markdown plan file.",
+  "type": "object",
+  "required": ["version", "mode", "stages"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "mode": {
+      "enum": ["all-parallel", "all-sequential", "dependency-driven", "manual-batching"],
+      "description": "Execution mode. dependency-driven gives maximum parallelism with correct ordering."
+    },
+    "tier": {
+      "enum": ["fast", "deep"],
+      "default": "deep",
+      "description": "Default dispatch.sh --tier for all tasks. 'fast' = gpt-5.3-codex-spark, 'deep' = gpt-5.3-codex."
+    },
+    "max_parallel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5,
+      "description": "Maximum concurrent Codex agents."
+    },
+    "timeout_per_task": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 1800,
+      "default": 300,
+      "description": "Timeout in seconds per task dispatch."
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "tasks"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable stage name."
+          },
+          "tasks": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "title"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^task-[0-9]+$",
+                  "description": "Unique task identifier within the manifest."
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Short task description for prompts and logs."
+                },
+                "files": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "default": [],
+                  "description": "Files this task will read or modify."
+                },
+                "depends": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "default": [],
+                  "description": "Task IDs this task explicitly depends on (additive to stage barriers)."
+                },
+                "tier": {
+                  "enum": ["fast", "deep"],
+                  "description": "Override the manifest-level tier for this task."
+                },
+                "prompt_hint": {
+                  "type": "string",
+                  "description": "Extra context to include in the generated prompt for this task."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+# Example execution manifest — companion to a markdown plan file.
+#
+# Stage barriers are additive: every task implicitly depends on ALL tasks
+# from prior stages. Explicit 'depends' adds intra-stage edges on top.
+#
+# This example models a typical feature implementation:
+#   Stage 1: Scaffold types (foundation)
+#   Stage 2: Implement API + CLI in parallel, then integration tests (fan-in)
+
+version: 1
+mode: dependency-driven
+tier: deep
+max_parallel: 3
+timeout_per_task: 300
+
+stages:
+  - name: Foundation
+    tasks:
+      - id: task-1
+        title: "Scaffold core types and interfaces"
+        files:
+          - pkg/types.go
+          - pkg/interfaces.go
+
+  - name: Implementation
+    tasks:
+      - id: task-2
+        title: "Implement REST API handlers"
+        files:
+          - pkg/api/handler.go
+          - pkg/api/routes.go
+        depends: []  # implicit stage barrier handles task-1 dep
+
+      - id: task-3
+        title: "Implement CLI commands"
+        files:
+          - cmd/cli/main.go
+          - cmd/cli/commands.go
+        depends: []  # runs in parallel with task-2
+
+      - id: task-4
+        title: "Integration tests"
+        files:
+          - tests/integration_test.go
+        depends: [task-2, task-3]  # fan-in: waits for both
+        tier: fast  # tests don't need deep reasoning
