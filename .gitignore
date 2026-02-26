@@ -29,3 +29,6 @@ __pycache__/
 .clavain/intercore.db.backup-*
 
 .intermem/
+
+# Go build artifacts
+bin/clavain-cli-go
