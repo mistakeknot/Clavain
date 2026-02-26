@@ -41,96 +41,19 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 16 discipline skills
-│   ├── brainstorming/             # Freeform exploration mode
-│   ├── code-review-discipline/    # Review dispatch + feedback handling
-│   ├── dispatching-parallel-agents/ # Independent task parallelism
-│   ├── engineering-docs/          # Solution doc capture
-│   ├── executing-plans/           # Plan execution with review checkpoints
-│   ├── file-todos/                # File-based todo tracking (todos/ directory)
-│   ├── galiana/                   # Discipline analytics + agent scorecard
-│   ├── interserve/                # Codex CLI dispatch (megaprompt + parallel)
-│   ├── landing-a-change/          # Verify, document, land on trunk
-│   ├── lane/                      # Thematic work lanes + velocity tracking
-│   ├── refactor-safely/           # Staged refactoring with safety nets
-│   ├── subagent-driven-development/ # In-session parallel agent execution
-│   ├── upstream-sync/             # Upstream repo change tracking
-│   ├── using-clavain/             # Bootstrap routing (injected via SessionStart)
-│   │   └── references/            # Routing tables, agent contracts, dispatch patterns
-│   ├── using-tmux-for-interactive-commands/ # tmux for interactive CLIs
-│   └── writing-plans/             # Multi-step task planning
+├── skills/                        # 16 discipline skills (ls skills/*/SKILL.md)
 ├── agents/
-│   ├── review/                    # 2 review agents (plan-reviewer, data-migration-expert)
-│   └── workflow/                  # 2 workflow agents (bug-reproduction-validator, pr-comment-resolver)
-├── commands/                      # 46 slash commands
-│   ├── setup.md                   # Modpack installer
-│   └── interpeer.md              # Quick cross-AI peer review (+ 44 others)
-├── hooks/
+│   ├── review/                    # 2: plan-reviewer, data-migration-expert
+│   └── workflow/                  # 2: bug-reproduction-validator, pr-comment-resolver
+├── commands/                      # 46 slash commands (ls commands/*.md)
+├── hooks/                         # 7 active hooks + 8 lib-*.sh libraries
 │   ├── hooks.json                 # Hook registration (4 event types, 6 bindings)
-│   ├── session-start.sh           # Context injection + sprint awareness
-│   ├── interserve-audit.sh        # Source code write audit (interserve mode)
-│   ├── catalog-reminder.sh        # Catalog update reminder on component changes
-│   ├── auto-publish.sh            # Auto-publish after git push (60s TTL dedup)
-│   ├── bead-agent-bind.sh         # Bind agent identity to claimed beads
-│   ├── auto-stop-actions.sh       # Post-turn signal detection + compound/drift triggers
-│   ├── dotfiles-sync.sh           # Sync dotfile changes at session end
-│   ├── sprint-scan.sh             # Sprint awareness scanner (sourced by session-start)
-│   ├── session-handoff.sh         # HANDOFF.md generation (inactive — not in hooks.json)
-│   ├── session-end-handoff.sh     # SessionEnd backup handoff (inactive — not in hooks.json)
-│   ├── lib.sh                     # Shared utilities (escape_for_json, plugin discovery)
-│   ├── lib-intercore.sh           # Intercore CLI wrappers (ic build/run/state/etc.)
-│   ├── lib-sprint.sh              # Sprint state library (phase, gate, budget queries)
-│   ├── lib-signals.sh             # Signal detection for auto-stop-actions
-│   ├── lib-spec.sh                # Agency spec loader (reads config/agency-spec.yaml)
-│   ├── lib-verdict.sh             # Verdict file utilities for structured handoffs
-│   ├── lib-gates.sh               # Phase gate shim (delegates to interphase)
-│   └── lib-discovery.sh           # Plugin discovery shim (delegates to interphase)
-├── cmd/
-│   └── clavain-cli/               # Go CLI binary (budget, checkpoint, claim, phase, sprint)
-├── config/
-│   ├── agency/                    # Phase-specific agency YAML (build, design, discover, reflect, ship)
-│   ├── agency-spec.yaml           # Agency specification
-│   ├── agency-spec.schema.json    # Schema for agency spec
-│   ├── fleet-registry.yaml        # Agent fleet registry
-│   ├── fleet-registry.schema.json # Schema for fleet registry
-│   ├── routing-overrides.schema.json # Routing overrides schema (read by interspect)
-│   ├── routing.yaml               # Model routing configuration
-│   └── CLAUDE.md                  # Engineering conventions (installed by agent-rig)
-├── scripts/
-│   ├── bump-version.sh            # Bump version across plugin.json + marketplace.json
-│   ├── build-clavain-cli.sh       # Build the Go clavain-cli binary
-│   ├── orchestrate.py             # DAG-based Codex agent dispatch
-│   ├── dispatch.sh                # Codex exec wrapper with sensible defaults
-│   ├── debate.sh                  # Structured 2-round Claude/Codex debate
-│   ├── gen-catalog.py             # Generate skill/agent/command catalog
-│   ├── scan-fleet.sh              # Auto-discover agents, update fleet-registry.yaml
-│   ├── lib-fleet.sh               # Fleet registry query library
-│   ├── lib-routing.sh             # Routing config reader
-│   ├── verify-config.sh           # Plugin enabled/disabled state verifier
-│   ├── modpack-install.sh         # Companion plugin installer
-│   ├── bead-land.sh               # Close orphaned beads (replaced auto-close hook)
-│   ├── beads-hygiene.sh           # Beads cleanup utilities
-│   ├── upstream-check.sh          # Checks upstream repos via gh api
-│   ├── upstream-impact-report.py  # Impact digest for upstream PRs
-│   ├── install-codex.sh           # Codex skill installer
-│   ├── codex-auto-refresh.sh      # Automated local Codex sync helper
-│   ├── clavain_sync/              # Python package for upstream sync classification
-│   └── validate-gitleaks-waivers.sh # Secret scan waiver validation
-├── docs/
-│   └── upstream-versions.json     # Baseline for upstream sync tracking
-├── tests/
-│   ├── structural/                # pytest — component counts, frontmatter, cross-refs
-│   ├── shell/                     # bats-core — hook scripts, lib functions
-│   ├── smoke/                     # Claude Code subagent smoke tests
-│   └── run-tests.sh              # Unified test runner
-└── .github/workflows/
-    ├── eval-daily.yml             # Daily evaluation run
-    ├── eval-on-change.yml         # Eval on code changes
-    ├── pr-agent-commands.yml      # Issue comment dispatch for /review and /codex-review
-    ├── secret-scan.yml            # Secret scanning
-    ├── sync.yml                   # Weekly upstream auto-merge
-    ├── test.yml                   # CI test suite
-    └── upstream-check.yml         # Daily upstream change detection
+│   └── lib-*.sh                   # Shared: intercore, sprint, signals, spec, verdict, gates, discovery
+├── cmd/clavain-cli/               # Go CLI binary (budget, checkpoint, claim, phase, sprint)
+├── config/                        # Agency specs, fleet registry, routing config
+├── scripts/                       # bump-version, orchestrate.py, dispatch, fleet management
+├── tests/                         # structural (pytest), shell (bats-core), smoke (subagent)
+└── .github/workflows/             # CI: eval, sync, test, secret-scan, upstream-check
 ```
 
 ## How It Works
@@ -416,28 +339,6 @@ bash scripts/upstream-check.sh        # Local check (no file changes)
 gh workflow run sync.yml               # Trigger auto-merge (creates PR)
 ```
 
-## Landing the Plane (Session Completion)
+## Session Completion
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync              # compatibility sync step (0.50.x syncs, 0.51+ no-op)
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+See root `Demarch/AGENTS.md` → "Landing the Plane" for the mandatory push workflow.
