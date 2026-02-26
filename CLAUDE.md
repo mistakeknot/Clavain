@@ -34,4 +34,4 @@ python3 -c "import json; json.load(open('hooks/hooks.json'))"           # Hooks 
 
 ### Release workflow
 
-For publishing a release, use `scripts/bump-version.sh <version>` (or `/interpub:release <version>` in Claude Code).
+Publish with `ic publish --patch` (or `ic publish <version>` for exact). The `/interpub:release` command and `scripts/bump-version.sh` both delegate to `ic publish`.
