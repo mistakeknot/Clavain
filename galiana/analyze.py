@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import subprocess
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -198,16 +199,88 @@ def compute_human_override_rate(events: list[dict[str, Any]]) -> tuple[dict[str,
     return ({"value": safe_rate(skipped, total), "numerator": skipped, "denominator": total, "by_type": by_type}, skipped, total)
 
 
+def _find_cost_query_script() -> str | None:
+    """Locate interstat cost-query.sh in standard paths."""
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent.parent / "interverse" / "interstat" / "scripts" / "cost-query.sh",
+        Path.home() / ".claude" / "plugins" / "cache" / "interagency-marketplace" / "interstat",
+    ]
+    for c in candidates:
+        if c.is_dir():
+            # Plugin cache: find latest version dir
+            for entry in sorted(c.iterdir(), reverse=True):
+                script = entry / "scripts" / "cost-query.sh"
+                if script.exists():
+                    return str(script)
+        elif c.exists():
+            return str(c)
+    return None
+
+
+def _query_interstat_tokens(shipped_bead_ids: set[str]) -> dict[str, Any] | None:
+    """Query real token data from interstat via cost-query.sh."""
+    script = _find_cost_query_script()
+    if not script:
+        return None
+
+    try:
+        result = subprocess.run(
+            ["bash", script, "by-bead"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        rows = json.loads(result.stdout.strip() or "[]")
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
+        return None
+
+    if not rows:
+        return None
+
+    # Correlate with shipped beads
+    correlated = [r for r in rows if r.get("bead_id") in shipped_bead_ids]
+    if not correlated:
+        return None
+
+    token_values = sorted(r.get("tokens", 0) for r in correlated)
+    n = len(token_values)
+    total = sum(token_values)
+    input_total = sum(r.get("input_tokens", 0) for r in correlated)
+    output_total = sum(r.get("output_tokens", 0) for r in correlated)
+
+    return {
+        "avg_tokens_per_landed_change": round(total / len(shipped_bead_ids)) if shipped_bead_ids else 0,
+        "median_tokens_per_landed_change": token_values[n // 2] if n else 0,
+        "p90_tokens_per_landed_change": token_values[min(n * 90 // 100, n - 1)] if n else 0,
+        "total_tokens": total,
+        "input_tokens": input_total,
+        "output_tokens": output_total,
+        "beads_with_token_data": n,
+        "token_data_coverage_pct": round(n / len(shipped_bead_ids) * 100, 1) if shipped_bead_ids else 0,
+    }
+
+
 def compute_cost_per_landed_change(
     tool_events: list[dict[str, Any]] | None,
     shipped_beads: set[str],
     bead_sessions: set[str],
 ) -> dict[str, Any]:
-    """Compute avg tool calls and avg sessions per shipped bead."""
-    if tool_events is None:
-        return {"avg_tools": None, "avg_sessions": None, "note": "tool-time data not available"}
+    """Compute cost per shipped bead using real token data (preferred) or tool-time proxy."""
     if not shipped_beads:
         return {"avg_tools": None, "avg_sessions": None, "note": "no shipped beads in selected period"}
+
+    # Try real token data from interstat first
+    token_data = _query_interstat_tokens(shipped_beads)
+    if token_data is not None:
+        result: dict[str, Any] = {**token_data, "source": "interstat"}
+        # Also include tool-time proxy for comparison if available
+        if tool_events is not None:
+            result["avg_tools"] = round(len(tool_events) / len(shipped_beads), 4)
+        return result
+
+    # Fall back to tool-time proxy
+    if tool_events is None:
+        return {"avg_tools": None, "avg_sessions": None, "note": "tool-time data not available", "source": "none"}
 
     scoped = tool_events
     note: str | None = None
@@ -222,9 +295,10 @@ def compute_cost_per_landed_change(
     session_count = len({str(e.get("_session_id", "")).strip() for e in scoped if str(e.get("_session_id", "")).strip()})
     shipped_count = len(shipped_beads)
 
-    result: dict[str, Any] = {
+    result = {
         "avg_tools": round(tool_count / shipped_count, 4),
         "avg_sessions": round(session_count / shipped_count, 4),
+        "source": "tool-time",
     }
     if note:
         result["note"] = note
