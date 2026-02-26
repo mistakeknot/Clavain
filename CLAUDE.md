@@ -24,7 +24,7 @@ bash -n hooks/lib-signals.sh           # Syntax check
 bash -n hooks/session-handoff.sh       # Syntax check
 bash -n hooks/auto-publish.sh          # Syntax check
 bash -n hooks/bead-agent-bind.sh       # Syntax check
-bash -n hooks/bead-auto-close.sh       # Syntax check (auto-close beads on push)
+bash -n scripts/bead-land.sh           # Syntax check (close orphaned beads)
 bash -n hooks/catalog-reminder.sh      # Syntax check
 bash -n hooks/interserve-audit.sh       # Syntax check
 bash -n hooks/sprint-scan.sh           # Syntax check (utility, not a hook binding)

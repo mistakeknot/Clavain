@@ -35,11 +35,6 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bead-agent-bind.sh",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bead-auto-close.sh",
-            "timeout": 10
           }
         ]
       },
