@@ -1,22 +1,12 @@
 #!/usr/bin/env bash
-# PostToolUse:Bash hook — auto-close beads after a successful git push.
+# PostToolUse:Bash hook — auto-close beads mentioned in pushed commits.
 #
-# Two-phase design:
-#   Phase 1 (git pre-push hook): saves bead IDs from commit messages to a
-#           marker file at .git/bead-push-pending. This runs in the correct
-#           repo CWD with reliable ref ranges from git's stdin.
-#   Phase 2 (this hook): after a successful `git push`, reads the marker file,
-#           closes eligible beads, and deletes the marker. If push failed, the
-#           marker is also deleted (no stale close on retry).
+# After a successful `git push`, extracts bead IDs (iv-xxxxx pattern) from
+# the commit messages that were just pushed, checks which are still open,
+# and closes them. Reports what was closed via additionalContext.
 #
-# Protections:
-#   - Beads with open children are never auto-closed — parent containers
-#     (epics, features with subtasks, etc.) should only close when all
-#     children are done. If all children are already closed, the parent
-#     is safe to auto-close.
-#   - Only beads in open/in_progress status are closed.
-#   - Marker file is always cleaned up (success or failure).
-#   - Falls back to HEAD~5 scan for repos without the pre-push helper.
+# This eliminates the need to manually `bd close` after pushing work.
+# Bead IDs are already embedded in commit messages by convention.
 #
 # Input: PostToolUse JSON on stdin (tool_input.command, tool_result, cwd)
 # Output: JSON with additionalContext listing closed beads, or empty on skip
@@ -42,141 +32,78 @@ main() {
     [[ -n "$cwd" ]] || exit 0
 
     # Fast exit: not a git push (~5ms path for 99% of Bash calls)
-    [[ "$cmd" == *"git push"* || "$cmd" == *"git -C "*" push"* ]] || exit 0
+    [[ "$cmd" == *"git push"* ]] || exit 0
 
-    # Determine which repo(s) were pushed — handle both `git push` and `git -C <dir> push`
-    local repo_dirs=()
-    if [[ "$cmd" == *"git -C "* && "$cmd" == *" push"* ]]; then
-        # Extract the -C argument: git -C <path> push ...
-        local git_c_dir
-        git_c_dir="$(echo "$cmd" | sed -n 's/.*git -C \([^ ]*\).*/\1/p' || true)"
-        if [[ -n "$git_c_dir" ]]; then
-            # Resolve relative to cwd
-            if [[ "$git_c_dir" == /* ]]; then
-                repo_dirs+=("$git_c_dir")
-            else
-                repo_dirs+=("$cwd/$git_c_dir")
-            fi
-        fi
-    fi
-    if [[ "$cmd" == *"git push"* && "$cmd" != *"git -C "* ]]; then
-        repo_dirs+=("$cwd")
-    fi
-    # Also catch chained pushes: `git push && git -C foo push`
-    # The above logic handles both patterns; for chained commands we may have both
-
-    [[ ${#repo_dirs[@]} -gt 0 ]] || exit 0
-
-    # Check if the push succeeded
+    # Skip if the push failed
     local exit_code
     exit_code="$(jq -r '.tool_result.exit_code // "0"' <<<"$payload" 2>/dev/null || true)"
+    [[ "$exit_code" == "0" ]] || exit 0
 
-    local closed=()
-    local skipped_parents=()
-
-    for repo_dir in "${repo_dirs[@]}"; do
-        # Resolve to git toplevel
-        local git_dir
-        git_dir="$(git -C "$repo_dir" rev-parse --show-toplevel 2>/dev/null || true)"
-        [[ -n "$git_dir" ]] || continue
-
-        local marker="$git_dir/.git/bead-push-pending"
-
-        # If no marker file, the pre-push hook wasn't installed in this repo.
-        # Fall back to scanning recent commits (less precise but still works).
-        if [[ ! -f "$marker" ]]; then
-            if [[ "$exit_code" != "0" ]]; then
-                continue
-            fi
-            # Generate marker from last 5 commits (conservative fallback)
-            local tracking
-            tracking="$(git -C "$git_dir" rev-parse --abbrev-ref '@{u}' 2>/dev/null || true)"
-            if [[ -n "$tracking" ]]; then
-                git -C "$git_dir" log --format='%H %s%n%H %b' HEAD~5..HEAD 2>/dev/null \
-                    | grep -oE '\biv-[a-z0-9]+\b' \
-                    | sort -u \
-                    | while IFS= read -r bid; do
-                        local head_sha
-                        head_sha="$(git -C "$git_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
-                        echo -e "${bid}\t${head_sha}"
-                    done > "$marker" 2>/dev/null || true
-                [[ -s "$marker" ]] || { rm -f "$marker"; continue; }
-            else
-                continue
-            fi
+    # Find .beads directory — walk up from cwd
+    local beads_dir=""
+    local search_dir="$cwd"
+    while [[ "$search_dir" != "/" ]]; do
+        if [[ -d "$search_dir/.beads" ]]; then
+            beads_dir="$search_dir/.beads"
+            break
         fi
-
-        if [[ "$exit_code" != "0" ]]; then
-            # Push failed — clean up marker without closing
-            rm -f "$marker"
-            continue
-        fi
-
-        # Find .beads directory — walk up from git toplevel
-        local beads_dir=""
-        local search_dir="$git_dir"
-        while [[ "$search_dir" != "/" ]]; do
-            if [[ -d "$search_dir/.beads" ]]; then
-                beads_dir="$search_dir/.beads"
-                break
-            fi
-            search_dir="$(dirname "$search_dir")"
-        done
-
-        if [[ -z "$beads_dir" ]]; then
-            rm -f "$marker"
-            continue
-        fi
-
-        # Read bead IDs from marker and close eligible ones
-        while IFS=$'\t' read -r bead_id commit_sha || [[ -n "$bead_id" ]]; do
-            [[ -n "$bead_id" ]] || continue
-
-            # Query bead status and type
-            local bead_json
-            bead_json="$(BEADS_DIR="$beads_dir" bd show "$bead_id" --json 2>/dev/null || true)"
-            [[ -n "$bead_json" ]] || continue
-
-            local status bead_type
-            status="$(jq -r '.status // empty' <<<"$bead_json" 2>/dev/null || true)"
-            bead_type="$(jq -r '.type // empty' <<<"$bead_json" 2>/dev/null || true)"
-
-            # Skip beads with open children — parent containers should only
-            # close when all children are done, regardless of type (epic, feature, etc.)
-            local children_json open_children
-            children_json="$(BEADS_DIR="$beads_dir" bd children "$bead_id" --json 2>/dev/null || true)"
-            if [[ -n "$children_json" && "$children_json" != "[]" && "$children_json" != "null" ]]; then
-                open_children="$(jq '[.[] | select(.status | test("closed") | not)] | length' <<<"$children_json" 2>/dev/null || echo "0")"
-                if [[ "$open_children" -gt 0 ]]; then
-                    skipped_parents+=("$bead_id")
-                    continue
-                fi
-                # All children closed — safe to auto-close the parent too
-            fi
-
-            # Only close open or in-progress beads
-            if [[ "$status" == "open" || "$status" == "in_progress" ]]; then
-                local short_sha="${commit_sha:0:7}"
-                if BEADS_DIR="$beads_dir" bd close "$bead_id" --reason="Auto-closed: pushed in ${short_sha:-commit}" 2>/dev/null; then
-                    closed+=("$bead_id")
-                fi
-            fi
-        done < "$marker"
-
-        rm -f "$marker"
+        search_dir="$(dirname "$search_dir")"
     done
+    [[ -n "$beads_dir" ]] || exit 0
+
+    # Get the push output to find the commit range (e.g., "abc1234..def5678")
+    # Fallback: use reflog to find what was just pushed
+    local push_stdout
+    push_stdout="$(jq -r '.tool_result.stdout // empty' <<<"$payload" 2>/dev/null || true)"
+    local push_stderr
+    push_stderr="$(jq -r '.tool_result.stderr // empty' <<<"$payload" 2>/dev/null || true)"
+    local push_output="${push_stdout}${push_stderr}"
+
+    # Extract commit range from push output (format: "oldsha..newsha branch -> branch")
+    local commit_range=""
+    commit_range="$(echo "$push_output" | grep -oE '[0-9a-f]+\.\.[0-9a-f]+' | head -1 || true)"
+
+    # Fallback: get commits between remote tracking and HEAD
+    if [[ -z "$commit_range" ]]; then
+        local tracking
+        tracking="$(git -C "$cwd" rev-parse --abbrev-ref '@{u}' 2>/dev/null || true)"
+        if [[ -n "$tracking" ]]; then
+            # After push, remote should equal HEAD. Use reflog to find pre-push state.
+            # @{1} is HEAD before the push operation that just updated the tracking ref.
+            # Safer: just scan last 10 commits — any bead mentioned gets closed.
+            commit_range="HEAD~10..HEAD"
+        fi
+    fi
+    [[ -n "$commit_range" ]] || exit 0
+
+    # Extract bead IDs from commit messages in the range
+    local bead_ids
+    bead_ids="$(git -C "$cwd" log --format='%s%n%b' "$commit_range" 2>/dev/null \
+        | grep -oE '\biv-[a-z0-9]+\b' \
+        | sort -u || true)"
+    [[ -n "$bead_ids" ]] || exit 0
+
+    # Close open beads
+    local closed=()
+    local already_closed=()
+    while IFS= read -r bead_id; do
+        [[ -n "$bead_id" ]] || continue
+        # Check if bead exists and is open
+        local status
+        status="$(BEADS_DIR="$beads_dir" bd list --id "$bead_id" --all --json 2>/dev/null \
+            | jq -r '.[0].status // empty' 2>/dev/null || true)"
+        if [[ "$status" == "open" || "$status" == "in_progress" ]]; then
+            if BEADS_DIR="$beads_dir" bd close "$bead_id" --reason="Auto-closed: pushed in $(git -C "$cwd" rev-parse --short HEAD 2>/dev/null || echo 'commit')" 2>/dev/null; then
+                closed+=("$bead_id")
+            fi
+        elif [[ "$status" == "closed" ]]; then
+            already_closed+=("$bead_id")
+        fi
+    done <<<"$bead_ids"
 
     # Report
-    local parts=()
     if [[ ${#closed[@]} -gt 0 ]]; then
-        parts+=("Auto-closed ${#closed[@]} bead(s): ${closed[*]}")
-    fi
-    if [[ ${#skipped_parents[@]} -gt 0 ]]; then
-        parts+=("Skipped ${#skipped_parents[@]} parent(s) with open children: ${skipped_parents[*]}")
-    fi
-    if [[ ${#parts[@]} -gt 0 ]]; then
-        local msg
-        msg="$(IFS='. '; echo "${parts[*]}")"
+        local msg="Auto-closed ${#closed[@]} bead(s) mentioned in pushed commits: ${closed[*]}"
         jq -n --arg msg "$msg" '{"additionalContext": $msg}'
     fi
 }
