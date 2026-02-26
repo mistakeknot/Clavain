@@ -205,10 +205,19 @@ def _find_cost_query_script() -> str | None:
         Path(__file__).resolve().parent.parent.parent.parent / "interverse" / "interstat" / "scripts" / "cost-query.sh",
         Path.home() / ".claude" / "plugins" / "cache" / "interagency-marketplace" / "interstat",
     ]
+    def _parse_semver(name: str) -> tuple[int, ...]:
+        """Parse '0.2.6' into (0, 2, 6) for proper numeric sorting."""
+        try:
+            return tuple(int(p) for p in name.split("."))
+        except (ValueError, AttributeError):
+            return (0,)
+
     for c in candidates:
         if c.is_dir():
-            # Plugin cache: find latest version dir
-            for entry in sorted(c.iterdir(), reverse=True):
+            # Plugin cache: find latest version dir (semver sort, not lexicographic)
+            version_dirs = [e for e in c.iterdir() if e.is_dir()]
+            version_dirs.sort(key=lambda e: _parse_semver(e.name), reverse=True)
+            for entry in version_dirs:
                 script = entry / "scripts" / "cost-query.sh"
                 if script.exists():
                     return str(script)
@@ -249,9 +258,9 @@ def _query_interstat_tokens(shipped_bead_ids: set[str]) -> dict[str, Any] | None
     output_total = sum(r.get("output_tokens", 0) for r in correlated)
 
     return {
-        "avg_tokens_per_landed_change": round(total / len(shipped_bead_ids)) if shipped_bead_ids else 0,
-        "median_tokens_per_landed_change": token_values[n // 2] if n else 0,
-        "p90_tokens_per_landed_change": token_values[min(n * 90 // 100, n - 1)] if n else 0,
+        "avg_tokens_per_landed_change": round(total / n),
+        "median_tokens_per_landed_change": token_values[min(n // 2, n - 1)],
+        "p90_tokens_per_landed_change": token_values[min(n * 90 // 100, n - 1)],
         "total_tokens": total,
         "input_tokens": input_total,
         "output_tokens": output_total,
