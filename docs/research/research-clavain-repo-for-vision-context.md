@@ -109,7 +109,7 @@ Search for dedicated vision/mission/philosophy files:
 "Bootstrap the Clavain modpack — install required plugins, disable conflicts, verify MCP servers, configure hooks"
 
 **Modpack Components Listed:**
-- Required: clavain, interdoc, auracoil, tool-time, context7, agent-sdk-dev, plugin-dev, serena, security-guidance, explanatory-output-style
+- Required: clavain, interdoc, tool-time, context7, agent-sdk-dev, plugin-dev, serena, security-guidance, explanatory-output-style
 - Language servers: gopls-lsp, pyright-lsp, typescript-lsp, rust-analyzer-lsp
 - Companions: interphase, interline (statusline), beads (issue tracking)
 - Conflicts (must disable): code-review, pr-review-toolkit, code-simplifier, commit-commands, feature-dev, claude-md-management, frontend-design, hookify

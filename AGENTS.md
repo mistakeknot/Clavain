@@ -345,7 +345,6 @@ These enhance the rig significantly but aren't hard dependencies.
 | **agent-sdk-dev** | claude-plugins-official | Agent SDK scaffolding: `/new-sdk-app` command, Python + TS verifier agents. |
 | **plugin-dev** | claude-plugins-official | Plugin development: 7 skills, 3 agents including agent-creator and skill-reviewer. |
 | **interdoc** | interagency-marketplace | AGENTS.md generation for any repo. |
-| **auracoil** | interagency-marketplace | GPT-5.2 Pro review of AGENTS.md specifically. |
 | **tool-time** | interagency-marketplace | Tool usage analytics across sessions. |
 | **security-guidance** | claude-plugins-official | Security warning hooks on file edits. Complements Clavain's fd-safety agent. |
 | **serena** | claude-plugins-official | Semantic code analysis via LSP-like tools. Different tool class from Clavain's agents. |

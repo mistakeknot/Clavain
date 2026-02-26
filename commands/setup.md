@@ -1,12 +1,12 @@
 ---
 name: setup
-description: Bootstrap the Clavain modpack — install required plugins, disable conflicts, verify MCP servers, configure hooks
+description: Bootstrap Clavain for the active runtime (Codex or Claude Code) and verify health
 argument-hint: "[optional: --check-only to verify without making changes, --scope=clavain|interlock|all]"
 ---
 
 # Clavain Modpack Setup
 
-Bootstrap the full Clavain engineering rig from a fresh Claude Code install. Run this once to install everything, or re-run to verify and repair configuration.
+Bootstrap the Clavain engineering rig for your active runtime. Run this once to install everything, or re-run to verify and repair configuration.
 
 ## Arguments
 
@@ -14,11 +14,45 @@ Bootstrap the full Clavain engineering rig from a fresh Claude Code install. Run
 
 If `--check-only` is in the arguments, only verify the configuration — do not make changes.
 
+## Step 0: Route by Runtime (critical)
+
+If this command is run from **Codex CLI**, do **not** run `claude plugin ...` commands. Use Codex bootstrap and stop after this section:
+
+```bash
+SCRIPT_PATH="${CLAVAIN_SOURCE_DIR:-$HOME/.codex/clavain}/scripts/install-codex-interverse.sh"
+if [[ ! -f "$SCRIPT_PATH" ]]; then
+  for candidate in \
+    "$PWD/os/clavain/scripts/install-codex-interverse.sh" \
+    "$HOME/projects/Demarch/os/clavain/scripts/install-codex-interverse.sh"; do
+    if [[ -f "$candidate" ]]; then
+      SCRIPT_PATH="$candidate"
+      break
+    fi
+  done
+fi
+if [[ -z "$SCRIPT_PATH" || ! -f "$SCRIPT_PATH" ]]; then
+  echo "Error: install-codex-interverse.sh not found."
+  echo "Run /clavain:codex-bootstrap first, then retry /clavain:setup."
+  exit 1
+fi
+
+# check-only mode
+bash "$SCRIPT_PATH" doctor --json
+
+# non-check mode
+bash "$SCRIPT_PATH" install
+bash "$SCRIPT_PATH" doctor --json
+
+ls ~/.agents/skills/
+```
+
+If this command is run from **Claude Code**, continue with Steps 1+ below.
+
 `--scope=interlock` focuses on intermute service install/health only, while
 `--scope=clavain` (default) runs the full Clavain modpack setup flow. Use
 `--scope=all` to force both.
 
-## Step 1: Verify Clavain Itself
+## Step 1: Verify Clavain Itself (Claude Code path)
 
 Confirm this plugin is installed and active:
 ```bash
@@ -233,7 +267,7 @@ Present results:
 ```
 Clavain Modpack Setup Complete
 
-Required plugins:  [X/10 enabled]
+Required plugins:  [see verify output]
 Conflicts disabled: [X/8 disabled]
 Language servers:   [list enabled]
 MCP servers:       context7 ✓ | qmd [status]

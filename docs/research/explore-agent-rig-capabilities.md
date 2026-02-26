@@ -249,16 +249,15 @@ Clavain provides **strong conceptual guidance** and **Claude Code plugin infrast
 **Directory:** `/root/.claude/plugins/cache/interagency-marketplace/`
 
 **Installed:**
-1. **auracoil**
-2. **clavain** (this plugin)
-3. **gurgeh-plugin**
-4. **interclode** (v0.2.3) — Cross-AI delegation (Codex from Claude Code)
-5. **interdoc** — AGENTS.md generator
-6. **interpeer** — Cross-AI peer review
-7. **tldrs**
-8. **tldr-swinton**
-9. **tool-time**
-10. **tuivision**
+1. **clavain** (this plugin)
+2. **gurgeh-plugin**
+3. **interclode** (v0.2.3) — Cross-AI delegation (Codex from Claude Code)
+4. **interdoc** — AGENTS.md generator
+5. **interpeer** — Cross-AI peer review
+6. **tldrs**
+7. **tldr-swinton**
+8. **tool-time**
+9. **tuivision**
 
 ### interclode Plugin
 - **Purpose:** Dispatch Codex agents from Claude Code for parallel autonomous work

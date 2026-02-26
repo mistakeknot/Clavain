@@ -19,7 +19,7 @@
 
 ### Group 1: Modified .gitignore — `chore: update gitignore`
 
-The `.gitignore` has one addition: `.beads/` directory exclusion. This is a standard tooling cache exclusion, consistent with the existing `.auracoil/cache/` and `.auracoil/oracle/` entries.
+The `.gitignore` has one addition: `.beads/` directory exclusion. This is a standard tooling cache exclusion, consistent with existing local tooling cache entries.
 
 **Diff:**
 ```diff
