@@ -4,7 +4,7 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Runs on Autarch TUI, backed by Intercore kernel (Layer 1) and Interspect profiler. 16 skills, 4 agents, 46 commands, 7 hooks, 1 MCP server. 32 companion plugins as drivers (Layer 3). Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `intertrust` (agent trust scoring), `interlock` (multi-agent coordination), `interpeer` (cross-AI review), `intertest` (quality disciplines).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 16 skills, 4 agents, 46 commands, 6 hook bindings, 1 MCP server. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
 
 ## Quick Commands
 
@@ -16,24 +16,9 @@ claude --plugin-dir /home/mk/projects/Demarch/os/clavain
 ls skills/*/SKILL.md | wc -l          # Should be 16
 ls agents/{review,workflow}/*.md | wc -l  # Should be 4
 ls commands/*.md | wc -l              # Should be 46
-bash -n hooks/lib.sh                   # Syntax check
-bash -n hooks/session-start.sh         # Syntax check
-bash -n hooks/dotfiles-sync.sh         # Syntax check
-bash -n hooks/auto-stop-actions.sh     # Syntax check (compound + drift, merged)
-bash -n hooks/lib-signals.sh           # Syntax check
-bash -n hooks/session-handoff.sh       # Syntax check
-bash -n hooks/auto-publish.sh          # Syntax check
-bash -n hooks/bead-agent-bind.sh       # Syntax check
-bash -n scripts/bead-land.sh           # Syntax check (close orphaned beads)
-bash -n hooks/catalog-reminder.sh      # Syntax check
-bash -n hooks/interserve-audit.sh       # Syntax check
-bash -n hooks/sprint-scan.sh           # Syntax check (utility, not a hook binding)
-bash -n hooks/lib-sprint.sh            # Syntax check (sprint state library)
-bash -n hooks/lib-discovery.sh         # Syntax check (shim → interphase)
-bash -n hooks/lib-gates.sh             # Syntax check (shim → interphase)
-bash -n hooks/session-end-handoff.sh  # Syntax check (SessionEnd backup handoff)
-bash -n scripts/clodex-toggle.sh   # Syntax check
+for f in hooks/*.sh; do bash -n "$f" && echo "$(basename $f) OK"; done  # Syntax check all hooks
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
+python3 -c "import json; json.load(open('hooks/hooks.json'))"           # Hooks JSON check
 ```
 
 ## Design Decisions (Do Not Re-Ask)
