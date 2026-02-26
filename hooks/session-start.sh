@@ -23,6 +23,15 @@ if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
     if [[ -n "$_session_id" ]]; then
         echo "export CLAUDE_SESSION_ID=${_session_id}" >> "$CLAUDE_ENV_FILE"
     fi
+
+    # Generate trace context for this session (lib-log.sh sourced via lib.sh at line 17)
+    if command -v generate_trace_id >/dev/null 2>&1; then
+        _trace_id=$(generate_trace_id)
+        _span_id=$(generate_span_id)
+        echo "export IC_TRACE_ID=${_trace_id}" >> "$CLAUDE_ENV_FILE"
+        echo "export IC_SPAN_ID=${_span_id}" >> "$CLAUDE_ENV_FILE"
+        log_info "session started" session_id="$_session_id" trace_id="$_trace_id"
+    fi
 fi
 
 # Clean up stale plugin cache versions.

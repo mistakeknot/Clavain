@@ -31,7 +31,7 @@ declare -A _SPRINT_RUN_ID_CACHE  # bead_id → run_id
 
 sprint_require_ic() {
     if ! intercore_available; then
-        echo "Sprint requires intercore (ic). Install ic or use beads directly for task tracking." >&2
+        log_error "Sprint requires intercore (ic). Run install.sh or /clavain:setup"
         return 1
     fi
     return 0
@@ -527,6 +527,7 @@ sprint_budget_stage_check() {
     local remaining
     remaining=$(sprint_budget_stage_remaining "$sprint_id" "$stage")
     if [[ "$remaining" -le 0 ]]; then
+        log_warn "stage budget depleted" stage="$stage" sprint_id="$sprint_id"
         echo "budget_exceeded|$stage|stage budget depleted" >&2
         return 1
     fi
@@ -573,7 +574,7 @@ sprint_claim() {
         now_epoch=$(date +%s)
         age_minutes=$(( (now_epoch - created_at) / 60 ))
         if [[ $age_minutes -lt 60 ]]; then
-            echo "Sprint $sprint_id is active in session ${existing_name:0:8} (${age_minutes}m ago)" >&2
+            log_warn "sprint claim conflict" sprint_id="$sprint_id" existing_session="${existing_name:0:8}" age_minutes="$age_minutes"
             intercore_unlock "sprint-claim" "$sprint_id"
             return 1
         fi
@@ -934,7 +935,7 @@ sprint_advance() {
                 ;;
             *)
                 if [[ -z "$event_type" ]]; then
-                    echo "sprint_advance: ic run advance returned unexpected result: ${result:-<empty>}" >&2
+                    log_warn "sprint_advance: unexpected result from ic run advance" result="${result:-<empty>}" run_id="$run_id"
                 fi
                 local actual_phase
                 actual_phase=$(intercore_run_phase "$run_id") || actual_phase=""
@@ -952,7 +953,7 @@ sprint_advance() {
 
     sprint_invalidate_caches
     sprint_record_phase_tokens "$sprint_id" "$current_phase" 2>/dev/null || true
-    echo "Phase: $from_phase → $to_phase (auto-advancing)" >&2
+    log_info "phase advancing" from="$from_phase" to="$to_phase" run_id="$run_id"
     return 0
 }
 

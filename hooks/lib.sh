@@ -2,6 +2,10 @@
 # shellcheck: sourced library — no set -euo pipefail (would alter caller's error policy)
 # Shared utilities for Clavain hook scripts
 
+# Structured logging — available to all hooks
+# shellcheck source=hooks/lib-log.sh
+source "${BASH_SOURCE[0]%/*}/lib-log.sh" 2>/dev/null || true
+
 # ─── Companion plugin discovery ──────────────────────────────────────────────
 # Batch-discovers all companion plugin root directories with a single `find`
 # call, then caches results both in-process (_CACHED_* vars) and on disk

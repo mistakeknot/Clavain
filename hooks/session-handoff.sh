@@ -34,6 +34,10 @@ fi
 
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
+# Source lib-log.sh for structured logging (lib-intercore.sh doesn't source it)
+source "${BASH_SOURCE[0]%/*}/lib-log.sh" 2>/dev/null || true
+log_info "session handoff starting" session_id="${SESSION_ID:0:8}" trace_id="${IC_TRACE_ID:-unset}"
+
 # CRITICAL: Stop sentinel must be written unconditionally to prevent hook cascade.
 # The wrapper handles DB-vs-file internally, but if the wrapper is unavailable
 # (e.g., lib-intercore.sh failed to source), intercore_check_or_die falls back

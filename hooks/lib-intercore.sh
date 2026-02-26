@@ -16,6 +16,10 @@ INTERCORE_STOP_DEDUP_SENTINEL="stop"
 INTERCORE_BIN=""
 INTERCORE_WARNED=false
 
+# Trace context: IC_TRACE_ID and IC_SPAN_ID are inherited from the environment.
+# They are set by session-start.sh and flow through to all ic CLI calls
+# via process environment inheritance. The ic binary reads them directly from env.
+
 intercore_available() {
     # Returns 0 (available) or 1 (unavailable).
     # "binary not found" → return 1 (wrappers handle fail-safe individually)
