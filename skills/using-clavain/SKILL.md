@@ -23,6 +23,20 @@ description: Use when starting any conversation - establishes how to find and us
 | Check doc freshness | `/interwatch:watch` |
 | See all commands | `/clavain:help` |
 
+## Auto-Route Rule
+
+**Always invoke `/clavain:route` when:**
+- A bead ID is mentioned ("let's do iv-xyz", "work on iv-abc")
+- The request is a feature, bugfix, or implementation task
+- The user says "what's next" and picks an item to work on
+
+**Do NOT auto-route when:**
+- The request is informational ("how does X work?", "show me Y")
+- The request is a review, publish, commit, or status check (use the specific skill)
+- You are already mid-execution inside a routed workflow
+
+This ensures every piece of real work gets proper classification, sprint wiring, and phase tracking — not just ad-hoc coding.
+
 ## Routing Heuristic
 
 1. **Detect stage** from the request ("build" → Execute, "fix bug" → Debug, "review" → Review, "plan" → Plan)
