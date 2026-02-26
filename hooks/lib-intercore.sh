@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # lib-intercore.sh — Bash wrappers for intercore CLI
 # shellcheck shell=bash
 # shellcheck: sourced library — no set -euo pipefail (would alter caller's error policy)

@@ -1,10 +1,10 @@
 {
-  "generated": "2026-02-24T21:37:54Z",
+  "generated": "2026-02-26T03:11:53Z",
   "counts": {
     "skills": 16,
     "agents": 4,
-    "commands": 58,
-    "hooks": 10,
+    "commands": 46,
+    "hooks": 7,
     "mcp_servers": 1,
     "review": 2,
     "workflow": 2
@@ -179,54 +179,6 @@
       "description": "Run Codex-first execution flow for larger scope work"
     },
     {
-      "name": "interspect",
-      "description": "Analyze Interspect evidence \u2014 detect patterns, classify by counting-rule thresholds, report readiness"
-    },
-    {
-      "name": "interspect-approve",
-      "description": "Promote pending proposals to active routing overrides"
-    },
-    {
-      "name": "interspect-correction",
-      "description": "Record that an agent got something wrong \u2014 high-quality manual evidence for Interspect"
-    },
-    {
-      "name": "interspect-disable-autonomy",
-      "description": "Disable autonomous mode \u2014 all overrides require explicit approval"
-    },
-    {
-      "name": "interspect-enable-autonomy",
-      "description": "Enable autonomous mode \u2014 low/medium-risk overrides auto-apply with canary monitoring"
-    },
-    {
-      "name": "interspect-evidence",
-      "description": "Detailed evidence view for a specific agent \u2014 event breakdown, timeline, recent events"
-    },
-    {
-      "name": "interspect-health",
-      "description": "Signal collection diagnostics \u2014 check evidence channels, dark sessions, DB health"
-    },
-    {
-      "name": "interspect-override",
-      "description": "Manually exclude an agent from flux-drive triage \u2014 bypasses evidence requirements"
-    },
-    {
-      "name": "interspect-propose",
-      "description": "Detect routing-eligible patterns and propose agent exclusions"
-    },
-    {
-      "name": "interspect-revert",
-      "description": "Revert a routing override and optionally blacklist the pattern"
-    },
-    {
-      "name": "interspect-status",
-      "description": "Interspect overview \u2014 session counts, evidence stats, active canaries, and modifications"
-    },
-    {
-      "name": "interspect-unblock",
-      "description": "Remove a pattern from the routing override blacklist"
-    },
-    {
       "name": "land",
       "description": "Run the landing workflow for trunk-based handoff"
     },
@@ -276,7 +228,7 @@
     },
     {
       "name": "setup",
-      "description": "Bootstrap the Clavain modpack \u2014 install required plugins, disable conflicts, verify MCP servers, configure hooks"
+      "description": "Bootstrap Clavain for the active runtime (Codex or Claude Code) and verify health"
     },
     {
       "name": "smoke-test",

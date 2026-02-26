@@ -9,7 +9,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 16 skills, 4 agents, 46 commands, 8 hooks, 1 MCP server |
+| Components | 16 skills, 4 agents, 46 commands, 7 hooks, 1 MCP server |
 | License | MIT |
 
 ### North Star for New Work
@@ -64,7 +64,7 @@ Clavain/
 │   └── workflow/                  # 2 workflow agents
 ├── commands/                      # 46 slash commands
 │   ├── setup.md               # Modpack installer
-│   └── interpeer.md           # Quick cross-AI peer review (+ 56 others)
+│   └── interpeer.md           # Quick cross-AI peer review (+ 44 others)
 ├── hooks/
 │   ├── hooks.json                 # Hook registration (SessionStart + PostToolUse + Stop + SessionEnd)
 │   ├── lib.sh                     # Shared utilities (escape_for_json)

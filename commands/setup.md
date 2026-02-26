@@ -151,6 +151,8 @@ claude plugin disable feature-dev@claude-plugins-official
 claude plugin disable claude-md-management@claude-plugins-official
 claude plugin disable frontend-design@claude-plugins-official
 claude plugin disable hookify@claude-plugins-official
+claude plugin disable superpowers@superpowers-marketplace
+claude plugin disable compound-engineering@every-marketplace
 ```
 <!-- agent-rig:end:disable-conflicts -->
 
@@ -235,7 +237,7 @@ Run a final verification. This script reads `~/.claude/settings.json` to check a
 <!-- agent-rig:begin:verify-script -->
 ```bash
 # Resolve script path relative to plugin cache (works from any cwd)
-VERIFY_SCRIPT="$(dirname "$(ls ~/.claude/plugins/cache/*/clavain/*/scripts/verify-config.sh 2>/dev/null | head -1)")/verify-config.sh"
+VERIFY_SCRIPT="$(dirname "$(ls "$HOME/.claude/plugins/cache"/*/clavain/*/scripts/verify-config.sh 2>/dev/null | head -1)")/verify-config.sh"
 if [[ -x "$VERIFY_SCRIPT" ]]; then
     bash "$VERIFY_SCRIPT"
 else

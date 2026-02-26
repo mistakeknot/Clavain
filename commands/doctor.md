@@ -55,7 +55,7 @@ fi
 ### 3b. Beads Lifecycle Companion
 
 ```bash
-if ls ~/.claude/plugins/cache/*/interphase/*/hooks/lib-gates.sh 2>/dev/null | head -1 >/dev/null; then
+if ls "$HOME/.claude/plugins/cache"/*/interphase/*/hooks/lib-gates.sh 2>/dev/null | head -1 >/dev/null; then
   echo "interphase: installed"
 else
   echo "interphase: not installed (phase tracking disabled)"
@@ -66,7 +66,7 @@ fi
 ### 3c. Statusline Companion
 
 ```bash
-if ls ~/.claude/plugins/cache/*/interline/*/scripts/statusline.sh 2>/dev/null | head -1 >/dev/null; then
+if ls "$HOME/.claude/plugins/cache"/*/interline/*/scripts/statusline.sh 2>/dev/null | head -1 >/dev/null; then
   echo "interline: installed"
 else
   echo "interline: not installed (statusline rendering unavailable)"
@@ -77,7 +77,7 @@ fi
 ### 3d. Artifact Generation Companion
 
 ```bash
-if ls ~/.claude/plugins/cache/*/interpath/*/scripts/interpath.sh 2>/dev/null | head -1 >/dev/null; then
+if ls "$HOME/.claude/plugins/cache"/*/interpath/*/scripts/interpath.sh 2>/dev/null | head -1 >/dev/null; then
   echo "interpath: installed"
 else
   echo "interpath: not installed (product artifact generation unavailable)"
@@ -88,7 +88,7 @@ fi
 ### 3e. Doc Freshness Companion
 
 ```bash
-if ls ~/.claude/plugins/cache/*/interwatch/*/scripts/interwatch.sh 2>/dev/null | head -1 >/dev/null; then
+if ls "$HOME/.claude/plugins/cache"/*/interwatch/*/scripts/interwatch.sh 2>/dev/null | head -1 >/dev/null; then
   echo "interwatch: installed"
 else
   echo "interwatch: not installed (doc drift detection unavailable)"
@@ -184,6 +184,8 @@ conflicts = [
     'claude-md-management@claude-plugins-official',
     'frontend-design@claude-plugins-official',
     'hookify@claude-plugins-official',
+    'superpowers@superpowers-marketplace',
+    'compound-engineering@every-marketplace',
 ]
 active = [p for p in conflicts if plugins.get(p, True)]
 if active:

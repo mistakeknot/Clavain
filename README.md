@@ -2,7 +2,7 @@
 
 Clavain is an opinionated, self-improving Claude Code agent rig that codifies product and engineering discipline into composable workflows for building software from brainstorm to ship. It orchestrates heterogeneous AI models: Claude, Codex, GPT-5.2 Pro via Oracle: into a reliable system for getting things built, where the review phases matter more than the building phases. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 16 skills, 4 agents, 58 commands, 10 hooks, and 1 MCP server, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 16 skills, 4 agents, 46 commands, 7 hooks, and 1 MCP server, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -189,7 +189,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (58)
+### Commands (46)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -241,7 +241,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
-### Hooks (10)
+### Hooks (7)
 
 - **SessionStart**: Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When interserve mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
 - **PostToolUse**: Interserve audit: logs source code writes when interserve mode is active for post-session review (`interserve-audit.sh`). Auto-publish: detects `git push` in plugin repos and auto-bumps version + syncs marketplace (`auto-publish.sh`).
@@ -313,7 +313,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ```
 skills/       # 16 discipline skills (SKILL.md each)
 agents/       # 4 agents (review/ + workflow/)
-commands/     # 58 slash commands
+commands/     # 46 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync

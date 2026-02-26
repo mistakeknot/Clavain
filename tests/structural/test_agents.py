@@ -20,8 +20,8 @@ def _get_agent_files(agents_dir):
 def test_agent_count(agents_dir):
     """Total agent count matches expected value."""
     agent_files = _get_agent_files(agents_dir)
-    assert len(agent_files) == 5, (
-        f"Expected 5 agents, found {len(agent_files)}: "
+    assert len(agent_files) == 4, (
+        f"Expected 4 agents, found {len(agent_files)}: "
         f"{[f.stem for f in agent_files]}"
     )
 

@@ -73,17 +73,19 @@ Commit changes. For each source type:
 
 ### 5. Record Trust Feedback
 
-After resolving findings, emit trust evidence for each finding that was acted on. This feeds the agent trust scoring system (interspect).
+After resolving findings, emit trust evidence for each finding that was acted on. This feeds the agent trust scoring system (intertrust).
 
 **Only emit when findings came from flux-drive review** (check: `.clavain/quality-gates/findings.json` exists).
 
 ```bash
 FINDINGS_JSON=".clavain/quality-gates/findings.json"
 if [[ -f "$FINDINGS_JSON" ]]; then
-    INTERSPECT_PLUGIN=$(find ~/.claude/plugins/cache -path "*/interspect/*/hooks/lib-trust.sh" 2>/dev/null | head -1)
-    if [[ -n "$INTERSPECT_PLUGIN" ]]; then
-        source "$INTERSPECT_PLUGIN"
-        PROJECT=$(_interspect_project_name)
+    # Try intertrust first (extracted plugin), fall back to legacy interspect location
+    TRUST_PLUGIN=$(find ~/.claude/plugins/cache -path "*/intertrust/*/hooks/lib-trust.sh" 2>/dev/null | head -1)
+    [[ -z "$TRUST_PLUGIN" ]] && TRUST_PLUGIN=$(find ~/.claude/plugins/cache -path "*/interspect/*/hooks/lib-trust.sh" 2>/dev/null | head -1)
+    if [[ -n "$TRUST_PLUGIN" ]]; then
+        source "$TRUST_PLUGIN"
+        PROJECT=$(_trust_project_name)
         SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
     fi
 fi

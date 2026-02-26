@@ -112,6 +112,27 @@ After each step completes successfully, record the phase transition via `sprint_
 ```
 Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
 
+## Before Starting
+
+Before entering the sprint lifecycle, run work discovery to detect available beads and pending work:
+
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh"
+result=$(discovery_scan_beads 2>/dev/null) || result=""
+
+if [[ "$result" == "DISCOVERY_UNAVAILABLE" ]]; then
+    # Discovery not available (interphase not installed) — proceed without discovery
+    echo "Discovery unavailable — skipping bead scan"
+elif [[ -n "$result" ]]; then
+    # Parse discovered beads and present selection
+    echo "$result"
+fi
+```
+
+If discovery finds actionable beads, present them to the user before starting the sprint. Otherwise, proceed with the user's original request.
+
+---
+
 ## Step 1: Brainstorm
 `/clavain:brainstorm $ARGUMENTS`
 
