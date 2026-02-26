@@ -24,6 +24,14 @@ if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
         echo "export CLAUDE_SESSION_ID=${_session_id}" >> "$CLAUDE_ENV_FILE"
     fi
 
+    # Set BD_ACTOR to distinguishable identity for beads audit trail.
+    # Use session ID prefix (8 chars) — unique per concurrent session.
+    # Only set on startup, not compact/resume (session_id may change on those).
+    if [[ "$_hook_source" == "startup" && -n "$_session_id" ]]; then
+        _bd_actor="${_session_id:0:8}"
+        echo "export BD_ACTOR='${_bd_actor}'" >> "$CLAUDE_ENV_FILE"
+    fi
+
     # Generate trace context for this session (lib-log.sh sourced via lib.sh at line 17)
     if command -v generate_trace_id >/dev/null 2>&1; then
         _trace_id=$(generate_trace_id)

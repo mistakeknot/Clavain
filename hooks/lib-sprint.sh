@@ -589,8 +589,8 @@ sprint_claim() {
         return 1
     fi
     intercore_unlock "sprint-claim" "$sprint_id"
-    # Also set bd claim for cross-session visibility
-    bead_claim "$sprint_id" "$session_id" || true
+    # Also set bd claim for cross-session visibility (soft — intercore lock is authoritative)
+    bead_claim "$sprint_id" "$session_id" --soft || true
     return 0
 }
 
@@ -599,8 +599,8 @@ sprint_release() {
     local sprint_id="$1"
     [[ -z "$sprint_id" ]] && return 0
 
-    # Release bd claim
-    bead_release "$sprint_id" || true
+    # Release bd claim (keep-status: sprint manages its own status lifecycle)
+    bead_release "$sprint_id" --keep-status || true
 
     local run_id
     run_id=$(_sprint_resolve_run_id "$sprint_id") || return 0
@@ -1308,46 +1308,77 @@ sprint_close_parent_if_done() {
 
 # ─── Bead Claiming ──────────────────────────────────────────────────
 
-# Claim a bead for the current session (advisory lock via bd set-state).
-# Usage: bead_claim <bead_id> [session_id]
-# Returns: 0 if claimed, 1 if already claimed by another active session
+# Claim a bead for the current session.
+# Usage: bead_claim <bead_id> [session_id] [--soft]
+# --soft: skip atomic bd update --claim, write advisory state only
+#         (used by sprint_claim which has its own intercore lock)
+# Returns: 0 if claimed, 1 if already claimed or lock contention exhausted
 bead_claim() {
     local bead_id="${1:?bead_id required}"
     local session_id="${2:-${CLAUDE_SESSION_ID:-unknown}}"
+    local soft=false
+    [[ "${3:-}" == "--soft" ]] && soft=true
     command -v bd &>/dev/null || return 0
 
-    # Check existing claim
-    local existing_claim existing_at now_epoch age_seconds
-    existing_claim=$(bd state "$bead_id" claimed_by 2>/dev/null) || existing_claim=""
-
-    if [[ -n "$existing_claim" && "$existing_claim" != "(no claimed_by state set)" ]]; then
-        # Same session? Already claimed by us.
-        [[ "$existing_claim" == "$session_id" ]] && return 0
-
-        # Check staleness (2h = 7200s)
-        existing_at=$(bd state "$bead_id" claimed_at 2>/dev/null) || existing_at=""
-        if [[ -n "$existing_at" && "$existing_at" != "(no claimed_at state set)" ]]; then
-            now_epoch=$(date +%s)
-            age_seconds=$(( now_epoch - existing_at ))
-            if [[ $age_seconds -lt 7200 ]]; then
-                local short_session="${existing_claim:0:8}"
-                local age_min=$(( age_seconds / 60 ))
-                echo "Bead $bead_id claimed by session ${short_session} (${age_min}m ago)" >&2
-                return 1
-            fi
-        fi
+    if [[ "$soft" == true ]]; then
+        # Sprint context: intercore lock is authoritative, just write audit trail
+        bd set-state "$bead_id" "claimed_by=$session_id" >/dev/null 2>&1 || true
+        bd set-state "$bead_id" "claimed_at=$(date +%s)" >/dev/null 2>&1 || true
+        return 0
     fi
 
-    bd set-state "$bead_id" "claimed_by=$session_id" >/dev/null 2>&1 || true
-    bd set-state "$bead_id" "claimed_at=$(date +%s)" >/dev/null 2>&1 || true
-    return 0
+    # Direct claim: use atomic bd update --claim with retry
+    local output retries=2 delay=1
+    for (( i=0; i<retries; i++ )); do
+        if output=$(bd update "$bead_id" --claim 2>&1); then
+            # Atomic claim succeeded — write legacy state for discovery
+            bd set-state "$bead_id" "claimed_by=$session_id" >/dev/null 2>&1 \
+                || echo "WARN: bead_claim: failed to write claimed_by for $bead_id" >&2
+            bd set-state "$bead_id" "claimed_at=$(date +%s)" >/dev/null 2>&1 \
+                || echo "WARN: bead_claim: failed to write claimed_at for $bead_id" >&2
+            return 0
+        fi
+        # Check if actual claim conflict (not lock contention)
+        if echo "$output" | grep -qi "already claimed"; then
+            echo "Bead $bead_id already claimed by another agent" >&2
+            return 1
+        fi
+        # Lock contention — retry (do NOT fall back to soft claim)
+        if (( i < retries-1 )); then
+            sleep "$delay"
+            delay=$(( delay * 2 ))
+        fi
+    done
+
+    echo "Bead $bead_id: could not acquire claim after $retries attempts (lock contention)" >&2
+    return 1
 }
 
 # Release a bead claim.
-# Usage: bead_release <bead_id>
+# Usage: bead_release <bead_id> [--keep-status]
+# --keep-status: clear assignee/claim but don't reset to open (for sprint context)
+# Only releases if we own the claim (or claim is empty/stale).
 bead_release() {
     local bead_id="${1:?bead_id required}"
+    local keep_status=false
+    [[ "${2:-}" == "--keep-status" ]] && keep_status=true
     command -v bd &>/dev/null || return 0
+
+    # Only release if we own the claim (or claim is empty/stale)
+    local current_claimer
+    current_claimer=$(bd state "$bead_id" claimed_by 2>/dev/null) || current_claimer=""
+    local our_session="${CLAUDE_SESSION_ID:-unknown}"
+    if [[ -n "$current_claimer" \
+          && "$current_claimer" != "(no claimed_by state set)" \
+          && "$current_claimer" != "$our_session" ]]; then
+        return 0  # Another session holds this — don't release
+    fi
+
+    if [[ "$keep_status" == false ]]; then
+        bd update "$bead_id" --assignee="" --status=open >/dev/null 2>&1 || true
+    else
+        bd update "$bead_id" --assignee="" >/dev/null 2>&1 || true
+    fi
     bd set-state "$bead_id" "claimed_by=" >/dev/null 2>&1 || true
     bd set-state "$bead_id" "claimed_at=" >/dev/null 2>&1 || true
 }

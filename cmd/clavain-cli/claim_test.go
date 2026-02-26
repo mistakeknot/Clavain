@@ -3,30 +3,30 @@ package main
 import "testing"
 
 func TestClaimStaleness_Fresh(t *testing.T) {
-	// A claim from 30 minutes ago should block (not stale)
-	if isClaimStale(30 * 60) {
-		t.Error("30min claim should not be stale")
+	// A claim from 10 minutes ago should block (not stale)
+	if isClaimStale(10 * 60) {
+		t.Error("10min claim should not be stale")
 	}
 }
 
 func TestClaimStaleness_Old(t *testing.T) {
-	// A claim from 3 hours ago should be stale (threshold: 2h = 7200s)
-	if !isClaimStale(3 * 60 * 60) {
-		t.Error("3h claim should be stale")
+	// A claim from 1 hour ago should be stale (threshold: 45min = 2700s)
+	if !isClaimStale(1 * 60 * 60) {
+		t.Error("1h claim should be stale")
 	}
 }
 
 func TestClaimStaleness_Boundary(t *testing.T) {
-	// Exactly at threshold — should NOT be stale (> not >=, matching bash `$age_seconds -lt 7200`)
-	if isClaimStale(7200) {
-		t.Error("exactly 2h should not be stale (> check, not >=)")
+	// Exactly at threshold — should NOT be stale (> not >=, matching bash `$age_sec -lt 2700`)
+	if isClaimStale(2700) {
+		t.Error("exactly 45min should not be stale (> check, not >=)")
 	}
 }
 
 func TestClaimStaleness_JustOver(t *testing.T) {
 	// One second over threshold — should be stale
-	if !isClaimStale(7201) {
-		t.Error("7201s should be stale")
+	if !isClaimStale(2701) {
+		t.Error("2701s should be stale")
 	}
 }
 

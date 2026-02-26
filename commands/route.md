@@ -122,8 +122,12 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
    - Remember the selected bead ID as `CLAVAIN_BEAD_ID` for this session.
    - **Claim the bead** (skip for `closed`, `verify_done`, and `create_bead` actions):
      ```bash
-     bd update "$CLAVAIN_BEAD_ID" --status=in_progress
+     bd update "$CLAVAIN_BEAD_ID" --claim
      ```
+     If `--claim` fails (exit code non-zero):
+     - "already claimed" in error → tell user "Bead already claimed by another agent" and re-run discovery from Step 1
+     - "lock" or "timeout" in error → retry once after 2 seconds; if still fails, tell user "Could not claim bead (database busy)" and re-run discovery from Step 1
+     Do NOT fall back to `--status=in_progress` — a failed claim means exclusivity is not guaranteed.
    - **Add to session tasks** using TaskCreate:
      - Title: `<bead_id> — <title>`
      - Status: `in_progress`
@@ -230,8 +234,12 @@ Parse the JSON response. If parsing fails, default to `/sprint` (safer fallback 
 3. **Claim bead and track in session:** If `CLAVAIN_BEAD_ID` is set:
    - **Claim the bead:**
      ```bash
-     bd update "$CLAVAIN_BEAD_ID" --status=in_progress
+     bd update "$CLAVAIN_BEAD_ID" --claim
      ```
+     If `--claim` fails (exit code non-zero):
+     - Tell user "Bead was claimed by another agent while routing."
+     - Do NOT proceed with the current bead.
+     - Restart from Step 1 of the discovery flow to find unclaimed work.
    - **Add to session tasks** using TaskCreate:
      - Title: `<bead_id> — <title or description>`
      - Status: `in_progress`

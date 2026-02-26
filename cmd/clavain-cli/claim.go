@@ -10,14 +10,15 @@ import (
 )
 
 const (
-	// beadClaimStaleSeconds is the staleness threshold for bead claims (2 hours).
-	beadClaimStaleSeconds = 7200
+	// beadClaimStaleSeconds is the staleness threshold for bead claims (45 minutes).
+	// Matches heartbeat interval (60s) + TTL in lib-discovery.sh (2700s).
+	beadClaimStaleSeconds = 2700
 	// sprintClaimStaleMinutes is the staleness threshold for sprint session claims (60 minutes).
 	sprintClaimStaleMinutes = 60
 )
 
-// isClaimStale returns true if the age in seconds exceeds the 2-hour threshold.
-// Matches bash: `if [[ $age_seconds -lt 7200 ]]` — so exactly 7200 is NOT stale.
+// isClaimStale returns true if the age in seconds exceeds the 45-minute threshold.
+// Matches bash: `if [[ $age_sec -lt 2700 ]]` — so exactly 2700 is NOT stale.
 func isClaimStale(ageSeconds int64) bool {
 	return ageSeconds > beadClaimStaleSeconds
 }
@@ -231,6 +232,7 @@ func cmdBeadClaim(args []string) error {
 
 // cmdBeadRelease clears a bead claim.
 // Args: bead_id
+// Only releases if we own the claim (or claim is empty/stale).
 func cmdBeadRelease(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: bead-release <bead_id>")
@@ -239,6 +241,19 @@ func cmdBeadRelease(args []string) error {
 
 	if !bdAvailable() {
 		return nil
+	}
+
+	// Ownership check: only release if we own the claim
+	ourSession := os.Getenv("CLAUDE_SESSION_ID")
+	if ourSession == "" {
+		ourSession = "unknown"
+	}
+	currentClaimer := ""
+	if out, err := runBD("state", beadID, "claimed_by"); err == nil {
+		currentClaimer = strings.TrimSpace(string(out))
+	}
+	if currentClaimer != "" && !strings.HasPrefix(currentClaimer, "(no ") && currentClaimer != ourSession {
+		return nil // Another session holds this — don't release
 	}
 
 	_, _ = runBD("set-state", beadID, "claimed_by=")
