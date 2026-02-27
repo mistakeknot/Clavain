@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/age
 
 Then restart Codex.
 
-> **Migrating from superpowers or compound-engineering?** The ecosystem installer (`install-codex-interverse.sh install`) automatically removes legacy prompt wrappers and skill symlinks. The superpowers clone at `~/.codex/superpowers` can be removed manually: `rm -rf ~/.codex/superpowers`.
+> **Migrating from superpowers or compound-engineering?** The ecosystem installer (`install-codex-interverse.sh install`) automatically removes known legacy prompt wrappers, legacy `~/.codex/skills/*` artifacts (symlink or directory), and legacy superpowers clone artifacts with backup-first safety (`~/.codex/.clavain-backups/<timestamp>/`).
 
 From a local clone:
 

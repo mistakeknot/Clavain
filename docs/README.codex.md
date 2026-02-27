@@ -27,6 +27,7 @@ bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ```
 
 Restart Codex after install. The installer is idempotent and removes stale `clavain-*.md` wrappers.
+It also manages a Clavain block in `~/.codex/AGENTS.md`, syncs MCP servers into `~/.codex/config.toml`, and writes conversion diagnostics to `~/.codex/prompts/.clavain-conversion-report.json`.
 
 If you only want skill discovery (no generated prompt wrappers):
 
@@ -51,6 +52,13 @@ For unattended updates, use the new autonomous helper:
 
 ```bash
 bash scripts/codex-auto-refresh.sh
+```
+
+For the full ecosystem install (all recommended Interverse plugins from `agent-rig.json` + linked Codex skills like `flux-drive`, `interpeer`, and `systematic-debugging`):
+
+```bash
+bash ~/.codex/clavain/scripts/install-codex-interverse.sh install
+bash ~/.codex/clavain/scripts/install-codex-interverse.sh doctor --json
 ```
 
 ## Windows (PowerShell)
@@ -83,6 +91,10 @@ Then restart Codex.
    - `clavain-work`
    - `clavain-review`
 3. Use `scripts/dispatch.sh` when you want Codex-agent delegation behavior from `codex`.
+4. Use the Codex helper CLI for discovery/bootstrap:
+   - `~/.codex/clavain/.codex/clavain-codex bootstrap`
+   - `~/.codex/clavain/.codex/clavain-codex find-skills`
+   - `~/.codex/clavain/.codex/clavain-codex use-skill using-clavain`
 
 If commands, skills, or dispatch/debate helpers change, run:
 
@@ -111,8 +123,11 @@ bash ~/.codex/clavain/scripts/codex-bootstrap.sh --json
 
 Checks:
 - Primary skill link in `~/.agents/skills/clavain`
-- Optional legacy skill link in `~/.codex/skills/clavain` (only when `CLAVAIN_LEGACY_SKILLS_LINK=1`)
+- Legacy `~/.codex/skills/clavain` path is absent (clean-break migration)
 - Prompt wrappers in `~/.codex/prompts` (including stale/missing checks)
+- Conversion report in `~/.codex/prompts/.clavain-conversion-report.json`
+- Managed Clavain block in `~/.codex/AGENTS.md`
+- Managed Clavain MCP block in `~/.codex/config.toml`
 - Codex CLI availability
 - For Codex sessions, you can run `make codex-bootstrap` to repair + validate state before work.
 
@@ -150,9 +165,10 @@ rm -rf ~/.codex/clavain
    ```bash
    ls -la ~/.agents/skills/clavain
    ```
-   If you enabled the legacy link, also verify:
+   Confirm legacy path is removed:
    ```bash
    ls -la ~/.codex/skills/clavain
+   # expected: No such file or directory
    ```
 2. Re-run installer:
    ```bash
@@ -169,8 +185,16 @@ bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ls ~/.codex/prompts/clavain-*.md
 ```
 
-### Existing non-symlink path blocks install
+### Legacy artifacts and backups
 
-If you already have a real directory/file at `~/.agents/skills/clavain` (or `~/.codex/skills/clavain` when legacy mode is enabled), move it aside first, then run install again.
+Legacy superpowers/compound artifacts are removed automatically during ecosystem install:
 
-When legacy mode is off, the installer now removes an existing `~/.codex/skills/clavain` symlink automatically.
+```bash
+bash ~/.codex/clavain/scripts/install-codex-interverse.sh install
+```
+
+Removed artifacts are preserved in:
+
+```bash
+~/.codex/.clavain-backups/<timestamp>/
+```

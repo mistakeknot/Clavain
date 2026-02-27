@@ -244,12 +244,14 @@ mv ~/.agents/skills/clavain ~/.agents/skills/clavain.backup.$(date +%s) 2>/dev/n
 make codex-refresh
 ```
 
-If you have enabled the legacy link (`CLAVAIN_LEGACY_SKILLS_LINK=1`), also move:
+If a legacy path still exists from older installs, move it aside and rerun:
 
 ```bash
 mv ~/.codex/skills/clavain ~/.codex/skills/clavain.backup.$(date +%s) 2>/dev/null || true
 make codex-refresh
 ```
+
+Current clean-break installs remove `~/.codex/skills/clavain` automatically (backup-first), so this step is usually not needed.
 
 ### Prompt wrappers are stale/missing
 

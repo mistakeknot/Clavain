@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# Clavain helper CLI for Codex sessions.
+# Commands:
+#   bootstrap     Show quickstart and auto-load using-clavain
+#   find-skills   List available Clavain skills
+#   use-skill     Print a specific Clavain skill
+#   doctor        Run Clavain Codex doctor checks
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLAVAIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+INSTALLER="$CLAVAIN_ROOT/scripts/install-codex.sh"
+
+SKILLS_LINK="${AGENTS_SKILLS_DIR:-$HOME/.agents/skills}/clavain"
+
+usage() {
+  cat <<'USAGE'
+Clavain for Codex
+
+Usage:
+  clavain-codex bootstrap
+  clavain-codex find-skills
+  clavain-codex use-skill <skill-name>
+  clavain-codex doctor [--json]
+USAGE
+}
+
+resolve_skills_root() {
+  if [[ -L "$SKILLS_LINK" ]]; then
+    readlink -f "$SKILLS_LINK" 2>/dev/null || readlink "$SKILLS_LINK"
+    return 0
+  fi
+
+  if [[ -d "$CLAVAIN_ROOT/skills" ]]; then
+    echo "$CLAVAIN_ROOT/skills"
+    return 0
+  fi
+
+  return 1
+}
+
+print_skill() {
+  local skill="$1"
+  local root="$2"
+
+  local path="$root/$skill/SKILL.md"
+  if [[ ! -f "$path" ]]; then
+    return 1
+  fi
+
+  echo "# Loading skill: clavain:$skill"
+  echo "# Source: $path"
+  echo
+
+  awk '
+    NR == 1 && $0 == "---" { in_fm = 1; next }
+    in_fm == 1 && $0 == "---" { in_fm = 0; next }
+    in_fm == 0 { print }
+  ' "$path"
+}
+
+run_find_skills() {
+  local root
+  if ! root="$(resolve_skills_root)"; then
+    echo "Skill root not found. Run install-codex.sh install first." >&2
+    return 1
+  fi
+
+  echo "Available Clavain skills:"
+  echo
+
+  local skill_dir
+  for skill_dir in "$root"/*; do
+    [[ -d "$skill_dir" ]] || continue
+    [[ -f "$skill_dir/SKILL.md" ]] || continue
+
+    local skill_name desc
+    skill_name="$(basename "$skill_dir")"
+    desc="$(awk '
+      NR == 1 && $0 == "---" { in_fm = 1; next }
+      in_fm == 1 && $0 == "---" { exit }
+      in_fm == 1 && $1 == "description:" {
+        sub(/^description:[[:space:]]*/, "", $0)
+        print $0
+        exit
+      }
+    ' "$skill_dir/SKILL.md")"
+
+    echo "- clavain:$skill_name"
+    if [[ -n "$desc" ]]; then
+      echo "  $desc"
+    fi
+  done
+}
+
+run_use_skill() {
+  local requested="${1:-}"
+  if [[ -z "$requested" ]]; then
+    echo "Usage: clavain-codex use-skill <skill-name>" >&2
+    return 1
+  fi
+
+  local skill_name="$requested"
+  skill_name="${skill_name#clavain:}"
+
+  local root
+  if ! root="$(resolve_skills_root)"; then
+    echo "Skill root not found. Run install-codex.sh install first." >&2
+    return 1
+  fi
+
+  if ! print_skill "$skill_name" "$root"; then
+    echo "Skill not found: clavain:$skill_name" >&2
+    echo
+    run_find_skills || true
+    return 1
+  fi
+}
+
+run_bootstrap() {
+  cat <<'BOOTSTRAP'
+# Clavain Codex Bootstrap
+
+1. Use native skills from ~/.agents/skills/clavain.
+2. Use /prompts:clavain-<command> wrappers for command workflows.
+3. Use scripts/dispatch.sh for Codex dispatch workflows.
+BOOTSTRAP
+  echo
+  run_find_skills || true
+  echo
+  echo "Auto-loading core router skill:"
+  echo
+  run_use_skill using-clavain || true
+}
+
+run_doctor() {
+  local extra_args=()
+  if [[ "${1:-}" == "--json" ]]; then
+    extra_args+=(--json)
+  fi
+
+  if [[ ! -x "$INSTALLER" ]]; then
+    echo "Installer not found: $INSTALLER" >&2
+    return 1
+  fi
+
+  bash "$INSTALLER" doctor --source "$CLAVAIN_ROOT" "${extra_args[@]}"
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  bootstrap)
+    run_bootstrap
+    ;;
+  find-skills)
+    run_find_skills
+    ;;
+  use-skill)
+    run_use_skill "${1:-}"
+    ;;
+  doctor)
+    run_doctor "${1:-}"
+    ;;
+  ""|-h|--help|help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

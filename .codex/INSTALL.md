@@ -17,10 +17,17 @@ Enable Clavain in Codex using native skill discovery, plus optional command prom
 If this is your first time, this script clones `https://github.com/mistakeknot/Clavain.git` into `~/.codex/clavain` and runs the Codex installer.
 
 - The install script links `~/.agents/skills/clavain` and generates wrappers under `~/.codex/prompts/clavain-*.md`.
-- To keep legacy behavior too, set `CLAVAIN_LEGACY_SKILLS_LINK=1` (adds `~/.codex/skills/clavain`).
-- When legacy mode is off, install now removes an existing `~/.codex/skills/clavain` symlink automatically.
+- It manages a Clavain block in `~/.codex/AGENTS.md` and an MCP block in `~/.codex/config.toml`.
+- It writes a conversion report to `~/.codex/prompts/.clavain-conversion-report.json`.
+- It enforces clean-break migration by removing `~/.codex/skills/clavain` (symlink or directory) with backup-first safety.
 - It validates helper/script coverage on `doctor`.
 - Wrapper generation is self-healing: stale wrappers for removed/renamed commands are removed.
+
+Codex bootstrap helper:
+
+```bash
+~/.codex/clavain/.codex/clavain-codex bootstrap
+```
 
 For Demarch (`clavain + interverse` Codex skills), run:
 
@@ -28,7 +35,12 @@ For Demarch (`clavain + interverse` Codex skills), run:
 bash ~/.codex/clavain/scripts/install-codex-interverse.sh install
 ```
 
-This installs Clavain plus curated Interverse Codex skills using native `~/.agents/skills` discovery:
+This installs Clavain plus the full **recommended Interverse plugin set** (from `agent-rig.json`) and links Codex-usable companion skills into native `~/.agents/skills` discovery.
+
+Notable linked skills include:
+- `flux-drive` / `flux-research` (interflux)
+- `interpeer`
+- `systematic-debugging`, `test-driven-development`, `verification-before-completion` (intertest)
 - `interdoc`
 - `tool-time` (Codex skill variant)
 - `tldrs-agent-workflow`
@@ -62,12 +74,14 @@ bash ~/.codex/clavain/scripts/install-codex-interverse.sh doctor --json
 
 Expected:
 - `~/.agents/skills/clavain` points to `~/.codex/clavain/skills`
-- `~/.codex/skills/clavain` is only expected when `CLAVAIN_LEGACY_SKILLS_LINK=1`
-- A symlink at `~/.codex/skills/clavain` is cleaned up automatically when legacy mode is off.
+- `~/.codex/skills/clavain` does not exist (clean-break path)
 - Prompt wrappers exist in `~/.codex/prompts/clavain-*.md`
 - Stale wrapper cleanup happens automatically during install.
+- Conversion report exists at `~/.codex/prompts/.clavain-conversion-report.json`
+- `~/.codex/AGENTS.md` includes the managed Clavain block markers
+- `~/.codex/config.toml` includes the managed Clavain MCP block markers
 - `install-codex.sh doctor` exits with success when links/helpers/wrappers are in sync.
-- `install-codex-interverse.sh doctor` verifies companion Interverse skill links.
+- `install-codex-interverse.sh doctor` verifies recommended Interverse repo installs plus companion skill links.
 
 From this repo checkout, keep Codex views fresh with:
 
@@ -99,17 +113,17 @@ If you previously used **superpowers**, **compound-engineering**, or the old `~/
    ```
    This automatically:
    - Removes superpowers prompt wrappers from `~/.codex/prompts/`
-   - Removes legacy skill symlinks from `~/.codex/skills/`
-   - Warns about the superpowers clone directory
+   - Removes known legacy skill paths from `~/.codex/skills/` (symlink or directory)
+   - Removes legacy `~/.codex/superpowers` clone path
+   - Moves removed legacy artifacts into `~/.codex/.clavain-backups/<timestamp>/`
 
 2. Remove the old bootstrap block in `~/.codex/AGENTS.md` that references `superpowers-codex bootstrap` or legacy bootstrap commands.
-3. Optionally remove the superpowers clone: `rm -rf ~/.codex/superpowers`
-4. Verify `~/.agents/skills/*` links.
-5. Restart Codex.
+3. Verify `~/.agents/skills/*` links.
+4. Restart Codex.
 
 For Claude Code users: the Demarch root installer (`install.sh`) also removes the `superpowers-marketplace` and `every-marketplace` from Claude Code's known marketplaces.
 
-The ecosystem installer only removes symlinks and known prompt wrappers (it does not delete real directories or unknown files).
+The ecosystem installer removes only known legacy artifacts and preserves them in backup snapshots before deletion.
 
 ## Uninstall
 
