@@ -1,7 +1,7 @@
 {
   "name": "clavain",
   "version": "0.6.107",
-  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, and monitors its own docs. Orchestrates Claude, Codex, and GPT-5.2 Pro through 4 agents, 46 commands, 16 skills, 1 MCP server. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
+  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, and monitors its own docs. Orchestrates Claude, Codex, and GPT-5.2 Pro through 4 agents, 47 commands, 16 skills, 1 MCP server. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
   "author": {
     "name": "mistakeknot"
   },
@@ -47,6 +47,7 @@
     "./commands/compound.md",
     "./commands/create-agent-skill.md",
     "./commands/debate.md",
+    "./commands/distill.md",
     "./commands/docs.md",
     "./commands/doctor.md",
     "./commands/execute-plan.md",
