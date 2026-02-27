@@ -183,6 +183,14 @@ def _mcp_label(n: int) -> str:
     return "MCP server" if n == 1 else "MCP servers"
 
 
+def replace_optional(text: str, pattern: str, replacement: str) -> str:
+    """Like replace_once but silently returns text unchanged if pattern is missing."""
+    compiled = re.compile(pattern, re.MULTILINE)
+    if not compiled.search(text):
+        return text
+    return compiled.sub(lambda _match: replacement, text, count=1)
+
+
 def replace_once(text: str, pattern: str, replacement: str, path: Path) -> str:
     compiled = re.compile(pattern, re.MULTILINE)
     if not compiled.search(text):
@@ -209,9 +217,9 @@ def update_agents_md_counts(text: str, counts: dict[str, int], path: Path) -> st
         f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, {mcp} {_mcp_label(mcp)}",
         path,
     )
-    updated = replace_once(updated, r"# \d+ discipline skills", f"# {counts['skills']} discipline skills", path)
-    updated = replace_once(updated, r"# \d+ slash commands", f"# {counts['commands']} slash commands", path)
-    updated = replace_once(updated, r"\(\+ \d+ others\)", f"(+ {others} others)", path)
+    updated = replace_optional(updated, r"# \d+ discipline skills", f"# {counts['skills']} discipline skills")
+    updated = replace_optional(updated, r"# \d+ slash commands", f"# {counts['commands']} slash commands")
+    updated = replace_optional(updated, r"\(\+ \d+ others\)", f"(+ {others} others)")
     updated = replace_once(
         updated,
         r'echo "Skills: \$\(ls skills/\*/SKILL\.md \| wc -l\)"\s+# Should be \d+',
@@ -226,7 +234,7 @@ def update_agents_md_counts(text: str, counts: dict[str, int], path: Path) -> st
     )
     for category in ("review", "research", "workflow"):
         if category in counts:
-            updated = replace_once(updated, rf"# \d+ {category} agents", f"# {counts[category]} {category} agents", path)
+            updated = replace_optional(updated, rf"# \d+ {category} agents", f"# {counts[category]} {category} agents")
     return updated
 
 

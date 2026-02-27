@@ -46,6 +46,7 @@ Clavain/
 │   ├── review/                    # 2: plan-reviewer, data-migration-expert
 │   └── workflow/                  # 2: bug-reproduction-validator, pr-comment-resolver
 ├── commands/                      # 46 slash commands (ls commands/*.md)
+│   └── interpeer.md              # Quick cross-AI peer review (+ 44 others)
 ├── hooks/                         # 7 active hooks + 8 lib-*.sh libraries
 │   ├── hooks.json                 # Hook registration (4 event types, 6 bindings)
 │   └── lib-*.sh                   # Shared: intercore, sprint, signals, spec, verdict, gates, discovery
