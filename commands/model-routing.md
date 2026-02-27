@@ -33,9 +33,6 @@ Defaults:
 
 Phase overrides:
   brainstorm:          opus (all categories)
-  brainstorm-reviewed: opus (all categories)
-  strategized:         opus (all categories)
-  executing:           review → opus
 ```
 
 ### `economy` (default)
@@ -71,10 +68,10 @@ Also reset all phase models to their standard economy values:
 sed -i '/^  phases:/,/^dispatch:/{
   /^\(      model:\).*/s//\1 sonnet/
   /brainstorm:/{n;s/^\(      model:\).*/\1 opus/}
-  /brainstorm-reviewed:/{n;s/^\(      model:\).*/\1 opus/}
-  /strategized:/{n;s/^\(      model:\).*/\1 opus/}
 }' config/routing.yaml
 ```
+
+Only brainstorm stays on opus — brainstorm-reviewed and strategized use sonnet (structured analysis, not creative generation).
 
 ### `quality`
 

@@ -41,16 +41,16 @@ subagents:
         # Research agents stay cheap even during brainstorm
         research: haiku
     brainstorm-reviewed:
-      model: opus
+      model: sonnet
     strategized:
-      model: opus
+      model: sonnet
     planned:
       model: sonnet
     executing:
       model: sonnet
       categories:
-        # Review agents get opus during execution (quality gates run here)
-        review: opus
+        # B1+safety floors is Pareto-optimal (iv-jc4j) — no opus uplift needed
+        review: sonnet
     shipping:
       model: sonnet
     reflect:
