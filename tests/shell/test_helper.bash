@@ -6,19 +6,19 @@ HOOKS_DIR="$BATS_TEST_DIRNAME/../../hooks"
 FIXTURES_DIR="$BATS_TEST_DIRNAME/../fixtures"
 export CLAUDE_PLUGIN_ROOT="$BATS_TEST_DIRNAME/../.."
 
-# Load bats-support and bats-assert from npm global modules
-# Try common npm global paths
-NPM_GLOBAL=""
-for candidate in /usr/lib/node_modules /usr/local/lib/node_modules; do
+# Load bats-support and bats-assert
+# Try local tests/node_modules first, then npm global paths
+BATS_LIBS=""
+for candidate in "$BATS_TEST_DIRNAME/../node_modules" /usr/lib/node_modules /usr/local/lib/node_modules; do
     if [[ -d "$candidate/bats-support" ]]; then
-        NPM_GLOBAL="$candidate"
+        BATS_LIBS="$candidate"
         break
     fi
 done
 
-if [[ -n "$NPM_GLOBAL" ]]; then
-    load "$NPM_GLOBAL/bats-support/load"
-    load "$NPM_GLOBAL/bats-assert/load"
+if [[ -n "$BATS_LIBS" ]]; then
+    load "$BATS_LIBS/bats-support/load"
+    load "$BATS_LIBS/bats-assert/load"
 fi
 
 # Stub network commands to prevent real network calls in tests

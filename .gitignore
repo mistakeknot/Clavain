@@ -3,6 +3,8 @@
 *.swo
 *~
 node_modules/
+tests/package.json
+tests/package-lock.json
 __pycache__/
 .pytest_cache/
 .upstream-work/
