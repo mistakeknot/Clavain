@@ -32,8 +32,19 @@ EOF
     # Reset guard variables so lib can be re-sourced
     unset _LIB_INTERSPECT_LOADED _INTERSPECT_CONFIDENCE_LOADED _INTERSPECT_MANIFEST_LOADED
 
-    # Source lib-interspect.sh from hooks dir
-    source "$HOOKS_DIR/lib-interspect.sh"
+    # Source lib-interspect.sh from interspect companion plugin
+    # Searches: INTERSPECT_ROOT env, monorepo sibling, clavain hooks (legacy)
+    local interspect_lib=""
+    if [[ -n "${INTERSPECT_ROOT:-}" ]]; then
+        interspect_lib="$INTERSPECT_ROOT/hooks/lib-interspect.sh"
+    elif [[ -f "$BATS_TEST_DIRNAME/../../../../interverse/interspect/hooks/lib-interspect.sh" ]]; then
+        interspect_lib="$BATS_TEST_DIRNAME/../../../../interverse/interspect/hooks/lib-interspect.sh"
+    elif [[ -f "$HOOKS_DIR/lib-interspect.sh" ]]; then
+        interspect_lib="$HOOKS_DIR/lib-interspect.sh"
+    else
+        skip "lib-interspect.sh not found (install interspect companion plugin)"
+    fi
+    source "$interspect_lib"
     _interspect_ensure_db
 }
 
