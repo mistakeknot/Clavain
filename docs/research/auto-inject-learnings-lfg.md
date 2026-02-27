@@ -121,3 +121,13 @@ For now, just docs/solutions/ and knowledge/ is enough. Codebase exemplar search
 - **Noise:** Learnings-researcher returns irrelevant results → clutters context before execution. Mitigated by the agent's existing grep-first filtering and relevance scoring.
 - **Latency:** Adds ~15-30s to the lfg workflow. Mitigated by making it non-blocking (present results, don't wait for approval).
 - **Empty results:** Most projects won't have a populated docs/solutions/. The step gracefully degrades ("No prior learnings found").
+
+## Implementation (2026-02-27)
+
+Implemented as a layered approach (Option B + AGENTS.md):
+
+1. **Floor:** AGENTS.md Operational Guides table points to `docs/solutions/` with search instructions
+2. **Ceiling:** `writing-plans` SKILL.md Step 0 spawns `learnings-researcher` before task writing
+3. **Safety net:** `/work` Phase 1b checks for `## Prior Learnings` section; if missing, spawns learnings-researcher
+
+Note: `/lfg` was replaced by `/sprint`. The injection happens at write-plan time (Option B), not between plan-review and execute (Option A), because learnings encoded into plan steps have higher leverage than learnings shown just before execution.

@@ -21,6 +21,18 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Save execution manifest to:** `docs/plans/YYYY-MM-DD-<feature-name>.exec.yaml` (generated alongside the plan — see "Execution Manifest" section below)
 
+## Step 0: Search Institutional Learnings
+
+Before writing any tasks, spawn a learnings-researcher to surface relevant prior solutions:
+
+1. Launch `Task(subagent_type="interflux:learnings-researcher")` with the feature description/spec as the prompt
+2. Read the returned learnings
+3. If **strong or moderate** relevance matches found:
+   - Add a `## Prior Learnings` section to the plan document header (after Architecture, before the first task)
+   - List each relevant learning: file path, key insight, and how it affects the plan
+   - Encode any must-know gotchas directly into the relevant task steps (e.g., "Note: see docs/solutions/patterns/wal-protocol-completeness-20260216.md — every write path needs WAL protection")
+4. If no relevant learnings found: proceed without mention
+
 ## Bite-Sized Task Granularity
 
 **Each step is one action (2-5 minutes):**
@@ -44,6 +56,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 **Architecture:** [2-3 sentences about approach]
 
 **Tech Stack:** [Key technologies/libraries]
+
+**Prior Learnings:** [If learnings-researcher found relevant docs, list them here. Otherwise omit this section.]
 
 ---
 ```

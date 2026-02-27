@@ -41,6 +41,14 @@ These rules are non-negotiable for this orchestration command:
    - Get user approval to proceed
    - **Do not skip this** - better to ask questions now than build the wrong thing
 
+1b. **Check for Prior Learnings**
+
+   If the plan does NOT contain a `## Prior Learnings` section (meaning it wasn't written via the `writing-plans` skill, or no learnings were found at plan time):
+   - Spawn `Task(subagent_type="interflux:learnings-researcher")` with keywords from the plan title and goal
+   - If relevant learnings found: present key insights before proceeding, and note them in conversation context
+   - If no relevant learnings found: proceed silently
+   - This step is advisory — never blocks execution
+
 2. **Setup Environment**
 
    Ensure you're on the main branch and up to date:
