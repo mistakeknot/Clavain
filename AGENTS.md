@@ -1,5 +1,27 @@
 # Clavain — Development Guide
 
+## Canonical References
+1. [`PHILOSOPHY.md`](../../PHILOSOPHY.md) — direction for ideation and planning decisions.
+2. `CLAUDE.md` — implementation details, architecture, testing, and release workflow.
+
+## Philosophy Alignment Protocol
+Review [`PHILOSOPHY.md`](../../PHILOSOPHY.md) during:
+- Intake/scoping
+- Brainstorming
+- Planning
+- Execution kickoff
+- Review/gates
+- Handoff/retrospective
+
+For brainstorming/planning outputs, add two short lines:
+- **Alignment:** one sentence on how the proposal supports the module's purpose within Demarch's philosophy.
+- **Conflict/Risk:** one sentence on any tension with philosophy (or 'none').
+
+If a high-value change conflicts with philosophy, either:
+- adjust the plan to align, or
+- create follow-up work to update `PHILOSOPHY.md` explicitly.
+
+
 Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code using heterogeneous AI models. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) for state management and Autarch (L3 apps) for TUI rendering. Originated from [superpowers](https://github.com/obra/superpowers), [superpowers-lab](https://github.com/obra/superpowers-lab), [superpowers-developing-for-claude-code](https://github.com/obra/superpowers-developing-for-claude-code), and [compound-engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
 ## Quick Reference
