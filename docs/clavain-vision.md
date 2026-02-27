@@ -64,8 +64,8 @@ Clavain serves three concentric circles, and the priority is explicit: inner cir
 
 ## Operating Principles
 
-### 1. Discipline before speed
-The review phases matter more than the building phases. Resolve all open questions before execution — ambiguity is far more expensive to handle during building than during planning. Encode judgment into checks before removing the human. Agents without discipline ship slop. Automation multipliers (adaptive routing, cross-project learning) should come after observability and measurement, not before.
+### 1. Discipline enables speed
+The review phases matter more than the building phases. Resolve all open questions before execution — ambiguity is far more expensive to handle during building than during planning. Encode judgment into checks before removing the human. Agents without discipline ship slop. Automation multipliers (adaptive routing, cross-project learning) should come after observability and measurement, not before. But discipline that slows without catching bugs is miscalibrated gates, not good practice. The goal is faster safe shipping, not more review. Match rigor to risk (PHILOSOPHY.md: "If review phases slow you down more than they catch bugs, the gates are miscalibrated").
 
 ### 2. Compose through contracts
 Small, focused tools composed together beat large integrated platforms. The inter-* constellation, Unix philosophy, modpack metaphor; it's turtles all the way down. Each companion does one thing well and composes with others through explicit interfaces. Prefer typed interfaces, schemas, manifests, and declarative specs over prompt sorcery — composition only works when boundaries are explicit. Agent definitions, plugin capabilities, and inter-plugin communication should be formally specifiable, not implicitly assumed.
@@ -155,7 +155,7 @@ Each macro-stage has a different risk profile and corresponding safety controls:
 | **Build** | High — writes code, modifies files | Gate enforcement: plan must be reviewed before execution. Tests run continuously. Incremental commits enable rollback. Sandbox specs constrain agent file access (future). |
 | **Ship** | Highest — pushes to remote, closes work items | Quality gates must pass. Human explicitly approves push. No auto-push without confirmation. Override audit trail. |
 
-**Invariant:** The system never pushes code to a remote repository without human confirmation. This holds regardless of autonomy level.
+**Invariant (today):** The system never pushes code to a remote repository without human confirmation. This is a Level 1-2 safety control. As trust progresses through the ladder (PHILOSOPHY.md), auto-push becomes available under policy constraints (e.g., auto-push to staging branches, require confirmation for main). The constraint softens through gated processes, not removal.
 
 ## Collaboration Stance
 
@@ -525,7 +525,7 @@ Clavain's value is measurable. These metrics define what "working" means at each
 
 **Core loop metrics (measurable now):**
 - **Sprint completion rate** — % of sprints that reach Ship without abandonment. Target: >70% for complexity ≤3.
-- **Gate pass rate** — % of phase transitions that pass gates on first attempt. Low rates indicate miscalibrated gates or poor planning.
+- **Gate pass rate** — % of phase transitions that pass gates on first attempt. Low rates indicate miscalibrated gates or poor planning. *Caveat:* Gate pass rate is a calibration signal, not a quality signal. If agents optimize for pass rate directly (e.g., lowering thresholds), the metric becomes meaningless. Post-merge defect rate is the ground truth (PHILOSOPHY.md: anti-gaming by design).
 - **Time-to-first-signal** — wall-clock time from sprint start to first quality gate result. Target: <15 min for simple, <45 min for complex.
 - **Defect escape rate** — bugs found after Ship that were present during Build. Lower is better. Measured by Interspect once correction events are available.
 - **Override rate** — % of gate failures that are manually overridden. High rates indicate gates are too strict or poorly calibrated. Tracked per gate type.
@@ -547,7 +547,7 @@ Clavain's value is measurable. These metrics define what "working" means at each
 
 **Not a coding assistant.** That's what Cursor and similar tools do. Clavain doesn't help you write code; it *builds software* — the full lifecycle from problem discovery through shipped, reviewed, tested, compounded code. The coding is one phase of five.
 
-**Not primarily a Claude Code plugin — by design.** Clavain's identity is an autonomous software agency. Autarch (TUI) is the target primary interface; today it ships as a Claude Code plugin because that surface is available now. The architecture is designed to outlive any single host platform. Clavain dispatches to Claude, Codex, Gemini, GPT-5.2, and other models as execution backends. The Claude Code plugin interface is one driver among several — a UX adapter, not the identity.
+**Not primarily a Claude Code plugin — but today, it is.** Clavain's identity is an autonomous software agency. Today it ships primarily as a Claude Code plugin because that surface is available and productive (PHILOSOPHY.md: "Claude Code first, multi-host near-term, host-agnostic long-term"). Autarch (TUI) is an alternative surface and a proving ground for the host-agnostic architecture, not a replacement target. The architecture is designed to outlive any single host platform — agent IDEs will commoditize; the value is in the infrastructure, not which editor runs the agents. Clavain dispatches to Claude, Codex, Gemini, GPT-5.2, and other models as execution backends. The Claude Code plugin interface is one driver among several — a UX adapter, not the identity.
 
 **Not for non-builders.** Clavain is for people who build software with agents. It is not a no-code tool, not an AI assistant for non-technical users, not a chatbot framework.
 
