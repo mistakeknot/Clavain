@@ -98,3 +98,69 @@ For each finding resolved in step 3:
 The `agent` comes from `findings.json` `.findings[].agents[0]` (primary attribution). The `review_run_id` comes from `.synthesis_timestamp`. The `severity` comes from `.findings[].severity`.
 
 **Silent failures:** If lib-trust.sh is not found or any call fails, continue normally. Trust feedback is opportunistic, never blocking.
+
+### 5b. Emit Disagreement Events
+
+After recording trust feedback, check each resolved finding for `severity_conflict`. When the resolution changes a decision, emit a kernel event.
+
+**Impact gate:** Only emit when:
+- The finding had `severity_conflict` (agents disagreed on severity)
+- AND either: (a) the finding was discarded despite having P0 or P1 severity from at least one agent, or (b) the finding was accepted with a severity different from the majority rating
+
+```bash
+if [[ -f "$FINDINGS_JSON" ]] && command -v ic &>/dev/null; then
+    SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+    # Process each finding that has severity_conflict
+    # Uses the same findings.json iteration as Step 5 (trust feedback)
+    jq -c '.findings[] | select(.severity_conflict != null)' "$FINDINGS_JSON" 2>/dev/null | while IFS= read -r finding; do
+        [[ -z "$finding" ]] && continue
+
+        FINDING_ID=$(echo "$finding" | jq -r '.id // empty')
+        SEVERITY=$(echo "$finding" | jq -r '.severity // empty')
+        AGENTS_MAP=$(echo "$finding" | jq -c '.severity_conflict // {}')
+
+        # Determine outcome from the finding's resolution field (set during Step 3)
+        OUTCOME=$(echo "$finding" | jq -r '.resolution // empty')
+        [[ -z "$OUTCOME" ]] && continue
+
+        # Check if any agent rated this P0 or P1
+        HAS_HIGH_SEVERITY=$(echo "$AGENTS_MAP" | jq 'to_entries | map(select(.value == "P0" or .value == "P1")) | length > 0')
+
+        # Impact gate
+        IMPACT=""
+        DISMISSAL_REASON=""
+        if [[ "$OUTCOME" == "discarded" && "$HAS_HIGH_SEVERITY" == "true" ]]; then
+            IMPACT="decision_changed"
+            DISMISSAL_REASON=$(echo "$finding" | jq -r '.dismissal_reason // "agent_wrong"')
+        elif [[ "$OUTCOME" == "accepted" ]]; then
+            SEVERITY_MISMATCH=$(echo "$AGENTS_MAP" | jq --arg sev "$SEVERITY" 'to_entries | map(select(.value != $sev)) | length > 0')
+            if [[ "$SEVERITY_MISMATCH" == "true" ]]; then
+                IMPACT="severity_overridden"
+            fi
+        fi
+
+        # Only emit if impact gate passed
+        if [[ -n "$IMPACT" ]]; then
+            CONTEXT=$(jq -n \
+                --arg finding_id "$FINDING_ID" \
+                --argjson agents "$AGENTS_MAP" \
+                --arg resolution "$OUTCOME" \
+                --arg dismissal_reason "$DISMISSAL_REASON" \
+                --arg chosen_severity "$SEVERITY" \
+                --arg impact "$IMPACT" \
+                '{finding_id:$finding_id,agents:$agents,resolution:$resolution,dismissal_reason:$dismissal_reason,chosen_severity:$chosen_severity,impact:$impact}')
+
+            ic events emit \
+                --source=review \
+                --type=disagreement_resolved \
+                --session="$SESSION_ID" \
+                --project="$PROJECT_ROOT" \
+                --context="$CONTEXT" 2>/dev/null || true
+        fi
+    done
+fi
+```
+
+**Silent fail-open:** The `2>/dev/null || true` ensures resolve never fails due to event emission. Same pattern as trust feedback.
