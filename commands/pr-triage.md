@@ -1,9 +1,9 @@
 ---
-name: triage-prs
+name: pr-triage
 description: Triage all open PRs — batch by theme, review with parallel agents, generate report, walk through decisions
 ---
 
-# /triage-prs
+# /pr-triage
 
 Triage a repository's open PR backlog. Batches PRs by theme, reviews with parallel fd-* agents, and walks through merge/comment/close decisions.
 

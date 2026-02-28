@@ -114,10 +114,23 @@ Phase tracking is silent — never block on errors. If no bead ID is available, 
 
 ## Before Starting
 
-Before entering the sprint lifecycle, run work discovery to detect available beads and pending work:
+### Environment Bootstrap (fail-soft)
+
+Ensure helpers are available. If missing (e.g., Codex sessions without full plugin stack), continue without blocking:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-discovery.sh"
+export CLAVAIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${HOME}/.codex/clavain}"
+export CLAVAIN_CLI="${CLAVAIN_ROOT}/bin/clavain-cli"
+if [[ -f "$CLAVAIN_ROOT/hooks/lib-discovery.sh" ]]; then
+    export DISCOVERY_PROJECT_DIR="."; source "$CLAVAIN_ROOT/hooks/lib-discovery.sh"
+fi
+```
+
+### Work Discovery
+
+Run work discovery to detect available beads and pending work:
+
+```bash
 result=$(discovery_scan_beads 2>/dev/null) || result=""
 
 if [[ "$result" == "DISCOVERY_UNAVAILABLE" ]]; then

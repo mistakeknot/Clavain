@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: Structured brainstorm workflow — 4 phases (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan. For freeform brainstorming without phases, use /brainstorming instead.
+description: Collaborative brainstorm workflow — explore ideas through structured dialogue (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan.
 argument-hint: "[feature idea or problem to explore]"
 ---
 
@@ -9,8 +9,6 @@ argument-hint: "[feature idea or problem to explore]"
 **Note: The current year is 2026.** Use this when dating brainstorm documents.
 
 Brainstorming helps answer **WHAT** to build through collaborative dialogue. It precedes `/clavain:write-plan`, which answers **HOW** to build it.
-
-**Process knowledge:** Load the `brainstorming` skill for detailed question techniques, approach exploration patterns, and YAGNI principles.
 
 ## Feature Description
 
@@ -78,11 +76,15 @@ Focus on: similar features, established patterns, CLAUDE.md guidance.
 
 Use the **AskUserQuestion tool** to ask questions **one at a time**.
 
-**Guidelines (see `brainstorming` skill for detailed techniques):**
-- Prefer multiple choice when natural options exist
-- Start broad (purpose, users) then narrow (constraints, edge cases)
-- Validate assumptions explicitly
-- Ask about success criteria
+**Dialogue principles:**
+- **One question per message** — don't overwhelm with multiple questions
+- **Prefer multiple choice** when natural options exist (easier to answer than open-ended)
+- **Start broad** (purpose, users) **then narrow** (constraints, edge cases)
+- **Validate assumptions explicitly** — don't assume, confirm
+- **Ask about success criteria** — what does "done" look like?
+- **Scale to complexity** — a few sentences for simple ideas, deeper exploration for nuanced ones
+
+**Question progression:** Purpose → Constraints → Success criteria → Edge cases
 
 **Exit condition:** Continue until the idea is clear OR user says "proceed"
 
@@ -103,7 +105,11 @@ Use **AskUserQuestion tool** to ask which approach the user prefers.
 
 Write a brainstorm document to `docs/brainstorms/YYYY-MM-DD-<topic>-brainstorm.md`.
 
-**Document structure:** See the `brainstorming` skill for the template format. Key sections: What We're Building, Why This Approach, Key Decisions, Open Questions.
+**Document structure:**
+- **What We're Building** — clear description of the feature/improvement
+- **Why This Approach** — rationale for the chosen direction
+- **Key Decisions** — choices made during dialogue, with reasoning
+- **Open Questions** — anything unresolved that planning should address
 
 Ensure `docs/brainstorms/` directory exists before writing.
 

@@ -37,7 +37,6 @@
       "lastSyncedCommit": "e4a2375cb705ca5800f0833528ce36a3faf9017a",
       "basePath": "",
       "fileMap": {
-        "skills/brainstorming/SKILL.md": "skills/brainstorming/SKILL.md",
         "skills/dispatching-parallel-agents/SKILL.md": "skills/dispatching-parallel-agents/SKILL.md",
         "skills/executing-plans/SKILL.md": "skills/executing-plans/SKILL.md",
         "skills/requesting-code-review/SKILL.md": "skills/code-review-discipline/SKILL.md",

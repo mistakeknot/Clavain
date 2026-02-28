@@ -88,14 +88,14 @@ echo "--- Phase 2: Skill Presence ---"
 
 # 8. Required skills exist
 missing=""
-for skill in brainstorming writing-plans executing-plans landing-a-change; do
+for skill in writing-plans executing-plans landing-a-change; do
     skill_path="$CLAVAIN_ROOT/skills/$skill/SKILL.md"
     if [[ ! -f "$skill_path" ]]; then
         missing="$missing $skill"
     fi
 done
 if [[ -z "$missing" ]]; then
-    pass "required skills exist (brainstorming, writing-plans, executing-plans, landing-a-change)"
+    pass "required skills exist (writing-plans, executing-plans, landing-a-change)"
 else
     fail "required skills missing:$missing"
 fi

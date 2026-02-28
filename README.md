@@ -2,7 +2,7 @@
 
 Clavain is an opinionated, self-improving Claude Code agent rig that codifies product and engineering discipline into composable workflows for building software from brainstorm to ship. It orchestrates heterogeneous AI models: Claude, Codex, GPT-5.2 Pro via Oracle: into a reliable system for getting things built, where the review phases matter more than the building phases. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 16 skills, 4 agents, 47 commands, 8 hooks, and 1 MCP server, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 15 skills, 4 agents, 45 commands, 8 hooks, and 1 MCP server, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -153,14 +153,13 @@ Worth running before any architectural decision with genuine uncertainty. The de
 
 ## What's included
 
-### Skills (16)
+### Skills (15)
 
 Skills are workflow disciplines: they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
 | Skill | What it does |
 |-------|-------------|
 | **Core Lifecycle** | |
-| `brainstorming` | Structured exploration before planning |
 | `writing-plans` | Create implementation plans with bite-sized tasks |
 | `executing-plans` | Execute plans with review checkpoints |
 | `landing-a-change` | Trunk-based finish checklist |
@@ -189,14 +188,13 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (47)
+### Commands (45)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
 | Command | What it does |
 |---------|-------------|
 | `/sprint` | Full autonomous lifecycle: brainstorm through ship |
-| `/codex-sprint` | Codex-safe phase-gated sprint workflow |
 | `/setup` | Bootstrap the modpack: install plugins, disable conflicts, verify servers |
 | `/brainstorm` | Explore before planning |
 | `/strategy` | Structure brainstorm into PRD with trackable beads |
@@ -204,7 +202,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/flux-drive` | Multi-agent document/repo review |
 | `/work` | Execute a plan autonomously |
 | `/review` | Multi-agent code review |
-| `/code-review` | Disciplined code review and feedback triage |
+| `/review-discipline` | Disciplined code review and feedback triage |
 | `/execute-plan` | Execute plan in batches with checkpoints |
 | `/plan-review` | Parallel plan review |
 | `/quality-gates` | Auto-select the right reviewers |
@@ -220,7 +218,6 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/migration-safety` | Data migration risk assessment |
 | `/compound` | Document solved problems |
 | `/changelog` | Generate changelog from recent merges |
-| `/docs` | Capture engineering knowledge in searchable docs |
 | `/clodex-toggle` | Toggle Codex-first execution mode |
 | `/model-routing` | Toggle subagent model tier (economy vs quality) |
 | `/codex-bootstrap` | Refresh Codex discovery links and run health checks |
@@ -231,7 +228,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/create-agent-skill` | Create new skills or agents |
 | `/generate-command` | Generate new commands |
 | `/heal-skill` | Fix broken skills |
-| `/triage-prs` | Triage open PR backlog with parallel review agents |
+| `/pr-triage` | Triage open PR backlog with parallel review agents |
 | `/review-doc` | Quick single-pass document refinement (lighter than flux-drive) |
 | `/upstream-sync` | Check upstream repos for updates |
 | `/sprint-status` | Deep scan of sprint workflow state: sessions, pipeline, beads |
@@ -311,9 +308,9 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 16 discipline skills (SKILL.md each)
+skills/       # 15 discipline skills (SKILL.md each)
 agents/       # 4 agents (review/ + workflow/)
-commands/     # 47 slash commands
+commands/     # 45 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync

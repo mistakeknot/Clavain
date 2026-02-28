@@ -40,20 +40,19 @@ These are the commands you'll use most often:
 | `/clavain:work` | Execute plans with quality checkpoints |
 | `/clavain:execute-plan` | Execute plan in separate session with review checkpoints |
 | `/clavain:sprint` | Full autonomous pipeline (brainstorm through ship) |
-| `/clavain:codex-sprint` | Full sprint flow with Codex-first execution |
 | `/clavain:resolve` | Auto-resolve findings from any source |
 | `/clavain:fixbuild` | Fix build/test failures |
 
 ### Review
 | `/interflux:flux-drive` | Deep multi-agent review (any input type) |
 |---|---|
-| `/clavain:code-review` | Rigorous code review and feedback triage | `/code-review` |
+| `/clavain:review-discipline` | Disciplined code review and feedback triage | `/review-discipline` |
 | `/clavain:quality-gates` | Quick code review from git diff |
 | `/clavain:review` | PR-focused multi-agent review |
 | `/clavain:review-doc` | Lightweight single-pass document refinement |
 | `/clavain:interpeer` | Cross-AI peer review (quick/deep/council/mine modes) |
 | `/clavain:migration-safety` | Database migration safety checks |
-| `/clavain:triage-prs` | Batch PR backlog triage with fd-* agents |
+| `/clavain:pr-triage` | Batch PR backlog triage with fd-* agents |
 | `/interflux:flux-gen` | Generate domain-specific review agents for your project |
 
 ### Ship
@@ -65,11 +64,6 @@ These are the commands you'll use most often:
 | `/clavain:land` | Apply landing checklist for safe handoff | `/land` |
 | `/clavain:compound` | Document a solved problem for future reference |
 | `/clavain:smoke-test` | Run smoke tests on agent dispatch |
-
-### Docs
-| Command | What it does | Example |
-|---|---|---|
-| `/clavain:docs` | Capture a solved problem as searchable engineering docs | `/docs` |
 
 ### Debug
 | `/clavain:repro-first-debugging` | Disciplined reproduce-first bug investigation |

@@ -122,7 +122,7 @@ These tests verify that key multi-step workflows are wired correctly. They piggy
 
 ### Workflow 17: Explore pipeline wiring
 - Source: Command 14 (brainstorm) output
-- Chain verified: command → brainstorming skill → structured exploration
+- Chain verified: command → structured exploration (dialogue principles inline)
 - PASS criteria: Output follows a structured format (numbered list, questions, phases, or sections)
 
 ### Workflow 18: Help catalog completeness

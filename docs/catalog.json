@@ -1,19 +1,15 @@
 {
-  "generated": "2026-02-28T09:27:16Z",
+  "generated": "2026-02-28T23:33:00Z",
   "counts": {
-    "skills": 16,
+    "skills": 15,
     "agents": 4,
-    "commands": 47,
+    "commands": 45,
     "hooks": 8,
     "mcp_servers": 1,
     "review": 2,
     "workflow": 2
   },
   "skills": [
-    {
-      "name": "brainstorming",
-      "description": "Freeform brainstorming mode \u2014 loads collaborative dialogue style (one question at a time, multiple choice, incremental design). Use for open-ended exploration without structured phases. For a guided workflow with repo research, use /brainstorm instead."
-    },
     {
       "name": "code-review-discipline",
       "description": "Use when requesting or receiving code review \u2014 covers dispatching reviewer subagents, handling feedback with technical rigor, and avoiding performative agreement"
@@ -100,7 +96,7 @@
   "commands": [
     {
       "name": "brainstorm",
-      "description": "Structured brainstorm workflow \u2014 4 phases (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan. For freeform brainstorming without phases, use /brainstorming instead."
+      "description": "Collaborative brainstorm workflow \u2014 explore ideas through structured dialogue (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan."
     },
     {
       "name": "changelog",
@@ -111,16 +107,8 @@
       "description": "Toggle interserve execution mode"
     },
     {
-      "name": "code-review",
-      "description": "Run disciplined code review and feedback triage"
-    },
-    {
       "name": "codex-bootstrap",
       "description": "Bootstrap or check Clavain Codex installation health (install + wrapper sync + doctor)"
-    },
-    {
-      "name": "codex-sprint",
-      "description": "Run the full phase-gated sprint workflow in Codex, with explicit fallback when interphase hooks are unavailable"
     },
     {
       "name": "compound",
@@ -137,10 +125,6 @@
     {
       "name": "distill",
       "description": "Synthesize accumulated docs into categorized solutions and generate missing SKILL-compact.md files"
-    },
-    {
-      "name": "docs",
-      "description": "Capture and refine engineering knowledge in searchable docs"
     },
     {
       "name": "doctor",
@@ -199,6 +183,10 @@
       "description": "Have multiple specialized agents review a plan in parallel"
     },
     {
+      "name": "pr-triage",
+      "description": "Triage all open PRs \u2014 batch by theme, review with parallel agents, generate report, walk through decisions"
+    },
+    {
       "name": "quality-gates",
       "description": "Auto-select and run the right reviewer agents based on what changed \u2014 one command for comprehensive quality review"
     },
@@ -221,6 +209,10 @@
     {
       "name": "review",
       "description": "Perform exhaustive code reviews using multi-agent analysis and deep inspection"
+    },
+    {
+      "name": "review-discipline",
+      "description": "Run disciplined code review and feedback triage"
     },
     {
       "name": "review-doc",
@@ -265,10 +257,6 @@
     {
       "name": "triage",
       "description": "Triage and categorize findings for the CLI todo system"
-    },
-    {
-      "name": "triage-prs",
-      "description": "Triage all open PRs \u2014 batch by theme, review with parallel agents, generate report, walk through decisions"
     },
     {
       "name": "upstream-sync",

@@ -8,7 +8,7 @@ For the compact version, see the `using-clavain` skill.
 
 | Stage | Primary Skills | Primary Commands | Key Agents |
 |-------|---------------|-----------------|------------|
-| **Explore** | brainstorming | brainstorm | interflux:research:repo-research-analyst, interflux:research:best-practices-researcher |
+| **Explore** | — | brainstorm | interflux:research:repo-research-analyst, interflux:research:best-practices-researcher |
 | **Plan** | writing-plans | write-plan, plan-review | interflux:fd-architecture, plan-reviewer |
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster in interflux — adaptive 4-12 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, interserve | work, execute-plan, sprint², resolve, debate | — |
@@ -77,10 +77,10 @@ For Oracle CLI reference, see `interpeer/references/oracle-reference.md`.
 
 When multiple skills could apply, use this order:
 
-1. **Process skills first** (brainstorming, debugging, TDD) — these determine HOW to approach the task
+1. **Process skills first** (debugging, TDD) — these determine HOW to approach the task
 2. **Domain skills second** (refactor-safely) — these guide execution
 3. **Meta skills last** (writing-skills, developing-claude-code-plugins) — only when explicitly meta
 
-"Let's build X" → brainstorming first, then domain skills.
+"Let's build X" → `/brainstorm` first, then domain skills.
 "Fix this bug" → systematic-debugging first, then domain-specific skills.
 "Review this code" → code-review-discipline first, then language-specific reviewers.
