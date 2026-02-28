@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import sqlite3
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -201,6 +202,54 @@ def compute_human_override_rate(events: list[dict[str, Any]]) -> tuple[dict[str,
         by_type[tier] = {"value": safe_rate(num, denom), "numerator": num, "denominator": denom}
 
     return ({"value": safe_rate(skipped, total), "numerator": skipped, "denominator": total, "by_type": by_type}, skipped, total)
+
+
+def load_interspect_overrides(project: Path, since: datetime, until: datetime) -> dict[str, Any]:
+    """Query interspect evidence DB for routing override events in the time window."""
+    db_path = project / ".clavain" / "interspect" / "interspect.db"
+    if not db_path.exists():
+        return {"available": False}
+
+    since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+    until_iso = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    try:
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        conn.row_factory = sqlite3.Row
+
+        # Total override events (both direct and disagreement-sourced)
+        total = conn.execute(
+            "SELECT COUNT(*) FROM evidence WHERE event IN ('override', 'disagreement_override') AND ts >= ? AND ts <= ?",
+            (since_iso, until_iso),
+        ).fetchone()[0]
+
+        # Wrong/miscalibrated overrides (agent was wrong)
+        wrong = conn.execute(
+            "SELECT COUNT(*) FROM evidence WHERE event IN ('override', 'disagreement_override') "
+            "AND override_reason IN ('agent_wrong', 'severity_miscalibrated') AND ts >= ? AND ts <= ?",
+            (since_iso, until_iso),
+        ).fetchone()[0]
+
+        # By override_reason
+        reason_rows = conn.execute(
+            "SELECT override_reason, COUNT(*) as cnt FROM evidence "
+            "WHERE event IN ('override', 'disagreement_override') AND ts >= ? AND ts <= ? "
+            "GROUP BY override_reason ORDER BY cnt DESC",
+            (since_iso, until_iso),
+        ).fetchall()
+        by_reason = {row["override_reason"] or "unknown": row["cnt"] for row in reason_rows}
+
+        conn.close()
+
+        return {
+            "available": True,
+            "total_overrides": total,
+            "agent_wrong_count": wrong,
+            "wrong_rate": safe_rate(wrong, total),
+            "by_reason": by_reason,
+        }
+    except (sqlite3.Error, OSError):
+        return {"available": False}
 
 
 def _find_cost_query_script() -> str | None:
@@ -526,6 +575,8 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
     findings_docs = load_findings_docs(findings_files, since, until)
     redundant_work_ratio, agent_scorecard = compute_findings_metrics(findings_docs)
 
+    interspect_overrides = load_interspect_overrides(project, since, until)
+
     topology_results = load_topology_results(since, until)
     topology_efficiency = compute_topology_efficiency(topology_results)
 
@@ -544,6 +595,8 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
         })
     if gate_skip_count == 0:
         advisories.append({"level": "info", "message": "No gate overrides detected."})
+    if not interspect_overrides.get("available"):
+        advisories.append({"level": "info", "message": "No interspect DB found — routing override metrics unavailable."})
     if tool_events is None:
         advisories.append({"level": "info", "message": "Install tool-time for cost metrics."})
     if not findings_files:
@@ -570,7 +623,7 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
         },
         "kpis": {
             "defect_escape_rate": defect_escape_rate,
-            "human_override_rate": human_override_rate,
+            "human_override_rate": {**human_override_rate, "routing_overrides": interspect_overrides},
             "cost_per_landed_change": cost_per_landed_change,
             "time_to_first_signal": compute_time_to_first_signal(),
             "redundant_work_ratio": redundant_work_ratio,
