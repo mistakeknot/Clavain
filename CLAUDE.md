@@ -15,7 +15,7 @@ claude --plugin-dir /home/mk/projects/Demarch/os/clavain
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 16
 ls agents/{review,workflow}/*.md | wc -l  # Should be 4
-ls commands/*.md | wc -l              # Should be 46
+ls commands/*.md | wc -l              # Should be 47
 for f in hooks/*.sh; do bash -n "$f" && echo "$(basename $f) OK"; done  # Syntax check all hooks
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 python3 -c "import json; json.load(open('hooks/hooks.json'))"           # Hooks JSON check
