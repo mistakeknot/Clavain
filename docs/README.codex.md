@@ -28,6 +28,8 @@ bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 
 Restart Codex after install. The installer is idempotent and removes stale `clavain-*.md` wrappers.
 It also manages a Clavain block in `~/.codex/AGENTS.md`, syncs MCP servers into `~/.codex/config.toml`, and writes conversion diagnostics to `~/.codex/prompts/.clavain-conversion-report.json`.
+Wrapper conversion also normalizes `AskUserQuestion` references to a Codex elicitation adapter policy:
+use `request_user_input` when available (Plan mode), otherwise ask in chat with numbered options and pause for response.
 
 If you only want skill discovery (no generated prompt wrappers):
 
@@ -61,6 +63,9 @@ bash ~/.codex/clavain/scripts/install-codex-interverse.sh install
 bash ~/.codex/clavain/scripts/install-codex-interverse.sh doctor --json
 ```
 
+This ecosystem install also generates Interverse command wrappers in `~/.codex/prompts` (for example `interflux-flux-drive`, `interpath-roadmap`, `interlock-interlock-status`) and adapter-rewrites Clavain wrappers to use those prompts.
+It applies the same elicitation adapter normalization for companion prompts.
+
 ## Windows (PowerShell)
 
 ```powershell
@@ -90,8 +95,13 @@ Then restart Codex.
    - `clavain-write-plan`
    - `clavain-work`
    - `clavain-review`
-3. Use `scripts/dispatch.sh` when you want Codex-agent delegation behavior from `codex`.
-4. Use the Codex helper CLI for discovery/bootstrap:
+3. Use generated Interverse prompt wrappers when you want command-style companion invocation:
+   - `/prompts:interflux-flux-drive`
+   - `/prompts:interflux-flux-research`
+   - `/prompts:interpath-roadmap`
+   - `/prompts:interlock-interlock-status`
+4. Use `scripts/dispatch.sh` when you want Codex-agent delegation behavior from `codex`.
+5. Use the Codex helper CLI for discovery/bootstrap:
    - `~/.codex/clavain/.codex/clavain-codex bootstrap`
    - `~/.codex/clavain/.codex/clavain-codex find-skills`
    - `~/.codex/clavain/.codex/clavain-codex use-skill using-clavain`

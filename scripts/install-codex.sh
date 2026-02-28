@@ -19,6 +19,7 @@ ACTION="${1:-install}"
 shift || true
 
 SOURCE_DIR=""
+SOURCE_EXPLICIT=0
 CLONE_DIR="${CLAVAIN_CLONE_DIR:-$HOME/.codex/clavain}"
 REPO_URL="${CLAVAIN_REPO_URL:-$REPO_URL_DEFAULT}"
 INSTALL_PROMPTS=1
@@ -65,6 +66,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --source)
       SOURCE_DIR="$2"
+      SOURCE_EXPLICIT=1
       shift 2
       ;;
     --clone-dir)
@@ -291,7 +293,7 @@ use warnings;
 my $re = $ENV{CLAVAIN_COMMAND_REGEX} // '';
 local $/;
 my $content = <>;
-my ($namespaced, $bare, $path) = (0, 0, 0);
+my ($namespaced, $bare, $path, $elicitation) = (0, 0, 0, 0);
 
 if ($re ne '') {
   $namespaced += ($content =~ s{(?<![A-Za-z0-9_./:-])/clavain:($re)(?=(?:$|[\s\)\]\}\.,;:\!\?\'\"`]))}{"/prompts:clavain-$1"}ge);
@@ -301,8 +303,12 @@ if ($re ne '') {
 $path += ($content =~ s{\Q~/.claude/\E}{~/.codex/}g);
 $path += ($content =~ s{(?<!~)\Q.claude/\E}{.codex/}g);
 
+# AskUserQuestion is Claude-specific. Normalize to a Codex elicitation adapter contract.
+$elicitation += ($content =~ s/\bAskUserQuestion tool\b/Codex elicitation adapter/g);
+$elicitation += ($content =~ s/\bAskUserQuestion\b/Codex elicitation adapter/g);
+
 print $content;
-print STDERR "namespaced=$namespaced bare=$bare path=$path\n";
+print STDERR "namespaced=$namespaced bare=$bare path=$path elicitation=$elicitation\n";
 PERL
 }
 
@@ -393,6 +399,7 @@ Tool mapping:
 - `Task`/`Subagent`: run in main thread; parallelize independent tool calls
 - `TodoWrite`/`TodoRead`: file-based todos in `todos/`
 - `Skill`: open referenced `SKILL.md`
+- `AskUserQuestion`: use `request_user_input` if available; otherwise ask in chat with numbered options and pause for response
 
 Bootstrap:
 - Run `~/.codex/clavain/.codex/clavain-codex bootstrap` for a Codex-native quickstart.
@@ -556,6 +563,7 @@ generate_prompts() {
   local namespaced_rewrites=0
   local bare_rewrites=0
   local path_rewrites=0
+  local elicitation_rewrites=0
 
   local src
   for src in "$commands_dir"/*.md; do
@@ -573,17 +581,20 @@ generate_prompts() {
     strip_frontmatter "$src" > "$body_tmp"
     convert_body_for_codex "$body_tmp" "$converted_tmp" "$stats_tmp" "$command_regex"
 
-    local ns_count bare_count path_count
+    local ns_count bare_count path_count elicit_count
     ns_count="$(sed -n 's/.*namespaced=\([0-9][0-9]*\).*/\1/p' "$stats_tmp" | head -1)"
     bare_count="$(sed -n 's/.*bare=\([0-9][0-9]*\).*/\1/p' "$stats_tmp" | head -1)"
     path_count="$(sed -n 's/.*path=\([0-9][0-9]*\).*/\1/p' "$stats_tmp" | head -1)"
+    elicit_count="$(sed -n 's/.*elicitation=\([0-9][0-9]*\).*/\1/p' "$stats_tmp" | head -1)"
     ns_count="${ns_count:-0}"
     bare_count="${bare_count:-0}"
     path_count="${path_count:-0}"
+    elicit_count="${elicit_count:-0}"
 
     namespaced_rewrites=$((namespaced_rewrites + ns_count))
     bare_rewrites=$((bare_rewrites + bare_count))
     path_rewrites=$((path_rewrites + path_count))
+    elicitation_rewrites=$((elicitation_rewrites + elicit_count))
 
     local unresolved_token ref_name
     while IFS= read -r unresolved_token; do
@@ -607,8 +618,17 @@ generate_prompts() {
       echo "- Source: \`$SOURCE_DIR/commands/$name.md\`"
       echo "- Rule: if this command references a skill, load that Clavain skill first."
       echo "- Compatibility: slash-command and .claude path references normalized for Codex."
+      echo "- Elicitation adapter: if a prompt calls for AskUserQuestion, try future plan-mode escalation if host supports it, else use \`request_user_input\` when available, else ask in chat with numbered options and wait."
       echo
       echo "---"
+      echo
+      echo "## Codex Elicitation Adapter"
+      echo
+      echo "When instructions below mention the Codex elicitation adapter:"
+      echo "1. If a host capability exists to switch from Default -> Plan mode, try once (non-fatal)."
+      echo "2. If \`request_user_input\` is available, use it for structured elicitation."
+      echo "3. Otherwise, ask in chat using a single concise question plus numbered options, then pause for user choice."
+      echo "4. Normalize the answer, echo the resolved selection, and continue."
       echo
       cat "$converted_tmp"
     } > "$out"
@@ -650,6 +670,7 @@ generate_prompts() {
       --argjson namespaced_rewrites "$namespaced_rewrites" \
       --argjson bare_rewrites "$bare_rewrites" \
       --argjson path_rewrites "$path_rewrites" \
+      --argjson elicitation_rewrites "$elicitation_rewrites" \
       --argjson unresolved "$unresolved_json" \
       '{
         generated_at: $generated_at,
@@ -661,7 +682,8 @@ generate_prompts() {
         rewrites: {
           namespaced: $namespaced_rewrites,
           bare: $bare_rewrites,
-          path: $path_rewrites
+          path: $path_rewrites,
+          elicitation: $elicitation_rewrites
         },
         unresolved_refs: $unresolved,
         unresolved_count: ($unresolved | length),
@@ -676,7 +698,7 @@ generate_prompts() {
   "command_count":$count,
   "wrappers_generated":$count,
   "stale_removed":$removed,
-  "rewrites":{"namespaced":$namespaced_rewrites,"bare":$bare_rewrites,"path":$path_rewrites},
+  "rewrites":{"namespaced":$namespaced_rewrites,"bare":$bare_rewrites,"path":$path_rewrites,"elicitation":$elicitation_rewrites},
   "unresolved_refs":[],
   "unresolved_count":$unresolved_count,
   "status":"$( [[ "$unresolved_count" == "0" ]] && echo ok || echo warn )"
@@ -742,7 +764,9 @@ sync_mcp_servers() {
 
 install_all() {
   resolve_source_dir
-  ensure_clone
+  if [[ "$SOURCE_EXPLICIT" -eq 0 ]]; then
+    ensure_clone
+  fi
 
   local skills_target="$SOURCE_DIR/skills"
   if [[ ! -d "$skills_target" ]]; then

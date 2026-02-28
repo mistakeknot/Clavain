@@ -5,6 +5,8 @@
 # - Runs Clavain Codex install/doctor via scripts/install-codex.sh
 # - Ensures all Interverse plugins in agent-rig.json (recommended tier) are cloned under ~/.codex
 # - Installs Codex skill links for companion plugins that expose SKILL.md entrypoints
+# - Generates Codex prompt wrappers for companion plugin commands under ~/.codex/prompts
+# - Rewrites Clavain wrappers to route /inter*:command references to those prompts
 # - Cleans up legacy ~/.codex/skills/<name> paths (symlink or directory)
 #   using backup-first removal
 
@@ -20,6 +22,8 @@ if [[ $# -gt 0 && "${1#-}" == "$1" ]]; then
 fi
 
 CLONE_ROOT="${CLAVAIN_CLONE_ROOT:-$HOME/.codex}"
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+CODEX_PROMPTS_DIR="${CODEX_PROMPTS_DIR:-$CODEX_HOME/prompts}"
 SKILLS_DIR="${AGENTS_SKILLS_DIR:-$HOME/.agents/skills}"
 LEGACY_SKILLS_DIR="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 BACKUP_ROOT="${CLAVAIN_BACKUP_ROOT:-$CLONE_ROOT/.clavain-backups}"
@@ -113,6 +117,7 @@ Options:
 Notes:
   - Native Codex skill discovery path is ~/.agents/skills
   - Recommended Interverse plugin list comes from agent-rig.json (fallback list if jq is unavailable)
+  - Interverse command wrappers are generated into ~/.codex/prompts as <plugin>-<command>.md
   - Legacy ~/.codex/skills paths are removed with backup-first safety
 EOF
 }
@@ -175,6 +180,225 @@ json_escape() {
   input="${input//$'\r'/}"
   input="${input//$'\t'/\\t}"
   printf '%s' "$input"
+}
+
+regex_escape() {
+  printf '%s' "$1" | sed -e 's/[.[\*^$()+?{|\\]/\\&/g'
+}
+
+strip_frontmatter() {
+  local file="$1"
+  awk '
+    NR == 1 && $0 == "---" { in_fm = 1; next }
+    in_fm == 1 && $0 == "---" { in_fm = 0; next }
+    in_fm == 0 { print }
+  ' "$file"
+}
+
+command_name_from_markdown() {
+  local file="$1"
+  awk '
+    NR == 1 && $0 == "---" { in_fm = 1; next }
+    in_fm == 1 && $0 == "---" { exit }
+    in_fm == 1 && $0 ~ /^name:[[:space:]]*/ {
+      sub(/^name:[[:space:]]*/, "", $0)
+      gsub(/^["'"'"']|["'"'"']$/, "", $0)
+      print $0
+      exit
+    }
+  ' "$file"
+}
+
+build_namespace_prefix_regex() {
+  local regex=""
+  local plugin escaped
+  while IFS= read -r plugin; do
+    [[ -n "$plugin" ]] || continue
+    escaped="$(regex_escape "$plugin")"
+    regex+="${regex:+|}$escaped"
+  done < <(interverse_recommended_plugins)
+  printf '%s' "$regex"
+}
+
+interverse_command_entries() {
+  local plugin repo_dir commands_dir src command_name
+  while IFS= read -r plugin; do
+    [[ -n "$plugin" ]] || continue
+    repo_dir="$CLONE_ROOT/$plugin"
+    commands_dir="$repo_dir/commands"
+    [[ -d "$commands_dir" ]] || continue
+
+    for src in "$commands_dir"/*.md; do
+      [[ -f "$src" ]] || continue
+      command_name="$(command_name_from_markdown "$src")"
+      if [[ -z "$command_name" ]]; then
+        command_name="$(basename "$src" .md)"
+      fi
+      [[ -n "$command_name" ]] || continue
+      echo "$plugin|$command_name|$src"
+    done
+  done < <(interverse_recommended_plugins)
+}
+
+convert_interverse_body_for_codex() {
+  local input_file="$1"
+  local output_file="$2"
+  local prefix_regex="$3"
+
+  INTERVERSE_PREFIX_REGEX="$prefix_regex" perl -0777 - "$input_file" >"$output_file" <<'PERL'
+use strict;
+use warnings;
+
+my $prefix = $ENV{INTERVERSE_PREFIX_REGEX} // '';
+local $/;
+my $content = <>;
+
+if ($prefix ne '') {
+  $content =~ s{(?<![A-Za-z0-9_./:-])/($prefix):([A-Za-z0-9_.-]+)(?=(?:$|[\s\)\]\}\.,;:\!\?\'\"`]))}{"/prompts:$1-$2"}ge;
+}
+
+$content =~ s{(?<![A-Za-z0-9_./:-])/clavain:([A-Za-z0-9_.-]+)(?=(?:$|[\s\)\]\}\.,;:\!\?\'\"`]))}{"/prompts:clavain-$1"}ge;
+$content =~ s{\Q~/.claude/\E}{~/.codex/}g;
+$content =~ s{(?<!~)\Q.claude/\E}{.codex/}g;
+
+# AskUserQuestion is Claude-specific. Normalize to a Codex elicitation adapter contract.
+$content =~ s/\bAskUserQuestion tool\b/Codex elicitation adapter/g;
+$content =~ s/\bAskUserQuestion\b/Codex elicitation adapter/g;
+
+print $content;
+PERL
+}
+
+generate_interverse_prompts() {
+  local prefix_regex
+  prefix_regex="$(build_namespace_prefix_regex)"
+  mkdir -p "$CODEX_PROMPTS_DIR"
+
+  local expected_files plugin_list
+  expected_files="$(mktemp)"
+  plugin_list="$(mktemp)"
+  interverse_recommended_plugins > "$plugin_list"
+
+  local count=0
+  local removed=0
+  local plugin command_name src out body_tmp converted_tmp
+
+  while IFS='|' read -r plugin command_name src; do
+    [[ -n "$plugin" && -n "$command_name" && -n "$src" ]] || continue
+    out="$CODEX_PROMPTS_DIR/$plugin-$command_name.md"
+    echo "$out" >> "$expected_files"
+
+    body_tmp="$(mktemp)"
+    converted_tmp="$(mktemp)"
+    strip_frontmatter "$src" > "$body_tmp"
+    convert_interverse_body_for_codex "$body_tmp" "$converted_tmp" "$prefix_regex"
+
+    {
+      echo "# Interverse Command: /$plugin:$command_name"
+      echo
+      echo "Interverse prompt wrapper generated from companion command source."
+      echo
+      echo "- Source: \`$src\`"
+      echo "- Compatibility: interverse namespaces and .claude paths normalized for Codex."
+      echo "- Elicitation adapter: if a prompt calls for AskUserQuestion, try future plan-mode escalation if host supports it, else use \`request_user_input\` when available, else ask in chat with numbered options and wait."
+      echo
+      echo "---"
+      echo
+      echo "## Codex Elicitation Adapter"
+      echo
+      echo "When instructions below mention the Codex elicitation adapter:"
+      echo "1. If a host capability exists to switch from Default -> Plan mode, try once (non-fatal)."
+      echo "2. If \`request_user_input\` is available, use it for structured elicitation."
+      echo "3. Otherwise, ask in chat using a single concise question plus numbered options, then pause for user choice."
+      echo "4. Normalize the answer, echo the resolved selection, and continue."
+      echo
+      cat "$converted_tmp"
+    } > "$out"
+
+    rm -f "$body_tmp" "$converted_tmp"
+    count=$((count + 1))
+  done < <(interverse_command_entries)
+
+  local prompt_file base is_recommended plugin
+  for prompt_file in "$CODEX_PROMPTS_DIR"/*.md; do
+    [[ -f "$prompt_file" ]] || continue
+    grep -Fq "Interverse prompt wrapper generated from companion command source." "$prompt_file" || continue
+    if grep -Fxq "$prompt_file" "$expected_files" 2>/dev/null; then
+      continue
+    fi
+
+    base="$(basename "$prompt_file")"
+    is_recommended=false
+    while IFS= read -r plugin; do
+      [[ -n "$plugin" ]] || continue
+      if [[ "$base" == "$plugin"-* ]]; then
+        is_recommended=true
+        break
+      fi
+    done < "$plugin_list"
+
+    if [[ "$is_recommended" == true ]]; then
+      rm -f "$prompt_file"
+      removed=$((removed + 1))
+    fi
+  done
+
+  rm -f "$expected_files" "$plugin_list"
+  echo "Generated $count Interverse prompt wrappers in $CODEX_PROMPTS_DIR"
+  echo "Removed $removed stale Interverse prompt wrappers in $CODEX_PROMPTS_DIR"
+}
+
+rewrite_clavain_prompt_refs() {
+  local prefix_regex
+  prefix_regex="$(build_namespace_prefix_regex)"
+  [[ -n "$prefix_regex" ]] || return 0
+
+  local changed=0
+  local prompt_file tmp
+  for prompt_file in "$CODEX_PROMPTS_DIR"/clavain-*.md; do
+    [[ -f "$prompt_file" ]] || continue
+    tmp="$(mktemp)"
+    INTERVERSE_PREFIX_REGEX="$prefix_regex" perl -0777 - "$prompt_file" >"$tmp" <<'PERL'
+use strict;
+use warnings;
+
+my $prefix = $ENV{INTERVERSE_PREFIX_REGEX} // '';
+local $/;
+my $content = <>;
+
+if ($prefix ne '') {
+  $content =~ s{(?<![A-Za-z0-9_./:-])/($prefix):([A-Za-z0-9_.-]+)(?=(?:$|[\s\)\]\}\.,;:\!\?\'\"`]))}{"/prompts:$1-$2"}ge;
+}
+
+print $content;
+PERL
+
+    if cmp -s "$prompt_file" "$tmp"; then
+      rm -f "$tmp"
+      continue
+    fi
+
+    mv "$tmp" "$prompt_file"
+    changed=$((changed + 1))
+  done
+
+  echo "Rewrote Interverse namespace refs in $changed Clavain prompt wrappers."
+}
+
+remove_interverse_prompts() {
+  local removed=0
+  local prompt_file
+  [[ -d "$CODEX_PROMPTS_DIR" ]] || return 0
+
+  for prompt_file in "$CODEX_PROMPTS_DIR"/*.md; do
+    [[ -f "$prompt_file" ]] || continue
+    if grep -Fq "Interverse prompt wrapper generated from companion command source." "$prompt_file"; then
+      rm -f "$prompt_file"
+      removed=$((removed + 1))
+    fi
+  done
+
+  echo "Removed $removed Interverse prompt wrappers from $CODEX_PROMPTS_DIR"
 }
 
 start_backup_session() {
@@ -373,6 +597,7 @@ install_skill_links() {
 install_companions() {
   local repo_failures=0
   local link_failures=0
+  local prompt_failures=0
 
   if ensure_recommended_repos; then
     repo_failures=0
@@ -385,8 +610,16 @@ install_companions() {
     link_failures=$?
   fi
 
-  if [[ "$repo_failures" -ne 0 || "$link_failures" -ne 0 ]]; then
-    echo "Install failures: repos=$repo_failures skill_links=$link_failures" >&2
+  if [[ "$INSTALL_PROMPTS" -eq 1 ]]; then
+    if generate_interverse_prompts && rewrite_clavain_prompt_refs; then
+      prompt_failures=0
+    else
+      prompt_failures=1
+    fi
+  fi
+
+  if [[ "$repo_failures" -ne 0 || "$link_failures" -ne 0 || "$prompt_failures" -ne 0 ]]; then
+    echo "Install failures: repos=$repo_failures skill_links=$link_failures prompts=$prompt_failures" >&2
     return 1
   fi
   return 0
@@ -648,6 +881,7 @@ case "$ACTION" in
       cleanup_legacy_link "$link_name"
       echo "Removed skill link: $SKILLS_DIR/$link_name"
     done < <(skill_specs)
+    remove_interverse_prompts || local_failed=1
 
     if [[ "$local_failed" -eq 0 ]]; then
       echo "Interverse companion skill links removed."

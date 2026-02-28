@@ -22,6 +22,7 @@ If this is your first time, this script clones `https://github.com/mistakeknot/C
 - It enforces clean-break migration by removing `~/.codex/skills/clavain` (symlink or directory) with backup-first safety.
 - It validates helper/script coverage on `doctor`.
 - Wrapper generation is self-healing: stale wrappers for removed/renamed commands are removed.
+- Wrapper generation normalizes `AskUserQuestion` references to a Codex elicitation adapter policy (`request_user_input` when available, otherwise numbered chat elicitation fallback).
 
 Codex bootstrap helper:
 
@@ -44,6 +45,15 @@ Notable linked skills include:
 - `interdoc`
 - `tool-time` (Codex skill variant)
 - `tldrs-agent-workflow`
+
+It also generates Interverse command wrappers in `~/.codex/prompts` as:
+- `/prompts:interflux-flux-drive`
+- `/prompts:interflux-flux-research`
+- `/prompts:interpath-roadmap`
+- `/prompts:interlock-interlock-status`
+
+During ecosystem install, Clavain wrappers are adapter-rewritten so references like `/interflux:flux-drive` become Codex-safe `/prompts:interflux-flux-drive`.
+Companion prompts get the same elicitation adapter normalization.
 
 3. Restart Codex (quit and relaunch the CLI).
 
