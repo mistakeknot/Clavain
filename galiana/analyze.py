@@ -125,9 +125,13 @@ def load_tool_time_events(since: datetime, until: datetime) -> list[dict[str, An
 
 
 def find_findings_files(project_root: Path) -> list[Path]:
-    """Discover docs/research/flux-drive/**/findings.json under project."""
-    pattern = project_root / "**" / "docs" / "research" / "flux-drive" / "**" / "findings.json"
-    return sorted({Path(p).resolve() for p in glob.glob(str(pattern), recursive=True)})
+    """Discover findings.json from flux-drive research and quality-gates runs."""
+    flux_drive_pattern = project_root / "**" / "docs" / "research" / "flux-drive" / "**" / "findings.json"
+    quality_gates_pattern = project_root / "**" / ".clavain" / "quality-gates" / "findings.json"
+    files: set[Path] = set()
+    for pattern in [flux_drive_pattern, quality_gates_pattern]:
+        files.update(Path(p).resolve() for p in glob.glob(str(pattern), recursive=True))
+    return sorted(files)
 
 
 def parse_reviewed_date(value: Any) -> datetime | None:

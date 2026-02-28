@@ -68,8 +68,12 @@ def find_production_reviews(project_root: Path, target_date: str) -> list[tuple[
     """
     import glob
 
-    pattern = project_root / "**" / "docs" / "research" / "flux-drive" / "**" / "findings.json"
-    findings_files = sorted({Path(p).resolve() for p in glob.glob(str(pattern), recursive=True)})
+    flux_drive_pattern = project_root / "**" / "docs" / "research" / "flux-drive" / "**" / "findings.json"
+    quality_gates_pattern = project_root / "**" / ".clavain" / "quality-gates" / "findings.json"
+    files: set[Path] = set()
+    for pattern in [flux_drive_pattern, quality_gates_pattern]:
+        files.update(Path(p).resolve() for p in glob.glob(str(pattern), recursive=True))
+    findings_files = sorted(files)
 
     reviews: list[tuple[Path, dict[str, Any]]] = []
     for file_path in findings_files:
