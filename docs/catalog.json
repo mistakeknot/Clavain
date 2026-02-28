@@ -1,10 +1,10 @@
 {
-  "generated": "2026-02-26T03:11:53Z",
+  "generated": "2026-02-28T09:27:16Z",
   "counts": {
     "skills": 16,
     "agents": 4,
-    "commands": 46,
-    "hooks": 7,
+    "commands": 47,
+    "hooks": 8,
     "mcp_servers": 1,
     "review": 2,
     "workflow": 2
@@ -133,6 +133,10 @@
     {
       "name": "debate",
       "description": "Run a structured Claude\u2194Codex debate before implementing a complex task"
+    },
+    {
+      "name": "distill",
+      "description": "Synthesize accumulated docs into categorized solutions and generate missing SKILL-compact.md files"
     },
     {
       "name": "docs",
