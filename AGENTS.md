@@ -282,6 +282,7 @@ Extracted subsystems that Clavain delegates to via namespace routing.
 | **interphase** | interagency-marketplace | Phase tracking, gates, and work discovery. lib-phase.sh, lib-gates.sh, lib-discovery.sh. Clavain shims delegate to interphase when installed. |
 | **interspect** | interagency-marketplace | Agent profiler — evidence collection, classification, routing overrides, canary monitoring. |
 | **interline** | interagency-marketplace | Statusline renderer. Shows dispatch state, bead context, workflow phase, interserve mode. |
+| **interwatch** | interagency-marketplace | Doc freshness monitoring. Auto-discovers watchable docs, detects drift via 14 signals, dispatches to interpath/interdoc for refresh. Triggered by `auto-stop-actions.sh` when signal weight >= 3. |
 
 ### Recommended
 
