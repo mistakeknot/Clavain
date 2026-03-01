@@ -1370,6 +1370,8 @@ bead_release() {
     local our_session="${CLAUDE_SESSION_ID:-unknown}"
     if [[ -n "$current_claimer" \
           && "$current_claimer" != "(no claimed_by state set)" \
+          && "$current_claimer" != "released" \
+          && "$current_claimer" != "unknown" \
           && "$current_claimer" != "$our_session" ]]; then
         return 0  # Another session holds this — don't release
     fi
@@ -1379,8 +1381,9 @@ bead_release() {
     else
         bd update "$bead_id" --assignee="" >/dev/null 2>&1 || true
     fi
-    bd set-state "$bead_id" "claimed_by=" >/dev/null 2>&1 || true
-    bd set-state "$bead_id" "claimed_at=" >/dev/null 2>&1 || true
+    # Sentinel values — bd rejects empty values in set-state
+    bd set-state "$bead_id" "claimed_by=released" >/dev/null 2>&1 || true
+    bd set-state "$bead_id" "claimed_at=0" >/dev/null 2>&1 || true
 }
 
 # ─── Invalidation ─────────────────────────────────────────────────
