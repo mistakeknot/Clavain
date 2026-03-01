@@ -1,7 +1,6 @@
 name: Daily Agent Eval
+# Disabled — eval runs via systemd timer on ethics-gradient (clavain-eval.timer)
 on:
-  schedule:
-    - cron: '0 4 * * *'
   workflow_dispatch: {}
 
 jobs:
