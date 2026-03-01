@@ -23,6 +23,11 @@ sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count
   b. Claim session: `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-claim "$sprint_id" "$CLAUDE_SESSION_ID"`
      - If claim fails (returns 1): tell user another session has this sprint, offer to force-claim (call `clavain-cli sprint-release` then `clavain-cli sprint-claim`) or start fresh
   c. Set `CLAVAIN_BEAD_ID="$sprint_id"`
+  c2. **Register bead for token attribution:**
+     ```bash
+     _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
+     [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+     ```
   d. Check for checkpoint:
      ```bash
      checkpoint=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-read)
@@ -128,6 +133,11 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
      - "already claimed" in error → tell user "Bead already claimed by another agent" and re-run discovery from Step 1
      - "lock" or "timeout" in error → retry once after 2 seconds; if still fails, tell user "Could not claim bead (database busy)" and re-run discovery from Step 1
      Do NOT fall back to `--status=in_progress` — a failed claim means exclusivity is not guaranteed.
+   - **Register bead for token attribution:**
+     ```bash
+     _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
+     [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+     ```
    - **Add to session tasks** using TaskCreate:
      - Title: `<bead_id> — <title>`
      - Status: `in_progress`
@@ -240,6 +250,11 @@ Parse the JSON response. If parsing fails, default to `/sprint` (safer fallback 
      - Tell user "Bead was claimed by another agent while routing."
      - Do NOT proceed with the current bead.
      - Restart from Step 1 of the discovery flow to find unclaimed work.
+   - **Register bead for token attribution:**
+     ```bash
+     _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
+     [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+     ```
    - **Add to session tasks** using TaskCreate:
      - Title: `<bead_id> — <title or description>`
      - Status: `in_progress`

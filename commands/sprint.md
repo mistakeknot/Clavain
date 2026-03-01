@@ -126,6 +126,16 @@ if [[ -f "$CLAVAIN_ROOT/hooks/lib-discovery.sh" ]]; then
 fi
 ```
 
+### Bead Token Attribution
+
+If `CLAVAIN_BEAD_ID` is set, register it for interstat token tracking:
+```bash
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+    _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
+    [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+fi
+```
+
 ### Work Discovery
 
 Run work discovery to detect available beads and pending work:
