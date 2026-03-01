@@ -31,7 +31,8 @@ esac
 EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_result.exit_code // .stdout // ""' 2>/dev/null) || exit 0
 
 # Extract issue ID from the command (first argument after bd update/claim)
-ISSUE_ID=$(echo "$COMMAND" | grep -oP '(?<=bd (?:update|claim) )\S+' 2>/dev/null) || exit 0
+# Note: separate lookbehinds required — PCRE rejects variable-length (?:update|claim)
+ISSUE_ID=$(echo "$COMMAND" | grep -oP '(?<=bd update |bd claim )\S+' 2>/dev/null) || exit 0
 [[ -n "$ISSUE_ID" ]] || exit 0
 
 # Check if command succeeded — don't bind on failed claims
