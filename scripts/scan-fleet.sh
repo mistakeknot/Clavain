@@ -118,13 +118,15 @@ _enrich_costs() {
     return 0
   fi
 
-  # Work on a temp copy for atomic writes
+  # Work on a temp copy to avoid mutating the live registry
   local work_file="$registry"
   local tmp_file=""
-  if [[ "$dry_run" != true && "$in_place" == true ]]; then
+  if [[ "$dry_run" != true ]]; then
     tmp_file="$(mktemp "${registry}.XXXXXX")"
     cp "$registry" "$tmp_file"
     work_file="$tmp_file"
+    # Ensure cleanup on error or signal
+    trap '[[ -n "${tmp_file:-}" && -f "${tmp_file:-}" ]] && rm -f "$tmp_file"' EXIT
   fi
 
   if [[ "$dry_run" == true ]]; then
@@ -134,6 +136,12 @@ _enrich_costs() {
 
   while IFS='|' read -r agent_name model run_count mean_tokens; do
     [[ -z "$agent_name" ]] && continue
+
+    # Validate inputs before SQL interpolation (SEC-001)
+    if [[ ! "$agent_name" =~ ^[a-zA-Z0-9_.:-]+$ ]] || [[ ! "$model" =~ ^[a-zA-Z0-9_.:-]+$ ]]; then
+      echo "scan-fleet: skipping invalid agent_name='$agent_name' or model='$model'" >&2
+      continue
+    fi
 
     # Check if agent exists in registry
     local exists

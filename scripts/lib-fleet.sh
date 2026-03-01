@@ -257,6 +257,16 @@ fleet_cost_estimate_live() {
     haiku)  model="claude-haiku-4-5" ;;
   esac
 
+  # Validate inputs before SQL interpolation (SEC-001)
+  if [[ ! "$agent_id" =~ ^[a-zA-Z0-9_.:-]+$ ]]; then
+    echo "lib-fleet: invalid agent_id '$agent_id'" >&2
+    return 1
+  fi
+  if [[ -n "$model" && ! "$model" =~ ^[a-zA-Z0-9_.:-]+$ ]]; then
+    echo "lib-fleet: invalid model '$model'" >&2
+    return 1
+  fi
+
   local _fleet_interstat_db="${INTERSTAT_DB:-${HOME}/.claude/interstat/metrics.db}"
 
   # Try interstat delta: check for runs newer than last_enrichment
@@ -264,6 +274,11 @@ fleet_cost_estimate_live() {
     # Read last_enrichment without yq (grep/sed per PRD requirement)
     local last_enrichment=""
     last_enrichment="$(grep '^last_enrichment:' "$_FLEET_REGISTRY_PATH" 2>/dev/null | sed 's/^last_enrichment: *//' | tr -d '"' | tr -d "'")" || true
+
+    # Validate last_enrichment is an ISO timestamp (SEC-001)
+    if [[ -n "$last_enrichment" && ! "$last_enrichment" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]]; then
+      last_enrichment=""
+    fi
 
     if [[ -n "$last_enrichment" ]]; then
       local delta_result
@@ -287,12 +302,13 @@ fleet_cost_estimate_live() {
           reg_runs="$(id="$agent_id" m="$model" yq '.agents[env(id)].models.actual_tokens[env(m)].runs // 0' "$_FLEET_REGISTRY_PATH")" || reg_runs=0
 
           if [[ "$reg_runs" -gt 0 ]]; then
-            # Weighted average: combine registry baseline + delta
+            # Weighted average: combine registry baseline + delta (any delta count useful here)
             local total_runs=$((reg_runs + delta_count))
             local combined=$(( (reg_mean * reg_runs + delta_mean * delta_count) / total_runs ))
             echo "$combined"
             return 0
-          else
+          elif [[ "$delta_count" -ge 3 ]]; then
+            # Delta-only: require >= 3 runs for reliability (CORRECTNESS-002)
             echo "$delta_mean"
             return 0
           fi
