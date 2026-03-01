@@ -1,12 +1,7 @@
 name: Agent Eval (on change)
+# Disabled — eval triggered by post-commit hook on ethics-gradient (clavain-eval-on-change.service)
 on:
-  push:
-    paths:
-      - 'agents/**'
-      - 'skills/flux-drive/**'
-      - 'galiana/topologies.json'
-      - 'galiana/eval.py'
-      - 'galiana/evals/**'
+  workflow_dispatch: {}
 
 jobs:
   eval:
