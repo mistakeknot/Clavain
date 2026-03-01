@@ -328,6 +328,64 @@ The `using-clavain` skill is injected into every session via the SessionStart ho
 
 This routes to the right skill, agent, or command for each task. You don't need to memorize the full list: the routing table is always in context.
 
+## Troubleshooting
+
+For full plugin and marketplace documentation, see the [official Claude Code plugin guide](https://code.claude.com/docs/en/discover-plugins).
+
+### Plugin install fails with "Source path does not exist"
+
+```
+✘ Failed to install plugin "context7@claude-plugins-official": Source path does not exist: /Users/...
+```
+
+The local marketplace clone is stale or corrupted. The official `claude-plugins-official` marketplace is auto-provisioned by Claude Code — remove the cached copy and restart:
+
+```bash
+rm -rf ~/.claude/plugins/marketplaces/claude-plugins-official
+claude   # restart — Claude Code re-provisions the official marketplace automatically
+```
+
+Or refresh from within Claude Code:
+
+```
+/plugin marketplace update claude-plugins-official
+```
+
+### Error path shows a different user's home directory
+
+If the error references `/Users/someone-else/` instead of your home directory, the marketplace cache was created by a different user account on the same machine. Same fix — remove and restart:
+
+```bash
+rm -rf ~/.claude/plugins/marketplaces/claude-plugins-official
+```
+
+### Marketplace commands reference
+
+```bash
+# Add a marketplace
+/plugin marketplace add owner/repo
+
+# List all marketplaces
+/plugin marketplace list
+
+# Refresh a marketplace
+/plugin marketplace update marketplace-name
+
+# Install a plugin
+/plugin install plugin-name@marketplace-name
+
+# Check for errors
+/plugin   # then go to the Errors tab
+```
+
+### interagency-marketplace not found
+
+If Clavain's companion plugins fail to install, add the marketplace manually:
+
+```
+/plugin marketplace add mistakeknot/interagency-marketplace
+```
+
 ## Credits
 
 Named after one of the protagonists from Alastair Reynolds's [Revelation Space series](https://en.wikipedia.org/wiki/Revelation_Space_series). Built on the work of:
