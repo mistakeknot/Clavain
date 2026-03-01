@@ -15,6 +15,9 @@ setup() {
     # Build ic binary once per test file (cached in /tmp)
     IC_BIN="/tmp/ic-seam-$$"
     IC_SRC_DIR="$BATS_TEST_DIRNAME/../../../../core/intercore"
+    if [[ ! -d "$IC_SRC_DIR" ]]; then
+        skip "intercore source not available (standalone checkout)"
+    fi
     if [[ ! -x "$IC_BIN" ]]; then
         cd "$IC_SRC_DIR" && go build -o "$IC_BIN" ./cmd/ic
     fi
