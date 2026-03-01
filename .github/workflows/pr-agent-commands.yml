@@ -27,7 +27,7 @@ jobs:
       has_codex_auth: ${{ steps.secrets_check.outputs.has_codex_auth }}
     steps:
       - id: parse
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const body = (context.payload.comment?.body || "").trim();
@@ -76,7 +76,7 @@ jobs:
     if: needs.parse-command.outputs.recognized == 'true' && needs.parse-command.outputs.trusted != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
           COMMAND: ${{ needs.parse-command.outputs.command }}
@@ -110,7 +110,7 @@ jobs:
       )
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
           MODE: ${{ needs.parse-command.outputs.mode }}
@@ -167,7 +167,7 @@ jobs:
 
       - name: Fetch PR metadata
         id: prmeta
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
         with:
@@ -218,7 +218,7 @@ jobs:
             --json-schema {"type":"object","properties":{"response":{"type":"string"}},"required":["response"],"additionalProperties":false}
 
       - name: Post Claude review comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           CLAUDE_STRUCTURED: ${{ steps.claude.outputs.structured_output }}
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
@@ -281,7 +281,7 @@ jobs:
 
       - name: Fetch PR metadata
         id: prmeta
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
         with:
@@ -360,7 +360,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Post Codex review comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           CODEX_FINAL_MESSAGE: ${{ steps.codex_exec.outputs.result }}
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
