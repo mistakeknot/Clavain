@@ -596,3 +596,277 @@ YAML
     # Should NOT show tier details when off
     [[ "$result" != *"C5:"* ]]
 }
+
+# ═══════════════════════════════════════════════════════════════════
+# Safety floor tests (iv-db5pc)
+# ═══════════════════════════════════════════════════════════════════
+
+@test "safety floor: agent in role with min_model gets clamped up" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  reviewer:
+    min_model: sonnet
+    agents:
+      - fd-safety
+      - fd-correctness
+  checker:
+    agents:
+      - fd-perception
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: haiku
+YAML
+    _source_routing
+    result="$(routing_resolve_model --agent fd-safety)"
+    [[ "$result" == "sonnet" ]]
+}
+
+@test "safety floor: agent without min_model is not clamped" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  checker:
+    agents:
+      - fd-perception
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: haiku
+YAML
+    _source_routing
+    result="$(routing_resolve_model --agent fd-perception)"
+    [[ "$result" == "haiku" ]]
+}
+
+@test "safety floor: agent already at or above floor is not changed" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  reviewer:
+    min_model: sonnet
+    agents:
+      - fd-safety
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: opus
+YAML
+    _source_routing
+    result="$(routing_resolve_model --agent fd-safety)"
+    [[ "$result" == "opus" ]]
+}
+
+@test "safety floor: planner role agents get sonnet floor" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  planner:
+    min_model: sonnet
+    agents:
+      - fd-architecture
+      - fd-systems
+  checker:
+    agents:
+      - fd-perception
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: haiku
+YAML
+    _source_routing
+    result="$(routing_resolve_model --agent fd-architecture)"
+    [[ "$result" == "sonnet" ]]
+}
+
+@test "safety floor: clamping emits structured log to stderr" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  reviewer:
+    min_model: sonnet
+    agents:
+      - fd-safety
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: haiku
+YAML
+    _source_routing
+    # Capture stderr only (stdout to /dev/null)
+    local stderr_output
+    stderr_output="$(routing_resolve_model --agent fd-safety 2>&1 1>/dev/null)"
+    [[ "$stderr_output" == *"[safety-floor]"* ]]
+    [[ "$stderr_output" == *"agent=fd-safety"* ]]
+    [[ "$stderr_output" == *"resolved=haiku"* ]]
+    [[ "$stderr_output" == *"clamped_to=sonnet"* ]]
+}
+
+@test "safety floor: no log when not clamping" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  reviewer:
+    min_model: sonnet
+    agents:
+      - fd-safety
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: opus
+YAML
+    _source_routing
+    local stderr_output
+    stderr_output="$(routing_resolve_model --agent fd-safety 2>&1 1>/dev/null)"
+    [[ -z "$stderr_output" ]]
+}
+
+@test "safety floor: no roles file means no clamping (graceful)" {
+    # Don't create agent-roles.yaml — only routing.yaml
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: haiku
+YAML
+    _source_routing
+    result="$(routing_resolve_model --agent fd-safety)"
+    [[ "$result" == "haiku" ]]
+}
+
+@test "safety floor: namespaced agent ID (interflux:review:fd-safety) is clamped" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  reviewer:
+    min_model: sonnet
+    agents:
+      - fd-safety
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: haiku
+YAML
+    _source_routing
+    # This is the path routing_resolve_agents uses — namespaced agent ID
+    result="$(routing_resolve_model --agent "interflux:review:fd-safety")"
+    [[ "$result" == "sonnet" ]]
+}
+
+@test "safety floor: invalid min_model emits warning" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  reviewer:
+    min_model: sonett
+    agents:
+      - fd-safety
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: haiku
+YAML
+    _source_routing
+    local stderr_output
+    stderr_output="$(routing_resolve_model --agent fd-safety 2>&1 1>/dev/null)"
+    [[ "$stderr_output" == *"invalid min_model"* ]]
+    # Model should NOT be clamped (invalid floor is ignored)
+    result="$(routing_resolve_model --agent fd-safety 2>/dev/null)"
+    [[ "$result" == "haiku" ]]
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# Batch agent resolution tests (routing_resolve_agents)
+# ═══════════════════════════════════════════════════════════════════
+
+@test "resolve_agents returns valid JSON for fd-* agents" {
+    _source_routing
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety,fd-architecture,fd-quality")"
+    # Verify it's valid JSON with expected keys
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'fd-safety' in d; assert 'fd-architecture' in d; assert 'fd-quality' in d"
+}
+
+@test "resolve_agents maps fd-* agents to review category" {
+    _source_routing
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety,fd-quality")"
+    # Executing phase has categories.review=opus in test config, so review agents get opus
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='opus', f\"got {d['fd-safety']}\"; assert d['fd-quality']=='opus', f\"got {d['fd-quality']}\""
+}
+
+@test "resolve_agents maps research agents to research category" {
+    _source_routing
+    result="$(routing_resolve_agents --phase executing --agents "best-practices-researcher,git-history-analyzer")"
+    # Research agents get haiku in economy mode (research category)
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['best-practices-researcher']=='haiku' or d['best-practices-researcher']=='sonnet'"
+}
+
+@test "resolve_agents respects phase override" {
+    _source_routing
+    result="$(routing_resolve_agents --phase brainstorm --agents "fd-architecture")"
+    # Brainstorm phase has model: opus, review agents get phase model (opus)
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-architecture']=='opus', f\"expected opus, got {d['fd-architecture']}\""
+}
+
+@test "resolve_agents returns empty JSON with no config" {
+    cat > "$TEST_DIR/config/empty.yaml" << 'YAML'
+# empty
+YAML
+    _source_routing "$TEST_DIR/config/empty.yaml"
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety")"
+    # Should return empty JSON or valid JSON (graceful degradation)
+    [[ "$result" == "{}" ]] || echo "$result" | python3 -c "import sys,json; json.load(sys.stdin)"
+}
+
+@test "resolve_agents returns empty JSON with no agents" {
+    _source_routing
+    result="$(routing_resolve_agents --phase executing --agents "")"
+    [[ "$result" == "{}" ]]
+}
+
+@test "resolve_agents safety floor clamps fd-safety to sonnet" {
+    cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
+roles:
+  reviewer:
+    min_model: sonnet
+    agents:
+      - interflux:review:fd-safety
+      - interflux:review:fd-correctness
+YAML
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: haiku
+    categories:
+      review: haiku
+YAML
+    _source_routing
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety,fd-correctness" 2>/dev/null)"
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='sonnet', f\"expected sonnet, got {d['fd-safety']}\"; assert d['fd-correctness']=='sonnet', f\"expected sonnet, got {d['fd-correctness']}\""
+}
+
+@test "resolve_agents brainstorm phase review category uses phase model" {
+    _source_routing
+    result="$(routing_resolve_agents --phase brainstorm --agents "fd-safety,fd-architecture,fd-quality")"
+    # Brainstorm phase model=opus, but brainstorm has categories.research=haiku.
+    # Review agents: no brainstorm:review override → falls to phase model (opus)
+    echo "$result" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+for agent in ['fd-safety','fd-architecture','fd-quality']:
+    assert d[agent]=='opus', f'{agent}: expected opus, got {d[agent]}'
+"
+}
+
+@test "resolve_agents handles whitespace in agent list" {
+    _source_routing
+    result="$(routing_resolve_agents --phase executing --agents " fd-safety , fd-quality ")"
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'fd-safety' in d; assert 'fd-quality' in d"
+}
+
+@test "resolve_agents category override applies to all agents" {
+    _source_routing
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety,fd-architecture" --category research)"
+    # With category override to research, executing phase has no research category override
+    # So falls to phase model (sonnet)
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='sonnet'; assert d['fd-architecture']=='sonnet'"
+}

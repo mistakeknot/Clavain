@@ -123,4 +123,5 @@ sed -i '/^  phases:/,/^dispatch:/{
 - Does not affect agents already running
 - Economy mode saves ~5x on research and ~3x on review vs. quality mode
 - Individual agents can still be overridden with `model: <tier>` in the Task tool call
-- `config/routing.yaml` is the single source of truth — no agent frontmatter involved
+- `config/routing.yaml` is the single source of truth — flux-drive's Step 2.0.5 calls `routing_resolve_agents()` to resolve models at launch time, passing the `model:` parameter to each Agent tool call. Agent frontmatter serves as fallback when routing.yaml is absent.
+- Safety floors: fd-safety and fd-correctness always resolve to >= sonnet regardless of phase or category (enforced by `agent-roles.yaml`)

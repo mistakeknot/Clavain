@@ -5,6 +5,7 @@
 #
 # Public API (B1 — static routing):
 #   routing_resolve_model --phase <phase> [--category <cat>] [--agent <name>]
+#   routing_resolve_agents --phase <phase> --agents "a,b,c" [--category <cat>]
 #   routing_resolve_dispatch_tier <tier-name>
 #   routing_list_mappings
 #
@@ -37,6 +38,52 @@ declare -gA _ROUTING_CX_DESC=()                 # [C1..C5]=description
 declare -gA _ROUTING_CX_SUBAGENT_MODEL=()       # [C1..C5]=model|inherit
 declare -gA _ROUTING_CX_DISPATCH_TIER=()        # [C1..C5]=tier|inherit
 
+# --- Safety floor cache (from agent-roles.yaml) ---
+declare -gA _ROUTING_SF_AGENT_MIN=()             # [agent_name]=min_model
+
+# --- Model tier ordering for safety floor comparison ---
+# Returns numeric tier: haiku=1, sonnet=2, opus=3. Unknown=0.
+_routing_model_tier() {
+  case "${1:-}" in
+    haiku)  echo 1 ;;
+    sonnet) echo 2 ;;
+    opus)   echo 3 ;;
+    *)      echo 0 ;;
+  esac
+}
+
+# --- Apply safety floor clamping ---
+# Usage: _routing_apply_safety_floor <agent> <model_var_name> <caller_label>
+# Looks up agent's min_model, clamps model if below floor. Handles namespaced
+# agent IDs (e.g. "interflux:review:fd-safety") by stripping to short name.
+# Prints the (possibly clamped) model to stdout. Returns 0 always.
+_routing_apply_safety_floor() {
+  local agent="$1" model="$2" caller="$3"
+  [[ -z "$agent" || -z "$model" ]] && { echo "$model"; return 0; }
+
+  # Resolve floor key: try full agent ID first, then strip namespace prefix
+  local floor_key="$agent"
+  if [[ -z "${_ROUTING_SF_AGENT_MIN[$floor_key]:-}" && "$floor_key" == *:* ]]; then
+    floor_key="${floor_key##*:}"
+  fi
+
+  if [[ -n "${_ROUTING_SF_AGENT_MIN[$floor_key]:-}" ]]; then
+    local floor="${_ROUTING_SF_AGENT_MIN[$floor_key]}"
+    local model_tier floor_tier
+    model_tier=$(_routing_model_tier "$model")
+    floor_tier=$(_routing_model_tier "$floor")
+    if [[ $floor_tier -eq 0 ]]; then
+      echo "Warning: [safety-floor] agent=$agent has invalid min_model='$floor' — floor ignored" >&2
+    elif [[ $model_tier -lt $floor_tier ]]; then
+      echo "[safety-floor] agent=$agent resolved=$model clamped_to=$floor role=$caller" >&2
+      model="$floor"
+    fi
+  fi
+
+  echo "$model"
+  return 0
+}
+
 # --- Find routing.yaml ---
 _routing_find_config() {
   # 0. Explicit env var override
@@ -65,6 +112,43 @@ _routing_find_config() {
     return 0
   fi
   return 1
+}
+
+# --- Find agent-roles.yaml (companion to routing.yaml) ---
+_routing_find_roles_config() {
+  # 0. Explicit env var
+  if [[ -n "${CLAVAIN_ROLES_CONFIG:-}" && -f "$CLAVAIN_ROLES_CONFIG" ]]; then
+    echo "$CLAVAIN_ROLES_CONFIG"
+    return 0
+  fi
+
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  # 1. Interflux plugin config (canonical location)
+  local d
+  for d in \
+    "${INTERFLUX_ROOT:-}/config/flux-drive" \
+    "$script_dir/../../interverse/interflux/config/flux-drive" \
+    "${CLAUDE_PLUGIN_ROOT:-}/../interflux/config/flux-drive" \
+  ; do
+    if [[ -f "$d/agent-roles.yaml" ]]; then
+      echo "$d/agent-roles.yaml"
+      return 0
+    fi
+  done
+
+  # 2. Same directory as routing.yaml
+  if [[ -n "$_ROUTING_CONFIG_PATH" ]]; then
+    local config_dir
+    config_dir="$(dirname "$_ROUTING_CONFIG_PATH")"
+    if [[ -f "$config_dir/agent-roles.yaml" ]]; then
+      echo "$config_dir/agent-roles.yaml"
+      return 0
+    fi
+  fi
+
+  return 1  # Not found — safety floors will be inactive
 }
 
 # --- Parse routing.yaml into cache ---
@@ -313,6 +397,55 @@ _routing_load_cache() {
     echo "Warning: routing.yaml exists but no subagent defaults were parsed — possible malformed config" >&2
   fi
 
+  # --- Parse agent-roles.yaml for safety floors ---
+  local roles_path
+  roles_path="$(_routing_find_roles_config)" || roles_path=""
+  if [[ -n "$roles_path" && -f "$roles_path" ]]; then
+    local current_min="" in_agents=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      # Strip comments and trailing whitespace
+      line="${line%%#*}"
+      [[ -z "${line// /}" ]] && continue
+
+      # Role name (2-space indent, not 4+)
+      if [[ "$line" =~ ^[[:space:]]{2}[a-z] && ! "$line" =~ ^[[:space:]]{4} ]]; then
+        current_min=""
+        in_agents=0
+        continue
+      fi
+
+      # min_model field
+      if [[ "$line" =~ ^[[:space:]]+min_model:[[:space:]]* ]]; then
+        current_min="${line#*min_model:}"
+        current_min="${current_min#"${current_min%%[![:space:]]*}"}"
+        current_min="${current_min%"${current_min##*[![:space:]]}"}"
+        continue
+      fi
+
+      # agents: list header (exact match to avoid agents_count: etc.)
+      if [[ "$line" =~ ^[[:space:]]+agents:[[:space:]]*$ ]]; then
+        in_agents=1
+        continue
+      fi
+
+      # Agent list item (- agent_name)
+      if [[ $in_agents -eq 1 && "$line" =~ ^[[:space:]]+-[[:space:]] ]]; then
+        local agent_name="${line#*- }"
+        agent_name="${agent_name#"${agent_name%%[![:space:]]*}"}"
+        agent_name="${agent_name%"${agent_name##*[![:space:]]}"}"
+        if [[ -n "$current_min" && -n "$agent_name" ]]; then
+          _ROUTING_SF_AGENT_MIN["$agent_name"]="$current_min"
+        fi
+        continue
+      fi
+
+      # Any other field resets agents context
+      if [[ $in_agents -eq 1 && ! "$line" =~ ^[[:space:]]+-[[:space:]] ]]; then
+        in_agents=0
+      fi
+    done < "$roles_path"
+  fi
+
   _ROUTING_CACHE_POPULATED=1
 }
 
@@ -388,6 +521,11 @@ routing_resolve_model() {
 
   # Guard: resolve_model MUST never return "inherit"
   [[ "$result" == "inherit" ]] && result="sonnet"
+
+  # Safety floor: clamp up to min_model if agent has one
+  if [[ -n "$agent" && -n "$result" ]]; then
+    result=$(_routing_apply_safety_floor "$agent" "$result" "routing_resolve_model")
+  fi
 
   [[ -n "$result" ]] && echo "$result"
   return 0
@@ -489,13 +627,24 @@ routing_resolve_model_complex() {
     if [[ "$final_result" != "$base_result" ]]; then
       echo "[B2-shadow] complexity=$complexity would change model: $base_result → $final_result (phase=$phase category=$category)" >&2
     fi
-    [[ -n "$base_result" ]] && echo "$base_result"
+    # Safety floor applies even in shadow mode — safety is non-negotiable
+    local shadow_result="$base_result"
+    if [[ -n "$agent" && -n "$shadow_result" ]]; then
+      shadow_result=$(_routing_apply_safety_floor "$agent" "$shadow_result" "routing_resolve_model_complex(shadow)")
+    fi
+    [[ -n "$shadow_result" ]] && echo "$shadow_result"
     return 0
   fi
 
   # Enforce mode: return overridden result
   # Guard: never return "inherit"
   [[ "$final_result" == "inherit" ]] && final_result="$base_result"
+
+  # Safety floor: clamp up to min_model (post-complexity resolution)
+  if [[ -n "$agent" && -n "$final_result" ]]; then
+    final_result=$(_routing_apply_safety_floor "$agent" "$final_result" "routing_resolve_model_complex")
+  fi
+
   [[ -n "$final_result" ]] && echo "$final_result"
   return 0
 }
@@ -674,6 +823,106 @@ routing_list_mappings() {
       fi
     done
   fi
+}
+
+# --- Public: batch-resolve models for a list of agents ---
+# Returns JSON map: {"agent-name":"model",...}
+# Used by flux-drive to resolve models for all triaged agents at once.
+#
+# Usage:
+#   routing_resolve_agents --phase <phase> --agents "fd-safety,fd-architecture,..." [--category <cat>]
+#
+# Agent ID mapping:
+#   fd-* review agents     → interflux:review:fd-<name>, category=review
+#   fd-* cognitive agents  → interflux:review:fd-<name>, category=review
+#   *-researcher agents    → interflux:research:<name>, category=research
+#   repo-research-analyst  → interflux:research:<name>, category=research
+#   Other agents           → passed as-is, uses provided --category or none
+#
+# When complexity mode is shadow/enforce, uses routing_resolve_model_complex.
+routing_resolve_agents() {
+  _routing_load_cache
+
+  local phase="" agents_csv="" category_override=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --phase)    phase="$2"; shift 2 ;;
+      --agents)   agents_csv="$2"; shift 2 ;;
+      --category) category_override="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  # Graceful degradation: no config → empty JSON
+  if [[ -z "$_ROUTING_CONFIG_PATH" ]]; then
+    echo "{}"
+    return 0
+  fi
+
+  # No agents → empty JSON
+  if [[ -z "$agents_csv" ]]; then
+    echo "{}"
+    return 0
+  fi
+
+  # Known cognitive agents (document-only, never code/diff)
+  local -A _cognitive_agents=(
+    [fd-systems]=1 [fd-decisions]=1 [fd-people]=1
+    [fd-resilience]=1 [fd-perception]=1
+  )
+
+  # Known research agents
+  local -A _research_agents=(
+    [best-practices-researcher]=1 [framework-docs-researcher]=1
+    [git-history-analyzer]=1 [learnings-researcher]=1
+    [repo-research-analyst]=1
+  )
+
+  local result="{"
+  local first=true
+  local IFS=','
+
+  for agent_short in $agents_csv; do
+    # Trim whitespace
+    agent_short="${agent_short#"${agent_short%%[![:space:]]*}"}"
+    agent_short="${agent_short%"${agent_short##*[![:space:]]}"}"
+    [[ -z "$agent_short" ]] && continue
+
+    # Determine routing agent ID and category
+    local agent_id="$agent_short"
+    local category="${category_override}"
+
+    if [[ -n "${_research_agents[$agent_short]:-}" ]]; then
+      agent_id="interflux:research:${agent_short}"
+      [[ -z "$category" ]] && category="research"
+    elif [[ "$agent_short" == fd-* ]]; then
+      agent_id="interflux:review:${agent_short}"
+      [[ -z "$category" ]] && category="review"
+    fi
+
+    # Resolve model — use complexity-aware resolver if complexity is active
+    local model=""
+    local resolve_args=(--phase "$phase" --agent "$agent_id")
+    [[ -n "$category" ]] && resolve_args+=(--category "$category")
+
+    if [[ "${_ROUTING_CX_MODE:-off}" != "off" ]]; then
+      model="$(routing_resolve_model_complex "${resolve_args[@]}")"
+    else
+      model="$(routing_resolve_model "${resolve_args[@]}")"
+    fi
+
+    # Build JSON entry
+    if [[ "$first" == true ]]; then
+      first=false
+    else
+      result+=","
+    fi
+    result+="\"${agent_short}\":\"${model}\""
+  done
+
+  result+="}"
+  echo "$result"
+  return 0
 }
 
 _ROUTING_LOADED=1
