@@ -26,7 +26,7 @@ Dispatch tasks to Codex CLI agents (`codex exec`). Claude acts as orchestrator â
 
 ## Prerequisites
 
-1. Codex CLI installed: `which codex`
+1. Codex CLI installed: `command -v codex`
 2. Codex config exists: `~/.codex/config.toml`
 3. Project directory has a `.git` root
 

@@ -318,3 +318,172 @@ SHEOF
     local trimmed="${output//[[:space:]]/}"
     [[ "$trimmed" -eq 5 ]]
 }
+
+# ═══════════════════════════════════════════════════════════════
+# scan-fleet.sh --enrich-costs tests (F1)
+# ═══════════════════════════════════════════════════════════════
+
+# Helper: create mock interstat DB from fixture SQL
+_create_mock_interstat() {
+    local db_path="$1"
+    sqlite3 "$db_path" < "$FIXTURES_DIR/interstat-mock.sql"
+}
+
+@test "enrich-costs writes actual_tokens for agents with >= 3 runs" {
+    local db="$TEST_DIR/metrics.db"
+    _create_mock_interstat "$db"
+    cp "$FIXTURES_DIR/fleet-registry.yaml" "$TEST_DIR/registry.yaml"
+
+    run bash "$SCRIPTS_DIR/scan-fleet.sh" --enrich-costs --registry "$TEST_DIR/registry.yaml" --interstat-db "$db" --in-place
+    [[ "$status" -eq 0 ]]
+
+    # test-reviewer-a has 5 sonnet runs — should have actual_tokens
+    local mean
+    mean="$(yq '.agents.test-reviewer-a.models.actual_tokens."claude-sonnet-4-6".mean' "$TEST_DIR/registry.yaml")"
+    [[ "$mean" -eq 38600 ]]
+
+    local runs
+    runs="$(yq '.agents.test-reviewer-a.models.actual_tokens."claude-sonnet-4-6".runs' "$TEST_DIR/registry.yaml")"
+    [[ "$runs" -eq 5 ]]
+}
+
+@test "enrich-costs marks agents with < 3 runs as preliminary" {
+    local db="$TEST_DIR/metrics.db"
+    _create_mock_interstat "$db"
+    cp "$FIXTURES_DIR/fleet-registry.yaml" "$TEST_DIR/registry.yaml"
+
+    run bash "$SCRIPTS_DIR/scan-fleet.sh" --enrich-costs --registry "$TEST_DIR/registry.yaml" --interstat-db "$db" --in-place
+    [[ "$status" -eq 0 ]]
+
+    # test-reviewer-b has only 2 sonnet runs — should have preliminary: true
+    local preliminary
+    preliminary="$(yq '.agents.test-reviewer-b.models.actual_tokens."claude-sonnet-4-6".preliminary' "$TEST_DIR/registry.yaml")"
+    [[ "$preliminary" == "true" ]]
+}
+
+@test "enrich-costs writes last_enrichment timestamp" {
+    local db="$TEST_DIR/metrics.db"
+    _create_mock_interstat "$db"
+    cp "$FIXTURES_DIR/fleet-registry.yaml" "$TEST_DIR/registry.yaml"
+
+    run bash "$SCRIPTS_DIR/scan-fleet.sh" --enrich-costs --registry "$TEST_DIR/registry.yaml" --interstat-db "$db" --in-place
+    [[ "$status" -eq 0 ]]
+
+    local ts
+    ts="$(yq '.last_enrichment' "$TEST_DIR/registry.yaml")"
+    # Should be an ISO timestamp (YYYY-MM-DDTHH:MM:SSZ format)
+    [[ "$ts" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]
+}
+
+@test "enrich-costs dry-run shows changes without modifying file" {
+    local db="$TEST_DIR/metrics.db"
+    _create_mock_interstat "$db"
+    cp "$FIXTURES_DIR/fleet-registry.yaml" "$TEST_DIR/registry.yaml"
+    local before_hash
+    before_hash="$(md5sum "$TEST_DIR/registry.yaml" | cut -d' ' -f1)"
+
+    run bash "$SCRIPTS_DIR/scan-fleet.sh" --enrich-costs --registry "$TEST_DIR/registry.yaml" --interstat-db "$db" --dry-run
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"test-reviewer-a"* ]]
+
+    local after_hash
+    after_hash="$(md5sum "$TEST_DIR/registry.yaml" | cut -d' ' -f1)"
+    [[ "$before_hash" == "$after_hash" ]]
+}
+
+@test "enrich-costs handles missing interstat DB gracefully" {
+    cp "$FIXTURES_DIR/fleet-registry.yaml" "$TEST_DIR/registry.yaml"
+
+    run --separate-stderr bash "$SCRIPTS_DIR/scan-fleet.sh" --enrich-costs --registry "$TEST_DIR/registry.yaml" --interstat-db "/nonexistent/db"
+    [[ "$status" -eq 0 ]]
+    [[ "$stderr" == *"not found"* ]]
+}
+
+@test "enrich-costs computes p50 and p90 correctly" {
+    local db="$TEST_DIR/metrics.db"
+    _create_mock_interstat "$db"
+    cp "$FIXTURES_DIR/fleet-registry.yaml" "$TEST_DIR/registry.yaml"
+
+    run bash "$SCRIPTS_DIR/scan-fleet.sh" --enrich-costs --registry "$TEST_DIR/registry.yaml" --interstat-db "$db" --in-place
+    [[ "$status" -eq 0 ]]
+
+    # test-reviewer-a sonnet: sorted tokens = [30000, 35000, 38000, 40000, 50000]
+    # p50 = index floor(5*0.5) = index 2 → 38000
+    # p90 = index floor(5*0.9) = index 4 → 50000
+    local p50
+    p50="$(yq '.agents.test-reviewer-a.models.actual_tokens."claude-sonnet-4-6".p50' "$TEST_DIR/registry.yaml")"
+    [[ "$p50" -eq 38000 ]]
+
+    local p90
+    p90="$(yq '.agents.test-reviewer-a.models.actual_tokens."claude-sonnet-4-6".p90' "$TEST_DIR/registry.yaml")"
+    [[ "$p90" -eq 50000 ]]
+}
+
+# ═══════════════════════════════════════════════════════════════
+# fleet_cost_estimate_live tests (F2)
+# ═══════════════════════════════════════════════════════════════
+
+# Helper: create enriched fixture registry with actual_tokens
+_create_enriched_fixture() {
+    local registry="$1"
+    cp "$FIXTURES_DIR/fleet-registry.yaml" "$registry"
+    yq -i '
+      .last_enrichment = "2026-02-15T00:00:00Z" |
+      .agents.test-reviewer-a.models.actual_tokens."claude-sonnet-4-6".mean = 38600 |
+      .agents.test-reviewer-a.models.actual_tokens."claude-sonnet-4-6".p50 = 38000 |
+      .agents.test-reviewer-a.models.actual_tokens."claude-sonnet-4-6".p90 = 50000 |
+      .agents.test-reviewer-a.models.actual_tokens."claude-sonnet-4-6".runs = 5
+    ' "$registry"
+}
+
+@test "fleet_cost_estimate_live returns registry data when no interstat" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_enriched_fixture "$registry"
+    _source_fleet "$registry"
+
+    run fleet_cost_estimate_live test-reviewer-a claude-sonnet-4-6
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == "38600" ]]
+}
+
+@test "fleet_cost_estimate_live falls back to cold_start_tokens when no actual_tokens" {
+    _source_fleet
+    run fleet_cost_estimate_live test-researcher claude-haiku-4-5
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == "300" ]]
+}
+
+@test "fleet_cost_estimate_live returns error for unknown agent" {
+    _source_fleet
+    run fleet_cost_estimate_live nonexistent-agent claude-sonnet-4-6
+    [[ "$status" -ne 0 ]]
+}
+
+@test "fleet_cost_estimate_live uses interstat delta when DB has newer runs" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_enriched_fixture "$registry"
+    _source_fleet "$registry"
+
+    # Create mock DB and add a post-enrichment run
+    local db="$TEST_DIR/metrics.db"
+    _create_mock_interstat "$db"
+    # Add a run after the enrichment timestamp (2026-02-15)
+    sqlite3 "$db" "INSERT INTO agent_runs (timestamp, session_id, agent_name, subagent_type, input_tokens, output_tokens, total_tokens, model)
+      VALUES ('2026-03-01T10:00:00Z', 's10', 'test-reviewer-a', 'test-plugin:review:test-reviewer-a', 18000, 27000, 45000, 'claude-sonnet-4-6');"
+
+    INTERSTAT_DB="$db" run fleet_cost_estimate_live test-reviewer-a claude-sonnet-4-6
+    [[ "$status" -eq 0 ]]
+    # Weighted average: (38600*5 + 45000*1) / 6 = 39666 (bash integer truncation)
+    [[ "$output" -eq 39666 ]]
+}
+
+@test "fleet_cost_estimate_live defaults to preferred model when model not specified" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_enriched_fixture "$registry"
+    _source_fleet "$registry"
+
+    # test-reviewer-a preferred model is sonnet → maps to claude-sonnet-4-6
+    run fleet_cost_estimate_live test-reviewer-a
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == "38600" ]]
+}

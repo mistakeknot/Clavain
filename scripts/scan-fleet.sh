@@ -10,12 +10,15 @@
 #
 # Usage:
 #   scan-fleet.sh [--dry-run] [--in-place] [--include-local] [--registry PATH]
+#   scan-fleet.sh --enrich-costs [--interstat-db PATH] [--registry PATH] [--dry-run] [--in-place]
 #
 # Options:
 #   --dry-run        Show what would change without modifying anything
 #   --in-place       Update fleet-registry.yaml atomically (temp file + mv)
 #   --include-local  Include .claude/agents/ project-local agents
 #   --registry PATH  Path to fleet-registry.yaml (default: auto-detect)
+#   --enrich-costs   Query interstat DB and write per-agent×model cost stats
+#   --interstat-db   Path to interstat SQLite DB (default: ~/.claude/interstat/metrics.db)
 #
 # Known limitation: Agent renames (fd-old → fd-new) orphan the old entry's
 # curated fields. No automatic migration. --dry-run makes this visible.
@@ -76,6 +79,130 @@ _derive_category() {
   esac
 }
 
+# --- Enrich with interstat cost data ---
+_enrich_costs() {
+  local registry="$1"
+  local db="$2"
+  local dry_run="$3"
+  local in_place="$4"
+
+  if [[ ! -f "$db" ]]; then
+    echo "scan-fleet: interstat DB not found at $db — skipping enrichment" >&2
+    return 0
+  fi
+
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    echo "scan-fleet: sqlite3 not found — cannot enrich costs" >&2
+    return 0
+  fi
+
+  # Query all (agent_name, model) pairs with their stats
+  local rows
+  rows="$(sqlite3 -separator '|' "$db" "
+    SELECT
+      agent_name,
+      model,
+      COUNT(*) as run_count,
+      CAST(ROUND(AVG(total_tokens)) AS INTEGER) as mean_tokens
+    FROM agent_runs
+    WHERE total_tokens IS NOT NULL AND model IS NOT NULL
+    GROUP BY agent_name, model
+    ORDER BY agent_name, model;
+  " 2>/dev/null)" || {
+    echo "scan-fleet: failed to query interstat DB" >&2
+    return 0
+  }
+
+  if [[ -z "$rows" ]]; then
+    echo "scan-fleet: no agent run data in interstat DB"
+    return 0
+  fi
+
+  # Work on a temp copy for atomic writes
+  local work_file="$registry"
+  local tmp_file=""
+  if [[ "$dry_run" != true && "$in_place" == true ]]; then
+    tmp_file="$(mktemp "${registry}.XXXXXX")"
+    cp "$registry" "$tmp_file"
+    work_file="$tmp_file"
+  fi
+
+  if [[ "$dry_run" == true ]]; then
+    echo "=== ENRICHMENT DRY RUN ==="
+    echo ""
+  fi
+
+  while IFS='|' read -r agent_name model run_count mean_tokens; do
+    [[ -z "$agent_name" ]] && continue
+
+    # Check if agent exists in registry
+    local exists
+    exists="$(id="$agent_name" yq '.agents[env(id)] != null' "$work_file")"
+    [[ "$exists" != "true" ]] && continue
+
+    # Compute p50 and p90 via ORDER BY + OFFSET
+    local p50 p90
+    p50="$(sqlite3 "$db" "
+      SELECT total_tokens FROM agent_runs
+      WHERE agent_name='${agent_name}' AND model='${model}' AND total_tokens IS NOT NULL
+      ORDER BY total_tokens ASC
+      LIMIT 1 OFFSET CAST(${run_count} * 0.5 AS INTEGER)
+    " 2>/dev/null)" || p50="$mean_tokens"
+    [[ -z "$p50" ]] && p50="$mean_tokens"
+
+    p90="$(sqlite3 "$db" "
+      SELECT total_tokens FROM agent_runs
+      WHERE agent_name='${agent_name}' AND model='${model}' AND total_tokens IS NOT NULL
+      ORDER BY total_tokens ASC
+      LIMIT 1 OFFSET CAST(${run_count} * 0.9 AS INTEGER)
+    " 2>/dev/null)" || p90="$mean_tokens"
+    # Clamp: if offset >= count, use last row
+    if [[ -z "$p90" ]]; then
+      p90="$(sqlite3 "$db" "
+        SELECT total_tokens FROM agent_runs
+        WHERE agent_name='${agent_name}' AND model='${model}' AND total_tokens IS NOT NULL
+        ORDER BY total_tokens DESC LIMIT 1
+      " 2>/dev/null)" || p90="$mean_tokens"
+    fi
+
+    local preliminary=false
+    [[ "$run_count" -lt 3 ]] && preliminary=true
+
+    if [[ "$dry_run" == true ]]; then
+      local flag=""
+      [[ "$preliminary" == true ]] && flag=" (preliminary)"
+      echo "  ${agent_name} × ${model}: mean=${mean_tokens} p50=${p50} p90=${p90} runs=${run_count}${flag}"
+    else
+      id="$agent_name" m="$model" mean="$mean_tokens" p50v="$p50" p90v="$p90" runs="$run_count" yq -i '
+        .agents[env(id)].models.actual_tokens[env(m)].mean = (env(mean) | tonumber) |
+        .agents[env(id)].models.actual_tokens[env(m)].p50 = (env(p50v) | tonumber) |
+        .agents[env(id)].models.actual_tokens[env(m)].p90 = (env(p90v) | tonumber) |
+        .agents[env(id)].models.actual_tokens[env(m)].runs = (env(runs) | tonumber)
+      ' "$work_file"
+
+      if [[ "$preliminary" == true ]]; then
+        id="$agent_name" m="$model" yq -i '
+          .agents[env(id)].models.actual_tokens[env(m)].preliminary = true
+        ' "$work_file"
+      fi
+    fi
+  done <<< "$rows"
+
+  # Write last_enrichment timestamp
+  if [[ "$dry_run" != true ]]; then
+    local now
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    ts="$now" yq -i '.last_enrichment = env(ts)' "$work_file"
+
+    if [[ "$in_place" == true && -n "$tmp_file" ]]; then
+      mv "$tmp_file" "$registry"
+      echo "scan-fleet: enriched $registry with interstat cost data"
+    else
+      cat "$work_file"
+    fi
+  fi
+}
+
 # --- Main scan logic ---
 main() {
   _ensure_yq
@@ -84,6 +211,8 @@ main() {
   local in_place=false
   local include_local=false
   local registry_path=""
+  local enrich_costs=false
+  local interstat_db=""
 
   # Parse args
   while [[ $# -gt 0 ]]; do
@@ -92,6 +221,8 @@ main() {
       --in-place) in_place=true; shift ;;
       --include-local) include_local=true; shift ;;
       --registry) registry_path="$2"; shift 2 ;;
+      --enrich-costs) enrich_costs=true; shift ;;
+      --interstat-db) interstat_db="$2"; shift 2 ;;
       --help|-h)
         sed -n '2,/^$/{ s/^# //; s/^#//; p }' "${BASH_SOURCE[0]}"
         exit 0 ;;
@@ -115,6 +246,15 @@ main() {
   fi
 
   registry_path="$(cd "$(dirname "$registry_path")" && pwd)/$(basename "$registry_path")"
+
+  # --- Enrichment mode (separate from scan) ---
+  if [[ "$enrich_costs" == true ]]; then
+    if [[ -z "$interstat_db" ]]; then
+      interstat_db="${HOME}/.claude/interstat/metrics.db"
+    fi
+    _enrich_costs "$registry_path" "$interstat_db" "$dry_run" "$in_place"
+    return $?
+  fi
 
   # Load existing registry into temp file for merging
   local existing_tmp

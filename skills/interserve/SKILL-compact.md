@@ -4,7 +4,7 @@ Dispatch tasks to Codex CLI agents. Claude orchestrates — planning, dispatchin
 
 ## Prerequisites
 
-Codex CLI installed (`which codex`). If unavailable, fall back to `clavain:subagent-driven-development`.
+Codex CLI installed (`command -v codex`). If unavailable, fall back to `clavain:subagent-driven-development`.
 
 ## Step 0: Resolve dispatch.sh
 

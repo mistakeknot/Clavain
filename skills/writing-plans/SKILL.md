@@ -172,11 +172,11 @@ Evaluate the plan you just wrote:
 | 3+ tasks with dependencies + `.exec.yaml` generated | Orchestrated Delegation |
 | 3+ independent implementation tasks (no manifest) | Codex Delegation |
 | Tasks have clear file lists + test commands | Codex Delegation or Orchestrated |
-| Codex CLI not available (`which codex` fails) | Subagent-Driven |
+| Codex CLI not available (`command -v codex` fails) | Subagent-Driven |
 
 ### Step 2: Check Codex Availability
 
-Before recommending Codex Delegation, verify: `which codex`
+Before recommending Codex Delegation, verify: `command -v codex`
 
 If Codex is not installed, exclude option 3 and recommend between options 1 and 2 only.
 

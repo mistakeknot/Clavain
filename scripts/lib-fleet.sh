@@ -17,6 +17,7 @@
 #   fleet_by_source <plugin>                — agents from a plugin
 #   fleet_by_role <role>                    — agents that can fulfill an agency-spec role
 #   fleet_cost_estimate <agent_id>          — cold_start_tokens for an agent (integer to stdout)
+#   fleet_cost_estimate_live <id> [model]   — live cost estimate (registry + interstat delta)
 #   fleet_within_budget <max_tokens> [cat]  — agents whose cold_start_tokens <= budget
 #   fleet_check_coverage <cap...>           — exit 0 if ALL capabilities covered; exit 1 + prints missing to stderr
 #
@@ -224,4 +225,98 @@ fleet_check_coverage() {
     fi
   done
   return "$missing"
+}
+
+# Live cost estimate: registry actual_tokens + interstat delta overlay.
+# Returns mean token estimate (integer to stdout) for agent+model pair.
+# Falls back: actual_tokens → cold_start_tokens → error.
+# When INTERSTAT_DB env var points to a valid SQLite DB with runs newer than
+# last_enrichment, returns a weighted average of registry baseline + delta.
+fleet_cost_estimate_live() {
+  local agent_id="${1:?usage: fleet_cost_estimate_live <agent_id> [model]}"
+  local model="${2:-}"
+  _fleet_init || return 1
+  _fleet_check || return 1
+
+  # Verify agent exists
+  local exists
+  exists="$(id="$agent_id" yq '.agents[env(id)] != null' "$_FLEET_REGISTRY_PATH")"
+  if [[ "$exists" != "true" ]]; then
+    echo "lib-fleet: agent '$agent_id' not found" >&2
+    return 1
+  fi
+
+  # Default to preferred model mapped to full model ID
+  if [[ -z "$model" ]]; then
+    model="$(id="$agent_id" yq '.agents[env(id)].models.preferred // "sonnet"' "$_FLEET_REGISTRY_PATH")"
+  fi
+  # Map short model names to full IDs for DB queries
+  case "$model" in
+    sonnet) model="claude-sonnet-4-6" ;;
+    opus)   model="claude-opus-4-6" ;;
+    haiku)  model="claude-haiku-4-5" ;;
+  esac
+
+  local _fleet_interstat_db="${INTERSTAT_DB:-${HOME}/.claude/interstat/metrics.db}"
+
+  # Try interstat delta: check for runs newer than last_enrichment
+  if [[ -f "$_fleet_interstat_db" ]] && command -v sqlite3 >/dev/null 2>&1; then
+    # Read last_enrichment without yq (grep/sed per PRD requirement)
+    local last_enrichment=""
+    last_enrichment="$(grep '^last_enrichment:' "$_FLEET_REGISTRY_PATH" 2>/dev/null | sed 's/^last_enrichment: *//' | tr -d '"' | tr -d "'")" || true
+
+    if [[ -n "$last_enrichment" ]]; then
+      local delta_result
+      delta_result="$(sqlite3 -separator '|' "$_fleet_interstat_db" "
+        SELECT CAST(ROUND(AVG(total_tokens)) AS INTEGER), COUNT(*)
+        FROM agent_runs
+        WHERE agent_name='${agent_id}' AND model='${model}'
+          AND total_tokens IS NOT NULL
+          AND timestamp > '${last_enrichment}'
+      " 2>/dev/null)" || delta_result=""
+
+      if [[ -n "$delta_result" && "$delta_result" != "|0" ]]; then
+        local delta_mean delta_count
+        delta_mean="${delta_result%%|*}"
+        delta_count="${delta_result##*|}"
+
+        if [[ "$delta_count" -gt 0 && -n "$delta_mean" ]]; then
+          # Get registry baseline stats
+          local reg_mean reg_runs
+          reg_mean="$(id="$agent_id" m="$model" yq '.agents[env(id)].models.actual_tokens[env(m)].mean // 0' "$_FLEET_REGISTRY_PATH")" || reg_mean=0
+          reg_runs="$(id="$agent_id" m="$model" yq '.agents[env(id)].models.actual_tokens[env(m)].runs // 0' "$_FLEET_REGISTRY_PATH")" || reg_runs=0
+
+          if [[ "$reg_runs" -gt 0 ]]; then
+            # Weighted average: combine registry baseline + delta
+            local total_runs=$((reg_runs + delta_count))
+            local combined=$(( (reg_mean * reg_runs + delta_mean * delta_count) / total_runs ))
+            echo "$combined"
+            return 0
+          else
+            echo "$delta_mean"
+            return 0
+          fi
+        fi
+      fi
+    fi
+  fi
+
+  # Fallback: registry actual_tokens (static baseline)
+  local actual
+  actual="$(id="$agent_id" m="$model" yq '.agents[env(id)].models.actual_tokens[env(m)].mean // ""' "$_FLEET_REGISTRY_PATH")" || actual=""
+  if [[ -n "$actual" && "$actual" != "null" && "$actual" != "" ]]; then
+    echo "$actual"
+    return 0
+  fi
+
+  # Fallback: cold_start_tokens
+  local cold
+  cold="$(id="$agent_id" yq '.agents[env(id)].cold_start_tokens // ""' "$_FLEET_REGISTRY_PATH")" || cold=""
+  if [[ -n "$cold" && "$cold" != "null" ]]; then
+    echo "$cold"
+    return 0
+  fi
+
+  echo "lib-fleet: no cost data for '$agent_id' (model=$model)" >&2
+  return 1
 }

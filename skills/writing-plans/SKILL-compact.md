@@ -33,7 +33,7 @@ After saving, analyze and recommend via AskUserQuestion:
 | 3+ independent with clear file lists | Codex Delegation |
 | User wants manual checkpoints | Parallel Session |
 
-Check `which codex` before recommending Codex. Put recommended option first with "(Recommended)".
+Check `command -v codex` before recommending Codex. Put recommended option first with "(Recommended)".
 
 **Execute based on choice:**
 - Subagent-Driven → `clavain:subagent-driven-development`
