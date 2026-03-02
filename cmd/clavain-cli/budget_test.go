@@ -371,3 +371,54 @@ func TestReadCalibrationMalformed(t *testing.T) {
 		t.Errorf("readCalibration() with empty phases = %+v, want nil", got)
 	}
 }
+
+func TestRemainingEstimateUSDModelAware(t *testing.T) {
+	// Create calibration with per-model breakdowns
+	tmpDir := t.TempDir()
+	clavainDir := filepath.Join(tmpDir, ".clavain")
+	os.MkdirAll(clavainDir, 0755)
+
+	cal := PhaseCalibration{
+		CalibratedAt: "2026-03-01T00:00:00Z",
+		RunCount:     10,
+		Phases: map[string]PhaseCalibData{
+			"executing": {
+				Runs:         5,
+				InputTokens:  100000,
+				OutputTokens: 50000,
+				Models: map[string]ModelCalibData{
+					"claude-opus-4-6":   {Runs: 2, InputTokens: 60000, OutputTokens: 30000},
+					"claude-sonnet-4-6": {Runs: 3, InputTokens: 40000, OutputTokens: 20000},
+				},
+			},
+		},
+	}
+	data, _ := json.Marshal(cal)
+	os.WriteFile(filepath.Join(clavainDir, "phase-cost-calibration.json"), data, 0644)
+	t.Setenv("SPRINT_LIB_PROJECT_DIR", tmpDir)
+
+	// Model-aware estimate for "executing" should use opus+sonnet pricing
+	modelAware := remainingEstimateUSD([]string{"executing"}, "claude-sonnet-4-6")
+
+	// Reset to no calibration for comparison
+	t.Setenv("SPRINT_LIB_PROJECT_DIR", t.TempDir())
+	defaultEst := remainingEstimateUSD([]string{"executing"}, "claude-sonnet-4-6")
+
+	// Model-aware should differ from default (opus is more expensive)
+	if modelAware == defaultEst {
+		t.Errorf("model-aware estimate (%.4f) should differ from default (%.4f)", modelAware, defaultEst)
+	}
+
+	// Model-aware should be > 0
+	if modelAware <= 0 {
+		t.Errorf("model-aware estimate = %.4f, want > 0", modelAware)
+	}
+
+	// Specifically: opus portion (60k in, 30k out) = 60k*15/1M + 30k*75/1M = 0.9 + 2.25 = 3.15
+	// Sonnet portion (40k in, 20k out) = 40k*3/1M + 20k*15/1M = 0.12 + 0.30 = 0.42
+	// Total = 3.57
+	expected := 3.57
+	if math.Abs(modelAware-expected) > 0.01 {
+		t.Errorf("model-aware estimate = %.4f, want ~%.2f", modelAware, expected)
+	}
+}

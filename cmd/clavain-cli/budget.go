@@ -22,7 +22,17 @@ type PhaseCalibration struct {
 }
 
 // PhaseCalibData holds the calibrated estimate for a single phase.
+// InputTokens/OutputTokens are aggregate per-run averages.
+// Models holds per-model breakdowns for model-aware USD estimation.
 type PhaseCalibData struct {
+	Runs         int64                     `json:"runs"`
+	InputTokens  int64                     `json:"input_tokens"`
+	OutputTokens int64                     `json:"output_tokens"`
+	Models       map[string]ModelCalibData `json:"models,omitempty"`
+}
+
+// ModelCalibData holds per-model token averages for a single phase.
+type ModelCalibData struct {
 	Runs         int64 `json:"runs"`
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
@@ -179,18 +189,33 @@ func tokensToUSD(model string, inputTokens, outputTokens int64) float64 {
 }
 
 // remainingEstimateUSD sums phaseCostEstimate for each phase and converts to USD.
-// Uses the given model for pricing (typically "claude-sonnet-4-6").
+// When calibration has per-model breakdowns, uses actual model mix for pricing.
+// Falls back to the given model for pricing (typically "claude-sonnet-4-6").
 func remainingEstimateUSD(phases []string, model string) float64 {
 	if len(phases) == 0 {
 		return 0
 	}
-	var totalInput, totalOutput int64
+
+	// Try model-aware estimation from calibration
+	cal := readCalibration()
+	var totalUSD float64
 	for _, phase := range phases {
-		est := phaseCostEstimate(phase)
-		totalInput += est * 60 / 100
-		totalOutput += est - (est * 60 / 100)
+		if cal != nil {
+			if pd, ok := cal.Phases[phase]; ok && pd.Runs >= 3 && len(pd.Models) > 0 {
+				// Use per-model pricing from calibration
+				for m, md := range pd.Models {
+					totalUSD += tokensToUSD(m, md.InputTokens, md.OutputTokens)
+				}
+				continue
+			}
+		}
+		// Fallback: use aggregate estimate with default model pricing
+		est := phaseCostDefault(phase)
+		inTok := est * 60 / 100
+		outTok := est - inTok
+		totalUSD += tokensToUSD(model, inTok, outTok)
 	}
-	return tokensToUSD(model, totalInput, totalOutput)
+	return math.Round(totalUSD*10000) / 10000
 }
 
 // CostSnapshot mirrors cost-query.sh cost-snapshot output.
@@ -714,7 +739,8 @@ func cmdRecordCostEstimate(args []string) error {
 }
 
 // cmdCalibratePhaseCosts reads historical per-phase token data from interstat,
-// computes per-run averages, and writes .clavain/phase-cost-calibration.json.
+// computes per-run averages (aggregate + per-model), and writes
+// .clavain/phase-cost-calibration.json.
 // This is Stage 3 of the closed-loop pattern: calibrate from history.
 // Silent on failure — defaults remain active (Stage 4).
 func cmdCalibratePhaseCosts(args []string) error {
@@ -724,20 +750,28 @@ func cmdCalibratePhaseCosts(args []string) error {
 		return nil
 	}
 
-	// Query actual per-phase token usage from interstat
-	out, err := runCommand("bash", script, "by-phase")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "by-phase query failed — skipping calibration")
-		return nil
-	}
-
-	// Parse the by-phase JSON array
 	type phaseRow struct {
 		Phase        string `json:"phase"`
 		Runs         int64  `json:"runs"`
 		Tokens       int64  `json:"tokens"`
 		InputTokens  int64  `json:"input_tokens"`
 		OutputTokens int64  `json:"output_tokens"`
+	}
+
+	type phaseModelRow struct {
+		Phase        string `json:"phase"`
+		Model        string `json:"model"`
+		Runs         int64  `json:"runs"`
+		Tokens       int64  `json:"tokens"`
+		InputTokens  int64  `json:"input_tokens"`
+		OutputTokens int64  `json:"output_tokens"`
+	}
+
+	// Query aggregate per-phase data
+	out, err := runCommand("bash", script, "by-phase")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "by-phase query failed — skipping calibration")
+		return nil
 	}
 
 	outStr := strings.TrimSpace(string(out))
@@ -757,7 +791,7 @@ func cmdCalibratePhaseCosts(args []string) error {
 		return nil
 	}
 
-	// Compute per-run averages for each phase
+	// Build aggregate per-phase averages
 	phases := make(map[string]PhaseCalibData, len(rows))
 	var totalRuns int64
 	for _, r := range rows {
@@ -775,6 +809,35 @@ func cmdCalibratePhaseCosts(args []string) error {
 	if len(phases) == 0 {
 		fmt.Println("no valid phase data — calibration skipped")
 		return nil
+	}
+
+	// Query per-phase-model breakdown (best-effort — aggregate is sufficient)
+	modelOut, err := runCommand("bash", script, "by-phase-model")
+	if err == nil {
+		modelStr := strings.TrimSpace(string(modelOut))
+		if modelStr != "" && modelStr != "[]" && modelStr != "null" {
+			var modelRows []phaseModelRow
+			if json.Unmarshal(modelOut, &modelRows) == nil {
+				for _, mr := range modelRows {
+					if mr.Runs <= 0 || mr.Phase == "" || mr.Model == "" {
+						continue
+					}
+					pd, ok := phases[mr.Phase]
+					if !ok {
+						continue
+					}
+					if pd.Models == nil {
+						pd.Models = make(map[string]ModelCalibData)
+					}
+					pd.Models[mr.Model] = ModelCalibData{
+						Runs:         mr.Runs,
+						InputTokens:  mr.InputTokens / mr.Runs,
+						OutputTokens: mr.OutputTokens / mr.Runs,
+					}
+					phases[mr.Phase] = pd
+				}
+			}
+		}
 	}
 
 	cal := PhaseCalibration{
