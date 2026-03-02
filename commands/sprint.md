@@ -161,6 +161,8 @@ If discovery finds actionable beads, present them to the user before starting th
 
 **Phase:** After brainstorm doc is created, set `phase=brainstorm` with reason `"Brainstorm: <doc_path>"`.
 
+**Cost estimate:** `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-cost-estimate "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null || true`
+
 ## Step 2: Strategize
 `/clavain:strategy`
 
@@ -178,6 +180,8 @@ Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it'
 **Note:** When interserve mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 5 (execute) — the plan has already been executed.
 
 **Phase:** After plan is written, set `phase=planned` with reason `"Plan: <plan_path>"`.
+
+**Cost estimate:** `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-cost-estimate "$CLAVAIN_BEAD_ID" "planned" 2>/dev/null || true`
 
 ## Step 4: Review Plan (gates execution)
 
@@ -210,6 +214,8 @@ fi
 Run `/clavain:work <plan-file-from-step-3>`
 
 **Phase:** At the START of execution (before work begins), set `phase=executing` with reason `"Executing: <plan_path>"`.
+
+**Cost estimate:** `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-cost-estimate "$CLAVAIN_BEAD_ID" "executing" 2>/dev/null || true`
 
 **Parallel execution:** When the plan has independent modules, dispatch them in parallel using the `dispatching-parallel-agents` skill. This is automatic when interserve mode is active (executing-plans detects the flag and dispatches Codex agents).
 
@@ -298,7 +304,8 @@ if [[ "$swept" -gt 0 ]]; then
 fi
 ```
 
-**Sprint summary:** At completion, display:
+**Sprint summary:** At completion, display the standard summary plus a per-model cost table:
+
 ```
 Sprint Summary:
 - Bead: <CLAVAIN_BEAD_ID>
@@ -309,6 +316,38 @@ Sprint Summary:
 - Estimated tokens: <verdict_total_tokens output>
 - Swept: <swept> child beads auto-closed
 ```
+
+**Cost table:** Query interstat for per-model USD breakdown and record actuals:
+
+```bash
+# Locate cost-query.sh (plugin cache → monorepo fallback)
+_cost_script=""
+_candidate="${CLAUDE_PLUGIN_ROOT}/../interstat/scripts/cost-query.sh"
+[[ -f "$_candidate" ]] && _cost_script="$_candidate"
+if [[ -z "$_cost_script" && -n "${CLAVAIN_SOURCE_DIR:-}" ]]; then
+    _candidate="${CLAVAIN_SOURCE_DIR}/../../interverse/interstat/scripts/cost-query.sh"
+    [[ -f "$_candidate" ]] && _cost_script="$_candidate"
+fi
+
+if [[ -n "$_cost_script" ]]; then
+    _cost_rows=$(bash "$_cost_script" cost-usd --bead="$CLAVAIN_BEAD_ID" 2>/dev/null) || _cost_rows=""
+fi
+```
+
+If `_cost_rows` is non-empty and not `[]`, display a table:
+
+```
+Cost Breakdown:
+  Model                   | Runs | Input Tokens | Output Tokens | Cost USD
+  ------------------------|------|--------------|---------------|----------
+  claude-opus-4-6         |   12 |      850,000 |       420,000 |  $44.25
+  claude-sonnet-4-6       |   35 |    1,200,000 |       600,000 |  $12.60
+  TOTAL                   |   47 |    2,050,000 |     1,020,000 |  $56.85
+```
+
+Then record actuals: `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-cost-actuals "$CLAVAIN_BEAD_ID" 2>/dev/null || true`
+
+If `_cost_rows` is empty or `[]`, display: `(no cost data — bead attribution not active)`
 
 ## Error Recovery
 

@@ -3,9 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ─── Pure Functions (no subprocess calls — unit testable) ───────────
@@ -79,6 +82,87 @@ func stageAllocation(totalBudget int64, sharePct int, minTokens int64) int64 {
 
 // allStages is the ordered list of macro-stages for budget allocation.
 var allStages = []string{"discover", "design", "build", "ship", "reflect"}
+
+// allPhases is the canonical ordered phase sequence for a sprint.
+var allPhases = []string{
+	"brainstorm", "brainstorm-reviewed", "strategized", "planned",
+	"plan-reviewed", "executing", "shipping", "reflect", "done",
+}
+
+// phasesAfter returns the phases remaining after currentPhase (exclusive).
+// Unknown phase returns all phases (conservative — assumes nothing done).
+func phasesAfter(currentPhase string) []string {
+	for i, p := range allPhases {
+		if p == currentPhase {
+			if i+1 >= len(allPhases) {
+				return nil
+			}
+			return allPhases[i+1:]
+		}
+	}
+	return allPhases // unknown phase → return all (conservative)
+}
+
+// tokensToUSD converts token counts to USD using API pricing.
+// Matches cost-query.sh pricing: opus $15/$75, sonnet $3/$15, haiku $1/$5 per million.
+func tokensToUSD(model string, inputTokens, outputTokens int64) float64 {
+	var inputRate, outputRate float64
+	switch {
+	case strings.Contains(model, "opus-4"):
+		inputRate, outputRate = 15.0, 75.0
+	case strings.Contains(model, "sonnet-4"):
+		inputRate, outputRate = 3.0, 15.0
+	case strings.Contains(model, "haiku-4"):
+		inputRate, outputRate = 1.0, 5.0
+	default:
+		inputRate, outputRate = 3.0, 15.0 // default to sonnet pricing
+	}
+	cost := float64(inputTokens)*inputRate/1_000_000 + float64(outputTokens)*outputRate/1_000_000
+	return math.Round(cost*10000) / 10000
+}
+
+// remainingEstimateUSD sums phaseCostEstimate for each phase and converts to USD.
+// Uses the given model for pricing (typically "claude-sonnet-4-6").
+func remainingEstimateUSD(phases []string, model string) float64 {
+	if len(phases) == 0 {
+		return 0
+	}
+	var totalInput, totalOutput int64
+	for _, phase := range phases {
+		est := phaseCostEstimate(phase)
+		totalInput += est * 60 / 100
+		totalOutput += est - (est * 60 / 100)
+	}
+	return tokensToUSD(model, totalInput, totalOutput)
+}
+
+// CostSnapshot mirrors cost-query.sh cost-snapshot output.
+type CostSnapshot struct {
+	BeadID       string           `json:"bead_id"`
+	CapturedAt   string           `json:"captured_at"`
+	TotalCostUSD float64          `json:"total_cost_usd"`
+	ByModel      []CostModelEntry `json:"by_model"`
+	PhasesSeen   []string         `json:"phases_seen"`
+}
+
+// CostModelEntry is one row of per-model cost data.
+type CostModelEntry struct {
+	Model        string  `json:"model"`
+	Runs         int64   `json:"runs"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	CostUSD      float64 `json:"cost_usd"`
+}
+
+// CostEstimateEntry records a point-in-time cost estimate for tracking accuracy.
+type CostEstimateEntry struct {
+	Phase             string  `json:"phase"`
+	Timestamp         string  `json:"timestamp"`
+	EstimatedTotalUSD float64 `json:"estimated_total_usd"`
+	ActualSoFarUSD    float64 `json:"actual_so_far_usd"`
+	RemainingEstUSD   float64 `json:"remaining_estimate_usd"`
+	EstimationSource  string  `json:"estimation_source"`
+}
 
 // ─── Subprocess Helpers ─────────────────────────────────────────────
 
@@ -440,6 +524,135 @@ func cmdRecordPhaseTokens(args []string) error {
 
 	// ic state set reads JSON from stdin
 	writeICState("phase_tokens", runID, string(data))
+	return nil
+}
+
+// ─── Cost Recording Commands ────────────────────────────────────────
+
+// findInterstatScript locates cost-query.sh across environments.
+// Resolution: plugin cache → CLAVAIN_SOURCE_DIR → empty (skip).
+func findInterstatScript() string {
+	// Plugin cache (Claude Code sessions)
+	pluginRoot := os.Getenv("CLAUDE_PLUGIN_ROOT")
+	if pluginRoot != "" {
+		// interstat lives alongside clavain in the plugin cache
+		candidate := filepath.Join(filepath.Dir(pluginRoot), "interstat", "scripts", "cost-query.sh")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	// CLAVAIN_SOURCE_DIR (development / monorepo)
+	sourceDir := os.Getenv("CLAVAIN_SOURCE_DIR")
+	if sourceDir != "" {
+		candidate := filepath.Join(sourceDir, "..", "..", "interverse", "interstat", "scripts", "cost-query.sh")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	return ""
+}
+
+// cmdRecordCostActuals persists a full cost snapshot for a bead.
+// Best-effort: silent on failure.
+func cmdRecordCostActuals(args []string) error {
+	if len(args) < 1 || args[0] == "" {
+		return nil
+	}
+	beadID := args[0]
+
+	script := findInterstatScript()
+	if script == "" {
+		return nil
+	}
+
+	// Run cost-snapshot query
+	out, err := runCommand("bash", script, "cost-snapshot", "--bead="+beadID)
+	if err != nil {
+		return nil
+	}
+
+	// Validate JSON
+	var snapshot CostSnapshot
+	if err := json.Unmarshal(out, &snapshot); err != nil {
+		return nil
+	}
+
+	runID, err := resolveRunID(beadID)
+	if err != nil {
+		return nil
+	}
+
+	// Persist full snapshot to ic state
+	writeICState("cost_actuals", runID, string(out))
+
+	// Set scalar on bead for quick lookup
+	totalStr := strconv.FormatFloat(snapshot.TotalCostUSD, 'f', 4, 64)
+	_, _ = runBD("set-state", beadID, "cost_usd="+totalStr)
+
+	return nil
+}
+
+// cmdRecordCostEstimate records a point-in-time cost estimate for a phase.
+// Appends to the cost_estimates array (read-append-write).
+// Best-effort: silent on failure.
+func cmdRecordCostEstimate(args []string) error {
+	if len(args) < 2 || args[0] == "" || args[1] == "" {
+		return nil
+	}
+	beadID := args[0]
+	phase := args[1]
+
+	runID, err := resolveRunID(beadID)
+	if err != nil {
+		return nil
+	}
+
+	// Get actual spend so far via cost-snapshot
+	var actualUSD float64
+	script := findInterstatScript()
+	if script != "" {
+		out, err := runCommand("bash", script, "cost-snapshot", "--bead="+beadID)
+		if err == nil {
+			var snapshot CostSnapshot
+			if json.Unmarshal(out, &snapshot) == nil {
+				actualUSD = snapshot.TotalCostUSD
+			}
+		}
+	}
+
+	// Compute remaining estimate
+	remaining := phasesAfter(phase)
+	remainingUSD := remainingEstimateUSD(remaining, "claude-sonnet-4-6")
+
+	entry := CostEstimateEntry{
+		Phase:             phase,
+		Timestamp:         time.Now().UTC().Format(time.RFC3339),
+		EstimatedTotalUSD: math.Round((actualUSD+remainingUSD)*10000) / 10000,
+		ActualSoFarUSD:    actualUSD,
+		RemainingEstUSD:   remainingUSD,
+		EstimationSource:  "phase-estimate+interstat",
+	}
+
+	// Read existing estimates array
+	var estimates []CostEstimateEntry
+	existingOut, err := runIC("state", "get", "cost_estimates", runID)
+	if err == nil {
+		s := strings.TrimSpace(string(existingOut))
+		if s != "" && s != "null" {
+			_ = json.Unmarshal(existingOut, &estimates)
+		}
+	}
+
+	estimates = append(estimates, entry)
+
+	data, err := json.Marshal(estimates)
+	if err != nil {
+		return nil
+	}
+
+	writeICState("cost_estimates", runID, string(data))
 	return nil
 }
 

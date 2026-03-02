@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestPhaseCostEstimate(t *testing.T) {
 	tests := []struct {
@@ -16,9 +19,9 @@ func TestPhaseCostEstimate(t *testing.T) {
 		{"shipping", 100000},
 		{"reflect", 10000},
 		{"done", 5000},
-		{"unknown", 30000},   // default
-		{"", 30000},          // default (empty)
-		{"garbage", 30000},   // default (unknown phase)
+		{"unknown", 30000},    // default
+		{"", 30000},           // default (empty)
+		{"garbage", 30000},    // default (unknown phase)
 		{"Brainstorm", 30000}, // case-sensitive — capitals fall through to default
 	}
 	for _, tt := range tests {
@@ -43,8 +46,8 @@ func TestPhaseToStage_BudgetCases(t *testing.T) {
 		{"shipping", "ship"},
 		{"reflect", "reflect"},
 		{"done", "done"},
-		{"garbage", "unknown"},  // default
-		{"", "unknown"},         // default (empty)
+		{"garbage", "unknown"},   // default
+		{"", "unknown"},          // default (empty)
 		{"Executing", "unknown"}, // case-sensitive
 	}
 	for _, tt := range tests {
@@ -61,14 +64,14 @@ func TestBudgetRemaining(t *testing.T) {
 		spent  int64
 		want   int64
 	}{
-		{250000, 100000, 150000},   // normal
-		{250000, 250000, 0},         // exactly spent
-		{250000, 300000, 0},         // overspent — clamped to 0
-		{0, 0, 0},                   // zero budget, zero spent
-		{0, 100, 0},                 // zero budget, some spent — clamp
-		{1000000, 0, 1000000},       // nothing spent
-		{1, 1, 0},                   // edge: exactly 1
-		{100, 99, 1},                // edge: 1 remaining
+		{250000, 100000, 150000}, // normal
+		{250000, 250000, 0},      // exactly spent
+		{250000, 300000, 0},      // overspent — clamped to 0
+		{0, 0, 0},                // zero budget, zero spent
+		{0, 100, 0},              // zero budget, some spent — clamp
+		{1000000, 0, 1000000},    // nothing spent
+		{1, 1, 0},                // edge: exactly 1
+		{100, 99, 1},             // edge: 1 remaining
 		{9223372036854775807, 0, 9223372036854775807}, // max int64
 	}
 	for _, tt := range tests {
@@ -185,5 +188,90 @@ func TestPhaseCostEstimateSumsToReasonableTotal(t *testing.T) {
 	// Full sprint estimate: 30k+15k+25k+35k+50k+150k+100k+10k+5k = 420k
 	if total != 420000 {
 		t.Errorf("total phase cost estimate = %d, want 420000", total)
+	}
+}
+
+func TestPhasesAfter(t *testing.T) {
+	tests := []struct {
+		phase string
+		want  []string
+	}{
+		{"brainstorm", []string{"brainstorm-reviewed", "strategized", "planned", "plan-reviewed", "executing", "shipping", "reflect", "done"}},
+		{"executing", []string{"shipping", "reflect", "done"}},
+		{"reflect", []string{"done"}},
+		{"done", nil},          // last phase → nothing remaining
+		{"garbage", allPhases}, // unknown → all phases (conservative)
+		{"", allPhases},        // empty → all phases (conservative)
+	}
+	for _, tt := range tests {
+		got := phasesAfter(tt.phase)
+		if len(got) != len(tt.want) {
+			t.Errorf("phasesAfter(%q) returned %d phases, want %d: %v", tt.phase, len(got), len(tt.want), got)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("phasesAfter(%q)[%d] = %q, want %q", tt.phase, i, got[i], tt.want[i])
+			}
+		}
+	}
+}
+
+func TestTokensToUSD(t *testing.T) {
+	tests := []struct {
+		model  string
+		input  int64
+		output int64
+		want   float64
+	}{
+		// Opus: $15/M in + $75/M out
+		{"claude-opus-4-6", 1_000_000, 1_000_000, 90.0},
+		{"claude-opus-4-6", 100_000, 50_000, 5.25},
+		// Sonnet: $3/M in + $15/M out
+		{"claude-sonnet-4-6", 1_000_000, 1_000_000, 18.0},
+		{"claude-sonnet-4-6", 500_000, 200_000, 4.5},
+		// Haiku: $1/M in + $5/M out
+		{"claude-haiku-4-5-20251001", 1_000_000, 1_000_000, 6.0},
+		// Default (unknown model) → sonnet pricing
+		{"unknown-model", 1_000_000, 1_000_000, 18.0},
+		// Zero tokens
+		{"claude-opus-4-6", 0, 0, 0},
+	}
+	for _, tt := range tests {
+		got := tokensToUSD(tt.model, tt.input, tt.output)
+		if math.Abs(got-tt.want) > 0.0001 {
+			t.Errorf("tokensToUSD(%q, %d, %d) = %.4f, want %.4f",
+				tt.model, tt.input, tt.output, got, tt.want)
+		}
+	}
+}
+
+func TestRemainingEstimateUSD(t *testing.T) {
+	// All phases should produce a positive estimate
+	allEst := remainingEstimateUSD(allPhases, "claude-sonnet-4-6")
+	if allEst <= 0 {
+		t.Errorf("remainingEstimateUSD(allPhases) = %.4f, want > 0", allEst)
+	}
+
+	// Nil/empty phases should produce 0
+	nilEst := remainingEstimateUSD(nil, "claude-sonnet-4-6")
+	if nilEst != 0 {
+		t.Errorf("remainingEstimateUSD(nil) = %.4f, want 0", nilEst)
+	}
+	emptyEst := remainingEstimateUSD([]string{}, "claude-sonnet-4-6")
+	if emptyEst != 0 {
+		t.Errorf("remainingEstimateUSD(empty) = %.4f, want 0", emptyEst)
+	}
+
+	// Fewer phases → smaller estimate
+	fewerEst := remainingEstimateUSD([]string{"reflect", "done"}, "claude-sonnet-4-6")
+	if fewerEst >= allEst {
+		t.Errorf("remainingEstimateUSD([reflect,done]) = %.4f, should be < allPhases %.4f", fewerEst, allEst)
+	}
+
+	// Opus pricing should produce higher estimates than sonnet
+	opusEst := remainingEstimateUSD(allPhases, "claude-opus-4-6")
+	if opusEst <= allEst {
+		t.Errorf("remainingEstimateUSD(opus) = %.4f, should be > sonnet %.4f", opusEst, allEst)
 	}
 }

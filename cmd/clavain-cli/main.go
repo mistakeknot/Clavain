@@ -39,6 +39,10 @@ func main() {
 		err = cmdStageTokensSpent(args)
 	case "sprint-record-phase-tokens":
 		err = cmdRecordPhaseTokens(args)
+	case "record-cost-actuals":
+		err = cmdRecordCostActuals(args)
+	case "record-cost-estimate":
+		err = cmdRecordCostEstimate(args)
 
 	// Phase transitions
 	case "sprint-advance":
@@ -148,6 +152,8 @@ Budget:
   sprint-budget-stage-check     <bead_id> <stage>
   sprint-stage-tokens-spent     <bead_id> <stage>
   sprint-record-phase-tokens    <bead_id> <phase>
+  record-cost-actuals           <bead_id>
+  record-cost-estimate          <bead_id> <phase>
 
 Complexity:
   classify-complexity <bead_id> <description>
