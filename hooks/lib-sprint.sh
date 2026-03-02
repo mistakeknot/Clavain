@@ -329,6 +329,24 @@ sprint_record_phase_completion() {
 # Estimated billing tokens per phase (used when interstat actuals unavailable).
 _sprint_phase_cost_estimate() {
     local phase="${1:-}"
+
+    # Stage 3: read calibration file if available (written by calibrate-phase-costs)
+    local cal_file="${SPRINT_LIB_PROJECT_DIR:-.}/.clavain/phase-cost-calibration.json"
+    if [[ -f "$cal_file" ]]; then
+        local cal_val
+        cal_val=$(jq -r --arg p "$phase" '
+            .phases[$p] // empty |
+            select(.runs >= 3) |
+            (.input_tokens + .output_tokens) |
+            select(. > 0)
+        ' "$cal_file" 2>/dev/null) || cal_val=""
+        if [[ -n "$cal_val" && "$cal_val" != "null" ]]; then
+            echo "$cal_val"
+            return 0
+        fi
+    fi
+
+    # Stage 4: hardcoded defaults (fallback when no calibration data)
     case "$phase" in
         brainstorm)          echo "30000" ;;
         brainstorm-reviewed) echo "15000" ;;

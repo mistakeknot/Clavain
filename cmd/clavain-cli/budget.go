@@ -13,9 +13,66 @@ import (
 
 // ─── Pure Functions (no subprocess calls — unit testable) ───────────
 
+// PhaseCalibration holds calibrated token estimates per phase.
+// Written by calibrate-phase-costs, read by phaseCostEstimate.
+type PhaseCalibration struct {
+	CalibratedAt string                    `json:"calibrated_at"`
+	RunCount     int                       `json:"run_count"`
+	Phases       map[string]PhaseCalibData `json:"phases"`
+}
+
+// PhaseCalibData holds the calibrated estimate for a single phase.
+type PhaseCalibData struct {
+	Runs         int64 `json:"runs"`
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+}
+
+// calibrationFilePath returns the path to the calibration config file.
+// Uses SPRINT_LIB_PROJECT_DIR if set, otherwise ".".
+func calibrationFilePath() string {
+	projectDir := os.Getenv("SPRINT_LIB_PROJECT_DIR")
+	if projectDir == "" {
+		projectDir = "."
+	}
+	return filepath.Join(projectDir, ".clavain", "phase-cost-calibration.json")
+}
+
+// readCalibration reads the calibration file. Returns nil if not found or invalid.
+func readCalibration() *PhaseCalibration {
+	data, err := os.ReadFile(calibrationFilePath())
+	if err != nil {
+		return nil
+	}
+	var cal PhaseCalibration
+	if err := json.Unmarshal(data, &cal); err != nil {
+		return nil
+	}
+	if cal.Phases == nil || len(cal.Phases) == 0 {
+		return nil
+	}
+	return &cal
+}
+
 // phaseCostEstimate returns the estimated billing tokens for a phase.
+// Reads calibration file first; falls back to hardcoded defaults.
 // Matches _sprint_phase_cost_estimate() in lib-sprint.sh.
 func phaseCostEstimate(phase string) int64 {
+	// Stage 3-4: read calibration, fall back to defaults
+	if cal := readCalibration(); cal != nil {
+		if pd, ok := cal.Phases[phase]; ok && pd.Runs >= 3 {
+			total := pd.InputTokens + pd.OutputTokens
+			if total > 0 {
+				return total
+			}
+		}
+	}
+	return phaseCostDefault(phase)
+}
+
+// phaseCostDefault returns the hardcoded default estimate for a phase.
+// These are the stage-1 constants from Feb 2026.
+func phaseCostDefault(phase string) int64 {
 	switch phase {
 	case "brainstorm":
 		return 30000
@@ -653,6 +710,97 @@ func cmdRecordCostEstimate(args []string) error {
 	}
 
 	writeICState("cost_estimates", runID, string(data))
+	return nil
+}
+
+// cmdCalibratePhaseCosts reads historical per-phase token data from interstat,
+// computes per-run averages, and writes .clavain/phase-cost-calibration.json.
+// This is Stage 3 of the closed-loop pattern: calibrate from history.
+// Silent on failure — defaults remain active (Stage 4).
+func cmdCalibratePhaseCosts(args []string) error {
+	script := findInterstatScript()
+	if script == "" {
+		fmt.Fprintln(os.Stderr, "interstat not found — skipping calibration")
+		return nil
+	}
+
+	// Query actual per-phase token usage from interstat
+	out, err := runCommand("bash", script, "by-phase")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "by-phase query failed — skipping calibration")
+		return nil
+	}
+
+	// Parse the by-phase JSON array
+	type phaseRow struct {
+		Phase        string `json:"phase"`
+		Runs         int64  `json:"runs"`
+		Tokens       int64  `json:"tokens"`
+		InputTokens  int64  `json:"input_tokens"`
+		OutputTokens int64  `json:"output_tokens"`
+	}
+
+	outStr := strings.TrimSpace(string(out))
+	if outStr == "" || outStr == "[]" || outStr == "null" {
+		fmt.Println("no phase data — calibration skipped")
+		return nil
+	}
+
+	var rows []phaseRow
+	if err := json.Unmarshal(out, &rows); err != nil {
+		fmt.Fprintf(os.Stderr, "parse error: %v — skipping calibration\n", err)
+		return nil
+	}
+
+	if len(rows) == 0 {
+		fmt.Println("no phase data — calibration skipped")
+		return nil
+	}
+
+	// Compute per-run averages for each phase
+	phases := make(map[string]PhaseCalibData, len(rows))
+	var totalRuns int64
+	for _, r := range rows {
+		if r.Runs <= 0 || r.Phase == "" {
+			continue
+		}
+		phases[r.Phase] = PhaseCalibData{
+			Runs:         r.Runs,
+			InputTokens:  r.InputTokens / r.Runs,
+			OutputTokens: r.OutputTokens / r.Runs,
+		}
+		totalRuns += r.Runs
+	}
+
+	if len(phases) == 0 {
+		fmt.Println("no valid phase data — calibration skipped")
+		return nil
+	}
+
+	cal := PhaseCalibration{
+		CalibratedAt: time.Now().UTC().Format(time.RFC3339),
+		RunCount:     int(totalRuns),
+		Phases:       phases,
+	}
+
+	data, err := json.MarshalIndent(cal, "", "  ")
+	if err != nil {
+		return nil
+	}
+
+	// Ensure .clavain/ directory exists
+	calPath := calibrationFilePath()
+	if err := os.MkdirAll(filepath.Dir(calPath), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "cannot create dir: %v\n", err)
+		return nil
+	}
+
+	if err := os.WriteFile(calPath, data, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "cannot write calibration: %v\n", err)
+		return nil
+	}
+
+	fmt.Printf("calibrated %d phases from %d total runs → %s\n", len(phases), totalRuns, calPath)
 	return nil
 }
 

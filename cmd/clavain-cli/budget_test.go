@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -273,5 +276,98 @@ func TestRemainingEstimateUSD(t *testing.T) {
 	opusEst := remainingEstimateUSD(allPhases, "claude-opus-4-6")
 	if opusEst <= allEst {
 		t.Errorf("remainingEstimateUSD(opus) = %.4f, should be > sonnet %.4f", opusEst, allEst)
+	}
+}
+
+func TestPhaseCostEstimateWithCalibration(t *testing.T) {
+	// Create a temp directory with a calibration file
+	tmpDir := t.TempDir()
+	clavainDir := filepath.Join(tmpDir, ".clavain")
+	if err := os.MkdirAll(clavainDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	cal := PhaseCalibration{
+		CalibratedAt: "2026-03-01T00:00:00Z",
+		RunCount:     15,
+		Phases: map[string]PhaseCalibData{
+			"brainstorm": {Runs: 5, InputTokens: 20000, OutputTokens: 10000},
+			"executing":  {Runs: 5, InputTokens: 80000, OutputTokens: 40000},
+			"reflect":    {Runs: 2, InputTokens: 5000, OutputTokens: 3000}, // < 3 runs
+		},
+	}
+	data, _ := json.Marshal(cal)
+	calPath := filepath.Join(clavainDir, "phase-cost-calibration.json")
+	if err := os.WriteFile(calPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Point calibrationFilePath() at our temp dir
+	t.Setenv("SPRINT_LIB_PROJECT_DIR", tmpDir)
+
+	// Calibrated phase with >= 3 runs: should use calibrated value
+	got := phaseCostEstimate("brainstorm")
+	want := int64(30000) // 20000 + 10000
+	if got != want {
+		t.Errorf("phaseCostEstimate(brainstorm) with calibration = %d, want %d", got, want)
+	}
+
+	got = phaseCostEstimate("executing")
+	want = int64(120000) // 80000 + 40000
+	if got != want {
+		t.Errorf("phaseCostEstimate(executing) with calibration = %d, want %d", got, want)
+	}
+
+	// Phase with < 3 runs: should fall back to default
+	got = phaseCostEstimate("reflect")
+	want = int64(10000) // hardcoded default
+	if got != want {
+		t.Errorf("phaseCostEstimate(reflect) with <3 runs = %d, want %d (default)", got, want)
+	}
+
+	// Phase not in calibration file: should fall back to default
+	got = phaseCostEstimate("planned")
+	want = int64(35000) // hardcoded default
+	if got != want {
+		t.Errorf("phaseCostEstimate(planned) not calibrated = %d, want %d (default)", got, want)
+	}
+}
+
+func TestPhaseCostEstimateFallback(t *testing.T) {
+	// Point at a directory with no calibration file
+	t.Setenv("SPRINT_LIB_PROJECT_DIR", t.TempDir())
+
+	// All should return hardcoded defaults
+	got := phaseCostEstimate("brainstorm")
+	if got != 30000 {
+		t.Errorf("phaseCostEstimate(brainstorm) without calibration = %d, want 30000", got)
+	}
+	got = phaseCostEstimate("executing")
+	if got != 150000 {
+		t.Errorf("phaseCostEstimate(executing) without calibration = %d, want 150000", got)
+	}
+}
+
+func TestReadCalibrationMalformed(t *testing.T) {
+	tmpDir := t.TempDir()
+	clavainDir := filepath.Join(tmpDir, ".clavain")
+	os.MkdirAll(clavainDir, 0755)
+
+	// Write malformed JSON
+	os.WriteFile(filepath.Join(clavainDir, "phase-cost-calibration.json"), []byte("{invalid"), 0644)
+	t.Setenv("SPRINT_LIB_PROJECT_DIR", tmpDir)
+
+	got := readCalibration()
+	if got != nil {
+		t.Errorf("readCalibration() with malformed JSON = %+v, want nil", got)
+	}
+
+	// Write valid JSON but empty phases
+	os.WriteFile(filepath.Join(clavainDir, "phase-cost-calibration.json"),
+		[]byte(`{"calibrated_at":"2026-01-01","run_count":0,"phases":{}}`), 0644)
+
+	got = readCalibration()
+	if got != nil {
+		t.Errorf("readCalibration() with empty phases = %+v, want nil", got)
 	}
 }

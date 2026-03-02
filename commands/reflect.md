@@ -49,4 +49,10 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "<sprint_id>" "reflect"
    ```
 
+6. **Calibrate cost estimates (silent).** After advancing, recalibrate phase cost estimates from interstat history so future sprints use improved estimates:
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" calibrate-phase-costs 2>/dev/null || true
+   ```
+   This is the closed-loop feedback: actual phase costs from completed sprints improve estimates for future sprints. Silent on failure — hardcoded defaults remain active.
+
 The reflect gate requires at least one artifact registered for the reflect phase. The learning artifact (memory note or engineering doc) satisfies this gate.
