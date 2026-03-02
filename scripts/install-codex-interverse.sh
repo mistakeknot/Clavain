@@ -70,8 +70,9 @@ interverse_recommended_plugins() {
   recommended_interverse_plugins_fallback
 }
 
-skill_specs() {
-  # plugin_name|skill_rel_path|link_name
+skill_specs_overrides() {
+  # Explicit overrides keep stable aliases and non-standard skill paths.
+  # Format: plugin_name|skill_rel_path|link_name
   cat <<'EOF'
 interdoc|skills/interdoc|interdoc
 interflux|skills/flux-drive|flux-drive
@@ -117,6 +118,7 @@ Options:
 Notes:
   - Native Codex skill discovery path is ~/.agents/skills
   - Recommended Interverse plugin list comes from agent-rig.json (fallback list if jq is unavailable)
+  - Companion skills are auto-discovered from recommended plugins (frontmatter name required)
   - Interverse command wrappers are generated into ~/.codex/prompts as <plugin>-<command>.md
   - Legacy ~/.codex/skills paths are removed with backup-first safety
 EOF
@@ -207,6 +209,86 @@ command_name_from_markdown() {
       exit
     }
   ' "$file"
+}
+
+skill_name_from_markdown() {
+  local file="$1"
+  awk '
+    NR == 1 && $0 == "---" { in_fm = 1; next }
+    in_fm == 1 && $0 == "---" { exit }
+    in_fm == 1 && $0 ~ /^name:[[:space:]]*/ {
+      sub(/^name:[[:space:]]*/, "", $0)
+      gsub(/^["'"'"']|["'"'"']$/, "", $0)
+      print $0
+      exit
+    }
+  ' "$file"
+}
+
+auto_discovered_skill_specs() {
+  local plugin repo_dir skills_root skill_md skill_dir skill_rel link_name
+  while IFS= read -r plugin; do
+    [[ -n "$plugin" ]] || continue
+    repo_dir="$CLONE_ROOT/$plugin"
+    skills_root="$repo_dir/skills"
+    [[ -d "$skills_root" ]] || continue
+
+    while IFS= read -r skill_md; do
+      [[ -f "$skill_md" ]] || continue
+      skill_dir="$(dirname "$skill_md")"
+      skill_rel="${skill_dir#$repo_dir/}"
+      link_name="$(skill_name_from_markdown "$skill_md")"
+
+      if [[ -z "$link_name" ]]; then
+        echo "WARN: skipping skill missing frontmatter name: $skill_md" >&2
+        continue
+      fi
+
+      if [[ ! "$link_name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        echo "WARN: skipping skill with unsupported name '$link_name': $skill_md" >&2
+        continue
+      fi
+
+      echo "$plugin|$skill_rel|$link_name"
+    done < <(find "$skills_root" -type f -name SKILL.md | sort)
+  done < <(interverse_recommended_plugins)
+}
+
+skill_specs() {
+  local plugin skill_rel link_name rel_key
+  declare -A recommended_plugins=()
+  declare -A seen_rel=()
+  declare -A seen_link=()
+
+  while IFS= read -r plugin; do
+    [[ -n "$plugin" ]] || continue
+    recommended_plugins["$plugin"]=1
+  done < <(interverse_recommended_plugins)
+
+  while IFS='|' read -r plugin skill_rel link_name; do
+    [[ -n "$plugin" && -n "$skill_rel" && -n "$link_name" ]] || continue
+    if [[ -z "${recommended_plugins[$plugin]+set}" ]]; then
+      continue
+    fi
+
+    rel_key="$plugin|$skill_rel"
+
+    if [[ -n "${seen_rel[$rel_key]+set}" ]]; then
+      continue
+    fi
+
+    if [[ -n "${seen_link[$link_name]+set}" && "${seen_link[$link_name]}" != "$rel_key" ]]; then
+      echo "WARN: skipping skill link name collision '$link_name' for $rel_key (already mapped to ${seen_link[$link_name]})" >&2
+      continue
+    fi
+
+    seen_rel["$rel_key"]=1
+    seen_link["$link_name"]="$rel_key"
+    echo "$plugin|$skill_rel|$link_name"
+  done < <(
+    skill_specs_overrides
+    auto_discovered_skill_specs
+  )
 }
 
 build_namespace_prefix_regex() {
