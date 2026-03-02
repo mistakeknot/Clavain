@@ -26,6 +26,11 @@ jobs:
       has_anthropic: ${{ steps.secrets_check.outputs.has_anthropic }}
       has_codex_auth: ${{ steps.secrets_check.outputs.has_codex_auth }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
       - id: parse
         uses: actions/github-script@v7
         with:
@@ -76,6 +81,11 @@ jobs:
     if: needs.parse-command.outputs.recognized == 'true' && needs.parse-command.outputs.trusted != 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
       - uses: actions/github-script@v7
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
@@ -110,6 +120,11 @@ jobs:
       )
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
       - uses: actions/github-script@v7
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
@@ -159,6 +174,11 @@ jobs:
     outputs:
       result: ${{ steps.claude.outputs.structured_output }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
       - name: Checkout PR merge ref
         uses: actions/checkout@v4
         with:
@@ -273,6 +293,11 @@ jobs:
     outputs:
       result: ${{ steps.codex_exec.outputs.result }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
       - name: Checkout PR merge ref
         uses: actions/checkout@v4
         with:
