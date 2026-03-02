@@ -453,6 +453,18 @@ _routing_load_cache() {
 # resolve_model MUST never return "inherit" — it is an internal sentinel
 # meaning "this level has no override, continue to next level."
 routing_resolve_model() {
+  # Fast path: delegate to compiled Go router when available.
+  # Skips fast path when CLAVAIN_RUN_ID is set (needs kernel-stored overrides
+  # that the Go router doesn't support yet).
+  if [[ -z "${CLAVAIN_RUN_ID:-}" ]] && command -v ic >/dev/null 2>&1; then
+    local _ic_result
+    _ic_result=$(ic route model "$@" 2>/dev/null) && {
+      echo "$_ic_result"
+      return 0
+    }
+    # Fall through on failure — bash implementation is the safety net
+  fi
+
   _routing_load_cache
 
   local phase="" category="" agent=""
@@ -699,6 +711,15 @@ routing_resolve_dispatch_tier_complex() {
 
 # --- Public: resolve dispatch tier to model ---
 routing_resolve_dispatch_tier() {
+  # Fast path: delegate to compiled Go router when available.
+  if command -v ic >/dev/null 2>&1; then
+    local _ic_result
+    _ic_result=$(ic route dispatch --tier="$1" 2>/dev/null) && {
+      echo "$_ic_result"
+      return 0
+    }
+  fi
+
   _routing_load_cache
   local tier="$1"
   local hops=0
@@ -841,6 +862,28 @@ routing_list_mappings() {
 #
 # When complexity mode is shadow/enforce, uses routing_resolve_model_complex.
 routing_resolve_agents() {
+  # Fast path: delegate to compiled Go router when available.
+  # Skips when CLAVAIN_RUN_ID is set or complexity mode is active.
+  if [[ -z "${CLAVAIN_RUN_ID:-}" ]] && command -v ic >/dev/null 2>&1; then
+    local _phase="" _agents_csv=""
+    local _args=("$@")
+    for (( _i=0; _i<${#_args[@]}; _i++ )); do
+      case "${_args[$_i]}" in
+        --phase)  _phase="${_args[$((_i+1))]:-}" ;;
+        --agents) _agents_csv="${_args[$((_i+1))]:-}" ;;
+      esac
+    done
+    if [[ -n "$_agents_csv" ]]; then
+      # shellcheck disable=SC2086
+      local _ic_result
+      local IFS=','
+      _ic_result=$(ic route batch --json --phase="$_phase" $_agents_csv 2>/dev/null) && {
+        echo "$_ic_result"
+        return 0
+      }
+    fi
+  fi
+
   _routing_load_cache
 
   local phase="" agents_csv="" category_override=""
