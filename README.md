@@ -238,10 +238,10 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
-### Hooks (8)
+### Hooks (7)
 
 - **SessionStart**: Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When interserve mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
-- **PostToolUse**: Interserve audit: logs source code writes when interserve mode is active for post-session review (`interserve-audit.sh`). Auto-publish: detects `git push` in plugin repos and auto-bumps version + syncs marketplace (`auto-publish.sh`).
+- **PostToolUse**: Auto-publish: detects `git push` in plugin repos and auto-bumps version + syncs marketplace (`auto-publish.sh`).
 - **Stop**: Auto-compound check: detects compoundable signals and prompts knowledge capture (`auto-compound.sh`). Session handoff: detects uncommitted work or in-progress beads and prompts HANDOFF.md creation (`session-handoff.sh`).
 - **SessionEnd**: Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
