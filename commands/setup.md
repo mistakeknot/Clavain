@@ -123,7 +123,6 @@ If the script is unavailable, use the fallback list:
 - `interkasten@interagency-marketplace` — Notion sync and documentation
 - `interlens@interagency-marketplace` — Cognitive augmentation lenses (MCP)
 - `intersearch@interagency-marketplace` — Shared embedding and Exa search library
-- `interserve@interagency-marketplace` — Codex spark classifier and context compression (MCP)
 - `interpub@interagency-marketplace` — Plugin publishing automation
 - `tuivision@interagency-marketplace` — TUI automation and visual testing (MCP)
 - `intermux@interagency-marketplace` — Agent activity visibility and tmux monitoring (MCP)
