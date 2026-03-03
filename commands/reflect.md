@@ -55,4 +55,16 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
    ```
    This is the closed-loop feedback: actual phase costs from completed sprints improve estimates for future sprints. Silent on failure — hardcoded defaults remain active.
 
+7. **Calibrate agent routing from evidence (silent).** After cost calibration, recalibrate agent model routing from interspect evidence so future sprints route agents to the right model tier:
+   ```bash
+   if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
+       interspect_root=$(_discover_interspect_plugin 2>/dev/null) || interspect_root=""
+       if [[ -n "$interspect_root" ]]; then
+           source "${interspect_root}/hooks/lib-interspect.sh"
+           _interspect_write_routing_calibration 2>/dev/null || true
+       fi
+   fi
+   ```
+   This is the B3 closed-loop: verdict outcomes from completed sprints calibrate agent model selection for future sprints. Shadow mode by default — logs what would change. Silent on failure.
+
 The reflect gate requires at least one artifact registered for the reflect phase. The learning artifact (memory note or engineering doc) satisfies this gate.

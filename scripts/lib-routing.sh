@@ -38,6 +38,9 @@ declare -gA _ROUTING_CX_DESC=()                 # [C1..C5]=description
 declare -gA _ROUTING_CX_SUBAGENT_MODEL=()       # [C1..C5]=model|inherit
 declare -gA _ROUTING_CX_DISPATCH_TIER=()        # [C1..C5]=tier|inherit
 
+# --- B3: Calibration cache ---
+declare -g _ROUTING_CAL_MODE=""                   # shadow | enforce (from routing.yaml)
+
 # --- Safety floor cache (from agent-roles.yaml) ---
 declare -gA _ROUTING_SF_AGENT_MIN=()             # [agent_name]=min_model
 
@@ -184,6 +187,10 @@ _routing_load_cache() {
     fi
     if [[ "$line" =~ ^complexity: ]]; then
       section="complexity"; subsection=""; current_cx_tier=""
+      continue
+    fi
+    if [[ "$line" =~ ^calibration: ]]; then
+      section="calibration"; subsection=""
       continue
     fi
     # Another top-level key — reset
@@ -390,7 +397,20 @@ _routing_load_cache() {
         fi
       fi
     fi
+
+    # --- calibration section (B3) ---
+    if [[ "$section" == "calibration" ]]; then
+      if [[ "$line" =~ ^[[:space:]]{2}mode:[[:space:]]*(.+) ]]; then
+        _ROUTING_CAL_MODE="${BASH_REMATCH[1]%%[[:space:]#]*}"
+        continue
+      fi
+    fi
   done < "$_ROUTING_CONFIG_PATH"
+
+  # Env override for calibration mode
+  if [[ -n "${INTERSPECT_ROUTING_MODE:-}" ]]; then
+    _ROUTING_CAL_MODE="$INTERSPECT_ROUTING_MODE"
+  fi
 
   # Warn if config exists but nothing was parsed (likely malformed)
   if [[ -n "$_ROUTING_CONFIG_PATH" && -z "$_ROUTING_SA_DEFAULT_MODEL" && ${#_ROUTING_SA_DEFAULTS[@]} -eq 0 ]]; then
@@ -449,6 +469,43 @@ _routing_load_cache() {
   _ROUTING_CACHE_POPULATED=1
 }
 
+# --- B3: Read interspect routing calibration (not cached — read fresh each call) ---
+# Returns calibrated model for an agent, or empty string if no recommendation.
+# Validates: file exists, valid JSON, schema_version=1, model name is valid.
+_routing_read_calibration() {
+  local agent="$1"
+  [[ -z "$agent" ]] && return 0
+
+  # Find calibration file
+  local cal_path=""
+  local root
+  if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
+    cal_path="${CLAUDE_PROJECT_DIR}/.clavain/interspect/routing-calibration.json"
+  else
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || root=""
+    [[ -n "$root" ]] && cal_path="${root}/.clavain/interspect/routing-calibration.json"
+  fi
+  [[ -z "$cal_path" || ! -f "$cal_path" ]] && return 0
+
+  # Strip namespace prefix for lookup (same as safety floor)
+  local lookup_key="$agent"
+  if [[ "$lookup_key" == *:* ]]; then
+    lookup_key="${lookup_key##*:}"
+  fi
+
+  # Read and validate with jq (single pass)
+  local result
+  result=$(jq -r --arg agent "$lookup_key" '
+    select(.schema_version == 1) |
+    .agents[$agent] // empty |
+    select(.confidence >= 0.7 and .evidence_sessions >= 3) |
+    .recommended_model // empty |
+    select(. == "haiku" or . == "sonnet" or . == "opus")
+  ' "$cal_path" 2>/dev/null) || result=""
+
+  [[ -n "$result" ]] && echo "$result"
+}
+
 # --- Public: resolve subagent model ---
 # resolve_model MUST never return "inherit" — it is an internal sentinel
 # meaning "this level has no override, continue to next level."
@@ -500,6 +557,36 @@ routing_resolve_model() {
   if [[ -z "$result" && -n "$agent" && -n "${_ROUTING_SA_OVERRIDE[$agent]:-}" ]]; then
     result="${_ROUTING_SA_OVERRIDE[$agent]}"
     [[ "$result" == "inherit" ]] && result=""
+  fi
+
+  # 1b. Interspect routing calibration (B3)
+  # Read fresh each call (not cached). Shadow mode logs, enforce mode applies.
+  # CRITICAL: assigns to $result and falls through to safety floor — no early return.
+  if [[ -z "$result" && -n "$agent" && -n "${_ROUTING_CAL_MODE:-}" && "${_ROUTING_CAL_MODE}" != "off" ]]; then
+    local cal_model
+    cal_model=$(_routing_read_calibration "$agent") || cal_model=""
+    if [[ -n "$cal_model" ]]; then
+      if [[ "${_ROUTING_CAL_MODE}" == "enforce" ]]; then
+        result="$cal_model"
+      else
+        # Shadow mode: log what would change (resolve base first for comparison)
+        local base_for_shadow=""
+        # Peek ahead at what the base resolution would produce
+        if [[ -n "$phase" && -n "$category" && -n "${_ROUTING_SA_PHASE_CAT[${phase}:${category}]:-}" ]]; then
+          base_for_shadow="${_ROUTING_SA_PHASE_CAT[${phase}:${category}]}"
+        elif [[ -n "$phase" && -n "${_ROUTING_SA_PHASE_MODEL[$phase]:-}" ]]; then
+          base_for_shadow="${_ROUTING_SA_PHASE_MODEL[$phase]}"
+        elif [[ -n "$category" && -n "${_ROUTING_SA_DEFAULTS[$category]:-}" ]]; then
+          base_for_shadow="${_ROUTING_SA_DEFAULTS[$category]}"
+        else
+          base_for_shadow="${_ROUTING_SA_DEFAULT_MODEL:-sonnet}"
+        fi
+        [[ "$base_for_shadow" == "inherit" ]] && base_for_shadow="sonnet"
+        if [[ "$cal_model" != "$base_for_shadow" ]]; then
+          echo "[interspect-shadow] ${agent##*:}: base=$base_for_shadow, calibrated=$cal_model" >&2
+        fi
+      fi
+    fi
   fi
 
   # 2. Phase-specific category

@@ -129,6 +129,29 @@ After the synthesis subagent returns:
 1. Read `{OUTPUT_DIR}/synthesis.md` and present it to the user (this is the compact report, ~30-50 lines)
 2. The gate result (PASS/FAIL) comes from the subagent's return value — no additional file reading needed
 
+### Phase 5a: Record Verdict Outcomes to Interspect (silent)
+
+After synthesis writes verdict JSON files, record outcomes to interspect evidence for B3 calibration. This is fail-open — never blocks the quality gate.
+
+```bash
+# Record verdict outcomes to interspect (fail-open)
+if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
+    interspect_root=$(_discover_interspect_plugin 2>/dev/null) || interspect_root=""
+    if [[ -n "$interspect_root" ]]; then
+        source "${interspect_root}/hooks/lib-interspect.sh"
+        SESSION_ID=$(cat /tmp/interstat-session-id 2>/dev/null || echo "unknown")
+        for verdict_file in .clavain/verdicts/*.json; do
+            [[ -f "$verdict_file" ]] || continue
+            agent=$(basename "$verdict_file" .json)
+            status=$(jq -r '.status // "UNKNOWN"' "$verdict_file")
+            findings=$(jq -r '.findings_count // 0' "$verdict_file")
+            model=$(jq -r '.model // "unknown"' "$verdict_file")
+            _interspect_record_verdict "$SESSION_ID" "$agent" "$status" "$findings" "$model" 2>/dev/null || true
+        done
+    fi
+fi
+```
+
 ### Phase 5b: Gate Check + Record Phase (on PASS only)
 
 If the gate result is **PASS**, enforce the shipping gate and record the phase transition:

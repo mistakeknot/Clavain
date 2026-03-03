@@ -1,12 +1,13 @@
-# Model routing policy for Clavain (Track B1+B2: Static + Complexity-Aware Routing)
+# Model routing policy for Clavain (Track B1+B2+B3: Static + Complexity + Calibration Routing)
 #
-# Three namespaces:
+# Four namespaces:
 #   subagents:   Claude Code agents (haiku/sonnet/opus/inherit)
 #   dispatch:    Codex CLI agents (concrete model IDs)
 #   complexity:  Task complexity → model override layer (B2)
+#   calibration: Evidence-based agent model calibration (B3)
 #
 # Subagent resolution order (highest priority first):
-#   complexity override (if enabled+matching) > overrides[agent] > phases[phase].categories[cat] > phases[phase].model > defaults.categories[cat] > defaults.model
+#   kernel overrides > complexity override (if enabled+matching) > overrides[agent] > calibration (if enabled+matching) > phases[phase].categories[cat] > phases[phase].model > defaults.categories[cat] > defaults.model
 #
 # Dispatch resolution:
 #   complexity tier promotion/demotion (if enabled) > tiers[name].model, with fallback chain
@@ -144,3 +145,18 @@ complexity:
     C1:
       subagent_model: haiku
       dispatch_tier: fast
+
+# Evidence-based calibration (Track B3)
+#
+# Interspect collects verdict outcomes from flux-drive agent reviews. The
+# /interspect:calibrate command computes per-agent hit rates and writes
+# .clavain/interspect/routing-calibration.json.
+#
+# mode:
+#   shadow  — Log what would change, but apply base routing. (default)
+#   enforce — Apply calibrated model recommendations.
+#
+# Env override: INTERSPECT_ROUTING_MODE=enforce
+# Escape hatch: delete .clavain/interspect/routing-calibration.json
+calibration:
+  mode: shadow
