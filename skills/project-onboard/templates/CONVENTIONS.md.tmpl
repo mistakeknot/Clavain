@@ -1,0 +1,15 @@
+# {{PROJECT_NAME}} Conventions
+
+Canonical documentation paths. Do not introduce compatibility aliases or fallback filenames.
+
+## Documentation Paths
+
+- Roadmap: `docs/roadmap.md`
+- Vision: `docs/{{PROJECT_SLUG}}-vision.md`
+- PRD: `docs/PRD.md` (or `docs/prds/*.md` for multiple)
+
+## Enforcement Rules
+
+- Do not use non-canonical paths for documentation.
+- New docs, commands, and scripts must reference canonical paths only.
+- Existing non-canonical files should be migrated to canonical filenames.

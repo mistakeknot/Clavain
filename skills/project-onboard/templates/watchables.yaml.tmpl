@@ -1,0 +1,21 @@
+# Drift detection configuration — created by /clavain:project-onboard
+# interwatch scans these signals and alerts when docs go stale.
+
+watchables:
+  - name: agents-md
+    path: AGENTS.md
+    generator: interdoc:interdoc
+    staleness_days: 14
+
+  - name: roadmap
+    path: docs/roadmap.md
+    generator: interpath:roadmap
+    staleness_days: 30
+
+  - name: philosophy
+    path: PHILOSOPHY.md
+    staleness_days: 90
+
+  - name: conventions
+    path: CONVENTIONS.md
+    staleness_days: 90

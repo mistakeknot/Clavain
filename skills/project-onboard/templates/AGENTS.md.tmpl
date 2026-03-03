@@ -1,0 +1,40 @@
+# {{PROJECT_NAME}} — Agent Development Guide
+
+## Overview
+
+{{PROJECT_DESCRIPTION}}
+
+## Agent Quickstart
+
+1. Read this file (AGENTS.md) — you're doing it now.
+2. Run `bd ready` to see available work.
+3. Before editing, check the relevant module's local AGENTS.md if one exists.
+4. When done: `bd close <id>`, commit, `bd sync`, push.
+
+## Directory Layout
+
+{{DIRECTORY_LAYOUT}}
+
+## Build & Test
+
+{{BUILD_TEST_COMMANDS}}
+
+## Coding Conventions
+
+{{CODING_CONVENTIONS}}
+
+## Bead Tracking
+
+All work is tracked using beads (`bd` CLI). The database lives in `.beads/`.
+
+```bash
+bd ready                              # Show available work
+bd create --title="..." --type=task   # Create new issue
+bd update <id> --status=in_progress   # Claim work
+bd close <id>                         # Mark complete
+bd sync                               # Sync with git remote
+```
+
+## Key Dependencies
+
+{{DEPENDENCIES}}
