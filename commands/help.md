@@ -71,8 +71,9 @@ These are the commands you'll use most often:
 | `/clavain:refactor` | Run refactors with duplication/risk controls |
 
 ### Meta
-| `/clavain:setup` | Bootstrap Clavain — install plugins, verify MCP, configure hooks |
+| `/clavain:project-onboard` | Set up a new/existing project with full Demarch automation |
 |---|---|
+| `/clavain:setup` | Bootstrap Clavain — install plugins, verify MCP, configure hooks |
 | `/clavain:help` | This command |
 | `/clavain:doctor` | Health check — MCP servers, tools, beads, plugin conflicts |
 | `/clavain:codex-bootstrap` | Keep Codex Clavain installation fresh (install + doctor + wrappers) |

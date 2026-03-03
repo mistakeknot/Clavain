@@ -18,6 +18,7 @@ description: Use when starting any conversation - establishes how to find and us
 | Fix a bug | `/clavain:repro-first-debugging` |
 | Fix build/test failure | `/clavain:fixbuild` |
 | Resolve review findings | `/clavain:resolve` |
+| Set up a new project | `/clavain:project-onboard` |
 | Check project health | `/clavain:doctor` or `/clavain:sprint-status` |
 | Generate a roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` |

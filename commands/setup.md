@@ -8,6 +8,8 @@ argument-hint: "[optional: --check-only to verify without making changes, --scop
 
 Bootstrap the Clavain engineering rig for your active runtime. Run this once to install everything, or re-run to verify and repair configuration.
 
+> **Note:** This command sets up *Clavain itself* (plugins, MCP servers, ic kernel). To set up a *project* (beads, CLAUDE.md, docs structure, observability), use `/clavain:project-onboard` instead.
+
 ## Arguments
 
 <setup_args> #$ARGUMENTS </setup_args>

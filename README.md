@@ -95,7 +95,9 @@ This inverts the typical "design the API first" approach: build too-tightly-coup
 
 For simple requests, `/sprint add user export feature` orchestrates the full lifecycle: brainstorm, plan, review the plan with multiple subagents, implement, review the implementation, resolve issues, and run quality gates. The human focuses on the usual suspects: product strategy, user pain points, and finding new [leverage points](https://donellameadows.org/archives/leverage-points-places-to-intervene-in-a-system/).
 
-For more complex endeavors (or new projects), each piece works standalone. The following review of the `/sprint` lifecycle provides a brief explanation of all the different parts of Clavain:
+For **new projects** (or existing projects you want to bring into the ecosystem), start with `/project-onboard`: it introspects the repo, asks a few questions, then sets up beads tracking, CLAUDE.md/AGENTS.md, docs structure, observability, and seeds initial content via interpath. After that, `/sprint` handles the development lifecycle.
+
+For more complex endeavors, each piece works standalone. The following review of the `/sprint` lifecycle provides a brief explanation of all the different parts of Clavain:
 
 ### The `/sprint` lifecycle
 
@@ -173,6 +175,8 @@ Skills are workflow disciplines: they guide **how** you work, not what tools to 
 | **Knowledge & Docs** | |
 | `engineering-docs` | Capture solved problems as searchable docs |
 | `file-todos` | File-based todo tracking across sessions |
+| **Setup** | |
+| `project-onboard` | One-command project setup: introspect, scaffold, seed content |
 | **Utilities** | |
 | `using-clavain` | Bootstrap routing: maps tasks to the right component |
 | `using-tmux-for-interactive-commands` | Interactive CLI tools in tmux |
@@ -195,6 +199,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | Command | What it does |
 |---------|-------------|
 | `/sprint` | Full autonomous lifecycle: brainstorm through ship |
+| `/project-onboard` | Set up a new/existing project with full automation (beads, docs, observability) |
 | `/setup` | Bootstrap the modpack: install plugins, disable conflicts, verify servers |
 | `/brainstorm` | Explore before planning |
 | `/strategy` | Structure brainstorm into PRD with trackable beads |

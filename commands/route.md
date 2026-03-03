@@ -8,6 +8,8 @@ argument-hint: "[bead ID, feature description, or empty for discovery]"
 
 Discovers available work, resumes active sprints, classifies task complexity, and auto-dispatches to the right workflow command. This is the primary entry point — use `/sprint` directly only to force the full lifecycle.
 
+> **New project?** If this project doesn't have beads, CLAUDE.md, or docs/ structure yet, run `/clavain:project-onboard` first to set everything up.
+
 ## Step 1: Check Active Sprints (Resume)
 
 Before anything else, check for an active sprint to resume:
