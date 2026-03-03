@@ -2,7 +2,7 @@
 
 Clavain is an opinionated, self-improving Claude Code agent rig that codifies product and engineering discipline into composable workflows for building software from brainstorm to ship. It orchestrates heterogeneous AI models: Claude, Codex, GPT-5.2 Pro via Oracle: into a reliable system for getting things built, where the review phases matter more than the building phases. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 15 skills, 4 agents, 45 commands, 7 hooks, and 1 MCP server, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 16 skills, 4 agents, 45 commands, 7 hooks, and 1 MCP server, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -153,7 +153,7 @@ Worth running before any architectural decision with genuine uncertainty. The de
 
 ## What's included
 
-### Skills (15)
+### Skills (16)
 
 Skills are workflow disciplines: they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -308,7 +308,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 15 discipline skills (SKILL.md each)
+skills/       # 16 discipline skills (SKILL.md each)
 agents/       # 4 agents (review/ + workflow/)
 commands/     # 45 slash commands
 hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)

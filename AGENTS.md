@@ -31,7 +31,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 15 skills, 4 agents, 45 commands, 7 hooks, 1 MCP server |
+| Components | 16 skills, 4 agents, 45 commands, 7 hooks, 1 MCP server |
 | License | MIT |
 | Layer | L2 (OS) — depends on Intercore (L1), consumed by Autarch (L3) |
 
@@ -63,7 +63,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 15 discipline skills (ls skills/*/SKILL.md)
+├── skills/                        # 16 discipline skills (ls skills/*/SKILL.md)
 ├── agents/
 │   ├── review/                    # 2: plan-reviewer, data-migration-expert
 │   └── workflow/                  # 2: bug-reproduction-validator, pr-comment-resolver
@@ -240,7 +240,7 @@ When making changes, verify:
 Quick validation:
 ```bash
 # Count components
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 15
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 16
 echo "Agents: $(ls agents/{review,workflow}/*.md | wc -l)"  # Should be 4
 echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 45
 
