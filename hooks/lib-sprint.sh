@@ -15,6 +15,11 @@ source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
 # Source agency spec loader (C1: declarative per-stage config)
 source "${BASH_SOURCE[0]%/*}/lib-spec.sh" 2>/dev/null || true
 
+# Source compose bridge (C3: dispatch plan generator)
+if [[ -f "${BASH_SOURCE[0]%/*}/../scripts/lib-compose.sh" ]]; then
+    source "${BASH_SOURCE[0]%/*}/../scripts/lib-compose.sh" 2>/dev/null || true
+fi
+
 SPRINT_LIB_PROJECT_DIR="${SPRINT_LIB_PROJECT_DIR:-.}"
 
 # Source interphase phase primitives (via Clavain shim)
@@ -971,6 +976,12 @@ sprint_advance() {
 
     sprint_invalidate_caches
     sprint_record_phase_tokens "$sprint_id" "$current_phase" 2>/dev/null || true
+
+    # C3: Export Composer dispatch plan for downstream phase commands
+    if [[ -n "${_COMPOSE_LIB_SOURCED:-}" && -n "$to_phase" ]]; then
+        export CLAVAIN_COMPOSE_PLAN=$(compose_dispatch "$sprint_id" "$to_phase" 2>/dev/null)
+    fi
+
     log_info "phase advancing" from="$from_phase" to="$to_phase" run_id="$run_id"
     return 0
 }
