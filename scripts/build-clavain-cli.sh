@@ -11,5 +11,5 @@ if ! command -v go &>/dev/null; then
 fi
 
 echo "Building clavain-cli Go binary..." >&2
-go build -C "$SRC_DIR" -mod=readonly -o "$OUT_DIR/clavain-cli-go" .
+go build -C "$SRC_DIR" -o "$OUT_DIR/clavain-cli-go" .
 echo "clavain-cli-go built at $OUT_DIR/clavain-cli-go" >&2

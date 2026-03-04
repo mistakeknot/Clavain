@@ -112,6 +112,10 @@ func main() {
 	case "sprint-invalidate-caches":
 		err = cmdSprintInvalidateCaches(args)
 
+	// Compose
+	case "compose":
+		err = cmdCompose(args)
+
 	case "help", "--help", "-h":
 		printHelp()
 
@@ -182,5 +186,8 @@ Agent Tracking:
   sprint-track-agent     <bead_id> <agent_name> [agent_type] [dispatch_id]
   sprint-complete-agent  <agent_id> [status]
   sprint-invalidate-caches
+
+Compose:
+  compose             --sprint=<bead_id> --stage=<stage>  Generate dispatch plan
 `)
 }
