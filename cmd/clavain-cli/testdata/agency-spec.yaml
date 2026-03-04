@@ -1,0 +1,46 @@
+version: "1.0"
+defaults:
+  budget_allocation: proportional
+  gate_mode: shadow
+stages:
+  ship:
+    description: "Quality gates and shipping"
+    phases: [shipping]
+    requires:
+      capabilities: [domain_review, multi_perspective, verdict_aggregation]
+    budget:
+      share: 20
+      min_tokens: 5000
+      model_tier_hint: sonnet
+    agents:
+      required:
+        - role: fd-architecture
+          description: "Architecture review"
+          model_tier: sonnet
+        - role: fd-correctness
+          description: "Correctness review"
+          model_tier: sonnet
+        - role: fd-quality
+          description: "Quality review"
+          model_tier: sonnet
+      optional:
+        - role: fd-safety
+          description: "Security review"
+          model_tier: sonnet
+        - role: synthesis
+          description: "Verdict aggregation"
+          model_tier: haiku
+  build:
+    description: "Execute implementation"
+    phases: [executing]
+    requires:
+      capabilities: []
+    budget:
+      share: 40
+      min_tokens: 10000
+    agents:
+      required:
+        - role: implementer
+          description: "Main implementer"
+          model_tier: opus
+      optional: []

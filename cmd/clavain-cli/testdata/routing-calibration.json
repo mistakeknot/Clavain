@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "calibrated_at": "2026-03-03",
+  "min_sessions": 3,
+  "agents": {
+    "fd-architecture": {
+      "recommended_model": "haiku",
+      "current_model": "sonnet",
+      "hit_rate": 0.25,
+      "evidence_sessions": 5,
+      "confidence": 0.85,
+      "reason": "low hit rate"
+    },
+    "fd-quality": {
+      "recommended_model": "opus",
+      "current_model": "sonnet",
+      "hit_rate": 0.80,
+      "evidence_sessions": 4,
+      "confidence": 0.75,
+      "reason": "high hit rate"
+    }
+  }
+}

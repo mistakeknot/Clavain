@@ -1,0 +1,84 @@
+version: "1.0"
+capability_vocabulary:
+  - domain_review
+  - multi_perspective
+  - verdict_aggregation
+agents:
+  fd-safety:
+    source: interflux
+    category: review
+    capabilities: [domain_review]
+    roles: [fd-safety]
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:fd-safety"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    cold_start_tokens: 800
+    tags: [technical]
+  fd-architecture:
+    source: interflux
+    category: review
+    capabilities: [domain_review, multi_perspective]
+    roles: [fd-architecture]
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:fd-architecture"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    cold_start_tokens: 800
+    tags: [technical]
+  fd-correctness:
+    source: interflux
+    category: review
+    capabilities: [domain_review]
+    roles: [fd-correctness]
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:fd-correctness"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    cold_start_tokens: 800
+    tags: [technical]
+  fd-quality:
+    source: interflux
+    category: review
+    capabilities: [domain_review]
+    roles: [fd-quality]
+    runtime:
+      mode: subagent
+      subagent_type: "interflux:fd-quality"
+    models:
+      preferred: sonnet
+      supported: [haiku, sonnet, opus]
+    cold_start_tokens: 900
+    tags: [technical]
+  synthesis-agent:
+    source: intersynth
+    category: synthesis
+    capabilities: [verdict_aggregation]
+    roles: [synthesis]
+    runtime:
+      mode: subagent
+      subagent_type: "intersynth:synthesize-review"
+    models:
+      preferred: haiku
+      supported: [haiku, sonnet]
+    cold_start_tokens: 400
+    tags: [synthesis]
+  orphaned-agent:
+    source: test
+    category: review
+    capabilities: [domain_review]
+    roles: [fd-architecture]
+    runtime:
+      mode: subagent
+      subagent_type: "test:orphaned"
+    models:
+      preferred: sonnet
+      supported: [sonnet]
+    cold_start_tokens: 500
+    orphaned_at: "2026-01-01"
