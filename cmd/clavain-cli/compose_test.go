@@ -406,6 +406,40 @@ func TestMergeSpec(t *testing.T) {
 	}
 }
 
+func TestMergeSpecNilBaseStages(t *testing.T) {
+	base := &AgencySpec{} // Stages is nil
+	override := &AgencySpec{
+		Stages: map[string]StageSpec{
+			"ship": {Budget: StageBudget{Share: 50}},
+		},
+	}
+	mergeSpec(base, override) // Must not panic
+	if base.Stages["ship"].Budget.Share != 50 {
+		t.Errorf("merged share = %d, want 50", base.Stages["ship"].Budget.Share)
+	}
+}
+
+func TestSafetyFloorExclusionWarning(t *testing.T) {
+	fleet := loadTestFleet(t)
+	spec := loadTestSpec(t)
+	overrides := &RoutingOverrides{
+		Version: 1,
+		Overrides: []RoutingOverride{
+			{Agent: "fd-safety", Action: "exclude", Reason: "test"},
+		},
+	}
+	plan := composePlan("ship", "", 100000, spec.Stages["ship"], fleet, nil, overrides)
+	var foundWarning bool
+	for _, w := range plan.Warnings {
+		if w == "WARNING:safety_floor_excluded:fd-safety:test" {
+			foundWarning = true
+		}
+	}
+	if !foundWarning {
+		t.Errorf("expected WARNING:safety_floor_excluded warning, got %v", plan.Warnings)
+	}
+}
+
 func TestComposePlanDeterministic(t *testing.T) {
 	fleet := loadTestFleet(t)
 	spec := loadTestSpec(t)

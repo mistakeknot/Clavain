@@ -254,13 +254,15 @@ func loadInterspectCalibration() *InterspectCalibration {
 	path := filepath.Join(projectDir, ".clavain", "interspect", "routing-calibration.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil // File missing — expected
 	}
 	var cal InterspectCalibration
 	if err := json.Unmarshal(data, &cal); err != nil {
+		fmt.Fprintf(os.Stderr, "compose: warning: corrupt %s: %v\n", path, err)
 		return nil
 	}
 	if cal.SchemaVersion != 1 {
+		fmt.Fprintf(os.Stderr, "compose: warning: unsupported schema version %d in %s\n", cal.SchemaVersion, path)
 		return nil
 	}
 	return &cal
@@ -271,10 +273,11 @@ func loadRoutingOverrides() *RoutingOverrides {
 	path := filepath.Join(projectDir, ".claude", "routing-overrides.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil // File missing — expected
 	}
 	var ov RoutingOverrides
 	if err := json.Unmarshal(data, &ov); err != nil {
+		fmt.Fprintf(os.Stderr, "compose: warning: corrupt %s: %v\n", path, err)
 		return nil
 	}
 	return &ov
@@ -363,6 +366,9 @@ func projectRoot() string {
 // mergeSpec applies override fields on top of base.
 // Arrays replace, non-zero scalars replace, zero values are skipped.
 func mergeSpec(base, override *AgencySpec) {
+	if base.Stages == nil {
+		base.Stages = make(map[string]StageSpec)
+	}
 	for stageName, oStage := range override.Stages {
 		if bStage, ok := base.Stages[stageName]; ok {
 			if len(oStage.Requires.Capabilities) > 0 {
@@ -433,6 +439,9 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 		for _, o := range overrides.Overrides {
 			if o.Action == "exclude" {
 				excluded[o.Agent] = true
+				if _, isFloor := safetyFloorAgents[o.Agent]; isFloor {
+					plan.Warnings = append(plan.Warnings, fmt.Sprintf("WARNING:safety_floor_excluded:%s:%s", o.Agent, o.Reason))
+				}
 				plan.Warnings = append(plan.Warnings, fmt.Sprintf("excluded:%s:%s", o.Agent, o.Reason))
 			}
 		}
