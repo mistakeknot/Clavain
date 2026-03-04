@@ -116,6 +116,12 @@ func main() {
 	case "compose":
 		err = cmdCompose(args)
 
+	// Handoff
+	case "validate-handoff":
+		err = cmdValidateHandoff(args)
+	case "validate-linkage":
+		err = cmdValidateLinkage(args)
+
 	case "help", "--help", "-h":
 		printHelp()
 
@@ -189,5 +195,9 @@ Agent Tracking:
 
 Compose:
   compose             --sprint=<bead_id> --stage=<stage>  Generate dispatch plan
+
+Handoff:
+  validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract
+  validate-linkage    [--contracts=<path>] [--spec=<path>] Check contract-to-spec consistency
 `)
 }

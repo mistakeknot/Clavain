@@ -36,9 +36,24 @@ Options should include "All of them" and the individual features as multi-select
 
 ## Phase 2: Write PRD
 
-Write to `docs/prds/YYYY-MM-DD-<topic>.md`:
+Write to `docs/prds/YYYY-MM-DD-<topic>.md`.
+
+**Frontmatter (required):** Every PRD MUST start with this YAML frontmatter block:
+
+```yaml
+---
+artifact_type: prd
+bead: <CLAVAIN_BEAD_ID or "none">
+stage: design
+---
+```
 
 ```markdown
+---
+artifact_type: prd
+bead: <bead_id>
+stage: design
+---
 # PRD: <Title>
 
 ## Problem

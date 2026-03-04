@@ -36,6 +36,15 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
 
    **C3+ (full path):** Use the `clavain:engineering-docs` skill to document what was learned during this sprint. The skill provides the full 7-step documentation workflow including YAML validation, category classification, and cross-referencing.
 
+   **Frontmatter (required):** All reflection artifacts MUST start with YAML frontmatter:
+   ```yaml
+   ---
+   artifact_type: reflection
+   bead: <sprint_id>
+   stage: reflect
+   ---
+   ```
+
    If no context argument was provided, extract context from the recent conversation history — what was built, what went wrong, what patterns emerged.
 
 4. **Register the artifact.** After the learning artifact is written, register it as a reflect-phase artifact:

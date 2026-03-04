@@ -105,6 +105,16 @@ Use **AskUserQuestion tool** to ask which approach the user prefers.
 
 Write a brainstorm document to `docs/brainstorms/YYYY-MM-DD-<topic>-brainstorm.md`.
 
+**Frontmatter (required):** Every brainstorm document MUST start with this YAML frontmatter block:
+
+```yaml
+---
+artifact_type: brainstorm
+bead: <CLAVAIN_BEAD_ID or "none">
+stage: discover
+---
+```
+
 **Document structure:**
 - **What We're Building** — clear description of the feature/improvement
 - **Why This Approach** — rationale for the chosen direction

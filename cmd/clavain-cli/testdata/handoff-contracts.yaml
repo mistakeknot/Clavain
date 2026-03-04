@@ -1,0 +1,50 @@
+version: "1.0"
+
+contracts:
+  brainstorm:
+    description: "Problem exploration with research and proposed approaches"
+    produced_by: discover
+    consumed_by: [design]
+    frontmatter:
+      required_fields: [artifact_type, bead, stage]
+    content:
+      required_sections:
+        - id: problem_statement
+          heading_pattern: "(?i)problem|problem.statement"
+          min_words: 50
+        - id: research
+          heading_pattern: "(?i)research|analysis|current.state"
+        - id: approaches
+          heading_pattern: "(?i)approach|proposed|options|design"
+      optional_sections:
+        - id: tradeoffs
+          heading_pattern: "(?i)tradeoff|trade.off|comparison"
+      min_total_words: 200
+
+  plan:
+    description: "Implementation plan with tasks and file targets"
+    produced_by: design
+    consumed_by: [build]
+    frontmatter:
+      required_fields: [artifact_type, bead, stage]
+    content:
+      required_sections:
+        - id: tasks
+          heading_pattern: "(?i)task.\\d|step.\\d|phase.\\d"
+          min_count: 1
+      required_patterns:
+        - pattern: "[A-Za-z_/.-]+\\.[a-z]{1,4}"
+          description: "Must reference at least one file path"
+
+  verdict:
+    description: "Review verdict from quality gates"
+    produced_by: build
+    consumed_by: [ship]
+    frontmatter:
+      required_fields: []
+    content:
+      required_patterns:
+        - pattern: "^TYPE:\\s+(verdict|implementation)"
+          description: "Must have TYPE header"
+        - pattern: "(?m)^STATUS:\\s+(CLEAN|NEEDS_ATTENTION|BLOCKED|ERROR|COMPLETE|PARTIAL|FAILED)"
+          description: "Must have STATUS line"

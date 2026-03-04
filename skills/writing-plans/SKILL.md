@@ -44,13 +44,19 @@ Before writing any tasks, spawn a learnings-researcher to surface relevant prior
 
 ## Plan Document Header
 
-**Every plan MUST start with this header:**
+**Every plan MUST start with YAML frontmatter and this header:**
 
 ```markdown
+---
+artifact_type: plan
+bead: <CLAVAIN_BEAD_ID or "none">
+stage: design
+---
 # [Feature Name] Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use clavain:executing-plans to implement this plan task-by-task.
 
+**Bead:** <bead_id>
 **Goal:** [One sentence describing what this builds]
 
 **Architecture:** [2-3 sentences about approach]

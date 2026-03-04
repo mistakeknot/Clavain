@@ -235,6 +235,22 @@ func cmdEnforceGate(args []string) error {
 		return nil
 	}
 
+	// Handoff contract pre-check (before ic gate check)
+	if os.Getenv("CLAVAIN_SKIP_HANDOFF") == "" {
+		handoffResults := checkHandoffContracts(beadID, targetPhase)
+		for _, r := range handoffResults {
+			if r.Result == "fail" {
+				mode := getGateMode()
+				if mode == "enforce" {
+					return fmt.Errorf("handoff contract failed for %s: %s", r.ArtifactType, summarizeFailures(r))
+				}
+				// Shadow mode: warn on stderr, continue
+				fmt.Fprintf(os.Stderr, "enforce-gate: handoff WARN: %s validation failed (%s) [shadow mode]\n",
+					r.ArtifactType, summarizeFailures(r))
+			}
+		}
+	}
+
 	// Resolve run ID — fail-open if no run
 	runID, err := resolveRunID(beadID)
 	if err != nil {
