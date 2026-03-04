@@ -23,6 +23,25 @@ func isClaimStale(ageSeconds int64) bool {
 	return ageSeconds > beadClaimStaleSeconds
 }
 
+// beadShowJSON is a minimal struct for parsing bd show --json output.
+type beadShowJSON struct {
+	Status string `json:"status"`
+}
+
+// isBeadClosed returns true if the bead's status is "closed".
+// Returns false if bd is unavailable or the bead doesn't exist.
+func isBeadClosed(beadID string) bool {
+	out, err := runBD("show", beadID, "--json")
+	if err != nil {
+		return false
+	}
+	var beads []beadShowJSON
+	if err := json.Unmarshal(out, &beads); err != nil {
+		return false
+	}
+	return len(beads) > 0 && beads[0].Status == "closed"
+}
+
 // cmdSprintClaim acquires a sprint claim for the given session.
 // Args: bead_id session_id
 // Acquires ic lock, checks active agents, registers session, releases lock, also claims bead.
@@ -165,6 +184,11 @@ func cmdSprintRelease(args []string) error {
 			_, _ = runIC("run", "agent", "update", a.ID, "--status=completed")
 		}
 	}
+
+	// If the bead is closed, cancel the ic run entirely to prevent stale sprint markers
+	if isBeadClosed(beadID) {
+		_, _ = runIC("run", "cancel", runID)
+	}
 	return nil
 }
 
@@ -194,7 +218,7 @@ func cmdBeadClaim(args []string) error {
 		existingClaim = strings.TrimSpace(string(out))
 	}
 
-	if existingClaim != "" && !strings.HasPrefix(existingClaim, "(no ") {
+	if existingClaim != "" && !strings.HasPrefix(existingClaim, "(no ") && existingClaim != "released" {
 		// Same session? Already claimed by us.
 		if existingClaim == sessionID {
 			return nil
@@ -252,12 +276,12 @@ func cmdBeadRelease(args []string) error {
 	if out, err := runBD("state", beadID, "claimed_by"); err == nil {
 		currentClaimer = strings.TrimSpace(string(out))
 	}
-	if currentClaimer != "" && !strings.HasPrefix(currentClaimer, "(no ") && currentClaimer != ourSession {
+	if currentClaimer != "" && !strings.HasPrefix(currentClaimer, "(no ") && currentClaimer != "released" && currentClaimer != ourSession {
 		return nil // Another session holds this — don't release
 	}
 
-	_, _ = runBD("set-state", beadID, "claimed_by=")
-	_, _ = runBD("set-state", beadID, "claimed_at=")
+	_, _ = runBD("set-state", beadID, "claimed_by=released")
+	_, _ = runBD("set-state", beadID, "claimed_at=0")
 	return nil
 }
 

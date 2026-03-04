@@ -67,12 +67,12 @@ var defaultPhases = []string{
 
 // defaultActions is the default phase→action mapping for kernel-driven routing.
 var defaultActions = map[string]any{
-	"brainstorm":   map[string]string{"command": "/clavain:strategy", "mode": "interactive"},
-	"strategized":  map[string]string{"command": "/clavain:write-plan", "mode": "interactive"},
-	"planned":      map[string]string{"command": "/interflux:flux-drive", "args": `["${artifact:plan}"]`, "mode": "interactive"},
+	"brainstorm":    map[string]string{"command": "/clavain:strategy", "mode": "interactive"},
+	"strategized":   map[string]string{"command": "/clavain:write-plan", "mode": "interactive"},
+	"planned":       map[string]string{"command": "/interflux:flux-drive", "args": `["${artifact:plan}"]`, "mode": "interactive"},
 	"plan-reviewed": map[string]string{"command": "/clavain:work", "args": `["${artifact:plan}"]`, "mode": "both"},
-	"executing":    map[string]string{"command": "/clavain:quality-gates", "mode": "interactive"},
-	"shipping":     map[string]string{"command": "/clavain:reflect", "mode": "interactive"},
+	"executing":     map[string]string{"command": "/clavain:quality-gates", "mode": "interactive"},
+	"shipping":      map[string]string{"command": "/clavain:reflect", "mode": "interactive"},
 }
 
 // cmdSprintCreate creates a sprint: bd epic + ic run, links them.
@@ -235,6 +235,12 @@ func cmdSprintFindActive(args []string) error {
 			break
 		}
 		if run.ScopeID == "" {
+			continue
+		}
+
+		// Check if the bead is closed — if so, auto-cancel the stale ic run
+		if isBeadClosed(run.ScopeID) {
+			_, _ = runIC("run", "cancel", run.ID)
 			continue
 		}
 
