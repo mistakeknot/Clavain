@@ -72,7 +72,7 @@ Clavain/
 ├── hooks/                         # 7 active hooks + 8 lib-*.sh libraries
 │   ├── hooks.json                 # Hook registration (4 event types, 6 bindings)
 │   └── lib-*.sh                   # Shared: intercore, sprint, signals, spec, verdict, gates, discovery
-├── cmd/clavain-cli/               # Go CLI binary (budget, checkpoint, claim, phase, sprint)
+├── cmd/clavain-cli/               # Go CLI binary (budget, checkpoint, claim, compose, phase, sprint)
 ├── config/                        # Agency specs, fleet registry, routing config
 ├── scripts/                       # bump-version, orchestrate.py, dispatch, fleet management
 ├── tests/                         # structural (pytest), shell (bats-core), smoke (subagent)
@@ -188,7 +188,8 @@ Sourced by hook scripts, not registered as hooks themselves:
 |---------|---------|
 | `lib.sh` | Shared utilities (escape_for_json, plugin path discovery) |
 | `lib-intercore.sh` | Intercore CLI wrappers (ic run/state/sprint/coordination) |
-| `lib-sprint.sh` | Sprint state queries (phase, gate, budget, artifact) |
+| `lib-compose.sh` | Thin bridge to `clavain-cli compose` — provides `compose_dispatch()` and `compose_available()` (in `scripts/`, not `hooks/`) |
+| `lib-sprint.sh` | Sprint state queries (phase, gate, budget, artifact); exports `CLAVAIN_COMPOSE_PLAN` after phase advance |
 | `lib-signals.sh` | Signal detection engine for auto-stop-actions |
 | `lib-spec.sh` | Agency spec loader — reads `config/agency-spec.yaml` at runtime |
 | `lib-verdict.sh` | Verdict file write/read utilities for structured agent handoffs |
