@@ -175,7 +175,7 @@ Fill `{{PROJECT_SLUG}}` from project name (lowercase, hyphenated).
 Create all missing directories:
 
 ```bash
-for d in brainstorms plans research guides canon prd prds \
+for d in brainstorms plans research guides canon prd prds cujs \
          solutions/patterns solutions/best-practices solutions/runtime-errors \
          audits diagrams migrations policies reports traces; do
     mkdir -p "docs/$d"
@@ -205,7 +205,8 @@ Use Q4 (key goals) to generate real content:
 2. **Vision** — run `/interpath:vision` (reads brainstorm)
 3. **PRD** — run `/interpath:prd` (reads brainstorm + vision)
 4. **Roadmap** — run `/interpath:roadmap` (reads beads)
-5. **Initial beads** — create epic from project goals, features from PRD:
+5. **CUJs** (optional) — run `/interpath:cuj` for 1-2 key user journeys identified in the PRD. Skip if the project doesn't have clear user-facing flows yet.
+6. **Initial beads** — create epic from project goals, features from PRD:
 
 ```bash
 bd create --title="<project>: initial setup and first features" --type=epic --priority=1

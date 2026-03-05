@@ -30,7 +30,7 @@ Skip anything that exists. Execute in order:
 4. Generate AGENTS.md from `templates/AGENTS.md.tmpl` (architecture, build, conventions)
 5. Generate PHILOSOPHY.md from `templates/PHILOSOPHY.md.tmpl` (goals → principles)
 6. Generate CONVENTIONS.md from `templates/CONVENTIONS.md.tmpl` (canonical doc paths)
-7. Create full docs/ tree: brainstorms, plans, research, guides, canon, prd, prds, solutions/{patterns,best-practices,runtime-errors}, audits, diagrams, migrations, policies, reports, traces
+7. Create full docs/ tree: brainstorms, plans, research, guides, canon, prd, prds, cujs, solutions/{patterns,best-practices,runtime-errors}, audits, diagrams, migrations, policies, reports, traces
 
 ## Phase 4: Observability
 
@@ -45,7 +45,8 @@ From Q4 (key goals):
 2. `/interpath:vision`
 3. `/interpath:prd`
 4. `/interpath:roadmap`
-5. Create initial beads (epic + features from PRD)
+5. `/interpath:cuj` (optional — for 1-2 key user journeys from PRD, skip if no clear user flows)
+6. Create initial beads (epic + features from PRD)
 
 ## Phase 6: Verify & Report
 

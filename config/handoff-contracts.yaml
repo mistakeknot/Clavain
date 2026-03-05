@@ -83,6 +83,30 @@ contracts:
         - pattern: "^MODEL:"
         - pattern: "^TOKENS_SPENT:"
 
+  cuj:
+    description: "Critical User Journey with typed success signals"
+    produced_by: design
+    consumed_by: [build, ship]
+    frontmatter:
+      required_fields: [artifact_type, journey, actor]
+    content:
+      required_sections:
+        - id: motivation
+          heading_pattern: "(?i)why.this.journey|why.it.matters|motivation|stakes"
+          min_words: 30
+        - id: journey
+          heading_pattern: "(?i)the.journey|journey|experience|flow"
+          min_words: 50
+        - id: success_signals
+          heading_pattern: "(?i)success.signal|signal"
+      optional_sections:
+        - id: friction_points
+          heading_pattern: "(?i)friction|pain.point|risk|known.issue"
+      required_patterns:
+        - pattern: "measurable|observable|qualitative"
+          description: "Must include typed success signals"
+      min_total_words: 150
+
   reflection:
     description: "Sprint learnings and retrospective"
     produced_by: reflect

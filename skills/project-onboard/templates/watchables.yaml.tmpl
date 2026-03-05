@@ -12,6 +12,12 @@ watchables:
     generator: interpath:roadmap
     staleness_days: 30
 
+  - name: cuj
+    path: docs/cujs/
+    generator: interpath:artifact-gen
+    generator_args: { type: cuj }
+    staleness_days: 14
+
   - name: philosophy
     path: PHILOSOPHY.md
     staleness_days: 90
