@@ -253,6 +253,7 @@ YAML
 # ═══════════════════════════════════════════════════════════════
 
 @test "fixture registry validates against JSON schema" {
+    python3 -c "import jsonschema" 2>/dev/null || skip "jsonschema not installed"
     export PATH="$HOME/.local/bin:$PATH"
     local schema_path="$BATS_TEST_DIRNAME/../../config/fleet-registry.schema.json"
     # Write validation script to temp file (avoids multi-line bash -c)
@@ -290,17 +291,22 @@ PYEOF
 # ═══════════════════════════════════════════════════════════════
 
 @test "lib-fleet fails with clear message when yq is absent" {
-    # Write a test script that restricts PATH before sourcing
+    # Create an isolated PATH with no yq by linking only essential commands
+    mkdir -p "$TEST_DIR/notyq_bin"
+    for cmd in bash cat dirname grep head readlink sed wc; do
+        local p; p="$(command -v "$cmd" 2>/dev/null)" && ln -sf "$p" "$TEST_DIR/notyq_bin/"
+    done
     cat > "$TEST_DIR/test_no_yq.sh" << SHEOF
-#!/usr/bin/env bash
-export PATH=/usr/bin:/bin
+#!/bin/bash
+export PATH="$TEST_DIR/notyq_bin"
 export HOME=/nonexistent
+unset _FLEET_LOADED_PATH
 source "$SCRIPTS_DIR/lib-fleet.sh"
 export CLAVAIN_FLEET_REGISTRY="$FIXTURES_DIR/fleet-registry.yaml"
 fleet_list 2>&1
 SHEOF
     chmod +x "$TEST_DIR/test_no_yq.sh"
-    run bash "$TEST_DIR/test_no_yq.sh"
+    run "$TEST_DIR/notyq_bin/bash" "$TEST_DIR/test_no_yq.sh"
     [[ "$status" -ne 0 ]]
     [[ "$output" == *"yq not found"* ]]
 }
