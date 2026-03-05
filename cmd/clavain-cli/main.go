@@ -176,6 +176,15 @@ func main() {
 	case "validate-linkage":
 		err = cmdValidateLinkage(args)
 
+	// Intent contract
+	case "intent":
+		if len(args) > 0 && args[0] == "submit" {
+			err = cmdIntentSubmit(args[1:])
+		} else {
+			fmt.Fprintf(os.Stderr, "clavain-cli intent: unknown subcommand (use 'intent submit')\n")
+			os.Exit(1)
+		}
+
 	case "help", "--help", "-h":
 		printHelp()
 
@@ -285,5 +294,8 @@ Policy:
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract
   validate-linkage    [--contracts=<path>] [--spec=<path>] Check contract-to-spec consistency
+
+Intent Contract:
+  intent submit   Submit a typed intent (JSON on stdin preferred; flags: --type, --bead, --session, --key)
 `)
 }
