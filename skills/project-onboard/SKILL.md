@@ -205,7 +205,7 @@ Use Q4 (key goals) to generate real content:
 2. **Vision** — run `/interpath:vision` (reads brainstorm)
 3. **PRD** — run `/interpath:prd` (reads brainstorm + vision)
 4. **Roadmap** — run `/interpath:roadmap` (reads beads)
-5. **CUJs** — run `/interpath:cuj` for 1-2 key user journeys identified in the PRD. Required for any project with user-facing flows. Skip only for pure libraries or internal infrastructure.
+5. **CUJs** — run `/interpath:cuj` for each critical user-facing flow identified in the PRD. Required for any project with user-facing flows. Skip only for pure libraries or internal infrastructure.
 6. **Initial beads** — create epic from project goals, features from PRD:
 
 ```bash

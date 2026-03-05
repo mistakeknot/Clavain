@@ -45,7 +45,7 @@ From Q4 (key goals):
 2. `/interpath:vision`
 3. `/interpath:prd`
 4. `/interpath:roadmap`
-5. `/interpath:cuj` (1-2 key user journeys from PRD — required for user-facing projects, skip for pure libraries/infra)
+5. `/interpath:cuj` (one per critical user-facing flow from PRD — required for user-facing projects, skip for pure libraries/infra)
 6. Create initial beads (epic + features from PRD)
 
 ## Phase 6: Verify & Report

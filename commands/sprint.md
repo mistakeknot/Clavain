@@ -170,7 +170,7 @@ Structures the brainstorm into a PRD, creates beads for tracking, and validates 
 
 **Optional:** Run `/clavain:review-doc` on the brainstorm output first for a quick polish before structuring. If you do, set `phase=brainstorm-reviewed` after review-doc completes.
 
-**CUJs:** After the PRD is created, run `/interpath:cuj` to generate 1-2 Critical User Journeys from the PRD. CUJs document the expected end-to-end experience with typed success signals (measurable/observable/qualitative) that agents can validate against during execution. Required for any user-facing work. Skip only for purely internal/infrastructure changes (refactors, CI, dependency updates).
+**CUJs:** After the PRD is created, run `/interpath:cuj` to generate a CUJ for each critical user-facing flow identified in the PRD. CUJs document the expected end-to-end experience with typed success signals (measurable/observable/qualitative) that agents can validate against during execution. Required for any user-facing work. Skip only for purely internal/infrastructure changes (refactors, CI, dependency updates).
 
 **Phase:** After strategy completes, set `phase=strategized` with reason `"PRD: <prd_path>"`.
 
