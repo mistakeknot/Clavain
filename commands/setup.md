@@ -232,6 +232,21 @@ If not on PATH: warn "Add ~/.local/bin to your PATH: export PATH=\"$HOME/.local/
 
 If `ic` is already present and healthy: report "ic kernel: healthy (version X.Y.Z)"
 
+## Step 5c: Configure Statusline (interline)
+
+If interline is installed, run its install script to set up the statusline with Clavain-branded defaults:
+
+```bash
+INTERLINE_INSTALL=$(ls ~/.claude/plugins/cache/*/interline/*/scripts/install.sh 2>/dev/null | head -1)
+if [ -n "$INTERLINE_INSTALL" ]; then
+  bash "$INTERLINE_INSTALL"
+else
+  echo "interline not installed — statusline will not be configured"
+fi
+```
+
+This installs `~/.claude/statusline.sh`, creates `~/.claude/interline.json` with defaults (rainbow "Clavain" label with auto-version, dispatch prefix "Dispatch", bead_query and coordination disabled), and wires `settings.json`.
+
 ## Step 6: Verify Configuration
 
 Run a final verification. This script reads `~/.claude/settings.json` to check actual enabled/disabled state (plugins missing from `enabledPlugins` are enabled by default — only explicit `false` means disabled):
