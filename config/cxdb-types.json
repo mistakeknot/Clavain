@@ -1,0 +1,95 @@
+{
+  "bundle_version": 1,
+  "types": {
+    "clavain.phase.v1": {
+      "description": "Sprint phase transition record",
+      "fields": {
+        "bead_id": {"type": "string", "tag": 1, "required": true},
+        "phase": {"type": "string", "tag": 2, "required": true},
+        "previous_phase": {"type": "string", "tag": 3, "required": true},
+        "artifact_path": {"type": "string", "tag": 4},
+        "artifact_blob_hash": {"type": "bytes32", "tag": 5},
+        "timestamp": {"type": "uint64", "tag": 6, "required": true}
+      }
+    },
+    "clavain.dispatch.v1": {
+      "description": "Agent dispatch record",
+      "fields": {
+        "bead_id": {"type": "string", "tag": 1, "required": true},
+        "agent_name": {"type": "string", "tag": 2, "required": true},
+        "agent_type": {"type": "string", "tag": 3},
+        "model": {"type": "string", "tag": 4},
+        "status": {"type": "string", "tag": 5, "required": true},
+        "input_tokens": {"type": "uint64", "tag": 6},
+        "output_tokens": {"type": "uint64", "tag": 7},
+        "result_blob_hash": {"type": "bytes32", "tag": 8},
+        "timestamp": {"type": "uint64", "tag": 9, "required": true}
+      }
+    },
+    "clavain.artifact.v1": {
+      "description": "Artifact blob reference",
+      "fields": {
+        "bead_id": {"type": "string", "tag": 1, "required": true},
+        "artifact_type": {"type": "string", "tag": 2, "required": true},
+        "path": {"type": "string", "tag": 3, "required": true},
+        "blob_hash": {"type": "bytes32", "tag": 4, "required": true},
+        "size_bytes": {"type": "uint64", "tag": 5},
+        "timestamp": {"type": "uint64", "tag": 6, "required": true}
+      }
+    },
+    "clavain.scenario.v1": {
+      "description": "Scenario execution trajectory",
+      "fields": {
+        "bead_id": {"type": "string", "tag": 1, "required": true},
+        "scenario_id": {"type": "string", "tag": 2, "required": true},
+        "step_index": {"type": "uint32", "tag": 3},
+        "action": {"type": "string", "tag": 4},
+        "expected": {"type": "string", "tag": 5},
+        "actual": {"type": "string", "tag": 6},
+        "pass": {"type": "bool", "tag": 7},
+        "expect_type": {"type": "string", "tag": 8},
+        "trajectory_blob_hash": {"type": "bytes32", "tag": 9},
+        "timestamp": {"type": "uint64", "tag": 10, "required": true}
+      }
+    },
+    "clavain.satisfaction.v1": {
+      "description": "Satisfaction score from LLM judges",
+      "fields": {
+        "bead_id": {"type": "string", "tag": 1, "required": true},
+        "scenario_id": {"type": "string", "tag": 2, "required": true},
+        "overall_score": {"type": "float64", "tag": 3, "required": true},
+        "per_criterion_scores": {"type": "map<string,float64>", "tag": 4},
+        "judge_model_version": {"type": "string", "tag": 5},
+        "judge_agent": {"type": "string", "tag": 6},
+        "trajectory_context_id": {"type": "uint64", "tag": 7},
+        "sprint_outcome": {"type": "string", "tag": 8},
+        "holdout": {"type": "bool", "tag": 9},
+        "timestamp": {"type": "uint64", "tag": 10, "required": true}
+      }
+    },
+    "clavain.evidence.v1": {
+      "description": "Evidence from plugin pipelines",
+      "fields": {
+        "bead_id": {"type": "string", "tag": 1, "required": true},
+        "source_plugin": {"type": "string", "tag": 2, "required": true},
+        "evidence_type": {"type": "string", "tag": 3, "required": true},
+        "session_id": {"type": "string", "tag": 4},
+        "phase": {"type": "string", "tag": 5},
+        "blob_hash": {"type": "bytes32", "tag": 6},
+        "timestamp": {"type": "uint64", "tag": 7, "required": true}
+      }
+    },
+    "clavain.policy_violation.v1": {
+      "description": "Policy violation audit record",
+      "fields": {
+        "bead_id": {"type": "string", "tag": 1, "required": true},
+        "agent_name": {"type": "string", "tag": 2, "required": true},
+        "phase": {"type": "string", "tag": 3, "required": true},
+        "action": {"type": "string", "tag": 4, "required": true},
+        "target": {"type": "string", "tag": 5, "required": true},
+        "policy_rule": {"type": "string", "tag": 6, "required": true},
+        "timestamp": {"type": "uint64", "tag": 7, "required": true}
+      }
+    }
+  }
+}

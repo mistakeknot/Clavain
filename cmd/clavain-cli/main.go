@@ -128,6 +128,16 @@ func main() {
 	case "tool-surface":
 		err = cmdToolSurface(args)
 
+	// CXDB
+	case "cxdb-start":
+		err = cmdCXDBStart(args)
+	case "cxdb-stop":
+		err = cmdCXDBStop(args)
+	case "cxdb-status":
+		err = cmdCXDBStatus(args)
+	case "cxdb-setup":
+		err = cmdCXDBSetup(args)
+
 	// Handoff
 	case "validate-handoff":
 		err = cmdValidateHandoff(args)
@@ -214,6 +224,12 @@ Compose:
 
 Tool Composition:
   tool-surface        [--json]                             Output tool composition context (domains, groups, hints)
+
+CXDB:
+  cxdb-start          Start CXDB server (creates data dir, registers types)
+  cxdb-stop           Stop CXDB server
+  cxdb-status         Show CXDB server status as JSON
+  cxdb-setup          Download and install cxdb-server binary [--version=<ver>]
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract

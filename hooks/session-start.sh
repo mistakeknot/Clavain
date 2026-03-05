@@ -245,6 +245,27 @@ if command -v clavain-cli &>/dev/null; then
     fi
 fi
 
+# CXDB auto-start — start server if binary installed but not running.
+# Runs in background to avoid blocking session startup.
+_cxdb_project_dir="${SPRINT_LIB_PROJECT_DIR:-.}"
+_cxdb_binary="${_cxdb_project_dir}/.clavain/cxdb/cxdb-server"
+_cxdb_pid_file="${_cxdb_project_dir}/.clavain/cxdb/cxdb.pid"
+if [[ -x "$_cxdb_binary" ]]; then
+    _cxdb_running=false
+    if [[ -f "$_cxdb_pid_file" ]]; then
+        _cxdb_pid=$(cat "$_cxdb_pid_file" 2>/dev/null) || _cxdb_pid=""
+        if [[ -n "$_cxdb_pid" ]] && kill -0 "$_cxdb_pid" 2>/dev/null; then
+            _cxdb_running=true
+        fi
+    fi
+    if [[ "$_cxdb_running" == "false" ]]; then
+        _cli=$(_compose_find_cli 2>/dev/null) || _cli=""
+        if [[ -n "$_cli" ]]; then
+            "$_cli" cxdb-start >/dev/null 2>&1 &
+        fi
+    fi
+fi
+
 # Work discovery brief scan (interphase companion — beads-based work state)
 # Source the discovery shim which delegates to interphase if available.
 # If interphase is not installed, discovery_brief_scan won't be defined → silent skip.
