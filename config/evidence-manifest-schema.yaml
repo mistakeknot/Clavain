@@ -1,0 +1,22 @@
+# Clavain Evidence Manifest Schema v1
+# Reference schema for .clavain/evidence/<case>/manifest.yml
+#
+# Evidence packs capture provenance for failures, regressions, and profiler events.
+# Each pack is a directory with a manifest and attached files.
+
+schema_version: 1
+
+# Required fields
+source_plugin: string    # Plugin that produced this evidence (e.g., "interspect", "interflux")
+evidence_type: string    # Category (e.g., "profiler_event", "regression", "test_failure", "sprint_failure")
+session_id: string       # Session that produced this evidence
+phase: string            # Sprint phase when evidence was collected
+timestamp: uint64        # Unix epoch seconds
+
+# Optional fields
+bead_id: string          # Associated bead ID
+finding_id: string       # Finding reference from source plugin
+severity: string         # "info" | "warning" | "error" | "critical"
+replay_instructions: string  # How to reproduce or replay this evidence
+attachments: list        # List of filenames in the evidence pack directory
+blob_hash: string        # CXDB blob hash for the full evidence data

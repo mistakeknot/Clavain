@@ -156,6 +156,14 @@ func main() {
 	case "scenario-calibrate":
 		err = cmdScenarioCalibrate(args)
 
+	// Evidence
+	case "evidence-to-scenario":
+		err = cmdEvidenceToScenario(args)
+	case "evidence-pack":
+		err = cmdEvidencePack(args)
+	case "evidence-list":
+		err = cmdEvidenceList(args)
+
 	// Handoff
 	case "validate-handoff":
 		err = cmdValidateHandoff(args)
@@ -258,6 +266,11 @@ Scenarios:
   scenario-run        <pattern> [--sprint=<id>]  Execute scenarios
   scenario-score      <run-id> [--summary]  Score scenario run with satisfaction rubrics
   scenario-calibrate                         Calibrate satisfaction threshold from history
+
+Evidence:
+  evidence-to-scenario <finding-id> [--bead=<id>]  Convert finding to dev scenario
+  evidence-pack        <bead-id> [--type=<type>]   Create evidence pack from sprint data
+  evidence-list        [bead-id]                    List evidence packs
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract
