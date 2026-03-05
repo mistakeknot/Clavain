@@ -5,6 +5,13 @@
 # Go-only parser (clavain-cli tool-surface). No bash-side parser exists.
 # curation_groups omit boost/weight intentionally — context injection, not graph scoring.
 # TODO: Add tool-composition.schema.json when format stabilizes.
+#
+# Consolidation Criteria (evaluate when adding hints):
+# 1. Hint exceeds 120-char limit → boundary may need facade or merge
+# 2. >3 hints between same plugin pair → too much coordination surface
+# 3. Persistent failure rate despite hints (check interstat data)
+# 4. Tool descriptions need cross-references to explain interaction
+# As of 2026-03-05: no plugin pair meets these criteria.
 
 version: 1
 
@@ -55,11 +62,41 @@ sequencing_hints:
   - first: interflux
     then: clavain
     hint: "flux-drive review runs on plan files before sprint execution"
-  - first: clavain
-    then: clavain
-    hint: "enforce-gate checks phase prerequisites before sprint-advance"
   - first: interstat
     then: clavain
     hint: "set-bead-context registers token attribution before sprint work"
+  - first: interflux
+    then: intersynth
+    hint: "review agents must complete before synthesis agent runs"
+  - first: intersynth
+    then: interspect
+    hint: "synthesize verdicts before recording evidence"
+  - first: interspect
+    then: clavain
+    hint: "interspect evidence calibrates agent routing after reflect"
+  - first: interphase
+    then: clavain
+    hint: "read interphase sprint state before route dispatch decision"
 
-disambiguation_hints: []
+disambiguation_hints:
+  - plugins: [interpath, interdoc]
+    domain: docs
+    hint: "interpath generates artifacts (roadmaps, changelogs); interdoc manages AGENTS.md"
+  - plugins: [interwatch, intercheck]
+    domain: quality
+    hint: "interwatch detects doc drift; intercheck runs code quality verification"
+  - plugins: [intersearch, tldr-swinton]
+    domain: discovery
+    hint: "intersearch queries cached embeddings; tldr-swinton extracts live file structure"
+  - plugins: [interlock, intermux]
+    domain: coordination
+    hint: "interlock reserves files for editing; intermux monitors active agent sessions"
+  - plugins: [interflux, interpeer]
+    domain: quality
+    hint: "interflux uses Claude-native fd-* agents; interpeer uses cross-AI review"
+  - plugins: [interject, intersearch]
+    domain: discovery
+    hint: "interject does ambient inbox triage; intersearch does explicit code queries"
+  - plugins: [interwatch, interkasten]
+    domain: docs
+    hint: "interwatch detects local doc staleness; interkasten syncs with Notion"

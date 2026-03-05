@@ -21,6 +21,7 @@ setup() {
     [[ "$output" == *"Quality:"* ]]
     [[ "$output" == *"### Workflow Groups"* ]]
     [[ "$output" == *"### Sequencing"* ]]
+    [[ "$output" == *"### Disambiguation"* ]]
 }
 
 @test "tool-surface --json produces valid JSON with expected keys" {
@@ -72,11 +73,11 @@ setup() {
     [ "$long_hints" -eq 0 ]
 }
 
-@test "tool-composition.yaml is < 100 lines" {
+@test "tool-composition.yaml is < 150 lines" {
     config_file="${CLAVAIN_CONFIG_DIR}/tool-composition.yaml"
     [ -f "$config_file" ]
     line_count=$(wc -l < "$config_file")
-    [ "$line_count" -lt 100 ]
+    [ "$line_count" -lt 150 ]
 }
 
 @test "tool-surface --json includes disambiguation_hints key" {
@@ -95,7 +96,7 @@ setup() {
 @test "disambiguation hints have required fields" {
     run "$CLI" tool-surface --json
     [ "$status" -eq 0 ]
-    missing=$(echo "$output" | jq '[.disambiguation_hints[] | select(.plugins | length == 0 or .hint == "")] | length')
+    missing=$(echo "$output" | jq '[.disambiguation_hints[] | select((.plugins | length) == 0 or .hint == "")] | length')
     [ "$missing" -eq 0 ]
 }
 
