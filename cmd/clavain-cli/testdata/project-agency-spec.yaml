@@ -1,0 +1,17 @@
+version: "1.0"
+stages:
+  ship:
+    agents:
+      required:
+        - role: fd-architecture
+          description: "Architecture review"
+          model_tier: sonnet
+        - role: fd-correctness
+          description: "Correctness review"
+          model_tier: sonnet
+        - role: fd-quality
+          description: "Quality review"
+          model_tier: sonnet
+        - role: fd-self-modification
+          description: "Self-modification safety review"
+          model_tier: sonnet

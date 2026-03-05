@@ -32,7 +32,8 @@ stages:
         type: markdown
         path_pattern: "docs/brainstorms/*.md"
         required: true
-    gates: {}
+    gates:
+      gate_mode: enforce
     budget:
       share: 10
       min_tokens: 2000
@@ -73,6 +74,7 @@ stages:
         path_pattern: "docs/plans/*.md"
         required: true
     gates:
+      gate_mode: enforce
       plan_reviewed:
         type: artifact_reviewed
         artifact: plan

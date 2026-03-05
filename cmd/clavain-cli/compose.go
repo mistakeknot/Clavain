@@ -59,11 +59,12 @@ type SpecDefaults struct {
 }
 
 type StageSpec struct {
-	Description string            `yaml:"description"`
-	Phases      []string          `yaml:"phases"`
-	Requires    StageRequirements `yaml:"requires"`
-	Budget      StageBudget       `yaml:"budget"`
-	Agents      StageAgents       `yaml:"agents"`
+	Description string                 `yaml:"description"`
+	Phases      []string               `yaml:"phases"`
+	Requires    StageRequirements      `yaml:"requires"`
+	Budget      StageBudget            `yaml:"budget"`
+	Agents      StageAgents            `yaml:"agents"`
+	Gates       map[string]interface{} `yaml:"gates,omitempty"`
 }
 
 type StageRequirements struct {
@@ -594,6 +595,82 @@ func checkCapabilityCoverage(required []string, agents []PlanAgent, fleet *Fleet
 	}
 	sort.Strings(missing)
 	return missing
+}
+
+// composeSprint runs compose for ALL stages in the agency spec.
+// Returns a slice of ComposePlan — one per stage.
+func composeSprint(spec *AgencySpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides, sprintID string, totalBudget int64) []ComposePlan {
+	var plans []ComposePlan
+
+	// Sort stage names for deterministic output
+	var stageNames []string
+	for name := range spec.Stages {
+		stageNames = append(stageNames, name)
+	}
+	sort.Strings(stageNames)
+
+	for _, stageName := range stageNames {
+		stageSpec := spec.Stages[stageName]
+		stageBudget := totalBudget * int64(stageSpec.Budget.Share) / 100
+		if stageBudget < int64(stageSpec.Budget.MinTokens) {
+			stageBudget = int64(stageSpec.Budget.MinTokens)
+		}
+		plan := composePlan(stageName, sprintID, stageBudget, stageSpec, fleet, cal, overrides)
+		plans = append(plans, plan)
+	}
+	return plans
+}
+
+// cmdSprintCompose runs compose for all stages and stores the result as an ic artifact.
+// Usage: sprint-compose <bead_id>
+// Outputs: JSON array of ComposePlan on stdout.
+func cmdSprintCompose(args []string) error {
+	if len(args) < 1 || args[0] == "" {
+		return fmt.Errorf("usage: sprint-compose <bead_id>")
+	}
+	beadID := args[0]
+
+	// Load inputs
+	fleet, err := loadFleetRegistry()
+	if err != nil {
+		return fmt.Errorf("sprint-compose: %w", err)
+	}
+	spec, err := loadAgencySpec()
+	if err != nil {
+		return fmt.Errorf("sprint-compose: %w", err)
+	}
+	cal := loadInterspectCalibration()
+	overrides := loadRoutingOverrides()
+
+	// Get total budget from ic run
+	var totalBudget int64 = 1000000 // default 1M
+	runID, runErr := resolveRunID(beadID)
+	if runErr == nil {
+		var run Run
+		if err := runICJSON(&run, "run", "status", runID); err == nil && run.TokenBudget > 0 {
+			totalBudget = run.TokenBudget
+		}
+	}
+
+	// Compose all stages
+	plans := composeSprint(spec, fleet, cal, overrides, beadID, totalBudget)
+
+	// Output JSON
+	data, err := json.MarshalIndent(plans, "", "  ")
+	if err != nil {
+		return fmt.Errorf("sprint-compose: marshal: %w", err)
+	}
+	fmt.Println(string(data))
+
+	// Store as ic artifact (best-effort)
+	if runErr == nil && runID != "" {
+		tmpPath := filepath.Join(os.TempDir(), fmt.Sprintf("clavain-compose-%s.json", beadID))
+		if err := os.WriteFile(tmpPath, data, 0644); err == nil {
+			runIC("run", "artifact", "add", runID, "--phase=brainstorm", "--path="+tmpPath, "--type=compose_plan")
+		}
+	}
+
+	return nil
 }
 
 func stageKeys(spec *AgencySpec) string {

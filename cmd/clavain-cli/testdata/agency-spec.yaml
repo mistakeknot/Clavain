@@ -3,6 +3,40 @@ defaults:
   budget_allocation: proportional
   gate_mode: shadow
 stages:
+  discover:
+    description: "Brainstorm and explore"
+    phases: [brainstorm]
+    requires:
+      capabilities: []
+    budget:
+      share: 10
+      min_tokens: 2000
+      model_tier_hint: sonnet
+    gates:
+      gate_mode: enforce
+    agents:
+      required:
+        - role: brainstorm-facilitator
+          description: "Brainstorm facilitator"
+          model_tier: sonnet
+      optional: []
+  design:
+    description: "Strategy and planning"
+    phases: [strategized, planned, plan-reviewed]
+    requires:
+      capabilities: []
+    budget:
+      share: 25
+      min_tokens: 5000
+      model_tier_hint: opus
+    gates:
+      gate_mode: enforce
+    agents:
+      required:
+        - role: strategist
+          description: "Strategy writer"
+          model_tier: opus
+      optional: []
   ship:
     description: "Quality gates and shipping"
     phases: [shipping]

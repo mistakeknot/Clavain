@@ -701,6 +701,28 @@ func getGateMode() string {
 	return "shadow"
 }
 
+// getGateModeForPhase checks for per-stage gate_mode override, falling back to spec defaults.
+// Maps the target phase to a stage via phaseToStage, then checks the stage's gates.
+func getGateModeForPhase(spec *AgencySpec, targetPhase string) string {
+	stage := phaseToStage(targetPhase)
+	if stage != "" && stage != "unknown" && stage != "done" {
+		if stageSpec, ok := spec.Stages[stage]; ok {
+			if stageSpec.Gates != nil {
+				if gm, ok := stageSpec.Gates["gate_mode"]; ok {
+					if mode, ok := gm.(string); ok && mode != "" {
+						return mode
+					}
+				}
+			}
+		}
+	}
+	// Fall back to spec defaults
+	if spec.Defaults.GateMode != "" {
+		return spec.Defaults.GateMode
+	}
+	return "shadow"
+}
+
 // summarizeFailures returns a one-line summary of failed checks.
 func summarizeFailures(r HandoffResult) string {
 	var fails []string

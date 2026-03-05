@@ -237,11 +237,19 @@ func cmdEnforceGate(args []string) error {
 
 	// Handoff contract pre-check (before ic gate check)
 	if os.Getenv("CLAVAIN_SKIP_HANDOFF") == "" {
+		// Load spec once for gate mode checks (hoisted outside loop)
+		spec, specErr := loadAgencySpec()
+		var gateMode string
+		if specErr == nil {
+			gateMode = getGateModeForPhase(spec, targetPhase)
+		} else {
+			gateMode = "shadow"
+		}
+
 		handoffResults := checkHandoffContracts(beadID, targetPhase)
 		for _, r := range handoffResults {
 			if r.Result == "fail" {
-				mode := getGateMode()
-				if mode == "enforce" {
+				if gateMode == "enforce" {
 					return fmt.Errorf("handoff contract failed for %s: %s", r.ArtifactType, summarizeFailures(r))
 				}
 				// Shadow mode: warn on stderr, continue

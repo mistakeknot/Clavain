@@ -81,8 +81,8 @@ func TestLoadFleetRegistry(t *testing.T) {
 
 func TestLoadAgencySpec(t *testing.T) {
 	spec := loadTestSpec(t)
-	if len(spec.Stages) != 2 {
-		t.Fatalf("expected 2 stages, got %d", len(spec.Stages))
+	if len(spec.Stages) != 4 {
+		t.Fatalf("expected 4 stages, got %d", len(spec.Stages))
 	}
 	ship, ok := spec.Stages["ship"]
 	if !ok {
@@ -489,6 +489,75 @@ func TestCapabilityCoverage(t *testing.T) {
 	missing = checkCapabilityCoverage(required, agents, fleet)
 	if len(missing) != 1 || missing[0] != "nonexistent" {
 		t.Errorf("expected [nonexistent] missing, got %v", missing)
+	}
+}
+
+func TestSprintComposeStoresAllStages(t *testing.T) {
+	fleet := loadTestFleet(t)
+	spec := loadTestSpec(t)
+	cal := loadTestCalibration(t)
+
+	plans := composeSprint(spec, fleet, cal, nil, "test-sprint", 100000)
+
+	// Should have plans for all stages in test spec (discover, design, ship, build)
+	if len(plans) != 4 {
+		t.Fatalf("composeSprint returned %d stage plans, want 4", len(plans))
+	}
+
+	// Verify ship stage has agents
+	var shipPlan *ComposePlan
+	for i := range plans {
+		if plans[i].Stage == "ship" {
+			shipPlan = &plans[i]
+			break
+		}
+	}
+	if shipPlan == nil {
+		t.Fatal("no ship stage in composeSprint output")
+	}
+	if len(shipPlan.Agents) == 0 {
+		t.Error("ship stage has no agents")
+	}
+
+	// Verify sprint ID is set on all plans
+	for _, p := range plans {
+		if p.Sprint != "test-sprint" {
+			t.Errorf("stage %s: sprint = %q, want test-sprint", p.Stage, p.Sprint)
+		}
+	}
+}
+
+func TestMergeProjectOverride(t *testing.T) {
+	spec := loadTestSpec(t)
+
+	// Load project override
+	data, err := os.ReadFile(filepath.Join("testdata", "project-agency-spec.yaml"))
+	if err != nil {
+		t.Fatalf("load project override: %v", err)
+	}
+	var override AgencySpec
+	if err := yaml.Unmarshal(data, &override); err != nil {
+		t.Fatalf("parse project override: %v", err)
+	}
+
+	mergeSpec(spec, &override)
+
+	ship := spec.Stages["ship"]
+	// Should now have 4 required agents (3 original + fd-self-modification)
+	if len(ship.Agents.Required) != 4 {
+		t.Errorf("merged ship required agents = %d, want 4", len(ship.Agents.Required))
+	}
+
+	// Verify fd-self-modification is present
+	found := false
+	for _, a := range ship.Agents.Required {
+		if a.Role == "fd-self-modification" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("fd-self-modification not found in merged spec")
 	}
 }
 

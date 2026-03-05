@@ -432,6 +432,51 @@ func TestGetGateMode(t *testing.T) {
 	}
 }
 
+func TestGetGateModePerStage(t *testing.T) {
+	spec := &AgencySpec{
+		Defaults: SpecDefaults{GateMode: "shadow"},
+		Stages: map[string]StageSpec{
+			"discover": {
+				Phases: []string{"brainstorm"},
+				Gates:  map[string]interface{}{"gate_mode": "enforce"},
+			},
+			"design": {
+				Phases: []string{"strategized", "planned"},
+				Gates:  map[string]interface{}{"gate_mode": "enforce"},
+			},
+			"build": {
+				Phases: []string{"executing"},
+				Gates:  nil, // no per-stage override
+			},
+			"ship": {
+				Phases: []string{"shipping"},
+				Gates:  map[string]interface{}{}, // empty map, no gate_mode key
+			},
+		},
+	}
+
+	tests := []struct {
+		phase string
+		want  string
+	}{
+		{"brainstorm", "enforce"},  // discover stage → enforce
+		{"strategized", "enforce"}, // design stage → enforce
+		{"planned", "enforce"},     // design stage → enforce
+		{"executing", "shadow"},    // build stage → falls back to default
+		{"shipping", "shadow"},     // ship stage → empty gates, falls back to default
+		{"unknown_phase", "shadow"},// unmapped phase → falls back to default
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.phase, func(t *testing.T) {
+			got := getGateModeForPhase(spec, tt.phase)
+			if got != tt.want {
+				t.Errorf("getGateModeForPhase(%q) = %q, want %q", tt.phase, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSummarizeFailures(t *testing.T) {
 	result := HandoffResult{
 		Checks: []HandoffCheck{

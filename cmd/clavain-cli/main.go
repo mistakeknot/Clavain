@@ -115,6 +115,12 @@ func main() {
 	// Compose
 	case "compose":
 		err = cmdCompose(args)
+	case "sprint-compose":
+		err = cmdSprintCompose(args)
+	case "sprint-plan-phase":
+		err = cmdSprintPlanPhase(args)
+	case "sprint-env-vars":
+		err = cmdSprintEnvVars(args)
 
 	// Handoff
 	case "validate-handoff":
@@ -195,6 +201,9 @@ Agent Tracking:
 
 Compose:
   compose             --sprint=<bead_id> --stage=<stage>  Generate dispatch plan
+  sprint-compose      <bead_id>                             Compose all stages for sprint
+  sprint-plan-phase   <bead_id> <phase>                    Get model+budget for phase from compose plan
+  sprint-env-vars     <bead_id> <phase>                    Output export statements for sprint env vars
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract
