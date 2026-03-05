@@ -164,6 +164,12 @@ func main() {
 	case "evidence-list":
 		err = cmdEvidenceList(args)
 
+	// Policy
+	case "policy-check":
+		err = cmdPolicyCheck(args)
+	case "policy-show":
+		err = cmdPolicyShow(args)
+
 	// Handoff
 	case "validate-handoff":
 		err = cmdValidateHandoff(args)
@@ -271,6 +277,10 @@ Evidence:
   evidence-to-scenario <finding-id> [--bead=<id>]  Convert finding to dev scenario
   evidence-pack        <bead-id> [--type=<type>]   Create evidence pack from sprint data
   evidence-list        [bead-id]                    List evidence packs
+
+Policy:
+  policy-check         <agent> <action> [--path=<p>] [--bead=<id>]  Check action against policy
+  policy-show                                        Display current policy
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract

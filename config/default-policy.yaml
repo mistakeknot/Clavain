@@ -1,0 +1,43 @@
+# Clavain Agent Capability Policy v1
+# Default policy for agent actions per sprint phase.
+#
+# Each phase defines allow/deny rules for paths and tools.
+# Deny rules take precedence over allow rules.
+# Holdout paths are denied during build phases to prevent contamination.
+
+schema_version: 1
+
+phases:
+  brainstorm:
+    deny_paths:
+      - ".clavain/scenarios/holdout/**"
+    deny_tools: []
+
+  strategized:
+    deny_paths:
+      - ".clavain/scenarios/holdout/**"
+    deny_tools: []
+
+  planned:
+    deny_paths:
+      - ".clavain/scenarios/holdout/**"
+    deny_tools: []
+
+  executing:
+    deny_paths:
+      - ".clavain/scenarios/holdout/**"
+    deny_tools: []
+
+  shipping:
+    # Quality gates phase — full access for validation
+    allow_paths:
+      - "**"
+    allow_tools:
+      - "**"
+    deny_paths: []
+    deny_tools: []
+
+  reflect:
+    deny_paths:
+      - ".clavain/scenarios/holdout/**"
+    deny_tools: []
