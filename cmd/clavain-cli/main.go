@@ -124,6 +124,10 @@ func main() {
 	case "sprint-env-vars":
 		err = cmdSprintEnvVars(args)
 
+	// Tool Composition
+	case "tool-surface":
+		err = cmdToolSurface(args)
+
 	// Handoff
 	case "validate-handoff":
 		err = cmdValidateHandoff(args)
@@ -207,6 +211,9 @@ Compose:
   sprint-compose      <bead_id>                             Compose all stages for sprint
   sprint-plan-phase   <bead_id> <phase>                    Get model+budget for phase from compose plan
   sprint-env-vars     <bead_id> <phase>                    Output export statements for sprint env vars
+
+Tool Composition:
+  tool-surface        [--json]                             Output tool composition context (domains, groups, hints)
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract

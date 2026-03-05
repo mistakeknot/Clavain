@@ -1,0 +1,63 @@
+# Tool composition layer — shallow metadata for agent tool routing
+# Mirrors interchart's domain overlay pattern applied to tool selection
+# See: dialectics/2026-03-02-plugin-modularity/r3_sublation.md
+#
+# Go-only parser (clavain-cli tool-surface). No bash-side parser exists.
+# curation_groups omit boost/weight intentionally — context injection, not graph scoring.
+# TODO: Add tool-composition.schema.json when format stabilizes.
+
+version: 1
+
+domains:
+  coordination:
+    description: "Multi-agent coordination, file locking, message passing"
+    plugins: [interlock, intermux, intercom]
+  analytics:
+    description: "Token tracking, cost analysis, benchmarking"
+    plugins: [interstat, tool-time, interbench]
+  quality:
+    description: "Code review, quality gates, verification"
+    plugins: [interflux, intercheck]
+  docs:
+    description: "Documentation lifecycle, drift detection, artifact generation"
+    plugins: [interwatch, interdoc, interpath, interkasten]
+  discovery:
+    description: "Code search, semantic retrieval, context extraction"
+    plugins: [intersearch, tldr-swinton, intermap, interject]
+  phase-control:
+    description: "Sprint lifecycle, phase gates, bead tracking"
+    plugins: [interphase, clavain]
+  design:
+    description: "Visual design, UI components, theming"
+    plugins: [interform, interchart]
+  research:
+    description: "Cross-AI peer review, external web search"
+    plugins: [interpeer]
+
+curation_groups:
+  sprint-core:
+    plugins: [clavain, interphase, interflux, interstat]
+    context: "Sprint lifecycle — clavain orchestrates, interphase gates, interflux reviews, interstat measures"
+  coordination-stack:
+    plugins: [interlock, intermux, interpath]
+    context: "Multi-agent file coordination — resolve paths, reserve files, monitor agents"
+  doc-lifecycle:
+    plugins: [interwatch, interdoc, interpath, interkasten]
+    context: "Document maintenance — detect drift, generate artifacts, manage AGENTS.md, sync Notion"
+  discovery-stack:
+    plugins: [intersearch, tldr-swinton, intermap, interject]
+    context: "Code investigation — semantic search, file extraction, codebase mapping, inbox triage"
+
+sequencing_hints:
+  - first: interpath
+    then: interlock
+    hint: "Resolve file paths before reserving them for editing"
+  - first: interflux
+    then: clavain
+    hint: "flux-drive review runs on plan files before sprint execution"
+  - first: clavain
+    then: clavain
+    hint: "enforce-gate checks phase prerequisites before sprint-advance"
+  - first: interstat
+    then: clavain
+    hint: "set-bead-context registers token attribution before sprint work"

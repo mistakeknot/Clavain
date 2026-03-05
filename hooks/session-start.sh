@@ -216,6 +216,16 @@ if [[ -n "$sprint_context" ]]; then
     sprint_context=$(escape_for_json "$sprint_context")
 fi
 
+# Tool composition context (iv-3kpfu) — shallow metadata for agent tool routing
+# Priority: after sprint_context, before discovery_context in shedding cascade
+composition_context=""
+if command -v clavain-cli &>/dev/null; then
+    _comp_output=$(clavain-cli tool-surface 2>/dev/null) || _comp_output=""
+    if [[ -n "$_comp_output" ]]; then
+        composition_context="\\n\\n$(escape_for_json "$_comp_output")"
+    fi
+fi
+
 # Work discovery brief scan (interphase companion — beads-based work state)
 # Source the discovery shim which delegates to interphase if available.
 # If interphase is not installed, discovery_brief_scan won't be defined → silent skip.
@@ -310,17 +320,21 @@ fi
 # Priority-based shedding: drop lowest-priority sections whole (not byte-level truncation)
 # to avoid breaking mid-escape-sequence in JSON output.
 _context_preamble="You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n"
-_full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}${inflight_context}"
+_full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}${discovery_context}${inflight_context}"
 ADDITIONAL_CONTEXT_CAP=10000
 
 # Shed sections in reverse priority order (lowest value dropped first).
-# Shedding order: inflight → discovery → sprint → upstream → setup
+# Shedding order: inflight → discovery → composition → sprint → upstream → setup
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     inflight_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${discovery_context}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}${discovery_context}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     discovery_context=""
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}"
+fi
+if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
+    composition_context=""
     _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
