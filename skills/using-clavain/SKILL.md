@@ -22,6 +22,9 @@ description: Use when starting any conversation - establishes how to find and us
 | Check project health | `/clavain:doctor` or `/clavain:sprint-status` |
 | Generate a roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` |
+| Run scenario tests | `clavain-cli scenario-run <pattern>` |
+| Check quality gate | `clavain-cli scenario-score <run-id> --summary` |
+| Check agent policy | `clavain-cli policy-check <agent> <action> --path=<p>` |
 | See all commands | `/clavain:help` |
 
 ## Auto-Route Rule
