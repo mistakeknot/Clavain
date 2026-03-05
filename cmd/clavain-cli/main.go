@@ -137,6 +137,10 @@ func main() {
 		err = cmdCXDBStatus(args)
 	case "cxdb-setup":
 		err = cmdCXDBSetup(args)
+	case "cxdb-sync":
+		err = cmdCXDBSync(args)
+	case "cxdb-fork":
+		err = cmdCXDBFork(args)
 
 	// Handoff
 	case "validate-handoff":
@@ -230,6 +234,8 @@ CXDB:
   cxdb-stop           Stop CXDB server
   cxdb-status         Show CXDB server status as JSON
   cxdb-setup          Download and install cxdb-server binary [--version=<ver>]
+  cxdb-sync           <sprint-id>           Backfill CXDB turns from Intercore events
+  cxdb-fork           <sprint-id> <turn-id> Create branched execution trajectory
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract

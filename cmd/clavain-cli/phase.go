@@ -381,7 +381,14 @@ func cmdAdvancePhase(args []string) error {
 	}
 
 	// Record phase completion
-	return cmdRecordPhase(args[:2])
+	if err := cmdRecordPhase(args[:2]); err != nil {
+		return err
+	}
+
+	// Best-effort: record phase transition in CXDB turn DAG
+	cxdbRecordPhaseTransition(beadID, targetPhase, artifactPath)
+
+	return nil
 }
 
 // cmdInferAction determines the next action from sprint state.
