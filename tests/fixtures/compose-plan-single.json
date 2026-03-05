@@ -1,0 +1,10 @@
+{
+  "stage": "build",
+  "sprint": "iv-single",
+  "budget": 80000,
+  "estimated_total": 60000,
+  "warnings": [],
+  "agents": [
+    {"agent_id": "fd-correctness", "subagent_type": "interflux:fd-correctness", "model": "sonnet", "estimated_tokens": 30000, "role": "correctness-review", "required": true, "model_source": "fleet_preferred"}
+  ]
+}

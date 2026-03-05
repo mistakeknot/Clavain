@@ -216,6 +216,25 @@ if [[ -n "$sprint_context" ]]; then
     sprint_context=$(escape_for_json "$sprint_context")
 fi
 
+# Sprint env var injection — CLAVAIN_MODEL + CLAVAIN_PHASE_BUDGET from Composer plans
+# Uses SPRINT_ACTIVE_JSON cached by sprint_brief_scan to avoid duplicate sprint_find_active call
+if [[ -n "${CLAUDE_ENV_FILE:-}" && -n "${SPRINT_ACTIVE_JSON:-}" ]]; then
+    _sprint_count=$(echo "$SPRINT_ACTIVE_JSON" | jq 'length' 2>/dev/null) || _sprint_count=0
+    if [[ "$_sprint_count" -gt 0 ]]; then
+        _sprint_id=$(echo "$SPRINT_ACTIVE_JSON" | jq -r '.[0].id' 2>/dev/null) || _sprint_id=""
+        _sprint_phase=$(echo "$SPRINT_ACTIVE_JSON" | jq -r '.[0].phase' 2>/dev/null) || _sprint_phase=""
+        if [[ -n "$_sprint_id" && -n "$_sprint_phase" ]]; then
+            _cli=$(_compose_find_cli 2>/dev/null) || _cli=""
+            if [[ -n "$_cli" ]]; then
+                _env_exports=$("$_cli" sprint-env-vars "$_sprint_id" "$_sprint_phase" 2>/dev/null) || _env_exports=""
+                if [[ -n "$_env_exports" ]]; then
+                    echo "$_env_exports" >> "$CLAUDE_ENV_FILE"
+                fi
+            fi
+        fi
+    fi
+fi
+
 # Tool composition context (iv-3kpfu) — shallow metadata for agent tool routing
 # Priority: after sprint_context, before discovery_context in shedding cascade
 composition_context=""

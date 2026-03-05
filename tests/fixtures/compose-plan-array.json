@@ -1,0 +1,23 @@
+[
+  {
+    "stage": "build",
+    "sprint": "iv-test",
+    "budget": 100000,
+    "estimated_total": 75000,
+    "warnings": [],
+    "agents": [
+      {"agent_id": "fd-architecture", "subagent_type": "interflux:fd-architecture", "model": "sonnet", "estimated_tokens": 25000, "role": "architecture-review", "required": true, "model_source": "fleet_preferred"},
+      {"agent_id": "fd-safety", "subagent_type": "interflux:fd-safety", "model": "sonnet", "estimated_tokens": 25000, "role": "safety-review", "required": true, "model_source": "safety_floor"}
+    ]
+  },
+  {
+    "stage": "ship",
+    "sprint": "iv-test",
+    "budget": 50000,
+    "estimated_total": 30000,
+    "warnings": ["budget_low"],
+    "agents": [
+      {"agent_id": "fd-quality", "subagent_type": "interflux:fd-quality", "model": "haiku", "estimated_tokens": 15000, "role": "quality-review", "required": false, "model_source": "routing_fallback"}
+    ]
+  }
+]

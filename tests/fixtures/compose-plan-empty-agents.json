@@ -1,0 +1,8 @@
+{
+  "stage": "discover",
+  "sprint": "iv-empty",
+  "budget": 50000,
+  "estimated_total": 0,
+  "warnings": ["unmatched_role:brainstorm-facilitator"],
+  "agents": []
+}

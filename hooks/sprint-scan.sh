@@ -353,6 +353,9 @@ sprint_brief_scan() {
         export SPRINT_LIB_PROJECT_DIR="$SPRINT_PROJECT_DIR"
         local _scan_active_sprints
         _scan_active_sprints=$(sprint_find_active 2>/dev/null) || _scan_active_sprints="[]"
+        # Cache for session-start.sh env var injection (avoids duplicate sprint_find_active call)
+        SPRINT_ACTIVE_JSON="$_scan_active_sprints"
+        export SPRINT_ACTIVE_JSON
         local _scan_sprint_count
         _scan_sprint_count=$(echo "$_scan_active_sprints" | jq 'length' 2>/dev/null) || _scan_sprint_count=0
         if [[ "$_scan_sprint_count" -gt 0 ]]; then
