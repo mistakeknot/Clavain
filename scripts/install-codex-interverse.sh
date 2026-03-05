@@ -586,7 +586,7 @@ cleanup_legacy_predecessors() {
     echo "Cleaned $cleaned legacy superpowers/compound artifacts (backup-first)."
   fi
 
-  # 4. Broken Intermem skill link cleanup (SKILL.md lacks required frontmatter).
+  # 4. Legacy intermem skill link cleanup (old 'synthesize' link name).
   local intermem_link="$SKILLS_DIR/synthesize"
   if [[ -L "$intermem_link" ]]; then
     local resolved
