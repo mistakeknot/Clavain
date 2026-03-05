@@ -31,7 +31,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 16 skills, 4 agents, 45 commands, 7 hooks, 1 MCP server |
+| Components | 16 skills, 4 agents, 45 commands, 8 hooks, 1 MCP server |
 | License | MIT |
 | Layer | L2 (OS) — depends on Intercore (L1), consumed by Autarch (L3) |
 
@@ -165,13 +165,15 @@ Grep sweep checklist (10 locations): `agents/*/`, `skills/*/SKILL.md`, `commands
 - Registration in `hooks/hooks.json` — specifies event, matcher regex, and command
 - Scripts in `hooks/` — use `${CLAUDE_PLUGIN_ROOT}` for portable paths
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
-  - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings. Sources `sprint-scan.sh` for sprint awareness.
+  - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings. Sources `sprint-scan.sh` for sprint awareness. On compact: injects mandatory recovery protocol (re-read CLAUDE.md, confirm conventions, check in-progress beads).
+- **PreToolUse** (matcher: `Edit|Write|MultiEdit`):
+  - `guard-plugin-cache.sh` — blocks edits to `~/.claude/plugins/cache/` (cached copies overwritten on install; directs to source repo)
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
   - `interserve-audit.sh` — logs source code writes when interserve mode is active (audit only, no denial)
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit`):
   - `catalog-reminder.sh` — reminds about catalog updates when components change
 - **PostToolUse** (matcher: `Bash`):
-  - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace (60s TTL sentinel prevents loops)
+  - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace, syncs GitHub repo description with current component counts
   - `bead-agent-bind.sh` — binds agent identity to beads claimed with bd update/claim (warns on overlap, notifies other agent)
 - **Stop**:
   - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh, weight >= 4 triggers /clavain:compound, weight >= 3 triggers /interwatch:watch

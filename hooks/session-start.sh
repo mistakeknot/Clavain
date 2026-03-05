@@ -309,7 +309,7 @@ fi
 # them produces stale notifications that flood the context.
 inflight_context=""
 if [[ "$_hook_source" == "compact" ]]; then
-    inflight_context="\\n\\n**Context was compacted.** Task-notifications from background agents received after this point may reference work already completed or reviewed. Check agent output freshness before re-actioning."
+    inflight_context="\\n\\n**Context was compacted.** Task-notifications from background agents received after this point may reference work already completed or reviewed. Check agent output freshness before re-actioning.\\n\\n**Compaction Recovery Protocol — MANDATORY**\\nSTOP. Before continuing, you MUST:\\n1. Re-read this project's CLAUDE.md to restore key conventions (trunk-based git, beads workflow, naming, working style)\\n2. Briefly confirm what conventions you found so the user knows you're back on track\\n3. Run \`bd list --status=in_progress\` to check for work that was active before compaction\\n\\nDo NOT resume work until steps 1-3 are complete."
 else
     _current_session=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _current_session=""
 

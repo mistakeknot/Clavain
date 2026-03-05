@@ -6,6 +6,9 @@
 # installed_plugins.json update, per-plugin sentinel, and never amends
 # or force-pushes.
 #
+# Also syncs the GitHub repo description with current skill/agent/command
+# counts to prevent drift (e.g. "16 skills, 4 agents, 45 commands").
+#
 # Input: PostToolUse JSON on stdin (tool_input.command, cwd)
 # Output: JSON with additionalContext on success, empty on skip
 # Exit: 0 always (fail-open)
@@ -57,10 +60,45 @@ main() {
     plugin_name="$(jq -r '.name // empty' "$cwd/.claude-plugin/plugin.json" 2>/dev/null || true)"
 
     if [[ -n "$output" && "$output" == *"Published"* ]]; then
+        _sync_github_description "$cwd" || true
         jq -n --arg msg "$output" '{"additionalContext": $msg}'
     elif [[ -n "$output" && "$output" == *"Synced"* ]]; then
+        _sync_github_description "$cwd" || true
         jq -n --arg msg "$output" '{"additionalContext": $msg}'
     fi
+}
+
+# Sync GitHub repo description with current skill/agent/command counts.
+# Derives repo from git remote; only updates if counts changed.
+_sync_github_description() {
+    local cwd="$1"
+    command -v gh &>/dev/null || return 0
+
+    # Derive GitHub repo (owner/name) from git remote
+    local remote_url repo
+    remote_url="$(git -C "$cwd" remote get-url origin 2>/dev/null || true)"
+    [[ -n "$remote_url" ]] || return 0
+    # Handle both SSH and HTTPS remotes
+    repo="$(echo "$remote_url" | sed -E 's#^(https?://github\.com/|git@github\.com:)##; s#\.git$##')"
+    [[ -n "$repo" && "$repo" == *"/"* ]] || return 0
+
+    # Count from filesystem
+    local skills agents commands
+    skills="$(find "$cwd/skills" -name "SKILL.md" -mindepth 2 -maxdepth 2 2>/dev/null | wc -l)"
+    agents="$(find "$cwd/agents" -name "*.md" -mindepth 2 -maxdepth 2 2>/dev/null | wc -l)"
+    commands="$(find "$cwd/commands" -name "*.md" -maxdepth 1 2>/dev/null | wc -l)"
+    skills="${skills// /}"; agents="${agents// /}"; commands="${commands// /}"
+
+    # Build new description
+    local new_desc="General-purpose engineering discipline plugin for Claude Code. ${skills} skills, ${agents} agents, ${commands} commands."
+
+    # Compare with current GitHub description (cached read, ~200ms)
+    local current_desc
+    current_desc="$(gh repo view "$repo" --json description -q '.description' 2>/dev/null || true)"
+    [[ "$current_desc" != "$new_desc" ]] || return 0
+
+    # Update
+    gh repo edit "$repo" --description "$new_desc" 2>/dev/null || true
 }
 
 main "$@" || true
