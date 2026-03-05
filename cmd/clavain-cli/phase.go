@@ -259,6 +259,24 @@ func cmdEnforceGate(args []string) error {
 		}
 	}
 
+	// Satisfaction gate check for shipping phase
+	if targetPhase == "shipping" {
+		spec, specErr := loadAgencySpec()
+		var gateMode string
+		if specErr == nil {
+			gateMode = getGateModeForPhase(spec, targetPhase)
+		} else {
+			gateMode = "shadow"
+		}
+
+		if err := satisfactionGateCheck(beadID); err != nil {
+			if gateMode == "enforce" {
+				return fmt.Errorf("enforce-gate: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "enforce-gate: satisfaction WARN: %v [shadow mode]\n", err)
+		}
+	}
+
 	// Resolve run ID — fail-open if no run
 	runID, err := resolveRunID(beadID)
 	if err != nil {

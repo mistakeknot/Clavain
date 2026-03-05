@@ -1,0 +1,32 @@
+# Clavain Scenario Schema v1
+# Reference schema for .clavain/scenarios/{dev,holdout}/*.yaml files
+#
+# Scenarios define reproducible test cases for agent-driven development.
+# Dev scenarios are failure-derived; holdout scenarios are spec-derived.
+# Agents never see or modify holdout scenarios during execution.
+
+schema_version: 1
+
+# Required fields
+id: string          # Unique identifier (kebab-case, e.g., "checkout-flow-001")
+intent: string      # Human-readable description of what this scenario tests
+mode: enum          # "static" (deterministic checks) or "behavioral" (LLM-judged)
+
+# Setup preconditions (list of strings)
+setup:
+  - string          # Each entry describes a required precondition
+
+# Ordered steps
+steps:
+  - action: string    # What the agent should do
+    expect: string    # Expected outcome
+    type: enum        # "llm-judge" | "exact" | "regex" | "shell"
+
+# Rubric for satisfaction scoring (weights must sum to 1.0)
+rubric:
+  - criterion: string  # What is being evaluated
+    weight: float      # 0.0-1.0, all weights must sum to 1.0
+
+# Optional fields
+risk_tags: list       # Risk categories (e.g., [payment, data-integrity, security])
+holdout: bool         # true = holdout (spec-derived), false = dev (failure-derived)

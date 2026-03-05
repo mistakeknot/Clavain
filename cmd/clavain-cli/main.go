@@ -142,6 +142,20 @@ func main() {
 	case "cxdb-fork":
 		err = cmdCXDBFork(args)
 
+	// Scenarios
+	case "scenario-create":
+		err = cmdScenarioCreate(args)
+	case "scenario-list":
+		err = cmdScenarioList(args)
+	case "scenario-validate":
+		err = cmdScenarioValidate(args)
+	case "scenario-run":
+		err = cmdScenarioRun(args)
+	case "scenario-score":
+		err = cmdScenarioScore(args)
+	case "scenario-calibrate":
+		err = cmdScenarioCalibrate(args)
+
 	// Handoff
 	case "validate-handoff":
 		err = cmdValidateHandoff(args)
@@ -236,6 +250,14 @@ CXDB:
   cxdb-setup          Download and install cxdb-server binary [--version=<ver>]
   cxdb-sync           <sprint-id>           Backfill CXDB turns from Intercore events
   cxdb-fork           <sprint-id> <turn-id> Create branched execution trajectory
+
+Scenarios:
+  scenario-create     <name> [--holdout]     Scaffold scenario YAML
+  scenario-list       [--holdout] [--dev]    List scenarios with metadata
+  scenario-validate                          Validate all scenarios against schema
+  scenario-run        <pattern> [--sprint=<id>]  Execute scenarios
+  scenario-score      <run-id> [--summary]  Score scenario run with satisfaction rubrics
+  scenario-calibrate                         Calibrate satisfaction threshold from history
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract
