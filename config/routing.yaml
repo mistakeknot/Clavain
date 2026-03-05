@@ -1,10 +1,11 @@
-# Model routing policy for Clavain (Track B1+B2+B3: Static + Complexity + Calibration Routing)
+# Model routing policy for Clavain (Track B1+B2+B3+B4: Static + Complexity + Calibration + Delegation Routing)
 #
-# Four namespaces:
+# Five namespaces:
 #   subagents:   Claude Code agents (haiku/sonnet/opus/inherit)
 #   dispatch:    Codex CLI agents (concrete model IDs)
 #   complexity:  Task complexity → model override layer (B2)
 #   calibration: Evidence-based agent model calibration (B3)
+#   delegation:  CC↔Codex routing policy (B4)
 #
 # Subagent resolution order (highest priority first):
 #   kernel overrides > complexity override (if enabled+matching) > overrides[agent] > calibration (if enabled+matching) > phases[phase].categories[cat] > phases[phase].model > defaults.categories[cat] > defaults.model
@@ -160,3 +161,40 @@ complexity:
 # Escape hatch: delete .clavain/interspect/routing-calibration.json
 calibration:
   mode: shadow
+
+# CC↔Codex delegation routing (Track B4)
+#
+# Controls when tasks should be delegated from Claude Code to Codex CLI
+# via the codex-delegate subagent. The routing policy is injected into
+# Claude's context at session start; the subagent handles dispatch.
+#
+# mode:
+#   off     — No delegation policy injected. codex-delegate agent still available manually.
+#   shadow  — Policy injected, outcomes logged, but Claude decides freely. (default)
+#   enforce — Policy injected with strong "MUST delegate" language for matching categories.
+#
+# Calibration: .clavain/interspect/delegation-calibration.json (written by interspect)
+# Escape hatch: set mode=off or delete calibration file
+delegation:
+  mode: shadow
+
+  # Task categories and their default routing preference.
+  # codex-first: delegate to codex-delegate by default
+  # claude-only: keep in Claude Code (never auto-delegate)
+  # adaptive: route based on calibration data (codex-first when pass_rate > min_category_pass_rate)
+  categories:
+    exploration: codex-first
+    implementation: codex-first
+    review: codex-first
+    test-generation: codex-first
+    doc-update: codex-first
+    architecture: claude-only
+    brainstorm: claude-only
+    interactive: claude-only
+
+  # Complexity ceiling — tasks above this tier stay in Claude regardless of category
+  max_delegatable_complexity: C3
+
+  # Minimum pass rate (from calibration data) to auto-delegate a category
+  # Categories below this get advisory-only routing even in enforce mode
+  min_category_pass_rate: 0.70

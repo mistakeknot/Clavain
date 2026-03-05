@@ -153,6 +153,46 @@ if [[ -f "$INTERSERVE_FLAG" ]]; then
     companion_context="${companion_context}\\n- **INTERSERVE MODE: ON** — Route source code changes through Codex (preserves Claude token budget for orchestration).\\n  1. Plan: Read/Grep/Glob freely\\n  2. Prompt: Write task to /tmp/, dispatch via /interserve\\n  3. Verify: read output, run tests, review diffs\\n  4. Git ops (add/commit/push) are yours — do directly\\n  Bash: read-only for source files (no redirects, sed -i, tee). Git + test/build OK.\\n  Direct-edit OK: .md/.json/.yaml/.yml/.toml/.txt/.csv/.xml/.html/.css/.svg/.lock/.cfg/.ini/.conf/.env, /tmp/*\\n  Everything else (code files): dispatch via /interserve."
 fi
 
+# Delegation routing policy injection (B4 — iv-2s7k7)
+# Read delegation calibration data and inject routing policy into context.
+# Only active when Codex is available and delegation mode != off.
+delegation_context=""
+if command -v codex &>/dev/null; then
+    # Read delegation mode from routing.yaml (simple grep — avoids sourcing lib-routing.sh)
+    _delegation_mode=""
+    _routing_yaml="${PLUGIN_ROOT}/config/routing.yaml"
+    if [[ -f "$_routing_yaml" ]]; then
+        _in_delegation=false
+        while IFS= read -r _line; do
+            [[ "$_line" =~ ^delegation: ]] && _in_delegation=true && continue
+            [[ "$_in_delegation" == true && "$_line" =~ ^[a-z] ]] && break
+            if [[ "$_in_delegation" == true && "$_line" =~ ^[[:space:]]+mode:[[:space:]]*(.+) ]]; then
+                _delegation_mode="${BASH_REMATCH[1]%%[[:space:]#]*}"
+                break
+            fi
+        done < "$_routing_yaml"
+    fi
+
+    if [[ -n "$_delegation_mode" && "$_delegation_mode" != "off" ]]; then
+        # Read calibration stats if available
+        _del_cal_file="${CLAUDE_PROJECT_DIR:-.}/.clavain/interspect/delegation-calibration.json"
+        _del_pass_rate="N/A"
+        _del_count="0"
+        _del_attention=""
+        if [[ -f "$_del_cal_file" ]] && command -v jq &>/dev/null; then
+            _del_pass_rate=$(jq -r '.overall_pass_rate // "N/A" | if type == "number" then (. * 100 | floor | tostring) + "%" else . end' "$_del_cal_file" 2>/dev/null) || _del_pass_rate="N/A"
+            _del_count=$(jq -r '.total_delegations // 0' "$_del_cal_file" 2>/dev/null) || _del_count="0"
+            _del_attention=$(jq -r '.high_retry_categories // [] | join(", ")' "$_del_cal_file" 2>/dev/null) || _del_attention=""
+        fi
+
+        _del_strength="Consider using"
+        [[ "$_delegation_mode" == "enforce" ]] && _del_strength="MUST use"
+
+        delegation_context="\\n\\n**DELEGATION POLICY (codex-first routing, mode=${_delegation_mode})**\\n${_del_strength} the codex-delegate agent for well-scoped tasks:\\n- Implementation: bug fixes, features, refactoring with clear file scope\\n- Exploration: search, find patterns, analyze code structure\\n- Test generation: write tests for existing code\\n- Code review: quality analysis of specific files\\n- Doc updates: documentation, comments, README changes\\n\\nKeep in Claude: architecture decisions, brainstorming, interactive/iterative work, C4+ complexity.\\nStats: ${_del_pass_rate} pass rate across ${_del_count} delegations."
+        [[ -n "$_del_attention" ]] && delegation_context="${delegation_context}\\nCategories needing attention: ${_del_attention}"
+    fi
+fi
+
 # Drift summary injection (iv-mqm4) — surface stale docs at session start
 # Reads .interwatch/drift.json and injects Medium+ confidence items
 _drift_file=".interwatch/drift.json"
@@ -360,31 +400,32 @@ fi
 # Priority-based shedding: drop lowest-priority sections whole (not byte-level truncation)
 # to avoid breaking mid-escape-sequence in JSON output.
 _context_preamble="You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n"
-_full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}${discovery_context}${inflight_context}"
+_full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}${discovery_context}${inflight_context}"
 ADDITIONAL_CONTEXT_CAP=10000
 
 # Shed sections in reverse priority order (lowest value dropped first).
 # Shedding order: inflight → discovery → composition → sprint → upstream → setup
+# Note: delegation_context is HIGH priority (survives all shedding) — it's the routing policy
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     inflight_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}${discovery_context}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}${discovery_context}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     discovery_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     composition_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     sprint_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}${setup_hint}${upstream_warning}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     upstream_warning=""
     setup_hint=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${conventions}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}"
 fi
 
 # Output context injection as JSON
