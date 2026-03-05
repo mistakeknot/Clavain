@@ -18,6 +18,7 @@ setup() {
 
     # Ensure yq is in PATH
     export PATH="$HOME/.local/bin:$PATH"
+    command -v yq >/dev/null 2>&1 || skip "yq not available (standalone CI)"
 }
 
 teardown() {

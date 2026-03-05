@@ -64,6 +64,7 @@ _mock_intercore_available() {
 # ─── 1. sprint_require_ic succeeds when ic available ──────────────
 
 @test "sprint_require_ic succeeds when ic available" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     _mock_intercore_available
     _source_sprint_lib
     run sprint_require_ic
@@ -155,6 +156,7 @@ _mock_intercore_available() {
 # ─── 5. sprint_create returns bead ID on success ─────────────────
 
 @test "sprint_create returns bead ID on success" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     bd() {
         echo "bd $*" >> "$BD_CALL_LOG"
         case "$1" in
@@ -181,6 +183,7 @@ _mock_intercore_available() {
 # ─── 6. sprint_create fails when ic run creation fails ───────────
 
 @test "sprint_create cancels bead when ic run creation fails" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     bd() {
         echo "bd $*" >> "$BD_CALL_LOG"
         case "$1" in
@@ -226,6 +229,7 @@ _mock_intercore_available() {
 # ─── 8. sprint_find_active returns runs from intercore ───────────
 
 @test "sprint_find_active returns active runs from intercore" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     _mock_intercore_available
     _source_sprint_lib
 
@@ -378,6 +382,7 @@ MOCKEOF
 # ─── 13. sprint_record_phase_completion invalidates caches ───────
 
 @test "sprint_record_phase_completion invalidates discovery caches" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     _source_sprint_lib
 
     # Override intercore_state_delete_all to just do the file cleanup
@@ -402,6 +407,7 @@ MOCKEOF
 # ─── 14. sprint_claim succeeds for first claimer ─────────────────
 
 @test "sprint_claim succeeds for first claimer" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     bd() {
         case "$1" in
             state)
@@ -461,6 +467,7 @@ MOCKEOF
 # ─── 16. sprint_claim allows takeover after 60 min expiry ────────
 
 @test "sprint_claim allows takeover after TTL expiry (61 minutes ago)" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     bd() {
         case "$1" in
             state)
@@ -526,6 +533,7 @@ MOCKEOF
 # ─── 18. sprint_claim re-claim by same session succeeds ──────────
 
 @test "sprint_claim re-claim by same session succeeds" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     bd() {
         case "$1" in
             state)
@@ -649,6 +657,7 @@ MOCKEOF
 # ─── 22. sprint_invalidate_caches removes cache files ────────────
 
 @test "sprint_invalidate_caches removes cache files" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     _source_sprint_lib
 
     # Override intercore_state_delete_all to just do the file cleanup
@@ -761,6 +770,7 @@ MOCKEOF
 # ─── 26. sprint_advance succeeds and advances phase ──────────────
 
 @test "sprint_advance succeeds and advances phase" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     bd() {
         case "$1" in
             state)

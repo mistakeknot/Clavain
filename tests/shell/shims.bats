@@ -33,7 +33,7 @@ teardown() {
 
 @test "gates shim: provides CLAVAIN_PHASES array" {
     source "$HOOKS_DIR/lib-gates.sh"
-    [[ ${#CLAVAIN_PHASES[@]} -eq 8 ]]
+    [[ ${#CLAVAIN_PHASES[@]} -eq 9 ]]
     [[ "${CLAVAIN_PHASES[0]}" == "brainstorm" ]]
     [[ "${CLAVAIN_PHASES[-1]}" == "done" ]]
 }

@@ -45,11 +45,11 @@ teardown() {
     [[ "$CLAVAIN_SIGNAL_WEIGHT" -eq 2 ]]
 }
 
-@test "lib-signals: detects insight signal (weight 1)" {
+@test "lib-signals: insight signal was removed (no detection)" {
     local transcript='Insight ─ The key realization is that X causes Y'
     detect_signals "$transcript"
-    [[ "$CLAVAIN_SIGNALS" == *"insight"* ]]
-    [[ "$CLAVAIN_SIGNAL_WEIGHT" -eq 1 ]]
+    [[ -z "$CLAVAIN_SIGNALS" ]]
+    [[ "$CLAVAIN_SIGNAL_WEIGHT" -eq 0 ]]
 }
 
 @test "lib-signals: detects recovery signal (weight 2)" {
@@ -74,10 +74,10 @@ teardown() {
 }
 
 @test "lib-signals: accumulates weights from multiple signals" {
-    local transcript=$'Running "git commit -m fix"\nInsight ─ key insight\n"the issue was a cache bug"'
+    local transcript=$'Running "git commit -m fix"\n"the issue was a cache bug"'
     detect_signals "$transcript"
-    # commit(1) + insight(1) + investigation(2) = 4
-    [[ "$CLAVAIN_SIGNAL_WEIGHT" -eq 4 ]]
+    # commit(1) + investigation(2) = 3 (insight signal was removed)
+    [[ "$CLAVAIN_SIGNAL_WEIGHT" -eq 3 ]]
 }
 
 @test "lib-signals: no signals returns weight 0 and empty SIGNALS" {

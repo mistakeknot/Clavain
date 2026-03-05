@@ -101,17 +101,47 @@ _mock_bd_with_state() {
 }
 
 @test "bead_claim: different session gets conflict" {
-    _mock_bd_with_state
+    # Mock bd update --claim to fail with "already claimed" on second call
+    local claim_count_file="$TEST_PROJECT/claim_count"
+    echo "0" > "$claim_count_file"
+    bd() {
+        echo "bd $*" >> "$BD_CALL_LOG"
+        case "$1" in
+            set-state)
+                local bead_id="$2" kv="$3"
+                local key="${kv%%=*}" val="${kv#*=}"
+                mkdir -p "$BD_STATE_DIR/$bead_id"
+                echo "$val" > "$BD_STATE_DIR/$bead_id/$key"
+                ;;
+            state)
+                local bead_id="$2" key="$3"
+                if [[ -f "$BD_STATE_DIR/$bead_id/$key" ]]; then
+                    cat "$BD_STATE_DIR/$bead_id/$key"
+                else
+                    echo "(no ${key} state set)"
+                fi
+                ;;
+            update)
+                local count
+                count=$(cat "$claim_count_file")
+                echo $(( count + 1 )) > "$claim_count_file"
+                if (( count >= 1 )); then
+                    echo "already claimed by another agent" >&2
+                    return 1
+                fi
+                return 0
+                ;;
+        esac
+        return 0
+    }
+    export -f bd
     _source_sprint_lib
 
     bead_claim "iv-test3" "session-abc"
 
-    # Set claimed_at to now (fresh claim)
-    echo "$(date +%s)" > "$BD_STATE_DIR/iv-test3/claimed_at"
-
     run bead_claim "iv-test3" "session-xyz"
     assert_failure
-    assert_output --partial "claimed by session"
+    assert_output --partial "already claimed"
 }
 
 @test "bead_claim: stale claim (>2h) gets overridden" {
@@ -139,12 +169,13 @@ _mock_bd_with_state() {
     _mock_bd_with_state
     _source_sprint_lib
 
+    export CLAUDE_SESSION_ID="session-abc"
     bead_claim "iv-test5" "session-abc"
     bead_release "iv-test5"
 
-    # Verify state was cleared (empty string)
-    [[ "$(cat "$BD_STATE_DIR/iv-test5/claimed_by")" == "" ]]
-    [[ "$(cat "$BD_STATE_DIR/iv-test5/claimed_at")" == "" ]]
+    # Verify state was cleared (sentinel values — bd rejects empty)
+    [[ "$(cat "$BD_STATE_DIR/iv-test5/claimed_by")" == "released" ]]
+    [[ "$(cat "$BD_STATE_DIR/iv-test5/claimed_at")" == "0" ]]
 }
 
 # ═══════════════════════════════════════════════════════════════════

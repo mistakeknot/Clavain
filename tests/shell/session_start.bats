@@ -211,10 +211,11 @@ ENDJSON
     assert_success
     context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
     # Should contain a, b, c (top 3 by score) but NOT d
-    [[ "$context" == *"a ("* ]]
-    [[ "$context" == *"b ("* ]]
-    [[ "$context" == *"c ("* ]]
-    [[ "$context" != *"d ("* ]]
+    # Use specific patterns (name + path) to avoid false matches from skill content
+    [[ "$context" == *"a (a.md"* ]]
+    [[ "$context" == *"b (b.md"* ]]
+    [[ "$context" == *"c (c.md"* ]]
+    [[ "$context" != *"d (d.md"* ]]
 }
 
 @test "session-start: detects HANDOFF.md in sprint scan" {
