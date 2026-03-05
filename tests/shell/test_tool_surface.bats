@@ -79,6 +79,26 @@ setup() {
     [ "$line_count" -lt 100 ]
 }
 
+@test "tool-surface --json includes disambiguation_hints key" {
+    run "$CLI" tool-surface --json
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.disambiguation_hints'
+}
+
+@test "disambiguation hints are all <= 120 characters" {
+    run "$CLI" tool-surface --json
+    [ "$status" -eq 0 ]
+    long_hints=$(echo "$output" | jq '[.disambiguation_hints[] | select(.hint | length > 120)] | length')
+    [ "$long_hints" -eq 0 ]
+}
+
+@test "disambiguation hints have required fields" {
+    run "$CLI" tool-surface --json
+    [ "$status" -eq 0 ]
+    missing=$(echo "$output" | jq '[.disambiguation_hints[] | select(.plugins | length == 0 or .hint == "")] | length')
+    [ "$missing" -eq 0 ]
+}
+
 @test "tool-surface output is deterministic" {
     run "$CLI" tool-surface
     first="$output"
