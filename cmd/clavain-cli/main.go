@@ -91,6 +91,8 @@ func main() {
 		err = cmdBeadClaim(args)
 	case "bead-release":
 		err = cmdBeadRelease(args)
+	case "bead-heartbeat":
+		err = cmdBeadHeartbeat(args)
 
 	// Complexity
 	case "classify-complexity":
@@ -185,6 +187,7 @@ Children:
 Bead Claiming:
   bead-claim              <bead_id> [session_id]
   bead-release            <bead_id>
+  bead-heartbeat          <bead_id>     Refresh claimed_at timestamp
 
 Checkpoints:
   checkpoint-write    <bead_id> <phase> <step> <plan_path>

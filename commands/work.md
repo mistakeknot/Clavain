@@ -86,6 +86,8 @@ fi
 
    ```
    while (tasks remain):
+     - Refresh bead claim heartbeat (if CLAVAIN_BEAD_ID is set):
+       "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" bead-heartbeat "$CLAVAIN_BEAD_ID" 2>/dev/null || true
      - Mark task as in_progress in TodoWrite
      - Read any referenced files from the plan
      - Look for similar patterns in codebase

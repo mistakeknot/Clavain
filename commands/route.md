@@ -135,6 +135,11 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
      - "already claimed" in error → tell user "Bead already claimed by another agent" and re-run discovery from Step 1
      - "lock" or "timeout" in error → retry once after 2 seconds; if still fails, tell user "Could not claim bead (database busy)" and re-run discovery from Step 1
      Do NOT fall back to `--status=in_progress` — a failed claim means exclusivity is not guaranteed.
+   - **Write claim identity** (after successful `--claim`):
+     ```bash
+     bd set-state "$CLAVAIN_BEAD_ID" "claimed_by=${CLAUDE_SESSION_ID:-unknown}" 2>/dev/null || true
+     bd set-state "$CLAVAIN_BEAD_ID" "claimed_at=$(date +%s)" 2>/dev/null || true
+     ```
    - **Register bead for token attribution:**
      ```bash
      _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
@@ -252,6 +257,11 @@ Parse the JSON response. If parsing fails, default to `/sprint` (safer fallback 
      - Tell user "Bead was claimed by another agent while routing."
      - Do NOT proceed with the current bead.
      - Restart from Step 1 of the discovery flow to find unclaimed work.
+   - **Write claim identity** (after successful `--claim`):
+     ```bash
+     bd set-state "$CLAVAIN_BEAD_ID" "claimed_by=${CLAUDE_SESSION_ID:-unknown}" 2>/dev/null || true
+     bd set-state "$CLAVAIN_BEAD_ID" "claimed_at=$(date +%s)" 2>/dev/null || true
+     ```
    - **Register bead for token attribution:**
      ```bash
      _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")

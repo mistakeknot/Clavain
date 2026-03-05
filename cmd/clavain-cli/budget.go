@@ -380,6 +380,11 @@ func cmdBudgetRemaining(args []string) error {
 	}
 	beadID := args[0]
 
+	// Piggyback: refresh bead claim heartbeat on every budget check.
+	// Budget checks happen periodically during sprint execution, making
+	// this a natural place to keep the claim alive without extra calls.
+	_ = cmdBeadHeartbeat([]string{beadID})
+
 	runID, err := resolveRunID(beadID)
 	if err != nil {
 		fmt.Println("0")

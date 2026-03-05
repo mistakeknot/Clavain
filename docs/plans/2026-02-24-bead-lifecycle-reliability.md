@@ -126,10 +126,14 @@ bead_claim() {
 bead_release() {
     local bead_id="${1:?bead_id required}"
     command -v bd &>/dev/null || return 0
-    bd set-state "$bead_id" "claimed_by=" >/dev/null 2>&1 || true
-    bd set-state "$bead_id" "claimed_at=" >/dev/null 2>&1 || true
+    bd set-state "$bead_id" "claimed_by=released" >/dev/null 2>&1 || true
+    bd set-state "$bead_id" "claimed_at=0" >/dev/null 2>&1 || true
 }
 ```
+
+> **Note (2026-03-05):** Empty values (`claimed_by=`, `claimed_at=`) are rejected by `bd set-state`.
+> Use sentinel values: `claimed_by=released`, `claimed_at=0`. Consumers treat `released`, `unknown`,
+> and `(no ... state set)` as unclaimed. See clavain v0.6.141+ for the fix.
 
 - [x] Add bead_claim() to lib-sprint.sh
 - [x] Add bead_release() to lib-sprint.sh
@@ -180,8 +184,8 @@ if [[ -n "$claimed_by_val" && "$claimed_by_val" != "(no claimed_by state set)" &
             score=$((score - 50))
             claimed_by="\"claimed_by\":\"${claimed_by_val:0:8}\","
         else
-            # Stale claim — auto-release
-            bd set-state "$bead_id" "claimed_by=" >/dev/null 2>&1 || true
+            # Stale claim — auto-release (use sentinels, not empty values)
+            bd set-state "$bead_id" "claimed_by=released" >/dev/null 2>&1 || true
             claimed_by=""
         fi
     else
@@ -261,12 +265,52 @@ Write bats tests covering:
 
 ---
 
+## Task 9: Claim Identity and Heartbeat (added 2026-03-05)
+
+**Root cause:** `bd update --claim` sets `claimed_by=unknown` because the beads CLI doesn't know `CLAUDE_SESSION_ID`.
+The route command called `bd update --claim` directly without following up with `bd set-state` to write the session ID.
+Additionally, `claimed_at` was never refreshed — claims went stale after 45 minutes even with active agents.
+
+**Fixes applied (clavain v0.6.142):**
+
+1. **route.md** — After `bd update --claim`, write claim identity via `bd set-state`:
+   ```bash
+   bd set-state "$CLAVAIN_BEAD_ID" "claimed_by=${CLAUDE_SESSION_ID:-unknown}" 2>/dev/null || true
+   bd set-state "$CLAVAIN_BEAD_ID" "claimed_at=$(date +%s)" 2>/dev/null || true
+   ```
+
+2. **clavain-cli `bead-heartbeat`** — New command that refreshes `claimed_at` and `claimed_by`.
+   Only refreshes if we own the claim (or it's unclaimed/unknown). Silently no-ops otherwise.
+
+3. **Heartbeat piggybacking** — `sprint-budget-remaining` (called periodically during sprints)
+   now calls `bead-heartbeat` internally, keeping claims alive without extra orchestration.
+
+4. **work.md** — Task execution loop explicitly calls `bead-heartbeat` at each iteration for
+   non-sprint work paths that don't use budget checks.
+
+5. **Sentinel values** — `bead-release` uses `claimed_by=released` / `claimed_at=0` instead of
+   empty strings (which `bd set-state` rejects). `bead-claim` and `bead-release` recognize
+   `released` as unclaimed.
+
+- [x] Fix route.md claim identity writes
+- [x] Add bead-heartbeat command to clavain-cli
+- [x] Piggyback heartbeat on sprint-budget-remaining
+- [x] Add heartbeat to work.md task loop
+- [x] Fix sentinel values in bead-release (Go + bash plan docs)
+
+---
+
 ## Files Changed
 
 | File | Change |
 |------|--------|
 | `os/clavain/hooks/lib-sprint.sh` | Add sprint_close_parent_if_done, bead_claim, bead_release; wire into sprint_claim/release and close_children |
-| `os/clavain/bin/clavain-cli` | Add close-parent-if-done, bead-claim, bead-release subcommands |
+| `os/clavain/cmd/clavain-cli/claim.go` | Add bead-heartbeat, isBeadClosed; fix sentinel values in bead-release; recognize `released` in claim checks |
+| `os/clavain/cmd/clavain-cli/budget.go` | Piggyback bead-heartbeat on sprint-budget-remaining |
+| `os/clavain/cmd/clavain-cli/sprint.go` | Filter closed beads from sprint-find-active, auto-cancel stale ic runs |
+| `os/clavain/cmd/clavain-cli/main.go` | Register bead-heartbeat command |
+| `os/clavain/commands/route.md` | Add claim identity writes after bd update --claim |
+| `os/clavain/commands/work.md` | Add bead-heartbeat call in task execution loop |
 | `interverse/interphase/hooks/lib-discovery.sh` | Add claim checking in discovery_scan_beads loop |
 | `os/clavain/hooks/session-end-handoff.sh` | Add bead claim release on session end |
 | `os/clavain/tests/shell/test_bead_lifecycle.bats` | New test file |

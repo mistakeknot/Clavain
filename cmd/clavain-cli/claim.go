@@ -285,6 +285,44 @@ func cmdBeadRelease(args []string) error {
 	return nil
 }
 
+// cmdBeadHeartbeat refreshes the claimed_at timestamp for an active bead claim.
+// Only refreshes if we own the claim (or claim is unowned). Silently succeeds otherwise.
+// Args: bead_id
+func cmdBeadHeartbeat(args []string) error {
+	if len(args) < 1 || args[0] == "" {
+		return nil
+	}
+	beadID := args[0]
+
+	if !bdAvailable() {
+		return nil
+	}
+
+	// Only heartbeat if we own the claim
+	ourSession := os.Getenv("CLAUDE_SESSION_ID")
+	if ourSession == "" {
+		ourSession = "unknown"
+	}
+	currentClaimer := ""
+	if out, err := runBD("state", beadID, "claimed_by"); err == nil {
+		currentClaimer = strings.TrimSpace(string(out))
+	}
+
+	// Refresh if: we own it, it's unclaimed, or it's the "unknown" sentinel
+	if currentClaimer != "" &&
+		!strings.HasPrefix(currentClaimer, "(no ") &&
+		currentClaimer != "released" &&
+		currentClaimer != "unknown" &&
+		currentClaimer != ourSession {
+		return nil // Another session holds this — don't touch
+	}
+
+	// Refresh timestamp and claim identity
+	_, _ = runBD("set-state", beadID, "claimed_by="+ourSession)
+	_, _ = runBD("set-state", beadID, "claimed_at="+strconv.FormatInt(time.Now().Unix(), 10))
+	return nil
+}
+
 // fallbackLock acquires a directory-based lock as fallback when ic lock is unavailable.
 func fallbackLock(name, scope string) error {
 	lockDir := fmt.Sprintf("/tmp/intercore/locks/%s/%s", name, scope)
