@@ -8,7 +8,9 @@
 
 Clavain is an autonomous software agency. It orchestrates the full development lifecycle — from problem discovery through shipped code — using heterogeneous AI models selected for cost, capability, and task fit. Each phase of development is a sub-agency with its own model routing, agent composition, and quality gates. The agency drives execution; the human decides direction.
 
-Clavain runs on its own TUI (Autarch), backed by a durable orchestration kernel (Intercore) that persists every run, phase, gate, dispatch, and event in a crash-safe database. An adaptive profiler (Interspect) reads the kernel's event stream and proposes improvements to routing, agent selection, and gate policies based on outcome data. Companion plugins are drivers — each wraps one capability and extends the agency through kernel primitives.
+Clavain runs on its own TUI (Autarch), backed by a durable orchestration kernel (Intercore) that persists every run, phase, gate, dispatch, and event in a crash-safe database. An adaptive profiler (Interspect) reads kernel event surfaces and proposes improvements to routing, agent selection, and gate policies based on outcome data. Companion plugins are drivers — each wraps one capability and extends the agency through kernel primitives.
+
+Current-state caveat: that event surface is not fully unified yet. Serious measurement consumers still rely on typed review and Interspect queries in addition to the generic event bus, and some session/bead/run attribution still flows through temporary bridge code while the hook cutover lands. See [docs/research/interspect-event-validity-and-outcome-attribution.md](../../../docs/research/interspect-event-validity-and-outcome-attribution.md).
 
 It is also a proving ground. Capabilities are built tightly integrated, battle-tested through real use, and then extracted into companion plugins when the patterns stabilize. The inter-* constellation represents crystallized research outputs; each companion started as a tightly-coupled feature inside Clavain that earned its independence through repeated, successful use.
 
@@ -40,7 +42,7 @@ Layer 1: Kernel (Intercore)
 └── Mechanism, not policy — the kernel doesn't know what "brainstorm" means
 
 Interspect (Profiler) — cross-cutting
-├── Reads kernel events (phase results, gate evidence, dispatch outcomes)
+├── Reads kernel event surfaces (today: generic bus plus typed review/Interspect queries)
 ├── Correlates with human corrections and outcome data
 ├── Proposes changes to OS configuration (routing, agent selection, gate rules)
 └── Never modifies the kernel — only the OS layer
@@ -50,7 +52,7 @@ The guiding principle: the system of record is in the kernel; the policy authori
 
 **Write-path contract.** The OS is the sole policy authority for kernel mutations. Companion plugins produce capability results (artifacts, evidence, telemetry) but do not create/advance runs or define gate rules. Apps submit intents to the OS — they do not call kernel primitives for policy-governing operations. See the [Intercore vision doc](../../../core/intercore/docs/product/intercore-vision.md) for the full write-path contract table.
 
-> **Current state vs target state.** Today, Clavain ships as a Claude Code plugin (dozens of slash commands, hooks, and an MCP server) because that surface is available and productive now. Autarch's TUI tools exist but are not yet the primary interface. The kernel (Intercore) is in active development with gates, events, and dispatches working; the hook cutover from temp files to `ic` is the v1.5 milestone. The architecture above describes the target design — what each layer is converging toward. Where the target differs from today's reality, the gap is acknowledged in the relevant section.
+> **Current state vs target state.** Today, Clavain ships as a Claude Code plugin (dozens of slash commands, hooks, and an MCP server) because that surface is available and productive now. Autarch's TUI tools exist but are not yet the primary interface. The kernel (Intercore) is in active development with gates, events, and dispatches working; the hook cutover from temp files to `ic` is the v1.5 milestone. Event unification and durable session/bead/run attribution are still incomplete, so some measurement and profiling paths remain transitional. The architecture above describes the target design — what each layer is converging toward. Where the target differs from today's reality, the gap is acknowledged in the relevant section.
 
 ## Audience
 
@@ -71,7 +73,7 @@ The review phases matter more than the building phases. Resolve all open questio
 Small, focused tools composed together beat large integrated platforms. The inter-* constellation, Unix philosophy, modpack metaphor; it's turtles all the way down. Each companion does one thing well and composes with others through explicit interfaces. Prefer typed interfaces, schemas, manifests, and declarative specs over prompt sorcery — composition only works when boundaries are explicit. Agent definitions, plugin capabilities, and inter-plugin communication should be formally specifiable, not implicitly assumed.
 
 ### 3. Measure what matters
-If you can't afford to run it, it doesn't matter how good it is. But cost alone is a vanity metric; the goal is outcomes per dollar: defects caught per token, merge-ready changes per session, time-to-first-signal per gate. 12 agents should cost less than 8 via orchestration optimization, *and* catch more bugs. This requires pervasive observability — every agent action should emit traceable events: inputs, outputs, cost, latency, decision rationale, and downstream outcomes. If it can't be traced, it can't be trusted. The kernel's event bus is the backbone; every state change produces a typed, durable event. You can't refine what you can't see, and you can't extract what you can't measure.
+If you can't afford to run it, it doesn't matter how good it is. But cost alone is a vanity metric; the goal is outcomes per dollar: defects caught per token, merge-ready changes per session, time-to-first-signal per gate. 12 agents should cost less than 8 via orchestration optimization, *and* catch more bugs. This requires pervasive observability — every agent action should emit traceable events: inputs, outputs, cost, latency, decision rationale, and downstream outcomes. If it can't be traced, it can't be trusted. The kernel's event bus is the backbone, but today measurement-grade consumers still need typed review/Interspect queries and a stronger session/bead/run join in addition to the generic bus. You can't refine what you can't see, and you can't extract what you can't measure.
 
 ### 4. Human attention is the bottleneck
 Optimize for the human's time, not the agent's. The human's focus, attention, and product sense are the scarce resource; agents are in service of that. Token efficiency does not equal attention efficiency; multi-agent output must be presented so humans can review quickly and confidently, not just cheaply.
@@ -215,7 +217,7 @@ Kernel events              thresholds shift             link related work
 
 **Source configuration (OS policy).** Which RSS feeds, arXiv categories, GitHub repos, and search queries to monitor. Sources are configured per-project with global defaults.
 
-**Three trigger modes.** The pipeline can be triggered three ways, all producing the same kernel event stream:
+**Three trigger modes.** The pipeline can be triggered three ways, all feeding the same kernel discovery primitives and generic event bus. Measurement-grade consumers still need typed evidence surfaces beyond that generic stream:
 
 - **Scheduled (background).** A managed timer runs the scanner at configurable intervals (default: 4x daily with randomized jitter). Each scan queries all configured sources, scores discoveries against the interest profile, and submits them to the kernel via `ic discovery add`. The kernel evaluates its confidence gate and emits the resulting events.
 - **Event-driven (reactive).** The scanner registers as a kernel event bus consumer. Run completions trigger search for related prior art. Work item creation checks for existing research. Dispatch completions with novel techniques trigger prior art search. Event-driven scans are targeted (using triggering event context); scheduled scans cast a wide net.
