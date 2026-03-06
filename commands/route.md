@@ -115,9 +115,10 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
    - **Options 2-3:** Next highest-ranked beads, same label format.
    - **Second-to-last option:** `"Start fresh brainstorm"` — dispatches to `/clavain:sprint`.
    - **Last option:** `"Show full backlog"` — runs `/clavain:sprint-status`.
-   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm", ship → "Ship", closed → "Closed", create_bead → "Link orphan:", verify_done → "Verify (parent closed):"
+   - Action verbs: continue → "Continue", execute → "Execute plan for", plan → "Plan", strategize → "Strategize", brainstorm → "Brainstorm", ship → "Ship", closed → "Closed", create_bead → "Link orphan:", verify_done → "Verify (parent closed):", review_discovery → "Review discovery:"
    - **Stale-parent entries** (action: "verify_done"): Label format: `"Verify (parent closed): <bead-id> — <title> (P<priority>, parent: <parent_closed_epic>)"`
    - **Orphan entries** (action: "create_bead", id: null): Label format: `"Link orphan: <title> (<type>)"`
+   - **Interject discovery entries** (action: "review_discovery"): Label format: `"Review discovery: <bead-id> — <clean_title> (<discovery_source>, score <discovery_score>)"`. Strip `[interject] ` prefix from title. If `discovery_source` or `discovery_score` are null, omit the parenthetical.
 
 4. **Pre-flight check:** Before routing, verify the selected bead still exists:
    ```bash
@@ -157,6 +158,10 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
    - `plan` → `/clavain:write-plan`
    - `strategize` → `/clavain:strategy`
    - `brainstorm` → `/clavain:sprint`
+   - `review_discovery` → Show bead description (the full discovery details), then AskUserQuestion with options:
+     1. "Promote to sprint" → Set phase to `brainstorm`, route to `/clavain:sprint`
+     2. "Dismiss discovery" → `bd close <id> --reason="Discovery dismissed — not relevant"`, then re-run discovery
+     3. "Skip for now" → Re-run discovery (don't close the bead)
    - `ship` → `/clavain:quality-gates`
    - `closed` → Tell user "This bead is already done" and re-run discovery
    - `verify_done` → Parent epic is closed. AskUserQuestion with options:
