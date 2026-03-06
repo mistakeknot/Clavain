@@ -63,8 +63,7 @@ func cmdSprintClaim(args []string) error {
 	// Resolve run ID
 	runID, err := resolveRunID(beadID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sprint_claim: no ic run found for %s\n", beadID)
-		os.Exit(1)
+		return fmt.Errorf("sprint_claim: no ic run found for %s", beadID)
 	}
 
 	// Acquire lock
@@ -73,7 +72,7 @@ func cmdSprintClaim(args []string) error {
 		// Fall back to mkdir-based lock
 		lockErr = fallbackLock("sprint-claim", beadID)
 		if lockErr != nil {
-			os.Exit(1)
+			return fmt.Errorf("sprint_claim: lock contention for %s", beadID)
 		}
 		defer fallbackUnlock("sprint-claim", beadID)
 	} else {
@@ -129,9 +128,8 @@ func cmdSprintClaim(args []string) error {
 			if len(shortName) > 8 {
 				shortName = shortName[:8]
 			}
-			fmt.Fprintf(os.Stderr, "Sprint %s is active in session %s (%dm ago)\n",
+			return fmt.Errorf("sprint_claim: sprint %s is claimed by session %s (%dm ago)",
 				beadID, shortName, ageMinutes)
-			os.Exit(1)
 		}
 
 		// Stale session — mark the old agent as failed
@@ -143,8 +141,7 @@ func cmdSprintClaim(args []string) error {
 	// Register new session agent
 	_, err = runIC("run", "agent", "add", runID, "--type=session", "--name="+sessionID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sprint_claim: failed to register session agent for %s\n", beadID)
-		os.Exit(1)
+		return fmt.Errorf("sprint_claim: failed to register session agent for %s", beadID)
 	}
 
 	// Also set bd claim for cross-session visibility (ignore errors)
@@ -240,9 +237,8 @@ func cmdBeadClaim(args []string) error {
 						shortSession = shortSession[:8]
 					}
 					ageMin := ageSeconds / 60
-					fmt.Fprintf(os.Stderr, "Bead %s claimed by session %s (%dm ago)\n",
+					return fmt.Errorf("bead %s claimed by session %s (%dm ago)",
 						beadID, shortSession, ageMin)
-					os.Exit(1)
 				}
 			}
 		}

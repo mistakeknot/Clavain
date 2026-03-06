@@ -13,6 +13,21 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// captureStdout temporarily redirects os.Stdout to devnull while running fn,
+// preventing cmd* functions from polluting the intent JSON output.
+func captureStdout(fn func() error) error {
+	orig := os.Stdout
+	devnull, err := os.Open(os.DevNull)
+	if err != nil {
+		return fn() // fallback: run without capture
+	}
+	os.Stdout = devnull
+	fnErr := fn()
+	os.Stdout = orig
+	devnull.Close()
+	return fnErr
+}
+
 // cmdIntentSubmit handles: clavain-cli intent submit
 // Accepts JSON intent payload on stdin (preferred — avoids /proc exposure).
 // Also supports flags for simple intents without params.
@@ -104,7 +119,7 @@ func handleSprintAdvance(intent *contract.Intent) *contract.IntentResult {
 		args = append(args, artifactPath)
 	}
 
-	if err := cmdSprintAdvance(args); err != nil {
+	if err := captureStdout(func() error { return cmdSprintAdvance(args) }); err != nil {
 		errStr := err.Error()
 		code := contract.ErrInternal
 		remediation := ""
@@ -139,7 +154,7 @@ func handleSprintCreate(intent *contract.Intent) *contract.IntentResult {
 	}
 
 	args := []string{title}
-	if err := cmdSprintCreate(args); err != nil {
+	if err := captureStdout(func() error { return cmdSprintCreate(args) }); err != nil {
 		return &contract.IntentResult{
 			OK:         false,
 			IntentType: intent.Type,
@@ -254,6 +269,7 @@ func logIntentEvent(intent *contract.Intent, result *contract.IntentResult) {
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000")
 
 	errorDetail := ""
 	if result.Error != nil {
@@ -277,17 +293,22 @@ func logIntentEvent(intent *contract.Intent, result *contract.IntentResult) {
 }
 
 // findICDB locates the intercore database file.
+// Validates path safety: must end in .db, no path traversal.
 func findICDB() string {
-	// Check standard locations
 	candidates := []string{
 		os.Getenv("IC_DB"),
 		".ic.db",
 	}
 	for _, c := range candidates {
-		if c != "" {
-			if _, err := os.Stat(c); err == nil {
-				return c
-			}
+		if c == "" {
+			continue
+		}
+		// Reject path traversal and non-.db paths
+		if strings.Contains(c, "..") || !strings.HasSuffix(c, ".db") {
+			continue
+		}
+		if _, err := os.Stat(c); err == nil {
+			return c
 		}
 	}
 	return ""
