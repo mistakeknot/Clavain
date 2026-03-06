@@ -119,6 +119,12 @@ This seeds the brainstorm, vision, PRD, and roadmap.
 Infer defaults from Makefile, package.json scripts, Cargo.toml, etc.
 Show inferred commands as the default option.
 
+**Q6** (monorepo only — skip for library/application/plugin):
+"Which top-level directories contain modules for the roadmap?"
+Auto-detect by scanning for subdirs with `.claude-plugin/plugin.json` or `CLAUDE.md`.
+Show detected dirs as the recommended default option, with "Customize..." as second option and "Skip roadmap setup" as third.
+Store the answer as `roadmap_scan_dirs` for Phase 4a.
+
 ## Phase 3: Scaffold Infrastructure
 
 Execute in order. Skip anything that already exists.
@@ -186,12 +192,19 @@ done
 
 ### 4a: Interwatch
 
-If `.interwatch/` doesn't exist, create from `templates/watchables.yaml.tmpl`:
+If `.interwatch/` doesn't exist, create from templates:
 
 ```bash
 mkdir -p .interwatch
-# Copy template to .interwatch/watchables.yaml
+# Copy templates/watchables.yaml.tmpl to .interwatch/watchables.yaml
+# Copy templates/project.yaml.tmpl to .interwatch/project.yaml
 ```
+
+Always generate `.interwatch/project.yaml` from `templates/project.yaml.tmpl`:
+- `{{PROJECT_NAME}}` — from Q1 or inferred
+- `{{ROADMAP_SCAN_DIRS}}` — from Q6 (monorepo) or empty list (single project)
+
+If `.interwatch/project.yaml` already exists, merge new values without overwriting existing config.
 
 ### 4b: Intertree
 

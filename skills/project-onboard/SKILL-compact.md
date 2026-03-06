@@ -19,6 +19,7 @@ Use AskUserQuestion. Skip questions answered by introspection.
 - **Q3**: Project type (skip if inferred)
 - **Q4**: Key goals for next month (always ask)
 - **Q5**: Build/test commands (always ask, show inferred default)
+- **Q6**: Roadmap module dirs (monorepo only — auto-detect dirs with plugin.json/CLAUDE.md subdirs, let user confirm or customize)
 
 ## Phase 3: Scaffold
 
@@ -35,7 +36,8 @@ Skip anything that exists. Execute in order:
 ## Phase 4: Observability
 
 1. Create `.interwatch/watchables.yaml` from template (AGENTS.md 14d, roadmap 30d, philosophy 90d)
-2. Register in intertree (skip silently if unavailable)
+2. Create `.interwatch/project.yaml` from template (project name from Q1, scan_dirs from Q6)
+3. Register in intertree (skip silently if unavailable)
 
 ## Phase 5: Content Seeding
 
