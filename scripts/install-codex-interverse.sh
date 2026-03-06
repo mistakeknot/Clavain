@@ -82,7 +82,7 @@ interpath|skills/artifact-gen|artifact-gen
 interwatch|skills/doc-watch|doc-watch
 interlock|skills/coordination-protocol|coordination-protocol
 interlock|skills/conflict-recovery|conflict-recovery
-intercheck|skills/status|status
+intercheck|skills/quality|quality
 tldr-swinton|.codex/skills/tldrs-agent-workflow|tldrs-agent-workflow
 tool-time|skills/tool-time-codex|tool-time
 interslack|skills/slack-messaging|slack-messaging
@@ -532,6 +532,22 @@ cleanup_legacy_link() {
   fi
 }
 
+cleanup_intercheck_legacy_status_link() {
+  local legacy_link="$SKILLS_DIR/status"
+  local expected_target="$CLONE_ROOT/intercheck/skills/status"
+  local raw_target=""
+  local resolved_target=""
+
+  [[ -L "$legacy_link" ]] || return 0
+
+  raw_target="$(readlink "$legacy_link" 2>/dev/null || true)"
+  resolved_target="$(readlink -f "$legacy_link" 2>/dev/null || true)"
+  if [[ "$raw_target" == "$expected_target" || "$resolved_target" == "$expected_target" ]]; then
+    backup_move_path "$legacy_link"
+    echo "Removed legacy intercheck skill link: $legacy_link"
+  fi
+}
+
 cleanup_legacy_predecessors() {
   # Remove superpowers and compound-engineering artifacts that conflict with Clavain.
   # Clean-break mode removes known legacy targets using backup-first semantics.
@@ -596,6 +612,8 @@ cleanup_legacy_predecessors() {
       echo "Removed invalid intermem skill link: $intermem_link"
     fi
   fi
+
+  cleanup_intercheck_legacy_status_link
 }
 
 ensure_repo() {
@@ -952,6 +970,7 @@ case "$ACTION" in
     ;;
   uninstall)
     local_failed=0
+    cleanup_intercheck_legacy_status_link || local_failed=1
     declare -A seen=()
     while IFS='|' read -r plugin skill_rel link_name; do
       [[ -n "$link_name" ]] || continue

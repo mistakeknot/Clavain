@@ -14,9 +14,14 @@ setup() {
     SOURCE_DIR="$TEST_DIR/clavain"
     CLONE_ROOT="$TEST_DIR/clones"
     SKILLS_DIR="$TEST_DIR/skills"
+    BIN_DIR="$TEST_DIR/bin"
+    SYSTEM_GIT="$(command -v git)"
 
-    mkdir -p "$SOURCE_DIR/scripts" "$SOURCE_DIR/skills" "$SOURCE_DIR/commands"
+    mkdir -p "$SOURCE_DIR/scripts" "$SOURCE_DIR/skills" "$SOURCE_DIR/commands" "$BIN_DIR"
     mkdir -p "$CLONE_ROOT" "$SKILLS_DIR"
+
+    _write_stub_git_binary
+    export PATH="$BIN_DIR:$PATH"
 
     _write_stub_clavain_source
 }
@@ -55,6 +60,31 @@ _write_agent_rig() {
         recommended: map({source: (. + "@interagency-marketplace")})
       }
     }' "$@" > "$SOURCE_DIR/agent-rig.json"
+}
+
+_write_stub_git_binary() {
+    cat > "$BIN_DIR/git" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "\${1:-}" == "-C" ]]; then
+  shift 2
+fi
+
+case "\${1:-}" in
+  pull)
+    exit 0
+    ;;
+  clone)
+    mkdir -p "\${3:?}/.git"
+    exit 0
+    ;;
+  *)
+    exec "$SYSTEM_GIT" "\$@"
+    ;;
+esac
+EOF
+    chmod +x "$BIN_DIR/git"
 }
 
 _make_plugin_skill_repo() {
@@ -154,4 +184,55 @@ EOF
       .interverse_companions.companions[]
       | select(.plugin == "gamma")
     ' >/dev/null
+}
+
+@test "doctor prefers intercheck quality skill over legacy status path" {
+    _write_agent_rig intercheck
+    _make_plugin_skill_repo intercheck skills/quality quality
+
+    ln -s "$CLONE_ROOT/intercheck/skills/quality" "$SKILLS_DIR/quality"
+
+    run --separate-stderr "$SCRIPT_UNDER_TEST" doctor \
+        --source "$SOURCE_DIR" \
+        --clone-root "$CLONE_ROOT" \
+        --skills-dir "$SKILLS_DIR" \
+        --json
+
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.status')" = "ok" ]
+
+    echo "$output" | jq -e '
+      .interverse_companions.companions[]
+      | select(
+          .plugin == "intercheck"
+          and .link_name == "quality"
+          and (.skill_path | endswith("/intercheck/skills/quality"))
+          and .repo_ok
+          and .skill_ok
+          and .link_ok
+        )
+    ' >/dev/null
+
+    ! echo "$output" | jq -e '
+      .interverse_companions.companions[]
+      | select(.plugin == "intercheck" and .link_name == "status")
+    ' >/dev/null
+}
+
+@test "install replaces legacy intercheck status link with quality" {
+    _write_agent_rig intercheck
+    _make_plugin_skill_repo intercheck skills/quality quality
+
+    ln -s "$CLONE_ROOT/intercheck/skills/status" "$SKILLS_DIR/status"
+
+    run --separate-stderr "$SCRIPT_UNDER_TEST" install \
+        --source "$SOURCE_DIR" \
+        --clone-root "$CLONE_ROOT" \
+        --skills-dir "$SKILLS_DIR" \
+        --no-prompts
+
+    [ "$status" -eq 0 ]
+    [ -L "$SKILLS_DIR/quality" ]
+    [ "$(readlink "$SKILLS_DIR/quality")" = "$CLONE_ROOT/intercheck/skills/quality" ]
+    [ ! -e "$SKILLS_DIR/status" ]
 }
