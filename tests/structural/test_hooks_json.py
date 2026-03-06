@@ -13,7 +13,7 @@ VALID_EVENT_TYPES = {
 }
 
 # Exact event types Clavain should register
-EXPECTED_EVENT_TYPES = {"SessionStart", "PostToolUse", "Stop", "SessionEnd"}
+EXPECTED_EVENT_TYPES = {"SessionStart", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"}
 
 
 def test_hooks_json_valid(hooks_json):
@@ -36,13 +36,6 @@ def test_hooks_json_expected_event_types(hooks_json):
     actual = set(hooks_json["hooks"].keys())
     assert actual == EXPECTED_EVENT_TYPES, (
         f"Expected event types {EXPECTED_EVENT_TYPES}, got {actual}"
-    )
-
-
-def test_hooks_json_no_pretooluse(hooks_json):
-    """PreToolUse hook must not be registered (removed in interserve overhaul)."""
-    assert "PreToolUse" not in hooks_json["hooks"], (
-        "PreToolUse hook should not exist — interserve uses behavioral contract, not deny-gate"
     )
 
 

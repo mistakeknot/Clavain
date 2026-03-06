@@ -67,7 +67,7 @@ Clavain encodes engineering and product discipline into four component types tha
 | Type | Count | Purpose | Example |
 |------|-------|---------|---------|
 | **Skills** | 16 | Reusable discipline knowledge | `systematic-debugging`, `writing-plans`, `flux-drive` |
-| **Agents** | 4 | Autonomous specialists (review + workflow) | `plan-reviewer`, `pr-comment-resolver` |
+| **Agents** | 5 | Autonomous specialists (review + workflow) | `plan-reviewer`, `pr-comment-resolver` |
 | **Commands** | 45 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
 | **Hooks** | 21 | Event-driven automation | `session-start.sh`, `auto-compound.sh`, `interspect-evidence.sh` |
 | **MCP Servers** | 1 | External tool integration | context7 (runtime doc fetching) |
