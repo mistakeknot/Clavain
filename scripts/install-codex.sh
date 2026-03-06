@@ -32,6 +32,8 @@ CODEX_PROMPTS_DIR="${CODEX_PROMPTS_DIR:-$CODEX_HOME/prompts}"
 CODEX_SKILLS_DIR="${CODEX_SKILLS_DIR:-$CODEX_HOME/skills}"
 CODEX_AGENTS_FILE="${CODEX_AGENTS_FILE:-$CODEX_HOME/AGENTS.md}"
 CODEX_CONFIG_FILE="${CODEX_CONFIG_FILE:-$CODEX_HOME/config.toml}"
+LOCAL_BIN_DIR="${LOCAL_BIN_DIR:-$HOME/.local/bin}"
+CLAVAIN_CLI_LINK="${CLAVAIN_CLI_LINK:-$LOCAL_BIN_DIR/clavain-cli}"
 BACKUP_ROOT="${CLAVAIN_BACKUP_ROOT:-$CODEX_HOME/.clavain-backups}"
 CONVERSION_REPORT_FILE="${CLAVAIN_CONVERSION_REPORT_FILE:-$CODEX_PROMPTS_DIR/.clavain-conversion-report.json}"
 
@@ -95,6 +97,8 @@ while [[ $# -gt 0 ]]; do
       CODEX_SKILLS_DIR="$CODEX_HOME/skills"
       CODEX_AGENTS_FILE="$CODEX_HOME/AGENTS.md"
       CODEX_CONFIG_FILE="$CODEX_HOME/config.toml"
+      LOCAL_BIN_DIR="$HOME/.local/bin"
+      CLAVAIN_CLI_LINK="$LOCAL_BIN_DIR/clavain-cli"
       BACKUP_ROOT="$CODEX_HOME/.clavain-backups"
       CONVERSION_REPORT_FILE="$CODEX_PROMPTS_DIR/.clavain-conversion-report.json"
       shift 2
@@ -211,6 +215,22 @@ safe_link() {
 
   ln -s "$target" "$link_path"
   echo "Linked: $link_path -> $target"
+}
+
+remove_managed_link() {
+  local expected_target="$1"
+  local link_path="$2"
+
+  [[ -L "$link_path" ]] || return 0
+
+  local current_target
+  current_target="$(readlink -f "$link_path" 2>/dev/null || readlink "$link_path")"
+  if [[ "$current_target" == "$expected_target" ]]; then
+    rm -f "$link_path"
+    echo "Removed managed link: $link_path"
+  else
+    echo "Skip non-managed link: $link_path -> $current_target" >&2
+  fi
 }
 
 regex_escape() {
@@ -455,7 +475,7 @@ render_mcp_block() {
       echo "command = $(toml_string "$command_val")" >> "$output_file"
     fi
 
-    args_line="$(jq -r 'if (.args|type=="array" and (.args|length)>0) then "args = [" + (.args|map(@json)|join(", ")) + "]" else empty end' <<<"$server_json")"
+    args_line="$(jq -r 'if ((((.args // null) | type) == "array") and (((.args // []) | length) > 0)) then "args = [" + ((.args // []) | map(@json) | join(", ")) + "]" else empty end' <<<"$server_json")"
     if [[ -n "$args_line" ]]; then
       echo "$args_line" >> "$output_file"
     fi
@@ -465,9 +485,9 @@ render_mcp_block() {
     fi
 
     headers_line="$(jq -r '
-      if (.headers|type=="object" and (.headers|length)>0) then
+      if ((((.headers // null) | type) == "object") and (((.headers // {}) | length) > 0)) then
         "http_headers = { " + (
-          .headers
+          (.headers // {})
           | to_entries
           | map(
               ((if (.key|test("^[A-Za-z0-9_-]+$")) then .key else (.key|@json) end)
@@ -484,7 +504,7 @@ render_mcp_block() {
     fi
 
     local env_count
-    env_count="$(jq -r 'if (.env|type=="object") then (.env|length) else 0 end' <<<"$server_json")"
+    env_count="$(jq -r 'if (((.env // null) | type) == "object") then ((.env // {}) | length) else 0 end' <<<"$server_json")"
     if [[ "$env_count" != "0" ]]; then
       echo "" >> "$output_file"
       echo "[mcp.servers.$table_key.env]" >> "$output_file"
@@ -769,13 +789,21 @@ install_all() {
   fi
 
   local skills_target="$SOURCE_DIR/skills"
+  local cli_target="$SOURCE_DIR/bin/clavain-cli"
   if [[ ! -d "$skills_target" ]]; then
     echo "Missing skills directory: $skills_target" >&2
     exit 1
   fi
 
+  if [[ ! -x "$cli_target" ]]; then
+    echo "Missing executable clavain-cli shim: $cli_target" >&2
+    exit 1
+  fi
+
   mkdir -p "$CODEX_HOME"
+  mkdir -p "$LOCAL_BIN_DIR"
   safe_link "$skills_target" "$AGENTS_SKILLS_DIR/clavain" || true
+  safe_link "$cli_target" "$CLAVAIN_CLI_LINK" || true
 
   remove_legacy_codex_skills_path
   cleanup_known_legacy_wrappers
@@ -802,6 +830,7 @@ doctor() {
   local scripts_dir="$SOURCE_DIR/scripts"
   local agents_link="$AGENTS_SKILLS_DIR/clavain"
   local legacy_link="$CODEX_SKILLS_DIR/clavain"
+  local cli_target="$SOURCE_DIR/bin/clavain-cli"
 
   local status=0
   local issues=()
@@ -814,6 +843,9 @@ doctor() {
   local helper_dispatch_status="missing"
   local helper_debate_status="missing"
   local codex_present="false"
+  local clavain_cli_link_ok="false"
+  local clavain_cli_link_match="false"
+  local clavain_cli_target=""
   local command_dir_ok="false"
   local prompts_dir_ok="false"
   local agents_block_ok="false"
@@ -862,6 +894,28 @@ doctor() {
   if [[ -e "$legacy_link" || -L "$legacy_link" ]]; then
     legacy_path_absent="false"
     issues+=("legacy codex skills path present (clean break expects removal): $legacy_link")
+    status=1
+  fi
+
+  if [[ ! -x "$cli_target" ]]; then
+    issues+=("source clavain-cli shim missing or not executable: $cli_target")
+    status=1
+  fi
+
+  if [[ -L "$CLAVAIN_CLI_LINK" ]]; then
+    clavain_cli_link_ok="true"
+    clavain_cli_target="$(readlink -f "$CLAVAIN_CLI_LINK" 2>/dev/null || readlink "$CLAVAIN_CLI_LINK")"
+    if [[ "$clavain_cli_target" == "$cli_target" ]]; then
+      clavain_cli_link_match="true"
+      if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+        echo "clavain-cli link:      $CLAVAIN_CLI_LINK -> $clavain_cli_target"
+      fi
+    else
+      issues+=("clavain-cli link target mismatch: $CLAVAIN_CLI_LINK -> $clavain_cli_target (expected $cli_target)")
+      status=1
+    fi
+  else
+    issues+=("clavain-cli link missing: $CLAVAIN_CLI_LINK")
     status=1
   fi
 
@@ -987,9 +1041,12 @@ doctor() {
     printf '    "agents_skills_link_match":%s,\n' "$agents_link_match"
     printf '    "agents_skills_link_target":"%s",\n' "$(json_escape "$source_agents_link")"
     printf '    "legacy_codex_skills_path_absent":%s,\n' "$legacy_path_absent"
+    printf '    "clavain_cli_link_exists":%s,\n' "$clavain_cli_link_ok"
+    printf '    "clavain_cli_link_match":%s,\n' "$clavain_cli_link_match"
+    printf '    "clavain_cli_target":"%s",\n' "$(json_escape "$clavain_cli_target")"
     printf '    "helpers":{\n'
-    printf '      "dispatch.sh":"%s",\n' "$helper_dispatch_status"
-    printf '      "debate.sh":"%s"\n' "$helper_debate_status"
+      printf '      "dispatch.sh":"%s",\n' "$helper_dispatch_status"
+      printf '      "debate.sh":"%s"\n' "$helper_debate_status"
     printf '    },\n'
     printf '    "codex_cli_present":%s,\n' "$codex_present"
     printf '    "commands_dir_exists":%s,\n' "$command_dir_ok"
@@ -1010,6 +1067,7 @@ doctor() {
     printf '  },\n'
     printf '  "paths":{\n'
     printf '    "codex_home":"%s",\n' "$(json_escape "$CODEX_HOME")"
+    printf '    "clavain_cli_link":"%s",\n' "$(json_escape "$CLAVAIN_CLI_LINK")"
     printf '    "agents_file":"%s",\n' "$(json_escape "$CODEX_AGENTS_FILE")"
     printf '    "config_file":"%s",\n' "$(json_escape "$CODEX_CONFIG_FILE")"
     printf '    "conversion_report":"%s"\n' "$(json_escape "$CONVERSION_REPORT_FILE")"
@@ -1047,7 +1105,12 @@ doctor() {
 }
 
 uninstall_all() {
+  resolve_source_dir
+
+  local cli_target="$SOURCE_DIR/bin/clavain-cli"
+
   rm -f "$AGENTS_SKILLS_DIR/clavain"
+  remove_managed_link "$cli_target" "$CLAVAIN_CLI_LINK"
   remove_legacy_codex_skills_path || true
   remove_prompts
   remove_block_from_file "$CODEX_AGENTS_FILE" "$AGENTS_BLOCK_START" "$AGENTS_BLOCK_END" || true
