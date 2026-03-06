@@ -62,6 +62,44 @@ galiana_log_signals "$SESSION_ID" "$CLAVAIN_SIGNALS" "$CLAVAIN_SIGNAL_WEIGHT" \
 SIGNALS="$CLAVAIN_SIGNALS"
 WEIGHT="$CLAVAIN_SIGNAL_WEIGHT"
 
+# Write delegation summary to interband (informational, non-blocking)
+# Statusline and session-start can read this later.
+if command -v sqlite3 &>/dev/null; then
+    _INTERSPECT_DB="${CLAUDE_PROJECT_DIR:-.}/.clavain/interspect/interspect.db"
+    if [[ -f "$_INTERSPECT_DB" ]]; then
+        _DEL_STATS=$(sqlite3 "$_INTERSPECT_DB" \
+            "SELECT COUNT(*) || '|' ||
+                    COALESCE(SUM(CASE WHEN json_extract(context,'\$.verdict') IN ('pass','CLEAN') THEN 1 ELSE 0 END),0) || '|' ||
+                    COALESCE(SUM(CASE WHEN json_extract(context,'\$.retry_needed') IN (1,'true') THEN 1 ELSE 0 END),0)
+             FROM evidence
+             WHERE event='delegation_outcome' AND source='codex-delegate'
+               AND session_id='${SESSION_ID}'" 2>/dev/null || true)
+        if [[ -n "$_DEL_STATS" ]]; then
+            _DEL_TOTAL="${_DEL_STATS%%|*}"
+            _DEL_REST="${_DEL_STATS#*|}"
+            _DEL_PASS="${_DEL_REST%%|*}"
+            _DEL_RETRY="${_DEL_REST#*|}"
+            if [[ "$_DEL_TOTAL" -gt 0 ]] 2>/dev/null; then
+                _DEL_RATE=$(( (_DEL_PASS * 100) / _DEL_TOTAL ))
+                _INTERBAND_DIR="$HOME/.interband/interspect/delegation"
+                mkdir -p "$_INTERBAND_DIR" 2>/dev/null || true
+                cat > "$_INTERBAND_DIR/${SESSION_ID}.json" <<EOF
+{
+  "version": "1.0",
+  "source": "interspect",
+  "payload": {
+    "total": $_DEL_TOTAL,
+    "pass": $_DEL_PASS,
+    "retry": $_DEL_RETRY,
+    "pass_rate": $_DEL_RATE
+  }
+}
+EOF
+            fi
+        fi
+    fi
+fi
+
 # Tiered decision: compound > drift check
 # Weight >= 4: non-trivial problem-solving → compound (raised from 3)
 # Weight >= 3: shipped work → drift check (raised from 2)
