@@ -29,6 +29,7 @@ sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count
      ```bash
      _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
      [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+     ic session attribute --session="${_is_sid}" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null || true
      ```
   d. Check for checkpoint:
      ```bash
@@ -144,6 +145,7 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
      ```bash
      _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
      [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+     ic session attribute --session="${_is_sid}" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null || true
      ```
    - **Add to session tasks** using TaskCreate:
      - Title: `<bead_id> — <title>`
@@ -266,6 +268,7 @@ Parse the JSON response. If parsing fails, default to `/sprint` (safer fallback 
      ```bash
      _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
      [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+     ic session attribute --session="${_is_sid}" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null || true
      ```
    - **Add to session tasks** using TaskCreate:
      - Title: `<bead_id> — <title or description>`

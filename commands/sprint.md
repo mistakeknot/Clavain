@@ -133,6 +133,7 @@ If `CLAVAIN_BEAD_ID` is set, register it for interstat token tracking:
 if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
     _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
     [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+    ic session attribute --session="$_is_sid" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null || true
 fi
 ```
 
