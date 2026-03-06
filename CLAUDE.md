@@ -4,7 +4,7 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 16 skills, 5 agents, 45 commands, 8 hooks, 1 MCP server. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 16 skills, 5 agents, 45 commands, 8 hooks, 0 MCP servers. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
 
 ## Quick Commands
 
