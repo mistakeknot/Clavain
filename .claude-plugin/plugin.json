@@ -88,6 +88,7 @@
     "./agents/review/data-migration-expert.md",
     "./agents/review/plan-reviewer.md",
     "./agents/workflow/bug-reproduction-validator.md",
+    "./agents/workflow/codex-delegate.md",
     "./agents/workflow/pr-comment-resolver.md"
   ],
   "mcpServers": {
