@@ -322,25 +322,66 @@ def _query_interstat_tokens(shipped_bead_ids: set[str]) -> dict[str, Any] | None
     }
 
 
+def _query_landed_changes(bead_filter: str | None = None) -> dict[str, Any] | None:
+    """Query canonical landed_changes via ic landed summary --json."""
+    try:
+        cmd = ["ic", "landed", "summary", "--json"]
+        if bead_filter:
+            cmd.append(f"--bead={bead_filter}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            return None
+        data = json.loads(result.stdout.strip() or "{}")
+        if not isinstance(data, dict) or data.get("total", 0) == 0:
+            return None
+        return data
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError, FileNotFoundError):
+        return None
+
+
 def compute_cost_per_landed_change(
     tool_events: list[dict[str, Any]] | None,
     shipped_beads: set[str],
     bead_sessions: set[str],
+    bead_filter: str | None = None,
 ) -> dict[str, Any]:
-    """Compute cost per shipped bead using real token data (preferred) or tool-time proxy."""
-    if not shipped_beads:
-        return {"avg_tools": None, "avg_sessions": None, "note": "no shipped beads in selected period"}
+    """Compute cost per landed change.
 
-    # Try real token data from interstat first
+    Primary: ic landed summary (canonical landed_changes table) + interstat tokens.
+    Fallback 1: interstat tokens correlated with shipped beads.
+    Fallback 2: tool-time proxy (tool call count per bead).
+    """
+    # Primary: canonical landed_changes
+    landed = _query_landed_changes(bead_filter)
+    if landed is not None:
+        landed_count = landed["total"] - landed.get("reverted", 0)
+        if landed_count > 0:
+            # Get bead IDs from landed changes for interstat correlation
+            landed_bead_ids = set(landed.get("by_bead", {}).keys())
+            token_data = _query_interstat_tokens(landed_bead_ids) if landed_bead_ids else None
+            result: dict[str, Any] = {
+                "landed_changes": landed_count,
+                "source": "ic_landed",
+            }
+            if token_data is not None:
+                result.update(token_data)
+                result["source"] = "ic_landed+interstat"
+            if tool_events is not None and landed_count > 0:
+                result["avg_tools"] = round(len(tool_events) / landed_count, 4)
+            return result
+
+    # Fallback 1: interstat tokens with shipped beads as denominator
+    if not shipped_beads:
+        return {"avg_tools": None, "avg_sessions": None, "note": "no shipped beads in selected period", "source": "none"}
+
     token_data = _query_interstat_tokens(shipped_beads)
     if token_data is not None:
-        result: dict[str, Any] = {**token_data, "source": "interstat"}
-        # Also include tool-time proxy for comparison if available
+        result = {**token_data, "landed_changes": len(shipped_beads), "source": "interstat+shipped_beads"}
         if tool_events is not None:
             result["avg_tools"] = round(len(tool_events) / len(shipped_beads), 4)
         return result
 
-    # Fall back to tool-time proxy
+    # Fallback 2: tool-time proxy
     if tool_events is None:
         return {"avg_tools": None, "avg_sessions": None, "note": "tool-time data not available", "source": "none"}
 
@@ -360,6 +401,7 @@ def compute_cost_per_landed_change(
     result = {
         "avg_tools": round(tool_count / shipped_count, 4),
         "avg_sessions": round(session_count / shipped_count, 4),
+        "landed_changes": shipped_count,
         "source": "tool-time",
     }
     if note:
@@ -569,7 +611,7 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
     }
 
     tool_events = load_tool_time_events(since, until)
-    cost_per_landed_change = compute_cost_per_landed_change(tool_events, shipped_beads, bead_sessions)
+    cost_per_landed_change = compute_cost_per_landed_change(tool_events, shipped_beads, bead_sessions, bead_filter)
 
     findings_files = find_findings_files(project)
     findings_docs = load_findings_docs(findings_files, since, until)
