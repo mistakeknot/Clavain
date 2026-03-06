@@ -345,7 +345,7 @@
     },
     "codex": {
       "installScript": "scripts/install-codex.sh",
-      "skillsDir": "~/.codex/skills/clavain"
+      "skillsDir": "~/.agents/skills/clavain"
     }
   }
 }

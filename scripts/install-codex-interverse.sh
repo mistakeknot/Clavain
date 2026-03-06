@@ -259,6 +259,7 @@ skill_specs() {
   declare -A recommended_plugins=()
   declare -A seen_rel=()
   declare -A seen_link=()
+  declare -A seen_link_source=()
 
   while IFS= read -r plugin; do
     [[ -n "$plugin" ]] || continue
@@ -278,17 +279,40 @@ skill_specs() {
     fi
 
     if [[ -n "${seen_link[$link_name]+set}" && "${seen_link[$link_name]}" != "$rel_key" ]]; then
+      continue
+    fi
+
+    seen_rel["$rel_key"]=1
+    seen_link["$link_name"]="$rel_key"
+    seen_link_source["$link_name"]="override"
+    echo "$plugin|$skill_rel|$link_name"
+  done < <(skill_specs_overrides)
+
+  while IFS='|' read -r plugin skill_rel link_name; do
+    [[ -n "$plugin" && -n "$skill_rel" && -n "$link_name" ]] || continue
+    if [[ -z "${recommended_plugins[$plugin]+set}" ]]; then
+      continue
+    fi
+
+    rel_key="$plugin|$skill_rel"
+
+    if [[ -n "${seen_rel[$rel_key]+set}" ]]; then
+      continue
+    fi
+
+    if [[ -n "${seen_link[$link_name]+set}" && "${seen_link[$link_name]}" != "$rel_key" ]]; then
+      if [[ "${seen_link_source[$link_name]:-}" == "override" ]]; then
+        continue
+      fi
       echo "WARN: skipping skill link name collision '$link_name' for $rel_key (already mapped to ${seen_link[$link_name]})" >&2
       continue
     fi
 
     seen_rel["$rel_key"]=1
     seen_link["$link_name"]="$rel_key"
+    seen_link_source["$link_name"]="auto"
     echo "$plugin|$skill_rel|$link_name"
-  done < <(
-    skill_specs_overrides
-    auto_discovered_skill_specs
-  )
+  done < <(auto_discovered_skill_specs)
 }
 
 build_namespace_prefix_regex() {
