@@ -176,7 +176,7 @@ calibration:
 # Calibration: .clavain/interspect/delegation-calibration.json (written by interspect)
 # Escape hatch: set mode=off or delete calibration file
 delegation:
-  mode: shadow
+  mode: enforce
 
   # Task categories and their default routing preference.
   # codex-first: delegate to codex-delegate by default
