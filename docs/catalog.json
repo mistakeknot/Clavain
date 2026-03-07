@@ -1,13 +1,13 @@
 {
-  "generated": "2026-03-07T06:21:17Z",
+  "generated": "2026-03-07T06:47:18Z",
   "counts": {
     "skills": 18,
-    "agents": 5,
+    "agents": 6,
     "commands": 45,
     "hooks": 10,
     "mcp_servers": 0,
     "review": 2,
-    "workflow": 3
+    "workflow": 4
   },
   "skills": [
     {
@@ -107,6 +107,11 @@
     {
       "name": "pr-comment-resolver",
       "description": "Addresses PR review comments by implementing requested changes and reporting resolutions. Use when code review feedback needs to be resolved with code changes.",
+      "category": "workflow"
+    },
+    {
+      "name": "ui-polish",
+      "description": "Iterates on UI refinements \u2014 tooltips, labels, layouts, mobile fixes, spacing, chart styling. Takes a screenshot or URL + natural language instruction and makes targeted frontend edits. Use when the user provides visual feedback about a web or TUI interface.",
       "category": "workflow"
     }
   ],
