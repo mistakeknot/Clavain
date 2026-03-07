@@ -176,6 +176,11 @@ mkdir -p "docs/solutions/${CATEGORY}"
 # (Content populated with Step 2 context and validated YAML frontmatter)
 ```
 
+**Provenance fields (always include in frontmatter):**
+- `lastConfirmed`: today's date (YYYY-MM-DD)
+- `provenance`: `independent` for new findings; `primed` if the agent had the pattern in context when confirming
+- `review_count`: `0` for new entries
+
 **Result:**
 - Single file in category directory
 - Enum validation ensures consistent categorization

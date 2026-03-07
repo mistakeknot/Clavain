@@ -131,6 +131,22 @@ optional_fields:
       - "test-isolation"
       - "concurrency"
 
+  lastConfirmed:
+    type: string
+    pattern: '^\d{4}-\d{2}-\d{2}$'
+    description: "Date of last independent re-observation of this pattern (YYYY-MM-DD). Defaults to date field value."
+
+  provenance:
+    type: enum
+    values:
+      - independent       # Agent found pattern without having entry in context
+      - primed            # Agent had entry in context when confirming
+    description: "How this entry was confirmed. Only independent confirmations reset the decay timer."
+
+  review_count:
+    type: integer
+    description: "Number of times this entry was surfaced during reviews. Used for decay tracking."
+
 validation_rules:
   - "module must be a valid project module name"
   - "date must be in YYYY-MM-DD format"
