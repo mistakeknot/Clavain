@@ -27,6 +27,7 @@ These are the commands you'll use most often:
 | `/clavain:brainstorm` | Structured brainstorm → auto-handoff to plan |
 |---|---|
 | `/clavain:strategy` | Bridge brainstorm → plan with PRD creation and beads tracking |
+| `/clavain:recall` | Search across all knowledge systems (docs/solutions, memory files) |
 | `/clavain:debate` | Structured Claude ↔ Codex debate before implementing |
 
 ### Plan

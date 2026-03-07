@@ -1,9 +1,9 @@
 {
-  "generated": "2026-03-07T06:47:18Z",
+  "generated": "2026-03-07T16:54:23Z",
   "counts": {
     "skills": 18,
     "agents": 6,
-    "commands": 45,
+    "commands": 46,
     "hooks": 10,
     "mcp_servers": 0,
     "review": 2,
@@ -211,6 +211,10 @@
     {
       "name": "quality-gates",
       "description": "Auto-select and run the right reviewer agents based on what changed \u2014 one command for comprehensive quality review"
+    },
+    {
+      "name": "recall",
+      "description": "Search across all knowledge systems \u2014 curated docs, memory files, legacy entries"
     },
     {
       "name": "refactor",
