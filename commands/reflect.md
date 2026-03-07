@@ -58,13 +58,15 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "<sprint_id>" "reflect"
    ```
 
-6. **Calibrate cost estimates (silent).** After advancing, recalibrate phase cost estimates from interstat history so future sprints use improved estimates:
+6. **Check documentation drift (non-blocking).** After advancing, run a drift scan to catch any docs that may have gone stale during this sprint. Use the `interwatch:watch` skill via the Skill tool. If interwatch finds drift, report it to the user but do not block — the sprint is already done. If interwatch is not installed or the scan fails, skip silently.
+
+7. **Calibrate cost estimates (silent).** After advancing, recalibrate phase cost estimates from interstat history so future sprints use improved estimates:
    ```bash
    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" calibrate-phase-costs 2>/dev/null || true
    ```
    This is the closed-loop feedback: actual phase costs from completed sprints improve estimates for future sprints. Silent on failure — hardcoded defaults remain active.
 
-7. **Calibrate agent routing from evidence (silent).** After cost calibration, recalibrate agent model routing from interspect evidence so future sprints route agents to the right model tier:
+8. **Calibrate agent routing from evidence (silent).** After cost calibration, recalibrate agent model routing from interspect evidence so future sprints route agents to the right model tier:
    ```bash
    if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
        interspect_root=$(_discover_interspect_plugin 2>/dev/null) || interspect_root=""
