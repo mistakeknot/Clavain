@@ -149,6 +149,74 @@
       {
         "source": "intermem@interagency-marketplace",
         "description": "Memory synthesis — graduates auto-memory to AGENTS.md/CLAUDE.md"
+      },
+      {
+        "source": "interspect@interagency-marketplace",
+        "description": "Agent performance profiler and routing optimizer"
+      },
+      {
+        "source": "interpulse@interagency-marketplace",
+        "description": "Session context pressure monitoring and threshold warnings"
+      },
+      {
+        "source": "intership@interagency-marketplace",
+        "description": "Culture ship names as Claude Code spinner verbs"
+      },
+      {
+        "source": "intername@interagency-marketplace",
+        "description": "Agent and agency naming for legible orchestration"
+      },
+      {
+        "source": "intertrust@interagency-marketplace",
+        "description": "Agent trust scoring and reputation tracking"
+      },
+      {
+        "source": "intertrace@interagency-marketplace",
+        "description": "Cross-module integration gap tracer"
+      },
+      {
+        "source": "interdeep@interagency-marketplace",
+        "description": "Deep research via content extraction and MCP tools"
+      },
+      {
+        "source": "interknow@interagency-marketplace",
+        "description": "Knowledge compounding with provenance tracking"
+      },
+      {
+        "source": "intermonk@interagency-marketplace",
+        "description": "Hegelian dialectic reasoning via Electric Monk subagents"
+      },
+      {
+        "source": "interplug@interagency-marketplace",
+        "description": "Plugin development lifecycle toolkit"
+      },
+      {
+        "source": "interscribe@interagency-marketplace",
+        "description": "Documentation quality enforcement and refactoring"
+      },
+      {
+        "source": "intersense@interagency-marketplace",
+        "description": "Domain detection and project classification"
+      },
+      {
+        "source": "intersight@interagency-marketplace",
+        "description": "Automated UI/UX design analysis and W3C DTCG token extraction"
+      },
+      {
+        "source": "interskill@interagency-marketplace",
+        "description": "Skill authoring, testing, and audit toolkit"
+      },
+      {
+        "source": "interrank@interagency-marketplace",
+        "description": "Model and benchmark ranking MCP server"
+      },
+      {
+        "source": "intertrack@interagency-marketplace",
+        "description": "Feature-level success metric tracking"
+      },
+      {
+        "source": "intertree@interagency-marketplace",
+        "description": "Project hierarchy management and filesystem discovery"
       }
     ],
     "optional": [
@@ -302,7 +370,7 @@
     },
     {
       "name": "beads",
-      "install": "npm install -g @steveyegge/beads",
+      "install": "go install github.com/steveyegge/beads/cmd/bd@latest",
       "check": "command -v bd",
       "optional": true,
       "description": "Git-native issue tracking"
@@ -327,7 +395,7 @@
   "postInstall": {
     "message": [
       "Try: /sprint add user export feature",
-      "Run /help to see all 32 commands, or /doctor to verify your setup."
+      "Run /help to see all 45 commands, or /doctor to verify your setup."
     ]
   },
   "platforms": {

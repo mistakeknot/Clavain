@@ -246,8 +246,9 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 ### Hooks (8)
 
 - **SessionStart**: Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When interserve mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
-- **PostToolUse**: Auto-publish: detects `git push` in plugin repos and auto-bumps version + syncs marketplace (`auto-publish.sh`).
-- **Stop**: Auto-compound check: detects compoundable signals and prompts knowledge capture (`auto-compound.sh`). Session handoff: detects uncommitted work or in-progress beads and prompts HANDOFF.md creation (`session-handoff.sh`).
+- **PreToolUse**: Guards `~/.claude/plugins/cache/` from accidental edits (`guard-plugin-cache.sh`).
+- **PostToolUse**: Auto-publish on `git push` in plugin repos (`auto-publish.sh`). Bead-agent binding on Bash (`bead-agent-bind.sh`). Catalog reminder on file edits (`catalog-reminder.sh`). Plugin edit validation (`validate-plugin-edit.sh`).
+- **Stop**: Auto-stop actions: compound check, session handoff, uncommitted work detection (`auto-stop-actions.sh`).
 - **SessionEnd**: Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
 ### MCP servers (1)
@@ -316,7 +317,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 skills/       # 16 discipline skills (SKILL.md each)
 agents/       # 5 agents (review/ + workflow/)
 commands/     # 45 slash commands
-hooks/        # 7 hooks (SessionStart, PostToolUse×2, Stop×2, SessionEnd×2)
+hooks/        # 8 hooks (SessionStart×1, PreToolUse×1, PostToolUse×4, Stop×1, SessionEnd×1)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync
 ```
