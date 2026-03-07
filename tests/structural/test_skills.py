@@ -20,14 +20,15 @@ def _get_skill_dirs():
 SKILL_DIRS = _get_skill_dirs()
 
 
-def test_skill_count(skills_dir):
-    """Total skill count matches expected value."""
+def test_skill_count(skills_dir, plugin_json):
+    """Skill count on filesystem matches plugin.json manifest."""
     dirs = sorted(
         d for d in skills_dir.iterdir()
         if d.is_dir() and (d / "SKILL.md").exists()
     )
-    assert len(dirs) == 18, (
-        f"Expected 18 skills, found {len(dirs)}: {[d.name for d in dirs]}"
+    expected = len(plugin_json.get("skills", []))
+    assert len(dirs) == expected, (
+        f"plugin.json lists {expected} skills, filesystem has {len(dirs)}: {[d.name for d in dirs]}"
     )
 
 

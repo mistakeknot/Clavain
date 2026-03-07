@@ -17,11 +17,12 @@ def _get_command_files():
 COMMAND_FILES = _get_command_files()
 
 
-def test_command_count(commands_dir):
-    """Total command count matches expected value."""
+def test_command_count(commands_dir, plugin_json):
+    """Command count on filesystem matches plugin.json manifest."""
     files = sorted(commands_dir.glob("*.md"))
-    assert len(files) == 45, (
-        f"Expected 45 commands, found {len(files)}: {[f.stem for f in files]}"
+    expected = len(plugin_json.get("commands", []))
+    assert len(files) == expected, (
+        f"plugin.json lists {expected} commands, filesystem has {len(files)}: {[f.stem for f in files]}"
     )
 
 

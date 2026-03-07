@@ -287,17 +287,27 @@ def update_using_clavain_counts(text: str, counts: dict[str, int], path: Path) -
     )
 
 
-def update_prd_version(text: str, path: Path) -> str:
+def update_prd_counts(text: str, counts: dict[str, int], path: Path) -> str:
     plugin_json = json.loads(read_text(ROOT / ".claude-plugin" / "plugin.json"))
     version = plugin_json.get("version", "")
-    if not version:
-        return text
-    return replace_once(
-        text,
-        r"\*\*Version:\*\* \S+",
-        f"**Version:** {version}",
-        path,
-    )
+    updated = text
+    if version:
+        updated = replace_once(
+            updated,
+            r"\*\*Version:\*\* \S+",
+            f"**Version:** {version}",
+            path,
+        )
+    # Update component count table rows: | **Skills** | 18 | ...
+    for label in ("Skills", "Agents", "Commands"):
+        key = label.lower()
+        if key in counts:
+            updated = replace_optional(
+                updated,
+                rf"\*\*{label}\*\*\s*\|\s*\d+",
+                f"**{label}** | {counts[key]}",
+            )
+    return updated
 
 
 def update_count_strings(path: Path, text: str, counts: dict[str, int]) -> str:
@@ -315,7 +325,7 @@ def update_count_strings(path: Path, text: str, counts: dict[str, int]) -> str:
     if relative == "skills/using-clavain/SKILL.md":
         return update_using_clavain_counts(text, counts, path)
     if relative == "docs/PRD.md":
-        return update_prd_version(text, path)
+        return update_prd_counts(text, counts, path)
     raise ValueError(f"Unexpected target file: {path}")
 
 

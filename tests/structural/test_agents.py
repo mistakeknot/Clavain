@@ -17,11 +17,12 @@ def _get_agent_files(agents_dir):
     return agent_files
 
 
-def test_agent_count(agents_dir):
-    """Total agent count matches expected value."""
+def test_agent_count(agents_dir, plugin_json):
+    """Agent count on filesystem matches plugin.json manifest."""
     agent_files = _get_agent_files(agents_dir)
-    assert len(agent_files) == 6, (
-        f"Expected 6 agents, found {len(agent_files)}: "
+    expected = len(plugin_json.get("agents", []))
+    assert len(agent_files) == expected, (
+        f"plugin.json lists {expected} agents, filesystem has {len(agent_files)}: "
         f"{[f.stem for f in agent_files]}"
     )
 
