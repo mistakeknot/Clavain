@@ -41,11 +41,96 @@ echo "bd: $(command -v bd >/dev/null 2>&1 && echo 'installed' || echo 'not found
 echo "qmd: $(command -v qmd >/dev/null 2>&1 && echo 'installed' || echo 'not found')"
 ```
 
+### 2b. Soft Dependencies
+
+Check optional tools that affect feature availability:
+
+```bash
+# Python 3 + PyYAML (needed for spec loader)
+if python3 -c "import yaml" 2>/dev/null; then
+  echo "python3+pyyaml: PASS"
+else
+  echo "python3+pyyaml: WARN (spec loader will use hardcoded defaults)"
+  echo "  Fix: pip install pyyaml"
+fi
+
+# yq v4 (needed for fleet registry queries)
+if command -v yq >/dev/null 2>&1 && yq --version 2>/dev/null | grep -q 'v4'; then
+  echo "yq: PASS"
+else
+  echo "yq: WARN (fleet registry queries unavailable)"
+  echo "  Fix: https://github.com/mikefarah/yq#install"
+fi
+
+# Node.js (needed for JS-based MCP plugins)
+if command -v node >/dev/null 2>&1; then
+  echo "node: PASS ($(node --version 2>/dev/null))"
+else
+  echo "node: WARN (JS-based MCP plugins won't start)"
+  echo "  Fix: https://nodejs.org/"
+fi
+
+# PATH includes ~/.local/bin (needed for ic kernel)
+if echo "$PATH" | grep -q "$HOME/.local/bin"; then
+  echo "PATH: PASS"
+else
+  echo "PATH: WARN (~/.local/bin not on PATH — ic kernel may not be found)"
+  echo "  Fix: export PATH=\"\$HOME/.local/bin:\$PATH\" in your shell profile"
+fi
+```
+
+### 2c. Config Validation
+
+Validate critical YAML config files are parseable:
+
+```bash
+_config_dir="os/clavain/config"
+for cfg in agency-spec.yaml fleet-registry.yaml routing.yaml; do
+  _cfg_path="${_config_dir}/${cfg}"
+  if [ ! -f "$_cfg_path" ]; then
+    echo "${cfg}: SKIP (not found)"
+    continue
+  fi
+  if python3 -c "import yaml; yaml.safe_load(open('${_cfg_path}'))" 2>/dev/null; then
+    echo "${cfg}: PASS"
+  elif yq '.' "${_cfg_path}" >/dev/null 2>&1; then
+    echo "${cfg}: PASS"
+  else
+    echo "${cfg}: FAIL (malformed YAML — features using this config will silently degrade)"
+  fi
+done
+```
+
+### 2d. Plugin Hook Syntax
+
+Fast syntax check on all installed plugin hooks:
+
+```bash
+_hook_errors=0
+for hook in ~/.claude/plugins/cache/*/*/hooks/*.sh; do
+  [ -f "$hook" ] || continue
+  if ! bash -n "$hook" 2>/dev/null; then
+    echo "  WARN: syntax error in $(basename "$(dirname "$(dirname "$hook")")")/$(basename "$hook")"
+    _hook_errors=$((_hook_errors + 1))
+  fi
+done
+if [ "$_hook_errors" -eq 0 ]; then
+  echo "hook syntax: PASS"
+else
+  echo "hook syntax: WARN ($_hook_errors hooks have syntax errors)"
+fi
+```
+
 ### 3. Beads
 
 ```bash
 if [ -d .beads ]; then
-  bd stats 2>&1 | head -5
+  if timeout 5 bd stats 2>&1 | head -5; then
+    true
+  else
+    echo "beads: FAIL (Dolt server hung or unresponsive)"
+    echo "  Fix: bash .beads/recover.sh"
+  fi
 else
   echo "not initialized (run 'bd init' to set up)"
 fi
@@ -262,6 +347,13 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - beads not initialized → "Run `bd init` to enable issue tracking"
 - interlock not installed → "Install interlock for multi-agent coordination: `claude plugin install interlock@interagency-marketplace`"
 - intermute not running → "Run `/clavain:setup --scope interlock` to install and start the intermute coordination service"
+- python3+pyyaml WARN → "Install PyYAML: `pip install pyyaml` (spec loader falls back to hardcoded defaults without it)"
+- yq WARN → "Install yq v4: https://github.com/mikefarah/yq#install (fleet registry queries unavailable without it)"
+- node WARN → "Install Node.js 20+: https://nodejs.org/ (JS-based MCP plugins won't start without it)"
+- PATH WARN → "Add `export PATH=\"$HOME/.local/bin:$PATH\"` to your shell profile"
+- config FAIL → "Fix the YAML syntax error in the named config file — features using it will silently degrade"
+- hook syntax WARN → "Check the named hook files for bash syntax errors"
+- beads FAIL (hung) → "Run `bash .beads/recover.sh` to recover from a stuck Dolt server"
 - .clavain not initialized → "Run `/clavain:init` to set up agent memory"
 - .clavain scratch not gitignored → "Run `/clavain:init` to fix gitignore"
 - skill budget WARN/ERROR → "Trim skills over 16K chars by moving verbose sections to references/ subdirectory"

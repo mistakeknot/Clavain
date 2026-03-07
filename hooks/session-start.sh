@@ -66,6 +66,39 @@ if [[ -d "$CACHE_PARENT" ]] && [[ "$CACHE_PARENT" == *"/plugins/cache/"* ]]; the
     _invalidate_companion_cache
 fi
 
+# First-run setup verification — surface critical issues on first session only.
+# Creates .clavain/setup-verified marker after passing. Runs in <200ms.
+if [[ ! -f ".clavain/setup-verified" ]] && [[ -d ".clavain" || -d ".beads" ]]; then
+    _firstrun_ok=true
+
+    # Critical: ic kernel on PATH
+    if ! command -v ic >/dev/null 2>&1; then
+        echo "Warning: ic kernel not found on PATH. Add ~/.local/bin to PATH or re-run install.sh." >&2
+        _firstrun_ok=false
+    fi
+
+    # Critical: bd (beads) available
+    if ! command -v bd >/dev/null 2>&1; then
+        echo "Warning: bd (beads) not found. Install: go install github.com/mistakeknot/beads/cmd/bd@latest" >&2
+        _firstrun_ok=false
+    fi
+
+    # Soft: PyYAML
+    if ! python3 -c "import yaml" 2>/dev/null; then
+        echo "Note: PyYAML not available — some features will use defaults. Fix: pip install pyyaml" >&2
+    fi
+
+    # Soft: yq
+    if ! command -v yq >/dev/null 2>&1; then
+        echo "Note: yq not found — fleet registry queries unavailable. Fix: https://github.com/mikefarah/yq" >&2
+    fi
+
+    if [[ "$_firstrun_ok" == "true" ]]; then
+        mkdir -p .clavain 2>/dev/null || true
+        touch .clavain/setup-verified 2>/dev/null || true
+    fi
+fi
+
 # Read using-clavain content (fail gracefully — don't mix stderr into injected context)
 using_clavain_content=$(cat "${PLUGIN_ROOT}/skills/using-clavain/SKILL.md" 2>/dev/null) || using_clavain_content="Could not load using-clavain skill. Run /clavain:using-clavain manually."
 
