@@ -1,10 +1,10 @@
 {
-  "generated": "2026-03-06T02:53:49Z",
+  "generated": "2026-03-07T06:21:17Z",
   "counts": {
-    "skills": 16,
+    "skills": 18,
     "agents": 5,
     "commands": 45,
-    "hooks": 8,
+    "hooks": 10,
     "mcp_servers": 0,
     "review": 2,
     "workflow": 3
@@ -47,12 +47,20 @@
       "description": "Manage thematic work lanes \u2014 discover, create, tag beads, show velocity and starvation scores"
     },
     {
+      "name": "project-kickstart",
+      "description": "Use when bootstrapping a new project \u2014 runs the full init-to-beads ceremony in one shot"
+    },
+    {
       "name": "project-onboard",
       "description": "Use when onboarding a new or existing project into the Demarch ecosystem \u2014 introspects infrastructure, conducts guided interview, scaffolds docs and automation, configures observability, seeds content via interpath"
     },
     {
       "name": "refactor-safely",
       "description": "Use when performing significant refactoring \u2014 guides a disciplined process that leverages duplication detection, characterization tests, staged execution, and continuous simplicity review"
+    },
+    {
+      "name": "ship",
+      "description": "Use when work is done and you need to commit, push, close beads, and sync in one shot. The quick session-close ceremony."
     },
     {
       "name": "subagent-driven-development",

@@ -37,6 +37,11 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bead-agent-bind.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agents-md-refresh.sh",
+            "timeout": 5
           }
         ]
       },
@@ -78,6 +83,11 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/dotfiles-sync.sh",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-push.sh",
             "async": true
           }
         ]
