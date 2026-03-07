@@ -55,11 +55,12 @@ exit 0
 
 def test_codex_manifest_uses_agents_skills_path(project_root):
     """Active and example manifests should advertise Codex native skill discovery."""
+    manifests = [project_root / "agent-rig.json"]
+    # Monorepo example manifest — only exists in full Demarch checkout, not standalone CI
     repo_root = project_root.parent.parent
-    manifests = [
-        project_root / "agent-rig.json",
-        repo_root / "core" / "agent-rig" / "examples" / "clavain" / "agent-rig.json",
-    ]
+    example = repo_root / "core" / "agent-rig" / "examples" / "clavain" / "agent-rig.json"
+    if example.exists():
+        manifests.append(example)
 
     for manifest_path in manifests:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))

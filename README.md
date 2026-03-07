@@ -315,7 +315,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 
 ```
 skills/       # 18 discipline skills (SKILL.md each)
-agents/       # 5 agents (review/ + workflow/)
+agents/       # 6 agents (review/ + workflow/)
 commands/     # 45 slash commands
 hooks/        # 8 hooks (SessionStart×1, PreToolUse×1, PostToolUse×4, Stop×1, SessionEnd×1)
 config/       # dispatch routing
