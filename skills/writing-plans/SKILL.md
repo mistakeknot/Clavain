@@ -51,6 +51,9 @@ Before writing any tasks, spawn a learnings-researcher to surface relevant prior
 artifact_type: plan
 bead: <CLAVAIN_BEAD_ID or "none">
 stage: design
+requirements:
+  - F1: <feature name from PRD>
+  - F2: <feature name from PRD>
 ---
 # [Feature Name] Implementation Plan
 
@@ -67,6 +70,34 @@ stage: design
 
 ---
 ```
+
+The `requirements` field links plan tasks to PRD feature IDs. Use the feature numbering from the PRD (F1, F2, etc.). This field is optional — omit it when no PRD exists.
+
+## Must-Haves Section
+
+After the plan header (after Prior Learnings, before the first task), add a Must-Haves section:
+
+```markdown
+## Must-Haves
+
+**Truths** (observable behaviors — verifiable by using the application):
+- [User can do X / System responds with Y / Data persists across Z]
+
+**Artifacts** (files that must exist with specific exports):
+- [`path/to/file.py`] exports [`function_name`, `class_name`]
+
+**Key Links** (critical connections where breakage causes cascading failures):
+- [Component A calls Component B before Component C]
+```
+
+**Deriving must-haves:**
+1. State the goal as an outcome, not a task ("Working chat interface", not "Build chat components")
+2. List 3-7 truths from the user's perspective ("User can see messages", "Messages persist across refresh")
+3. For each truth, identify required artifacts (files, exports, types)
+4. For each artifact, identify key links (what must be connected for it to function)
+5. Focus key_links on where breakage causes cascading failures
+
+Must-haves are optional. Omit for trivial plans (complexity 1-2) or when the goal is self-evident. The executing-plans skill validates these after all tasks complete.
 
 ## Task Structure
 
@@ -109,7 +140,21 @@ Expected: PASS
 git add tests/path/test.py src/path/file.py
 git commit -m "feat: add specific feature"
 ```
+
+<verify>
+- run: `pytest tests/path/test.py -v`
+  expect: exit 0
+- run: `python -c "from src.module import func; print(func('test'))"`
+  expect: contains "expected_output"
+</verify>
 ````
+
+**Writing verify blocks:**
+- Place `<verify>` at the end of each task, after the final step
+- Each entry has `run:` (exact command) and `expect:` (pass condition)
+- Two matchers: `exit 0` (command succeeds), `contains "string"` (output includes substring)
+- Verify blocks are optional — omit for tasks that are purely documentation or configuration
+- The executing-plans skill runs these automatically after completing all task steps
 
 ## Execution Manifest
 
