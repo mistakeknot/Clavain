@@ -21,6 +21,29 @@ Bridge between brainstorming (WHAT) and planning (HOW). Takes an idea or brainst
    ```
 3. If no brainstorm exists → ask the user what they want to build, then proceed directly (strategy can work without a prior brainstorm)
 
+## Phase 0: Prior Art Check
+
+Before designing anything, check if the problem is already solved — either by an assessed external tool or by existing Demarch infrastructure.
+
+1. **Search assessment docs** for prior verdicts on the domain:
+   ```bash
+   grep -ril "<2-3 keywords from the topic>" docs/research/assess-*.md 2>/dev/null
+   ```
+   If hits found, read the verdict. If verdict is "adopt" or "port-partially", **stop and surface this** to the user before proceeding:
+   > "We already assessed [tool] for this domain with verdict '[adopt]'. Should we use that instead of building from scratch?"
+
+2. **Search existing beads** for prior work in this area:
+   ```bash
+   bd search "<keywords>" 2>/dev/null
+   ```
+
+3. **Search existing plugins/skills** for overlap:
+   ```bash
+   ls interverse/*/CLAUDE.md 2>/dev/null | xargs grep -li "<keywords>" 2>/dev/null
+   ```
+
+If prior art exists with "adopt" verdict, the default should be integration (install + wire up), not reimplementation.
+
 ## Phase 1: Extract Features
 
 From the brainstorm doc or user description, identify **discrete features**. Each feature should be:

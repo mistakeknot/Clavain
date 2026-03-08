@@ -21,9 +21,20 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Save execution manifest to:** `docs/plans/YYYY-MM-DD-<feature-name>.exec.yaml` (generated alongside the plan — see "Execution Manifest" section below)
 
-## Step 0: Search Institutional Learnings
+## Step 0: Prior Art & Institutional Learnings
 
-Before writing any tasks, spawn a learnings-researcher to surface relevant prior solutions:
+**Prior art check (REQUIRED):** Before designing infrastructure, check if the problem is already solved:
+
+```bash
+# Check assessment docs for external tools with adopt/port verdicts
+grep -ril "<2-3 keywords>" docs/research/assess-*.md 2>/dev/null
+# Check existing plugins for overlap
+ls interverse/*/CLAUDE.md 2>/dev/null | xargs grep -li "<keywords>" 2>/dev/null
+```
+
+If an external tool has an "adopt" verdict for this domain, default to integration (install + wire up) over reimplementation. Surface to user before proceeding.
+
+**Institutional learnings:** Before writing any tasks, spawn a learnings-researcher to surface relevant prior solutions:
 
 1. Launch `Task(subagent_type="interflux:learnings-researcher")` with the feature description/spec as the prompt
 2. Read the returned learnings
