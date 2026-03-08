@@ -42,6 +42,12 @@ Before designing anything, check if the problem is already solved — either by 
    ls interverse/*/CLAUDE.md 2>/dev/null | xargs grep -li "<keywords>" 2>/dev/null
    ```
 
+4. **Web search for unknown prior art (conditional)** — if any feature involves building **new infrastructure or tooling from scratch** (not extending existing modules), run a quick web search:
+   ```
+   WebSearch: "open source <what we're building> CLI tool 2025 2026"
+   ```
+   Spend ≤2 minutes. If a mature project exists (>100 stars, active), surface it before creating beads. Skip for feature additions, bug fixes, refactors, and UI work.
+
 If prior art exists with "adopt" verdict, the default should be integration (install + wire up), not reimplementation.
 
 ## Phase 1: Extract Features

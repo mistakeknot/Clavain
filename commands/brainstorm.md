@@ -72,11 +72,22 @@ Run a quick repo scan to understand existing patterns:
 
 Focus on: similar features, established patterns, CLAUDE.md guidance.
 
-**Prior art check:** Also search assessment docs for external tools that solve this problem:
-```bash
-grep -ril "<2-3 keywords>" docs/research/assess-*.md 2>/dev/null
-```
-If an assessed tool has "adopt" or "port-partially" verdict for this domain, surface it immediately — the brainstorm may be unnecessary if we should just integrate an existing tool.
+**Prior art check (REQUIRED):** Before designing anything new, check for existing solutions:
+
+1. **Local assessment docs** — search for already-evaluated tools:
+   ```bash
+   grep -ril "<2-3 keywords>" docs/research/assess-*.md 2>/dev/null
+   ```
+   If an assessed tool has "adopt" or "port-partially" verdict, surface it immediately — the brainstorm may be unnecessary.
+
+2. **External prior art (conditional)** — if the feature involves building **new infrastructure, tooling, search, indexing, or a new system** (not a feature addition to existing code, not a bug fix, not a refactor), run a web search for existing open-source solutions:
+   ```
+   WebSearch: "open source <what we're building> CLI tool 2025 2026"
+   ```
+   Spend ≤2 minutes. Look for: mature projects (>100 stars), active maintenance, language-compatible (Rust/Go/Python preferred). If a strong candidate exists, surface it to the user with AskUserQuestion:
+   > "Found [tool] (N stars, language) which does [overlap]. Should we evaluate it before building our own?"
+
+   **Skip this step for:** feature additions to existing modules, bug fixes, refactors, config changes, documentation, UI tweaks. The signal is "are we creating a new system from scratch?" — if yes, search; if no, skip.
 
 #### 1.2 Collaborative Dialogue
 

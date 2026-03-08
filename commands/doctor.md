@@ -224,25 +224,28 @@ if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
     fi
   done
 
-  # Pattern 2: open beads whose parent (DEPENDS ON) is closed
+  # Pattern 2: dot-children (iv-xxx.N) whose parent is closed
+  # Only targets dot-notation children (e.g., iv-abc.1, iv-abc.2) — these are
+  # definitionally part of their parent epic. A closed dependency is NOT the same
+  # as a closed parent — dependencies just mean "blocker removed."
   for _id in $_open_ids; do
+    # Only match dot-children: <parent-id>.<number>
+    _parent_id=$(echo "$_id" | grep -oE '^[A-Za-z]+-[a-z0-9]+' 2>/dev/null) || continue
+    echo "$_id" | grep -qE '\.[0-9]+$' || continue
+    [ "$_parent_id" = "$_id" ] && continue
+
     # Skip if already closed by Pattern 1
     _cur=$(bd show "$_id" 2>/dev/null | head -1) || continue
     echo "$_cur" | grep -qE 'CLOSED|DEFERRED' && continue
 
-    # Extract dependency IDs from "DEPENDS ON" section
-    _deps=$(bd show "$_id" 2>/dev/null | sed -n '/DEPENDS ON/,/^$/p' | grep -oE '[A-Za-z]+-[a-z0-9]+' | head -5) || _deps=""
-    for _dep in $_deps; do
-      [ "$_dep" = "$_id" ] && continue  # skip self-reference
-      _dep_line=$(bd show "$_dep" 2>/dev/null | head -1) || continue
-      if echo "$_dep_line" | grep -q "CLOSED"; then
-        _dep_title=$(echo "$_dep_line" | sed 's/.*· //;s/   \[.*//')
-        echo "  ZOMBIE: $_id (parent $_dep closed: $_dep_title)"
-        bd close "$_id" --reason="Zombie sweep: parent $_dep is closed" 2>/dev/null || true
-        _zombie_count=$((_zombie_count + 1))
-        break
-      fi
-    done
+    # Check if parent is closed
+    _par_line=$(bd show "$_parent_id" 2>/dev/null | head -1) || continue
+    if echo "$_par_line" | grep -q "CLOSED"; then
+      _par_title=$(echo "$_par_line" | sed 's/.*· //;s/   \[.*//')
+      echo "  ZOMBIE: $_id (parent $_parent_id closed)"
+      bd close "$_id" --reason="Zombie sweep: parent $_parent_id is closed" 2>/dev/null || true
+      _zombie_count=$((_zombie_count + 1))
+    fi
   done
 
   if [ "$_zombie_count" -eq 0 ]; then
