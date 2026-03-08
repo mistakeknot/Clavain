@@ -10,7 +10,7 @@ setup() {
 }
 
 @test "session-start: outputs valid JSON" {
-    run bash -c "
+    run --separate-stderr bash -c "
         curl() { return 1; }
         pgrep() { return 1; }
         export -f curl pgrep
@@ -22,7 +22,7 @@ setup() {
 }
 
 @test "session-start: has additionalContext key" {
-    run bash -c "
+    run --separate-stderr bash -c "
         curl() { return 1; }
         pgrep() { return 1; }
         export -f curl pgrep
@@ -34,7 +34,7 @@ setup() {
 }
 
 @test "session-start: additionalContext is nonempty" {
-    run bash -c "
+    run --separate-stderr bash -c "
         curl() { return 1; }
         pgrep() { return 1; }
         export -f curl pgrep
@@ -46,7 +46,7 @@ setup() {
 }
 
 @test "session-start: exits zero" {
-    run bash -c "
+    run --separate-stderr bash -c "
         curl() { return 1; }
         pgrep() { return 1; }
         export -f curl pgrep
@@ -77,7 +77,7 @@ setup() {
     cat > "$tmpdir/.clavain/scratch/inflight-agents.json" <<'ENDJSON'
 {"session_id":"prev-session-123","agents":[{"id":"agent-fd-arch","task":"review architecture"}],"timestamp":1234567890}
 ENDJSON
-    run bash -c "
+    run --separate-stderr bash -c "
         curl() { return 1; }
         pgrep() { return 1; }
         export -f curl pgrep
