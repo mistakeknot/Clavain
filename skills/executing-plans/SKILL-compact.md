@@ -30,6 +30,21 @@ Apply feedback, execute next batch, repeat.
 
 Use `clavain:landing-a-change` for final verification and commit.
 
+## Deviation Rules
+
+During execution you WILL find unplanned work. Apply automatically:
+
+- **R1 Auto-fix bugs** (wrong queries, type errors, null pointers) — fix inline, no permission needed
+- **R2 Auto-add critical functionality** (missing validation, auth, error handling) — add it, no permission needed
+- **R3 Auto-fix blockers** (missing deps, broken imports) — fix it, no permission needed
+- **R4 Ask about architectural changes** (new DB tables, framework switches, breaking APIs) — STOP, user decision required
+
+**Priority:** R4 (stop) > R1-R3 (auto-fix) > unsure (treat as R4).
+
+**Scope:** Only fix issues caused by the current task. Pre-existing issues → deferred-items. 3 fix attempts per task max, then defer.
+
+**Stuck guard:** 5+ reads without writes = stuck. Write code or declare blocked.
+
 ## When to Stop
 
 Hit a blocker, plan has critical gaps, instruction unclear, verification fails repeatedly. **Ask, don't guess.**

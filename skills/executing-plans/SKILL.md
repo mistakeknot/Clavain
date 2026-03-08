@@ -121,6 +121,8 @@ When a `.exec.yaml` manifest exists alongside the plan, use the Python orchestra
 When batch complete:
 - Show what was implemented
 - Show verification output
+- List any deviations (Rules 1-3 auto-fixes applied)
+- List any deferred items (out-of-scope issues discovered, tasks that hit the 3-attempt limit)
 - Say: "Ready for feedback."
 
 ### Step 4: Continue
@@ -135,6 +137,40 @@ After all tasks complete and verified:
 - Announce: "I'm using the landing-a-change skill to complete this work."
 - **REQUIRED SUB-SKILL:** Use clavain:landing-a-change
 - Follow that skill to verify tests, present options, execute choice
+
+## Deviation Rules
+
+While executing, you WILL discover work not in the plan. Apply these rules automatically. Track all deviations for the batch report.
+
+### Rule 1: Auto-fix bugs
+**Trigger:** Code doesn't work as intended — wrong queries, type errors, null pointer exceptions, broken validation, logic errors.
+**Action:** Fix inline, verify fix, continue task. No permission needed.
+
+### Rule 2: Auto-add critical functionality
+**Trigger:** Code missing essentials for correctness, security, or basic operation — missing error handling, no input validation, missing null checks, no auth on protected routes, missing DB indexes.
+**Action:** Add it, verify, continue. These aren't "features" — they're correctness requirements. No permission needed.
+
+### Rule 3: Auto-fix blockers
+**Trigger:** Something prevents completing the current task — missing dependency, broken imports, wrong types, missing env var, build config error.
+**Action:** Fix it, verify, continue. No permission needed.
+
+### Rule 4: Ask about architectural changes
+**Trigger:** Fix requires significant structural modification — new DB table (not column), switching libraries/frameworks, changing auth approach, breaking API changes, new service layer.
+**Action:** STOP. Report what you found, the proposed change, why it's needed, and alternatives. User decision required.
+
+### Priority
+1. Rule 4 applies → STOP (architectural decision needed)
+2. Rules 1-3 apply → Fix automatically
+3. Genuinely unsure → Treat as Rule 4 (ask)
+
+### Scope Boundary
+Only auto-fix issues DIRECTLY caused by the current task's changes. Pre-existing warnings, linting errors, or failures in unrelated files are out of scope. Log out-of-scope discoveries to `deferred-items.md` in the batch report — do NOT fix them.
+
+### Fix Attempt Limit
+After 3 auto-fix attempts on a single task, STOP fixing. Document remaining issues in the batch report under "Deferred Issues". Continue to the next task.
+
+### Analysis Paralysis Guard
+If you make 5+ consecutive Read/Grep/Glob calls without any Edit/Write/Bash action: STOP. State in one sentence why you haven't written anything yet. Then either write code (you have enough context) or report "blocked" with the specific missing information.
 
 ## When to Stop and Ask for Help
 
