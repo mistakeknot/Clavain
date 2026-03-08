@@ -32,6 +32,7 @@ DOCTOR_JSON=0
 BACKUP_SESSION_ROOT=""
 
 recommended_interverse_plugins_fallback() {
+  # Keep this in sync with agent-rig.json for jq-less standalone installs.
   cat <<'EOF'
 interdoc
 interflux
@@ -47,12 +48,29 @@ interslack
 interform
 intercraft
 interdev
+interdeep
+interknow
+intermonk
+intername
+interplug
+interpulse
+interrank
+interscribe
+intersense
+intership
+intersight
+interskill
 intertest
 interpeer
 intersynth
 intermap
 internext
 intermem
+interspect
+intertrace
+intertrack
+intertree
+intertrust
 EOF
 }
 
