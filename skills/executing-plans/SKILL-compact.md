@@ -18,13 +18,21 @@ Read plan. Raise concerns with user before starting. If no concerns, create Todo
 
 **DIRECT →** Execute first 3 tasks per batch. Per task: mark in_progress → follow plan steps exactly → run verifications → mark completed.
 
+### Step 2D: Post-Task Verification
+
+After each task, check for `<verify>` block. Parse `- run:` / `expect:` pairs, run commands, check `exit 0` or `contains "string"`. Failure → deviation Rule 1 (auto-fix, retry, 3-attempt limit). No verify block → skip silently.
+
 ### Step 3: Report
 
-After each batch: show what was implemented, verification output. Say "Ready for feedback."
+After each batch: show what was implemented, verification output (pass/fail from `<verify>` blocks). Say "Ready for feedback."
 
 ### Step 4: Continue
 
 Apply feedback, execute next batch, repeat.
+
+### Step 4B: Must-Have Validation
+
+After all tasks complete, check for `## Must-Haves` in plan header. Validate: **Truths** (check code paths exist), **Artifacts** (files exist with exports), **Key Links** (grep for imports and calls). Report results but don't block completion. No Must-Haves section → skip silently.
 
 ### Step 5: Complete
 

@@ -16,11 +16,19 @@ Write implementation plans with bite-sized tasks for engineers with zero codebas
 
 Save to: `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
+## Plan Header Extensions (optional)
+
+**Frontmatter:** Add `requirements:` listing PRD feature IDs (F1, F2) when a PRD exists.
+
+**Must-Haves section** (after Prior Learnings, before tasks): Derive from goal using goal-backward methodology. Three categories: **Truths** (observable behaviors), **Artifacts** (files that must exist with exports), **Key Links** (critical connections). Omit for trivial plans.
+
 ## Task Structure
 
 Each step is one action (2-5 minutes). TDD order: write failing test → verify fails → implement → verify passes → commit.
 
 Include: exact file paths, complete code (not "add validation"), exact commands with expected output.
+
+**Verify block** (end of each task, optional): `<verify>` with `- run:` / `expect:` pairs. Two matchers: `exit 0`, `contains "string"`. Executor runs these automatically after task completion.
 
 ## Execution Handoff
 
