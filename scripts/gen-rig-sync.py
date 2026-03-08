@@ -208,6 +208,7 @@ Clavain Doctor
 {"oracle":<14}[installed|not found]
 {"codex":<14}[installed|not found]
 {"beads":<14}[OK (N open, M closed)|not initialized]
+{"zombies":<14}[PASS|FIXED: N auto-closed]
 {companions}
 {".clavain":<14}[initialized|not set up]
 {"conflicts":<14}[clear|WARN: N active]
