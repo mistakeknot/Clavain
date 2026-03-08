@@ -198,6 +198,61 @@ else
 fi
 ```
 
+### 3a. Zombie Bead Detection (auto-fix)
+
+Finds open beads that are actually done. Two detection patterns:
+
+1. **Phase-done zombies**: Open/in-progress beads with `phase=done` state
+2. **Orphaned children**: Open beads whose parent bead is closed
+
+This check auto-closes zombies it finds (doctor is read-only for most checks, but zombie closure is safe and high-value — leaving them open pollutes the ready queue and causes duplicate work).
+
+```bash
+if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
+  _zombie_count=0
+
+  # Collect open + in_progress IDs (bd doesn't combine --status flags)
+  _open_ids=$( (bd list --status=open --json 2>/dev/null; bd list --status=in_progress --json 2>/dev/null) | jq -r '.[].id' 2>/dev/null | sort -u) || _open_ids=""
+
+  # Pattern 1: phase=done but bead still open/in_progress
+  for _id in $_open_ids; do
+    _phase=$(bd state "$_id" phase 2>/dev/null) || _phase=""
+    if [ "$_phase" = "done" ]; then
+      echo "  ZOMBIE: $_id (phase=done but still open)"
+      bd close "$_id" --reason="Zombie sweep: phase=done but bead was left open" 2>/dev/null || true
+      _zombie_count=$((_zombie_count + 1))
+    fi
+  done
+
+  # Pattern 2: open beads whose parent (DEPENDS ON) is closed
+  for _id in $_open_ids; do
+    # Skip if already closed by Pattern 1
+    _cur=$(bd show "$_id" 2>/dev/null | head -1) || continue
+    echo "$_cur" | grep -qE 'CLOSED|DEFERRED' && continue
+
+    # Extract dependency IDs from "DEPENDS ON" section
+    _deps=$(bd show "$_id" 2>/dev/null | sed -n '/DEPENDS ON/,/^$/p' | grep -oE '[A-Za-z]+-[a-z0-9]+' | head -5) || _deps=""
+    for _dep in $_deps; do
+      [ "$_dep" = "$_id" ] && continue  # skip self-reference
+      _dep_line=$(bd show "$_dep" 2>/dev/null | head -1) || continue
+      if echo "$_dep_line" | grep -q "CLOSED"; then
+        _dep_title=$(echo "$_dep_line" | sed 's/.*· //;s/   \[.*//')
+        echo "  ZOMBIE: $_id (parent $_dep closed: $_dep_title)"
+        bd close "$_id" --reason="Zombie sweep: parent $_dep is closed" 2>/dev/null || true
+        _zombie_count=$((_zombie_count + 1))
+        break
+      fi
+    done
+  done
+
+  if [ "$_zombie_count" -eq 0 ]; then
+    echo "zombie beads: PASS (none found)"
+  else
+    echo "zombie beads: FIXED (auto-closed $_zombie_count zombies)"
+  fi
+fi
+```
+
 <!-- agent-rig:begin:companion-checks -->
 ### 3b. Beads Lifecycle Companion
 
@@ -416,6 +471,7 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - config FAIL → "Fix the YAML syntax error in the named config file — features using it will silently degrade"
 - hook syntax WARN → "Check the named hook files for bash syntax errors"
 - beads FAIL (hung) → "Run `bash .beads/recover.sh` to recover from a stuck Dolt server"
+- zombies FIXED → "Auto-closed N zombie beads. Root cause: prior sessions completed work but didn't run the close protocol. Run `bd list --status=closed` to review."
 - .clavain not initialized → "Run `/clavain:init` to set up agent memory"
 - .clavain scratch not gitignored → "Run `/clavain:init` to fix gitignore"
 - skill budget WARN/ERROR → "Trim skills over 16K chars by moving verbose sections to references/ subdirectory"

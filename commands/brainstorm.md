@@ -72,6 +72,12 @@ Run a quick repo scan to understand existing patterns:
 
 Focus on: similar features, established patterns, CLAUDE.md guidance.
 
+**Prior art check:** Also search assessment docs for external tools that solve this problem:
+```bash
+grep -ril "<2-3 keywords>" docs/research/assess-*.md 2>/dev/null
+```
+If an assessed tool has "adopt" or "port-partially" verdict for this domain, surface it immediately — the brainstorm may be unnecessary if we should just integrate an existing tool.
+
 #### 1.2 Collaborative Dialogue
 
 Use the **AskUserQuestion tool** to ask questions **one at a time**.
