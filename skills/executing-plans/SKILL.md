@@ -95,7 +95,11 @@ When a `.exec.yaml` manifest exists alongside the plan, use the Python orchestra
 
 3. **Show the execution plan:**
    Run: `python3 "$ORCHESTRATE" --dry-run "$MANIFEST"`
-   Present the wave breakdown to the user.
+   Present the wave breakdown to the user. Highlight:
+   - Total waves and max parallelism (shown in dry-run header)
+   - Which tasks run in parallel vs sequentially
+   - Cross-stage dependencies (tasks in wave N depending on wave N-1)
+   - Any tasks with no files listed (may need manual file assignment)
 
 4. **Ask for approval** via AskUserQuestion:
    - "Approve" — dispatch as shown

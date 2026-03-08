@@ -517,6 +517,11 @@ def orchestrate(
     tmp_dir = tempfile.mkdtemp(prefix=f"orchestrate-{run_id}-")
 
     print(f"Orchestrating {total_tasks} tasks (mode: {mode}, max_parallel: {manifest.max_parallel})")
+    if dry_run:
+        # Pre-compute all waves for summary header
+        dry_waves = _compute_waves(graph, mode, manifest)
+        max_par = max(len(w) for w in dry_waves) if dry_waves else 0
+        print(f"Dry run: {len(dry_waves)} wave(s), max parallelism: {max_par}")
     print()
 
     try:
@@ -592,6 +597,32 @@ def orchestrate(
     return completed
 
 
+def _compute_waves(
+    graph: dict[str, set[str]],
+    mode: str,
+    manifest: Manifest,
+) -> list[list[str]]:
+    """Pre-compute wave groupings for dry-run summary without dispatching."""
+    if mode == "all-parallel":
+        return _resolve_all_parallel(graph)
+    elif mode == "all-sequential":
+        return _resolve_all_sequential(graph)
+    elif mode == "manual-batching":
+        return _resolve_manual_batching(graph, manifest)
+    else:  # dependency-driven
+        waves: list[list[str]] = []
+        ts = TopologicalSorter(dict(graph))
+        ts.prepare()
+        while ts.is_active():
+            ready = list(ts.get_ready())
+            if not ready:
+                break
+            waves.append(ready)
+            for tid in ready:
+                ts.done(tid)
+        return waves
+
+
 def _propagate_failure(
     failed_id: str,
     graph: dict[str, set[str]],
@@ -624,15 +655,25 @@ def _print_wave(
     dry_run: bool,
 ) -> None:
     prefix = "[DRY RUN] " if dry_run else ""
-    print(f"{prefix}Wave {wave}: {len(task_ids)} task(s)")
+    parallelism = len(task_ids)
+    par_label = f"parallel: {parallelism}" if parallelism > 1 else "sequential"
+    # Group by stage for multi-stage visibility
+    stages_in_wave: dict[str, list[str]] = {}
+    for tid in task_ids:
+        task = tasks.get(tid)
+        stage = task.stage if task else "unnamed"
+        stages_in_wave.setdefault(stage, []).append(tid)
+    stage_str = ", ".join(stages_in_wave.keys())
+    print(f"{prefix}Wave {wave}: {parallelism} task(s) ({par_label}) [{stage_str}]")
     for tid in task_ids:
         task = tasks.get(tid)
         title = task.title if task else tid
         files = ", ".join(task.files) if task and task.files else "(no files)"
         tier = task.tier if task and task.tier else "default"
         deps = task.depends if task else []
-        dep_str = f" ← [{', '.join(deps)}]" if deps else ""
-        print(f"  {tid}: {title} ({files}) [tier: {tier}]{dep_str}")
+        dep_str = f" \u2190 [{', '.join(deps)}]" if deps else ""
+        print(f"  {tid}: {title}")
+        print(f"       files: {files}  tier: {tier}{dep_str}")
     print()
 
 

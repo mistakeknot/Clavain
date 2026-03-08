@@ -16,6 +16,8 @@ Read plan. Raise concerns with user before starting. If no concerns, create Todo
 
 **INTERSERVE →** Classify tasks (independent → Codex parallel, sequential → ordered, exploratory → Claude subagent). Group into batches (max 5). Use `clavain:interserve` to dispatch. Read `.verdict` sidecar first. Between batches: report and wait for feedback.
 
+**ORCHESTRATED →** If `.exec.yaml` manifest exists alongside plan, use `orchestrate.py --dry-run` first. Present wave breakdown (total waves, parallelism, stage grouping) and get approval before dispatching. Takes priority over other modes.
+
 **DIRECT →** Execute first 3 tasks per batch. Per task: mark in_progress → follow plan steps exactly → run verifications → mark completed.
 
 ### Step 2D: Post-Task Verification
