@@ -121,6 +121,68 @@ else
 fi
 ```
 
+### 2e. Routing Activation Status
+
+Check routing.yaml feature modes for shadow/off configs that may be ready to activate:
+
+```bash
+_routing_yaml="os/clavain/config/routing.yaml"
+if [ -f "$_routing_yaml" ]; then
+  _shadow_count=0
+  for _section in complexity calibration delegation; do
+    _mode=$(awk -v sec="${_section}:" '
+      $0 == sec { found=1; next }
+      found && /^[a-z]/ { exit }
+      found && /^[[:space:]]+mode:/ { sub(/.*mode:[[:space:]]*/, ""); sub(/[[:space:]]*#.*/, ""); print; exit }
+    ' "$_routing_yaml" 2>/dev/null)
+    if [ -z "$_mode" ]; then
+      echo "  $_section: SKIP (not found)"
+    elif [ "$_mode" = "off" ] || [ "$_mode" = "shadow" ]; then
+      echo "  $_section: $_mode  WARN (not enforcing)"
+      _shadow_count=$((_shadow_count + 1))
+    else
+      echo "  $_section: $_mode  PASS"
+    fi
+  done
+  if [ "$_shadow_count" -gt 0 ]; then
+    echo "  Recommendation: Review shadow-mode features — they may be ready to activate"
+  fi
+else
+  echo "routing.yaml: SKIP (not found)"
+fi
+```
+
+### 2f. Plugin Cache Verification
+
+Verify installed companion plugins have files (catches empty-cache deployment gaps):
+
+```bash
+_cache_dir="${HOME}/.claude/plugins/cache/interagency-marketplace"
+_cache_warns=0
+for _plugin in interphase interline interspect interflux interpath interwatch interlock; do
+  _plugin_dir=$(find "$_cache_dir" -maxdepth 1 -name "$_plugin" -type d 2>/dev/null | head -1)
+  if [ -z "$_plugin_dir" ]; then
+    continue  # Not installed — companion checks (section 3b) handle this
+  fi
+  _latest=$(ls -d "$_plugin_dir"/*/ 2>/dev/null | sort -V | tail -1)
+  if [ -z "$_latest" ]; then
+    echo "  $_plugin: WARN (installed but no version directory)"
+    _cache_warns=$((_cache_warns + 1))
+    continue
+  fi
+  _file_count=$(find "$_latest" -type f 2>/dev/null | wc -l)
+  if [ "$_file_count" -le 2 ]; then
+    echo "  $_plugin: WARN (only $_file_count files — likely empty cache, reinstall)"
+    _cache_warns=$((_cache_warns + 1))
+  else
+    echo "  $_plugin: $_file_count files  PASS"
+  fi
+done
+if [ "$_cache_warns" -eq 0 ]; then
+  echo "plugin caches: PASS"
+fi
+```
+
 ### 3. Beads
 
 ```bash
@@ -357,3 +419,5 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - .clavain not initialized → "Run `/clavain:init` to set up agent memory"
 - .clavain scratch not gitignored → "Run `/clavain:init` to fix gitignore"
 - skill budget WARN/ERROR → "Trim skills over 16K chars by moving verbose sections to references/ subdirectory"
+- routing shadow mode → "Review shadow-mode features in routing.yaml — they may be ready to activate with `mode: enforce`"
+- plugin cache empty → "Reinstall the plugin: `claude plugin install <name>@interagency-marketplace`"
