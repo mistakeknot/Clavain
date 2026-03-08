@@ -117,10 +117,23 @@ When a `.exec.yaml` manifest exists alongside the plan, use the Python orchestra
    - Execute failed tasks directly (fall back to Step 2B for those tasks)
    - Skip and continue
 
+### Step 2D: Post-Task Verification
+
+After completing each task (in any execution mode), check for a `<verify>` block at the end of the task:
+
+1. **Parse the verify block:** Look for `<verify>...</verify>` after the task's last step. Extract each `- run:` / `expect:` pair.
+2. **Run each verification command** in order.
+3. **Check results:**
+   - `expect: exit 0` — command must exit with code 0
+   - `expect: contains "string"` — command output must include the quoted string
+4. **On success:** Log "Verify passed for Task N" and continue.
+5. **On failure:** Treat as deviation Rule 1 (auto-fix bug). Review the task implementation, fix the issue, re-run the verification. Apply the 3-attempt limit — if verify still fails after 3 attempts, log the failure and continue to the next task.
+6. **No verify block:** Skip silently — this is backward compatible. Log nothing.
+
 ### Step 3: Report
 When batch complete:
 - Show what was implemented
-- Show verification output
+- Show verification output (pass/fail per task from `<verify>` blocks)
 - List any deviations (Rules 1-3 auto-fixes applied)
 - List any deferred items (out-of-scope issues discovered, tasks that hit the 3-attempt limit)
 - Say: "Ready for feedback."
@@ -130,6 +143,27 @@ Based on feedback:
 - Apply changes if needed
 - Execute next batch
 - Repeat until complete
+
+### Step 4B: Must-Have Validation
+
+After all tasks complete, check for a `## Must-Haves` section in the plan header:
+
+1. **Truths:** For each truth listed, verify it's observable. If the truth references a command or URL, run it. If it describes user behavior, check that the relevant code path exists.
+2. **Artifacts:** For each artifact, verify the file exists and exports the listed symbols. Use grep or read the file to confirm.
+3. **Key Links:** For each key link, verify the connection exists in the source code (e.g., "Component A calls Component B" — grep for the import and function call).
+
+**Report must-have results** in the completion summary:
+
+```
+Must-Have Validation:
+  Truths: 3/3 verified
+  Artifacts: 2/2 exist with exports
+  Key Links: 1/2 — Registration endpoint missing validate_email call
+```
+
+If any must-have fails: report the failure but do NOT block completion. Must-haves are advisory — the user decides whether to fix them before shipping.
+
+If no Must-Haves section exists: skip silently (backward compatible).
 
 ### Step 5: Complete Development
 
