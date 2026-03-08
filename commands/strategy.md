@@ -87,6 +87,21 @@ Ensure `docs/prds/` directory exists before writing.
 
 ## Phase 3: Create Beads
 
+**Dedup guard (REQUIRED before any `bd create`):**
+
+Before creating each feature bead, search for existing open beads with similar titles. Extract 2-3 keywords from the feature name and search:
+
+```bash
+# For each feature, check for duplicates
+bd search "<keyword1> <keyword2>" --status=open 2>/dev/null
+```
+
+- If search returns beads with clearly matching intent → **do NOT create a duplicate**. Instead, reuse the existing bead ID and report: `Reusing existing bead <id> for F<n>: <name>`.
+- If search returns beads with similar but different scope → report both to the user and ask via AskUserQuestion: "Existing bead <id> looks similar. Create new or reuse?"
+- If no matches → proceed with creation.
+
+This prevents the duplicate beads that accumulate when multiple sessions strategize the same domain.
+
 **Sprint-aware bead creation:**
 
 If `CLAVAIN_BEAD_ID` is set (we're inside a sprint):
