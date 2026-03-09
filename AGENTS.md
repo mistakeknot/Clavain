@@ -52,6 +52,17 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Development | [agents/development.md](agents/development.md) | Release workflow, validation checklist, constraints, upstream tracking |
 | Codex & Plugins | [agents/codex-integration.md](agents/codex-integration.md) | Codex setup, interserve dispatch, modpack companion plugins |
 
+## Prior Art Pipeline
+
+Brainstorm, strategy, and write-plan commands all enforce a prior art check before building new infrastructure. The pipeline:
+
+1. `grep -ril "<keywords>" docs/research/assess-*.md` — check for prior verdicts
+2. `bd search "<keywords>"` + `ls interverse/*/CLAUDE.md | xargs grep -li "<keywords>"` — check existing work
+3. Conditional web search — only when creating new systems from scratch
+4. Clone to `research/` for deep evaluation — write `docs/research/assess-<repo>.md` with verdict
+
+See `agents/operational-guides.md` in the Demarch root for the full protocol.
+
 ## Quick Validation
 
 ```bash
