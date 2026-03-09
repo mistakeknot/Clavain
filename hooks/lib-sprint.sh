@@ -350,14 +350,14 @@ sprint_publish_contract() {
     # Record as contract artifact
     sprint_set_artifact "$sprint_id" "contract" "$contract_path"
 
-    # Extract patterns from contract for write_set reservation
+    # Extract contract metadata
     if intercore_available && command -v jq &>/dev/null; then
-        local patterns_json
+        local patterns_json contract_name contract_version
         patterns_json=$(jq -r '.patterns // [] | join(",")' "$contract_path" 2>/dev/null) || return 0
         [[ -z "$patterns_json" || "$patterns_json" == "" ]] && return 0
 
-        local contract_name
         contract_name=$(jq -r '.name // "unnamed"' "$contract_path" 2>/dev/null) || contract_name="unnamed"
+        contract_version=$(jq -r '.version // 1' "$contract_path" 2>/dev/null) || contract_version="1"
 
         if [[ -z "$scope" ]]; then
             scope=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null) || scope="default"
@@ -372,12 +372,132 @@ sprint_publish_contract() {
                 --scope="$scope" \
                 --pattern="$pattern" \
                 --type=write_set \
-                --reason="contract:${contract_name}" \
+                --reason="contract:${contract_name}:v${contract_version}" \
                 --exclusive=false \
                 2>/dev/null || true
         done
+
+        # Notify dependents on revision (version > 1) via Intermute
+        if [[ "$contract_version" -gt 1 ]] 2>/dev/null; then
+            _sprint_notify_contract_revised "$contract_name" "$contract_version" "$scope" "$owner" "$contract_path"
+        fi
     fi
 
+    return 0
+}
+
+# Internal: send contract-revised notification via Intermute.
+# Fail-safe — never blocks sprint on notification failure.
+_sprint_notify_contract_revised() {
+    local contract_name="$1"
+    local contract_version="$2"
+    local scope="$3"
+    local owner="$4"
+    local contract_path="$5"
+
+    local intermute_url="${INTERMUTE_URL:-http://127.0.0.1:7338}"
+
+    # Check Intermute is reachable (1s timeout)
+    curl -sf --connect-timeout 1 --max-time 1 "${intermute_url}/health" >/dev/null 2>&1 || return 0
+
+    # Extract dependency list to target dependents
+    local dependents
+    dependents=$(jq -r '.dependencies // [] | join(",")' "$contract_path" 2>/dev/null) || dependents=""
+
+    # Broadcast contract-revised event
+    curl -sf --connect-timeout 2 --max-time 3 -X POST "${intermute_url}/api/messages" \
+        -H 'Content-Type: application/json' \
+        -d "$(jq -n \
+            --arg id "contract-revised:${contract_name}:v${contract_version}" \
+            --arg project "$scope" \
+            --arg from "$owner" \
+            --arg name "$contract_name" \
+            --arg version "$contract_version" \
+            '{
+                id: $id,
+                project: $project,
+                from: $from,
+                to: ["*"],
+                subject: ("[contract-revised] " + $name + " v" + $version),
+                topic: "contract-revised",
+                body: ("Contract " + $name + " revised to v" + $version + ". Dependents should re-read and adjust.")
+            }')" 2>/dev/null || true
+
+    return 0
+}
+
+# Query active interface contracts for a sprint.
+# Returns JSON array of contract artifacts with coordination lock status.
+# Args: $1=sprint_id, $2=scope (optional)
+# Output: JSON array to stdout; empty array on failure
+sprint_query_contracts() {
+    local sprint_id="$1"
+    local scope="${2:-}"
+    [[ -z "$sprint_id" ]] && echo "[]" && return 0
+
+    if ! intercore_available || ! command -v jq &>/dev/null; then
+        echo "[]"
+        return 0
+    fi
+
+    local run_id
+    run_id=$(_sprint_resolve_run_id "$sprint_id") || { echo "[]"; return 0; }
+
+    # Get all contract artifacts for this run
+    local artifacts
+    artifacts=$("$INTERCORE_BIN" run artifact list "$run_id" 2>/dev/null) || { echo "[]"; return 0; }
+
+    # Filter to type=contract and enrich with coordination lock info
+    if [[ -z "$scope" ]]; then
+        scope=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null) || scope="default"
+    fi
+
+    local locks
+    locks=$("$INTERCORE_BIN" coordination list --scope="$scope" --type=write_set --active 2>/dev/null) || locks="[]"
+
+    echo "$artifacts" | jq --argjson locks "$locks" '
+        [.[] | select(.type == "contract")] |
+        map(. + {
+            locks: ($locks | [.[] | select(.reason | startswith("contract:"))])
+        })
+    ' 2>/dev/null || echo "[]"
+}
+
+# Check if a contract has been revised since a given version.
+# Used by dependents before building against a contract to detect TOCTOU.
+# Args: $1=sprint_id, $2=contract_name, $3=expected_version
+# Returns: 0 if safe (no revision), 1 if revised (version mismatch)
+# Output: current version to stdout
+sprint_check_contract_conflict() {
+    local sprint_id="$1"
+    local contract_name="$2"
+    local expected_version="$3"
+    [[ -z "$sprint_id" || -z "$contract_name" || -z "$expected_version" ]] && return 0
+
+    if ! intercore_available || ! command -v jq &>/dev/null; then
+        return 0  # Can't check — assume safe (fail-open for convention phase)
+    fi
+
+    local run_id
+    run_id=$(_sprint_resolve_run_id "$sprint_id") || return 0
+
+    # Get latest contract artifact and extract version from content
+    local artifacts current_version
+    artifacts=$("$INTERCORE_BIN" run artifact list "$run_id" 2>/dev/null) || return 0
+
+    # Find the contract artifact by path containing the contract name
+    local contract_path
+    contract_path=$(echo "$artifacts" | jq -r \
+        --arg name "$contract_name" \
+        '[.[] | select(.type == "contract")] | last | .path // ""' 2>/dev/null) || return 0
+    [[ -z "$contract_path" || ! -f "$contract_path" ]] && return 0
+
+    current_version=$(jq -r '.version // 1' "$contract_path" 2>/dev/null) || return 0
+    echo "$current_version"
+
+    if [[ "$current_version" != "$expected_version" ]]; then
+        return 1  # Contract was revised
+    fi
     return 0
 }
 
