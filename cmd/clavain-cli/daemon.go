@@ -388,6 +388,18 @@ func spawnAgent(state *daemonState, cfg daemonConfig, bead bdReadyEntry, logDir 
 	cmd := exec.Command(claudePath, "--dangerously-skip-permissions", "--verbose", "-p", prompt)
 	cmd.Dir = cfg.ProjectDir
 
+	// Clear env vars that prevent nested Claude Code sessions.
+	// The daemon spawns independent sessions, not nested ones.
+	env := os.Environ()
+	cleanEnv := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, "CLAUDECODE=") &&
+			!strings.HasPrefix(e, "CLAUDE_CODE_ENTRYPOINT=") {
+			cleanEnv = append(cleanEnv, e)
+		}
+	}
+	cmd.Env = cleanEnv
+
 	// Set up log file
 	logFile := filepath.Join(logDir, fmt.Sprintf("%s.log", bead.ID))
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
