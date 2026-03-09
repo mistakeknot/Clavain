@@ -13,7 +13,7 @@
       }
     },
     "clavain.dispatch.v1": {
-      "description": "Agent dispatch record",
+      "description": "Agent dispatch record (legacy)",
       "fields": {
         "bead_id": {"type": "string", "tag": 1, "required": true},
         "agent_name": {"type": "string", "tag": 2, "required": true},
@@ -24,6 +24,22 @@
         "output_tokens": {"type": "uint64", "tag": 7},
         "result_blob_hash": {"type": "bytes32", "tag": 8},
         "timestamp": {"type": "uint64", "tag": 9, "required": true}
+      }
+    },
+    "clavain.dispatch.v2": {
+      "description": "Agent dispatch record with timing and error fields",
+      "fields": {
+        "bead_id": {"type": "string", "tag": 1, "required": true},
+        "agent_name": {"type": "string", "tag": 2, "required": true},
+        "agent_type": {"type": "string", "tag": 3},
+        "model": {"type": "string", "tag": 4},
+        "status": {"type": "string", "tag": 5, "required": true},
+        "input_tokens": {"type": "uint64", "tag": 6},
+        "output_tokens": {"type": "uint64", "tag": 7},
+        "result_blob_hash": {"type": "bytes32", "tag": 8},
+        "timestamp": {"type": "uint64", "tag": 9, "required": true},
+        "duration_ms": {"type": "uint64", "tag": 10},
+        "error_message": {"type": "string", "tag": 11}
       }
     },
     "clavain.artifact.v1": {

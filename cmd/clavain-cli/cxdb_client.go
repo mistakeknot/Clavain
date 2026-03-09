@@ -5,16 +5,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	cxdb "github.com/strongdm/ai-cxdb/clients/go"
 	"github.com/vmihailenco/msgpack/v5"
+	"github.com/zeebo/blake3"
 )
 
 // cxdbClient holds the singleton CXDB connection.
 var cxdbClient *cxdb.Client
+
+// cxdbStartAttempted prevents repeated auto-start attempts in the same process.
+var cxdbStartAttempted bool
+
+// cxdbEnsureRunning checks if CXDB is available, and if not, attempts to start it.
+// Returns true if CXDB is available (either already running or successfully started).
+// Returns false if CXDB binary is not installed or start failed.
+func cxdbEnsureRunning() bool {
+	if cxdbAvailable() {
+		return true
+	}
+	if cxdbStartAttempted {
+		return false
+	}
+	cxdbStartAttempted = true
+
+	// Check if binary exists
+	if _, err := os.Stat(cxdbBinaryPath()); os.IsNotExist(err) {
+		return false
+	}
+
+	// Attempt to start
+	if err := cmdCXDBStart(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "cxdb: auto-start failed: %v\n", err)
+		return false
+	}
+	return cxdbAvailable()
+}
 
 // cxdbConnect connects to the local CXDB server.
 // Returns the existing connection if already connected.
@@ -80,7 +110,7 @@ type PhaseRecord struct {
 	Timestamp        uint64 `msgpack:"6" json:"timestamp"`
 }
 
-// DispatchRecord is the data for a clavain.dispatch.v1 turn.
+// DispatchRecord is the data for a clavain.dispatch.v2 turn.
 type DispatchRecord struct {
 	BeadID         string `msgpack:"1" json:"bead_id"`
 	AgentName      string `msgpack:"2" json:"agent_name"`
@@ -91,6 +121,8 @@ type DispatchRecord struct {
 	OutputTokens   uint64 `msgpack:"7" json:"output_tokens,omitempty"`
 	ResultBlobHash []byte `msgpack:"8" json:"result_blob_hash,omitempty"`
 	Timestamp      uint64 `msgpack:"9" json:"timestamp"`
+	DurationMs     uint64 `msgpack:"10" json:"duration_ms,omitempty"`
+	ErrorMessage   string `msgpack:"11" json:"error_message,omitempty"`
 }
 
 // ArtifactRecord is the data for a clavain.artifact.v1 turn.
@@ -116,7 +148,7 @@ func cxdbRecordDispatch(client *cxdb.Client, ctxID uint64, rec DispatchRecord) e
 	if rec.Timestamp == 0 {
 		rec.Timestamp = uint64(time.Now().Unix())
 	}
-	return cxdbAppendTyped(client, ctxID, "clavain.dispatch.v1", rec)
+	return cxdbAppendTyped(client, ctxID, "clavain.dispatch.v2", rec)
 }
 
 // cxdbStoreBlob stores data as a blob via CXDB CAS (content-addressed turn).
@@ -182,6 +214,7 @@ func cxdbAppendTyped(client *cxdb.Client, ctxID uint64, typeID string, record an
 }
 
 // cmdCXDBSync backfills the CXDB Turn DAG from Intercore events.
+// Supports incremental sync via cursor stored in ic state.
 // Usage: cxdb-sync <sprint-id>
 func cmdCXDBSync(args []string) error {
 	if len(args) < 1 {
@@ -189,8 +222,8 @@ func cmdCXDBSync(args []string) error {
 	}
 	beadID := args[0]
 
-	if !cxdbAvailable() {
-		return fmt.Errorf("cxdb-sync: CXDB server not running")
+	if !cxdbEnsureRunning() {
+		return fmt.Errorf("cxdb-sync: CXDB not available")
 	}
 
 	client, err := cxdbConnect()
@@ -210,26 +243,40 @@ func cmdCXDBSync(args []string) error {
 		return fmt.Errorf("cxdb-sync: cannot resolve run for %s: %w", beadID, err)
 	}
 
+	// Read sync cursor for incremental sync
+	cursorKey := "cxdb_sync_cursor_" + beadID
+	var cursor string
+	if icAvailable() {
+		if out, err := runIC("state", "get", cursorKey); err == nil {
+			cursor = strings.TrimSpace(string(out))
+		}
+	}
+
 	var events []struct {
-		ID    string `json:"id"`
-		Type  string `json:"type"`
-		Phase string `json:"phase,omitempty"`
+		ID    string          `json:"id"`
+		Type  string          `json:"type"`
+		Phase string          `json:"phase,omitempty"`
 		Data  json.RawMessage `json:"data,omitempty"`
 	}
 	if err := runICJSON(&events, "run", "events", runID); err != nil {
 		return fmt.Errorf("cxdb-sync: cannot read events: %w", err)
 	}
 
-	// Check which events are already synced (idempotency)
-	existingTurns, _ := cxdbQueryByType(client, ctxID, "clavain.phase.v1")
-	synced := make(map[string]bool)
-	for _, t := range existingTurns {
-		// Use idempotency key from turn payload to track already-synced events
-		synced[t.TypeID+":"+fmt.Sprintf("%d", t.TurnID)] = true
+	// Filter events after cursor
+	startIdx := 0
+	if cursor != "" {
+		for i, evt := range events {
+			if evt.ID == cursor {
+				startIdx = i + 1
+				break
+			}
+		}
 	}
 
 	syncCount := 0
-	for _, evt := range events {
+	var lastID string
+	for _, evt := range events[startIdx:] {
+		lastID = evt.ID
 		// Record phase transitions
 		if evt.Type == "phase_change" || evt.Type == "advance" {
 			rec := PhaseRecord{
@@ -245,14 +292,19 @@ func cmdCXDBSync(args []string) error {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "cxdb-sync: synced %d events for %s\n", syncCount, beadID)
+	// Update cursor
+	if lastID != "" && icAvailable() {
+		runIC("state", "set", cursorKey, lastID)
+	}
+
+	fmt.Fprintf(os.Stderr, "cxdb-sync: synced %d events for %s (cursor: %s)\n", syncCount, beadID, lastID)
 	return nil
 }
 
 // cxdbRecordPhaseTransition is a best-effort helper called after phase advances.
-// Silently skips if CXDB is not available.
+// Auto-starts CXDB if the binary is installed. Silently skips otherwise.
 func cxdbRecordPhaseTransition(beadID, phase, artifactPath string) {
-	if !cxdbAvailable() {
+	if !cxdbEnsureRunning() {
 		return
 	}
 	client, err := cxdbConnect()
@@ -273,6 +325,202 @@ func cxdbRecordPhaseTransition(beadID, phase, artifactPath string) {
 	if err := cxdbRecordPhase(client, ctxID, rec); err != nil {
 		fmt.Fprintf(os.Stderr, "cxdb: phase record warning: %v\n", err)
 	}
+}
+
+// cxdbRecordArtifact records a file artifact with its BLAKE3 hash as a CXDB turn.
+// Silently skips if the file doesn't exist or CXDB is not available.
+func cxdbRecordArtifact(beadID, artifactType, path string) {
+	if !cxdbEnsureRunning() {
+		return
+	}
+
+	// Read file and compute hash
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return // File doesn't exist yet — skip silently
+	}
+	hash := blake3.Sum256(data)
+
+	client, err := cxdbConnect()
+	if err != nil {
+		return
+	}
+	ctxID, err := cxdbSprintContext(client, beadID)
+	if err != nil {
+		return
+	}
+
+	rec := ArtifactRecord{
+		BeadID:       beadID,
+		ArtifactType: artifactType,
+		Path:         path,
+		BlobHash:     hash[:],
+		SizeBytes:    uint64(len(data)),
+	}
+	if err := cxdbAppendTyped(client, ctxID, "clavain.artifact.v1", rec); err != nil {
+		fmt.Fprintf(os.Stderr, "cxdb: artifact record warning: %v\n", err)
+	}
+}
+
+// VerdictFile is the JSON structure of a verdict file in .clavain/verdicts/.
+type VerdictFile struct {
+	Type          string `json:"type"`
+	Status        string `json:"status"`
+	Model         string `json:"model"`
+	TokensSpent   int    `json:"tokens_spent"`
+	FindingsCount int    `json:"findings_count"`
+	Summary       string `json:"summary"`
+	Timestamp     string `json:"timestamp"`
+}
+
+// cmdCXDBSyncVerdicts reads verdict files and writes dispatch turns.
+// Usage: cxdb-sync-verdicts <bead-id>
+func cmdCXDBSyncVerdicts(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: cxdb-sync-verdicts <bead-id>")
+	}
+	beadID := args[0]
+
+	if !cxdbEnsureRunning() {
+		return fmt.Errorf("cxdb-sync-verdicts: CXDB not available")
+	}
+
+	client, err := cxdbConnect()
+	if err != nil {
+		return err
+	}
+	defer cxdbClose()
+
+	ctxID, err := cxdbSprintContext(client, beadID)
+	if err != nil {
+		return err
+	}
+
+	// Find verdict files
+	projectDir := os.Getenv("SPRINT_LIB_PROJECT_DIR")
+	if projectDir == "" {
+		projectDir = "."
+	}
+	verdictDir := filepath.Join(projectDir, ".clavain", "verdicts")
+	entries, err := os.ReadDir(verdictDir)
+	if err != nil {
+		return fmt.Errorf("cxdb-sync-verdicts: no verdict dir: %w", err)
+	}
+
+	syncCount := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		data, err := os.ReadFile(filepath.Join(verdictDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		var verdict VerdictFile
+		if err := json.Unmarshal(data, &verdict); err != nil {
+			continue
+		}
+		if verdict.Type != "verdict" {
+			continue
+		}
+
+		// Agent name from filename (e.g., "fd-architecture.json" → "fd-architecture")
+		agentName := strings.TrimSuffix(entry.Name(), ".json")
+
+		// Parse timestamp
+		var ts uint64
+		if t, err := time.Parse(time.RFC3339, verdict.Timestamp); err == nil {
+			ts = uint64(t.Unix())
+		} else {
+			ts = uint64(time.Now().Unix())
+		}
+
+		rec := DispatchRecord{
+			BeadID:    beadID,
+			AgentName: agentName,
+			AgentType: "flux-drive-reviewer",
+			Model:     verdict.Model,
+			Status:    strings.ToLower(verdict.Status),
+		}
+		if verdict.TokensSpent > 0 {
+			rec.OutputTokens = uint64(verdict.TokensSpent)
+		}
+		rec.Timestamp = ts
+
+		if err := cxdbRecordDispatch(client, ctxID, rec); err != nil {
+			fmt.Fprintf(os.Stderr, "cxdb-sync-verdicts: warning: %v\n", err)
+			continue
+		}
+		syncCount++
+	}
+
+	fmt.Fprintf(os.Stderr, "cxdb-sync-verdicts: synced %d verdicts for %s\n", syncCount, beadID)
+	return nil
+}
+
+// cmdCXDBHistory outputs a JSON timeline of all turns for a sprint.
+// Usage: cxdb-history <bead-id>
+func cmdCXDBHistory(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: cxdb-history <bead-id>")
+	}
+	beadID := args[0]
+
+	if !cxdbAvailable() {
+		return fmt.Errorf("cxdb-history: CXDB not available")
+	}
+
+	client, err := cxdbConnect()
+	if err != nil {
+		return err
+	}
+	defer cxdbClose()
+
+	ctxID, err := cxdbSprintContext(client, beadID)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	turns, err := client.GetLast(ctx, ctxID, cxdb.GetLastOptions{
+		Limit:          10000,
+		IncludePayload: true,
+	})
+	if err != nil {
+		return fmt.Errorf("cxdb-history: query failed: %w", err)
+	}
+
+	type HistoryEntry struct {
+		TurnID  uint64         `json:"turn_id"`
+		TypeID  string         `json:"type_id"`
+		Payload map[string]any `json:"payload"`
+		Depth   uint32         `json:"depth"`
+	}
+
+	var entries []HistoryEntry
+	for _, t := range turns {
+		entry := HistoryEntry{
+			TurnID: t.TurnID,
+			TypeID: t.TypeID,
+			Depth:  t.Depth,
+		}
+
+		// Decode msgpack payload to generic map
+		var payload map[string]any
+		if len(t.Payload) > 0 {
+			if err := msgpack.Unmarshal(t.Payload, &payload); err != nil {
+				// Fallback: store raw hex
+				payload = map[string]any{"_raw": fmt.Sprintf("%x", t.Payload)}
+			}
+		}
+		entry.Payload = payload
+		entries = append(entries, entry)
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(entries)
 }
 
 // cmdCXDBFork creates a branched execution trajectory.

@@ -250,7 +250,7 @@ func loadEvidenceManifest(path string) (*EvidenceManifest, error) {
 
 // cxdbRecordEvidence records an evidence event as a CXDB turn.
 func cxdbRecordEvidence(beadID string, m EvidenceManifest) {
-	if !cxdbAvailable() {
+	if !cxdbEnsureRunning() {
 		return
 	}
 	client, err := cxdbConnect()

@@ -328,6 +328,10 @@ func cmdSetArtifact(args []string) error {
 		// Fail-safe: log but don't fail
 		fmt.Fprintf(os.Stderr, "set-artifact: warning: %v\n", err)
 	}
+
+	// Best-effort: record artifact with content hash in CXDB
+	cxdbRecordArtifact(beadID, artifactType, artifactPath)
+
 	return nil
 }
 

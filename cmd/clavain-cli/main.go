@@ -141,6 +141,10 @@ func main() {
 		err = cmdCXDBSync(args)
 	case "cxdb-fork":
 		err = cmdCXDBFork(args)
+	case "cxdb-sync-verdicts":
+		err = cmdCXDBSyncVerdicts(args)
+	case "cxdb-history":
+		err = cmdCXDBHistory(args)
 
 	// Scenarios
 	case "scenario-create":

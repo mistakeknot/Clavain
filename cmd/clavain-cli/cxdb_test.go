@@ -136,6 +136,7 @@ func TestCXDBTypeBundleParsing(t *testing.T) {
 	expectedTypes := []string{
 		"clavain.phase.v1",
 		"clavain.dispatch.v1",
+		"clavain.dispatch.v2",
 		"clavain.artifact.v1",
 		"clavain.scenario.v1",
 		"clavain.satisfaction.v1",
