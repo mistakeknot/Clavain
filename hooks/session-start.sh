@@ -66,6 +66,16 @@ if [[ -d "$CACHE_PARENT" ]] && [[ "$CACHE_PARENT" == *"/plugins/cache/"* ]]; the
     _invalidate_companion_cache
 fi
 
+# Clean up stale /tmp/clavain-* sentinel files (heartbeats, throttles, bead refs).
+# These accumulate when sessions crash or kill without running Stop hooks.
+# TTL: 60 minutes — active sessions refresh heartbeats every ~60s.
+if [[ "$_hook_source" == "startup" ]]; then
+    find /tmp -maxdepth 1 -name 'clavain-heartbeat-*' -mmin +60 -delete 2>/dev/null || true
+    find /tmp -maxdepth 1 -name 'clavain-bead-*' -mmin +60 -delete 2>/dev/null || true
+    find /tmp -maxdepth 1 -name 'clavain-compose-*' -mmin +60 -delete 2>/dev/null || true
+    find /tmp -maxdepth 1 -name 'clavain-agents-md-*' -mmin +60 -delete 2>/dev/null || true
+fi
+
 # First-run setup verification — surface critical issues on first session only.
 # Creates .clavain/setup-verified marker after passing. Runs in <200ms.
 if [[ ! -f ".clavain/setup-verified" ]] && [[ -d ".clavain" || -d ".beads" ]]; then
