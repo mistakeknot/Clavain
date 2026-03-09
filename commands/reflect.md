@@ -22,7 +22,7 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
    artifacts=$(bd state "<sprint_id>" sprint_artifacts 2>/dev/null) || artifacts="{}"
    existing=$(echo "$artifacts" | jq -r '.reflect // empty' 2>/dev/null) || existing=""
    ```
-   If `existing` is non-empty, report "Reflect artifact already registered: <existing>. Skipping to advance." and jump to step 5 (advance).
+   If `existing` is non-empty, report "Reflect artifact already registered: <existing>. Skipping to advance." and jump to step 6 (advance).
 
 3. **Capture learnings (complexity-scaled).**
 
@@ -53,20 +53,32 @@ Capture what this sprint taught you — patterns discovered, mistakes caught, de
    ```
    (`sprint_set_artifact` handles both kernel registration via `ic run artifact add` and beads fallback automatically.)
 
-5. **Advance the sprint.** Move from `reflect` → `done`:
+5. **Export session transcript (non-blocking).** Archive the sprint session as a durable receipt:
+   ```bash
+   session_file=$(ls -t ~/.claude/projects/*/"$(cat /tmp/interstat-session-id 2>/dev/null || echo unknown)"*.jsonl 2>/dev/null | head -1)
+   if [[ -n "$session_file" ]] && command -v cass &>/dev/null; then
+       transcript_dir="docs/sprints"
+       mkdir -p "$transcript_dir"
+       cass export "$session_file" --format markdown -o "${transcript_dir}/<sprint_id>-transcript.md" 2>/dev/null || true
+       cass export "$session_file" --format json -o "${transcript_dir}/<sprint_id>-transcript.json" 2>/dev/null || true
+   fi
+   ```
+   Silent on failure — transcript export is supplementary, not gate-enforced. Creates both markdown (human-readable archive) and JSON (machine-parseable for future analysis).
+
+6. **Advance the sprint.** Move from `reflect` → `done`:
    ```bash
    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "<sprint_id>" "reflect"
    ```
 
-6. **Check documentation drift (non-blocking).** After advancing, run a drift scan to catch any docs that may have gone stale during this sprint. Use the `interwatch:watch` skill via the Skill tool. If interwatch finds drift, report it to the user but do not block — the sprint is already done. If interwatch is not installed or the scan fails, skip silently.
+7. **Check documentation drift (non-blocking).** After advancing, run a drift scan to catch any docs that may have gone stale during this sprint. Use the `interwatch:watch` skill via the Skill tool. If interwatch finds drift, report it to the user but do not block — the sprint is already done. If interwatch is not installed or the scan fails, skip silently.
 
-7. **Calibrate cost estimates (silent).** After advancing, recalibrate phase cost estimates from interstat history so future sprints use improved estimates:
+8. **Calibrate cost estimates (silent).** After advancing, recalibrate phase cost estimates from interstat history so future sprints use improved estimates:
    ```bash
    "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" calibrate-phase-costs 2>/dev/null || true
    ```
    This is the closed-loop feedback: actual phase costs from completed sprints improve estimates for future sprints. Silent on failure — hardcoded defaults remain active.
 
-8. **Calibrate agent routing from evidence (silent).** After cost calibration, recalibrate agent model routing from interspect evidence so future sprints route agents to the right model tier:
+9. **Calibrate agent routing from evidence (silent).** After cost calibration, recalibrate agent model routing from interspect evidence so future sprints route agents to the right model tier:
    ```bash
    if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
        interspect_root=$(_discover_interspect_plugin 2>/dev/null) || interspect_root=""

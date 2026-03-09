@@ -322,6 +322,23 @@ def _query_interstat_tokens(shipped_bead_ids: set[str]) -> dict[str, Any] | None
     }
 
 
+def _query_cass_analytics(workspace: str | None = None, days: int = 30) -> dict[str, Any] | None:
+    """Query cross-agent token analytics from cass (supplementary view)."""
+    import shutil
+    if not shutil.which("cass"):
+        return None
+    try:
+        cmd = ["cass", "analytics", "tokens", f"--days={days}", "--json"]
+        if workspace:
+            cmd.extend(["--workspace", workspace])
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            return None
+        return json.loads(result.stdout)
+    except Exception:
+        return None
+
+
 def _query_landed_changes(bead_filter: str | None = None) -> dict[str, Any] | None:
     """Query canonical landed_changes via ic landed summary --json."""
     try:
@@ -612,6 +629,12 @@ def run_analysis(since: datetime, project: Path, bead_filter: str | None = None)
 
     tool_events = load_tool_time_events(since, until)
     cost_per_landed_change = compute_cost_per_landed_change(tool_events, shipped_beads, bead_sessions, bead_filter)
+
+    days = (until - since).days or 30
+    repo_path_str = str(project)
+    cass_data = _query_cass_analytics(workspace=repo_path_str, days=days)
+    if cass_data:
+        cost_per_landed_change["cross_agent_analytics"] = cass_data
 
     findings_files = find_findings_files(project)
     findings_docs = load_findings_docs(findings_files, since, until)
