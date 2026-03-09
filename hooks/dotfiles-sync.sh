@@ -20,6 +20,8 @@ if [[ ! -x "$SYNC_SCRIPT" ]]; then
 fi
 
 # Run the sync (capture output to log, don't block session exit)
-bash "$SYNC_SCRIPT" >>/var/log/dotfiles-sync.log 2>&1 || true
+LOG_DIR="${HOME}/.local/log"
+mkdir -p "$LOG_DIR"
+bash "$SYNC_SCRIPT" >>"${LOG_DIR}/dotfiles-sync.log" 2>&1 || true
 
 exit 0
