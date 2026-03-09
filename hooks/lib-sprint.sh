@@ -320,6 +320,67 @@ sprint_set_artifact() {
     intercore_run_artifact_add "$run_id" "$phase" "$artifact_path" "$artifact_type" >/dev/null 2>&1 || true
 }
 
+# Publish an interface contract for the current sprint.
+# Creates a contract artifact (type=contract) and optionally reserves a write_set
+# coordination lock for the declared file patterns.
+#
+# Contract file format (JSON):
+#   {
+#     "name": "ast-interface",
+#     "version": 1,
+#     "owner": "<agent-name>",
+#     "patterns": ["src/ast/*.py", "src/ast/types.ts"],
+#     "schema": { ... },           # optional: typed interface declaration
+#     "dependencies": ["other-contract-name"],  # optional
+#     "description": "AST node types for parser/interpreter interface"
+#   }
+#
+# Args: $1=sprint_id, $2=contract_file_path
+#       $3=scope (optional, defaults to project name)
+#       $4=owner (optional, defaults to CLAUDE_SESSION_ID)
+# Returns: 0 on success, 1 on failure (fail-safe: never blocks sprint)
+sprint_publish_contract() {
+    local sprint_id="$1"
+    local contract_path="$2"
+    local scope="${3:-}"
+    local owner="${4:-${CLAUDE_SESSION_ID:-unknown}}"
+    [[ -z "$sprint_id" || -z "$contract_path" ]] && return 0
+    [[ ! -f "$contract_path" ]] && return 0
+
+    # Record as contract artifact
+    sprint_set_artifact "$sprint_id" "contract" "$contract_path"
+
+    # Extract patterns from contract for write_set reservation
+    if intercore_available && command -v jq &>/dev/null; then
+        local patterns_json
+        patterns_json=$(jq -r '.patterns // [] | join(",")' "$contract_path" 2>/dev/null) || return 0
+        [[ -z "$patterns_json" || "$patterns_json" == "" ]] && return 0
+
+        local contract_name
+        contract_name=$(jq -r '.name // "unnamed"' "$contract_path" 2>/dev/null) || contract_name="unnamed"
+
+        if [[ -z "$scope" ]]; then
+            scope=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null) || scope="default"
+        fi
+
+        # Reserve write_set for each pattern (non-exclusive — contracts are shared declarations)
+        local IFS=','
+        for pattern in $patterns_json; do
+            [[ -z "$pattern" ]] && continue
+            "$INTERCORE_BIN" coordination reserve \
+                --owner="$owner" \
+                --scope="$scope" \
+                --pattern="$pattern" \
+                --type=write_set \
+                --reason="contract:${contract_name}" \
+                --exclusive=false \
+                2>/dev/null || true
+        done
+    fi
+
+    return 0
+}
+
 # Record phase completion. With ic, events are auto-recorded.
 # Just invalidates discovery caches.
 sprint_record_phase_completion() {
