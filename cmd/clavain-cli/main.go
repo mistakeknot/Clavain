@@ -176,6 +176,10 @@ func main() {
 	case "validate-linkage":
 		err = cmdValidateLinkage(args)
 
+	// Daemon
+	case "daemon":
+		err = cmdDaemon(args)
+
 	// Intent contract
 	case "intent":
 		if len(args) > 0 && args[0] == "submit" {
@@ -294,6 +298,12 @@ Policy:
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract
   validate-linkage    [--contracts=<path>] [--spec=<path>] Check contract-to-spec consistency
+
+Daemon:
+  daemon          [flags]  Run continuous dispatch loop
+                  --poll=30s  --max-concurrent=3  --max-complexity=3
+                  --min-priority=3  --label=<filter>  --project-dir=.
+                  --dry-run  --once
 
 Intent Contract:
   intent submit   Submit a typed intent (JSON on stdin preferred; flags: --type, --bead, --session, --key)
