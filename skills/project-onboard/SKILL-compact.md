@@ -1,8 +1,12 @@
 # Project Onboard (compact)
 
-One-command project setup. Introspect → Interview → Scaffold → Observe → Seed → Verify.
+One-command project setup. Repo Setup → Introspect → Interview → Scaffold → Observe → Seed → Verify.
 
-Safe to re-run (idempotent). Must be in a git repo.
+Safe to re-run (idempotent). Works for both new and existing projects.
+
+## Phase 0: Repository Setup (new projects only)
+
+If not in a git repo, run `git init`. If no remote, offer to create one via `gh repo create mistakeknot/<name> --private` or let user provide a URL. Skip entirely if remote already exists.
 
 ## Phase 1: Introspect
 

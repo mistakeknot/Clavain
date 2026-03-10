@@ -1,6 +1,6 @@
 ---
 name: project-onboard
-description: Use when onboarding a new or existing project into the Demarch ecosystem — introspects infrastructure, conducts guided interview, scaffolds docs and automation, configures observability, seeds content via interpath
+description: Use when setting up any project (new or existing) in the Demarch ecosystem — introspects infrastructure, creates GitHub repo if needed, conducts guided interview, scaffolds docs and automation, configures observability, seeds content via interpath. Replaces the former project-kickstart command.
 ---
 
 <!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. -->
@@ -17,18 +17,32 @@ Safe to re-run — all operations are idempotent (skip what already exists).
 
 ## Preconditions
 
-Must be in a git repository. Verify:
+Must be in a git repository (or willing to create one). Verify:
 
 ```bash
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 if [[ -z "$GIT_ROOT" ]]; then
-    echo "ERROR: Not in a git repository. Run 'git init' first."
-    # Stop — do not proceed
+    echo "Not in a git repository — will initialize one."
+    git init
+    GIT_ROOT=$(pwd)
 fi
 cd "$GIT_ROOT"
 ```
 
 Also verify `bd` is available: `command -v bd`. If missing, warn but continue (beads steps will be skipped).
+
+## Phase 0: Repository Setup (new projects only)
+
+Skip this phase entirely if the project already has a git remote.
+
+If no remote exists (`git remote get-url origin` fails):
+
+1. Ask the user: "Create a GitHub repo, or add a remote manually?"
+   - Default: create via `gh repo create mistakeknot/<project-name> --private --description "<one-liner>"`
+   - Alternative: user provides remote URL
+2. Set origin: `git remote add origin <url>`
+
+This absorbs what was previously the separate `project-kickstart` command.
 
 ## Phase 1: Introspect
 

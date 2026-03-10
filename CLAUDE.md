@@ -4,7 +4,7 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 18 skills, 6 agents, 47 commands, 10 hooks, 0 MCP servers. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 17 skills, 6 agents, 47 commands, 10 hooks, 0 MCP servers. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
 
 ## Quick Commands
 
@@ -13,7 +13,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 claude --plugin-dir /home/mk/projects/Demarch/os/clavain
 
 # Validate structure
-ls skills/*/SKILL.md | wc -l          # Should be 18
+ls skills/*/SKILL.md | wc -l          # Should be 17
 ls agents/{review,workflow}/*.md | wc -l  # Should be 6
 ls commands/*.md | wc -l              # Should be 47
 for f in hooks/*.sh; do bash -n "$f" && echo "$(basename $f) OK"; done  # Syntax check all hooks
