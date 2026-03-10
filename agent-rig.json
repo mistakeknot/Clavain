@@ -217,6 +217,10 @@
       {
         "source": "intertree@interagency-marketplace",
         "description": "Project hierarchy management and filesystem discovery"
+      },
+      {
+        "source": "interhelm@interagency-marketplace",
+        "description": "Agent-as-operator runtime diagnostics for native apps"
       }
     ],
     "optional": [
