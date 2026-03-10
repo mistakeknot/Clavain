@@ -557,25 +557,39 @@ sprint_record_phase_tokens() {
     local run_id
     run_id=$(_sprint_resolve_run_id "$sprint_id") || return 0
 
-    # Try actual data from interstat (session-scoped billing tokens)
-    local actual_tokens=""
+    # Read cumulative cursor from previous phase (0 if first phase)
+    local prev_cursor
+    prev_cursor=$(intercore_state_get "token_cursor" "$run_id" 2>/dev/null) || prev_cursor="0"
+    [[ -z "$prev_cursor" || "$prev_cursor" == "null" ]] && prev_cursor="0"
+    [[ "$prev_cursor" =~ ^[0-9]+$ ]] || prev_cursor="0"
+
+    # Try actual data from interstat (session-scoped cumulative billing tokens)
+    local cumulative_tokens=""
     if command -v sqlite3 &>/dev/null; then
         local db_path="${HOME}/.claude/interstat/metrics.db"
         if [[ -f "$db_path" ]]; then
-            actual_tokens=$(sqlite3 "$db_path" \
-                "SELECT COALESCE(SUM(COALESCE(input_tokens,0) + COALESCE(output_tokens,0)), 0) FROM agent_runs WHERE session_id='${CLAUDE_SESSION_ID:-none}'" 2>/dev/null) || actual_tokens=""
+            cumulative_tokens=$(sqlite3 "$db_path" \
+                "SELECT COALESCE(SUM(COALESCE(input_tokens,0) + COALESCE(output_tokens,0)), 0) FROM agent_runs WHERE session_id='${CLAUDE_SESSION_ID:-none}'" 2>/dev/null) || cumulative_tokens=""
         fi
     fi
 
     local in_tokens out_tokens
-    if [[ -n "$actual_tokens" && "$actual_tokens" != "0" ]]; then
-        in_tokens=$(( actual_tokens * 60 / 100 ))
-        out_tokens=$(( actual_tokens - in_tokens ))
+    if [[ -n "$cumulative_tokens" && "$cumulative_tokens" != "0" ]]; then
+        # Delta = current cumulative - previous cursor
+        local delta=$(( cumulative_tokens - prev_cursor ))
+        [[ $delta -lt 0 ]] && delta=0
+        in_tokens=$(( delta * 60 / 100 ))
+        out_tokens=$(( delta - in_tokens ))
+        # Save new cursor for next phase
+        intercore_state_set "token_cursor" "$run_id" "$cumulative_tokens" 2>/dev/null || true
     else
         local estimate
         estimate=$(_sprint_phase_cost_estimate "$phase")
         in_tokens=$(( estimate * 60 / 100 ))
         out_tokens=$(( estimate - in_tokens ))
+        # Advance cursor by estimate so fallback doesn't re-count
+        local new_cursor=$(( prev_cursor + estimate ))
+        intercore_state_set "token_cursor" "$run_id" "$new_cursor" 2>/dev/null || true
     fi
 
     # Record phase tokens via ic state (keyed by run_id + phase)
