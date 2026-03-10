@@ -47,8 +47,6 @@ This catches cases where the GitHub Action hasn't run (e.g., repo not pushed, Ac
 
 ### Layer 3: `/clavain:upstream-sync` Command
 
-The command integrates with the pipeline. See `commands/upstream-sync.md` for the full workflow.
-
 **Preferred path** (GitHub issues exist):
 1. Fetch open `upstream-sync` issues via `gh issue list`
 2. For each issue, read the checklist and affected skills
