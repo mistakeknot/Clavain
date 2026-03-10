@@ -19,13 +19,13 @@ description: Use when starting any conversation - establishes how to find and us
 | Fix build/test failure | `/clavain:fixbuild` |
 | Resolve review findings | `/clavain:resolve` |
 | Set up a new project | `/clavain:project-onboard` |
-| Check project health | `/clavain:doctor` or `/clavain:sprint-status` |
+| Check project health | `/clavain:clavain-doctor` or `/clavain:sprint-status` |
 | Generate a roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` |
 | Run scenario tests | `clavain-cli scenario-run <pattern>` |
 | Check quality gate | `clavain-cli scenario-score <run-id> --summary` |
 | Check agent policy | `clavain-cli policy-check <agent> <action> --path=<p>` |
-| See all commands | `/clavain:help` |
+| See all commands | `/clavain:clavain-help` |
 
 ## Auto-Route Rule
 

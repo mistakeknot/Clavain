@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-10T11:33:46Z",
+  "generated": "2026-03-10T21:01:25Z",
   "counts": {
     "skills": 17,
     "agents": 6,
@@ -121,6 +121,26 @@
       "description": "Create engaging changelogs for recent merges to main branch"
     },
     {
+      "name": "clavain-doctor",
+      "description": "Quick health check \u2014 verifies MCP servers, external tools, beads, and plugin configuration without making changes"
+    },
+    {
+      "name": "clavain-help",
+      "description": "Show Clavain commands organized by daily drivers first, then by workflow stage"
+    },
+    {
+      "name": "clavain-init",
+      "description": "Scaffold .clavain/ agent memory directory in the current project"
+    },
+    {
+      "name": "clavain-review",
+      "description": "Perform exhaustive code reviews using multi-agent analysis and deep inspection"
+    },
+    {
+      "name": "clavain-status",
+      "description": "Unified status view across Clavain, artifact generation, doc drift, and coordination"
+    },
+    {
       "name": "clodex-toggle",
       "description": "Toggle interserve execution mode"
     },
@@ -149,10 +169,6 @@
       "description": "Synthesize accumulated docs into categorized solutions and generate missing SKILL-compact.md files"
     },
     {
-      "name": "doctor",
-      "description": "Quick health check \u2014 verifies MCP servers, external tools, beads, and plugin configuration without making changes"
-    },
-    {
       "name": "execute-plan",
       "description": "Execute plan in batches with review checkpoints"
     },
@@ -171,14 +187,6 @@
     {
       "name": "heal-skill",
       "description": "Fix incorrect SKILL.md files when a skill has wrong instructions or outdated API references"
-    },
-    {
-      "name": "help",
-      "description": "Show Clavain commands organized by daily drivers first, then by workflow stage"
-    },
-    {
-      "name": "init",
-      "description": "Scaffold .clavain/ agent memory directory in the current project"
     },
     {
       "name": "interpeer",
@@ -233,10 +241,6 @@
       "description": "Resolve findings from any source \u2014 auto-detects TODOs, PR comments, or todo files, then resolves in parallel"
     },
     {
-      "name": "review",
-      "description": "Perform exhaustive code reviews using multi-agent analysis and deep inspection"
-    },
-    {
       "name": "review-discipline",
       "description": "Run disciplined code review and feedback triage"
     },
@@ -263,10 +267,6 @@
     {
       "name": "sprint-status",
       "description": "Deep scan of sprint workflow state \u2014 session continuity, pipeline health, plan progress, beads, and recommendations"
-    },
-    {
-      "name": "status",
-      "description": "Unified status view across Clavain, artifact generation, doc drift, and coordination"
     },
     {
       "name": "strategy",

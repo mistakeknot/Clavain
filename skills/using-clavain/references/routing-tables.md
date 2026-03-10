@@ -13,9 +13,9 @@ For the compact version, see the `using-clavain` skill.
 | **Review (docs)** | flux-drive | flux-drive | (triaged from fd-* roster in interflux — adaptive 4-12 agents)¹ |
 | **Execute** | executing-plans, subagent-driven-development, dispatching-parallel-agents, interserve | work, execute-plan, sprint², resolve, debate | — |
 | **Debug** | systematic-debugging | repro-first-debugging | bug-reproduction-validator, interflux:research:git-history-analyzer |
-| **Review** | code-review-discipline | review, quality-gates, plan-review, migration-safety, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
+| **Review** | code-review-discipline | clavain-review, quality-gates, plan-review, migration-safety, interpeer | interflux:fd-architecture, fd-safety, fd-correctness, fd-quality, fd-performance, fd-user-product |
 | **Ship** | landing-a-change, verification-before-completion | changelog, triage, compound | interflux:fd-safety |
-| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills, galiana | setup, help, doctor, sprint-status, galiana, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
+| **Meta** | writing-skills, developing-claude-code-plugins, working-with-claude-code, upstream-sync, create-agent-skills, galiana | setup, clavain-help, clavain-doctor, sprint-status, galiana, create-agent-skill, generate-command, heal-skill, upstream-sync | — |
 
 ## Layer 2: What domain?
 
@@ -48,7 +48,7 @@ For the compact version, see the `using-clavain` skill.
 |---------|------------|-------|
 | `/interflux:flux-drive` | Deep review of documents, plans, repos, or large diffs with scored agent triage | File, directory, or diff |
 | `/clavain:quality-gates` | Quick code review of working changes (auto-selects agents from git diff) | None (uses git diff) |
-| `/clavain:review` | PR-focused multi-agent review | PR number, URL, or branch |
+| `/clavain:clavain-review` | PR-focused multi-agent review | PR number, URL, or branch |
 | `/clavain:plan-review` | Lightweight 3-agent plan review | Plan file |
 | `/interflux:flux-gen` | Generate project-specific domain review agents in `.claude/agents/` | Optional: domain name |
 

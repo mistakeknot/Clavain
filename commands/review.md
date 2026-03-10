@@ -1,5 +1,5 @@
 ---
-name: review
+name: clavain-review
 description: Perform exhaustive code reviews using multi-agent analysis and deep inspection
 argument-hint: "[PR number, GitHub URL, branch name, or latest]"
 ---

@@ -1,5 +1,5 @@
 ---
-name: init
+name: clavain-init
 description: Scaffold .clavain/ agent memory directory in the current project
 argument-hint: ""
 disable-model-invocation: false
@@ -16,7 +16,7 @@ Scaffold the `.clavain/` agent memory filesystem in the current git repository. 
 ```bash
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 if [[ -z "$GIT_ROOT" ]]; then
-    echo "ERROR: Not in a git repository. /clavain:init requires git."
+    echo "ERROR: Not in a git repository. /clavain:clavain-init requires git."
     exit 1
 fi
 ```
@@ -46,7 +46,7 @@ fi
 ```markdown
 # .clavain/
 
-Agent memory filesystem for this project. Created by `/clavain:init`.
+Agent memory filesystem for this project. Created by `/clavain:clavain-init`.
 
 ## Directories
 

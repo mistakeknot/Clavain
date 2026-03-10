@@ -1,5 +1,5 @@
 ---
-name: help
+name: clavain-help
 description: Show Clavain commands organized by daily drivers first, then by workflow stage
 ---
 
@@ -49,7 +49,7 @@ These are the commands you'll use most often:
 |---|---|
 | `/clavain:review-discipline` | Disciplined code review and feedback triage | `/review-discipline` |
 | `/clavain:quality-gates` | Quick code review from git diff |
-| `/clavain:review` | PR-focused multi-agent review |
+| `/clavain:clavain-review` | PR-focused multi-agent review |
 | `/clavain:review-doc` | Lightweight single-pass document refinement |
 | `/clavain:interpeer` | Cross-AI peer review (quick/deep/council/mine modes) |
 | `/clavain:migration-safety` | Database migration safety checks |
@@ -75,8 +75,8 @@ These are the commands you'll use most often:
 | `/clavain:project-onboard` | Set up a new/existing project with full Demarch automation |
 |---|---|
 | `/clavain:setup` | Bootstrap Clavain — install plugins, verify MCP, configure hooks |
-| `/clavain:help` | This command |
-| `/clavain:doctor` | Health check — MCP servers, tools, beads, plugin conflicts |
+| `/clavain:clavain-help` | This command |
+| `/clavain:clavain-doctor` | Health check — MCP servers, tools, beads, plugin conflicts |
 | `/clavain:codex-bootstrap` | Keep Codex Clavain installation fresh (install + doctor + wrappers) |
 | `/clavain:create-agent-skill` | Create new agent skills |
 | `/clavain:generate-command` | Scaffold a new command |

@@ -30,7 +30,7 @@ Use AskUserQuestion. Skip questions answered by introspection.
 Skip anything that exists. Execute in order:
 
 1. `bd init` + `bd setup claude --project` (if no .beads/)
-2. `/clavain:init` (if no .clavain/)
+2. `/clavain:clavain-init` (if no .clavain/)
 3. Generate CLAUDE.md from `templates/CLAUDE.md.tmpl` (30-60 lines, operations only)
 4. Generate AGENTS.md from `templates/AGENTS.md.tmpl` (architecture, build, conventions)
 5. Generate PHILOSOPHY.md from `templates/PHILOSOPHY.md.tmpl` (goals → principles)

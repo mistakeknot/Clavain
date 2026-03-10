@@ -1,5 +1,5 @@
 ---
-name: doctor
+name: clavain-doctor
 description: Quick health check — verifies MCP servers, external tools, beads, and plugin configuration without making changes
 argument-hint: "[optional: --scope=clavain|interpath|interwatch|interlock|notion|all, --check-only]"
 ---
@@ -339,7 +339,7 @@ if [ -d .clavain ]; then
   learnings_count=$(ls .clavain/learnings/*.md 2>/dev/null | wc -l | tr -d ' ')
   echo "  learnings: ${learnings_count} entries"
 else
-  echo ".clavain: not initialized (run /clavain:init to set up)"
+  echo ".clavain: not initialized (run /clavain:clavain-init to set up)"
 fi
 ```
 
@@ -476,8 +476,8 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - hook syntax WARN → "Check the named hook files for bash syntax errors"
 - beads FAIL (hung) → "Run `bash .beads/recover.sh` to recover from a stuck Dolt server"
 - zombies FIXED → "Auto-closed N zombie beads. Root cause: prior sessions completed work but didn't run the close protocol. Run `bd list --status=closed` to review."
-- .clavain not initialized → "Run `/clavain:init` to set up agent memory"
-- .clavain scratch not gitignored → "Run `/clavain:init` to fix gitignore"
+- .clavain not initialized → "Run `/clavain:clavain-init` to set up agent memory"
+- .clavain scratch not gitignored → "Run `/clavain:clavain-init` to fix gitignore"
 - skill budget WARN/ERROR → "Trim skills over 16K chars by moving verbose sections to references/ subdirectory"
 - routing shadow mode → "Review shadow-mode features in routing.yaml — they may be ready to activate with `mode: enforce`"
 - plugin cache empty → "Reinstall the plugin: `claude plugin install <name>@interagency-marketplace`"

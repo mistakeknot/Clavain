@@ -154,7 +154,7 @@ bd setup claude --project
 
 ### 3b: Clavain Memory
 
-If `.clavain/` doesn't exist, run `/clavain:init`.
+If `.clavain/` doesn't exist, run `/clavain:clavain-init`.
 
 ### 3c: CLAUDE.md
 
