@@ -318,6 +318,38 @@ if [[ -n "${CLAUDE_ENV_FILE:-}" && -n "${SPRINT_ACTIVE_JSON:-}" ]]; then
     fi
 fi
 
+# Mycroft assignment check — detect if this agent was dispatched by Mycroft
+# Extracts fleet name from tmux session, queries bead state for assignment
+mycroft_context=""
+if command -v bd &>/dev/null && [[ -n "${TMUX:-}" ]]; then
+    _tmux_session=$(tmux display-message -p '#S' 2>/dev/null) || _tmux_session=""
+    if [[ -n "$_tmux_session" ]]; then
+        # Extract agent name from session: {terminal}-{project}-{agent}[-{number}]
+        _fleet_name=$(echo "$_tmux_session" | sed -E 's/^[^-]+-[^-]+-//' | sed -E 's/-[0-9]+$//')
+        if [[ -n "$_fleet_name" && "$_fleet_name" != "$_tmux_session" ]]; then
+            # Check if Mycroft assigned a bead to this agent
+            _mycroft_bead=$(bd list --json 2>/dev/null | jq -r --arg agent "$_fleet_name" \
+                '.[] | select(.state.assigned_agent == $agent and .status == "in_progress") | .id' 2>/dev/null | head -1) || _mycroft_bead=""
+            if [[ -n "$_mycroft_bead" ]]; then
+                _mycroft_phase=$(bd get-state "$_mycroft_bead" assigned_phase 2>/dev/null) || _mycroft_phase=""
+                _mycroft_ctx=$(bd get-state "$_mycroft_bead" context_file 2>/dev/null) || _mycroft_ctx=""
+                # Write identity linkage
+                bd set-state "$_mycroft_bead" session_id="${CLAUDE_SESSION_ID:-unknown}" 2>/dev/null || true
+                if [[ -n "${INTERLOCK_ID:-}" ]]; then
+                    bd set-state "$_mycroft_bead" interlock_agent_id="$INTERLOCK_ID" 2>/dev/null || true
+                fi
+                # Export for downstream consumers
+                if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
+                    echo "MYCROFT_BEAD=$_mycroft_bead" >> "$CLAUDE_ENV_FILE"
+                    [[ -n "$_mycroft_phase" ]] && echo "MYCROFT_PHASE=$_mycroft_phase" >> "$CLAUDE_ENV_FILE"
+                    [[ -n "$_mycroft_ctx" ]] && echo "MYCROFT_CONTEXT=$_mycroft_ctx" >> "$CLAUDE_ENV_FILE"
+                fi
+                mycroft_context="\\n\\n**Mycroft assignment**: bead \`$_mycroft_bead\` (phase: ${_mycroft_phase:-unset})"
+            fi
+        fi
+    fi
+fi
+
 # Tool composition context (iv-3kpfu) — shallow metadata for agent tool routing
 # Priority: after sprint_context, before discovery_context in shedding cascade
 composition_context=""
@@ -443,7 +475,7 @@ fi
 # Priority-based shedding: drop lowest-priority sections whole (not byte-level truncation)
 # to avoid breaking mid-escape-sequence in JSON output.
 _context_preamble="You have Clavain.\n\n**Below is the full content of your 'clavain:using-clavain' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n"
-_full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}${discovery_context}${inflight_context}"
+_full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${mycroft_context}${composition_context}${discovery_context}${inflight_context}"
 ADDITIONAL_CONTEXT_CAP=10000
 
 # Shed sections in reverse priority order (lowest value dropped first).
@@ -451,7 +483,7 @@ ADDITIONAL_CONTEXT_CAP=10000
 # Note: delegation_context is HIGH priority (survives all shedding) — it's the routing policy
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     inflight_context=""
-    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${composition_context}${discovery_context}"
+    _full_context="${_context_preamble}${using_clavain_escaped}${companion_context}${delegation_context}${conventions}${setup_hint}${upstream_warning}${sprint_context}${mycroft_context}${composition_context}${discovery_context}"
 fi
 if [[ ${#_full_context} -gt $ADDITIONAL_CONTEXT_CAP ]]; then
     discovery_context=""

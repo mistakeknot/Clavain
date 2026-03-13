@@ -504,3 +504,25 @@ agents:
     tools: [Read, Grep, Glob, Bash, Edit, Write]
     cold_start_tokens: 600
     tags: []
+
+  # ─── Mycroft Agents (1) ─────────────────────────────────────────
+
+  mycroft:
+    source: autarch
+    category: orchestrator
+    description: "Fleet orchestrator — escalating autonomy (T0 observe → T1 suggest → T2/T3 auto-dispatch)"
+    capabilities:
+      - multi_agent_coordination
+      - freshness_monitoring
+    roles:
+      - fleet-orchestrator
+    runtime:
+      mode: cli
+      binary: "go run ./cmd/mycroft"
+      working_dir: "apps/Autarch"
+    models:
+      preferred: opus
+      supported: [sonnet, opus]
+    tools: [Read, Grep, Glob, Bash]
+    cold_start_tokens: 1200
+    tags: [session, orchestrator]
