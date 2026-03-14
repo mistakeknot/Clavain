@@ -31,6 +31,12 @@ verdict_write() {
 
     verdict_init
 
+    # Capture originating session_id for correct attribution during sweep.
+    # Without this, swept verdicts get attributed to the sweeping session
+    # which may have different source classification (bootstrap vs normal).
+    local origin_session_id
+    origin_session_id=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
+
     local tmp="${VERDICT_DIR}/.${agent}.json.tmp"
     jq -n \
         --arg type "$type" \
@@ -42,9 +48,11 @@ verdict_write() {
         --argjson findings_count "$findings_count" \
         --argjson tokens_spent "$tokens_spent" \
         --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg session_id "$origin_session_id" \
         '{type: $type, status: $status, model: $model, tokens_spent: $tokens_spent,
           files_changed: $files_changed, findings_count: $findings_count,
-          summary: $summary, detail_path: $detail_path, timestamp: $timestamp}' \
+          summary: $summary, detail_path: $detail_path, timestamp: $timestamp,
+          session_id: $session_id}' \
         > "$tmp" && mv "$tmp" "${VERDICT_DIR}/${agent}.json"
 }
 
