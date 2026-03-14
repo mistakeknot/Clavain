@@ -1153,8 +1153,8 @@ routing_resolve_agents() {
   result+="}"
   echo "$result"
 
-  # B2: emit routing decisions for interspect evidence (fire-and-forget)
-  # Writes JSONL to .clavain/routing-decisions.jsonl for session-end consumption.
+  # Emit routing decisions to intercore kernel (fire-and-forget, background)
+  # Uses `ic route record` which writes to the routing_decisions table.
   # Only emits when complexity mode is active (shadow or enforce) — no overhead when off.
   if [[ "${_ROUTING_CX_MODE:-off}" != "off" && -n "$agents_csv" ]]; then
     _routing_emit_decisions "$phase" "$complexity" "$result" &>/dev/null &
@@ -1163,27 +1163,22 @@ routing_resolve_agents() {
   return 0
 }
 
-# --- Internal: emit routing decisions as JSONL for interspect ---
-# Appends one line per agent to .clavain/routing-decisions.jsonl.
+# --- Internal: emit routing decisions via ic route record ---
+# Records one decision per agent to intercore's routing_decisions table.
 # Runs in background (&) — must not affect routing latency.
 _routing_emit_decisions() {
-  local phase="$1" complexity="$2" model_json="$3"
-  local decisions_dir decisions_file
-  local root
-  root=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
-  decisions_dir="${root}/.clavain"
-  decisions_file="${decisions_dir}/routing-decisions.jsonl"
-  [[ -d "$decisions_dir" ]] || return 0
+  command -v ic >/dev/null 2>&1 || return 0
 
-  local ts sid
-  ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "${CLAUDE_SESSION_ID:-unknown}")
+  local phase="$1" complexity="$2" model_json="$3"
 
   # Determine decision source
-  local source="B1"
-  [[ -n "$complexity" ]] && source="B2"
+  local rule="B1"
+  [[ -n "$complexity" ]] && rule="B2"
 
-  # Parse model_json and emit one line per agent
+  local sid
+  sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "${CLAUDE_SESSION_ID:-unknown}")
+
+  # Parse model_json and record each agent's decision
   # model_json format: {"agent1":"model1","agent2":"model2"}
   local stripped="${model_json#\{}"
   stripped="${stripped%\}}"
@@ -1196,8 +1191,13 @@ _routing_emit_decisions() {
     agent_name="${agent_name//\"/}"
     model="${model//\"/}"
     [[ -z "$agent_name" || -z "$model" ]] && continue
-    printf '{"ts":"%s","session_id":"%s","agent":"%s","model":"%s","phase":"%s","complexity":"%s","decision_source":"%s"}\n' \
-      "$ts" "$sid" "$agent_name" "$model" "$phase" "${complexity:-}" "$source" >> "$decisions_file" 2>/dev/null
+    ic route record \
+      --agent="$agent_name" \
+      --model="$model" \
+      --rule="$rule" \
+      --phase="${phase:-}" \
+      --session="$sid" \
+      2>/dev/null || true
   done
 }
 
