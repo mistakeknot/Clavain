@@ -871,6 +871,68 @@ for agent in ['fd-safety','fd-architecture','fd-quality']:
     echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='sonnet'; assert d['fd-architecture']=='sonnet'"
 }
 
+# ═══════════════════════════════════════════════════════════════════
+# B2: routing_resolve_agents with complexity signal flags
+# ═══════════════════════════════════════════════════════════════════
+
+@test "resolve_agents with --prompt-tokens classifies and uses complexity resolver" {
+    _write_cx_config shadow
+    _source_routing "$TEST_DIR/config/cx.yaml"
+    export CLAVAIN_RUN_ID="test-run"  # Force bash path (skip ic fast path)
+    # 5000 tokens → C5 classification. Shadow mode returns base result + logs.
+    run bash -c "
+        unset _ROUTING_LOADED
+        export CLAVAIN_ROUTING_CONFIG='$TEST_DIR/config/cx.yaml'
+        export CLAVAIN_RUN_ID='test-run'
+        source '$SCRIPTS_DIR/lib-routing.sh'
+        routing_resolve_agents --phase executing --agents 'fd-safety' --prompt-tokens 5000 --reasoning-depth 1
+    "
+    [ "$status" -eq 0 ]
+    # Shadow log should appear (C5 would override sonnet → opus)
+    [[ "$output" == *"B2-shadow"* ]]
+    unset CLAVAIN_RUN_ID
+}
+
+@test "resolve_agents with --prompt-tokens 100 classifies as C1" {
+    _write_cx_config enforce
+    _source_routing "$TEST_DIR/config/cx.yaml"
+    export CLAVAIN_RUN_ID="test-run"
+    # 100 tokens, 0 files, depth 1 → C1 → override to haiku
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety" --prompt-tokens 100 --file-count 0 --reasoning-depth 1 2>/dev/null)"
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='haiku', f\"expected haiku, got {d['fd-safety']}\""
+    unset CLAVAIN_RUN_ID
+}
+
+@test "resolve_agents with --prompt-tokens 5000 classifies as C5 enforce" {
+    _write_cx_config enforce
+    _source_routing "$TEST_DIR/config/cx.yaml"
+    export CLAVAIN_RUN_ID="test-run"
+    # 5000 tokens → C5 → override to opus
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety" --prompt-tokens 5000 --reasoning-depth 1 2>/dev/null)"
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='opus', f\"expected opus, got {d['fd-safety']}\""
+    unset CLAVAIN_RUN_ID
+}
+
+@test "resolve_agents without signal flags behaves as B1 only" {
+    _write_cx_config enforce
+    _source_routing "$TEST_DIR/config/cx.yaml"
+    export CLAVAIN_RUN_ID="test-run"
+    # No signal flags → no complexity classification → B1 base result (sonnet)
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety" 2>/dev/null)"
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='sonnet', f\"expected sonnet, got {d['fd-safety']}\""
+    unset CLAVAIN_RUN_ID
+}
+
+@test "resolve_agents skips ic fast path when complexity mode is shadow" {
+    _write_cx_config shadow
+    _source_routing "$TEST_DIR/config/cx.yaml"
+    # Don't set CLAVAIN_RUN_ID — the fast-path guard should check _ROUTING_CX_MODE
+    # With mode=shadow, the Go fast path should be skipped even without CLAVAIN_RUN_ID
+    # We verify by checking that the function still returns valid JSON (bash path works)
+    result="$(routing_resolve_agents --phase executing --agents "fd-safety" 2>/dev/null)"
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'fd-safety' in d"
+}
+
 # ═══════════════════════════════════════════════
 # Interspect override consumption tests
 # ═══════════════════════════════════════════════

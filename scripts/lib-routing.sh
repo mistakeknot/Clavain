@@ -1015,6 +1015,12 @@ routing_list_mappings() {
 #
 # Usage:
 #   routing_resolve_agents --phase <phase> --agents "fd-safety,fd-architecture,..." [--category <cat>]
+#     [--prompt-tokens <n>] [--file-count <n>] [--reasoning-depth <n>]
+#
+# When any signal flag (--prompt-tokens, --file-count, --reasoning-depth) is provided,
+# classifies complexity internally via routing_classify_complexity and passes the
+# resulting tier to routing_resolve_model_complex. Classification stays in lib-routing.sh
+# so callers only measure and pass raw numbers.
 #
 # Agent ID mapping:
 #   fd-* review agents     → interflux:review:fd-<name>, category=review
@@ -1025,9 +1031,13 @@ routing_list_mappings() {
 #
 # When complexity mode is shadow/enforce, uses routing_resolve_model_complex.
 routing_resolve_agents() {
+  # Load cache first — idempotent (guarded by _ROUTING_CACHE_POPULATED).
+  # Must run before fast-path so _ROUTING_CX_MODE is available for the guard.
+  _routing_load_cache
+
   # Fast path: delegate to compiled Go router when available.
-  # Skips when CLAVAIN_RUN_ID is set or complexity mode is active.
-  if [[ -z "${CLAVAIN_RUN_ID:-}" ]] && command -v ic >/dev/null 2>&1; then
+  # Skips when CLAVAIN_RUN_ID is set, complexity mode is active, or Go router unavailable.
+  if [[ -z "${CLAVAIN_RUN_ID:-}" && "${_ROUTING_CX_MODE:-off}" == "off" ]] && command -v ic >/dev/null 2>&1; then
     local _phase="" _agents_csv=""
     local _args=("$@")
     for (( _i=0; _i<${#_args[@]}; _i++ )); do
@@ -1047,17 +1057,29 @@ routing_resolve_agents() {
     fi
   fi
 
-  _routing_load_cache
-
   local phase="" agents_csv="" category_override=""
+  local cx_prompt_tokens="" cx_file_count="" cx_reasoning_depth=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --phase)    phase="$2"; shift 2 ;;
-      --agents)   agents_csv="$2"; shift 2 ;;
-      --category) category_override="$2"; shift 2 ;;
+      --phase)           phase="$2"; shift 2 ;;
+      --agents)          agents_csv="$2"; shift 2 ;;
+      --category)        category_override="$2"; shift 2 ;;
+      --prompt-tokens)   cx_prompt_tokens="$2"; shift 2 ;;
+      --file-count)      cx_file_count="$2"; shift 2 ;;
+      --reasoning-depth) cx_reasoning_depth="$2"; shift 2 ;;
       *) shift ;;
     esac
   done
+
+  # B2: classify complexity from raw signals when any are provided
+  local complexity=""
+  if [[ -n "$cx_prompt_tokens" || -n "$cx_file_count" || -n "$cx_reasoning_depth" ]]; then
+    local cx_args=()
+    [[ -n "$cx_prompt_tokens" ]]   && cx_args+=(--prompt-tokens "$cx_prompt_tokens")
+    [[ -n "$cx_file_count" ]]      && cx_args+=(--file-count "$cx_file_count")
+    [[ -n "$cx_reasoning_depth" ]] && cx_args+=(--reasoning-depth "$cx_reasoning_depth")
+    complexity="$(routing_classify_complexity "${cx_args[@]}")"
+  fi
 
   # Graceful degradation: no config → empty JSON
   if [[ -z "$_ROUTING_CONFIG_PATH" ]]; then
@@ -1106,13 +1128,15 @@ routing_resolve_agents() {
       [[ -z "$category" ]] && category="review"
     fi
 
-    # Resolve model — use complexity-aware resolver if complexity is active
+    # Resolve model — use complexity-aware resolver when tier is available or mode is active
     local model=""
     local resolve_args=(--phase "$phase" --agent "$agent_id")
     [[ -n "$category" ]] && resolve_args+=(--category "$category")
 
-    if [[ "${_ROUTING_CX_MODE:-off}" != "off" ]]; then
-      model="$(routing_resolve_model_complex "${resolve_args[@]}")"
+    if [[ -n "$complexity" ]]; then
+      model="$(routing_resolve_model_complex --complexity "$complexity" "${resolve_args[@]}")"
+    elif [[ "${_ROUTING_CX_MODE:-off}" != "off" ]]; then
+      model="$(routing_resolve_model_complex --complexity "" "${resolve_args[@]}")"
     else
       model="$(routing_resolve_model "${resolve_args[@]}")"
     fi

@@ -95,7 +95,7 @@ dispatch:
 # Zero-cost guarantee: when mode=off, routing_resolve_model behaves identically
 # to B1 with no extra function calls, no config parsing, no overhead.
 complexity:
-  mode: shadow
+  mode: shadow  # Before setting enforce: verify quality-gates integration (iv-jgdct)
 
   # Classification thresholds — a task's complexity tier is the highest tier
   # whose ANY threshold is met. Evaluated top-down (C5 first).
