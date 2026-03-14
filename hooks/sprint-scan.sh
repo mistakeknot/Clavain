@@ -34,34 +34,37 @@ sprint_count_orphaned_brainstorms() {
 
     [[ -d "$brainstorms_dir" ]] || { echo "0"; return 1; }
 
-    local plans="" prds=""
+    # Build a single lowercase string of all plan+PRD filenames for fast substring matching
+    local _all_targets=""
     if [[ -d "$plans_dir" ]]; then
-        plans=$(ls "$plans_dir" 2>/dev/null || true)
+        local _f
+        for _f in "$plans_dir"/*; do
+            [[ -e "$_f" ]] || continue
+            _all_targets="${_all_targets} ${_f##*/}"
+        done
     fi
     if [[ -d "$prds_dir" ]]; then
-        prds=$(ls "$prds_dir" 2>/dev/null || true)
+        local _f
+        for _f in "$prds_dir"/*; do
+            [[ -e "$_f" ]] || continue
+            _all_targets="${_all_targets} ${_f##*/}"
+        done
     fi
+    _all_targets="${_all_targets,,}"  # lowercase once
 
-    local file slug matched
+    local file slug bname
     for file in "$brainstorms_dir"/*-brainstorm.md; do
         [[ -f "$file" ]] || continue
-        # Extract topic slug: YYYY-MM-DD-<topic>-brainstorm.md → <topic>
-        slug=$(basename "$file" | sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-//; s/-brainstorm\.md$//')
+        # Extract topic slug via parameter expansion (no subprocess):
+        # YYYY-MM-DD-<topic>-brainstorm.md → <topic>
+        bname="${file##*/}"
+        slug="${bname#[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-}"
+        slug="${slug%-brainstorm.md}"
         [[ -z "$slug" ]] && continue
 
-        matched=0
-        # Check plans (case-insensitive substring)
-        if echo "$plans" | grep -qi "$slug"; then
-            matched=1
-        fi
-        # Check PRDs (case-insensitive substring)
-        if [[ $matched -eq 0 ]] && echo "$prds" | grep -qi "$slug"; then
-            matched=1
-        fi
-
-        if [[ $matched -eq 0 ]]; then
-            count=$((count + 1))
-        fi
+        # Case-insensitive substring check (no subprocess)
+        local slug_lower="${slug,,}"
+        [[ "$_all_targets" == *"$slug_lower"* ]] || count=$((count + 1))
     done
 
     echo "$count"
@@ -77,26 +80,36 @@ sprint_list_orphaned_brainstorms() {
 
     [[ -d "$brainstorms_dir" ]] || return 1
 
-    local plans="" prds=""
+    # Build a single lowercase string of all plan+PRD filenames for fast substring matching
+    local _all_targets=""
     if [[ -d "$plans_dir" ]]; then
-        plans=$(ls "$plans_dir" 2>/dev/null || true)
+        local _f
+        for _f in "$plans_dir"/*; do
+            [[ -e "$_f" ]] || continue
+            _all_targets="${_all_targets} ${_f##*/}"
+        done
     fi
     if [[ -d "$prds_dir" ]]; then
-        prds=$(ls "$prds_dir" 2>/dev/null || true)
+        local _f
+        for _f in "$prds_dir"/*; do
+            [[ -e "$_f" ]] || continue
+            _all_targets="${_all_targets} ${_f##*/}"
+        done
     fi
+    _all_targets="${_all_targets,,}"  # lowercase once
 
-    local file slug matched found=0
+    local file slug bname found=0
     for file in "$brainstorms_dir"/*-brainstorm.md; do
         [[ -f "$file" ]] || continue
-        slug=$(basename "$file" | sed 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}-//; s/-brainstorm\.md$//')
+        # Extract topic slug via parameter expansion (no subprocess)
+        bname="${file##*/}"
+        slug="${bname#[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-}"
+        slug="${slug%-brainstorm.md}"
         [[ -z "$slug" ]] && continue
 
-        matched=0
-        if echo "$plans" | grep -qi "$slug"; then matched=1; fi
-        if [[ $matched -eq 0 ]] && echo "$prds" | grep -qi "$slug"; then matched=1; fi
-
-        if [[ $matched -eq 0 ]]; then
-            echo "$(basename "$file") (topic: $slug)"
+        local slug_lower="${slug,,}"
+        if [[ "$_all_targets" != *"$slug_lower"* ]]; then
+            echo "${bname} (topic: $slug)"
             found=1
         fi
     done
