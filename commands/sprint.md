@@ -28,8 +28,10 @@ Display to the user: `Complexity: ${complexity}/5 (${label})`
 
 Score-based routing:
 - **1-2 (trivial/simple):** Ask user via AskUserQuestion whether to skip brainstorm + strategy and go directly to Step 3 (write-plan). Options: "Skip to plan (Recommended)", "Full workflow". If skipping, jump to Step 3.
-- **3 (moderate):** Standard workflow, all steps.
-- **4-5 (complex/research):** Full workflow with Opus orchestration, full agent roster.
+- **3 (moderate):** Standard workflow, all steps. Offer "Skip to plan" if the bead already has a clear description with acceptance criteria.
+- **4-5 (complex/research):** Full workflow with Opus orchestration, full agent roster. User can still explicitly use `--from-step <step>` to skip phases — complexity score is advisory, not a hard gate.
+
+**Note:** `--from-step` always overrides complexity-based routing. A user who says `--from-step plan` on a complexity-5 task knows what they're doing.
 
 ---
 
@@ -86,7 +88,13 @@ if [[ "$is_sprint" == "true" ]]; then
                 # AskUserQuestion: "Sprint paused (auto_advance=false). Options: Continue, Stop"
                 ;;
             stale_phase)
-                # Another session already advanced — re-read state and continue from new phase
+                # Another session already advanced — re-read state and route to new phase
+                new_state=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-read-state "$CLAVAIN_BEAD_ID")
+                new_phase=$(echo "$new_state" | jq -r '.phase // "brainstorm"')
+                echo "Phase advanced by another session → now at: $new_phase"
+                # Re-route to the current phase using sprint-next-step
+                next=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-next-step "$new_phase")
+                # Continue with the new phase (fall through to normal routing below)
                 ;;
             budget_exceeded)
                 # AskUserQuestion: "Budget exceeded (<detail>). Options: Continue (override), Stop sprint, Adjust budget"

@@ -36,8 +36,9 @@ sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count
      checkpoint=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-read)
      ```
      If checkpoint exists for this sprint:
-     - Run `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-validate` — warn (don't block) if git SHA changed
-     - Use `checkpoint_completed_steps` to determine which steps are done
+     - Run `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-validate`
+     - If git SHA changed (WARNING in stderr): display `"Code changed since checkpoint (was <old>, now <new>). Completed steps may not reflect current state."` and use AskUserQuestion: "Resume from checkpoint (trust completed steps)" / "Re-run from start (discard checkpoint)" / "Re-run from plan-review (re-validate with current code)". Default: resume.
+     - If no SHA change: use `checkpoint_completed_steps` silently
      - Display: `Resuming from checkpoint. Completed: [<steps>]`
      - Route to the first *incomplete* step
   e. Determine next step: `next=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-next-step "<phase>")`
@@ -52,7 +53,7 @@ sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count
      - `done` → tell user "Sprint is complete"
   g. Display: `Resuming sprint <id> — <title> (phase: <phase>, next: <step>)`
   h. **Stop after dispatch.** Do NOT continue to Step 2.
-- **Multiple sprints (`sprint_count > 1`)** → AskUserQuestion to choose which to resume, plus "Start fresh" option. Then claim and route as above.
+- **Multiple sprints (`sprint_count > 1`)** → Sort by most recently advanced (latest phase transition timestamp), then present via AskUserQuestion. Label format: `"Resume <id> — <title> (phase: <phase>, last active: <relative_time>)"`. Include "Start fresh" as final option. Recommended = most recently active sprint. Then claim and route as above.
 
 **Confidence: 1.0** — active sprint resume is always definitive.
 
@@ -144,7 +145,7 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
    ")
    ```
    Cache results: `echo '<json>' | ic state set "bead_sweep" "<bead_id>" --ttl=3600s` for each result.
-   **Do NOT wait for the background agent.** Continue to step 3 immediately. If the agent finishes before the user selects, its results will be available next time. If any cached results exist from a previous sweep, merge them into the discovery results as `possibly_done` flags.
+   **Wait briefly (up to 5 seconds) for the background agent.** If it completes in time, merge its results into the discovery output as `possibly_done` flags before presenting options. If it hasn't finished after 5 seconds, continue to step 3 — results will be cached for next session. This prevents presenting already-done beads as actionable options in most cases.
 
 3. Present the top results via **AskUserQuestion**:
    - **First option (recommended):** Top-ranked bead. Label format: `"<Action> <bead-id> — <title> (P<priority>)"`. Add `", stale"` if stale is true. Mark as `(Recommended)`.
@@ -231,8 +232,9 @@ Check in order — first match wins:
 
 | Condition | Route | Confidence | Reason |
 |-----------|-------|------------|--------|
-| Bead has plan artifact (`has_plan` non-empty) | `/clavain:work <plan_path>` | 1.0 | Plan already exists |
-| `bead_phase` is `planned` or `plan-reviewed` | `/clavain:work <plan_path>` | 1.0 | Ready for execution |
+| Bead has plan AND `bead_phase` is `plan-reviewed` | `/clavain:work <plan_path>` | 1.0 | Plan reviewed and approved |
+| Bead has plan AND `bead_phase` is `planned` (not yet reviewed) | `/clavain:sprint --from-step plan-review` | 1.0 | Plan exists but needs review before execution |
+| Bead has plan artifact (`has_plan` non-empty) AND no `bead_phase` | `/clavain:sprint --from-step plan-review` | 0.95 | Plan exists, ensure review gate |
 | `bead_action` is `execute` or `continue` | `/clavain:work <plan_path>` | 1.0 | Bead state indicates execution |
 | Complexity = 1 (trivial) | `/clavain:work` | 0.9 | Too simple for full sprint |
 | No description AND no brainstorm artifact | `/clavain:sprint` | 0.9 | Needs brainstorm first |

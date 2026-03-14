@@ -32,6 +32,7 @@ func nextStep(phase string) string {
 	case "done":
 		return "done"
 	default:
+		fmt.Fprintf(os.Stderr, "WARNING: unknown phase %q — defaulting to brainstorm\n", phase)
 		return "brainstorm"
 	}
 }

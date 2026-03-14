@@ -158,7 +158,8 @@ func complexityLabelFromString(s string) string {
 }
 
 // cmdClassifyComplexity handles: classify-complexity <bead_id> <description...>
-// Checks ic run status for complexity override, then bd state, then falls back to heuristic.
+// Checks ic run status for complexity override, then bd state, then falls back to heuristic
+// with structural signals from the bead (type, children).
 func cmdClassifyComplexity(args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("usage: classify-complexity <bead_id> <description...>")
@@ -176,8 +177,27 @@ func cmdClassifyComplexity(args []string) error {
 		}
 	}
 
-	// Fall back to heuristic classification
+	// Heuristic classification from description text
 	score := classifyComplexity(description)
+
+	// Structural adjustments from bead metadata (if available)
+	if beadID != "" && bdAvailable() {
+		// Epic with no children → needs decomposition → bump complexity
+		beadType, _ := runBD("show", beadID, "--field=type")
+		if strings.TrimSpace(string(beadType)) == "epic" {
+			childCount, _ := runBD("children", beadID)
+			if strings.TrimSpace(string(childCount)) == "[]" || strings.TrimSpace(string(childCount)) == "" {
+				if score < 4 {
+					score = 4 // epics without children need full exploration
+				}
+			}
+		}
+		// Bug type → cap complexity at 3 (bugs have clear scope)
+		if strings.TrimSpace(string(beadType)) == "bug" && score > 3 {
+			score = 3
+		}
+	}
+
 	fmt.Println(score)
 	return nil
 }
