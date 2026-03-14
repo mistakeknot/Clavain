@@ -870,3 +870,101 @@ for agent in ['fd-safety','fd-architecture','fd-quality']:
     # So falls to phase model (sonnet)
     echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='sonnet'; assert d['fd-architecture']=='sonnet'"
 }
+
+# ═══════════════════════════════════════════════
+# Interspect override consumption tests
+# ═══════════════════════════════════════════════
+
+@test "override: missing file has no effect" {
+    _source_routing
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    export CLAVAIN_RUN_ID="test-run"  # Force bash path (skip ic fast path)
+    # No .claude/routing-overrides.json exists
+    run routing_resolve_model --agent fd-safety --phase executing --category review
+    [ "$status" -eq 0 ]
+    [ "$output" = "opus" ]  # executing + review = opus per routing.yaml
+    unset CLAVAIN_RUN_ID
+}
+
+@test "override: malformed file has no effect" {
+    _source_routing
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    mkdir -p "$TEST_DIR/.claude"
+    echo 'NOT-JSON{{{' > "$TEST_DIR/.claude/routing-overrides.json"
+    run routing_resolve_model --agent fd-safety --phase executing --category review
+    [ "$status" -eq 0 ]
+    [ "$output" = "opus" ]
+}
+
+@test "override: exclude action returns _EXCLUDED_" {
+    _source_routing
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    mkdir -p "$TEST_DIR/.claude"
+    cat > "$TEST_DIR/.claude/routing-overrides.json" << 'EOF'
+{"overrides":[{"agent":"fd-game-design","action":"exclude","reason":"not relevant"}]}
+EOF
+    run routing_resolve_model --agent fd-game-design --phase executing --category review
+    [ "$status" -eq 0 ]
+    [ "$output" = "_EXCLUDED_" ]
+}
+
+@test "override: approved model recommendation overrides default" {
+    _source_routing
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    mkdir -p "$TEST_DIR/.claude"
+    cat > "$TEST_DIR/.claude/routing-overrides.json" << 'EOF'
+{"overrides":[{"agent":"fd-safety","action":"propose","status":"approved","recommended_model":"haiku"}]}
+EOF
+    run routing_resolve_model --agent fd-safety --phase executing --category review
+    [ "$status" -eq 0 ]
+    # Safety floor may clamp this up, but override was applied
+    # fd-safety has min_model sonnet in agent-roles, so haiku gets clamped to sonnet
+    # Without agent-roles loaded, it should be haiku
+    [[ "$output" == "haiku" || "$output" == "sonnet" ]]
+}
+
+@test "override: pending proposal has no effect" {
+    _source_routing
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    mkdir -p "$TEST_DIR/.claude"
+    cat > "$TEST_DIR/.claude/routing-overrides.json" << 'EOF'
+{"overrides":[{"agent":"fd-safety","action":"propose","status":"pending_approval","recommended_model":"haiku"}]}
+EOF
+    run routing_resolve_model --agent fd-safety --phase executing --category review
+    [ "$status" -eq 0 ]
+    [ "$output" = "opus" ]  # Normal resolution, no override applied
+}
+
+@test "override: namespaced agent matches stripped name" {
+    _source_routing
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    mkdir -p "$TEST_DIR/.claude"
+    cat > "$TEST_DIR/.claude/routing-overrides.json" << 'EOF'
+{"overrides":[{"agent":"fd-game-design","action":"exclude","reason":"not relevant"}]}
+EOF
+    # Query with full namespace — should still match "fd-game-design"
+    run routing_resolve_model --agent "interflux:review:fd-game-design" --phase executing --category review
+    [ "$status" -eq 0 ]
+    [ "$output" = "_EXCLUDED_" ]
+}
+
+@test "override: routing.yaml agent override takes precedence over interspect override" {
+    # If routing.yaml has a per-agent override, it should win over interspect
+    mkdir -p "$TEST_DIR/config"
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: sonnet
+  overrides:
+    fd-safety: opus
+YAML
+    _source_routing "$TEST_DIR/config/routing.yaml"
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    mkdir -p "$TEST_DIR/.claude"
+    cat > "$TEST_DIR/.claude/routing-overrides.json" << 'EOF'
+{"overrides":[{"agent":"fd-safety","action":"propose","status":"approved","recommended_model":"haiku"}]}
+EOF
+    run routing_resolve_model --agent fd-safety
+    [ "$status" -eq 0 ]
+    [ "$output" = "opus" ]  # routing.yaml override wins
+}

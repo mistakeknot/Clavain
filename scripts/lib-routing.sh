@@ -506,14 +506,76 @@ _routing_read_calibration() {
   [[ -n "$result" ]] && echo "$result"
 }
 
+# --- Internal: read interspect routing overrides ---
+# Returns: "exclude" if agent is excluded, model name if agent has an approved
+# model recommendation, empty string if no matching override.
+# Reads .claude/routing-overrides.json (written by /interspect:propose + /interspect:approve).
+_routing_read_override() {
+  local agent="$1"
+  [[ -z "$agent" ]] && return 0
+
+  # Find override file
+  local ovr_path=""
+  local root
+  if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
+    ovr_path="${CLAUDE_PROJECT_DIR}/.claude/routing-overrides.json"
+  else
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || root=""
+    [[ -n "$root" ]] && ovr_path="${root}/.claude/routing-overrides.json"
+  fi
+  [[ -z "$ovr_path" || ! -f "$ovr_path" ]] && return 0
+
+  # Strip namespace prefix for lookup (same as calibration/safety floor)
+  local lookup_key="$agent"
+  if [[ "$lookup_key" == *:* ]]; then
+    lookup_key="${lookup_key##*:}"
+  fi
+
+  # Read and match override with jq (single pass)
+  # Only applies: (a) exclude actions, (b) approved model recommendations
+  # Skips: pending proposals, expired overrides
+  local result
+  result=$(jq -r --arg agent "$lookup_key" '
+    .overrides // [] | map(
+      select(.agent == $agent) |
+      select(
+        # Skip expired overrides
+        (.expires_at // null) == null or
+        (.expires_at > (now | todate))
+      )
+    ) | first //empty |
+    if .action == "exclude" then
+      "exclude"
+    elif .action == "propose" and .status == "approved" and .recommended_model != null then
+      .recommended_model |
+      select(. == "haiku" or . == "sonnet" or . == "opus")
+    else
+      empty
+    end
+  ' "$ovr_path" 2>/dev/null) || result=""
+
+  [[ -n "$result" ]] && echo "$result"
+}
+
 # --- Public: resolve subagent model ---
 # resolve_model MUST never return "inherit" — it is an internal sentinel
 # meaning "this level has no override, continue to next level."
+# Returns "_EXCLUDED_" if the agent is excluded by an interspect routing override.
+# Callers (flux-drive triage, quality-gates) MUST check for "_EXCLUDED_" and skip the agent.
 routing_resolve_model() {
   # Fast path: delegate to compiled Go router when available.
   # Skips fast path when CLAVAIN_RUN_ID is set (needs kernel-stored overrides
   # that the Go router doesn't support yet).
-  if [[ -z "${CLAVAIN_RUN_ID:-}" ]] && command -v ic >/dev/null 2>&1; then
+  # Also skips when routing-overrides.json exists (Go router doesn't support
+  # interspect overrides yet — bash implementation handles them).
+  local _ovr_check=""
+  if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
+    [[ -f "${CLAUDE_PROJECT_DIR}/.claude/routing-overrides.json" ]] && _ovr_check="yes"
+  else
+    local _ovr_root; _ovr_root=$(git rev-parse --show-toplevel 2>/dev/null) || _ovr_root=""
+    [[ -n "$_ovr_root" && -f "${_ovr_root}/.claude/routing-overrides.json" ]] && _ovr_check="yes"
+  fi
+  if [[ -z "${CLAVAIN_RUN_ID:-}" && -z "$_ovr_check" ]] && command -v ic >/dev/null 2>&1; then
     local _ic_result
     _ic_result=$(ic route model "$@" 2>/dev/null) && {
       echo "$_ic_result"
@@ -557,6 +619,20 @@ routing_resolve_model() {
   if [[ -z "$result" && -n "$agent" && -n "${_ROUTING_SA_OVERRIDE[$agent]:-}" ]]; then
     result="${_ROUTING_SA_OVERRIDE[$agent]}"
     [[ "$result" == "inherit" ]] && result=""
+  fi
+
+  # 1a. Interspect routing overrides (.claude/routing-overrides.json)
+  # Read fresh each call. Exclusions return "_EXCLUDED_" sentinel.
+  # Model overrides take precedence over calibration but not routing.yaml agent overrides.
+  if [[ -z "$result" && -n "$agent" ]]; then
+    local ovr_result
+    ovr_result=$(_routing_read_override "$agent") || ovr_result=""
+    if [[ "$ovr_result" == "exclude" ]]; then
+      echo "_EXCLUDED_"
+      return 0
+    elif [[ -n "$ovr_result" ]]; then
+      result="$ovr_result"
+    fi
   fi
 
   # 1b. Interspect routing calibration (B3)
