@@ -34,15 +34,26 @@ ls interverse/*/CLAUDE.md 2>/dev/null | xargs grep -li "<keywords>" 2>/dev/null
 
 If an external tool has an "adopt" verdict for this domain, default to integration (install + wire up) over reimplementation. Surface to user before proceeding.
 
-**Institutional learnings:** Before writing any tasks, spawn a learnings-researcher to surface relevant prior solutions:
+**Institutional learnings (deterministic):** Before writing any tasks, search for relevant prior solutions without spawning an LLM agent:
 
-1. Launch `Task(subagent_type="interflux:learnings-researcher")` with the feature description/spec as the prompt
-2. Read the returned learnings
-3. If **strong or moderate** relevance matches found:
+1. **Extract 2-4 keywords** from the feature description/spec (module names, problem type, component names)
+2. **Search docs/solutions/** for matching frontmatter:
+   ```bash
+   # Parallel Grep for each keyword against title/tags/module fields
+   Grep: pattern="(title|tags|module):.*<keyword>" path=docs/solutions/ output_mode=files_with_matches -i=true
+   ```
+   Also read `docs/solutions/patterns/critical-patterns.md` if it exists.
+3. **Search past sessions** via CASS (if available):
+   ```bash
+   cass search "<keywords>" --limit 3 --json --fast-only 2>/dev/null
+   ```
+4. If **matches found** from either source:
+   - Read frontmatter (limit:30 lines) of matching docs/solutions/ files
    - Add a `## Prior Learnings` section to the plan document header (after Architecture, before the first task)
    - List each relevant learning: file path, key insight, and how it affects the plan
    - Encode any must-know gotchas directly into the relevant task steps (e.g., "Note: see docs/solutions/patterns/wal-protocol-completeness-20260216.md — every write path needs WAL protection")
-4. If no relevant learnings found: proceed without mention
+5. If no matches from either source: proceed without mention
+6. **Fallback**: If both `docs/solutions/` and `cass` are unavailable, spawn `Task(subagent_type="interflux:learnings-researcher")` as before
 
 ## Bite-Sized Task Granularity
 

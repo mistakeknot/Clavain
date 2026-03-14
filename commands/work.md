@@ -41,13 +41,33 @@ These rules are non-negotiable for this orchestration command:
    - Get user approval to proceed
    - **Do not skip this** - better to ask questions now than build the wrong thing
 
-1b. **Check for Prior Learnings**
+1b. **Check for Prior Learnings (deterministic)**
 
    If the plan does NOT contain a `## Prior Learnings` section (meaning it wasn't written via the `writing-plans` skill, or no learnings were found at plan time):
-   - Spawn `Task(subagent_type="interflux:learnings-researcher")` with keywords from the plan title and goal
+
+   Run a deterministic search — no LLM call needed:
+
+   a. **Extract keywords** from the plan title and goal (2-4 key terms — module names, problem type, component names).
+
+   b. **Search docs/solutions/** for matching frontmatter:
+      ```bash
+      # Search title/tags/module fields for each keyword (parallel Grep calls)
+      Grep: pattern="(title|tags|module):.*<keyword>" path=docs/solutions/ output_mode=files_with_matches -i=true
+      ```
+      Also read `docs/solutions/patterns/critical-patterns.md` if it exists.
+
+   c. **Search past sessions** via CASS (if available):
+      ```bash
+      cass search "<keywords>" --limit 3 --json --fast-only 2>/dev/null
+      ```
+      This returns relevant past sessions in <50ms without spawning an agent.
+
+   d. **Present results**: If matches found in either source, read the frontmatter (limit:30 lines) of matching docs/solutions/ files and display a brief summary. If CASS returned session hits, mention the session IDs for context.
+
    - If relevant learnings found: present key insights before proceeding, and note them in conversation context
-   - If no relevant learnings found: proceed silently
+   - If no matches from either source: proceed silently
    - This step is advisory — never blocks execution
+   - **Fallback**: If both `docs/solutions/` and `cass` are unavailable, spawn `Task(subagent_type="interflux:learnings-researcher")` as before
 
 2. **Setup Environment**
 
