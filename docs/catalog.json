@@ -1,9 +1,9 @@
 {
-  "generated": "2026-03-10T21:01:25Z",
+  "generated": "2026-03-14T01:12:05Z",
   "counts": {
     "skills": 17,
     "agents": 6,
-    "commands": 47,
+    "commands": 48,
     "hooks": 10,
     "mcp_servers": 0,
     "review": 2,
@@ -112,6 +112,10 @@
     }
   ],
   "commands": [
+    {
+      "name": "bead-sweep",
+      "description": "Scan open beads for stale trackers that are already implemented \u2014 deterministic checks first, LLM verification second"
+    },
     {
       "name": "brainstorm",
       "description": "Collaborative brainstorm workflow \u2014 explore ideas through structured dialogue (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan."

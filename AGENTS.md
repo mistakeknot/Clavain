@@ -31,7 +31,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 17 skills, 6 agents, 47 commands, 10 hooks, 0 MCP servers |
+| Components | 17 skills, 6 agents, 48 commands, 10 hooks, 0 MCP servers |
 | License | MIT |
 | Layer | L2 (OS) — depends on Intercore (L1), consumed by Autarch (L3) |
 
@@ -67,7 +67,7 @@ See `agents/operational-guides.md` in the Demarch root for the full protocol.
 
 ```bash
 echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 17
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 47
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 48
 ```
 
 See [agents/development.md](agents/development.md) for the full validation checklist.

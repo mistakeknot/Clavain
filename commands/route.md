@@ -119,6 +119,7 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
    - **Stale-parent entries** (action: "verify_done"): Label format: `"Verify (parent closed): <bead-id> — <title> (P<priority>, parent: <parent_closed_epic>)"`
    - **Orphan entries** (action: "create_bead", id: null): Label format: `"Link orphan: <title> (<type>)"`
    - **Interject discovery entries** (action: "review_discovery"): Label format: `"Review discovery: <bead-id> — <clean_title> (<discovery_source>, score <discovery_score>)"`. Strip `[interject] ` prefix from title. If `discovery_source` or `discovery_score` are null, omit the parenthetical.
+   - **Possibly-done beads**: If any result has a `possibly_done` field (non-null string), display a notice after the options list: `"⚠ Sweep detected N bead(s) that may already be done — run /bead-sweep to verify: <id1> (<reason1>), <id2> (<reason2>)"`. Do NOT include these as selectable options — they're informational. The user can run `/bead-sweep` to verify and close them.
 
 4. **Pre-flight check:** Before routing, verify the selected bead still exists:
    ```bash
