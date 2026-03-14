@@ -490,19 +490,10 @@ ${PROMPT}"
   fi
 fi
 
-# Auto-detect bwrap sandbox failure (Ubuntu 24.04 AppArmor restriction).
-# If bwrap can't create loopback, Codex sandbox modes will fail silently.
-# Auto-add bypass flag so delegation doesn't break on affected systems.
-_has_bypass=false
-for _arg in "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"; do
-  [[ "$_arg" == "--dangerously-bypass-approvals-and-sandbox" ]] && _has_bypass=true
-done
-if [[ "$_has_bypass" == false ]] && command -v bwrap &>/dev/null; then
-  if ! bwrap --ro-bind / / --dev /dev true 2>/dev/null; then
-    echo "Note: bwrap sandbox unavailable (AppArmor restriction) — auto-adding sandbox bypass" >&2
-    EXTRA_ARGS+=("--dangerously-bypass-approvals-and-sandbox")
-  fi
-fi
+# NOTE: Codex v0.100.0+ uses Landlock+seccomp as the default Linux sandbox,
+# NOT bwrap. The previous bwrap auto-bypass was removed because it disabled
+# a working sandbox. If Landlock is unavailable (kernel < 5.13), Codex falls
+# back to unsandboxed mode on its own — no intervention needed from dispatch.sh.
 
 # Build codex exec command
 CMD=(codex exec)
