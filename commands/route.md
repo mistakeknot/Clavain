@@ -202,6 +202,15 @@ Check in order — first match wins:
 | No description AND no brainstorm artifact | `/clavain:sprint` | 0.9 | Needs brainstorm first |
 | Complexity = 5 (research) | `/clavain:sprint` | 0.85 | Needs full exploration |
 | `child_count > 0` (epic with children) | `/clavain:sprint` | 0.85 | Epic needs orchestration |
+| `issue_type` is `bug` | `/clavain:work` | 0.9 | Bugs have clear scope — fix the thing |
+| `issue_type` is `task` AND complexity <= 3 | `/clavain:work` | 0.85 | Scoped task, moderate complexity |
+| `issue_type` is `decision` | `/clavain:sprint` | 0.85 | Decisions need brainstorm/exploration |
+| `issue_type` is `epic` AND `child_count == 0` | `/clavain:sprint` | 0.85 | Epic needs decomposition first |
+| Description matches `[research]`, `investigate`, `explore`, `assess`, `evaluate` (case-insensitive) | `/clavain:sprint` | 0.85 | Research work needs full lifecycle |
+| Complexity = 2 | `/clavain:work` | 0.85 | Simple enough for direct execution |
+| Complexity = 4 | `/clavain:sprint` | 0.85 | Complex enough for full lifecycle |
+| Has brainstorm but no plan | `/clavain:sprint` | 0.85 | Explored but needs planning |
+| `issue_type` is `feature` AND complexity = 3 | `/clavain:sprint` | 0.85 | Moderate features need brainstorm |
 
 If confidence >= 0.8: display verdict and skip to **4c: Dispatch**.
 
