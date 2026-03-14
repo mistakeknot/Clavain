@@ -635,6 +635,46 @@ _jsonl_parser() {
   '
 }
 
+# Post-dispatch validation: check modified files scope and scan for secrets.
+# Runs after Codex completes. Warnings only — does not block the dispatch exit.
+_post_dispatch_validate() {
+    local workdir="${1:-.}"
+    [[ -d "$workdir/.git" ]] || return 0
+
+    local changed
+    changed=$(git -C "$workdir" diff --name-only HEAD 2>/dev/null) || return 0
+    [[ -z "$changed" ]] && return 0
+
+    local file_count
+    file_count=$(echo "$changed" | wc -l)
+
+    # 1. Scope check: warn if files outside CWD were modified (shouldn't happen with sandbox)
+    local out_of_scope=0
+    while IFS= read -r f; do
+        if [[ "$f" == ../* || "$f" == /* ]]; then
+            echo "Warning: post-dispatch: file outside workspace modified: $f" >&2
+            out_of_scope=$((out_of_scope + 1))
+        fi
+    done <<< "$changed"
+
+    # 2. Secret scan: check diff for common secret patterns
+    local diff_content
+    diff_content=$(git -C "$workdir" diff HEAD 2>/dev/null) || return 0
+
+    local secret_patterns='(AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY-----|ghp_[a-zA-Z0-9]{36}|xoxb-[0-9]+-[a-zA-Z0-9]+)'
+    local secret_hits
+    secret_hits=$(echo "$diff_content" | grep -cE "$secret_patterns" 2>/dev/null) || secret_hits=0
+
+    if [[ "$secret_hits" -gt 0 ]]; then
+        echo "Warning: post-dispatch: $secret_hits potential secret(s) detected in diff — review before committing" >&2
+    fi
+
+    # 3. Log validation summary
+    if [[ "$out_of_scope" -gt 0 || "$secret_hits" -gt 0 ]]; then
+        echo "Post-dispatch validation: $file_count files changed, $out_of_scope out-of-scope, $secret_hits secret warnings" >&2
+    fi
+}
+
 # Extract verdict header from agent output and write .verdict sidecar.
 # The verdict is the last block delimited by "--- VERDICT ---" ... "---".
 # If no verdict block found, synthesize one from the output's last lines.
@@ -699,6 +739,9 @@ if [[ "$HAS_GAWK" == true ]]; then
   # Extract verdict sidecar from output
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
 
+  # Post-dispatch validation: scope check + secret scan
+  _post_dispatch_validate "$WORKDIR"
+
   # Keep structured sideband in sync even when parser wrote only legacy state.
   _dispatch_sync_interband_from_legacy
 
@@ -712,4 +755,7 @@ else
 
   # Extract verdict sidecar from output
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
+
+  # Post-dispatch validation: scope check + secret scan
+  _post_dispatch_validate "$WORKDIR"
 fi
