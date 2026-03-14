@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -75,6 +76,17 @@ var defaultActions = map[string]any{
 	"shipping":      map[string]string{"command": "/clavain:reflect", "mode": "interactive"},
 }
 
+// Pre-marshalled JSON for constant data — avoids per-call json.Marshal overhead.
+var (
+	defaultPhasesJSON  []byte
+	defaultActionsJSON []byte
+)
+
+func init() {
+	defaultPhasesJSON, _ = json.Marshal(defaultPhases)
+	defaultActionsJSON, _ = json.Marshal(defaultActions)
+}
+
 // cmdSprintCreate creates a sprint: bd epic + ic run, links them.
 // Args: <title> [complexity] [lane]
 // Output: bead ID (plain text) on stdout.
@@ -136,18 +148,15 @@ func cmdSprintCreate(args []string) error {
 	// Build ic run create args
 	tokenBudget := defaultBudget(complexity)
 
-	phasesJSON, _ := json.Marshal(defaultPhases)
-	actionsJSON, _ := json.Marshal(defaultActions)
-
 	icArgs := []string{
 		"run", "create",
 		"--project=" + mustGetwd(),
 		"--goal=" + title,
 		"--complexity=" + strconv.Itoa(complexity),
-		"--phases=" + string(phasesJSON),
+		"--phases=" + string(defaultPhasesJSON),
 		"--scope-id=" + scopeID,
 		"--token-budget=" + strconv.FormatInt(tokenBudget, 10),
-		"--actions=" + string(actionsJSON),
+		"--actions=" + string(defaultActionsJSON),
 	}
 
 	runIDOut, err := runIC(icArgs...)
@@ -217,62 +226,94 @@ func cmdSprintCreate(args []string) error {
 // cmdSprintFindActive finds active sprint runs.
 // Output: JSON array [{id, title, phase, run_id}] or "[]"
 func cmdSprintFindActive(args []string) error {
-	if !icAvailable() {
-		fmt.Print("[]")
-		return nil
-	}
-
+	// Skip the icAvailable() health-check subprocess — if ic is missing,
+	// runICJSON will fail and we fall through to the empty-array return.
 	var runs []Run
 	err := runICJSON(&runs, "run", "list", "--active")
-	if err != nil {
+	if err != nil || len(runs) == 0 {
 		fmt.Print("[]")
 		return nil
 	}
 
-	results := make([]ActiveSprint, 0, len(runs))
-	for i, run := range runs {
-		if i >= 100 {
-			break
-		}
+	// Cap to 100 runs and filter empty scope IDs up front.
+	candidates := runs
+	if len(candidates) > 100 {
+		candidates = candidates[:100]
+	}
+
+	type runResult struct {
+		index  int
+		sprint *ActiveSprint // nil means skip (closed or no scope)
+	}
+
+	ch := make(chan runResult, len(candidates))
+	var wg sync.WaitGroup
+
+	for i, run := range candidates {
 		if run.ScopeID == "" {
 			continue
 		}
+		wg.Add(1)
+		go func(idx int, r Run) {
+			defer wg.Done()
 
-		// Check if the bead is closed — if so, auto-cancel the stale ic run
-		if isBeadClosed(run.ScopeID) {
-			_, _ = runIC("run", "cancel", run.ID)
-			continue
-		}
-
-		title := run.Goal
-		if title == "" {
-			// Try to get title from bd
-			out, err := runBD("show", run.ScopeID)
-			if err == nil {
-				line := strings.SplitN(string(out), "\n", 2)[0]
-				// Parse: strip prefix up to "· " and suffix from " ["
-				if idx := strings.Index(line, "· "); idx >= 0 {
-					line = line[idx+len("· "):]
-				}
-				if idx := strings.Index(line, " ["); idx >= 0 {
-					line = line[:idx]
-				}
-				line = strings.TrimSpace(line)
-				if line != "" {
-					title = line
-				}
+			// Check if the bead is closed — if so, auto-cancel the stale ic run
+			if isBeadClosed(r.ScopeID) {
+				_, _ = runIC("run", "cancel", r.ID)
+				ch <- runResult{index: idx}
+				return
 			}
+
+			title := r.Goal
 			if title == "" {
-				title = "Untitled"
+				// Try to get title from bd
+				out, err := runBD("show", r.ScopeID)
+				if err == nil {
+					line := strings.SplitN(string(out), "\n", 2)[0]
+					if idx := strings.Index(line, "· "); idx >= 0 {
+						line = line[idx+len("· "):]
+					}
+					if idx := strings.Index(line, " ["); idx >= 0 {
+						line = line[:idx]
+					}
+					line = strings.TrimSpace(line)
+					if line != "" {
+						title = line
+					}
+				}
+				if title == "" {
+					title = "Untitled"
+				}
 			}
-		}
 
-		results = append(results, ActiveSprint{
-			ID:    run.ScopeID,
-			Title: title,
-			Phase: run.Phase,
-			RunID: run.ID,
-		})
+			ch <- runResult{
+				index: idx,
+				sprint: &ActiveSprint{
+					ID:    r.ScopeID,
+					Title: title,
+					Phase: r.Phase,
+					RunID: r.ID,
+				},
+			}
+		}(i, run)
+	}
+
+	// Close channel when all goroutines complete.
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	// Collect results, preserving original order.
+	ordered := make([]*ActiveSprint, len(candidates))
+	for rr := range ch {
+		ordered[rr.index] = rr.sprint
+	}
+	results := make([]ActiveSprint, 0, len(candidates))
+	for _, sp := range ordered {
+		if sp != nil {
+			results = append(results, *sp)
+		}
 	}
 
 	out, err := json.Marshal(results)
@@ -307,59 +348,84 @@ func cmdSprintReadState(args []string) error {
 		return nil
 	}
 
-	// Get run status
-	var run Run
-	err = runICJSON(&run, "run", "status", runID)
-	if err != nil {
+	// Fan out all 5 ic queries in parallel — they only depend on runID.
+	var (
+		run          Run
+		runErr       error
+		artifactList []Artifact
+		events       []RunEvent
+		agents       []RunAgent
+		tokenAgg     TokenAgg
+		tokenErr     error
+		wgState      sync.WaitGroup
+	)
+
+	wgState.Add(5)
+
+	go func() {
+		defer wgState.Done()
+		runErr = runICJSON(&run, "run", "status", runID)
+	}()
+
+	go func() {
+		defer wgState.Done()
+		runICJSON(&artifactList, "run", "artifact", "list", runID) //nolint: errcheck
+	}()
+
+	go func() {
+		defer wgState.Done()
+		eventsOut, err := runIC("--json", "run", "events", runID)
+		if err == nil && len(eventsOut) > 0 {
+			json.Unmarshal(eventsOut, &events) //nolint: errcheck
+		}
+	}()
+
+	go func() {
+		defer wgState.Done()
+		runICJSON(&agents, "run", "agent", "list", runID) //nolint: errcheck
+	}()
+
+	go func() {
+		defer wgState.Done()
+		tokenErr = runICJSON(&tokenAgg, "run", "tokens", runID)
+	}()
+
+	wgState.Wait()
+
+	if runErr != nil {
 		fmt.Print("{}")
 		return nil
 	}
 
-	// Artifacts from ic run artifact list
-	artifacts := map[string]string{}
-	var artifactList []Artifact
-	err = runICJSON(&artifactList, "run", "artifact", "list", runID)
-	if err == nil {
-		for _, a := range artifactList {
-			if a.Type != "" && a.Path != "" {
-				artifacts[a.Type] = a.Path
-			}
+	// Assemble artifacts map
+	artifacts := make(map[string]string, len(artifactList))
+	for _, a := range artifactList {
+		if a.Type != "" && a.Path != "" {
+			artifacts[a.Type] = a.Path
 		}
 	}
 
-	// Phase history from ic run events
-	history := map[string]string{}
-	var events []RunEvent
-	eventsOut, err := runIC("--json", "run", "events", runID)
-	if err == nil && len(eventsOut) > 0 {
-		if json.Unmarshal(eventsOut, &events) == nil {
-			for _, ev := range events {
-				if ev.EventType == "advance" && ev.ToPhase != "" {
-					history[ev.ToPhase+"_at"] = ev.CreatedAt
-				}
-			}
+	// Assemble phase history
+	history := make(map[string]string, len(events))
+	for _, ev := range events {
+		if ev.EventType == "advance" && ev.ToPhase != "" {
+			history[ev.ToPhase+"_at"] = ev.CreatedAt
 		}
 	}
 
-	// Active session from agent tracking
+	// Find active session
 	activeSession := ""
-	var agents []RunAgent
-	err = runICJSON(&agents, "run", "agent", "list", runID)
-	if err == nil {
-		for _, a := range agents {
-			if a.Status == "active" {
-				activeSession = a.Name
-				break
-			}
+	for _, a := range agents {
+		if a.Status == "active" {
+			activeSession = a.Name
+			break
 		}
 	}
 
 	// Token budget and spend
 	tokenBudget := run.TokenBudget
 	var tokensSpent int64
-	var tokenAgg TokenAgg
-	err = runICJSON(&tokenAgg, "run", "tokens", runID)
-	if err == nil {
+	if tokenErr == nil {
 		tokensSpent = tokenAgg.InputTokens + tokenAgg.OutputTokens
 	}
 
