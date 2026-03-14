@@ -129,6 +129,14 @@ if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
             companion_context="${companion_context}\\n- beads doctor: ${beads_issues} issue(s) — run \`bd doctor --fix\`"
         fi
     fi
+
+    # Shadow tracker detection — warn about work tracked outside beads
+    _shadow_count=$(find . -path '*/todos/*.md' -not -path './.git/*' -not -path './node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
+    _pending_count=$(find . -name 'pending-beads*.md' -not -path './.git/*' 2>/dev/null | wc -l | tr -d ' ')
+    _shadow_total=$((_shadow_count + _pending_count))
+    if [[ "$_shadow_total" -gt 0 ]]; then
+        companion_context="${companion_context}\\n- shadow trackers: ${_shadow_total} file(s) tracking work outside beads — run \`/bead-sweep\` to migrate"
+    fi
 fi
 
 # Oracle

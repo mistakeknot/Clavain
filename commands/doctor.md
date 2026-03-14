@@ -198,7 +198,53 @@ else
 fi
 ```
 
-### 3a. Zombie Bead Detection (auto-fix)
+### 3a. Shadow Tracker Detection
+
+Find markdown files that track work outside beads — these drift and cause duplicate effort. Scans for TODO files with status frontmatter and pending-beads lists.
+
+```bash
+if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
+  _shadow_count=0
+  _shadow_files=""
+
+  # Pattern 1: directories named "todos" containing markdown with status frontmatter
+  while IFS= read -r _f; do
+    [ -z "$_f" ] && continue
+    if head -10 "$_f" 2>/dev/null | grep -qE '^status:\s*(pending|open|done|complete|ready|in_progress)'; then
+      _shadow_files="${_shadow_files}  - ${_f}\n"
+      _shadow_count=$((_shadow_count + 1))
+    fi
+  done < <(find . -path '*/todos/*.md' -not -path './.git/*' -not -path './node_modules/*' 2>/dev/null)
+
+  # Pattern 2: pending-beads files anywhere
+  while IFS= read -r _f; do
+    [ -z "$_f" ] && continue
+    _shadow_files="${_shadow_files}  - ${_f}\n"
+    _shadow_count=$((_shadow_count + 1))
+  done < <(find . -name 'pending-beads*.md' -not -path './.git/*' 2>/dev/null)
+
+  # Pattern 3: markdown files with status frontmatter in docs/ directories
+  while IFS= read -r _f; do
+    [ -z "$_f" ] && continue
+    # Skip files already caught by Pattern 1
+    echo "$_f" | grep -q '/todos/' && continue
+    if head -10 "$_f" 2>/dev/null | grep -qE '^status:\s*(pending|open|done|complete|ready|in_progress)'; then
+      _shadow_files="${_shadow_files}  - ${_f}\n"
+      _shadow_count=$((_shadow_count + 1))
+    fi
+  done < <(find . -path '*/docs/*' -name '*.md' -not -path './.git/*' -not -path './node_modules/*' -newer .beads/config 2>/dev/null | head -50)
+
+  if [ "$_shadow_count" -eq 0 ]; then
+    echo "shadow trackers: PASS (none found)"
+  else
+    echo "shadow trackers: WARN (${_shadow_count} files tracking work outside beads)"
+    printf "%b" "$_shadow_files"
+    echo "  Fix: Run /bead-sweep to migrate, or delete if already tracked in beads"
+  fi
+fi
+```
+
+### 3b. Zombie Bead Detection (auto-fix)
 
 Finds open beads that are actually done. Two detection patterns:
 
@@ -206,6 +252,8 @@ Finds open beads that are actually done. Two detection patterns:
 2. **Orphaned children**: Open beads whose parent bead is closed
 
 This check auto-closes zombies it finds (doctor is read-only for most checks, but zombie closure is safe and high-value — leaving them open pollutes the ready queue and causes duplicate work).
+
+> Section numbering note: 3a is shadow tracker detection (above), 3b onward continues the beads checks.
 
 ```bash
 if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
@@ -475,6 +523,7 @@ If any check shows FAIL or WARN, add a **Recommendations** section with one-line
 - config FAIL → "Fix the YAML syntax error in the named config file — features using it will silently degrade"
 - hook syntax WARN → "Check the named hook files for bash syntax errors"
 - beads FAIL (hung) → "Run `bash .beads/recover.sh` to recover from a stuck Dolt server"
+- shadow trackers WARN → "Found N files tracking work outside beads (todos/*.md, pending-beads.md, etc.). Run `/bead-sweep` to migrate them to beads, or delete if already tracked."
 - zombies FIXED → "Auto-closed N zombie beads. Root cause: prior sessions completed work but didn't run the close protocol. Run `bd list --status=closed` to review."
 - .clavain not initialized → "Run `/clavain:clavain-init` to set up agent memory"
 - .clavain scratch not gitignored → "Run `/clavain:clavain-init` to fix gitignore"

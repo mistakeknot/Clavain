@@ -21,6 +21,10 @@ python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manif
 python3 -c "import json; json.load(open('hooks/hooks.json'))"           # Hooks JSON check
 ```
 
+## Work Tracking
+
+All work tracking goes through beads (`bd create`). Never create TODO files with status frontmatter, pending-beads lists, or markdown checklists for tracking work. If beads is unavailable, note items in a single `BLOCKED.md` and convert when it recovers.
+
 ## Design Decisions (Do Not Re-Ask)
 
 - Namespace: `clavain:` (not superpowers, not compound-engineering)
