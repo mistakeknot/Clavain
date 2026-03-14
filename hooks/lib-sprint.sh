@@ -33,13 +33,27 @@ export GATES_PROJECT_DIR="$SPRINT_LIB_PROJECT_DIR"
 # ─── ic availability guard ──────────────────────────────────────
 # Sprint operations require intercore. Non-sprint beads workflows are unaffected.
 declare -A _SPRINT_RUN_ID_CACHE  # bead_id → run_id
+_SPRINT_IC_AVAILABLE=""  # cache: "yes", "no", or "" (unchecked)
 
 sprint_require_ic() {
-    if ! intercore_available; then
+    # Use sprint-level cache to avoid repeated ic health checks.
+    # intercore_available resets INTERCORE_BIN on failure, causing
+    # the expensive ic health subprocess on every call. Cache the result.
+    if [[ "$_SPRINT_IC_AVAILABLE" == "yes" ]]; then return 0; fi
+    if [[ "$_SPRINT_IC_AVAILABLE" == "no" ]]; then return 1; fi
+    if intercore_available; then
+        _SPRINT_IC_AVAILABLE="yes"
+        return 0
+    else
+        _SPRINT_IC_AVAILABLE="no"
         log_error "Sprint requires intercore (ic). Run install.sh or /clavain:setup"
         return 1
     fi
-    return 0
+}
+
+# Invalidate the ic availability cache (call after ic init/setup)
+sprint_invalidate_ic_cache() {
+    _SPRINT_IC_AVAILABLE=""
 }
 
 # Resolve bead_id → ic run_id. Caches result in _SPRINT_RUN_ID_CACHE.
@@ -199,37 +213,51 @@ sprint_create() {
 # Find active sprint runs. Output: JSON array [{id, title, phase, run_id}] or "[]"
 # REQUIRES: intercore available.
 sprint_find_active() {
-    sprint_require_ic || { echo "[]"; return 0; }
+    # Fast-fail via sprint-level cache: avoids subprocess if ic already known unavailable
+    if [[ "$_SPRINT_IC_AVAILABLE" == "no" ]]; then echo "[]"; return 0; fi
 
     local runs_json
-    runs_json=$(intercore_run_list "--active") || { echo "[]"; return 0; }
+    runs_json=$(intercore_run_list "--active") || {
+        _SPRINT_IC_AVAILABLE="no"
+        echo "[]"
+        return 0
+    }
 
-    local results="[]"
-    local count
-    count=$(echo "$runs_json" | jq 'length' 2>/dev/null) || count=0
+    # Fast exit: empty or trivially-empty JSON avoids jq subprocess entirely
+    if [[ -z "$runs_json" || "$runs_json" == "[]" || "$runs_json" == "null" ]]; then
+        echo "[]"
+        return 0
+    fi
 
-    local i=0
-    while [[ $i -lt $count && $i -lt 100 ]]; do
-        local run_id scope_id phase goal
-        run_id=$(echo "$runs_json" | jq -r ".[$i].id // empty")
-        scope_id=$(echo "$runs_json" | jq -r ".[$i].scope_id // empty")
-        phase=$(echo "$runs_json" | jq -r ".[$i].phase // empty")
-        goal=$(echo "$runs_json" | jq -r ".[$i].goal // empty")
+    # Single jq pass: extract all fields and build result array at once.
+    # Items missing scope_id are filtered out; items missing goal get empty title
+    # (patched below via bd show). This replaces O(N) subprocess calls with 1.
+    local results
+    results=$(echo "$runs_json" | jq -c '
+        [limit(100; .[]) | select(.scope_id != null and .scope_id != "") |
+         {id: .scope_id, title: (.goal // ""), phase: (.phase // ""), run_id: (.id // "")}]
+    ' 2>/dev/null) || { echo "[]"; return 0; }
 
-        if [[ -n "$scope_id" ]]; then
-            local title="$goal"
+    [[ -z "$results" || "$results" == "[]" || "$results" == "null" ]] && { echo "[]"; return 0; }
+
+    # Patch empty titles via bd show (rare — only when goal is missing).
+    # Check with bash string match first to avoid jq subprocess when no titles are empty.
+    if [[ "$results" == *'"title":""'* ]]; then
+        local count
+        count=$(echo "$results" | jq 'length' 2>/dev/null) || count=0
+        local i=0
+        while [[ $i -lt $count ]]; do
+            local title
+            title=$(echo "$results" | jq -r ".[$i].title" 2>/dev/null)
             if [[ -z "$title" ]]; then
+                local scope_id
+                scope_id=$(echo "$results" | jq -r ".[$i].id" 2>/dev/null)
                 title=$(bd show "$scope_id" 2>/dev/null | head -1 | sed 's/^[^·]*· //' | sed 's/ *\[.*$//' 2>/dev/null) || title="Untitled"
+                results=$(echo "$results" | jq --argjson idx "$i" --arg t "$title" '.[$idx].title = $t')
             fi
-            results=$(echo "$results" | jq \
-                --arg id "$scope_id" \
-                --arg title "$title" \
-                --arg phase "$phase" \
-                --arg run_id "$run_id" \
-                '. + [{id: $id, title: $title, phase: $phase, run_id: $run_id}]')
-        fi
-        i=$((i + 1))
-    done
+            i=$((i + 1))
+        done
+    fi
 
     echo "$results"
 }
@@ -248,47 +276,76 @@ sprint_read_state() {
     local run_json
     run_json=$(intercore_run_status "$run_id") || { echo "{}"; return 0; }
 
-    local phase complexity auto_advance
-    phase=$(echo "$run_json" | jq -r '.phase // ""')
-    complexity=$(echo "$run_json" | jq -r '.complexity // 3')
-    auto_advance=$(echo "$run_json" | jq -r '.auto_advance // true')
+    # Single jq call to extract all fields from run_json (was 4 separate calls)
+    local _run_fields
+    _run_fields=$(echo "$run_json" | jq -r '
+        [(.phase // ""), (.complexity // 3 | tostring), (.auto_advance // true | tostring), (.token_budget // 0 | tostring)]
+        | join("\t")' 2>/dev/null) || _run_fields=""
+    local phase complexity auto_advance token_budget
+    IFS=$'\t' read -r phase complexity auto_advance token_budget <<< "$_run_fields"
+    phase="${phase:-}"
+    complexity="${complexity:-3}"
+    auto_advance="${auto_advance:-true}"
+    token_budget="${token_budget:-0}"
 
-    # Artifacts from ic run artifact list
+    # Launch 3 independent ic queries in parallel (artifacts, events, agents, tokens)
+    local _tmp_dir
+    _tmp_dir=$(mktemp -d) || { echo "{}"; return 0; }
+
+    # Artifact list
+    "$INTERCORE_BIN" run artifact list "$run_id" --json >"$_tmp_dir/artifacts" 2>/dev/null &
+    local _pid_art=$!
+
+    # Events
+    "$INTERCORE_BIN" run events "$run_id" --json >"$_tmp_dir/events" 2>/dev/null &
+    local _pid_evt=$!
+
+    # Agent list (via wrapper that checks intercore_available — already cached)
+    intercore_run_agent_list "$run_id" >"$_tmp_dir/agents" 2>/dev/null &
+    local _pid_agt=$!
+
+    # Tokens
+    "$INTERCORE_BIN" run tokens "$run_id" --json >"$_tmp_dir/tokens" 2>/dev/null &
+    local _pid_tok=$!
+
+    # Wait for all
+    wait "$_pid_art" "$_pid_evt" "$_pid_agt" "$_pid_tok" 2>/dev/null
+
+    # Process artifacts
     local artifacts="{}"
     local artifact_json
-    artifact_json=$("$INTERCORE_BIN" run artifact list "$run_id" --json 2>/dev/null) || artifact_json="[]"
-    if [[ "$artifact_json" != "[]" ]]; then
-        artifacts=$(echo "$artifact_json" | jq '[.[] | {(.type): .path}] | add // {}')
+    artifact_json=$(<"$_tmp_dir/artifacts") 2>/dev/null || artifact_json="[]"
+    if [[ -n "$artifact_json" && "$artifact_json" != "[]" ]]; then
+        artifacts=$(echo "$artifact_json" | jq '[.[] | {(.type): .path}] | add // {}' 2>/dev/null) || artifacts="{}"
     fi
 
-    # Phase history from ic run events (Amendment E: correct field names)
+    # Process phase history (Amendment E: correct field names)
     local history="{}"
     local events_json
-    events_json=$("$INTERCORE_BIN" run events "$run_id" --json 2>/dev/null) || events_json=""
+    events_json=$(<"$_tmp_dir/events") 2>/dev/null || events_json=""
     if [[ -n "$events_json" ]]; then
         history=$(echo "$events_json" | jq '
             [.[] | select(.event_type == "advance") |
              {((.to_phase // "") + "_at"): (.created_at // "")}] | add // {}' 2>/dev/null) || history="{}"
     fi
 
-    # Active session (agent tracking)
+    # Process active session (agent tracking)
     local active_session=""
     local agents_json
-    agents_json=$(intercore_run_agent_list "$run_id") || agents_json="[]"
-    if [[ "$agents_json" != "[]" ]]; then
-        active_session=$(echo "$agents_json" | jq -r '[.[] | select(.status == "active")] | .[0].name // ""')
+    agents_json=$(<"$_tmp_dir/agents") 2>/dev/null || agents_json="[]"
+    if [[ -n "$agents_json" && "$agents_json" != "[]" ]]; then
+        active_session=$(echo "$agents_json" | jq -r '[.[] | select(.status == "active")] | .[0].name // ""' 2>/dev/null) || active_session=""
     fi
 
-    # Token budget and spend (Amendment E: correct field names)
-    local token_budget tokens_spent
-    token_budget=$(echo "$run_json" | jq -r '.token_budget // 0')
+    # Process tokens
+    local tokens_spent="0"
     local token_agg
-    token_agg=$("$INTERCORE_BIN" run tokens "$run_id" --json 2>/dev/null) || token_agg=""
+    token_agg=$(<"$_tmp_dir/tokens") 2>/dev/null || token_agg=""
     if [[ -n "$token_agg" ]]; then
-        tokens_spent=$(echo "$token_agg" | jq -r '(.input_tokens // 0) + (.output_tokens // 0)')
-    else
-        tokens_spent="0"
+        tokens_spent=$(echo "$token_agg" | jq -r '(.input_tokens // 0) + (.output_tokens // 0)' 2>/dev/null) || tokens_spent="0"
     fi
+
+    rm -rf "$_tmp_dir" 2>/dev/null
 
     jq -n -c \
         --arg id "$sprint_id" \
@@ -1614,6 +1671,7 @@ bead_release() {
 
 # Invalidate discovery caches. Called automatically by sprint_record_phase_completion.
 sprint_invalidate_caches() {
+    _SPRINT_IC_AVAILABLE=""  # re-check ic availability on next call
     if type intercore_state_delete_all &>/dev/null; then
         intercore_state_delete_all "discovery_brief"
     fi
