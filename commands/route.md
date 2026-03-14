@@ -83,6 +83,24 @@ sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count
   ```
 - Cache complexity on bead: `bd set-state "$bead_id" "complexity=$complexity" 2>/dev/null || true`
 - Display: `Complexity: ${complexity}/5 (${complexity_label})`
+- **Staleness check (haiku):** Before dispatching, verify the bead isn't already implemented. Run a background haiku agent:
+  ```
+  Agent(model="haiku", description="Check bead staleness", run_in_background=false, prompt="
+  You are checking whether bead $bead_id is already implemented.
+
+  Bead title: <title from bd show>
+  Bead description: <description from bd show>
+
+  Check the codebase for evidence this feature already exists:
+  1. Search for CLI subcommands, command files, or functions matching the described feature
+  2. Check if the described capability is already working (test with a quick command if applicable)
+  3. Look for the feature in existing code structure
+
+  Return ONLY valid JSON: {\"implemented\": true/false, \"evidence\": \"one sentence\"}
+  If uncertain, return {\"implemented\": false, \"evidence\": \"no clear signal\"}
+  ")
+  ```
+  If `implemented: true`: Display `⚠ This bead may already be done: <evidence>`. Use AskUserQuestion: "This feature appears to already exist. Options: Close bead (already done) / Proceed anyway / Investigate further". If user chooses to close: `bd close "$bead_id" --reason="Bead sweep: <evidence>"` and re-run discovery (Step 3).
 - Skip to **Step 4: Classify and Dispatch**.
 
 **Otherwise** (free text):
@@ -108,7 +126,25 @@ Only reached when `route_mode="discovery"` (no arguments, no active sprint).
    - `DISCOVERY_UNAVAILABLE` → skip discovery, dispatch to `/clavain:sprint` (bd not installed)
    - `DISCOVERY_ERROR` → skip discovery, dispatch to `/clavain:sprint`
    - `[]` → no open beads, dispatch to `/clavain:sprint`
-   - JSON array → present options (continue to step 3)
+   - JSON array → continue to staleness sweep (step 2b) then present options (step 3)
+
+2b. **Background staleness sweep (haiku):** For the top 3 discovery candidates that DON'T already have a `possibly_done` flag from the deterministic check, check `ic state get "bead_sweep" "<bead_id>"` for cached results (1-hour TTL). For any cache misses, spawn a **single** background haiku agent to batch-check them:
+   ```
+   Agent(model="haiku", description="Batch bead staleness check", run_in_background=true, prompt="
+   You are checking whether these beads are already implemented in the codebase.
+   For each bead, search for evidence the feature exists (CLI commands, functions, config, tests).
+
+   Beads to check:
+   1. <id1>: <title1> — <description1>
+   2. <id2>: <title2> — <description2>
+   3. <id3>: <title3> — <description3>
+
+   For each bead, run targeted searches (Grep for function names, Glob for command files, Bash for CLI --help).
+   Return ONLY valid JSON array: [{\"id\": \"<id>\", \"implemented\": true/false, \"evidence\": \"one sentence\"}]
+   ")
+   ```
+   Cache results: `echo '<json>' | ic state set "bead_sweep" "<bead_id>" --ttl=3600s` for each result.
+   **Do NOT wait for the background agent.** Continue to step 3 immediately. If the agent finishes before the user selects, its results will be available next time. If any cached results exist from a previous sweep, merge them into the discovery results as `possibly_done` flags.
 
 3. Present the top results via **AskUserQuestion**:
    - **First option (recommended):** Top-ranked bead. Label format: `"<Action> <bead-id> — <title> (P<priority>)"`. Add `", stale"` if stale is true. Mark as `(Recommended)`.
