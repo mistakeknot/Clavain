@@ -101,7 +101,28 @@ for cfg in agency-spec.yaml fleet-registry.yaml routing.yaml; do
 done
 ```
 
-### 2d. Plugin Hook Syntax
+### 2d. Agency Spec Validation
+
+If `ic` is available and agency specs exist, validate them:
+
+```bash
+if command -v ic >/dev/null 2>&1; then
+  _spec_dir="os/clavain/config/agency"
+  if [ -d "$_spec_dir" ]; then
+    if ic agency validate --all --spec-dir="$_spec_dir" 2>/dev/null; then
+      echo "Agency specs: PASS"
+    else
+      echo "Agency specs: FAIL (ic agency validate found errors)"
+    fi
+  else
+    echo "Agency specs: SKIP (no config/agency/ directory)"
+  fi
+else
+  echo "Agency specs: SKIP (ic not available)"
+fi
+```
+
+### 2e. Plugin Hook Syntax
 
 Fast syntax check on all installed plugin hooks:
 

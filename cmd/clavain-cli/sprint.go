@@ -191,6 +191,9 @@ func cmdSprintCreate(args []string) error {
 		return fmt.Errorf("ic run phase verification failed")
 	}
 
+	// Capture baseline situation snapshot (fire-and-forget)
+	runIC("situation", "snapshot", "--run="+runID)
+
 	// Store run_id on bead AFTER verification
 	if sprintID != "" {
 		_, err := runBD("set-state", sprintID, "ic_run_id="+runID)
