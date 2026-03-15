@@ -58,6 +58,15 @@ Analyzes the last 20 git commits for ones that don't reference any plan, bead, P
 ### 7. Recommendations
 1-3 prioritized next actions based on the scan results. When everything is clean, reports "Ready to work."
 
+### 8. Sprint Completion Rate
+Shows the sprint completion rate — what percentage of sprints reach the `done` phase without being cancelled. Uses `clavain-cli sprint-stats` for the current project. Vision target: >70% for complexity ≤3.
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-stats 2>/dev/null
+```
+
+If `sprint-stats` fails (ic unavailable), skip this section silently.
+
 ## After the Scan
 
 Based on the recommendations:

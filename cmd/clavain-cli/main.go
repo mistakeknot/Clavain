@@ -106,6 +106,10 @@ func main() {
 	case "close-parent-if-done":
 		err = cmdCloseParentIfDone(args)
 
+	// Stats
+	case "sprint-stats":
+		err = cmdSprintStats(args)
+
 	// Agent tracking
 	case "sprint-track-agent":
 		err = cmdSprintTrackAgent(args)
@@ -227,6 +231,7 @@ Sprint State:
   sprint-read-state   <bead_id>
   sprint-next-step    <phase>
   sprint-budget-remaining <bead_id>
+  sprint-stats        [--complexity=N] [--since=DURATION] [--json] [--project=DIR]
 
 Budget:
   budget-total            <bead_id>
