@@ -37,7 +37,7 @@
         },
         "category": {
           "type": "string",
-          "enum": ["review", "research", "workflow", "synthesis"]
+          "enum": ["review", "research", "workflow", "synthesis", "orchestrator"]
         },
         "description": {
           "type": "string",
@@ -79,6 +79,11 @@
           "default": [],
           "description": "Free-form tags for future filtering"
         },
+        "routing_level": {
+          "type": "string",
+          "enum": ["kernel", "os", "orchestrator", "agent"],
+          "description": "Hierarchy level for routing — prevents recursive dispatch (e.g., an orchestrator routing to itself). Higher levels can dispatch to lower levels only."
+        },
         "orphaned_at": {
           "type": "string",
           "format": "date",
@@ -93,8 +98,8 @@
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["subagent", "command", "codex"],
-          "description": "How to invoke: subagent (Claude Code Task tool), command (slash command), codex (Codex CLI dispatch)"
+          "enum": ["subagent", "command", "codex", "cli"],
+          "description": "How to invoke: subagent (Claude Code Task tool), command (slash command), codex (Codex CLI dispatch), cli (direct binary execution)"
         },
         "subagent_type": {
           "type": "string",
@@ -103,6 +108,14 @@
         "command": {
           "type": "string",
           "description": "Slash command to invoke (when mode=command)"
+        },
+        "binary": {
+          "type": "string",
+          "description": "Binary or go run path to execute (when mode=cli)"
+        },
+        "working_dir": {
+          "type": "string",
+          "description": "Working directory relative to project root (when mode=cli)"
         }
       }
     },

@@ -525,4 +525,5 @@ agents:
       supported: [sonnet, opus]
     tools: [Read, Grep, Glob, Bash]
     cold_start_tokens: 1200
+    routing_level: orchestrator
     tags: [session, orchestrator]
