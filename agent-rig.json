@@ -3,8 +3,15 @@
   "version": "0.6.202",
   "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 6 agents, 48 commands, 17 skills, 0 MCP servers. Companions: interphase, interline, interslack, interform, intercraft, interdev.",
   "author": "mistakeknot",
-  "license": "MIT",
-  "repository": "mistakeknot/Clavain",
+  "behavioral": {
+    "claude-md": {
+      "source": "config/CLAUDE.md"
+    }
+  },
+  "environment": {
+    "DISPLAY": ":99",
+    "CHROME_PATH": "/usr/local/bin/google-chrome-wrapper"
+  },
   "keywords": [
     "engineering-discipline",
     "code-review",
@@ -18,19 +25,161 @@
     "oracle",
     "council"
   ],
+  "license": "MIT",
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "description": "Runtime documentation fetching"
+    },
+    "qmd": {
+      "type": "stdio",
+      "command": "qmd",
+      "args": [
+        "mcp"
+      ],
+      "description": "Local semantic search engine"
+    }
+  },
+  "platforms": {
+    "claude-code": {
+      "marketplaces": [
+        {
+          "name": "interagency-marketplace",
+          "repo": "mistakeknot/interagency-marketplace"
+        },
+        {
+          "name": "claude-plugins-official",
+          "repo": "anthropics/claude-plugins-official"
+        }
+      ]
+    },
+    "codex": {
+      "installScript": "scripts/install-codex.sh",
+      "skillsDir": "~/.agents/skills/clavain"
+    }
+  },
   "plugins": {
+    "conflicts": [
+      {
+        "source": "code-review@claude-plugins-official",
+        "reason": "Duplicates Clavain review agents"
+      },
+      {
+        "source": "pr-review-toolkit@claude-plugins-official",
+        "reason": "Duplicates Clavain PR review"
+      },
+      {
+        "source": "code-simplifier@claude-plugins-official",
+        "reason": "Duplicates simplicity reviewer"
+      },
+      {
+        "source": "commit-commands@claude-plugins-official",
+        "reason": "Duplicates commit workflow"
+      },
+      {
+        "source": "feature-dev@claude-plugins-official",
+        "reason": "Duplicates feature dev workflow"
+      },
+      {
+        "source": "claude-md-management@claude-plugins-official",
+        "reason": "Conflicts with doc management"
+      },
+      {
+        "source": "frontend-design@claude-plugins-official",
+        "reason": "Conflicts with design agents"
+      },
+      {
+        "source": "hookify@claude-plugins-official",
+        "reason": "Conflicts with hook management"
+      },
+      {
+        "source": "superpowers@superpowers-marketplace",
+        "reason": "Clavain is the successor to superpowers"
+      },
+      {
+        "source": "compound-engineering@every-marketplace",
+        "reason": "Clavain is the successor to compound-engineering"
+      }
+    ],
     "core": {
       "source": "clavain@interagency-marketplace",
       "description": "The core Clavain multi-agent rig"
     },
-    "required": [
+    "infrastructure": [
       {
-        "source": "context7@claude-plugins-official",
-        "description": "Runtime doc fetching via MCP"
+        "source": "gopls-lsp@claude-plugins-official",
+        "description": "Go language server"
       },
       {
-        "source": "explanatory-output-style@claude-plugins-official",
-        "description": "Educational output formatting"
+        "source": "pyright-lsp@claude-plugins-official",
+        "description": "Python language server"
+      },
+      {
+        "source": "typescript-lsp@claude-plugins-official",
+        "description": "TypeScript language server"
+      },
+      {
+        "source": "rust-analyzer-lsp@claude-plugins-official",
+        "description": "Rust language server"
+      }
+    ],
+    "optional": [
+      {
+        "source": "interfluence@interagency-marketplace",
+        "description": "Voice profile and style adaptation"
+      },
+      {
+        "source": "interject@interagency-marketplace",
+        "description": "Ambient discovery and research engine (MCP)"
+      },
+      {
+        "source": "interstat@interagency-marketplace",
+        "description": "Token efficiency benchmarking"
+      },
+      {
+        "source": "interkasten@interagency-marketplace",
+        "description": "Notion sync and documentation"
+      },
+      {
+        "source": "interlens@interagency-marketplace",
+        "description": "Cognitive augmentation lenses (MCP)"
+      },
+      {
+        "source": "intersearch@interagency-marketplace",
+        "description": "Shared embedding and Exa search library"
+      },
+      {
+        "source": "interserve@interagency-marketplace",
+        "description": "Codex spark classifier and context compression (MCP)"
+      },
+      {
+        "source": "interpub@interagency-marketplace",
+        "description": "Plugin publishing automation"
+      },
+      {
+        "source": "tuivision@interagency-marketplace",
+        "description": "TUI automation and visual testing (MCP)"
+      },
+      {
+        "source": "intermux@interagency-marketplace",
+        "description": "Agent activity visibility and tmux monitoring (MCP)"
+      },
+      {
+        "source": "interleave@interagency-marketplace",
+        "description": "Deterministic skeleton + LLM islands pattern"
+      },
+      {
+        "source": "interlearn@interagency-marketplace",
+        "description": "Cross-repo institutional knowledge index"
+      },
+      {
+        "source": "intercache@interagency-marketplace",
+        "description": "Cross-session semantic cache (MCP)"
+      },
+      {
+        "source": "interchart@interagency-marketplace",
+        "description": "Interactive ecosystem diagram generator"
       }
     ],
     "recommended": [
@@ -221,142 +370,30 @@
       {
         "source": "interhelm@interagency-marketplace",
         "description": "Agent-as-operator runtime diagnostics for native apps"
+      },
+      {
+        "source": "interlab@interagency-marketplace",
+        "description": "Autonomous experiment loop with mutation provenance tracking — init, run, log experiments with JSONL persistence, git isolation, SQLite mutation store, and ic events bridge."
       }
     ],
-    "optional": [
+    "required": [
       {
-        "source": "interfluence@interagency-marketplace",
-        "description": "Voice profile and style adaptation"
+        "source": "context7@claude-plugins-official",
+        "description": "Runtime doc fetching via MCP"
       },
       {
-        "source": "interject@interagency-marketplace",
-        "description": "Ambient discovery and research engine (MCP)"
-      },
-      {
-        "source": "interstat@interagency-marketplace",
-        "description": "Token efficiency benchmarking"
-      },
-      {
-        "source": "interkasten@interagency-marketplace",
-        "description": "Notion sync and documentation"
-      },
-      {
-        "source": "interlens@interagency-marketplace",
-        "description": "Cognitive augmentation lenses (MCP)"
-      },
-      {
-        "source": "intersearch@interagency-marketplace",
-        "description": "Shared embedding and Exa search library"
-      },
-      {
-        "source": "interserve@interagency-marketplace",
-        "description": "Codex spark classifier and context compression (MCP)"
-      },
-      {
-        "source": "interpub@interagency-marketplace",
-        "description": "Plugin publishing automation"
-      },
-      {
-        "source": "tuivision@interagency-marketplace",
-        "description": "TUI automation and visual testing (MCP)"
-      },
-      {
-        "source": "intermux@interagency-marketplace",
-        "description": "Agent activity visibility and tmux monitoring (MCP)"
-      },
-      {
-        "source": "interleave@interagency-marketplace",
-        "description": "Deterministic skeleton + LLM islands pattern"
-      },
-      {
-        "source": "interlearn@interagency-marketplace",
-        "description": "Cross-repo institutional knowledge index"
-      },
-      {
-        "source": "intercache@interagency-marketplace",
-        "description": "Cross-session semantic cache (MCP)"
-      },
-      {
-        "source": "interchart@interagency-marketplace",
-        "description": "Interactive ecosystem diagram generator"
-      }
-    ],
-    "infrastructure": [
-      {
-        "source": "gopls-lsp@claude-plugins-official",
-        "description": "Go language server"
-      },
-      {
-        "source": "pyright-lsp@claude-plugins-official",
-        "description": "Python language server"
-      },
-      {
-        "source": "typescript-lsp@claude-plugins-official",
-        "description": "TypeScript language server"
-      },
-      {
-        "source": "rust-analyzer-lsp@claude-plugins-official",
-        "description": "Rust language server"
-      }
-    ],
-    "conflicts": [
-      {
-        "source": "code-review@claude-plugins-official",
-        "reason": "Duplicates Clavain review agents"
-      },
-      {
-        "source": "pr-review-toolkit@claude-plugins-official",
-        "reason": "Duplicates Clavain PR review"
-      },
-      {
-        "source": "code-simplifier@claude-plugins-official",
-        "reason": "Duplicates simplicity reviewer"
-      },
-      {
-        "source": "commit-commands@claude-plugins-official",
-        "reason": "Duplicates commit workflow"
-      },
-      {
-        "source": "feature-dev@claude-plugins-official",
-        "reason": "Duplicates feature dev workflow"
-      },
-      {
-        "source": "claude-md-management@claude-plugins-official",
-        "reason": "Conflicts with doc management"
-      },
-      {
-        "source": "frontend-design@claude-plugins-official",
-        "reason": "Conflicts with design agents"
-      },
-      {
-        "source": "hookify@claude-plugins-official",
-        "reason": "Conflicts with hook management"
-      },
-      {
-        "source": "superpowers@superpowers-marketplace",
-        "reason": "Clavain is the successor to superpowers"
-      },
-      {
-        "source": "compound-engineering@every-marketplace",
-        "reason": "Clavain is the successor to compound-engineering"
+        "source": "explanatory-output-style@claude-plugins-official",
+        "description": "Educational output formatting"
       }
     ]
   },
-  "mcpServers": {
-    "context7": {
-      "type": "http",
-      "url": "https://mcp.context7.com/mcp",
-      "description": "Runtime documentation fetching"
-    },
-    "qmd": {
-      "type": "stdio",
-      "command": "qmd",
-      "args": [
-        "mcp"
-      ],
-      "description": "Local semantic search engine"
-    }
+  "postInstall": {
+    "message": [
+      "Try: /sprint add user export feature",
+      "Run /help to see all 46 commands, or /doctor to verify your setup."
+    ]
   },
+  "repository": "mistakeknot/Clavain",
   "tools": [
     {
       "name": "oracle",
@@ -386,38 +423,5 @@
       "optional": true,
       "description": "Semantic search across documentation"
     }
-  ],
-  "environment": {
-    "DISPLAY": ":99",
-    "CHROME_PATH": "/usr/local/bin/google-chrome-wrapper"
-  },
-  "behavioral": {
-    "claude-md": {
-      "source": "config/CLAUDE.md"
-    }
-  },
-  "postInstall": {
-    "message": [
-      "Try: /sprint add user export feature",
-      "Run /help to see all 46 commands, or /doctor to verify your setup."
-    ]
-  },
-  "platforms": {
-    "claude-code": {
-      "marketplaces": [
-        {
-          "name": "interagency-marketplace",
-          "repo": "mistakeknot/interagency-marketplace"
-        },
-        {
-          "name": "claude-plugins-official",
-          "repo": "anthropics/claude-plugins-official"
-        }
-      ]
-    },
-    "codex": {
-      "installScript": "scripts/install-codex.sh",
-      "skillsDir": "~/.agents/skills/clavain"
-    }
-  }
+  ]
 }
