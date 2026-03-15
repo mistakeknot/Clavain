@@ -231,7 +231,7 @@ If you make 5+ consecutive Read/Grep/Glob calls without any Edit/Write/Bash acti
 ## Remember
 - Review plan critically first
 - Follow plan steps exactly
-- Don't skip verifications
+- Always run verifications
 - Reference skills when plan says to
 - Between batches: just report and wait
 - Stop when blocked, don't guess
