@@ -28,7 +28,8 @@ _discover_all_companions() {
     if [[ -f "$_COMPANION_CACHE_FILE" ]]; then
         local _cache_sid
         _cache_sid=$(head -1 "$_COMPANION_CACHE_FILE" 2>/dev/null) || _cache_sid=""
-        if [[ "$_cache_sid" == "# session=${CLAUDE_SESSION_ID:-}" && -n "${CLAUDE_SESSION_ID:-}" ]]; then
+        local _expected_key="# session=${CLAUDE_SESSION_ID:-$$}"
+        if [[ "$_cache_sid" == "$_expected_key" ]]; then
             # Cache is from this session — read it
             while IFS='=' read -r _key _val; do
                 [[ "$_key" == \#* ]] && continue
@@ -105,7 +106,7 @@ _discover_all_companions() {
     mkdir -p "$_COMPANION_CACHE_DIR" 2>/dev/null || true
     local _tmp="${_COMPANION_CACHE_FILE}.$$"
     {
-        echo "# session=${CLAUDE_SESSION_ID:-}"
+        echo "# session=${CLAUDE_SESSION_ID:-$$}"
         echo "INTERPHASE=${_CACHED_INTERPHASE_ROOT}"
         echo "INTERFLUX=${_CACHED_INTERFLUX_ROOT}"
         echo "INTERPATH=${_CACHED_INTERPATH_ROOT}"

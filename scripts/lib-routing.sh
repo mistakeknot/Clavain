@@ -1190,6 +1190,7 @@ _routing_emit_decisions() {
     # Strip quotes
     agent_name="${agent_name//\"/}"
     model="${model//\"/}"
+    [[ "$model" == "_EXCLUDED_" ]] && continue
     [[ -z "$agent_name" || -z "$model" ]] && continue
     ic route record \
       --agent="$agent_name" \

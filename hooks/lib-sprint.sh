@@ -12,8 +12,13 @@ _SPRINT_LOADED=1
 # Source intercore state primitives (cache invalidation, sentinel checks)
 source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
 
-# Source agency spec loader (C1: declarative per-stage config)
-source "${BASH_SOURCE[0]%/*}/lib-spec.sh" 2>/dev/null || true
+# Agency spec loader deferred to first call — not needed at session-start (saves ~5ms + 2 subprocesses)
+# Functions that need it (sprint_budget_*, enforce_gate) source it on demand via _SPEC_LIB_SOURCED guard.
+_SPRINT_LIB_SPEC_DIR="${BASH_SOURCE[0]%/*}"
+_sprint_ensure_spec() {
+    [[ -n "${_SPEC_LIB_SOURCED:-}" ]] && return 0
+    source "${_SPRINT_LIB_SPEC_DIR}/lib-spec.sh" 2>/dev/null || true
+}
 
 # Source compose bridge (C3: dispatch plan generator)
 if [[ -f "${BASH_SOURCE[0]%/*}/../scripts/lib-compose.sh" ]]; then
@@ -697,6 +702,7 @@ sprint_budget_total() {
 
 # Private: sum allocations for all 5 stages (for overallocation cap).
 _sprint_sum_all_stage_allocations() {
+    _sprint_ensure_spec
     local sprint_id="$1"
     local total_budget
     total_budget=$(sprint_budget_total "$sprint_id")
@@ -719,6 +725,7 @@ _sprint_sum_all_stage_allocations() {
 
 # Get allocated budget for a stage.
 sprint_budget_stage() {
+    _sprint_ensure_spec
     local sprint_id="$1" stage="$2"
     [[ -z "$sprint_id" || -z "$stage" ]] && { echo "0"; return 0; }
     local total_budget
@@ -1052,6 +1059,7 @@ _sprint_evaluate_spec_gates() {
 # Gate enforcement. Returns 0 if gate passes, 1 if blocked.
 # ic gates are mandatory precondition; spec gates are additive.
 enforce_gate() {
+    _sprint_ensure_spec
     local bead_id="$1"
     local target_phase="$2"
     local artifact_path="${3:-}"

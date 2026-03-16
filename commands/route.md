@@ -97,9 +97,10 @@ First match wins. **Row order is semantically significant** — rows 1-4 are ter
 | has_plan AND phase=`plan-reviewed` | `/clavain:work <plan_path>` | 1.0 |
 | has_plan AND phase=`planned` | `/clavain:sprint --from-step plan-review` | 1.0 |
 | has_plan AND no phase | `/clavain:sprint --from-step plan-review` | 0.95 |
-| bead_action=`execute`\|`continue` | `/clavain:work <plan_path>` | 1.0 |
+| bead_action=`execute`\|`continue` AND has_plan | `/clavain:work <plan_path>` | 1.0 |
 | Complexity = 1 (trivial) | `/clavain:work` | 0.9 |
 | No description AND no brainstorm | `/clavain:sprint` | 0.9 |
+| Has brainstorm but no plan | `/clavain:sprint` | 0.85 |
 | Complexity = 5 (research) | `/clavain:sprint` | 0.85 |
 | child_count > 0 (epic w/ children) | `/clavain:sprint` | 0.85 |
 | issue_type=`bug` | `/clavain:work` | 0.9 |
@@ -109,7 +110,6 @@ First match wins. **Row order is semantically significant** — rows 1-4 are ter
 | Description matches research/investigate/explore/assess/evaluate | `/clavain:sprint` | 0.85 |
 | Complexity = 2 | `/clavain:work` | 0.85 |
 | Complexity = 4 | `/clavain:sprint` | 0.85 |
-| Has brainstorm but no plan | `/clavain:sprint` | 0.85 |
 | issue_type=`feature` AND complexity = 3 | `/clavain:sprint` | 0.85 |
 
 If confidence >= 0.8: display verdict, skip to 4c.

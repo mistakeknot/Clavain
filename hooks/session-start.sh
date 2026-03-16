@@ -70,10 +70,7 @@ fi
 # These accumulate when sessions crash or kill without running Stop hooks.
 # TTL: 60 minutes — active sessions refresh heartbeats every ~60s.
 if [[ "$_hook_source" == "startup" ]]; then
-    find /tmp -maxdepth 1 -name 'clavain-heartbeat-*' -mmin +60 -delete 2>/dev/null || true
-    find /tmp -maxdepth 1 -name 'clavain-bead-*' -mmin +60 -delete 2>/dev/null || true
-    find /tmp -maxdepth 1 -name 'clavain-compose-*' -mmin +60 -delete 2>/dev/null || true
-    find /tmp -maxdepth 1 -name 'clavain-agents-md-*' -mmin +60 -delete 2>/dev/null || true
+    find /tmp -maxdepth 1 \( -name 'clavain-heartbeat-*' -o -name 'clavain-bead-*' -o -name 'clavain-compose-*' -o -name 'clavain-agents-md-*' \) -mmin +60 -delete 2>/dev/null || true
 fi
 
 # First-run setup verification — surface critical issues on first session only.
@@ -122,9 +119,17 @@ companion_context=""
 # Beads
 if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     companion_list="${companion_list}beads,"
-    # Surface beads health warnings (bd doctor --json is local-only, typically <100ms)
+    # Surface beads health warnings — gated behind 5-minute TTL to avoid 27ms hit every session
     if command -v bd &>/dev/null; then
-        beads_issues=$( (bd doctor --json 2>/dev/null || true) | jq '[.checks[]? | select(.status == "warning" or .status == "error")] | length' 2>/dev/null) || beads_issues="0"
+        _bd_sentinel="/tmp/clavain-bd-doctor-${USER:-mk}"
+        _bd_age=999
+        [[ -f "$_bd_sentinel" ]] && _bd_age=$(( $(date +%s) - $(stat -c %Y "$_bd_sentinel" 2>/dev/null || echo 0) ))
+        if [[ "$_bd_age" -gt 300 ]]; then
+            beads_issues=$( (bd doctor --json 2>/dev/null || true) | jq '[.checks[]? | select(.status == "warning" or .status == "error")] | length' 2>/dev/null) || beads_issues="0"
+            touch "$_bd_sentinel" 2>/dev/null || true
+        else
+            beads_issues="0"
+        fi
         if [[ "$beads_issues" -gt 0 ]]; then
             companion_context="${companion_context}\\n- beads doctor: ${beads_issues} issue(s) — run \`bd doctor --fix\`"
         fi
@@ -164,7 +169,7 @@ if [[ -n "$interlock_root" ]]; then
     # Auto-join Intermute if reachable and in a git repo
     _intermute_url="${INTERMUTE_URL:-http://127.0.0.1:7338}"
     if git rev-parse --is-inside-work-tree &>/dev/null; then
-        if curl -sf --connect-timeout 1 --max-time 2 "${_intermute_url}/health" >/dev/null 2>&1; then
+        if curl -sf --connect-timeout 0.3 --max-time 0.5 "${_intermute_url}/health" >/dev/null 2>&1; then
             _join_flag="${HOME}/.config/clavain/intermute-joined"
             mkdir -p "$(dirname "$_join_flag")" 2>/dev/null || true
             touch "$_join_flag" 2>/dev/null || true
@@ -172,7 +177,7 @@ if [[ -n "$interlock_root" ]]; then
             # Active agents — inject only if others are online (coordination-critical)
             # Cache responses for sprint_check_coordination to avoid redundant fetches (iv-kcf6)
             _intermute_project=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")
-            _agents_json=$(curl -sf --connect-timeout 1 --max-time 2 "${_intermute_url}/api/agents?project=${_intermute_project}" 2>/dev/null) || _agents_json=""
+            _agents_json=$(curl -sf --connect-timeout 0.3 --max-time 0.5 "${_intermute_url}/api/agents?project=${_intermute_project}" 2>/dev/null) || _agents_json=""
             _INTERMUTE_AGENTS_CACHE="$_agents_json"
             if [[ -n "$_agents_json" ]]; then
                 _agent_count=$(echo "$_agents_json" | jq '.agents | length' 2>/dev/null) || _agent_count="0"
@@ -181,7 +186,7 @@ if [[ -n "$interlock_root" ]]; then
                     _agent_names=$(escape_for_json "$_agent_names")
                     companion_context="${companion_context}\\n- Intermute: ${_agent_count} agent(s) online (${_agent_names})"
 
-                    _reservations_json=$(curl -sf --connect-timeout 1 --max-time 2 "${_intermute_url}/api/reservations?project=${_intermute_project}" 2>/dev/null) || _reservations_json=""
+                    _reservations_json=$(curl -sf --connect-timeout 0.3 --max-time 0.5 "${_intermute_url}/api/reservations?project=${_intermute_project}" 2>/dev/null) || _reservations_json=""
                     _INTERMUTE_RESERVATIONS_CACHE="$_reservations_json"
                     if [[ -n "$_reservations_json" ]]; then
                         _res_count=$(echo "$_reservations_json" | jq '[.reservations[]? | select(.is_active == true)] | length' 2>/dev/null) || _res_count="0"
