@@ -1,7 +1,7 @@
 {
-  "generated": "2026-03-14T01:12:05Z",
+  "generated": "2026-03-16T06:03:18Z",
   "counts": {
-    "skills": 17,
+    "skills": 18,
     "agents": 6,
     "commands": 48,
     "hooks": 10,
@@ -10,6 +10,10 @@
     "workflow": 4
   },
   "skills": [
+    {
+      "name": "autoresearch",
+      "description": "Use when running autonomous experiment campaigns to optimize metrics. Drives init/run/log experiment loop with context recovery."
+    },
     {
       "name": "code-review-discipline",
       "description": "Use when requesting or receiving code review \u2014 covers dispatching reviewer subagents, handling feedback with technical rigor, and avoiding performative agreement"
