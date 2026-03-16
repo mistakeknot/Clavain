@@ -128,36 +128,40 @@ fi
 
 
 def gen_companion_checks(entries: list[dict]) -> str:
-    """Generate doctor.md companion check blocks from doctorCheck metadata."""
-    sections = []
-    # Use a letter counter starting at 'b' for subsection numbering
-    letter = ord("b")
-
+    """Generate doctor.md companion check as a compact loop."""
+    checks = []
     for entry in entries:
         check = entry.get("doctorCheck")
         if not check:
             continue
-
         name, _ = parse_source(entry["source"])
-        label = check["label"]
-        probe = check["probe"]
-        not_installed_msg = check["notInstalledMsg"]
+        checks.append((name, check["probe"], check["notInstalledMsg"], entry["source"]))
 
-        section_label = chr(letter)
-        letter += 1
+    if not checks:
+        return ""
 
-        sections.append(f"""### 3{section_label}. {label}
+    # Build compact associative arrays for the loop
+    names = " ".join(c[0] for c in checks)
+    probe_cases = "\n    ".join(
+        f'{c[0]}) _probe="{c[1]}" _msg="{c[2]}" _src="{c[3]}";;'
+        for c in checks
+    )
+
+    return f"""### 3b. Companion Plugins
 
 ```bash
-if ls "$HOME/.claude/plugins/cache"/*/{name}/*/{probe} 2>/dev/null | head -1 >/dev/null; then
-  echo "{name}: installed"
-else
-  echo "{name}: not installed ({not_installed_msg})"
-  echo "  Install: claude plugin install {entry['source']}"
-fi
-```""")
-
-    return "\n\n".join(sections)
+for _p in {names}; do
+  case $_p in
+    {probe_cases}
+  esac
+  if ls "$HOME/.claude/plugins/cache"/*/$_p/*/$_probe 2>/dev/null | head -1 >/dev/null; then
+    echo "$_p: installed"
+  else
+    echo "$_p: not installed ($_msg)"
+    echo "  Install: claude plugin install $_src"
+  fi
+done
+```"""
 
 
 def gen_doctor_conflicts(entries: list[dict]) -> str:
@@ -186,36 +190,8 @@ else:
 
 
 def gen_doctor_output(rig: dict) -> str:
-    """Generate doctor.md output table template."""
-    # Build companion lines from entries with doctorCheck
-    companion_lines = []
-    for entry in get_tier_entries(rig, "recommended"):
-        check = entry.get("doctorCheck")
-        if check:
-            name, _ = parse_source(entry["source"])
-            companion_lines.append(f"{name:<14}[installed|not installed]")
-
-    # Always include interlock (hand-written check, no doctorCheck)
-    companion_lines.append(f"{'interlock':<14}[installed|not installed]")
-
-    companions = "\n".join(companion_lines)
-
-    return f"""```
-Clavain Doctor
-──────────────────────────────────
-{"context7":<14}[PASS|FAIL]
-{"qmd":<14}[PASS|WARN: not installed]
-{"oracle":<14}[installed|not found]
-{"codex":<14}[installed|not found]
-{"beads":<14}[OK (N open, M closed)|not initialized]
-{"zombies":<14}[PASS|FIXED: N auto-closed]
-{companions}
-{".clavain":<14}[initialized|not set up]
-{"conflicts":<14}[clear|WARN: N active]
-{"skill budget":<14}[PASS|WARN: N over 16K|ERROR: N over 32K]
-{"version":<14}v0.X.Y
-──────────────────────────────────
-```"""
+    """Generate compact doctor.md output instruction."""
+    return "Present results as a compact table: `<check> [PASS|WARN|FAIL] <detail>`. Group by section."
 
 
 # ---------------------------------------------------------------------------

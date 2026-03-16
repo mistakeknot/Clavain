@@ -20,7 +20,7 @@ description: Use when starting any conversation - establishes how to find and us
 | Resolve review findings | `/clavain:resolve` |
 | Set up a new project | `/clavain:project-onboard` |
 | Check project health | `/clavain:clavain-doctor` or `/clavain:sprint-status` |
-| Generate a roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
+| Generate roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` |
 | Run scenario tests | `clavain-cli scenario-run <pattern>` |
 | Check quality gate | `clavain-cli scenario-score <run-id> --summary` |
@@ -29,22 +29,14 @@ description: Use when starting any conversation - establishes how to find and us
 
 ## Auto-Route Rule
 
-**Always invoke `/clavain:route` when:**
-- A bead ID is mentioned ("let's do iv-xyz", "work on iv-abc")
-- The request is a feature, bugfix, or implementation task
-- The user says "what's next" and picks an item to work on
+**Invoke `/clavain:route` when:** bead ID mentioned, request is a feature/bugfix/implementation, user says "what's next" and picks work.
 
-**Do NOT auto-route when:**
-- The request is informational ("how does X work?", "show me Y")
-- The request is a review, publish, commit, or status check (use the specific skill)
-- You are already mid-execution inside a routed workflow
-
-This ensures every piece of real work gets proper classification, sprint wiring, and phase tracking — not just ad-hoc coding.
+**Do NOT auto-route when:** request is informational, is a review/publish/commit/status check (use specific skill), or already mid-execution inside a routed workflow.
 
 ## Routing Heuristic
 
-1. **Detect stage** from the request ("build" → Execute, "fix bug" → Debug, "review" → Review, "plan" → Plan)
-2. **Detect domain** from context (file types, topic, recent conversation)
-3. **Invoke the primary skill first** — don't skip relevant skills
+1. Detect stage: "build" → Execute, "fix bug" → Debug, "review" → Review, "plan" → Plan
+2. Detect domain from context (file types, topic, recent conversation)
+3. Invoke the primary skill first — don't skip
 
 Full routing tables: `using-clavain/references/routing-tables.md`

@@ -180,48 +180,23 @@ fi
 ```
 
 <!-- agent-rig:begin:companion-checks -->
-### 3b. Beads Lifecycle Companion
+### 3b. Companion Plugins
 
 ```bash
-if ls "$HOME/.claude/plugins/cache"/*/interphase/*/hooks/lib-gates.sh 2>/dev/null | head -1 >/dev/null; then
-  echo "interphase: installed"
-else
-  echo "interphase: not installed (phase tracking disabled)"
-  echo "  Install: claude plugin install interphase@interagency-marketplace"
-fi
-```
-
-### 3c. Statusline Companion
-
-```bash
-if ls "$HOME/.claude/plugins/cache"/*/interline/*/scripts/statusline.sh 2>/dev/null | head -1 >/dev/null; then
-  echo "interline: installed"
-else
-  echo "interline: not installed (statusline rendering unavailable)"
-  echo "  Install: claude plugin install interline@interagency-marketplace"
-fi
-```
-
-### 3d. Artifact Generation Companion
-
-```bash
-if ls "$HOME/.claude/plugins/cache"/*/interpath/*/scripts/interpath.sh 2>/dev/null | head -1 >/dev/null; then
-  echo "interpath: installed"
-else
-  echo "interpath: not installed (product artifact generation unavailable)"
-  echo "  Install: claude plugin install interpath@interagency-marketplace"
-fi
-```
-
-### 3e. Doc Freshness Companion
-
-```bash
-if ls "$HOME/.claude/plugins/cache"/*/interwatch/*/scripts/interwatch.sh 2>/dev/null | head -1 >/dev/null; then
-  echo "interwatch: installed"
-else
-  echo "interwatch: not installed (doc drift detection unavailable)"
-  echo "  Install: claude plugin install interwatch@interagency-marketplace"
-fi
+for _p in interphase interline interpath interwatch; do
+  case $_p in
+    interphase) _probe="hooks/lib-gates.sh" _msg="phase tracking disabled" _src="interphase@interagency-marketplace";;
+    interline) _probe="scripts/statusline.sh" _msg="statusline rendering unavailable" _src="interline@interagency-marketplace";;
+    interpath) _probe="scripts/interpath.sh" _msg="product artifact generation unavailable" _src="interpath@interagency-marketplace";;
+    interwatch) _probe="scripts/interwatch.sh" _msg="doc drift detection unavailable" _src="interwatch@interagency-marketplace";;
+  esac
+  if ls "$HOME/.claude/plugins/cache"/*/$_p/*/$_probe 2>/dev/null | head -1 >/dev/null; then
+    echo "$_p: installed"
+  else
+    echo "$_p: not installed ($_msg)"
+    echo "  Install: claude plugin install $_src"
+  fi
+done
 ```
 <!-- agent-rig:end:companion-checks -->
 
@@ -306,6 +281,8 @@ cat ~/.claude/plugins/cache/interagency-marketplace/clavain/*/plugin.json 2>/dev
 
 ## Output
 
+<!-- agent-rig:begin:doctor-output -->
 Present results as a compact table: `<check> [PASS|WARN|FAIL] <detail>`. Group by section.
+<!-- agent-rig:end:doctor-output -->
 
 **Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:clavain-init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin.
