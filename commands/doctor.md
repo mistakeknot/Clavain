@@ -103,7 +103,23 @@ if [ -f "$_routing_yaml" ]; then
 else echo "routing.yaml: SKIP (not found)"; fi
 ```
 
-### 2f. Plugin Cache Verification
+### 2f. Routing Shadow Mode Report
+
+```bash
+# Shadow mode data report
+if command -v ic >/dev/null 2>&1; then
+  _shadow_count=$(ic route list --json 2>/dev/null | jq '[.[] | select(.rule_matched | startswith("B2"))] | length' 2>/dev/null) || _shadow_count="0"
+  if [[ "$_shadow_count" -gt 0 ]]; then
+    echo "  B2 shadow data: $_shadow_count decisions recorded"
+    _b2_sprint=$(ic route list --json 2>/dev/null | jq '[.[] | select(.rule_matched | startswith("B2")) | select(.selected_model | contains("sprint"))] | length' 2>/dev/null) || _b2_sprint="?"
+    echo "    sprint: $_b2_sprint, work: $((_shadow_count - _b2_sprint))"
+  else
+    echo "  B2 shadow data: none (shadow mode active but no decisions recorded)"
+  fi
+fi
+```
+
+### 2g. Plugin Cache Verification
 
 ```bash
 _cache_dir="${HOME}/.claude/plugins/cache/interagency-marketplace"
@@ -270,6 +286,26 @@ if [[ -n "$CLAVAIN_LIB" ]]; then
     if [[ $errs -gt 0 ]]; then echo "skill budget: ERROR ($errs over 32K)"; echo "$out" | grep "^ERROR"
     elif [[ $warns -gt 0 ]]; then echo "skill budget: WARN ($warns over 16K)"; echo "$out" | grep "^WARN"
     else echo "skill budget: PASS"; fi
+fi
+```
+
+### 5b. help.md Sync
+
+```bash
+# help.md sync check
+_help_file="commands/help.md"
+if [[ -f "$_help_file" ]]; then
+  _missing=""
+  for _cmd in commands/*.md; do
+    _name=$(head -5 "$_cmd" | grep '^name:' | sed 's/name: //')
+    [[ -z "$_name" || "$_name" == "help" ]] && continue
+    grep -q "/clavain:${_name}" "$_help_file" 2>/dev/null || _missing="${_missing} ${_name}"
+  done
+  if [[ -z "$_missing" ]]; then
+    echo "help.md sync: PASS"
+  else
+    echo "help.md sync: WARN — commands not in help.md:${_missing}"
+  fi
 fi
 ```
 

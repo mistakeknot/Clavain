@@ -170,6 +170,44 @@ stages:
 
 Rules: IDs match `task-N`, unique. `depends` is additive to stage barriers. `tier` uses `fast`/`deep`, not model names. Skip manifest for <3 tasks or tightly coupled — executing-plans falls back to direct execution.
 
+## Auto-Manifest Generation
+
+After writing the plan file, count tasks with no inter-dependencies. If 3 or more exist, generate the `.exec.yaml` manifest automatically alongside the plan — do not wait for the user to request it.
+
+**Algorithm:**
+1. Scan all tasks in the plan for declared `depends` relationships
+2. Group tasks into waves: tasks with no unresolved dependencies go in the first wave; tasks whose dependencies are all in earlier waves go in subsequent waves
+3. If wave 1 has 3+ tasks (or total independent tasks ≥ 3 across all waves), write the manifest
+
+**Wave format:**
+```yaml
+version: 1
+mode: dependency-driven     # or all-parallel if all tasks are independent
+tier: deep
+max_parallel: 5
+timeout_per_task: 300
+
+stages:
+  - name: "Wave 1 — independent"
+    tasks:
+      - id: task-1
+        title: "Short task description"
+        files: [path/to/file.py]
+        depends: []
+      - id: task-2
+        title: "Another task"
+        files: [path/to/other.py]
+        depends: []
+  - name: "Wave 2 — after Wave 1"
+    tasks:
+      - id: task-3
+        title: "Depends on task-1 and task-2"
+        files: [path/to/dependent.py]
+        depends: [task-1, task-2]
+```
+
+When all tasks are fully independent, use `mode: all-parallel` and a single stage. When the manifest is generated, note it in the Execution Handoff step and recommend "Orchestrated Delegation" as the default option.
+
 ## Remember
 - Exact file paths always
 - Complete code in plan (not "add validation")

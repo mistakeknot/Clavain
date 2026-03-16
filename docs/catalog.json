@@ -1,9 +1,9 @@
 {
-  "generated": "2026-03-16T18:27:39Z",
+  "generated": "2026-03-16T18:32:20Z",
   "counts": {
     "skills": 17,
     "agents": 6,
-    "commands": 47,
+    "commands": 48,
     "hooks": 10,
     "mcp_servers": 0,
     "review": 2,
@@ -263,6 +263,10 @@
     {
       "name": "sprint",
       "description": "Phase sequencer \u2014 brainstorm, strategize, plan, execute, review, ship. Use /route for smart dispatch."
+    },
+    {
+      "name": "sprint-dag",
+      "description": "Visualize sprint execution as a DAG \u2014 shows phases, dispatches, and artifacts"
     },
     {
       "name": "sprint-status",

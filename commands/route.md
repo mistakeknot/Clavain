@@ -130,6 +130,6 @@ Return `{"command":"/sprint"|"/work","confidence":0.0-1.0,"reason":"..."}`. Pars
 1. If dispatching to `/clavain:sprint` and no `CLAVAIN_BEAD_ID`: `SPRINT_ID=$(clavain-cli sprint-create "<title>")`, set as `CLAVAIN_BEAD_ID`, cache complexity.
 2. Cache complexity: `bd set-state "$CLAVAIN_BEAD_ID" "complexity=$complexity"`
 3. Run PATTERN: claim-bead. On failure: re-run discovery. Add TaskCreate.
-4. Display: `Route: /work (0.92) — Plan exists and scope is clear` or `Route: /sprint (heuristic, 0.9) — Needs brainstorm first`
+4. Display: `Route: /work (0.92) — Plan exists and scope is clear` or `Route: /sprint (heuristic, 0.9) — Needs brainstorm first`. If budget data available (`clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID"` returns non-zero), append: `(budget: Nk remaining)`.
 5. Auto-dispatch via Skill tool. Pass bead ID or plan path. **Do not ask for confirmation.**
 6. **Stop after dispatch.**

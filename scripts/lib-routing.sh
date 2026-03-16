@@ -660,6 +660,7 @@ routing_resolve_model() {
         [[ "$base_for_shadow" == "inherit" ]] && base_for_shadow="sonnet"
         if [[ "$cal_model" != "$base_for_shadow" ]]; then
           echo "[interspect-shadow] ${agent##*:}: base=$base_for_shadow, calibrated=$cal_model" >&2
+          command -v ic >/dev/null 2>&1 && ic route record --rule "B3" --agent "${agent##*:}" --selected-model "$base_for_shadow" --meta "calibrated=$cal_model" 2>/dev/null || true
         fi
       fi
     fi

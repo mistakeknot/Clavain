@@ -116,6 +116,8 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 [[ "$remaining" -gt 0 ]] && export FLUX_BUDGET_REMAINING="$remaining"
 ```
 
+Cost preview: `clavain-cli sprint-budget-stage "$CLAVAIN_BEAD_ID" plan-review 2>/dev/null` — display token budget for this stage and which agents will be launched (skip silently on error).
+
 `/interflux:flux-drive <plan-file-from-step-3>` — review before execution to catch plan-level risks early.
 
 If P0/P1 issues found: stop and fix before proceeding. After passing: set `phase=plan-reviewed`.
@@ -142,7 +144,13 @@ Run project test suite + linter. If tests fail: stop and fix — do NOT proceed 
 
 ## Step 7: Quality Gates
 
-Budget context (same pattern as Step 4).
+Budget context (same pattern as Step 4):
+```bash
+remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
+[[ "$remaining" -gt 0 ]] && export FLUX_BUDGET_REMAINING="$remaining"
+```
+
+Cost preview: `clavain-cli sprint-budget-stage "$CLAVAIN_BEAD_ID" quality-gates 2>/dev/null` — display token budget for this stage and which agents will be launched (skip silently on error).
 
 `/clavain:quality-gates`
 

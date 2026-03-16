@@ -4,7 +4,7 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 17 skills, 6 agents, 47 commands, 10 hooks, 0 MCP servers. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Demarch stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 17 skills, 6 agents, 48 commands, 10 hooks, 0 MCP servers. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
 
 ## Quick Commands
 
@@ -15,7 +15,7 @@ claude --plugin-dir /home/mk/projects/Demarch/os/Clavain
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 17
 ls agents/{review,workflow}/*.md | wc -l  # Should be 6
-ls commands/*.md | wc -l              # Should be 47 (46 registered + 1 unregistered bead-sweep)
+ls commands/*.md | wc -l              # Should be 48 (46 registered + 1 unregistered bead-sweep)
 for f in hooks/*.sh; do bash -n "$f" && echo "$(basename $f) OK"; done  # Syntax check all hooks
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 python3 -c "import json; json.load(open('hooks/hooks.json'))"           # Hooks JSON check
