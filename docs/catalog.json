@@ -1,19 +1,15 @@
 {
-  "generated": "2026-03-16T06:03:18Z",
+  "generated": "2026-03-16T18:27:39Z",
   "counts": {
-    "skills": 18,
+    "skills": 17,
     "agents": 6,
-    "commands": 48,
+    "commands": 47,
     "hooks": 10,
     "mcp_servers": 0,
     "review": 2,
     "workflow": 4
   },
   "skills": [
-    {
-      "name": "autoresearch",
-      "description": "Use when running autonomous experiment campaigns to optimize metrics. Drives init/run/log experiment loop with context recovery."
-    },
     {
       "name": "code-review-discipline",
       "description": "Use when requesting or receiving code review \u2014 covers dispatching reviewer subagents, handling feedback with technical rigor, and avoiding performative agreement"
@@ -195,10 +191,6 @@
     {
       "name": "heal-skill",
       "description": "Fix incorrect SKILL.md files when a skill has wrong instructions or outdated API references"
-    },
-    {
-      "name": "interpeer",
-      "description": "Quick cross-AI peer review \u2014 auto-detects host agent and calls the other for a second opinion"
     },
     {
       "name": "interserve",

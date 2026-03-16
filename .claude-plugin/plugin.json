@@ -1,7 +1,7 @@
 {
   "name": "clavain",
   "version": "0.6.209",
-  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, and monitors its own docs. Orchestrates Claude, Codex, and GPT-5.2 Pro through 6 agents, 48 commands, 18 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
+  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, and monitors its own docs. Orchestrates Claude, Codex, and GPT-5.2 Pro through 6 agents, 47 commands, 17 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
   "author": {
     "name": "mistakeknot"
   },
@@ -36,8 +36,7 @@
     "./skills/using-clavain",
     "./skills/ship",
     "./skills/using-tmux-for-interactive-commands",
-    "./skills/writing-plans",
-    "./skills/autoresearch"
+    "./skills/writing-plans"
   ],
   "commands": [
     "./commands/brainstorm.md",
@@ -57,7 +56,6 @@
     "./commands/heal-skill.md",
     "./commands/help.md",
     "./commands/init.md",
-    "./commands/interpeer.md",
     "./commands/interserve.md",
     "./commands/land.md",
     "./commands/migration-safety.md",
