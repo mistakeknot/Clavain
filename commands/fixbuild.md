@@ -12,63 +12,30 @@ Lightweight build-error fast path. For type errors, missing imports, and straigh
 
 <build_cmd> #$ARGUMENTS </build_cmd>
 
-If no build command provided, auto-detect from project:
+If not provided, auto-detect:
+- `go.mod` → `go build ./...`
+- `Cargo.toml` → `cargo build`
+- `package.json` → `npm run build` (or `tsc` if `tsconfig.json`)
+- `pyproject.toml` → `uv run python -m py_compile`
+- `Makefile` → `make`
 
-```bash
-# Detect build system (check in order)
-ls go.mod 2>/dev/null        # → go build ./...
-ls Cargo.toml 2>/dev/null    # → cargo build
-ls package.json 2>/dev/null  # → npm run build (or tsc if tsconfig.json exists)
-ls pyproject.toml 2>/dev/null # → uv run python -m py_compile (or pytest --collect-only)
-ls Makefile 2>/dev/null      # → make
-```
-
-If multiple build systems detected, pick the most specific (go.mod > Makefile).
+Multiple detected: prefer most specific (`go.mod` > `Makefile`).
 
 ## Loop (max 5 attempts)
 
-For each attempt:
-
-### 1. Run Build
-
-```bash
-# Run the build command, capture both stdout and stderr
-```
-
-If build succeeds (exit 0): report success and stop.
-
-### 2. Parse Errors
-
-Extract from build output:
-- **File paths** with line numbers
-- **Error messages** (type mismatch, undefined reference, missing import, syntax error)
-
-Read only the failing file(s). Don't read the whole codebase.
-
-### 3. Fix
-
-Apply the minimal fix. Common patterns:
-- Missing import → add it
-- Type mismatch → fix the type
-- Undefined symbol → check for typo, add declaration, or fix reference
-- Syntax error → fix syntax
-
-**Do not refactor.** Fix the error and nothing else.
-
-### 4. Re-run Build
-
-Go back to step 1 with the next attempt.
+1. **Run build** — if exit 0, report success and stop.
+2. **Parse errors** — extract file paths, line numbers, error messages. Read only failing files.
+3. **Fix** — minimal change only. Missing import → add it. Type mismatch → fix type. Undefined symbol → check typo/add declaration. Syntax error → fix syntax. **Do not refactor.**
+4. Repeat.
 
 ## Escalation
 
-After 5 failed attempts, stop and say:
+After 5 failed attempts:
 
-> Build still failing after 5 fix attempts. This looks like a deeper issue — consider using `/clavain:repro-first-debugging` for systematic investigation.
+> Build still failing after 5 fix attempts. This looks like a deeper issue — consider `/clavain:repro-first-debugging`.
 
-Do NOT keep looping. Five attempts means the problem isn't a simple build error.
+## Constraints
 
-## Important
-
-- **This is not debugging.** Don't investigate root causes, don't add logging, don't run tests. Just fix the build error.
-- **Minimal diffs.** Each fix should be 1-5 lines. If a fix requires more than 10 lines, it's probably not a build error.
-- **Don't touch passing code.** Only modify files that appear in the error output.
+- Not debugging — no root cause investigation, no logging, no tests.
+- Each fix: 1–5 lines. >10 lines means it's not a simple build error.
+- Only touch files in error output.

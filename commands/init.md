@@ -7,74 +7,53 @@ disable-model-invocation: false
 
 # /init
 
-Scaffold the `.clavain/` agent memory filesystem in the current git repository. This creates a per-project directory contract for durable knowledge, ephemeral working state, and API contracts.
+Scaffold `.clavain/` agent memory filesystem in the current git repository.
 
 ## Execution
 
-1. **Determine the git repository root:**
+1. **Get git root:**
 
 ```bash
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-if [[ -z "$GIT_ROOT" ]]; then
-    echo "ERROR: Not in a git repository. /clavain:clavain-init requires git."
-    exit 1
-fi
+[[ -z "$GIT_ROOT" ]] && { echo "ERROR: Not in a git repository."; exit 1; }
 ```
 
-2. **Create directory structure** (at `$GIT_ROOT/.clavain/`):
+2. **Create directories** (`mkdir -p`, skip existing):
 
 ```
 .clavain/
-├── learnings/          # Curated durable knowledge (committed)
-├── scratch/            # Ephemeral state (gitignored)
-│   └── runs/           # Future: run manifests
-└── contracts/          # API contracts, invariants (committed)
+├── learnings/    # Curated durable knowledge (committed)
+├── scratch/      # Ephemeral state (gitignored)
+│   └── runs/
+└── contracts/    # API contracts, invariants (committed)
 ```
 
-Use `mkdir -p` for each directory. Do NOT create files that already exist.
-
-3. **Add `.clavain/scratch/` to `.gitignore`** (duplicate-safe):
+3. **Gitignore scratch** (duplicate-safe):
 
 ```bash
-if ! grep -qF '.clavain/scratch/' "$GIT_ROOT/.gitignore" 2>/dev/null; then
-    echo '.clavain/scratch/' >> "$GIT_ROOT/.gitignore"
-fi
+grep -qF '.clavain/scratch/' "$GIT_ROOT/.gitignore" 2>/dev/null || echo '.clavain/scratch/' >> "$GIT_ROOT/.gitignore"
 ```
 
-4. **Create `.clavain/README.md`** (only if it doesn't exist) with:
+4. **Create `.clavain/README.md`** (only if missing):
 
 ```markdown
 # .clavain/
+Agent memory filesystem. Created by `/clavain:clavain-init`.
 
-Agent memory filesystem for this project. Created by `/clavain:clavain-init`.
+- **learnings/** — Durable knowledge. Feeds review agents.
+- **scratch/** — Ephemeral state (gitignored). Handoffs, checkpoints.
+- **contracts/** — API contracts, invariants, SLOs. Read by fd-correctness/fd-safety.
 
-## Directories
-
-- **learnings/** — Curated durable knowledge. YAML frontmatter + markdown body. Feeds into review agents.
-- **scratch/** — Ephemeral working state (gitignored). Session handoffs, run checkpoints.
-- **contracts/** — API contracts, invariants, SLOs. Read by interflux:fd-correctness and interflux:fd-safety during reviews.
-
-## Gitignore
-
-`scratch/` is gitignored. Everything else is committed and travels with the repo.
-
-## Extension Points
-
-Downstream features add their own subdirectories:
-- `scenarios/` — holdout scenario bank
-- `pipelines/` — graph pipeline definitions
-- `provenance/` — agent run manifests
+Extension points: `scenarios/`, `pipelines/`, `provenance/`
 ```
 
-5. **Report what was created:**
+5. **Report:**
 
 ```
 .clavain/ initialized at $GIT_ROOT
-  learnings/    — durable project knowledge
-  scratch/      — ephemeral state (gitignored)
-  contracts/    — API contracts and invariants
+  learnings/  — durable project knowledge
+  scratch/    — ephemeral state (gitignored)
+  contracts/  — API contracts and invariants
 ```
 
-## Idempotency
-
-This command is safe to re-run. It only creates directories and files that don't already exist, and only appends to `.gitignore` if the entry is missing.
+Idempotent — safe to re-run.

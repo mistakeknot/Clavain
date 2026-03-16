@@ -9,74 +9,65 @@ Run a continuous optimization campaign: edit code, benchmark, keep improvements,
 
 ## Setup Phase
 
-1. **Locate campaign YAML.** The user provides a campaign name. Call `init_experiment` with the campaign name and a hypothesis for the first experiment. The tool loads the YAML, creates a git worktree, and opens (or resumes) a JSONL segment.
+1. **Locate campaign YAML.** Call `init_experiment` with campaign name + first hypothesis. Tool loads YAML, creates git worktree, opens (or resumes) a JSONL segment.
 
-2. **Check for resume.** If `init_experiment` returns `resumed: true`, the campaign is continuing from a previous session. Read the `autoresearch.md` living document for context, but treat the tool's response as the authoritative state (experiment count, current best, baseline).
+2. **Check for resume.** If `init_experiment` returns `resumed: true`, read `autoresearch.md` for context — but treat the tool's response as authoritative state (experiment count, current best, baseline).
 
-3. **Create session documents.** On first run (not resumed), generate `autoresearch.md` and `autoresearch.ideas.md` from the templates in this skill's `templates/` directory. Populate with campaign metadata from the tool response.
+3. **Create session documents.** On first run (not resumed): generate `autoresearch.md` and `autoresearch.ideas.md` from `templates/` in this skill directory. Populate with campaign metadata from tool response.
 
 ## Experiment Loop
 
-Repeat until `campaign_complete: true` is returned by `log_experiment`:
+Repeat until `log_experiment` returns `campaign_complete: true`:
 
 ### 1. Pick an idea
-Read the next untried idea from `autoresearch.ideas.md`. If no ideas remain, analyze the code in the worktree to generate new hypotheses. If you cannot generate any, the campaign is done — call `log_experiment` with a final summary.
+Read next untried idea from `autoresearch.ideas.md`. If none remain, analyze worktree code to generate new hypotheses. If none possible, call `log_experiment` with final summary.
 
 ### 2. Make code changes
-Edit files in the **worktree directory** (returned by `init_experiment`) to implement the hypothesis. Keep changes small and focused — one variable at a time.
+Edit files in the **worktree directory** (returned by `init_experiment`). Keep changes small — one variable at a time.
 
 ### 3. Run benchmark
-Call `run_experiment` with the campaign name. The tool executes the benchmark command from the YAML, extracts metrics, and returns values.
+Call `run_experiment` with campaign name. Tool executes benchmark, extracts metrics, returns values.
 
 ### 4. Evaluate results
-Compare the returned metric value against the current best:
-- **Improvement** (metric moved in the right direction): decide `keep`
-- **Regression** (metric moved wrong way): decide `discard`
-- **Negligible change** (< 0.1% of baseline): decide `discard` with notes explaining why
+- **Improvement** (metric moved right direction) → `keep`
+- **Regression** (metric moved wrong way) → `discard`
+- **Negligible change** (< 0.1% of baseline) → `discard` with explanation
 
 ### 5. Log decision
-Call `log_experiment` with the campaign name, decision, metric value, secondary values, and notes.
+Call `log_experiment` with campaign name, decision, metric value, secondary values, notes.
 
-**Important:** Check the response for:
+Check response for:
 - `campaign_complete: true` → stop the loop
-- `override_reason` → the system overrode your decision due to secondary metric regression
+- `override_reason` → system overrode your decision (secondary metric regression)
 - `effective_decision` → may differ from your `decision` if overridden
 
 ### 6. Update living document
-After each experiment, update `autoresearch.md`:
-- Update the "Current Best" and "Experiments" counters
-- Add the experiment to the "Recent Experiments" table (keep last 10)
-- Move the idea from "Untried" to "Tried" in `autoresearch.ideas.md`
-- Record any new ideas discovered during the experiment
+- Update "Current Best" and "Experiments" counters in `autoresearch.md`
+- Add experiment to "Recent Experiments" table (keep last 10)
+- Move idea from "Untried" to "Tried" in `autoresearch.ideas.md`
+- Record any new hypotheses discovered
 
 ## Context Recovery
 
-When approaching context limits (context window > 80%):
+When context window > 80%:
+1. Write current state to `autoresearch.md`
+2. Session ends naturally
+3. Next session: call `init_experiment` first (JSONL store is authoritative) → rebuild `autoresearch.md` from tool response if diverged → continue from next untried idea
 
-1. Write the current state to `autoresearch.md` (it's a write-through cache)
-2. The session will end naturally
-3. On the next session, `/autoresearch` resumes:
-   - Call `init_experiment` first — it reads the JSONL store (authoritative source)
-   - Rebuild `autoresearch.md` from the tool's response if it diverges
-   - Continue the loop from the next untried idea
-
-**Never treat `autoresearch.md` as the recovery source.** The JSONL store is ground truth. The living document is a convenience cache for agent context.
+**Never treat `autoresearch.md` as recovery source.** JSONL store is ground truth.
 
 ## Campaign Completion
 
-A campaign ends when any of:
-- All ideas exhausted and no new ones generated
-- `log_experiment` returns `campaign_complete: true` (budget or failure cap reached)
-- User interrupts
+Ends when: all ideas exhausted and no new ones generated, `campaign_complete: true` returned, or user interrupts.
 
 On completion:
 1. Update `autoresearch.md` with final summary
 2. Report: total experiments, kept count, cumulative improvement
-3. If improvements were kept, remind the user to merge the experiment branch
+3. If improvements were kept, remind user to merge the experiment branch
 
 ## Safety Notes
 
-- `run_experiment` will prompt the user for approval before the first benchmark execution (RequirePrompt gate). This is expected — the benchmark command comes from YAML.
-- `log_experiment` may override your `keep` decision to `discard` if secondary metrics regress beyond thresholds. Check `override_reason` in the response.
-- All changes happen in a git worktree — the main branch is never touched.
-- Secret files (.env, .pem, .key) are automatically rejected by `KeepChanges`.
+- `run_experiment` prompts user for approval before first benchmark (RequirePrompt gate) — expected behavior
+- `log_experiment` may override `keep` → `discard` if secondary metrics regress — check `override_reason`
+- All changes in git worktree — main branch never touched
+- Secret files (.env, .pem, .key) auto-rejected by `KeepChanges`

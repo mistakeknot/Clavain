@@ -5,54 +5,34 @@ description: Run a structured Claude↔Codex debate before implementing a comple
 
 # Debate — Structured Cross-AI Discussion
 
-Run a structured 2-round debate between Claude and Codex to explore different approaches before implementing a complex task.
+2-round debate between Claude and Codex to explore approaches before implementing.
 
 ## Usage
 
-The user invokes `/debate [topic]` where topic describes the decision or task to debate.
+`/debate [topic]` — if no topic, infer from conversation context. Read relevant files for context.
 
 ## Workflow
 
-### 1. Understand the Topic
-
-If the user provides a topic, use it directly. If not, analyze the current conversation context to identify the decision point that needs debate.
-
-Read relevant code files to build context.
-
-### 2. Write Claude's Position (Round 1)
-
-Write your analysis and recommended approach to a position file:
+### 1. Write Claude's Position (Round 1)
 
 ```bash
 TOPIC_SLUG="<short-kebab-case-label>"
 ```
 
-Write the position to `/tmp/debate-claude-position-${TOPIC_SLUG}.md` with this structure:
+Write to `/tmp/debate-claude-position-${TOPIC_SLUG}.md`:
 
 ```markdown
 # Claude's Position: [Topic]
-
 ## Context
-[Brief description of the problem and codebase state]
-
 ## Recommended Approach
-[Your proposed solution with rationale]
-
 ## Trade-offs
-[Pros and cons you see]
-
 ## Concerns
-[Risks, edge cases, or unknowns]
-
 ## Key Files
-[List of relevant files with brief descriptions]
 ```
 
-### 3. Dispatch Codex for Independent Analysis (Round 1)
+### 2. Dispatch Codex (Round 1)
 
-Use debate.sh to get Codex's independent position:
-
-**Resolve script paths first** — `$CLAUDE_PLUGIN_ROOT` is NOT available in the Bash environment:
+Locate debate.sh:
 ```bash
 DEBATE_SH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/debate.sh' 2>/dev/null | head -1)
 [ -z "$DEBATE_SH" ] && DEBATE_SH=$(find ~/projects/Clavain -name debate.sh -path '*/scripts/*' 2>/dev/null | head -1)
@@ -67,35 +47,23 @@ bash $DEBATE_SH \
   --rounds 2
 ```
 
-This runs Codex in `read-only` mode (no file changes) and produces a structured debate output.
+Codex runs in `read-only` mode — no file changes.
 
-### 4. Read and Synthesize
+### 3. Read and Synthesize
 
-Read the debate output file. Synthesize a final recommendation:
+Read the output file. Produce:
 
 ```markdown
 ## Debate Synthesis: [Topic]
-
 ### Areas of Agreement
-[Where Claude and Codex align]
-
 ### Areas of Disagreement
-[Where they differ and why]
-
 ### Final Recommendation
-[Your synthesis based on both positions]
-
 ### Risk Mitigations
-[How to address concerns raised by either side]
 ```
 
-### 5. Oracle Escalation (if warranted)
+### 4. Oracle Escalation (if warranted)
 
-If the debate involves any of these, escalate to Oracle (GPT-5.2 Pro) for a third opinion:
-- Security implications (auth, crypto, data access)
-- Multi-system integration (API contracts, protocol changes)
-- Performance architecture (algorithms, data structures at scale)
-- Fundamental architectural disagreement between Claude and Codex
+Escalate to Oracle for: security implications, multi-system API contracts, performance architecture, or fundamental architectural disagreement.
 
 ```bash
 DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
@@ -105,20 +73,17 @@ DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
   --write-output /tmp/oracle-debate-${TOPIC_SLUG}.md
 ```
 
-After Oracle responds, produce a final synthesis that maps all three positions.
+Produce a three-way synthesis after Oracle responds.
 
-### 6. Present to User
+### 5. Present to User
 
-Present the synthesis to the user with clear options:
-- Option A (if positions diverged): Claude's approach with Codex's mitigations
-- Option B (if positions diverged): Codex's approach with Claude's refinements
-- Consensus (if positions aligned): The agreed approach with combined improvements
+- **Diverged:** Option A (Claude approach + Codex mitigations) / Option B (Codex approach + Claude refinements)
+- **Aligned:** Consensus approach with combined improvements
 
 Ask the user which direction to take before implementing.
 
 ## Notes
 
-- Debate is for **decisions**, not execution. After the debate, use normal delegation to implement.
-- 2-round maximum prevents debate from costing more than the implementation.
-- Codex runs in `read-only` mode during debate — no files are modified.
-- Oracle escalation adds ~2-5 minutes. Only use for genuinely complex architectural decisions.
+- Debate is for decisions, not execution. Implement afterward via normal delegation.
+- 2-round max — debate must not cost more than implementation.
+- Oracle adds ~2-5 min; use only for genuinely complex architectural decisions.
