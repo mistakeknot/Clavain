@@ -7,66 +7,42 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 # Writing Plans
 
-## Overview
-
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
-
-Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
+Write comprehensive implementation plans assuming zero codebase context and questionable taste. Document every file to touch, code, tests, and how to verify. Bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
-**Context:** This should be run after `/brainstorm` has captured the design.
+**Context:** Run after `/brainstorm` has captured the design.
 
-**Save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
-
-**Save execution manifest to:** `docs/plans/YYYY-MM-DD-<feature-name>.exec.yaml` (generated alongside the plan — see "Execution Manifest" section below)
+**Save plan to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
+**Save manifest to:** `docs/plans/YYYY-MM-DD-<feature-name>.exec.yaml`
 
 ## Step 0: Prior Art & Institutional Learnings
 
-**Prior art check (REQUIRED):** Before designing infrastructure, check if the problem is already solved:
-
+**Prior art check (REQUIRED):**
 ```bash
-# Check assessment docs for external tools with adopt/port verdicts
 grep -ril "<2-3 keywords>" docs/research/assess-*.md 2>/dev/null
-# Check existing plugins for overlap
 ls interverse/*/CLAUDE.md 2>/dev/null | xargs grep -li "<keywords>" 2>/dev/null
 ```
+If an external tool has an "adopt" verdict, default to integration over reimplementation. Surface to user before proceeding.
 
-If an external tool has an "adopt" verdict for this domain, default to integration (install + wire up) over reimplementation. Surface to user before proceeding.
-
-**Institutional learnings (deterministic):** Before writing any tasks, search for relevant prior solutions without spawning an LLM agent:
-
-1. **Extract 2-4 keywords** from the feature description/spec (module names, problem type, component names)
-2. **Search docs/solutions/** for matching frontmatter:
+**Institutional learnings (deterministic):**
+1. Extract 2-4 keywords from the spec
+2. Search `docs/solutions/` for matching frontmatter:
    ```bash
-   # Parallel Grep for each keyword against title/tags/module fields
    Grep: pattern="(title|tags|module):.*<keyword>" path=docs/solutions/ output_mode=files_with_matches -i=true
    ```
    Also read `docs/solutions/patterns/critical-patterns.md` if it exists.
-3. **Search past sessions** via CASS (if available):
-   ```bash
-   cass search "<keywords>" --limit 3 --json --fast-only 2>/dev/null
-   ```
-4. If **matches found** from either source:
-   - Read frontmatter (limit:30 lines) of matching docs/solutions/ files
-   - Add a `## Prior Learnings` section to the plan document header (after Architecture, before the first task)
-   - List each relevant learning: file path, key insight, and how it affects the plan
-   - Encode any must-know gotchas directly into the relevant task steps (e.g., "Note: see docs/solutions/patterns/wal-protocol-completeness-20260216.md — every write path needs WAL protection")
-5. If no matches from either source: proceed without mention
-6. **Fallback**: If both `docs/solutions/` and `cass` are unavailable, spawn `Task(subagent_type="interflux:learnings-researcher")` as before
+3. Search past sessions: `cass search "<keywords>" --limit 3 --json --fast-only 2>/dev/null`
+4. If matches found: read frontmatter (limit:30 lines), add `## Prior Learnings` section after Architecture, encode gotchas into relevant task steps
+5. No matches: proceed without mention
+6. Fallback if both unavailable: spawn `Task(subagent_type="interflux:learnings-researcher")`
 
 ## Bite-Sized Task Granularity
 
-**Each step is one action (2-5 minutes):**
-- "Write the failing test" - step
-- "Run it to make sure it fails" - step
-- "Implement the minimal code to make the test pass" - step
-- "Run the tests and make sure they pass" - step
-- "Commit" - step
+Each step = one action (2-5 min):
+- "Write the failing test" / "Run it to confirm it fails" / "Write minimal implementation" / "Run tests to confirm pass" / "Commit"
 
 ## Plan Document Header
-
-**Every plan MUST start with YAML frontmatter and this header:**
 
 ```markdown
 ---
@@ -75,51 +51,43 @@ bead: <CLAVAIN_BEAD_ID or "none">
 stage: design
 requirements:
   - F1: <feature name from PRD>
-  - F2: <feature name from PRD>
 ---
 # [Feature Name] Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use clavain:executing-plans to implement this plan task-by-task.
 
 **Bead:** <bead_id>
-**Goal:** [One sentence describing what this builds]
+**Goal:** [One sentence]
 
-**Architecture:** [2-3 sentences about approach]
+**Architecture:** [2-3 sentences]
 
-**Tech Stack:** [Key technologies/libraries]
+**Tech Stack:** [Key technologies]
 
-**Prior Learnings:** [If learnings-researcher found relevant docs, list them here. Otherwise omit this section.]
+**Prior Learnings:** [Relevant docs found. Omit if none.]
 
 ---
 ```
 
-The `requirements` field links plan tasks to PRD feature IDs. Use the feature numbering from the PRD (F1, F2, etc.). This field is optional — omit it when no PRD exists.
+`requirements` links tasks to PRD feature IDs. Omit when no PRD exists.
 
 ## Must-Haves Section
 
-After the plan header (after Prior Learnings, before the first task), add a Must-Haves section:
+After plan header, before first task:
 
 ```markdown
 ## Must-Haves
 
-**Truths** (observable behaviors — verifiable by using the application):
-- [User can do X / System responds with Y / Data persists across Z]
+**Truths** (observable behaviors):
+- [User can do X / System responds with Y]
 
-**Artifacts** (files that must exist with specific exports):
+**Artifacts** (files with specific exports):
 - [`path/to/file.py`] exports [`function_name`, `class_name`]
 
-**Key Links** (critical connections where breakage causes cascading failures):
+**Key Links** (connections where breakage cascades):
 - [Component A calls Component B before Component C]
 ```
 
-**Deriving must-haves:**
-1. State the goal as an outcome, not a task ("Working chat interface", not "Build chat components")
-2. List 3-7 truths from the user's perspective ("User can see messages", "Messages persist across refresh")
-3. For each truth, identify required artifacts (files, exports, types)
-4. For each artifact, identify key links (what must be connected for it to function)
-5. Focus key_links on where breakage causes cascading failures
-
-Must-haves are optional. Omit for trivial plans (complexity 1-2) or when the goal is self-evident. The executing-plans skill validates these after all tasks complete.
+Derive by: (1) state goal as outcome not task, (2) list 3-7 user-perspective truths, (3) identify required artifacts per truth, (4) identify key links per artifact. Omit for trivial plans (complexity 1-2). executing-plans validates these after all tasks.
 
 ## Task Structure
 
@@ -132,7 +100,6 @@ Must-haves are optional. Omit for trivial plans (complexity 1-2) or when the goa
 - Test: `tests/exact/path/to/test.py`
 
 **Step 1: Write the failing test**
-
 ```python
 def test_specific_behavior():
     result = function(input)
@@ -140,24 +107,20 @@ def test_specific_behavior():
 ```
 
 **Step 2: Run test to verify it fails**
-
 Run: `pytest tests/path/test.py::test_name -v`
 Expected: FAIL with "function not defined"
 
 **Step 3: Write minimal implementation**
-
 ```python
 def function(input):
     return expected
 ```
 
 **Step 4: Run test to verify it passes**
-
 Run: `pytest tests/path/test.py::test_name -v`
 Expected: PASS
 
 **Step 5: Commit**
-
 ```bash
 git add tests/path/test.py src/path/file.py
 git commit -m "feat: add specific feature"
@@ -171,56 +134,41 @@ git commit -m "feat: add specific feature"
 </verify>
 ````
 
-**Writing verify blocks:**
-- Place `<verify>` at the end of each task, after the final step
-- Each entry has `run:` (exact command) and `expect:` (pass condition)
-- Two matchers: `exit 0` (command succeeds), `contains "string"` (output includes substring)
-- Verify blocks are optional — omit for tasks that are purely documentation or configuration
-- The executing-plans skill runs these automatically after completing all task steps
+`<verify>` rules: place at end of task; `run:` + `expect:`; matchers: `exit 0` or `contains "string"`; omit for pure docs/config tasks. executing-plans runs these automatically.
 
 ## Execution Manifest
 
-After saving the plan markdown, also generate a companion `.exec.yaml` manifest at the same path (replacing `.md` with `.exec.yaml`). This manifest tells `orchestrate.py` how to dispatch Codex agents for the plan.
-
-**Choose `mode` based on plan analysis:**
+Save companion `.exec.yaml` alongside the plan. Choose `mode`:
 
 | Plan shape | Mode |
 |-----------|------|
 | 3+ tasks with declared dependencies | `dependency-driven` |
 | All tasks share state or files heavily | `all-sequential` |
-| All tasks fully independent, no deps | `all-parallel` |
-| Mixed, but stages are clear boundaries | `manual-batching` |
-
-**Manifest template:**
+| All tasks fully independent | `all-parallel` |
+| Mixed with clear stage boundaries | `manual-batching` |
 
 ```yaml
 version: 1
 mode: dependency-driven     # or all-parallel, all-sequential, manual-batching
-tier: deep                   # default tier: fast or deep
-max_parallel: 5              # max concurrent agents (1-10)
-timeout_per_task: 300        # seconds
+tier: deep                   # fast or deep
+max_parallel: 5
+timeout_per_task: 300
 
 stages:
   - name: "Stage Name"
     tasks:
       - id: task-1
         title: "Short task description"
-        files: [path/to/file.go]     # files this task reads/modifies
-        depends: []                   # explicit deps (additive to stage barrier)
+        files: [path/to/file.go]
+        depends: []
       - id: task-2
         title: "Another task"
         files: [path/to/other.go]
-        depends: [task-1]            # intra-stage dependency
-        tier: fast                   # override default tier
+        depends: [task-1]
+        tier: fast             # override; use fast for verify-only tasks
 ```
 
-**Rules:**
-- Task IDs must match `task-N` pattern and be unique
-- `depends` is additive to stage barriers — every task implicitly depends on ALL tasks from prior stages
-- Group tasks into stages by natural workflow phases
-- Use `tier: fast` for verification-only tasks (tests, linting)
-- The `tier` field uses dispatch.sh values (`fast`/`deep`), NOT model names (`sonnet`/`opus`)
-- If the plan has <3 tasks or all tasks are tightly coupled, skip the manifest — the executing-plans skill will fall back to direct execution
+Rules: IDs match `task-N`, unique. `depends` is additive to stage barriers. `tier` uses `fast`/`deep`, not model names. Skip manifest for <3 tasks or tightly coupled — executing-plans falls back to direct execution.
 
 ## Remember
 - Exact file paths always
@@ -231,35 +179,29 @@ stages:
 
 ## Execution Handoff
 
-After saving the plan, analyze it to recommend an execution approach using `AskUserQuestion`.
+After saving, analyze the plan and recommend execution via `AskUserQuestion`.
 
-### Step 1: Analyze the Plan
-
-Evaluate the plan you just wrote:
+### Step 1: Analyze
 
 | Signal | Points toward |
 |--------|--------------|
 | <3 tasks, or tasks share files/state | Subagent-Driven |
-| Tasks are exploratory/research/architectural | Subagent-Driven |
-| User wants manual checkpoints between batches | Parallel Session |
-| 3+ tasks with dependencies + `.exec.yaml` generated | Orchestrated Delegation |
+| Exploratory/research/architectural tasks | Subagent-Driven |
+| User wants manual checkpoints | Parallel Session |
+| 3+ tasks with deps + `.exec.yaml` generated | Orchestrated Delegation |
 | 3+ independent implementation tasks (no manifest) | Codex Delegation |
-| Tasks have clear file lists + test commands | Codex Delegation or Orchestrated |
-| Codex CLI not available (`command -v codex` fails) | Subagent-Driven |
+| Clear file lists + test commands | Codex Delegation or Orchestrated |
+| `command -v codex` fails | Subagent-Driven |
 
-### Step 2: Check Codex Availability
+### Step 2: Check Codex
 
-Before recommending Codex Delegation, verify: `command -v codex`
+`command -v codex` — if unavailable, exclude Codex option, show only Subagent-Driven and Parallel Session.
 
-If Codex is not installed, exclude option 3 and recommend between options 1 and 2 only.
+### Step 3: AskUserQuestion
 
-### Step 3: Present Choice via AskUserQuestion
+Put recommended option first with "(Recommended)". Tailor descriptions to this plan's task count and coupling.
 
-Use `AskUserQuestion` with the recommended option listed first (with "(Recommended)"
-in the label). Tailor the descriptions to this specific plan.
-
-**Example** (when recommending Codex Delegation for a plan with 5 independent tasks):
-
+**Example (5 independent tasks → Codex Delegation):**
 ```
 AskUserQuestion:
   question: "Plan saved to docs/plans/<filename>.md. How should we execute it?"
@@ -269,15 +211,14 @@ AskUserQuestion:
       description: "5 independent tasks with clear file boundaries — Codex agents
         execute in parallel, Claude reviews. Fastest for this plan shape."
     - label: "Subagent-Driven"
-      description: "Fresh Claude subagent per task in this session, with spec +
-        quality review after each. Serial but thorough."
+      description: "Fresh Claude subagent per task, with spec + quality review
+        after each. Serial but thorough."
     - label: "Parallel Session"
       description: "Open separate session with executing-plans skill. Batch
         execution with human checkpoints between groups."
 ```
 
-**Example** (when recommending Subagent-Driven for a plan with 2 coupled tasks):
-
+**Example (2 coupled tasks → Subagent-Driven):**
 ```
 AskUserQuestion:
   question: "Plan saved to docs/plans/<filename>.md. How should we execute it?"
@@ -287,40 +228,18 @@ AskUserQuestion:
       description: "2 tightly coupled tasks that share state — best handled
         sequentially with full Claude reasoning per task."
     - label: "Codex Delegation"
-      description: "Dispatch Codex agents for parallel execution. Less ideal here
-        since tasks share files, but possible if split carefully."
+      description: "Dispatch Codex agents. Less ideal since tasks share files,
+        but possible if split carefully."
     - label: "Parallel Session"
-      description: "Open separate session with executing-plans skill. Batch
-        execution with human checkpoints."
+      description: "Open separate session with executing-plans skill."
 ```
 
-**Key rules for the AskUserQuestion call:**
-- Always put the recommended option first with "(Recommended)" in the label
-- Write descriptions that reference *this plan's* specific task count, coupling, and characteristics
-- If Codex is unavailable, show only 2 options (Subagent-Driven and Parallel Session)
-- The "Other" option is automatically available for users who want something different
+### Step 4: Execute
 
-### Step 4: Execute Based on Choice
+**Subagent-Driven:** REQUIRED SUB-SKILL: `clavain:subagent-driven-development` — stay in session, fresh subagent per task + code review.
 
-**If Subagent-Driven chosen:**
-- **REQUIRED SUB-SKILL:** Use clavain:subagent-driven-development
-- Stay in this session
-- Fresh subagent per task + code review
+**Parallel Session:** Guide to new session in worktree. REQUIRED SUB-SKILL: `clavain:executing-plans`.
 
-**If Parallel Session chosen:**
-- Guide them to open new session in worktree
-- **REQUIRED SUB-SKILL:** New session uses clavain:executing-plans
+**Orchestrated Delegation (manifest exists):** executing-plans auto-detects `.exec.yaml`, invokes `orchestrate.py` — handles dependency ordering, parallel dispatch, output routing, failure propagation. Claude reviews summary and handles failures.
 
-**If Orchestrated Delegation chosen (manifest exists):**
-- The executing-plans skill auto-detects the `.exec.yaml` manifest and invokes `orchestrate.py`
-- The orchestrator handles dependency ordering, parallel dispatch, output routing between tasks, and failure propagation
-- Claude reviews the orchestrator's summary and handles any failures
-- Best when tasks have declared dependencies and benefit from mixed sequential/parallel execution
-
-**If Codex Delegation chosen (no manifest):**
-- **REQUIRED SUB-SKILL:** Use clavain:interserve
-- Claude stays as orchestrator — planning, dispatching, reviewing, integrating
-- Codex agents execute tasks in parallel sandboxes
-- Best when tasks are independent, well-scoped, and benefit from parallel execution
-- When running under `/sprint`, this step subsumes `/work` — the plan is executed here via Codex, so `/sprint` skips the `/work` step
-- The subsequent `/flux-drive` step also dispatches review agents through Codex when interserve mode is active, creating a consistent Codex pipeline
+**Codex Delegation (no manifest):** REQUIRED SUB-SKILL: `clavain:interserve` — Claude orchestrates, Codex agents execute in parallel sandboxes. Under `/sprint`, this subsumes `/work`; `/flux-drive` also dispatches review agents through Codex for a consistent pipeline.

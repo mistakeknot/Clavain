@@ -6,19 +6,17 @@ argument-hint: "[optional: --check-only to verify without making changes, --scop
 
 # Clavain Modpack Setup
 
-Bootstrap the Clavain engineering rig for your active runtime. Run this once to install everything, or re-run to verify and repair configuration.
-
-> **Note:** This command sets up *Clavain itself* (plugins, MCP servers, ic kernel). To set up a *project* (beads, CLAUDE.md, docs structure, observability), use `/clavain:project-onboard` instead.
+Bootstrap the Clavain engineering rig. Re-run to verify/repair. Use `/clavain:project-onboard` for project setup (beads, CLAUDE.md, docs, observability) — this command sets up Clavain itself.
 
 ## Arguments
 
 <setup_args> #$ARGUMENTS </setup_args>
 
-If `--check-only` is in the arguments, only verify the configuration — do not make changes.
+`--check-only`: verify only, no changes. `--scope=interlock`: intermute service only. `--scope=clavain` (default): full modpack. `--scope=all`: force both.
 
 ## Step 0: Route by Runtime (critical)
 
-If this command is run from **Codex CLI**, do **not** run `claude plugin ...` commands. Use Codex bootstrap and stop after this section:
+**Codex CLI:** Do NOT run `claude plugin ...`. Run the Codex bootstrap script, then stop:
 
 ```bash
 SCRIPT_PATH="${CLAVAIN_SOURCE_DIR:-$HOME/.codex/clavain}/scripts/install-codex-interverse.sh"
@@ -26,75 +24,40 @@ if [[ ! -f "$SCRIPT_PATH" ]]; then
   for candidate in \
     "$PWD/os/clavain/scripts/install-codex-interverse.sh" \
     "$HOME/projects/Demarch/os/clavain/scripts/install-codex-interverse.sh"; do
-    if [[ -f "$candidate" ]]; then
-      SCRIPT_PATH="$candidate"
-      break
-    fi
+    if [[ -f "$candidate" ]]; then SCRIPT_PATH="$candidate"; break; fi
   done
 fi
 if [[ -z "$SCRIPT_PATH" || ! -f "$SCRIPT_PATH" ]]; then
-  echo "Error: install-codex-interverse.sh not found."
-  echo "Run /clavain:codex-bootstrap first, then retry /clavain:setup."
-  exit 1
+  echo "Error: install-codex-interverse.sh not found. Run /clavain:codex-bootstrap first."; exit 1
 fi
-
-# check-only mode
-bash "$SCRIPT_PATH" doctor --json
-
-# non-check mode
-bash "$SCRIPT_PATH" install
-bash "$SCRIPT_PATH" doctor --json
-
+# check-only: bash "$SCRIPT_PATH" doctor --json
+# otherwise:  bash "$SCRIPT_PATH" install && bash "$SCRIPT_PATH" doctor --json
 ls ~/.agents/skills/
 ```
 
-If this command is run from **Claude Code**, continue with Steps 1+ below.
+**Claude Code:** continue with Steps 1+.
 
-`--scope=interlock` focuses on intermute service install/health only, while
-`--scope=clavain` (default) runs the full Clavain modpack setup flow. Use
-`--scope=all` to force both.
+## Step 1: Verify Clavain (Claude Code path)
 
-## Step 1: Verify Clavain Itself (Claude Code path)
-
-Confirm this plugin is installed and active:
-```bash
-# Clavain should already be installed if you're running this command
-ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/skills/using-clavain/SKILL.md
-```
+`ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/skills/using-clavain/SKILL.md`
 
 ## Step 2: Install Required & Recommended Plugins
 
-> **Automated install:** Use `scripts/modpack-install.sh` which reads `agent-rig.json` at runtime — no hardcoded lists to go stale.
+`modpack-install.sh` reads `agent-rig.json` at runtime — no hardcoded lists to go stale.
 
-Locate the modpack install script:
 ```bash
 CLAVAIN_DIR=$(dirname "$(ls ~/.claude/plugins/cache/interagency-marketplace/clavain/*/agent-rig.json 2>/dev/null | head -1)")
 INSTALL_SCRIPT="${CLAVAIN_DIR}/scripts/modpack-install.sh"
 ```
 
-If `--check-only` was passed, use dry-run mode:
-```bash
-# Check-only: report what would change without installing
-result=$("$INSTALL_SCRIPT" --dry-run --quiet)
-```
+- `--check-only`: `result=$("$INSTALL_SCRIPT" --dry-run --quiet)`
+- Otherwise: `result=$("$INSTALL_SCRIPT" --quiet)` — installs core + required + recommended, disables conflicts
 
-Otherwise, install required and recommended plugins automatically:
-```bash
-# Install core + required + recommended, disable conflicts — all in one pass
-result=$("$INSTALL_SCRIPT" --quiet)
-```
+Parse result JSON and report: **installed** (list), **already_present** (count), **failed** (warn each), **disabled**, **optional_available** (→ Step 2b).
 
-Parse the result JSON and report to the user:
-- **installed**: plugins that were just installed (list them)
-- **already_present**: plugins that were already installed (report count)
-- **failed**: plugins that failed to install (warn about each one)
-- **disabled**: conflicting plugins that were disabled
-- **optional_available**: optional plugins not yet installed (presented in Step 2b)
+If `$INSTALL_SCRIPT` or `jq` unavailable, fall back to manual lists below.
 
-If `$INSTALL_SCRIPT` is not found or `jq` is not available, fall back to the manual lists below.
-
-**Language servers (install based on what languages you work with):**
-Use AskUserQuestion to ask which languages to enable:
+**Language servers** — ask via AskUserQuestion which languages to enable:
 <!-- agent-rig:begin:install-infrastructure -->
 - Go → `claude plugin install gopls-lsp@claude-plugins-official`
 - Python → `claude plugin install pyright-lsp@claude-plugins-official`
@@ -104,20 +67,11 @@ Use AskUserQuestion to ask which languages to enable:
 
 ## Step 2b: Optional Plugins
 
-Check the `optional_available` field from the install result above. If any optional plugins are not yet installed, present them via AskUserQuestion (multi-select) with descriptions from `agent-rig.json`:
+Get uninstalled optionals: `optional=$("$INSTALL_SCRIPT" --dry-run --quiet --category=optional | jq -r '.optional_available[]')`
 
-```bash
-# Get optional plugins not yet installed
-optional=$("$INSTALL_SCRIPT" --dry-run --quiet --category=optional | jq -r '.optional_available[]')
-```
+Present via AskUserQuestion (multi-select). Install selected: `claude plugin install <plugin>`
 
-For each plugin the user selects, install it:
-```bash
-claude plugin install <selected-plugin>
-```
-
-If the script is unavailable, use the fallback list:
-
+Fallback list if script unavailable:
 <!-- agent-rig:begin:install-optional -->
 - `interfluence@interagency-marketplace` — Voice profile and style adaptation
 - `interject@interagency-marketplace` — Ambient discovery and research engine (MCP)
@@ -137,11 +91,7 @@ If the script is unavailable, use the fallback list:
 
 ## Step 3: Disable Conflicting Plugins
 
-> Conflicts are handled automatically by `modpack-install.sh` in Step 2. This step only runs if the script was unavailable.
-
-If the automated install ran, conflicts are already disabled — skip to Step 4.
-
-Otherwise, manually disable these plugins:
+Conflicts are handled automatically by `modpack-install.sh` — skip this step if automated install ran. Manual fallback:
 
 <!-- agent-rig:begin:disable-conflicts -->
 ```bash
@@ -160,57 +110,30 @@ claude plugin disable compound-engineering@every-marketplace
 
 ## Step 4: Verify MCP Servers
 
-Check that required MCP servers are configured:
-
-**context7** — should be declared in Clavain's plugin.json (automatic)
-
-**qmd** — check if available:
-```bash
-command -v qmd && qmd status
-```
-If qmd is not installed, inform the user: "qmd is not installed. Install from https://github.com/tobi/qmd for semantic search across project documentation."
-
-**Oracle** (optional) — check if available:
-```bash
-command -v oracle && pgrep -f "Xvfb :99"
-```
-If Oracle is available, confirm it's working. If not, inform the user it's optional.
+- **context7** — declared in Clavain's plugin.json (automatic)
+- **qmd** — `command -v qmd && qmd status`. If missing: "Install from https://github.com/tobi/qmd for semantic search across project docs."
+- **Oracle** (optional) — `command -v oracle && pgrep -f "Xvfb :99"`. Report status; not installed is OK.
 
 ## Step 5: Initialize Beads (if not configured)
 
-Check if the current project uses beads:
-```bash
-ls .beads/ 2>/dev/null
-```
-If `.beads/` doesn't exist, ask: "Initialize beads issue tracking for this project? (bd init)"
+`ls .beads/ 2>/dev/null` — if absent, ask: "Initialize beads issue tracking for this project? (bd init)"
 
 ## Step 5b: Build Intercore Kernel (ic)
 
-Check if the `ic` binary is available:
-```bash
-command -v ic && ic health
-```
+`command -v ic && ic health`
 
-If `ic` is not found or health check fails:
+If not found or unhealthy:
 
-1. Check for Go toolchain:
-```bash
-go version
-```
-If Go is not found: warn "Go >= 1.22 is required to build ic. Install from https://go.dev/dl/" and skip this step.
+1. `go version` — if missing, warn "Go >= 1.22 required: https://go.dev/dl/" and skip.
 
-2. Find the intercore source. Check these paths in order:
+2. Find intercore source (check in order):
 ```bash
-# If in the Demarch monorepo
 ls core/intercore/cmd/ic/main.go 2>/dev/null
-# If in a subproject with Demarch parent
 ls ../core/intercore/cmd/ic/main.go 2>/dev/null
 ls ../../core/intercore/cmd/ic/main.go 2>/dev/null
-# Standard clone location
 ls ~/projects/Demarch/core/intercore/cmd/ic/main.go 2>/dev/null
 ```
-
-If source not found: warn "intercore source not found. Clone https://github.com/mistakeknot/Demarch and re-run setup." and skip this step.
+If not found, warn "Clone https://github.com/mistakeknot/Demarch and re-run setup." and skip.
 
 3. Build and install:
 ```bash
@@ -218,23 +141,13 @@ mkdir -p ~/.local/bin
 go build -C <intercore_source_dir> -mod=readonly -o ~/.local/bin/ic ./cmd/ic
 ```
 
-4. Initialize and verify:
-```bash
-ic init
-ic health
-```
+4. `ic init && ic health`
 
-5. PATH check:
-```bash
-echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"
-```
-If not on PATH: warn "Add ~/.local/bin to your PATH: export PATH=\"$HOME/.local/bin:$PATH\""
+5. PATH check: `echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"` — if missing, warn "Add ~/.local/bin to PATH: `export PATH=\"$HOME/.local/bin:$PATH\"`"
 
-If `ic` is already present and healthy: report "ic kernel: healthy (version X.Y.Z)"
+If already present and healthy: report "ic kernel: healthy (version X.Y.Z)"
 
 ## Step 5c: Configure Statusline (interline)
-
-If interline is installed, run its install script to set up the statusline with Clavain-branded defaults:
 
 ```bash
 INTERLINE_INSTALL=$(ls ~/.claude/plugins/cache/*/interline/*/scripts/install.sh 2>/dev/null | head -1)
@@ -245,11 +158,9 @@ else
 fi
 ```
 
-This installs `~/.claude/statusline.sh`, creates `~/.claude/interline.json` with defaults (rainbow "Clavain" label with auto-version, dispatch prefix "Dispatch", bead_query and coordination disabled), and wires `settings.json`.
+Installs `~/.claude/statusline.sh`, creates `~/.claude/interline.json` (rainbow "Clavain" label, "Dispatch" prefix, bead_query/coordination disabled), wires `settings.json`.
 
 ## Step 6: Verify Configuration
-
-Run a final verification. This script reads `~/.claude/settings.json` to check actual enabled/disabled state (plugins missing from `enabledPlugins` are enabled by default — only explicit `false` means disabled):
 
 <!-- agent-rig:begin:verify-script -->
 ```bash
@@ -280,8 +191,6 @@ echo "ic kernel: $(command -v ic >/dev/null 2>&1 && ic health >/dev/null 2>&1 &&
 ```
 
 ## Step 7: Summary
-
-Present results:
 
 ```
 Clavain Modpack Setup Complete

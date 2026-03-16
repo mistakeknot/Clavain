@@ -6,80 +6,73 @@ argument-hint: "[optional: specific files or 'all' for full diff]"
 
 # Quality Gates
 
-Run the right set of reviewer agents automatically based on change risk. This command analyzes what changed and invokes the appropriate specialists.
+Analyzes changes, invokes appropriate specialist agents, synthesizes findings.
 
 ## Input
 
 <review_target> #$ARGUMENTS </review_target>
 
-If no arguments provided, analyze the current unstaged + staged changes (`git diff` + `git diff --cached`).
+No arguments → analyze current unstaged + staged changes (`git diff` + `git diff --cached`).
 
-## Execution Flow
+**Small change shortcut:** If diff is under 20 lines and touches one file, only run `interflux:review:fd-quality`. Skip phases 2-5b.
 
-### Phase 1: Analyze Changes
+## Phase 1: Analyze Changes
 
 ```bash
-# Get changed files
 git diff --name-only HEAD
 git diff --cached --name-only
 ```
 
-Classify each changed file by:
-- **Language**: .go → Go, .py → Python, .ts/.tsx → TypeScript, .sh → Shell, .rs → Rust
-- **Risk domain**: auth/crypto/secrets → Safety, migration/schema → Correctness, hot-path/cache/query → Performance, goroutine/async/channel → Correctness
+Classify each file by language (.go, .py, .ts/.tsx, .sh, .rs) and risk domain:
+- auth/crypto/secrets → Safety
+- migration/schema → Correctness
+- hot-path/cache/query → Performance
+- goroutine/async/channel → Correctness
 
-### Phase 2: Select Reviewers
-
-Based on analysis, invoke the appropriate agents in parallel:
+## Phase 2: Select Reviewers
 
 **Always run:**
-- `interflux:review:fd-architecture` — structural review for every change
-- `interflux:review:fd-quality` — naming, conventions, language-specific idioms (auto-detects language)
+- `interflux:review:fd-architecture` — structural review
+- `interflux:review:fd-quality` — naming, conventions, idioms
 
-**Risk-based (based on file paths and content):**
-- Auth/crypto/input handling/secrets → `interflux:review:fd-safety`
-- Database/migration/schema/backfill → `interflux:review:fd-correctness` + `data-migration-expert`
+**Risk-based:**
+- Auth/crypto/input/secrets → `interflux:review:fd-safety`
+- DB/migration/schema/backfill → `interflux:review:fd-correctness` + `data-migration-expert`
 - Performance-critical paths → `interflux:review:fd-performance`
 - Concurrent/async code → `interflux:review:fd-correctness`
 - User-facing flows → `interflux:review:fd-user-product`
 
-**Threshold:** Don't run more than 5 agents total. Prioritize by risk.
+Max 5 agents total. Prioritize by risk.
 
-### Phase 3: Gather Context and Prepare Output Directory
-
-Before launching agents, prepare the diff and output infrastructure:
+## Phase 3: Prepare Diff and Output Dir
 
 ```bash
-# Unified diff (staged + unstaged)
 TS=$(date +%s)
 git diff HEAD > /tmp/qg-diff-${TS}.txt
 git diff --cached >> /tmp/qg-diff-${TS}.txt
-
-# Output directory for agent findings (cleaned each run, gitignored)
 OUTPUT_DIR="${PROJECT_ROOT}/.clavain/quality-gates"
 mkdir -p "$OUTPUT_DIR"
 rm -f "$OUTPUT_DIR"/*.md "$OUTPUT_DIR"/*.md.partial 2>/dev/null
-
-# Changed file list with reasons for agent selection
-git diff --name-only HEAD
-git diff --cached --name-only
 ```
 
-### Phase 4: Run Agents in Parallel
+## Phase 4: Run Agents in Parallel
 
-Launch selected agents using the Task tool with `run_in_background: true`.
+Launch selected agents with `Task(run_in_background: true)`.
 
-**Critical: File-based output contract.** Each agent prompt MUST include this output section:
+Each agent prompt MUST include:
+1. Diff file path — agents read `/tmp/qg-diff-{TS}.txt` as first action
+2. Changed file list with reason for selection
+3. Relevant config files if touched (go.mod, tsconfig.json, Cargo.toml)
 
+**Output contract** (include verbatim in every agent prompt):
 ```
 ## Output Contract
 
 Write ALL findings to `{OUTPUT_DIR}/{agent-name}.md`.
-Do NOT return findings in your response text.
-Your response text should be a single line: "Findings written to {OUTPUT_DIR}/{agent-name}.md"
+Do NOT return findings in response text.
+Response text: single line "Findings written to {OUTPUT_DIR}/{agent-name}.md"
 
 File structure:
-
 ### Findings Index
 - SEVERITY | ID | "Section" | Title
 Verdict: safe|needs-changes|risky
@@ -88,7 +81,7 @@ Verdict: safe|needs-changes|risky
 [3-5 lines]
 
 ### Issues Found
-[ID. SEVERITY: Title — 1-2 sentences with evidence. Reference file:line or hunk headers.]
+[ID. SEVERITY: Title — 1-2 sentences with evidence. file:line or hunk headers.]
 
 ### Improvements
 [ID. Title — 1 sentence with rationale]
@@ -96,23 +89,11 @@ Verdict: safe|needs-changes|risky
 Zero findings: empty index + verdict: safe.
 ```
 
-Each agent prompt MUST also include:
+Polling: check `{OUTPUT_DIR}/` every 30s for `.md` files (not `.md.partial`). Report `[2/4 agents complete]`. After 5 min, report pending agents.
 
-1. **The diff file path** — tell agents to Read `/tmp/qg-diff-{TS}.txt` as their first action
-2. **Changed file list** — with why each file was selected for this agent
-3. **Relevant config files** — if any were touched (e.g., go.mod, tsconfig.json, Cargo.toml)
+## Phase 5: Synthesize via Subagent
 
-**Polling for completion** (after dispatch):
-1. Check `{OUTPUT_DIR}/` every 30 seconds for `.md` files (not `.md.partial`)
-2. Report progress: `[2/4 agents complete]`
-3. After 5 minutes, report any agents still pending
-4. If an agent has no `.md` file after timeout, check its background task output for errors
-
-### Phase 5: Synthesize Results via Subagent
-
-**Do NOT read agent output files yourself.** Delegate synthesis to a subagent so agent prose never enters the host context.
-
-Launch the **intersynth synthesis agent** (foreground, not background — you need its result):
+Do NOT read agent output files directly — delegate to avoid agent prose in host context.
 
 ```
 Task(intersynth:synthesize-review):
@@ -123,18 +104,11 @@ Task(intersynth:synthesize-review):
     CONTEXT="{X files changed across Y languages. Risk domains: [list]}"
 ```
 
-The intersynth agent reads all agent output files, validates structure, deduplicates findings, writes verdict JSON files, and returns a compact summary. See the agent's built-in instructions for the full protocol.
+After subagent returns: read `{OUTPUT_DIR}/synthesis.md` and present to user (~30-50 lines). Gate result (PASS/FAIL) comes from subagent return value.
 
-After the synthesis subagent returns:
-1. Read `{OUTPUT_DIR}/synthesis.md` and present it to the user (this is the compact report, ~30-50 lines)
-2. The gate result (PASS/FAIL) comes from the subagent's return value — no additional file reading needed
-
-### Phase 5a: Record Verdict Outcomes to Interspect (silent)
-
-After synthesis writes verdict JSON files, record outcomes to interspect evidence for B3 calibration. This is fail-open — never blocks the quality gate.
+## Phase 5a: Record Verdicts to Interspect (silent, fail-open)
 
 ```bash
-# Record verdict outcomes to interspect (fail-open)
 if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
     interspect_root=$(_discover_interspect_plugin 2>/dev/null) || interspect_root=""
     if [[ -n "$interspect_root" ]]; then
@@ -152,36 +126,28 @@ if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
 fi
 ```
 
-### Phase 5b: Gate Check + Record Phase (on PASS only)
+## Phase 5b: Gate Check + Record Phase (PASS only)
 
-If the gate result is **PASS**, enforce the shipping gate and record the phase transition:
 ```bash
 BEAD_ID="${CLAVAIN_BEAD_ID:-}"
 if [[ -n "$BEAD_ID" ]]; then
-    if ! "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" enforce-gate "$BEAD_ID" "shipping" ""; then
-        echo "Gate blocked: review findings are stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
-        # Do NOT advance phase — stop and tell user
+    if ! clavain-cli enforce-gate "$BEAD_ID" "shipping" ""; then
+        echo "Gate blocked: review findings stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     else
-        "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "shipping" "Quality gates passed" ""
+        clavain-cli advance-phase "$BEAD_ID" "shipping" "Quality gates passed" ""
     fi
 fi
 ```
-Do NOT set the phase if the gate result is FAIL — the work needs fixing first.
 
-### Phase 6: File Findings as Beads (optional)
+Do NOT set phase on FAIL — work needs fixing first.
 
-If the project has `.beads/` initialized, ask the user:
-> "File review findings as beads issues for tracking? (recommended for >3 findings)"
+## Phase 6: File Findings as Beads (optional)
 
-If yes, for each significant finding:
-```bash
-bd create --title="[quality-gates] <brief finding>" --type=bug --priority=3
-```
+If `.beads/` initialized, ask: "File review findings as beads issues? (recommended for >3 findings)"
 
-Group related findings into a single bead where appropriate. This makes review output actionable across sessions — per Yegge's recommendation that code reviews should produce trackable issues.
+If yes: `bd create --title="[quality-gates] <finding>" --type=bug --priority=3` — group related findings where appropriate.
 
-## Important
+## Notes
 
-- **Don't over-review small changes.** If the diff is under 20 lines and touches one file, only run `interflux:review:fd-quality`.
-- **Run after tests pass.** Quality gates complement testing, not replace it.
-- **P1 findings block shipping.** Present them prominently and ensure resolution.
+- Run after tests pass. Quality gates complement testing, not replace it.
+- P1 findings block shipping — present prominently, ensure resolution.

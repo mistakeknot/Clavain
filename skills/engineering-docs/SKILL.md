@@ -15,13 +15,7 @@ preconditions:
 
 # engineering-docs Skill
 
-**Purpose:** Automatically document solved problems to build searchable institutional knowledge with category-based organization (enum-validated problem types).
-
-## Overview
-
-This skill captures problem solutions immediately after confirmation, creating structured documentation that serves as a searchable knowledge base for future sessions.
-
-**Organization:** Single-file architecture - each problem documented as one markdown file in its symptom category directory (e.g., `docs/solutions/performance-issues/n-plus-one-briefs.md`). Files use YAML frontmatter for metadata and searchability.
+**Purpose:** Document solved problems as searchable institutional knowledge in category-organized single-file markdown with enum-validated YAML frontmatter.
 
 ---
 
@@ -29,398 +23,148 @@ This skill captures problem solutions immediately after confirmation, creating s
 
 ### Step 1: Detect Confirmation
 
-**Auto-invoke after phrases:**
+Auto-invoke after: "that worked", "it's fixed", "working now", "problem solved", "that did it" — OR via `/clavain:compound`.
 
-- "that worked"
-- "it's fixed"
-- "working now"
-- "problem solved"
-- "that did it"
-
-**OR manual:** `/clavain:compound` command
-
-**Non-trivial problems only:**
-
-- Multiple investigation attempts needed
-- Tricky debugging that took time
-- Non-obvious solution
-- Future sessions would benefit
-
-**Skip documentation for:**
-
-- Simple typos
-- Obvious syntax errors
-- Trivial fixes immediately corrected
+**Non-trivial only** (multiple attempts, tricky debugging, non-obvious solution). Skip typos, obvious syntax errors, trivial fixes.
 
 ### Step 2: Gather Context
 
-Extract from conversation history:
+Extract from conversation:
+- **Module name**, **symptom** (exact error), **investigation attempts**, **root cause**, **solution**, **prevention**
+- Env details: language/framework version, OS, file:line refs
 
-**Required information:**
-
-- **Module name**: Which module or component had the problem
-- **Symptom**: Observable error/behavior (exact error messages)
-- **Investigation attempts**: What didn't work and why
-- **Root cause**: Technical explanation of actual problem
-- **Solution**: What fixed it (code/config changes)
-- **Prevention**: How to avoid in future
-
-**Environment details:**
-
-- Language/framework version
-- OS version
-- File/line references
-
-**BLOCKING REQUIREMENT:** If critical context is missing (module name, exact error, or resolution steps), ask user and WAIT for response before proceeding to Step 3:
-
+**BLOCKING:** If module name, exact error, or resolution steps are missing, ask and WAIT:
 ```
 I need a few details to document this properly:
-
 1. Which module had this issue? [ModuleName]
 2. What was the exact error message or symptom?
-
 [Continue after user provides details]
 ```
 
 ### Step 3: Check Existing Docs
 
-Search docs/solutions/ for similar issues:
-
 ```bash
-# Search by error message keywords
 grep -r "exact error phrase" docs/solutions/
-
-# Search by symptom category
 ls docs/solutions/[category]/
 ```
 
-**IF similar issue found:**
-
-THEN present decision options:
-
+If similar found, present and WAIT:
 ```
 Found similar issue: docs/solutions/[path]
-
-What's next?
 1. Create new doc with cross-reference (recommended)
 2. Update existing doc (only if same root cause)
 3. Other
-
 Choose (1-3): _
 ```
 
-WAIT for user response, then execute chosen action.
-
-**ELSE** (no similar issue found):
-
-Proceed directly to Step 4 (no user interaction needed).
+If no match, proceed to Step 4 without user interaction.
 
 ### Step 4: Generate Filename
 
-Format: `[sanitized-symptom]-[module]-[YYYYMMDD].md`
+Format: `[sanitized-symptom]-[module]-[YYYYMMDD].md` — lowercase, hyphens for spaces, no special chars, <80 chars.
 
-**Sanitization rules:**
-
-- Lowercase
-- Replace spaces with hyphens
-- Remove special characters except hyphens
-- Truncate to reasonable length (< 80 chars)
-
-**Examples:**
-
-- `missing-include-BriefSystem-20251110.md`
-- `parameter-not-saving-state-EmailProcessing-20251110.md`
-- `webview-crash-on-resize-Assistant-20251110.md`
+Examples: `missing-include-BriefSystem-20251110.md`, `webview-crash-on-resize-Assistant-20251110.md`
 
 ### Step 5: Validate YAML Schema (Blocking)
 
-**CRITICAL:** All docs require validated YAML frontmatter with enum validation.
+Load `schema.yaml` and classify against enums in [yaml-schema.md](./references/yaml-schema.md). All required fields must be present and match allowed values exactly.
 
-#### Validation Gate: YAML Schema (Blocking)
-
-**Validate against schema:**
-Load `schema.yaml` and classify the problem against the enum values defined in [yaml-schema.md](./references/yaml-schema.md). Ensure all required fields are present and match allowed values exactly.
-
-**BLOCK if validation fails:**
-
+**BLOCK until valid:**
 ```
 ❌ YAML validation failed
-
 Errors:
 - problem_type: must be one of schema enums, got "compilation_error"
 - severity: must be one of [critical, high, medium, low], got "invalid"
 - symptoms: must be array with 1-5 items, got string
-
 Please provide corrected values.
 ```
 
-**GATE ENFORCEMENT:** Do NOT proceed to Step 6 (Create Documentation) until YAML frontmatter passes all validation rules defined in `schema.yaml`.
-
-
 ### Step 6: Create Documentation
 
-**Determine category from problem_type:** Use the category mapping defined in [yaml-schema.md](./references/yaml-schema.md) (lines 49-61).
-
-**Create documentation file:**
-
-```bash
-PROBLEM_TYPE="[from validated YAML]"
-CATEGORY="[mapped from problem_type]"
-FILENAME="[generated-filename].md"
-DOC_PATH="docs/solutions/${CATEGORY}/${FILENAME}"
-
-# Create directory if needed
-mkdir -p "docs/solutions/${CATEGORY}"
-
-# Write documentation using template from assets/resolution-template.md
-# (Content populated with Step 2 context and validated YAML frontmatter)
-```
-
-**Provenance fields (always include in frontmatter):**
-- `lastConfirmed`: today's date (YYYY-MM-DD)
-- `provenance`: `independent` for new findings; `primed` if the agent had the pattern in context when confirming
-- `review_count`: `0` for new entries
-
-**Result:**
-- Single file in category directory
-- Enum validation ensures consistent categorization
-
-**Create documentation:** Populate the structure from `assets/resolution-template.md` with context gathered in Step 2 and validated YAML frontmatter from Step 5.
+- Determine category from problem_type using mapping in [yaml-schema.md](./references/yaml-schema.md) (lines 49-61)
+- `mkdir -p "docs/solutions/${CATEGORY}"` then write file using `assets/resolution-template.md`
+- **Provenance fields** (always include): `lastConfirmed` (YYYY-MM-DD), `provenance` (`independent` or `primed`), `review_count: 0`
 
 ### Step 7: Cross-Reference & Critical Pattern Detection
 
-If similar issues found in Step 3:
+If similar issues found in Step 3, add `- See also: [$FILENAME]($REAL_FILE)` to the similar doc.
 
-**Update existing doc:**
-
-```bash
-# Add Related Issues link to similar doc
-echo "- See also: [$FILENAME]($REAL_FILE)" >> [similar-doc.md]
+If 3+ similar issues exist, append to `docs/solutions/patterns/common-solutions.md`:
 ```
-
-**Update new doc:**
-Already includes cross-reference from Step 6.
-
-**Update patterns if applicable:**
-
-If this represents a common pattern (3+ similar issues):
-
-```bash
-# Add to docs/solutions/patterns/common-solutions.md
-cat >> docs/solutions/patterns/common-solutions.md << 'EOF'
-
 ## [Pattern Name]
-
 **Common symptom:** [Description]
 **Root cause:** [Technical explanation]
 **Solution pattern:** [General approach]
-
-**Examples:**
-- [Link to doc 1]
-- [Link to doc 2]
-- [Link to doc 3]
-EOF
+**Examples:** [links]
 ```
 
-**Critical Pattern Detection (Optional Proactive Suggestion):**
+**Critical pattern hint** (if severity=critical, affects multiple modules or foundational stage, non-obvious): add note in decision menu — `💡 This might be worth adding to Required Reading (Option 2)`. **NEVER auto-promote.**
 
-If this issue has automatic indicators suggesting it might be critical:
-- Severity: `critical` in YAML
-- Affects multiple modules OR foundational stage (Stage 2 or 3)
-- Non-obvious solution
-
-Then in the decision menu (Step 8), add a note:
-```
-💡 This might be worth adding to Required Reading (Option 2)
-```
-
-But **NEVER auto-promote**. User decides via decision menu (Option 2).
-
-**Template for critical pattern addition:**
-
-When user selects Option 2 (Add to Required Reading), use the template from `assets/critical-pattern-template.md` to structure the pattern entry. Number it sequentially based on existing patterns in `docs/solutions/patterns/critical-patterns.md`.
+When user selects Option 2, use `assets/critical-pattern-template.md` and number sequentially in `docs/solutions/patterns/critical-patterns.md`.
 
 ---
 
-### Decision Gate: Post-Documentation
-
 ## Decision Menu After Capture
 
-After successful documentation, present options and WAIT for user response:
-
+Present and WAIT for response:
 ```
 ✓ Solution documented
-
-File created:
-- docs/solutions/[category]/[filename].md
+File: docs/solutions/[category]/[filename].md
 
 What's next?
 1. Continue workflow (recommended)
-2. Add to Required Reading - Promote to critical patterns (critical-patterns.md)
-3. Link related issues - Connect to similar problems
-4. Add to existing skill - Add to a learning skill (e.g., engineering-docs)
-5. Create new skill - Extract into new learning skill
-6. View documentation - See what was captured
+2. Add to Required Reading — promote to critical-patterns.md
+3. Link related issues
+4. Add to existing skill
+5. Create new skill
+6. View documentation
 7. Other
 ```
 
-**Handle responses:**
+**Option 1:** Return to calling workflow.
 
-**Option 1: Continue workflow**
+**Option 2:** Extract pattern → format as ❌ WRONG / ✅ CORRECT with code → add to `docs/solutions/patterns/critical-patterns.md` → cross-reference → confirm.
 
-- Return to calling skill/workflow
-- Documentation is complete
+**Option 3:** Prompt for filename/description → search → add cross-reference to both docs → confirm.
 
-**Option 2: Add to Required Reading** ⭐ PRIMARY PATH FOR CRITICAL PATTERNS
+**Option 4:** Prompt for skill name → determine which reference file (resources.md, patterns.md, examples.md) → add link + description → confirm.
 
-User selects this when:
-- System made this mistake multiple times across different modules
-- Solution is non-obvious but must be followed every time
-- Foundational requirement (threading, APIs, core architecture, etc.)
+**Option 5:** Prompt for skill name → create skill directory + SKILL.md → create reference files with this solution → confirm.
 
-Action:
-1. Extract pattern from the documentation
-2. Format as ❌ WRONG vs ✅ CORRECT with code examples
-3. Add to `docs/solutions/patterns/critical-patterns.md`
-4. Add cross-reference back to this doc
-5. Confirm: "✓ Added to Required Reading. All subagents will see this pattern before code generation."
+**Option 6:** Display created doc → present menu again.
 
-**Option 3: Link related issues**
-
-- Prompt: "Which doc to link? (provide filename or describe)"
-- Search docs/solutions/ for the doc
-- Add cross-reference to both docs
-- Confirm: "✓ Cross-reference added"
-
-**Option 4: Add to existing skill**
-
-User selects this when the documented solution relates to an existing learning skill:
-
-Action:
-1. Prompt: "Which skill? (engineering-docs, etc.)"
-2. Determine which reference file to update (resources.md, patterns.md, or examples.md)
-3. Add link and brief description to appropriate section
-4. Confirm: "✓ Added to [skill-name] skill in [file]"
-
-Example: For Hotwire Native Tailwind variants solution:
-- Add to `engineering-docs/references/resources.md` under "Project-Specific Resources"
-- Add to `engineering-docs/references/examples.md` with link to solution doc
-
-**Option 5: Create new skill**
-
-User selects this when the solution represents the start of a new learning domain:
-
-Action:
-1. Prompt: "What should the new skill be called? (e.g., stripe-billing, email-processing)"
-2. Create the skill directory structure with SKILL.md following plugin conventions
-3. Create initial reference files with this solution as first example
-4. Confirm: "✓ Created new [skill-name] skill with this solution as first example"
-
-**Option 6: View documentation**
-
-- Display the created documentation
-- Present decision menu again
-
-**Option 7: Other**
-
-- Ask what they'd like to do
-
+**Option 7:** Ask what they'd like to do.
 
 ---
 
 ## Integration Points
 
-**Invoked by:**
-- /clavain:compound command (primary interface)
-- Manual invocation in conversation after solution confirmed
-- Can be triggered by detecting confirmation phrases like "that worked", "it's fixed", etc.
-
-**Invokes:**
-- None (terminal skill - does not delegate to other skills)
-
-**Handoff expectations:**
-All context needed for documentation should be present in conversation history before invocation.
-
+- Invoked by: `/clavain:compound`, manual trigger, confirmation phrase detection
+- Invokes: nothing (terminal skill)
+- All context must be in conversation history before invocation
 
 ---
 
 ## Success Criteria
 
-Documentation is successful when ALL of the following are true:
-
-- ✅ YAML frontmatter validated (all required fields, correct formats)
-- ✅ File created in docs/solutions/[category]/[filename].md
-- ✅ Enum values match schema.yaml exactly
-- ✅ Code examples included in solution section
-- ✅ Cross-references added if related issues found
-- ✅ User presented with decision menu and action confirmed
-
-
----
+- YAML frontmatter validated (all required fields, correct formats)
+- File created in `docs/solutions/[category]/[filename].md`
+- Enum values match `schema.yaml` exactly
+- Code examples in solution section
+- Cross-references added if related issues found
+- User presented with decision menu and action confirmed
 
 ## Error Handling
 
-**Missing context:**
+| Error | Action |
+|---|---|
+| Missing context | Ask user, don't proceed until critical info provided |
+| YAML validation failure | Show specific errors, BLOCK until valid |
+| Similar issue ambiguity | Present matches, let user choose |
+| Module not in docs | Warn but don't block; suggest adding |
 
-- Ask user for missing details
-- Don't proceed until critical info provided
+## Quality Checklist
 
-**YAML validation failure:**
+**Good:** exact error messages, file:line refs, observable symptoms, failed attempts, technical explanation (why not just what), code examples, prevention guidance, cross-references.
 
-- Show specific errors
-- Present retry with corrected values
-- BLOCK until valid
-
-**Similar issue ambiguity:**
-
-- Present multiple matches
-- Let user choose: new doc, update existing, or link as duplicate
-
-**Module not in modules documentation:**
-
-- Warn but don't block
-- Proceed with documentation
-- Suggest: "Add [Module] to modules documentation if not there"
-
----
-
-## Execution Guidelines
-
-**MUST do:**
-- Validate YAML frontmatter (BLOCK if invalid per Step 5 validation gate)
-- Extract exact error messages from conversation
-- Include code examples in solution section
-- Create directories before writing files (`mkdir -p`)
-- Ask user and WAIT if critical context missing
-
-**MUST NOT do:**
-- Skip YAML validation (validation gate is blocking)
-- Use vague descriptions (not searchable)
-- Omit code examples or cross-references
-
----
-
-## Quality Guidelines
-
-**Good documentation has:**
-
-- ✅ Exact error messages (copy-paste from output)
-- ✅ Specific file:line references
-- ✅ Observable symptoms (what you saw, not interpretations)
-- ✅ Failed attempts documented (helps avoid wrong paths)
-- ✅ Technical explanation (not just "what" but "why")
-- ✅ Code examples (before/after if applicable)
-- ✅ Prevention guidance (how to catch early)
-- ✅ Cross-references (related issues)
-
-**Avoid:**
-
-- ❌ Vague descriptions ("something was wrong")
-- ❌ Missing technical details ("fixed the code")
-- ❌ No context (which version? which file?)
-- ❌ Just code dumps (explain why it works)
-- ❌ No prevention guidance
-- ❌ No cross-references
-
----
-
+**Bad:** vague descriptions, missing technical details, no version/file context, unexplained code dumps, no prevention, no cross-references.
