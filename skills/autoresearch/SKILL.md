@@ -19,11 +19,23 @@ Run a continuous optimization campaign: edit code, benchmark, keep improvements,
 
 Repeat until `log_experiment` returns `campaign_complete: true`:
 
-### 1. Pick an idea
-Read next untried idea from `autoresearch.ideas.md`. If none remain, analyze worktree code to generate new hypotheses. If none possible, call `log_experiment` with final summary.
+### 1. Pick next experiment
+Check `next_mutation` from `init_experiment` or `log_experiment` response:
+
+**If `next_mutation` is present** — execute the structured mutation:
+- `parameter_sweep` / `enum_sweep`: find the parameter in the specified file, change its value to `params.value`
+- `swap`: find `params.target` pattern in `params.files`, replace with `params.replacement`
+- `toggle`: find the flag `params.flag` in `params.file`, flip its boolean value
+- `scale`: find the parameter `params.param` in `params.file`, multiply by `params.factor`
+- `remove`: find and remove the code block described by `params.target` in `params.file`
+- `reorder`: find the items and reorder them to match `params.items`
+
+When logging the result, include `mutation_id` and `mutation_type` from the mutation spec.
+
+**If `next_mutation` is null** — fall back to ideas list in `autoresearch.ideas.md`. If no ideas remain, generate hypotheses or end campaign.
 
 ### 2. Make code changes
-Edit files in the **worktree directory** (returned by `init_experiment`). Keep changes small — one variable at a time.
+Edit files in the **worktree directory** (returned by `init_experiment`). For mutations, follow the structured spec. For ideas, keep changes small — one variable at a time.
 
 ### 3. Run benchmark
 Call `run_experiment` with campaign name. Tool executes benchmark, extracts metrics, returns values.
