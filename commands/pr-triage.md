@@ -5,13 +5,9 @@ description: Triage all open PRs — batch by theme, review with parallel agents
 
 # /pr-triage
 
-Triage a repository's open PR backlog. Batches PRs by theme, reviews with parallel fd-* agents, and walks through merge/comment/close decisions.
-
-Complements `/triage` (internal findings) and `/resolve` (fix review feedback).
+Triage open PR backlog. Complements `/triage` (internal findings) and `/resolve` (fix review feedback).
 
 ## Step 1: Gather Context (parallel)
-
-Run these in parallel:
 
 ```bash
 gh repo view --json name,owner,defaultBranch
@@ -20,49 +16,34 @@ gh issue list --state open --limit 30 --json number,title,labels
 gh label list --json name,description
 ```
 
-Report: "Found N open PRs across the repo."
+Report: "Found N open PRs."
 
 ## Step 2: Batch PRs by Theme
 
-Group PRs into 3-6 batches based on:
-- **Labels** (bug, feature, docs, chore, dependencies)
-- **Branch prefix** (fix/, feat/, docs/, chore/)
-- **Title keywords** if no labels/prefix
-
-Example batches: Bug Fixes, Features, Documentation, Dependencies, Stale (>30 days no activity).
-
-Show the batching and ask for approval before proceeding.
+Group into 3-6 batches by labels, branch prefix (`fix/`, `feat/`, `docs/`, `chore/`), or title keywords. Example batches: Bug Fixes, Features, Documentation, Dependencies, Stale (>30 days). Show batching and ask for approval.
 
 ## Step 3: Parallel Agent Review
 
-For each batch, spawn a review agent using the Task tool (all batches in one message for parallelism):
+Spawn all batch agents in one message:
+- **Bug fix batches** → `interflux:review:fd-correctness`: regression risk, test coverage
+- **Feature batches** → `interflux:review:fd-architecture`: design alignment, scope creep
+- **All batches** → `interflux:review:fd-quality`: naming, conventions, test approach
 
-- **Bug fix batches** → interflux:review:fd-correctness agent: check for regression risk, test coverage
-- **Feature batches** → interflux:review:fd-architecture agent: check for design alignment, scope creep
-- **All batches** → interflux:review:fd-quality agent: naming, conventions, test approach
-
-Each agent receives the PR list with `gh pr diff <number>` for each PR in its batch. Agent output: markdown table with columns: PR#, Summary, Risk, Recommendation (merge/revise/close).
+Each agent gets PR list + `gh pr diff <number>` per PR. Output: markdown table with PR#, Summary, Risk, Recommendation (merge/revise/close).
 
 ## Step 4: Cross-Reference Issues
 
-For each PR, check:
 - `Fixes #X` / `Closes #X` in body → link to issue
-- PRs with no linked issue → flag as "needs issue"
-- Issues with no PR → flag as "needs implementation"
+- PRs with no linked issue → flag "needs issue"
+- Issues with no PR → flag "needs implementation"
 
 ## Step 5: Generate Triage Report
-
-Compile agent outputs into a single report:
 
 ```markdown
 # PR Triage Report — <repo> (<date>)
 
 ## Summary
-- Total open PRs: N
-- Ready to merge: N
-- Needs revision: N
-- Recommend close: N
-- Stale (>30 days): N
+- Total open PRs: N | Ready to merge: N | Needs revision: N | Recommend close: N | Stale: N
 
 ## By Category
 
@@ -70,29 +51,20 @@ Compile agent outputs into a single report:
 | PR | Title | Author | Age | Risk | Action |
 |----|-------|--------|-----|------|--------|
 | #123 | Fix auth timeout | @user | 3d | Low | Merge |
-
-### Features (N PRs)
-...
 ```
 
 ## Step 6: Walk Through Decisions
 
-For each PR in the report, present the recommendation and ask:
-
+Per PR, present recommendation and act:
 - **Merge** → `gh pr merge <number> --squash`
-- **Comment** → compose review comment, post with `gh pr comment <number> --body "..."`
+- **Comment** → `gh pr comment <number> --body "..."`
 - **Close** → `gh pr close <number> --comment "..."`
-- **Skip** → move to next
+- **Skip** → next
 
 ## Step 7: Apply Labels
 
-Bulk-apply labels based on triage decisions:
 ```bash
 gh pr edit <number> --add-label "triaged,priority-high"
 ```
 
-## Notes
-
-- Max 50 PRs per triage session — for larger backlogs, use `--limit` or filter by label
-- Stale threshold: 30 days with no activity
-- Agent review is optional for small backlogs (<5 PRs) — go straight to walk-through
+**Notes:** Max 50 PRs per session. Stale = 30 days no activity. Skip agent review for <5 PRs.

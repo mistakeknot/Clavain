@@ -7,84 +7,82 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 
 ## Daily Drivers
 
-These are the commands you'll use most often:
-
-| Command | What it does | Example |
-|---------|-------------|---------|
-| `/clavain:route` | Adaptive entry point — discovers work, classifies, dispatches | `/route build a caching layer` |
-| `/clavain:brainstorm` | Structured 4-phase brainstorm with auto-handoff to write-plan | `/brainstorm how should we handle auth?` |
-| `/clavain:write-plan` | Create detailed implementation plan with bite-sized tasks | `/write-plan` (after brainstorm) |
-| `/clavain:tdd` | Run RED-GREEN-REFACTOR for a task before coding | `/tdd implement auth refresh flow` |
-| `/clavain:work` | Execute a plan efficiently, maintaining quality | `/work docs/plans/2026-02-11-auth.md` |
-| `/interflux:flux-drive` | Deep multi-agent review of any document, diff, or repo | `/flux-drive docs/plans/my-plan.md` |
-| `/clavain:quality-gates` | Auto-select reviewers based on git diff | `/quality-gates` |
-| `/clavain:resolve` | Fix findings from TODOs, PR comments, or todo files | `/resolve` |
-| `/clavain:interpeer` | Quick cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `/clavain:route` | Adaptive entry — discovers, classifies, dispatches | `/route build a caching layer` |
+| `/clavain:brainstorm` | 4-phase brainstorm → auto-handoff to write-plan | `/brainstorm how should we handle auth?` |
+| `/clavain:write-plan` | Create implementation plan with bite-sized tasks | `/write-plan` |
+| `/clavain:tdd` | RED-GREEN-REFACTOR before coding | `/tdd implement auth refresh flow` |
+| `/clavain:work` | Execute plan with quality checkpoints | `/work docs/plans/2026-02-11-auth.md` |
+| `/interflux:flux-drive` | Deep multi-agent review (any input) | `/flux-drive docs/plans/my-plan.md` |
+| `/clavain:quality-gates` | Auto-select reviewers from git diff | `/quality-gates` |
+| `/clavain:resolve` | Fix findings from TODOs/PR comments | `/resolve` |
+| `/clavain:interpeer` | Cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
 
 ## By Stage
 
 ### Explore
-| `/clavain:brainstorm` | Structured brainstorm → auto-handoff to plan |
+| `/clavain:brainstorm` | Structured brainstorm → plan |
 |---|---|
-| `/clavain:strategy` | Bridge brainstorm → plan with PRD creation and beads tracking |
-| `/clavain:recall` | Search across all knowledge systems (docs/solutions, memory files) |
-| `/clavain:debate` | Structured Claude ↔ Codex debate before implementing |
+| `/clavain:strategy` | PRD creation + beads tracking |
+| `/clavain:recall` | Search all knowledge systems |
+| `/clavain:debate` | Claude ↔ Codex debate before implementing |
 
 ### Plan
-| `/clavain:write-plan` | Create implementation plan |
+| `/clavain:write-plan` | Implementation plan |
 |---|---|
 | `/clavain:plan-review` | Lightweight 3-agent plan review |
 
 ### Execute
-| `/clavain:route` | Adaptive entry — routes to sprint or work automatically |
+| `/clavain:route` | Adaptive entry |
 |---|---|
-| `/clavain:work` | Execute plans with quality checkpoints |
-| `/clavain:execute-plan` | Execute plan in separate session with review checkpoints |
-| `/clavain:sprint` | Full autonomous pipeline (brainstorm through ship) |
-| `/clavain:resolve` | Auto-resolve findings from any source |
+| `/clavain:work` | Execute plans |
+| `/clavain:execute-plan` | Execute in separate session |
+| `/clavain:sprint` | Full autonomous pipeline |
+| `/clavain:resolve` | Auto-resolve findings |
 | `/clavain:fixbuild` | Fix build/test failures |
 
 ### Review
-| `/interflux:flux-drive` | Deep multi-agent review (any input type) |
+| `/interflux:flux-drive` | Deep multi-agent review |
 |---|---|
-| `/clavain:review-discipline` | Disciplined code review and feedback triage | `/review-discipline` |
-| `/clavain:quality-gates` | Quick code review from git diff |
+| `/clavain:review-discipline` | Disciplined code review + feedback triage |
+| `/clavain:quality-gates` | Quick review from git diff |
 | `/clavain:clavain-review` | PR-focused multi-agent review |
-| `/clavain:review-doc` | Lightweight single-pass document refinement |
-| `/clavain:interpeer` | Cross-AI peer review (quick/deep/council/mine modes) |
-| `/clavain:migration-safety` | Database migration safety checks |
-| `/clavain:pr-triage` | Batch PR backlog triage with fd-* agents |
-| `/interflux:flux-gen` | Generate domain-specific review agents for your project |
+| `/clavain:review-doc` | Single-pass doc refinement |
+| `/clavain:interpeer` | Cross-AI peer review |
+| `/clavain:migration-safety` | DB migration safety checks |
+| `/clavain:pr-triage` | Batch PR triage with fd-* agents |
+| `/interflux:flux-gen` | Generate domain-specific review agents |
 
 ### Ship
-| `/clavain:changelog` | Generate changelog from recent commits |
+| `/clavain:changelog` | Changelog from recent commits |
 |---|---|
-| `/clavain:verify` | Run verification checks before declaring work complete | `/verify` |
-| `/clavain:todos` | Track follow-up and handoff work in file-based todos | `/todos` |
-| `/clavain:triage` | Prioritize and categorize open issues |
-| `/clavain:land` | Apply landing checklist for safe handoff | `/land` |
-| `/clavain:compound` | Document a solved problem for future reference |
-| `/clavain:smoke-test` | Run smoke tests on agent dispatch |
+| `/clavain:verify` | Verification checks before done |
+| `/clavain:todos` | File-based follow-up tracking |
+| `/clavain:triage` | Prioritize open issues |
+| `/clavain:land` | Landing checklist |
+| `/clavain:compound` | Document solved problems |
+| `/clavain:smoke-test` | Smoke tests on agent dispatch |
 
 ### Debug
-| `/clavain:repro-first-debugging` | Disciplined reproduce-first bug investigation |
+| `/clavain:repro-first-debugging` | Reproduce-first bug investigation |
 |---|---|
-| `/clavain:refactor` | Run refactors with duplication/risk controls |
+| `/clavain:refactor` | Refactors with duplication/risk controls |
 
 ### Meta
-| `/clavain:project-onboard` | Set up a new/existing project with full Demarch automation |
+| `/clavain:project-onboard` | Set up project with Demarch automation |
 |---|---|
-| `/clavain:setup` | Bootstrap Clavain — install plugins, verify MCP, configure hooks |
+| `/clavain:setup` | Bootstrap Clavain |
 | `/clavain:clavain-help` | This command |
-| `/clavain:clavain-doctor` | Health check — MCP servers, tools, beads, plugin conflicts |
-| `/clavain:codex-bootstrap` | Keep Codex Clavain installation fresh (install + doctor + wrappers) |
-| `/clavain:create-agent-skill` | Create new agent skills |
+| `/clavain:clavain-doctor` | Health check |
+| `/clavain:codex-bootstrap` | Keep Codex installation fresh |
+| `/clavain:create-agent-skill` | Create agent skills |
 | `/clavain:generate-command` | Scaffold a new command |
 | `/clavain:heal-skill` | Fix broken skills |
-| `/clavain:upstream-sync` | Check upstream repos for updates |
+| `/clavain:upstream-sync` | Check upstream for updates |
 | `/clavain:clodex-toggle` | Toggle Codex delegation mode |
-| `/clavain:sprint-status` | Deep scan of sprint workflow state and recommendations |
-| `/clavain:model-routing` | Configure model routing for agents |
-| `/clavain:interserve` | Launch full Codex workflow for larger tasks | `/interserve` |
+| `/clavain:sprint-status` | Sprint workflow state + recommendations |
+| `/clavain:model-routing` | Configure model routing |
+| `/clavain:interserve` | Launch full Codex workflow for large tasks |
 
 For the full routing guide with skills and agents, use the `using-clavain` skill.

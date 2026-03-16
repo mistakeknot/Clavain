@@ -6,74 +6,51 @@ argument-hint: "[document path]"
 
 # /review-doc
 
-Lightweight document review — cheaper and faster than `/flux-drive`. Single-pass refinement for brainstorm outputs, PRDs, plans, or any markdown document.
-
-**Use this** for quick polish before handing off to the next workflow step.
-**Use `/flux-drive`** for comprehensive multi-agent quality gates.
-
-## Input
+Single-pass refinement for brainstorm outputs, PRDs, plans, or any markdown doc. Use `/flux-drive` for comprehensive multi-agent quality gates.
 
 <review_doc_input> #$ARGUMENTS </review_doc_input>
 
-## Step 1: Read the Document
+## Step 1: Read
 
-Read the target file. If no argument provided, look for the most recent file in:
-1. `docs/brainstorms/*.md` (brainstorm output)
-2. `docs/prds/*.md` (PRD)
-3. `docs/plans/*.md` (implementation plan)
-
-Report: "Reviewing <filename> (<N> lines)"
+Read target file. If no argument, check in order: `docs/brainstorms/*.md`, `docs/prds/*.md`, `docs/plans/*.md` (most recent). Report: "Reviewing <filename> (<N> lines)"
 
 ## Step 2: Assess
 
-Identify issues in these categories:
-
+Top 5 issues ranked by impact across:
 - **Unclear** — vague language, undefined terms, ambiguous requirements
-- **Unnecessary** — sections that don't contribute to the document's purpose, over-engineering, YAGNI violations
-- **Missing** — gaps in requirements, unaddressed edge cases, missing acceptance criteria
-- **Structural** — poor organization, redundant sections, missing headers
-
-List the top 5 issues found, ranked by impact.
+- **Unnecessary** — sections that don't add value, over-engineering, YAGNI violations
+- **Missing** — gaps in requirements, edge cases, acceptance criteria
+- **Structural** — poor organization, redundant sections
 
 ## Step 3: Score
 
-Rate the document on 4 dimensions (1-5 scale):
-
 | Dimension | Score | Notes |
 |-----------|-------|-------|
-| **Clarity** | X/5 | Can someone implement this without asking questions? |
-| **Completeness** | X/5 | Are edge cases and error paths covered? |
-| **Specificity** | X/5 | Are requirements testable and measurable? |
-| **YAGNI** | X/5 | Does it avoid premature complexity? (5 = lean and focused) |
+| **Clarity** | X/5 | Implementable without questions? |
+| **Completeness** | X/5 | Edge cases and error paths covered? |
+| **Specificity** | X/5 | Requirements testable and measurable? |
+| **YAGNI** | X/5 | Avoids premature complexity? (5=lean) |
 
 **Overall: X/20**
 
 ## Step 4: Fix
 
-For each issue from Step 2:
-
-- **Minor issues** (grammar, formatting, structure) → fix directly without asking
-- **Substantive issues** (missing requirements, scope changes, architectural decisions) → propose the change and ask for approval
-
-Apply fixes to the document.
+- **Minor** (grammar, formatting, structure) → fix directly
+- **Substantive** (missing requirements, scope changes, architecture) → propose and ask
 
 ## Step 4b: Record Phase (brainstorm docs only)
 
-If the reviewed document is in `docs/brainstorms/`, record the phase transition:
+If doc is in `docs/brainstorms/`:
 ```bash
-BEAD_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" infer-bead "<reviewed_doc_path>")
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "brainstorm-reviewed" "Reviewed: <reviewed_doc_path>" "<reviewed_doc_path>"
+BEAD_ID=$(clavain-cli infer-bead "<reviewed_doc_path>")
+clavain-cli advance-phase "$BEAD_ID" "brainstorm-reviewed" "Reviewed: <reviewed_doc_path>" "<reviewed_doc_path>"
 ```
-Only set `brainstorm-reviewed` for brainstorm docs. PRDs and plans have their own phase transitions in other commands.
 
 ## Step 5: Offer Next Action
 
-After fixes are applied:
-
-> Document score: **X/20** (was Y/20 before fixes)
+> Score: **X/20** (was Y/20 before fixes)
 >
-> Options:
-> 1. **Refine again** — run another pass (recommended if score < 15)
-> 2. **Proceed** — hand off to the next workflow step
+> 1. **Refine again** — another pass (recommended if score < 15)
+> 2. **Proceed** — hand off to next workflow step
 
-Cap at 2 refinement rounds. If score is still <12 after 2 rounds, recommend a full `/flux-drive` review instead.
+Cap at 2 refinement rounds. If still <12 after 2 rounds, recommend `/flux-drive`.

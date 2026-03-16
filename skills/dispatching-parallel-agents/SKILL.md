@@ -7,66 +7,23 @@ description: Use when facing 2+ independent tasks that can be worked on without 
 
 # Dispatching Parallel Agents
 
-## Overview
+**Core principle:** One agent per independent problem domain. Let them work concurrently.
 
-When you have multiple unrelated failures (different test files, different subsystems, different bugs), investigating them sequentially wastes time. Each investigation is independent and can happen in parallel.
+## When to Use / Not Use
 
-**Core principle:** Dispatch one agent per independent problem domain. Let them work concurrently.
-
-## When to Use
-
-```dot
-digraph when_to_use {
-    "Multiple failures?" [shape=diamond];
-    "Are they independent?" [shape=diamond];
-    "Single agent investigates all" [shape=box];
-    "One agent per problem domain" [shape=box];
-    "Can they work in parallel?" [shape=diamond];
-    "Sequential agents" [shape=box];
-    "Parallel dispatch" [shape=box];
-
-    "Multiple failures?" -> "Are they independent?" [label="yes"];
-    "Are they independent?" -> "Single agent investigates all" [label="no - related"];
-    "Are they independent?" -> "Can they work in parallel?" [label="yes"];
-    "Can they work in parallel?" -> "Parallel dispatch" [label="yes"];
-    "Can they work in parallel?" -> "Sequential agents" [label="no - shared state"];
-}
-```
-
-**Use when:**
-- 3+ test files failing with different root causes
-- Multiple subsystems broken independently
-- Each problem can be understood without context from others
-- No shared state between investigations
-
-**Don't use when:**
-- Failures are related (fix one might fix others)
-- Need to understand full system state
-- Agents would interfere with each other
+**Use:** 3+ failures/tasks with different root causes, no shared state, each problem self-contained.
+**Skip:** Failures are related (fix one might fix others), agents would edit same files, you don't know what's broken yet.
 
 ## The Pattern
 
 ### 1. Identify Independent Domains
+Group by what's broken. E.g.: File A = tool approval flow, File B = batch completion, File C = abort. Each is independent.
 
-Group failures by what's broken:
-- File A tests: Tool approval flow
-- File B tests: Batch completion behavior
-- File C tests: Abort functionality
-
-Each domain is independent - fixing tool approval doesn't affect abort tests.
-
-### 2. Create Focused Agent Tasks
-
-Each agent gets:
-- **Specific scope:** One test file or subsystem
-- **Clear goal:** Make these tests pass
-- **Constraints:** Don't change other code
-- **Expected output:** Summary of what you found and fixed
+### 2. Focused Agent Tasks
+Each agent gets: specific scope, clear goal, constraints (don't touch other code), expected output format.
 
 ### 3. Dispatch in Parallel
-
 ```typescript
-// In Claude Code / AI environment
 Task("Fix agent-tool-abort.test.ts failures")
 Task("Fix batch-completion-behavior.test.ts failures")
 Task("Fix tool-approval-race-conditions.test.ts failures")
@@ -74,19 +31,9 @@ Task("Fix tool-approval-race-conditions.test.ts failures")
 ```
 
 ### 4. Review and Integrate
-
-When agents return:
-- Read each summary
-- Verify fixes don't conflict
-- Run full test suite
-- Integrate all changes
+Read each summary → verify fixes don't conflict → run full test suite.
 
 ## Agent Prompt Structure
-
-Good agent prompts are:
-1. **Focused** - One clear problem domain
-2. **Self-contained** - All context needed to understand the problem
-3. **Specific about output** - What should the agent return?
 
 ```markdown
 Fix the 3 failing tests in src/agents/agent-tool-abort.test.ts:
@@ -96,140 +43,52 @@ Fix the 3 failing tests in src/agents/agent-tool-abort.test.ts:
 3. "should properly track pendingToolCount" - expects 3 results but gets 0
 
 These are timing/race condition issues. Your task:
-
 1. Read the test file and understand what each test verifies
 2. Identify root cause - timing issues or actual bugs?
-3. Fix by:
-   - Replacing arbitrary timeouts with event-based waiting
-   - Fixing bugs in abort implementation if found
-   - Adjusting test expectations if testing changed behavior
+3. Fix (replace arbitrary timeouts with event-based waiting, fix bugs, adjust expectations)
 
-Do NOT just increase timeouts - find the real issue.
-
+Do NOT just increase timeouts.
 Return: Summary of what you found and what you fixed.
 ```
 
-## Common Mistakes
+## Prompt Mistakes
 
-**❌ Too broad:** "Fix all the tests" - agent gets lost
-**✅ Specific:** "Fix agent-tool-abort.test.ts" - focused scope
-
-**❌ No context:** "Fix the race condition" - agent doesn't know where
-**✅ Context:** Paste the error messages and test names
-
-**❌ No constraints:** Agent might refactor everything
-**✅ Constraints:** "Do NOT change production code" or "Fix tests only"
-
-**❌ Vague output:** "Fix it" - you don't know what changed
-**✅ Specific:** "Return summary of root cause and changes"
-
-## When NOT to Use
-
-**Related failures:** Fixing one might fix others - investigate together first
-**Need full context:** Understanding requires seeing entire system
-**Exploratory debugging:** You don't know what's broken yet
-**Shared state:** Agents would interfere (editing same files, using same resources)
-
-## Real Example from Session
-
-**Scenario:** 6 test failures across 3 files after major refactoring
-
-**Failures:**
-- agent-tool-abort.test.ts: 3 failures (timing issues)
-- batch-completion-behavior.test.ts: 2 failures (tools not executing)
-- tool-approval-race-conditions.test.ts: 1 failure (execution count = 0)
-
-**Decision:** Independent domains - abort logic separate from batch completion separate from race conditions
-
-**Dispatch:**
-```
-Agent 1 → Fix agent-tool-abort.test.ts
-Agent 2 → Fix batch-completion-behavior.test.ts
-Agent 3 → Fix tool-approval-race-conditions.test.ts
-```
-
-**Results:**
-- Agent 1: Replaced timeouts with event-based waiting
-- Agent 2: Fixed event structure bug (threadId in wrong place)
-- Agent 3: Added wait for async tool execution to complete
-
-**Integration:** All fixes independent, no conflicts, full suite green
-
-**Time saved:** 3 problems solved in parallel vs sequentially
-
-## Key Benefits
-
-1. **Parallelization** - Multiple investigations happen simultaneously
-2. **Focus** - Each agent has narrow scope, less context to track
-3. **Independence** - Agents don't interfere with each other
-4. **Speed** - 3 problems solved in time of 1
+- **Too broad:** "Fix all the tests" → agent gets lost. Use: "Fix agent-tool-abort.test.ts"
+- **No context:** "Fix the race condition" → agent doesn't know where. Paste error messages.
+- **No constraints:** Agent might refactor everything. Add: "Do NOT change production code"
+- **Vague output:** "Fix it" → you don't know what changed. Use: "Return summary of root cause and changes"
 
 ## Verification
 
-After agents return:
-1. **Review each summary** - Understand what changed
-2. **Check for conflicts** - Did agents edit same code?
-3. **Run full suite** - Verify all fixes work together
-4. **Spot check** - Agents can make systematic errors
-
-## Real-World Impact
-
-From debugging session (2025-10-03):
-- 6 failures across 3 files
-- 3 agents dispatched in parallel
-- All investigations completed concurrently
-- All fixes integrated successfully
-- Zero conflicts between agent changes
+After agents return: review each summary → check for same-file conflicts → run full suite → spot check for systematic errors.
 
 ## Cross-AI Variant: Codex Agents
 
-When tasks are implementation-focused (bug fixes, features, test generation) and don't
-need Claude's deep architectural reasoning, consider dispatching Codex agents instead:
-
-**Use Codex agents when:**
-- Tasks are well-scoped with clear file lists and success criteria
-- You want true parallel execution (Codex agents run in separate sandboxes)
-- You want to preserve Claude's context window for orchestration + review
-- Cost/speed optimization matters (Codex execution is cheaper per task)
-
-**Keep Claude agents when:**
-- Tasks need deep codebase understanding across many files
-- Tasks are exploratory (research, investigation)
-- Tasks involve complex architectural decisions
-
-**To dispatch Codex agents:** Use the `clavain:interserve` skill, which provides
-the full delegation protocol (prompt crafting, dispatch, monitoring, verification).
-It translates plan tasks directly into Codex dispatch format.
+**Use Codex (via `clavain:interserve`):** Well-scoped tasks with clear file lists, true parallel sandboxes, cost/context optimization.
+**Keep Claude:** Deep cross-file understanding, exploratory investigation, architectural decisions.
 
 ## Orchestration Patterns
 
-Three reusable patterns for multi-agent work, extracted from real-world swarm orchestration:
-
 ### Parallel Specialists
-Independent tasks run concurrently. Each agent has a distinct domain with no shared files.
-
+Independent tasks, distinct domains, no shared files. All dispatched in one message.
 ```
 Task("Review authentication module")   ─┐
 Task("Review database migrations")     ─┤── all in one message
 Task("Review API error handling")      ─┘
 ```
-
-**When:** Plan has 3+ independent modules. `/sprint` Step 5 (execute) uses this when the plan defines independent components.
+Use when plan has 3+ independent modules.
 
 ### Pipeline
-Sequential handoff — agent N's output feeds agent N+1's input.
-
+Sequential handoff — agent N's output feeds agent N+1.
 ```
 Agent 1: Research & design    → design.md
 Agent 2: Implement from design.md → code changes
 Agent 3: Write tests for code changes → test files
 ```
-
-**When:** Tasks have strict data dependencies. Each step needs the prior step's output.
+Use when tasks have strict data dependencies.
 
 ### Fan-out / Fan-in
-Dispatch N agents for the same question with different perspectives, then synthesize.
-
+N agents, same question, different perspectives → synthesize.
 ```
 Task("Review from security perspective")     ─┐
 Task("Review from performance perspective")  ─┤── fan-out
@@ -237,5 +96,4 @@ Task("Review from UX perspective")           ─┘
                      │
               Synthesize findings              ── fan-in
 ```
-
-**When:** You want diverse analysis. `/flux-drive` and `/quality-gates` use this pattern — launching fd-* agents in parallel, then synthesizing their findings.
+Used by `/flux-drive` and `/quality-gates`.

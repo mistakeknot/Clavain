@@ -6,47 +6,28 @@ argument-hint: "[economy|quality|status]"
 
 # Model Routing
 
-Toggle how subagents pick their model tier. Reads from `config/routing.yaml` — the single source of truth for all model routing policy.
-
-## Current Mode
-
 <routing_arg> #$ARGUMENTS </routing_arg>
 
-### `status` (or no argument)
+Single source of truth: `config/routing.yaml`.
 
-Source `scripts/lib-routing.sh` and call `routing_list_mappings` to show the full routing table.
+## `status` (default)
 
-Determine the mode label by inspecting `config/routing.yaml`:
-- If `defaults.model` is `sonnet` and categories match economy defaults → **economy**
-- If `defaults.model` is `opus` and all categories are `opus` → **quality**
+Source `scripts/lib-routing.sh`, call `routing_list_mappings`. Inspect `config/routing.yaml`:
+- `defaults.model=sonnet` + economy categories → **economy**
+- `defaults.model=opus` + all categories opus → **quality**
 - Otherwise → **custom**
 
-Display phase overrides that differ from the default model. Only show phases where the model or a category override deviates.
-
-Output format:
-
+Show only phases/categories that deviate from default:
 ```
 Mode: economy
-
-Defaults:
-  research: haiku | review: sonnet | workflow: sonnet | synthesis: haiku
-
+Defaults: research: haiku | review: sonnet | workflow: sonnet | synthesis: haiku
 Phase overrides:
-  brainstorm:          opus (all categories)
+  brainstorm: opus (all categories)
 ```
 
-### `economy` (default)
+## `economy`
 
-Set smart defaults optimized for cost:
-
-| Category | Model | Rationale |
-|----------|-------|-----------|
-| Research | `haiku` | Grep, read, summarize — doesn't need reasoning |
-| Review | `sonnet` | Structured analysis with good judgment |
-| Workflow | `sonnet` | Code changes need reliable execution |
-| Synthesis | `haiku` | Aggregation tasks — pattern matching, not reasoning |
-
-Update `config/routing.yaml` subagents defaults section:
+Cost-optimized defaults: research→haiku, review→sonnet, workflow→sonnet, synthesis→haiku. Brainstorm stays on opus.
 
 ```bash
 sed -i '/^subagents:/,/^dispatch:/{
@@ -60,26 +41,16 @@ sed -i '/^subagents:/,/^dispatch:/{
     }
   }
 }' config/routing.yaml
-```
 
-Also reset all phase models to their standard economy values:
-
-```bash
 sed -i '/^  phases:/,/^dispatch:/{
   /^\(      model:\).*/s//\1 sonnet/
   /brainstorm:/{n;s/^\(      model:\).*/\1 opus/}
 }' config/routing.yaml
 ```
 
-Only brainstorm stays on opus — brainstorm-reviewed and strategized use sonnet (structured analysis, not creative generation).
+## `quality`
 
-### `quality`
-
-Maximum quality — all resolution paths return `opus`:
-
-Update `config/routing.yaml`:
-
-1. Set all defaults to `opus`:
+All agents on opus. Set defaults, then all phase models and category overrides to `inherit`.
 
 ```bash
 sed -i '/^subagents:/,/^dispatch:/{
@@ -93,35 +64,15 @@ sed -i '/^subagents:/,/^dispatch:/{
     }
   }
 }' config/routing.yaml
+
+sed -i '/^  phases:/,/^dispatch:/{ s/^\(      model:\).*/\1 inherit/ }' config/routing.yaml
+
+sed -i '/^  phases:/,/^dispatch:/{ /^        [a-z].*:/{ s/^\(        [a-z][a-z0-9_-]*:\).*/\1 inherit/ } }' config/routing.yaml
 ```
 
-2. Set all phase models to `inherit` (so defaults.model=opus flows through):
+## Notes
 
-```bash
-sed -i '/^  phases:/,/^dispatch:/{
-  s/^\(      model:\).*/\1 inherit/
-}' config/routing.yaml
-```
-
-3. Set all phase category overrides to `inherit`:
-
-```bash
-sed -i '/^  phases:/,/^dispatch:/{
-  /^        [a-z].*:/{
-    s/^\(        [a-z][a-z0-9_-]*:\).*/\1 inherit/
-  }
-}' config/routing.yaml
-```
-
-**Result:** `resolve_model` at any phase + category returns `opus` (via inherit → defaults.model=opus fallback chain).
-
-**Use when:** Critical reviews, production deployments, complex architectural decisions where you want maximum reasoning on every agent.
-
-## Important
-
-- Changes take effect immediately for new agent dispatches in this session
-- Does not affect agents already running
-- Economy mode saves ~5x on research and ~3x on review vs. quality mode
-- Individual agents can still be overridden with `model: <tier>` in the Task tool call
-- `config/routing.yaml` is the single source of truth — flux-drive's Step 2.0.5 calls `routing_resolve_agents()` to resolve models at launch time, passing the `model:` parameter to each Agent tool call. Agent frontmatter serves as fallback when routing.yaml is absent.
-- Safety floors: fd-safety and fd-correctness always resolve to >= sonnet regardless of phase or category (enforced by `agent-roles.yaml`)
+- Takes effect immediately for new dispatches; does not affect running agents
+- Economy saves ~5x on research, ~3x on review vs quality
+- Individual agents overrideable via `model: <tier>` in Task call
+- `fd-safety` and `fd-correctness` always resolve to ≥sonnet regardless of mode (enforced by `agent-roles.yaml`)
