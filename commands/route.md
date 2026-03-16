@@ -90,7 +90,7 @@ Reached when `route_mode` is `"bead"` or `"text"`.
 
 ### 4a: Fast-Path Heuristics
 
-First match wins:
+First match wins. **Row order is semantically significant** — rows 1-4 are terminal (conf 1.0), rows 5+ are advisory. Do not reorder.
 
 | Condition | Route | Conf |
 |-----------|-------|------|
@@ -116,7 +116,14 @@ If confidence >= 0.8: display verdict, skip to 4c.
 
 ### 4b: LLM Classification (haiku fallback)
 
-Haiku subagent: given bead metadata (description, has_plan, has_brainstorm, has_prd, complexity, priority, type, phase, child_count), route to `/sprint` (full lifecycle, C4-5, ambiguous, research, epic) or `/work` (clear scope, C1-3, bug fix, plan exists). Return `{"command":"/sprint"|"/work","confidence":0.0-1.0,"reason":"..."}`. Parse fails→default `/sprint`.
+Haiku subagent: given bead metadata (description, has_plan, has_brainstorm, has_prd, complexity, priority, type, phase, child_count), route to `/sprint` (full lifecycle, C4-5, ambiguous, research, epic) or `/work` (clear scope, C1-3, bug fix, plan exists).
+
+Examples to include in prompt:
+- `/sprint`: `{type:feature, C:4, no plan, "Redesign auth flow"}` — ambiguous scope needs brainstorm
+- `/work`: `{type:bug, C:2, "Fix null pointer in payment handler"}` — clear scope, directly executable
+- `/work`: `{type:task, C:3, has_plan:true, phase:plan-reviewed}` — plan exists and reviewed
+
+Return `{"command":"/sprint"|"/work","confidence":0.0-1.0,"reason":"..."}`. Parse fails→default `/sprint`.
 
 ### 4c: Dispatch
 

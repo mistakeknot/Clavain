@@ -36,7 +36,7 @@ if [[ "$TOTAL" -lt 2 ]]; then
 fi
 
 # Throttle: don't fire more than once per 10 minutes
-THROTTLE_FILE="/tmp/clavain-agents-md-refresh-$$"
+THROTTLE_FILE="/tmp/clavain-agents-md-refresh-${CLAUDE_SESSION_ID:-default}"
 if [[ -f "$THROTTLE_FILE" ]]; then
     LAST=$(cat "$THROTTLE_FILE" 2>/dev/null || echo 0)
     NOW=$(date +%s)
