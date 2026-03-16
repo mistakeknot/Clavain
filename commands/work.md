@@ -4,287 +4,114 @@ description: Execute work plans efficiently while maintaining quality and finish
 argument-hint: "[plan file, specification, or todo file path]"
 ---
 
-# Work Plan Execution Command
+# Work
 
-Execute a work plan efficiently while maintaining quality and finishing features.
+Execute a work plan (spec, plan, or todo file) systematically to ship complete features.
 
-## Introduction
+> **vs `/execute-plan`:** Use `/work` for autonomous feature shipping. Use `/execute-plan` for batch execution with architect review checkpoints every 3 tasks.
 
-This command takes a work document (plan, specification, or todo file) and executes it systematically. The focus is on **shipping complete features** by understanding requirements quickly, following existing patterns, and maintaining quality throughout.
-
-> **When to use this vs `/execute-plan`:** Use `/work` for autonomous feature shipping from a spec or plan. Use `/execute-plan` when you want batch execution with architect review checkpoints between batches (3 tasks at a time).
-
-## Input Document
+## Input
 
 <input_document> #$ARGUMENTS </input_document>
 
 <BEHAVIORAL-RULES>
 These rules are non-negotiable for this orchestration command:
 
-1. **Execute steps in order.** Do not skip, reorder, or parallelize phases unless the phase explicitly allows it. Each phase's output feeds into later phases.
-2. **Write output to files, read from files.** Every phase that produces an artifact MUST write it to disk (docs/, .clavain/, etc.). Later phases read from these files, not from conversation context. This ensures recoverability and auditability.
-3. **Stop at checkpoints for user approval.** When a phase defines a gate, checkpoint, or AskUserQuestion — stop and wait. Never auto-approve on behalf of the user.
-4. **Halt on failure and present error.** If a phase fails (test failure, gate block, tool error), stop immediately. Report what failed, what succeeded before it, and what the user can do. Do not retry silently or skip the failed phase.
-5. **Local agents by default.** Use local subagents (Task tool) for dispatch. External agents (Codex, interserve) require explicit user opt-in or an active interserve-mode flag. Never silently escalate to external dispatch.
-6. **Never enter plan mode autonomously.** Do not call EnterPlanMode during orchestration. The plan was already created before this command runs. If scope changes mid-execution, stop and ask the user.
+1. **Execute steps in order.** Do not skip, reorder, or parallelize phases unless explicitly allowed. Each phase feeds into later phases.
+2. **Write output to files, read from files.** Every phase producing an artifact MUST write it to disk (docs/, .clavain/, etc.). Later phases read from files, not conversation context.
+3. **Stop at checkpoints for user approval.** When a phase defines a gate, checkpoint, or AskUserQuestion — stop and wait. Never auto-approve.
+4. **Halt on failure and present error.** If a phase fails, stop immediately. Report what failed, what succeeded, and what the user can do. Do not retry silently or skip.
+5. **Local agents by default.** Use Task tool for dispatch. External agents (Codex, interserve) require explicit user opt-in. Never silently escalate.
+6. **Never enter plan mode autonomously.** Do not call EnterPlanMode during orchestration. If scope changes mid-execution, stop and ask the user.
 </BEHAVIORAL-RULES>
 
-## Execution Workflow
+## Phase 1: Quick Start
 
-### Phase 1: Quick Start
+**1. Read Plan and Clarify**
+- Read the work document completely, including any referenced links
+- Ask clarifying questions now if anything is unclear
+- Get user approval to proceed
 
-1. **Read Plan and Clarify**
+**1b. Check for Prior Learnings** (skip if plan has `## Prior Learnings` section)
 
-   - Read the work document completely
-   - Review any references or links provided in the plan
-   - If anything is unclear or ambiguous, ask clarifying questions now
-   - Get user approval to proceed
-   - **Do not skip this** - better to ask questions now than build the wrong thing
+Extract 2-4 keywords from the plan title/goal, then run in parallel:
+- `Grep: pattern="(title|tags|module):.*<keyword>" path=docs/solutions/ output_mode=files_with_matches -i=true`
+- Also read `docs/solutions/patterns/critical-patterns.md` if it exists
+- `cass search "<keywords>" --limit 3 --json --fast-only 2>/dev/null`
 
-1b. **Check for Prior Learnings (deterministic)**
+If matches found: read frontmatter (limit 30 lines) of matching files, present key insights. If no matches: proceed silently. This step is advisory — never blocks execution.
 
-   If the plan does NOT contain a `## Prior Learnings` section (meaning it wasn't written via the `writing-plans` skill, or no learnings were found at plan time):
+Fallback if both unavailable: `Task(subagent_type="interflux:learnings-researcher")`
 
-   Run a deterministic search — no LLM call needed:
+**2. Setup Environment**
+- `git pull` (trunk-based, commit directly to main)
 
-   a. **Extract keywords** from the plan title and goal (2-4 key terms — module names, problem type, component names).
+**3. Create Todo List**
+- Use TodoWrite to break plan into actionable tasks with dependencies
+- Include testing and quality check tasks
 
-   b. **Search docs/solutions/** for matching frontmatter:
-      ```bash
-      # Search title/tags/module fields for each keyword (parallel Grep calls)
-      Grep: pattern="(title|tags|module):.*<keyword>" path=docs/solutions/ output_mode=files_with_matches -i=true
-      ```
-      Also read `docs/solutions/patterns/critical-patterns.md` if it exists.
+## Phase 1b: Gate Check + Record
 
-   c. **Search past sessions** via CASS (if available):
-      ```bash
-      cass search "<keywords>" --limit 3 --json --fast-only 2>/dev/null
-      ```
-      This returns relevant past sessions in <50ms without spawning an agent.
-
-   d. **Present results**: If matches found in either source, read the frontmatter (limit:30 lines) of matching docs/solutions/ files and display a brief summary. If CASS returned session hits, mention the session IDs for context.
-
-   - If relevant learnings found: present key insights before proceeding, and note them in conversation context
-   - If no matches from either source: proceed silently
-   - This step is advisory — never blocks execution
-   - **Fallback**: If both `docs/solutions/` and `cass` are unavailable, spawn `Task(subagent_type="interflux:learnings-researcher")` as before
-
-2. **Setup Environment**
-
-   Ensure you're on the main branch and up to date:
-
-   ```bash
-   git pull
-   ```
-
-   Work will be committed directly to main (trunk-based development).
-
-3. **Create Todo List**
-   - Use TodoWrite to break plan into actionable tasks
-   - Include dependencies between tasks
-   - Prioritize based on what needs to be done first
-   - Include testing and quality check tasks
-   - Keep tasks specific and completable
-
-### Phase 1b: Gate Check + Record Phase
-
-Before starting execution, enforce the gate (requires plan-reviewed for P0/P1 beads):
 ```bash
-BEAD_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" infer-bead "<input_document_path>")
-if ! "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" enforce-gate "$BEAD_ID" "executing" "<input_document_path>"; then
+BEAD_ID=$(clavain-cli infer-bead "<input_document_path>")
+if ! clavain-cli enforce-gate "$BEAD_ID" "executing" "<input_document_path>"; then
     echo "Gate blocked: run /interflux:flux-drive on the plan first, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
-    # Stop and tell user — do NOT proceed to execution
+    # Stop — do NOT proceed
 fi
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "executing" "Executing: <input_document_path>" "<input_document_path>"
+clavain-cli advance-phase "$BEAD_ID" "executing" "Executing: <input_document_path>" "<input_document_path>"
 ```
 
-### Phase 2: Execute
+## Phase 2: Execute
 
-1. **Task Execution Loop**
+**Task loop** — for each task in priority order:
+- Refresh bead heartbeat if CLAVAIN_BEAD_ID set: `clavain-cli bead-heartbeat "$CLAVAIN_BEAD_ID" 2>/dev/null || true`
+- Mark in_progress in TodoWrite
+- Read referenced files, find similar patterns in codebase
+- Implement following existing conventions; write and run tests
+- Mark completed in TodoWrite
+- Check off `[ ] → [x]` in the plan file (Edit tool)
+- Evaluate incremental commit (see below)
 
-   For each task in priority order:
+**Incremental Commits**
 
-   ```
-   while (tasks remain):
-     - Refresh bead claim heartbeat (if CLAVAIN_BEAD_ID is set):
-       "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" bead-heartbeat "$CLAVAIN_BEAD_ID" 2>/dev/null || true
-     - Mark task as in_progress in TodoWrite
-     - Read any referenced files from the plan
-     - Look for similar patterns in codebase
-     - Implement following existing conventions
-     - Write tests for new functionality
-     - Run tests after changes
-     - Mark task as completed in TodoWrite
-     - Mark off the corresponding checkbox in the plan file ([ ] → [x])
-     - Evaluate for incremental commit (see below)
-   ```
+Commit when: logical unit is complete with passing tests, about to switch contexts, or about to attempt risky changes.
+Skip when: partial unit, tests failing, purely scaffolding, message would be "WIP".
 
-   **IMPORTANT**: Always update the original plan document by checking off completed items. Use the Edit tool to change `- [ ]` to `- [x]` for each task you finish. This keeps the plan as a living document showing progress and ensures no checkboxes are left unchecked.
+```bash
+git add <files for this logical unit>   # never git add .
+git commit -m "feat(scope): description"
+```
 
-2. **Incremental Commits**
+Incremental commits use no attribution footer — the final Phase 4 commit includes it.
 
-   After completing each task, evaluate whether to create an incremental commit:
+**Follow Existing Patterns** — read plan references first, match naming exactly, grep for similar implementations.
 
-   | Commit when... | Don't commit when... |
-   |----------------|---------------------|
-   | Logical unit complete (model, service, component) | Small part of a larger unit |
-   | Tests pass + meaningful progress | Tests failing |
-   | About to switch contexts (backend → frontend) | Purely scaffolding with no behavior |
-   | About to attempt risky/uncertain changes | Would need a "WIP" commit message |
+**Test Continuously** — run tests after each significant change; fix failures immediately.
 
-   **Heuristic:** "Can I write a commit message that describes a complete, valuable change? If yes, commit. If the message would be 'WIP' or 'partial X', wait."
+## Phase 3: Quality Check
 
-   **Commit workflow:**
-   ```bash
-   # 1. Verify tests pass (use project's test command)
-   # Examples: npm test, pytest, go test, cargo test, etc.
+**Run quality checks:**
+- Full test suite (npm test / pytest / go test / cargo test / etc.)
+- Linting (per CLAUDE.md)
 
-   # 2. Stage only files related to this logical unit (not `git add .`)
-   git add <files related to this logical unit>
+**Reviewer agents** — for risky/large changes, delegate to `/clavain:quality-gates` (auto-selects agents). For cross-AI second opinion: `/clavain:interpeer quick`.
 
-   # 3. Commit with conventional message
-   git commit -m "feat(scope): description of this unit"
-   ```
+Run `/clavain:quality-gates` only for: large refactors (10+ files), security-sensitive changes, performance-critical paths, complex algorithms, or user-requested review. For most features: tests + linting + patterns is sufficient.
 
-   **Handling merge conflicts:** If conflicts arise during rebasing or merging, resolve them immediately. Incremental commits make conflict resolution easier since each commit is small and focused.
+**Final checklist:**
+- All TodoWrite tasks completed
+- All tests pass; linting passes
+- Code follows existing patterns; no console errors
 
-   **Note:** Incremental commits use clean conventional messages without attribution footers. The final Phase 4 commit/PR includes the full attribution.
+## Phase 4: Ship
 
-3. **Follow Existing Patterns**
+```bash
+git add <changed-files>    # NOT git add .
+git status && git diff --staged
+git commit -m "feat(scope): description of what and why
 
-   - The plan should reference similar code - read those files first
-   - Match naming conventions exactly
-   - Reuse existing components where possible
-   - Follow project coding standards (see CLAUDE.md)
-   - When in doubt, grep for similar implementations
+Co-Authored-By: Claude <noreply@anthropic.com>"
+git push
+```
 
-4. **Test Continuously**
-
-   - Run relevant tests after each significant change
-   - Don't wait until the end to test
-   - Fix failures immediately
-   - Add new tests for new functionality
-
-5. **Track Progress**
-   - Keep TodoWrite updated as you complete tasks
-   - Note any blockers or unexpected discoveries
-   - Create new tasks if scope expands
-   - Keep user informed of major milestones
-
-### Phase 3: Quality Check
-
-1. **Run Core Quality Checks**
-
-   Always run before committing:
-
-   ```bash
-   # Run full test suite (use project's test command)
-   # Examples: npm test, pytest, go test, cargo test, etc.
-
-   # Run linting (per CLAUDE.md)
-   # Use project's linter before pushing
-   ```
-
-2. **Reviewer Agents** — delegate to `/quality-gates`
-
-   If the change is risky or large, run `/clavain:quality-gates` instead of manually selecting reviewers. It auto-selects the right agents based on what changed.
-
-   For a cross-AI second opinion, run `/clavain:interpeer quick`.
-
-3. **Final Validation**
-   - All TodoWrite tasks marked completed
-   - All tests pass
-   - Linting passes
-   - Code follows existing patterns
-   - No console errors or warnings
-
-### Phase 4: Ship It
-
-1. **Commit to Trunk**
-
-   ```bash
-   # Stage specific files (NOT git add .)
-   git add <changed-files>
-   git status  # Review what's being committed
-   git diff --staged  # Check the changes
-
-   # Commit with conventional format
-   git commit -m "feat(scope): description of what and why
-
-   Co-Authored-By: Claude <noreply@anthropic.com>"
-
-   git push
-   ```
-
-2. **Notify User**
-   - Summarize what was completed
-   - Note any follow-up work needed
-   - Suggest next steps if applicable
-
----
-
-## Key Principles
-
-### Start Fast, Execute Faster
-
-- Get clarification once at the start, then execute
-- Don't wait for perfect understanding - ask questions and move
-- The goal is to **finish the feature**, not create perfect process
-
-### The Plan is Your Guide
-
-- Work documents should reference similar code and patterns
-- Load those references and follow them
-- Don't reinvent - match what exists
-
-### Test As You Go
-
-- Run tests after each change, not at the end
-- Fix failures immediately
-- Continuous testing prevents big surprises
-
-### Quality is Built In
-
-- Follow existing patterns
-- Write tests for new code
-- Run linting before pushing
-- Use reviewer agents for complex/risky changes only
-
-### Ship Complete Features
-
-- Mark all tasks completed before moving on
-- Don't leave features 80% done
-- A finished feature that ships beats a perfect feature that doesn't
-
-## Quality Checklist
-
-Before committing, verify:
-
-- [ ] All clarifying questions asked and answered
-- [ ] All TodoWrite tasks marked completed
-- [ ] Tests pass (run project's test command)
-- [ ] Linting passes (use project's linter)
-- [ ] Code follows existing patterns
-- [ ] Commit messages follow conventional format
-
-## When to Use Quality Gates
-
-**Don't review by default.** Run `/clavain:quality-gates` only when:
-
-- Large refactor affecting many files (10+)
-- Security-sensitive changes (authentication, permissions, data access)
-- Performance-critical code paths
-- Complex algorithms or business logic
-- User explicitly requests thorough review
-
-For most features: tests + linting + following patterns is sufficient.
-
-## Common Pitfalls to Avoid
-
-- **Analysis paralysis** - Don't overthink, read the plan and execute
-- **Skipping clarifying questions** - Ask now, not after building wrong thing
-- **Ignoring plan references** - The plan has links for a reason
-- **Testing at the end** - Test continuously or suffer later
-- **Forgetting TodoWrite** - Track progress or lose track of what's done
-- **80% done syndrome** - Finish the feature, don't move on early
-- **Over-reviewing simple changes** - Save reviewer agents for complex work
+Summarize what was completed, note follow-up work, suggest next steps.

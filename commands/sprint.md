@@ -6,317 +6,193 @@ argument-hint: "[feature description or --from-step <step>]"
 
 # Sprint — Phase Sequencer
 
-Runs the full 10-phase development lifecycle from brainstorm to ship. Normally invoked via `/route` which handles discovery, resume, and classification. Can be invoked directly to force the full lifecycle.
+Runs the full 10-phase lifecycle from brainstorm to ship. Normally invoked via `/route`. `CLAVAIN_BEAD_ID` set by caller; if unset, runs without bead tracking.
 
-**Expects:** `CLAVAIN_BEAD_ID` set by caller (`/route` or manual). If not set, sprint runs without bead tracking.
-
-## Arguments
-
-- **`--from-step <n>`**: Skip directly to step `<n>`. Step names: brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, reflect, ship.
-- **Otherwise**: `$ARGUMENTS` is treated as a feature description for Step 1 (Brainstorm).
-
-## Complexity (Read from Bead)
-
-Read cached complexity (set by `/route`):
-
-```bash
-complexity=$(bd state "$CLAVAIN_BEAD_ID" complexity 2>/dev/null) || complexity="3"
-label=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" complexity-label "$complexity" 2>/dev/null) || label="moderate"
-```
-
-Display to the user: `Complexity: ${complexity}/5 (${label})`
-
-Score-based routing:
-- **1-2 (trivial/simple):** Ask user via AskUserQuestion whether to skip brainstorm + strategy and go directly to Step 3 (write-plan). Options: "Skip to plan (Recommended)", "Full workflow". If skipping, jump to Step 3.
-- **3 (moderate):** Standard workflow, all steps. Offer "Skip to plan" if the bead already has a clear description with acceptance criteria.
-- **4-5 (complex/research):** Full workflow with Opus orchestration, full agent roster. User can still explicitly use `--from-step <step>` to skip phases — complexity score is advisory, not a hard gate.
-
-**Note:** `--from-step` always overrides complexity-based routing. A user who says `--from-step plan` on a complexity-5 task knows what they're doing.
-
----
+- `--from-step <n>`: jump to step name (brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, reflect, ship)
+- Otherwise: `$ARGUMENTS` is feature description for Step 1
 
 <BEHAVIORAL-RULES>
-These rules are non-negotiable for this orchestration command:
-
-1. **Execute steps in order.** Do not skip, reorder, or parallelize steps unless the step explicitly allows it. Each step's output feeds into later steps.
-2. **Write output to files, read from files.** Every step that produces an artifact MUST write it to disk (docs/, .clavain/, etc.). Later steps read from these files, not from conversation context. This ensures recoverability and auditability.
-3. **Stop at checkpoints for user approval.** When a step defines a gate, checkpoint, or AskUserQuestion — stop and wait. Never auto-approve on behalf of the user.
-4. **Halt on failure and present error.** If a step fails (test failure, gate block, tool error), stop immediately. Report what failed, what succeeded before it, and what the user can do. Do not retry silently or skip the failed step.
-5. **Local agents by default.** Use local subagents (Task tool) for dispatch. External agents (Codex, interserve) require explicit user opt-in or an active interserve-mode flag. Never silently escalate to external dispatch.
-6. **Never enter plan mode autonomously.** Do not call EnterPlanMode during orchestration. The plan was already created before this command runs. If scope changes mid-execution, stop and ask the user.
+Non-negotiable:
+1. Execute steps in order — no skipping, reordering, or parallelizing unless a step explicitly allows it.
+2. Write artifacts to disk (docs/, .clavain/); later steps read files, not conversation context.
+3. Stop at checkpoints/gates for user approval — never auto-approve.
+4. Halt on failure — report what failed, what succeeded, what user can do. No silent retry or skip.
+5. Local subagents (Task tool) by default — external agents (Codex, interserve) require explicit opt-in.
+6. Never call EnterPlanMode — plan was created before this runs. Scope changes → stop and ask.
 </BEHAVIORAL-RULES>
 
-### Session Checkpointing
-
-After each step completes successfully, write a checkpoint:
-```bash
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-write "$CLAVAIN_BEAD_ID" "<phase>" "<step_name>" "<plan_path>"
-```
-
-Step names: `brainstorm`, `strategy`, `plan`, `plan-review`, `execute`, `test`, `quality-gates`, `resolve`, `reflect`, `ship`.
-
-When resuming (via `/route` sprint resume):
-1. Read checkpoint: `checkpoint_read`
-2. Validate git SHA: `checkpoint_validate` (warn on mismatch, don't block)
-3. Get completed steps: `checkpoint_completed_steps`
-4. Display: `Resuming from step <next>. Completed: [<steps>]`
-5. Skip completed steps — jump to the first incomplete one
-6. Load agent verdicts from `.clavain/verdicts/` if present
-
-When the sprint completes (Step 10 Ship), clear the checkpoint:
-```bash
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" checkpoint-clear
-```
-
-### Auto-Advance Protocol
-
-When transitioning between steps, use auto-advance instead of manual routing:
-
-```bash
-# Validate sprint bead before advancing
-is_sprint=$(bd state "$CLAVAIN_BEAD_ID" sprint 2>/dev/null) || is_sprint=""
-if [[ "$is_sprint" == "true" ]]; then
-    pause_reason=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>" "<artifact_path>")
-    if [[ $? -ne 0 ]]; then
-        # Parse structured pause reason: type|phase|detail
-        reason_type="${pause_reason%%|*}"
-        case "$reason_type" in
-            gate_blocked)
-                # AskUserQuestion: "Gate blocked. Options: Fix issues, Skip gate, Stop sprint"
-                ;;
-            manual_pause)
-                # AskUserQuestion: "Sprint paused (auto_advance=false). Options: Continue, Stop"
-                ;;
-            stale_phase)
-                # Another session already advanced — re-read state and route to new phase
-                new_state=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-read-state "$CLAVAIN_BEAD_ID")
-                new_phase=$(echo "$new_state" | jq -r '.phase // "brainstorm"')
-                echo "Phase advanced by another session → now at: $new_phase"
-                # Re-route to the current phase using sprint-next-step
-                next=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-next-step "$new_phase")
-                # Continue with the new phase (fall through to normal routing below)
-                ;;
-            budget_exceeded)
-                # AskUserQuestion: "Budget exceeded (<detail>). Options: Continue (override), Stop sprint, Adjust budget"
-                ;;
-        esac
-    fi
-fi
-```
-
-**Status messages:** At each auto-advance, display: `Phase: <current> → <next> (auto-advancing)`
-
-**No "what next?" prompts between steps.** Sprint proceeds automatically unless:
-1. `sprint_should_pause()` returns a pause trigger
-2. A step fails (test failure, gate block)
-3. User set `auto_advance=false` on the sprint bead
-
-### Phase Tracking
-
-After each step completes successfully, record the phase transition via `sprint_advance()`. If `CLAVAIN_BEAD_ID` is set (from `/route` or manual), run:
-```bash
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" set-artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>"
-```
-Phase tracking is silent — never block on errors. If no bead ID is available, skip phase tracking. Pass the artifact path (brainstorm doc, plan file, etc.) when one exists for the step; pass empty string when there is no single artifact (e.g., quality-gates, ship).
-
-## Before Starting
-
-### Environment Bootstrap (fail-soft)
-
-Ensure helpers are available. If missing (e.g., Codex sessions without full plugin stack), continue without blocking:
+## Environment Bootstrap (fail-soft)
 
 ```bash
 export CLAVAIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${HOME}/.codex/clavain}"
 export CLAVAIN_CLI="${CLAVAIN_ROOT}/bin/clavain-cli"
-if [[ -f "$CLAVAIN_ROOT/hooks/lib-discovery.sh" ]]; then
-    export DISCOVERY_PROJECT_DIR="."; source "$CLAVAIN_ROOT/hooks/lib-discovery.sh"
-fi
+[[ -f "$CLAVAIN_ROOT/hooks/lib-discovery.sh" ]] && export DISCOVERY_PROJECT_DIR="." && source "$CLAVAIN_ROOT/hooks/lib-discovery.sh"
 ```
 
-### Bead Token Attribution
-
-If `CLAVAIN_BEAD_ID` is set, register it for interstat token tracking:
+If `CLAVAIN_BEAD_ID` set, register for interstat:
 ```bash
-if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
-    _is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
-    [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
-    ic session attribute --session="$_is_sid" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null || true
-fi
+_is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
+[[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
+ic session attribute --session="$_is_sid" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null || true
 ```
 
-### Work Discovery
+Work discovery: `result=$(discovery_scan_beads 2>/dev/null)` — if actionable beads found, present them before starting; otherwise proceed.
 
-Run work discovery to detect available beads and pending work:
+## Complexity Routing
 
 ```bash
-result=$(discovery_scan_beads 2>/dev/null) || result=""
-
-if [[ "$result" == "DISCOVERY_UNAVAILABLE" ]]; then
-    # Discovery not available (interphase not installed) — proceed without discovery
-    echo "Discovery unavailable — skipping bead scan"
-elif [[ -n "$result" ]]; then
-    # Parse discovered beads and present selection
-    echo "$result"
-fi
+complexity=$(bd state "$CLAVAIN_BEAD_ID" complexity 2>/dev/null) || complexity="3"
+label=$(clavain-cli complexity-label "$complexity" 2>/dev/null) || label="moderate"
 ```
+Display: `Complexity: ${complexity}/5 (${label})`
 
-If discovery finds actionable beads, present them to the user before starting the sprint. Otherwise, proceed with the user's original request.
+- **1-2:** AskUserQuestion — "Skip to plan (Recommended)" or "Full workflow". If skip, jump to Step 3.
+- **3:** Standard workflow; offer skip-to-plan if bead has clear description+AC.
+- **4-5:** Full workflow, Opus orchestration.
+
+`--from-step` always overrides complexity routing.
+
+## Checkpointing
+
+After each step: `clavain-cli checkpoint-write "$CLAVAIN_BEAD_ID" "<phase>" "<step_name>" "<plan_path>"`
+
+Resume protocol:
+1. `checkpoint_read` → validate git SHA (`checkpoint_validate`, warn not block) → `checkpoint_completed_steps`
+2. Display: `Resuming from step <next>. Completed: [<steps>]`
+3. Skip completed steps; load verdicts from `.clavain/verdicts/` if present
+
+On Step 10 completion: `clavain-cli checkpoint-clear`
+
+## Auto-Advance
+
+Between steps, if `$(bd state "$CLAVAIN_BEAD_ID" sprint)` == `"true"`:
+```bash
+pause_reason=$(clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>" "<artifact_path>")
+```
+On non-zero exit, parse `reason_type="${pause_reason%%|*}"`:
+- `gate_blocked` → AskUserQuestion: Fix issues / Skip gate / Stop sprint
+- `manual_pause` → AskUserQuestion: Continue / Stop
+- `stale_phase` → re-read state, route to new phase via `clavain-cli sprint-next-step`
+- `budget_exceeded` → AskUserQuestion: Continue (override) / Stop / Adjust budget
+
+Display at each advance: `Phase: <current> → <next> (auto-advancing)`. No "what next?" prompts unless pause triggered or step fails.
+
+## Phase Tracking
+
+After each step (silent, skip on error):
+```bash
+clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
+clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>"
+```
+Pass artifact path when one exists; empty string otherwise (quality-gates, ship).
 
 ---
 
 ## Step 1: Brainstorm
+
 `/clavain:brainstorm $ARGUMENTS`
 
-**Phase:** After brainstorm doc is created, set `phase=brainstorm` with reason `"Brainstorm: <doc_path>"`.
-
-**Cost estimate:** `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-cost-estimate "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null || true`
+After doc created: set `phase=brainstorm`; `clavain-cli record-cost-estimate "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null || true`
 
 ## Step 2: Strategize
+
 `/clavain:strategy`
 
-Structures the brainstorm into a PRD, creates beads for tracking, and validates with flux-drive before planning.
-
-**Optional:** Run `/clavain:review-doc` on the brainstorm output first for a quick polish before structuring. If you do, set `phase=brainstorm-reviewed` after review-doc completes.
-
-**CUJs:** After the PRD is created, run `/interpath:cuj` to generate a CUJ for each critical user-facing flow identified in the PRD. CUJs document the expected end-to-end experience with typed success signals (measurable/observable/qualitative) that agents can validate against during execution. Required for any user-facing work. Skip only for purely internal/infrastructure changes (refactors, CI, dependency updates).
-
-**Phase:** After strategy completes, set `phase=strategized` with reason `"PRD: <prd_path>"`.
+Optionally run `/clavain:review-doc` on brainstorm first (set `phase=brainstorm-reviewed` after). After PRD created, run `/interpath:cuj` for each critical user-facing flow — skip only for purely internal changes. After strategy: set `phase=strategized`.
 
 ## Step 3: Write Plan
-`/clavain:write-plan`
 
-Remember the plan file path (saved to `docs/plans/YYYY-MM-DD-<name>.md`) — it's needed in Step 4.
+`/clavain:write-plan` → saves to `docs/plans/YYYY-MM-DD-<name>.md` (remember path for Step 4).
 
-**Note:** When interserve mode is active, `/write-plan` auto-selects Codex Delegation and executes the plan via Codex agents. In this case, skip Step 5 (execute) — the plan has already been executed.
+If interserve mode active: write-plan auto-executes via Codex — skip Step 5.
 
-**Phase:** After plan is written, set `phase=planned` with reason `"Plan: <plan_path>"`.
+After plan written: set `phase=planned`; `clavain-cli record-cost-estimate "$CLAVAIN_BEAD_ID" "planned" 2>/dev/null || true`
 
-**Cost estimate:** `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-cost-estimate "$CLAVAIN_BEAD_ID" "planned" 2>/dev/null || true`
+## Step 4: Review Plan
 
-## Step 4: Review Plan (gates execution)
-
-**Budget context:** Before invoking flux-drive, compute remaining budget:
+Budget context before flux-drive:
 ```bash
-remaining=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-budget-remaining "$CLAVAIN_BEAD_ID")
-if [[ "$remaining" -gt 0 ]]; then
-    export FLUX_BUDGET_REMAINING="$remaining"
-fi
+remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
+[[ "$remaining" -gt 0 ]] && export FLUX_BUDGET_REMAINING="$remaining"
 ```
 
-`/interflux:flux-drive <plan-file-from-step-3>`
+`/interflux:flux-drive <plan-file-from-step-3>` — review before execution to catch plan-level risks early.
 
-Pass the plan file path from Step 3 as the flux-drive target. Review happens **before** execution so plan-level risks are caught early.
-
-If flux-drive finds P0/P1 issues, stop and address them before proceeding to execution.
-
-**Phase:** After plan review passes, set `phase=plan-reviewed` with reason `"Plan reviewed: <plan_path>"`.
+If P0/P1 issues found: stop and fix before proceeding. After passing: set `phase=plan-reviewed`.
 
 ## Step 5: Execute
 
-**Gate check:** Before executing, enforce the gate:
+Gate check:
 ```bash
-if ! "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" enforce-gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
-    echo "Gate blocked: plan must be reviewed first. Run /interflux:flux-drive on the plan, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
-    # Stop — do NOT proceed to execution
+if ! clavain-cli enforce-gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
+    echo "Gate blocked: plan must be reviewed first. Run /interflux:flux-drive or set CLAVAIN_SKIP_GATE='reason'." >&2
+    # Stop
 fi
 ```
 
-Run `/clavain:work <plan-file-from-step-3>`
+`/clavain:work <plan-file-from-step-3>`
 
-**Phase:** At the START of execution (before work begins), set `phase=executing` with reason `"Executing: <plan_path>"`.
+At START of execution: set `phase=executing`; `clavain-cli record-cost-estimate "$CLAVAIN_BEAD_ID" "executing" 2>/dev/null || true`
 
-**Cost estimate:** `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-cost-estimate "$CLAVAIN_BEAD_ID" "executing" 2>/dev/null || true`
-
-**Parallel execution:** When the plan has independent modules, dispatch them in parallel using the `dispatching-parallel-agents` skill. This is automatic when interserve mode is active (executing-plans detects the flag and dispatches Codex agents).
+Parallel execution: use `dispatching-parallel-agents` skill for independent modules. Interserve mode auto-dispatches Codex agents.
 
 ## Step 6: Test & Verify
 
-Run the project's test suite and linting before proceeding to review:
-
-```bash
-# Run project's test command (go test ./... | npm test | pytest | cargo test)
-# Run project's linter if configured
-```
-
-**If tests fail:** Stop. Fix failures before proceeding. Do NOT continue to quality gates with a broken build.
-
-**If no test command exists:** Note this and proceed — quality-gates will still run reviewer agents.
+Run project test suite + linter. If tests fail: stop and fix — do NOT proceed with broken build. If no test command: note and proceed.
 
 ## Step 7: Quality Gates
 
-**Budget context:** Before invoking quality-gates, compute remaining budget:
-```bash
-remaining=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-budget-remaining "$CLAVAIN_BEAD_ID")
-if [[ "$remaining" -gt 0 ]]; then
-    export FLUX_BUDGET_REMAINING="$remaining"
-fi
-```
+Budget context (same pattern as Step 4).
 
 `/clavain:quality-gates`
 
-**Parallel opportunity:** Quality gates and resolve can overlap — quality-gates spawns review agents while resolve addresses already-known findings. If you have known TODOs from execution, start `/clavain:resolve` in parallel with quality-gates.
+Parallel opportunity: if known TODOs from execution exist, start `/clavain:resolve` in parallel.
 
-**Verdict consumption:** After quality-gates completes, read structured verdicts instead of raw agent output:
+After completion, read verdicts:
 ```bash
 source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-verdict.sh"
-verdict_parse_all    # Summary table: STATUS  AGENT  SUMMARY
-verdict_count_by_status  # e.g., "3 CLEAN, 1 NEEDS_ATTENTION"
+verdict_parse_all       # STATUS  AGENT  SUMMARY table
+verdict_count_by_status # e.g., "3 CLEAN, 1 NEEDS_ATTENTION"
 ```
-- If all CLEAN: proceed (one-line summary in context)
-- If any NEEDS_ATTENTION: read only those agents' detail files via `verdict_get_attention`
-- Report per-agent STATUS in sprint summary
+- All CLEAN → proceed (one-line summary)
+- Any NEEDS_ATTENTION → read detail via `verdict_get_attention`; report per-agent STATUS in sprint summary
 
-**Gate check + Phase:** After quality gates PASS, enforce the shipping gate before recording:
+Gate check after PASS:
 ```bash
-if ! "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" enforce-gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
-    echo "Gate blocked: review findings are stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
-    # Do NOT advance to shipping — stop and tell user
+if ! clavain-cli enforce-gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
+    echo "Gate blocked: re-run /clavain:quality-gates or set CLAVAIN_SKIP_GATE='reason'." >&2
+    # Stop
 fi
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "shipping"
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-phase "$CLAVAIN_BEAD_ID" "shipping"
+clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"
+clavain-cli record-phase "$CLAVAIN_BEAD_ID" "shipping"
 ```
-Do NOT set the phase if gates FAIL.
+Do NOT set phase if gates FAIL.
 
 ## Step 8: Resolve Issues
 
-Run `/clavain:resolve` — it auto-detects the source (todo files, PR comments, or code TODOs) and handles interserve mode automatically.
+`/clavain:resolve` — auto-detects source (todo files, PR comments, code TODOs), handles interserve mode.
 
-**After resolving:** If quality-gates found patterns that could recur in other code (e.g., format injection, portability issues, race conditions), compound them:
-- Run `/clavain:compound` to document the pattern in `config/flux-drive/knowledge/`
-- If findings revealed a plan-level mistake, annotate the plan file with a `## Lessons Learned` section so future similar plans benefit
+After resolving: if quality-gates found recurring patterns, run `/clavain:compound` to document in `config/flux-drive/knowledge/`. If findings revealed a plan-level mistake, add `## Lessons Learned` to the plan file.
 
 ## Step 9: Reflect
 
-Advance the sprint from `shipping` to `reflect`, then invoke `/reflect`:
+`clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"` then `/reflect`.
 
-```bash
-"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" sprint-advance "$CLAVAIN_BEAD_ID" "shipping"
-```
-
-Run `/reflect` — it captures learnings (complexity-scaled), registers the artifact, and advances `reflect → done`.
-
-**Phase-advance ownership:** `/reflect` owns both artifact registration AND the `reflect → done` advance. Do NOT call `sprint_advance` after `/reflect` returns.
-
-**Soft gate:** Gate hardness is soft for the initial rollout (emit warning but allow advance if no reflect artifact exists). Graduation to hard gate is tracked separately.
+`/reflect` owns artifact registration AND the `reflect → done` advance — do NOT call sprint-advance after it returns. Gate is soft (warn but allow if no reflect artifact).
 
 ## Step 10: Ship
 
-Use the `clavain:landing-a-change` skill to verify, document, and commit the completed work.
+Use `clavain:landing-a-change` skill to verify, document, commit.
 
-**Phase:** After successful ship, set `phase=done` with reason `"Shipped"`. Also close the bead: `bd close "$CLAVAIN_BEAD_ID" 2>/dev/null || true`.
+After ship: set `phase=done`; `bd close "$CLAVAIN_BEAD_ID" 2>/dev/null || true`
 
-**Close sweep:** After closing the sprint bead, auto-close any open beads that were blocked by it:
-
+Close sweep:
 ```bash
-swept=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" close-children "$CLAVAIN_BEAD_ID" "Shipped with parent epic $CLAVAIN_BEAD_ID")
-if [[ "$swept" -gt 0 ]]; then
-    echo "Auto-closed $swept child beads"
-fi
+swept=$(clavain-cli close-children "$CLAVAIN_BEAD_ID" "Shipped with parent epic $CLAVAIN_BEAD_ID")
+[[ "$swept" -gt 0 ]] && echo "Auto-closed $swept child beads"
 ```
 
-**Sprint summary:** At completion, display the standard summary plus a per-model cost table:
-
+Sprint summary:
 ```
 Sprint Summary:
 - Bead: <CLAVAIN_BEAD_ID>
@@ -328,49 +204,23 @@ Sprint Summary:
 - Swept: <swept> child beads auto-closed
 ```
 
-**Cost table:** Query interstat for per-model USD breakdown and record actuals:
-
+Cost table — locate and run cost-query.sh:
 ```bash
-# Locate cost-query.sh (plugin cache → monorepo fallback)
 _cost_script=""
-_candidate="${CLAUDE_PLUGIN_ROOT}/../interstat/scripts/cost-query.sh"
-[[ -f "$_candidate" ]] && _cost_script="$_candidate"
-if [[ -z "$_cost_script" && -n "${CLAVAIN_SOURCE_DIR:-}" ]]; then
-    _candidate="${CLAVAIN_SOURCE_DIR}/../../interverse/interstat/scripts/cost-query.sh"
-    [[ -f "$_candidate" ]] && _cost_script="$_candidate"
-fi
-
-if [[ -n "$_cost_script" ]]; then
-    _cost_rows=$(bash "$_cost_script" cost-usd --bead="$CLAVAIN_BEAD_ID" 2>/dev/null) || _cost_rows=""
-fi
+_c="${CLAUDE_PLUGIN_ROOT}/../interstat/scripts/cost-query.sh"
+[[ -f "$_c" ]] && _cost_script="$_c"
+[[ -z "$_cost_script" && -n "${CLAVAIN_SOURCE_DIR:-}" ]] && _c="${CLAVAIN_SOURCE_DIR}/../../interverse/interstat/scripts/cost-query.sh" && [[ -f "$_c" ]] && _cost_script="$_c"
+[[ -n "$_cost_script" ]] && _cost_rows=$(bash "$_cost_script" cost-usd --bead="$CLAVAIN_BEAD_ID" 2>/dev/null) || _cost_rows=""
 ```
-
-If `_cost_rows` is non-empty and not `[]`, display a table:
-
-```
-Cost Breakdown:
-  Model                   | Runs | Input Tokens | Output Tokens | Cost USD
-  ------------------------|------|--------------|---------------|----------
-  claude-opus-4-6         |   12 |      850,000 |       420,000 |  $44.25
-  claude-sonnet-4-6       |   35 |    1,200,000 |       600,000 |  $12.60
-  TOTAL                   |   47 |    2,050,000 |     1,020,000 |  $56.85
-```
-
-Then record actuals: `"${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" record-cost-actuals "$CLAVAIN_BEAD_ID" 2>/dev/null || true`
-
-If `_cost_rows` is empty or `[]`, display: `(no cost data — bead attribution not active)`
+If `_cost_rows` non-empty: display Model/Runs/Input/Output/Cost table. Then: `clavain-cli record-cost-actuals "$CLAVAIN_BEAD_ID" 2>/dev/null || true`
+If empty: `(no cost data — bead attribution not active)`
 
 ## Error Recovery
 
-If any step fails:
+1. Do NOT skip failed step
+2. Retry once with tighter scope
+3. If retry fails: report which step, the error, what succeeded
 
-1. **Do NOT skip the failed step** — each step's output feeds into later steps
-2. **Retry once** with a tighter scope (e.g., fewer features, smaller change set)
-3. **If retry fails**, stop and report:
-   - Which step failed
-   - The error or unexpected output
-   - What was completed successfully before the failure
-
-To **resume from a specific step**, re-invoke `/clavain:route` which will detect the active sprint and resume from the right phase. Or use `/clavain:sprint --from-step <step>` to skip directly.
+To resume: `/clavain:route` (auto-detects active sprint) or `/clavain:sprint --from-step <step>`.
 
 Start with Step 1 now.
