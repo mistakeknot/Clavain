@@ -352,3 +352,25 @@ func TestSatisfactionGateCheck_Fail(t *testing.T) {
 		t.Error("expected gate to fail with score 0.3 < threshold 0.7")
 	}
 }
+
+// BenchmarkScoreScenarioResult benchmarks the pure scoring computation.
+func BenchmarkScoreScenarioResult(b *testing.B) {
+	sr := ScenarioResult{
+		ScenarioID: "bench-checkout",
+		Intent:     "User can complete checkout",
+		Mode:       "behavioral",
+		Steps: []StepResult{
+			{Action: "Navigate to cart", Expected: "Cart shows items", Passed: true, Type: "llm-judge"},
+			{Action: "Submit order", Expected: "exit_code: 0", Passed: true, Type: "shell"},
+			{Action: "Verify email", Expected: "Email sent", Passed: false, Type: "llm-judge"},
+			{Action: "Check inventory", Expected: "Stock decremented", Passed: true, Type: "shell"},
+			{Action: "Validate receipt", Expected: "PDF generated", Passed: true, Type: "llm-judge"},
+		},
+		PassCount:  4,
+		TotalSteps: 5,
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = scoreScenarioResult(sr, "bench-bead")
+	}
+}
