@@ -787,6 +787,201 @@ clavain_doctor() {
   bash "$SOURCE_DIR/scripts/install-codex.sh" "${args[@]}"
 }
 
+prompt_wrapper_has_unconverted_tokens() {
+  local prompt_file="$1"
+  grep -Fv "if a prompt calls for AskUserQuestion" "$prompt_file" | grep -Eq '\bAskUserQuestion\b'
+}
+
+prompt_wrapper_entries() {
+  local plugin command_name src prompt_path
+  while IFS='|' read -r plugin command_name src; do
+    [[ -n "$plugin" && -n "$command_name" && -n "$src" ]] || continue
+    prompt_path="$CODEX_PROMPTS_DIR/$plugin-$command_name.md"
+    echo "$plugin|$command_name|$src|$prompt_path"
+  done < <(interverse_command_entries)
+}
+
+doctor_prompt_wrappers_text() {
+  local status=0
+  local expected_files plugin_list
+  local plugin command_name src prompt_path
+
+  expected_files="$(mktemp)"
+  plugin_list="$(mktemp)"
+  interverse_recommended_plugins > "$plugin_list"
+
+  echo
+  echo "-- Prompt wrappers --"
+
+  while IFS='|' read -r plugin command_name src prompt_path; do
+    [[ -n "$plugin" ]] || continue
+    printf '%s\n' "$prompt_path" >> "$expected_files"
+
+    local ok=true
+    if [[ ! -f "$prompt_path" ]]; then
+      echo "[FAIL] prompt missing: $prompt_path"
+      ok=false
+    elif ! grep -Fq "Interverse prompt wrapper generated from companion command source." "$prompt_path"; then
+      echo "[FAIL] prompt missing managed marker: $prompt_path"
+      ok=false
+    elif ! grep -Fq -- "- Source: \`$src\`" "$prompt_path"; then
+      echo "[FAIL] prompt source mismatch: $prompt_path"
+      ok=false
+    elif prompt_wrapper_has_unconverted_tokens "$prompt_path"; then
+      echo "[FAIL] prompt contains unconverted Claude-only tokens: $prompt_path"
+      ok=false
+    fi
+
+    if [[ "$ok" == true ]]; then
+      echo "[OK]   prompt: $plugin-$command_name"
+    else
+      status=1
+    fi
+  done < <(prompt_wrapper_entries)
+
+  local prompt_file base is_recommended plugin
+  for prompt_file in "$CODEX_PROMPTS_DIR"/*.md; do
+    [[ -f "$prompt_file" ]] || continue
+    grep -Fq "Interverse prompt wrapper generated from companion command source." "$prompt_file" || continue
+    if grep -Fxq "$prompt_file" "$expected_files" 2>/dev/null; then
+      continue
+    fi
+
+    base="$(basename "$prompt_file")"
+    is_recommended=false
+    while IFS= read -r plugin; do
+      [[ -n "$plugin" ]] || continue
+      if [[ "$base" == "$plugin"-* ]]; then
+        is_recommended=true
+        break
+      fi
+    done < "$plugin_list"
+
+    if [[ "$is_recommended" == true ]]; then
+      echo "[FAIL] stale prompt wrapper: $prompt_file"
+      status=1
+    fi
+  done
+
+  rm -f "$expected_files" "$plugin_list"
+  return "$status"
+}
+
+doctor_prompt_wrappers_json() {
+  local status=0
+  local entries_file stale_file expected_files plugin_list
+  local plugin command_name src prompt_path
+  local prompt_count=0
+  local stale_count=0
+  local first=true
+
+  entries_file="$(mktemp)"
+  stale_file="$(mktemp)"
+  expected_files="$(mktemp)"
+  plugin_list="$(mktemp)"
+  printf '[\n' > "$entries_file"
+  printf '[\n' > "$stale_file"
+  interverse_recommended_plugins > "$plugin_list"
+
+  while IFS='|' read -r plugin command_name src prompt_path; do
+    [[ -n "$plugin" ]] || continue
+    printf '%s\n' "$prompt_path" >> "$expected_files"
+
+    local prompt_ok=false
+    local marker_ok=false
+    local source_ok=false
+    local converted_ok=false
+
+    if [[ -f "$prompt_path" ]]; then
+      prompt_ok=true
+      grep -Fq "Interverse prompt wrapper generated from companion command source." "$prompt_path" && marker_ok=true
+      grep -Fq -- "- Source: \`$src\`" "$prompt_path" && source_ok=true
+      if ! prompt_wrapper_has_unconverted_tokens "$prompt_path"; then
+        converted_ok=true
+      fi
+    fi
+
+    if [[ "$prompt_ok" != true || "$marker_ok" != true || "$source_ok" != true || "$converted_ok" != true ]]; then
+      status=1
+    fi
+
+    if [[ "$first" != true ]]; then
+      printf ',\n' >> "$entries_file"
+    fi
+    first=false
+
+    printf '    {\n' >> "$entries_file"
+    printf '      "plugin":"%s",\n' "$(json_escape "$plugin")" >> "$entries_file"
+    printf '      "command_name":"%s",\n' "$(json_escape "$command_name")" >> "$entries_file"
+    printf '      "source_path":"%s",\n' "$(json_escape "$src")" >> "$entries_file"
+    printf '      "prompt_path":"%s",\n' "$(json_escape "$prompt_path")" >> "$entries_file"
+    printf '      "prompt_ok":%s,\n' "$prompt_ok" >> "$entries_file"
+    printf '      "marker_ok":%s,\n' "$marker_ok" >> "$entries_file"
+    printf '      "source_ok":%s,\n' "$source_ok" >> "$entries_file"
+    printf '      "converted_ok":%s\n' "$converted_ok" >> "$entries_file"
+    printf '    }' >> "$entries_file"
+    prompt_count=$((prompt_count + 1))
+  done < <(prompt_wrapper_entries)
+  printf '\n  ]\n' >> "$entries_file"
+
+  first=true
+  local prompt_file base is_recommended
+  for prompt_file in "$CODEX_PROMPTS_DIR"/*.md; do
+    [[ -f "$prompt_file" ]] || continue
+    grep -Fq "Interverse prompt wrapper generated from companion command source." "$prompt_file" || continue
+    if grep -Fxq "$prompt_file" "$expected_files" 2>/dev/null; then
+      continue
+    fi
+
+    base="$(basename "$prompt_file")"
+    is_recommended=false
+    while IFS= read -r plugin; do
+      [[ -n "$plugin" ]] || continue
+      if [[ "$base" == "$plugin"-* ]]; then
+        is_recommended=true
+        break
+      fi
+    done < "$plugin_list"
+
+    if [[ "$is_recommended" != true ]]; then
+      continue
+    fi
+
+    status=1
+    if [[ "$first" != true ]]; then
+      printf ',\n' >> "$stale_file"
+    fi
+    first=false
+
+    printf '    {\n' >> "$stale_file"
+    printf '      "prompt_path":"%s"\n' "$(json_escape "$prompt_file")" >> "$stale_file"
+    printf '    }' >> "$stale_file"
+    stale_count=$((stale_count + 1))
+  done
+  printf '\n  ]\n' >> "$stale_file"
+
+  local status_text="ok"
+  if [[ "$status" -ne 0 ]]; then
+    status_text="fail"
+  fi
+
+  printf '{\n'
+  printf '  "status":"%s",\n' "$status_text"
+  printf '  "counts":{\n'
+  printf '    "prompt_wrapper_count":%s,\n' "$prompt_count"
+  printf '    "stale_prompt_wrapper_count":%s\n' "$stale_count"
+  printf '  },\n'
+  printf '  "prompt_wrappers":'
+  cat "$entries_file"
+  printf ',\n'
+  printf '  "stale_prompt_wrappers":'
+  cat "$stale_file"
+  printf '}\n'
+
+  rm -f "$entries_file" "$stale_file" "$expected_files" "$plugin_list"
+  return "$status"
+}
+
 doctor_companions_text() {
   local status=0
   local plugin skill_rel link_name
@@ -844,18 +1039,23 @@ doctor_companions_text() {
     fi
   done < <(skill_specs)
 
+  if ! doctor_prompt_wrappers_text; then
+    status=1
+  fi
+
   return "$status"
 }
 
 doctor_companions_json() {
   local status=0
   local plugin skill_rel link_name
-  local plugins_file skills_file
+  local plugins_file skills_file prompts_file
   local plugin_count=0
   local skill_count=0
 
   plugins_file="$(mktemp)"
   skills_file="$(mktemp)"
+  prompts_file="$(mktemp)"
   printf '[\n' > "$plugins_file"
   printf '[\n' > "$skills_file"
 
@@ -931,6 +1131,10 @@ doctor_companions_json() {
   done < <(skill_specs)
   printf '\n  ]\n' >> "$skills_file"
 
+  if ! doctor_prompt_wrappers_json > "$prompts_file"; then
+    status=1
+  fi
+
   local status_text="ok"
   if [[ "$status" -ne 0 ]]; then
     status_text="fail"
@@ -949,9 +1153,12 @@ doctor_companions_json() {
   printf ',\n'
   printf '  "companions":'
   cat "$skills_file"
+  printf ',\n'
+  printf '  "prompts":'
+  cat "$prompts_file"
   printf '}\n'
 
-  rm -f "$plugins_file" "$skills_file"
+  rm -f "$plugins_file" "$skills_file" "$prompts_file"
   return "$status"
 }
 

@@ -69,14 +69,14 @@ if [[ ! -d "$SOURCE_DIR/scripts" || ! -d "$SOURCE_DIR/skills" || ! -d "$SOURCE_D
 fi
 
 if [[ "$CHECK_ONLY" -eq 0 ]]; then
-  bash "$SOURCE_DIR/scripts/install-codex.sh" install --source "$SOURCE_DIR"
+  bash "$SOURCE_DIR/scripts/install-codex-interverse.sh" install --source "$SOURCE_DIR"
 fi
 
 run_doctor() {
   local output status
 
   if [[ "$DOCTOR_JSON" -eq 1 ]]; then
-    if output="$(bash "$SOURCE_DIR/scripts/install-codex.sh" doctor --source "$SOURCE_DIR" --json 2>&1)"; then
+    if output="$(bash "$SOURCE_DIR/scripts/install-codex-interverse.sh" doctor --source "$SOURCE_DIR" --json 2>&1)"; then
       status=0
     else
       status=$?
@@ -99,7 +99,7 @@ run_doctor() {
     return "$status"
   fi
 
-  bash "$SOURCE_DIR/scripts/install-codex.sh" doctor --source "$SOURCE_DIR"
+  bash "$SOURCE_DIR/scripts/install-codex-interverse.sh" doctor --source "$SOURCE_DIR"
 }
 
 run_doctor

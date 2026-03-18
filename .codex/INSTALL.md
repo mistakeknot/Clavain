@@ -14,9 +14,9 @@ Enable Clavain in Codex using native skill discovery, plus optional command prom
    curl -fsSL https://raw.githubusercontent.com/mistakeknot/Clavain/main/.codex/agent-install.sh | bash -s -- --update --json
    ```
 
-If this is your first time, this script clones `https://github.com/mistakeknot/Clavain.git` into `~/.codex/clavain` and runs the Codex installer.
+If this is your first time, this script clones `https://github.com/mistakeknot/Clavain.git` into `~/.codex/clavain` and runs the Codex ecosystem installer.
 
-- The install script links `~/.agents/skills/clavain` and generates wrappers under `~/.codex/prompts/clavain-*.md`.
+- The install script links `~/.agents/skills/clavain`, installs the recommended Interverse companions, and generates wrappers under `~/.codex/prompts/clavain-*.md`.
 - It manages a Clavain block in `~/.codex/AGENTS.md` and an MCP block in `~/.codex/config.toml`.
 - It writes a conversion report to `~/.codex/prompts/.clavain-conversion-report.json`.
 - It enforces clean-break migration by removing `~/.codex/skills/clavain` (symlink or directory) with backup-first safety.
@@ -91,7 +91,7 @@ Expected:
 - `~/.codex/AGENTS.md` includes the managed Clavain block markers
 - `~/.codex/config.toml` includes the managed Clavain MCP block markers
 - `install-codex.sh doctor` exits with success when links/helpers/wrappers are in sync.
-- `install-codex-interverse.sh doctor` verifies recommended Interverse repo installs plus companion skill links.
+- `install-codex-interverse.sh doctor` verifies recommended Interverse repo installs, companion skill links, and generated companion prompt wrappers.
 
 From this repo checkout, keep Codex views fresh with:
 

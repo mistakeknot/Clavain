@@ -19,6 +19,11 @@ setup() {
 
     mkdir -p "$SOURCE_DIR/scripts" "$SOURCE_DIR/skills" "$SOURCE_DIR/commands" "$BIN_DIR"
     mkdir -p "$CLONE_ROOT" "$SKILLS_DIR"
+    CODEX_HOME="$TEST_DIR/codex-home"
+    CODEX_PROMPTS_DIR="$CODEX_HOME/prompts"
+    CLAVAIN_BACKUP_ROOT="$TEST_DIR/backups"
+    export CODEX_HOME CODEX_PROMPTS_DIR CLAVAIN_BACKUP_ROOT
+    mkdir -p "$CODEX_PROMPTS_DIR"
 
     _write_stub_git_binary
     export PATH="$BIN_DIR:$PATH"
@@ -113,6 +118,49 @@ description: invalid skill missing name
 # Invalid Skill
 EOF
     fi
+}
+
+_make_plugin_command_repo() {
+    local plugin="$1"
+    local command_name="$2"
+    local repo_dir="$CLONE_ROOT/$plugin"
+    local command_dir="$repo_dir/commands"
+
+    mkdir -p "$repo_dir/.git" "$command_dir"
+
+    cat > "$command_dir/$command_name.md" <<EOF
+---
+name: $command_name
+description: test command
+---
+# /$plugin:$command_name
+
+Use AskUserQuestion if needed.
+EOF
+}
+
+_write_prompt_wrapper() {
+    local plugin="$1"
+    local command_name="$2"
+    local source_path="$3"
+    local prompt_path="$CODEX_PROMPTS_DIR/$plugin-$command_name.md"
+    local body="${4:-Converted content.}"
+
+    cat > "$prompt_path" <<EOF
+# Interverse Command: /$plugin:$command_name
+
+Interverse prompt wrapper generated from companion command source.
+
+- Source: \`$source_path\`
+- Compatibility: interverse namespaces and .claude paths normalized for Codex.
+- Elicitation adapter: if a prompt calls for AskUserQuestion, try future plan-mode escalation if host supports it, else use \`request_user_input\` when available, else ask in chat with numbered options and wait.
+
+---
+
+## Codex Elicitation Adapter
+
+$body
+EOF
 }
 
 @test "doctor auto-discovers companion skills for recommended plugins" {
@@ -235,4 +283,41 @@ EOF
     [ -L "$SKILLS_DIR/quality" ]
     [ "$(readlink "$SKILLS_DIR/quality")" = "$CLONE_ROOT/intercheck/skills/quality" ]
     [ ! -e "$SKILLS_DIR/status" ]
+}
+
+@test "doctor validates generated prompt wrappers for command-based companions" {
+    _write_agent_rig alpha
+    _make_plugin_command_repo alpha sync
+    _write_prompt_wrapper alpha sync "$CLONE_ROOT/alpha/commands/sync.md"
+
+    run --separate-stderr env CODEX_HOME="$CODEX_HOME" CODEX_PROMPTS_DIR="$CODEX_PROMPTS_DIR" \
+        "$SCRIPT_UNDER_TEST" doctor \
+        --source "$SOURCE_DIR" \
+        --clone-root "$CLONE_ROOT" \
+        --skills-dir "$SKILLS_DIR" \
+        --json
+
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.interverse_companions.prompts.status')" = "ok" ]
+    [ "$(echo "$output" | jq -r '.interverse_companions.prompts.counts.prompt_wrapper_count')" = "1" ]
+    [ "$(echo "$output" | jq -r '.interverse_companions.prompts.prompt_wrappers[0].prompt_ok')" = "true" ]
+    [ "$(echo "$output" | jq -r '.interverse_companions.prompts.prompt_wrappers[0].converted_ok')" = "true" ]
+}
+
+@test "doctor fails when a generated prompt wrapper still contains Claude-only tokens" {
+    _write_agent_rig alpha
+    _make_plugin_command_repo alpha sync
+    _write_prompt_wrapper alpha sync "$CLONE_ROOT/alpha/commands/sync.md" "AskUserQuestion remains here."
+
+    run --separate-stderr env CODEX_HOME="$CODEX_HOME" CODEX_PROMPTS_DIR="$CODEX_PROMPTS_DIR" \
+        "$SCRIPT_UNDER_TEST" doctor \
+        --source "$SOURCE_DIR" \
+        --clone-root "$CLONE_ROOT" \
+        --skills-dir "$SKILLS_DIR" \
+        --json
+
+    [ "$status" -eq 1 ]
+    [ "$(echo "$output" | jq -r '.status')" = "fail" ]
+    [ "$(echo "$output" | jq -r '.interverse_companions.prompts.status')" = "fail" ]
+    [ "$(echo "$output" | jq -r '.interverse_companions.prompts.prompt_wrappers[0].converted_ok')" = "false" ]
 }

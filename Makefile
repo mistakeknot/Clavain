@@ -1,8 +1,8 @@
 .PHONY: codex-refresh codex-bootstrap codex-bootstrap-json codex-doctor codex-doctor-json codex-ecosystem-bootstrap codex-ecosystem-bootstrap-json codex-ecosystem-doctor codex-ecosystem-doctor-json shellcheck
 
 codex-refresh:
-	@bash scripts/install-codex.sh install --source "$(PWD)"
-	@echo "Codex refresh complete. Restart Codex to reload skills/prompts."
+	@bash scripts/install-codex-interverse.sh install --source "$(PWD)"
+	@echo "Codex ecosystem refresh complete. Restart Codex to reload skills/prompts."
 
 codex-bootstrap:
 	@bash scripts/codex-bootstrap.sh
@@ -11,10 +11,10 @@ codex-bootstrap-json:
 	@bash scripts/codex-bootstrap.sh --json
 
 codex-doctor:
-	@bash scripts/install-codex.sh doctor --source "$(PWD)"
+	@bash scripts/install-codex-interverse.sh doctor --source "$(PWD)"
 
 codex-doctor-json:
-	@bash scripts/install-codex.sh doctor --source "$(PWD)" --json
+	@bash scripts/install-codex-interverse.sh doctor --source "$(PWD)" --json
 
 codex-ecosystem-bootstrap:
 	@bash scripts/install-codex-interverse.sh install --source "$(PWD)"

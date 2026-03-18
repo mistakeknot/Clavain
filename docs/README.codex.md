@@ -26,7 +26,7 @@ git clone https://github.com/mistakeknot/Clavain.git clavain
 bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ```
 
-Restart Codex after install. The installer is idempotent and removes stale `clavain-*.md` wrappers.
+Restart Codex after install. The default installer now refreshes Clavain plus the recommended Interverse companion set. It is idempotent and removes stale `clavain-*.md` wrappers.
 It also manages a Clavain block in `~/.codex/AGENTS.md`, syncs MCP servers into `~/.codex/config.toml`, and writes conversion diagnostics to `~/.codex/prompts/.clavain-conversion-report.json`.
 Wrapper conversion also normalizes `AskUserQuestion` references to a Codex elicitation adapter policy:
 use `request_user_input` when available (Plan mode), otherwise ask in chat with numbered options and pause for response.

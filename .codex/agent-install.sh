@@ -119,18 +119,18 @@ if [[ ! -d "$SOURCE_DIR/.git" ]]; then
   exit 1
 fi
 
-echo "Running Clavain Codex install from $SOURCE_DIR"
-bash "$SOURCE_DIR/scripts/install-codex.sh" install --source "$SOURCE_DIR" "${INSTALL_ARGS[@]}"
+echo "Running Clavain Codex ecosystem install from $SOURCE_DIR"
+bash "$SOURCE_DIR/scripts/install-codex-interverse.sh" install --source "$SOURCE_DIR" "${INSTALL_ARGS[@]}"
 
 if [[ "$SKIP_DOCTOR" -eq 0 ]]; then
   if [[ "$DOCTOR_JSON" -eq 1 ]]; then
     DOCTOR_CHECK_OUTPUT="$(mktemp)"
-    if bash "$SOURCE_DIR/scripts/install-codex.sh" doctor --source "$SOURCE_DIR" --json >"$DOCTOR_CHECK_OUTPUT" 2>&1; then
+    if bash "$SOURCE_DIR/scripts/install-codex-interverse.sh" doctor --source "$SOURCE_DIR" --json >"$DOCTOR_CHECK_OUTPUT" 2>&1; then
       cat "$DOCTOR_CHECK_OUTPUT"
       rm -f "$DOCTOR_CHECK_OUTPUT"
     elif grep -q "Unknown option: --json" "$DOCTOR_CHECK_OUTPUT"; then
-      echo "install-codex.sh in this checkout does not expose --json; running doctor without JSON."
-      bash "$SOURCE_DIR/scripts/install-codex.sh" doctor --source "$SOURCE_DIR"
+      echo "install-codex-interverse.sh in this checkout does not expose --json; running doctor without JSON."
+      bash "$SOURCE_DIR/scripts/install-codex-interverse.sh" doctor --source "$SOURCE_DIR"
       rm -f "$DOCTOR_CHECK_OUTPUT"
     else
       cat "$DOCTOR_CHECK_OUTPUT"
@@ -138,7 +138,7 @@ if [[ "$SKIP_DOCTOR" -eq 0 ]]; then
       exit 1
     fi
   else
-    bash "$SOURCE_DIR/scripts/install-codex.sh" doctor --source "$SOURCE_DIR"
+    bash "$SOURCE_DIR/scripts/install-codex-interverse.sh" doctor --source "$SOURCE_DIR"
   fi
 fi
 

@@ -65,6 +65,7 @@ def test_codex_manifest_uses_agents_skills_path(project_root):
     for manifest_path in manifests:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
         assert data["platforms"]["codex"]["skillsDir"] == "~/.agents/skills/clavain"
+        assert data["platforms"]["codex"]["installScript"] == "scripts/install-codex-interverse.sh"
 
 
 def test_interverse_doctor_skips_expected_override_collision(project_root, tmp_path):

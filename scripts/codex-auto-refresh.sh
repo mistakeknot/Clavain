@@ -43,13 +43,13 @@ run_refresh() {
     if command -v make >/dev/null 2>&1 && [[ -f "$CLAVAIN_DIR/Makefile" ]]; then
       (cd "$CLAVAIN_DIR" && make codex-refresh codex-doctor-json)
     else
-      bash "$CLAVAIN_DIR/scripts/install-codex.sh" install --source "$CLAVAIN_DIR"
-      bash "$CLAVAIN_DIR/scripts/install-codex.sh" doctor --source "$CLAVAIN_DIR" --json
+      bash "$CLAVAIN_DIR/scripts/install-codex-interverse.sh" install --source "$CLAVAIN_DIR"
+      bash "$CLAVAIN_DIR/scripts/install-codex-interverse.sh" doctor --source "$CLAVAIN_DIR" --json
     fi
   else
     echo "codex CLI missing; skipped make targets; paths and wrappers may be stale" | tee -a "$LOG_FILE"
-    bash "$CLAVAIN_DIR/scripts/install-codex.sh" install --source "$CLAVAIN_DIR"
-    bash "$CLAVAIN_DIR/scripts/install-codex.sh" doctor --source "$CLAVAIN_DIR" --json
+    bash "$CLAVAIN_DIR/scripts/install-codex-interverse.sh" install --source "$CLAVAIN_DIR"
+    bash "$CLAVAIN_DIR/scripts/install-codex-interverse.sh" doctor --source "$CLAVAIN_DIR" --json
   fi
 }
 
