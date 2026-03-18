@@ -17,6 +17,8 @@ func main() {
 	var err error
 	switch cmd {
 	// Sprint CRUD
+	case "sprint-init":
+		err = cmdSprintInit(args)
 	case "sprint-create":
 		err = cmdSprintCreate(args)
 	case "sprint-find-active":
@@ -221,6 +223,7 @@ Gate / Phase:
   infer-bead          <artifact_path>
 
 Sprint State:
+  sprint-init         <bead_id>                            Bootstrap + formatted status banner
   set-artifact        <bead_id> <type> <path>
   record-phase        <bead_id> <phase>
   sprint-advance      <bead_id> <current_phase> [artifact_path]

@@ -21,30 +21,15 @@ Non-negotiable:
 6. Never call EnterPlanMode — plan was created before this runs. Scope changes → stop and ask.
 </BEHAVIORAL-RULES>
 
-## Environment Bootstrap (fail-soft)
+## Environment Bootstrap + Status
 
 ```bash
-export CLAVAIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${HOME}/.codex/clavain}"
-export CLAVAIN_CLI="${CLAVAIN_ROOT}/bin/clavain-cli"
-[[ -f "$CLAVAIN_ROOT/hooks/lib-discovery.sh" ]] && export DISCOVERY_PROJECT_DIR="." && source "$CLAVAIN_ROOT/hooks/lib-discovery.sh"
+clavain-cli sprint-init "$CLAVAIN_BEAD_ID"
 ```
 
-If `CLAVAIN_BEAD_ID` set, register for interstat:
-```bash
-_is_sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "")
-[[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null || true
-ic session attribute --session="$_is_sid" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null || true
-```
+This single call validates the bead, reads complexity/phase/budget, registers interstat session attribution, and outputs a formatted status banner. No additional bootstrap commands needed.
 
-Work discovery: `result=$(discovery_scan_beads 2>/dev/null)` — if actionable beads found, present them before starting; otherwise proceed.
-
-## Complexity Routing
-
-```bash
-complexity=$(bd state "$CLAVAIN_BEAD_ID" complexity 2>/dev/null) || complexity="3"
-label=$(clavain-cli complexity-label "$complexity" 2>/dev/null) || label="moderate"
-```
-Display: `Complexity: ${complexity}/5 (${label})`
+Read the complexity from the banner output to decide routing:
 
 - **1-2:** AskUserQuestion — "Skip to plan (Recommended)" or "Full workflow". If skip, jump to Step 3.
 - **3:** Standard workflow; offer skip-to-plan if bead has clear description+AC.

@@ -109,3 +109,42 @@ func runCommandExec(name string, args ...string) ([]byte, error) {
 	}
 	return bytes.TrimSpace(out), nil
 }
+
+// runICQuiet executes ic with the given args, discarding stderr.
+// Use for expected-to-fail queries where stderr noise is unwanted.
+func runICQuiet(args ...string) ([]byte, error) {
+	bin, err := findIC()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(bin, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("ic %s: %w", strings.Join(args, " "), err)
+	}
+	return bytes.TrimSpace(out), nil
+}
+
+// runICJSONQuiet executes ic --json <args>, discarding stderr, and unmarshals into dst.
+func runICJSONQuiet(dst any, args ...string) error {
+	fullArgs := append([]string{"--json"}, args...)
+	out, err := runICQuiet(fullArgs...)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(out, dst)
+}
+
+// runBDQuiet executes bd with the given args, discarding stderr.
+func runBDQuiet(args ...string) ([]byte, error) {
+	path, err := exec.LookPath("bd")
+	if err != nil {
+		return nil, fmt.Errorf("bd binary not found on PATH")
+	}
+	cmd := exec.Command(path, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("bd %s: %w", strings.Join(args, " "), err)
+	}
+	return bytes.TrimSpace(out), nil
+}
