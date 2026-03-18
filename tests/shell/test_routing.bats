@@ -74,7 +74,9 @@ teardown() {
 
 # Helper: source lib-routing.sh with a specific config, resetting caches
 _source_routing() {
-    unset _ROUTING_LOADED
+    unset _ROUTING_LOADED _ROUTING_CACHE_POPULATED
+    # Reset safety floor cache to avoid leakage between tests
+    declare -gA _ROUTING_SF_AGENT_MIN=()
     export CLAVAIN_ROUTING_CONFIG="${1:-$TEST_DIR/config/routing.yaml}"
     source "$SCRIPTS_DIR/lib-routing.sh"
 }
@@ -724,6 +726,8 @@ YAML
 
 @test "safety floor: no roles file means no clamping (graceful)" {
     # Don't create agent-roles.yaml — only routing.yaml
+    # Explicitly disable roles discovery so the real agent-roles.yaml isn't found
+    export CLAVAIN_ROLES_CONFIG="/dev/null"
     cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
 subagents:
   defaults:
@@ -732,6 +736,7 @@ YAML
     _source_routing
     result="$(routing_resolve_model --agent fd-safety)"
     [[ "$result" == "haiku" ]]
+    unset CLAVAIN_ROLES_CONFIG
 }
 
 @test "safety floor: namespaced agent ID (interflux:review:fd-safety) is clamped" {
@@ -754,6 +759,7 @@ YAML
 }
 
 @test "safety floor: invalid min_model emits warning" {
+    export CLAVAIN_ROLES_CONFIG="$TEST_DIR/config/agent-roles.yaml"
     cat > "$TEST_DIR/config/agent-roles.yaml" << 'YAML'
 roles:
   reviewer:
@@ -773,6 +779,7 @@ YAML
     # Model should NOT be clamped (invalid floor is ignored)
     result="$(routing_resolve_model --agent fd-safety 2>/dev/null)"
     [[ "$result" == "haiku" ]]
+    unset CLAVAIN_ROLES_CONFIG
 }
 
 # ═══════════════════════════════════════════════════════════════════
@@ -898,8 +905,9 @@ for agent in ['fd-safety','fd-architecture','fd-quality']:
     _source_routing "$TEST_DIR/config/cx.yaml"
     export CLAVAIN_RUN_ID="test-run"
     # 100 tokens, 0 files, depth 1 → C1 → override to haiku
-    result="$(routing_resolve_agents --phase executing --agents "fd-safety" --prompt-tokens 100 --file-count 0 --reasoning-depth 1 2>/dev/null)"
-    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-safety']=='haiku', f\"expected haiku, got {d['fd-safety']}\""
+    # Use fd-perception (checker role, no safety floor) — fd-safety has min_model=sonnet floor
+    result="$(routing_resolve_agents --phase executing --agents "fd-perception" --prompt-tokens 100 --file-count 0 --reasoning-depth 1 2>/dev/null)"
+    echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['fd-perception']=='haiku', f\"expected haiku, got {d['fd-perception']}\""
     unset CLAVAIN_RUN_ID
 }
 

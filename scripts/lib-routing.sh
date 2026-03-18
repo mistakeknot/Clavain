@@ -119,10 +119,13 @@ _routing_find_config() {
 
 # --- Find agent-roles.yaml (companion to routing.yaml) ---
 _routing_find_roles_config() {
-  # 0. Explicit env var
-  if [[ -n "${CLAVAIN_ROLES_CONFIG:-}" && -f "$CLAVAIN_ROLES_CONFIG" ]]; then
-    echo "$CLAVAIN_ROLES_CONFIG"
-    return 0
+  # 0. Explicit env var — if set, use it (or fail if not a regular file)
+  if [[ -n "${CLAVAIN_ROLES_CONFIG:-}" ]]; then
+    if [[ -f "$CLAVAIN_ROLES_CONFIG" ]]; then
+      echo "$CLAVAIN_ROLES_CONFIG"
+      return 0
+    fi
+    return 1  # Env var set but file missing/invalid — don't search further
   fi
 
   local script_dir
@@ -132,6 +135,7 @@ _routing_find_roles_config() {
   local d
   for d in \
     "${INTERFLUX_ROOT:-}/config/flux-drive" \
+    "$script_dir/../../../interverse/interflux/config/flux-drive" \
     "$script_dir/../../interverse/interflux/config/flux-drive" \
     "${CLAUDE_PLUGIN_ROOT:-}/../interflux/config/flux-drive" \
   ; do
