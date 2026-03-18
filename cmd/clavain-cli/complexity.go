@@ -3,14 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 )
-
-// wordPattern matches sequences of letters, digits, and hyphens (matching the
-// Bash awk gsub(/[^a-zA-Z-]/, "") behavior for keyword extraction).
-var wordPattern = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9-]*`)
 
 // trivialKeywords triggers complexity=1 when found in short descriptions (<20 words).
 var trivialKeywords = map[string]bool{
@@ -37,6 +32,20 @@ var simplicitySignals = map[string]bool{
 	"just": true, "simple": true, "straightforward": true,
 }
 
+// trivialKeywordsList etc. are pre-computed slices for countMatchesInText.
+var trivialKeywordsList = mapKeys(trivialKeywords)
+var researchKeywordsList = mapKeys(researchKeywords)
+var ambiguitySignalsList = mapKeys(ambiguitySignals)
+var simplicitySignalsList = mapKeys(simplicitySignals)
+
+func mapKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // classifyComplexity scores a description on a 1-5 complexity scale.
 // Scale: 1=trivial, 2=simple, 3=moderate, 4=complex, 5=research.
 // This is a pure function porting the Bash heuristics from lib-sprint.sh.
@@ -54,14 +63,14 @@ func classifyComplexity(desc string) int {
 		return 3
 	}
 
-	// Extract cleaned words for keyword matching (lowercase, letters/hyphens only)
-	cleanedWords := wordPattern.FindAllString(desc, -1)
+	// Pre-lowercase the entire input once, then search for keywords directly.
+	lowered := strings.ToLower(desc)
 
-	// Count keyword matches
-	trivialCount := countMatches(cleanedWords, trivialKeywords)
-	researchCount := countMatches(cleanedWords, researchKeywords)
-	ambiguityCount := countMatches(cleanedWords, ambiguitySignals)
-	simplicityCount := countMatches(cleanedWords, simplicitySignals)
+	// Count keyword matches by scanning text for each keyword
+	trivialCount := countMatchesInText(lowered, trivialKeywordsList)
+	researchCount := countMatchesInText(lowered, researchKeywordsList)
+	ambiguityCount := countMatchesInText(lowered, ambiguitySignalsList)
+	simplicityCount := countMatchesInText(lowered, simplicitySignalsList)
 
 	// Trivial keywords — floor at 1
 	if trivialCount > 0 && wordCount < 20 {
@@ -102,11 +111,44 @@ func classifyComplexity(desc string) int {
 }
 
 // countMatches counts how many words (case-insensitive) appear in the keyword set.
+// Retained for backward compatibility with direct callers.
 func countMatches(words []string, keywords map[string]bool) int {
 	count := 0
 	for _, w := range words {
 		if keywords[strings.ToLower(w)] {
 			count++
+		}
+	}
+	return count
+}
+
+// isWordBoundary reports whether the byte at position i in text is a word boundary
+// (i.e., not a letter, digit, or hyphen).
+func isWordBoundary(text string, i int) bool {
+	if i < 0 || i >= len(text) {
+		return true // start/end of string is a boundary
+	}
+	c := text[i]
+	return !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-')
+}
+
+// countMatchesInText searches pre-lowered text for each keyword, counting all
+// word-boundary-delimited occurrences. This avoids regex extraction and per-word lowering.
+func countMatchesInText(lowered string, keywords []string) int {
+	count := 0
+	for _, kw := range keywords {
+		off := 0
+		for off < len(lowered) {
+			idx := strings.Index(lowered[off:], kw)
+			if idx < 0 {
+				break
+			}
+			abs := off + idx
+			// Check word boundaries: char before and after the match
+			if isWordBoundary(lowered, abs-1) && isWordBoundary(lowered, abs+len(kw)) {
+				count++
+			}
+			off = abs + len(kw)
 		}
 	}
 	return count
