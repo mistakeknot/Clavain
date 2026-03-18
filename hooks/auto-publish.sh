@@ -75,6 +75,11 @@ with open('$marketplace', 'w') as f:
     f.write('\n')
 " 2>/dev/null || true
 
+    # Pre-build Go binary before cache sync
+    if [[ -x "$cwd/scripts/build-clavain-cli.sh" ]]; then
+        "$cwd/scripts/build-clavain-cli.sh" 2>/dev/null || true
+    fi
+
     # Sync cache
     local cache_root="$HOME/.claude/plugins/cache/interagency-marketplace"
     if [[ -d "$cache_root" ]]; then
@@ -123,6 +128,13 @@ main() {
 
     # Check if this is a plugin repo
     [[ -f "$cwd/.claude-plugin/plugin.json" ]] || exit 0
+
+    # Pre-build Go binary so it's included in the published cache.
+    # The Go binary can only be compiled from the monorepo source tree where
+    # replace directives resolve. Once in the plugin cache, auto-build fails.
+    if [[ -x "$cwd/scripts/build-clavain-cli.sh" ]]; then
+        "$cwd/scripts/build-clavain-cli.sh" 2>/dev/null || true
+    fi
 
     # Delegate to ic publish --auto
     local ic_bin

@@ -10,10 +10,14 @@ if [[ -x "$GO_BIN" ]]; then
     exec "$GO_BIN" "$@"
 fi
 
-# Auto-build if Go is available
+# Auto-build if Go is available and source exists (won't work from plugin cache)
 if command -v go &>/dev/null && [[ -d "$SCRIPT_DIR/../cmd/clavain-cli" ]]; then
-    if go build -C "$SCRIPT_DIR/../cmd/clavain-cli" -mod=readonly -o "$GO_BIN" . 2>/dev/null; then
-        exec "$GO_BIN" "$@"
+    local_err="$(go build -C "$SCRIPT_DIR/../cmd/clavain-cli" -mod=readonly -o "$GO_BIN" . 2>&1)" && exec "$GO_BIN" "$@"
+    # Build failed — warn once per session so the user knows Go commands are unavailable
+    if [[ -z "${CLAVAIN_BUILD_WARNED:-}" ]]; then
+        echo "clavain-cli: Go binary build failed (using Bash fallback, 34 Go-only commands unavailable)" >&2
+        echo "clavain-cli: ${local_err##*$'\n'}" >&2
+        export CLAVAIN_BUILD_WARNED=1
     fi
 fi
 
