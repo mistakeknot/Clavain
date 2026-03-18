@@ -24,7 +24,23 @@ Do not proceed until you have a feature description.
 4. **Halt on failure.** Report what failed and what the user can do. Do not skip failed phases.
 5. **Local agents by default.** Use Task tool for research. External agents require explicit user opt-in.
 6. **Never enter plan mode autonomously.** If user wants to plan, hand off to `/clavain:write-plan`.
+7. **Exactly 5 phases (0-4).** Do NOT invent, rename, or append phases. Worktree setup, planning, and execution are the sprint orchestrator's domain — not yours.
 </BEHAVIORAL-RULES>
+
+## Progress Tracking
+
+Display this checklist at key transitions. Use these exact phase names — do not rename or add phases.
+
+```
+Brainstorm Progress:
+- [ ] Phase 0: Assess Clarity
+- [ ] Phase 1: Understand (research + dialogue)
+- [ ] Phase 2: Explore Approaches
+- [ ] Phase 3: Capture Design
+- [ ] Phase 4: Handoff
+```
+
+Mark each `[x]` as you complete it. After Phase 4, brainstorming is **done** — no further phases exist.
 
 ## Execution Flow
 
@@ -121,18 +137,23 @@ stage: discover
 
 Ensure `docs/brainstorms/` exists before writing.
 
-### Phase 3b: Record Phase
+### Phase 3b: Record Phase (Reflect + Compound)
+
+Record the brainstorm artifact and advance the phase state machine. This is the OODARC Reflect+Compound step — it writes the outcome back into the system so the sprint orchestrator can route correctly.
 
 ```bash
 BEAD_ID=$(clavain-cli infer-bead "<brainstorm_doc_path>")
 clavain-cli advance-phase "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>" "<brainstorm_doc_path>"
+clavain-cli checkpoint-write "$BEAD_ID" "brainstorm" "brainstorm" "<brainstorm_doc_path>" 2>/dev/null || true
 ```
 
 `CLAVAIN_BEAD_ID` env var takes priority. If no bead ID found, skip silently.
 
-### Phase 4: Handoff
+### Phase 4: Handoff (Terminal)
 
-**In sprint** (`bd state "$CLAVAIN_BEAD_ID" sprint` == `"true"`): Skip handoff question. Display output summary and return to caller.
+This is the **final phase**. After this, brainstorming is complete. Do NOT add phases 5, 6, or beyond — worktree setup, planning, and execution are the sprint orchestrator's responsibility.
+
+**In sprint** (`bd state "$CLAVAIN_BEAD_ID" sprint` == `"true"`): Display output summary and return to caller. The sprint orchestrator auto-advances to Step 2 (Strategize).
 
 **Standalone:** AskUserQuestion — "Brainstorm captured. What next?"
 1. Proceed to planning — run `/clavain:write-plan`
@@ -140,6 +161,8 @@ clavain-cli advance-phase "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_p
 3. Done for now
 
 ## Output Summary
+
+Display exactly this template, then **stop**:
 
 ```
 Brainstorm complete!
@@ -152,6 +175,8 @@ Key decisions:
 
 Next: Run `/clavain:write-plan` when ready to implement.
 ```
+
+Do NOT display additional unchecked phases, pending steps, or "what happens next" items after this summary. The brainstorm command's scope ends here.
 
 ## Guidelines
 
