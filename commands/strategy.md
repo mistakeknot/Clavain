@@ -8,14 +8,39 @@ argument-hint: "[brainstorm doc path, or feature description if no brainstorm ex
 
 Bridge between brainstorming (WHAT) and planning (HOW). Takes an idea or brainstorm doc and produces a structured PRD with trackable beads.
 
+<BEHAVIORAL-RULES>
+1. **Execute phases in order.** No skipping, reordering, or parallelizing unless a phase explicitly allows it.
+2. **Write output to files, read from files.** PRD MUST be written to `docs/prds/`.
+3. **Stop at checkpoints.** When a phase defines AskUserQuestion — stop and wait.
+4. **Halt on failure.** Report what failed and what the user can do.
+5. **Exactly 6 phases (0-5).** Do NOT invent, rename, or append phases. Planning and execution are the sprint orchestrator's domain — not yours.
+</BEHAVIORAL-RULES>
+
+## Progress Tracking
+
+Display this checklist at key transitions. Use these exact phase names — do not rename or add phases.
+
+```
+Strategy Progress:
+- [ ] Phase 0: Prior Art Check
+- [ ] Phase 1: Extract Features
+- [ ] Phase 2: Write PRD
+- [ ] Phase 3: Create Beads
+- [ ] Phase 4: Validate
+- [ ] Phase 5: Handoff
+```
+
+Mark each `[x]` as you complete it. After Phase 5, strategy is **done** — no further phases exist.
+
 ## Input
 
 <strategy_input> #$ARGUMENTS </strategy_input>
 
 Resolve input:
 1. Argument is a file path → read it as brainstorm doc
-2. No argument → `ls -t docs/brainstorms/*.md 2>/dev/null | head -1`
-3. No brainstorm → ask user what to build, proceed directly
+2. No argument + bead ID set → `clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null`
+3. No argument + no bead → `ls -t docs/brainstorms/*.md 2>/dev/null | head -1`
+4. No brainstorm found → ask user what to build, proceed directly
 
 ## Phase 0: Prior Art Check
 
@@ -88,14 +113,17 @@ If `CLAVAIN_BEAD_ID` not set (standalone):
 - `bd create --title="<PRD title>" --type=epic --priority=1`
 - For each feature: `bd create --title="F1: <name>" --type=feature --priority=2` then `bd dep add <feature-id> <epic-id>`
 
-### Phase 3b: Record Phase
+### Phase 3b: Record Phase (Reflect + Compound)
+
+Record the PRD artifact and advance the phase state machine.
 
 ```bash
 if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
-    clavain-cli advance-phase "$CLAVAIN_BEAD_ID" "strategized" "PRD: <prd_path>" ""
-    clavain-cli record-phase "$CLAVAIN_BEAD_ID" "strategized"
+    clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "prd" "<prd_path>"
+    clavain-cli advance-phase "$CLAVAIN_BEAD_ID" "strategized" "PRD: <prd_path>" "<prd_path>"
+    clavain-cli checkpoint-write "$CLAVAIN_BEAD_ID" "strategized" "strategy" "<prd_path>" 2>/dev/null || true
 else
-    clavain-cli advance-phase "<epic_bead_id>" "strategized" "PRD: <prd_path>" ""
+    clavain-cli advance-phase "<epic_bead_id>" "strategized" "PRD: <prd_path>" "<prd_path>"
 fi
 # Also advance-phase each child feature bead
 clavain-cli advance-phase "<feature_bead_id>" "strategized" "PRD: <prd_path>" ""
@@ -105,9 +133,11 @@ clavain-cli advance-phase "<feature_bead_id>" "strategized" "PRD: <prd_path>" ""
 
 `/interflux:flux-drive docs/prds/YYYY-MM-DD-<topic>.md` — catches scope creep, missing AC, architectural risks.
 
-## Phase 5: Handoff
+## Phase 5: Handoff (Terminal)
 
-**Inside sprint** (`bd state "$CLAVAIN_BEAD_ID" sprint` returns `"true"`): skip question, display summary, return to caller.
+This is the **final phase**. After this, strategy is complete. Do NOT add phases 6, 7, or beyond — planning, execution, and review are the sprint orchestrator's responsibility.
+
+**Inside sprint** (`bd state "$CLAVAIN_BEAD_ID" sprint` returns `"true"`): Display output summary and return to caller. The sprint orchestrator auto-advances to Step 3 (Write Plan).
 
 **Standalone:** AskUserQuestion: "Strategy complete. What's next?"
 1. Plan first feature — `/clavain:write-plan` for highest-priority unblocked bead
@@ -116,6 +146,8 @@ clavain-cli advance-phase "<feature_bead_id>" "strategized" "PRD: <prd_path>" ""
 4. Done for now
 
 ## Output Summary
+
+Display exactly this template, then **stop**:
 
 ```
 Strategy complete!
@@ -130,3 +162,5 @@ Flux-drive: [pass/findings count]
 
 Next: /clavain:write-plan to start implementation planning
 ```
+
+Do NOT display additional unchecked phases, pending steps, or "what happens next" items after this summary. The strategy command's scope ends here.

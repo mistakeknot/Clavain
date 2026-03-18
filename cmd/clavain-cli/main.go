@@ -224,7 +224,8 @@ Gate / Phase:
 
 Sprint State:
   sprint-init         <bead_id>                            Bootstrap + formatted status banner
-  set-artifact        <bead_id> <type> <path>
+  set-artifact        <bead_id> <type> <path>              Store artifact (ic + bd fallback)
+  get-artifact        <bead_id> <type>                     Retrieve artifact path by type
   record-phase        <bead_id> <phase>
   sprint-advance      <bead_id> <current_phase> [artifact_path]
   sprint-find-active

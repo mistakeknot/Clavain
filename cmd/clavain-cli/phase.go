@@ -298,6 +298,20 @@ func cmdEnforceGate(args []string) error {
 	return nil
 }
 
+// knownArtifactTypes is the canonical set of artifact types for the sprint lifecycle.
+var knownArtifactTypes = map[string]bool{
+	"brainstorm":      true,
+	"prd":             true,
+	"plan":            true,
+	"plan-review":     true,
+	"implementation":  true,
+	"quality-verdict": true,
+	"resolution":      true,
+	"reflection":      true,
+	"landed":          true,
+	"closed":          true,
+}
+
 // cmdSetArtifact records an artifact for the current phase.
 // Usage: set-artifact <bead_id> <type> <path>
 func cmdSetArtifact(args []string) error {
@@ -308,9 +322,18 @@ func cmdSetArtifact(args []string) error {
 	artifactType := args[1]
 	artifactPath := args[2]
 
+	if !knownArtifactTypes[artifactType] {
+		fmt.Fprintf(os.Stderr, "set-artifact: warning: unknown type %q\n", artifactType)
+	}
+
+	// Always store in bd state as fallback (works without ic run)
+	if bdAvailable() {
+		_, _ = runBD("set-state", beadID, "artifact_"+artifactType+"="+artifactPath)
+	}
+
 	runID, err := resolveRunID(beadID)
 	if err != nil {
-		return nil // fail-safe: no run, no artifact recording
+		return nil // no ic run — bd fallback already written
 	}
 
 	// Get current phase
@@ -336,7 +359,8 @@ func cmdSetArtifact(args []string) error {
 	return nil
 }
 
-// cmdGetArtifact retrieves an artifact path by type from the current run.
+// cmdGetArtifact retrieves an artifact path by type.
+// Tries ic run artifacts first, falls back to bd state.
 // Usage: get-artifact <bead_id> <type>
 func cmdGetArtifact(args []string) error {
 	if len(args) < 2 {
@@ -345,27 +369,34 @@ func cmdGetArtifact(args []string) error {
 	beadID := args[0]
 	artifactType := args[1]
 
+	// Try ic first (if run exists)
 	runID, err := resolveRunID(beadID)
-	if err != nil {
-		return fmt.Errorf("no run for bead %q", beadID)
-	}
-
-	var artifacts []Artifact
-	err = runICJSON(&artifacts, "run", "artifact", "list", runID)
-	if err != nil {
-		return fmt.Errorf("get-artifact: %w", err)
-	}
-
-	// Filter by type, return first match
-	for _, a := range artifacts {
-		if a.Type == artifactType {
-			fmt.Println(a.Path)
-			return nil
+	if err == nil {
+		var artifacts []Artifact
+		err = runICJSON(&artifacts, "run", "artifact", "list", runID)
+		if err == nil {
+			for _, a := range artifacts {
+				if a.Type == artifactType {
+					fmt.Println(a.Path)
+					return nil
+				}
+			}
 		}
 	}
 
-	// No match found
-	return fmt.Errorf("no artifact of type %q found", artifactType)
+	// Fallback: read from bd state
+	if bdAvailable() {
+		out, err := runBD("state", beadID, "artifact_"+artifactType)
+		if err == nil {
+			path := strings.TrimSpace(string(out))
+			if path != "" && !strings.HasPrefix(path, "(no") {
+				fmt.Println(path)
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("no artifact of type %q found for %s", artifactType, beadID)
 }
 
 // cmdRecordPhase records phase completion — just invalidates caches.
