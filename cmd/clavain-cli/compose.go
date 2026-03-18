@@ -425,6 +425,59 @@ func computeStageBudget(sprintID, stage string, stageSpec StageSpec) int64 {
 
 // ─── Core Compose Algorithm ────────────────────────────────────────
 
+// roleIndex partitions the active fleet by role once, with each role's
+// candidates pre-sorted by ColdStartTokens (cheapest first, stable ID tiebreak).
+// Lookups are O(1) map access + a linear skip over any excluded agents.
+type roleIndex struct {
+	byRole map[string][]matchedAgent
+}
+
+func buildRoleIndex(fleet map[string]FleetAgent, excluded map[string]bool) roleIndex {
+	idx := roleIndex{byRole: make(map[string][]matchedAgent, len(fleet)/2)}
+	for id, agent := range fleet {
+		if agent.OrphanedAt != "" || excluded[id] {
+			continue
+		}
+		for _, r := range agent.Roles {
+			idx.byRole[r] = append(idx.byRole[r], matchedAgent{id: id, agent: agent})
+		}
+	}
+	// Pre-sort each role's candidates: cheapest ColdStartTokens first, ID tiebreak.
+	for _, candidates := range idx.byRole {
+		sort.Slice(candidates, func(i, j int) bool {
+			if candidates[i].agent.ColdStartTokens == candidates[j].agent.ColdStartTokens {
+				return candidates[i].id < candidates[j].id
+			}
+			return candidates[i].agent.ColdStartTokens < candidates[j].agent.ColdStartTokens
+		})
+	}
+	return idx
+}
+
+// match returns the cheapest agent for the given role.
+// Because candidates are pre-sorted, we just return the first one.
+func (idx *roleIndex) match(role string) (matchedAgent, bool) {
+	candidates := idx.byRole[role]
+	if len(candidates) == 0 {
+		return matchedAgent{}, false
+	}
+	return candidates[0], true
+}
+
+// precomputeCapabilities builds a set of all capabilities provided by
+// the selected agents, so checkCapabilityCoverage can do a simple lookup.
+func precomputeCapabilities(agents []PlanAgent, fleet *FleetRegistry) map[string]bool {
+	provided := make(map[string]bool, len(agents)*2)
+	for _, a := range agents {
+		if fleetAgent, ok := fleet.Agents[a.AgentID]; ok {
+			for _, cap := range fleetAgent.Capabilities {
+				provided[cap] = true
+			}
+		}
+	}
+	return provided
+}
+
 func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides) ComposePlan {
 	plan := ComposePlan{
 		Stage:    stage,
@@ -448,17 +501,12 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 		}
 	}
 
-	// Filter out orphaned agents
-	activeFleet := map[string]FleetAgent{}
-	for id, agent := range fleet.Agents {
-		if agent.OrphanedAt == "" && !excluded[id] {
-			activeFleet[id] = agent
-		}
-	}
+	// Build role index: partition fleet by role, pre-sort candidates once
+	idx := buildRoleIndex(fleet.Agents, excluded)
 
 	// Match required roles
 	for _, role := range stageSpec.Agents.Required {
-		agent, found := matchRole(role, activeFleet)
+		agent, found := idx.match(role.Role)
 		if !found {
 			plan.Warnings = append(plan.Warnings, fmt.Sprintf("unmatched_role:%s", role.Role))
 			continue
@@ -477,7 +525,7 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 
 	// Match optional roles
 	for _, role := range stageSpec.Agents.Optional {
-		agent, found := matchRole(role, activeFleet)
+		agent, found := idx.match(role.Role)
 		if !found {
 			continue // Optional roles are silently skipped
 		}
@@ -510,8 +558,15 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 		plan.Warnings = append(plan.Warnings, "budget_exceeded")
 	}
 
-	// Capability coverage check
-	missing := checkCapabilityCoverage(stageSpec.Requires.Capabilities, plan.Agents, fleet)
+	// Capability coverage check using pre-computed set
+	capSet := precomputeCapabilities(plan.Agents, fleet)
+	var missing []string
+	for _, req := range stageSpec.Requires.Capabilities {
+		if !capSet[req] {
+			missing = append(missing, req)
+		}
+	}
+	sort.Strings(missing)
 	for _, cap := range missing {
 		plan.Warnings = append(plan.Warnings, fmt.Sprintf("missing_capability:%s", cap))
 	}
@@ -524,6 +579,9 @@ type matchedAgent struct {
 	agent FleetAgent
 }
 
+// matchRole is the original per-call linear-scan matcher, retained for
+// backward compatibility with tests and callers outside composePlan.
+// composePlan uses roleIndex.match() instead.
 func matchRole(role AgentRole, fleet map[string]FleetAgent) (matchedAgent, bool) {
 	var candidates []matchedAgent
 	for id, agent := range fleet {
