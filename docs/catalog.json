@@ -1,9 +1,9 @@
 {
-  "generated": "2026-03-18T00:18:42Z",
+  "generated": "2026-03-18T07:45:51Z",
   "counts": {
     "skills": 17,
     "agents": 6,
-    "commands": 49,
+    "commands": 48,
     "hooks": 10,
     "mcp_servers": 0,
     "review": 2,
@@ -187,10 +187,6 @@
     {
       "name": "generate-command",
       "description": "Create a new custom slash command following conventions and best practices"
-    },
-    {
-      "name": "handoff",
-      "description": "Generate a concise session handoff summary for pasting into a new conversation"
     },
     {
       "name": "heal-skill",

@@ -1,6 +1,6 @@
 # Clavain — Product Requirements Document
 
-**Version:** 0.6.209
+**Version:** 0.6.210
 **Last updated:** 2026-02-19
 **Vision:** [`docs/vision.md`](vision.md)
 **Dev guide:** [`AGENTS.md`](../AGENTS.md)
@@ -68,7 +68,7 @@ Clavain encodes engineering and product discipline into four component types tha
 |------|-------|---------|---------|
 | **Skills** | 17 | Reusable discipline knowledge | `systematic-debugging`, `writing-plans`, `flux-drive` |
 | **Agents** | 6 | Autonomous specialists (review + workflow) | `plan-reviewer`, `pr-comment-resolver` |
-| **Commands** | 49 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
+| **Commands** | 48 | User-invocable entry points | `/sprint`, `/interpeer`, `/write-plan` |
 | **Hooks** | 21 | Event-driven automation | `session-start.sh`, `auto-compound.sh`, `interspect-evidence.sh` |
 | **MCP Servers** | 1 | External tool integration | context7 (runtime doc fetching) |
 
