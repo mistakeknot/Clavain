@@ -196,7 +196,7 @@ Cost preview: `clavain-cli sprint-budget-stage "$CLAVAIN_BEAD_ID" quality-gates 
 
 `/clavain:quality-gates`
 
-Parallel opportunity: if known TODOs from execution exist, start `/clavain:resolve` in parallel.
+**Parallel Window 1 (optional):** While quality-gates agents run, if known TODOs from execution exist, start `/clavain:resolve` in a background agent. Quality-gates writes `quality-verdict` artifact; resolve writes `resolution` artifact — no type conflicts.
 
 After completion, read verdicts:
 ```bash
@@ -220,11 +220,19 @@ Do NOT set phase if gates FAIL.
 
 ## Step 8: Resolve Issues
 
+If resolve was already dispatched in parallel during Step 7, check if it completed:
+```bash
+resolution=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "resolution" 2>/dev/null) || resolution=""
+```
+If `resolution` is set, skip to Step 9 (already resolved). Otherwise run now:
+
 `/clavain:resolve` — auto-detects source (todo files, PR comments, code TODOs), handles interserve mode.
 
 After resolving: if quality-gates found recurring patterns, run `/clavain:compound` to document in `config/flux-drive/knowledge/`. If findings revealed a plan-level mistake, add `## Lessons Learned` to the plan file.
 
 ## Step 9: Reflect
+
+**Parallel Window 2 (optional):** If resolve has no blocking findings (all findings are P2+), resolve and reflect can run in parallel. Resolve writes `resolution` artifact; reflect writes `reflection` artifact — no type conflicts. Sprint waits for both artifacts before advancing to Step 10.
 
 `clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"` then `/reflect`.
 
