@@ -143,6 +143,7 @@ Record the brainstorm artifact and advance the phase state machine. This is the 
 
 ```bash
 BEAD_ID=$(clavain-cli infer-bead "<brainstorm_doc_path>")
+clavain-cli set-artifact "$BEAD_ID" "brainstorm" "<brainstorm_doc_path>" 2>/dev/null || true
 clavain-cli advance-phase "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>" "<brainstorm_doc_path>"
 clavain-cli checkpoint-write "$BEAD_ID" "brainstorm" "brainstorm" "<brainstorm_doc_path>" 2>/dev/null || true
 ```

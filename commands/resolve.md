@@ -42,12 +42,21 @@ Commit changes. Per source type:
 - **PR comments:** `gh api` to resolve threads. Verify with `gh pr view --comments`. If unresolved remain, repeat from step 1.
 - **Code TODOs:** Verify TODO comment removed. Commit with conventional message.
 
+After committing, register the resolution artifact:
+```bash
+clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "resolution" "$(git rev-parse HEAD)" 2>/dev/null || true
+```
+
 ### 5. Record Trust Feedback
 
 Only when findings came from flux-drive review (`.clavain/quality-gates/findings.json` exists):
 
 ```bash
 FINDINGS_JSON=".clavain/quality-gates/findings.json"
+if [[ ! -f "$FINDINGS_JSON" && -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+    _qv=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "quality-verdict" 2>/dev/null) || _qv=""
+    [[ -n "$_qv" && -f "$_qv" ]] && FINDINGS_JSON="$_qv"
+fi
 if [[ -f "$FINDINGS_JSON" ]]; then
     TRUST_PLUGIN=$(find ~/.claude/plugins/cache -path "*/intertrust/*/hooks/lib-trust.sh" 2>/dev/null | head -1)
     [[ -z "$TRUST_PLUGIN" ]] && TRUST_PLUGIN=$(find ~/.claude/plugins/cache -path "*/interspect/*/hooks/lib-trust.sh" 2>/dev/null | head -1)

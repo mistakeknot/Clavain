@@ -3,10 +3,18 @@ name: write-plan
 description: Create detailed implementation plan with bite-sized tasks
 ---
 
+**Before invoking the skill**, resolve input context:
+```bash
+brainstorm_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null) || brainstorm_path=""
+prd_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "prd" 2>/dev/null) || prd_path=""
+```
+If `prd_path` exists, read it as primary input. If only `brainstorm_path`, read that. Pass as context to the skill.
+
 Invoke the clavain:writing-plans skill and follow it exactly as presented to you.
 
-**After the plan is saved**, record the phase transition:
+**After the plan is saved**, register the artifact and record the phase transition:
 ```bash
 BEAD_ID=$("${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" infer-bead "<plan_file_path>")
+clavain-cli set-artifact "$BEAD_ID" "plan" "<plan_file_path>" 2>/dev/null || true
 "${CLAUDE_PLUGIN_ROOT}/bin/clavain-cli" advance-phase "$BEAD_ID" "planned" "Plan: <plan_file_path>" "<plan_file_path>"
 ```

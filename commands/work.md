@@ -14,6 +14,11 @@ Execute a work plan (spec, plan, or todo file) systematically to ship complete f
 
 <input_document> #$ARGUMENTS </input_document>
 
+If `input_document` is empty and `CLAVAIN_BEAD_ID` is set, resolve via artifact bus:
+```bash
+input_document=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || input_document=""
+```
+
 <BEHAVIORAL-RULES>
 These rules are non-negotiable for this orchestration command:
 
@@ -112,6 +117,11 @@ git commit -m "feat(scope): description of what and why
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 git push
+```
+
+After pushing, register the implementation artifact:
+```bash
+clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "implementation" "$(git rev-parse HEAD)" 2>/dev/null || true
 ```
 
 Summarize what was completed, note follow-up work, suggest next steps.

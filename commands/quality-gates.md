@@ -131,6 +131,7 @@ fi
 ```bash
 BEAD_ID="${CLAVAIN_BEAD_ID:-}"
 if [[ -n "$BEAD_ID" ]]; then
+    clavain-cli set-artifact "$BEAD_ID" "quality-verdict" "${OUTPUT_DIR}/synthesis.md" 2>/dev/null || true
     if ! clavain-cli enforce-gate "$BEAD_ID" "shipping" ""; then
         echo "Gate blocked: review findings stale or pre-conditions not met. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_GATE='reason' to override." >&2
     else

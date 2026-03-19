@@ -87,7 +87,7 @@ Optionally run `/clavain:review-doc` on brainstorm first (set `phase=brainstorm-
 
 ## Step 3: Write Plan
 
-`/clavain:write-plan` → saves to `docs/plans/YYYY-MM-DD-<name>.md` (remember path for Step 4).
+`/clavain:write-plan` → saves to `docs/plans/YYYY-MM-DD-<name>.md`. The command registers it via `set-artifact plan`.
 
 If interserve mode active: write-plan auto-executes via Codex — skip Step 5.
 
@@ -103,21 +103,28 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 
 Cost preview: `clavain-cli sprint-budget-stage "$CLAVAIN_BEAD_ID" plan-review 2>/dev/null` — display token budget for this stage and which agents will be launched (skip silently on error).
 
-`/interflux:flux-drive <plan-file-from-step-3>` — review before execution to catch plan-level risks early.
+```bash
+plan_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || plan_path=""
+```
+`/interflux:flux-drive $plan_path` — review before execution to catch plan-level risks early.
 
 If P0/P1 issues found: stop and fix before proceeding. After passing: set `phase=plan-reviewed`.
 
 ## Step 5: Execute
 
+```bash
+plan_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || plan_path=""
+```
+
 Gate check:
 ```bash
-if ! clavain-cli enforce-gate "$CLAVAIN_BEAD_ID" "executing" "<plan_path>"; then
+if ! clavain-cli enforce-gate "$CLAVAIN_BEAD_ID" "executing" "$plan_path"; then
     echo "Gate blocked: plan must be reviewed first. Run /interflux:flux-drive or set CLAVAIN_SKIP_GATE='reason'." >&2
     # Stop
 fi
 ```
 
-`/clavain:work <plan-file-from-step-3>`
+`/clavain:work $plan_path`
 
 At START of execution: set `phase=executing`; `clavain-cli record-cost-estimate "$CLAVAIN_BEAD_ID" "executing" 2>/dev/null || true`
 
@@ -177,7 +184,7 @@ After resolving: if quality-gates found recurring patterns, run `/clavain:compou
 
 Use `clavain:landing-a-change` skill to verify, document, commit.
 
-After ship: set `phase=done`; `bd close "$CLAVAIN_BEAD_ID" 2>/dev/null || true`
+After ship: `clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "closed" "$(git rev-parse HEAD)" 2>/dev/null || true`; set `phase=done`; `bd close "$CLAVAIN_BEAD_ID" 2>/dev/null || true`
 
 Close sweep:
 ```bash
