@@ -61,7 +61,8 @@ Identify discrete features from brainstorm/description. Each feature:
 - Testable in isolation
 - Small enough for one session (1-3 hours agent work)
 
-AskUserQuestion: "I've identified these features. Which to include this iteration?" (include "All of them" option)
+**Tier 1-2:** Auto-select all features. No AskUserQuestion.
+**Tier 3:** AskUserQuestion: "I've identified these features. Which to include this iteration?" (include "All of them" option)
 
 ## Phase 2: Write PRD
 

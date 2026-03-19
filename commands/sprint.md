@@ -29,13 +29,40 @@ clavain-cli sprint-init "$CLAVAIN_BEAD_ID"
 
 This single call validates the bead, reads complexity/phase/budget, registers interstat session attribution, and outputs a formatted status banner. No additional bootstrap commands needed.
 
-Read the complexity from the banner output to decide routing:
+Read the complexity from the banner output to decide routing and autonomy tier.
 
-- **1-2:** AskUserQuestion — "Skip to plan (Recommended)" or "Full workflow". If skip, jump to Step 3.
-- **3:** Standard workflow; offer skip-to-plan if bead has clear description+AC.
-- **4-5:** Full workflow, Opus orchestration.
+## Autonomy Tiers
 
-`--from-step` always overrides complexity routing.
+Determine the autonomy tier from complexity (or `--autonomy=<1|2|3>` override, or `bd state "$CLAVAIN_BEAD_ID" autonomy_tier`):
+
+| Tier | Complexity | Behavior |
+|------|-----------|----------|
+| **1** | C1-C2 | **Full auto.** Skip brainstorm dialogue, auto-approve plan review if no P0/P1, auto-advance all steps. Only gate: quality-gates FAIL pauses. |
+| **2** | C3 | **One checkpoint.** Auto-advance brainstorm → plan. Pause after plan review for user confirmation. Auto-advance execute → ship. |
+| **3** | C4-C5 | **Interactive.** All AskUserQuestion checkpoints active (current behavior). |
+
+```bash
+autonomy_override=$(bd state "$CLAVAIN_BEAD_ID" autonomy_tier 2>/dev/null) || autonomy_override=""
+if [[ -n "$autonomy_override" && "$autonomy_override" =~ ^[123]$ ]]; then
+    autonomy_tier="$autonomy_override"
+elif [[ "$complexity" -le 2 ]]; then
+    autonomy_tier=1
+elif [[ "$complexity" -eq 3 ]]; then
+    autonomy_tier=2
+else
+    autonomy_tier=3
+fi
+```
+
+Display: `Autonomy: Tier $autonomy_tier`. Pass tier to sub-commands via `CLAVAIN_AUTONOMY_TIER=$autonomy_tier`.
+
+**Tier 1 routing:** Skip brainstorm (Phase 0 detects clear requirements → jump to Step 3). If brainstorm is needed (ambiguous), escalate to Tier 2.
+
+**Tier 2 routing:** Standard workflow; auto-advance except pause after Step 4 (plan review).
+
+**Tier 3 routing:** Full workflow with all checkpoints.
+
+`--from-step` always overrides complexity routing. `--autonomy=<tier>` overrides tier. `bd set-state <bead> manual_pause true` forces pause at next checkpoint regardless of tier.
 
 ## Checkpointing
 
@@ -60,7 +87,9 @@ On non-zero exit, parse `reason_type="${pause_reason%%|*}"`:
 - `stale_phase` → re-read state, route to new phase via `clavain-cli sprint-next-step`
 - `budget_exceeded` → AskUserQuestion: Continue (override) / Stop / Adjust budget
 
-Display at each advance: `Phase: <current> → <next> (auto-advancing)`. No "what next?" prompts unless pause triggered or step fails.
+Display at each advance: `Phase: <current> → <next> (auto-advancing)`. No "what next?" prompts unless pause triggered, step fails, or tier requires a checkpoint at this step.
+
+**Tier-aware checkpoints:** Tier 1 pauses only on `gate_blocked` (quality-gates FAIL). Tier 2 also pauses after Step 4 (plan review). Tier 3 preserves all existing AskUserQuestion calls in sub-commands.
 
 ## Phase Tracking
 

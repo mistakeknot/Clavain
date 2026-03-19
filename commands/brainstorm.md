@@ -48,7 +48,9 @@ Mark each `[x]` as you complete it. After Phase 4, brainstorming is **done** —
 
 Clear requirements indicators: specific acceptance criteria, referenced existing patterns, exact expected behavior, constrained scope.
 
-If clear: AskUserQuestion — "Requirements seem detailed enough to plan. Run `/clavain:write-plan` instead, or explore further?"
+**Autonomy tier check:** If `CLAVAIN_AUTONOMY_TIER=1` and requirements are clear, skip brainstorm entirely — return to caller so sprint can jump to Step 3 (Write Plan). No AskUserQuestion needed.
+
+If clear and tier >= 2: AskUserQuestion — "Requirements seem detailed enough to plan. Run `/clavain:write-plan` instead, or explore further?"
 
 ### Phase 0.5: Complexity Classification (Sprint Only)
 
