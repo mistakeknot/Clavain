@@ -15,11 +15,32 @@ Runs the full 10-phase lifecycle from brainstorm to ship. Normally invoked via `
 Non-negotiable:
 1. Execute steps in order — no skipping, reordering, or parallelizing unless a step explicitly allows it.
 2. Write artifacts to disk (docs/, .clavain/); later steps read files, not conversation context.
-3. Stop at checkpoints/gates for user approval — never auto-approve.
+3. Stop at checkpoints/gates for user approval — never auto-approve (unless autonomy tier allows).
 4. Halt on failure — report what failed, what succeeded, what user can do. No silent retry or skip.
 5. Local subagents (Task tool) by default — external agents (Codex, interserve) require explicit opt-in.
 6. Never call EnterPlanMode — plan was created before this runs. Scope changes → stop and ask.
+7. **Exactly 10 steps.** Do NOT invent, rename, or append steps beyond the 10 defined below.
 </BEHAVIORAL-RULES>
+
+## Progress Tracking
+
+Display this checklist after bootstrap and update after each step. Use exact step names.
+
+```
+Sprint Progress (<CLAVAIN_BEAD_ID>):
+- [ ] Step 1:  Brainstorm
+- [ ] Step 2:  Strategy
+- [ ] Step 3:  Write Plan
+- [ ] Step 4:  Plan Review
+- [ ] Step 5:  Execute
+- [ ] Step 6:  Test & Verify
+- [ ] Step 7:  Quality Gates
+- [ ] Step 8:  Resolve
+- [ ] Step 9:  Reflect
+- [ ] Step 10: Ship
+```
+
+Mark each `[x]` as completed. Append artifact path: `✓ docs/plans/...`. After Step 10, sprint is **done** — no further steps exist.
 
 ## Environment Bootstrap + Status
 
