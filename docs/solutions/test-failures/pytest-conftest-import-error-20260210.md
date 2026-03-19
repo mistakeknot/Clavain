@@ -11,6 +11,7 @@ root_cause: wrong_api
 resolution_type: code_fix
 severity: medium
 tags: [pytest, conftest, imports, test-helpers, python]
+synthesized_into: integration-issues/synthesis-external-tool-api-pitfalls.md
 ---
 
 # Troubleshooting: Cannot Import Functions from conftest.py in Pytest

@@ -11,6 +11,7 @@ root_cause: missing_workflow_step
 resolution_type: workflow_improvement
 severity: high
 tags: [flux-drive, content-assembly, diff-slicing, pyramid-mode, abstraction, strongdm]
+synthesized_into: best-practices/synthesis-flux-drive-multi-agent-patterns.md
 ---
 
 # Unify Content-Assembly Abstractions Before Adding Variants

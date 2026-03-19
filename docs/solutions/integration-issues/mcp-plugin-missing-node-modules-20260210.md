@@ -12,6 +12,7 @@ root_cause: incomplete_setup
 resolution_type: environment_setup
 severity: high
 tags: [mcp, plugin-cache, node-modules, native-modules, canvas, libgif]
+synthesized_into: integration-issues/synthesis-plugin-cache-session-lifecycle.md
 ---
 
 # Troubleshooting: MCP Plugin Cache Missing node_modules

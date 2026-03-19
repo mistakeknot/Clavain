@@ -11,6 +11,7 @@ root_cause: config_error
 resolution_type: config_change
 severity: medium
 tags: [mcp, context-budget, duplicate-registration, settings-hygiene, claude-doctor]
+synthesized_into: workflow-issues/synthesis-settings-configuration-hygiene.md
 ---
 
 # Troubleshooting: Duplicate MCP Server Registration Wastes Context Budget

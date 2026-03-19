@@ -11,6 +11,7 @@ root_cause: session_lifecycle
 resolution_type: workaround
 severity: medium
 tags: [agents, subagent-type, session-start, plugin-registry, flux-drive-v2]
+synthesized_into: integration-issues/synthesis-plugin-cache-session-lifecycle.md
 ---
 
 # New Agent Files Not Available as subagent_type Until Session Restart

@@ -12,6 +12,7 @@ root_cause: missing_workflow_step
 resolution_type: workflow_improvement
 severity: medium
 tags: [agent-consolidation, rename-sweep, stale-references, plugin-maintenance, grep-sweep]
+synthesized_into: best-practices/synthesis-refactoring-safety-consumer-awareness.md
 ---
 
 # Best Practice: Agent Consolidation with Complete Reference Sweep

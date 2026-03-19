@@ -11,6 +11,7 @@ root_cause: config_error
 resolution_type: workflow_improvement
 severity: medium
 tags: [smoke-test, subagent, instruction-conflict, task-tool, mandatory-first-step]
+synthesized_into: best-practices/synthesis-flux-drive-multi-agent-patterns.md
 ---
 
 # Best Practice: Smoke Test Agent Prompts Must Override the Task Tool Write-First Wrapper

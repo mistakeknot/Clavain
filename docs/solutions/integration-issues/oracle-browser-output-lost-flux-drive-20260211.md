@@ -12,6 +12,7 @@ root_cause: config_error
 resolution_type: documentation_update
 severity: high
 tags: [oracle, browser-mode, flux-drive, stdout-redirect, write-output, timeout]
+synthesized_into: best-practices/synthesis-flux-drive-multi-agent-patterns.md
 ---
 
 # Troubleshooting: Oracle Browser Mode Output Lost in Flux-Drive Reviews

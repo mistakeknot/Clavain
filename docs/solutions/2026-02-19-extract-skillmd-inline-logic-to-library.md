@@ -6,6 +6,7 @@ severity: P2
 discovery: implementation
 applies_to: [clavain, interspect]
 date: 2026-02-19
+synthesized_into: patterns/synthesis-code-organization-config-patterns.md
 ---
 
 # Extract SKILL.md Inline Logic into Testable Library Functions

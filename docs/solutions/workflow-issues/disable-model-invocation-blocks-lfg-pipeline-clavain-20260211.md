@@ -11,6 +11,7 @@ root_cause: missing_workflow_step
 resolution_type: config_change
 severity: high
 tags: [claude-code-plugin, disable-model-invocation, command-chaining, lfg, orchestration, clavain]
+synthesized_into: workflow-issues/synthesis-settings-configuration-hygiene.md
 ---
 
 # Troubleshooting: disable-model-invocation Blocks All Command Chaining in /lfg Pipeline

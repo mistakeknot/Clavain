@@ -11,6 +11,7 @@ root_cause: wrong_api
 resolution_type: documentation_update
 severity: medium
 tags: [codex-cli, deprecated-flags, approval-mode, full-auto, clodex, ai-agent-hallucination]
+synthesized_into: integration-issues/synthesis-external-tool-api-pitfalls.md
 ---
 
 # Troubleshooting: Codex CLI Deprecated Flags Cause Agent Dispatch Failures

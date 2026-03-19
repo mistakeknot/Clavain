@@ -4,6 +4,7 @@ category: patterns
 tags: [routing, yaml-parsing, shell, config-resolution]
 date: 2026-02-20
 sprint: iv-dd9q
+synthesized_into: patterns/synthesis-code-organization-config-patterns.md
 ---
 
 # Hierarchical Config Resolution with Sentinel Values

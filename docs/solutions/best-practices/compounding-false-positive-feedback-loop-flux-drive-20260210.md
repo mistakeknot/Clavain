@@ -11,6 +11,7 @@ root_cause: logic_error
 resolution_type: documentation_update
 severity: high
 tags: [compounding, feedback-loop, knowledge-layer, provenance, flux-drive, multi-agent]
+synthesized_into: best-practices/synthesis-flux-drive-multi-agent-patterns.md
 ---
 
 # Best Practice: Provenance Tracking Breaks Compounding Feedback Loops

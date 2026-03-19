@@ -11,6 +11,7 @@ root_cause: missing_workflow_step
 resolution_type: workflow_improvement
 severity: medium
 tags: [clodex, flux-drive, templates, dispatch, refactoring-safety]
+synthesized_into: best-practices/synthesis-refactoring-safety-consumer-awareness.md
 ---
 
 # Best Practice: Template System Has Multiple Independent Consumers

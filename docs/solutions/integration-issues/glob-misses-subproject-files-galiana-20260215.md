@@ -11,6 +11,7 @@ root_cause: logic_error
 resolution_type: code_fix
 severity: medium
 tags: [glob, monorepo, findings, python, path-discovery]
+synthesized_into: integration-issues/synthesis-external-tool-api-pitfalls.md
 ---
 
 # Troubleshooting: Glob Pattern Misses Subproject Files in Monorepo

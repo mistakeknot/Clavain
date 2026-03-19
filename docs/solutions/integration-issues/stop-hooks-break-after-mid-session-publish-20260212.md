@@ -11,6 +11,7 @@ root_cause: cache_invalidation
 resolution_type: fix
 severity: medium
 tags: [hooks, stop-hooks, plugin-cache, bump-version, publish, symlink, session-lifecycle]
+synthesized_into: integration-issues/synthesis-plugin-cache-session-lifecycle.md
 ---
 
 # Stop Hooks Break After Mid-Session Plugin Publish
