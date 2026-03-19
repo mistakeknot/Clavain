@@ -9,6 +9,28 @@ disable-model-invocation: false
 
 Capture sprint learnings and advance `reflect → done`.
 
+<BEHAVIORAL-RULES>
+1. **Execute steps in order.** No skipping or reordering.
+2. **Exactly 9 steps.** Do NOT invent, rename, or append steps. Shipping is the sprint orchestrator's domain.
+</BEHAVIORAL-RULES>
+
+## Progress Tracking
+
+```
+Reflect Progress:
+- [ ] Step 1: Find active sprint
+- [ ] Step 2: Check existing artifact
+- [ ] Step 3: Capture learnings
+- [ ] Step 4: Register artifact
+- [ ] Step 5: Export transcript
+- [ ] Step 6: Advance sprint
+- [ ] Step 7: Drift check
+- [ ] Step 8: Calibrate costs
+- [ ] Step 9: Calibrate routing
+```
+
+Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no further steps exist.
+
 ## Context
 
 <context> #$ARGUMENTS </context>
@@ -80,3 +102,5 @@ Capture sprint learnings and advance `reflect → done`.
    ```
 
 Reflect gate requires at least one registered artifact for the reflect phase.
+
+Do NOT display additional unchecked phases or pending steps after this. The reflect command's scope ends here.

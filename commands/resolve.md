@@ -6,6 +6,24 @@ argument-hint: "[optional: 'todos', 'pr', 'code', PR number, or specific pattern
 
 Resolve findings from any source using parallel processing. Auto-detects source or accepts explicit hint.
 
+<BEHAVIORAL-RULES>
+1. **Execute steps in order.** Analyze before implementing, commit before recording trust.
+2. **Exactly 5 steps.** Do NOT invent or append steps. Reflection and shipping are the sprint orchestrator's domain.
+</BEHAVIORAL-RULES>
+
+## Progress Tracking
+
+```
+Resolve Progress:
+- [ ] Step 1: Analyze
+- [ ] Step 2: Plan
+- [ ] Step 3: Implement
+- [ ] Step 4: Commit
+- [ ] Step 5: Record Trust
+```
+
+Mark each `[x]` as you complete it. After Step 5, resolve is **done** — no further steps exist.
+
 ## Source Detection
 
 <resolve_target> #$ARGUMENTS </resolve_target>
@@ -126,3 +144,5 @@ fi
 ```
 
 Silent fail-open: `2>/dev/null || true` — resolve never fails due to event emission.
+
+Do NOT display additional unchecked phases or pending steps after this. The resolve command's scope ends here.

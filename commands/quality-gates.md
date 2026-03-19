@@ -8,6 +8,28 @@ argument-hint: "[optional: specific files or 'all' for full diff]"
 
 Analyzes changes, invokes appropriate specialist agents, synthesizes findings.
 
+<BEHAVIORAL-RULES>
+1. **Execute phases in order.** No skipping or reordering.
+2. **Write findings to files.** Agent output goes to `{OUTPUT_DIR}/`, not conversation context.
+3. **Stop at gates.** FAIL blocks shipping — do not auto-proceed.
+4. **Exactly 7 phases (1-6).** Do NOT invent, rename, or append phases. Resolution and shipping are the sprint orchestrator's domain.
+</BEHAVIORAL-RULES>
+
+## Progress Tracking
+
+```
+Quality Gates Progress:
+- [ ] Phase 1: Analyze Changes
+- [ ] Phase 2: Select Reviewers
+- [ ] Phase 3: Prepare Diff
+- [ ] Phase 4: Run Agents
+- [ ] Phase 5: Synthesize + Record
+- [ ] Phase 5b: Gate Check
+- [ ] Phase 6: File Findings (optional)
+```
+
+Mark each `[x]` as you complete it. After Phase 6, quality gates is **done** — no further phases exist.
+
 ## Input
 
 <review_target> #$ARGUMENTS </review_target>
@@ -142,11 +164,15 @@ fi
 
 Do NOT set phase on FAIL — work needs fixing first.
 
-## Phase 6: File Findings as Beads (optional)
+## Phase 6: File Findings as Beads (optional, Terminal)
+
+This is the **final phase**. After this, quality gates is complete. Do NOT add further phases — resolution and shipping are the sprint orchestrator's responsibility.
 
 If `.beads/` initialized, ask: "File review findings as beads issues? (recommended for >3 findings)"
 
 If yes: `bd create --title="[quality-gates] <finding>" --type=bug --priority=3` — group related findings where appropriate.
+
+Do NOT display additional unchecked phases or pending steps after this phase.
 
 ## Notes
 
