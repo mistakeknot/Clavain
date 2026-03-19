@@ -6,6 +6,8 @@ With 17 skills, 6 agents, 49 commands, 10 hooks, and 0 MCP servers, there is a l
 
 ## Install
 
+> **Want the full platform?** Clavain is part of [Demarch](https://github.com/mistakeknot/Demarch), which installs the complete ecosystem (55+ plugins, Go services, TUI tools) in one command. See the [Demarch Quick Start](https://github.com/mistakeknot/Demarch#quick-start).
+
 ```bash
 # Full rig install (recommended): installs Clavain + companions, MCP servers, env vars, and conflict resolution
 npx @gensysven/agent-rig install mistakeknot/Clavain
