@@ -32,6 +32,9 @@ __pycache__/
 
 .intermem/
 
+# Vendored upstream repos (only specific subdirs are tracked)
+vendor-src/cxdb/
+
 # Go build artifacts (native dev binary — not shipped)
 bin/clavain-cli-go
 # Platform release binaries ARE tracked (shipped with plugin)
