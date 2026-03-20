@@ -197,6 +197,8 @@ func main() {
 		err = cmdFactoryPaused(args)
 	case "agent-paused":
 		err = cmdAgentPaused(args)
+	case "factory-status":
+		err = cmdFactoryStatus(args)
 
 	// Daemon
 	case "daemon":
@@ -279,6 +281,9 @@ Quality Gates:
 Watchdog:
   watchdog                [flags]  Sweep stale beads and escalate failures
                   --once  --dry-run  --stale-ttl=600s  --interval=60s  --max-unclaims=2
+
+Factory:
+  factory-status          [--json]   Fleet health dashboard (utilization, queue, WIP, dispatches)
 
 Checkpoints:
   checkpoint-write    <bead_id> <phase> <step> <plan_path>
