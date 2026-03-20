@@ -10,13 +10,12 @@ import (
 	"strings"
 	"time"
 
-	cxdb "github.com/strongdm/ai-cxdb/clients/go"
 	"github.com/vmihailenco/msgpack/v5"
 	"github.com/zeebo/blake3"
 )
 
 // cxdbClient holds the singleton CXDB connection.
-var cxdbClient *cxdb.Client
+var cxdbClient *CXDBClient
 
 // cxdbStartAttempted prevents repeated auto-start attempts in the same process.
 var cxdbStartAttempted bool
@@ -48,13 +47,13 @@ func cxdbEnsureRunning() bool {
 
 // cxdbConnect connects to the local CXDB server.
 // Returns the existing connection if already connected.
-func cxdbConnect() (*cxdb.Client, error) {
+func cxdbConnect() (*CXDBClient, error) {
 	if cxdbClient != nil {
 		return cxdbClient, nil
 	}
 
 	addr := fmt.Sprintf("localhost:%d", cxdbDefaultPort)
-	client, err := cxdb.Dial(addr)
+	client, err := CXDBDial(addr)
 	if err != nil {
 		return nil, fmt.Errorf("cxdb connect: %w", err)
 	}
@@ -72,7 +71,7 @@ func cxdbClose() {
 
 // cxdbSprintContext gets or creates a CXDB context for a sprint.
 // Uses the bead ID to map to a persistent context.
-func cxdbSprintContext(client *cxdb.Client, beadID string) (uint64, error) {
+func cxdbSprintContext(client *CXDBClient, beadID string) (uint64, error) {
 	// Try to find existing context via ic state
 	if icAvailable() {
 		out, err := runIC("state", "get", "cxdb_context_"+beadID)
@@ -136,7 +135,7 @@ type ArtifactRecord struct {
 }
 
 // cxdbRecordPhase records a phase transition as a CXDB turn.
-func cxdbRecordPhase(client *cxdb.Client, ctxID uint64, rec PhaseRecord) error {
+func cxdbRecordPhase(client *CXDBClient, ctxID uint64, rec PhaseRecord) error {
 	if rec.Timestamp == 0 {
 		rec.Timestamp = uint64(time.Now().Unix())
 	}
@@ -144,7 +143,7 @@ func cxdbRecordPhase(client *cxdb.Client, ctxID uint64, rec PhaseRecord) error {
 }
 
 // cxdbRecordDispatch records an agent dispatch as a CXDB turn.
-func cxdbRecordDispatch(client *cxdb.Client, ctxID uint64, rec DispatchRecord) error {
+func cxdbRecordDispatch(client *CXDBClient, ctxID uint64, rec DispatchRecord) error {
 	if rec.Timestamp == 0 {
 		rec.Timestamp = uint64(time.Now().Unix())
 	}
@@ -153,7 +152,7 @@ func cxdbRecordDispatch(client *cxdb.Client, ctxID uint64, rec DispatchRecord) e
 
 // cxdbStoreBlob stores data as a blob via CXDB CAS (content-addressed turn).
 // Returns the hex-encoded BLAKE3 hash.
-func cxdbStoreBlob(client *cxdb.Client, ctxID uint64, data []byte) (string, error) {
+func cxdbStoreBlob(client *CXDBClient, ctxID uint64, data []byte) (string, error) {
 	rec := ArtifactRecord{
 		BlobHash:  data, // The CXDB server computes BLAKE3 internally
 		SizeBytes: uint64(len(data)),
@@ -163,7 +162,7 @@ func cxdbStoreBlob(client *cxdb.Client, ctxID uint64, data []byte) (string, erro
 }
 
 // cxdbForkSprint creates an O(1) branched execution trajectory.
-func cxdbForkSprint(client *cxdb.Client, turnID uint64) (uint64, error) {
+func cxdbForkSprint(client *CXDBClient, turnID uint64) (uint64, error) {
 	ctx := context.Background()
 	head, err := client.CreateContext(ctx, turnID)
 	if err != nil {
@@ -173,9 +172,9 @@ func cxdbForkSprint(client *cxdb.Client, turnID uint64) (uint64, error) {
 }
 
 // cxdbQueryByType returns all turns of a specific type from a context.
-func cxdbQueryByType(client *cxdb.Client, ctxID uint64, typeID string) ([]cxdb.TurnRecord, error) {
+func cxdbQueryByType(client *CXDBClient, ctxID uint64, typeID string) ([]CXDBTurnRecord, error) {
 	ctx := context.Background()
-	turns, err := client.GetLast(ctx, ctxID, cxdb.GetLastOptions{
+	turns, err := client.GetLast(ctx, ctxID, CXDBGetLastOptions{
 		Limit:          1000,
 		IncludePayload: true,
 	})
@@ -184,7 +183,7 @@ func cxdbQueryByType(client *cxdb.Client, ctxID uint64, typeID string) ([]cxdb.T
 	}
 
 	// Filter by type
-	var result []cxdb.TurnRecord
+	var result []CXDBTurnRecord
 	for _, t := range turns {
 		if t.TypeID == typeID {
 			result = append(result, t)
@@ -194,14 +193,14 @@ func cxdbQueryByType(client *cxdb.Client, ctxID uint64, typeID string) ([]cxdb.T
 }
 
 // cxdbAppendTyped encodes a record as msgpack and appends it as a CXDB turn.
-func cxdbAppendTyped(client *cxdb.Client, ctxID uint64, typeID string, record any) error {
+func cxdbAppendTyped(client *CXDBClient, ctxID uint64, typeID string, record any) error {
 	payload, err := msgpack.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("cxdb encode %s: %w", typeID, err)
 	}
 
 	ctx := context.Background()
-	_, err = client.AppendTurn(ctx, &cxdb.AppendRequest{
+	_, err = client.AppendTurn(ctx, &CXDBAppendRequest{
 		ContextID:   ctxID,
 		TypeID:      typeID,
 		TypeVersion: 1,
@@ -483,7 +482,7 @@ func cmdCXDBHistory(args []string) error {
 	}
 
 	ctx := context.Background()
-	turns, err := client.GetLast(ctx, ctxID, cxdb.GetLastOptions{
+	turns, err := client.GetLast(ctx, ctxID, CXDBGetLastOptions{
 		Limit:          10000,
 		IncludePayload: true,
 	})

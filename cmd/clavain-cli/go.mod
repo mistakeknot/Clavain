@@ -4,7 +4,6 @@ go 1.22
 
 require (
 	github.com/mistakeknot/intercore v0.0.0-00010101000000-000000000000
-	github.com/strongdm/ai-cxdb/clients/go v0.0.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/zeebo/blake3 v0.2.4
 	gopkg.in/yaml.v3 v3.0.1
@@ -28,7 +27,5 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-replace github.com/strongdm/ai-cxdb/clients/go => ../../vendor-src/cxdb/clients/go
 
 replace github.com/mistakeknot/intercore => ../../vendor-src/intercore

@@ -1,6 +1,0 @@
-# Only the Go client is vendored — ignore everything else from the cxdb repo
-*
-!.gitignore
-!clients/
-!clients/go/
-!clients/go/**
