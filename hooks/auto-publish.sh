@@ -75,8 +75,10 @@ with open('$marketplace', 'w') as f:
     f.write('\n')
 " 2>/dev/null || true
 
-    # Pre-build Go binary before cache sync
-    if [[ -x "$cwd/scripts/build-clavain-cli.sh" ]]; then
+    # Cross-compile Go binaries before cache sync
+    if [[ -x "$cwd/scripts/build-release.sh" ]]; then
+        "$cwd/scripts/build-release.sh" 2>/dev/null || true
+    elif [[ -x "$cwd/scripts/build-clavain-cli.sh" ]]; then
         "$cwd/scripts/build-clavain-cli.sh" 2>/dev/null || true
     fi
 
@@ -129,10 +131,11 @@ main() {
     # Check if this is a plugin repo
     [[ -f "$cwd/.claude-plugin/plugin.json" ]] || exit 0
 
-    # Pre-build Go binary so it's included in the published cache.
-    # The Go binary can only be compiled from the monorepo source tree where
-    # replace directives resolve. Once in the plugin cache, auto-build fails.
-    if [[ -x "$cwd/scripts/build-clavain-cli.sh" ]]; then
+    # Cross-compile Go binaries so they ship with the published cache.
+    # Uses build-release.sh (cross-compile) if available, falls back to build-clavain-cli.sh (native only).
+    if [[ -x "$cwd/scripts/build-release.sh" ]]; then
+        "$cwd/scripts/build-release.sh" 2>/dev/null || true
+    elif [[ -x "$cwd/scripts/build-clavain-cli.sh" ]]; then
         "$cwd/scripts/build-clavain-cli.sh" 2>/dev/null || true
     fi
 

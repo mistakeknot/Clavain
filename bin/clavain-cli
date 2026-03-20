@@ -3,17 +3,32 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Resolve platform-specific binary name: clavain-cli-go-{os}-{arch}
+_cli_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+_cli_arch="$(uname -m)"
+case "$_cli_arch" in
+    x86_64)  _cli_arch="amd64" ;;
+    aarch64) _cli_arch="arm64" ;;
+esac
+PLATFORM_BIN="$SCRIPT_DIR/clavain-cli-go-${_cli_os}-${_cli_arch}"
 GO_BIN="$SCRIPT_DIR/clavain-cli-go"
 
-# Try Go binary first
+# Try platform-specific binary first, then generic
+if [[ -x "$PLATFORM_BIN" ]]; then
+    exec "$PLATFORM_BIN" "$@"
+fi
 if [[ -x "$GO_BIN" ]]; then
     exec "$GO_BIN" "$@"
 fi
 
-# Auto-build if Go is available and source exists (won't work from plugin cache)
-if command -v go &>/dev/null && [[ -d "$SCRIPT_DIR/../cmd/clavain-cli" ]]; then
+# In plugin cache, no source tree exists — skip auto-build silently
+if [[ "$SCRIPT_DIR" == *"/.claude/plugins/cache/"* ]]; then
+    : # fall through to Bash
+# Auto-build if Go is available and source exists (monorepo dev only)
+elif command -v go &>/dev/null && [[ -d "$SCRIPT_DIR/../cmd/clavain-cli" ]]; then
     local_err="$(go build -C "$SCRIPT_DIR/../cmd/clavain-cli" -mod=readonly -o "$GO_BIN" . 2>&1)" && exec "$GO_BIN" "$@"
-    # Build failed — warn once per session so the user knows Go commands are unavailable
+    # Build failed — warn once per session
     if [[ -z "${CLAVAIN_BUILD_WARNED:-}" ]]; then
         echo "clavain-cli: Go binary build failed (using Bash fallback, 34 Go-only commands unavailable)" >&2
         echo "clavain-cli: ${local_err##*$'\n'}" >&2
@@ -83,7 +98,9 @@ case "${1:-help}" in
     sprint-invalidate-caches) shift; sprint_invalidate_caches "$@" ;;
 
     help|--help|-h)
-        if [[ -x "$GO_BIN" ]]; then "$GO_BIN" help; else cat <<'HELP'
+        if [[ -x "$PLATFORM_BIN" ]]; then "$PLATFORM_BIN" help
+        elif [[ -x "$GO_BIN" ]]; then "$GO_BIN" help
+        else cat <<'HELP'
 Usage: clavain-cli <command> [args...] (Bash fallback mode)
 Run with Go binary for full command list.
 HELP
