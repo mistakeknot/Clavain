@@ -17,7 +17,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/interflux:flux-drive` | Deep multi-agent review (any input) | `/flux-drive docs/plans/my-plan.md` |
 | `/clavain:quality-gates` | Auto-select reviewers from git diff | `/quality-gates` |
 | `/clavain:resolve` | Fix findings from TODOs/PR comments | `/resolve` |
-| `/clavain:interpeer` | Cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
+| `/interpeer:interpeer` | Cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
 
 ## By Stage
 
@@ -47,9 +47,9 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 |---|---|
 | `/clavain:review-discipline` | Disciplined code review + feedback triage |
 | `/clavain:quality-gates` | Quick review from git diff |
-| `/clavain:clavain-review` | PR-focused multi-agent review |
+| `/clavain:review` | PR-focused multi-agent review |
 | `/clavain:review-doc` | Single-pass doc refinement |
-| `/clavain:interpeer` | Cross-AI peer review |
+| `/interpeer:interpeer` | Cross-AI peer review |
 | `/clavain:migration-safety` | DB migration safety checks |
 | `/clavain:pr-triage` | Batch PR triage with fd-* agents |
 | `/interflux:flux-gen` | Generate domain-specific review agents |
@@ -73,8 +73,8 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/clavain:project-onboard` | Set up project with Demarch automation |
 |---|---|
 | `/clavain:setup` | Bootstrap Clavain |
-| `/clavain:clavain-help` | This command |
-| `/clavain:clavain-doctor` | Health check |
+| `/clavain:help` | This command |
+| `/clavain:doctor` | Health check |
 | `/clavain:codex-bootstrap` | Keep Codex installation fresh |
 | `/clavain:create-agent-skill` | Create agent skills |
 | `/clavain:generate-command` | Scaffold a new command |

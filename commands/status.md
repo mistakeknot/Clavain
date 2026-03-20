@@ -22,7 +22,7 @@ Read `--scope` (or the first argument) and route accordingly:
 
 1. For `clavain` scope, report:
    - Key dependencies: `clavain`, `interdoc`, `interphase`, `interline`, `interpath`, `interwatch`, `interlock`, `qmd`, `oracle`, `tool-time`.
-   - Whether `/clavain:clavain-doctor` checks can be run successfully.
+   - Whether `/clavain:doctor` checks can be run successfully.
 2. For each additional scope, execute the delegated command:
    - `interpath`: `/interpath:interpath-status`
    - `interwatch`: `/interwatch:interwatch-status`

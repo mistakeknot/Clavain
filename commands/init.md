@@ -38,7 +38,7 @@ grep -qF '.clavain/scratch/' "$GIT_ROOT/.gitignore" 2>/dev/null || echo '.clavai
 
 ```markdown
 # .clavain/
-Agent memory filesystem. Created by `/clavain:clavain-init`.
+Agent memory filesystem. Created by `/clavain:init`.
 
 - **learnings/** — Durable knowledge. Feeds review agents.
 - **scratch/** — Ephemeral state (gitignored). Handoffs, checkpoints.

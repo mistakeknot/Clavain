@@ -341,22 +341,31 @@ update_file_with_block() {
   local candidate
   candidate="$(mktemp)"
 
+  # Write block content to temp file — BSD awk (macOS) doesn't allow newlines in -v values
+  local block_file
+  block_file="$(mktemp)"
+  printf '%s\n' "$block_content" > "$block_file"
+
   if [[ ! -f "$file" ]]; then
-    printf '%s\n' "$block_content" > "$candidate"
+    cp "$block_file" "$candidate"
   else
-    awk -v start="$start_marker" -v end="$end_marker" -v block="$block_content" '
+    awk -v start="$start_marker" -v end="$end_marker" -v blockfile="$block_file" '
       BEGIN { in_block = 0; replaced = 0 }
-      index($0, start) { if (!replaced) { print block; replaced = 1 } in_block = 1; next }
+      index($0, start) {
+        if (!replaced) { while ((getline line < blockfile) > 0) print line; close(blockfile); replaced = 1 }
+        in_block = 1; next
+      }
       index($0, end)   { in_block = 0; next }
       !in_block        { print }
       END {
         if (!replaced) {
           if (NR > 0) print ""
-          print block
+          while ((getline line < blockfile) > 0) print line; close(blockfile)
         }
       }
     ' "$file" > "$candidate"
   fi
+  rm -f "$block_file"
 
   if [[ -f "$file" ]] && cmp -s "$file" "$candidate"; then
     rm -f "$candidate"

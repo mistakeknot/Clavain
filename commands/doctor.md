@@ -226,7 +226,7 @@ if [ -d .clavain ]; then
   [ -z "$_hf" ] && [ -f .clavain/scratch/handoff.md ] && _hf=".clavain/scratch/handoff.md"
   [ -n "$_hf" ] && { _mt=$(stat -c %Y "$_hf" 2>/dev/null||stat -f %m "$_hf" 2>/dev/null||echo 0); [ "$_mt" -gt 0 ] && { _age=$((($(date +%s)-_mt)/86400)); [ "$_age" -gt 7 ] && echo "  WARN: stale handoff (${_age}d)"; }; }
   echo "  learnings: $(ls .clavain/learnings/*.md 2>/dev/null|wc -l|tr -d ' ') entries"
-else echo ".clavain: not initialized — /clavain:clavain-init"; fi
+else echo ".clavain: not initialized — /clavain:init"; fi
 ```
 
 ### 3g. Multi-Agent Coordination (interlock)
@@ -321,4 +321,4 @@ cat ~/.claude/plugins/cache/interagency-marketplace/clavain/*/plugin.json 2>/dev
 Present results as a compact table: `<check> [PASS|WARN|FAIL] <detail>`. Group by section.
 <!-- agent-rig:end:doctor-output -->
 
-**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:clavain-init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin.
+**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin.
