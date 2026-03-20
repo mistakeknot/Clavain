@@ -1609,22 +1609,37 @@ bead_claim() {
     [[ "${3:-}" == "--soft" ]] && soft=true
     command -v bd &>/dev/null || return 0
 
+    local epoch
+    epoch=$(date +%s)
+
+    # Strip any existing claimed_by/claimed_at labels so --add-label doesn't duplicate
+    local existing_cb existing_ca
+    existing_cb=$(bd state "$bead_id" claimed_by 2>/dev/null) || existing_cb=""
+    existing_ca=$(bd state "$bead_id" claimed_at 2>/dev/null) || existing_ca=""
+    local remove_args=()
+    if [[ -n "$existing_cb" && "$existing_cb" != *"no claimed_by"* ]]; then
+        remove_args+=(--remove-label "claimed_by:$existing_cb")
+    fi
+    if [[ -n "$existing_ca" && "$existing_ca" != *"no claimed_at"* ]]; then
+        remove_args+=(--remove-label "claimed_at:$existing_ca")
+    fi
+
     if [[ "$soft" == true ]]; then
-        # Sprint context: intercore lock is authoritative, just write audit trail
-        bd set-state "$bead_id" "claimed_by=$session_id" >/dev/null 2>&1 || true
-        bd set-state "$bead_id" "claimed_at=$(date +%s)" >/dev/null 2>&1 || true
+        # Sprint context: intercore lock is authoritative, write identity in single call
+        bd update "$bead_id" "${remove_args[@]}" \
+            --add-label "claimed_by:$session_id" \
+            --add-label "claimed_at:$epoch" >/dev/null 2>&1 || true
         return 0
     fi
 
-    # Direct claim: use atomic bd update --claim with retry
+    # Direct claim: atomic --claim + identity labels in single bd update call
+    # Eliminates crash window between claim and identity write
     local output retries=2 delay=1
     for (( i=0; i<retries; i++ )); do
-        if output=$(bd update "$bead_id" --claim 2>&1); then
-            # Atomic claim succeeded — write legacy state for discovery
-            bd set-state "$bead_id" "claimed_by=$session_id" >/dev/null 2>&1 \
-                || echo "WARN: bead_claim: failed to write claimed_by for $bead_id" >&2
-            bd set-state "$bead_id" "claimed_at=$(date +%s)" >/dev/null 2>&1 \
-                || echo "WARN: bead_claim: failed to write claimed_at for $bead_id" >&2
+        if output=$(bd update "$bead_id" --claim \
+                "${remove_args[@]}" \
+                --add-label "claimed_by:$session_id" \
+                --add-label "claimed_at:$epoch" 2>&1); then
             return 0
         fi
         # Check if actual claim conflict (not lock contention)
@@ -1665,14 +1680,30 @@ bead_release() {
         return 0  # Another session holds this — don't release
     fi
 
-    if [[ "$keep_status" == false ]]; then
-        bd update "$bead_id" --assignee="" --status=open >/dev/null 2>&1 || true
-    else
-        bd update "$bead_id" --assignee="" >/dev/null 2>&1 || true
+    # Strip existing claim labels for atomic replacement
+    local existing_cb existing_ca
+    existing_cb=$(bd state "$bead_id" claimed_by 2>/dev/null) || existing_cb=""
+    existing_ca=$(bd state "$bead_id" claimed_at 2>/dev/null) || existing_ca=""
+    local remove_args=()
+    if [[ -n "$existing_cb" && "$existing_cb" != *"no claimed_by"* ]]; then
+        remove_args+=(--remove-label "claimed_by:$existing_cb")
     fi
-    # Sentinel values — bd rejects empty values in set-state
-    bd set-state "$bead_id" "claimed_by=released" >/dev/null 2>&1 || true
-    bd set-state "$bead_id" "claimed_at=0" >/dev/null 2>&1 || true
+    if [[ -n "$existing_ca" && "$existing_ca" != *"no claimed_at"* ]]; then
+        remove_args+=(--remove-label "claimed_at:$existing_ca")
+    fi
+
+    # Atomic release: status + assignee + sentinel labels in single bd update call
+    if [[ "$keep_status" == false ]]; then
+        bd update "$bead_id" --assignee="" --status=open \
+            "${remove_args[@]}" \
+            --add-label "claimed_by:released" \
+            --add-label "claimed_at:0" >/dev/null 2>&1 || true
+    else
+        bd update "$bead_id" --assignee="" \
+            "${remove_args[@]}" \
+            --add-label "claimed_by:released" \
+            --add-label "claimed_at:0" >/dev/null 2>&1 || true
+    fi
 }
 
 # ─── Invalidation ─────────────────────────────────────────────────

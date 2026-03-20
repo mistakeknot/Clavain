@@ -189,8 +189,10 @@ func cmdSprintRelease(args []string) error {
 	return nil
 }
 
-// cmdBeadClaim acquires an advisory bead claim via bd set-state.
+// cmdBeadClaim acquires an advisory bead claim via atomic bd update.
 // Args: bead_id [session_id]
+// Combines claim identity labels with status update in a single bd call
+// to eliminate the crash window between claim and identity write.
 // Exit 1 if a fresh claim exists from another session.
 func cmdBeadClaim(args []string) error {
 	if len(args) < 1 {
@@ -244,15 +246,32 @@ func cmdBeadClaim(args []string) error {
 		}
 	}
 
-	// Set claim
-	_, _ = runBD("set-state", beadID, "claimed_by="+sessionID)
-	_, _ = runBD("set-state", beadID, "claimed_at="+strconv.FormatInt(time.Now().Unix(), 10))
+	// Build atomic update args: remove old labels, add new ones
+	epoch := strconv.FormatInt(time.Now().Unix(), 10)
+	updateArgs := []string{"update", beadID}
+	if existingClaim != "" && !strings.HasPrefix(existingClaim, "(no ") {
+		updateArgs = append(updateArgs, "--remove-label", "claimed_by:"+existingClaim)
+	}
+	existingAt := ""
+	if out, err := runBD("state", beadID, "claimed_at"); err == nil {
+		existingAt = strings.TrimSpace(string(out))
+	}
+	if existingAt != "" && !strings.HasPrefix(existingAt, "(no ") {
+		updateArgs = append(updateArgs, "--remove-label", "claimed_at:"+existingAt)
+	}
+	updateArgs = append(updateArgs,
+		"--add-label", "claimed_by:"+sessionID,
+		"--add-label", "claimed_at:"+epoch,
+	)
+
+	_, _ = runBD(updateArgs...)
 	return nil
 }
 
 // cmdBeadRelease clears a bead claim.
 // Args: bead_id
 // Only releases if we own the claim (or claim is empty/stale).
+// Uses atomic bd update to set sentinel labels in a single call.
 func cmdBeadRelease(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: bead-release <bead_id>")
@@ -276,8 +295,24 @@ func cmdBeadRelease(args []string) error {
 		return nil // Another session holds this — don't release
 	}
 
-	_, _ = runBD("set-state", beadID, "claimed_by=released")
-	_, _ = runBD("set-state", beadID, "claimed_at=0")
+	// Build atomic update: remove old labels, add sentinel labels
+	updateArgs := []string{"update", beadID}
+	if currentClaimer != "" && !strings.HasPrefix(currentClaimer, "(no ") {
+		updateArgs = append(updateArgs, "--remove-label", "claimed_by:"+currentClaimer)
+	}
+	existingAt := ""
+	if out, err := runBD("state", beadID, "claimed_at"); err == nil {
+		existingAt = strings.TrimSpace(string(out))
+	}
+	if existingAt != "" && !strings.HasPrefix(existingAt, "(no ") {
+		updateArgs = append(updateArgs, "--remove-label", "claimed_at:"+existingAt)
+	}
+	updateArgs = append(updateArgs,
+		"--add-label", "claimed_by:released",
+		"--add-label", "claimed_at:0",
+	)
+
+	_, _ = runBD(updateArgs...)
 	return nil
 }
 
@@ -313,9 +348,25 @@ func cmdBeadHeartbeat(args []string) error {
 		return nil // Another session holds this — don't touch
 	}
 
-	// Refresh timestamp and claim identity
-	_, _ = runBD("set-state", beadID, "claimed_by="+ourSession)
-	_, _ = runBD("set-state", beadID, "claimed_at="+strconv.FormatInt(time.Now().Unix(), 10))
+	// Atomic refresh: remove old labels, add new ones in single call
+	epoch := strconv.FormatInt(time.Now().Unix(), 10)
+	updateArgs := []string{"update", beadID}
+	if currentClaimer != "" && !strings.HasPrefix(currentClaimer, "(no ") {
+		updateArgs = append(updateArgs, "--remove-label", "claimed_by:"+currentClaimer)
+	}
+	existingAt := ""
+	if out, err := runBD("state", beadID, "claimed_at"); err == nil {
+		existingAt = strings.TrimSpace(string(out))
+	}
+	if existingAt != "" && !strings.HasPrefix(existingAt, "(no ") {
+		updateArgs = append(updateArgs, "--remove-label", "claimed_at:"+existingAt)
+	}
+	updateArgs = append(updateArgs,
+		"--add-label", "claimed_by:"+ourSession,
+		"--add-label", "claimed_at:"+epoch,
+	)
+
+	_, _ = runBD(updateArgs...)
 	return nil
 }
 
