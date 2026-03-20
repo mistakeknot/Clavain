@@ -133,7 +133,12 @@ if [[ -z "$REASON" && "${CLAVAIN_SELF_DISPATCH:-}" == "true" ]]; then
             source "${SCRIPT_DIR}/lib-dispatch.sh" 2>/dev/null || true
             if intercore_sentinel_check_or_legacy "dispatch_cooldown" "$SESSION_ID" "${DISPATCH_COOLDOWN_SEC:-20}"; then
                 if type dispatch_cap_check &>/dev/null && type dispatch_circuit_check &>/dev/null; then
-                    if dispatch_cap_check "$SESSION_ID" && dispatch_circuit_check "$SESSION_ID"; then
+                    # Watchdog pause checks: factory-level and agent-level
+                    if [[ -f "$HOME/.clavain/factory-paused.json" ]]; then
+                        : # Factory paused by watchdog tier 4 — skip dispatch
+                    elif [[ -n "$SESSION_ID" && -f "$HOME/.clavain/paused-agents/$(echo "$SESSION_ID" | tr '/:' '__').json" ]]; then
+                        : # Agent paused by watchdog tier 3 — skip dispatch
+                    elif dispatch_cap_check "$SESSION_ID" && dispatch_circuit_check "$SESSION_ID"; then
                         # WIP check (advisory — atomic claim is the real guard)
                         _wip_count=0
                         if command -v bd &>/dev/null; then

@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	// beadClaimStaleSeconds is the staleness threshold for bead claims (45 minutes).
-	// Matches heartbeat interval (60s) + TTL in lib-discovery.sh (2700s).
-	beadClaimStaleSeconds = 2700
+	// beadClaimStaleSeconds is the staleness threshold for bead claims (10 minutes).
+	// Shortened from 45min to 10min per flux-drive research (Airflow 10:1 ratio with 60s heartbeat).
+	// Watchdog sweep uses this as the TTL; old 2700s value was too slow for automated recovery.
+	beadClaimStaleSeconds = 600
 	// sprintClaimStaleMinutes is the staleness threshold for sprint session claims (60 minutes).
 	sprintClaimStaleMinutes = 60
 )
@@ -269,14 +270,26 @@ func cmdBeadClaim(args []string) error {
 }
 
 // cmdBeadRelease clears a bead claim.
-// Args: bead_id
+// Args: bead_id [--failure-class=retriable|spec_blocked|env_blocked]
 // Only releases if we own the claim (or claim is empty/stale).
 // Uses atomic bd update to set sentinel labels in a single call.
+// If --failure-class is provided, writes failure classification to bead state.
 func cmdBeadRelease(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: bead-release <bead_id>")
+		return fmt.Errorf("usage: bead-release <bead_id> [--failure-class=<class>]")
 	}
 	beadID := args[0]
+
+	// Parse optional --failure-class flag
+	failureClass := ""
+	for _, arg := range args[1:] {
+		if strings.HasPrefix(arg, "--failure-class=") {
+			failureClass = strings.TrimPrefix(arg, "--failure-class=")
+		}
+	}
+	if failureClass != "" {
+		_, _ = runBDQuiet("set-state", beadID, "failure_class="+failureClass)
+	}
 
 	if !bdAvailable() {
 		return nil
