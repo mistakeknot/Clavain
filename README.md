@@ -19,6 +19,23 @@ claude plugin install clavain@interagency-marketplace
 claude --plugin-dir /path/to/Clavain
 ```
 
+### Uninstall
+
+```bash
+# Remove Clavain + companions from Claude Code
+bash scripts/uninstall.sh
+
+# Remove Clavain only, keep companions
+bash scripts/uninstall.sh --keep-companions
+
+# Full platform uninstall (from Demarch repo)
+bash install.sh --uninstall
+```
+
+### Prerequisites
+
+**Go 1.22+** is required — `clavain-cli` is a Go binary built from source. Install from [go.dev/dl](https://go.dev/dl/).
+
 ## Codex install
 
 Clavain can also run in Codex via native skill discovery and generated prompt wrappers.
