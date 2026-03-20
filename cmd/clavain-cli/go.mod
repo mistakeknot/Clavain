@@ -31,4 +31,4 @@ require (
 
 replace github.com/strongdm/ai-cxdb/clients/go => ../../vendor-src/cxdb/clients/go
 
-replace github.com/mistakeknot/intercore => ../../../../core/intercore
+replace github.com/mistakeknot/intercore => ../../vendor-src/intercore
