@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Stop hook: unified post-turn actions (compound + drift check)
+# Stop hook: unified post-turn actions (compound + dispatch + drift check)
 #
 # Detects work signals once using lib-signals.sh, then applies tiered thresholds:
-#   - weight >= 3 → trigger /clavain:compound (non-trivial problem-solving)
-#   - weight >= 2 → trigger /interwatch:watch (doc drift check)
+#   - weight >= 4 → trigger /clavain:compound (non-trivial problem-solving)
+#   - bead-closed + CLAVAIN_SELF_DISPATCH=true → self-dispatch (autonomous bead pickup)
+#   - weight >= 3 → trigger /interwatch:watch (doc drift check)
 #
 # Merged from auto-compound.sh + auto-drift-check.sh (iv-rn81).
-# Previously these were separate hooks competing for the same stop sentinel,
-# meaning only one could ever fire per stop cycle.
+# Self-dispatch tier added in ysxe.3 (2026-03-20): merged here per flux-drive
+# review to avoid sentinel conflict with separate hook file.
 #
 # Guards: stop_hook_active, shared sentinel, per-repo opt-out, per-action throttle.
 # Returns JSON with decision:"block" + reason when action is warranted.
@@ -100,38 +101,79 @@ EOF
     fi
 fi
 
-# Tiered decision: compound > drift check
+# Tiered decision: compound > dispatch > drift check
 # Weight >= 4: non-trivial problem-solving → compound (raised from 3)
+# bead-closed + opt-in: autonomous dispatch → claim next bead
 # Weight >= 3: shipped work → drift check (raised from 2)
 # Weight < 3: nothing to do
+#
+# Dispatch is between compound and drift: completing the next bead is more
+# valuable than checking doc staleness. Compound takes priority because it
+# captures knowledge that would otherwise be lost.
+
+REASON=""
 
 if [[ "$WEIGHT" -ge 4 ]]; then
     # Check per-repo opt-out for compound
-    if [[ -f ".claude/clavain.no-autocompound" ]]; then
-        exit 0
+    if [[ ! -f ".claude/clavain.no-autocompound" ]]; then
+        # Check compound-specific throttle (5-min cooldown)
+        if intercore_sentinel_check_or_legacy "compound_throttle" "$SESSION_ID" 300; then
+            REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] (weight ${WEIGHT}) in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."
+        fi
     fi
-    # Check compound-specific throttle (5-min cooldown)
-    intercore_check_or_die "compound_throttle" "$SESSION_ID" 300
+fi
 
-    REASON="Auto-compound check: detected compoundable signals [${SIGNALS}] (weight ${WEIGHT}) in this turn. Evaluate whether the work just completed contains non-trivial problem-solving worth documenting. If YES (multiple investigation steps, non-obvious solution, or reusable insight): briefly tell the user what you are documenting (one sentence), then immediately run /clavain:compound using the Skill tool. If NO (trivial fix, routine commit, or already documented), say nothing and stop."
-
-elif [[ "$WEIGHT" -ge 3 ]]; then
-    # Check per-repo opt-out for drift check
-    if [[ -f ".claude/clavain.no-driftcheck" ]]; then
-        exit 0
+# Self-dispatch tier: requires bead-closed signal + explicit opt-in.
+# Only fires if compound didn't claim this cycle (REASON still empty).
+# Uses sentinel_check_or_legacy (returns 1 if throttled) instead of
+# check_or_die (which would exit the entire script and block drift check).
+if [[ -z "$REASON" && "${CLAVAIN_SELF_DISPATCH:-}" == "true" ]]; then
+    if [[ "$SIGNALS" == *"bead-closed"* ]]; then
+        if [[ ! -f ".claude/clavain.no-selfdispatch" ]]; then
+            source "${SCRIPT_DIR}/lib-dispatch.sh" 2>/dev/null || true
+            if intercore_sentinel_check_or_legacy "dispatch_cooldown" "$SESSION_ID" "${DISPATCH_COOLDOWN_SEC:-20}"; then
+                if type dispatch_cap_check &>/dev/null && type dispatch_circuit_check &>/dev/null; then
+                    if dispatch_cap_check "$SESSION_ID" && dispatch_circuit_check "$SESSION_ID"; then
+                        # WIP check (advisory — atomic claim is the real guard)
+                        _wip_count=0
+                        if command -v bd &>/dev/null; then
+                            _wip_count=$(bd list --status=in_progress --json 2>/dev/null \
+                                | jq --arg sid "$SESSION_ID" \
+                                    '[.[] | select(.assignee == $sid or .assignee == "unknown")] | length' \
+                                    2>/dev/null) || _wip_count=0
+                        fi
+                        if [[ "${_wip_count:-0}" -eq 0 ]]; then
+                            _dispatch_result=""
+                            _dispatch_result=$(dispatch_attempt_claim "$SESSION_ID" 2>/dev/null) || _dispatch_result=""
+                            if [[ -n "$_dispatch_result" ]]; then
+                                _d_bead="${_dispatch_result%%|*}"
+                                _d_score="${_dispatch_result#*|}"
+                                REASON="Self-dispatch: claimed ${_d_bead} (score ${_d_score}). Run /clavain:route ${_d_bead}"
+                            fi
+                        fi
+                    fi
+                fi
+            fi
+        fi
     fi
-    # Check drift-specific throttle (10-min cooldown)
-    intercore_check_or_die "drift_throttle" "$SESSION_ID" 600
+fi
 
-    # Guard: interwatch must be installed
-    source "${SCRIPT_DIR}/lib.sh" 2>/dev/null || true
-    INTERWATCH_ROOT=$(_discover_interwatch_plugin)
-    if [[ -z "$INTERWATCH_ROOT" ]]; then
-        exit 0
+# Drift check tier: fires if neither compound nor dispatch claimed this cycle.
+if [[ -z "$REASON" && "$WEIGHT" -ge 3 ]]; then
+    if [[ ! -f ".claude/clavain.no-driftcheck" ]]; then
+        if intercore_sentinel_check_or_legacy "drift_throttle" "$SESSION_ID" 600; then
+            # Guard: interwatch must be installed
+            source "${SCRIPT_DIR}/lib.sh" 2>/dev/null || true
+            INTERWATCH_ROOT=$(_discover_interwatch_plugin)
+            if [[ -n "$INTERWATCH_ROOT" ]]; then
+                REASON="Auto-drift-check: detected shipped-work signals [${SIGNALS}] (weight ${WEIGHT}). Documentation may be stale. Run /interwatch:watch using the Skill tool to scan for doc drift. If interwatch finds drift, follow its recommendations (auto-refresh for Certain/High confidence, suggest for Medium)."
+            fi
+        fi
     fi
+fi
 
-    REASON="Auto-drift-check: detected shipped-work signals [${SIGNALS}] (weight ${WEIGHT}). Documentation may be stale. Run /interwatch:watch using the Skill tool to scan for doc drift. If interwatch finds drift, follow its recommendations (auto-refresh for Certain/High confidence, suggest for Medium)."
-else
+# No tier matched — nothing to do
+if [[ -z "$REASON" ]]; then
     exit 0
 fi
 
