@@ -186,6 +186,10 @@ func main() {
 	case "validate-linkage":
 		err = cmdValidateLinkage(args)
 
+	// Quality Gates
+	case "quality-gate-run":
+		err = cmdQualityGateRun(args)
+
 	// Daemon
 	case "daemon":
 		err = cmdDaemon(args)
@@ -260,6 +264,9 @@ Bead Claiming:
   bead-claim              <bead_id> [session_id]
   bead-release            <bead_id>
   bead-heartbeat          <bead_id>     Refresh claimed_at timestamp
+
+Quality Gates:
+  quality-gate-run        [project_dir]   Run deterministic gates (build/test/lint)
 
 Checkpoints:
   checkpoint-write    <bead_id> <phase> <step> <plan_path>
