@@ -12,50 +12,61 @@ Generate a compact, high-signal summary of this session that the user can paste 
 
 ## What to include
 
-Scan the full conversation and produce a markdown block covering exactly these sections:
+Scan the full conversation and produce a markdown block covering exactly these sections, in this order:
 
-### 1. What was done
-- Bullet list of concrete changes made (files created/edited, commands run, features built)
-- Include commit hashes if any commits were made this session
+### 1. Directive
+The most important section. Write as a direct instruction to the next agent.
+- Lead with: `> Your job is to [X]. Start by [Y]. Verify with [Z].`
+- Be specific: name files to edit, tests to run, commands to verify
+- If multiple possible next steps, pick the highest-priority one as primary; list alternatives as `Fallback:` items
+- Include blockers or open decisions the next session must resolve
+- If beads are in progress, list IDs and status here (e.g., `Demarch-abc1 — in_progress, claimed`)
 
-### 2. Current state
-- What's working, what's broken, what's partially done
-- Any running processes, open PRs, or pending operations
-- Current branch and last commit
+### 2. Dead ends
+What was tried and didn't work. This is the highest-signal section for preventing wasted effort.
+- Format: `[approach] — [why it failed or was abandoned]`
+- Include partial approaches that were promising but dropped, and why
+- If nothing failed this session, omit the section
 
-### 3. What's next
-- Immediate next steps the user would likely pick up
-- Any blockers, open questions, or decisions deferred
+### 3. Non-obvious context
+Things a new session can't derive from `git log`, `git status`, or CLAUDE.md:
+- Why approach A was chosen over B
+- Gotchas discovered (workarounds, config quirks, tool behavior)
+- In-memory state: environment variables set, processes running, temporary config
+- Key file paths for work in progress (absolute paths)
 
-### 4. Key context
-- Non-obvious decisions made and why (things a new session wouldn't infer from code alone)
-- Gotchas encountered and workarounds applied
-- Relevant file paths for the work in progress
+## What to OMIT
+
+A new session will always run `git log`, `git status`, and read CLAUDE.md. Do not repeat:
+- Commit hashes, branch name, or last commit (derivable from git)
+- List of files changed (derivable from git status/diff)
+- What's working vs broken if obvious from tests (derivable from running tests)
+- Architecture or conventions already in CLAUDE.md
 
 ## Format
 
-Output the handoff as a single fenced code block (```markdown) so the user can copy it cleanly. Keep it under 60 lines. Prefer terse bullet points over prose. Use absolute file paths.
+Output as a single fenced code block (```markdown) so the user can copy it cleanly. **Max 40 lines.** Terse bullets only. Absolute file paths.
 
 ```markdown
 ## Session Handoff — [date] [brief topic]
 
-### Done
-- ...
+### Directive
+> Your job is to [specific task]. Start by [first action]. Verify with [command].
+- Fallback: [alternative if primary is blocked]
+- Beads: [IDs and status, if any]
 
-### Current State
-- ...
+### Dead Ends
+- [approach] — [why it failed]
 
-### Next Steps
-- ...
-
-### Key Context
-- ...
+### Context
+- [non-obvious decision or gotcha]
+- [key file paths]
 ```
 
 ## Rules
 
-- Do NOT pad with generic advice or pleasantries
-- Do NOT include information the new session can derive from `git log`, `git status`, or reading CLAUDE.md
-- DO include session-specific knowledge that would be lost: why you chose approach A over B, what you tried that failed, config that only exists in memory
+- The Directive is the lead section — a new session receiving this handoff should start working immediately without asking "what should I do?"
+- Do NOT pad with pleasantries, summaries of what was done, or generic advice
+- Do NOT duplicate what git or CLAUDE.md already provide
+- DO include session-specific knowledge that dies when this conversation closes
 - If the user provides a focus area argument, weight the summary toward that topic
-- If beads are in progress, include their IDs and status
