@@ -149,10 +149,6 @@
         "description": "Shared embedding and Exa search library"
       },
       {
-        "source": "interserve@interagency-marketplace",
-        "description": "Codex spark classifier and context compression (MCP)"
-      },
-      {
         "source": "interpub@interagency-marketplace",
         "description": "Plugin publishing automation"
       },
@@ -265,10 +261,6 @@
       {
         "source": "plugin-dev@claude-plugins-official",
         "description": "Plugin development tools"
-      },
-      {
-        "source": "serena@claude-plugins-official",
-        "description": "Semantic coding tools"
       },
       {
         "source": "security-guidance@claude-plugins-official",
