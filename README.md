@@ -234,7 +234,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/review-discipline` | Disciplined code review and feedback triage |
 | `/execute-plan` | Execute plan in batches with checkpoints |
 | `/plan-review` | Parallel plan review |
-| `/quality-gates` | Auto-select the right reviewers |
+| `/quality-gates` | Gate orchestrator — delegates review to flux-drive, enforces pass/fail |
 | `/interserve` | Run Codex-first execution flow for larger scope work |
 | `/fixbuild` | Fast build-error fix loop: run, parse, fix, re-run |
 | `/tdd` | Run RED-GREEN-REFACTOR for a task before coding |

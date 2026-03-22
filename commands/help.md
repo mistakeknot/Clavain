@@ -15,7 +15,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/clavain:tdd` | RED-GREEN-REFACTOR before coding | `/tdd implement auth refresh flow` |
 | `/clavain:work` | Execute plan with quality checkpoints | `/work docs/plans/2026-02-11-auth.md` |
 | `/interflux:flux-drive` | Deep multi-agent review (any input) | `/flux-drive docs/plans/my-plan.md` |
-| `/clavain:quality-gates` | Auto-select reviewers from git diff | `/quality-gates` |
+| `/clavain:quality-gates` | Gate orchestrator — delegates to flux-drive, enforces pass/fail | `/quality-gates` |
 | `/clavain:resolve` | Fix findings from TODOs/PR comments | `/resolve` |
 | `/interpeer:interpeer` | Cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
 

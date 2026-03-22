@@ -47,7 +47,7 @@ For the compact version, see the `using-clavain` skill.
 | Command | Use when... | Input |
 |---------|------------|-------|
 | `/interflux:flux-drive` | Deep review of documents, plans, repos, or large diffs with scored agent triage | File, directory, or diff |
-| `/clavain:quality-gates` | Quick code review of working changes (auto-selects agents from git diff) | None (uses git diff) |
+| `/clavain:quality-gates` | Gate orchestrator — prepares diff, delegates to flux-drive for agent triage, enforces pass/fail | None (uses git diff) |
 | `/clavain:clavain-review` | PR-focused multi-agent review | PR number, URL, or branch |
 | `/clavain:plan-review` | Lightweight 3-agent plan review | Plan file |
 | `/interflux:flux-gen` | Generate project-specific domain review agents in `.claude/agents/` | Optional: domain name |
