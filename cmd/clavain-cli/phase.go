@@ -310,6 +310,9 @@ var knownArtifactTypes = map[string]bool{
 	"reflection":      true,
 	"landed":          true,
 	"closed":          true,
+	"degradation":     true,
+	"test-pass-sha":   true,
+	"prior-art":       true,
 }
 
 // cmdSetArtifact records an artifact for the current phase.
@@ -514,6 +517,8 @@ func phaseToAction(phase string) string {
 		return "continue"
 	case "shipping":
 		return "ship"
+	case "reflect":
+		return "reflect" // identity mapping: reflect is both phase and action (unlike ship/closed)
 	case "done":
 		return "closed"
 	default:

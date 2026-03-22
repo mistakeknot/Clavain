@@ -50,6 +50,14 @@ clavain-cli sprint-init "$CLAVAIN_BEAD_ID"
 
 This single call validates the bead, reads complexity/phase/budget, registers interstat session attribution, and outputs a formatted status banner. No additional bootstrap commands needed.
 
+**Surface recent learnings:**
+```bash
+recent_learnings=$(clavain-cli recent-reflect-learnings "$CLAVAIN_BEAD_ID" 3 2>/dev/null) || recent_learnings=""
+if [[ -n "$recent_learnings" ]]; then
+    printf 'Past learnings that influenced this sprint:\n%s\n' "$recent_learnings"
+fi
+```
+
 Read the complexity from the banner output to decide routing and autonomy tier.
 
 ## Autonomy Tiers
@@ -117,8 +125,10 @@ Display at each advance: `Phase: <current> → <next> (auto-advancing)`. No "wha
 After each step (silent, skip on error):
 ```bash
 clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "<artifact_type>" "<artifact_path>"
-clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>"
+clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "<current_phase>" || echo "WARNING: phase advance failed (artifact was recorded)" >&2
 ```
+Artifact is always recorded even if advance fails. This is intentional — artifacts provide audit trail regardless of phase state. If advance fails, log the warning but do not halt the sprint.
+
 Pass artifact path when one exists; empty string otherwise (quality-gates, ship).
 
 ---
@@ -242,11 +252,30 @@ After resolving: if quality-gates found recurring patterns, run `/clavain:compou
 
 **Parallel Window 2 (optional):** If resolve has no blocking findings (all findings are P2+), resolve and reflect can run in parallel. Resolve writes `resolution` artifact; reflect writes `reflection` artifact — no type conflicts. Sprint waits for both artifacts before advancing to Step 10.
 
-`clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"` then `/reflect`.
+`clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"`
 
-`/reflect` owns artifact registration AND the `reflect → done` advance — do NOT call sprint-advance after it returns. Gate is soft (warn but allow if no reflect artifact).
+Note: This advances `shipping → reflect` in the kernel. Step 7's `sprint-advance "shipping"` advanced `executing → shipping`. Both pass `"shipping"` as `currentPhase` which causes `recordPhaseTokens` to double-record under the "shipping" key — this is a known calibration quirk (Demarch-84sv partial fix; full fix requires `recordPhaseTokens` to deduplicate).
+
+`/reflect`
+
+`/reflect` owns artifact registration AND the `reflect → done` advance — do NOT call sprint-advance after it returns. Gate is firm: Step 10 requires a reflect artifact with >= 3 substantive lines.
 
 ## Step 10: Ship
+
+**Reflect gate (firm):**
+```bash
+reflect_artifact=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "reflection" 2>/dev/null) || reflect_artifact=""
+if [[ -z "$reflect_artifact" || ! -f "$reflect_artifact" ]]; then
+    echo "ERROR: Step 10 requires a reflect artifact. Run /reflect first." >&2
+    exit 1
+fi
+# Check minimum content: >= 3 substantive lines (non-empty, outside frontmatter)
+body_lines=$(awk 'BEGIN{fm=0; count=0} /^---$/{fm++; next} fm>=2 && /[^ \t]/{count++} END{print count}' "$reflect_artifact")
+if [[ "$body_lines" -lt 3 ]]; then
+    echo "ERROR: Reflect artifact has $body_lines substantive lines (minimum: 3). Add more detail to $reflect_artifact." >&2
+    exit 1
+fi
+```
 
 Use `clavain:landing-a-change` skill to verify, document, commit.
 
@@ -283,9 +312,12 @@ If empty: `(no cost data — bead attribution not active)`
 
 ## Error Recovery
 
-1. Do NOT skip failed step
-2. Retry once with tighter scope
-3. If retry fails: report which step, the error, what succeeded
+When a subsystem fails, consult `commands/degraded-modes.yaml` for the appropriate degradation:
+
+1. Identify which subsystem failed (review-fleet, test-suite, intercore, routing, budget)
+2. Apply the degraded mode: set the flag, log to stderr, continue at reduced capability
+3. If multiple critical subsystems fail (level: checkpoint-only): save all work, commit clean changes, report diagnostic
+4. Record degradation events for sprint summary: `clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "degradation" "<subsystem>:<level>"`
 
 To resume: `/clavain:route` (auto-detects active sprint) or `/clavain:sprint --from-step <step>`.
 

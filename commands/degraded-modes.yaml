@@ -1,0 +1,47 @@
+# Degraded Mode Definitions
+# When a subsystem fails, sprint continues at reduced capability instead of halting.
+# Each mode defines: trigger, reduced capability, downstream impact.
+# This file is read by Claude (sprint.md Error Recovery), not by Go code.
+
+subsystems:
+  review-fleet:
+    trigger: "flux-drive agents return errors or timeout"
+    degraded: "Sprint continues with self-review only (no multi-agent analysis)"
+    flag: "review_degraded"
+    impact: "Quality gates run with reduced confidence; sprint summary notes unreviewed status"
+
+  test-suite:
+    trigger: "Test command fails with infrastructure error (not test failure)"
+    degraded: "Sprint continues; test step marked as skipped with reason"
+    flag: "tests_degraded"
+    impact: "Quality gates cannot verify correctness; manual testing recommended before ship"
+
+  intercore:
+    trigger: "ic commands fail (ECONNREFUSED, timeout, not installed)"
+    degraded: "Sprint uses bd-only tracking (no ic runs, budgets, or gates)"
+    flag: "intercore_degraded"
+    impact: "No budget enforcement, no kernel-level phase tracking"
+
+  routing:
+    trigger: "clavain-cli routing commands fail or routing.yaml missing"
+    degraded: "Sprint uses default model routing (no agent-specific optimization)"
+    flag: "routing_degraded"
+    impact: "May use more expensive models than necessary"
+
+  budget:
+    trigger: "Token budget exceeded or budget tracking unavailable"
+    degraded: "Sprint continues with soft budget warning per step"
+    flag: "budget_degraded"
+    impact: "No automatic pause on budget exceed; manual cost awareness required"
+
+ladder:
+  - level: full
+    description: "All subsystems operational"
+  - level: reduced
+    description: "1-2 non-critical subsystems degraded (routing, budget)"
+  - level: critical-only
+    description: "Review fleet or test suite degraded; proceed with caution"
+  - level: skeleton
+    description: "Intercore degraded; bd-only tracking"
+  - level: checkpoint-only
+    description: "Multiple critical subsystems down; save work and stop"

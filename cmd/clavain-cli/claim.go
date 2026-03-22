@@ -18,8 +18,8 @@ const (
 	sprintClaimStaleMinutes = 60
 )
 
-// isClaimStale returns true if the age in seconds exceeds the 45-minute threshold.
-// Matches bash: `if [[ $age_sec -lt 2700 ]]` — so exactly 2700 is NOT stale.
+// isClaimStale returns true if the age in seconds exceeds the 10-minute threshold.
+// Matches beadClaimStaleSeconds (600s). Exactly 600 is NOT stale (> check, not >=).
 func isClaimStale(ageSeconds int64) bool {
 	return ageSeconds > beadClaimStaleSeconds
 }
@@ -145,7 +145,9 @@ func cmdSprintClaim(args []string) error {
 		return fmt.Errorf("sprint_claim: failed to register session agent for %s", beadID)
 	}
 
-	// Also set bd claim for cross-session visibility (ignore errors)
+	// Also set bd claim for cross-session visibility (ignore errors).
+	// cmdBeadClaim acquires its own "bead-claim" lock — different namespace
+	// from this function's "sprint-claim" lock, so no deadlock risk.
 	_ = cmdBeadClaim([]string{beadID, sessionID})
 	return nil
 }
@@ -190,10 +192,11 @@ func cmdSprintRelease(args []string) error {
 	return nil
 }
 
-// cmdBeadClaim acquires an advisory bead claim via atomic bd update.
+// cmdBeadClaim acquires an advisory bead claim via bd labels.
 // Args: bead_id [session_id]
-// Combines claim identity labels with status update in a single bd call
-// to eliminate the crash window between claim and identity write.
+// Advisory locking — serializes concurrent Go callers via ic lock (or mkdir fallback)
+// but does not cover direct `bd` CLI invocations from shell scripts. The claim system
+// is best-effort; downstream consumers must tolerate stale or contested claims.
 // Exit 1 if a fresh claim exists from another session.
 func cmdBeadClaim(args []string) error {
 	if len(args) < 1 {
@@ -210,6 +213,21 @@ func cmdBeadClaim(args []string) error {
 
 	if !bdAvailable() {
 		return nil
+	}
+
+	// Advisory lock: serialize concurrent Go callers (mirrors cmdSprintClaim pattern).
+	// Try ic lock first, fall back to mkdir lock.
+	_, lockErr := runIC("lock", "acquire", "bead-claim", beadID, "--timeout=500ms")
+	if lockErr != nil {
+		lockErr = fallbackLock("bead-claim", beadID)
+		if lockErr != nil {
+			return fmt.Errorf("bead-claim: lock contention for %s", beadID)
+		}
+		defer fallbackUnlock("bead-claim", beadID)
+	} else {
+		defer func() {
+			_, _ = runIC("lock", "release", "bead-claim", beadID)
+		}()
 	}
 
 	// Check existing claim
@@ -265,7 +283,9 @@ func cmdBeadClaim(args []string) error {
 		"--add-label", "claimed_at:"+epoch,
 	)
 
-	_, _ = runBD(updateArgs...)
+	if _, err := runBD(updateArgs...); err != nil {
+		return fmt.Errorf("bead-claim: bd update failed for %s: %w", beadID, err)
+	}
 	return nil
 }
 

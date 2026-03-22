@@ -111,6 +111,8 @@ func main() {
 	// Stats
 	case "sprint-stats":
 		err = cmdSprintStats(args)
+	case "recent-reflect-learnings":
+		err = cmdRecentReflectLearnings(args)
 
 	// Agent tracking
 	case "sprint-track-agent":

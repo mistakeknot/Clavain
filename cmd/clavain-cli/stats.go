@@ -199,6 +199,131 @@ func cmdSprintStats(args []string) error {
 	return nil
 }
 
+// cmdRecentReflectLearnings surfaces recent reflect learnings from sibling beads.
+// Reads closed siblings under the same parent, extracts reflection artifact content.
+// Usage: recent-reflect-learnings <bead_id> [max_count]
+func cmdRecentReflectLearnings(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: recent-reflect-learnings <bead_id> [max_count]")
+	}
+	beadID := args[0]
+	maxCount := 3
+	if len(args) >= 2 {
+		if n, err := strconv.Atoi(args[1]); err == nil && n > 0 {
+			maxCount = n
+		}
+	}
+
+	if !bdAvailable() {
+		return nil
+	}
+
+	// Find parent bead from dependency list
+	depsOut, err := runBD("dep", "list", beadID, "--json")
+	if err != nil {
+		return nil // no deps — no siblings to query
+	}
+
+	type DepEntry struct {
+		ID   string `json:"id"`
+		Type string `json:"dependency_type"`
+	}
+	var deps []DepEntry
+	if err := json.Unmarshal(depsOut, &deps); err != nil {
+		return nil
+	}
+
+	// Find parent: bd dep list returns edges from bead's perspective.
+	// parent-child deps where ID != beadID point to the parent.
+	// If bd returns bidirectional edges, the first non-self match may be a sibling;
+	// current bd behavior returns only direct edges (verified v0.60).
+	parentID := ""
+	for _, d := range deps {
+		if d.Type == "parent-child" && d.ID != beadID {
+			parentID = d.ID
+			break
+		}
+	}
+	if parentID == "" {
+		return nil // no parent — standalone bead
+	}
+
+	// List closed siblings under the same parent
+	siblingsOut, err := runBD("list", "--parent="+parentID, "--status=closed", "--json")
+	if err != nil {
+		return nil
+	}
+
+	type BeadEntry struct {
+		ID string `json:"id"`
+	}
+	var siblings []BeadEntry
+	if err := json.Unmarshal(siblingsOut, &siblings); err != nil {
+		return nil
+	}
+
+	found := 0
+	for _, sib := range siblings {
+		if sib.ID == beadID || found >= maxCount {
+			continue
+		}
+		// Check for reflection artifact
+		artOut, err := runBD("state", sib.ID, "artifact_reflection")
+		if err != nil {
+			continue
+		}
+		artPath := strings.TrimSpace(string(artOut))
+		if artPath == "" || strings.HasPrefix(artPath, "(no ") {
+			continue
+		}
+
+		// Read file and extract substantive lines (skip frontmatter)
+		content, err := os.ReadFile(artPath)
+		if err != nil {
+			continue
+		}
+
+		lines := strings.Split(string(content), "\n")
+		inFrontmatter := false
+		pastFrontmatter := false
+		var substantive []string
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "---" {
+				if !inFrontmatter && !pastFrontmatter {
+					inFrontmatter = true
+					continue
+				}
+				if inFrontmatter {
+					inFrontmatter = false
+					pastFrontmatter = true
+					continue
+				}
+			}
+			if inFrontmatter {
+				continue
+			}
+			if trimmed != "" {
+				substantive = append(substantive, trimmed)
+			}
+		}
+
+		if len(substantive) == 0 {
+			continue
+		}
+
+		// Take first 3 substantive lines
+		limit := 3
+		if len(substantive) < limit {
+			limit = len(substantive)
+		}
+		fmt.Fprintf(os.Stdout, "  [%s] %s\n", sib.ID, strings.Join(substantive[:limit], " | "))
+		found++
+	}
+
+	return nil
+}
+
 // parseDuration parses "7d", "30d", "24h" etc. into time.Duration.
 func parseDuration(s string) time.Duration {
 	s = strings.TrimSpace(s)

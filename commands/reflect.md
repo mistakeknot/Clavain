@@ -41,10 +41,9 @@ Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no fur
 
 2. **Check existing artifact.**
    ```bash
-   artifacts=$(bd state "<sprint_id>" sprint_artifacts 2>/dev/null) || artifacts="{}"
-   existing=$(echo "$artifacts" | jq -r '.reflect // empty' 2>/dev/null)
+   existing=$(clavain-cli get-artifact "<sprint_id>" "reflection" 2>/dev/null) || existing=""
    ```
-   If non-empty: report it, skip to step 5.
+   If non-empty AND the file has >= 3 substantive lines (non-empty, non-frontmatter): report it, skip to step 5. If the file exists but has < 3 substantive lines, proceed to step 3 to capture proper learnings.
 
 3. **Capture learnings (complexity-scaled).**
    ```bash
@@ -63,9 +62,11 @@ Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no fur
      ```
    If no context arg, extract from conversation history.
 
+   **Minimum content check (advisory):** After writing, count substantive lines (non-empty, outside frontmatter `---` block). If < 3 lines, prompt: "Reflect artifact needs at least 3 substantive lines for the gate to pass. Add more detail about what was learned." The hard enforcement is in sprint.md Step 10's gate check.
+
 4. **Register artifact.**
    ```bash
-   clavain-cli set-artifact "<sprint_id>" "reflect" "<path_to_doc>"
+   clavain-cli set-artifact "<sprint_id>" "reflection" "<path_to_doc>"
    ```
 
 5. **Export session transcript (non-blocking).**
@@ -101,6 +102,6 @@ Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no fur
    fi
    ```
 
-Reflect gate requires at least one registered artifact for the reflect phase.
+Reflect gate is firm: requires a registered `"reflection"` artifact with >= 3 substantive lines. Step 10 will block without it.
 
 Do NOT display additional unchecked phases or pending steps after this. The reflect command's scope ends here.
