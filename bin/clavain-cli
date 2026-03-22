@@ -18,6 +18,11 @@ GO_BIN="$SCRIPT_DIR/clavain-cli-go"
 if [[ -x "$PLATFORM_BIN" ]]; then
     exec "$PLATFORM_BIN" "$@"
 fi
+# Rosetta 2 on macOS reports x86_64 for arm64 — try alternate arch
+if [[ "$_cli_os" == "darwin" && "$_cli_arch" == "amd64" ]]; then
+    ALT_BIN="$SCRIPT_DIR/clavain-cli-go-darwin-arm64"
+    [[ -x "$ALT_BIN" ]] && exec "$ALT_BIN" "$@"
+fi
 if [[ -x "$GO_BIN" ]]; then
     exec "$GO_BIN" "$@"
 fi

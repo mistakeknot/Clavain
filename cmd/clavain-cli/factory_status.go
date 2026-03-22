@@ -38,11 +38,12 @@ type priCount struct {
 }
 
 type wipEntry struct {
-	Agent  string `json:"agent"`
-	BeadID string `json:"bead_id"`
-	Title  string `json:"title"`
-	Age    string `json:"age"`
-	AgeSec int64  `json:"age_seconds"`
+	Agent   string `json:"agent"`
+	BeadID  string `json:"bead_id"`
+	Project string `json:"project"`
+	Title   string `json:"title"`
+	Age     string `json:"age"`
+	AgeSec  int64  `json:"age_seconds"`
 }
 
 type dispatchEntry struct {
@@ -231,12 +232,15 @@ func gatherWIPBalance() []wipEntry {
 			}
 		}
 
+		project := strings.ToLower(strings.SplitN(b.ID, "-", 2)[0])
+
 		entries = append(entries, wipEntry{
-			Agent:  agent,
-			BeadID: b.ID,
-			Title:  truncateStr(b.Title, 40),
-			Age:    formatDuration(ageSec),
-			AgeSec: ageSec,
+			Agent:   agent,
+			BeadID:  b.ID,
+			Project: project,
+			Title:   truncateStr(b.Title, 40),
+			Age:     formatDuration(ageSec),
+			AgeSec:  ageSec,
 		})
 	}
 
