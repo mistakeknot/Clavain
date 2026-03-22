@@ -20,10 +20,16 @@ type factoryStatus struct {
 	FactoryPaused bool            `json:"factory_paused"`
 }
 
+type fleetAgent struct {
+	SessionName string `json:"session_name"`
+	Active      bool   `json:"active"`
+}
+
 type fleetStatus struct {
-	TotalAgents  int `json:"total_agents"`
-	ActiveAgents int `json:"active_agents"`
-	IdleAgents   int `json:"idle_agents"`
+	TotalAgents  int          `json:"total_agents"`
+	ActiveAgents int          `json:"active_agents"`
+	IdleAgents   int          `json:"idle_agents"`
+	Agents       []fleetAgent `json:"agents,omitempty"`
 }
 
 type queueStatus struct {
@@ -133,17 +139,19 @@ func gatherFleetStatus() fleetStatus {
 		return fs
 	}
 	sessions := strings.Split(strings.TrimSpace(string(sessOut)), "\n")
+	var sessionNames []string
 	for _, s := range sessions {
 		if s == "" {
 			continue
 		}
+		sessionNames = append(sessionNames, s)
 		fs.TotalAgents++
 	}
 
 	// Count active: sessions with recent activity (pane has a running process)
+	activeSet := make(map[string]bool)
 	paneOut, err := runCommandExec("tmux", "list-panes", "-a", "-F", "#{session_name} #{pane_current_command}")
 	if err == nil {
-		activeSet := make(map[string]bool)
 		for _, line := range strings.Split(string(paneOut), "\n") {
 			parts := strings.SplitN(strings.TrimSpace(line), " ", 2)
 			if len(parts) == 2 && parts[1] != "bash" && parts[1] != "zsh" && parts[1] != "" {
@@ -151,6 +159,14 @@ func gatherFleetStatus() fleetStatus {
 			}
 		}
 		fs.ActiveAgents = len(activeSet)
+	}
+
+	// Build per-agent detail
+	for _, name := range sessionNames {
+		fs.Agents = append(fs.Agents, fleetAgent{
+			SessionName: name,
+			Active:      activeSet[name],
+		})
 	}
 
 	fs.IdleAgents = fs.TotalAgents - fs.ActiveAgents
