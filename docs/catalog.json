@@ -1,5 +1,5 @@
 {
-  "generated": "2026-03-18T07:49:45Z",
+  "generated": "2026-03-22T05:00:56Z",
   "counts": {
     "skills": 17,
     "agents": 6,
@@ -222,7 +222,7 @@
     },
     {
       "name": "quality-gates",
-      "description": "Auto-select and run the right reviewer agents based on what changed \u2014 one command for comprehensive quality review"
+      "description": "Gate orchestrator \u2014 prepares diff, delegates review to flux-drive, enforces pass/fail gate"
     },
     {
       "name": "recall",

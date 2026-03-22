@@ -1,18 +1,18 @@
 ---
 name: quality-gates
-description: Auto-select and run the right reviewer agents based on what changed — one command for comprehensive quality review
+description: Gate orchestrator — prepares diff, delegates review to flux-drive, enforces pass/fail gate
 argument-hint: "[optional: specific files or 'all' for full diff]"
 ---
 
 # Quality Gates
 
-Analyzes changes, invokes appropriate specialist agents, synthesizes findings.
+Gate orchestrator that composes flux-drive for agent selection/dispatch and owns the pass/fail gate decision. Does NOT select or dispatch agents itself — flux-drive is the single owner of agent triage.
 
 <BEHAVIORAL-RULES>
 1. **Execute phases in order.** No skipping or reordering.
 2. **Write findings to files.** Agent output goes to `{OUTPUT_DIR}/`, not conversation context.
 3. **Stop at gates.** FAIL blocks shipping — do not auto-proceed.
-4. **Exactly 7 phases (1-6).** Do NOT invent, rename, or append phases. Resolution and shipping are the sprint orchestrator's domain.
+4. **Exactly 4 phases (1-4).** Do NOT invent, rename, or append phases. Resolution and shipping are the sprint orchestrator's domain.
 </BEHAVIORAL-RULES>
 
 ## Progress Tracking
@@ -20,23 +20,18 @@ Analyzes changes, invokes appropriate specialist agents, synthesizes findings.
 ```
 Quality Gates Progress:
 - [ ] Phase 1: Analyze Changes
-- [ ] Phase 2: Select Reviewers
-- [ ] Phase 3: Prepare Diff
-- [ ] Phase 4: Run Agents
-- [ ] Phase 5: Synthesize + Record
-- [ ] Phase 5b: Gate Check
-- [ ] Phase 6: File Findings (optional)
+- [ ] Phase 2: Dispatch Review
+- [ ] Phase 3: Gate Decision
+- [ ] Phase 4: File Findings (optional)
 ```
 
-Mark each `[x]` as you complete it. After Phase 6, quality gates is **done** — no further phases exist.
+Mark each `[x]` as you complete it. After Phase 4, quality gates is **done** — no further phases exist.
 
 ## Input
 
 <review_target> #$ARGUMENTS </review_target>
 
 No arguments → analyze current unstaged + staged changes (`git diff` + `git diff --cached`).
-
-**Small change shortcut:** If diff is under 20 lines and touches one file, only run `interflux:review:fd-quality`. Skip phases 2-5b.
 
 ## Phase 1: Analyze Changes
 
@@ -45,90 +40,52 @@ git diff --name-only HEAD
 git diff --cached --name-only
 ```
 
-Classify each file by language (.go, .py, .ts/.tsx, .sh, .rs) and risk domain:
-- auth/crypto/secrets → Safety
-- migration/schema → Correctness
-- hot-path/cache/query → Performance
-- goroutine/async/channel → Correctness
+Count changed files and total diff lines:
+```bash
+DIFF_LINES=$(( $(git diff HEAD | wc -l) + $(git diff --cached | wc -l) ))
+CHANGED_FILES=$(( $(git diff --name-only HEAD | wc -l) + $(git diff --cached --name-only | wc -l) ))
+```
 
-## Phase 2: Select Reviewers
+**Small change shortcut:** If `DIFF_LINES < 20` and `CHANGED_FILES == 1`, run only a single fd-quality agent directly (Task tool, `subagent_type: "interflux:review:fd-quality"`). Include the diff in the prompt. Skip Phases 2-3. After agent returns, jump to Phase 4.
 
-**Always run:**
-- `interflux:review:fd-architecture` — structural review
-- `interflux:review:fd-quality` — naming, conventions, idioms
-
-**Risk-based:**
-- Auth/crypto/input/secrets → `interflux:review:fd-safety`
-- DB/migration/schema/backfill → `interflux:review:fd-correctness` + `data-migration-expert`
-- Performance-critical paths → `interflux:review:fd-performance`
-- Concurrent/async code → `interflux:review:fd-correctness`
-- User-facing flows → `interflux:review:fd-user-product`
-
-Max 5 agents total. Prioritize by risk.
-
-## Phase 3: Prepare Diff and Output Dir
+Otherwise, prepare the diff file for flux-drive:
 
 ```bash
 TS=$(date +%s)
-git diff HEAD > /tmp/qg-diff-${TS}.txt
-git diff --cached >> /tmp/qg-diff-${TS}.txt
+DIFF_PATH="/tmp/qg-diff-${TS}.txt"
+git diff HEAD > "$DIFF_PATH"
+git diff --cached >> "$DIFF_PATH"
+```
+
+## Phase 2: Dispatch Review
+
+Delegate agent selection, dispatch, and synthesis to flux-drive. flux-drive owns the triage algorithm, project agents, routing overrides, domain scoring, and content slicing.
+
+`/interflux:flux-drive $DIFF_PATH`
+
+flux-drive will:
+1. Detect `INPUT_TYPE = diff` from the file content
+2. Run its full triage (scoring, project agents, routing overrides, domain detection)
+3. Dispatch agents in stages
+4. Synthesize findings via intersynth
+
+After flux-drive completes, its output directory contains `synthesis.md` and per-agent findings.
+
+Locate the synthesis:
+```bash
+# flux-drive writes to docs/research/flux-drive/{INPUT_STEM}/
+DIFF_STEM=$(basename "$DIFF_PATH" .txt)
+FLUX_OUTPUT_DIR="${PROJECT_ROOT}/docs/research/flux-drive/${DIFF_STEM}"
+# Copy synthesis to quality-gates canonical location
 OUTPUT_DIR="${PROJECT_ROOT}/.clavain/quality-gates"
 mkdir -p "$OUTPUT_DIR"
-rm -f "$OUTPUT_DIR"/*.md "$OUTPUT_DIR"/*.md.partial 2>/dev/null
+cp "$FLUX_OUTPUT_DIR/synthesis.md" "$OUTPUT_DIR/synthesis.md" 2>/dev/null || true
+cp "$FLUX_OUTPUT_DIR/synthesis.json" "$OUTPUT_DIR/synthesis.json" 2>/dev/null || true
 ```
 
-## Phase 4: Run Agents in Parallel
+## Phase 3: Gate Decision
 
-Launch selected agents with `Task(run_in_background: true)`.
-
-Each agent prompt MUST include:
-1. Diff file path — agents read `/tmp/qg-diff-{TS}.txt` as first action
-2. Changed file list with reason for selection
-3. Relevant config files if touched (go.mod, tsconfig.json, Cargo.toml)
-
-**Output contract** (include verbatim in every agent prompt):
-```
-## Output Contract
-
-Write ALL findings to `{OUTPUT_DIR}/{agent-name}.md`.
-Do NOT return findings in response text.
-Response text: single line "Findings written to {OUTPUT_DIR}/{agent-name}.md"
-
-File structure:
-### Findings Index
-- SEVERITY | ID | "Section" | Title
-Verdict: safe|needs-changes|risky
-
-### Summary
-[3-5 lines]
-
-### Issues Found
-[ID. SEVERITY: Title — 1-2 sentences with evidence. file:line or hunk headers.]
-
-### Improvements
-[ID. Title — 1 sentence with rationale]
-
-Zero findings: empty index + verdict: safe.
-```
-
-Polling: check `{OUTPUT_DIR}/` every 30s for `.md` files (not `.md.partial`). Report `[2/4 agents complete]`. After 5 min, report pending agents.
-
-## Phase 5: Synthesize via Subagent
-
-Do NOT read agent output files directly — delegate to avoid agent prose in host context.
-
-```
-Task(intersynth:synthesize-review):
-  prompt: |
-    OUTPUT_DIR={OUTPUT_DIR}
-    VERDICT_LIB={CLAUDE_PLUGIN_ROOT}/hooks/lib-verdict.sh
-    MODE=quality-gates
-    CONTEXT="{X files changed across Y languages. Risk domains: [list]}"
-```
-
-After subagent returns: read `{OUTPUT_DIR}/synthesis.md` and present to user (~30-50 lines). Gate result (PASS/FAIL) comes from subagent return value.
-
-## Phase 5a: Record Verdicts to Interspect (silent, fail-open)
+### 3a: Record Verdicts to Interspect (silent, fail-open)
 
 ```bash
 if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
@@ -148,7 +105,9 @@ if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
 fi
 ```
 
-## Phase 5b: Gate Check + Record Phase (PASS only)
+### 3b: Enforce Gate + Record Phase
+
+Read `{OUTPUT_DIR}/synthesis.md` and present to user (~30-50 lines).
 
 ```bash
 BEAD_ID="${CLAVAIN_BEAD_ID:-}"
@@ -164,9 +123,9 @@ fi
 
 Do NOT set phase on FAIL — work needs fixing first.
 
-## Phase 6: File Findings as Beads (optional, Terminal)
+## Phase 4: File Findings as Beads (optional, Terminal)
 
-This is the **final phase**. After this, quality gates is complete. Do NOT add further phases — resolution and shipping are the sprint orchestrator's responsibility.
+This is the **final phase**. After this, quality gates is complete. Do NOT add further phases — resolution and shipping are the sprint orchestrator's domain.
 
 If `.beads/` initialized, ask: "File review findings as beads issues? (recommended for >3 findings)"
 
@@ -178,3 +137,4 @@ Do NOT display additional unchecked phases or pending steps after this phase.
 
 - Run after tests pass. Quality gates complement testing, not replace it.
 - P1 findings block shipping — present prominently, ensure resolution.
+- Agent selection, dispatch, and synthesis are flux-drive's responsibility — quality-gates does not select agents.

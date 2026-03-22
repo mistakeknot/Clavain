@@ -184,6 +184,13 @@ Parallel execution: use `dispatching-parallel-agents` skill for independent modu
 
 Run project test suite + linter. If tests fail: stop and fix — do NOT proceed with broken build. If no test command: note and proceed.
 
+**Record test-pass artifact** (canonical test result — downstream steps check this instead of re-running):
+```bash
+clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "test-pass-sha" "$(git rev-parse HEAD)" 2>/dev/null || true
+```
+
+This SHA lets landing-a-change (Step 10) skip re-running tests when HEAD hasn't moved since the last pass.
+
 ## Step 7: Quality Gates
 
 Budget context (same pattern as Step 4):
@@ -196,9 +203,11 @@ Cost preview: `clavain-cli sprint-budget-stage "$CLAVAIN_BEAD_ID" quality-gates 
 
 `/clavain:quality-gates`
 
-**Parallel Window 1 (optional):** While quality-gates agents run, if known TODOs from execution exist, start `/clavain:resolve` in a background agent. Quality-gates writes `quality-verdict` artifact; resolve writes `resolution` artifact — no type conflicts.
+Quality-gates is a gate orchestrator: it prepares the diff, delegates agent selection/dispatch to flux-drive (which handles triage, project agents, routing overrides, content slicing), and enforces the pass/fail gate. It handles verdict recording, gate enforcement, and phase advancement internally.
 
-After completion, read verdicts:
+**Parallel Window 1 (optional):** While flux-drive agents run, if known TODOs from execution exist, start `/clavain:resolve` in a background agent. Quality-gates writes `quality-verdict` artifact; resolve writes `resolution` artifact — no type conflicts.
+
+After quality-gates returns, read verdicts:
 ```bash
 source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-verdict.sh"
 verdict_parse_all       # STATUS  AGENT  SUMMARY table
@@ -207,14 +216,13 @@ verdict_count_by_status # e.g., "3 CLEAN, 1 NEEDS_ATTENTION"
 - All CLEAN → proceed (one-line summary)
 - Any NEEDS_ATTENTION → read detail via `verdict_get_attention`; report per-agent STATUS in sprint summary
 
-Gate check after PASS:
+Sprint-level gate check (verify quality-gates advanced phase):
 ```bash
 if ! clavain-cli enforce-gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
     echo "Gate blocked: re-run /clavain:quality-gates or set CLAVAIN_SKIP_GATE='reason'." >&2
     # Stop
 fi
 clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"
-clavain-cli record-phase "$CLAVAIN_BEAD_ID" "shipping"
 ```
 Do NOT set phase if gates FAIL.
 

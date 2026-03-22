@@ -95,11 +95,15 @@ Incremental commits use no attribution footer — the final Phase 4 commit inclu
 
 ## Phase 3: Quality Check
 
+**Sprint-aware skip:** If inside a sprint (`CLAVAIN_BEAD_ID` set and `bd state "$CLAVAIN_BEAD_ID" sprint` == `"true"`), skip this phase entirely — sprint Steps 6 (Test & Verify) and 7 (Quality Gates) handle testing and review. Proceed directly to Phase 4.
+
+**Standalone mode** (no active sprint):
+
 **Run quality checks:**
 - Full test suite (npm test / pytest / go test / cargo test / etc.)
 - Linting (per CLAUDE.md)
 
-**Reviewer agents** — for risky/large changes, delegate to `/clavain:quality-gates` (auto-selects agents). For cross-AI second opinion: `/interpeer:interpeer quick`.
+**Reviewer agents** — for risky/large changes, delegate to `/clavain:quality-gates` (composes flux-drive for agent triage). For cross-AI second opinion: `/interpeer:interpeer quick`.
 
 Run `/clavain:quality-gates` only for: large refactors (10+ files), security-sensitive changes, performance-critical paths, complex algorithms, or user-requested review. For most features: tests + linting + patterns is sufficient.
 

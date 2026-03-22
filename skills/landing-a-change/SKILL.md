@@ -13,7 +13,21 @@ Verify → Review evidence → Document → Commit → Confirm.
 
 ## Step 1: Verify Tests
 
-Run project test suite (`go test ./...` / `npm test` / `pytest` / `cargo test`). If tests fail, stop and fix. Do not proceed.
+**Artifact-cached skip:** If inside a sprint (`CLAVAIN_BEAD_ID` set), check whether tests already passed at current HEAD:
+
+```bash
+BEAD_ID="${CLAVAIN_BEAD_ID:-}"
+if [[ -n "$BEAD_ID" ]]; then
+    test_sha=$(clavain-cli get-artifact "$BEAD_ID" "test-pass-sha" 2>/dev/null) || test_sha=""
+    current_sha=$(git rev-parse HEAD)
+    if [[ "$test_sha" == "$current_sha" ]]; then
+        echo "Tests verified at $test_sha (current HEAD). Skipping re-run."
+        # Skip to Step 2
+    fi
+fi
+```
+
+If HEAD moved since the last recorded test pass, or no test-pass-sha artifact exists, or not in a sprint: run the full test suite (`go test ./...` / `npm test` / `pytest` / `cargo test`). If tests fail, stop and fix. Do not proceed.
 
 ## Step 2: Verify Plan Compliance
 
