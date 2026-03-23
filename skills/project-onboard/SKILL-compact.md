@@ -10,7 +10,7 @@ If not in a git repo, run `git init`. If no remote, offer to create one via `gh 
 
 ## Phase 1: Introspect
 
-Scan for: git remote, .beads/, .clavain/, .interwatch/, CLAUDE.md, AGENTS.md, PHILOSOPHY.md, CONVENTIONS.md, docs/ subdirs, languages (from manifests/extensions), project name (from manifest/remote/dirname), project type (monorepo/library/app/plugin).
+Scan for: git remote, .beads/, .clavain/, .interwatch/, MISSION.md, CLAUDE.md, AGENTS.md, PHILOSOPHY.md, CONVENTIONS.md, docs/ subdirs, languages (from manifests/extensions), project name (from manifest/remote/dirname), project type (monorepo/library/app/plugin).
 
 Report ✔/✖ checklist to user.
 
@@ -18,6 +18,7 @@ Report ✔/✖ checklist to user.
 
 Use AskUserQuestion. Skip questions answered by introspection.
 
+- **Q0**: Mission statement — one sentence (skip if MISSION.md exists)
 - **Q1**: Project name + one-liner (skip if inferred)
 - **Q2**: Languages/frameworks (skip if detected)
 - **Q3**: Project type (skip if inferred)
@@ -31,10 +32,11 @@ Skip anything that exists. Execute in order:
 
 1. `bd init` + `bd setup claude --project` (if no .beads/)
 2. `/clavain:clavain-init` (if no .clavain/)
-3. Generate CLAUDE.md from `templates/CLAUDE.md.tmpl` (30-60 lines, operations only)
-4. Generate AGENTS.md from `templates/AGENTS.md.tmpl` (architecture, build, conventions)
-5. Generate PHILOSOPHY.md from `templates/PHILOSOPHY.md.tmpl` (goals → principles)
-6. Generate CONVENTIONS.md from `templates/CONVENTIONS.md.tmpl` (canonical doc paths)
+3. Generate MISSION.md from `templates/MISSION.md.tmpl` (Q0 → one-sentence mission)
+4. Generate CLAUDE.md from `templates/CLAUDE.md.tmpl` (30-60 lines, operations only)
+5. Generate AGENTS.md from `templates/AGENTS.md.tmpl` (architecture, build, conventions)
+6. Generate PHILOSOPHY.md from `templates/PHILOSOPHY.md.tmpl` (mission + goals → principles)
+7. Generate CONVENTIONS.md from `templates/CONVENTIONS.md.tmpl` (canonical doc paths)
 7. Create full docs/ tree: brainstorms, plans, research, guides, canon, prd, prds, cujs, solutions/{patterns,best-practices,runtime-errors}, audits, diagrams, migrations, policies, reports, traces
 
 ## Phase 4: Observability
