@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cross-compile clavain-cli-go for all release targets.
-# Must be run from the monorepo source tree where go.mod replace directives resolve.
 # Produces: bin/clavain-cli-go-{os}-{arch} for each target platform.
+# These binaries are checked into git and ship with the published plugin.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,20 +19,11 @@ if [[ ! -d "$SRC_DIR" ]]; then
     exit 1
 fi
 
-# Verify replace directive targets resolve (only works in monorepo)
-while IFS= read -r line; do
-    target="${line##*=> }"
-    if [[ ! -d "$SRC_DIR/$target" ]]; then
-        echo "build-release: replace target missing: $target" >&2
-        echo "build-release: must run from monorepo (ethics-gradient)" >&2
-        exit 1
-    fi
-done < <(grep '^replace ' "$SRC_DIR/go.mod" | grep '=>')
-
-# Target platforms
+# Target platforms (binaries ship with plugin for users without Go)
 TARGETS=(
     "darwin:arm64"
     "linux:amd64"
+    "windows:amd64"
 )
 
 built=0

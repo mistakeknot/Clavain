@@ -34,9 +34,14 @@ if [[ -x "$GO_BIN" ]]; then
     exec "$GO_BIN" "$@"
 fi
 
-# In plugin cache, no source tree exists — skip auto-build silently
+# In plugin cache — binary should have shipped; warn if missing
 if [[ "$SCRIPT_DIR" == *"/.claude/plugins/cache/"* ]]; then
-    : # fall through to Bash
+    if [[ -z "${CLAVAIN_BUILD_WARNED:-}" ]]; then
+        echo "clavain-cli: Go binary missing from plugin cache (34 Go-only commands unavailable)" >&2
+        echo "clavain-cli: run: claude plugin update clavain@interagency-marketplace" >&2
+        export CLAVAIN_BUILD_WARNED=1
+    fi
+    # fall through to Bash
 # Auto-build if Go is available and source exists (monorepo dev only)
 elif command -v go &>/dev/null && [[ -d "$SCRIPT_DIR/../cmd/clavain-cli" ]]; then
     local_err="$(go build -C "$SCRIPT_DIR/../cmd/clavain-cli" -mod=readonly -o "$GO_BIN" . 2>&1)" && exec "$GO_BIN" "$@"
