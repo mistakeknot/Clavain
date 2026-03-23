@@ -2,7 +2,14 @@
 # clavain-cli — thin shim. Delegates to Go binary if available, falls back to Bash.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks before computing SCRIPT_DIR (POSIX-portable, no readlink -f)
+_src="${BASH_SOURCE[0]}"
+while [ -L "$_src" ]; do
+    _dir="$(cd "$(dirname "$_src")" && pwd)"
+    _src="$(readlink "$_src")"
+    [[ "$_src" != /* ]] && _src="$_dir/$_src"
+done
+SCRIPT_DIR="$(cd "$(dirname "$_src")" && pwd)"
 
 # Resolve platform-specific binary name: clavain-cli-go-{os}-{arch}
 _cli_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
