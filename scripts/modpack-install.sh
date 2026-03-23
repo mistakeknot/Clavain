@@ -109,16 +109,28 @@ install_plugin() {
 
     log "  [installing] $source ..."
     local output
-    if output=$(claude plugin install "$source" 2>&1); then
-        installed+=("$source")
-        log "  [installed] $source"
-        # Show any output from claude CLI (it may be silent — see GitHub #3)
-        if [[ -n "$output" ]]; then
-            log "    $output"
+    local attempts=0
+    local max_retries=2
+    local success=false
+    while [[ $attempts -le $max_retries ]]; do
+        if output=$(claude plugin install "$source" 2>&1); then
+            installed+=("$source")
+            log "  [installed] $source"
+            if [[ -n "$output" ]]; then
+                log "    $output"
+            fi
+            success=true
+            break
         fi
-    else
+        attempts=$((attempts + 1))
+        if [[ $attempts -le $max_retries ]]; then
+            log "  [retry $attempts/$max_retries] $source (waiting ${attempts}s)..."
+            sleep "$attempts"
+        fi
+    done
+    if [[ "$success" != true ]]; then
         failed+=("$source")
-        log "  [FAILED] $source"
+        log "  [FAILED] $source (after $((max_retries + 1)) attempts)"
         if [[ -n "$output" ]]; then
             log "    $output"
         fi
