@@ -188,11 +188,14 @@ func cmdCompose(args []string) error {
 	// 4. Load routing overrides (optional — missing is OK)
 	overrides := loadRoutingOverrides()
 
-	// 5. Get budget
+	// 5. Load calibrated confidence thresholds (optional — missing is OK)
+	ct := loadCalibratedThresholds()
+
+	// 6. Get budget
 	budget := computeStageBudget(sprintID, stage, stageSpec)
 
-	// 6. Build plan
-	plan := composePlan(stage, sprintID, budget, stageSpec, fleet, cal, overrides)
+	// 7. Build plan
+	plan := composePlan(stage, sprintID, budget, stageSpec, fleet, cal, overrides, ct)
 
 	// 7. Output JSON
 	data, err := json.MarshalIndent(plan, "", "  ")
@@ -478,7 +481,7 @@ func precomputeCapabilities(agents []PlanAgent, fleet *FleetRegistry) map[string
 	return provided
 }
 
-func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides) ComposePlan {
+func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides, ct *CalibratedThresholds) ComposePlan {
 	plan := ComposePlan{
 		Stage:    stage,
 		Sprint:   sprintID,
@@ -511,7 +514,7 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 			plan.Warnings = append(plan.Warnings, fmt.Sprintf("unmatched_role:%s", role.Role))
 			continue
 		}
-		model, source := resolveModel(agent, role, cal)
+		model, source := resolveModel(agent, role, cal, ct)
 		plan.Agents = append(plan.Agents, PlanAgent{
 			AgentID:         agent.id,
 			SubagentType:    agent.agent.Runtime.SubagentType,
@@ -529,7 +532,7 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 		if !found {
 			continue // Optional roles are silently skipped
 		}
-		model, source := resolveModel(agent, role, cal)
+		model, source := resolveModel(agent, role, cal, ct)
 		plan.Agents = append(plan.Agents, PlanAgent{
 			AgentID:         agent.id,
 			SubagentType:    agent.agent.Runtime.SubagentType,
@@ -605,7 +608,7 @@ func matchRole(role AgentRole, fleet map[string]FleetAgent) (matchedAgent, bool)
 	return candidates[0], true
 }
 
-func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration) (string, string) {
+func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration, ct *CalibratedThresholds) (string, string) {
 	// Safety floor check first — hard constraint
 	if floor, ok := safetyFloorAgents[agent.id]; ok {
 		return floor, "safety_floor"
@@ -614,7 +617,14 @@ func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration
 	// Interspect calibration — evidence-driven
 	if cal != nil {
 		if c, ok := cal.Agents[agent.id]; ok {
-			if c.Confidence >= 0.7 && c.EvidenceSessions >= 3 {
+			// Use per-agent calibrated threshold if available, otherwise default 0.7
+			threshold := 0.7
+			if ct != nil {
+				if at, ok := ct.Agents[agent.id]; ok {
+					threshold = at.ConfidenceThreshold
+				}
+			}
+			if c.Confidence >= threshold && c.EvidenceSessions >= 3 {
 				model := c.RecommendedModel
 				if model == "haiku" || model == "sonnet" || model == "opus" {
 					return model, "interspect_calibration"
@@ -657,7 +667,7 @@ func checkCapabilityCoverage(required []string, agents []PlanAgent, fleet *Fleet
 
 // composeSprint runs compose for ALL stages in the agency spec.
 // Returns a slice of ComposePlan — one per stage.
-func composeSprint(spec *AgencySpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides, sprintID string, totalBudget int64) []ComposePlan {
+func composeSprint(spec *AgencySpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides, ct *CalibratedThresholds, sprintID string, totalBudget int64) []ComposePlan {
 	var plans []ComposePlan
 
 	// Sort stage names for deterministic output
@@ -673,7 +683,7 @@ func composeSprint(spec *AgencySpec, fleet *FleetRegistry, cal *InterspectCalibr
 		if stageBudget < int64(stageSpec.Budget.MinTokens) {
 			stageBudget = int64(stageSpec.Budget.MinTokens)
 		}
-		plan := composePlan(stageName, sprintID, stageBudget, stageSpec, fleet, cal, overrides)
+		plan := composePlan(stageName, sprintID, stageBudget, stageSpec, fleet, cal, overrides, ct)
 		plans = append(plans, plan)
 	}
 	return plans
@@ -699,6 +709,7 @@ func cmdSprintCompose(args []string) error {
 	}
 	cal := loadInterspectCalibration()
 	overrides := loadRoutingOverrides()
+	ct := loadCalibratedThresholds()
 
 	// Get total budget from ic run
 	var totalBudget int64 = 1000000 // default 1M
@@ -711,7 +722,7 @@ func cmdSprintCompose(args []string) error {
 	}
 
 	// Compose all stages
-	plans := composeSprint(spec, fleet, cal, overrides, beadID, totalBudget)
+	plans := composeSprint(spec, fleet, cal, overrides, ct, beadID, totalBudget)
 
 	// Output JSON
 	data, err := json.MarshalIndent(plans, "", "  ")

@@ -89,6 +89,20 @@ CREATE TABLE IF NOT EXISTS modifications (
   status           TEXT    NOT NULL DEFAULT 'applied'  -- applied, reverted, superseded
 );
 
+-- Canary outcomes table: tracks measured outcomes for confidence calibration.
+-- Each row records the result of a canary override experiment.
+CREATE TABLE IF NOT EXISTS canary_outcomes (
+  id              INTEGER PRIMARY KEY,
+  agent_name      TEXT    NOT NULL,
+  override_id     TEXT    NOT NULL,
+  applied_at      INTEGER NOT NULL,
+  measured_at     INTEGER NOT NULL,
+  metric          TEXT    NOT NULL,
+  baseline_value  REAL,
+  override_value  REAL,
+  outcome         TEXT    NOT NULL     -- improved, degraded, neutral
+);
+
 -- ──── Indexes ────
 -- Query patterns from the PRD: evidence by session, by source, by project;
 -- canary by status; modifications by group and status.
@@ -125,6 +139,12 @@ CREATE INDEX IF NOT EXISTS idx_modifications_status
 
 CREATE INDEX IF NOT EXISTS idx_modifications_target
   ON modifications(target_file);
+
+CREATE INDEX IF NOT EXISTS idx_canary_outcomes_agent
+  ON canary_outcomes(agent_name);
+
+CREATE INDEX IF NOT EXISTS idx_canary_outcomes_measured
+  ON canary_outcomes(measured_at);
 SQL
 
 echo "Interspect initialized: ${DB_FILE}" >&2

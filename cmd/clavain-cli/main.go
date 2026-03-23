@@ -176,6 +176,12 @@ func main() {
 	case "evidence-list":
 		err = cmdEvidenceList(args)
 
+	// Interspect Calibration
+	case "interspect-record-canary":
+		err = cmdInterspectRecordCanary(args)
+	case "interspect-calibrate-thresholds":
+		err = cmdInterspectCalibrateThresholds(args)
+
 	// Policy
 	case "policy-check":
 		err = cmdPolicyCheck(args)
@@ -329,6 +335,10 @@ Evidence:
   evidence-to-scenario <finding-id> [--bead=<id>]  Convert finding to dev scenario
   evidence-pack        <bead-id> [--type=<type>]   Create evidence pack from sprint data
   evidence-list        [bead-id]                    List evidence packs
+
+Interspect Calibration:
+  interspect-record-canary        --agent=<name> --override=<id> --metric=<m> --baseline=<v> --measured=<v> --outcome=<improved|degraded|neutral>
+  interspect-calibrate-thresholds [--window-days=30]  Recalibrate confidence thresholds from canary outcomes
 
 Policy:
   policy-check         <agent> <action> [--path=<p>] [--bead=<id>]  Check action against policy

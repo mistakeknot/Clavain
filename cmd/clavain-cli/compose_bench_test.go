@@ -78,7 +78,7 @@ func BenchmarkComposePlan10Agents(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = composePlan("review", "sprint-1", 500000, spec, fleet, nil, nil)
+		_ = composePlan("review", "sprint-1", 500000, spec, fleet, nil, nil, nil)
 	}
 }
 
@@ -88,7 +88,7 @@ func BenchmarkComposePlan30Agents(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = composePlan("review", "sprint-1", 500000, spec, fleet, nil, nil)
+		_ = composePlan("review", "sprint-1", 500000, spec, fleet, nil, nil, nil)
 	}
 }
 
@@ -107,7 +107,7 @@ func BenchmarkComposePlanWithCalibration(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = composePlan("review", "sprint-1", 500000, spec, fleet, cal, nil)
+		_ = composePlan("review", "sprint-1", 500000, spec, fleet, cal, nil, nil)
 	}
 }
 

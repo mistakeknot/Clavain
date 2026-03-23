@@ -210,7 +210,7 @@ func TestResolveModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			model, source := resolveModel(tt.agent, tt.role, cal)
+			model, source := resolveModel(tt.agent, tt.role, cal, nil)
 			if model != tt.wantModel || source != tt.wantSource {
 				t.Errorf("resolveModel(%q) = (%q, %q), want (%q, %q)",
 					tt.agent.id, model, source, tt.wantModel, tt.wantSource)
@@ -225,7 +225,7 @@ func TestResolveModelNoCalibration(t *testing.T) {
 		agent: FleetAgent{Models: AgentModels{Preferred: "sonnet"}},
 	}
 	role := AgentRole{ModelTier: "sonnet"}
-	model, source := resolveModel(agent, role, nil)
+	model, source := resolveModel(agent, role, nil, nil)
 	if model != "sonnet" || source != "fleet_preferred" {
 		t.Errorf("no calibration: model=%q source=%q, want sonnet/fleet_preferred", model, source)
 	}
@@ -239,7 +239,7 @@ func TestComposePlanShipStage(t *testing.T) {
 
 	stageSpec := spec.Stages["ship"]
 	budget := int64(stageSpec.Budget.MinTokens)
-	plan := composePlan("ship", "", budget, stageSpec, fleet, cal, overrides)
+	plan := composePlan("ship", "", budget, stageSpec, fleet, cal, overrides, nil)
 
 	// 5 agents: 3 required + 2 optional
 	if len(plan.Agents) != 5 {
@@ -292,7 +292,7 @@ func TestComposePlanBudgetWarning(t *testing.T) {
 
 	stageSpec := spec.Stages["ship"]
 	// Tiny budget that will be exceeded by agent token estimates
-	plan := composePlan("ship", "", 100, stageSpec, fleet, nil, nil)
+	plan := composePlan("ship", "", 100, stageSpec, fleet, nil, nil, nil)
 
 	found := false
 	for _, w := range plan.Warnings {
@@ -313,7 +313,7 @@ func TestComposePlanUnmatchedRole(t *testing.T) {
 
 	stageSpec := spec.Stages["build"]
 	budget := int64(stageSpec.Budget.MinTokens)
-	plan := composePlan("build", "", budget, stageSpec, fleet, nil, nil)
+	plan := composePlan("build", "", budget, stageSpec, fleet, nil, nil, nil)
 
 	found := false
 	for _, w := range plan.Warnings {
@@ -342,7 +342,7 @@ func TestComposePlanExcludedAgent(t *testing.T) {
 
 	stageSpec := spec.Stages["ship"]
 	budget := int64(stageSpec.Budget.MinTokens)
-	plan := composePlan("ship", "", budget, stageSpec, fleet, cal, overrides)
+	plan := composePlan("ship", "", budget, stageSpec, fleet, cal, overrides, nil)
 
 	// fd-architecture should not be in plan
 	for _, a := range plan.Agents {
@@ -370,7 +370,7 @@ func TestComposePlanOrphanedAgentExcluded(t *testing.T) {
 
 	stageSpec := spec.Stages["ship"]
 	budget := int64(stageSpec.Budget.MinTokens)
-	plan := composePlan("ship", "", budget, stageSpec, fleet, nil, nil)
+	plan := composePlan("ship", "", budget, stageSpec, fleet, nil, nil, nil)
 
 	for _, a := range plan.Agents {
 		if a.AgentID == "orphaned-agent" {
@@ -428,7 +428,7 @@ func TestSafetyFloorExclusionWarning(t *testing.T) {
 			{Agent: "fd-safety", Action: "exclude", Reason: "test"},
 		},
 	}
-	plan := composePlan("ship", "", 100000, spec.Stages["ship"], fleet, nil, overrides)
+	plan := composePlan("ship", "", 100000, spec.Stages["ship"], fleet, nil, overrides, nil)
 	var foundWarning bool
 	for _, w := range plan.Warnings {
 		if w == "WARNING:safety_floor_excluded:fd-safety:test" {
@@ -450,7 +450,7 @@ func TestComposePlanDeterministic(t *testing.T) {
 	budget := int64(stageSpec.Budget.MinTokens)
 
 	// Generate plan once as reference
-	ref := composePlan("ship", "", budget, stageSpec, fleet, cal, overrides)
+	ref := composePlan("ship", "", budget, stageSpec, fleet, cal, overrides, nil)
 	refJSON, err := json.Marshal(ref)
 	if err != nil {
 		t.Fatalf("marshal reference plan: %v", err)
@@ -458,7 +458,7 @@ func TestComposePlanDeterministic(t *testing.T) {
 
 	// Run 20 times and compare
 	for i := 0; i < 20; i++ {
-		plan := composePlan("ship", "", budget, stageSpec, fleet, cal, overrides)
+		plan := composePlan("ship", "", budget, stageSpec, fleet, cal, overrides, nil)
 		planJSON, err := json.Marshal(plan)
 		if err != nil {
 			t.Fatalf("marshal plan iteration %d: %v", i, err)
@@ -497,7 +497,7 @@ func TestSprintComposeStoresAllStages(t *testing.T) {
 	spec := loadTestSpec(t)
 	cal := loadTestCalibration(t)
 
-	plans := composeSprint(spec, fleet, cal, nil, "test-sprint", 100000)
+	plans := composeSprint(spec, fleet, cal, nil, nil, "test-sprint", 100000)
 
 	// Should have plans for all stages in test spec (discover, design, ship, build)
 	if len(plans) != 4 {
@@ -567,7 +567,7 @@ func TestResolveModelRoutingFallback(t *testing.T) {
 		agent: FleetAgent{Models: AgentModels{Preferred: ""}},
 	}
 	role := AgentRole{ModelTier: "opus"}
-	model, source := resolveModel(agent, role, nil)
+	model, source := resolveModel(agent, role, nil, nil)
 	if model != "opus" || source != "routing_fallback" {
 		t.Errorf("routing fallback: model=%q source=%q, want opus/routing_fallback", model, source)
 	}

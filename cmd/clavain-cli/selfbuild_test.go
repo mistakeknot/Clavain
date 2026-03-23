@@ -122,7 +122,7 @@ func TestSelfBuildLoopComposeMerge(t *testing.T) {
 	cal := loadTestCalibration(t)
 
 	// Compose all stages
-	plans := composeSprint(spec, fleet, cal, nil, "self-build-test", 1000000)
+	plans := composeSprint(spec, fleet, cal, nil, nil, "self-build-test", 1000000)
 	if len(plans) == 0 {
 		t.Fatal("composeSprint returned no plans")
 	}
