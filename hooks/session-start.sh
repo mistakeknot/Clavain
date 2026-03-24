@@ -100,9 +100,18 @@ if [[ ! -f ".clavain/setup-verified" ]] && [[ -d ".clavain" || -d ".beads" ]]; t
         echo "Note: yq not found — fleet registry queries unavailable. Fix: https://github.com/mikefarah/yq" >&2
     fi
 
-    if [[ "$_firstrun_ok" == "true" ]]; then
+if [[ "$_firstrun_ok" == "true" ]]; then
         mkdir -p .clavain 2>/dev/null || true
         touch .clavain/setup-verified 2>/dev/null || true
+    fi
+fi
+
+# Conservative update drift notice — read-only and cached.
+# Claude hooks can surface this automatically; Codex relies on the manual
+# update-check command because Codex does not expose equivalent startup hooks.
+if [[ "$_hook_source" == "startup" || "$_hook_source" == "resume" ]]; then
+    if [[ -x "${PLUGIN_ROOT}/scripts/check-install-updates.sh" ]]; then
+        "${PLUGIN_ROOT}/scripts/check-install-updates.sh" --hook || true
     fi
 fi
 

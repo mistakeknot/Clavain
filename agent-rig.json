@@ -5,7 +5,7 @@
       "source": "config/CLAUDE.md"
     }
   },
-  "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 6 agents, 49 commands, 17 skills, 0 MCP servers. Companions: interphase, interline, interslack, interform, intercraft, interdev.",
+  "description": "Recursively self-improving multi-agent rig — brainstorm to ship. 6 agents, 50 commands, 17 skills, 0 MCP servers. Companions: interphase, interline, interslack, interform, intercraft, interdev.",
   "environment": {
     "DISPLAY": ":99",
     "CHROME_PATH": "/usr/local/bin/google-chrome-wrapper"
