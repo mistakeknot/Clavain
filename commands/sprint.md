@@ -155,7 +155,9 @@ After plan written: set `phase=planned`; `clavain-cli record-cost-estimate "$CLA
 
 ## Step 4: Review Plan
 
-Budget context before flux-drive:
+**Auto-run — no AskUserQuestion before starting.** The Tier 2 checkpoint pauses *after* the review to present findings, not before.
+
+Budget context before review:
 ```bash
 remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 [[ "$remaining" -gt 0 ]] && export FLUX_BUDGET_REMAINING="$remaining"
@@ -163,12 +165,25 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 
 Cost preview: `clavain-cli sprint-budget-stage "$CLAVAIN_BEAD_ID" plan-review 2>/dev/null` — display token budget for this stage and which agents will be launched (skip silently on error).
 
+### 4a: Generate project-specific review agents
+
 ```bash
 plan_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || plan_path=""
 ```
-`/interflux:flux-drive $plan_path` — review before execution to catch plan-level risks early.
 
-If P0/P1 issues found: stop and fix before proceeding. After passing: set `phase=plan-reviewed`.
+`/interflux:flux-gen` — auto-detect project domains and generate `fd-*` agents in `.claude/agents/`. Use `skip-existing` mode (no confirmation, no overwrite). If agents already exist, this completes in seconds. If flux-gen fails or no domains detected, proceed — core agents work without domain specialization.
+
+### 4b: Run plan review
+
+`/interflux:flux-drive $plan_path` — review before execution to catch plan-level risks early. flux-drive auto-discovers project agents generated in 4a and gives them a triage bonus.
+
+### 4c: Tier-aware checkpoint
+
+- **Tier 1:** Auto-approve if no P0/P1 findings. Proceed to Step 5 immediately.
+- **Tier 2:** Present findings summary. If P0/P1 found, stop and fix. If clean or P2+ only, proceed to Step 5.
+- **Tier 3:** AskUserQuestion with findings. Wait for explicit approval.
+
+After passing: set `phase=plan-reviewed`.
 
 ## Step 5: Execute
 
