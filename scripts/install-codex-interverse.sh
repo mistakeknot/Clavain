@@ -229,6 +229,23 @@ command_name_from_markdown() {
   ' "$file"
 }
 
+command_codex_aliases_from_markdown() {
+  local file="$1"
+  awk '
+    NR == 1 && $0 == "---" { in_fm = 1; next }
+    in_fm == 1 && $0 == "---" { exit }
+    in_fm == 1 && $0 ~ /^codex-aliases:[[:space:]]*/ {
+      sub(/^codex-aliases:[[:space:]]*/, "", $0)
+      gsub(/^\[/, "", $0)
+      gsub(/\]$/, "", $0)
+      gsub(/["'"'"']/, "", $0)
+      gsub(/,[[:space:]]*/, "\n", $0)
+      print $0
+      exit
+    }
+  ' "$file"
+}
+
 skill_name_from_markdown() {
   local file="$1"
   awk '
@@ -345,7 +362,7 @@ build_namespace_prefix_regex() {
 }
 
 interverse_command_entries() {
-  local plugin repo_dir commands_dir src command_name
+  local plugin repo_dir commands_dir src command_name aliases_csv
   while IFS= read -r plugin; do
     [[ -n "$plugin" ]] || continue
     repo_dir="$CLONE_ROOT/$plugin"
@@ -359,7 +376,8 @@ interverse_command_entries() {
         command_name="$(basename "$src" .md)"
       fi
       [[ -n "$command_name" ]] || continue
-      echo "$plugin|$command_name|$src"
+      aliases_csv="$(command_codex_aliases_from_markdown "$src" | paste -sd, -)"
+      printf '%s\t%s\t%s\t%s\n' "$plugin" "$command_name" "$src" "$aliases_csv"
     done
   done < <(interverse_recommended_plugins)
 }
@@ -405,45 +423,95 @@ generate_interverse_prompts() {
 
   local count=0
   local removed=0
-  local plugin command_name src out body_tmp converted_tmp
+  local plugin command_name src alias_csv out body_tmp converted_tmp
+  declare -A seen_prompt_names=()
 
-  while IFS='|' read -r plugin command_name src; do
+  while IFS=$'\t' read -r plugin command_name src alias_csv; do
     [[ -n "$plugin" && -n "$command_name" && -n "$src" ]] || continue
-    out="$CODEX_PROMPTS_DIR/$plugin-$command_name.md"
-    echo "$out" >> "$expected_files"
 
     body_tmp="$(mktemp)"
     converted_tmp="$(mktemp)"
     strip_frontmatter "$src" > "$body_tmp"
     convert_interverse_body_for_codex "$body_tmp" "$converted_tmp" "$prefix_regex"
 
-    {
-      echo "# Interverse Command: /$plugin:$command_name"
-      echo
-      echo "Interverse prompt wrapper generated from companion command source."
-      echo
-      echo "- Source: \`$src\`"
-      echo "- Compatibility: interverse namespaces and .claude paths normalized for Codex."
-      echo "- Elicitation adapter: if a prompt calls for AskUserQuestion, try future plan-mode escalation if host supports it, else use \`request_user_input\` when available, else ask in chat with numbered options and wait."
-      echo
-      echo "---"
-      echo
-      echo "## Codex Elicitation Adapter"
-      echo
-      echo "When instructions below mention the Codex elicitation adapter:"
-      echo "1. If a host capability exists to switch from Default -> Plan mode, try once (non-fatal)."
-      echo "2. If \`request_user_input\` is available, use it for structured elicitation."
-      echo "3. Otherwise, ask in chat using a single concise question plus numbered options, then pause for user choice."
-      echo "4. Normalize the answer, echo the resolved selection, and continue."
-      echo
-      cat "$converted_tmp"
-    } > "$out"
+    local prompt_name
+    prompt_name="$plugin-$command_name"
+    if [[ -z "${seen_prompt_names[$prompt_name]+set}" ]]; then
+      out="$CODEX_PROMPTS_DIR/$prompt_name.md"
+      printf '%s\n' "$out" >> "$expected_files"
+      {
+        echo "# Interverse Command: /$plugin:$command_name"
+        echo
+        echo "Interverse prompt wrapper generated from companion command source."
+        echo
+        echo "- Source: \`$src\`"
+        echo "- Compatibility: interverse namespaces and .claude paths normalized for Codex."
+        echo "- Elicitation adapter: if a prompt calls for AskUserQuestion, try future plan-mode escalation if host supports it, else use \`request_user_input\` when available, else ask in chat with numbered options and wait."
+        echo
+        echo "---"
+        echo
+        echo "## Codex Elicitation Adapter"
+        echo
+        echo "When instructions below mention the Codex elicitation adapter:"
+        echo "1. If a host capability exists to switch from Default -> Plan mode, try once (non-fatal)."
+        echo "2. If \`request_user_input\` is available, use it for structured elicitation."
+        echo "3. Otherwise, ask in chat using a single concise question plus numbered options, then pause for user choice."
+        echo "4. Normalize the answer, echo the resolved selection, and continue."
+        echo
+        cat "$converted_tmp"
+      } > "$out"
+      seen_prompt_names["$prompt_name"]=1
+      count=$((count + 1))
+    fi
+
+    if [[ -n "$alias_csv" ]]; then
+      local alias
+      local IFS=','
+      read -r -a alias_list <<< "$alias_csv"
+      for alias in "${alias_list[@]}"; do
+        [[ -n "$alias" ]] || continue
+        if [[ ! "$alias" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+          echo "WARN: skipping unsupported codex alias '$alias' for $plugin:$command_name" >&2
+          continue
+        fi
+        if [[ -n "${seen_prompt_names[$alias]+set}" ]]; then
+          echo "WARN: skipping duplicate codex alias '$alias' for $plugin:$command_name" >&2
+          continue
+        fi
+        out="$CODEX_PROMPTS_DIR/$alias.md"
+        printf '%s\n' "$out" >> "$expected_files"
+        {
+          echo "# Interverse Command Alias: /$alias"
+          echo
+          echo "Interverse prompt wrapper generated from companion command source."
+          echo
+          echo "- Source: \`$src\`"
+          echo "- Source command: \`/$plugin:$command_name\`"
+          echo "- Codex alias: \`/$alias\`"
+          echo "- Compatibility: interverse namespaces and .claude paths normalized for Codex."
+          echo "- Elicitation adapter: if a prompt calls for AskUserQuestion, try future plan-mode escalation if host supports it, else use \`request_user_input\` when available, else ask in chat with numbered options and wait."
+          echo
+          echo "---"
+          echo
+          echo "## Codex Elicitation Adapter"
+          echo
+          echo "When instructions below mention the Codex elicitation adapter:"
+          echo "1. If a host capability exists to switch from Default -> Plan mode, try once (non-fatal)."
+          echo "2. If \`request_user_input\` is available, use it for structured elicitation."
+          echo "3. Otherwise, ask in chat using a single concise question plus numbered options, then pause for user choice."
+          echo "4. Normalize the answer, echo the resolved selection, and continue."
+          echo
+          cat "$converted_tmp"
+        } > "$out"
+        seen_prompt_names["$alias"]=1
+        count=$((count + 1))
+      done
+    fi
 
     rm -f "$body_tmp" "$converted_tmp"
-    count=$((count + 1))
   done < <(interverse_command_entries)
 
-  local prompt_file base is_recommended plugin
+  local prompt_file base is_recommended plugin has_alias_marker
   for prompt_file in "$CODEX_PROMPTS_DIR"/*.md; do
     [[ -f "$prompt_file" ]] || continue
     grep -Fq "Interverse prompt wrapper generated from companion command source." "$prompt_file" || continue
@@ -453,6 +521,7 @@ generate_interverse_prompts() {
 
     base="$(basename "$prompt_file")"
     is_recommended=false
+    has_alias_marker=false
     while IFS= read -r plugin; do
       [[ -n "$plugin" ]] || continue
       if [[ "$base" == "$plugin"-* ]]; then
@@ -461,7 +530,11 @@ generate_interverse_prompts() {
       fi
     done < "$plugin_list"
 
-    if [[ "$is_recommended" == true ]]; then
+    if grep -Fq -- "- Codex alias: \`/" "$prompt_file"; then
+      has_alias_marker=true
+    fi
+
+    if [[ "$is_recommended" == true || "$has_alias_marker" == true ]]; then
       rm -f "$prompt_file"
       removed=$((removed + 1))
     fi
@@ -793,8 +866,8 @@ prompt_wrapper_has_unconverted_tokens() {
 }
 
 prompt_wrapper_entries() {
-  local plugin command_name src prompt_path
-  while IFS='|' read -r plugin command_name src; do
+  local plugin command_name src alias_csv prompt_path
+  while IFS=$'\t' read -r plugin command_name src alias_csv; do
     [[ -n "$plugin" && -n "$command_name" && -n "$src" ]] || continue
     prompt_path="$CODEX_PROMPTS_DIR/$plugin-$command_name.md"
     echo "$plugin|$command_name|$src|$prompt_path"
