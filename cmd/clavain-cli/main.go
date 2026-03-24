@@ -207,6 +207,8 @@ func main() {
 		err = cmdAgentPaused(args)
 	case "factory-status":
 		err = cmdFactoryStatus(args)
+	case "factory-stream":
+		err = cmdFactoryStream(args)
 
 	// Daemon
 	case "daemon":
@@ -292,6 +294,8 @@ Watchdog:
 
 Factory:
   factory-status          [--json]   Fleet health dashboard (utilization, queue, WIP, dispatches)
+  factory-stream          [flags]    SSE streaming server for live factory data
+                  --port=8401  --interval=5s  --cors-origins="*"
 
 Checkpoints:
   checkpoint-write    <bead_id> <phase> <step> <plan_path>
