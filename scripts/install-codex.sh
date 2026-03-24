@@ -776,6 +776,8 @@ sync_mcp_servers() {
     return 0
   fi
 
+  cleanup_legacy_mcp_server_tables "$CODEX_CONFIG_FILE"
+
   local block_file
   block_file="$(mktemp)"
   render_mcp_block "$manifest" "$block_file"
@@ -789,6 +791,54 @@ sync_mcp_servers() {
   else
     echo "Managed MCP config block already up to date: $CODEX_CONFIG_FILE"
   fi
+}
+
+cleanup_legacy_mcp_server_tables() {
+  local config_file="$1"
+  [[ -f "$config_file" ]] || return 0
+
+  if ! grep -qE '^\[mcp_servers\.' "$config_file"; then
+    return 0
+  fi
+
+  local candidate
+  candidate="$(mktemp)"
+
+  awk '
+    BEGIN { in_legacy = 0; removed = 0 }
+    /^\[mcp_servers\./ {
+      in_legacy = 1
+      removed = 1
+      next
+    }
+    in_legacy == 1 {
+      if ($0 ~ /^\[/ || $0 == "'"$MCP_BLOCK_START"'" || $0 == "'"$MCP_BLOCK_END"'") {
+        in_legacy = 0
+      } else {
+        next
+      }
+    }
+    { print }
+    END {
+      if (removed == 0) exit 2
+    }
+  ' "$config_file" > "$candidate" || {
+    local status=$?
+    rm -f "$candidate"
+    if [[ "$status" -eq 2 ]]; then
+      return 0
+    fi
+    return "$status"
+  }
+
+  if cmp -s "$config_file" "$candidate"; then
+    rm -f "$candidate"
+    return 0
+  fi
+
+  backup_copy_file "$config_file"
+  mv "$candidate" "$config_file"
+  echo "Removed legacy [mcp_servers.*] tables from $config_file"
 }
 
 install_all() {
