@@ -923,6 +923,15 @@ doctor() {
       issues+=("clavain-cli link target mismatch: $CLAVAIN_CLI_LINK -> $clavain_cli_target (expected $cli_target)")
       status=1
     fi
+  elif [[ -x "$CLAVAIN_CLI_LINK" ]]; then
+    # Demarch install.sh may place a standalone executable here instead of the
+    # managed symlink used by install-codex.sh. That shape is still valid.
+    clavain_cli_link_ok="true"
+    clavain_cli_link_match="true"
+    clavain_cli_target="$CLAVAIN_CLI_LINK"
+    if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+      echo "clavain-cli executable: $CLAVAIN_CLI_LINK"
+    fi
   else
     issues+=("clavain-cli link missing: $CLAVAIN_CLI_LINK")
     status=1
