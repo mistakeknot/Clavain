@@ -2,6 +2,8 @@ module github.com/mistakeknot/clavain-cli
 
 go 1.22
 
+replace github.com/mistakeknot/intercore => ../../../../core/intercore
+
 require (
 	github.com/mistakeknot/intercore v0.1.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1

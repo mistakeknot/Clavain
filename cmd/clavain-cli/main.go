@@ -181,6 +181,8 @@ func main() {
 		err = cmdInterspectRecordCanary(args)
 	case "interspect-calibrate-thresholds":
 		err = cmdInterspectCalibrateThresholds(args)
+	case "calibrate-gate-tiers":
+		err = cmdCalibrateGateTiers(args)
 
 	// Policy
 	case "policy-check":

@@ -138,9 +138,15 @@ func cmdSprintAdvance(args []string) error {
 		}
 	}
 
-	// Advance via ic
+	// Advance via ic — pass calibration file if available
+	advanceArgs := []string{"run", "advance", runID, "--priority=0"}
+	calPath := gateCalibrationFilePath()
+	if _, statErr := os.Stat(calPath); statErr == nil {
+		advanceArgs = append(advanceArgs, "--calibration-file="+calPath)
+	}
+
 	var result AdvanceResult
-	err = runICJSON(&result, "run", "advance", runID, "--priority=0")
+	err = runICJSON(&result, advanceArgs...)
 	if err != nil {
 		// ic returned error — check if phase already advanced
 		actualPhaseOut, phaseErr := runIC("run", "phase", runID)
@@ -233,6 +239,12 @@ func cmdEnforceGate(args []string) error {
 	// Check CLAVAIN_SKIP_GATE env var
 	if os.Getenv("CLAVAIN_SKIP_GATE") != "" {
 		fmt.Fprintf(os.Stderr, "enforce-gate: skipping gate for %s (CLAVAIN_SKIP_GATE set)\n", targetPhase)
+		// Audit event: gate was skipped — important for calibration signal quality
+		runID, resolveErr := resolveRunID(beadID)
+		if resolveErr == nil && runID != "" {
+			emitInterspectEvent("calibration_skip_gate",
+				fmt.Sprintf("run=%s phase=%s reason=CLAVAIN_SKIP_GATE", runID, targetPhase))
+		}
 		return nil
 	}
 
@@ -290,7 +302,14 @@ func cmdEnforceGate(args []string) error {
 		return nil
 	}
 
-	_, gateErr := runIC("gate", "check", runID)
+	// Pass calibration file if available
+	gateArgs := []string{"gate", "check", runID}
+	calPathGate := gateCalibrationFilePath()
+	if _, statErr := os.Stat(calPathGate); statErr == nil {
+		gateArgs = append(gateArgs, "--calibration-file="+calPathGate)
+	}
+
+	_, gateErr := runIC(gateArgs...)
 	if gateErr != nil {
 		return fmt.Errorf("gate blocked for %s", targetPhase)
 	}
