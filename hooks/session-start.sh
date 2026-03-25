@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SessionStart hook for Clavain plugin
 
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 # Read hook input from stdin (must happen before anything else consumes it)
 HOOK_INPUT=$(cat)

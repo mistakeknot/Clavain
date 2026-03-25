@@ -8,7 +8,8 @@
 # Output: none (async, fire-and-forget)
 # Exit: 0 always
 
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 # Find git root
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0

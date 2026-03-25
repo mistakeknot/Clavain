@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 trap 'exit 0' ERR
 
 input=$(cat)

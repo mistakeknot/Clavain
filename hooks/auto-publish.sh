@@ -13,7 +13,8 @@
 # Output: JSON with additionalContext on success, empty on skip
 # Exit: 0 always (fail-open)
 
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 # Manual publish fallback when ic publish is locked.
 # Bumps patch version, updates marketplace.json, syncs cache.

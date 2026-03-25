@@ -9,7 +9,8 @@
 # Output: JSON on stdout (decision: block/allow)
 # Exit: 0 always
 
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 INPUT=$(cat)
 

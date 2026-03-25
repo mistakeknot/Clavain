@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 main() {
   local project_dir flag_file log_file payload file_path base

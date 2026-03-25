@@ -5,7 +5,8 @@
 #
 # Fast-path: exits immediately if not a bd command or no agent ID.
 
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 # Fast guards — exit before reading stdin if possible
 [[ -n "${INTERMUTE_AGENT_ID:-}" ]] || exit 0

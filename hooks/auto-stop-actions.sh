@@ -17,7 +17,8 @@
 # Output: JSON on stdout
 # Exit: 0 always
 
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
 
 # Guard: fail-open if jq is not available

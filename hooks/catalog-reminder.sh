@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # PostToolUse hook: remind to run gen-catalog.py when component files change.
 # Fires once per session via a sentinel lock file.
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 INPUT="$(cat)"
 

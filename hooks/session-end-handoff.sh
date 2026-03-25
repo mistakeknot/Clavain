@@ -12,7 +12,8 @@
 # Output: None (async, fire-and-forget)
 # Exit: 0 always
 
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 # Guard: fail-open if jq is not available
 if ! command -v jq &>/dev/null; then

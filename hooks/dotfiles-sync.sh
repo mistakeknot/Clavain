@@ -9,7 +9,8 @@
 #   - The sync repo isn't cloned
 #   - Git push fails (logged but not surfaced)
 
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 # Derive paths relative to the user's home directory
 SYNC_SCRIPT="${HOME}/projects/dotfiles-sync/sync-dotfiles.sh"

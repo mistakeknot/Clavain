@@ -2,7 +2,8 @@
 # PostToolUse hook: validate plugin.json after edits.
 # Fires on Edit|Write|MultiEdit targeting */.claude-plugin/plugin.json.
 # Fail-open: always exits 0 — reports via additionalContext.
-set -euo pipefail
+set -uo pipefail
+trap 'exit 0' ERR
 
 INPUT="$(cat)"
 
