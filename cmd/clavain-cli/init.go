@@ -44,6 +44,17 @@ func cmdSprintInit(args []string) error {
 	}
 	beadID := args[0]
 
+	// Block sprint on beads corruption (sentinel written by session-start.sh)
+	user := os.Getenv("USER")
+	if user == "" {
+		user = "mk"
+	}
+	corruptionFile := fmt.Sprintf("/tmp/clavain-bd-corruption-%s", user)
+	if data, err := os.ReadFile(corruptionFile); err == nil {
+		count := strings.TrimSpace(string(data))
+		return fmt.Errorf("bd doctor found %s error(s) — run 'bd doctor --fix' before sprinting", count)
+	}
+
 	// Validate bead exists and get title (use loud version — this is a real error)
 	titleOut, err := runBDQuiet("show", beadID)
 	if err != nil {

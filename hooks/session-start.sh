@@ -135,13 +135,25 @@ if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
         _bd_age=999
         [[ -f "$_bd_sentinel" ]] && _bd_age=$(( $(date +%s) - $(stat -c %Y "$_bd_sentinel" 2>/dev/null || echo 0) ))
         if [[ "$_bd_age" -gt 300 ]]; then
-            beads_issues=$( (bd doctor --json 2>/dev/null || true) | jq '[.checks[]? | select(.status == "warning" or .status == "error")] | length' 2>/dev/null) || beads_issues="0"
+            _bd_result=$( (bd doctor --json 2>/dev/null || true) )
+            beads_errors=$(echo "$_bd_result" | jq '[.checks[]? | select(.status == "error")] | length' 2>/dev/null) || beads_errors="0"
+            beads_warnings=$(echo "$_bd_result" | jq '[.checks[]? | select(.status == "warning")] | length' 2>/dev/null) || beads_warnings="0"
             touch "$_bd_sentinel" 2>/dev/null || true
+            # Write corruption sentinel for sprint-init to check
+            _bd_corruption="/tmp/clavain-bd-corruption-${USER:-mk}"
+            if [[ "$beads_errors" -gt 0 ]]; then
+                echo "$beads_errors" > "$_bd_corruption"
+            else
+                rm -f "$_bd_corruption"
+            fi
         else
-            beads_issues="0"
+            beads_errors="0"
+            beads_warnings="0"
         fi
-        if [[ "$beads_issues" -gt 0 ]]; then
-            companion_context="${companion_context}\\n- beads doctor: ${beads_issues} issue(s) — run \`bd doctor --fix\`"
+        if [[ "$beads_errors" -gt 0 ]]; then
+            companion_context="${companion_context}\\n- beads doctor: ${beads_errors} ERROR(s) — DATA CORRUPTION, run \`bd doctor --fix\` before starting work"
+        elif [[ "$beads_warnings" -gt 0 ]]; then
+            companion_context="${companion_context}\\n- beads doctor: ${beads_warnings} warning(s) — run \`bd doctor --fix\`"
         fi
     fi
 
