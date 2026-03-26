@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
 	"gopkg.in/yaml.v3"
 )
 
@@ -609,15 +610,11 @@ func matchRole(role AgentRole, fleet map[string]FleetAgent) (matchedAgent, bool)
 }
 
 func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration, ct *CalibratedThresholds) (string, string) {
-	// Safety floor check first — hard constraint
-	if floor, ok := safetyFloorAgents[agent.id]; ok {
-		return floor, "safety_floor"
-	}
+	var model, source string
 
 	// Interspect calibration — evidence-driven
 	if cal != nil {
 		if c, ok := cal.Agents[agent.id]; ok {
-			// Use per-agent calibrated threshold if available, otherwise default 0.7
 			threshold := 0.7
 			if ct != nil {
 				if at, ok := ct.Agents[agent.id]; ok {
@@ -625,25 +622,36 @@ func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration
 				}
 			}
 			if c.Confidence >= threshold && c.EvidenceSessions >= 3 {
-				model := c.RecommendedModel
-				if model == "haiku" || model == "sonnet" || model == "opus" {
-					return model, "interspect_calibration"
+				if m := c.RecommendedModel; m == "haiku" || m == "sonnet" || m == "opus" {
+					model, source = m, "interspect_calibration"
 				}
 			}
 		}
 	}
 
 	// Fleet preferred model
-	if agent.agent.Models.Preferred != "" {
-		return agent.agent.Models.Preferred, "fleet_preferred"
+	if model == "" && agent.agent.Models.Preferred != "" {
+		model, source = agent.agent.Models.Preferred, "fleet_preferred"
 	}
 
 	// Role-declared model tier
-	if role.ModelTier != "" {
-		return role.ModelTier, "routing_fallback"
+	if model == "" && role.ModelTier != "" {
+		model, source = role.ModelTier, "routing_fallback"
 	}
 
-	return "sonnet", "routing_fallback"
+	// Ultimate fallback
+	if model == "" {
+		model, source = "sonnet", "routing_fallback"
+	}
+
+	// Safety floor clamp — unconditional final step
+	if floor, ok := safetyFloorAgents[agent.id]; ok {
+		if pkgphase.ModelTier(model) < pkgphase.ModelTier(floor) || pkgphase.ModelTier(model) == 0 {
+			model, source = floor, "safety_floor"
+		}
+	}
+
+	return model, source
 }
 
 func checkCapabilityCoverage(required []string, agents []PlanAgent, fleet *FleetRegistry) []string {

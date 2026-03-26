@@ -168,27 +168,31 @@ func TestResolveModel(t *testing.T) {
 		name       string
 		agent      matchedAgent
 		role       AgentRole
+		cal        *InterspectCalibration
 		wantModel  string
 		wantSource string
 	}{
 		{
-			name:       "safety floor fd-safety",
+			name:       "safety floor fd-safety no calibration",
 			agent:      matchedAgent{id: "fd-safety", agent: FleetAgent{Models: AgentModels{Preferred: "sonnet"}}},
 			role:       AgentRole{ModelTier: "sonnet"},
+			cal:        cal,
 			wantModel:  "sonnet",
-			wantSource: "safety_floor",
+			wantSource: "fleet_preferred",
 		},
 		{
-			name:       "safety floor fd-correctness",
+			name:       "safety floor fd-correctness no calibration",
 			agent:      matchedAgent{id: "fd-correctness", agent: FleetAgent{Models: AgentModels{Preferred: "sonnet"}}},
 			role:       AgentRole{ModelTier: "sonnet"},
+			cal:        cal,
 			wantModel:  "sonnet",
-			wantSource: "safety_floor",
+			wantSource: "fleet_preferred",
 		},
 		{
 			name:       "calibration applied fd-architecture to haiku",
 			agent:      matchedAgent{id: "fd-architecture", agent: FleetAgent{Models: AgentModels{Preferred: "sonnet"}}},
 			role:       AgentRole{ModelTier: "sonnet"},
+			cal:        cal,
 			wantModel:  "haiku",
 			wantSource: "interspect_calibration",
 		},
@@ -196,6 +200,7 @@ func TestResolveModel(t *testing.T) {
 			name:       "calibration upgrades fd-quality to opus",
 			agent:      matchedAgent{id: "fd-quality", agent: FleetAgent{Models: AgentModels{Preferred: "sonnet"}}},
 			role:       AgentRole{ModelTier: "sonnet"},
+			cal:        cal,
 			wantModel:  "opus",
 			wantSource: "interspect_calibration",
 		},
@@ -203,14 +208,45 @@ func TestResolveModel(t *testing.T) {
 			name:       "fleet preferred synthesis-agent haiku",
 			agent:      matchedAgent{id: "synthesis-agent", agent: FleetAgent{Models: AgentModels{Preferred: "haiku"}}},
 			role:       AgentRole{ModelTier: "haiku"},
+			cal:        cal,
 			wantModel:  "haiku",
 			wantSource: "fleet_preferred",
+		},
+		{
+			name:  "calibration upgrades fd-safety to opus",
+			agent: matchedAgent{id: "fd-safety", agent: FleetAgent{}},
+			role:  AgentRole{},
+			cal: &InterspectCalibration{Agents: map[string]AgentCalibration{
+				"fd-safety": {RecommendedModel: "opus", Confidence: 0.95, EvidenceSessions: 10},
+			}},
+			wantModel:  "opus",
+			wantSource: "interspect_calibration",
+		},
+		{
+			name:  "calibration haiku for fd-safety clamped to sonnet",
+			agent: matchedAgent{id: "fd-safety", agent: FleetAgent{}},
+			role:  AgentRole{},
+			cal: &InterspectCalibration{Agents: map[string]AgentCalibration{
+				"fd-safety": {RecommendedModel: "haiku", Confidence: 0.95, EvidenceSessions: 10},
+			}},
+			wantModel:  "sonnet",
+			wantSource: "safety_floor",
+		},
+		{
+			name:  "unrecognized calibration model for fd-safety falls to floor",
+			agent: matchedAgent{id: "fd-safety", agent: FleetAgent{}},
+			role:  AgentRole{},
+			cal: &InterspectCalibration{Agents: map[string]AgentCalibration{
+				"fd-safety": {RecommendedModel: "claude-3-5-sonnet", Confidence: 0.95, EvidenceSessions: 10},
+			}},
+			wantModel:  "sonnet",
+			wantSource: "routing_fallback", // unrecognized model filtered by calibration, fallback produces sonnet which matches floor
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			model, source := resolveModel(tt.agent, tt.role, cal, nil)
+			model, source := resolveModel(tt.agent, tt.role, tt.cal, nil)
 			if model != tt.wantModel || source != tt.wantSource {
 				t.Errorf("resolveModel(%q) = (%q, %q), want (%q, %q)",
 					tt.agent.id, model, source, tt.wantModel, tt.wantSource)
@@ -254,16 +290,17 @@ func TestComposePlanShipStage(t *testing.T) {
 		}
 	}
 
-	// Safety floors enforced
+	// Safety floor agents with no calibration data resolve via fleet_preferred
+	// (sonnet matches floor, so clamp does not fire — source is fleet_preferred)
 	for _, a := range plan.Agents {
 		if a.AgentID == "fd-safety" {
-			if a.Model != "sonnet" || a.ModelSource != "safety_floor" {
-				t.Errorf("fd-safety: model=%q source=%q, want sonnet/safety_floor", a.Model, a.ModelSource)
+			if a.Model != "sonnet" || a.ModelSource != "fleet_preferred" {
+				t.Errorf("fd-safety: model=%q source=%q, want sonnet/fleet_preferred", a.Model, a.ModelSource)
 			}
 		}
 		if a.AgentID == "fd-correctness" {
-			if a.Model != "sonnet" || a.ModelSource != "safety_floor" {
-				t.Errorf("fd-correctness: model=%q source=%q, want sonnet/safety_floor", a.Model, a.ModelSource)
+			if a.Model != "sonnet" || a.ModelSource != "fleet_preferred" {
+				t.Errorf("fd-correctness: model=%q source=%q, want sonnet/fleet_preferred", a.Model, a.ModelSource)
 			}
 		}
 	}
