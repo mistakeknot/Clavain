@@ -48,10 +48,13 @@ declare -gA _ROUTING_SF_AGENT_MIN=()             # [agent_name]=min_model
 # Returns numeric tier: haiku=1, sonnet=2, opus=3. Unknown=0.
 _routing_model_tier() {
   case "${1:-}" in
-    haiku)  echo 1 ;;
-    sonnet) echo 2 ;;
-    opus)   echo 3 ;;
-    *)      echo 0 ;;
+    haiku)              echo 1 ;;
+    local:qwen3-8b)     echo 1 ;;  # Track B5: haiku-equivalent
+    sonnet)             echo 2 ;;
+    local:qwen3-30b)    echo 2 ;;  # Track B5: sonnet-equivalent
+    local:qwen2.5-72b)  echo 2 ;;  # Track B5: sonnet-equivalent
+    opus)               echo 3 ;;
+    *)                  echo 0 ;;
   esac
 }
 

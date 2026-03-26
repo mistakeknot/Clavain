@@ -198,3 +198,49 @@ delegation:
   # Minimum pass rate (from calibration data) to auto-delegate a category
   # Categories below this get advisory-only routing even in enforce mode
   min_category_pass_rate: 0.70
+
+# Local model routing via interfere (Track B5)
+#
+# Routes eligible tasks to local MLX models served by the interfere plugin.
+# Complexity tiers map to local model tiers; confidence cascade escalates
+# to cloud when local model confidence is too low.
+#
+# mode:
+#   off     — No local routing. All tasks use cloud models. (default)
+#   shadow  — Log what would route locally, but use cloud models.
+#   enforce — Route eligible tasks to local models via interfere.
+#
+# Env override: INTERFERE_ROUTING_MODE=enforce
+# Escape hatch: set mode=off or stop the interfere server
+local_models:
+  mode: "off"
+  endpoint: "http://localhost:8421"
+
+  # Map local model identifiers to Clavain model tiers (1=haiku, 2=sonnet, 3=opus)
+  tier_mappings:
+    "local:qwen3-8b": 1
+    "local:qwen3-30b": 2
+    "local:qwen2.5-72b": 2
+
+  # Complexity tier -> preferred local model
+  complexity_routing:
+    C1: "local:qwen3-8b"
+    C2: "local:qwen3-30b"
+    C3: "local:qwen2.5-72b"    # with confidence cascade
+
+  # Confidence cascade: if first-3-token avg probability < threshold, escalate
+  confidence_cascade:
+    enabled: true
+    accept_threshold: 0.8      # accept local output above this
+    escalate_threshold: 0.6    # try larger local model between 0.6-0.8
+    cloud_threshold: 0.6       # escalate to cloud below this
+
+  # Agents that MUST NOT use local models (safety floors)
+  ineligible_agents:
+    - fd-safety
+    - fd-correctness
+
+  # Privacy routing: tasks classified as internal/sensitive always route locally
+  privacy_routing:
+    internal: "local-only"
+    sensitive: "local-only-no-log"
