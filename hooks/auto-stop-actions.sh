@@ -20,6 +20,7 @@
 set -uo pipefail
 trap 'exit 0' ERR
 source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
+source "${BASH_SOURCE[0]%/*}/lib-shadow-tracker.sh" 2>/dev/null || true
 
 # Guard: fail-open if jq is not available
 if ! command -v jq &>/dev/null; then
@@ -102,6 +103,17 @@ EOF
     fi
 fi
 
+# Shadow tracker detection — orthogonal to tier waterfall
+# Runs independently; emits warning always, blocks only if no other tier claimed the cycle
+SHADOW_WARNING=""
+if [[ ! -f ".claude/clavain.no-shadow-enforce" ]]; then
+    shadow_files=$(detect_shadow_trackers "." 2>/dev/null)
+    shadow_count=$?
+    if [[ $shadow_count -gt 0 ]]; then
+        SHADOW_WARNING="Shadow tracker detected: ${shadow_count} file(s) found using work-tracking outside beads:\n${shadow_files}\n\nThese drift silently and cause duplicate work. Run /bead-sweep to migrate to beads, or delete if already tracked."
+    fi
+fi
+
 # Tiered decision: compound > dispatch > drift check
 # Weight >= 4: non-trivial problem-solving → compound (raised from 3)
 # bead-closed + opt-in: autonomous dispatch → claim next bead
@@ -176,6 +188,11 @@ if [[ -z "$REASON" && "$WEIGHT" -ge 3 ]]; then
             fi
         fi
     fi
+fi
+
+# If no tier claimed the cycle AND shadow trackers were found, block
+if [[ -z "$REASON" && -n "$SHADOW_WARNING" ]]; then
+    REASON="$SHADOW_WARNING"
 fi
 
 # No tier matched — nothing to do
