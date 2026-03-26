@@ -184,6 +184,21 @@ resolve_source_dir() {
     return
   fi
 
+  # Infer from existing install: if the skills symlink points to a valid
+  # Clavain root, use that. This handles marketplace-based installs where
+  # the links point to the plugin cache, not the local source checkout.
+  local agents_link="$AGENTS_SKILLS_DIR/clavain"
+  if [[ -L "$agents_link" ]]; then
+    local link_target
+    link_target="$(readlink -f "$agents_link" 2>/dev/null || readlink "$agents_link")"
+    # link_target is <clavain-root>/skills — parent should be the root
+    local inferred_root="${link_target%/skills}"
+    if [[ "$inferred_root" != "$link_target" ]] && is_clavain_root "$inferred_root"; then
+      SOURCE_DIR="$inferred_root"
+      return
+    fi
+  fi
+
   local script_root
   script_root="$(cd "$SCRIPT_DIR/.." && pwd)"
   if is_clavain_root "$script_root"; then
@@ -572,8 +587,8 @@ generate_prompts() {
 
   mkdir -p "$CODEX_PROMPTS_DIR"
 
-  local expected
-  expected="$(mktemp)"
+  local expected_files
+  expected_files="$(mktemp)"
   local command_names
   command_names="$(mktemp)"
   local skill_names
@@ -588,6 +603,7 @@ generate_prompts() {
   command_regex="$(build_command_regex "$command_names")"
 
   local count=0
+  local alias_count=0
   local removed=0
   local namespaced_rewrites=0
   local bare_rewrites=0
@@ -601,7 +617,7 @@ generate_prompts() {
     local name out body_tmp converted_tmp stats_tmp
     name="$(basename "$src" .md)"
     out="$CODEX_PROMPTS_DIR/clavain-$name.md"
-    echo "$name" >> "$expected"
+    printf '%s\n' "$out" >> "$expected_files"
 
     body_tmp="$(mktemp)"
     converted_tmp="$(mktemp)"
@@ -662,20 +678,52 @@ generate_prompts() {
       cat "$converted_tmp"
     } > "$out"
 
+    local alias_out
+    alias_out="$CODEX_PROMPTS_DIR/clavain:$name.md"
+    printf '%s\n' "$alias_out" >> "$expected_files"
+    {
+      echo "# Clavain Command Alias: /prompts:clavain:$name"
+      echo
+      echo "Codex prompt wrapper generated from Clavain command source."
+      echo
+      echo "- Source: \`$SOURCE_DIR/commands/$name.md\`"
+      echo "- Source command: \`/clavain:$name\`"
+      echo "- Codex alias: \`/prompts:clavain:$name\`"
+      echo "- Compatibility: slash-command and .claude path references normalized for Codex."
+      echo "- Elicitation adapter: if a prompt calls for AskUserQuestion, try future plan-mode escalation if host supports it, else use \`request_user_input\` when available, else ask in chat with numbered options and wait."
+      echo
+      echo "---"
+      echo
+      echo "## Codex Elicitation Adapter"
+      echo
+      echo "When instructions below mention the Codex elicitation adapter:"
+      echo "1. If a host capability exists to switch from Default -> Plan mode, try once (non-fatal)."
+      echo "2. If \`request_user_input\` is available, use it for structured elicitation."
+      echo "3. Otherwise, ask in chat using a single concise question plus numbered options, then pause for user choice."
+      echo "4. Normalize the answer, echo the resolved selection, and continue."
+      echo
+      cat "$converted_tmp"
+    } > "$alias_out"
+
     rm -f "$body_tmp" "$converted_tmp" "$stats_tmp"
     count=$((count + 1))
+    alias_count=$((alias_count + 1))
   done
 
   local wrapper_file wrapper_name command_name
-  for wrapper_file in "$CODEX_PROMPTS_DIR"/clavain-*.md; do
+  while IFS= read -r wrapper_file; do
     [[ -f "$wrapper_file" ]] || continue
-    wrapper_name="$(basename "$wrapper_file" .md)"
-    command_name="${wrapper_name#clavain-}"
-    if [[ -n "$command_name" ]] && ! grep -Fxq "$command_name" "$expected" 2>/dev/null; then
+    if grep -Fxq "$wrapper_file" "$expected_files" 2>/dev/null; then
+      continue
+    fi
+
+    wrapper_name="$(basename "$wrapper_file")"
+    if [[ "$wrapper_name" == clavain-*.md || "$wrapper_name" == clavain:*.md ]] || \
+       grep -Fq -- "- Codex alias: \`/prompts:clavain:" "$wrapper_file" 2>/dev/null; then
       rm -f "$wrapper_file"
       removed=$((removed + 1))
     fi
-  done
+  done < <(find "$CODEX_PROMPTS_DIR" -maxdepth 1 -type f \( -name 'clavain-*.md' -o -name 'clavain:*.md' \) | sort)
 
   local unresolved_unique unresolved_json unresolved_count
   unresolved_unique="$(mktemp)"
@@ -694,7 +742,7 @@ generate_prompts() {
       --arg source_dir "$SOURCE_DIR" \
       --arg prompts_dir "$CODEX_PROMPTS_DIR" \
       --argjson command_count "$count" \
-      --argjson wrappers_generated "$count" \
+      --argjson wrappers_generated "$((count + alias_count))" \
       --argjson stale_removed "$removed" \
       --argjson namespaced_rewrites "$namespaced_rewrites" \
       --argjson bare_rewrites "$bare_rewrites" \
@@ -725,7 +773,7 @@ generate_prompts() {
   "source_dir":"$(json_escape "$SOURCE_DIR")",
   "prompts_dir":"$(json_escape "$CODEX_PROMPTS_DIR")",
   "command_count":$count,
-  "wrappers_generated":$count,
+  "wrappers_generated":$((count + alias_count)),
   "stale_removed":$removed,
   "rewrites":{"namespaced":$namespaced_rewrites,"bare":$bare_rewrites,"path":$path_rewrites,"elicitation":$elicitation_rewrites},
   "unresolved_refs":[],
@@ -735,9 +783,9 @@ generate_prompts() {
 REPORT
   fi
 
-  rm -f "$expected" "$command_names" "$skill_names" "$unresolved_refs" "$unresolved_unique"
+  rm -f "$expected_files" "$command_names" "$skill_names" "$unresolved_refs" "$unresolved_unique"
 
-  echo "Generated $count prompt wrappers in $CODEX_PROMPTS_DIR"
+  echo "Generated $count prompt wrappers and $alias_count aliases in $CODEX_PROMPTS_DIR"
   echo "Removed $removed stale prompt wrappers in $CODEX_PROMPTS_DIR"
   echo "Wrote conversion report: $CONVERSION_REPORT_FILE"
   if [[ "$unresolved_count" != "0" ]]; then
@@ -749,7 +797,7 @@ remove_prompts() {
   local removed=0
   if [[ -d "$CODEX_PROMPTS_DIR" ]]; then
     local file
-    for file in "$CODEX_PROMPTS_DIR"/clavain-*.md; do
+    for file in "$CODEX_PROMPTS_DIR"/clavain-*.md "$CODEX_PROMPTS_DIR"/clavain:*.md; do
       [[ -f "$file" ]] || continue
       rm -f "$file"
       removed=$((removed + 1))
