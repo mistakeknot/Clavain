@@ -213,7 +213,7 @@ delegation:
 # Env override: INTERFERE_ROUTING_MODE=enforce
 # Escape hatch: set mode=off or stop the interfere server
 local_models:
-  mode: "off"
+  mode: shadow  # Promoted from off 2026-03-26 (Demarch-09n). Shadow logs what would route locally.
   endpoint: "http://localhost:8421"
 
   # Map local model identifiers to Clavain model tiers (1=haiku, 2=sonnet, 3=opus)
