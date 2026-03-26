@@ -220,6 +220,32 @@ if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
 fi
 ```
 
+### 3d. Calibration Stage Maturity
+
+```bash
+_stages_file="docs/calibration-stages.yaml"
+if [ -f "$_stages_file" ]; then
+  echo "Calibration Stages (PHILOSOPHY.md closed-loop):"
+  # Parse with awk (no external deps). Extracts domain name + current_stage.
+  awk '
+    /^  [a-z_]+:$/ { domain = $1; sub(/:$/, "", domain) }
+    /current_stage:/ && domain != "" {
+      stage = $NF
+      marker = (stage >= 4) ? "PASS" : (stage >= 3) ? "WARN" : "GAP"
+      printf "  %-20s stage %s/4  %s\n", domain, stage, marker
+      if (stage >= 4) complete++
+      total++
+      domain = ""
+    }
+    END {
+      printf "  Summary: %d/%d domains at stage 4\n", complete, total
+    }
+  ' "$_stages_file"
+else
+  echo "calibration stages: WARN (docs/calibration-stages.yaml not found)"
+fi
+```
+
 <!-- agent-rig:begin:companion-checks -->
 ### 3b. Companion Plugins
 
