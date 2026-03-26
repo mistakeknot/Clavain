@@ -195,6 +195,31 @@ if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
 fi
 ```
 
+### 3c. Orphan Bead Detection
+
+Open beads whose ID appears in a git commit message — work likely shipped but bead never closed.
+
+```bash
+if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
+  _oc=0; _of=""
+  _open_ids=$( (bd list --status=open --json 2>/dev/null; bd list --status=in_progress --json 2>/dev/null) | jq -r '.[].id' 2>/dev/null | sort -u) || _open_ids=""
+  if [ -n "$_open_ids" ]; then
+    # Build grep pattern from all open IDs
+    _pattern=$(echo "$_open_ids" | tr '\n' '|' | sed 's/|$//')
+    # Search recent commits (90 days) for any open bead ID
+    _hits=$(git log --since="90 days ago" --oneline --grep-reflog="" --all 2>/dev/null | grep -oE "$_pattern" | sort -u) || _hits=""
+    for _bid in $_hits; do
+      # Verify it's still in the open list (not just a substring match)
+      echo "$_open_ids" | grep -qx "$_bid" || continue
+      _commit=$(git log --since="90 days ago" --oneline --all --grep="$_bid" 2>/dev/null | head -1)
+      _of="${_of}  - ${_bid}: ${_commit}\n"
+      _oc=$((_oc+1))
+    done
+  fi
+  [ "$_oc" -eq 0 ] && echo "orphan beads: PASS" || { echo "orphan beads: WARN ($_oc open bead(s) referenced in commits)"; printf "%b" "$_of"; echo "  └─ Review with 'bd show <id>' — if work shipped, close with 'bd close <id> --reason \"Already shipped\"'"; }
+fi
+```
+
 <!-- agent-rig:begin:companion-checks -->
 ### 3b. Companion Plugins
 
