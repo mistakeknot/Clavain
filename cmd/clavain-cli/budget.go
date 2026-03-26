@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
 )
 
 // ─── Pure Functions (no subprocess calls — unit testable) ───────────
@@ -84,23 +86,23 @@ func phaseCostEstimate(phase string) int64 {
 // These are the stage-1 constants from Feb 2026.
 func phaseCostDefault(phase string) int64 {
 	switch phase {
-	case "brainstorm":
+	case pkgphase.Brainstorm:
 		return 30000
-	case "brainstorm-reviewed":
+	case pkgphase.BrainstormReviewed:
 		return 15000
-	case "strategized":
+	case pkgphase.Strategized:
 		return 25000
-	case "planned":
+	case pkgphase.Planned:
 		return 35000
-	case "plan-reviewed":
+	case pkgphase.LegacyPlanReviewed:
 		return 50000
-	case "executing":
+	case pkgphase.Executing:
 		return 150000
-	case "shipping":
+	case pkgphase.LegacyShipping:
 		return 100000
-	case "reflect":
+	case pkgphase.Reflect:
 		return 10000
-	case "done":
+	case pkgphase.Done:
 		return 5000
 	default:
 		return 30000
@@ -111,17 +113,17 @@ func phaseCostDefault(phase string) int64 {
 // Matches _sprint_phase_to_stage() in lib-sprint.sh.
 func phaseToStage(phase string) string {
 	switch phase {
-	case "brainstorm":
+	case pkgphase.Brainstorm:
 		return "discover"
-	case "brainstorm-reviewed", "strategized", "planned", "plan-reviewed":
+	case pkgphase.BrainstormReviewed, pkgphase.Strategized, pkgphase.Planned, pkgphase.LegacyPlanReviewed:
 		return "design"
-	case "executing":
+	case pkgphase.Executing:
 		return "build"
-	case "shipping":
+	case pkgphase.LegacyShipping:
 		return "ship"
-	case "reflect":
+	case pkgphase.Reflect:
 		return "reflect"
-	case "done":
+	case pkgphase.Done:
 		return "done"
 	default:
 		return "unknown"
@@ -152,8 +154,8 @@ var allStages = []string{"discover", "design", "build", "ship", "reflect"}
 
 // allPhases is the canonical ordered phase sequence for a sprint.
 var allPhases = []string{
-	"brainstorm", "brainstorm-reviewed", "strategized", "planned",
-	"plan-reviewed", "executing", "shipping", "reflect", "done",
+	pkgphase.Brainstorm, pkgphase.BrainstormReviewed, pkgphase.Strategized, pkgphase.Planned,
+	pkgphase.LegacyPlanReviewed, pkgphase.Executing, pkgphase.LegacyShipping, pkgphase.Reflect, pkgphase.Done,
 }
 
 // phasesAfter returns the phases remaining after currentPhase (exclusive).

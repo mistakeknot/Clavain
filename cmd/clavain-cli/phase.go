@@ -7,29 +7,31 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
 )
 
 // nextStep returns the static fallback next step for a given phase.
 // This matches the Bash sprint_next_step() fallback case statement.
 func nextStep(phase string) string {
 	switch phase {
-	case "brainstorm":
+	case pkgphase.Brainstorm:
 		return "strategy"
-	case "brainstorm-reviewed":
+	case pkgphase.BrainstormReviewed:
 		return "strategy"
-	case "strategized":
+	case pkgphase.Strategized:
 		return "write-plan"
-	case "planned":
+	case pkgphase.Planned:
 		return "flux-drive"
-	case "plan-reviewed":
+	case pkgphase.LegacyPlanReviewed:
 		return "work"
-	case "executing":
+	case pkgphase.Executing:
 		return "quality-gates"
-	case "shipping":
+	case pkgphase.LegacyShipping:
 		return "reflect"
-	case "reflect":
+	case pkgphase.Reflect:
 		return "done"
-	case "done":
+	case pkgphase.Done:
 		return "done"
 	default:
 		fmt.Fprintf(os.Stderr, "WARNING: unknown phase %q — defaulting to brainstorm\n", phase)
@@ -273,7 +275,7 @@ func cmdEnforceGate(args []string) error {
 	}
 
 	// Satisfaction gate check for shipping phase
-	if targetPhase == "shipping" {
+	if targetPhase == pkgphase.LegacyShipping {
 		spec, specErr := loadAgencySpec()
 		var gateMode string
 		if specErr == nil {
@@ -522,23 +524,23 @@ func cmdInferAction(args []string) error {
 // phaseToAction maps a phase name to an action name for infer-action.
 func phaseToAction(phase string) string {
 	switch phase {
-	case "brainstorm":
+	case pkgphase.Brainstorm:
 		return "strategize"
-	case "brainstorm-reviewed":
+	case pkgphase.BrainstormReviewed:
 		return "strategize"
-	case "strategized":
+	case pkgphase.Strategized:
 		return "plan"
-	case "planned":
+	case pkgphase.Planned:
 		return "execute"
-	case "plan-reviewed":
+	case pkgphase.LegacyPlanReviewed:
 		return "execute"
-	case "executing":
+	case pkgphase.Executing:
 		return "continue"
-	case "shipping":
+	case pkgphase.LegacyShipping:
 		return "ship"
-	case "reflect":
+	case pkgphase.Reflect:
 		return "reflect" // identity mapping: reflect is both phase and action (unlike ship/closed)
-	case "done":
+	case pkgphase.Done:
 		return "closed"
 	default:
 		return ""

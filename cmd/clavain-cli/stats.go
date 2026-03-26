@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
 )
 
 // StatsRow is per-complexity stats in sprint-stats output.
@@ -93,7 +95,7 @@ func cmdSprintStats(args []string) error {
 
 		row.Total++
 		switch {
-		case r.Status == "completed" || r.Phase == "done":
+		case r.Status == "completed" || r.Phase == pkgphase.Done:
 			row.Completed++
 		case r.Status == "cancelled" || r.Status == "failed":
 			row.Abandoned++

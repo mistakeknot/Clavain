@@ -271,12 +271,12 @@ func detectFleetDeltas(prev, curr *factoryStatus) []agentDelta {
 		if !existed {
 			deltas = append(deltas, agentDelta{
 				Type: "agent_status", Agent: a.SessionName,
-				From: "absent", To: statusStr(a.Active),
+				From: "absent", To: agentStatusStr(a.Active),
 			})
 		} else if prevActive != a.Active {
 			deltas = append(deltas, agentDelta{
 				Type: "agent_status", Agent: a.SessionName,
-				From: statusStr(prevActive), To: statusStr(a.Active),
+				From: agentStatusStr(prevActive), To: agentStatusStr(a.Active),
 			})
 		}
 	}
@@ -290,7 +290,7 @@ func detectFleetDeltas(prev, curr *factoryStatus) []agentDelta {
 		if !currMap[a.SessionName] {
 			deltas = append(deltas, agentDelta{
 				Type: "agent_status", Agent: a.SessionName,
-				From: statusStr(a.Active), To: "absent",
+				From: agentStatusStr(a.Active), To: "absent",
 			})
 		}
 	}
@@ -298,9 +298,11 @@ func detectFleetDeltas(prev, curr *factoryStatus) []agentDelta {
 	return deltas
 }
 
-func statusStr(active bool) string {
+// agentStatusStr returns the agent activity status string.
+// This is agent-level activity (executing/idle), NOT sprint lifecycle phase.
+func agentStatusStr(active bool) string {
 	if active {
-		return "executing"
+		return "executing" // agent activity status, not pkgphase.Executing
 	}
 	return "idle"
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
 	"github.com/vmihailenco/msgpack/v5"
 	"gopkg.in/yaml.v3"
 )
@@ -98,7 +99,7 @@ func cmdPolicyShow(args []string) error {
 	fmt.Printf("%-15s %-30s %-30s\n", "Phase", "Deny Paths", "Deny Tools")
 	fmt.Printf("%-15s %-30s %-30s\n", "-----", "----------", "----------")
 
-	for _, phase := range []string{"brainstorm", "strategized", "planned", "executing", "shipping", "reflect"} {
+	for _, phase := range []string{pkgphase.Brainstorm, pkgphase.Strategized, pkgphase.Planned, pkgphase.Executing, pkgphase.LegacyShipping, pkgphase.Reflect} {
 		pp, ok := policy.Phases[phase]
 		if !ok {
 			fmt.Printf("%-15s %-30s %-30s\n", phase, "(none)", "(none)")
@@ -142,12 +143,12 @@ func defaultPolicy() *Policy {
 	return &Policy{
 		SchemaVersion: 1,
 		Phases: map[string]PhasePolicy{
-			"brainstorm":  {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
-			"strategized": {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
-			"planned":     {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
-			"executing":   {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
-			"shipping":    {AllowPaths: []string{"**"}, AllowTools: []string{"**"}},
-			"reflect":     {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
+			pkgphase.Brainstorm:     {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
+			pkgphase.Strategized:    {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
+			pkgphase.Planned:        {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
+			pkgphase.Executing:      {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
+			pkgphase.LegacyShipping: {AllowPaths: []string{"**"}, AllowTools: []string{"**"}},
+			pkgphase.Reflect:        {DenyPaths: []string{".clavain/scenarios/holdout/**"}},
 		},
 	}
 }
@@ -223,7 +224,7 @@ func getCurrentPhase(beadID string) string {
 		return phase
 	}
 
-	return "executing" // Default to most restrictive build phase
+	return pkgphase.Executing // Default to most restrictive build phase
 }
 
 // recordPolicyViolation records a policy violation in CXDB.
