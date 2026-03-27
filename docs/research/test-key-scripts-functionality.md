@@ -1,8 +1,8 @@
 # Functional Test: Key Clavain Scripts
 
 **Date:** 2026-02-22
-**Working directory:** /home/mk/projects/Demarch
-**Clavain root:** /home/mk/projects/Demarch/os/clavain
+**Working directory:** /home/mk/projects/Sylveste
+**Clavain root:** /home/mk/projects/Sylveste/os/clavain
 
 ## Test Results
 
@@ -85,12 +85,12 @@
 
 **Path:** `os/clavain/scripts/check-versions.sh`
 
-#### Test: Run from Demarch root
+#### Test: Run from Sylveste root
 - **Exit code:** 1
 - **Result:** FAIL (location-dependent)
 - **Output:**
   ```
-  Error: No .claude-plugin/plugin.json found at /home/mk/projects/Demarch
+  Error: No .claude-plugin/plugin.json found at /home/mk/projects/Sylveste
   ```
 
 #### Test: Run from Clavain directory
@@ -117,11 +117,11 @@
 - **Result:** PASS (correct usage error)
 - **Output:**
   ```
-  Usage: /home/mk/projects/Demarch/scripts/interbump.sh <version> [--dry-run]
+  Usage: /home/mk/projects/Sylveste/scripts/interbump.sh <version> [--dry-run]
     version   Semver string, e.g. 0.5.0
     --dry-run Show what would change without writing
   ```
-- **Notes:** The script delegates to `/home/mk/projects/Demarch/scripts/interbump.sh` (the monorepo-level version bumper). It correctly shows usage when no version argument is provided. The exit code 1 is appropriate for a missing required argument. Note: the usage message shows the `interbump.sh` path rather than `bump-version.sh` — this is a minor cosmetic issue since `bump-version.sh` is a thin wrapper.
+- **Notes:** The script delegates to `/home/mk/projects/Sylveste/scripts/interbump.sh` (the monorepo-level version bumper). It correctly shows usage when no version argument is provided. The exit code 1 is appropriate for a missing required argument. Note: the usage message shows the `interbump.sh` path rather than `bump-version.sh` — this is a minor cosmetic issue since `bump-version.sh` is a thin wrapper.
 
 ---
 
@@ -245,7 +245,7 @@ All 9 hook libraries were tested by sourcing them and checking for exported func
 | 1a | `dispatch.sh` | `--help` | 0 | **PASS** | Full help with examples |
 | 1b | `dispatch.sh` | `--dry-run` (no prompt) | 1 | **PASS** | Correct validation error |
 | 2 | `lib-routing.sh` | Source + check functions | 0 | **PASS** | 8 functions exported (6 public, 2 private). Test searched for wrong names |
-| 3a | `check-versions.sh` | From Demarch root | 1 | **FAIL** | Requires cwd to have `.claude-plugin/plugin.json` |
+| 3a | `check-versions.sh` | From Sylveste root | 1 | **FAIL** | Requires cwd to have `.claude-plugin/plugin.json` |
 | 3b | `check-versions.sh` | From Clavain root | 1 | **PASS*** | Correctly detects real version drift (0.6.60 vs 0.6.59) |
 | 4 | `bump-version.sh` | No args | 1 | **PASS** | Shows interbump.sh usage; delegates correctly |
 | 5 | `codex-bootstrap.sh` | `--help` | 0 | **PASS** | Clean help output |

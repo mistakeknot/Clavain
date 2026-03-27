@@ -1022,7 +1022,7 @@ doctor() {
       status=1
     fi
   elif [[ -x "$CLAVAIN_CLI_LINK" ]]; then
-    # Demarch install.sh may place a standalone executable here instead of the
+    # Sylveste install.sh may place a standalone executable here instead of the
     # managed symlink used by install-codex.sh. That shape is still valid.
     clavain_cli_link_ok="true"
     clavain_cli_link_match="true"

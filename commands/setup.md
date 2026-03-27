@@ -23,7 +23,7 @@ SCRIPT_PATH="${CLAVAIN_SOURCE_DIR:-$HOME/.codex/clavain}/scripts/install-codex-i
 if [[ ! -f "$SCRIPT_PATH" ]]; then
   for candidate in \
     "$PWD/os/clavain/scripts/install-codex-interverse.sh" \
-    "$HOME/projects/Demarch/os/clavain/scripts/install-codex-interverse.sh"; do
+    "$HOME/projects/Sylveste/os/clavain/scripts/install-codex-interverse.sh"; do
     if [[ -f "$candidate" ]]; then SCRIPT_PATH="$candidate"; break; fi
   done
 fi
@@ -130,9 +130,9 @@ If not found or unhealthy:
 ls core/intercore/cmd/ic/main.go 2>/dev/null
 ls ../core/intercore/cmd/ic/main.go 2>/dev/null
 ls ../../core/intercore/cmd/ic/main.go 2>/dev/null
-ls ~/projects/Demarch/core/intercore/cmd/ic/main.go 2>/dev/null
+ls ~/projects/Sylveste/core/intercore/cmd/ic/main.go 2>/dev/null
 ```
-If not found, warn "Clone https://github.com/mistakeknot/Demarch and re-run setup." and skip.
+If not found, warn "Clone https://github.com/mistakeknot/Sylveste and re-run setup." and skip.
 
 3. Build and install:
 ```bash

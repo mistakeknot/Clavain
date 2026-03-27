@@ -6,8 +6,8 @@ Replaced the stub implementations in `children.go` with full children management
 
 ## Files Modified
 
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/children.go` — Full implementation (was 7-line stub, now ~190 lines)
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/children_test.go` — New file with comprehensive tests
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/children.go` — Full implementation (was 7-line stub, now ~190 lines)
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/children_test.go` — New file with comprehensive tests
 
 ## Implementation Details
 

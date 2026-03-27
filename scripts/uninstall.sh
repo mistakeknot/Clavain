@@ -6,7 +6,7 @@
 #
 # This removes the Clavain plugin and optionally its companion plugins.
 # It does NOT remove the ic kernel, Beads data, or Codex/Gemini skills.
-# For full platform uninstall, use: bash install.sh --uninstall (from Demarch repo)
+# For full platform uninstall, use: bash install.sh --uninstall (from Sylveste repo)
 
 set -euo pipefail
 
@@ -78,7 +78,7 @@ fi
 echo ""
 echo "✓ Clavain uninstalled from Claude Code."
 echo ""
-echo "  Not removed (use Demarch install.sh --uninstall for full cleanup):"
+echo "  Not removed (use Sylveste install.sh --uninstall for full cleanup):"
 echo "  - ic kernel (~/.local/bin/ic)"
 echo "  - Codex/Gemini skills"
 echo "  - Beads data (.beads/)"

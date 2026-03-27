@@ -2,7 +2,7 @@
 
 **Status:** Complete
 **Date:** 2026-02-25
-**Artifact:** `/home/mk/projects/Demarch/os/clavain/tests/shell/test_go_cli_compat.bats`
+**Artifact:** `/home/mk/projects/Sylveste/os/clavain/tests/shell/test_go_cli_compat.bats`
 
 ## Summary
 
@@ -113,7 +113,7 @@ All mappings are verified to be identical between Go and Bash.
 ## Running the Tests
 
 ```bash
-cd /home/mk/projects/Demarch/os/clavain
+cd /home/mk/projects/Sylveste/os/clavain
 bats tests/shell/test_go_cli_compat.bats
 ```
 
@@ -123,15 +123,15 @@ The tests build the Go binary fresh into `$TMPDIR` on each test file run (not pe
 
 ## Files Created
 
-- `/home/mk/projects/Demarch/os/clavain/tests/shell/test_go_cli_compat.bats` — 39 BATS integration tests (executable)
+- `/home/mk/projects/Sylveste/os/clavain/tests/shell/test_go_cli_compat.bats` — 39 BATS integration tests (executable)
 
 ## Files Referenced
 
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/main.go` — Go CLI dispatcher (38 commands)
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/complexity.go` — complexity-label and classify-complexity
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/phase.go` — sprint-next-step and phase transitions
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/exec.go` — subprocess helpers (runIC, runBD, etc.)
-- `/home/mk/projects/Demarch/os/clavain/bin/clavain-cli` — Bash CLI dispatcher (reference implementation)
-- `/home/mk/projects/Demarch/os/clavain/tests/shell/test_helper.bash` — shared BATS test helper
-- `/home/mk/projects/Demarch/os/clavain/tests/shell/test_seam_integration.bats` — existing BATS tests (pattern reference)
-- `/home/mk/projects/Demarch/os/clavain/tests/shell/test_lib_sprint.bats` — existing sprint lib tests (expected values reference)
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/main.go` — Go CLI dispatcher (38 commands)
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/complexity.go` — complexity-label and classify-complexity
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/phase.go` — sprint-next-step and phase transitions
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/exec.go` — subprocess helpers (runIC, runBD, etc.)
+- `/home/mk/projects/Sylveste/os/clavain/bin/clavain-cli` — Bash CLI dispatcher (reference implementation)
+- `/home/mk/projects/Sylveste/os/clavain/tests/shell/test_helper.bash` — shared BATS test helper
+- `/home/mk/projects/Sylveste/os/clavain/tests/shell/test_seam_integration.bats` — existing BATS tests (pattern reference)
+- `/home/mk/projects/Sylveste/os/clavain/tests/shell/test_lib_sprint.bats` — existing sprint lib tests (expected values reference)

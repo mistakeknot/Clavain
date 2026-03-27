@@ -30,7 +30,7 @@ Codex bootstrap helper:
 ~/.codex/clavain/.codex/clavain-codex bootstrap
 ```
 
-For Demarch (`clavain + interverse` Codex skills), run:
+For Sylveste (`clavain + interverse` Codex skills), run:
 
 ```bash
 bash ~/.codex/clavain/scripts/install-codex-interverse.sh install
@@ -131,7 +131,7 @@ If you previously used **superpowers**, **compound-engineering**, or the old `~/
 3. Verify `~/.agents/skills/*` links.
 4. Restart Codex.
 
-For Claude Code users: the Demarch root installer (`install.sh`) also removes the `superpowers-marketplace` and `every-marketplace` from Claude Code's known marketplaces.
+For Claude Code users: the Sylveste root installer (`install.sh`) also removes the `superpowers-marketplace` and `every-marketplace` from Claude Code's known marketplaces.
 
 The ecosystem installer removes only known legacy artifacts and preserves them in backup snapshots before deletion.
 

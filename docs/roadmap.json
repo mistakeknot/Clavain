@@ -1,6 +1,6 @@
 {
-  "project": "demarch",
-  "kind": "demarch-monorepo-roadmap",
+  "project": "sylveste",
+  "kind": "sylveste-monorepo-roadmap",
   "generated_at": "2026-03-19T00:13:06+00:00",
   "module_count": 67,
   "open_beads": 722,
@@ -601,7 +601,7 @@
       "status": "active"
     },
     {
-      "module": "demarch",
+      "module": "sylveste",
       "location": "root",
       "version": "—",
       "has_roadmap": true,
@@ -1206,7 +1206,7 @@
       "status": "active"
     },
     {
-      "module": "demarch",
+      "module": "sylveste",
       "location": "root",
       "version": "—",
       "has_roadmap": true,
@@ -1218,8 +1218,8 @@
   "roadmap": {
     "now": [
       {
-        "module": "demarch",
-        "id": "Demarch-fqb",
+        "module": "sylveste",
+        "id": "Sylveste-fqb",
         "title": "Interrank power-up: task-based model recommendation",
         "phase": "now",
         "priority": "P1",
@@ -1230,19 +1230,19 @@
         "notes": "Interrank power-up: task-based model recommendation"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-6qb",
-        "title": "Skaffen — Demarch's sovereign agent runtime",
+        "module": "sylveste",
+        "id": "Sylveste-6qb",
+        "title": "Skaffen — Sylveste's sovereign agent runtime",
         "phase": "now",
         "priority": "P1",
         "status": "in_progress",
         "source": "beads",
         "source_file": "beads",
         "blocked_by": [],
-        "notes": "Skaffen — Demarch's sovereign agent runtime"
+        "notes": "Skaffen — Sylveste's sovereign agent runtime"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-w41fn",
         "title": "Expand sequencing hints in tool-composition.yaml from real failure data",
         "phase": "now",
@@ -1254,7 +1254,7 @@
         "notes": "Expand sequencing hints in tool-composition.yaml from real failure data"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-7h6tp",
         "title": "Adapt check_fn tool gating pattern from Hermes",
         "phase": "now",
@@ -1268,8 +1268,8 @@
     ],
     "next": [
       {
-        "module": "demarch",
-        "id": "Demarch-lcxa",
+        "module": "sylveste",
+        "id": "Sylveste-lcxa",
         "title": "F4: Graduated autonomy tier system for sprint",
         "phase": "next",
         "priority": "P2",
@@ -1280,8 +1280,8 @@
         "notes": "F4: Graduated autonomy tier system for sprint"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-ss15",
+        "module": "sylveste",
+        "id": "Sylveste-ss15",
         "title": "F3: Progress tracker rollout to remaining 6 commands",
         "phase": "next",
         "priority": "P2",
@@ -1292,8 +1292,8 @@
         "notes": "F3: Progress tracker rollout to remaining 6 commands"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-7uko",
+        "module": "sylveste",
+        "id": "Sylveste-7uko",
         "title": "F2: Wire artifact bus into all 10 sprint commands",
         "phase": "next",
         "priority": "P2",
@@ -1304,8 +1304,8 @@
         "notes": "F2: Wire artifact bus into all 10 sprint commands"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-lta9",
+        "module": "sylveste",
+        "id": "Sylveste-lta9",
         "title": "Deep review + brainstorm of sprint lifecycle — phase coherence, OODARC alignment, inter-step handoff quality",
         "phase": "next",
         "priority": "P2",
@@ -1316,8 +1316,8 @@
         "notes": "Deep review + brainstorm of sprint lifecycle — phase coherence, OODARC alignment, inter-step handoff quality"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-8w73",
+        "module": "sylveste",
+        "id": "Sylveste-8w73",
         "title": "Skaffen SWE-bench: richer context for persistent failures",
         "phase": "next",
         "priority": "P2",
@@ -1328,8 +1328,8 @@
         "notes": "Skaffen SWE-bench: richer context for persistent failures"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-dog5",
+        "module": "sylveste",
+        "id": "Sylveste-dog5",
         "title": "Skaffen SWE-bench: increase iterate budget to 5 cycles",
         "phase": "next",
         "priority": "P2",
@@ -1340,8 +1340,8 @@
         "notes": "Skaffen SWE-bench: increase iterate budget to 5 cycles"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-3zmo",
+        "module": "sylveste",
+        "id": "Sylveste-3zmo",
         "title": "Skaffen SWE-bench: run full 300-instance Lite benchmark",
         "phase": "next",
         "priority": "P2",
@@ -1352,8 +1352,8 @@
         "notes": "Skaffen SWE-bench: run full 300-instance Lite benchmark"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-dxzr",
+        "module": "sylveste",
+        "id": "Sylveste-dxzr",
         "title": "Epic: Interlab observability audit — ensure all components have measurable metrics for optimization",
         "phase": "next",
         "priority": "P2",
@@ -1364,8 +1364,8 @@
         "notes": "Epic: Interlab observability audit — ensure all components have measurable metrics for optimization"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-jly6",
+        "module": "sylveste",
+        "id": "Sylveste-jly6",
         "title": "F2: /interspect:effectiveness command",
         "phase": "next",
         "priority": "P2",
@@ -1376,8 +1376,8 @@
         "notes": "F2: /interspect:effectiveness command"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-6f5i",
+        "module": "sylveste",
+        "id": "Sylveste-6f5i",
         "title": "F1: Interspect effectiveness report function",
         "phase": "next",
         "priority": "P2",
@@ -1389,7 +1389,7 @@
       },
       {
         "module": "epic",
-        "id": "Demarch-oac8",
+        "id": "Sylveste-oac8",
         "title": "Clavain prompt token optimization — phase 2",
         "phase": "next",
         "priority": "P2",
@@ -1400,8 +1400,8 @@
         "notes": "Clavain prompt token optimization — phase 2"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-2ik",
+        "module": "sylveste",
+        "id": "Sylveste-2ik",
         "title": "Autoresearch: cross-campaign leaderboard and config adoption",
         "phase": "next",
         "priority": "P2",
@@ -1412,16 +1412,16 @@
         "notes": "Autoresearch: cross-campaign leaderboard and config adoption"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-1yy",
-        "title": "Hyperspace AGI patterns: adapt distributed experiment infrastructure for Demarch",
+        "module": "sylveste",
+        "id": "Sylveste-1yy",
+        "title": "Hyperspace AGI patterns: adapt distributed experiment infrastructure for Sylveste",
         "phase": "next",
         "priority": "P2",
         "status": "open",
         "source": "beads",
         "source_file": "beads",
         "blocked_by": [],
-        "notes": "Hyperspace AGI patterns: adapt distributed experiment infrastructure for Demarch"
+        "notes": "Hyperspace AGI patterns: adapt distributed experiment infrastructure for Sylveste"
       },
       {
         "module": "mycroft",
@@ -1448,8 +1448,8 @@
         "notes": "Mycroft fleet orchestrator v0.2"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-mvy",
+        "module": "sylveste",
+        "id": "Sylveste-mvy",
         "title": "Intercom Go rewrite: port Rust daemon to Go + Skaffen integration",
         "phase": "next",
         "priority": "P2",
@@ -1460,7 +1460,7 @@
         "notes": "Intercom Go rewrite: port Rust daemon to Go + Skaffen integration"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-i76wv",
         "title": "Research: Autonomy safety policy for auto-remediate and auto-ship",
         "phase": "next",
@@ -1472,7 +1472,7 @@
         "notes": "Research: Autonomy safety policy for auto-remediate and auto-ship"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-sym02",
         "title": "External issue tracker adapter for beads (Linear/GitHub Issues)",
         "phase": "next",
@@ -1508,7 +1508,7 @@
         "notes": "Message delivery confirmation feedback"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-qi80j",
         "title": "Audit real sessions for unhinted sequencing pipelines",
         "phase": "next",
@@ -1520,7 +1520,7 @@
         "notes": "Audit real sessions for unhinted sequencing pipelines"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-hkrlc",
         "title": "Typing indicator persists after send_message until container exits",
         "phase": "next",
@@ -1532,7 +1532,7 @@
         "notes": "Typing indicator persists after send_message until container exits"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-rjgi9",
         "title": "Intersight: optimize Playwright MCP token efficiency",
         "phase": "next",
@@ -1580,7 +1580,7 @@
         "notes": "Decouple user identity from session: add user_peers table"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-a0q2r",
         "title": "Adapt parent_session_id compression chain from Hermes",
         "phase": "next",
@@ -1592,7 +1592,7 @@
         "notes": "Adapt parent_session_id compression chain from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-qyx8z",
         "title": "Adopt memory-flush-before-compress pattern from Hermes",
         "phase": "next",
@@ -1604,7 +1604,7 @@
         "notes": "Adopt memory-flush-before-compress pattern from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-f8s9q",
         "title": "Port Anthropic prompt caching strategy from Hermes",
         "phase": "next",
@@ -1616,7 +1616,7 @@
         "notes": "Port Anthropic prompt caching strategy from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-fwwhl",
         "title": "Epic: WCM multi-agent coordination patterns",
         "phase": "next",
@@ -1628,7 +1628,7 @@
         "notes": "Epic: WCM multi-agent coordination patterns"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-goiyq",
         "title": "Design convergence-divergence detection with per-domain calibration",
         "phase": "next",
@@ -1640,7 +1640,7 @@
         "notes": "Design convergence-divergence detection with per-domain calibration"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-2n0ew",
         "title": "Design idle-time micro-task dispatch with budget gate",
         "phase": "next",
@@ -1652,7 +1652,7 @@
         "notes": "Design idle-time micro-task dispatch with budget gate"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ofgtl",
         "title": "Design verifiable work commitment lifecycle with Goodhart resistance",
         "phase": "next",
@@ -1664,7 +1664,7 @@
         "notes": "Design verifiable work commitment lifecycle with Goodhart resistance"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-b6hqa",
         "title": "Move sync.yml upstream sync to systemd timer on ethics-gradient",
         "phase": "next",
@@ -1760,7 +1760,7 @@
         "notes": "Establish <name>-metrics.md artifact convention"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-mi8e0",
         "title": "intertrack: metrics instrumentation plugin + per-repo metrics artifacts",
         "phase": "next",
@@ -1772,7 +1772,7 @@
         "notes": "intertrack: metrics instrumentation plugin + per-repo metrics artifacts"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-dta9w",
         "title": "F7: Architecture pattern detection MCP tool",
         "phase": "next",
@@ -1784,7 +1784,7 @@
         "notes": "F7: Architecture pattern detection MCP tool"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-80s4e",
         "title": "F6: Cross-project dependency graph MCP tool",
         "phase": "next",
@@ -1796,7 +1796,7 @@
         "notes": "F6: Cross-project dependency graph MCP tool"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-3kz0v",
         "title": "F5: Write real Intermap vision and roadmap docs",
         "phase": "next",
@@ -1808,7 +1808,7 @@
         "notes": "F5: Write real Intermap vision and roadmap docs"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-dl72x",
         "title": "F1: Audit existing Intermap MCP tools (accuracy, performance, integration)",
         "phase": "next",
@@ -1820,7 +1820,7 @@
         "notes": "F1: Audit existing Intermap MCP tools (accuracy, performance, integration)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-elbnh",
         "title": "Intercom: session continuity across model switches",
         "phase": "next",
@@ -1832,7 +1832,7 @@
         "notes": "Intercom: session continuity across model switches"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-niu3a",
         "title": "Intercom: discovery triage via messaging",
         "phase": "next",
@@ -1844,7 +1844,7 @@
         "notes": "Intercom: discovery triage via messaging"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-wjbex",
         "title": "Intercom: sprint status push notifications",
         "phase": "next",
@@ -1856,7 +1856,7 @@
         "notes": "Intercom: sprint status push notifications"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-902u6",
         "title": "Intercom: gate approval via Telegram",
         "phase": "next",
@@ -1868,7 +1868,7 @@
         "notes": "Intercom: gate approval via Telegram"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-zzo4",
         "title": "Investigate interflux install failure on new computer",
         "phase": "next",
@@ -1880,7 +1880,7 @@
         "notes": "Investigate interflux install failure on new computer"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-fv1f",
         "title": "Implement multi-strategy context estimation",
         "phase": "next",
@@ -1892,7 +1892,7 @@
         "notes": "Implement multi-strategy context estimation"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-1pkt",
         "title": "Implement phase-based confirmation flow for Autarch broadcast actions",
         "phase": "next",
@@ -1904,7 +1904,7 @@
         "notes": "Implement phase-based confirmation flow for Autarch broadcast actions"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-8nly",
         "title": "Implement virtualized lists with Fenwick tree in Bigend",
         "phase": "next",
@@ -1916,7 +1916,7 @@
         "notes": "Implement virtualized lists with Fenwick tree in Bigend"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-m33r",
         "title": "Implement budget degradation with PID controller in Bigend",
         "phase": "next",
@@ -1928,7 +1928,7 @@
         "notes": "Implement budget degradation with PID controller in Bigend"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-14g9",
         "title": "TOCTOU prevention: phased dispatch coordination",
         "phase": "next",
@@ -1988,7 +1988,7 @@
         "notes": "Role-aware latent memory architecture experiments"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-9kq3",
         "title": "F5: Agent overlay (intermux integration)",
         "phase": "next",
@@ -2000,7 +2000,7 @@
         "notes": "F5: Agent overlay (intermux integration)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-okfc",
         "title": "F6: Marketplace + plugin packaging",
         "phase": "next",
@@ -2012,7 +2012,7 @@
         "notes": "F6: Marketplace + plugin packaging"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-h3jl",
         "title": "F4: Project registry + path resolver",
         "phase": "next",
@@ -2024,7 +2024,7 @@
         "notes": "F4: Project registry + path resolver"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-mif9",
         "title": "F3: Remove moved tools from tldr-swinton",
         "phase": "next",
@@ -2036,7 +2036,7 @@
         "notes": "F3: Remove moved tools from tldr-swinton"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-vwj3",
         "title": "F2: Extract Python modules from tldr-swinton",
         "phase": "next",
@@ -2048,7 +2048,7 @@
         "notes": "F2: Extract Python modules from tldr-swinton"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-728k",
         "title": "F1: Go MCP scaffold + Python subprocess bridge",
         "phase": "next",
@@ -2060,7 +2060,7 @@
         "notes": "F1: Go MCP scaffold + Python subprocess bridge"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-zyym",
         "title": "Evaluate Claude Hub for event-driven GitHub agent dispatch",
         "phase": "next",
@@ -2072,7 +2072,7 @@
         "notes": "Evaluate Claude Hub for event-driven GitHub agent dispatch"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-qjwz",
         "title": "AgentDropout: dynamic redundancy elimination for flux-drive reviews",
         "phase": "next",
@@ -2084,7 +2084,7 @@
         "notes": "AgentDropout: dynamic redundancy elimination for flux-drive reviews"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-quk4",
         "title": "Hierarchical dispatch: meta-agent for N-agent fan-out",
         "phase": "next",
@@ -2144,7 +2144,7 @@
         "notes": "F2: routing-eligible pattern detection + propose flow"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-6u3s",
         "title": "F4: Sprint Scan Release Visibility",
         "phase": "next",
@@ -2156,7 +2156,7 @@
         "notes": "F4: Sprint Scan Release Visibility"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-gg8v",
         "title": "F2: Auto-Release on Clean Files",
         "phase": "next",
@@ -2312,7 +2312,7 @@
         "notes": "Session-start summary injection"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-sdqv",
         "title": "Plan interscribe extraction (knowledge compounding)",
         "phase": "next",
@@ -2324,7 +2324,7 @@
         "notes": "Plan interscribe extraction (knowledge compounding)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-6ikc",
         "title": "Plan intershift extraction (cross-AI dispatch engine)",
         "phase": "next",
@@ -2372,7 +2372,7 @@
         "notes": "Phase 2: Extract domain detection library"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ho3",
         "title": "Epic: StrongDM Factory Substrate — validation-first infrastructure for Clavain",
         "phase": "next",
@@ -2384,7 +2384,7 @@
         "notes": "Epic: StrongDM Factory Substrate — validation-first infrastructure for Clavain"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-3w1x",
         "title": "Split upstreams.json into config + state files",
         "phase": "next",
@@ -2396,7 +2396,7 @@
         "notes": "Split upstreams.json into config + state files"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-4728",
         "title": "Consolidate upstream-check.sh API calls (24 to 12)",
         "phase": "next",
@@ -2408,7 +2408,7 @@
         "notes": "Consolidate upstream-check.sh API calls (24 to 12)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-0lt",
         "title": "Extract cache_hints metrics in score_tokens.py",
         "phase": "next",
@@ -2420,7 +2420,7 @@
         "notes": "Extract cache_hints metrics in score_tokens.py"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-1gb",
         "title": "Add cache-friendly format queries to regression_suite.json",
         "phase": "next",
@@ -2432,7 +2432,7 @@
         "notes": "Add cache-friendly format queries to regression_suite.json"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-16z",
         "title": "Wire Coldwine and Pollard signal emitters — zero call sites currently",
         "phase": "next",
@@ -2444,7 +2444,7 @@
         "notes": "Wire Coldwine and Pollard signal emitters — zero call sites currently"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-l8p",
         "title": "TUI Pollard scan integration — wire Run Research to subprocess+log-pane pattern",
         "phase": "next",
@@ -2458,8 +2458,8 @@
     ],
     "later": [
       {
-        "module": "demarch",
-        "id": "Demarch-8hzt",
+        "module": "sylveste",
+        "id": "Sylveste-8hzt",
         "title": "F6: Multi-agent parallel execution windows in sprint",
         "phase": "later",
         "priority": "P3",
@@ -2470,8 +2470,8 @@
         "notes": "F6: Multi-agent parallel execution windows in sprint"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-5ump",
+        "module": "sylveste",
+        "id": "Sylveste-5ump",
         "title": "F5: Sprint-level 10-step progress display",
         "phase": "later",
         "priority": "P3",
@@ -2482,8 +2482,8 @@
         "notes": "F5: Sprint-level 10-step progress display"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-4bxc",
+        "module": "sylveste",
+        "id": "Sylveste-4bxc",
         "title": "Add progress tracker + hard-stop to resolve.md",
         "phase": "later",
         "priority": "P3",
@@ -2494,8 +2494,8 @@
         "notes": "Add progress tracker + hard-stop to resolve.md"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-ce29",
+        "module": "sylveste",
+        "id": "Sylveste-ce29",
         "title": "Add progress tracker + hard-stop to reflect.md",
         "phase": "later",
         "priority": "P3",
@@ -2506,8 +2506,8 @@
         "notes": "Add progress tracker + hard-stop to reflect.md"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-sst3",
+        "module": "sylveste",
+        "id": "Sylveste-sst3",
         "title": "Add progress tracker + hard-stop to quality-gates.md",
         "phase": "later",
         "priority": "P3",
@@ -2518,8 +2518,8 @@
         "notes": "Add progress tracker + hard-stop to quality-gates.md"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-fq41",
+        "module": "sylveste",
+        "id": "Sylveste-fq41",
         "title": "Add progress tracker + hard-stop to write-plan.md",
         "phase": "later",
         "priority": "P3",
@@ -2530,8 +2530,8 @@
         "notes": "Add progress tracker + hard-stop to write-plan.md"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-hlx2",
+        "module": "sylveste",
+        "id": "Sylveste-hlx2",
         "title": "Add progress tracker + hard-stop to strategy.md",
         "phase": "later",
         "priority": "P3",
@@ -2543,7 +2543,7 @@
       },
       {
         "module": "epic",
-        "id": "Demarch-01ew",
+        "id": "Sylveste-01ew",
         "title": "Clavain command progress trackers — add explicit phase names and hard-stop rules to prevent phantom phases",
         "phase": "later",
         "priority": "P3",
@@ -2554,8 +2554,8 @@
         "notes": "Clavain command progress trackers — add explicit phase names and hard-stop rules to prevent phantom phases"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.19",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.19",
         "title": "Autarch: benchmark ReconcileProject — full filesystem walk with YAML parse + SHA256 per file",
         "phase": "later",
         "priority": "P3",
@@ -2566,8 +2566,8 @@
         "notes": "Autarch: benchmark ReconcileProject — full filesystem walk with YAML parse + SHA256 per file"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.18",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.18",
         "title": "Intermute: benchmark Hub.Broadcast + snapshot — event fan-out to 100s of connections",
         "phase": "later",
         "priority": "P3",
@@ -2578,8 +2578,8 @@
         "notes": "Intermute: benchmark Hub.Broadcast + snapshot — event fan-out to 100s of connections"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.16",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.16",
         "title": "Skaffen: optimize trust.Evaluator.Evaluate — linear glob scan per tool call",
         "phase": "later",
         "priority": "P3",
@@ -2590,8 +2590,8 @@
         "notes": "Skaffen: optimize trust.Evaluator.Evaluate — linear glob scan per tool call"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.15",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.15",
         "title": "Skaffen: optimize ScoreMessages + TopK — full sort for partial selection during compaction",
         "phase": "later",
         "priority": "P3",
@@ -2602,8 +2602,8 @@
         "notes": "Skaffen: optimize ScoreMessages + TopK — full sort for partial selection during compaction"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.14",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.14",
         "title": "Skaffen: benchmark and optimize Graph.Rank() PageRank — O(nodes*edges*100) per session",
         "phase": "later",
         "priority": "P3",
@@ -2614,8 +2614,8 @@
         "notes": "Skaffen: benchmark and optimize Graph.Rank() PageRank — O(nodes*edges*100) per session"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.13",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.13",
         "title": "Skaffen: optimize extractFileActivity — JSON unmarshal for every tool call",
         "phase": "later",
         "priority": "P3",
@@ -2626,8 +2626,8 @@
         "notes": "Skaffen: optimize extractFileActivity — JSON unmarshal for every tool call"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.12",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.12",
         "title": "Skaffen: optimize estimateMessageTokens — iterates all messages every turn",
         "phase": "later",
         "priority": "P3",
@@ -2638,8 +2638,8 @@
         "notes": "Skaffen: optimize estimateMessageTokens — iterates all messages every turn"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.11",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.11",
         "title": "Skaffen: optimize classifyFailure — O(m*n) substring search called every agent turn",
         "phase": "later",
         "priority": "P3",
@@ -2650,8 +2650,8 @@
         "notes": "Skaffen: optimize classifyFailure — O(m*n) substring search called every agent turn"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-mvy.11",
+        "module": "sylveste",
+        "id": "Sylveste-mvy.11",
         "title": "Go rewrite: cron expression parser for scheduler",
         "phase": "later",
         "priority": "P3",
@@ -2662,8 +2662,8 @@
         "notes": "Go rewrite: cron expression parser for scheduler"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.6",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.6",
         "title": "Autarch: optimize DiffSpecs — set operations on requirements use linear scan (43μs/240 allocs at 50 reqs)",
         "phase": "later",
         "priority": "P3",
@@ -2674,8 +2674,8 @@
         "notes": "Autarch: optimize DiffSpecs — set operations on requirements use linear scan (43μs/240 allocs at 50 reqs)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.5",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.5",
         "title": "Clavain: optimize composePlan — reduce map iteration allocs (81μs/90 allocs at 30 agents)",
         "phase": "later",
         "priority": "P3",
@@ -2686,8 +2686,8 @@
         "notes": "Clavain: optimize composePlan — reduce map iteration allocs (81μs/90 allocs at 30 agents)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.4",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.4",
         "title": "Skaffen: optimize skill parseFrontmatter — YAML unmarshal dominates (20μs/127 allocs)",
         "phase": "later",
         "priority": "P3",
@@ -2698,8 +2698,8 @@
         "notes": "Skaffen: optimize skill parseFrontmatter — YAML unmarshal dominates (20μs/127 allocs)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.3",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.3",
         "title": "Intercore: optimize TopologicalSort — reduce sort.Strings calls in inner loop (23μs/168 allocs at 50 nodes)",
         "phase": "later",
         "priority": "P3",
@@ -2710,8 +2710,8 @@
         "notes": "Intercore: optimize TopologicalSort — reduce sort.Strings calls in inner loop (23μs/168 allocs at 50 nodes)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.2",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.2",
         "title": "Intercore: reduce scoring Assign allocations (95μs/33 allocs at 20×8 — pre-allocate pair slices)",
         "phase": "later",
         "priority": "P3",
@@ -2722,8 +2722,8 @@
         "notes": "Intercore: reduce scoring Assign allocations (95μs/33 allocs at 20×8 — pre-allocate pair slices)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.1",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.1",
         "title": "Clavain: optimize classifyComplexity — eliminate regex allocs (24μs/55 allocs → target 5μs/5 allocs)",
         "phase": "later",
         "priority": "P3",
@@ -2734,8 +2734,8 @@
         "notes": "Clavain: optimize classifyComplexity — eliminate regex allocs (24μs/55 allocs → target 5μs/5 allocs)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp",
         "title": "Epic: Go benchmark-driven optimization across core pillars",
         "phase": "later",
         "priority": "P3",
@@ -2746,8 +2746,8 @@
         "notes": "Epic: Go benchmark-driven optimization across core pillars"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-9lw5",
+        "module": "sylveste",
+        "id": "Sylveste-9lw5",
         "title": "F3: Effectiveness summary in /interspect:status",
         "phase": "later",
         "priority": "P3",
@@ -2758,8 +2758,8 @@
         "notes": "F3: Effectiveness summary in /interspect:status"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-ukwx",
+        "module": "sylveste",
+        "id": "Sylveste-ukwx",
         "title": "Skaffen router: hardware-aware model selection",
         "phase": "later",
         "priority": "P3",
@@ -2806,7 +2806,7 @@
         "notes": "Multi-runtime support"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "projects-e4d",
         "title": "Update ? help overlay with all keybindings",
         "phase": "later",
@@ -2818,7 +2818,7 @@
         "notes": "Update ? help overlay with all keybindings"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "projects-e3t",
         "title": "Ctrl+W word-delete in prompt",
         "phase": "later",
@@ -2830,7 +2830,7 @@
         "notes": "Ctrl+W word-delete in prompt"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "projects-99s",
         "title": "In-flight tool elapsed time display",
         "phase": "later",
@@ -2842,7 +2842,7 @@
         "notes": "In-flight tool elapsed time display"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "projects-m14",
         "title": "Terminal-too-small warning",
         "phase": "later",
@@ -2854,8 +2854,8 @@
         "notes": "Terminal-too-small warning"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-oyi",
+        "module": "sylveste",
+        "id": "Sylveste-oyi",
         "title": "Easter egg: Conway's Game of Life background layer",
         "phase": "later",
         "priority": "P3",
@@ -2866,8 +2866,8 @@
         "notes": "Easter egg: Conway's Game of Life background layer"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-dk5",
+        "module": "sylveste",
+        "id": "Sylveste-dk5",
         "title": "Research: Skaffen model routing shadow experiments (haiku/sonnet/opus phase comparison)",
         "phase": "later",
         "priority": "P3",
@@ -2878,8 +2878,8 @@
         "notes": "Research: Skaffen model routing shadow experiments (haiku/sonnet/opus phase comparison)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-2bf",
+        "module": "sylveste",
+        "id": "Sylveste-2bf",
         "title": "Skaffen TUI: configurable status bar",
         "phase": "later",
         "priority": "P3",
@@ -2890,8 +2890,8 @@
         "notes": "Skaffen TUI: configurable status bar"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-22q",
+        "module": "sylveste",
+        "id": "Sylveste-22q",
         "title": "Skaffen v0.4: self-building loop",
         "phase": "later",
         "priority": "P3",
@@ -2903,7 +2903,7 @@
       },
       {
         "module": "interhelm",
-        "id": "Demarch-a02",
+        "id": "Sylveste-a02",
         "title": "Layer 3: Event stream + assertions pattern",
         "phase": "later",
         "priority": "P3",
@@ -2915,7 +2915,7 @@
       },
       {
         "module": "interhelm",
-        "id": "Demarch-ar0",
+        "id": "Sylveste-ar0",
         "title": "Python/Flask diagnostic server templates",
         "phase": "later",
         "priority": "P3",
@@ -2927,7 +2927,7 @@
       },
       {
         "module": "interhelm",
-        "id": "Demarch-j0n",
+        "id": "Sylveste-j0n",
         "title": "Layer 2: Accessibility tree export pattern",
         "phase": "later",
         "priority": "P3",
@@ -2939,7 +2939,7 @@
       },
       {
         "module": "interhelm",
-        "id": "Demarch-xsq",
+        "id": "Sylveste-xsq",
         "title": "interpath CUJ format integration",
         "phase": "later",
         "priority": "P3",
@@ -2951,7 +2951,7 @@
       },
       {
         "module": "interject",
-        "id": "Demarch-q0f",
+        "id": "Sylveste-q0f",
         "title": "Source-trust adaptation — shipped-rate signal + source probation",
         "phase": "later",
         "priority": "P3",
@@ -2963,7 +2963,7 @@
       },
       {
         "module": "interject",
-        "id": "Demarch-hs6",
+        "id": "Sylveste-hs6",
         "title": "Cross-source dedup — URL-based + embedding near-duplicate detection",
         "phase": "later",
         "priority": "P3",
@@ -2975,7 +2975,7 @@
       },
       {
         "module": "interject",
-        "id": "Demarch-0ox",
+        "id": "Sylveste-0ox",
         "title": "Discovery evaluation dashboard — /interject:eval skill",
         "phase": "later",
         "priority": "P3",
@@ -2986,7 +2986,7 @@
         "notes": "Discovery evaluation dashboard — /interject:eval skill"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-5vahl",
         "title": "F5: Backlog sweep script — one-time stale bead cleanup",
         "phase": "later",
@@ -3010,7 +3010,7 @@
         "notes": "Explore per-project Notion workspace support"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-1d3v2",
         "title": "Research: Portfolio orchestration economics and dependent-project fan-out",
         "phase": "later",
@@ -3022,7 +3022,7 @@
         "notes": "Research: Portfolio orchestration economics and dependent-project fan-out"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-dtxkn",
         "title": "Research: Human attention budgets and review UX for multi-agent output",
         "phase": "later",
@@ -3034,7 +3034,7 @@
         "notes": "Research: Human attention budgets and review UX for multi-agent output"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-lpfin",
         "title": "Research: Standalone degradation matrix for Interverse plugins",
         "phase": "later",
@@ -3046,7 +3046,7 @@
         "notes": "Research: Standalone degradation matrix for Interverse plugins"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-sym05",
         "title": "Workspace isolation via git worktree per task",
         "phase": "later",
@@ -3058,7 +3058,7 @@
         "notes": "Workspace isolation via git worktree per task"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-sym06",
         "title": "Real-time token budget enforcement mid-execution",
         "phase": "later",
@@ -3070,7 +3070,7 @@
         "notes": "Real-time token budget enforcement mid-execution"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-sym07",
         "title": "Harness engineering audit: repo health pre-routing gate",
         "phase": "later",
@@ -3190,7 +3190,7 @@
         "notes": "Conversation memory search (FTS5/semantic)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-7c810",
         "title": "Repeat accuracy benchmark with Sonnet to test model-capability sensitivity",
         "phase": "later",
@@ -3202,7 +3202,7 @@
         "notes": "Repeat accuracy benchmark with Sonnet to test model-capability sensitivity"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-eu7ge",
         "title": "Self-improvement loop: scheduled self-review of Intercom codebase",
         "phase": "later",
@@ -3214,7 +3214,7 @@
         "notes": "Self-improvement loop: scheduled self-review of Intercom codebase"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-kvu1u",
         "title": "Quick reply templates for common queries (skip container spin-up)",
         "phase": "later",
@@ -3226,7 +3226,7 @@
         "notes": "Quick reply templates for common queries (skip container spin-up)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-m3mu5",
         "title": "Token budget tracking and cost awareness in chat",
         "phase": "later",
@@ -3238,7 +3238,7 @@
         "notes": "Token budget tracking and cost awareness in chat"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-yww42",
         "title": "Agent-to-agent shared memory layer",
         "phase": "later",
@@ -3250,7 +3250,7 @@
         "notes": "Agent-to-agent shared memory layer"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-gx405",
         "title": "bd ready --verify: cross-check each result is still open before printing",
         "phase": "later",
@@ -3262,7 +3262,7 @@
         "notes": "bd ready --verify: cross-check each result is still open before printing"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-pkv4y",
         "title": "Study VerifierContext pattern: reuse agent sandbox for reward verification",
         "phase": "later",
@@ -3274,7 +3274,7 @@
         "notes": "Study VerifierContext pattern: reuse agent sandbox for reward verification"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-hj44q",
         "title": "Study middle-out trajectory compression from Hermes",
         "phase": "later",
@@ -3286,7 +3286,7 @@
         "notes": "Study middle-out trajectory compression from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-9lzey",
         "title": "Adapt gateway async approval flow from Hermes",
         "phase": "later",
@@ -3298,7 +3298,7 @@
         "notes": "Adapt gateway async approval flow from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-qkwvn",
         "title": "Adapt toolset distributions for eval/training from Hermes",
         "phase": "later",
@@ -3310,7 +3310,7 @@
         "notes": "Adapt toolset distributions for eval/training from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-be5ny",
         "title": "Adapt quarantine-scan-confirm install pipeline from Hermes",
         "phase": "later",
@@ -3322,7 +3322,7 @@
         "notes": "Adapt quarantine-scan-confirm install pipeline from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-uv97h",
         "title": "Adapt progressive skill disclosure pattern from Hermes",
         "phase": "later",
@@ -3334,7 +3334,7 @@
         "notes": "Adapt progressive skill disclosure pattern from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-afpgr",
         "title": "Adopt trajectory system prompt sanitization from Hermes",
         "phase": "later",
@@ -3346,7 +3346,7 @@
         "notes": "Adopt trajectory system prompt sanitization from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-lkg78",
         "title": "Lightweight coordination mode canary experiment",
         "phase": "later",
@@ -3358,7 +3358,7 @@
         "notes": "Lightweight coordination mode canary experiment"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-56p1u",
         "title": "Move pr-agent-commands.yml Codex review to ethics-gradient",
         "phase": "later",
@@ -3370,7 +3370,7 @@
         "notes": "Move pr-agent-commands.yml Codex review to ethics-gradient"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-aa0ts",
         "title": "Fix intertrace contract tracer grep patterns for ic-subcommand invocations",
         "phase": "later",
@@ -3394,7 +3394,7 @@
         "notes": "Decouple IpcDelegate from Telegram bridge"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-64hvx",
         "title": "Intercom H2 follow-up: IpcDelegate decoupling + callback auth + stub actions",
         "phase": "later",
@@ -3406,7 +3406,7 @@
         "notes": "Intercom H2 follow-up: IpcDelegate decoupling + callback auth + stub actions"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-fl9gg",
         "title": "Research: anti-Goodhart mechanisms for Interspect optimization",
         "phase": "later",
@@ -3418,7 +3418,7 @@
         "notes": "Research: anti-Goodhart mechanisms for Interspect optimization"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-toe0e",
         "title": "Gridfire: capability-based composition layer",
         "phase": "later",
@@ -3430,16 +3430,16 @@
         "notes": "Gridfire: capability-based composition layer"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-o4w8o",
-        "title": "Cybernetic Unix (ctlsh): theoretical foundation for Demarch's agentic OS primitives",
+        "title": "Cybernetic Unix (ctlsh): theoretical foundation for Sylveste's agentic OS primitives",
         "phase": "later",
         "priority": "P3",
         "status": "open",
         "source": "beads",
         "source_file": "beads",
         "blocked_by": [],
-        "notes": "Cybernetic Unix (ctlsh): theoretical foundation for Demarch's agentic OS primitives"
+        "notes": "Cybernetic Unix (ctlsh): theoretical foundation for Sylveste's agentic OS primitives"
       },
       {
         "module": "research",
@@ -3742,7 +3742,7 @@
         "notes": "[interverse] scaffold/release wave for 8 extracted plugins (no iv refs)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-uxfm6",
         "title": "Intercom: expose container-runner as service endpoint",
         "phase": "later",
@@ -3754,7 +3754,7 @@
         "notes": "Intercom: expose container-runner as service endpoint"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-gpsqk",
         "title": "Intercom: Interspect routing hints for model selection",
         "phase": "later",
@@ -3766,7 +3766,7 @@
         "notes": "Intercom: Interspect routing hints for model selection"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-pmeni",
         "title": "Intercom: multi-runtime review dispatch",
         "phase": "later",
@@ -3778,7 +3778,7 @@
         "notes": "Intercom: multi-runtime review dispatch"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-x6by",
         "title": "Research: Interspect adaptive profiling and dynamic rule evolution",
         "phase": "later",
@@ -3790,7 +3790,7 @@
         "notes": "Research: Interspect adaptive profiling and dynamic rule evolution"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-f5g7",
         "title": "Add shimmer/gradient animation rendering to Autarch",
         "phase": "later",
@@ -3802,7 +3802,7 @@
         "notes": "Add shimmer/gradient animation rendering to Autarch"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-x63e",
         "title": "Implement three-tier icon fallback system for Autarch",
         "phase": "later",
@@ -3814,7 +3814,7 @@
         "notes": "Implement three-tier icon fallback system for Autarch"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-0srs",
         "title": "Implement first-run onboarding tutorial for Autarch",
         "phase": "later",
@@ -3826,7 +3826,7 @@
         "notes": "Implement first-run onboarding tutorial for Autarch"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-dkdu",
         "title": "Define Panel interface for Autarch dashboard composition",
         "phase": "later",
@@ -3838,7 +3838,7 @@
         "notes": "Define Panel interface for Autarch dashboard composition"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-2xei",
         "title": "Implement badge system for Autarch TUI",
         "phase": "later",
@@ -3886,7 +3886,7 @@
         "notes": "Level 3: Auto-remediate kernel primitives — retry policies, agent substitution, parameter adjustment"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ocwt",
         "title": "Implement hit grid for mouse interaction in Bigend",
         "phase": "later",
@@ -3898,7 +3898,7 @@
         "notes": "Implement hit grid for mouse interaction in Bigend"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-mvc6",
         "title": "Enforce one-writer rule in Bigend TUI",
         "phase": "later",
@@ -3910,7 +3910,7 @@
         "notes": "Enforce one-writer rule in Bigend TUI"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-npwd",
         "title": "Implement style cascade via option merge in Bigend",
         "phase": "later",
@@ -3922,7 +3922,7 @@
         "notes": "Implement style cascade via option merge in Bigend"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-amjm",
         "title": "Implement widget state persistence in Bigend",
         "phase": "later",
@@ -3934,7 +3934,7 @@
         "notes": "Implement widget state persistence in Bigend"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-k8w5",
         "title": "Phase 2 decision gate: evaluate Phase 1 TOCTOU telemetry after 30 days",
         "phase": "later",
@@ -3946,7 +3946,7 @@
         "notes": "Phase 2 decision gate: evaluate Phase 1 TOCTOU telemetry after 30 days"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-5b4k",
         "title": "F8: Smart checkpoint triggers (pressure + intermem synthesis)",
         "phase": "later",
@@ -3958,7 +3958,7 @@
         "notes": "F8: Smart checkpoint triggers (pressure + intermem synthesis)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-mt7l",
         "title": "F5: Verdict-to-bead bridge (auto-create beads from P0/P1 findings)",
         "phase": "later",
@@ -3970,7 +3970,7 @@
         "notes": "F5: Verdict-to-bead bridge (auto-create beads from P0/P1 findings)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-khc9",
         "title": "F4: Unified staleness library",
         "phase": "later",
@@ -3994,7 +3994,7 @@
         "notes": "SDK roadmap — extended API, plugin author guide, additional migrations"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-l9bd",
         "title": "F6: Close marketplace manifest drift — auto-generate metadata via interbump",
         "phase": "later",
@@ -4174,7 +4174,7 @@
         "notes": "Tool output auto-collapse (>20 lines → 5 lines preview)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-mkfy",
         "title": "Graduate reflect gate from soft to hard",
         "phase": "later",
@@ -4186,7 +4186,7 @@
         "notes": "Graduate reflect gate from soft to hard"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-52om",
         "title": "F2b: Phase rename shipping→polish (deferred, requires migration)",
         "phase": "later",
@@ -4282,7 +4282,7 @@
         "notes": "Pollard: hunter results as ic discovery events"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-d5hz",
         "title": "Autarch: extract Coldwine task orchestration to Clavain skills (v2)",
         "phase": "later",
@@ -4294,7 +4294,7 @@
         "notes": "Autarch: extract Coldwine task orchestration to Clavain skills (v2)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-c2hm",
         "title": "Autarch: extract Gurgeh confidence scoring to OS component",
         "phase": "later",
@@ -4306,7 +4306,7 @@
         "notes": "Autarch: extract Gurgeh confidence scoring to OS component"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-b0jr",
         "title": "Intercore: add --caller flag for write-path auditing (v2)",
         "phase": "later",
@@ -4366,7 +4366,7 @@
         "notes": "Obligation leak detection on session close"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-d6vf",
         "title": "B2 design: zero-cost routing abstraction + shadow mode",
         "phase": "later",
@@ -4402,7 +4402,7 @@
         "notes": "E9: Autarch Phase 2 — Pollard + Gurgeh migration"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-fy2n",
         "title": "Add CRITICAL BEHAVIORAL RULES template to orchestration commands",
         "phase": "later",
@@ -4414,7 +4414,7 @@
         "notes": "Add CRITICAL BEHAVIORAL RULES template to orchestration commands"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-sgpr",
         "title": "Add file ownership decomposition to parallel agent dispatch",
         "phase": "later",
@@ -4426,7 +4426,7 @@
         "notes": "Add file ownership decomposition to parallel agent dispatch"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-dow5",
         "title": "Add ACH parallel hypothesis debugging to intertest",
         "phase": "later",
@@ -4534,7 +4534,7 @@
         "notes": "Webhook receiver + cloudflared tunnel"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-nonb",
         "title": "Build config profile switching (interctx or extend interphase)",
         "phase": "later",
@@ -4546,7 +4546,7 @@
         "notes": "Build config profile switching (interctx or extend interphase)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-5leh",
         "title": "Study hook-level agent comms for intra-session coordination",
         "phase": "later",
@@ -4558,7 +4558,7 @@
         "notes": "Study hook-level agent comms for intra-session coordination"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-l6ef",
         "title": "Port hot-path hooks to compiled Go binaries",
         "phase": "later",
@@ -4714,7 +4714,7 @@
         "notes": "Hands On with New Multi-Agent Orchestration in VS Code"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-jdow",
         "title": "Complexity-based model skip (no-LLM for trivial transforms)",
         "phase": "later",
@@ -4726,7 +4726,7 @@
         "notes": "Complexity-based model skip (no-LLM for trivial transforms)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-jhz1",
         "title": "Session resume for Codex dispatches",
         "phase": "later",
@@ -4738,7 +4738,7 @@
         "notes": "Session resume for Codex dispatches"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-0plv",
         "title": "Backend cost arbitrage — multi-model routing in clodex",
         "phase": "later",
@@ -4870,7 +4870,7 @@
         "notes": "Twitter MCP Integration with Codex | Composio"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-eaeq",
         "title": "Research: delegation depth limits and Schelling traps",
         "phase": "later",
@@ -4882,7 +4882,7 @@
         "notes": "Research: delegation depth limits and Schelling traps"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-19oc",
         "title": "Research: prompt compression techniques (LLMLingua, gist tokens) for agent context",
         "phase": "later",
@@ -4894,7 +4894,7 @@
         "notes": "Research: prompt compression techniques (LLMLingua, gist tokens) for agent context"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-6i37",
         "title": "Blueprint distillation: channel optimization for sprint intake",
         "phase": "later",
@@ -4906,7 +4906,7 @@
         "notes": "Blueprint distillation: channel optimization for sprint intake"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ffo5",
         "title": "Research: reflection-driven trajectory pruning for agent loops",
         "phase": "later",
@@ -4918,7 +4918,7 @@
         "notes": "Research: reflection-driven trajectory pruning for agent loops"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-qtcl",
         "title": "Research: Zettelkasten-inspired agentic memory for cross-session knowledge",
         "phase": "later",
@@ -5014,7 +5014,7 @@
         "notes": "How I Use AI Agents + MCP to Fully Automate My Website's Content"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-e443",
         "title": "Interphase gate failures → interwatch escalation integration",
         "phase": "later",
@@ -5026,7 +5026,7 @@
         "notes": "Interphase gate failures → interwatch escalation integration"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-l4uo",
         "title": "Environment variable contract registry + validation",
         "phase": "later",
@@ -5038,7 +5038,7 @@
         "notes": "Environment variable contract registry + validation"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-1n6z",
         "title": "Monorepo build orchestrator (interbuild) with change detection",
         "phase": "later",
@@ -5050,7 +5050,7 @@
         "notes": "Monorepo build orchestrator (interbuild) with change detection"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-3uew",
         "title": "Plugin health auditor (interaudit) for ecosystem maintenance",
         "phase": "later",
@@ -5062,7 +5062,7 @@
         "notes": "Plugin health auditor (interaudit) for ecosystem maintenance"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ynbh",
         "title": "Agent trust and reputation scoring via interspect",
         "phase": "later",
@@ -5074,7 +5074,7 @@
         "notes": "Agent trust and reputation scoring via interspect"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-qoj5",
         "title": "Skill auto-suggest based on tool usage patterns",
         "phase": "later",
@@ -5086,7 +5086,7 @@
         "notes": "Skill auto-suggest based on tool usage patterns"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-friz",
         "title": "CI/CD integration bridge: GitHub Actions templates for interflux + interwatch",
         "phase": "later",
@@ -5098,7 +5098,7 @@
         "notes": "CI/CD integration bridge: GitHub Actions templates for interflux + interwatch"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-0681",
         "title": "Crash recovery + error aggregation for multi-agent sessions",
         "phase": "later",
@@ -5290,7 +5290,7 @@
         "notes": "Lmnt MCP Integration with AutoGen | Composio"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-mury",
         "title": "Improve flux-gen domain detection for monorepos",
         "phase": "later",
@@ -5302,7 +5302,7 @@
         "notes": "Improve flux-gen domain detection for monorepos"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-2vup",
         "title": "Phase 4: Merge agent & reservation negotiation",
         "phase": "later",
@@ -6394,7 +6394,7 @@
         "notes": "An AI agent published a hit piece on me – more things have happened"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-rrc2",
         "title": "F3: Demo hooks for interwatch (reuse examples)",
         "phase": "later",
@@ -6406,7 +6406,7 @@
         "notes": "F3: Demo hooks for interwatch (reuse examples)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-1626",
         "title": "Version-bump → Interwatch signal",
         "phase": "later",
@@ -6418,7 +6418,7 @@
         "notes": "Version-bump → Interwatch signal"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-3115",
         "title": "Landing-a-change → doc refresh gate",
         "phase": "later",
@@ -6430,7 +6430,7 @@
         "notes": "Landing-a-change → doc refresh gate"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-444d",
         "title": "Catalog-reminder → Interwatch escalation",
         "phase": "later",
@@ -6442,7 +6442,7 @@
         "notes": "Catalog-reminder → Interwatch escalation"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-173y",
         "title": "Research: guardian agent patterns (formalize quality-gates)",
         "phase": "later",
@@ -6454,7 +6454,7 @@
         "notes": "Research: guardian agent patterns (formalize quality-gates)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-8nza",
         "title": "Research: latency budgets as first-class constraints",
         "phase": "later",
@@ -6466,7 +6466,7 @@
         "notes": "Research: latency budgets as first-class constraints"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-nv7f",
         "title": "Cross-project knowledge compounding",
         "phase": "later",
@@ -6478,7 +6478,7 @@
         "notes": "Cross-project knowledge compounding"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-icqo",
         "title": "Research: ADL discipline extensions for Clavain agents",
         "phase": "later",
@@ -6490,7 +6490,7 @@
         "notes": "Research: ADL discipline extensions for Clavain agents"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-mkrh",
         "title": "Research: prompt/agent supply chain management",
         "phase": "later",
@@ -6502,7 +6502,7 @@
         "notes": "Research: prompt/agent supply chain management"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ve1n",
         "title": "Research: security model for disciplined tool access",
         "phase": "later",
@@ -6514,7 +6514,7 @@
         "notes": "Research: security model for disciplined tool access"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-4xqu",
         "title": "Adaptive model routing based on measured trust",
         "phase": "later",
@@ -6526,7 +6526,7 @@
         "notes": "Adaptive model routing based on measured trust"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-jk7q",
         "title": "Research: cognitive load budgets & progressive disclosure review UX",
         "phase": "later",
@@ -6538,7 +6538,7 @@
         "notes": "Research: cognitive load budgets & progressive disclosure review UX"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-exos",
         "title": "Research: bias-aware product decision framework",
         "phase": "later",
@@ -6550,7 +6550,7 @@
         "notes": "Research: bias-aware product decision framework"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-fzrn",
         "title": "Research: multi-agent hallucination cascades & failure taxonomy",
         "phase": "later",
@@ -6562,7 +6562,7 @@
         "notes": "Research: multi-agent hallucination cascades & failure taxonomy"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-spad",
         "title": "Deep tldrs integration into Clavain workflows",
         "phase": "later",
@@ -6574,7 +6574,7 @@
         "notes": "Deep tldrs integration into Clavain workflows"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-eff5",
         "title": "Plan interarch extraction (agent-native architecture)",
         "phase": "later",
@@ -6598,7 +6598,7 @@
         "notes": "Phase 5: Write Claude Code adapter guide + publish"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-0d3a",
         "title": "flux-gen UX: onboarding, integration, docs mentions",
         "phase": "later",
@@ -6610,7 +6610,7 @@
         "notes": "flux-gen UX: onboarding, integration, docs mentions"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ub8n",
         "title": "flux-gen: add frontmatter and move boilerplate to dispatch-time",
         "phase": "later",
@@ -6622,7 +6622,7 @@
         "notes": "flux-gen: add frontmatter and move boilerplate to dispatch-time"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-1hu",
         "title": "Expand autarch-mcp server with StrongDM factory substrate tools",
         "phase": "later",
@@ -6634,7 +6634,7 @@
         "notes": "Expand autarch-mcp server with StrongDM factory substrate tools"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-b46",
         "title": "Add agent provenance manifests + capability policies to Bigend/Coldwine",
         "phase": "later",
@@ -6646,7 +6646,7 @@
         "notes": "Add agent provenance manifests + capability policies to Bigend/Coldwine"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-3ov",
         "title": "Add evidence pack pipeline to Pollard for obstacle-to-input conversion",
         "phase": "later",
@@ -6658,7 +6658,7 @@
         "notes": "Add evidence pack pipeline to Pollard for obstacle-to-input conversion"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-2li",
         "title": "Add DTU-lite workflow for generating behavioral API mock services",
         "phase": "later",
@@ -6670,7 +6670,7 @@
         "notes": "Add DTU-lite workflow for generating behavioral API mock services"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-wbh",
         "title": "Add Attractor-mode graph pipeline orchestration to Coldwine",
         "phase": "later",
@@ -6682,7 +6682,7 @@
         "notes": "Add Attractor-mode graph pipeline orchestration to Coldwine"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-c2r",
         "title": "Add scenario bank + satisfaction scoring to Gurgeh/Coldwine",
         "phase": "later",
@@ -6694,7 +6694,7 @@
         "notes": "Add scenario bank + satisfaction scoring to Gurgeh/Coldwine"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-xweh",
         "title": "Formalize interactive-to-autonomous shift-work boundary in workflows",
         "phase": "later",
@@ -6706,7 +6706,7 @@
         "notes": "Formalize interactive-to-autonomous shift-work boundary in workflows"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-b683",
         "title": "Auto-inject past solutions into /lfg execute phase via learnings-researcher",
         "phase": "later",
@@ -6718,7 +6718,7 @@
         "notes": "Auto-inject past solutions into /lfg execute phase via learnings-researcher"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-4xbz",
         "title": "Fast-follow deferred flux-drive v2 features (8 items)",
         "phase": "later",
@@ -6730,7 +6730,7 @@
         "notes": "Fast-follow deferred flux-drive v2 features (8 items)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-9tq",
         "title": "Fast-follow deferred flux-drive v2 features (8 items)",
         "phase": "later",
@@ -6742,7 +6742,7 @@
         "notes": "Fast-follow deferred flux-drive v2 features (8 items)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-72c",
         "title": "Add cache-friendly run to demo-tldrs.sh",
         "phase": "later",
@@ -6754,7 +6754,7 @@
         "notes": "Add cache-friendly run to demo-tldrs.sh"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-19m",
         "title": "tldrs: slice command should optionally include source code",
         "phase": "later",
@@ -6766,7 +6766,7 @@
         "notes": "tldrs: slice command should optionally include source code"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ca5",
         "title": "tldrs: truncation should respect symbol boundaries",
         "phase": "later",
@@ -6778,7 +6778,7 @@
         "notes": "tldrs: truncation should respect symbol boundaries"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-dsk",
         "title": "tldrs: ultracompact needs --depth=body variant",
         "phase": "later",
@@ -6790,7 +6790,7 @@
         "notes": "tldrs: ultracompact needs --depth=body variant"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-a8s",
         "title": "interclode: auto-decide agent count from plan task coupling",
         "phase": "later",
@@ -6802,7 +6802,7 @@
         "notes": "interclode: auto-decide agent count from plan task coupling"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-4er",
         "title": "Synthesize AC research into docs/PRD/roadmap updates",
         "phase": "later",
@@ -6814,7 +6814,7 @@
         "notes": "Synthesize AC research into docs/PRD/roadmap updates"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-gny",
         "title": "P2: Iterative codebase exploration — subprocess CLI pattern",
         "phase": "later",
@@ -6826,7 +6826,7 @@
         "notes": "P2: Iterative codebase exploration — subprocess CLI pattern"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-t1x",
         "title": "P2: Gurgeh self-hosting Layer 1 — brief decomposition via Claude",
         "phase": "later",
@@ -6838,7 +6838,7 @@
         "notes": "P2: Gurgeh self-hosting Layer 1 — brief decomposition via Claude"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-3yy",
         "title": "Coldwine DELIVERABLE/BLOCKER output tagging for Bigend rollups",
         "phase": "later",
@@ -6850,7 +6850,7 @@
         "notes": "Coldwine DELIVERABLE/BLOCKER output tagging for Bigend rollups"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-ef4",
         "title": "Intermute heartbeat protocol — tools emit periodic health/status signals",
         "phase": "later",
@@ -6862,7 +6862,7 @@
         "notes": "Intermute heartbeat protocol — tools emit periodic health/status signals"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-1v4",
         "title": "Naming/migration strategy for rename",
         "phase": "later",
@@ -6874,8 +6874,8 @@
         "notes": "Naming/migration strategy for rename"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.20",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.20",
         "title": "Autarch: benchmark AtomicWriteFile — multiple syscalls per spec write",
         "phase": "later",
         "priority": "P4",
@@ -6886,8 +6886,8 @@
         "notes": "Autarch: benchmark AtomicWriteFile — multiple syscalls per spec write"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.17",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.17",
         "title": "Skaffen: cache convertToolDefs — rebuilds tool list every turn unchanged",
         "phase": "later",
         "priority": "P4",
@@ -6898,8 +6898,8 @@
         "notes": "Skaffen: cache convertToolDefs — rebuilds tool list every turn unchanged"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-0pvp.7",
+        "module": "sylveste",
+        "id": "Sylveste-0pvp.7",
         "title": "Intermute: optimize PatternsOverlap — reduce path normalization allocs (2.6μs/13 allocs)",
         "phase": "later",
         "priority": "P4",
@@ -6910,8 +6910,8 @@
         "notes": "Intermute: optimize PatternsOverlap — reduce path normalization allocs (2.6μs/13 allocs)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-oac8.7",
+        "module": "sylveste",
+        "id": "Sylveste-oac8.7",
         "title": "Lazy command decomposition (doctor, sprint)",
         "phase": "later",
         "priority": "P4",
@@ -6922,8 +6922,8 @@
         "notes": "Lazy command decomposition (doctor, sprint)"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-3xnc",
+        "module": "sylveste",
+        "id": "Sylveste-3xnc",
         "title": "Fleet registry: uptime-weighted consistency scoring",
         "phase": "later",
         "priority": "P4",
@@ -6934,8 +6934,8 @@
         "notes": "Fleet registry: uptime-weighted consistency scoring"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-hgtz",
+        "module": "sylveste",
+        "id": "Sylveste-hgtz",
         "title": "Multi-agent coordination: CRDT-based state sync (Loro)",
         "phase": "later",
         "priority": "P4",
@@ -6970,8 +6970,8 @@
         "notes": "Dispatch log retention policy"
       },
       {
-        "module": "demarch",
-        "id": "Demarch-71d",
+        "module": "sylveste",
+        "id": "Sylveste-71d",
         "title": "Add notRelevantFor field to benchmark metadata",
         "phase": "later",
         "priority": "P4",
@@ -6982,7 +6982,7 @@
         "notes": "Add notRelevantFor field to benchmark metadata"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-sym08",
         "title": "Task lifecycle hooks (before_run, after_run, before_remove)",
         "phase": "later",
@@ -6994,7 +6994,7 @@
         "notes": "Task lifecycle hooks (before_run, after_run, before_remove)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-fvch0",
         "title": "Evaluate Playwright CLI migration for Intersight if MCP optimizations insufficient",
         "phase": "later",
@@ -7006,7 +7006,7 @@
         "notes": "Evaluate Playwright CLI migration for Intersight if MCP optimizations insufficient"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-bkntz",
         "title": "Adopt bundled_manifest user-deletion-respecting pattern from Hermes",
         "phase": "later",
@@ -7018,7 +7018,7 @@
         "notes": "Adopt bundled_manifest user-deletion-respecting pattern from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-5dbap",
         "title": "Study per-task container image override from Hermes",
         "phase": "later",
@@ -7030,7 +7030,7 @@
         "notes": "Study per-task container image override from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-kru4l",
         "title": "Study Codex ack-continuation detection from Hermes",
         "phase": "later",
@@ -7042,7 +7042,7 @@
         "notes": "Study Codex ack-continuation detection from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-gkcw3",
         "title": "Study ephemeral-at-call-time prompt injection from Hermes",
         "phase": "later",
@@ -7054,7 +7054,7 @@
         "notes": "Study ephemeral-at-call-time prompt injection from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-jbbsb",
         "title": "Study interruptible HTTP cancellation from Hermes",
         "phase": "later",
@@ -7066,7 +7066,7 @@
         "notes": "Study interruptible HTTP cancellation from Hermes"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-40hv5",
         "title": "Study LobeHub adapter pattern from Hermes for marketplace integration",
         "phase": "later",
@@ -9072,14 +9072,14 @@
       {
         "module": "recovered",
         "id": "iv-nxyj0",
-        "title": "feat: add Rust Demarch read/write adapters and API endpoints (iv-nxyj0)",
+        "title": "feat: add Rust Sylveste read/write adapters and API endpoints (iv-nxyj0)",
         "phase": "later",
         "priority": "P4",
         "status": "open",
         "source": "beads",
         "source_file": "beads",
         "blocked_by": [],
-        "notes": "feat: add Rust Demarch read/write adapters and API endpoints (iv-nxyj0)"
+        "notes": "feat: add Rust Sylveste read/write adapters and API endpoints (iv-nxyj0)"
       },
       {
         "module": "recovered",
@@ -9454,7 +9454,7 @@
         "notes": "Level 4: Auto-ship kernel primitives — confidence-gated deployment"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-bypu",
         "title": "Evaluate conformal alerting for interstat token budgets",
         "phase": "later",
@@ -9466,7 +9466,7 @@
         "notes": "Evaluate conformal alerting for interstat token budgets"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-s511",
         "title": "Implement evidence ledger pattern for intercore decisions",
         "phase": "later",
@@ -9478,7 +9478,7 @@
         "notes": "Implement evidence ledger pattern for intercore decisions"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-mpxp",
         "title": "Research: OCC read-set inference via PostToolUse hooks (Phase 3, if justified)",
         "phase": "later",
@@ -9490,7 +9490,7 @@
         "notes": "Research: OCC read-set inference via PostToolUse hooks (Phase 3, if justified)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-64j3",
         "title": "Multi-agent sprint reflection (N artifacts for N dispatches)",
         "phase": "later",
@@ -9574,7 +9574,7 @@
         "notes": "Wave 3: interhub TUI control room"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-lvf8",
         "title": "Add severity calibration criteria to Interflux scoring",
         "phase": "later",
@@ -9586,7 +9586,7 @@
         "notes": "Add severity calibration criteria to Interflux scoring"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-opr0",
         "title": "Add per-dimension review checklists to Interflux agents",
         "phase": "later",
@@ -9598,7 +9598,7 @@
         "notes": "Add per-dimension review checklists to Interflux agents"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-d8yi",
         "title": "Add inherit model tier to Clavain model routing",
         "phase": "later",
@@ -9610,7 +9610,7 @@
         "notes": "Add inherit model tier to Clavain model routing"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-eqbo",
         "title": "Add Conductor-style project init wizard to /clavain:init",
         "phase": "later",
@@ -9622,7 +9622,7 @@
         "notes": "Add Conductor-style project init wizard to /clavain:init"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-upap",
         "title": "Audit agent/skill descriptions for proactive trigger clauses",
         "phase": "later",
@@ -9646,7 +9646,7 @@
         "notes": "Evaluate Dolt hybrid backend for runs/dispatches/gates"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-bwvx",
         "title": "Study git worktree isolation pattern for parallel agents",
         "phase": "later",
@@ -9658,7 +9658,7 @@
         "notes": "Study git worktree isolation pattern for parallel agents"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-g48f",
         "title": "Extract prompt effectiveness metrics for interstat",
         "phase": "later",
@@ -9670,7 +9670,7 @@
         "notes": "Extract prompt effectiveness metrics for interstat"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-rrnn",
         "title": "Evaluate VoiceMode MCP for voice input modality",
         "phase": "later",
@@ -9682,7 +9682,7 @@
         "notes": "Evaluate VoiceMode MCP for voice input modality"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-jotf",
         "title": "Add desktop/audio notifications for background agent completion",
         "phase": "later",
@@ -9694,7 +9694,7 @@
         "notes": "Add desktop/audio notifications for background agent completion"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-wrae",
         "title": "Evaluate Container Use (Dagger) for sandboxed agent dispatch",
         "phase": "later",
@@ -9706,7 +9706,7 @@
         "notes": "Evaluate Container Use (Dagger) for sandboxed agent dispatch"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-54ku",
         "title": "Stream-JSON chaining between agents (no intermediate files)",
         "phase": "later",
@@ -9718,7 +9718,7 @@
         "notes": "Stream-JSON chaining between agents (no intermediate files)"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-r90q",
         "title": "Deployment registry (interdeploy) with rollback tracking",
         "phase": "later",
@@ -9730,7 +9730,7 @@
         "notes": "Deployment registry (interdeploy) with rollback tracking"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-xgcy",
         "title": "Performance tracer (interperf) for hook/MCP/query profiling",
         "phase": "later",
@@ -9742,7 +9742,7 @@
         "notes": "Performance tracer (interperf) for hook/MCP/query profiling"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-r5z9",
         "title": "Slack event-driven alerts for critical events",
         "phase": "later",
@@ -9754,7 +9754,7 @@
         "notes": "Slack event-driven alerts for critical events"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-zfjg",
         "title": "MCP server lifecycle manager (intermcp) with crash recovery",
         "phase": "later",
@@ -9766,7 +9766,7 @@
         "notes": "MCP server lifecycle manager (intermcp) with crash recovery"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-01c4",
         "title": "GitHub PR integration service (interhub) with status checks",
         "phase": "later",
@@ -9778,7 +9778,7 @@
         "notes": "GitHub PR integration service (interhub) with status checks"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-umvq",
         "title": "Health aggregation service (interstatus) for 22-module ecosystem",
         "phase": "later",
@@ -9790,7 +9790,7 @@
         "notes": "Health aggregation service (interstatus) for 22-module ecosystem"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-wjl0",
         "title": "Cross-plugin dependency declaration in plugin.json",
         "phase": "later",
@@ -9802,7 +9802,7 @@
         "notes": "Cross-plugin dependency declaration in plugin.json"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-cam4",
         "title": "Automated user testing via TUI/browser automation",
         "phase": "later",
@@ -9814,7 +9814,7 @@
         "notes": "Automated user testing via TUI/browser automation"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-bq9",
         "title": "Implement NudgeNik-style LLM agent state classification",
         "phase": "later",
@@ -9826,7 +9826,7 @@
         "notes": "Implement NudgeNik-style LLM agent state classification"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-cng",
         "title": "Add debounced activity tracking for Intermute event bus",
         "phase": "later",
@@ -9838,7 +9838,7 @@
         "notes": "Add debounced activity tracking for Intermute event bus"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-d32",
         "title": "Add semantic porting execution + ongoing sync to Coldwine",
         "phase": "later",
@@ -9850,7 +9850,7 @@
         "notes": "Add semantic porting execution + ongoing sync to Coldwine"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-txw",
         "title": "Add cross-session token economics tracking to Bigend",
         "phase": "later",
@@ -9862,7 +9862,7 @@
         "notes": "Add cross-session token economics tracking to Bigend"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-hbcw",
         "title": "Add /semport workflow for semantic code porting with equivalence validation",
         "phase": "later",
@@ -9874,7 +9874,7 @@
         "notes": "Add /semport workflow for semantic code porting with equivalence validation"
       },
       {
-        "module": "demarch",
+        "module": "sylveste",
         "id": "iv-q703",
         "title": "Add model routing policy + consensus planning across providers",
         "phase": "later",

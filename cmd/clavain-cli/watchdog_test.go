@@ -190,7 +190,7 @@ func TestSweepResultJSON(t *testing.T) {
 		Skipped:      1,
 		Actions: []sweepAction{
 			{
-				BeadID:       "Demarch-test.1",
+				BeadID:       "Sylveste-test.1",
 				FailureClass: "retriable",
 				Tier:         tierAutoRetry,
 				Action:       "released for auto-retry",

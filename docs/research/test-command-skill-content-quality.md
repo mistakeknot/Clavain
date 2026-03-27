@@ -1,7 +1,7 @@
 # Clavain Content Quality Audit — Commands, Skills, Agents
 
 **Date:** 2026-02-22
-**Scope:** `/home/mk/projects/Demarch/os/clavain` — 53 commands, 16 skills, 4 agents
+**Scope:** `/home/mk/projects/Sylveste/os/clavain` — 53 commands, 16 skills, 4 agents
 **Audit type:** Content quality check (not syntax)
 
 ---

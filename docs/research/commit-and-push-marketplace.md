@@ -1,7 +1,7 @@
 # Commit and Push: Marketplace
 
 **Date:** 2026-02-23
-**Repo:** `/home/mk/projects/Demarch/core/marketplace`
+**Repo:** `/home/mk/projects/Sylveste/core/marketplace`
 **Remote:** `https://github.com/mistakeknot/interagency-marketplace.git`
 
 ## Task

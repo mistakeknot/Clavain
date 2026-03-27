@@ -10,10 +10,10 @@ Replaced stub implementations in `budget.go` with full working budget math engin
 
 ## Files Modified
 
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/budget.go` — 530 lines (was 12-line stub)
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/budget_test.go` — 189 lines (new)
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/exec.go` — added `execCommand` var and `runCommandExec` helper
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/checkpoint.go` — removed duplicate `resolveRunID` (now uses sprint.go's cached version)
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/budget.go` — 530 lines (was 12-line stub)
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/budget_test.go` — 189 lines (new)
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/exec.go` — added `execCommand` var and `runCommandExec` helper
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/checkpoint.go` — removed duplicate `resolveRunID` (now uses sprint.go's cached version)
 
 ## Pure Functions Implemented
 

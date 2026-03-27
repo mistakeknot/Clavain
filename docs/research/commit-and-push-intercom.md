@@ -1,7 +1,7 @@
 # Commit and Push: Intercom
 
 **Date:** 2026-02-23
-**Repo:** `/home/mk/projects/Demarch/apps/intercom`
+**Repo:** `/home/mk/projects/Sylveste/apps/intercom`
 **Remote pushed to:** `intercom` (https://github.com/mistakeknot/Intercom.git)
 
 ## Summary

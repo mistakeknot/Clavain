@@ -119,7 +119,7 @@ func cmdDaemon(args []string) error {
 
 	if _, err := os.Stat(filepath.Join(cfg.ProjectDir, ".beads")); err != nil {
 		if _, err2 := os.Stat(filepath.Join(cfg.ProjectDir, "CLAUDE.md")); err2 != nil {
-			return fmt.Errorf("daemon: %s has no .beads/ or CLAUDE.md — not a Demarch project", cfg.ProjectDir)
+			return fmt.Errorf("daemon: %s has no .beads/ or CLAUDE.md — not a Sylveste project", cfg.ProjectDir)
 		}
 	}
 

@@ -1,7 +1,7 @@
 # Research: Write Power User Guide
 
 **Date:** 2026-02-23
-**Task:** Create `/home/mk/projects/Demarch/docs/guide-power-user.md`
+**Task:** Create `/home/mk/projects/Sylveste/docs/guide-power-user.md`
 
 ## Analysis
 
@@ -20,15 +20,15 @@ Claude Code users who already have Claude Code installed and want to add Clavain
 
 5. **Multi-agent review**: Quality gates dispatch 7 specialized agents (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design).
 
-6. **File location**: Written to `/home/mk/projects/Demarch/docs/guide-power-user.md` — top-level docs directory alongside existing guides in `docs/guides/`.
+6. **File location**: Written to `/home/mk/projects/Sylveste/docs/guide-power-user.md` — top-level docs directory alongside existing guides in `docs/guides/`.
 
 ### Key Findings
 
-- No existing `guide-*.md` files exist in `/home/mk/projects/Demarch/docs/` — this is the first user-facing guide at this path convention.
+- No existing `guide-*.md` files exist in `/home/mk/projects/Sylveste/docs/` — this is the first user-facing guide at this path convention.
 - The `docs/guides/` subdirectory contains operational/internal guides, not user-facing ones.
-- No `install.sh` exists at the Demarch repo root — the guide references a planned installation script.
+- No `install.sh` exists at the Sylveste repo root — the guide references a planned installation script.
 - The content was provided verbatim by the user and written as-is.
 
 ### Files Written
 
-- `/home/mk/projects/Demarch/docs/guide-power-user.md` — the power user guide (exact content as specified)
+- `/home/mk/projects/Sylveste/docs/guide-power-user.md` — the power user guide (exact content as specified)

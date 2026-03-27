@@ -7,7 +7,7 @@ import (
 
 func TestFormatBanner_Basic(t *testing.T) {
 	d := sprintInitData{
-		beadID:     "Demarch-czxk",
+		beadID:     "Sylveste-czxk",
 		title:      "clavain-cli sprint-init: consolidated sprint bootstrap",
 		complexity: 3,
 		compLabel:  "moderate",
@@ -21,7 +21,7 @@ func TestFormatBanner_Basic(t *testing.T) {
 	// Test plain text (no color)
 	out := formatBanner(d, false)
 
-	if !strings.Contains(out, "Demarch-czxk") {
+	if !strings.Contains(out, "Sylveste-czxk") {
 		t.Errorf("missing bead ID in output:\n%s", out)
 	}
 	if !strings.Contains(out, "3/5 (moderate)") {
@@ -42,7 +42,7 @@ func TestFormatBanner_Basic(t *testing.T) {
 
 func TestFormatBanner_Color(t *testing.T) {
 	d := sprintInitData{
-		beadID:     "Demarch-abc1",
+		beadID:     "Sylveste-abc1",
 		title:      "test",
 		complexity: 2,
 		compLabel:  "simple",
@@ -58,14 +58,14 @@ func TestFormatBanner_Color(t *testing.T) {
 	if !strings.Contains(out, "\033[") {
 		t.Errorf("expected ANSI escapes in color mode:\n%s", out)
 	}
-	if !strings.Contains(out, "Demarch-abc1") {
+	if !strings.Contains(out, "Sylveste-abc1") {
 		t.Errorf("missing bead ID in color output")
 	}
 }
 
 func TestFormatBanner_NoRun(t *testing.T) {
 	d := sprintInitData{
-		beadID:     "Demarch-xyz9",
+		beadID:     "Sylveste-xyz9",
 		title:      "some task",
 		complexity: 3,
 		compLabel:  "moderate",
@@ -99,7 +99,7 @@ func TestFormatBanner_BudgetWarning(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := sprintInitData{
-				beadID:     "Demarch-test",
+				beadID:     "Sylveste-test",
 				title:      "test",
 				complexity: 3,
 				compLabel:  "moderate",
@@ -118,7 +118,7 @@ func TestFormatBanner_BudgetWarning(t *testing.T) {
 
 func TestFormatBanner_LongTitle(t *testing.T) {
 	d := sprintInitData{
-		beadID:     "Demarch-long",
+		beadID:     "Sylveste-long",
 		title:      "This is a very long title that should be truncated because it exceeds the maximum display width",
 		complexity: 3,
 		compLabel:  "moderate",
@@ -136,11 +136,11 @@ func TestParseBDTitle(t *testing.T) {
 		want  string
 	}{
 		{
-			"✓ Demarch-czxk · clavain-cli sprint-init [in_progress]",
+			"✓ Sylveste-czxk · clavain-cli sprint-init [in_progress]",
 			"clavain-cli sprint-init",
 		},
 		{
-			"Demarch-abc1 — some task title [open]",
+			"Sylveste-abc1 — some task title [open]",
 			"some task title",
 		},
 		{
@@ -183,7 +183,7 @@ func TestCmdSprintNextStepPure(t *testing.T) {
 
 func TestFormatBanner_NoBudgetSet(t *testing.T) {
 	d := sprintInitData{
-		beadID:     "Demarch-nob",
+		beadID:     "Sylveste-nob",
 		title:      "test",
 		complexity: 3,
 		compLabel:  "moderate",

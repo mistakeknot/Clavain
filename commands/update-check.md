@@ -1,6 +1,6 @@
 ---
 name: update-check
-description: Conservative update check — reports available Demarch/Clavain/Codex updates without changing anything
+description: Conservative update check — reports available Sylveste/Clavain/Codex updates without changing anything
 argument-hint: "[optional: --full --refresh]"
 ---
 
@@ -11,7 +11,7 @@ Run the conservative update checker. This command is read-only.
 ## Behavior
 
 - Default: light check
-  - current Demarch checkout, if detectable
+  - current Sylveste checkout, if detectable
   - `~/.codex/clavain`
   - installed Claude plugin version vs local Codex clone
 - `--full`: also checks recommended `~/.codex/*` companion repos against origin

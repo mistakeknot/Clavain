@@ -1,12 +1,12 @@
 # Research: Write Root README.md
 
 ## Task
-Replace the existing `/home/mk/projects/Demarch/README.md` with a new user-facing version.
+Replace the existing `/home/mk/projects/Sylveste/README.md` with a new user-facing version.
 
 ## Analysis
 
 ### Current State
-The current README.md at `/home/mk/projects/Demarch/README.md` is titled "Interverse" and is developer-focused — it lists all plugins, services, and infrastructure in table format with version numbers and GitHub links. It includes installation instructions for plugins via the marketplace CLI but lacks:
+The current README.md at `/home/mk/projects/Sylveste/README.md` is titled "Interverse" and is developer-focused — it lists all plugins, services, and infrastructure in table format with version numbers and GitHub links. It includes installation instructions for plugins via the marketplace CLI but lacks:
 - A clear project description for newcomers
 - Quick start instructions
 - Architecture overview with layer descriptions
@@ -15,7 +15,7 @@ The current README.md at `/home/mk/projects/Demarch/README.md` is titled "Interv
 
 ### Changes
 The new README.md replaces the entire file with a user-facing version that:
-1. Renames the title from "Interverse" to "Demarch" (the project's proper name)
+1. Renames the title from "Interverse" to "Sylveste" (the project's proper name)
 2. Adds a one-line description of the platform
 3. Provides a curl-based quick start installation
 4. Lists what the user gets (Clavain, 33+ plugins, multi-model orchestration, sprint management)

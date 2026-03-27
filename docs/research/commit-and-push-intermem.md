@@ -1,7 +1,7 @@
 # Intermem: Commit and Push Analysis
 
 **Date:** 2026-02-23
-**Repository:** `/home/mk/projects/Demarch/interverse/intermem`
+**Repository:** `/home/mk/projects/Sylveste/interverse/intermem`
 **Remote:** `https://github.com/mistakeknot/intermem.git`
 
 ## Pre-Commit State
@@ -24,7 +24,7 @@
 
 ### Group 1: Test File Updates
 
-Both test files had a single-line path reference change from `hub/clavain` to `os/clavain`, reflecting the Demarch monorepo restructure where Clavain moved from `hub/` to `os/`.
+Both test files had a single-line path reference change from `hub/clavain` to `os/clavain`, reflecting the Sylveste monorepo restructure where Clavain moved from `hub/` to `os/`.
 
 **`tests/test_citations.py`** (line 117):
 ```python

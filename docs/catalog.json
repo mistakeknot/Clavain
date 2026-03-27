@@ -48,7 +48,7 @@
     },
     {
       "name": "project-onboard",
-      "description": "Use when setting up any project (new or existing) in the Demarch ecosystem \u2014 introspects infrastructure, creates GitHub repo if needed, conducts guided interview, scaffolds docs and automation, configures observability, seeds content via interpath. Replaces the former project-kickstart command."
+      "description": "Use when setting up any project (new or existing) in the Sylveste ecosystem \u2014 introspects infrastructure, creates GitHub repo if needed, conducts guided interview, scaffolds docs and automation, configures observability, seeds content via interpath. Replaces the former project-kickstart command."
     },
     {
       "name": "refactor-safely",
@@ -298,7 +298,7 @@
     },
     {
       "name": "update-check",
-      "description": "Conservative update check \u2014 reports available Demarch/Clavain/Codex updates without changing anything"
+      "description": "Conservative update check \u2014 reports available Sylveste/Clavain/Codex updates without changing anything"
     },
     {
       "name": "upstream-sync",

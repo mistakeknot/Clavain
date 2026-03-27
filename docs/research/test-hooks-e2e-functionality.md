@@ -1,7 +1,7 @@
 # Clavain Hooks E2E Functional Test Report
 
 **Date:** 2026-02-22
-**Working directory:** `/home/mk/projects/Demarch` (Demarch project root)
+**Working directory:** `/home/mk/projects/Sylveste` (Sylveste project root)
 **Hooks path:** `os/clavain/hooks/`
 **Plugin version:** 0.6.60
 
@@ -14,7 +14,7 @@ Test command pattern:
 echo '<JSON input>' | timeout <seconds> bash os/clavain/hooks/<hook>.sh 2>&1
 ```
 
-All tests were run from `/home/mk/projects/Demarch`.
+All tests were run from `/home/mk/projects/Sylveste`.
 
 ## Hook Binding Reference
 

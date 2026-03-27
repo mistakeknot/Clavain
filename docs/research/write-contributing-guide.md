@@ -2,7 +2,7 @@
 
 ## Task
 
-Create `/home/mk/projects/Demarch/docs/guide-contributing.md` with the exact content specified by the user.
+Create `/home/mk/projects/Sylveste/docs/guide-contributing.md` with the exact content specified by the user.
 
 ## Analysis
 
@@ -22,13 +22,13 @@ The contributing guide covers:
 7. **Key files** -- CLAUDE.md, AGENTS.md, plugin.json, agent-rig.json, .beads/
 
 ### Consistency with Project Conventions
-- Naming conventions match `CLAUDE.md` at `/home/mk/projects/Demarch/CLAUDE.md` (lowercase modules, proper noun exceptions)
+- Naming conventions match `CLAUDE.md` at `/home/mk/projects/Sylveste/CLAUDE.md` (lowercase modules, proper noun exceptions)
 - Trunk-based development matches global `~/.claude/CLAUDE.md` git workflow rules
-- Layer descriptions (L1/L2/L3) match the Demarch CLAUDE.md design decisions
+- Layer descriptions (L1/L2/L3) match the Sylveste CLAUDE.md design decisions
 - Testing conventions (`-race` flag) match autarch/intermute project standards from MEMORY.md
 
 ### File Placement
-Written to `/home/mk/projects/Demarch/docs/guide-contributing.md` -- at the docs root alongside `architecture.md`, `glossary.md`, and other top-level reference docs. This is distinct from `docs/guides/` which holds operational/troubleshooting docs.
+Written to `/home/mk/projects/Sylveste/docs/guide-contributing.md` -- at the docs root alongside `architecture.md`, `glossary.md`, and other top-level reference docs. This is distinct from `docs/guides/` which holds operational/troubleshooting docs.
 
 ## Outcome
 

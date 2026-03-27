@@ -1,7 +1,7 @@
 # Commit and Push Analysis — Autarch
 
 **Date:** 2026-02-23
-**Repo:** `/home/mk/projects/Demarch/apps/autarch` (origin: `https://github.com/mistakeknot/Autarch.git`)
+**Repo:** `/home/mk/projects/Sylveste/apps/autarch` (origin: `https://github.com/mistakeknot/Autarch.git`)
 **Branch:** `main` (trunk-based development)
 
 ## Current State

@@ -20,7 +20,7 @@ The most important section. Write as a direct instruction to the next agent.
 - Be specific: name files to edit, tests to run, commands to verify
 - If multiple possible next steps, pick the highest-priority one as primary; list alternatives as `Fallback:` items
 - Include blockers or open decisions the next session must resolve
-- If beads are in progress, list IDs and status here (e.g., `Demarch-abc1 — in_progress, claimed`)
+- If beads are in progress, list IDs and status here (e.g., `Sylveste-abc1 — in_progress, claimed`)
 
 ### 2. Dead ends
 What was tried and didn't work. This is the highest-signal section for preventing wasted effort.

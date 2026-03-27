@@ -8,7 +8,7 @@ With 17 skills, 6 agents, 51 commands, 11 hooks, and 0 MCP servers, there is a l
 
 ## Install
 
-> **Want the full platform?** Clavain is part of [Demarch](https://github.com/mistakeknot/Demarch), which installs the complete ecosystem (55+ plugins, Go services, TUI tools) in one command. See the [Demarch Quick Start](https://github.com/mistakeknot/Demarch#quick-start).
+> **Want the full platform?** Clavain is part of [Sylveste](https://github.com/mistakeknot/Sylveste), which installs the complete ecosystem (55+ plugins, Go services, TUI tools) in one command. See the [Sylveste Quick Start](https://github.com/mistakeknot/Sylveste#quick-start).
 
 ```bash
 # Full rig install (recommended): installs Clavain + companions, MCP servers, env vars, and conflict resolution
@@ -30,7 +30,7 @@ bash scripts/uninstall.sh
 # Remove Clavain only, keep companions
 bash scripts/uninstall.sh --keep-companions
 
-# Full platform uninstall (from Demarch repo)
+# Full platform uninstall (from Sylveste repo)
 bash install.sh --uninstall
 ```
 

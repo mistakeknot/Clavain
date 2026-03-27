@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# check-install-updates.sh — conservative, read-only update notifier for Demarch/Clavain installs
+# check-install-updates.sh — conservative, read-only update notifier for Sylveste/Clavain installs
 #
 # Light mode (default):
-# - current Demarch checkout, if detectable from cwd or script source
+# - current Sylveste checkout, if detectable from cwd or script source
 # - ~/.codex/clavain clone drift vs origin
 # - installed Claude plugin cache version vs local ~/.codex/clavain version
 #
@@ -97,18 +97,18 @@ semver_newer() {
   [[ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n1)" == "$a" ]]
 }
 
-discover_demarch_root() {
+discover_sylveste_root() {
   local candidate
 
   if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
-    if [[ "$(basename "$git_root")" == "Demarch" && -f "$git_root/install.sh" ]]; then
+    if [[ "$(basename "$git_root")" == "Sylveste" && -f "$git_root/install.sh" ]]; then
       printf '%s\n' "$git_root"
       return 0
     fi
   fi
 
   candidate="$(cd "$SCRIPT_DIR/../../.." && pwd 2>/dev/null || true)"
-  if [[ -f "$candidate/install.sh" && "$(basename "$candidate")" == "Demarch" ]]; then
+  if [[ -f "$candidate/install.sh" && "$(basename "$candidate")" == "Sylveste" ]]; then
     printf '%s\n' "$candidate"
     return 0
   fi
@@ -274,13 +274,13 @@ EOF
 run_checks() {
   RESULTS=()
 
-  local demarch_root=""
-  if demarch_root="$(discover_demarch_root)"; then
+  local sylveste_root=""
+  if sylveste_root="$(discover_sylveste_root)"; then
     check_git_repo \
-      "demarch_repo" \
-      "Demarch checkout" \
-      "$demarch_root" \
-      "cd \"$demarch_root\" && bash install.sh --update"
+      "sylveste_repo" \
+      "Sylveste checkout" \
+      "$sylveste_root" \
+      "cd \"$sylveste_root\" && bash install.sh --update"
   fi
 
   local clavain_root=""
@@ -435,10 +435,10 @@ render_hook_notice() {
 
   [[ -n "$notices" ]] || return 0
 
-  echo "Demarch update check: $notices" >&2
+  echo "Sylveste update check: $notices" >&2
   echo "Run: bash ~/.codex/clavain/scripts/check-install-updates.sh --full --refresh" >&2
-  if demarch_root="$(discover_demarch_root)"; then
-    echo "Apply Demarch updates from checkout: cd \"$demarch_root\" && bash install.sh --update" >&2
+  if sylveste_root="$(discover_sylveste_root)"; then
+    echo "Apply Sylveste updates from checkout: cd \"$sylveste_root\" && bash install.sh --update" >&2
   fi
 }
 

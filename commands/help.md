@@ -70,7 +70,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/clavain:refactor` | Refactors with duplication/risk controls |
 
 ### Meta
-| `/clavain:project-onboard` | Set up project with Demarch automation |
+| `/clavain:project-onboard` | Set up project with Sylveste automation |
 |---|---|
 | `/clavain:setup` | Bootstrap Clavain |
 | `/clavain:help` | This command |

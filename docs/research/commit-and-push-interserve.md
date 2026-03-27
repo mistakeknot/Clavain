@@ -1,7 +1,7 @@
 # Commit and Push: Interserve
 
 **Date**: 2026-02-23
-**Repository**: `/home/mk/projects/Demarch/interverse/interserve`
+**Repository**: `/home/mk/projects/Sylveste/interverse/interserve`
 **Remote**: `https://github.com/mistakeknot/interserve.git`
 **Branch**: `main`
 

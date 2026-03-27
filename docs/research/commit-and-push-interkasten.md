@@ -1,7 +1,7 @@
 # Interkasten: Commit and Push Analysis
 
 **Date:** 2026-02-23
-**Repository:** `/home/mk/projects/Demarch/interverse/interkasten`
+**Repository:** `/home/mk/projects/Sylveste/interverse/interkasten`
 **Remote:** `https://github.com/mistakeknot/interkasten.git`
 
 ## Pre-Commit State

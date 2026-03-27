@@ -317,7 +317,7 @@ After resolving: if quality-gates found recurring patterns, run `/clavain:compou
 
 `clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"`
 
-Note: This advances `shipping → reflect` in the kernel. Step 7's `sprint-advance "shipping"` advanced `executing → shipping`. Both pass `"shipping"` as `currentPhase` which causes `recordPhaseTokens` to double-record under the "shipping" key — this is a known calibration quirk (Demarch-84sv partial fix; full fix requires `recordPhaseTokens` to deduplicate).
+Note: This advances `shipping → reflect` in the kernel. Step 7's `sprint-advance "shipping"` advanced `executing → shipping`. Both pass `"shipping"` as `currentPhase` which causes `recordPhaseTokens` to double-record under the "shipping" key — this is a known calibration quirk (Sylveste-84sv partial fix; full fix requires `recordPhaseTokens` to deduplicate).
 
 `/reflect`
 

@@ -1,7 +1,7 @@
 # Commit and Push — Intercore
 
 **Date:** 2026-02-23
-**Repository:** `/home/mk/projects/Demarch/core/intercore`
+**Repository:** `/home/mk/projects/Sylveste/core/intercore`
 **Remote:** `https://github.com/mistakeknot/intercore.git`
 
 ## Task

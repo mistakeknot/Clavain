@@ -6,7 +6,7 @@
 
 ## Overview
 
-Clavain is the L2 OS layer of Demarch — an autonomous software agency orchestrating the full development lifecycle. This roadmap covers work directly on Clavain and closely coupled Demarch-level items (sprint system, prompt optimization, tool gating, progress tracking).
+Clavain is the L2 OS layer of Sylveste — an autonomous software agency orchestrating the full development lifecycle. This roadmap covers work directly on Clavain and closely coupled Sylveste-level items (sprint system, prompt optimization, tool gating, progress tracking).
 
 For companion plugin roadmaps (interflux, interphase, interspect, etc.), see each plugin's own `docs/roadmap.md`.
 
@@ -16,8 +16,8 @@ For companion plugin roadmaps (interflux, interphase, interspect, etc.), see eac
 
 | ID | Title | Status |
 |----|-------|--------|
-| Demarch-fqb | Interrank power-up: task-based model recommendation | in_progress |
-| Demarch-6qb | Skaffen — sovereign agent runtime | in_progress |
+| Sylveste-fqb | Interrank power-up: task-based model recommendation | in_progress |
+| Sylveste-6qb | Skaffen — sovereign agent runtime | in_progress |
 | iv-w41fn | Expand sequencing hints in tool-composition.yaml from real failure data | open |
 | iv-7h6tp | Adapt check_fn tool gating pattern from Hermes | open |
 
@@ -26,11 +26,11 @@ For companion plugin roadmaps (interflux, interphase, interspect, etc.), see eac
 ## Next (P2) — Planned
 
 ### Sprint system
-- **Demarch-oac8** Clavain prompt token optimization — phase 2 *(in_progress)*
-- **Demarch-ss15** F3: Progress tracker rollout to remaining 6 commands
-- **Demarch-7uko** F2: Wire artifact bus into all 10 sprint commands *(blocked)*
-- **Demarch-lcxa** F4: Graduated autonomy tier system for sprint *(blocked)*
-- **Demarch-lta9** Deep review + brainstorm of sprint lifecycle — phase coherence, OODARC alignment *(blocked)*
+- **Sylveste-oac8** Clavain prompt token optimization — phase 2 *(in_progress)*
+- **Sylveste-ss15** F3: Progress tracker rollout to remaining 6 commands
+- **Sylveste-7uko** F2: Wire artifact bus into all 10 sprint commands *(blocked)*
+- **Sylveste-lcxa** F4: Graduated autonomy tier system for sprint *(blocked)*
+- **Sylveste-lta9** Deep review + brainstorm of sprint lifecycle — phase coherence, OODARC alignment *(blocked)*
 - **iv-6u3s** F4: Sprint Scan Release Visibility
 
 ### Infrastructure
@@ -38,14 +38,14 @@ For companion plugin roadmaps (interflux, interphase, interspect, etc.), see eac
 - **iv-ho3** Epic: StrongDM Factory Substrate — validation-first infrastructure for Clavain
 
 ### Observability + routing
-- **Demarch-jly6** F2: /interspect:effectiveness command
-- **Demarch-6f5i** F1: Interspect effectiveness report function
+- **Sylveste-jly6** F2: /interspect:effectiveness command
+- **Sylveste-6f5i** F1: Interspect effectiveness report function
 - **iv-5ubkh** Evolve Interspect outcome data to drive adaptive routing
 - **iv-jgdct** Apply complexity-aware routing across all subagents
 
 ### Research + coordination
-- **Demarch-dxzr** Epic: Interlab observability audit
-- **Demarch-2ik** Autoresearch: cross-campaign leaderboard and config adoption *(blocked)*
+- **Sylveste-dxzr** Epic: Interlab observability audit
+- **Sylveste-2ik** Autoresearch: cross-campaign leaderboard and config adoption *(blocked)*
 - **iv-i76wv** Research: Autonomy safety policy for auto-remediate and auto-ship
 - **iv-fwwhl** Epic: WCM multi-agent coordination patterns
 - **iv-qjwz** AgentDropout: dynamic redundancy elimination for flux-drive reviews
@@ -61,15 +61,15 @@ For companion plugin roadmaps (interflux, interphase, interspect, etc.), see eac
 ## Later (P3+) — Backlog
 
 ### Progress trackers (P3, 6 items)
-Epic **Demarch-01ew**: Add explicit phase names and hard-stop rules to resolve, reflect, quality-gates, write-plan, strategy commands.
+Epic **Sylveste-01ew**: Add explicit phase names and hard-stop rules to resolve, reflect, quality-gates, write-plan, strategy commands.
 
 ### Sprint evolution (P3)
-- **Demarch-8hzt** F6: Multi-agent parallel execution windows *(blocked)*
-- **Demarch-5ump** F5: Sprint-level 10-step progress display *(blocked)*
+- **Sylveste-8hzt** F6: Multi-agent parallel execution windows *(blocked)*
+- **Sylveste-5ump** F5: Sprint-level 10-step progress display *(blocked)*
 
 ### Performance (P3)
-- **Demarch-0pvp.5** Optimize composePlan — reduce map iteration allocs
-- **Demarch-0pvp.1** Optimize classifyComplexity — eliminate regex allocs
+- **Sylveste-0pvp.5** Optimize composePlan — reduce map iteration allocs
+- **Sylveste-0pvp.1** Optimize classifyComplexity — eliminate regex allocs
 
 ### Extractions + integrations (P3-P4)
 - **iv-u2pd** Arbiter extraction Phase 2: spec sprint sequencing to Clavain skill
@@ -89,7 +89,7 @@ Epic **Demarch-01ew**: Add explicit phase names and hard-stop rules to resolve, 
 ## Research Agenda
 
 - **Autonomy safety** — policy for auto-remediate and auto-ship (iv-i76wv)
-- **Model routing** — Skaffen shadow experiments, haiku/sonnet/opus phase comparison (Demarch-dk5)
+- **Model routing** — Skaffen shadow experiments, haiku/sonnet/opus phase comparison (Sylveste-dk5)
 - **Token efficiency** — prompt caching strategy from Hermes (iv-f8s9q), multi-strategy context estimation (iv-fv1f)
 - **Coordination patterns** — WCM multi-agent patterns (iv-fwwhl), convergence-divergence detection (iv-goiyq)
 - **ADL discipline extensions** for Clavain agents (iv-icqo)

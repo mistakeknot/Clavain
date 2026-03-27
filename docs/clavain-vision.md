@@ -62,7 +62,7 @@ Clavain serves three concentric circles, and the priority is explicit: inner cir
 
 2. **Proof by demonstration.** Build Clavain with Clavain. Use the agency to run its own development sprints — research improvements, brainstorm features, plan execution, write code, review changes, compound learnings. Every capability must survive contact with its own development process. This is the credibility engine: a system that autonomously builds itself is a more convincing proof than any benchmark.
 
-3. **Platform play.** Once dogfooding proves the model works, open the Demarch platform — Intercore as infrastructure for anyone building autonomous software development agencies, and Clavain as the reference agency. AI labs get the kernel. Developers get the agency. Both are open source. The differentiation from general-purpose AI gateways is that this stack is purpose-built for building software.
+3. **Platform play.** Once dogfooding proves the model works, open the Sylveste platform — Intercore as infrastructure for anyone building autonomous software development agencies, and Clavain as the reference agency. AI labs get the kernel. Developers get the agency. Both are open source. The differentiation from general-purpose AI gateways is that this stack is purpose-built for building software.
 
 ## Operating Principles
 
@@ -257,7 +257,7 @@ Bead shipped     → Feedback signal → Discovery marked "validated"
                                       Similar future discoveries score higher
 ```
 
-Discovery is a capability track orthogonal to the autonomy ladder (see the [Demarch vision](../../../docs/demarch-vision.md) for the full ladder and capability track definitions). It operates at any autonomy level — the pipeline that finds work before it can be recorded.
+Discovery is a capability track orthogonal to the autonomy ladder (see the [Sylveste vision](../../../docs/sylveste-vision.md) for the full ladder and capability track definitions). It operates at any autonomy level — the pipeline that finds work before it can be recorded.
 
 **What already exists.** The interject plugin implements the core discovery engine: source adapters (arXiv, HN, GitHub, Anthropic docs, Exa), embedding-based scoring (all-MiniLM-L6-v2, 384 dims), adaptive thresholds, and bead/briefing output. The intersearch library provides shared embedding and Exa search infrastructure. What's missing is OS pipeline integration — feeding interject discoveries into the kernel event bus, event-driven scan triggers, and automated backlog refinement. The kernel primitives (discovery storage, confidence tiers, scoring, promotion/dismissal) shipped in E5.
 
@@ -543,7 +543,7 @@ Clavain's value is measurable. These metrics define what "working" means at each
 
 ## What Clavain Is Not
 
-**Not the platform.** That's Demarch. Clavain is the opinionated reference agency built on the platform. The inter-* constellation offers composable pieces that anyone can adopt independently, but the agency as a whole is not designed to be "framework-agnostic" or "configurable for any workflow."
+**Not the platform.** That's Sylveste. Clavain is the opinionated reference agency built on the platform. The inter-* constellation offers composable pieces that anyone can adopt independently, but the agency as a whole is not designed to be "framework-agnostic" or "configurable for any workflow."
 
 **Not a general AI gateway.** That's what projects like OpenClaw (general-purpose AI message routing) do. Clavain doesn't route arbitrary messages to arbitrary agents. It orchestrates software development — it has opinions about what "good" looks like at every phase, and those opinions are encoded in gates, review agents, and quality disciplines.
 

@@ -8,11 +8,11 @@
 
 ## Files Modified
 
-1. **`/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/complexity.go`** -- Replaced stub with full implementation
-2. **`/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/complexity_test.go`** -- Created with 52 table-driven test cases
-3. **`/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/budget.go`** -- Removed duplicate `resolveRunID` (pre-existing build error fix)
-4. **`/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/checkpoint.go`** -- Removed unused `os/exec` import (pre-existing build error fix)
-5. **`/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/phase.go`** -- Removed unused `encoding/json` import (pre-existing build error fix)
+1. **`/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/complexity.go`** -- Replaced stub with full implementation
+2. **`/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/complexity_test.go`** -- Created with 52 table-driven test cases
+3. **`/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/budget.go`** -- Removed duplicate `resolveRunID` (pre-existing build error fix)
+4. **`/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/checkpoint.go`** -- Removed unused `os/exec` import (pre-existing build error fix)
+5. **`/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/phase.go`** -- Removed unused `encoding/json` import (pre-existing build error fix)
 
 ---
 

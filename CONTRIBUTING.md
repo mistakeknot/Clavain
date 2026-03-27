@@ -1,6 +1,6 @@
 # Contributing to Clavain
 
-Thanks for your interest in contributing! Clavain is part of the [Demarch](https://github.com/mistakeknot/Demarch) ecosystem.
+Thanks for your interest in contributing! Clavain is part of the [Sylveste](https://github.com/mistakeknot/Sylveste) ecosystem.
 
 ## Quick start
 
@@ -54,4 +54,4 @@ tests/            # Shell (bats) and structural (pytest) tests
 
 ## Full contributing guide
 
-For detailed setup, testing matrix, commit conventions, and plugin development workflow, see the [Demarch Contributing Guide](https://github.com/mistakeknot/Demarch/blob/main/docs/guide-contributing.md).
+For detailed setup, testing matrix, commit conventions, and plugin development workflow, see the [Sylveste Contributing Guide](https://github.com/mistakeknot/Sylveste/blob/main/docs/guide-contributing.md).

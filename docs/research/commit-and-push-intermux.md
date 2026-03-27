@@ -4,7 +4,7 @@
 
 ## Repository State
 
-**Working directory:** `/home/mk/projects/Demarch/interverse/intermux`
+**Working directory:** `/home/mk/projects/Sylveste/interverse/intermux`
 **Branch:** `main`
 **Remote:** `origin`
 
@@ -18,7 +18,7 @@
 
 ### Untracked Files (4 files)
 
-1. **`docs/intermux-roadmap.md`** — Auto-generated roadmap from beads (2026-02-23). Contains one open item: `iv-9kq3 [P2] [feature] - F5: Agent overlay (intermux integration)`. Links to Demarch-level roadmap.
+1. **`docs/intermux-roadmap.md`** — Auto-generated roadmap from beads (2026-02-23). Contains one open item: `iv-9kq3 [P2] [feature] - F5: Agent overlay (intermux integration)`. Links to Sylveste-level roadmap.
 
 2. **`docs/intermux-vision.md`** — Placeholder vision document. States no dedicated vision has been authored yet; exists to satisfy artifact convention.
 

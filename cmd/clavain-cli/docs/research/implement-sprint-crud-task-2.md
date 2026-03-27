@@ -6,10 +6,10 @@ Replaced all 8 stub implementations in `sprint.go` with full working code that m
 
 ## Files Modified
 
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/sprint.go` -- full implementations of all 8 functions
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/sprint_test.go` -- new, 5 test functions
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/checkpoint.go` -- removed duplicate `resolveRunID`, added `os/exec` import
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/phase.go` -- removed duplicate `resolveRunID` and `phaseToStage`
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/sprint.go` -- full implementations of all 8 functions
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/sprint_test.go` -- new, 5 test functions
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/checkpoint.go` -- removed duplicate `resolveRunID`, added `os/exec` import
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/phase.go` -- removed duplicate `resolveRunID` and `phaseToStage`
 
 ## Functions Implemented
 

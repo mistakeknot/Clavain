@@ -1,12 +1,12 @@
 # Implementation: Tasks 5+6 (Checkpoints + Claiming)
 
 **Date:** 2026-02-25
-**Plan:** `/home/mk/projects/Demarch/docs/plans/2026-02-25-clavain-cli-go-migration.md`
+**Plan:** `/home/mk/projects/Sylveste/docs/plans/2026-02-25-clavain-cli-go-migration.md`
 **Files modified:**
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/checkpoint.go`
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/claim.go`
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/checkpoint_test.go` (new)
-- `/home/mk/projects/Demarch/os/clavain/cmd/clavain-cli/claim_test.go` (new)
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/checkpoint.go`
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/claim.go`
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/checkpoint_test.go` (new)
+- `/home/mk/projects/Sylveste/os/clavain/cmd/clavain-cli/claim_test.go` (new)
 
 ---
 

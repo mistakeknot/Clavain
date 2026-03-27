@@ -256,8 +256,8 @@ func formatBanner(d sprintInitData, color bool) string {
 }
 
 // parseBDTitle extracts the bead title from `bd show` output.
-// Format varies but typically: "✓ Demarch-czxk · Title here [status]"
-// or "Demarch-czxk — Title here"
+// Format varies but typically: "✓ Sylveste-czxk · Title here [status]"
+// or "Sylveste-czxk — Title here"
 func parseBDTitle(output string) string {
 	lines := strings.SplitN(output, "\n", 2)
 	if len(lines) == 0 {

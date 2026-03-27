@@ -1,12 +1,12 @@
 # Research: Write Full Setup Guide
 
 ## Task
-Create `/home/mk/projects/Demarch/docs/guide-full-setup.md` — a complete setup guide for users who want the full Demarch platform including Go services and TUI tools.
+Create `/home/mk/projects/Sylveste/docs/guide-full-setup.md` — a complete setup guide for users who want the full Sylveste platform including Go services and TUI tools.
 
 ## Analysis
 
 ### Target Audience
-Users who want the complete Demarch platform: Clavain agent rig, Interverse plugins, Go core services (Intercore, Intermute), Autarch TUI apps, and optional Oracle cross-AI review.
+Users who want the complete Sylveste platform: Clavain agent rig, Interverse plugins, Go core services (Intercore, Intermute), Autarch TUI apps, and optional Oracle cross-AI review.
 
 ### Structure Decisions
 The guide follows a progressive installation sequence:
@@ -28,4 +28,4 @@ The guide follows a progressive installation sequence:
 - Beads initialization is per-project (`bd init`)
 
 ## Output
-Written to `/home/mk/projects/Demarch/docs/guide-full-setup.md` — 6 setup steps, verification section, and next-steps links.
+Written to `/home/mk/projects/Sylveste/docs/guide-full-setup.md` — 6 setup steps, verification section, and next-steps links.

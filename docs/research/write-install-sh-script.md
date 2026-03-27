@@ -1,8 +1,8 @@
-# Research: install.sh Script for Demarch
+# Research: install.sh Script for Sylveste
 
 ## Task
 
-Create a curl-fetchable bash installer at `/home/mk/projects/Demarch/install.sh` for the Clavain + Interverse plugin ecosystem.
+Create a curl-fetchable bash installer at `/home/mk/projects/Sylveste/install.sh` for the Clavain + Interverse plugin ecosystem.
 
 ## Style Reference
 
@@ -48,7 +48,7 @@ In dry-run mode:
 
 ## Implementation
 
-The script was written to `/home/mk/projects/Demarch/install.sh` and made executable with `chmod +x`.
+The script was written to `/home/mk/projects/Sylveste/install.sh` and made executable with `chmod +x`.
 
 ### Key Implementation Details
 
@@ -60,4 +60,4 @@ The script was written to `/home/mk/projects/Demarch/install.sh` and made execut
 
 ## Files Modified
 
-- `/home/mk/projects/Demarch/install.sh` (created, chmod +x)
+- `/home/mk/projects/Sylveste/install.sh` (created, chmod +x)

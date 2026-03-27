@@ -1,7 +1,7 @@
 # Intermute: Commit and Push Analysis
 
 **Date:** 2026-02-23
-**Repository:** /home/mk/projects/Demarch/core/intermute
+**Repository:** /home/mk/projects/Sylveste/core/intermute
 **Branch:** main
 
 ## Current State (`git status --short`)
@@ -43,9 +43,9 @@ Two new research documents in `docs/research/`:
 
 **`intermute` symlink:**
 ```
-lrwxrwxrwx 1 mk mk 40 Feb 23 18:01 intermute -> /home/mk/projects/Demarch/core/intermute
+lrwxrwxrwx 1 mk mk 40 Feb 23 18:01 intermute -> /home/mk/projects/Sylveste/core/intermute
 ```
-This is a self-referencing compatibility symlink (the repo directory points to itself). This matches the Demarch monorepo pattern where old project locations have symlinks back. It should be added since it's a symlink, not a binary.
+This is a self-referencing compatibility symlink (the repo directory points to itself). This matches the Sylveste monorepo pattern where old project locations have symlinks back. It should be added since it's a symlink, not a binary.
 
 ## Execution Plan
 

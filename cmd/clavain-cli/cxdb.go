@@ -302,7 +302,7 @@ func cmdCXDBSetup(args []string) error {
 	fmt.Fprintf(os.Stderr, "cxdb-setup: downloading %s from release %s...\n", artifactName, releaseTag)
 
 	_, err := runCommandExec("gh", "release", "download", releaseTag,
-		"--repo", "mistakeknot/Demarch",
+		"--repo", "mistakeknot/Sylveste",
 		"--pattern", artifactName,
 		"--dir", cxdbDir(),
 		"--clobber")
