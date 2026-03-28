@@ -149,6 +149,13 @@ sprint_create() {
         # Tag with lane label if specified
         if [[ -n "$lane" ]]; then
             bd label add "$sprint_id" "lane:${lane}" >/dev/null 2>&1 || true
+            # Inject lane strategic intent into bead state (rsj.1.1)
+            # Agents read this via bd show/state to maintain strategic context
+            local _lane_intent=""
+            _lane_intent=$(ic lane status "$lane" --json 2>/dev/null | jq -r '.intent // empty' 2>/dev/null) || _lane_intent=""
+            if [[ -n "$_lane_intent" ]]; then
+                bd set-state "$sprint_id" "lane_intent=$_lane_intent" >/dev/null 2>&1 || true
+            fi
         fi
     fi
 
