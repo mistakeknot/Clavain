@@ -186,6 +186,20 @@ dispatch_rescore() {
         fi
         [[ "$deps_ok" == "false" ]] && continue
 
+        # Lane pause check (rsj.1.5): skip beads in paused lanes
+        if command -v bd &>/dev/null; then
+            local _bead_labels _bead_lane _lane_paused
+            _bead_labels=$(bd show "$bead_id" --json 2>/dev/null | jq -r '.labels[]? // empty' 2>/dev/null) || _bead_labels=""
+            _bead_lane=$(echo "$_bead_labels" | grep -oP '^lane:\K.*' | head -1) || _bead_lane=""
+            if [[ -n "$_bead_lane" ]]; then
+                _lane_paused=$(ic lane status "$_bead_lane" --json 2>/dev/null | jq -r '.metadata.paused // empty' 2>/dev/null) || _lane_paused=""
+                if [[ "$_lane_paused" == "true" ]]; then
+                    dispatch_log "$session_id" "$bead_id" "0" "lane_paused:$_bead_lane"
+                    continue
+                fi
+            fi
+        fi
+
         # Add random perturbation (0-5) for tie-breaking, subtract review pressure
         perturbation=$(( RANDOM % 6 ))
         adjusted_score=$(( score + perturbation - pressure_penalty ))

@@ -115,6 +115,7 @@ On non-zero exit, parse `reason_type="${pause_reason%%|*}"`:
 - `manual_pause` → AskUserQuestion: Continue / Stop
 - `stale_phase` → re-read state, route to new phase via `clavain-cli sprint-next-step`
 - `budget_exceeded` → AskUserQuestion: Continue (override) / Stop / Adjust budget
+- `strategic_contradiction` → AskUserQuestion: Revise plan to align / Update lane intent / Override and continue / Stop sprint. Display the contradiction reason and the lane's strategic_intent for context.
 
 Display at each advance: `Phase: <current> → <next> (auto-advancing)`. No "what next?" prompts unless pause triggered, step fails, or tier requires a checkpoint at this step.
 
@@ -184,6 +185,24 @@ plan_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || p
 - **Tier 3:** AskUserQuestion with findings. Wait for explicit approval.
 
 After passing: set `phase=plan-reviewed`.
+
+### 4d: Strategic intent validation (rsj.1.5)
+
+If lane intent exists on this bead:
+```bash
+lane_intent=$(bd state "$CLAVAIN_BEAD_ID" lane_intent 2>/dev/null) || lane_intent=""
+```
+
+When `lane_intent` is non-empty, check whether the plan contradicts it. Use a haiku agent (foreground, ~500 tokens):
+- Input: plan summary (first 500 chars), lane intent text
+- Prompt: "Does this plan contradict or undermine the lane's strategic intent? Return JSON: `{\"contradicts\": bool, \"reason\": \"...\"}`"
+- If `contradicts == true`:
+  1. Display: `Strategic contradiction detected: <reason>` + lane intent
+  2. Escalate: `sprint_escalate_strategic_contradiction "$CLAVAIN_BEAD_ID" "$lane_name" "$reason"`
+  3. The escalation pauses the lane and records evidence
+  4. Emit pause: `echo "strategic_contradiction|plan-reviewed|$reason"` → user decision flow
+
+If no lane intent or `contradicts == false`: proceed silently to Step 5.
 
 ## Step 5: Execute
 

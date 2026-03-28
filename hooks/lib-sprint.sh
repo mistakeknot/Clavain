@@ -1180,6 +1180,55 @@ sprint_should_pause() {
     return 1
 }
 
+# Escalate a strategic contradiction — pauses the lane and records evidence.
+# Called when a sprint's plan/output contradicts the lane's strategic_intent.
+# Args: $1=sprint_id $2=lane_name $3=reason (human-readable explanation)
+# Returns: 0 on success, 1 on error
+sprint_escalate_strategic_contradiction() {
+    local sprint_id="$1"
+    local lane_name="$2"
+    local reason="$3"
+    [[ -z "$sprint_id" || -z "$lane_name" || -z "$reason" ]] && return 1
+
+    # Pause the lane via metadata
+    local current_meta
+    current_meta=$(ic lane status "$lane_name" --json 2>/dev/null | jq -r '.metadata // "{}"' 2>/dev/null) || current_meta="{}"
+    local updated_meta
+    updated_meta=$(echo "$current_meta" | jq \
+        --arg reason "$reason" \
+        --arg bead "$sprint_id" \
+        --arg ts "$(date +%s)" \
+        '. + {paused: "true", pause_reason: $reason, pause_bead: $bead, pause_ts: $ts}' \
+        2>/dev/null) || return 1
+
+    # Write paused state — ic lane update with metadata
+    ic lane update "$lane_name" --metadata="$updated_meta" 2>/dev/null || {
+        # Fallback: store pause state via bd set-state on the lane's beads
+        bd set-state "$sprint_id" "lane_paused=true" 2>/dev/null || true
+        bd set-state "$sprint_id" "lane_pause_reason=$reason" 2>/dev/null || true
+    }
+
+    # Record Interspect evidence
+    local session_id context_json
+    session_id="${CLAUDE_SESSION_ID:-unknown}"
+    context_json=$(jq -n \
+        --arg bead "$sprint_id" \
+        --arg lane "$lane_name" \
+        --arg reason "$reason" \
+        --arg intent "$(bd state "$sprint_id" lane_intent 2>/dev/null || echo '')" \
+        '{bead:$bead, lane:$lane, reason:$reason, intent:$intent}' 2>/dev/null) || context_json="{}"
+
+    if type -t _interspect_insert_evidence &>/dev/null; then
+        _interspect_insert_evidence \
+            "$session_id" "sprint" "strategic_contradiction" \
+            "" "$context_json" "sprint-escalation" \
+            2>/dev/null || true
+    fi
+
+    log_warn "strategic_contradiction: lane=$lane_name paused" bead="$sprint_id" reason="$reason"
+    return 0
+}
+
 # Advance sprint to the next phase.
 # Returns 0 on success, 1 on pause/error (structured reason on stdout).
 sprint_advance() {
