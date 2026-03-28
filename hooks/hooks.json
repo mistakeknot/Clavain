@@ -64,6 +64,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/temple-invariant.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [
