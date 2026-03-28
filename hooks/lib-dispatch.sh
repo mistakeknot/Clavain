@@ -25,6 +25,7 @@ DISPATCH_CAP="${CLAVAIN_DISPATCH_CAP:-5}"       # max dispatches per session
 DISPATCH_CIRCUIT_THRESHOLD=3                     # consecutive infra failures to trip breaker
 DISPATCH_COOLDOWN_SEC=20                         # seconds between dispatch attempts
 DISPATCH_LOG="$HOME/.clavain/dispatch-log.jsonl" # telemetry log path
+DISPATCH_REVIEW_PRESSURE_THRESHOLD="${CLAVAIN_REVIEW_PRESSURE_THRESHOLD:-3}"  # pending reviews before backpressure kicks in
 
 # ─── Dispatch Cap ─────────────────────────────────────────────────
 # NOTE: Read-modify-write on intercore state is not atomic, but dispatch cap
@@ -101,6 +102,27 @@ dispatch_log() {
         >> "$DISPATCH_LOG" 2>/dev/null || true
 }
 
+# ─── Review Backpressure (rsj.1.3) ───────────────────────────────
+# Count pending reviews. When review queue exceeds threshold, dispatch
+# scores are penalized proportionally. At 2x threshold, dispatch cap
+# drops to 1 ("in the weeds" protocol from cuisine agent).
+
+# Returns: count of beads awaiting review on stdout
+_dispatch_review_pressure() {
+    local pending=0
+    if command -v bd &>/dev/null; then
+        # Count beads that are shipped/closed but need review (needs-review label)
+        # OR beads in quality-gates/shipping phase (pending quality check)
+        pending=$(bd list --status=open --label=needs-review 2>/dev/null | grep -c '○\|◐\|●' 2>/dev/null) || pending=0
+        # Also count beads in shipping phase (awaiting quality gates)
+        local shipping
+        shipping=$(bd list --status=in_progress 2>/dev/null | grep -c 'shipping\|quality' 2>/dev/null) || shipping=0
+        pending=$(( pending + shipping ))
+    fi
+    [[ "$pending" =~ ^[0-9]+$ ]] || pending=0
+    echo "$pending"
+}
+
 # ─── Scoring & Filtering ─────────────────────────────────────────
 
 # Re-score discovery_scan_beads output with dispatch-specific filters.
@@ -131,6 +153,15 @@ dispatch_rescore() {
         return 0
     fi
 
+    # Review backpressure: compute penalty once for all candidates (rsj.1.3)
+    local review_depth pressure_penalty
+    review_depth=$(_dispatch_review_pressure)
+    pressure_penalty=0
+    if [[ "$review_depth" -gt "$DISPATCH_REVIEW_PRESSURE_THRESHOLD" ]]; then
+        # 5 points per excess review — proportional, not binary
+        pressure_penalty=$(( (review_depth - DISPATCH_REVIEW_PRESSURE_THRESHOLD) * 5 ))
+    fi
+
     # Check deps for each bead and add perturbation
     local result="[]"
     local i bead_id score deps_ok deps_json perturbation adjusted_score
@@ -155,9 +186,11 @@ dispatch_rescore() {
         fi
         [[ "$deps_ok" == "false" ]] && continue
 
-        # Add random perturbation (0-5) for tie-breaking
+        # Add random perturbation (0-5) for tie-breaking, subtract review pressure
         perturbation=$(( RANDOM % 6 ))
-        adjusted_score=$(( score + perturbation ))
+        adjusted_score=$(( score + perturbation - pressure_penalty ))
+        # Floor at 1 — still claimable, just deprioritized
+        (( adjusted_score < 1 )) && adjusted_score=1
 
         result=$(echo "$result" | jq \
             --arg id "$bead_id" \
@@ -180,6 +213,15 @@ dispatch_rescore() {
 dispatch_attempt_claim() {
     local session_id="$1"
     local attempt
+
+    # "In the weeds" protocol (rsj.1.3): when review queue is deeply backed up,
+    # reduce dispatch cap to 1 — recover flow before producing more work.
+    local _review_depth
+    _review_depth=$(_dispatch_review_pressure)
+    if [[ "$_review_depth" -gt $(( DISPATCH_REVIEW_PRESSURE_THRESHOLD * 2 )) ]]; then
+        DISPATCH_CAP=1
+        dispatch_log "$session_id" "" "0" "in_the_weeds"
+    fi
 
     for (( attempt=0; attempt<2; attempt++ )); do
         # Get fresh scan on each attempt (critical: don't use stale data on retry)
