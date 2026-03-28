@@ -32,6 +32,10 @@ If a plan document exists: check all checkboxes, resolve TODOs, load `verificati
 
 Close beads (`bd close <ids>`), stage specific files (not `git add .`), `bd sync`, commit with conventional message + Co-Authored-By, push if chosen.
 
+### Step 5.5: Post-Push Canary
+
+After push, if in a sprint: `sprint_canary_check "$CLAVAIN_BEAD_ID"`. On failure: warn, emit `quality_failure` to Interspect, do NOT close bead. Skip with `CLAVAIN_SKIP_CANARY=true`.
+
 ### Step 6: Capture Learnings (optional)
 
 If notable learnings: run `/clavain:compound` or update memory files.

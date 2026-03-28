@@ -1722,3 +1722,74 @@ sprint_invalidate_caches() {
         intercore_state_delete_all "discovery_brief"
     fi
 }
+
+# ─── Post-Merge Canary (rsj.1.2) ────────────────────────────────
+# Run a lightweight build+test check after push to detect silent failures.
+# If canary fails, emits quality_failure to Interspect instead of recording success.
+# Args: $1=bead_id
+# Returns: 0 on pass, 1 on failure
+
+sprint_canary_check() {
+    local bead_id="${1:-}"
+    local project_root
+    project_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
+
+    local canary_passed=true
+    local canary_detail=""
+
+    # Detect language and run appropriate checks
+    if [[ -f "$project_root/go.mod" ]]; then
+        if ! go build ./... 2>/dev/null; then
+            canary_passed=false
+            canary_detail="go build failed"
+        elif ! go test ./... -count=1 -short 2>/dev/null; then
+            canary_passed=false
+            canary_detail="go test failed"
+        fi
+    elif [[ -f "$project_root/Cargo.toml" ]]; then
+        if ! cargo check 2>/dev/null; then
+            canary_passed=false
+            canary_detail="cargo check failed"
+        fi
+    elif [[ -f "$project_root/package.json" ]]; then
+        if command -v npm &>/dev/null; then
+            if ! npm run build --if-present 2>/dev/null; then
+                canary_passed=false
+                canary_detail="npm build failed"
+            elif ! npm test --if-present 2>/dev/null; then
+                canary_passed=false
+                canary_detail="npm test failed"
+            fi
+        fi
+    elif [[ -f "$project_root/pyproject.toml" ]] || [[ -f "$project_root/setup.py" ]]; then
+        if command -v pytest &>/dev/null || command -v uv &>/dev/null; then
+            if ! uv run pytest --tb=no -q 2>/dev/null && ! pytest --tb=no -q 2>/dev/null; then
+                canary_passed=false
+                canary_detail="pytest failed"
+            fi
+        fi
+    fi
+
+    if [[ "$canary_passed" == "false" ]]; then
+        # Emit quality_failure to Interspect (rsj.1.2 + rsj.1.4 quarantine)
+        # Source interspect lib if available
+        local _interspect_lib=""
+        _interspect_lib=$(find ~/.claude/plugins/cache -path '*/interspect/*/hooks/lib-interspect.sh' 2>/dev/null | head -1)
+        [[ -z "$_interspect_lib" ]] && _interspect_lib="${_DISPATCH_DIR:+${_DISPATCH_DIR}/../../../interverse/interspect/hooks/lib-interspect.sh}"
+        if [[ -n "$_interspect_lib" && -f "$_interspect_lib" ]]; then
+            source "$_interspect_lib" 2>/dev/null || true
+            _interspect_ensure_db 2>/dev/null || true
+            _interspect_insert_evidence \
+                "${CLAUDE_SESSION_ID:-unknown}" \
+                "canary" \
+                "quality_failure" \
+                "post_merge_canary_failed" \
+                "{\"bead\":\"${bead_id}\",\"detail\":\"${canary_detail}\"}" \
+                "" "" "" "" 2>/dev/null || true
+        fi
+        echo "CANARY FAILED: ${canary_detail}" >&2
+        return 1
+    fi
+
+    return 0
+}

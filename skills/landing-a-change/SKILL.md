@@ -75,6 +75,23 @@ git push                      # skip if "locally" chosen
 
 **Review first:** Show `git diff --stat && git diff`, return to Step 4.
 
+## Step 5.5: Post-Push Canary (rsj.1.2)
+
+After push succeeds and inside a sprint (`CLAVAIN_BEAD_ID` set), run a lightweight canary check on the merged state:
+
+```bash
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]] && [[ "${CLAVAIN_SKIP_CANARY:-}" != "true" ]]; then
+    source "${CLAUDE_PLUGIN_ROOT}/hooks/lib-sprint.sh" 2>/dev/null || true
+    if ! sprint_canary_check "$CLAVAIN_BEAD_ID"; then
+        echo "⚠ Post-merge canary FAILED. Sprint NOT recorded as successful."
+        echo "  Fix the issue and re-run, or set CLAVAIN_SKIP_CANARY=true to override."
+        # Do NOT close the bead or record success
+    fi
+fi
+```
+
+If canary fails: warn user, emit `quality_failure` event to Interspect, do NOT record sprint as successful. If canary passes: normal flow continues.
+
 ## Step 6: Capture Learnings (Optional)
 
 Run `/clavain:compound` or note insights in project memory files.
