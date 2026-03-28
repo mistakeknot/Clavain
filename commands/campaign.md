@@ -187,7 +187,28 @@ After all phases complete:
    Features: 4/4 closed
    ```
 
-3. **Do NOT close the epic automatically.** Epics may have acceptance criteria beyond their children. Tell the user: "All children are closed. Review epic acceptance criteria and close with `bd close $EPIC_ID` when satisfied."
+3. **Evaluate Epic Definition of Done (rsj.1.6):**
+   ```bash
+   epic_dod=$(bd state "$EPIC_ID" epic_dod 2>/dev/null) || epic_dod=""
+   ```
+
+   If `epic_dod` exists (JSON array of criteria):
+   - Parse and display each criterion with its verification method
+   - For `automated: true` criteria: run the verification command, report pass/fail
+   - For `automated: false` criteria: present to user for manual confirmation
+   - Display DoD scorecard:
+     ```
+     Epic DoD: sylveste-rsj.1
+     [PASS] API p95 latency < 200ms — k6 load test passed
+     [MANUAL] User completes onboarding in < 3 steps — awaiting verification
+     [FAIL] Error rate < 0.1% — current: 0.3%
+     ```
+   - If any FAIL: AskUserQuestion — "DoD criteria not met. Fix issues / Override / Defer"
+   - If all PASS + MANUAL confirmed: "Epic DoD satisfied. Close with `bd close $EPIC_ID`."
+
+   If no `epic_dod`: "No DoD criteria set. All children are closed. Review and close with `bd close $EPIC_ID` when satisfied."
+
+4. **Do NOT close the epic automatically.** Even with DoD satisfied, epic closure is an explicit human decision.
 
 ## Error Handling
 

@@ -142,6 +142,23 @@ If `CLAVAIN_BEAD_ID` not set (standalone):
 - `bd create --title="<PRD title>" --type=epic --priority=1`
 - For each feature: `bd create --title="F1: <name>" --type=feature --priority=2` then `bd dep add <feature-id> <epic-id>`
 
+### Phase 3a.1: Epic Definition of Done (rsj.1.6)
+
+After creating epic + children, store outcome-based acceptance criteria. These are distinct from "all children closed" — they express the *measurable outcomes* the epic should achieve.
+
+Extract 2-5 criteria from the PRD's goals/success metrics. Format as JSON array:
+```bash
+epic_dod='[{"criterion":"API p95 latency < 200ms","verification":"Run load test: k6 run tests/load.js","automated":true},{"criterion":"User can complete onboarding in < 3 steps","verification":"Manual walkthrough of onboarding flow","automated":false}]'
+bd set-state "$epic_id" "epic_dod=$epic_dod"
+```
+
+Each criterion has:
+- `criterion`: What success looks like (measurable, specific)
+- `verification`: How to check it (test command, manual check, metric query)
+- `automated`: Whether verification can run without human intervention
+
+If the PRD has no clear success metrics, prompt: "What outcome would tell you this epic succeeded, beyond all children being closed?"
+
 ### Phase 3b: Record Phase (Reflect + Compound)
 
 Record the PRD artifact and advance the phase state machine.
