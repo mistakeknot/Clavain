@@ -132,6 +132,35 @@ Artifact is always recorded even if advance fails. This is intentional — artif
 
 Pass artifact path when one exists; empty string otherwise (quality-gates, ship).
 
+### Provenance Recording (rsj.1.7)
+
+After each artifact write, record its provenance vector — the chain of inputs that produced it. This enables backward tracing (stemma) when debugging failures.
+
+```bash
+# Gather input artifact paths for this step
+input_artifacts=""  # comma-separated list of artifact types this step consumed
+# Step 1 (brainstorm): inputs="" (no prior artifacts)
+# Step 2 (strategy): inputs="brainstorm"
+# Step 3 (plan): inputs="brainstorm,prd"
+# Step 4 (review): inputs="plan"
+# Step 5 (execute): inputs="plan"
+# Step 6 (test): inputs="" (tests current code state)
+# Step 7 (quality): inputs="test-pass-sha"
+# Step 10 (ship): inputs="test-pass-sha"
+
+provenance_json=$(jq -n \
+    --arg session "${CLAUDE_SESSION_ID:-unknown}" \
+    --arg bead "$CLAVAIN_BEAD_ID" \
+    --arg step "<step_name>" \
+    --arg inputs "$input_artifacts" \
+    --arg output "<artifact_path>" \
+    --arg ts "$(date +%s)" \
+    '{session:$session, bead:$bead, step:$step, inputs:($inputs|split(",")|map(select(.!=""))), output:$output, ts:($ts|tonumber)}')
+bd set-state "$CLAVAIN_BEAD_ID" "provenance_<artifact_type>=$provenance_json" 2>/dev/null || true
+```
+
+The provenance DAG can be walked backward via: `bd state <bead> provenance_<type>` → read `inputs[]` → resolve each input's provenance → recurse.
+
 ---
 
 ## Step 1: Brainstorm
