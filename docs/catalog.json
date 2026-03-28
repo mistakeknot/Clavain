@@ -1,9 +1,9 @@
 {
-  "generated": "2026-03-24T23:01:03Z",
+  "generated": "2026-03-28T22:35:24Z",
   "counts": {
     "skills": 17,
     "agents": 6,
-    "commands": 50,
+    "commands": 51,
     "hooks": 10,
     "mcp_servers": 0,
     "review": 2,
@@ -119,6 +119,10 @@
     {
       "name": "brainstorm",
       "description": "Collaborative brainstorm workflow \u2014 explore ideas through structured dialogue (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan."
+    },
+    {
+      "name": "campaign",
+      "description": "Orchestrate epic execution \u2014 read children, topo-sort by dependencies, dispatch phases sequentially with parallel features"
     },
     {
       "name": "changelog",

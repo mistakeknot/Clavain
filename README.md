@@ -4,7 +4,7 @@
 
 Clavain is an opinionated, self-improving Claude Code agent rig that codifies product and engineering discipline into composable workflows for building software from brainstorm to ship. It orchestrates heterogeneous AI models: Claude, Codex, GPT-5.2 Pro via Oracle: into a reliable system for getting things built, where the review phases matter more than the building phases. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 17 skills, 6 agents, 50 commands, 10 hooks, and 0 MCP servers, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 17 skills, 6 agents, 51 commands, 10 hooks, and 0 MCP servers, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -216,7 +216,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow (2):** PR comment resolution and bug reproduction validation.
 
-### Commands (50)
+### Commands (51)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -341,7 +341,7 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ```
 skills/       # 17 discipline skills (SKILL.md each)
 agents/       # 6 agents (review/ + workflow/)
-commands/     # 50 slash commands
+commands/     # 51 slash commands
 hooks/        # 8 hooks (SessionStart×1, PreToolUse×1, PostToolUse×4, Stop×1, SessionEnd×1)
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync
