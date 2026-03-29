@@ -38,16 +38,18 @@ if intercore_available 2>/dev/null; then
     intercore_sentinel_reset_or_legacy "handoff" "$SESSION_ID" 2>/dev/null || true
 fi
 
-# Check if .clavain directory exists (we're in a Clavain-aware project)
-if [[ ! -d ".clavain" ]]; then
+# Determine handoff target: docs/handoffs/ (git-tracked), fallback to .clavain/scratch/
+TIMESTAMP=$(date +%Y-%m-%d)
+SESSION_SHORT="${SESSION_ID:0:8}"
+if [[ -d "docs" ]] || mkdir -p "docs/handoffs" 2>/dev/null; then
+    mkdir -p "docs/handoffs" 2>/dev/null || true
+    HANDOFF_PATH="docs/handoffs/${TIMESTAMP}-${SESSION_SHORT}-auto.md"
+elif [[ -d ".clavain" ]]; then
+    mkdir -p ".clavain/scratch" 2>/dev/null || true
+    HANDOFF_PATH=".clavain/scratch/handoff-${TIMESTAMP}-${SESSION_SHORT}.md"
+else
     exit 0
 fi
-
-mkdir -p ".clavain/scratch" 2>/dev/null || true
-
-TIMESTAMP=$(date +%Y-%m-%dT%H%M)
-SESSION_SHORT="${SESSION_ID:0:8}"
-HANDOFF_PATH=".clavain/scratch/handoff-${TIMESTAMP}-${SESSION_SHORT}.md"
 
 # Gather signals
 DIFF_STAT=""
@@ -107,11 +109,7 @@ fi
 } > "$HANDOFF_PATH"
 
 # Update latest symlink
-ln -sf "$(basename "$HANDOFF_PATH")" ".clavain/scratch/handoff-latest.md" 2>/dev/null || true
-
-# Prune old handoffs: keep last 10
-# shellcheck disable=SC2012
-ls -1t .clavain/scratch/handoff-*.md 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/null || true
+ln -sf "$(basename "$HANDOFF_PATH")" "$(dirname "$HANDOFF_PATH")/latest.md" 2>/dev/null || true
 
 # Release any bead claims held by this session
 if [[ -n "${CLAVAIN_BEAD_ID:-}" ]] && command -v bd &>/dev/null; then

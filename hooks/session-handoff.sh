@@ -130,19 +130,22 @@ fi
 
 SIGNALS="${SIGNALS%,}"
 
-# Determine handoff target: .clavain/scratch/ if available, else project root.
-# Hooks run from project root (set by Claude Code), so relative paths are safe.
-# Uses timestamped filenames so handoffs from concurrent/sequential sessions
-# don't overwrite each other. A symlink (handoff-latest.md) points to the newest.
-HANDOFF_PATH="HANDOFF.md"
-if [[ -d ".clavain" ]]; then
+# Determine handoff target: docs/handoffs/ (git-tracked, cross-agent readable).
+# Falls back to .clavain/scratch/ if docs/ doesn't exist, then project root.
+# Uses date-stamped filenames so handoffs from concurrent/sequential sessions
+# don't overwrite each other. A symlink (latest.md) points to the newest.
+TIMESTAMP=$(date +%Y-%m-%d)
+SESSION_SHORT="${SESSION_ID:0:8}"
+if [[ -d "docs" ]] || mkdir -p "docs/handoffs" 2>/dev/null; then
+    mkdir -p "docs/handoffs" 2>/dev/null || true
+    HANDOFF_PATH="docs/handoffs/${TIMESTAMP}-${SESSION_SHORT}.md"
+elif [[ -d ".clavain" ]]; then
     mkdir -p ".clavain/scratch" 2>/dev/null || true
-    TIMESTAMP=$(date +%Y-%m-%dT%H%M)
-    SESSION_SHORT="${SESSION_ID:0:8}"
     HANDOFF_PATH=".clavain/scratch/handoff-${TIMESTAMP}-${SESSION_SHORT}.md"
-    # Prune old handoffs: keep last 10 timestamped files
     # shellcheck disable=SC2012
     ls -1t .clavain/scratch/handoff-*.md 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/null || true
+else
+    HANDOFF_PATH="HANDOFF.md"
 fi
 
 # Build the handoff prompt
@@ -155,7 +158,7 @@ REASON="Session handoff check: detected incomplete work signals [${SIGNALS}]. Be
    - **Context**: Any gotchas or decisions the next session needs to know
 
 2. Update the latest-handoff symlink so session-start finds it:
-   \`ln -sf \"\$(basename '${HANDOFF_PATH}')\" .clavain/scratch/handoff-latest.md\`
+   \`ln -sf \"\$(basename '${HANDOFF_PATH}')\" \"\$(dirname '${HANDOFF_PATH}')/latest.md\"\`
 
 3. Update any in-progress beads with current status:
    \`bd update <id> --notes=\"<current status>\"\`

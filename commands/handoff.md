@@ -6,7 +6,7 @@ argument-hint: "[focus area or notes]"
 
 # Session Handoff
 
-Generate a compact, high-signal summary of this session that the user can paste into a new conversation to restore context fast.
+Generate a compact, high-signal summary of this session, write it to `docs/handoffs/`, and output it for pasting.
 
 **Announce:** "Generating handoff summary..."
 
@@ -21,6 +21,7 @@ The most important section. Write as a direct instruction to the next agent.
 - If multiple possible next steps, pick the highest-priority one as primary; list alternatives as `Fallback:` items
 - Include blockers or open decisions the next session must resolve
 - If beads are in progress, list IDs and status here (e.g., `Sylveste-abc1 — in_progress, claimed`)
+- If a long-running process is active (downloads, builds), include the check/restart command
 
 ### 2. Dead ends
 What was tried and didn't work. This is the highest-signal section for preventing wasted effort.
@@ -43,17 +44,24 @@ A new session will always run `git log`, `git status`, and read CLAUDE.md. Do no
 - What's working vs broken if obvious from tests (derivable from running tests)
 - Architecture or conventions already in CLAUDE.md
 
-## Format
+## Step 1: Write to `docs/handoffs/`
 
-Output as a single fenced code block (```markdown) so the user can copy it cleanly. **Max 40 lines.** Terse bullets only. Absolute file paths.
+Create the handoff file at `docs/handoffs/YYYY-MM-DD-<topic-slug>.md` with frontmatter:
 
 ```markdown
-## Session Handoff — [date] [brief topic]
+---
+date: YYYY-MM-DD
+session: <first 8 chars of CLAUDE_SESSION_ID or "unknown">
+topic: <2-5 word topic>
+beads: [list of bead IDs touched this session]
+---
+
+## Session Handoff — YYYY-MM-DD <brief topic>
 
 ### Directive
 > Your job is to [specific task]. Start by [first action]. Verify with [command].
-- Fallback: [alternative if primary is blocked]
 - Beads: [IDs and status, if any]
+- Dependency chain: [if relevant]
 
 ### Dead Ends
 - [approach] — [why it failed]
@@ -63,6 +71,17 @@ Output as a single fenced code block (```markdown) so the user can copy it clean
 - [key file paths]
 ```
 
+Create `docs/handoffs/` directory if it doesn't exist. Update the symlink:
+```bash
+ln -sf "$(basename '<handoff-file>')" docs/handoffs/latest.md
+```
+
+Do NOT prune old handoffs — they serve as long-term session history.
+
+## Step 2: Output for clipboard
+
+Also output the handoff content (without frontmatter) as a fenced code block (```markdown) so the user can copy it. **Max 40 lines.** Terse bullets only. Absolute file paths.
+
 ## Rules
 
 - The Directive is the lead section — a new session receiving this handoff should start working immediately without asking "what should I do?"
@@ -70,3 +89,4 @@ Output as a single fenced code block (```markdown) so the user can copy it clean
 - Do NOT duplicate what git or CLAUDE.md already provide
 - DO include session-specific knowledge that dies when this conversation closes
 - If the user provides a focus area argument, weight the summary toward that topic
+- The file is committed to git — any agent (Claude Code, Codex, Skaffen, tmux agents) can read it
