@@ -464,6 +464,38 @@ generate_interverse_prompts() {
       count=$((count + 1))
     fi
 
+    local namespaced_alias
+    namespaced_alias="$plugin:$command_name"
+    if [[ -z "${seen_prompt_names[$namespaced_alias]+set}" ]]; then
+      out="$CODEX_PROMPTS_DIR/$namespaced_alias.md"
+      printf '%s\n' "$out" >> "$expected_files"
+      {
+        echo "# Interverse Command Alias: /prompts:$namespaced_alias"
+        echo
+        echo "Interverse prompt wrapper generated from companion command source."
+        echo
+        echo "- Source: \`$src\`"
+        echo "- Source command: \`/$plugin:$command_name\`"
+        echo "- Codex alias: \`/prompts:$namespaced_alias\`"
+        echo "- Compatibility: interverse namespaces and .claude paths normalized for Codex."
+        echo "- Elicitation adapter: if a prompt calls for AskUserQuestion, try future plan-mode escalation if host supports it, else use \`request_user_input\` when available, else ask in chat with numbered options and wait."
+        echo
+        echo "---"
+        echo
+        echo "## Codex Elicitation Adapter"
+        echo
+        echo "When instructions below mention the Codex elicitation adapter:"
+        echo "1. If a host capability exists to switch from Default -> Plan mode, try once (non-fatal)."
+        echo "2. If \`request_user_input\` is available, use it for structured elicitation."
+        echo "3. Otherwise, ask in chat using a single concise question plus numbered options, then pause for user choice."
+        echo "4. Normalize the answer, echo the resolved selection, and continue."
+        echo
+        cat "$converted_tmp"
+      } > "$out"
+      seen_prompt_names["$namespaced_alias"]=1
+      count=$((count + 1))
+    fi
+
     if [[ -n "$alias_csv" ]]; then
       local alias
       local IFS=','

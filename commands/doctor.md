@@ -136,6 +136,34 @@ done
 [ "$_warns" -eq 0 ] && echo "plugin caches: PASS"
 ```
 
+### 2h. Marketplace Association
+
+Detects plugins in the interagency-marketplace cache that lack entries in `installed_plugins.json`. These show up in `/plugin/installed` via autodiscovery but not under the marketplace. Auto-fixes by running `modpack-associate.sh`.
+
+```bash
+_associate_script="$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/modpack-associate.sh' 2>/dev/null | sort -V | tail -1)"
+if [[ -z "$_associate_script" ]]; then
+  echo "marketplace association: SKIP (modpack-associate.sh not found)"
+else
+  _result=$(bash "$_associate_script" --dry-run --quiet 2>/dev/null) || _result=""
+  if [[ -n "$_result" ]]; then
+    _count=$(echo "$_result" | jq '.would_associate | length' 2>/dev/null) || _count=0
+    if [[ "$_count" -gt 0 ]]; then
+      echo "marketplace association: WARN ($_count plugins in cache but not in installed_plugins.json)"
+      echo "$_result" | jq -r '.would_associate[:5][]' 2>/dev/null | while read -r _n; do echo "  - $_n"; done
+      [[ "$_count" -gt 5 ]] && echo "  ... and $((_count - 5)) more"
+      echo "  Fix: bash $(dirname "$_associate_script")/modpack-associate.sh"
+      # Auto-fix (safe — only adds entries, never removes)
+      bash "$_associate_script" --quiet >/dev/null 2>&1 && echo "  AUTO-FIXED: associated $_count plugins" || echo "  Auto-fix failed — run manually"
+    else
+      echo "marketplace association: PASS"
+    fi
+  else
+    echo "marketplace association: SKIP (dry-run failed)"
+  fi
+fi
+```
+
 ### 3. Beads
 
 ```bash
@@ -372,4 +400,4 @@ cat ~/.claude/plugins/cache/interagency-marketplace/clavain/*/plugin.json 2>/dev
 Present results as a compact table: `<check> [PASS|WARN|FAIL] <detail>`. Group by section.
 <!-- agent-rig:end:doctor-output -->
 
-**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin.
+**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin, marketplace association→auto-fixed by doctor or run `modpack-associate.sh` manually.

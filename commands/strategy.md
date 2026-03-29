@@ -159,23 +159,42 @@ Each criterion has:
 
 If the PRD has no clear success metrics, prompt: "What outcome would tell you this epic succeeded, beyond all children being closed?"
 
-### Phase 3a.2: Decomposition quality prediction (rsj.1.9.1)
+### Phase 3a.2: Decomposition quality check + prediction (rsj.1.9)
 
-After creating children, record the decomposition prediction for later calibration. This is stage 2 (collect actuals — prediction side) of the closed-loop pattern.
+After creating children, check decomposition size against calibrated baselines and record the prediction.
 
 ```bash
-# Count children just created
 child_count=$(bd children "$epic_id" --json 2>/dev/null | jq 'length' 2>/dev/null) || child_count=0
-# Complexity distribution of children
 complexity_dist=$(bd children "$epic_id" --json 2>/dev/null | jq '[.[] | .priority // "P2"] | group_by(.) | map({(.[0]): length}) | add' 2>/dev/null) || complexity_dist="{}"
 
+# Read calibration (calibrated section takes precedence over defaults)
+calibration_file="${CLAUDE_PLUGIN_ROOT}/config/decomposition-calibration.yaml"
+if [[ -f "$calibration_file" ]]; then
+    over_threshold=$(python3 -c "import yaml; d=yaml.safe_load(open('$calibration_file')); print(d.get('calibrated',d.get('defaults',{})).get('thresholds',{}).get('over_decomposition',15))" 2>/dev/null) || over_threshold=15
+    under_threshold=$(python3 -c "import yaml; d=yaml.safe_load(open('$calibration_file')); print(d.get('calibrated',d.get('defaults',{})).get('thresholds',{}).get('under_decomposition',2))" 2>/dev/null) || under_threshold=2
+    typical_p50=$(python3 -c "import yaml; d=yaml.safe_load(open('$calibration_file')); print(d.get('calibrated',d.get('defaults',{})).get('child_count',{}).get('p50',5))" 2>/dev/null) || typical_p50=5
+else
+    over_threshold=15; under_threshold=2; typical_p50=5
+fi
+
+# Warn on decomposition outliers
+if [[ "$child_count" -gt "$over_threshold" ]]; then
+    echo "⚠ Over-decomposition: $child_count children (baseline p90=$over_threshold). Consider consolidating related features."
+elif [[ "$child_count" -le "$under_threshold" ]]; then
+    echo "⚠ Under-decomposition: $child_count children (baseline minimum=$under_threshold). Consider whether features need further breakdown."
+fi
+```
+
+Record the prediction for later calibration (stage 2 — collect actuals, prediction side):
+```bash
 decomp_prediction=$(jq -n \
     --arg epic "$epic_id" \
     --arg session "${CLAUDE_SESSION_ID:-unknown}" \
     --argjson child_count "$child_count" \
     --argjson complexity_dist "$complexity_dist" \
+    --argjson typical "$typical_p50" \
     --arg ts "$(date +%s)" \
-    '{epic:$epic, session:$session, predicted_children:$child_count, complexity_dist:$complexity_dist, ts:($ts|tonumber)}')
+    '{epic:$epic, session:$session, predicted_children:$child_count, complexity_dist:$complexity_dist, baseline_typical:$typical, ts:($ts|tonumber)}')
 bd set-state "$epic_id" "decomp_prediction=$decomp_prediction" 2>/dev/null || true
 ```
 

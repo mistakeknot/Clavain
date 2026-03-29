@@ -1,0 +1,55 @@
+# Decomposition quality calibration defaults (rsj.1.9)
+#
+# Source: 98 epics with >=3 children from Demarch-era backup (2026-01-13 to 2026-02-28)
+# Total issues in source: 2,554 (265 epics, 555 features, 770 tasks)
+# Generated: 2026-03-29
+#
+# These are stage-1 defaults in the 4-stage calibration pattern (PHILOSOPHY.md).
+# When interspect accumulates >=30 decomposition_outcome events from Sylveste-era
+# sprints, stage-3 calibration should override these values.
+#
+# Resolution order: calibrated (if N>=30) > defaults (this file)
+
+defaults:
+  # Child count distribution (from 98 eligible epics)
+  child_count:
+    p25: 4
+    p50: 5       # median — use as "typical" prediction
+    p75: 9
+    p90: 16
+    mean: 7.5
+    range: [3, 24]
+
+  # Thresholds for decomposition quality signals
+  thresholds:
+    under_decomposition: 2    # fewer children than this → likely under-decomposed
+    over_decomposition: 15    # more children than this → likely over-decomposed (p90)
+    prediction_accuracy_warn: 0.5  # prediction off by >50% → flag for review
+
+  # Expected completion rates
+  completion:
+    expected_rate: 0.99       # 96 of 98 epics hit 100%
+    warn_below: 0.75          # only 2 epics were below this
+
+  # Re-planning baseline (not available in historical data — use conservative defaults)
+  replanning:
+    expected_rate: 0.15       # assume ~15% of children are replanned (no data, conservative)
+    warn_above: 0.40          # >40% replanned children → decomposition was poor
+
+# Calibration trigger
+calibration:
+  min_events: 30              # minimum decomposition_outcome events before auto-calibrating
+  evidence_type: decomposition_outcome
+  source: interspect
+  # When triggered, read all decomposition_outcome events and recompute
+  # child_count percentiles + completion rates from Sylveste-era data
+  # Write results to calibrated: section (below), which takes precedence
+
+# Populated by auto-calibration when min_events threshold is met
+# calibrated:
+#   child_count: ...
+#   thresholds: ...
+#   completion: ...
+#   replanning: ...
+#   last_calibrated: ...
+#   event_count: ...

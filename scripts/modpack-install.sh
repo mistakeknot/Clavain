@@ -243,6 +243,14 @@ esac
 
 log ""
 
+# Post-install: ensure marketplace association for autodiscovered plugins
+ASSOCIATE_SCRIPT="${SCRIPT_DIR}/modpack-associate.sh"
+if [[ -f "$ASSOCIATE_SCRIPT" && "$DRY_RUN" != true ]]; then
+    log "=== Marketplace Association ==="
+    bash "$ASSOCIATE_SCRIPT" --quiet >/dev/null 2>&1 && log "  marketplace association: OK" || log "  marketplace association: WARN (run modpack-associate.sh manually)"
+    log ""
+fi
+
 # Build JSON output
 json_array() {
     local arr=("$@")
