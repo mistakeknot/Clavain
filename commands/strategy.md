@@ -159,6 +159,28 @@ Each criterion has:
 
 If the PRD has no clear success metrics, prompt: "What outcome would tell you this epic succeeded, beyond all children being closed?"
 
+### Phase 3a.2: Decomposition quality prediction (rsj.1.9.1)
+
+After creating children, record the decomposition prediction for later calibration. This is stage 2 (collect actuals — prediction side) of the closed-loop pattern.
+
+```bash
+# Count children just created
+child_count=$(bd children "$epic_id" --json 2>/dev/null | jq 'length' 2>/dev/null) || child_count=0
+# Complexity distribution of children
+complexity_dist=$(bd children "$epic_id" --json 2>/dev/null | jq '[.[] | .priority // "P2"] | group_by(.) | map({(.[0]): length}) | add' 2>/dev/null) || complexity_dist="{}"
+
+decomp_prediction=$(jq -n \
+    --arg epic "$epic_id" \
+    --arg session "${CLAUDE_SESSION_ID:-unknown}" \
+    --argjson child_count "$child_count" \
+    --argjson complexity_dist "$complexity_dist" \
+    --arg ts "$(date +%s)" \
+    '{epic:$epic, session:$session, predicted_children:$child_count, complexity_dist:$complexity_dist, ts:($ts|tonumber)}')
+bd set-state "$epic_id" "decomp_prediction=$decomp_prediction" 2>/dev/null || true
+```
+
+This prediction will be compared against actuals at reflect time (sprint.md Step 9).
+
 ### Phase 3b: Record Phase (Reflect + Compound)
 
 Record the PRD artifact and advance the phase state machine.
