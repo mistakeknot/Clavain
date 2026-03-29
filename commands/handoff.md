@@ -6,7 +6,7 @@ argument-hint: "[focus area or notes]"
 
 # Session Handoff
 
-Generate a compact, high-signal summary of this session, write it to `docs/handoffs/`, and output it for pasting.
+Generate a compact, high-signal summary of this session. Writes to three places: `docs/handoffs/` (git-tracked history), auto-memory (loaded into every future session), and clipboard output.
 
 **Announce:** "Generating handoff summary..."
 
@@ -78,9 +78,38 @@ ln -sf "$(basename '<handoff-file>')" docs/handoffs/latest.md
 
 Do NOT prune old handoffs — they serve as long-term session history.
 
-## Step 2: Output for clipboard
+## Step 2: Write to auto-memory
 
-Also output the handoff content (without frontmatter) as a fenced code block (```markdown) so the user can copy it. **Max 40 lines.** Terse bullets only. Absolute file paths.
+Also write a persistent memory file so future sessions load the handoff automatically. This is the high-value step — `docs/handoffs/` requires someone to read the file; auto-memory is injected into every conversation.
+
+Write to the project's auto-memory directory:
+
+```bash
+MEMORY_DIR="${CLAUDE_PROJECT_MEMORY_DIR:-$HOME/.claude/projects/-home-mk-projects-$(basename "$(pwd)")/memory}"
+```
+
+Create `${MEMORY_DIR}/handoff_latest.md` with this structure:
+
+```markdown
+---
+name: Latest session handoff
+description: Session handoff from YYYY-MM-DD — <2-5 word topic>. Directive for next session, dead ends, non-obvious context.
+type: project
+---
+
+[Same content as Step 1, without the docs/handoffs frontmatter]
+```
+
+**Overwrite** `handoff_latest.md` each time (only the latest handoff matters in memory — older ones are in `docs/handoffs/` git history).
+
+Update MEMORY.md if no handoff entry exists:
+- Check if MEMORY.md already has a line containing `handoff_latest.md`
+- If not, add under a `## Session Continuity` heading: `- [Latest handoff](handoff_latest.md) — directive, dead ends, and context for next session`
+- If it already exists, no change needed (the file content is overwritten, not the index line)
+
+## Step 3: Output for clipboard
+
+Also output the handoff content (without frontmatter) as a fenced code block (` ```markdown `) so the user can copy it. **Max 40 lines.** Terse bullets only. Absolute file paths.
 
 ## Rules
 
