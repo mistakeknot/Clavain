@@ -167,6 +167,20 @@ After creating children, check decomposition size against calibrated baselines a
 child_count=$(bd children "$epic_id" --json 2>/dev/null | jq 'length' 2>/dev/null) || child_count=0
 complexity_dist=$(bd children "$epic_id" --json 2>/dev/null | jq '[.[] | .priority // "P2"] | group_by(.) | map({(.[0]): length}) | add' 2>/dev/null) || complexity_dist="{}"
 
+# Check if calibration data is sufficient but uncalibrated (rsj.1.9.1)
+# Source interspect if available to check event count
+if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
+    _isp_root=$(_discover_interspect_plugin 2>/dev/null) || _isp_root=""
+    if [[ -n "$_isp_root" ]]; then
+        source "${_isp_root}/hooks/lib-interspect.sh"
+        _decomp_count=$(_interspect_decomposition_calibration_ready 30 2>/dev/null)
+        _decomp_ready=$?
+        if [[ "$_decomp_ready" -eq 0 ]]; then
+            echo "📊 Decomposition calibration ready: $_decomp_count events. Run calibration to update baselines."
+        fi
+    fi
+fi
+
 # Read calibration (calibrated section takes precedence over defaults)
 calibration_file="${CLAUDE_PLUGIN_ROOT}/config/decomposition-calibration.yaml"
 if [[ -f "$calibration_file" ]]; then
@@ -187,6 +201,9 @@ fi
 
 Record the prediction for later calibration (stage 2 — collect actuals, prediction side):
 ```bash
+# Capture original child IDs for intent survival tracking (rsj.1.9.1)
+original_child_ids=$(bd children "$epic_id" --json 2>/dev/null | jq -r '[.[].id] | join(",")' 2>/dev/null) || original_child_ids=""
+
 decomp_prediction=$(jq -n \
     --arg epic "$epic_id" \
     --arg session "${CLAUDE_SESSION_ID:-unknown}" \
@@ -194,11 +211,12 @@ decomp_prediction=$(jq -n \
     --argjson complexity_dist "$complexity_dist" \
     --argjson typical "$typical_p50" \
     --arg ts "$(date +%s)" \
-    '{epic:$epic, session:$session, predicted_children:$child_count, complexity_dist:$complexity_dist, baseline_typical:$typical, ts:($ts|tonumber)}')
+    --arg original_ids "$original_child_ids" \
+    '{epic:$epic, session:$session, predicted_children:$child_count, complexity_dist:$complexity_dist, baseline_typical:$typical, ts:($ts|tonumber), original_child_ids:$original_ids}')
 bd set-state "$epic_id" "decomp_prediction=$decomp_prediction" 2>/dev/null || true
 ```
 
-This prediction will be compared against actuals at reflect time (sprint.md Step 9).
+This prediction will be compared against actuals at reflect time (reflect.md Step 9).
 
 ### Phase 3b: Record Phase (Reflect + Compound)
 

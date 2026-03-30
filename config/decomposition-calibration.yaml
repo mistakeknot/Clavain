@@ -36,11 +36,17 @@ defaults:
     expected_rate: 0.15       # assume ~15% of children are replanned (no data, conservative)
     warn_above: 0.40          # >40% replanned children → decomposition was poor
 
-# Calibration trigger
+# Calibration trigger (rsj.1.9.1: measurement plumbing only, no calibration logic yet)
 calibration:
   min_events: 30              # minimum decomposition_outcome events before auto-calibrating
   evidence_type: decomposition_outcome
-  source: interspect
+  source: interspect          # events stored in interspect.db evidence table
+  hook_id: interspect-decomposition  # registered in _interspect_validate_hook_id allowlist
+  readiness_check: _interspect_decomposition_calibration_ready  # function in lib-interspect.sh
+  # Collection flow:
+  #   strategy.md Phase 3a.2 → records decomp_prediction as bead state (prediction side)
+  #   reflect.md Step 9 → reads prediction, computes actuals, emits decomposition_outcome (actuals side)
+  #   strategy.md Phase 3a.2 → checks readiness, notifies when N>=30
   # When triggered, read all decomposition_outcome events and recompute
   # child_count percentiles + completion rates from Sylveste-era data
   # Write results to calibrated: section (below), which takes precedence
