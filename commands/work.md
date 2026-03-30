@@ -43,6 +43,7 @@ Extract 2-4 keywords from the plan title/goal, then run in parallel:
 - `Grep: pattern="(title|tags|module):.*<keyword>" path=docs/solutions/ output_mode=files_with_matches -i=true`
 - Also read `docs/solutions/patterns/critical-patterns.md` if it exists
 - `cass search "<keywords>" --limit 3 --json --fast-only 2>/dev/null`
+- File context (if plan references specific files): `cass context "<primary_file>" --json --limit 3 2>/dev/null` — surfaces recent sessions that touched the same files, showing what was learned/changed. Complements keyword search with file-level session history.
 
 If matches found: read frontmatter (limit 30 lines) of matching files, present key insights. If no matches: proceed silently. This step is advisory — never blocks execution.
 

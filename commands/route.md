@@ -74,6 +74,23 @@ Only when `route_mode="discovery"`.
 
 3. **Staleness sweep:** Top 3 without `possibly_done`: check `ic state get "bead_sweep" "<id>"` (1hr cache). Misses→single background haiku batch-check. Wait 5s max.
 
+3b. **Context warmth annotation:** For each top-3 bead, check if recent sessions touched related files:
+   ```bash
+   if command -v cass > /dev/null 2>&1; then
+       for bead in "${top_beads[@]:0:3}"; do
+           primary_file=$(bd state "$bead" primary_file 2>/dev/null) || primary_file=""
+           if [[ -n "$primary_file" && "$primary_file" != *"(no"* ]]; then
+               warmth=$(cass context "$primary_file" --json --limit 1 2>/dev/null | jq -r '.[0].age_minutes // empty' 2>/dev/null) || warmth=""
+               if [[ -n "$warmth" && "$warmth" -lt 120 ]]; then
+                   # Annotate: this bead has warm context (session touched files <2hrs ago)
+                   bead_warmth[$bead]="warm (${warmth}m ago)"
+               fi
+           fi
+       done
+   fi
+   ```
+   Append warmth annotation to AskUserQuestion labels: `"<Action> <id> — <title> (P<pri>) 🔥 warm (Nm ago)"`. Context warmth is a **tiebreaker**, not a primary signal — never override priority ordering, only annotate for user awareness.
+
 4. **AskUserQuestion**: top 3 beads + "Start fresh brainstorm" + "Show full backlog". Label: `"<Action> <id> — <title> (P<pri>)"`. Actions: continue/execute/plan/strategize/brainstorm/ship/create_bead→"Link orphan:"/verify_done→"Verify (parent closed):"/review_discovery→"Review discovery:". Interject: strip `[interject] `, append source+score. Possibly-done: `⚠` notice only.
 
 5. Pre-flight: `bd show <id>` — if fails, re-run. Skip for orphans.
