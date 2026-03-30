@@ -494,3 +494,157 @@ _create_enriched_fixture() {
     [[ "$status" -eq 0 ]]
     [[ "$output" == "38600" ]]
 }
+
+# ═══════════════════════════════════════════════════════════════
+# Compound Autonomy Guard (rsj.1.8)
+# ═══════════════════════════════════════════════════════════════
+
+_create_compound_fixture() {
+    local registry="$1"
+    local policy_dir
+    policy_dir="$(dirname "$registry")"
+
+    cat > "$registry" << 'YAML'
+version: "1.0"
+capability_vocabulary: []
+agents:
+  test-observer:
+    source: test
+    category: review
+    capability_level: 0
+    description: "L0 read-only"
+    capabilities: []
+    roles: []
+    runtime: { mode: subagent }
+    models: { preferred: haiku, supported: [haiku] }
+    tools: [Read]
+    cold_start_tokens: 100
+    tags: []
+  test-reviewer:
+    source: test
+    category: review
+    capability_level: 1
+    description: "L1 analysis"
+    capabilities: [domain_review]
+    roles: []
+    runtime: { mode: subagent }
+    models: { preferred: sonnet, supported: [sonnet] }
+    tools: [Read, Grep]
+    cold_start_tokens: 400
+    tags: []
+  test-worker:
+    source: test
+    category: workflow
+    capability_level: 2
+    description: "L2 local mutations"
+    capabilities: []
+    roles: []
+    runtime: { mode: subagent }
+    models: { preferred: sonnet, supported: [sonnet] }
+    tools: [Read, Edit, Write]
+    cold_start_tokens: 600
+    tags: []
+  test-shipper:
+    source: test
+    category: workflow
+    capability_level: 3
+    description: "L3 external effects"
+    capabilities: []
+    roles: []
+    runtime: { mode: subagent }
+    models: { preferred: opus, supported: [opus] }
+    tools: [Read, Edit, Write, Bash]
+    cold_start_tokens: 800
+    tags: []
+  test-no-level:
+    source: test
+    category: review
+    description: "No capability_level set"
+    capabilities: []
+    roles: []
+    runtime: { mode: subagent }
+    models: { preferred: haiku, supported: [haiku] }
+    tools: [Read]
+    cold_start_tokens: 100
+    tags: []
+YAML
+
+    # Create policy file alongside registry
+    cat > "$policy_dir/default-policy.yaml" << 'YAML'
+schema_version: 1
+phases: {}
+compound_autonomy:
+  default_capability_level: 2
+  thresholds:
+    auto: 2
+    advisory: 4
+    approval: 6
+    blocked: 9
+YAML
+}
+
+@test "compound autonomy: T1×L1=1 → auto (pass)" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_compound_fixture "$registry"
+    _source_fleet "$registry"
+
+    run fleet_compound_autonomy_check 1 test-reviewer
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"auto"* ]]
+    [[ "$output" == *"T1×L1"* ]]
+}
+
+@test "compound autonomy: T2×L2=4 → advisory" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_compound_fixture "$registry"
+    _source_fleet "$registry"
+
+    run fleet_compound_autonomy_check 2 test-worker
+    [[ "$status" -eq 1 ]]
+    [[ "$output" == *"advisory"* ]]
+    [[ "$output" == *"T2×L2"* ]]
+}
+
+@test "compound autonomy: T2×L3=6 → approval required" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_compound_fixture "$registry"
+    _source_fleet "$registry"
+
+    run fleet_compound_autonomy_check 2 test-shipper
+    [[ "$status" -eq 2 ]]
+    [[ "$output" == *"approval"* ]]
+    [[ "$output" == *"T2×L3"* ]]
+}
+
+@test "compound autonomy: T3×L3=9 → blocked" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_compound_fixture "$registry"
+    _source_fleet "$registry"
+
+    run fleet_compound_autonomy_check 3 test-shipper
+    [[ "$status" -eq 3 ]]
+    [[ "$output" == *"blocked"* ]]
+    [[ "$output" == *"T3×L3"* ]]
+}
+
+@test "compound autonomy: T0×L3=0 → auto (zero tier is safe)" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_compound_fixture "$registry"
+    _source_fleet "$registry"
+
+    run fleet_compound_autonomy_check 0 test-shipper
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"auto"* ]]
+}
+
+@test "compound autonomy: missing capability_level uses default (L2)" {
+    local registry="$TEST_DIR/registry.yaml"
+    _create_compound_fixture "$registry"
+    _source_fleet "$registry"
+
+    # T2 × L2(default) = 4 → advisory
+    run fleet_compound_autonomy_check 2 test-no-level
+    [[ "$status" -eq 1 ]]
+    [[ "$output" == *"advisory"* ]]
+    [[ "$output" == *"L2"* ]]
+}

@@ -336,3 +336,60 @@ fleet_cost_estimate_live() {
   echo "lib-fleet: no cost data for '$agent_id' (model=$model)" >&2
   return 1
 }
+
+# ─── Compound Autonomy Guard (rsj.1.8) ──────────────────────────────────────
+
+# Check compound autonomy score for a Mycroft dispatch.
+# Score = mycroft_tier × agent_capability_level.
+# Returns: 0 (auto/pass), 1 (advisory), 2 (require approval), 3 (blocked)
+# Prints verdict to stdout: "auto|advisory|approval|blocked <score> <reason>"
+#
+# Args: $1 = mycroft_tier (0-3), $2 = agent_id
+fleet_compound_autonomy_check() {
+  local mycroft_tier="${1:?usage: fleet_compound_autonomy_check <mycroft_tier> <agent_id>}"
+  local agent_id="${2:?usage: fleet_compound_autonomy_check <mycroft_tier> <agent_id>}"
+  _fleet_init || return 1
+
+  # Get agent capability level (default from policy if not set)
+  local cap_level
+  cap_level="$(id="$agent_id" yq '.agents[env(id)].capability_level // ""' "$_FLEET_REGISTRY_PATH" 2>/dev/null)" || cap_level=""
+  if [[ -z "$cap_level" || "$cap_level" == "null" ]]; then
+    # Read default from policy
+    local policy_file
+    policy_file="$(dirname "$_FLEET_REGISTRY_PATH")/default-policy.yaml"
+    if [[ -f "$policy_file" ]]; then
+      cap_level="$(yq '.compound_autonomy.default_capability_level // 2' "$policy_file" 2>/dev/null)" || cap_level=2
+    else
+      cap_level=2
+    fi
+  fi
+
+  # Compute compound score
+  local score=$(( mycroft_tier * cap_level ))
+
+  # Read thresholds from policy
+  local policy_file
+  policy_file="$(dirname "$_FLEET_REGISTRY_PATH")/default-policy.yaml"
+  local t_auto=2 t_advisory=4 t_approval=6 t_blocked=9
+  if [[ -f "$policy_file" ]]; then
+    t_auto="$(yq '.compound_autonomy.thresholds.auto // 2' "$policy_file" 2>/dev/null)" || t_auto=2
+    t_advisory="$(yq '.compound_autonomy.thresholds.advisory // 4' "$policy_file" 2>/dev/null)" || t_advisory=4
+    t_approval="$(yq '.compound_autonomy.thresholds.approval // 6' "$policy_file" 2>/dev/null)" || t_approval=6
+    t_blocked="$(yq '.compound_autonomy.thresholds.blocked // 9' "$policy_file" 2>/dev/null)" || t_blocked=9
+  fi
+
+  # Classify
+  if [[ "$score" -ge "$t_blocked" ]]; then
+    echo "blocked $score T${mycroft_tier}×L${cap_level} — requires explicit user opt-in"
+    return 3
+  elif [[ "$score" -ge "$t_approval" ]]; then
+    echo "approval $score T${mycroft_tier}×L${cap_level} — requires human approval"
+    return 2
+  elif [[ "$score" -gt "$t_auto" ]]; then
+    echo "advisory $score T${mycroft_tier}×L${cap_level} — proceeding with warning"
+    return 1
+  else
+    echo "auto $score T${mycroft_tier}×L${cap_level} — within safe bounds"
+    return 0
+  fi
+}

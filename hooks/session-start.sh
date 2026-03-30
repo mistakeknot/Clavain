@@ -379,7 +379,24 @@ if command -v bd &>/dev/null && [[ -n "${TMUX:-}" ]]; then
                     [[ -n "$_mycroft_phase" ]] && echo "MYCROFT_PHASE=$_mycroft_phase" >> "$CLAUDE_ENV_FILE"
                     [[ -n "$_mycroft_ctx" ]] && echo "MYCROFT_CONTEXT=$_mycroft_ctx" >> "$CLAUDE_ENV_FILE"
                 fi
-                mycroft_context="\\n\\n**Mycroft assignment**: bead \`$_mycroft_bead\` (phase: ${_mycroft_phase:-unset})"
+                # Compound autonomy check (rsj.1.8)
+                _mycroft_tier=$(bd get-state "$_mycroft_bead" mycroft_tier 2>/dev/null) || _mycroft_tier=""
+                _compound_info=""
+                if [[ -n "$_mycroft_tier" && "$_mycroft_tier" =~ ^[0-3]$ ]]; then
+                    _lib_fleet="${SCRIPT_DIR}/../scripts/lib-fleet.sh"
+                    if [[ -f "$_lib_fleet" ]]; then
+                        source "$_lib_fleet"
+                        _compound_verdict=$(fleet_compound_autonomy_check "$_mycroft_tier" "$_fleet_name" 2>/dev/null) || _compound_verdict=""
+                        if [[ -n "$_compound_verdict" ]]; then
+                            _compound_info=" | compound: ${_compound_verdict}"
+                            if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
+                                echo "MYCROFT_TIER=$_mycroft_tier" >> "$CLAUDE_ENV_FILE"
+                                echo "MYCROFT_COMPOUND_VERDICT=$_compound_verdict" >> "$CLAUDE_ENV_FILE"
+                            fi
+                        fi
+                    fi
+                fi
+                mycroft_context="\\n\\n**Mycroft assignment**: bead \`$_mycroft_bead\` (phase: ${_mycroft_phase:-unset}${_compound_info})"
             fi
         fi
     fi

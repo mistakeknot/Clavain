@@ -41,3 +41,14 @@ phases:
     deny_paths:
       - ".clavain/scenarios/holdout/**"
     deny_tools: []
+
+# Compound autonomy guard (rsj.1.8)
+# Score = mycroft_tier × agent_capability_level
+# Prevents unreviewed escalation when orchestrator auto-dispatches high-capability agents.
+compound_autonomy:
+  default_capability_level: 2  # agents without explicit capability_level in fleet-registry
+  thresholds:
+    auto: 2        # score 0-2: proceed without notification
+    advisory: 4    # score 3-4: log warning, proceed
+    approval: 6    # score 5-6: require human approval (or MYCROFT_OVERRIDE=true)
+    blocked: 9     # score 7+: blocked, require explicit user opt-in via policy override

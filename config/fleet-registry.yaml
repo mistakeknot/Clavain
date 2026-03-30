@@ -43,6 +43,7 @@ agents:
   fd-architecture:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Architecture & design reviewer — module boundaries, coupling, design patterns, anti-patterns, code duplication"
     capabilities:
       - domain_review
@@ -62,6 +63,7 @@ agents:
   fd-correctness:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Correctness reviewer — data consistency, transaction safety, race conditions, async bugs, concurrency"
     capabilities:
       - domain_review
@@ -80,6 +82,7 @@ agents:
   fd-quality:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Quality & style reviewer — naming, conventions, test approach, error handling, language-specific idioms"
     capabilities:
       - domain_review
@@ -98,6 +101,7 @@ agents:
   fd-safety:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Safety reviewer — security threats, credential handling, trust boundaries, deployment risk, migration safety"
     capabilities:
       - domain_review
@@ -116,6 +120,7 @@ agents:
   fd-performance:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Performance reviewer — rendering bottlenecks, data access patterns, algorithmic complexity, memory, resource consumption"
     capabilities:
       - domain_review
@@ -134,6 +139,7 @@ agents:
   fd-user-product:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "User & product reviewer — user flows, UX friction, value proposition, problem validation, scope creep, edge cases"
     capabilities:
       - domain_review
@@ -153,6 +159,7 @@ agents:
   fd-game-design:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Game design reviewer — balance, pacing, player psychology, feedback loops, emergent behavior, procedural content"
     capabilities:
       - domain_review
@@ -171,6 +178,7 @@ agents:
   fd-decisions:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Decision quality reviewer — decision traps, cognitive biases, uncertainty handling, strategic paradoxes, option framing"
     capabilities:
       - domain_review
@@ -190,6 +198,7 @@ agents:
   fd-people:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Human systems reviewer — trust dynamics, power structures, communication patterns, team culture, leadership gaps"
     capabilities:
       - domain_review
@@ -209,6 +218,7 @@ agents:
   fd-perception:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Sensemaking reviewer — mental models, information quality, temporal reasoning, perceptual blind spots"
     capabilities:
       - domain_review
@@ -228,6 +238,7 @@ agents:
   fd-resilience:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Adaptive capacity reviewer — antifragility, creative constraints, resource allocation, innovation dynamics, failure recovery"
     capabilities:
       - domain_review
@@ -247,6 +258,7 @@ agents:
   fd-systems:
     source: interflux
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Systems thinking reviewer — feedback loops, emergence, causal reasoning, unintended consequences, systems dynamics"
     capabilities:
       - domain_review
@@ -268,6 +280,7 @@ agents:
   best-practices-researcher:
     source: interflux
     category: research
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Researches and synthesizes external best practices, documentation, and examples for any technology or framework"
     capabilities:
       - multi_perspective
@@ -286,6 +299,7 @@ agents:
   framework-docs-researcher:
     source: interflux
     category: research
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Gathers comprehensive documentation and best practices for frameworks, libraries, or dependencies"
     capabilities:
       - multi_perspective
@@ -304,6 +318,7 @@ agents:
   git-history-analyzer:
     source: interflux
     category: research
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Archaeological analysis of git history — trace code evolution, identify contributors, understand why code patterns exist"
     capabilities: []
     roles:
@@ -321,6 +336,7 @@ agents:
   learnings-researcher:
     source: interflux
     category: research
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Searches docs/solutions/ for relevant past solutions by frontmatter metadata to surface institutional knowledge"
     capabilities: []
     roles:
@@ -338,6 +354,7 @@ agents:
   repo-research-analyst:
     source: interflux
     category: research
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Thorough research on repository structure, documentation, conventions, and implementation patterns"
     capabilities:
       - multi_perspective
@@ -358,6 +375,7 @@ agents:
   voice-analyzer:
     source: interfluence
     category: research
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Deep analysis agent for generating voice profiles from writing corpora"
     capabilities: []
     roles:
@@ -377,6 +395,7 @@ agents:
   agent-native-reviewer:
     source: intercraft
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Reviews code for agent-native parity — ensures any user action can also be performed by an agent"
     capabilities:
       - domain_review
@@ -397,6 +416,7 @@ agents:
   synthesize-review:
     source: intersynth
     category: synthesis
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Aggregates multi-agent review output — deduplicates findings, writes verdict JSON, produces summary report"
     capabilities:
       - verdict_aggregation
@@ -416,6 +436,7 @@ agents:
   synthesize-research:
     source: intersynth
     category: synthesis
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Merges multi-agent research findings with source attribution, ranks sources, produces compact answer"
     capabilities:
       - multi_agent_synthesis
@@ -436,6 +457,7 @@ agents:
   data-migration-expert:
     source: clavain
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Validates data migrations, backfills, and production data transformations — ID mappings, column renames, enum conversions"
     capabilities:
       - domain_review
@@ -454,6 +476,7 @@ agents:
   plan-reviewer:
     source: clavain
     category: review
+    capability_level: 1  # L1: analysis only, no mutations
     description: "Reviews completed implementation steps against the original plan and coding standards"
     capabilities:
       - domain_review
@@ -472,6 +495,7 @@ agents:
   bug-reproduction-validator:
     source: clavain
     category: workflow
+    capability_level: 2  # L2: local mutations (file edits)
     description: "Systematically reproduces and validates bug reports to confirm whether reported behavior is an actual bug"
     capabilities:
       - debugging
@@ -491,6 +515,7 @@ agents:
   pr-comment-resolver:
     source: clavain
     category: workflow
+    capability_level: 2  # L2: local mutations (file edits)
     description: "Implements requested changes from PR review comments and reports resolutions"
     capabilities: []
     roles:
@@ -510,6 +535,7 @@ agents:
   mycroft:
     source: autarch
     category: orchestrator
+    capability_level: 3  # L3: external effects (dispatch, orchestration)
     description: "Fleet orchestrator — escalating autonomy (T0 observe → T1 suggest → T2/T3 auto-dispatch)"
     capabilities:
       - multi_agent_coordination

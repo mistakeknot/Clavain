@@ -495,6 +495,39 @@ fi
 # a working sandbox. If Landlock is unavailable (kernel < 5.13), Codex falls
 # back to unsandboxed mode on its own — no intervention needed from dispatch.sh.
 
+# ─── Compound Autonomy Guard (rsj.1.8) ──────────────────────────────────────
+# If Mycroft is dispatching, check compound autonomy score before proceeding.
+if [[ -n "${MYCROFT_TIER:-}" ]]; then
+  if [[ -f "${DISPATCH_SCRIPT_DIR}/lib-fleet.sh" ]]; then
+    source "${DISPATCH_SCRIPT_DIR}/lib-fleet.sh"
+    _agent_name="${NAME:-unknown}"
+    _verdict=$(fleet_compound_autonomy_check "$MYCROFT_TIER" "$_agent_name" 2>/dev/null) || true
+    _verdict_type="${_verdict%% *}"
+    case "$_verdict_type" in
+      blocked)
+        echo "COMPOUND AUTONOMY BLOCKED: $_verdict" >&2
+        echo "Override: set MYCROFT_OVERRIDE=true to bypass (requires explicit user opt-in)" >&2
+        if [[ "${MYCROFT_OVERRIDE:-}" != "true" ]]; then
+          exit 1
+        fi
+        echo "WARNING: Compound autonomy override active — proceeding despite blocked score" >&2
+        ;;
+      approval)
+        echo "COMPOUND AUTONOMY — approval required: $_verdict" >&2
+        if [[ "${MYCROFT_OVERRIDE:-}" != "true" ]]; then
+          echo "Set MYCROFT_OVERRIDE=true to proceed, or dispatch manually" >&2
+          exit 1
+        fi
+        echo "Compound autonomy override active — proceeding" >&2
+        ;;
+      advisory)
+        echo "COMPOUND AUTONOMY advisory: $_verdict" >&2
+        ;;
+      # auto: silent pass
+    esac
+  fi
+fi
+
 # Build codex exec command
 CMD=(codex exec)
 CMD+=(-s "$SANDBOX")

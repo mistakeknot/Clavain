@@ -1,0 +1,11 @@
+schema_version: 1
+
+phases: {}
+
+compound_autonomy:
+  default_capability_level: 2
+  thresholds:
+    auto: 2
+    advisory: 4
+    approval: 6
+    blocked: 9
