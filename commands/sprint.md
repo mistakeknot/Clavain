@@ -66,9 +66,9 @@ Determine the autonomy tier from complexity (or `--autonomy=<1|2|3>` override, o
 
 | Tier | Complexity | Behavior |
 |------|-----------|----------|
-| **1** | C1-C2 | **Full auto.** Skip brainstorm dialogue, auto-approve plan review if no P0/P1, auto-advance all steps. Only gate: quality-gates FAIL pauses. |
-| **2** | C3 | **One checkpoint.** Auto-advance brainstorm → plan. Pause after plan review for user confirmation. Auto-advance execute → ship. |
-| **3** | C4-C5 | **Interactive.** All AskUserQuestion checkpoints active (current behavior). |
+| **1** | C1-C2 | **Full auto.** Skip brainstorm/strategy reviews, auto-approve plan review if no P0/P1, auto-advance all steps. Only gate: quality-gates FAIL pauses. |
+| **2** | C3 | **Two checkpoints.** Run brainstorm/strategy reviews but auto-approve if no P0/P1. Pause after plan review for user confirmation. Auto-advance execute → ship. |
+| **3** | C4-C5 | **Interactive.** All AskUserQuestion checkpoints active at all three review gates (current behavior). |
 
 ```bash
 autonomy_override=$(bd state "$CLAVAIN_BEAD_ID" autonomy_tier 2>/dev/null) || autonomy_override=""
@@ -85,11 +85,11 @@ fi
 
 Display: `Autonomy: Tier $autonomy_tier`. Pass tier to sub-commands via `CLAVAIN_AUTONOMY_TIER=$autonomy_tier`.
 
-**Tier 1 routing:** Skip brainstorm (Phase 0 detects clear requirements → jump to Step 3). If brainstorm is needed (ambiguous), escalate to Tier 2.
+**Tier 1 routing:** Skip brainstorm (Phase 0 detects clear requirements → jump to Step 3). Skip all three flux-drive review gates. If brainstorm is needed (ambiguous), escalate to Tier 2.
 
-**Tier 2 routing:** Standard workflow; auto-advance except pause after Step 4 (plan review).
+**Tier 2 routing:** Standard workflow with all three flux-drive reviews. Auto-approve brainstorm and strategy reviews if no P0/P1. Pause after plan review (Step 4) for user confirmation. Auto-advance execute → ship.
 
-**Tier 3 routing:** Full workflow with all checkpoints.
+**Tier 3 routing:** Full workflow with all three review gates interactive (AskUserQuestion at each).
 
 `--from-step` always overrides complexity routing. `--autonomy=<tier>` overrides tier. `bd set-state <bead> manual_pause true` forces pause at next checkpoint regardless of tier.
 
@@ -119,7 +119,7 @@ On non-zero exit, parse `reason_type="${pause_reason%%|*}"`:
 
 Display at each advance: `Phase: <current> → <next> (auto-advancing)`. No "what next?" prompts unless pause triggered, step fails, or tier requires a checkpoint at this step.
 
-**Tier-aware checkpoints:** Tier 1 pauses only on `gate_blocked` (quality-gates FAIL). Tier 2 also pauses after Step 4 (plan review). Tier 3 preserves all existing AskUserQuestion calls in sub-commands.
+**Tier-aware checkpoints:** Tier 1 pauses only on `gate_blocked` (quality-gates FAIL) — skips all three flux-drive review gates. Tier 2 auto-approves brainstorm/strategy reviews (Steps 1b, 2b) if no P0/P1, pauses after plan review (Step 4). Tier 3 preserves all AskUserQuestion calls at all three review gates.
 
 ## Phase Tracking
 
@@ -139,8 +139,10 @@ After each artifact write, record its provenance vector — the chain of inputs 
 ```bash
 # Gather input artifact paths for this step
 input_artifacts=""  # comma-separated list of artifact types this step consumed
-# Step 1 (brainstorm): inputs="" (no prior artifacts)
-# Step 2 (strategy): inputs="brainstorm"
+# Step 1a (brainstorm): inputs="" (no prior artifacts)
+# Step 1b (brainstorm-review): inputs="brainstorm"
+# Step 2a (strategy): inputs="brainstorm"
+# Step 2b (strategy-review): inputs="prd"
 # Step 3 (plan): inputs="brainstorm,prd"
 # Step 4 (review): inputs="plan"
 # Step 5 (execute): inputs="plan"
@@ -165,15 +167,71 @@ The provenance DAG can be walked backward via: `bd state <bead> provenance_<type
 
 ## Step 1: Brainstorm
 
+### 1a: Generate brainstorm
+
 `/clavain:brainstorm $ARGUMENTS`
 
 After doc created: set `phase=brainstorm`; `clavain-cli record-cost-estimate "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null || true`
 
+### 1b: Review brainstorm
+
+**Auto-run — no AskUserQuestion before starting.**
+
+```bash
+brainstorm_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null) || brainstorm_path=""
+```
+
+If `brainstorm_path` is empty or file missing, skip review (brainstorm may not have produced an artifact for trivial features).
+
+Budget context:
+```bash
+remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
+[[ "$remaining" -gt 0 ]] && export FLUX_BUDGET_REMAINING="$remaining"
+```
+
+`/interflux:flux-drive $brainstorm_path` — catches scope creep, missing constraints, implicit assumptions, and architectural blind spots before they get baked into the PRD.
+
+### 1c: Tier-aware checkpoint
+
+- **Tier 1:** Skip review entirely (1b and 1c). Proceed to Step 2 immediately.
+- **Tier 2:** Auto-approve if no P0/P1 findings. Proceed to Step 2 immediately.
+- **Tier 3:** AskUserQuestion with findings. Wait for explicit approval.
+
+After passing: set `phase=brainstorm-reviewed`.
+
 ## Step 2: Strategize
+
+### 2a: Generate strategy
 
 `/clavain:strategy`
 
-Optionally run `/clavain:review-doc` on brainstorm first (set `phase=brainstorm-reviewed` after). After PRD created, run `/interpath:cuj` for each critical user-facing flow — skip only for purely internal changes. After strategy: set `phase=strategized`.
+After PRD created, run `/interpath:cuj` for each critical user-facing flow — skip only for purely internal changes. After strategy: set `phase=strategized`.
+
+### 2b: Review strategy
+
+**Auto-run — no AskUserQuestion before starting.**
+
+```bash
+prd_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "prd" 2>/dev/null) || prd_path=""
+```
+
+If `prd_path` is empty or file missing, skip review.
+
+Budget context:
+```bash
+remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
+[[ "$remaining" -gt 0 ]] && export FLUX_BUDGET_REMAINING="$remaining"
+```
+
+`/interflux:flux-drive $prd_path` — validates the PRD for feature gaps, decomposition errors, user journey blind spots, and architectural feasibility before planning begins.
+
+### 2c: Tier-aware checkpoint
+
+- **Tier 1:** Skip review entirely (2b and 2c). Proceed to Step 3 immediately.
+- **Tier 2:** Auto-approve if no P0/P1 findings. Proceed to Step 3 immediately.
+- **Tier 3:** AskUserQuestion with findings. Wait for explicit approval.
+
+After passing: set `phase=strategy-reviewed`.
 
 ## Step 3: Write Plan
 

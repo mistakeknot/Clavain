@@ -163,7 +163,7 @@ sprint_create() {
     local scope_id="${sprint_id:-sprint-$(date +%s)}"
 
     # Create ic run (required — this is the state backend)
-    local phases_json='["brainstorm","brainstorm-reviewed","strategized","planned","plan-reviewed","executing","shipping","reflect","done"]'
+    local phases_json='["brainstorm","brainstorm-reviewed","strategized","strategy-reviewed","planned","plan-reviewed","executing","shipping","reflect","done"]'
     local complexity="${2:-3}"
     local token_budget
     token_budget=$(_sprint_default_budget "$complexity")
@@ -171,7 +171,7 @@ sprint_create() {
     # Default phase actions for kernel-driven routing (matches sprint_next_step fallback table)
     # Keys = phase where you ARE, values = command to run at that phase
     # Args is a string containing a JSON array (ic CLI expects *string, not raw array)
-    local default_actions='{"brainstorm":{"command":"/clavain:strategy","mode":"interactive"},"strategized":{"command":"/clavain:write-plan","mode":"interactive"},"planned":{"command":"/interflux:flux-drive","args":"[\"${artifact:plan}\"]","mode":"interactive"},"plan-reviewed":{"command":"/clavain:work","args":"[\"${artifact:plan}\"]","mode":"both"},"executing":{"command":"/clavain:quality-gates","mode":"interactive"},"shipping":{"command":"/clavain:reflect","mode":"interactive"}}'
+    local default_actions='{"brainstorm":{"command":"/interflux:flux-drive","args":"[\"${artifact:brainstorm}\"]","mode":"interactive"},"brainstorm-reviewed":{"command":"/clavain:strategy","mode":"interactive"},"strategized":{"command":"/interflux:flux-drive","args":"[\"${artifact:prd}\"]","mode":"interactive"},"strategy-reviewed":{"command":"/clavain:write-plan","mode":"interactive"},"planned":{"command":"/interflux:flux-drive","args":"[\"${artifact:plan}\"]","mode":"interactive"},"plan-reviewed":{"command":"/clavain:work","args":"[\"${artifact:plan}\"]","mode":"both"},"executing":{"command":"/clavain:quality-gates","mode":"interactive"},"shipping":{"command":"/clavain:reflect","mode":"interactive"}}'
 
     local run_id
     run_id=$(intercore_run_create "$(pwd)" "$title" "$phases_json" "$scope_id" "$complexity" "$token_budget" "$default_actions") || run_id=""
@@ -1149,10 +1149,12 @@ sprint_next_step() {
     fi
 
     # Fallback: static phase→step mapping
+    # Three flux-drive review gates: after brainstorm, after strategy, after plan
     case "$phase" in
-        brainstorm)          echo "strategy" ;;
+        brainstorm)          echo "flux-drive" ;;
         brainstorm-reviewed) echo "strategy" ;;
-        strategized)         echo "write-plan" ;;
+        strategized)         echo "flux-drive" ;;
+        strategy-reviewed)   echo "write-plan" ;;
         planned)             echo "flux-drive" ;;
         plan-reviewed)       echo "work" ;;
         executing)           echo "quality-gates" ;;
