@@ -53,6 +53,18 @@ intercore_check_or_die "handoff" "$SESSION_ID" 0
 source "${BASH_SOURCE[0]%/*}/lib.sh" 2>/dev/null || true
 _write_inflight_manifest "$SESSION_ID" 2>/dev/null || true
 
+# Auto-close shipped-but-unclosed beads claimed by this session (sylveste-060).
+# Runs BEFORE signal check so closed beads don't trigger false "in-progress" signals.
+_close_script="${BASH_SOURCE[0]%/*}/../scripts/bead-close-shipped.sh"
+if [[ -x "$_close_script" ]]; then
+    _close_result=$("$_close_script" --session-id "$SESSION_ID" 2>/dev/null) || true
+    if [[ "$_close_result" == AUTO_CLOSED:* ]]; then
+        _close_count="${_close_result#AUTO_CLOSED:}"
+        _close_count="${_close_count%%$'\n'*}"
+        log_info "auto-closed ${_close_count} shipped bead(s)" session_id="${SESSION_ID:0:8}" 2>/dev/null || true
+    fi
+fi
+
 # Check for signals that work is incomplete.
 # Only trigger on NEW signals from this session, not pre-existing stale state.
 SIGNALS=""

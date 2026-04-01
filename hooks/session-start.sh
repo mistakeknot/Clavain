@@ -164,6 +164,18 @@ if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     if [[ "$_shadow_total" -gt 0 ]]; then
         companion_context="${companion_context}\\n- shadow trackers: ${_shadow_total} file(s) tracking work outside beads — run \`/bead-sweep\` to migrate"
     fi
+
+    # Phantom bead detection (sylveste-060) — shipped but unclosed
+    _close_script="${PLUGIN_ROOT}/scripts/bead-close-shipped.sh"
+    if [[ -x "$_close_script" ]]; then
+        _phantom_result=$("$_close_script" --dry-run 2>/dev/null) || true
+        if [[ "$_phantom_result" == PHANTOM_BEADS* ]]; then
+            _phantom_count=$(echo "$_phantom_result" | tail -n +2 | grep -c '.' || true)
+            if [[ "$_phantom_count" -gt 0 ]]; then
+                companion_context="${companion_context}\\n- phantom beads: ${_phantom_count} bead(s) shipped but not closed — run \`/bead-sweep --auto-close\` or close manually"
+            fi
+        fi
+    fi
 fi
 
 # Oracle
