@@ -119,16 +119,39 @@ def compute_decomposition_metrics(parent, real_children, baseline_p50=5):
 
 
 def find_interspect_db(db_path=None):
-    """Find the Interspect database path."""
+    """Find the Interspect database path.
+
+    Mirrors lib-interspect.sh _interspect_db_path() priority:
+    CLAUDE_PROJECT_DIR > git root > hardcoded fallback.
+    """
     if db_path:
         return db_path
-    candidates = [
-        os.path.expanduser("~/projects/Sylveste/.clavain/interspect/interspect.db"),
-        os.path.expanduser("~/projects/Sylveste/os/Clavain/.clavain/interspect/interspect.db"),
-    ]
-    for c in candidates:
-        if os.path.isfile(c):
-            return c
+
+    # 1. CLAUDE_PROJECT_DIR
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "")
+    if project_dir:
+        candidate = os.path.join(project_dir, ".clavain/interspect/interspect.db")
+        if os.path.isfile(candidate):
+            return candidate
+
+    # 2. Git root
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            candidate = os.path.join(result.stdout.strip(), ".clavain/interspect/interspect.db")
+            if os.path.isfile(candidate):
+                return candidate
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    # 3. Hardcoded fallback
+    candidate = os.path.expanduser("~/projects/Sylveste/.clavain/interspect/interspect.db")
+    if os.path.isfile(candidate):
+        return candidate
+
     return None
 
 

@@ -155,9 +155,17 @@ Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no fur
                        "$_session_id" "$_epic_id" "$_predicted" "$_actual" \
                        "$_completion" "$_replan" "$_survival" "$_complexity" "$_baseline"
 
-                   # Check calibration readiness
-                   _count=$(_interspect_decomposition_calibration_ready 30 2>/dev/null) && \
-                       echo "Decomposition calibration ready: $_count events (threshold: 30)" || true
+                   # Check calibration readiness and trigger if ready (rsj.1.9.3)
+                   _count=$(_interspect_decomposition_calibration_ready 30 2>/dev/null)
+                   if [[ $? -eq 0 && -n "$_count" && "$_count" -ge 30 ]] 2>/dev/null; then
+                       _cal_script="${CLAUDE_PLUGIN_ROOT}/scripts/calibrate-decomposition.py"
+                       _cal_config="${CLAUDE_PLUGIN_ROOT}/config/decomposition-calibration.yaml"
+                       _cal_db=$(_interspect_db_path 2>/dev/null) || _cal_db=""
+                       if [[ -f "$_cal_script" && -f "$_cal_config" && -n "$_cal_db" ]]; then
+                           python3 "$_cal_script" --db "$_cal_db" --config "$_cal_config" 2>/dev/null && \
+                               echo "Decomposition calibrated from $_count events" || true
+                       fi
+                   fi
                fi
            fi
        fi
