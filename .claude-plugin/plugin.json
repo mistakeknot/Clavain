@@ -1,6 +1,6 @@
 {
   "name": "clavain",
-  "version": "0.6.240",
+  "version": "0.6.241",
   "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, monitors its own docs, and surfaces conservative update drift. Orchestrates Claude, Codex, and GPT-5.2 Pro through 6 agents, 51 commands, 17 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
   "author": {
     "name": "mistakeknot"
