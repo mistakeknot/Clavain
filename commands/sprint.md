@@ -166,7 +166,7 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 [[ "$remaining" -gt 0 ]] && export FLUX_BUDGET_REMAINING="$remaining"
 ```
 
-`/interflux:flux-drive $brainstorm_path` — catches scope creep, missing constraints, implicit assumptions, and architectural blind spots before they get baked into the PRD.
+`/interflux:flux-review $brainstorm_path --quality=balanced` — multi-track deep review (4 tracks for brainstorms: adjacent + orthogonal + distant + esoteric). The brainstorm sets the direction for everything downstream — catching scope creep, missing constraints, implicit assumptions, and blind spots here prevents compounding errors in the PRD and plan.
 
 ### 1c: Tier-aware checkpoint
 
@@ -236,7 +236,7 @@ Cost preview: `clavain-cli sprint-budget-stage "$CLAVAIN_BEAD_ID" plan-review 2>
 plan_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || plan_path=""
 ```
 
-`/interflux:flux-gen` — auto-detect project domains and generate `fd-*` agents in `.claude/agents/`. Use `skip-existing` mode (no confirmation, no overwrite). If agents already exist, this completes in seconds. If flux-gen fails or no domains detected, proceed — core agents work without domain specialization.
+**Conditional flux-gen:** Check if project agents already exist: `ls .claude/agents/fd-*.md 2>/dev/null | wc -l`. If >= 3 agents exist, skip flux-gen entirely — agents are already generated and flux-drive will discover them. If < 3, run `/interflux:flux-gen` with `skip-existing` mode. If flux-gen fails or no domains detected, proceed — core agents work without domain specialization.
 
 ### 4b: Run plan review
 

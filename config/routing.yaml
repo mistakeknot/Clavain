@@ -165,7 +165,7 @@ complexity:
 # Env override: INTERSPECT_ROUTING_MODE=enforce
 # Escape hatch: delete .clavain/interspect/routing-calibration.json
 calibration:
-  mode: shadow
+  mode: enforce  # Promoted from shadow 2026-04-01. 21+ sprint sessions + 498 closed beads provide calibration baseline.
 
 # CC↔Codex delegation routing (Track B4)
 #

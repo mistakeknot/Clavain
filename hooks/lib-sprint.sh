@@ -171,7 +171,7 @@ sprint_create() {
     # Default phase actions for kernel-driven routing (matches sprint_next_step fallback table)
     # Keys = phase where you ARE, values = command to run at that phase
     # Args is a string containing a JSON array (ic CLI expects *string, not raw array)
-    local default_actions='{"brainstorm":{"command":"/interflux:flux-drive","args":"[\"${artifact:brainstorm}\"]","mode":"interactive"},"brainstorm-reviewed":{"command":"/clavain:strategy","mode":"interactive"},"strategized":{"command":"/interflux:flux-drive","args":"[\"${artifact:prd}\"]","mode":"interactive"},"strategy-reviewed":{"command":"/clavain:write-plan","mode":"interactive"},"planned":{"command":"/interflux:flux-drive","args":"[\"${artifact:plan}\"]","mode":"interactive"},"plan-reviewed":{"command":"/clavain:work","args":"[\"${artifact:plan}\"]","mode":"both"},"executing":{"command":"/clavain:quality-gates","mode":"interactive"},"shipping":{"command":"/clavain:reflect","mode":"interactive"}}'
+    local default_actions='{"brainstorm":{"command":"/interflux:flux-review","args":"[\"${artifact:brainstorm}\",\"--quality=balanced\"]","mode":"interactive"},"brainstorm-reviewed":{"command":"/clavain:strategy","mode":"interactive"},"strategized":{"command":"/interflux:flux-drive","args":"[\"${artifact:prd}\"]","mode":"interactive"},"strategy-reviewed":{"command":"/clavain:write-plan","mode":"interactive"},"planned":{"command":"/interflux:flux-drive","args":"[\"${artifact:plan}\"]","mode":"interactive"},"plan-reviewed":{"command":"/clavain:work","args":"[\"${artifact:plan}\"]","mode":"both"},"executing":{"command":"/clavain:quality-gates","mode":"interactive"},"shipping":{"command":"/clavain:reflect","mode":"interactive"}}'
 
     local run_id
     run_id=$(intercore_run_create "$(pwd)" "$title" "$phases_json" "$scope_id" "$complexity" "$token_budget" "$default_actions") || run_id=""
@@ -1136,6 +1136,7 @@ sprint_next_step() {
                         /clavain:strategy)         echo "strategy" ;;
                         /clavain:write-plan)       echo "write-plan" ;;
                         /interflux:flux-drive)     echo "flux-drive" ;;
+                        /interflux:flux-review)    echo "flux-review" ;;
                         /clavain:work)             echo "work" ;;
                         /clavain:quality-gates)    echo "quality-gates" ;;
                         /clavain:resolve)          echo "ship" ;;
@@ -1149,9 +1150,9 @@ sprint_next_step() {
     fi
 
     # Fallback: static phase→step mapping
-    # Three flux-drive review gates: after brainstorm, after strategy, after plan
+    # Three review gates: flux-review after brainstorm, flux-drive after strategy and plan
     case "$phase" in
-        brainstorm)          echo "flux-drive" ;;
+        brainstorm)          echo "flux-review" ;;
         brainstorm-reviewed) echo "strategy" ;;
         strategized)         echo "flux-drive" ;;
         strategy-reviewed)   echo "write-plan" ;;
