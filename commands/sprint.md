@@ -91,7 +91,7 @@ Display: `Autonomy: Tier $autonomy_tier`. Pass tier to sub-commands via `CLAVAIN
 
 **Tier 3 routing:** Full workflow with all three review gates interactive (AskUserQuestion at each).
 
-**Note:** All tiers run all three flux-drive reviews unconditionally. We need more sprint data before introducing skip logic — interspect captures findings per phase and complexity, so review-skip thresholds can be calibrated once we have enough evidence.
+**Note:** All tiers run all reviews unconditionally until calibration fires. Each review records a `review_phase_outcome` event to interspect (phase, complexity, severity counts, agent count). When >= 20 events per phase exist, `_interspect_auto_calibrate` writes `review-phase-calibration.yaml` with tier-skip thresholds. The sprint reads this file to decide whether to skip or lighten reviews for low-complexity tiers.
 
 `--from-step` always overrides complexity routing. `--autonomy=<tier>` overrides tier. `bd set-state <bead> manual_pause true` forces pause at next checkpoint regardless of tier.
 
@@ -176,6 +176,14 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 
 After passing: set `phase=brainstorm-reviewed`.
 
+Record review outcome for calibration (silent, skip on error):
+```bash
+_review_outcome='{"phase":"brainstorm","complexity":'$complexity',"review_type":"flux-review","p0":'${p0_count:-0}',"p1":'${p1_count:-0}',"p2":'${p2_count:-0}',"agents":'${agent_count:-0}'}'
+if type -t _interspect_insert_evidence &>/dev/null; then
+    _interspect_insert_evidence "${CLAUDE_SESSION_ID:-unknown}" "sprint" "review_phase_outcome" "" "$_review_outcome" "sprint-review-calibration" 2>/dev/null || true
+fi
+```
+
 ## Step 2: Strategize
 
 ### 2a: Generate strategy
@@ -209,6 +217,8 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 - **Tier 3:** AskUserQuestion with findings. Wait for explicit approval.
 
 After passing: set `phase=strategy-reviewed`.
+
+Record review outcome (same pattern as Step 1c, with `"phase":"strategy","review_type":"flux-drive"`).
 
 ## Step 3: Write Plan
 
@@ -249,6 +259,8 @@ plan_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || p
 - **Tier 3:** AskUserQuestion with findings. Wait for explicit approval.
 
 After passing: set `phase=plan-reviewed`.
+
+Record review outcome (same pattern as Step 1c, with `"phase":"plan","review_type":"flux-drive"`).
 
 ### 4d: Strategic intent validation (rsj.1.5)
 
