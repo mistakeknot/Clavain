@@ -66,9 +66,9 @@ Determine the autonomy tier from complexity (or `--autonomy=<1|2|3>` override, o
 
 | Tier | Complexity | Behavior |
 |------|-----------|----------|
-| **1** | C1-C2 | **Full auto.** Skip brainstorm/strategy reviews, auto-approve plan review if no P0/P1, auto-advance all steps. Only gate: quality-gates FAIL pauses. |
-| **2** | C3 | **Two checkpoints.** Run brainstorm/strategy reviews but auto-approve if no P0/P1. Pause after plan review for user confirmation. Auto-advance execute → ship. |
-| **3** | C4-C5 | **Interactive.** All AskUserQuestion checkpoints active at all three review gates (current behavior). |
+| **1** | C1-C2 | **Full auto.** All three flux-drive reviews run. Auto-approve all reviews if no P0/P1, auto-advance all steps. Only gate: quality-gates FAIL pauses. |
+| **2** | C3 | **Two checkpoints.** All three flux-drive reviews run. Auto-approve brainstorm/strategy reviews if no P0/P1. Pause after plan review for user confirmation. Auto-advance execute → ship. |
+| **3** | C4-C5 | **Interactive.** All three flux-drive reviews run. All AskUserQuestion checkpoints active at all three review gates. |
 
 ```bash
 autonomy_override=$(bd state "$CLAVAIN_BEAD_ID" autonomy_tier 2>/dev/null) || autonomy_override=""
@@ -85,11 +85,13 @@ fi
 
 Display: `Autonomy: Tier $autonomy_tier`. Pass tier to sub-commands via `CLAVAIN_AUTONOMY_TIER=$autonomy_tier`.
 
-**Tier 1 routing:** Skip brainstorm (Phase 0 detects clear requirements → jump to Step 3). Skip all three flux-drive review gates. If brainstorm is needed (ambiguous), escalate to Tier 2.
+**Tier 1 routing:** Skip brainstorm (Phase 0 detects clear requirements → jump to Step 3). All flux-drive reviews still run — auto-approve if no P0/P1. If brainstorm is needed (ambiguous), escalate to Tier 2.
 
-**Tier 2 routing:** Standard workflow with all three flux-drive reviews. Auto-approve brainstorm and strategy reviews if no P0/P1. Pause after plan review (Step 4) for user confirmation. Auto-advance execute → ship.
+**Tier 2 routing:** Standard workflow. All three flux-drive reviews run. Auto-approve brainstorm/strategy reviews if no P0/P1. Pause after plan review (Step 4) for user confirmation. Auto-advance execute → ship.
 
 **Tier 3 routing:** Full workflow with all three review gates interactive (AskUserQuestion at each).
+
+**Note:** All tiers run all three flux-drive reviews unconditionally. We need more sprint data before introducing skip logic — interspect captures findings per phase and complexity, so review-skip thresholds can be calibrated once we have enough evidence.
 
 `--from-step` always overrides complexity routing. `--autonomy=<tier>` overrides tier. `bd set-state <bead> manual_pause true` forces pause at next checkpoint regardless of tier.
 
@@ -119,7 +121,7 @@ On non-zero exit, parse `reason_type="${pause_reason%%|*}"`:
 
 Display at each advance: `Phase: <current> → <next> (auto-advancing)`. No "what next?" prompts unless pause triggered, step fails, or tier requires a checkpoint at this step.
 
-**Tier-aware checkpoints:** Tier 1 pauses only on `gate_blocked` (quality-gates FAIL) — skips all three flux-drive review gates. Tier 2 auto-approves brainstorm/strategy reviews (Steps 1b, 2b) if no P0/P1, pauses after plan review (Step 4). Tier 3 preserves all AskUserQuestion calls at all three review gates.
+**Tier-aware checkpoints:** All tiers run all three flux-drive reviews. Tier 1 auto-approves all reviews if no P0/P1, pauses only on `gate_blocked` (quality-gates FAIL). Tier 2 auto-approves brainstorm/strategy reviews (Steps 1b, 2b) if no P0/P1, pauses after plan review (Step 4). Tier 3 preserves all AskUserQuestion calls at all three review gates.
 
 ## Phase Tracking
 
@@ -193,7 +195,7 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 
 ### 1c: Tier-aware checkpoint
 
-- **Tier 1:** Skip review entirely (1b and 1c). Proceed to Step 2 immediately.
+- **Tier 1:** Auto-approve if no P0/P1 findings. Proceed to Step 2 immediately.
 - **Tier 2:** Auto-approve if no P0/P1 findings. Proceed to Step 2 immediately.
 - **Tier 3:** AskUserQuestion with findings. Wait for explicit approval.
 
@@ -227,7 +229,7 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 
 ### 2c: Tier-aware checkpoint
 
-- **Tier 1:** Skip review entirely (2b and 2c). Proceed to Step 3 immediately.
+- **Tier 1:** Auto-approve if no P0/P1 findings. Proceed to Step 3 immediately.
 - **Tier 2:** Auto-approve if no P0/P1 findings. Proceed to Step 3 immediately.
 - **Tier 3:** AskUserQuestion with findings. Wait for explicit approval.
 
