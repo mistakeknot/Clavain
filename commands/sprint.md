@@ -136,34 +136,9 @@ Pass artifact path when one exists; empty string otherwise (quality-gates, ship)
 
 ### Provenance Recording (rsj.1.7)
 
-After each artifact write, record its provenance vector — the chain of inputs that produced it. This enables backward tracing (stemma) when debugging failures.
+After each artifact write, record its provenance vector via `bd set-state "$CLAVAIN_BEAD_ID" "provenance_<type>=<json>"`. JSON has: session, bead, step, inputs (comma-separated artifact types consumed), output (path), ts (epoch).
 
-```bash
-# Gather input artifact paths for this step
-input_artifacts=""  # comma-separated list of artifact types this step consumed
-# Step 1a (brainstorm): inputs="" (no prior artifacts)
-# Step 1b (brainstorm-review): inputs="brainstorm"
-# Step 2a (strategy): inputs="brainstorm"
-# Step 2b (strategy-review): inputs="prd"
-# Step 3 (plan): inputs="brainstorm,prd"
-# Step 4 (review): inputs="plan"
-# Step 5 (execute): inputs="plan"
-# Step 6 (test): inputs="" (tests current code state)
-# Step 7 (quality): inputs="test-pass-sha"
-# Step 10 (ship): inputs="test-pass-sha"
-
-provenance_json=$(jq -n \
-    --arg session "${CLAUDE_SESSION_ID:-unknown}" \
-    --arg bead "$CLAVAIN_BEAD_ID" \
-    --arg step "<step_name>" \
-    --arg inputs "$input_artifacts" \
-    --arg output "<artifact_path>" \
-    --arg ts "$(date +%s)" \
-    '{session:$session, bead:$bead, step:$step, inputs:($inputs|split(",")|map(select(.!=""))), output:$output, ts:($ts|tonumber)}')
-bd set-state "$CLAVAIN_BEAD_ID" "provenance_<artifact_type>=$provenance_json" 2>/dev/null || true
-```
-
-The provenance DAG can be walked backward via: `bd state <bead> provenance_<type>` → read `inputs[]` → resolve each input's provenance → recurse.
+**Input map:** brainstorm→"", brainstorm-review→"brainstorm", strategy→"brainstorm", strategy-review→"prd", plan→"brainstorm,prd", review→"plan", execute→"plan", test→"", quality→"test-pass-sha", ship→"test-pass-sha".
 
 ---
 
@@ -375,45 +350,7 @@ After resolving: if quality-gates found recurring patterns, run `/clavain:compou
 
 ### 9a: Decomposition quality actuals (rsj.1.9.1)
 
-Before running /reflect, collect decomposition actuals for calibration. This is stage 2 (collect actuals — outcome side) of the closed-loop pattern.
-
-```bash
-# Check if this bead has a decomposition prediction (was it an epic with children?)
-decomp_pred=$(bd state "$CLAVAIN_BEAD_ID" decomp_prediction 2>/dev/null) || decomp_pred=""
-if [[ -n "$decomp_pred" ]]; then
-    # Collect actuals
-    actual_children=$(bd children "$CLAVAIN_BEAD_ID" --json 2>/dev/null | jq 'length' 2>/dev/null) || actual_children=0
-    closed_children=$(bd children "$CLAVAIN_BEAD_ID" --json 2>/dev/null | jq '[.[] | select(.status=="closed")] | length' 2>/dev/null) || closed_children=0
-    deferred_children=$(bd children "$CLAVAIN_BEAD_ID" --json 2>/dev/null | jq '[.[] | select(.status=="deferred")] | length' 2>/dev/null) || deferred_children=0
-    predicted_children=$(echo "$decomp_pred" | jq -r '.predicted_children' 2>/dev/null) || predicted_children=0
-
-    # Re-planning events: children created AFTER the prediction timestamp
-    pred_ts=$(echo "$decomp_pred" | jq -r '.ts' 2>/dev/null) || pred_ts=0
-    replanned=$(bd children "$CLAVAIN_BEAD_ID" --json 2>/dev/null | jq --argjson ts "$pred_ts" '[.[] | select((.created_at // 0) > ($ts * 1000))] | length' 2>/dev/null) || replanned=0
-
-    decomp_actual=$(jq -n \
-        --arg bead "$CLAVAIN_BEAD_ID" \
-        --arg session "${CLAUDE_SESSION_ID:-unknown}" \
-        --argjson predicted "$predicted_children" \
-        --argjson actual "$actual_children" \
-        --argjson closed "$closed_children" \
-        --argjson deferred "$deferred_children" \
-        --argjson replanned "$replanned" \
-        --arg ts "$(date +%s)" \
-        '{bead:$bead, session:$session, predicted_children:$predicted, actual_children:$actual, closed:$closed, deferred:$deferred, replanned:$replanned, completion_rate:(if $actual>0 then ($closed/$actual) else 0 end), prediction_accuracy:(if $predicted>0 then (1-((($actual-$predicted)|fabs)/$predicted)) else 0 end), ts:($ts|tonumber)}')
-    bd set-state "$CLAVAIN_BEAD_ID" "decomp_actual=$decomp_actual" 2>/dev/null || true
-
-    # Record to interspect evidence for cross-sprint aggregation
-    if type -t _interspect_insert_evidence &>/dev/null; then
-        _interspect_insert_evidence \
-            "${CLAUDE_SESSION_ID:-unknown}" "sprint" "decomposition_outcome" \
-            "" "$decomp_actual" "decomp-quality" \
-            2>/dev/null || true
-    fi
-fi
-```
-
-Calibration (stage 3) auto-triggers when interspect has >= 30 `decomposition_outcome` events. Until then, defaults apply.
+If bead has `decomp_prediction` state (epic with children), collect actuals for calibration. Read `bd children` to get actual/closed/deferred counts. Count re-planning events (children created after prediction timestamp). Compute `completion_rate` and `prediction_accuracy`. Store as `decomp_actual` on bead state. Record to interspect evidence (`decomposition_outcome` type) for cross-sprint aggregation. Calibration auto-triggers at >= 30 events.
 
 ### 9b: Reflect
 

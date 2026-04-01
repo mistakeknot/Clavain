@@ -236,7 +236,9 @@ clavain-cli advance-phase "<feature_bead_id>" "strategized" "PRD: <prd_path>" ""
 
 ## Phase 4: Validate
 
-`/interflux:flux-drive docs/prds/YYYY-MM-DD-<topic>.md` — catches scope creep, missing AC, architectural risks.
+**Inside sprint** (`bd state "$CLAVAIN_BEAD_ID" sprint` == `"true"`): **Skip this phase.** The sprint orchestrator runs its own flux-drive review at Step 2b — running it here would duplicate the review (~60-200K tokens wasted). Advance directly to Phase 5.
+
+**Standalone** (no sprint): `/interflux:flux-drive docs/prds/YYYY-MM-DD-<topic>.md` — catches scope creep, missing AC, architectural risks.
 
 ## Phase 5: Handoff (Terminal)
 

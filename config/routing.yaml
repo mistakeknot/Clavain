@@ -42,9 +42,14 @@ subagents:
       categories:
         # Research agents stay cheap even during brainstorm
         research: haiku
+        # Review agents (flux-drive Step 1b) do structured analysis, not creative thinking
+        review: sonnet
+        synthesis: haiku
     brainstorm-reviewed:
       model: sonnet
     strategized:
+      model: sonnet
+    strategy-reviewed:
       model: sonnet
     planned:
       model: sonnet
