@@ -166,6 +166,15 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 [[ "$remaining" -gt 0 ]] && export FLUX_BUDGET_REMAINING="$remaining"
 ```
 
+Display running cost (silent on failure, applies to all subsequent budget context blocks too):
+```bash
+_interstat_cost_script="${INTERSTAT_ROOT:-$HOME/projects/Sylveste/interverse/interstat}/scripts/cost-query.sh"
+if [[ -f "$_interstat_cost_script" ]]; then
+    _scj=$(bash "$_interstat_cost_script" session-cost 2>/dev/null) || _scj=""
+    [[ -n "$_scj" ]] && echo "Session cost so far: \$$(echo "$_scj" | jq -r '.[0].cost_usd // "?"' 2>/dev/null) USD"
+fi
+```
+
 `/interflux:flux-review $brainstorm_path --quality=balanced` — multi-track deep review (4 tracks for brainstorms: adjacent + orthogonal + distant + esoteric). The brainstorm sets the direction for everything downstream — catching scope creep, missing constraints, implicit assumptions, and blind spots here prevents compounding errors in the PRD and plan.
 
 ### 1c: Tier-aware checkpoint
@@ -178,7 +187,17 @@ After passing: set `phase=brainstorm-reviewed`.
 
 Record review outcome for calibration (silent, skip on error):
 ```bash
-_review_outcome='{"phase":"brainstorm","complexity":'$complexity',"review_type":"flux-review","p0":'${p0_count:-0}',"p1":'${p1_count:-0}',"p2":'${p2_count:-0}',"agents":'${agent_count:-0}'}'
+# Query session token cost for this review (from interstat)
+_review_tokens=0; _review_cost_usd="0"
+_interstat_cost_script="${INTERSTAT_ROOT:-$HOME/projects/Sylveste/interverse/interstat}/scripts/cost-query.sh"
+if [[ -f "$_interstat_cost_script" ]]; then
+    _cost_json=$(bash "$_interstat_cost_script" session-cost --session="${CLAUDE_SESSION_ID:-}" 2>/dev/null) || _cost_json=""
+    if [[ -n "$_cost_json" ]]; then
+        _review_tokens=$(echo "$_cost_json" | jq -r '.[0].total_tokens // 0' 2>/dev/null) || _review_tokens=0
+        _review_cost_usd=$(echo "$_cost_json" | jq -r '.[0].cost_usd // 0' 2>/dev/null) || _review_cost_usd="0"
+    fi
+fi
+_review_outcome='{"phase":"brainstorm","complexity":'$complexity',"review_type":"flux-review","p0":'${p0_count:-0}',"p1":'${p1_count:-0}',"p2":'${p2_count:-0}',"agents":'${agent_count:-0}',"tokens":'${_review_tokens}',"cost_usd":'${_review_cost_usd}'}'
 if type -t _interspect_insert_evidence &>/dev/null; then
     _interspect_insert_evidence "${CLAUDE_SESSION_ID:-unknown}" "sprint" "review_phase_outcome" "" "$_review_outcome" "sprint-review-calibration" 2>/dev/null || true
 fi
@@ -218,7 +237,7 @@ remaining=$(clavain-cli sprint-budget-remaining "$CLAVAIN_BEAD_ID")
 
 After passing: set `phase=strategy-reviewed`.
 
-Record review outcome (same pattern as Step 1c, with `"phase":"strategy","review_type":"flux-drive"`).
+Record review outcome (same pattern as Step 1c, with `"phase":"strategy","review_type":"flux-drive"`, including `tokens` and `cost_usd` from session-cost query).
 
 ## Step 3: Write Plan
 
@@ -260,7 +279,7 @@ plan_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || p
 
 After passing: set `phase=plan-reviewed`.
 
-Record review outcome (same pattern as Step 1c, with `"phase":"plan","review_type":"flux-drive"`).
+Record review outcome (same pattern as Step 1c, with `"phase":"plan","review_type":"flux-drive"`, including `tokens` and `cost_usd` from session-cost query).
 
 ### 4d: Strategic intent validation (rsj.1.5)
 
@@ -403,12 +422,26 @@ swept=$(clavain-cli close-children "$CLAVAIN_BEAD_ID" "Shipped with parent epic 
 [[ "$swept" -gt 0 ]] && echo "Auto-closed $swept child beads"
 ```
 
+Session cost (from interstat, silent on failure):
+```bash
+_session_cost=""
+_interstat_cost_script=""
+_c="${CLAUDE_PLUGIN_ROOT}/../interstat/scripts/cost-query.sh"
+[[ -f "$_c" ]] && _interstat_cost_script="$_c"
+[[ -z "$_interstat_cost_script" && -n "${CLAVAIN_SOURCE_DIR:-}" ]] && _c="${CLAVAIN_SOURCE_DIR}/../../interverse/interstat/scripts/cost-query.sh" && [[ -f "$_c" ]] && _interstat_cost_script="$_c"
+if [[ -n "$_interstat_cost_script" ]]; then
+    _scj=$(bash "$_interstat_cost_script" session-cost 2>/dev/null) || _scj=""
+    [[ -n "$_scj" ]] && _session_cost=$(echo "$_scj" | jq -r '.[0].cost_usd // ""' 2>/dev/null) || _session_cost=""
+fi
+```
+
 Sprint summary:
 ```
 Sprint Summary:
 - Bead: <CLAVAIN_BEAD_ID>
 - Steps completed: <n>/10
 - Budget: <tokens_spent>k / <token_budget>k (<percentage>%)
+- Session cost: $<_session_cost> USD (from interstat session-cost)
 - Agents dispatched: <count>
 - Verdicts: <verdict_count_by_status output>
 - Estimated tokens: <verdict_total_tokens output>
