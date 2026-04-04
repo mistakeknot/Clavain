@@ -162,9 +162,30 @@ dispatch_rescore() {
         pressure_penalty=$(( (review_depth - DISPATCH_REVIEW_PRESSURE_THRESHOLD) * 5 ))
     fi
 
+    # Bulk-fetch Ockham offsets once per dispatch cycle (not per-bead)
+    declare -A _ockham_offsets
+    if intercore_available 2>/dev/null; then
+        local _ock_scope _ock_val
+        while IFS= read -r _ock_scope; do
+            [[ -z "$_ock_scope" ]] && continue
+            _ock_val=$(intercore_state_get "ockham_offset" "$_ock_scope") || continue
+            # Extract numeric offset — may be bare int or JSON {"offset":N}
+            if [[ "$_ock_val" =~ ^-?[0-9]+$ ]]; then
+                : # already numeric
+            else
+                _ock_val=$(echo "$_ock_val" | jq -r '.offset // 0' 2>/dev/null) || _ock_val=0
+            fi
+            [[ "$_ock_val" =~ ^-?[0-9]+$ ]] || _ock_val=0
+            # Clamp to [-6, +6] (defense in depth — Ockham clamps at write, dispatch clamps at read)
+            (( _ock_val > 6 )) && _ock_val=6
+            (( _ock_val < -6 )) && _ock_val=-6
+            _ockham_offsets["$_ock_scope"]=$_ock_val
+        done < <("$INTERCORE_BIN" state list ockham_offset 2>/dev/null || true)
+    fi
+
     # Check deps for each bead and add perturbation
     local result="[]"
-    local i bead_id score deps_ok deps_json perturbation adjusted_score
+    local i bead_id score deps_ok deps_json perturbation adjusted_score _ock_off
     for (( i=0; i<count; i++ )); do
         bead_id=$(echo "$filtered" | jq -r ".[$i].id" 2>/dev/null) || continue
         score=$(echo "$filtered" | jq -r ".[$i].score // 0" 2>/dev/null) || score=0
@@ -200,17 +221,24 @@ dispatch_rescore() {
             fi
         fi
 
+        # Ockham offset: apply governor weight adjustment (missing → 0, fail-open)
+        _ock_off=${_ockham_offsets[$bead_id]:-0}
+
         # Add random perturbation (0-5) for tie-breaking, subtract review pressure
         perturbation=$(( RANDOM % 6 ))
-        adjusted_score=$(( score + perturbation - pressure_penalty ))
+        adjusted_score=$(( score + _ock_off + perturbation - pressure_penalty ))
         # Floor at 1 — still claimable, just deprioritized
         (( adjusted_score < 1 )) && adjusted_score=1
+
+        # Log scoring breakdown per bead (raw_score, ockham_offset, final_score)
+        dispatch_log "$session_id" "$bead_id" "$adjusted_score" "scored:raw=$score,offset=$_ock_off,final=$adjusted_score"
 
         result=$(echo "$result" | jq \
             --arg id "$bead_id" \
             --argjson score "$adjusted_score" \
             --argjson orig "$score" \
-            '. + [{"id": $id, "score": $score, "orig_score": $orig}]' 2>/dev/null) || continue
+            --argjson offset "$_ock_off" \
+            '. + [{"id": $id, "score": $score, "orig_score": $orig, "ockham_offset": $offset}]' 2>/dev/null) || continue
     done
 
     # Sort by score DESC
