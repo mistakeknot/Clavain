@@ -126,6 +126,18 @@ using_clavain_escaped=$(escape_for_json "$using_clavain_content")
 companion_list=""
 companion_context=""
 
+# Ockham governor health check — 5-minute TTL sentinel (matches bd doctor pattern)
+if command -v ockham &>/dev/null; then
+    _ock_sentinel="$HOME/.config/ockham/.check-ttl"
+    _ock_age=999
+    [[ -f "$_ock_sentinel" ]] && _ock_age=$(( $(date +%s) - $(stat -c %Y "$_ock_sentinel" 2>/dev/null || echo 0) ))
+    if [[ "$_ock_age" -gt 300 ]]; then
+        ockham check 2>/dev/null || true
+        mkdir -p "$(dirname "$_ock_sentinel")" 2>/dev/null || true
+        touch "$_ock_sentinel" 2>/dev/null || true
+    fi
+fi
+
 # Beads
 if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     companion_list="${companion_list}beads,"
