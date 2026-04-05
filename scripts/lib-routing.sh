@@ -43,6 +43,8 @@ declare -g _ROUTING_CAL_MODE=""                   # shadow | enforce (from routi
 
 # --- Safety floor cache (from agent-roles.yaml) ---
 declare -gA _ROUTING_SF_AGENT_MIN=()             # [agent_name]=min_model
+declare -gA _ROUTING_SF_AGENT_DOMAIN_CX=()       # [agent_name]=low|medium|high
+declare -gA _ROUTING_SF_AGENT_MAX_MODEL=()       # [agent_name]=haiku|sonnet|opus (empty if no ceiling)
 
 # --- Model tier ordering for safety floor comparison ---
 # Returns numeric tier: haiku=1, sonnet=2, opus=3. Unknown=0.
@@ -88,6 +90,21 @@ _routing_apply_safety_floor() {
 
   echo "$model"
   return 0
+}
+
+# --- Downgrade model one tier ---
+# Usage: _routing_downgrade <model>
+# Returns next lower tier. haiku stays haiku. Empty/unknown preserved or defaults to haiku.
+_routing_downgrade() {
+  case "${1:-}" in
+    opus)               echo "sonnet" ;;
+    sonnet)             echo "haiku" ;;
+    haiku)              echo "haiku" ;;
+    local:qwen3-30b)    echo "local:qwen3-8b" ;;  # Track B5
+    local:qwen2.5-72b)  echo "local:qwen3-8b" ;;  # Track B5
+    local:qwen3-8b)     echo "local:qwen3-8b" ;;  # Track B5: already lowest
+    *)                  echo "${1:-haiku}" ;;       # unknown → preserve or default
+  esac
 }
 
 # --- Find routing.yaml ---
@@ -428,15 +445,15 @@ _routing_load_cache() {
   local roles_path
   roles_path="$(_routing_find_roles_config)" || roles_path=""
   if [[ -n "$roles_path" && -f "$roles_path" ]]; then
-    local current_min="" in_agents=0
+    local current_min="" current_domain_cx="" current_max_model="" in_agents=0
     while IFS= read -r line || [[ -n "$line" ]]; do
       # Strip comments and trailing whitespace
       line="${line%%#*}"
       [[ -z "${line// /}" ]] && continue
 
-      # Role name (2-space indent, not 4+)
+      # Role name (2-space indent, not 4+) — reset all tracked fields
       if [[ "$line" =~ ^[[:space:]]{2}[a-z] && ! "$line" =~ ^[[:space:]]{4} ]]; then
-        current_min=""
+        current_min="" current_domain_cx="" current_max_model=""
         in_agents=0
         continue
       fi
@@ -449,20 +466,36 @@ _routing_load_cache() {
         continue
       fi
 
+      # domain_complexity field
+      if [[ "$line" =~ ^[[:space:]]+domain_complexity:[[:space:]]* ]]; then
+        current_domain_cx="${line#*domain_complexity:}"
+        current_domain_cx="${current_domain_cx#"${current_domain_cx%%[![:space:]]*}"}"
+        current_domain_cx="${current_domain_cx%"${current_domain_cx##*[![:space:]]}"}"
+        continue
+      fi
+
+      # max_model field
+      if [[ "$line" =~ ^[[:space:]]+max_model:[[:space:]]* ]]; then
+        current_max_model="${line#*max_model:}"
+        current_max_model="${current_max_model#"${current_max_model%%[![:space:]]*}"}"
+        current_max_model="${current_max_model%"${current_max_model##*[![:space:]]}"}"
+        continue
+      fi
+
       # agents: list header (exact match to avoid agents_count: etc.)
       if [[ "$line" =~ ^[[:space:]]+agents:[[:space:]]*$ ]]; then
         in_agents=1
         continue
       fi
 
-      # Agent list item (- agent_name)
+      # Agent list item (- agent_name) — populate all three arrays
       if [[ $in_agents -eq 1 && "$line" =~ ^[[:space:]]+-[[:space:]] ]]; then
         local agent_name="${line#*- }"
         agent_name="${agent_name#"${agent_name%%[![:space:]]*}"}"
         agent_name="${agent_name%"${agent_name##*[![:space:]]}"}"
-        if [[ -n "$current_min" && -n "$agent_name" ]]; then
-          _ROUTING_SF_AGENT_MIN["$agent_name"]="$current_min"
-        fi
+        [[ -n "$current_min" && -n "$agent_name" ]] && _ROUTING_SF_AGENT_MIN["$agent_name"]="$current_min"
+        [[ -n "$current_domain_cx" && -n "$agent_name" ]] && _ROUTING_SF_AGENT_DOMAIN_CX["$agent_name"]="$current_domain_cx"
+        [[ -n "$current_max_model" && -n "$agent_name" ]] && _ROUTING_SF_AGENT_MAX_MODEL["$agent_name"]="$current_max_model"
         continue
       fi
 
@@ -474,6 +507,80 @@ _routing_load_cache() {
   fi
 
   _ROUTING_CACHE_POPULATED=1
+}
+
+# --- Look up agent field from pre-populated cache ---
+# Usage: _routing_agent_field <agent> <field>
+# Fields: min_model, domain_complexity, max_model
+_routing_agent_field() {
+  local agent="${1:-}" field="${2:-}"
+  [[ -z "$agent" ]] && return 0
+  # Strip namespace prefix
+  [[ "$agent" == *:* ]] && agent="${agent##*:}"
+  case "$field" in
+    min_model)          echo "${_ROUTING_SF_AGENT_MIN[$agent]:-}" ;;
+    domain_complexity)  echo "${_ROUTING_SF_AGENT_DOMAIN_CX[$agent]:-}" ;;
+    max_model)          echo "${_ROUTING_SF_AGENT_MAX_MODEL[$agent]:-}" ;;
+    *)                  echo "" ;;
+  esac
+}
+
+# --- Adjust expansion pool agent model tier ---
+# Usage: routing_adjust_expansion_tier <agent> <current_model> <expansion_score> <budget_pressure>
+# Pipeline: score adjust → budget pressure → constitutional floor → safety floor → validate
+# budget_pressure: "low" | "medium" | "high"
+# Returns: adjusted model name
+routing_adjust_expansion_tier() {
+  local agent="$1" model="$2" score="${3:-2}" pressure="${4:-low}"
+
+  # 1. Score-based tier adjustment
+  case "$score" in
+    3) # Strong evidence — upgrade haiku checkers if no max_model ceiling blocks it
+       local max_ceil; max_ceil=$(_routing_agent_field "$agent" "max_model")
+       if [[ "$model" == "haiku" || "$model" == "local:qwen3-8b" ]]; then
+         if [[ -z "$max_ceil" || "$(_routing_model_tier "$max_ceil")" -ge 2 ]]; then
+           model="sonnet"
+         fi
+       fi
+       ;;
+    2) ;; # Moderate evidence — keep model
+    1) # Weak evidence — downgrade unless domain_complexity is high
+       local dom_cx; dom_cx=$(_routing_agent_field "$agent" "domain_complexity")
+       if [[ "${dom_cx:-low}" != "high" ]]; then
+         model=$(_routing_downgrade "$model")
+       fi
+       ;;
+    0) model="haiku" ;; # Should not reach dispatch
+    *) ;; # Invalid score — keep model
+  esac
+
+  # 2. Budget pressure (applied after score, before floors)
+  if [[ "$pressure" == "high" ]]; then
+    model=$(_routing_downgrade "$model")
+  fi
+
+  # 3. Constitutional floor from agent-roles.yaml
+  local const_floor; const_floor=$(_routing_agent_field "$agent" "min_model")
+  if [[ -n "$const_floor" ]]; then
+    local m_tier f_tier
+    m_tier=$(_routing_model_tier "$model")
+    f_tier=$(_routing_model_tier "$const_floor")
+    [[ $m_tier -lt $f_tier ]] && model="$const_floor"
+  fi
+
+  # 4. INVARIANT: empty model guard — default to haiku before safety floor
+  [[ -n "$model" ]] || model="haiku"
+
+  # 5. Safety floor (ALWAYS LAST — non-negotiable)
+  model=$(_routing_apply_safety_floor "$agent" "$model" "expansion")
+
+  # 6. Final validation
+  if [[ ! "$model" =~ ^(haiku|sonnet|opus|local:.+)$ ]]; then
+    echo "[routing] WARN: adjust returned invalid '$model' for $agent, falling back to $2" >&2
+    model="$2"
+  fi
+
+  echo "$model"
 }
 
 # --- B3: Read interspect routing calibration (not cached — read fresh each call) ---
