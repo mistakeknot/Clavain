@@ -536,9 +536,12 @@ routing_adjust_expansion_tier() {
   # 1. Score-based tier adjustment
   case "$score" in
     3) # Strong evidence — upgrade haiku checkers if no max_model ceiling blocks it
-       local max_ceil; max_ceil=$(_routing_agent_field "$agent" "max_model")
+       local max_ceil max_ceil_tier
+       max_ceil=$(_routing_agent_field "$agent" "max_model")
+       max_ceil_tier=$(_routing_model_tier "${max_ceil:-}")
        if [[ "$model" == "haiku" || "$model" == "local:qwen3-8b" ]]; then
-         if [[ -z "$max_ceil" || "$(_routing_model_tier "$max_ceil")" -ge 2 ]]; then
+         # Empty ceiling or unknown ceiling (tier=0) → no ceiling enforced
+         if [[ -z "$max_ceil" || $max_ceil_tier -eq 0 || $max_ceil_tier -ge 2 ]]; then
            model="sonnet"
          fi
        fi
@@ -578,6 +581,8 @@ routing_adjust_expansion_tier() {
   if [[ ! "$model" =~ ^(haiku|sonnet|opus|local:.+)$ ]]; then
     echo "[routing] WARN: adjust returned invalid '$model' for $agent, falling back to $2" >&2
     model="$2"
+    # Re-apply safety floor on fallback — $2 hasn't been through the floor check
+    model=$(_routing_apply_safety_floor "$agent" "$model" "expansion-fallback")
   fi
 
   echo "$model"
