@@ -13,6 +13,10 @@
 #   routing_classify_complexity --prompt-tokens <n> [--file-count <n>] [--reasoning-depth <n>]
 #   routing_resolve_model_complex --complexity <tier> [--phase ...] [--category ...] [--agent ...]
 #   routing_resolve_dispatch_tier_complex --complexity <tier> <tier-name>
+#
+# Track B5 (local model routing) is integrated into routing_resolve_model_complex.
+# In shadow mode: logs [B5-shadow] to stderr. In enforce: returns local model.
+# Config: local_models section of routing.yaml. Env: INTERFERE_ROUTING_MODE.
 
 # Guard: only load once per shell process
 [[ -n "${_ROUTING_LOADED:-}" ]] && return 0
@@ -41,6 +45,15 @@ declare -gA _ROUTING_CX_DISPATCH_TIER=()        # [C1..C5]=tier|inherit
 # --- B3: Calibration cache ---
 declare -g _ROUTING_CAL_MODE=""                   # shadow | enforce (from routing.yaml)
 
+# --- B5: Local model routing cache ---
+declare -g _ROUTING_B5_MODE=""                     # off | shadow | enforce
+declare -g _ROUTING_B5_ENDPOINT=""                 # e.g., http://localhost:8421
+declare -gA _ROUTING_B5_TIER_MAP=()               # [local:model]=tier (1/2/3)
+declare -gA _ROUTING_B5_CX_MODEL=()               # [C1..C5]=local:model
+declare -gA _ROUTING_B5_INELIGIBLE=()             # [agent]=1
+declare -g _ROUTING_B5_HEALTH_CACHE=""             # yes | no
+declare -g _ROUTING_B5_HEALTH_TIME=0               # epoch seconds of last check
+
 # --- Safety floor cache (from agent-roles.yaml) ---
 declare -gA _ROUTING_SF_AGENT_MIN=()             # [agent_name]=min_model
 declare -gA _ROUTING_SF_AGENT_DOMAIN_CX=()       # [agent_name]=low|medium|high
@@ -50,13 +63,19 @@ declare -gA _ROUTING_SF_AGENT_MAX_MODEL=()       # [agent_name]=haiku|sonnet|opu
 # Returns numeric tier: haiku=1, sonnet=2, opus=3. Unknown=0.
 _routing_model_tier() {
   case "${1:-}" in
-    haiku)              echo 1 ;;
-    local:qwen3-8b)     echo 1 ;;  # Track B5: haiku-equivalent
-    sonnet)             echo 2 ;;
-    local:qwen3-30b)    echo 2 ;;  # Track B5: sonnet-equivalent
-    local:qwen2.5-72b)  echo 2 ;;  # Track B5: sonnet-equivalent
-    opus)               echo 3 ;;
-    *)                  echo 0 ;;
+    haiku)                              echo 1 ;;
+    local:qwen3-8b)                     echo 1 ;;  # Track B5: legacy haiku-equivalent
+    local:qwen3.5-9b-4bit)              echo 1 ;;  # Track B5: draft model
+    sonnet)                             echo 2 ;;
+    local:qwen3-30b)                    echo 2 ;;  # Track B5: legacy sonnet-equivalent
+    local:qwen2.5-72b)                  echo 2 ;;  # Track B5: legacy sonnet-equivalent
+    local:qwen3.5-35b-a3b-4bit)         echo 2 ;;  # Track B5: MoE sonnet-equivalent
+    local:nemotron-30b-a3b-8bit)        echo 2 ;;  # Track B5: MoE sonnet-equivalent
+    opus)                               echo 3 ;;
+    local:qwen3.5-122b-a10b-4bit)       echo 3 ;;  # Track B5: MoE opus-equivalent
+    local:gpt-oss-120b-mxfp4)           echo 3 ;;  # Track B5: opus-equivalent
+    flash-moe:qwen3.5-397b)             echo 3 ;;  # Track B5: SSD-streamed opus-equivalent
+    *)                                  echo 0 ;;
   esac
 }
 
@@ -215,6 +234,10 @@ _routing_load_cache() {
     fi
     if [[ "$line" =~ ^calibration: ]]; then
       section="calibration"; subsection=""
+      continue
+    fi
+    if [[ "$line" =~ ^local_models: ]]; then
+      section="local_models"; subsection=""
       continue
     fi
     # Another top-level key — reset
@@ -423,6 +446,50 @@ _routing_load_cache() {
     fi
 
     # --- calibration section (B3) ---
+    # --- local_models section (Track B5) ---
+    if [[ "$section" == "local_models" ]]; then
+      # mode: off | shadow | enforce
+      if [[ "$line" =~ ^[[:space:]]{2}mode:[[:space:]]*(.+) ]]; then
+        _ROUTING_B5_MODE="${BASH_REMATCH[1]%%[[:space:]#]*}"
+        continue
+      fi
+      # endpoint: http://localhost:8421
+      if [[ "$line" =~ ^[[:space:]]{2}endpoint:[[:space:]]*\"?([^\"#]+)\"? ]]; then
+        _ROUTING_B5_ENDPOINT="${BASH_REMATCH[1]%%[[:space:]]*}"
+        continue
+      fi
+      # Subsections
+      if [[ "$line" =~ ^[[:space:]]{2}tier_mappings: ]]; then
+        subsection="b5_tiers"; continue
+      fi
+      if [[ "$line" =~ ^[[:space:]]{2}complexity_routing: ]]; then
+        subsection="b5_cx"; continue
+      fi
+      if [[ "$line" =~ ^[[:space:]]{2}ineligible_agents: ]]; then
+        subsection="b5_ineligible"; continue
+      fi
+      # Reset subsection on other 2-indent keys
+      if [[ "$line" =~ ^[[:space:]]{2}[a-z] && ! "$line" =~ ^[[:space:]]{4} ]]; then
+        subsection=""; continue
+      fi
+      # tier_mappings entries: "local:model": N
+      if [[ "$subsection" == "b5_tiers" && "$line" =~ ^[[:space:]]{4}\"?([^\":#]+)\"?:[[:space:]]*([0-9]+) ]]; then
+        _ROUTING_B5_TIER_MAP["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]%%[[:space:]#]*}"
+        continue
+      fi
+      # complexity_routing entries: C1: "local:model"
+      if [[ "$subsection" == "b5_cx" && "$line" =~ ^[[:space:]]{4}(C[0-9]+):[[:space:]]*\"?([^\"#]+)\"? ]]; then
+        _ROUTING_B5_CX_MODEL["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]%%[[:space:]]*}"
+        continue
+      fi
+      # ineligible_agents list items: - agent_name
+      if [[ "$subsection" == "b5_ineligible" && "$line" =~ ^[[:space:]]{4}-[[:space:]]+(.+) ]]; then
+        local inelig="${BASH_REMATCH[1]%%[[:space:]#]*}"
+        _ROUTING_B5_INELIGIBLE["$inelig"]=1
+        continue
+      fi
+    fi
+
     if [[ "$section" == "calibration" ]]; then
       if [[ "$line" =~ ^[[:space:]]{2}mode:[[:space:]]*(.+) ]]; then
         _ROUTING_CAL_MODE="${BASH_REMATCH[1]%%[[:space:]#]*}"
@@ -434,6 +501,11 @@ _routing_load_cache() {
   # Env override for calibration mode
   if [[ -n "${INTERSPECT_ROUTING_MODE:-}" ]]; then
     _ROUTING_CAL_MODE="$INTERSPECT_ROUTING_MODE"
+  fi
+
+  # Env override for B5 local model mode
+  if [[ -n "${INTERFERE_ROUTING_MODE:-}" ]]; then
+    _ROUTING_B5_MODE="$INTERFERE_ROUTING_MODE"
   fi
 
   # Warn if config exists but nothing was parsed (likely malformed)
@@ -674,6 +746,74 @@ _routing_read_override() {
   ' "$ovr_path" 2>/dev/null) || result=""
 
   [[ -n "$result" ]] && echo "$result"
+}
+
+# --- B5: Check interfer availability (cached) ---
+_routing_b5_available() {
+  [[ -z "$_ROUTING_B5_ENDPOINT" ]] && { echo "no"; return; }
+  local now
+  now=$(date +%s)
+  if (( now - _ROUTING_B5_HEALTH_TIME < 30 )); then
+    echo "$_ROUTING_B5_HEALTH_CACHE"
+    return
+  fi
+  if curl -sf --max-time 1 "${_ROUTING_B5_ENDPOINT}/health" >/dev/null 2>&1; then
+    _ROUTING_B5_HEALTH_CACHE="yes"
+  else
+    _ROUTING_B5_HEALTH_CACHE="no"
+  fi
+  _ROUTING_B5_HEALTH_TIME=$now
+  echo "$_ROUTING_B5_HEALTH_CACHE"
+}
+
+# --- B5: Resolve local model for a cloud model + complexity ---
+# Returns the local model that would serve this request, or empty string.
+# In shadow mode, logs to stderr and returns empty (caller uses cloud model).
+# In enforce mode, returns the local model (caller routes to interfer).
+_routing_b5_resolve() {
+  local cloud_model="$1" complexity="${2:-}" agent="${3:-}" phase="${4:-}"
+
+  # Quick exit: B5 not active
+  local mode="${_ROUTING_B5_MODE:-off}"
+  [[ "$mode" == "off" ]] && return 0
+
+  # Ineligible agent check
+  if [[ -n "$agent" && -n "${_ROUTING_B5_INELIGIBLE[$agent]:-}" ]]; then
+    if [[ "$mode" == "shadow" ]]; then
+      echo "[B5-shadow] ineligible: $agent (safety floor)" >&2
+    fi
+    return 0
+  fi
+
+  # Determine which local model would serve this
+  local local_model=""
+  if [[ -n "$complexity" && -n "${_ROUTING_B5_CX_MODEL[$complexity]:-}" ]]; then
+    local_model="${_ROUTING_B5_CX_MODEL[$complexity]}"
+  fi
+
+  # No local model for this complexity tier
+  if [[ -z "$local_model" ]]; then
+    return 0
+  fi
+
+  # Check interfer availability
+  local available
+  available=$(_routing_b5_available)
+  if [[ "$available" != "yes" ]]; then
+    if [[ "$mode" == "shadow" ]]; then
+      echo "[B5-shadow] unavailable: interfer not responding (would route $cloud_model → $local_model)" >&2
+    fi
+    return 0
+  fi
+
+  # Shadow mode: log and return empty (caller uses cloud)
+  if [[ "$mode" == "shadow" ]]; then
+    echo "[B5-shadow] would route locally: $cloud_model → $local_model (complexity=$complexity phase=$phase agent=$agent)" >&2
+    return 0
+  fi
+
+  # Enforce mode: return local model
+  echo "$local_model"
 }
 
 # --- Public: resolve subagent model ---
@@ -927,6 +1067,8 @@ routing_resolve_model_complex() {
     if [[ -n "$agent" && -n "$shadow_result" ]]; then
       shadow_result=$(_routing_apply_safety_floor "$agent" "$shadow_result" "routing_resolve_model_complex(shadow)")
     fi
+    # B5: check local model routing (shadow logs independently)
+    _routing_b5_resolve "$shadow_result" "$complexity" "$agent" "$phase" >/dev/null
     [[ -n "$shadow_result" ]] && echo "$shadow_result"
     return 0
   fi
@@ -938,6 +1080,13 @@ routing_resolve_model_complex() {
   # Safety floor: clamp up to min_model (post-complexity resolution)
   if [[ -n "$agent" && -n "$final_result" ]]; then
     final_result=$(_routing_apply_safety_floor "$agent" "$final_result" "routing_resolve_model_complex")
+  fi
+
+  # B5: attempt local model routing (enforce returns local model, shadow logs only)
+  local b5_result
+  b5_result=$(_routing_b5_resolve "$final_result" "$complexity" "$agent" "$phase")
+  if [[ -n "$b5_result" ]]; then
+    final_result="$b5_result"
   fi
 
   [[ -n "$final_result" ]] && echo "$final_result"

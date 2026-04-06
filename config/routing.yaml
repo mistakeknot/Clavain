@@ -204,19 +204,19 @@ delegation:
   # Categories below this get advisory-only routing even in enforce mode
   min_category_pass_rate: 0.70
 
-# Local model routing via interfere (Track B5)
+# Local model routing via interfer (Track B5)
 #
-# Routes eligible tasks to local MLX models served by the interfere plugin.
+# Routes eligible tasks to local MLX models served by the interfer plugin.
 # Complexity tiers map to local model tiers; confidence cascade escalates
 # to cloud when local model confidence is too low.
 #
 # mode:
 #   off     — No local routing. All tasks use cloud models. (default)
 #   shadow  — Log what would route locally, but use cloud models.
-#   enforce — Route eligible tasks to local models via interfere.
+#   enforce — Route eligible tasks to local models via interfer.
 #
 # Env override: INTERFERE_ROUTING_MODE=enforce
-# Escape hatch: set mode=off or stop the interfere server
+# Escape hatch: set mode=off or stop the interfer server
 local_models:
   mode: shadow  # Promoted from off 2026-03-26 (Sylveste-09n). Shadow logs what would route locally.
   endpoint: "http://localhost:8421"
@@ -228,13 +228,17 @@ local_models:
     "local:qwen3.5-9b-4bit": 1          # ~5GB, fast draft (mlx-community/Qwen3.5-9B-OptiQ-4bit)
     "local:qwen3.5-35b-a3b-4bit": 2     # ~18GB, MoE 3B active (Jackrong/MLX-Qwen3.5-35B-A3B-*-4bit)
     "local:nemotron-30b-a3b-8bit": 2     # ~32GB, MoE 3B active (mlx-community/Nemotron-Cascade-2-30B-A3B-8bit)
+    "local:qwen3.5-122b-a10b-4bit": 3   # ~65GB, MoE 10B active — benchmarked 2.99 tok/s, uses entire memory budget
     "local:gpt-oss-120b-mxfp4": 3        # ~60GB, largest that fits (mlx-community/gpt-oss-120b-MXFP4-Q8)
+    "flash-moe:qwen3.5-397b": 3          # SSD-streamed via flash-moe binary, ~1 tok/s, 6GB RAM
 
   # Complexity tier -> preferred local model
+  # Updated 2026-03-27 (sylveste-86r): use 35B MoE for C1/C2 (zero marginal cost,
+  # same speed as 9B thanks to 3B active params), 122B MoE for C3 (Clavain only).
   complexity_routing:
-    C1: "local:qwen3.5-9b-4bit"              # fast draft, ~60-80 tok/s
-    C2: "local:qwen3.5-35b-a3b-4bit"         # MoE sweet spot, ~40-50 tok/s
-    C3: "local:nemotron-30b-a3b-8bit"         # higher quality MoE, with confidence cascade
+    C1: "local:qwen3.5-35b-a3b-4bit"         # MoE 3B active, 88 tok/s — was 9B
+    C2: "local:qwen3.5-35b-a3b-4bit"         # same model, zero marginal cost
+    C3: "flash-moe:qwen3.5-397b"             # SSD-streamed, ~1 tok/s, quality=122B at 6GB RAM
 
   # Confidence cascade: if first-3-token avg probability < threshold, escalate
   confidence_cascade:

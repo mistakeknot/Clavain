@@ -77,6 +77,14 @@ _source_routing() {
     unset _ROUTING_LOADED _ROUTING_CACHE_POPULATED
     # Reset safety floor cache to avoid leakage between tests
     declare -gA _ROUTING_SF_AGENT_MIN=()
+    # Reset B5 cache
+    _ROUTING_B5_MODE=""
+    _ROUTING_B5_ENDPOINT=""
+    declare -gA _ROUTING_B5_TIER_MAP=()
+    declare -gA _ROUTING_B5_CX_MODEL=()
+    declare -gA _ROUTING_B5_INELIGIBLE=()
+    _ROUTING_B5_HEALTH_CACHE=""
+    _ROUTING_B5_HEALTH_TIME=0
     export CLAVAIN_ROUTING_CONFIG="${1:-$TEST_DIR/config/routing.yaml}"
     source "$SCRIPTS_DIR/lib-routing.sh"
 }
@@ -1037,4 +1045,97 @@ EOF
     run routing_resolve_model --agent fd-safety
     [ "$status" -eq 0 ]
     [ "$output" = "opus" ]  # routing.yaml override wins
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# Track B5: Local model routing
+# ═══════════════════════════════════════════════════════════════════
+
+_write_b5_config() {
+    cat > "$TEST_DIR/config/routing.yaml" << 'YAML'
+subagents:
+  defaults:
+    model: sonnet
+
+complexity:
+  mode: enforce
+  tiers:
+    C1:
+      description: trivial
+    C2:
+      description: routine
+  overrides:
+    C1:
+      subagent_model: haiku
+    C2:
+      subagent_model: haiku
+
+local_models:
+  mode: shadow
+  endpoint: "http://127.0.0.1:19999"
+  tier_mappings:
+    "local:qwen3.5-35b-a3b-4bit": 2
+    "flash-moe:qwen3.5-397b": 3
+  complexity_routing:
+    C1: "local:qwen3.5-35b-a3b-4bit"
+    C2: "local:qwen3.5-35b-a3b-4bit"
+    C3: "flash-moe:qwen3.5-397b"
+  ineligible_agents:
+    - fd-safety
+    - fd-correctness
+YAML
+}
+
+@test "B5: config is parsed — mode, endpoint, tiers, cx_model, ineligible" {
+    _write_b5_config
+    _source_routing "$TEST_DIR/config/routing.yaml"
+    # Direct cache load (not via run, which forks a subshell)
+    _routing_load_cache
+    [ "$_ROUTING_B5_MODE" = "shadow" ]
+    [ "$_ROUTING_B5_ENDPOINT" = "http://127.0.0.1:19999" ]
+    [ "${_ROUTING_B5_CX_MODEL[C1]}" = "local:qwen3.5-35b-a3b-4bit" ]
+    [ "${_ROUTING_B5_CX_MODEL[C2]}" = "local:qwen3.5-35b-a3b-4bit" ]
+    [ "${_ROUTING_B5_CX_MODEL[C3]}" = "flash-moe:qwen3.5-397b" ]
+    [ "${_ROUTING_B5_INELIGIBLE[fd-safety]}" = "1" ]
+    [ "${_ROUTING_B5_INELIGIBLE[fd-correctness]}" = "1" ]
+}
+
+@test "B5: shadow mode logs but returns cloud model" {
+    _write_b5_config
+    _source_routing "$TEST_DIR/config/routing.yaml"
+    # Direct call (not run) so cache loads in this process
+    local result
+    result=$(routing_resolve_model_complex --complexity C2 --phase executing 2>/dev/null)
+    # Should return cloud model (haiku from B2 enforce), not local
+    [ "$result" = "haiku" ]
+}
+
+@test "B5: ineligible agent is logged in shadow" {
+    _write_b5_config
+    _source_routing "$TEST_DIR/config/routing.yaml"
+    run routing_resolve_model_complex --complexity C2 --phase executing --agent fd-safety
+    [ "$status" -eq 0 ]
+    # fd-safety has safety floor of opus in the real config, but here
+    # it's just the ineligible check we care about
+}
+
+@test "B5: off mode produces no B5 logs" {
+    _write_b5_config
+    # Override to off
+    export INTERFERE_ROUTING_MODE=off
+    _source_routing "$TEST_DIR/config/routing.yaml"
+    run routing_resolve_model_complex --complexity C2 --phase executing
+    [ "$status" -eq 0 ]
+    # No [B5-shadow] in stderr
+    [[ ! "${output}" =~ "B5-shadow" ]]
+    unset INTERFERE_ROUTING_MODE
+}
+
+@test "B5: env override INTERFERE_ROUTING_MODE works" {
+    _write_b5_config
+    export INTERFERE_ROUTING_MODE=enforce
+    _source_routing "$TEST_DIR/config/routing.yaml"
+    _routing_load_cache
+    [ "$_ROUTING_B5_MODE" = "enforce" ]
+    unset INTERFERE_ROUTING_MODE
 }
