@@ -1307,6 +1307,34 @@ sprint_advance() {
 
 # ─── Tiered Brainstorming ────────────────────────────────────────
 
+# _count_keyword_matches <text> <keyword1> <keyword2> ...
+# Returns count of keywords found (case-insensitive) in text.
+_count_keyword_matches() {
+    local text="$1"; shift
+    local count=0
+    for kw in "$@"; do
+        if echo "$text" | grep -qi "$kw"; then
+            ((count++)) || true
+        fi
+    done
+    echo "$count"
+}
+
+# _sprint_get_override <sprint_id> <key>
+# Check for manual override — try ic run first, then beads state.
+_sprint_get_override() {
+    local sprint_id="$1" key="$2"
+    local override="" run_id
+    run_id=$(_sprint_resolve_run_id "$sprint_id") || run_id=""
+    if [[ -n "$run_id" ]]; then
+        override=$(intercore_run_status "$run_id" | jq -r ".$key // empty" 2>/dev/null) || override=""
+    fi
+    if [[ -z "$override" || "$override" == "null" ]]; then
+        override=$(bd state "$sprint_id" "$key" 2>/dev/null) || override=""
+    fi
+    echo "$override"
+}
+
 # Classify feature complexity from description text.
 # Output: integer 1-5 (or legacy string if override is a string)
 # Scale: 1=trivial, 2=simple, 3=moderate, 4=complex, 5=research
@@ -1325,15 +1353,8 @@ sprint_classify_complexity() {
 
     # Check for manual override — try ic run first, then beads
     if [[ -n "$sprint_id" ]]; then
-        local override=""
-        local run_id
-        run_id=$(_sprint_resolve_run_id "$sprint_id") || run_id=""
-        if [[ -n "$run_id" ]]; then
-            override=$(intercore_run_status "$run_id" | jq -r '.complexity // empty' 2>/dev/null) || override=""
-        fi
-        if [[ -z "$override" || "$override" == "null" ]]; then
-            override=$(bd state "$sprint_id" complexity 2>/dev/null) || override=""
-        fi
+        local override
+        override=$(_sprint_get_override "$sprint_id" "complexity") || override=""
         if [[ -n "$override" && "$override" != "null" ]]; then
             echo "$override"
             return 0
@@ -1354,17 +1375,7 @@ sprint_classify_complexity() {
 
     # Trivial keywords — floor at 1
     local trivial_count
-    trivial_count=$(echo "$description" | awk -v IGNORECASE=1 '
-        BEGIN { count=0 }
-        {
-            for (i=1; i<=NF; i++) {
-                word = $i
-                gsub(/[^a-zA-Z-]/, "", word)
-                if (word ~ /^(rename|format|typo|bump|reformat|formatting)$/) count++
-            }
-        }
-        END { print count }
-    ')
+    trivial_count=$(_count_keyword_matches "$description" rename format typo bump reformat formatting)
 
     if [[ $trivial_count -gt 0 && $word_count -lt 20 ]]; then
         echo "1"
@@ -1373,50 +1384,20 @@ sprint_classify_complexity() {
 
     # Research keywords — ceiling at 5
     local research_count
-    research_count=$(echo "$description" | awk -v IGNORECASE=1 '
-        BEGIN { count=0 }
-        {
-            for (i=1; i<=NF; i++) {
-                word = $i
-                gsub(/[^a-zA-Z-]/, "", word)
-                if (word ~ /^(explore|investigate|research|brainstorm|evaluate|survey|analyze)$/) count++
-            }
-        }
-        END { print count }
-    ')
+    research_count=$(_count_keyword_matches "$description" explore investigate research brainstorm evaluate survey analyze)
 
     if [[ $research_count -gt 1 ]]; then
         echo "5"
         return 0
     fi
 
-    # Ambiguity signals (awk for POSIX portability — no GNU grep \b needed)
+    # Ambiguity signals
     local ambiguity_count
-    ambiguity_count=$(echo "$description" | awk -v IGNORECASE=1 '
-        BEGIN { count=0 }
-        {
-            for (i=1; i<=NF; i++) {
-                word = $i
-                gsub(/[^a-zA-Z-]/, "", word)
-                if (word ~ /^(or|vs|versus|alternative|tradeoff|trade-off|either|approach|option)$/) count++
-            }
-        }
-        END { print count }
-    ')
+    ambiguity_count=$(_count_keyword_matches "$description" or vs versus alternative tradeoff trade-off either approach option)
 
     # Simplicity signals
     local simplicity_count
-    simplicity_count=$(echo "$description" | awk -v IGNORECASE=1 '
-        BEGIN { count=0 }
-        {
-            for (i=1; i<=NF; i++) {
-                word = $i
-                gsub(/[^a-zA-Z-]/, "", word)
-                if (word ~ /^(like|similar|existing|just|simple|straightforward)$/) count++
-            }
-        }
-        END { print count }
-    ')
+    simplicity_count=$(_count_keyword_matches "$description" like similar existing just simple straightforward)
 
     # Score: start with word-count tier, adjust with signals
     local score=0
