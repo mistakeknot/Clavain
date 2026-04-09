@@ -34,8 +34,4 @@ All work tracking goes through beads (`bd create`). Never create TODO files with
 - 3-layer routing: Stage → Domain → Concern
 - Trunk-based development — no branches/worktrees skills
 - `docs-sp-reference/` is historical archive from source plugins — don't modify
-- **Always publish after pushing** — documented in `AGENTS.md` under **Release workflow**.
-
-### Release workflow
-
-Publish with `ic publish --patch` (or `ic publish <version>` for exact). The `/interpub:release` command and `scripts/bump-version.sh` both delegate to `ic publish`.
+- **Always publish after pushing** — see `AGENTS.md` "Release workflow" and root `agents/plugin-publishing.md`.
