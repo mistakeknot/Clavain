@@ -136,16 +136,88 @@ func TestMsgpackNumericTags(t *testing.T) {
 }
 
 func TestCXDBConnectNoServer(t *testing.T) {
-	// With no server, cxdbConnect should fail
-	// Reset singleton
+	// With no server, cxdbConnect should fail.
+	// Skip if a real CXDB is running (integration environment).
 	oldClient := cxdbClient
 	cxdbClient = nil
 	defer func() { cxdbClient = oldClient }()
 
 	_, err := cxdbConnect()
 	if err == nil {
-		t.Error("expected error connecting to non-existent server")
+		// If connect succeeds, a real CXDB server is running — test the live path instead
+		t.Log("CXDB server is running — skipping no-server assertion, testing live connection")
+		return
 	}
+}
+
+func TestCXDBIntegration(t *testing.T) {
+	// Integration test: requires a live CXDB server on localhost:9009
+	oldClient := cxdbClient
+	cxdbClient = nil
+	defer func() { cxdbClient = oldClient }()
+
+	client, err := cxdbConnect()
+	if err != nil {
+		t.Skip("CXDB server not running — skipping integration test")
+	}
+
+	// Create a context for a test sprint
+	ctxID, err := cxdbSprintContext(client, "sylveste-test-integration")
+	if err != nil {
+		t.Fatalf("cxdbSprintContext: %v", err)
+	}
+	if ctxID == 0 {
+		t.Fatal("expected non-zero context ID")
+	}
+
+	// Record a phase transition
+	err = cxdbRecordPhase(client, ctxID, PhaseRecord{
+		BeadID:        "sylveste-test-integration",
+		Phase:         "executing",
+		PreviousPhase: "plan-reviewed",
+		ArtifactPath:  "docs/plans/test.md",
+		Timestamp:     1709654400,
+	})
+	if err != nil {
+		t.Fatalf("cxdbRecordPhase: %v", err)
+	}
+
+	// Record a dispatch
+	err = cxdbRecordDispatch(client, ctxID, DispatchRecord{
+		BeadID:       "sylveste-test-integration",
+		AgentName:    "fd-correctness",
+		AgentType:    "review",
+		Model:        "claude-opus-4-6",
+		Status:       "completed",
+		InputTokens:  50000,
+		OutputTokens: 12000,
+		Timestamp:    1709654500,
+		DurationMs:   30000,
+	})
+	if err != nil {
+		t.Fatalf("cxdbRecordDispatch: %v", err)
+	}
+
+	// Store a blob
+	testData := []byte("test artifact content for integration test")
+	hash, err := cxdbStoreBlob(client, ctxID, testData)
+	if err != nil {
+		t.Fatalf("cxdbStoreBlob: %v", err)
+	}
+	if hash == "" {
+		t.Fatal("expected non-empty blob hash")
+	}
+
+	// Query turns by type
+	turns, err := cxdbQueryByType(client, ctxID, "clavain.phase.v1")
+	if err != nil {
+		t.Fatalf("cxdbQueryByType: %v", err)
+	}
+	if len(turns) == 0 {
+		t.Error("expected at least one phase turn")
+	}
+
+	t.Logf("Integration test passed: context=%d, blob_hash=%s, turns=%d", ctxID, hash, len(turns))
 }
 
 func TestCXDBRecordPhaseTransitionNoServer(t *testing.T) {

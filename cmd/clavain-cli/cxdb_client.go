@@ -153,12 +153,13 @@ func cxdbRecordDispatch(client *CXDBClient, ctxID uint64, rec DispatchRecord) er
 // cxdbStoreBlob stores data as a blob via CXDB CAS (content-addressed turn).
 // Returns the hex-encoded BLAKE3 hash.
 func cxdbStoreBlob(client *CXDBClient, ctxID uint64, data []byte) (string, error) {
+	hash := blake3.Sum256(data)
 	rec := ArtifactRecord{
-		BlobHash:  data, // The CXDB server computes BLAKE3 internally
+		BlobHash:  hash[:],
 		SizeBytes: uint64(len(data)),
 		Timestamp: uint64(time.Now().Unix()),
 	}
-	return "", cxdbAppendTyped(client, ctxID, "clavain.artifact.v1", rec)
+	return fmt.Sprintf("%x", hash), cxdbAppendTyped(client, ctxID, "clavain.artifact.v1", rec)
 }
 
 // cxdbForkSprint creates an O(1) branched execution trajectory.
