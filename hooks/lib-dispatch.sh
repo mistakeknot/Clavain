@@ -26,6 +26,7 @@ DISPATCH_CIRCUIT_THRESHOLD=3                     # consecutive infra failures to
 DISPATCH_COOLDOWN_SEC=20                         # seconds between dispatch attempts
 DISPATCH_LOG="$HOME/.clavain/dispatch-log.jsonl" # telemetry log path
 DISPATCH_REVIEW_PRESSURE_THRESHOLD="${CLAVAIN_REVIEW_PRESSURE_THRESHOLD:-3}"  # pending reviews before backpressure kicks in
+OCKHAM_WEIGHTS_FILE="${OCKHAM_WEIGHTS_FILE:-$HOME/.config/ockham/weight-offsets.json}"  # Ockham writes; dispatch reads
 
 # ─── Dispatch Cap ─────────────────────────────────────────────────
 # NOTE: Read-modify-write on intercore state is not atomic, but dispatch cap
@@ -183,6 +184,22 @@ dispatch_rescore() {
         done < <("$INTERCORE_BIN" state list ockham_offset 2>/dev/null || true)
     fi
 
+    # Ockham Wave 2 F8: load per-theme weight offsets from the weight-offsets.json
+    # file. This is how CONSTRAIN (sylveste-nzhl.2) actually enforces — a frozen
+    # theme lands a -6 here that deprioritizes every bead on that lane.
+    # Fail-open: missing file, bad JSON, or missing jq all yield no offsets.
+    declare -A _ockham_theme_offsets
+    if [[ -r "$OCKHAM_WEIGHTS_FILE" ]] && command -v jq &>/dev/null; then
+        local _wt_line _wt_theme _wt_off
+        while IFS=$'\t' read -r _wt_theme _wt_off; do
+            [[ -z "$_wt_theme" ]] && continue
+            [[ "$_wt_off" =~ ^-?[0-9]+$ ]] || continue
+            (( _wt_off > 6 )) && _wt_off=6
+            (( _wt_off < -6 )) && _wt_off=-6
+            _ockham_theme_offsets["$_wt_theme"]=$_wt_off
+        done < <(jq -r '.themes // {} | to_entries[] | "\(.key)\t\(.value)"' "$OCKHAM_WEIGHTS_FILE" 2>/dev/null || true)
+    fi
+
     # Check deps for each bead and add perturbation
     local result="[]"
     local i bead_id score deps_ok deps_json perturbation adjusted_score _ock_off
@@ -223,6 +240,17 @@ dispatch_rescore() {
 
         # Ockham offset: apply governor weight adjustment (missing → 0, fail-open)
         _ock_off=${_ockham_offsets[$bead_id]:-0}
+
+        # Ockham theme offset (F8): sum with bead-scoped offset so CONSTRAIN on a
+        # lane penalizes every bead on that lane without needing per-bead writes.
+        local _ock_theme_off=0
+        if [[ -n "${_bead_lane:-}" && -n "${_ockham_theme_offsets[${_bead_lane:-}]:-}" ]]; then
+            _ock_theme_off=${_ockham_theme_offsets[$_bead_lane]}
+        fi
+        _ock_off=$(( _ock_off + _ock_theme_off ))
+        # Re-clamp the combined value — two -6 inputs must not slip below -6
+        (( _ock_off > 6 )) && _ock_off=6
+        (( _ock_off < -6 )) && _ock_off=-6
 
         # Add random perturbation (0-5) for tie-breaking, subtract review pressure
         perturbation=$(( RANDOM % 6 ))
