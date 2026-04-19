@@ -330,6 +330,16 @@ clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "test-pass-sha" "$(git rev-parse HEA
 
 This SHA lets landing-a-change (Step 10) skip re-running tests when HEAD hasn't moved since the last pass.
 
+**Persist vetting signals** (consumed by the auto-proceed authz gate at ship time; see `docs/canon/policy-merge.md`):
+```bash
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "sprint step 6 tests passed" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "sprint step 6 tests passed" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "sprint step 6 tests passed" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "sprint step 6 tests passed" 2>/dev/null || true
+fi
+```
+
 ## Step 7: Quality Gates
 
 Budget context (same pattern as Step 4):
@@ -364,6 +374,16 @@ fi
 clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"
 ```
 Do NOT set phase if gates FAIL.
+
+**Refresh vetting signals** after all quality gates pass (HEAD may have advanced since Step 6 if review produced fixup commits):
+```bash
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "sprint step 7 gates clean" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "sprint step 7 gates clean" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "sprint step 7 gates clean" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "sprint step 7 gates clean" 2>/dev/null || true
+fi
+```
 
 ## Step 8: Resolve Issues
 

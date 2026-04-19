@@ -113,6 +113,16 @@ Run `/clavain:quality-gates` only for: large refactors (10+ files), security-sen
 - All tests pass; linting passes
 - Code follows existing patterns; no console errors
 
+**Persist vetting signals** (consumed by the auto-proceed authz gate in Phase 4; see `docs/canon/policy-merge.md`):
+```bash
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "work phase 3 tests passed" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "work phase 3 tests passed" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "work phase 3 tests passed" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "work phase 3 tests passed" 2>/dev/null || true
+fi
+```
+
 ## Phase 4: Ship
 
 ```bash

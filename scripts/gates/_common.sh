@@ -11,6 +11,42 @@
 # This file is sourced by individual gate scripts; callers must have:
 #     set -euo pipefail
 
+# gate_bd_state <bead> <dimension>
+# Queries `bd state <bead> <dim>` and echoes the value (empty on miss).
+# Best-effort — silent on bd-not-installed, empty result, or non-zero exit.
+gate_bd_state() {
+  local bead="$1" dim="$2"
+  if [[ -z "$bead" ]] || ! command -v bd >/dev/null 2>&1; then
+    return 0
+  fi
+  bd state "$bead" "$dim" 2>/dev/null || true
+}
+
+# gate_populate_vetting <bead>
+# Populates CLAVAIN_VETTED_AT / CLAVAIN_VETTED_SHA / CLAVAIN_TESTS_PASSED /
+# CLAVAIN_SPRINT_OR_WORK from bd state if not already set in the env. Called
+# by wrappers that accept a bead context.
+gate_populate_vetting() {
+  local bead="$1"
+  if [[ -z "${CLAVAIN_VETTED_AT:-}" ]]; then
+    local v; v="$(gate_bd_state "$bead" vetted_at)"
+    [[ -n "$v" ]] && CLAVAIN_VETTED_AT="$v"
+  fi
+  if [[ -z "${CLAVAIN_VETTED_SHA:-}" ]]; then
+    local v; v="$(gate_bd_state "$bead" vetted_sha)"
+    [[ -n "$v" ]] && CLAVAIN_VETTED_SHA="$v"
+  fi
+  if [[ -z "${CLAVAIN_TESTS_PASSED:-}" ]]; then
+    local v; v="$(gate_bd_state "$bead" tests_passed)"
+    [[ "$v" == "true" ]] && CLAVAIN_TESTS_PASSED=1
+  fi
+  if [[ -z "${CLAVAIN_SPRINT_OR_WORK:-}" ]]; then
+    local v; v="$(gate_bd_state "$bead" sprint_or_work_flow)"
+    [[ "$v" == "true" ]] && CLAVAIN_SPRINT_OR_WORK=1
+  fi
+  export CLAVAIN_VETTED_AT CLAVAIN_VETTED_SHA CLAVAIN_TESTS_PASSED CLAVAIN_SPRINT_OR_WORK
+}
+
 # gate_resolve_agent returns a stable identity for this invocation.
 # Preference order: $CLAVAIN_AGENT_ID → $USER@$HOSTNAME → fallback.
 gate_resolve_agent() {

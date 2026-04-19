@@ -14,6 +14,8 @@ REASON="${2:-}"
 # shellcheck source=/dev/null
 source "$(dirname "$0")/_common.sh"
 
+gate_populate_vetting "$BEAD_ID"
+
 check_flags=( --target="$BEAD_ID" --bead="$BEAD_ID" )
 if [[ -n "${CLAVAIN_VETTED_AT:-}"         ]]; then check_flags+=( --vetted-at="$CLAVAIN_VETTED_AT" ); fi
 if [[ -n "${CLAVAIN_VETTED_SHA:-}"        ]]; then check_flags+=( --vetted-sha="$CLAVAIN_VETTED_SHA" ); fi

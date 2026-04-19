@@ -67,6 +67,16 @@ After each task (any mode): parse `<verify>...</verify>` block for `run:`/`expec
 - Pass → log "Verify passed for Task N"; failure → treat as Rule 1 auto-fix (3-attempt limit, then log and continue)
 - No verify block → skip silently
 
+**Vetting signal write** — when all per-task verifications pass for a plan that is part of a tracked bead, persist vetting state so the auto-proceed authz gate can evaluate at ship time (see `docs/canon/policy-merge.md`):
+```bash
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "executing-plans task verified" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "executing-plans task verified" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "executing-plans task verified" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "executing-plans task verified" 2>/dev/null || true
+fi
+```
+
 ## Step 3: Report
 
 Per batch: what was implemented | verify results (pass/fail) | deviations (Rules 1-3) | deferred items | "Ready for feedback."

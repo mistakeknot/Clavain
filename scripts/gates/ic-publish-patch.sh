@@ -14,6 +14,10 @@ shift
 # shellcheck source=/dev/null
 source "$(dirname "$0")/_common.sh"
 
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+  gate_populate_vetting "$CLAVAIN_BEAD_ID"
+fi
+
 HEAD_SHA="$(git -C "$PLUGIN_DIR" rev-parse HEAD 2>/dev/null || echo)"
 
 check_flags=( --target="$PLUGIN_DIR" --head-sha="$HEAD_SHA" )
