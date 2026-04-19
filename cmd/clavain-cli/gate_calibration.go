@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
-	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
+	"github.com/mistakeknot/clavain-cli/gatecal"
 )
 
 // ─── Gate Calibration Types ──────────────────────────────────────
@@ -50,194 +51,87 @@ type gateSignal struct {
 	Category  string `json:"category,omitempty"`
 }
 
-const (
-	halfLifeDays         = 30
-	promotionFNRThresh   = 0.30
-	promotionMinN        = 10.0
-	cooldownDays         = 7
-	velocityLimitChanges = 2
-	velocityWindowDays   = 90
-)
+// ErrNoNewSignals is returned by calibrate-gate-tiers when no new signals were available.
+var ErrNoNewSignals = errors.New("calibrate-gate-tiers: no new signals")
 
 // cmdCalibrateGateTiers recalibrates gate tier assignments from signal data.
-// Usage: calibrate-gate-tiers [--dry-run]
+// Usage: calibrate-gate-tiers [--auto] [--dry-run]
 func cmdCalibrateGateTiers(args []string) error {
+	autoMode := false
 	dryRun := false
 	for _, a := range args {
-		if a == "--dry-run" {
+		switch a {
+		case "--auto":
+			autoMode = true
+		case "--dry-run":
 			dryRun = true
 		}
 	}
 
-	// Step 1: Load existing calibration file (for cursor + existing tiers)
-	calPath := gateCalibrationFilePath()
-	existing := loadGateCalibrationFile(calPath)
-	sinceID := int64(0)
-	if existing != nil {
-		sinceID = existing.SinceID
+	invoker := "manual"
+	if autoMode {
+		invoker = "auto"
 	}
 
-	// Step 2: Fetch new signals from intercore via subprocess
-	var sr signalResult
-	err := runICJSON(&sr, "gate", "signals", "--since-id="+strconv.FormatInt(sinceID, 10))
+	calPath := gateCalibrationFilePath()
+	dbPath := filepath.Join(filepath.Dir(calPath), "gate.db")
+
+	s, err := gatecal.Open(dbPath)
 	if err != nil {
+		return fmt.Errorf("calibrate-gate-tiers: open gate.db: %w", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	if err := s.MigrateFromV1(ctx, calPath); err != nil {
+		return fmt.Errorf("calibrate-gate-tiers: migrate: %w", err)
+	}
+
+	sinceID := int64(0)
+	if err := s.DB().QueryRowContext(ctx, `SELECT COALESCE(MAX(since_id_after), 0) FROM drain_log WHERE drain_committed IS NOT NULL`).Scan(&sinceID); err != nil {
+		return fmt.Errorf("calibrate-gate-tiers: read cursor: %w", err)
+	}
+
+	var sr signalResult
+	if err := runICJSON(&sr, "gate", "signals", "--since-id="+strconv.FormatInt(sinceID, 10)); err != nil {
 		return fmt.Errorf("calibrate-gate-tiers: fetch signals: %w", err)
 	}
 
-	if len(sr.Signals) == 0 && existing != nil {
-		fmt.Fprintln(os.Stderr, "calibrate-gate-tiers: no new signals — calibration unchanged")
-		return nil
+	signals := make([]gatecal.GateSignal, 0, len(sr.Signals))
+	for _, sig := range sr.Signals {
+		signals = append(signals, gatecal.GateSignal{
+			EventID:   sig.EventID,
+			RunID:     sig.RunID,
+			CheckType: sig.CheckType,
+			FromPhase: sig.FromPhase,
+			ToPhase:   sig.ToPhase,
+			Signal:    sig.Signal,
+			CreatedAt: sig.CreatedAt,
+			Category:  sig.Category,
+		})
 	}
-
-	// Step 3: Build weighted signal counts per key
-	type signalCounts struct {
-		weightedTP float64
-		weightedFP float64
-		weightedTN float64
-		weightedFN float64
-	}
-	counts := map[string]*signalCounts{}
 
 	now := time.Now().Unix()
-	ln2 := math.Ln2
-
-	for _, sig := range sr.Signals {
-		key := pkgphase.GateCalibrationKey(sig.CheckType, sig.FromPhase, sig.ToPhase)
-		sc, ok := counts[key]
-		if !ok {
-			sc = &signalCounts{}
-			counts[key] = sc
-		}
-
-		ageDays := float64(now-sig.CreatedAt) / 86400.0
-		weight := math.Exp(-ln2 * ageDays / halfLifeDays)
-
-		switch sig.Signal {
-		case "tp":
-			sc.weightedTP += weight
-		case "fp":
-			sc.weightedFP += weight
-		case "tn":
-			sc.weightedTN += weight
-		case "fn":
-			sc.weightedFN += weight
-		}
-	}
-
-	// Step 4: Merge with existing tiers and compute rates
-	tiers := make(map[string]GateCalibrationEntry)
-	if existing != nil {
-		for k, v := range existing.Tiers {
-			tiers[k] = v
-		}
-	}
-
-	promoted := 0
-	for key, sc := range counts {
-		weightedN := sc.weightedTP + sc.weightedFP + sc.weightedTN + sc.weightedFN
-
-		// Compute FPR and FNR
-		var fpr, fnr float64
-		if sc.weightedTP+sc.weightedFP > 0 {
-			fpr = sc.weightedFP / (sc.weightedTP + sc.weightedFP)
-		}
-		if sc.weightedTN+sc.weightedFN > 0 {
-			fnr = sc.weightedFN / (sc.weightedTN + sc.weightedFN)
-		}
-
-		entry, exists := tiers[key]
-		if !exists {
-			entry = GateCalibrationEntry{Tier: "soft"}
-		}
-		entry.FPR = fpr
-		entry.FNR = fnr
-		entry.WeightedN = weightedN
-		entry.UpdatedAt = now
-
-		// Skip locked entries
-		if entry.Locked {
-			tiers[key] = entry
-			continue
-		}
-
-		// Promotion rule: soft→hard if FNR > threshold AND sufficient data
-		if entry.Tier == "soft" && fnr > promotionFNRThresh && weightedN >= promotionMinN {
-			// Check 7-day cooldown
-			if entry.LastChangedAt > 0 {
-				daysSinceChange := float64(now-entry.LastChangedAt) / 86400.0
-				if daysSinceChange < cooldownDays {
-					fmt.Fprintf(os.Stderr, "calibrate-gate-tiers: %s — promotion blocked (cooldown: %.0f days remaining)\n",
-						key, float64(cooldownDays)-daysSinceChange)
-					tiers[key] = entry
-					continue
-				}
-			}
-
-			// Check velocity limit (>2 changes in 90 days → lock)
-			if entry.ChangeCount90d >= velocityLimitChanges {
-				fmt.Fprintf(os.Stderr, "calibrate-gate-tiers: %s — velocity limit hit (%d changes in 90d), locking\n",
-					key, entry.ChangeCount90d)
-				entry.Locked = true
-				tiers[key] = entry
-				continue
-			}
-
-			// Promote
-			entry.Tier = "hard"
-			entry.LastChangedAt = now
-			entry.ChangeCount90d++
-			promoted++
-			fmt.Fprintf(os.Stderr, "calibrate-gate-tiers: %s — promoted soft→hard (FNR=%.2f, n=%.1f)\n",
-				key, fnr, weightedN)
-		}
-
-		tiers[key] = entry
-	}
-
-	// Emit interspect events (best-effort)
-	if promoted > 0 {
-		emitInterspectEvent("calibration_checkpoint", fmt.Sprintf("promoted %d gate(s)", promoted))
-	}
-	// Data starvation: warn if any key has weighted_n < 5
-	for key, entry := range tiers {
-		if entry.WeightedN < 5 && !entry.Locked {
-			emitInterspectEvent("calibration_data_starvation", fmt.Sprintf("%s: n=%.1f", key, entry.WeightedN))
-		}
-	}
-
-	// Step 5: Write calibration file (tmp+rename for atomicity)
-	calFile := GateCalibrationFile{
-		CreatedAt: now,
-		SinceID:   sr.Cursor,
-		Tiers:     tiers,
-	}
-
-	if dryRun {
-		data, _ := json.MarshalIndent(calFile, "", "  ")
-		fmt.Println(string(data))
-		return nil
-	}
-
-	dir := filepath.Dir(calPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("calibrate-gate-tiers: mkdir: %w", err)
-	}
-
-	data, err := json.MarshalIndent(calFile, "", "  ")
+	res, err := s.Drain(ctx, now, invoker, signals)
 	if err != nil {
-		return fmt.Errorf("calibrate-gate-tiers: marshal: %w", err)
+		return fmt.Errorf("calibrate-gate-tiers: drain: %w", err)
 	}
 
-	tmpPath := calPath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		return fmt.Errorf("calibrate-gate-tiers: write: %w", err)
-	}
-	if err := os.Rename(tmpPath, calPath); err != nil {
-		return fmt.Errorf("calibrate-gate-tiers: rename: %w", err)
+	if !dryRun {
+		if err := s.ExportV1JSON(ctx, calPath, res.SinceIDAfter); err != nil {
+			return fmt.Errorf("calibrate-gate-tiers: export: %w", err)
+		}
 	}
 
-	fmt.Fprintf(os.Stderr, "calibrate-gate-tiers: %d key(s), %d promoted → %s\n",
-		len(tiers), promoted, calPath)
+	if res.StateChanges > 0 {
+		emitInterspectEvent("calibration_checkpoint", fmt.Sprintf("state changes=%d", res.StateChanges))
+	}
+
+	fmt.Fprintf(os.Stderr, "calibrate-gate-tiers: signals=%d, state_changes=%d → %s\n",
+		res.SignalsProcessed, res.StateChanges, calPath)
+	if res.SignalsProcessed == 0 {
+		return ErrNoNewSignals
+	}
 	return nil
 }
 

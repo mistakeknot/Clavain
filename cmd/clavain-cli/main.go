@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -235,6 +236,9 @@ func main() {
 	}
 
 	if err != nil {
+		if errors.Is(err, ErrNoNewSignals) {
+			os.Exit(2)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
