@@ -136,6 +136,30 @@ For more complex endeavors, each piece works standalone. The following review of
 
 Even with clear requirements, starting with `/brainstorm` forces articulation of requirements and user journeys before touching code: Clavain often catches edge cases that weren't considered. `/strategy` then structures the brainstorm into a PRD with discrete features and creates beads for tracking: this convergent step catches scope creep and missing acceptance criteria before any planning starts. After that, `/write-plan` creates a structured implementation plan: and when interserve mode is active, it also dispatches execution through Codex agents, making the `/work` step unnecessary. `/flux-drive` then reviews the plan (or, under interserve, the executed result) with up to 4 tiers of agents before the code review phase.
 
+### Auto-proceed authorization
+
+By default every irreversible op — `bd close`, `git push`, `bash .beads/push.sh`, `ic publish --patch` — prompts for confirmation. Inside a vetted `/clavain:work` or `/clavain:sprint` flow that's redundant friction; the discipline already ran tests, review, and quality gates. The auto-proceed authz layer lets those vetted ops proceed without a prompt, logs every decision to a per-project audit table, and keeps `confirm` as the floor for everything else.
+
+**Install (one-time):**
+
+```bash
+mkdir -p ~/.clavain
+cp /path/to/Clavain/config/policy.yaml.example ~/.clavain/policy.yaml
+```
+
+**Run a sprint as usual.** `/clavain:sprint` persists vetting signals (`vetted_at`, `vetted_sha`, `tests_passed`, `sprint_or_work_flow`) as bead labels after tests and after quality gates pass. At ship time the gate wrappers read those signals and proceed automatically when the policy's `requires` block is satisfied.
+
+**Inspect decisions:**
+
+```bash
+clavain-cli policy list                # effective merged policy + sha256 hash
+clavain-cli policy audit --since=1d    # recent auto/confirmed/blocked decisions
+clavain-cli policy explain bead-close --bead=iv-xyz
+clavain-cli policy lint                # spec invariants + gate-coverage check
+```
+
+Spec: `docs/canon/policy-merge.md` (merge order, allow_override, mode floors) and `docs/canon/authz-cross-project-consistency.md` (cross-repo op semantics). Wrappers live in `scripts/gates/`; the `.clavain/gates/` registry declares which ops have wrappers so `policy lint` can flag any gate without a matching rule.
+
 ### Reviewing things with `/flux-drive`
 
 `/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is the most versatile standalone command. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from three categories of review agents:
