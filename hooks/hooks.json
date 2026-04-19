@@ -99,6 +99,11 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-push.sh",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/gate-calibration-session-end.sh",
+            "async": true
           }
         ]
       }
