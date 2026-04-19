@@ -24,7 +24,7 @@ description: Use when starting any conversation - establishes how to find and us
 | Check doc freshness | `/interwatch:watch` |
 | Run scenario tests | `clavain-cli scenario-run <pattern>` |
 | Check quality gate | `clavain-cli scenario-score <run-id> --summary` |
-| Check agent policy | `clavain-cli policy-check <agent> <action> --path=<p>` |
+| Check scenario policy | `clavain-cli scenario-policy-check <agent> <action> --path=<p>` |
 | See all commands | `/clavain:clavain-help` |
 
 ## Auto-Route Rule

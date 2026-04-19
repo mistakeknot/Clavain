@@ -91,9 +91,10 @@ The factory substrate adds validation-first quality infrastructure to the sprint
 - `clavain-cli evidence-list [bead-id]` — list evidence packs
 - Flux-drive regressions auto-generate dev scenarios via `createFluxDriveDevScenario()`
 
-**Agent Capability Policies** — holdout contamination prevention:
-- `clavain-cli policy-check <agent> <action> [--path=<p>]` — evaluate against phase policy
-- `clavain-cli policy-show` — display current policy
+**Scenario Policies** — holdout contamination prevention (sprint-phase guardrails):
+- `clavain-cli scenario-policy-check <agent> <action> [--path=<p>]` — evaluate against phase policy
+- `clavain-cli scenario-policy-show` — display current policy
+- Not to be confused with `clavain-cli policy ...` (authz subcommand group for irreversible ops; see `docs/canon/policy-merge.md`)
 - Default policy: holdout denied during build phases, allowed during shipping (quality gates)
 - Violations recorded as CXDB turns; contaminated satisfaction scores are invalidated
 - Project override: `.clavain/policy.yml`

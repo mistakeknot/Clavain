@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/vmihailenco/msgpack/v5"
@@ -174,5 +177,55 @@ func TestGetCurrentPhase_Default(t *testing.T) {
 	phase := getCurrentPhase("")
 	if phase != "executing" {
 		t.Errorf("got %q, want 'executing' (default)", phase)
+	}
+}
+
+// TestScenarioPolicyCheckAlias verifies the rename from `policy-check` to
+// `scenario-policy-check`. The authz `policy` subcommand group claims the
+// `policy` namespace in Task 5; here we just confirm the renamed function is
+// reachable and emits the same JSON shape.
+func TestScenarioPolicyCheckAlias(t *testing.T) {
+	t.Setenv("CLAVAIN_PHASE", "executing")
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := cmdScenarioPolicyCheck([]string{"test-agent", "read", "--path=.clavain/scenarios/dev/demo.yaml"})
+
+	w.Close()
+	os.Stdout = old
+
+	if err != nil {
+		t.Fatalf("cmdScenarioPolicyCheck: %v", err)
+	}
+	out, _ := io.ReadAll(r)
+	var result PolicyCheckResult
+	if err := json.Unmarshal(out, &result); err != nil {
+		t.Fatalf("unmarshal %q: %v", string(out), err)
+	}
+	if !result.Allowed {
+		t.Errorf("dev path should be allowed; reason=%q", result.Reason)
+	}
+}
+
+func TestScenarioPolicyShowAlias(t *testing.T) {
+	t.Setenv("CLAVAIN_PHASE", "executing")
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := cmdScenarioPolicyShow(nil)
+
+	w.Close()
+	os.Stdout = old
+
+	if err != nil {
+		t.Fatalf("cmdScenarioPolicyShow: %v", err)
+	}
+	out, _ := io.ReadAll(r)
+	if !strings.Contains(string(out), "Policy Schema Version") {
+		t.Errorf("scenario-policy-show output missing header: %q", string(out))
 	}
 }

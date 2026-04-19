@@ -185,11 +185,17 @@ func main() {
 	case "calibrate-gate-tiers":
 		err = cmdCalibrateGateTiers(args)
 
-	// Policy
+	// Scenario policy (holdout guardrails, per sprint phase)
+	case "scenario-policy-check":
+		err = cmdScenarioPolicyCheck(args)
+	case "scenario-policy-show":
+		err = cmdScenarioPolicyShow(args)
 	case "policy-check":
-		err = cmdPolicyCheck(args)
+		fmt.Fprintln(os.Stderr, "DEPRECATED: use `scenario-policy-check`; `policy-check` alias will be removed in v0.7")
+		err = cmdScenarioPolicyCheck(args)
 	case "policy-show":
-		err = cmdPolicyShow(args)
+		fmt.Fprintln(os.Stderr, "DEPRECATED: use `scenario-policy-show`; `policy-show` alias will be removed in v0.7")
+		err = cmdScenarioPolicyShow(args)
 
 	// Handoff
 	case "validate-handoff":

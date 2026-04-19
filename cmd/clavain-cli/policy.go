@@ -44,11 +44,15 @@ type PolicyViolationRecord struct {
 	Timestamp  uint64 `msgpack:"7" json:"timestamp"`
 }
 
-// cmdPolicyCheck evaluates an action against the current phase policy.
-// Usage: policy-check <agent> <action> [--path=<path>] [--bead=<id>]
-func cmdPolicyCheck(args []string) error {
+// cmdScenarioPolicyCheck evaluates an action against the current sprint-phase
+// scenario policy (holdout guardrails). Not to be confused with the authz
+// policy subcommand group (`clavain-cli policy check`), which governs
+// irreversible-op authorization under docs/canon/policy-merge.md.
+//
+// Usage: scenario-policy-check <agent> <action> [--path=<path>] [--bead=<id>]
+func cmdScenarioPolicyCheck(args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: policy-check <agent> <action> [--path=<path>] [--bead=<id>]")
+		return fmt.Errorf("usage: scenario-policy-check <agent> <action> [--path=<path>] [--bead=<id>]")
 	}
 	agentName := args[0]
 	action := args[1]
@@ -86,9 +90,12 @@ func cmdPolicyCheck(args []string) error {
 	return outputJSON(result)
 }
 
-// cmdPolicyShow displays the current policy in human-readable format.
-// Usage: policy-show
-func cmdPolicyShow(args []string) error {
+// cmdScenarioPolicyShow displays the current sprint-phase scenario policy
+// (holdout guardrails) in human-readable format. See cmdScenarioPolicyCheck
+// for the distinction from authz `policy` subcommands.
+//
+// Usage: scenario-policy-show
+func cmdScenarioPolicyShow(args []string) error {
 	policy, err := loadPolicy()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "No policy file found. Using defaults.")
