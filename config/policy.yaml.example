@@ -1,0 +1,50 @@
+# Auto-proceed authorization policy (v1)
+#
+# See docs/canon/policy-merge.md for merge semantics.
+# See docs/canon/authz-cross-project-consistency.md for cross-repo behavior.
+#
+# Install:
+#   mkdir -p ~/.clavain && cp policy.yaml.example ~/.clavain/policy.yaml
+#
+# Layering (merged in order of strictness — child cannot loosen a floor):
+#   1. global   ~/.clavain/policy.yaml
+#   2. project  <repo>/.clavain/policy.yaml
+#   3. env      <repo>/.clavain/policy.env.yaml
+#
+# First match wins per op; `op: "*"` is the terminal fallback.
+
+version: 1
+rules:
+  # bead-close: auto-proceed when the /work or /sprint flow has verified
+  # tests pass within the last 60 minutes on the same HEAD SHA.
+  - op: bead-close
+    mode: auto
+    requires:
+      vetted_within_minutes: 60
+      tests_passed: true
+      sprint_or_work_flow: true
+      vetted_sha_matches_head: true
+
+  # git-push-main: only auto on commits made by this session.
+  - op: git-push-main
+    mode: auto
+    requires:
+      committed_by_this_session: true
+
+  # ic-publish-patch: same vetting window as bead-close.
+  - op: ic-publish-patch
+    mode: auto
+    requires:
+      vetted_within_minutes: 60
+      tests_passed: true
+      vetted_sha_matches_head: true
+
+  # bd-push-dolt: auto inside a vetted flow.
+  - op: bd-push-dolt
+    mode: auto
+    requires:
+      sprint_or_work_flow: true
+
+  # Terminal catchall — every other op confirms by default.
+  - op: "*"
+    mode: confirm

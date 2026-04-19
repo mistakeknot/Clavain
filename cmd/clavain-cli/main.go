@@ -197,6 +197,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "DEPRECATED: use `scenario-policy-show`; `policy-show` alias will be removed in v0.7")
 		err = cmdScenarioPolicyShow(args)
 
+	// Authz policy (irreversible-op gates; see docs/canon/policy-merge.md)
+	case "policy":
+		err = cmdPolicy(args)
+
 	// Handoff
 	case "validate-handoff":
 		err = cmdValidateHandoff(args)
@@ -244,6 +248,15 @@ func main() {
 	if err != nil {
 		if errors.Is(err, ErrNoNewSignals) {
 			os.Exit(2)
+		}
+		if errors.Is(err, ErrPolicyConfirm) {
+			os.Exit(1)
+		}
+		if errors.Is(err, ErrPolicyBlocked) {
+			os.Exit(2)
+		}
+		if errors.Is(err, ErrPolicyMalformed) {
+			os.Exit(3)
 		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
