@@ -75,7 +75,7 @@ calibrated:
     expected_rate: 0.15
     warn_above: 0.4
 
-  last_calibrated: "2026-04-01T17:57:34Z"
+  last_calibrated: "2026-04-04T15:09:21Z"
   event_count: 743
   retroactive_count: 743
   live_count: 0
