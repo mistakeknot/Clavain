@@ -389,6 +389,10 @@ func cmdPolicyAudit(args []string) error {
 	}
 	defer db.Close()
 
+	if _, ok := flags["verify"]; ok {
+		return maybeAuditVerify(db, flags)
+	}
+
 	where := []string{"1=1"}
 	params := []interface{}{}
 	if v, ok := flags["since"]; ok {
@@ -563,7 +567,7 @@ func declaredGateOps(dir string) ([]string, error) {
 // cmdPolicy is the `policy` subcommand dispatcher.
 func cmdPolicy(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: policy <check|record|explain|audit|list|lint> [...]")
+		return fmt.Errorf("usage: policy <check|record|explain|audit|list|lint|init-key|sign|verify|rotate-key|quarantine> [...]")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -579,8 +583,18 @@ func cmdPolicy(args []string) error {
 		return cmdPolicyList(rest)
 	case "lint":
 		return cmdPolicyLint(rest)
+	case "init-key":
+		return cmdPolicyInitKey(rest)
+	case "sign":
+		return cmdPolicySign(rest)
+	case "verify":
+		return cmdPolicyVerify(rest)
+	case "rotate-key":
+		return cmdPolicyRotateKey(rest)
+	case "quarantine":
+		return cmdPolicyQuarantine(rest)
 	default:
-		return fmt.Errorf("unknown policy subcommand: %s (check|record|explain|audit|list|lint)", sub)
+		return fmt.Errorf("unknown policy subcommand: %s (check|record|explain|audit|list|lint|init-key|sign|verify|rotate-key|quarantine)", sub)
 	}
 }
 
