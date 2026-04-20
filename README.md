@@ -160,6 +160,31 @@ clavain-cli policy lint                # spec invariants + gate-coverage check
 
 Spec: `docs/canon/policy-merge.md` (merge order, allow_override, mode floors) and `docs/canon/authz-cross-project-consistency.md` (cross-repo op semantics). Wrappers live in `scripts/gates/`; the `.clavain/gates/` registry declares which ops have wrappers so `policy lint` can flag any gate without a matching rule.
 
+#### Signing audit records (v1.5)
+
+Every gate wrapper signs its authorization row with Ed25519 after recording it, so the audit table is tamper-evident post-write. `policy audit --verify` checks every post-cutover row against the project pubkey and exits non-zero on any mismatch.
+
+**One-time bootstrap per project:**
+
+```bash
+bash /path/to/Clavain/scripts/authz-init.sh
+```
+
+That script migrates the project's `.clavain/intercore.db` to the current schema, installs `~/.clavain/policy.yaml` from the example if absent, generates `.clavain/keys/authz-project.{key,pub}` (mode 0400 / 0444) if absent, signs the cutover marker + any unsigned post-cutover rows, and runs `policy audit --verify` as a sanity check. Every step is idempotent; rerunning it is safe.
+
+**Day-to-day:**
+
+```bash
+clavain-cli policy audit --verify            # walk + verify every row; exit 1 on any failure
+clavain-cli policy verify --json             # same, emits per-row JSON report
+clavain-cli policy rotate-key                # archive old keypair, generate fresh pair
+clavain-cli policy quarantine --before-key=<fp> --reason="..."  # record key-compromise event
+```
+
+The private key never leaves `.clavain/keys/authz-project.key` — the gate wrappers shell out to `clavain-cli policy sign` which reads it only long enough to sign one batch of rows. The pubkey (`.clavain/keys/authz-project.pub`) is safe to commit so verifiers can check signatures without filesystem access to the signer.
+
+Trust claim is **tamper-evident-post-write**, not tamper-proof: an attacker who can invoke the gate CLI with the key readable can forge signatures. Detection works against direct-SQL mutations, backup tampering, and history-rewrite attempts by anyone who cannot invoke the CLI. Full model: `docs/canon/authz-signing-trust-model.md`. Payload spec: `docs/canon/authz-signing-payload.md`.
+
 ### Reviewing things with `/flux-drive`
 
 `/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is the most versatile standalone command. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from three categories of review agents:

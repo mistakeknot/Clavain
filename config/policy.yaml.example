@@ -1,9 +1,12 @@
-# Auto-proceed authorization policy (v1)
+# Auto-proceed authorization policy (v1.5)
 #
 # See docs/canon/policy-merge.md for merge semantics.
 # See docs/canon/authz-cross-project-consistency.md for cross-repo behavior.
+# See docs/canon/authz-signing-trust-model.md for the v1.5 signing model.
 #
-# Install:
+# Install (recommended): run os/Clavain/scripts/authz-init.sh from your project
+# root — handles policy copy + DB migration + key init + audit verify in one
+# shot. Manual install:
 #   mkdir -p ~/.clavain && cp policy.yaml.example ~/.clavain/policy.yaml
 #
 # Layering (merged in order of strictness — child cannot loosen a floor):
@@ -12,6 +15,9 @@
 #   3. env      <repo>/.clavain/policy.env.yaml
 #
 # First match wins per op; `op: "*"` is the terminal fallback.
+#
+# v1.5 signing: no policy change required. Gate wrappers automatically sign
+# each audit row after recording it; `policy audit --verify` checks signatures.
 
 version: 1
 rules:
