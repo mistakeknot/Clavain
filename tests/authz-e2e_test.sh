@@ -55,9 +55,9 @@ rules:
     mode: confirm
 YAML
 
-# Schema for authorizations.
+# Schema for authorizations (v33: signing columns + partial index + marker).
 python3 - <<PY
-import sqlite3
+import sqlite3, time
 db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
 db.executescript("""
 CREATE TABLE authorizations (
@@ -66,12 +66,24 @@ CREATE TABLE authorizations (
   bead_id TEXT, mode TEXT NOT NULL CHECK(mode IN ('auto','confirmed','blocked','force_auto')),
   policy_match TEXT, policy_hash TEXT, vetted_sha TEXT,
   vetting TEXT CHECK(vetting IS NULL OR json_valid(vetting)),
-  cross_project_id TEXT, created_at INTEGER NOT NULL);
+  cross_project_id TEXT, created_at INTEGER NOT NULL,
+  sig_version INTEGER NOT NULL DEFAULT 0,
+  signature BLOB, signed_at INTEGER);
+CREATE INDEX authz_unsigned ON authorizations(sig_version, signed_at)
+  WHERE signature IS NULL AND sig_version >= 1;
 """)
+db.execute(
+  "INSERT INTO authorizations (id, op_type, target, agent_id, mode, created_at, sig_version) "
+  "VALUES ('migration-033-cutover-marker','migration.signing-enabled','authorizations',"
+  "'system:migration-033','auto',?,1)", (int(time.time()),))
 db.commit()
 PY
 
 cd "$SANDBOX"
+
+# Bootstrap signing so gate_sign has a key and the marker gets signed.
+clavain-cli policy init-key >/dev/null
+clavain-cli policy sign >/dev/null
 
 # Populate vetting signals as if /work Phase 3 or /sprint Step 6 had just run.
 export CLAVAIN_AGENT_ID=e2e-test
@@ -101,14 +113,14 @@ if ! grep -q "bd close iv-e2e-1" "$BD_CALL_LOG"; then
   exit 1
 fi
 
-# Assertion 2: one audit row exists, mode=auto, policy_hash matches check.
+# Assertion 2: one bead-close row exists, mode=auto, policy_hash matches check.
 row="$(python3 - <<PY
 import sqlite3
 db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
-cur = db.execute("SELECT op_type, mode, policy_match, policy_hash, agent_id, bead_id FROM authorizations")
+cur = db.execute("SELECT op_type, mode, policy_match, policy_hash, agent_id, bead_id FROM authorizations WHERE op_type='bead-close'")
 rows = cur.fetchall()
 if len(rows) != 1:
-    print("FAIL: expected 1 row, got %d" % len(rows)); raise SystemExit(2)
+    print("FAIL: expected 1 bead-close row, got %d" % len(rows)); raise SystemExit(2)
 print("|".join(str(v) for v in rows[0]))
 PY
 )"
@@ -125,4 +137,20 @@ IFS='|' read -r op mode match hash agent bead <<< "$row"
 [[ "$agent" == "e2e-test"     ]] || { echo "FAIL: agent=$agent, want e2e-test"; exit 1; }
 [[ "$bead"  == "iv-e2e-1"     ]] || { echo "FAIL: bead=$bead, want iv-e2e-1";   exit 1; }
 
-echo "PASS: authz-e2e (policy check → bd close → audit row with pinned hash)"
+# Assertion 3: the bead-close row carries a valid Ed25519 signature (gate_sign ran).
+sig_len="$(python3 -c "
+import sqlite3
+db = sqlite3.connect('${SANDBOX}/.clavain/intercore.db')
+r = db.execute(\"SELECT length(signature) FROM authorizations WHERE op_type='bead-close'\").fetchone()
+print(r[0] if r and r[0] is not None else 0)
+")"
+[[ "$sig_len" == "64" ]] || { echo "FAIL: bead-close signature length=$sig_len, want 64 (Ed25519)"; exit 1; }
+
+# Assertion 4: policy audit --verify succeeds end-to-end.
+clavain-cli policy audit --verify >/dev/null 2>&1 || {
+  echo "FAIL: policy audit --verify did not return 0"
+  clavain-cli policy audit --verify
+  exit 1
+}
+
+echo "PASS: authz-e2e (policy check → bd close → audit row + signature verified)"
