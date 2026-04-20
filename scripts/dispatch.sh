@@ -495,6 +495,89 @@ fi
 # a working sandbox. If Landlock is unavailable (kernel < 5.13), Codex falls
 # back to unsandboxed mode on its own — no intervention needed from dispatch.sh.
 
+# ─── Toolchain preflight (sylveste-aglf) ────────────────────────────────────
+# Detect language toolchains implied by project markers in WORKDIR and check
+# they resolve on PATH before invoking codex. Produces a clear "go not on PATH"
+# warning instead of the task body discovering it mid-run as "go: command not found".
+#
+# Default: warn and continue. CLAVAIN_STRICT_PREFLIGHT=1 fails fast.
+# CLAVAIN_PREFLIGHT_INJECT_PATH=1 appends common toolchain bin dirs to PATH.
+_preflight_toolchains() {
+  local workdir="${1:-}"
+  [[ -z "$workdir" || ! -d "$workdir" ]] && return 0
+
+  # Project marker → (display name, command to probe)
+  local -a markers=(
+    "go.mod:go:go"
+    "package.json:node:node"
+    "pyproject.toml:python3:python3"
+    "requirements.txt:python3:python3"
+    "Cargo.toml:rust:cargo"
+    "Gemfile:ruby:ruby"
+    "pom.xml:java:java"
+    "build.gradle:java:java"
+    "build.gradle.kts:java:java"
+  )
+
+  local -A seen_tool=()
+  local -a missing=()
+  local entry marker lang tool
+
+  for entry in "${markers[@]}"; do
+    IFS=':' read -r marker lang tool <<< "$entry"
+    [[ -f "$workdir/$marker" ]] || continue
+    [[ -n "${seen_tool[$tool]:-}" ]] && continue
+    seen_tool[$tool]=1
+
+    if command -v "$tool" >/dev/null 2>&1; then
+      continue
+    fi
+
+    # Optional PATH injection before declaring missing.
+    if [[ "${CLAVAIN_PREFLIGHT_INJECT_PATH:-0}" == "1" ]]; then
+      local -a candidates=()
+      case "$tool" in
+        go)     candidates=(/usr/local/go/bin "$HOME/go/bin") ;;
+        cargo)  candidates=("$HOME/.cargo/bin") ;;
+        node)   candidates=("$HOME/.nvm/versions/node"/*/bin "$HOME/.volta/bin" /usr/local/bin) ;;
+        python3) candidates=(/usr/local/bin /usr/bin) ;;
+      esac
+      local cand found=0
+      for cand in "${candidates[@]+"${candidates[@]}"}"; do
+        [[ -d "$cand" && -x "$cand/$tool" ]] || continue
+        export PATH="$PATH:$cand"
+        echo "Note: preflight injected $cand into PATH for $tool ($lang detected via $marker)" >&2
+        found=1
+        break
+      done
+      [[ "$found" == "1" ]] && continue
+    fi
+
+    missing+=("$tool ($lang, implied by $marker)")
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  local m
+  for m in "${missing[@]}"; do
+    echo "Warning: preflight: required toolchain not on PATH — $m" >&2
+  done
+
+  if [[ "${CLAVAIN_STRICT_PREFLIGHT:-0}" == "1" ]]; then
+    echo "Error: preflight failed (CLAVAIN_STRICT_PREFLIGHT=1). Aborting before codex exec." >&2
+    exit 1
+  fi
+
+  echo "Note: continuing despite missing toolchains — set CLAVAIN_STRICT_PREFLIGHT=1 to fail fast, or CLAVAIN_PREFLIGHT_INJECT_PATH=1 to try known locations." >&2
+  return 0
+}
+
+if [[ -n "$WORKDIR" ]]; then
+  _preflight_toolchains "$WORKDIR"
+fi
+
 # ─── Compound Autonomy Guard (rsj.1.8) ──────────────────────────────────────
 # If Mycroft is dispatching, check compound autonomy score before proceeding.
 if [[ -n "${MYCROFT_TIER:-}" ]]; then
@@ -753,13 +836,128 @@ SUMMARY: $summary
 VERDICT
 }
 
+# ─── Codex error surfacing (sylveste-mb3i) ──────────────────────────────────
+# Inspect codex stderr, exit code, and state counters after codex exits.
+# Returns (stdout) a TAB-delimited "<kind>\t<detail>" when an error/retry/warn
+# signal is present, or non-zero exit when all clear.
+#
+# kind:
+#   error  — codex exec failed visibly (HTTP 4xx/5xx, ERROR line, non-zero exit)
+#   retry  — HTTP 429 rate-limit (caller can back off)
+#   warn   — codex exited 0 but produced zero turns/messages/commands
+_detect_codex_error() {
+    local stderr_file="$1" state_file="$2" exit_code="${3:-0}"
+    local kind="" detail="" line=""
+
+    if [[ -f "$stderr_file" ]]; then
+        # HTTP-coded error lines (codex format: "stream error: unexpected status 400 Bad Request: ...")
+        line=$(grep -m1 -E '(unexpected status|HTTP/?[0-9.]*|status code)[[:space:]]*:?[[:space:]]*(4[0-9]{2}|5[0-9]{2})' "$stderr_file" 2>/dev/null || true)
+        if [[ -z "$line" ]]; then
+            line=$(grep -m1 -E '\b(4[0-9]{2}|5[0-9]{2})\b.*(Bad Request|Unauthorized|Forbidden|Not Found|Too Many Requests|Internal|Service Unavailable|not supported|quota)' "$stderr_file" 2>/dev/null || true)
+        fi
+        if [[ -n "$line" ]]; then
+            line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300)
+            if grep -qE '\b429\b' <<< "$line"; then
+                kind="retry"
+                detail="Codex HTTP 429 (rate limited): $line"
+            else
+                kind="error"
+                detail="Codex HTTP error: $line"
+            fi
+        fi
+
+        # Generic ERROR prefix (codex-exec format) if no HTTP match
+        if [[ -z "$kind" ]]; then
+            line=$(grep -m1 -E '^[[:space:]]*ERROR[[:space:]:]' "$stderr_file" 2>/dev/null || true)
+            if [[ -n "$line" ]]; then
+                line=$(printf '%s' "$line" | sed -E 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | head -c 300)
+                kind="error"
+                detail="$line"
+            fi
+        fi
+    fi
+
+    if [[ -z "$kind" && "$exit_code" != "0" ]]; then
+        kind="error"
+        detail="codex exec exited $exit_code (no stderr error pattern matched)"
+    fi
+
+    # Zero-output heuristic: successful exit but nothing happened → suspicious.
+    if [[ -z "$kind" && -f "$state_file" ]] && command -v jq >/dev/null 2>&1; then
+        local turns msgs cmds
+        turns=$(jq -r '.turns // 0' "$state_file" 2>/dev/null || echo 0)
+        msgs=$(jq -r '.messages // 0' "$state_file" 2>/dev/null || echo 0)
+        cmds=$(jq -r '.commands // 0' "$state_file" 2>/dev/null || echo 0)
+        if [[ "$turns" == "0" && "$msgs" == "0" && "$cmds" == "0" ]]; then
+            kind="warn"
+            detail="No model output — zero turns, messages, and commands."
+        fi
+    fi
+
+    [[ -z "$kind" ]] && return 1
+    printf '%s\t%s\n' "$kind" "$detail"
+    return 0
+}
+
+# Overwrite the verdict sidecar with a STATUS reflecting a codex-level failure.
+# Preserves the original verdict body at "${verdict_file}.pre-error" for debugging.
+_write_error_verdict() {
+    local output_file="$1" kind="$2" detail="$3"
+    [[ -z "$output_file" ]] && return 0
+    local verdict_file="${output_file}.verdict"
+    local status
+    case "$kind" in
+        error) status="error" ;;
+        retry) status="retry" ;;
+        warn)  status="warn"  ;;
+        *)     status="warn"  ;;
+    esac
+
+    if [[ -f "$verdict_file" ]]; then
+        cp "$verdict_file" "${verdict_file}.pre-error" 2>/dev/null || true
+    fi
+
+    cat > "$verdict_file" <<VERDICT
+--- VERDICT ---
+STATUS: $status
+FILES: 0 changed
+FINDINGS: 0 (P0: 0, P1: 0, P2: 0)
+SUMMARY: $detail
+---
+VERDICT
+}
+
+# Cleanup: register stderr capture file with existing trap.
+STDERR_FILE="${STATE_FILE}.stderr"
+_dispatch_cleanup_stderr() {
+  rm -f "$STDERR_FILE" 2>/dev/null || true
+}
+trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT INT TERM
+
+_surface_codex_errors() {
+  local exit_code="$1"
+  [[ -z "$OUTPUT" ]] && return 0
+  local err_info=""
+  if err_info=$(_detect_codex_error "$STDERR_FILE" "$STATE_FILE" "$exit_code"); then
+    local err_kind err_detail
+    IFS=$'\t' read -r err_kind err_detail <<< "$err_info"
+    _write_error_verdict "$OUTPUT" "$err_kind" "$err_detail"
+    echo "Warning: dispatch surfaced codex $err_kind — verdict overridden: $err_detail" >&2
+  fi
+}
+
 if [[ "$HAS_GAWK" == true ]]; then
   # Add --json to capture JSONL stream, pipe through parser
   CMD+=(--json)
 
-  # Execute: pipe stdout through parser, capture exit code immediately
-  "${CMD[@]}" | _jsonl_parser "$STATE_FILE" "${NAME:-codex}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+  # Capture stderr while still mirroring to the terminal so the user sees errors live
+  # AND dispatch can inspect them for verdict synthesis (sylveste-mb3i).
+  # set -e is disabled around the pipeline so a non-zero codex exit still lets
+  # us run verdict override + cleanup before exiting with the captured code.
+  set +e
+  "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2) | _jsonl_parser "$STATE_FILE" "${NAME:-codex}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
   CODEX_EXIT="${PIPESTATUS[0]}"
+  set -e
 
   # Write summary from bash if awk didn't (fallback for short/failed runs)
   if [[ -n "$SUMMARY_FILE" && ! -f "$SUMMARY_FILE" ]]; then
@@ -769,8 +967,9 @@ if [[ "$HAS_GAWK" == true ]]; then
     printf 'Dispatch: %s\nDuration: %dm %ds\n' "${NAME:-codex}" "$MINS" "$SECS" > "$SUMMARY_FILE"
   fi
 
-  # Extract verdict sidecar from output
+  # Extract verdict sidecar from output, then override on codex-level errors.
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
+  _surface_codex_errors "$CODEX_EXIT"
 
   # Post-dispatch validation: scope check + secret scan
   _post_dispatch_validate "$WORKDIR"
@@ -782,13 +981,19 @@ if [[ "$HAS_GAWK" == true ]]; then
 else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
-  "${CMD[@]}"
+  set +e
+  "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2)
+  CODEX_EXIT=$?
+  set -e
 
   _dispatch_sync_interband_from_legacy
 
-  # Extract verdict sidecar from output
+  # Extract verdict sidecar from output, then override on codex-level errors.
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
+  _surface_codex_errors "$CODEX_EXIT"
 
   # Post-dispatch validation: scope check + secret scan
   _post_dispatch_validate "$WORKDIR"
+
+  exit "$CODEX_EXIT"
 fi
