@@ -27,4 +27,5 @@ gate_decide_mode "$rc" git-push-main
 git push "$REMOTE" "$REFSPEC"
 
 gate_record git-push-main "${REMOTE}/${REFSPEC}" "" --vetted-sha="$HEAD_SHA"
+gate_sign   git-push-main "${REMOTE}/${REFSPEC}" ""
 echo "git-push-main: pushed ${CURRENT_BRANCH} → ${REMOTE}/${REFSPEC}"

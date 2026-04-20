@@ -51,3 +51,4 @@ fi
 echo "bd-push-dolt: ok"
 
 gate_record bd-push-dolt "$DB_DIR" ""
+gate_sign   bd-push-dolt "$DB_DIR" ""

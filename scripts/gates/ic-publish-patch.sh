@@ -32,3 +32,4 @@ gate_decide_mode "$rc" ic-publish-patch
 ic publish --patch "$PLUGIN_DIR" "$@"
 
 gate_record ic-publish-patch "$PLUGIN_DIR" "" --vetted-sha="$HEAD_SHA"
+gate_sign   ic-publish-patch "$PLUGIN_DIR" ""

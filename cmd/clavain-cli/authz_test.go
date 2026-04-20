@@ -57,7 +57,10 @@ CREATE TABLE IF NOT EXISTS authorizations (
   vetted_sha       TEXT,
   vetting          TEXT CHECK(vetting IS NULL OR json_valid(vetting)),
   cross_project_id TEXT,
-  created_at       INTEGER NOT NULL
+  created_at       INTEGER NOT NULL,
+  sig_version      INTEGER NOT NULL DEFAULT 0,
+  signature        BLOB,
+  signed_at        INTEGER
 );`
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatalf("create schema: %v", err)

@@ -145,3 +145,22 @@ gate_record() {
     echo "policy: record failed (op=${op} target=${target}); op succeeded" >&2
   fi
 }
+
+# gate_sign <op> <target> [bead-or-empty]
+# Signs the just-recorded audit row via `clavain-cli policy sign`. Best-effort:
+# missing key, unwritable DB, or any signing failure is logged but does not
+# fail the op — the row remains unsigned and will be caught by the next
+# `policy audit --verify` pass. Called AFTER gate_record so the row exists.
+#
+# Filters narrow the signer to just this wrapper's row; without filters the
+# signer would cover every unsigned row in the table, which is fine but noisy.
+gate_sign() {
+  local op="$1" target="$2" bead="${3:-}"
+  local args=( --op="$op" --target="$target" )
+  if [[ -n "$bead" ]]; then
+    args+=( --bead="$bead" )
+  fi
+  if ! clavain-cli policy sign "${args[@]}" >/dev/null 2>&1; then
+    echo "policy: sign failed (op=${op} target=${target}); row remains unsigned" >&2
+  fi
+}

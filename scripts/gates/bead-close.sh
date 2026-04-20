@@ -33,3 +33,4 @@ else
 fi
 
 gate_record bead-close "$BEAD_ID" "$BEAD_ID"
+gate_sign   bead-close "$BEAD_ID" "$BEAD_ID"

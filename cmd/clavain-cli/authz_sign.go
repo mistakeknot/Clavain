@@ -410,13 +410,6 @@ func cmdPolicyQuarantine(args []string) error {
 		return fmt.Errorf("policy quarantine: record: %w", err)
 	}
 
-	// Flip sig_version of the quarantine row to 1 so `policy sign` picks it up.
-	if _, err := db.Exec(`UPDATE authorizations
-		SET sig_version=1
-		WHERE op_type='policy.quarantine' AND target=? AND sig_version=0`, fp); err != nil {
-		return fmt.Errorf("policy quarantine: mark signable: %w", err)
-	}
-
 	return outputJSON(map[string]string{
 		"status":              "ok",
 		"quarantined_key":     fp,
