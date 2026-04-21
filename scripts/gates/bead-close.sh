@@ -14,17 +14,26 @@ REASON="${2:-}"
 # shellcheck source=/dev/null
 source "$(dirname "$0")/_common.sh"
 
-gate_populate_vetting "$BEAD_ID"
+# v2 token path: if $CLAVAIN_AUTHZ_TOKEN is set, try to consume it first.
+# Hard-fails on auth-failure class (revoked | sig-verify | POP | mismatch);
+# state-class errors fall through to legacy gate_check below.
+if ! gate_token_consume bead-close "$BEAD_ID"; then
+  exit 1
+fi
 
-check_flags=( --target="$BEAD_ID" --bead="$BEAD_ID" )
-if [[ -n "${CLAVAIN_VETTED_AT:-}"         ]]; then check_flags+=( --vetted-at="$CLAVAIN_VETTED_AT" ); fi
-if [[ -n "${CLAVAIN_VETTED_SHA:-}"        ]]; then check_flags+=( --vetted-sha="$CLAVAIN_VETTED_SHA" ); fi
-if [[ "${CLAVAIN_TESTS_PASSED:-0}"  == "1" ]]; then check_flags+=( --tests-passed ); fi
-if [[ "${CLAVAIN_SPRINT_OR_WORK:-0}" == "1" ]]; then check_flags+=( --sprint-or-work-flow ); fi
+if [[ "${GATE_CONSUMED:-0}" != "1" ]]; then
+  gate_populate_vetting "$BEAD_ID"
 
-rc=0
-gate_check bead-close "${check_flags[@]}" >/dev/null || rc=$?
-gate_decide_mode "$rc" bead-close
+  check_flags=( --target="$BEAD_ID" --bead="$BEAD_ID" )
+  if [[ -n "${CLAVAIN_VETTED_AT:-}"         ]]; then check_flags+=( --vetted-at="$CLAVAIN_VETTED_AT" ); fi
+  if [[ -n "${CLAVAIN_VETTED_SHA:-}"        ]]; then check_flags+=( --vetted-sha="$CLAVAIN_VETTED_SHA" ); fi
+  if [[ "${CLAVAIN_TESTS_PASSED:-0}"  == "1" ]]; then check_flags+=( --tests-passed ); fi
+  if [[ "${CLAVAIN_SPRINT_OR_WORK:-0}" == "1" ]]; then check_flags+=( --sprint-or-work-flow ); fi
+
+  rc=0
+  gate_check bead-close "${check_flags[@]}" >/dev/null || rc=$?
+  gate_decide_mode "$rc" bead-close
+fi
 
 if [[ -n "$REASON" ]]; then
   bd close "$BEAD_ID" --reason="$REASON"

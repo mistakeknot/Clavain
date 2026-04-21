@@ -164,3 +164,74 @@ gate_sign() {
     echo "policy: sign failed (op=${op} target=${target}); row remains unsigned" >&2
   fi
 }
+
+# gate_token_consume <op> <target>
+# If $CLAVAIN_AUTHZ_TOKEN is set, attempts to consume it against the given
+# op/target scope. Sets GATE_CONSUMED=1 on success and unsets the env var to
+# prevent child-process leakage. Exit contract (per authz v2 plan r3):
+#
+#   CLI exit 0 (success)     → GATE_CONSUMED=1, GATE_MODE=auto, return 0.
+#   CLI exit 2 (token-state) → already-consumed OR expired — passive drift,
+#                              safe to fall through. GATE_CONSUMED=0, return 0.
+#   CLI exit 3 (not-found)   → malformed string or stale ULID — fall through.
+#                              GATE_CONSUMED=0, return 0.
+#   CLI exit 4 (auth-fail)   → sig-verify | POP | scope-widen | caller-mismatch
+#                              | cross-project | expect-mismatch | REVOKED |
+#                              cascade-on-non-root. HARD FAIL — caller exits.
+#                              An operator-invoked revoke is stronger intent
+#                              than passive state; falling through to legacy
+#                              policy would let a legacy rule silently
+#                              override the revoke. Return 1.
+#   CLI exit 1/other         → unexpected (DB/IO/programmer). HARD FAIL. Return 1.
+#
+# Empty $CLAVAIN_AUTHZ_TOKEN is a no-op: GATE_CONSUMED=0, return 0 (legacy
+# path runs). The caller MUST check this function's return code BEFORE
+# checking $GATE_CONSUMED.
+gate_token_consume() {
+  local op="$1" target="$2"
+  GATE_CONSUMED=0
+  export GATE_CONSUMED
+  if [[ -z "${CLAVAIN_AUTHZ_TOKEN:-}" ]]; then
+    return 0
+  fi
+
+  local out rc
+  out="$(clavain-cli policy token consume \
+          --token="$CLAVAIN_AUTHZ_TOKEN" \
+          --expect-op="$op" \
+          --expect-target="$target" 2>&1)" && rc=0 || rc=$?
+
+  case "$rc" in
+    0)
+      GATE_CONSUMED=1
+      GATE_MODE=auto
+      export GATE_CONSUMED GATE_MODE
+      # Belt: unset in this process so child ops don't re-see a consumed
+      # token. The CLI also emits an eval-friendly `unset CLAVAIN_AUTHZ_TOKEN`
+      # block to stdout for interactive shells.
+      unset CLAVAIN_AUTHZ_TOKEN
+      echo "authz: token consumed for ${op} ${target}" >&2
+      return 0
+      ;;
+    2)
+      echo "authz: token unusable (state — consumed or expired): ${out}" >&2
+      echo "authz: falling back to policy check" >&2
+      return 0
+      ;;
+    3)
+      echo "authz: token unusable (not-found or malformed): ${out}" >&2
+      echo "authz: falling back to policy check" >&2
+      return 0
+      ;;
+    4)
+      echo "authz: AUTH FAILURE — token rejected for ${op} ${target}: ${out}" >&2
+      echo "authz: gate hard-fails; resolve the mismatch and retry" >&2
+      return 1
+      ;;
+    *)
+      echo "authz: unexpected token consume error (rc=${rc}): ${out}" >&2
+      echo "authz: gate hard-fails; this is a bug — check intercore DB" >&2
+      return 1
+      ;;
+  esac
+}

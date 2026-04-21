@@ -14,20 +14,26 @@ shift
 # shellcheck source=/dev/null
 source "$(dirname "$0")/_common.sh"
 
-if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
-  gate_populate_vetting "$CLAVAIN_BEAD_ID"
-fi
-
 HEAD_SHA="$(git -C "$PLUGIN_DIR" rev-parse HEAD 2>/dev/null || echo)"
 
-check_flags=( --target="$PLUGIN_DIR" --head-sha="$HEAD_SHA" )
-if [[ -n "${CLAVAIN_VETTED_AT:-}"          ]]; then check_flags+=( --vetted-at="$CLAVAIN_VETTED_AT" ); fi
-if [[ -n "${CLAVAIN_VETTED_SHA:-}"         ]]; then check_flags+=( --vetted-sha="$CLAVAIN_VETTED_SHA" ); fi
-if [[ "${CLAVAIN_TESTS_PASSED:-0}"   == "1" ]]; then check_flags+=( --tests-passed ); fi
+if ! gate_token_consume ic-publish-patch "$PLUGIN_DIR"; then
+  exit 1
+fi
 
-rc=0
-gate_check ic-publish-patch "${check_flags[@]}" >/dev/null || rc=$?
-gate_decide_mode "$rc" ic-publish-patch
+if [[ "${GATE_CONSUMED:-0}" != "1" ]]; then
+  if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+    gate_populate_vetting "$CLAVAIN_BEAD_ID"
+  fi
+
+  check_flags=( --target="$PLUGIN_DIR" --head-sha="$HEAD_SHA" )
+  if [[ -n "${CLAVAIN_VETTED_AT:-}"          ]]; then check_flags+=( --vetted-at="$CLAVAIN_VETTED_AT" ); fi
+  if [[ -n "${CLAVAIN_VETTED_SHA:-}"         ]]; then check_flags+=( --vetted-sha="$CLAVAIN_VETTED_SHA" ); fi
+  if [[ "${CLAVAIN_TESTS_PASSED:-0}"   == "1" ]]; then check_flags+=( --tests-passed ); fi
+
+  rc=0
+  gate_check ic-publish-patch "${check_flags[@]}" >/dev/null || rc=$?
+  gate_decide_mode "$rc" ic-publish-patch
+fi
 
 ic publish --patch "$PLUGIN_DIR" "$@"
 

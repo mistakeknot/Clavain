@@ -33,12 +33,18 @@ if [[ -z "$DB_DIR" || ! -d "$DB_DIR" ]]; then
   exit 1
 fi
 
-check_flags=( --target="$DB_DIR" )
-if [[ "${CLAVAIN_SPRINT_OR_WORK:-0}" == "1" ]]; then check_flags+=( --sprint-or-work-flow ); fi
+if ! gate_token_consume bd-push-dolt "$DB_DIR"; then
+  exit 1
+fi
 
-rc=0
-gate_check bd-push-dolt "${check_flags[@]}" >/dev/null || rc=$?
-gate_decide_mode "$rc" bd-push-dolt
+if [[ "${GATE_CONSUMED:-0}" != "1" ]]; then
+  check_flags=( --target="$DB_DIR" )
+  if [[ "${CLAVAIN_SPRINT_OR_WORK:-0}" == "1" ]]; then check_flags+=( --sprint-or-work-flow ); fi
+
+  rc=0
+  gate_check bd-push-dolt "${check_flags[@]}" >/dev/null || rc=$?
+  gate_decide_mode "$rc" bd-push-dolt
+fi
 
 cd "$DB_DIR"
 output="$("$DOLT" push origin main 2>&1)"

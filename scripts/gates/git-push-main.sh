@@ -18,11 +18,16 @@ source "$(dirname "$0")/_common.sh"
 HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || echo)"
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo detached)"
 
-check_flags=( --target="${REMOTE}/${REFSPEC}" --head-sha="$HEAD_SHA" )
+if ! gate_token_consume git-push-main "${REMOTE}/${REFSPEC}"; then
+  exit 1
+fi
 
-rc=0
-gate_check git-push-main "${check_flags[@]}" >/dev/null || rc=$?
-gate_decide_mode "$rc" git-push-main
+if [[ "${GATE_CONSUMED:-0}" != "1" ]]; then
+  check_flags=( --target="${REMOTE}/${REFSPEC}" --head-sha="$HEAD_SHA" )
+  rc=0
+  gate_check git-push-main "${check_flags[@]}" >/dev/null || rc=$?
+  gate_decide_mode "$rc" git-push-main
+fi
 
 git push "$REMOTE" "$REFSPEC"
 
