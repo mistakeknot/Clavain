@@ -30,6 +30,11 @@ __pycache__/
 .clavain/intercore.db-shm
 .clavain/intercore.db.backup-*
 
+# Authz signing keys — private ONLY; pubkey is intentionally committed for verifiers.
+.clavain/keys/*.key
+.clavain/keys/*.archive
+!.clavain/keys/*.pub
+
 .intermem/
 
 # Vendored upstream repos (only specific subdirs are tracked)

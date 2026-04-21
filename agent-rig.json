@@ -381,7 +381,12 @@
   "postInstall": {
     "message": [
       "Try: /sprint add user export feature",
-      "Run /help to see all 46 commands, or /doctor to verify your setup."
+      "Run /help to see all 46 commands, or /doctor to verify your setup.",
+      "",
+      "Auto-proceed authz (v1.5): run scripts/authz-init.sh from each project",
+      "root to enable signed audit records for bd close / git push / ic publish.",
+      "  bash <(claude plugin-path clavain)/scripts/authz-init.sh",
+      "See README.md § \"Signing audit records (v1.5)\" for the full quickstart."
     ]
   },
   "repository": "mistakeknot/Clavain",
