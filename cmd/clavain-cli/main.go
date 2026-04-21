@@ -258,6 +258,14 @@ func main() {
 		if errors.Is(err, ErrPolicyMalformed) {
 			os.Exit(3)
 		}
+		// Authz-token handlers wrap errors with an ExitCoder carrying the
+		// library's 5-class mapping (see authz_token.go tokenExit). The
+		// stderr "ERROR <class>:" line was already printed by reportTokenErr;
+		// here we only translate to os.Exit without re-emitting the message.
+		var ec interface{ ExitCode() int }
+		if errors.As(err, &ec) {
+			os.Exit(ec.ExitCode())
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
