@@ -20,10 +20,12 @@ set -euo pipefail
 
 PROJECT_ROOT=""
 POLICY_EXAMPLE=""
+WITH_TOKEN_DEMO=0
 for arg in "$@"; do
   case "$arg" in
     --project-root=*)   PROJECT_ROOT="${arg#*=}" ;;
     --policy-example=*) POLICY_EXAMPLE="${arg#*=}" ;;
+    --with-token-demo)  WITH_TOKEN_DEMO=1 ;;
     -h|--help)
       sed -n '1,20p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -103,5 +105,23 @@ if command -v jq >/dev/null 2>&1; then
   log "summary: ${summary}"
 fi
 rm -f /tmp/authz-init-verify.json
+
+# Optional: issue a demo bead-close token to validate v2 end-to-end.
+if [[ "$WITH_TOKEN_DEMO" == "1" ]]; then
+  AGENT_ID="${CLAVAIN_AGENT_ID:-demo-agent}"
+  TARGET="demo-$(date +%s)"
+  if TOKEN="$(CLAVAIN_AGENT_ID="$AGENT_ID" clavain-cli policy token issue --op=bead-close --target="$TARGET" --for="$AGENT_ID" --ttl=5m 2>/tmp/authz-init-demo.err)"; then
+    echo "Demo token issued: $TOKEN"
+    echo "Use with (one-shot, preferred):"
+    echo "  CLAVAIN_AUTHZ_TOKEN=$TOKEN bead-close some-bead-id"
+    echo "Verify (no consume):"
+    echo "  clavain-cli policy token verify --token=$TOKEN"
+    echo "(Do NOT 'export' the token — keep it scoped to one command.)"
+  else
+    log "WARN: demo token issue failed:"
+    cat /tmp/authz-init-demo.err >&2 || true
+  fi
+  rm -f /tmp/authz-init-demo.err
+fi
 
 log "done"

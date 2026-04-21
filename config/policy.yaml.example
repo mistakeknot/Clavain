@@ -1,5 +1,10 @@
 # Auto-proceed authorization policy (v1.5)
 #
+# v2 note: tokens layer on top of policy. When CLAVAIN_AUTHZ_TOKEN is set
+# and matches the op+target, the token consume short-circuits the policy
+# check entirely. Policy still governs token-less ops. Issue tokens via
+# `clavain-cli policy token issue`; see docs/canon/authz-token-model.md.
+#
 # See docs/canon/policy-merge.md for merge semantics.
 # See docs/canon/authz-cross-project-consistency.md for cross-repo behavior.
 # See docs/canon/authz-signing-trust-model.md for the v1.5 signing model.
