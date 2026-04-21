@@ -56,6 +56,13 @@ export BD_CALL_LOG="${SANDBOX}/bd-calls.log"
 export HOME="${SANDBOX}/fakehome"
 mkdir -p "$HOME"
 
+# v2-behavior assertion: this test covers the v1.5 legacy path. With v2
+# rolled in, $CLAVAIN_AUTHZ_TOKEN MUST be empty so gate_token_consume
+# returns immediately and the legacy gate_check path runs. If it's set by
+# the caller's environment we explicitly clear it — any regression where
+# v1.5 silently stops working with tokens absent would fail scenario 2.
+unset CLAVAIN_AUTHZ_TOKEN
+
 cd "$SANDBOX"
 
 # ─── Scenario 1: bootstrap ────────────────────────────────────────────
