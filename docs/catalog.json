@@ -1,5 +1,5 @@
 {
-  "generated": "2026-04-19T16:18:02Z",
+  "generated": "2026-04-26T19:41:20Z",
   "counts": {
     "skills": 17,
     "agents": 6,
@@ -35,8 +35,8 @@
       "description": "Show discipline analytics \u2014 defect escape rate, override rate, cost metrics, and agent scorecard"
     },
     {
-      "name": "interserve",
-      "description": "Dispatch tasks to Codex CLI agents \u2014 single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation."
+      "name": "interserve-engine",
+      "description": "Use when invoked from /clavain:interserve command \u2014 dispatches tasks to Codex CLI agents (single megaprompt or parallel delegation), with structured debate triggers and Oracle escalation. Internal engine; users invoke via the slash command."
     },
     {
       "name": "landing-a-change",
@@ -63,8 +63,8 @@
       "description": "Use when executing implementation plans with independent tasks in the current session"
     },
     {
-      "name": "upstream-sync",
-      "description": "Use when checking for updates from upstream tool repos (beads, oracle, superpowers, compound-engineering) or when the /clavain:upstream-sync command is invoked"
+      "name": "upstream-sync-engine",
+      "description": "Use when invoked from /clavain:upstream-sync command \u2014 checks upstream tool repos (beads, oracle, superpowers, compound-engineering) for updates and generates an upgrade checklist. Internal engine; users invoke via the slash command."
     },
     {
       "name": "using-clavain",

@@ -1,7 +1,7 @@
 ---
-name: interserve
-description: Dispatch tasks to Codex CLI agents — single megaprompt for one task, parallel delegation for many. Includes structured debate triggers and Oracle escalation.
-version: 0.4.0
+name: interserve-engine
+description: Use when invoked from /clavain:interserve command — dispatches tasks to Codex CLI agents (single megaprompt or parallel delegation), with structured debate triggers and Oracle escalation. Internal engine; users invoke via the slash command.
+version: 0.4.1
 user-invocable: false
 ---
 

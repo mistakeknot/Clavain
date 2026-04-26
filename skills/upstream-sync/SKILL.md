@@ -1,6 +1,6 @@
 ---
-name: upstream-sync
-description: Use when checking for updates from upstream tool repos (beads, oracle, superpowers, compound-engineering) or when the /clavain:upstream-sync command is invoked
+name: upstream-sync-engine
+description: Use when invoked from /clavain:upstream-sync command — checks upstream tool repos (beads, oracle, superpowers, compound-engineering) for updates and generates an upgrade checklist. Internal engine; users invoke via the slash command.
 ---
 
 # Upstream Sync
