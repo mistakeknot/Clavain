@@ -248,6 +248,17 @@ type CostEstimateEntry struct {
 	EstimationSource  string  `json:"estimation_source"`
 }
 
+// CostAnomalyEntry records an actual-vs-estimate drift receipt.
+type CostAnomalyEntry struct {
+	BeadID            string  `json:"bead_id"`
+	Timestamp         string  `json:"timestamp"`
+	EstimateTimestamp string  `json:"estimate_timestamp"`
+	EstimatedTotalUSD float64 `json:"estimated_total_usd"`
+	ActualTotalUSD    float64 `json:"actual_total_usd"`
+	Ratio             float64 `json:"ratio"`
+	Reason            string  `json:"reason"`
+}
+
 // ─── Subprocess Helpers ─────────────────────────────────────────────
 
 // resolveRunID is defined in sprint.go (cached version).
@@ -675,6 +686,7 @@ func cmdRecordCostActuals(args []string) error {
 
 	// Persist full snapshot to ic state
 	writeICState("cost_actuals", runID, string(out))
+	recordCostAnomalyIfNeeded(beadID, runID, snapshot)
 
 	// Set scalar on bead for quick lookup
 	totalStr := strconv.FormatFloat(snapshot.TotalCostUSD, 'f', 4, 64)
@@ -743,6 +755,76 @@ func cmdRecordCostEstimate(args []string) error {
 
 	writeICState("cost_estimates", runID, string(data))
 	return nil
+}
+
+func latestCostEstimate(estimates []CostEstimateEntry) (CostEstimateEntry, bool) {
+	for i := len(estimates) - 1; i >= 0; i-- {
+		if estimates[i].EstimatedTotalUSD > 0 {
+			return estimates[i], true
+		}
+	}
+	return CostEstimateEntry{}, false
+}
+
+func detectCostAnomaly(beadID string, snapshot CostSnapshot, estimates []CostEstimateEntry, timestamp string) (CostAnomalyEntry, bool) {
+	estimate, ok := latestCostEstimate(estimates)
+	if !ok || snapshot.TotalCostUSD <= 0 {
+		return CostAnomalyEntry{}, false
+	}
+
+	ratio := snapshot.TotalCostUSD / estimate.EstimatedTotalUSD
+	if ratio <= 2.0 {
+		return CostAnomalyEntry{}, false
+	}
+
+	ratio = math.Round(ratio*100) / 100
+	return CostAnomalyEntry{
+		BeadID:            beadID,
+		Timestamp:         timestamp,
+		EstimateTimestamp: estimate.Timestamp,
+		EstimatedTotalUSD: math.Round(estimate.EstimatedTotalUSD*10000) / 10000,
+		ActualTotalUSD:    math.Round(snapshot.TotalCostUSD*10000) / 10000,
+		Ratio:             ratio,
+		Reason:            "actual_cost_exceeded_estimate_by_more_than_2x",
+	}, true
+}
+
+func recordCostAnomalyIfNeeded(beadID, runID string, snapshot CostSnapshot) {
+	out, err := runIC("state", "get", "cost_estimates", runID)
+	if err != nil {
+		return
+	}
+	var estimates []CostEstimateEntry
+	if err := json.Unmarshal(out, &estimates); err != nil || len(estimates) == 0 {
+		return
+	}
+
+	entry, ok := detectCostAnomaly(beadID, snapshot, estimates, time.Now().UTC().Format(time.RFC3339))
+	if !ok {
+		return
+	}
+
+	var anomalies []CostAnomalyEntry
+	existingOut, err := runIC("state", "get", "cost_anomalies", runID)
+	if err == nil {
+		s := strings.TrimSpace(string(existingOut))
+		if s != "" && s != "null" {
+			_ = json.Unmarshal(existingOut, &anomalies)
+		}
+	}
+	for _, existing := range anomalies {
+		if existing.EstimateTimestamp == entry.EstimateTimestamp {
+			return
+		}
+	}
+
+	anomalies = append(anomalies, entry)
+	data, err := json.Marshal(anomalies)
+	if err != nil {
+		return
+	}
+	writeICState("cost_anomalies", runID, string(data))
+	_, _ = runBD("set-state", beadID, "cost_anomaly="+strconv.FormatFloat(entry.Ratio, 'f', 2, 64)+"x")
 }
 
 // cmdCalibratePhaseCosts reads historical per-phase token data from interstat,

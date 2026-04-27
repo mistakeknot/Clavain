@@ -279,6 +279,62 @@ func TestRemainingEstimateUSD(t *testing.T) {
 	}
 }
 
+func TestDetectCostAnomaly(t *testing.T) {
+	estimates := []CostEstimateEntry{
+		{
+			Phase:             "planned",
+			Timestamp:         "2026-04-27T00:00:00Z",
+			EstimatedTotalUSD: 1.25,
+		},
+	}
+	snapshot := CostSnapshot{TotalCostUSD: 2.76}
+
+	got, ok := detectCostAnomaly("sylveste-test", snapshot, estimates, "2026-04-27T01:00:00Z")
+	if !ok {
+		t.Fatal("detectCostAnomaly returned ok=false, want true")
+	}
+	if got.BeadID != "sylveste-test" {
+		t.Errorf("BeadID = %q, want sylveste-test", got.BeadID)
+	}
+	if got.EstimateTimestamp != "2026-04-27T00:00:00Z" {
+		t.Errorf("EstimateTimestamp = %q", got.EstimateTimestamp)
+	}
+	if got.Ratio != 2.21 {
+		t.Errorf("Ratio = %.2f, want 2.21", got.Ratio)
+	}
+	if got.Reason != "actual_cost_exceeded_estimate_by_more_than_2x" {
+		t.Errorf("Reason = %q", got.Reason)
+	}
+}
+
+func TestDetectCostAnomalySkipsAtOrBelowThreshold(t *testing.T) {
+	estimates := []CostEstimateEntry{{Timestamp: "t1", EstimatedTotalUSD: 1.00}}
+	for _, actual := range []float64{0, 1.99, 2.00} {
+		_, ok := detectCostAnomaly("sylveste-test", CostSnapshot{TotalCostUSD: actual}, estimates, "now")
+		if ok {
+			t.Fatalf("detectCostAnomaly(actual=%.2f) returned ok=true, want false", actual)
+		}
+	}
+}
+
+func TestDetectCostAnomalyUsesLatestNonzeroEstimate(t *testing.T) {
+	estimates := []CostEstimateEntry{
+		{Timestamp: "old", EstimatedTotalUSD: 1.00},
+		{Timestamp: "zero", EstimatedTotalUSD: 0},
+		{Timestamp: "latest", EstimatedTotalUSD: 3.00},
+	}
+	got, ok := detectCostAnomaly("sylveste-test", CostSnapshot{TotalCostUSD: 6.30}, estimates, "now")
+	if !ok {
+		t.Fatal("detectCostAnomaly returned ok=false, want true")
+	}
+	if got.EstimateTimestamp != "latest" {
+		t.Errorf("EstimateTimestamp = %q, want latest", got.EstimateTimestamp)
+	}
+	if got.Ratio != 2.10 {
+		t.Errorf("Ratio = %.2f, want 2.10", got.Ratio)
+	}
+}
+
 func TestPhaseCostEstimateWithCalibration(t *testing.T) {
 	// Create a temp directory with a calibration file
 	tmpDir := t.TempDir()
