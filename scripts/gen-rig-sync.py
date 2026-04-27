@@ -263,7 +263,9 @@ def build_expected(rig: dict) -> dict[Path, str]:
     required = get_tier_entries(rig, "required")
     optional = get_tier_entries(rig, "optional")
     infrastructure = get_tier_entries(rig, "infrastructure")
-    conflicts = get_tier_entries(rig, "conflicts")
+    # hard_conflicts: true duplicates of Clavain functionality (auto-disabled).
+    # plugins.peers (alt rigs) are NOT included here — they are never auto-disabled.
+    conflicts = get_tier_entries(rig, "hard_conflicts")
 
     rec_groups = group_by_marketplace(recommended)
     req_groups = group_by_marketplace(required)

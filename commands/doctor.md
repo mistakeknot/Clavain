@@ -332,7 +332,14 @@ try:
 except FileNotFoundError:
     print('  settings.json not found'); exit()
 conflicts = [
-    ,
+    'code-review@claude-plugins-official',
+    'pr-review-toolkit@claude-plugins-official',
+    'code-simplifier@claude-plugins-official',
+    'commit-commands@claude-plugins-official',
+    'feature-dev@claude-plugins-official',
+    'claude-md-management@claude-plugins-official',
+    'frontend-design@claude-plugins-official',
+    'hookify@claude-plugins-official',
 ]
 active = [p for p in conflicts if plugins.get(p, True)]
 if active:
@@ -343,6 +350,32 @@ else:
 "
 ```
 <!-- agent-rig:end:doctor-conflicts -->
+
+### 4b. Peer Rigs (Informational)
+
+Peer agent rigs (alternate Claude Code methodologies) coexist with Clavain — never reported as conflicts. INFO only.
+
+```bash
+python3 -c "
+import json, os
+settings = os.path.expanduser('~/.claude/settings.json')
+try:
+    plugins = json.load(open(settings)).get('enabledPlugins', {})
+except FileNotFoundError:
+    print('  settings.json not found'); exit()
+peer_rigs = [
+    'superpowers@superpowers-marketplace',
+    'compound-engineering@every-marketplace',
+    'gsd-plugin@jnuyens',
+]
+active_peers = [p for p in peer_rigs if plugins.get(p, True)]
+if active_peers:
+    for p in active_peers:
+        print(f'  INFO: peer rig active: {p} (see /clavain:peers)')
+else:
+    print('  No peer rigs detected')
+"
+```
 
 ### 5. Skill Budget
 

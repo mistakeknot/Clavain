@@ -94,6 +94,14 @@ Conflicts are handled automatically by `modpack-install.sh` — skip this step i
 
 <!-- agent-rig:begin:disable-conflicts -->
 ```bash
+claude plugin disable code-review@claude-plugins-official
+claude plugin disable pr-review-toolkit@claude-plugins-official
+claude plugin disable code-simplifier@claude-plugins-official
+claude plugin disable commit-commands@claude-plugins-official
+claude plugin disable feature-dev@claude-plugins-official
+claude plugin disable claude-md-management@claude-plugins-official
+claude plugin disable frontend-design@claude-plugins-official
+claude plugin disable hookify@claude-plugins-official
 ```
 <!-- agent-rig:end:disable-conflicts -->
 
