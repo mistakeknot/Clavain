@@ -59,7 +59,7 @@
     }
   },
   "plugins": {
-    "conflicts": [
+    "hard_conflicts": [
       {
         "source": "code-review@claude-plugins-official",
         "reason": "Duplicates Clavain review agents"
@@ -91,14 +91,23 @@
       {
         "source": "hookify@claude-plugins-official",
         "reason": "Conflicts with hook management"
-      },
+      }
+    ],
+    "peers": [
       {
         "source": "superpowers@superpowers-marketplace",
-        "reason": "Clavain is the successor to superpowers"
+        "reason": "Peer agent rig. Clavain shares vocabulary (vendored skills) but does not replace it. Both rigs coexist.",
+        "bridge_skill": "skills/interop-with-superpowers"
       },
       {
         "source": "compound-engineering@every-marketplace",
-        "reason": "Clavain is the successor to compound-engineering"
+        "reason": "Peer agent rig. Predecessor of several Clavain skills (file-todos); coexistence supported.",
+        "bridge_skill": "skills/interop-with-superpowers"
+      },
+      {
+        "source": "gsd-plugin@jnuyens",
+        "reason": "Peer agent rig (Get Stuff Done — spec-driven workflow). Coexistence supported. NOTE: marketplace identifier unconfirmed; may need adjustment when first user reports.",
+        "bridge_skill": "skills/interop-with-gsd"
       }
     ],
     "core": {

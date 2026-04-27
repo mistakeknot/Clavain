@@ -332,16 +332,7 @@ try:
 except FileNotFoundError:
     print('  settings.json not found'); exit()
 conflicts = [
-    'code-review@claude-plugins-official',
-    'pr-review-toolkit@claude-plugins-official',
-    'code-simplifier@claude-plugins-official',
-    'commit-commands@claude-plugins-official',
-    'feature-dev@claude-plugins-official',
-    'claude-md-management@claude-plugins-official',
-    'frontend-design@claude-plugins-official',
-    'hookify@claude-plugins-official',
-    'superpowers@superpowers-marketplace',
-    'compound-engineering@every-marketplace',
+    ,
 ]
 active = [p for p in conflicts if plugins.get(p, True)]
 if active:

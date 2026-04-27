@@ -44,8 +44,11 @@ required_sources=$(jq -r '
     ] | add | sort | .[]
 ' "$RIG_FILE")
 
-# Extract conflict sources from agent-rig.json
-conflict_sources=$(jq -r '[.plugins.conflicts[]?.source] | sort | .[]' "$RIG_FILE")
+# Extract hard-conflict sources from agent-rig.json (true duplicates — expected disabled)
+conflict_sources=$(jq -r '[.plugins.hard_conflicts[]?.source] | sort | .[]' "$RIG_FILE")
+
+# Extract peer sources (alt rigs — expected present and active, NOT disabled)
+peer_sources=$(jq -r '[.plugins.peers[]?.source] | sort | .[]' "$RIG_FILE")
 
 # Read enabledPlugins from settings.json (empty object if key absent)
 enabled_plugins=$(jq '.enabledPlugins // {}' "$SETTINGS")
@@ -83,6 +86,22 @@ while IFS= read -r source; do
     fi
 done <<< "$conflict_sources"
 
+# Peers: report status but never as conflicts. enabled = good, disabled = informational.
+peer_total=0
+peer_active=0
+peer_results=()
+while IFS= read -r source; do
+    [[ -z "$source" ]] && continue
+    peer_total=$((peer_total + 1))
+    val=$(echo "$enabled_plugins" | jq -r --arg s "$source" '.[$s] // "absent"')
+    if [[ "$val" == "false" ]]; then
+        peer_results+=("$source:installed-disabled")
+    else
+        peer_active=$((peer_active + 1))
+        peer_results+=("$source:active")
+    fi
+done <<< "$peer_sources"
+
 if [[ "$JSON_MODE" == true ]]; then
     # Build JSON output
     req_json="[]"
@@ -97,12 +116,20 @@ if [[ "$JSON_MODE" == true ]]; then
         status="${r#*:}"
         conf_json=$(echo "$conf_json" | jq --arg s "$src" --arg st "$status" '. + [{"source": $s, "status": $st}]')
     done
+    peer_json="[]"
+    for r in "${peer_results[@]}"; do
+        src="${r%%:*}"
+        status="${r#*:}"
+        peer_json=$(echo "$peer_json" | jq --arg s "$src" --arg st "$status" '. + [{"source": $s, "status": $st}]')
+    done
     jq -n \
         --argjson required "$req_json" \
         --argjson conflicts "$conf_json" \
+        --argjson peers "$peer_json" \
         --arg req_summary "${req_ok}/${req_total} enabled" \
         --arg conf_summary "${conf_ok}/${conf_total} disabled" \
-        '{required: $required, required_summary: $req_summary, conflicts: $conflicts, conflicts_summary: $conf_summary}'
+        --arg peer_summary "${peer_active}/${peer_total} active" \
+        '{required: $required, required_summary: $req_summary, conflicts: $conflicts, conflicts_summary: $conf_summary, peers: $peers, peers_summary: $peer_summary}'
 else
     echo "=== Required Plugins ==="
     for r in "${req_results[@]}"; do
@@ -112,11 +139,19 @@ else
     done
     echo "  (${req_ok}/${req_total} enabled)"
     echo ""
-    echo "=== Conflicting Plugins ==="
+    echo "=== Hard-Conflict Plugins (true duplicates — expected disabled) ==="
     for r in "${conf_results[@]}"; do
         src="${r%%:*}"
         status="${r#*:}"
         echo "  ${src}: ${status}"
     done
     echo "  (${conf_ok}/${conf_total} disabled)"
+    echo ""
+    echo "=== Peer Rigs (alternate methodologies — informational, not disabled) ==="
+    for r in "${peer_results[@]}"; do
+        src="${r%%:*}"
+        status="${r#*:}"
+        echo "  ${src}: ${status}"
+    done
+    echo "  (${peer_active}/${peer_total} active)"
 fi
