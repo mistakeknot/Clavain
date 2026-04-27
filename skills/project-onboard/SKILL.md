@@ -1,6 +1,6 @@
 ---
 name: project-onboard
-description: Use when setting up any project (new or existing) in the Sylveste ecosystem — introspects infrastructure, creates GitHub repo if needed, conducts guided interview, scaffolds docs and automation, configures observability, seeds content via interpath. Replaces the former project-kickstart command.
+description: Use to set up any Sylveste project (new or existing) — introspects, creates repo, scaffolds docs/automation/observability, seeds via interpath.
 ---
 
 <!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. -->

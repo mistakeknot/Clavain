@@ -1,6 +1,6 @@
 ---
 name: migration-safety
-description: Orchestrate database migration and data-risk work with consistent safety checks — combines data integrity, migration, and deployment verification agents
+description: Orchestrate database migration and data-risk work with safety checks (integrity, migration, deployment).
 argument-hint: "[migration file, PR number, or description of data change]"
 ---
 

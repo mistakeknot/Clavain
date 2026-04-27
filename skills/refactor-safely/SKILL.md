@@ -1,6 +1,6 @@
 ---
 name: refactor-safely
-description: Use when performing significant refactoring — guides a disciplined process that leverages duplication detection, characterization tests, staged execution, and continuous simplicity review
+description: Use for significant refactoring — duplication detection, characterization tests, staged execution, simplicity review.
 ---
 
 # Refactor Safely

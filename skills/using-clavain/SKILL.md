@@ -1,6 +1,6 @@
 ---
 name: using-clavain
-description: Use when starting any conversation - establishes how to find and use skills, agents, and commands, requiring Skill tool invocation before ANY response including clarifying questions
+description: Use at start of any conversation — how to find/use skills, agents, commands. Requires Skill invocation before ANY response, including clarifying questions.
 ---
 
 **Proactive skill invocation is required.** When a skill matches the current task — even partially — invoke it before responding.

@@ -1,6 +1,6 @@
 ---
 name: sprint-status
-description: Deep scan of sprint workflow state — session continuity, pipeline health, plan progress, beads, and recommendations
+description: Deep sprint workflow scan — session continuity, pipeline, plan, beads, recommendations.
 ---
 
 # Sprint Status

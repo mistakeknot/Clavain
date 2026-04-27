@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: Collaborative brainstorm workflow — explore ideas through structured dialogue (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan.
+description: Collaborative brainstorm — assess clarity, research repo, explore approaches, capture design. Auto-handoff to /write-plan.
 argument-hint: "[feature idea or problem to explore]"
 ---
 

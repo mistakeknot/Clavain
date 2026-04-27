@@ -1,5 +1,5 @@
 {
-  "generated": "2026-04-26T19:41:20Z",
+  "generated": "2026-04-27T01:32:55Z",
   "counts": {
     "skills": 17,
     "agents": 6,
@@ -12,11 +12,11 @@
   "skills": [
     {
       "name": "code-review-discipline",
-      "description": "Use when requesting or receiving code review \u2014 covers dispatching reviewer subagents, handling feedback with technical rigor, and avoiding performative agreement"
+      "description": "Use when requesting or receiving code review \u2014 dispatch reviewers, handle feedback rigorously, avoid performative agreement."
     },
     {
       "name": "dispatching-parallel-agents",
-      "description": "Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies"
+      "description": "Use for 2+ independent tasks with no shared state or sequential dependency."
     },
     {
       "name": "engineering-docs",
@@ -24,7 +24,7 @@
     },
     {
       "name": "executing-plans",
-      "description": "Use when you have a written implementation plan to execute in a separate session with review checkpoints"
+      "description": "Execute a written implementation plan in a separate session with review checkpoints."
     },
     {
       "name": "file-todos",
@@ -40,7 +40,7 @@
     },
     {
       "name": "landing-a-change",
-      "description": "Use when implementation is complete and all tests pass \u2014 guides the disciplined process of verifying, documenting, and landing a change on trunk"
+      "description": "Use when implementation is complete and tests pass \u2014 verify, document, and land on trunk."
     },
     {
       "name": "lane",
@@ -48,11 +48,11 @@
     },
     {
       "name": "project-onboard",
-      "description": "Use when setting up any project (new or existing) in the Sylveste ecosystem \u2014 introspects infrastructure, creates GitHub repo if needed, conducts guided interview, scaffolds docs and automation, configures observability, seeds content via interpath. Replaces the former project-kickstart command."
+      "description": "Use to set up any Sylveste project (new or existing) \u2014 introspects, creates repo, scaffolds docs/automation/observability, seeds via interpath."
     },
     {
       "name": "refactor-safely",
-      "description": "Use when performing significant refactoring \u2014 guides a disciplined process that leverages duplication detection, characterization tests, staged execution, and continuous simplicity review"
+      "description": "Use for significant refactoring \u2014 duplication detection, characterization tests, staged execution, simplicity review."
     },
     {
       "name": "ship",
@@ -64,15 +64,15 @@
     },
     {
       "name": "upstream-sync-engine",
-      "description": "Use when invoked from /clavain:upstream-sync command \u2014 checks upstream tool repos (beads, oracle, superpowers, compound-engineering) for updates and generates an upgrade checklist. Internal engine; users invoke via the slash command."
+      "description": "Engine for /clavain:upstream-sync \u2014 checks beads/oracle/superpowers/compound-engineering for updates, generates upgrade checklist. Internal; invoke via slash command."
     },
     {
       "name": "using-clavain",
-      "description": "Use when starting any conversation - establishes how to find and use skills, agents, and commands, requiring Skill tool invocation before ANY response including clarifying questions"
+      "description": "Use at start of any conversation \u2014 how to find/use skills, agents, commands. Requires Skill invocation before ANY response, including clarifying questions."
     },
     {
       "name": "using-tmux-for-interactive-commands",
-      "description": "Use when you need to run interactive CLI tools (vim, git rebase -i, Python REPL, etc.) that require real-time input/output - provides tmux-based approach for controlling interactive sessions through detached sessions and send-keys"
+      "description": "Use for interactive CLI tools (vim, git rebase -i, REPLs) that need a real terminal \u2014 drives tmux detached sessions via send-keys/capture-pane."
     },
     {
       "name": "writing-plans",
@@ -114,11 +114,11 @@
   "commands": [
     {
       "name": "bead-sweep",
-      "description": "Scan open beads for stale trackers that are already implemented \u2014 deterministic checks first, LLM verification second"
+      "description": "Scan open beads for stale trackers already implemented \u2014 deterministic checks then LLM verification."
     },
     {
       "name": "brainstorm",
-      "description": "Collaborative brainstorm workflow \u2014 explore ideas through structured dialogue (assess clarity, research repo, explore approaches, capture design) with auto-handoff to /write-plan."
+      "description": "Collaborative brainstorm \u2014 assess clarity, research repo, explore approaches, capture design. Auto-handoff to /write-plan."
     },
     {
       "name": "campaign",
@@ -210,7 +210,7 @@
     },
     {
       "name": "migration-safety",
-      "description": "Orchestrate database migration and data-risk work with consistent safety checks \u2014 combines data integrity, migration, and deployment verification agents"
+      "description": "Orchestrate database migration and data-risk work with safety checks (integrity, migration, deployment)."
     },
     {
       "name": "model-routing",
@@ -242,7 +242,7 @@
     },
     {
       "name": "repro-first-debugging",
-      "description": "Disciplined bug investigation that enforces \"reproduce first, then diagnose\" \u2014 composes debugging agents into a structured workflow"
+      "description": "Disciplined bug investigation: reproduce first, then diagnose. Composes debugging agents."
     },
     {
       "name": "resolve",
@@ -278,7 +278,7 @@
     },
     {
       "name": "sprint-status",
-      "description": "Deep scan of sprint workflow state \u2014 session continuity, pipeline health, plan progress, beads, and recommendations"
+      "description": "Deep sprint workflow scan \u2014 session continuity, pipeline, plan, beads, recommendations."
     },
     {
       "name": "strategy",

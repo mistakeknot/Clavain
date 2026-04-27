@@ -1,6 +1,6 @@
 ---
 name: bead-sweep
-description: Scan open beads for stale trackers that are already implemented — deterministic checks first, LLM verification second
+description: Scan open beads for stale trackers already implemented — deterministic checks then LLM verification.
 argument-hint: "[--auto-close] [--limit N] [plugin-name]"
 ---
 
