@@ -1,10 +1,10 @@
 {
-  "generated": "2026-04-27T01:32:55Z",
+  "generated": "2026-04-27T23:13:45Z",
   "counts": {
-    "skills": 17,
+    "skills": 19,
     "agents": 6,
-    "commands": 51,
-    "hooks": 12,
+    "commands": 52,
+    "hooks": 13,
     "mcp_servers": 0,
     "review": 2,
     "workflow": 4
@@ -33,6 +33,14 @@
     {
       "name": "galiana",
       "description": "Show discipline analytics \u2014 defect escape rate, override rate, cost metrics, and agent scorecard"
+    },
+    {
+      "name": "interop-with-gsd",
+      "description": "If gsd-plugin is not installed, this skill is informational only. Use when the user mentions /gsd:* commands, references the GSD framework (Get Stuff Done), or asks how Clavain compares to spec-driven development workflows."
+    },
+    {
+      "name": "interop-with-superpowers",
+      "description": "If superpowers is not installed, this skill is informational only. Use when the user mentions /superpowers:* commands or asks how Clavain relates to superpowers (obra/superpowers)."
     },
     {
       "name": "interserve-engine",
@@ -215,6 +223,10 @@
     {
       "name": "model-routing",
       "description": "Toggle subagent model routing between economy (smart defaults) and quality (all opus) mode"
+    },
+    {
+      "name": "peers",
+      "description": "Read-only viewer for detected peer agent rigs (superpowers, GSD, compound-engineering). Lists detection state and recommended bridge skills. Never makes changes."
     },
     {
       "name": "plan-review",

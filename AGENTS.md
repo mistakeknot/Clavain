@@ -13,7 +13,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 | Repo | `https://github.com/mistakeknot/Clavain` |
 | Namespace | `clavain:` |
 | Manifest | `.claude-plugin/plugin.json` |
-| Components | 17 skills, 6 agents, 51 commands, 12 hooks, 0 MCP servers |
+| Components | 19 skills, 6 agents, 52 commands, 13 hooks, 0 MCP servers |
 | License | MIT |
 | Layer | L2 (OS) — depends on Intercore (L1), consumed by Autarch (L3) |
 
@@ -48,8 +48,8 @@ See `agents/operational-guides.md` in the Sylveste root for the full protocol.
 ## Quick Validation
 
 ```bash
-echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 17
-echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 51
+echo "Skills: $(ls skills/*/SKILL.md | wc -l)"      # Should be 19
+echo "Commands: $(ls commands/*.md | wc -l)"        # Should be 52
 ```
 
 See [agents/development.md](agents/development.md) for the full validation checklist.
