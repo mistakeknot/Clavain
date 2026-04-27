@@ -4,7 +4,7 @@
 # Usage:
 #   modpack-install.sh [--dry-run] [--check-only] [--quiet] [--category=CATEGORY]
 #
-# Categories: required, recommended, optional, conflicts, all (default: all)
+# Categories: required, recommended, optional, hard_conflicts, peers, all (default: all)
 # --dry-run:    Show what would be installed without making changes
 # --check-only: Alias for --dry-run
 # --quiet:      Suppress progress output, emit JSON only
@@ -53,6 +53,8 @@ failed=()
 disabled=()
 already_disabled=()
 optional_available=()
+peers_detected=()
+peers_active=()
 
 log() {
     if [[ "$QUIET" != true ]]; then
@@ -176,8 +178,8 @@ process_category() {
         required|recommended|optional|infrastructure)
             sources=$(jq -r ".plugins.${cat}[]?.source" "$RIG_FILE")
             ;;
-        conflicts)
-            sources=$(jq -r '.plugins.conflicts[]?.source' "$RIG_FILE")
+        hard_conflicts)
+            sources=$(jq -r '.plugins.hard_conflicts[]?.source' "$RIG_FILE")
             ;;
         *)
             log "Unknown category: $cat"
@@ -191,7 +193,7 @@ process_category() {
 
     while IFS= read -r source; do
         [[ -z "$source" ]] && continue
-        if [[ "$cat" == "conflicts" ]]; then
+        if [[ "$cat" == "hard_conflicts" ]]; then
             disable_plugin "$source"
         elif [[ "$cat" == "optional" ]]; then
             # For optional: just report what's available (not installed)
@@ -205,6 +207,31 @@ process_category() {
         else
             install_plugin "$source"
         fi
+    done <<< "$sources"
+}
+
+# Detect peer rigs without modifying anything. Peers coexist with Clavain;
+# they are reported, never disabled. Called from `peers` case (alone) or
+# from `all` mode (the two are mutually exclusive in main, so accumulators
+# don't double-fill).
+process_peers() {
+    local sources
+    sources=$(jq -r '.plugins.peers[]?.source' "$RIG_FILE")
+    if [[ -z "$sources" ]]; then
+        return 0
+    fi
+    while IFS= read -r source; do
+        [[ -z "$source" ]] && continue
+        if is_installed "$source"; then
+            peers_detected+=("$source")
+            if is_disabled "$source"; then
+                log "  [peer-detected, disabled] $source"
+            else
+                peers_active+=("$source")
+                log "  [peer-detected, active] $source"
+            fi
+        fi
+        # NB: never call disable_plugin for peers
     done <<< "$sources"
 }
 
@@ -228,15 +255,22 @@ case "$CATEGORY" in
         log "=== Optional (detection only) ==="
         process_category "optional"
         log ""
-        log "=== Conflicts ==="
-        process_category "conflicts"
+        log "=== Hard Conflicts ==="
+        process_category "hard_conflicts"
+        log ""
+        log "=== Peers (detection only) ==="
+        process_peers
         ;;
-    required|recommended|optional|infrastructure|conflicts|core)
+    required|recommended|optional|infrastructure|hard_conflicts|core)
         log "=== ${CATEGORY^} ==="
         process_category "$CATEGORY"
         ;;
+    peers)
+        log "=== Peers (detection only) ==="
+        process_peers
+        ;;
     *)
-        echo '{"error": "Unknown category: '"$CATEGORY"'. Use: required, recommended, optional, infrastructure, conflicts, all"}'
+        echo '{"error": "Unknown category: '"$CATEGORY"'. Use: required, recommended, optional, infrastructure, hard_conflicts, peers, all"}'
         exit 1
         ;;
 esac
@@ -268,6 +302,8 @@ failed_json=$(json_array "${failed[@]}")
 disabled_json=$(json_array "${disabled[@]}")
 already_disabled_json=$(json_array "${already_disabled[@]}")
 optional_json=$(json_array "${optional_available[@]}")
+peers_detected_json=$(json_array "${peers_detected[@]}")
+peers_active_json=$(json_array "${peers_active[@]}")
 
 if [[ "$DRY_RUN" == true ]]; then
     jq -n \
@@ -276,7 +312,9 @@ if [[ "$DRY_RUN" == true ]]; then
         --argjson would_disable "$disabled_json" \
         --argjson already_disabled "$already_disabled_json" \
         --argjson optional_available "$optional_json" \
-        '{would_install: $would_install, already_present: $already_present, would_disable: $would_disable, already_disabled: $already_disabled, optional_available: $optional_available}'
+        --argjson peers_detected "$peers_detected_json" \
+        --argjson peers_active "$peers_active_json" \
+        '{would_install: $would_install, already_present: $already_present, would_disable: $would_disable, already_disabled: $already_disabled, optional_available: $optional_available, peers_detected: $peers_detected, peers_active: $peers_active}'
 else
     jq -n \
         --argjson installed "$installed_json" \
@@ -285,7 +323,9 @@ else
         --argjson disabled "$disabled_json" \
         --argjson already_disabled "$already_disabled_json" \
         --argjson optional_available "$optional_json" \
-        '{installed: $installed, already_present: $already_present, failed: $failed, disabled: $disabled, already_disabled: $already_disabled, optional_available: $optional_available}'
+        --argjson peers_detected "$peers_detected_json" \
+        --argjson peers_active "$peers_active_json" \
+        '{installed: $installed, already_present: $already_present, failed: $failed, disabled: $disabled, already_disabled: $already_disabled, optional_available: $optional_available, peers_detected: $peers_detected, peers_active: $peers_active}'
 fi
 
 log "Done."

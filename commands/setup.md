@@ -51,9 +51,9 @@ INSTALL_SCRIPT="${CLAVAIN_DIR}/scripts/modpack-install.sh"
 ```
 
 - `--check-only`: `result=$("$INSTALL_SCRIPT" --dry-run --quiet)`
-- Otherwise: `result=$("$INSTALL_SCRIPT" --quiet)` — installs core + required + recommended, disables conflicts
+- Otherwise: `result=$("$INSTALL_SCRIPT" --quiet)` — installs core + required + recommended, disables hard conflicts, detects peers (no changes to peers)
 
-Parse result JSON and report: **installed** (list), **already_present** (count), **failed** (warn each), **disabled**, **optional_available** (→ Step 2b).
+Parse result JSON and report: **installed** (list), **already_present** (count), **failed** (warn each), **disabled** (hard conflicts), **peers_detected** / **peers_active** (informational; → `/clavain:peers`), **optional_available** (→ Step 2b).
 
 If `$INSTALL_SCRIPT` or `jq` unavailable, fall back to manual lists below.
 
@@ -192,9 +192,10 @@ echo "ic kernel: $(command -v ic >/dev/null 2>&1 && ic health >/dev/null 2>&1 &&
 ```
 Clavain Modpack Setup Complete
 
-Required plugins:  [see verify output]
-Conflicts disabled: [X/8 disabled]
-Language servers:   [list enabled]
+Required plugins:    [see verify output]
+Hard conflicts:      [X/8 disabled]
+Peer rigs detected:  [list — never auto-disabled; see /clavain:peers]
+Language servers:    [list enabled]
 MCP servers:       context7 ✓ | qmd [status]
 Infrastructure:    oracle [status]
 Beads:             [status]
