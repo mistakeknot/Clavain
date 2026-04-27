@@ -93,3 +93,12 @@ def test_session_start_interserve_injection(project_root):
     assert "INTERSERVE MODE" in content, (
         "session-start.sh should contain 'INTERSERVE MODE' for behavioral contract injection"
     )
+
+
+def test_session_end_calibration_hook_closes_core_loops(project_root):
+    """SessionEnd calibration refreshes gate tiers and phase-cost estimates."""
+    hook = project_root / "hooks" / "gate-calibration-session-end.sh"
+    content = hook.read_text()
+    assert "calibrate-gate-tiers --auto" in content
+    assert "calibrate-phase-costs" in content
+    assert "timeout" in content

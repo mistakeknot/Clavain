@@ -687,7 +687,7 @@ _routing_read_calibration() {
   # Read and validate with jq (single pass)
   local result
   result=$(jq -r --arg agent "$lookup_key" '
-    select(.schema_version == 1) |
+    select(.schema_version == 1 or .schema_version == 2) |
     .agents[$agent] // empty |
     select(.confidence >= 0.7 and .evidence_sessions >= 3) |
     .recommended_model // empty |

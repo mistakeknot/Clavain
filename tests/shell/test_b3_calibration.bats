@@ -256,7 +256,7 @@ _insert_dispatch() {
     jq -e '.' "$cal_file"
 }
 
-@test "write_calibration has schema_version 1" {
+@test "write_calibration has schema_version 2" {
     for i in 1 2 3 4; do
         _insert_dispatch "s$i" "fd-game-design"
         _insert_verdict "s$i" "fd-game-design" "CLEAN" 1 "sonnet"
@@ -264,7 +264,7 @@ _insert_dispatch() {
     _interspect_write_routing_calibration
     local version
     version=$(jq -r '.schema_version' "${TEST_DIR}/.clavain/interspect/routing-calibration.json")
-    [[ "$version" == "1" ]]
+    [[ "$version" == "2" ]]
 }
 
 @test "write_calibration uses fd-prefixed agent keys" {
@@ -316,6 +316,26 @@ YAML
             "recommended_model": "haiku",
             "confidence": 0.85,
             "evidence_sessions": 5
+        }
+    }
+}
+JSON
+    result=$(_routing_read_calibration "fd-game-design")
+    [[ "$result" == "haiku" ]]
+}
+
+@test "read_calibration: schema v2 file returns recommendation" {
+    _setup_routing_cal
+    mkdir -p "$TEST_DIR/.clavain/interspect"
+    cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
+{
+    "schema_version": 2,
+    "agents": {
+        "fd-game-design": {
+            "recommended_model": "haiku",
+            "confidence": 0.85,
+            "evidence_sessions": 5,
+            "weighted_hit_rate": 0.1
         }
     }
 }
