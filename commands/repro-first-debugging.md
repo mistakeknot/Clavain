@@ -1,6 +1,6 @@
 ---
 name: repro-first-debugging
-description: Disciplined bug investigation: reproduce first, then diagnose. Composes debugging agents.
+description: Disciplined bug investigation — reproduce first, then diagnose. Composes debugging agents.
 argument-hint: "[bug description or error message]"
 ---
 
