@@ -8,6 +8,12 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/peer-telemetry.sh",
+            "async": true,
+            "timeout": 3
           }
         ]
       }
