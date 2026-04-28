@@ -17,7 +17,7 @@ verdict_init() {
 }
 
 # Write a verdict JSON file.
-# Usage: verdict_write <agent-name> <type> <status> <model> <summary> [detail-path] [files-changed] [findings-count] [tokens-spent]
+# Usage: verdict_write <agent-name> <type> <status> <model> <summary> [detail-path] [files-changed] [findings-count] [tokens-spent] [phase]
 verdict_write() {
     local agent="${1:?agent name required}"
     local type="${2:?type required}"    # verdict | implementation
@@ -28,6 +28,7 @@ verdict_write() {
     local files_changed="${7:-[]}"
     local findings_count="${8:-0}"
     local tokens_spent="${9:-0}"
+    local phase="${10:-${CLAVAIN_PHASE:-${CLAVAIN_CURRENT_PHASE:-}}}"
 
     verdict_init
 
@@ -49,10 +50,11 @@ verdict_write() {
         --argjson tokens_spent "$tokens_spent" \
         --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --arg session_id "$origin_session_id" \
+        --arg phase "$phase" \
         '{type: $type, status: $status, model: $model, tokens_spent: $tokens_spent,
           files_changed: $files_changed, findings_count: $findings_count,
           summary: $summary, detail_path: $detail_path, timestamp: $timestamp,
-          session_id: $session_id}' \
+          session_id: $session_id} + (if $phase != "" then {phase: $phase} else {} end)' \
         > "$tmp" && mv "$tmp" "${VERDICT_DIR}/${agent}.json"
 }
 

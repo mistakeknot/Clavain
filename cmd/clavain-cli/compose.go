@@ -95,19 +95,24 @@ type AgentRole struct {
 // ─── Interspect Calibration Types ──────────────────────────────────
 
 type InterspectCalibration struct {
-	SchemaVersion int                         `json:"schema_version"`
-	CalibratedAt  string                      `json:"calibrated_at"`
-	MinSessions   int                         `json:"min_sessions"`
-	Agents        map[string]AgentCalibration `json:"agents"`
+	SchemaVersion           int                         `json:"schema_version"`
+	CalibratedAt            string                      `json:"calibrated_at"`
+	MinSessions             int                         `json:"min_sessions"`
+	MinNonBootstrapSessions int                         `json:"min_non_bootstrap_sessions,omitempty"`
+	SourceWeights           map[string]float64          `json:"source_weights,omitempty"`
+	Agents                  map[string]AgentCalibration `json:"agents"`
 }
 
 type AgentCalibration struct {
-	RecommendedModel string  `json:"recommended_model"`
-	CurrentModel     string  `json:"current_model"`
-	HitRate          float64 `json:"hit_rate"`
-	EvidenceSessions int     `json:"evidence_sessions"`
-	Confidence       float64 `json:"confidence"`
-	Reason           string  `json:"reason"`
+	RecommendedModel    string                      `json:"recommended_model"`
+	CurrentModel        string                      `json:"current_model"`
+	HitRate             float64                     `json:"hit_rate"`
+	WeightedHitRate     float64                     `json:"weighted_hit_rate,omitempty"`
+	EvidenceSessions    int                         `json:"evidence_sessions"`
+	Confidence          float64                     `json:"confidence"`
+	PropagationEligible bool                        `json:"propagation_eligible,omitempty"`
+	Reason              string                      `json:"reason"`
+	Phases              map[string]AgentCalibration `json:"phases,omitempty"`
 }
 
 // ─── Routing Overrides Types ───────────────────────────────────────
@@ -266,7 +271,7 @@ func loadInterspectCalibration() *InterspectCalibration {
 		fmt.Fprintf(os.Stderr, "compose: warning: corrupt %s: %v\n", path, err)
 		return nil
 	}
-	if cal.SchemaVersion != 1 {
+	if cal.SchemaVersion != 1 && cal.SchemaVersion != 2 {
 		fmt.Fprintf(os.Stderr, "compose: warning: unsupported schema version %d in %s\n", cal.SchemaVersion, path)
 		return nil
 	}
@@ -515,7 +520,7 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 			plan.Warnings = append(plan.Warnings, fmt.Sprintf("unmatched_role:%s", role.Role))
 			continue
 		}
-		model, source := resolveModel(agent, role, cal, ct)
+		model, source := resolveModelForStage(stage, agent, role, cal, ct)
 		plan.Agents = append(plan.Agents, PlanAgent{
 			AgentID:         agent.id,
 			SubagentType:    agent.agent.Runtime.SubagentType,
@@ -533,7 +538,7 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 		if !found {
 			continue // Optional roles are silently skipped
 		}
-		model, source := resolveModel(agent, role, cal, ct)
+		model, source := resolveModelForStage(stage, agent, role, cal, ct)
 		plan.Agents = append(plan.Agents, PlanAgent{
 			AgentID:         agent.id,
 			SubagentType:    agent.agent.Runtime.SubagentType,
@@ -610,9 +615,16 @@ func matchRole(role AgentRole, fleet map[string]FleetAgent) (matchedAgent, bool)
 }
 
 func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration, ct *CalibratedThresholds) (string, string) {
+	return resolveModelForStage("", agent, role, cal, ct)
+}
+
+func resolveModelForStage(stage string, agent matchedAgent, role AgentRole, cal *InterspectCalibration, ct *CalibratedThresholds) (string, string) {
 	var model, source string
 
-	// Interspect calibration — evidence-driven
+	// Interspect calibration — evidence-driven. Schema v2 can carry
+	// phase-specific recommendations; prefer those for the compose stage and
+	// fall back to the global agent recommendation when no phase has enough
+	// evidence/confidence.
 	if cal != nil {
 		if c, ok := cal.Agents[agent.id]; ok {
 			threshold := 0.7
@@ -621,7 +633,12 @@ func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration
 					threshold = at.ConfidenceThreshold
 				}
 			}
-			if c.Confidence >= threshold && c.EvidenceSessions >= 3 {
+			if pc, ok := phaseCalibration(c, stage); ok && calibrationUsable(pc, threshold) {
+				if m := pc.RecommendedModel; m == "haiku" || m == "sonnet" || m == "opus" {
+					model, source = m, "interspect_calibration"
+				}
+			}
+			if model == "" && calibrationUsable(c, threshold) {
 				if m := c.RecommendedModel; m == "haiku" || m == "sonnet" || m == "opus" {
 					model, source = m, "interspect_calibration"
 				}
@@ -652,6 +669,35 @@ func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration
 	}
 
 	return model, source
+}
+
+func calibrationUsable(c AgentCalibration, threshold float64) bool {
+	return c.Confidence >= threshold && c.EvidenceSessions >= 3
+}
+
+func phaseCalibration(c AgentCalibration, stage string) (AgentCalibration, bool) {
+	if len(c.Phases) == 0 || stage == "" {
+		return AgentCalibration{}, false
+	}
+	for _, key := range phaseCalibrationKeys(stage) {
+		if pc, ok := c.Phases[key]; ok {
+			return pc, true
+		}
+	}
+	return AgentCalibration{}, false
+}
+
+func phaseCalibrationKeys(stage string) []string {
+	keys := []string{stage}
+	switch stage {
+	case "ship":
+		keys = append(keys, "shipping", "quality-gates", "quality_gates")
+	case "plan":
+		keys = append(keys, "planning")
+	case "build":
+		keys = append(keys, "implementation", "implement")
+	}
+	return keys
 }
 
 func checkCapabilityCoverage(required []string, agents []PlanAgent, fleet *FleetRegistry) []string {

@@ -99,7 +99,8 @@ if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
             status=$(jq -r '.status // "UNKNOWN"' "$verdict_file")
             findings=$(jq -r '.findings_count // 0' "$verdict_file")
             model=$(jq -r '.model // "unknown"' "$verdict_file")
-            _interspect_record_verdict "$SESSION_ID" "$agent" "$status" "$findings" "$model" 2>/dev/null || true
+            phase=$(jq -r '.phase // env.CLAVAIN_PHASE // env.CLAVAIN_CURRENT_PHASE // "quality-gates"' "$verdict_file")
+            _interspect_record_verdict "$SESSION_ID" "$agent" "$status" "$findings" "$model" "$phase" 2>/dev/null || true
         done
     fi
 fi

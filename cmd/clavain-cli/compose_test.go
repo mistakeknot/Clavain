@@ -267,6 +267,80 @@ func TestResolveModelNoCalibration(t *testing.T) {
 	}
 }
 
+func TestLoadInterspectCalibrationSchemaV2(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("SPRINT_LIB_PROJECT_DIR", tmp)
+	calDir := filepath.Join(tmp, ".clavain", "interspect")
+	if err := os.MkdirAll(calDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := []byte(`{
+		"schema_version": 2,
+		"calibrated_at": "2026-04-28T00:00:00Z",
+		"min_sessions": 3,
+		"min_non_bootstrap_sessions": 20,
+		"source_weights": {"bootstrap": 0.5, "self-building": 0.7, "normal": 1.0},
+		"agents": {
+			"fd-quality": {
+				"recommended_model": "sonnet",
+				"current_model": "sonnet",
+				"hit_rate": 0.5,
+				"weighted_hit_rate": 0.5,
+				"evidence_sessions": 6,
+				"confidence": 0.85,
+				"propagation_eligible": true,
+				"reason": "global fallback",
+				"phases": {
+					"plan": {"recommended_model": "haiku", "current_model": "sonnet", "hit_rate": 0.0, "weighted_hit_rate": 0.0, "evidence_sessions": 3, "confidence": 0.7, "propagation_eligible": true, "reason": "phase-specific demotion"},
+					"ship": {"recommended_model": "sonnet", "current_model": "sonnet", "hit_rate": 1.0, "weighted_hit_rate": 1.0, "evidence_sessions": 3, "confidence": 0.7, "propagation_eligible": true, "reason": "phase-specific keep"}
+				}
+			}
+		}
+	}`)
+	if err := os.WriteFile(filepath.Join(calDir, "routing-calibration.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cal := loadInterspectCalibration()
+	if cal == nil {
+		t.Fatal("schema v2 calibration should load")
+	}
+	if cal.SchemaVersion != 2 {
+		t.Fatalf("schema version = %d, want 2", cal.SchemaVersion)
+	}
+	if got := cal.SourceWeights["bootstrap"]; got != 0.5 {
+		t.Fatalf("bootstrap source weight = %v, want 0.5", got)
+	}
+	if got := cal.Agents["fd-quality"].Phases["plan"].RecommendedModel; got != "haiku" {
+		t.Fatalf("phase calibration model = %q, want haiku", got)
+	}
+}
+
+func TestResolveModelUsesPhaseSpecificCalibration(t *testing.T) {
+	agent := matchedAgent{id: "fd-quality", agent: FleetAgent{Models: AgentModels{Preferred: "sonnet"}}}
+	role := AgentRole{ModelTier: "sonnet"}
+	cal := &InterspectCalibration{SchemaVersion: 2, Agents: map[string]AgentCalibration{
+		"fd-quality": {
+			RecommendedModel: "sonnet",
+			Confidence:       0.85,
+			EvidenceSessions: 6,
+			Phases: map[string]AgentCalibration{
+				"plan": {RecommendedModel: "haiku", Confidence: 0.7, EvidenceSessions: 3},
+				"ship": {RecommendedModel: "sonnet", Confidence: 0.7, EvidenceSessions: 3},
+			},
+		},
+	}}
+
+	model, source := resolveModelForStage("plan", agent, role, cal, nil)
+	if model != "haiku" || source != "interspect_calibration" {
+		t.Fatalf("plan phase model/source = %q/%q, want haiku/interspect_calibration", model, source)
+	}
+	model, source = resolveModelForStage("ship", agent, role, cal, nil)
+	if model != "sonnet" || source != "interspect_calibration" {
+		t.Fatalf("ship phase model/source = %q/%q, want sonnet/interspect_calibration", model, source)
+	}
+}
+
 func TestComposePlanShipStage(t *testing.T) {
 	fleet := loadTestFleet(t)
 	spec := loadTestSpec(t)
