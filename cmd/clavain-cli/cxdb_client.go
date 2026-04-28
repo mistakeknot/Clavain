@@ -292,12 +292,30 @@ func cmdCXDBSync(args []string) error {
 		}
 	}
 
+	pluginCursor := loadPluginEvidenceCursor(beadID)
+	pluginItems, nextPluginCursor, err := collectPluginEvidenceRecords(beadID, PluginEvidenceOptions{}, pluginCursor)
+	if err != nil {
+		return fmt.Errorf("cxdb-sync: collect plugin evidence: %w", err)
+	}
+	pluginSyncCount := 0
+	for _, item := range pluginItems {
+		if err := cxdbAppendTyped(client, ctxID, "clavain.evidence.v1", item.Record); err != nil {
+			return fmt.Errorf("cxdb-sync: append plugin evidence %s: %w", item.Record.SourceID, err)
+		}
+		pluginSyncCount++
+	}
+	if pluginSyncCount > 0 {
+		if err := savePluginEvidenceCursor(beadID, nextPluginCursor); err != nil {
+			return fmt.Errorf("cxdb-sync: save plugin evidence cursor: %w", err)
+		}
+	}
+
 	// Update cursor
 	if lastID != "" && icAvailable() {
 		runIC("state", "set", cursorKey, lastID)
 	}
 
-	fmt.Fprintf(os.Stderr, "cxdb-sync: synced %d events for %s (cursor: %s)\n", syncCount, beadID, lastID)
+	fmt.Fprintf(os.Stderr, "cxdb-sync: synced %d events and %d plugin evidence records for %s (cursor: %s)\n", syncCount, pluginSyncCount, beadID, lastID)
 	return nil
 }
 

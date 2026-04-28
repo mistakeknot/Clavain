@@ -10,36 +10,40 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vmihailenco/msgpack/v5"
 	"gopkg.in/yaml.v3"
 )
 
 // EvidenceManifest is the v1 manifest for an evidence pack.
 type EvidenceManifest struct {
-	SchemaVersion     int      `yaml:"schema_version" json:"schema_version"`
-	SourcePlugin      string   `yaml:"source_plugin" json:"source_plugin"`
-	EvidenceType      string   `yaml:"evidence_type" json:"evidence_type"`
-	SessionID         string   `yaml:"session_id" json:"session_id"`
-	Phase             string   `yaml:"phase" json:"phase"`
-	Timestamp         uint64   `yaml:"timestamp" json:"timestamp"`
-	BeadID            string   `yaml:"bead_id,omitempty" json:"bead_id,omitempty"`
-	FindingID         string   `yaml:"finding_id,omitempty" json:"finding_id,omitempty"`
-	Severity          string   `yaml:"severity,omitempty" json:"severity,omitempty"`
-	ReplayInstructions string  `yaml:"replay_instructions,omitempty" json:"replay_instructions,omitempty"`
-	Attachments       []string `yaml:"attachments,omitempty" json:"attachments,omitempty"`
-	BlobHash          string   `yaml:"blob_hash,omitempty" json:"blob_hash,omitempty"`
+	SchemaVersion      int      `yaml:"schema_version" json:"schema_version"`
+	SourcePlugin       string   `yaml:"source_plugin" json:"source_plugin"`
+	EvidenceType       string   `yaml:"evidence_type" json:"evidence_type"`
+	SessionID          string   `yaml:"session_id" json:"session_id"`
+	Phase              string   `yaml:"phase" json:"phase"`
+	Timestamp          uint64   `yaml:"timestamp" json:"timestamp"`
+	BeadID             string   `yaml:"bead_id,omitempty" json:"bead_id,omitempty"`
+	FindingID          string   `yaml:"finding_id,omitempty" json:"finding_id,omitempty"`
+	Severity           string   `yaml:"severity,omitempty" json:"severity,omitempty"`
+	ReplayInstructions string   `yaml:"replay_instructions,omitempty" json:"replay_instructions,omitempty"`
+	Attachments        []string `yaml:"attachments,omitempty" json:"attachments,omitempty"`
+	BlobHash           string   `yaml:"blob_hash,omitempty" json:"blob_hash,omitempty"`
 }
 
 // EvidenceRecord is the CXDB turn data for clavain.evidence.v1.
 type EvidenceRecord struct {
-	BeadID       string `msgpack:"1" json:"bead_id"`
-	SourcePlugin string `msgpack:"2" json:"source_plugin"`
-	EvidenceType string `msgpack:"3" json:"evidence_type"`
-	FindingID    string `msgpack:"4" json:"finding_id,omitempty"`
-	SessionID    string `msgpack:"5" json:"session_id,omitempty"`
-	Severity     string `msgpack:"6" json:"severity,omitempty"`
-	BlobHash     []byte `msgpack:"7" json:"blob_hash,omitempty"`
-	Timestamp    uint64 `msgpack:"8" json:"timestamp"`
+	BeadID        string `msgpack:"1" json:"bead_id"`
+	SourcePlugin  string `msgpack:"2" json:"source_plugin"`
+	EvidenceType  string `msgpack:"3" json:"evidence_type"`
+	SessionID     string `msgpack:"4" json:"session_id,omitempty"`
+	Phase         string `msgpack:"5" json:"phase,omitempty"`
+	BlobHash      []byte `msgpack:"6" json:"blob_hash,omitempty"`
+	Timestamp     uint64 `msgpack:"7" json:"timestamp"`
+	FindingID     string `msgpack:"8" json:"finding_id,omitempty"`
+	Severity      string `msgpack:"9" json:"severity,omitempty"`
+	SourceID      string `msgpack:"10" json:"source_id,omitempty"`
+	SourceTable   string `msgpack:"11" json:"source_table,omitempty"`
+	SourceEventID string `msgpack:"12" json:"source_event_id,omitempty"`
+	Summary       string `msgpack:"13" json:"summary,omitempty"`
 }
 
 // evidenceDir returns the evidence base directory, creating it if needed.
@@ -270,11 +274,7 @@ func cxdbRecordEvidence(beadID string, m EvidenceManifest) {
 		Severity:     m.Severity,
 		Timestamp:    m.Timestamp,
 	}
-	payload, err := msgpack.Marshal(rec)
-	if err != nil {
-		return
-	}
-	_ = cxdbAppendTyped(client, ctxID, "clavain.evidence.v1", payload)
+	_ = cxdbAppendTyped(client, ctxID, "clavain.evidence.v1", rec)
 }
 
 // createFluxDriveDevScenario creates a dev scenario from a flux-drive regression finding.

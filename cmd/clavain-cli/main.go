@@ -357,7 +357,7 @@ CXDB:
   cxdb-stop           Stop CXDB server
   cxdb-status         Show CXDB server status as JSON
   cxdb-setup          Download and install cxdb-server binary [--version=<ver>]
-  cxdb-sync           <sprint-id>           Backfill CXDB turns from Intercore events
+  cxdb-sync           <sprint-id>           Backfill CXDB turns from Intercore + plugin evidence events
   cxdb-fork           <sprint-id> <turn-id> Create branched execution trajectory
 
 Scenarios:
