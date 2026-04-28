@@ -1,6 +1,6 @@
 ---
 name: upstream-sync-engine
-description: Engine for /clavain:upstream-sync — checks beads/oracle/superpowers/compound-engineering for updates, generates upgrade checklist. Internal; invoke via slash command.
+description: Invoked from /clavain:upstream-sync — checks beads/oracle/superpowers/compound for updates, generates upgrade checklist. Internal.
 ---
 
 # Upstream Sync

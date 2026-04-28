@@ -44,7 +44,7 @@
     },
     {
       "name": "interserve-engine",
-      "description": "Use when invoked from /clavain:interserve command \u2014 dispatches tasks to Codex CLI agents (single megaprompt or parallel delegation), with structured debate triggers and Oracle escalation. Internal engine; users invoke via the slash command."
+      "description": "Invoked from /clavain:interserve \u2014 dispatches tasks to Codex CLI agents (megaprompt or parallel), with debate triggers and Oracle escalation. Internal; users invoke via slash command."
     },
     {
       "name": "landing-a-change",
@@ -72,7 +72,7 @@
     },
     {
       "name": "upstream-sync-engine",
-      "description": "Engine for /clavain:upstream-sync \u2014 checks beads/oracle/superpowers/compound-engineering for updates, generates upgrade checklist. Internal; invoke via slash command."
+      "description": "Invoked from /clavain:upstream-sync \u2014 checks beads/oracle/superpowers/compound for updates, generates upgrade checklist. Internal."
     },
     {
       "name": "using-clavain",
