@@ -1,10 +1,10 @@
 {
-  "generated": "2026-04-27T23:13:45Z",
+  "generated": "2026-04-28T03:22:59Z",
   "counts": {
     "skills": 19,
     "agents": 6,
     "commands": 52,
-    "hooks": 13,
+    "hooks": 14,
     "mcp_servers": 0,
     "review": 2,
     "workflow": 4

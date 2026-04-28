@@ -94,5 +94,48 @@ HOOKS_JSON="$SCRIPT_DIR/../hooks/hooks.json"
 jq -e '.hooks.SessionStart | map(.hooks[]?.command) | flatten | any(. | contains("peer-telemetry.sh"))' "$HOOKS_JSON" >/dev/null || fail "F6.4 peer-telemetry not registered in hooks.json SessionStart"
 pass "F6.4 peer-telemetry registered in hooks.json"
 
+# ---- G1: peer-routing telemetry hook (sylveste-ogrq) ----
+ROUTING_HOOK="$SCRIPT_DIR/../hooks/peer-routing-telemetry.sh"
+[[ -x "$ROUTING_HOOK" ]] || fail "G1.1 peer-routing-telemetry.sh missing/not executable"
+pass "G1.1 peer-routing-telemetry.sh exists"
+
+# G1.2: emits one JSONL record per Skill invocation; records namespace + skill_name only (no args)
+TMPLOG=$(mktemp); rm -f "$TMPLOG"
+INPUT='{"tool_name":"Skill","tool_input":{"skill":"clavain:write-plan","args":"sensitive prompt content here"}}'
+CLAVAIN_PEER_ROUTING_FILE="$TMPLOG" echo "$INPUT" | CLAVAIN_PEER_ROUTING_FILE="$TMPLOG" bash "$ROUTING_HOOK" >/dev/null 2>&1 || true
+[[ -s "$TMPLOG" ]] || fail "G1.2 routing hook produced no output"
+jq -e '.namespace == "clavain" and .skill_name == "write-plan"' "$TMPLOG" >/dev/null || fail "G1.2 namespace/skill_name not parsed correctly"
+# Privacy: must NOT contain the args content
+if grep -q "sensitive prompt content" "$TMPLOG"; then
+    fail "G1.2 PRIVACY VIOLATION: hook leaked args content into log"
+fi
+pass "G1.2 hook emits namespace + skill_name, no args leak"
+
+# G1.3: handles peer namespaces correctly
+TMPLOG2=$(mktemp); rm -f "$TMPLOG2"
+INPUT2='{"tool_name":"Skill","tool_input":{"skill":"superpowers:dispatching-parallel-agents"}}'
+echo "$INPUT2" | CLAVAIN_PEER_ROUTING_FILE="$TMPLOG2" bash "$ROUTING_HOOK" >/dev/null 2>&1 || true
+jq -e '.namespace == "superpowers"' "$TMPLOG2" >/dev/null || fail "G1.3 peer namespace not captured"
+pass "G1.3 peer namespace captured"
+
+# G1.4: ignores non-Skill tool invocations
+TMPLOG3=$(mktemp); rm -f "$TMPLOG3"
+INPUT3='{"tool_name":"Bash","tool_input":{"command":"echo hi"}}'
+echo "$INPUT3" | CLAVAIN_PEER_ROUTING_FILE="$TMPLOG3" bash "$ROUTING_HOOK" >/dev/null 2>&1 || true
+[[ ! -s "$TMPLOG3" ]] || fail "G1.4 hook fired on non-Skill tool"
+pass "G1.4 ignores non-Skill tools"
+
+# G1.5: opt-out env var works
+TMPLOG4=$(mktemp); rm -f "$TMPLOG4"
+echo "$INPUT" | CLAVAIN_PEER_TELEMETRY=0 CLAVAIN_PEER_ROUTING_FILE="$TMPLOG4" bash "$ROUTING_HOOK" >/dev/null 2>&1 || true
+[[ ! -s "$TMPLOG4" ]] || fail "G1.5 opt-out did not suppress routing telemetry"
+pass "G1.5 opt-out env var works"
+
+# G1.6: registered in hooks.json under PostToolUse with Skill matcher
+jq -e '.hooks.PostToolUse | map(select(.matcher | test("Skill"))) | map(.hooks[]?.command) | flatten | any(. | contains("peer-routing-telemetry.sh"))' "$HOOKS_JSON" >/dev/null || fail "G1.6 peer-routing-telemetry not registered in hooks.json PostToolUse(Skill)"
+pass "G1.6 peer-routing-telemetry registered for PostToolUse(Skill)"
+
+rm -f "$TMPLOG" "$TMPLOG2" "$TMPLOG3" "$TMPLOG4"
+
 echo
 echo "=== ALL ACCEPTANCE TESTS PASSED ==="
