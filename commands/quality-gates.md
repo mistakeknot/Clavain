@@ -40,13 +40,33 @@ git diff --name-only HEAD
 git diff --cached --name-only
 ```
 
-Count changed files and total diff lines:
+Count changed files, total diff lines, and raw B2 complexity signals:
 ```bash
 DIFF_LINES=$(( $(git diff HEAD | wc -l) + $(git diff --cached | wc -l) ))
 CHANGED_FILES=$(( $(git diff --name-only HEAD | wc -l) + $(git diff --cached --name-only | wc -l) ))
+REVIEW_TOKENS=$(( DIFF_LINES * 4 ))
+REVIEW_DEPTH=2
+export CLAVAIN_REVIEW_TOKENS="$REVIEW_TOKENS"
+export CLAVAIN_REVIEW_FILE_COUNT="$CHANGED_FILES"
+export CLAVAIN_REVIEW_DEPTH="$REVIEW_DEPTH"
 ```
 
-**Small change shortcut:** If `DIFF_LINES < 20` and `CHANGED_FILES == 1`, run only a single fd-quality agent directly (Task tool, `subagent_type: "interflux:review:fd-quality"`). Include the diff in the prompt. Skip Phases 2-3. After agent returns, jump to Phase 4.
+**Small change shortcut:** If `DIFF_LINES < 20` and `CHANGED_FILES == 1`, resolve `fd-quality` through B2 in shadow mode, then run only that single fd-quality agent directly (Task tool, `subagent_type: "interflux:review:fd-quality"`, `model: "${FD_QUALITY_MODEL}"`). Include the diff in the prompt. Skip Phases 2-3. After agent returns, jump to Phase 4.
+
+```bash
+ROUTING_LIB="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}/scripts/lib-routing.sh"
+if [[ -f "$ROUTING_LIB" ]]; then
+    # Caller-local shadow rollout: observe B2 decisions without changing the
+    # global routing.yaml default for other surfaces.
+    source "$ROUTING_LIB"
+    declare -F _routing_load_cache >/dev/null && _routing_load_cache
+    _ROUTING_CX_MODE="${CLAVAIN_QG_COMPLEXITY_MODE:-shadow}"
+    FD_QUALITY_ROUTE=$(routing_resolve_agents --phase "quality-gates" --agents "fd-quality" --prompt-tokens "$REVIEW_TOKENS" --file-count "$CHANGED_FILES" --reasoning-depth "$REVIEW_DEPTH") || FD_QUALITY_ROUTE="{}"
+    FD_QUALITY_MODEL=$(printf '%s' "$FD_QUALITY_ROUTE" | jq -r '."fd-quality" // "sonnet"' 2>/dev/null || echo sonnet)
+else
+    FD_QUALITY_MODEL="sonnet"
+fi
+```
 
 Otherwise, prepare the diff file for flux-drive:
 
@@ -61,7 +81,7 @@ git diff --cached >> "$DIFF_PATH"
 
 Delegate agent selection, dispatch, and synthesis to flux-drive. flux-drive owns the triage algorithm, project agents, routing overrides, domain scoring, and content slicing.
 
-`/interflux:flux-drive $DIFF_PATH`
+`/interflux:flux-drive $DIFF_PATH --phase=quality-gates`
 
 flux-drive will:
 1. Detect `INPUT_TYPE = diff` from the file content

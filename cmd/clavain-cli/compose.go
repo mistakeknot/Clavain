@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
@@ -129,6 +130,31 @@ type RoutingOverride struct {
 	Confidence float64 `json:"confidence"`
 }
 
+// RoutingConfig captures the production routing.yaml fields the composer needs.
+// B2 complexity routing is intentionally scoped here to model selection; shell
+// dispatch-tier routing remains owned by scripts/lib-routing.sh.
+type RoutingConfig struct {
+	Complexity ComplexityRoutingConfig `json:"complexity" yaml:"complexity"`
+}
+
+type ComplexityRoutingConfig struct {
+	Mode      string                          `json:"mode" yaml:"mode"`
+	Tiers     map[string]ComplexityTierConfig `json:"tiers" yaml:"tiers"`
+	Overrides map[string]ComplexityOverride   `json:"overrides" yaml:"overrides"`
+}
+
+type ComplexityTierConfig struct {
+	Description    string `json:"description" yaml:"description"`
+	PromptTokens   int    `json:"prompt_tokens" yaml:"prompt_tokens"`
+	FileCount      int    `json:"file_count" yaml:"file_count"`
+	ReasoningDepth int    `json:"reasoning_depth" yaml:"reasoning_depth"`
+}
+
+type ComplexityOverride struct {
+	SubagentModel string `json:"subagent_model" yaml:"subagent_model"`
+	DispatchTier  string `json:"dispatch_tier" yaml:"dispatch_tier"`
+}
+
 // ─── Compose Output Types ──────────────────────────────────────────
 
 type ComposePlan struct {
@@ -136,6 +162,7 @@ type ComposePlan struct {
 	Sprint         string      `json:"sprint"`
 	Budget         int64       `json:"budget"`
 	EstimatedTotal int64       `json:"estimated_total"`
+	ComplexityTier string      `json:"complexity_tier,omitempty"`
 	Warnings       []string    `json:"warnings"`
 	Agents         []PlanAgent `json:"agents"`
 }
@@ -157,14 +184,28 @@ var safetyFloorAgents = map[string]string{
 }
 
 func cmdCompose(args []string) error {
-	// Parse flags
-	var sprintID, stage string
+	// Parse flags. --phase is accepted as an alias for --stage so flux-drive
+	// handoffs can pass their native phase terminology through unchanged.
+	var sprintID, stage, complexityTier string
+	var promptTokens, fileCount, reasoningDepth int
 	for i := 0; i < len(args); i++ {
 		switch {
 		case strings.HasPrefix(args[i], "--sprint="):
 			sprintID = strings.TrimPrefix(args[i], "--sprint=")
 		case strings.HasPrefix(args[i], "--stage="):
 			stage = strings.TrimPrefix(args[i], "--stage=")
+		case strings.HasPrefix(args[i], "--phase="):
+			stage = strings.TrimPrefix(args[i], "--phase=")
+		case strings.HasPrefix(args[i], "--complexity-tier="):
+			complexityTier = strings.TrimPrefix(args[i], "--complexity-tier=")
+		case strings.HasPrefix(args[i], "--complexity="):
+			complexityTier = strings.TrimPrefix(args[i], "--complexity=")
+		case strings.HasPrefix(args[i], "--prompt-tokens="):
+			promptTokens = parseIntArg(strings.TrimPrefix(args[i], "--prompt-tokens="))
+		case strings.HasPrefix(args[i], "--file-count="):
+			fileCount = parseIntArg(strings.TrimPrefix(args[i], "--file-count="))
+		case strings.HasPrefix(args[i], "--reasoning-depth="):
+			reasoningDepth = parseIntArg(strings.TrimPrefix(args[i], "--reasoning-depth="))
 		}
 	}
 	if stage == "" {
@@ -197,13 +238,20 @@ func cmdCompose(args []string) error {
 	// 5. Load calibrated confidence thresholds (optional — missing is OK)
 	ct := loadCalibratedThresholds()
 
-	// 6. Get budget
+	// 6. Load B2 routing config and derive complexity tier from caller signals.
+	routing := loadRoutingConfig()
+	applyComposeComplexityModeDefault(routing)
+	if complexityTier == "" {
+		complexityTier = classifyRoutingComplexity(routing, promptTokens, fileCount, reasoningDepth)
+	}
+
+	// 7. Get budget
 	budget := computeStageBudget(sprintID, stage, stageSpec)
 
-	// 7. Build plan
-	plan := composePlan(stage, sprintID, budget, stageSpec, fleet, cal, overrides, ct)
+	// 8. Build plan
+	plan := composePlanWithRouting(stage, sprintID, budget, complexityTier, stageSpec, fleet, cal, overrides, ct, routing)
 
-	// 7. Output JSON
+	// 9. Output JSON
 	data, err := json.MarshalIndent(plan, "", "  ")
 	if err != nil {
 		return fmt.Errorf("compose: marshal: %w", err)
@@ -293,6 +341,24 @@ func loadRoutingOverrides() *RoutingOverrides {
 	return &ov
 }
 
+func loadRoutingConfig() *RoutingConfig {
+	path := findRoutingConfigPath()
+	if path == "" {
+		return nil // routing.yaml missing — expected in minimal fixtures
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "compose: warning: read %s: %v\n", path, err)
+		return nil
+	}
+	var cfg RoutingConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "compose: warning: corrupt %s: %v\n", path, err)
+		return nil
+	}
+	return &cfg
+}
+
 // ─── Path Resolution ───────────────────────────────────────────────
 
 func findFleetRegistryPath() string {
@@ -320,6 +386,22 @@ func findFleetRegistryPath() string {
 	// 4. CLAUDE_PLUGIN_ROOT/../config (plugin cache)
 	if dir := os.Getenv("CLAUDE_PLUGIN_ROOT"); dir != "" {
 		p := filepath.Join(dir, "config", "fleet-registry.yaml")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func findRoutingConfigPath() string {
+	if path := os.Getenv("CLAVAIN_ROUTING_CONFIG"); path != "" {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+		return ""
+	}
+	for _, dir := range configDirs() {
+		p := filepath.Join(dir, "routing.yaml")
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
@@ -583,6 +665,133 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 	return plan
 }
 
+func composePlanWithRouting(stage, sprintID string, budget int64, complexityTier string, stageSpec StageSpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides, ct *CalibratedThresholds, routing *RoutingConfig) ComposePlan {
+	plan := composePlan(stage, sprintID, budget, stageSpec, fleet, cal, overrides, ct)
+	applyB2ComplexityRouting(&plan, normalizeComplexityTier(complexityTier), fleet, routing)
+	return plan
+}
+
+func applyB2ComplexityRouting(plan *ComposePlan, tier string, fleet *FleetRegistry, routing *RoutingConfig) {
+	if plan == nil || tier == "" {
+		return
+	}
+	plan.ComplexityTier = tier
+	if routing == nil {
+		return
+	}
+	mode := strings.ToLower(strings.TrimSpace(routing.Complexity.Mode))
+	if mode == "" || mode == "off" {
+		return
+	}
+	override, ok := routing.Complexity.Overrides[tier]
+	if !ok {
+		return
+	}
+	target := strings.TrimSpace(override.SubagentModel)
+	if target == "" || target == "inherit" {
+		return
+	}
+	for i := range plan.Agents {
+		baseModel := plan.Agents[i].Model
+		baseSource := plan.Agents[i].ModelSource
+		candidateModel, candidateSource := target, "b2_complexity"
+		if !agentSupportsModel(plan.Agents[i].AgentID, candidateModel, fleet) {
+			continue
+		}
+		candidateModel, candidateSource = applySafetyFloor(plan.Agents[i].AgentID, candidateModel, candidateSource)
+		switch mode {
+		case "shadow":
+			if candidateModel != baseModel {
+				plan.Warnings = append(plan.Warnings, fmt.Sprintf("b2_shadow:%s:%s->%s:%s", plan.Agents[i].AgentID, baseModel, candidateModel, tier))
+			}
+		case "enforce":
+			if candidateModel != baseModel || candidateSource != baseSource {
+				plan.Agents[i].Model = candidateModel
+				plan.Agents[i].ModelSource = candidateSource
+			}
+		}
+	}
+}
+
+func applySafetyFloor(agentID, model, source string) (string, string) {
+	if floor, ok := safetyFloorAgents[agentID]; ok {
+		if pkgphase.ModelTier(model) < pkgphase.ModelTier(floor) || pkgphase.ModelTier(model) == 0 {
+			return floor, "safety_floor"
+		}
+	}
+	return model, source
+}
+
+func agentSupportsModel(agentID, model string, fleet *FleetRegistry) bool {
+	if fleet == nil || model == "" {
+		return true
+	}
+	agent, ok := fleet.Agents[agentID]
+	if !ok || len(agent.Models.Supported) == 0 {
+		return true
+	}
+	for _, supported := range agent.Models.Supported {
+		if supported == model {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeComplexityTier(tier string) string {
+	t := strings.ToUpper(strings.TrimSpace(tier))
+	if t == "" {
+		return ""
+	}
+	if strings.HasPrefix(t, "C") {
+		return t
+	}
+	if n, err := strconv.Atoi(t); err == nil && n >= 1 && n <= 5 {
+		return fmt.Sprintf("C%d", n)
+	}
+	return t
+}
+
+func classifyRoutingComplexity(routing *RoutingConfig, promptTokens, fileCount, reasoningDepth int) string {
+	if routing == nil || (promptTokens == 0 && fileCount == 0 && reasoningDepth == 0) {
+		return ""
+	}
+	order := []string{"C5", "C4", "C3", "C2", "C1"}
+	for _, tier := range order {
+		cfg, ok := routing.Complexity.Tiers[tier]
+		if !ok {
+			continue
+		}
+		if promptTokens >= cfg.PromptTokens || fileCount >= cfg.FileCount || reasoningDepth >= cfg.ReasoningDepth {
+			return tier
+		}
+	}
+	return "C1"
+}
+
+func applyComposeComplexityModeDefault(routing *RoutingConfig) {
+	if routing == nil {
+		return
+	}
+	if mode := strings.TrimSpace(os.Getenv("CLAVAIN_COMPOSE_COMPLEXITY_MODE")); mode != "" {
+		routing.Complexity.Mode = mode
+		return
+	}
+	if routing.Complexity.Mode != "" && routing.Complexity.Mode != "off" {
+		// Production compose activation is a shadow rollout. Config may already be
+		// enforce for lower-level routing; compose callers observe before enforcing.
+		routing.Complexity.Mode = "shadow"
+	}
+}
+
+func parseIntArg(value string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
 type matchedAgent struct {
 	id    string
 	agent FleetAgent
@@ -723,6 +932,12 @@ func checkCapabilityCoverage(required []string, agents []PlanAgent, fleet *Fleet
 // Returns a slice of ComposePlan — one per stage.
 func composeSprint(spec *AgencySpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides, ct *CalibratedThresholds, sprintID string, totalBudget int64) []ComposePlan {
 	var plans []ComposePlan
+	routing := loadRoutingConfig()
+	applyComposeComplexityModeDefault(routing)
+	complexityTier := ""
+	if sprintID != "" {
+		complexityTier = tryComplexityOverride(sprintID)
+	}
 
 	// Sort stage names for deterministic output
 	var stageNames []string
@@ -737,7 +952,7 @@ func composeSprint(spec *AgencySpec, fleet *FleetRegistry, cal *InterspectCalibr
 		if stageBudget < int64(stageSpec.Budget.MinTokens) {
 			stageBudget = int64(stageSpec.Budget.MinTokens)
 		}
-		plan := composePlan(stageName, sprintID, stageBudget, stageSpec, fleet, cal, overrides, ct)
+		plan := composePlanWithRouting(stageName, sprintID, stageBudget, complexityTier, stageSpec, fleet, cal, overrides, ct, routing)
 		plans = append(plans, plan)
 	}
 	return plans

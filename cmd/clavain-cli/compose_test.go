@@ -341,6 +341,68 @@ func TestResolveModelUsesPhaseSpecificCalibration(t *testing.T) {
 	}
 }
 
+func TestComposePlanAppliesB2ComplexityEnforce(t *testing.T) {
+	fleet := loadTestFleet(t)
+	spec := loadTestSpec(t)
+	stageSpec := spec.Stages["ship"]
+	routing := &RoutingConfig{Complexity: ComplexityRoutingConfig{
+		Mode: "enforce",
+		Overrides: map[string]ComplexityOverride{
+			"C2": {SubagentModel: "haiku"},
+		},
+	}}
+
+	plan := composePlanWithRouting("ship", "", int64(stageSpec.Budget.MinTokens), "C2", stageSpec, fleet, nil, nil, nil, routing)
+
+	for _, a := range plan.Agents {
+		switch a.AgentID {
+		case "fd-quality":
+			if a.Model != "haiku" || a.ModelSource != "b2_complexity" {
+				t.Fatalf("fd-quality model/source = %q/%q, want haiku/b2_complexity", a.Model, a.ModelSource)
+			}
+		case "fd-safety", "fd-correctness":
+			if a.Model != "sonnet" || a.ModelSource != "safety_floor" {
+				t.Fatalf("%s model/source = %q/%q, want sonnet/safety_floor", a.AgentID, a.Model, a.ModelSource)
+			}
+		}
+	}
+	if plan.ComplexityTier != "C2" {
+		t.Fatalf("plan complexity tier = %q, want C2", plan.ComplexityTier)
+	}
+}
+
+func TestComposePlanB2ComplexityShadowWarnsWithoutChangingModel(t *testing.T) {
+	fleet := loadTestFleet(t)
+	spec := loadTestSpec(t)
+	stageSpec := spec.Stages["ship"]
+	routing := &RoutingConfig{Complexity: ComplexityRoutingConfig{
+		Mode: "shadow",
+		Overrides: map[string]ComplexityOverride{
+			"C2": {SubagentModel: "haiku"},
+		},
+	}}
+
+	plan := composePlanWithRouting("ship", "", int64(stageSpec.Budget.MinTokens), "C2", stageSpec, fleet, nil, nil, nil, routing)
+
+	for _, a := range plan.Agents {
+		if a.AgentID == "fd-quality" {
+			if a.Model != "sonnet" || a.ModelSource != "fleet_preferred" {
+				t.Fatalf("fd-quality shadow model/source = %q/%q, want sonnet/fleet_preferred", a.Model, a.ModelSource)
+			}
+		}
+	}
+	found := false
+	for _, w := range plan.Warnings {
+		if w == "b2_shadow:fd-quality:sonnet->haiku:C2" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected b2 shadow warning, got %v", plan.Warnings)
+	}
+}
+
 func TestComposePlanShipStage(t *testing.T) {
 	fleet := loadTestFleet(t)
 	spec := loadTestSpec(t)

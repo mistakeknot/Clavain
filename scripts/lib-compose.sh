@@ -36,9 +36,13 @@ compose_dispatch() {
         fi
     fi
 
-    # Fallback: on-demand compose
+    # Fallback: on-demand compose. Forward raw complexity signals when a caller
+    # measured them so the Go composer can emit B2 shadow routing metadata.
     local args=(compose --stage="$stage")
     [[ -n "$bead_id" ]] && args+=(--sprint="$bead_id")
+    [[ -n "${CLAVAIN_REVIEW_TOKENS:-}" ]] && args+=(--prompt-tokens="${CLAVAIN_REVIEW_TOKENS}")
+    [[ -n "${CLAVAIN_REVIEW_FILE_COUNT:-}" ]] && args+=(--file-count="${CLAVAIN_REVIEW_FILE_COUNT}")
+    [[ -n "${CLAVAIN_REVIEW_DEPTH:-}" ]] && args+=(--reasoning-depth="${CLAVAIN_REVIEW_DEPTH}")
     "$cli" "${args[@]}" 2>/dev/null
 }
 
