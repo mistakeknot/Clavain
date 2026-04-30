@@ -86,8 +86,9 @@ Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no fur
 
 7. **Drift check (non-blocking).** Run `interwatch:watch` via Skill tool. Report findings but don't block.
 
-8. **Calibrate costs (silent).**
+8. **Calibrate costs (silent).** Explicit `/reflect` calibration is a manual intervention for A:L3 no-touch tracking.
    ```bash
+   clavain-cli calibration-streak record-manual phase_cost reflect-command 2>/dev/null || true
    clavain-cli calibrate-phase-costs 2>/dev/null || true
    ```
 

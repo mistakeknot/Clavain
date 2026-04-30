@@ -30,5 +30,10 @@ Read `--scope` (or the first argument) and route accordingly:
 3. Keep output short and structured:
    - `PASS` / `WARN` / `FAIL`
    - Immediate next action for each `WARN` or `FAIL`.
+4. Include the A:L3 no-touch calibration streak by running:
+   ```bash
+   clavain-cli calibration-streak status
+   ```
+   Manual intervention means an explicit `/reflect` calibration, a direct human invocation of a calibration command, or a manual edit to routing/gate/phase calibration thresholds. Record such resets with `clavain-cli calibration-streak record-manual <routing|gate_threshold|phase_cost> <reason>`.
 
 If a delegated command is missing, add a one-line remediation and continue.

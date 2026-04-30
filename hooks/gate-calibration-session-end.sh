@@ -16,5 +16,6 @@ _run_bounded() {
 
 _run_bounded 10 clavain-cli calibrate-gate-tiers --auto
 _run_bounded 10 clavain-cli calibrate-phase-costs
+_run_bounded 5 clavain-cli calibration-streak record-session-end
 
 exit 0

@@ -102,3 +102,24 @@ def test_session_end_calibration_hook_closes_core_loops(project_root):
     assert "calibrate-gate-tiers --auto" in content
     assert "calibrate-phase-costs" in content
     assert "timeout" in content
+
+
+def test_session_end_calibration_hook_tracks_no_touch_streak(project_root):
+    """SessionEnd calibration updates the A:L3 no-touch streak read model."""
+    hook = project_root / "hooks" / "gate-calibration-session-end.sh"
+    content = hook.read_text()
+    assert "calibration-streak record-session-end" in content
+
+
+def test_reflect_command_marks_manual_phase_cost_intervention(project_root):
+    """Manual /reflect calibration resets the phase-cost no-touch streak."""
+    reflect = project_root / "commands" / "reflect.md"
+    content = reflect.read_text()
+    assert "calibration-streak record-manual phase_cost reflect-command" in content
+
+
+def test_status_command_reports_calibration_streak(project_root):
+    """Unified status includes the A:L3 no-touch streak surface."""
+    status = project_root / "commands" / "status.md"
+    content = status.read_text()
+    assert "clavain-cli calibration-streak status" in content

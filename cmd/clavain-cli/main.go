@@ -184,6 +184,8 @@ func main() {
 		err = cmdInterspectCalibrateThresholds(args)
 	case "calibrate-gate-tiers":
 		err = cmdCalibrateGateTiers(args)
+	case "calibration-streak":
+		err = cmdCalibrationStreak(args)
 
 	// Scenario policy (holdout guardrails, per sprint phase)
 	case "scenario-policy-check":
@@ -376,6 +378,8 @@ Evidence:
 Interspect Calibration:
   interspect-record-canary        --agent=<name> --override=<id> --metric=<m> --baseline=<v> --measured=<v> --outcome=<improved|degraded|neutral>
   interspect-calibrate-thresholds [--window-days=30]  Recalibrate confidence thresholds from canary outcomes
+  calibrate-gate-tiers            [--auto]             Recalibrate gate tier thresholds
+  calibration-streak              <record-session-end|record-manual LOOP [REASON]|status [--json]>
 
 Policy:
   policy-check         <agent> <action> [--path=<p>] [--bead=<id>]  Check action against policy
