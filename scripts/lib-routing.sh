@@ -69,7 +69,8 @@ _routing_model_tier() {
     sonnet)                             echo 2 ;;
     local:qwen3-30b)                    echo 2 ;;  # Track B5: legacy sonnet-equivalent
     local:qwen2.5-72b)                  echo 2 ;;  # Track B5: legacy sonnet-equivalent
-    local:qwen3.5-35b-a3b-4bit)         echo 2 ;;  # Track B5: MoE sonnet-equivalent
+    local:qwen3.5-35b-a3b-4bit)         echo 2 ;;  # Track B5: MoE sonnet-equivalent (legacy)
+    local:qwen3.6-35b-a3b-4bit)         echo 2 ;;  # Track B5: MoE sonnet-equivalent (LCB v6: 40.0% pass@1, default C2)
     local:nemotron-30b-a3b-8bit)        echo 2 ;;  # Track B5: MoE sonnet-equivalent
     opus)                               echo 3 ;;
     local:qwen3.5-122b-a10b-4bit)       echo 3 ;;  # Track B5: MoE opus-equivalent

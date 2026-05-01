@@ -222,23 +222,27 @@ local_models:
   endpoint: "http://localhost:8421"
 
   # Map local model identifiers to Clavain model tiers (1=haiku, 2=sonnet, 3=opus)
-  # Updated 2026-03-26 (Sylveste-llc): MoE-first models for better quality/speed.
-  # MoE models (A3B = 3B active params) give big-model quality at small-model speed.
+  # Updated 2026-04-29 (Sylveste-2ss): C2 promoted to Qwen3.6-35B-A3B after LCB v6
+  # matrix showed +22.3 pass@1 over 3.5 at 5× decode speed (40.0% vs 17.7%, n=175).
+  # Thinking mode hurts at <600s budgets (-18.3 points, 104 runtime errors); keep off.
+  # See docs/benchmarks/2026-04-27-lcb-v6-matrix.md for the full A/B.
   tier_mappings:
     "local:qwen3.5-9b-4bit": 1          # ~5GB, fast draft (mlx-community/Qwen3.5-9B-OptiQ-4bit)
-    "local:qwen3.5-35b-a3b-4bit": 2     # ~18GB, MoE 3B active (Jackrong/MLX-Qwen3.5-35B-A3B-*-4bit)
+    "local:qwen3.6-35b-a3b-4bit": 2     # ~18GB, MoE 3B active (mlx-community/Qwen3.6-35B-A3B-4bit), enable_thinking=False
     "local:nemotron-30b-a3b-8bit": 2     # ~32GB, MoE 3B active (mlx-community/Nemotron-Cascade-2-30B-A3B-8bit)
     "local:qwen3.5-122b-a10b-4bit": 3   # ~65GB, MoE 10B active — benchmarked 2.99 tok/s, uses entire memory budget
     "local:gpt-oss-120b-mxfp4": 3        # ~60GB, largest that fits (mlx-community/gpt-oss-120b-MXFP4-Q8)
-    "flash-moe:qwen3.5-397b": 3          # SSD-streamed via flash-moe binary, ~1 tok/s, 6GB RAM
+    # flash-moe:qwen3.5-397b demoted 2026-04-29 (Sylveste-2ss): LCB v6 matrix found
+    # 4 tok/s actual vs 12.9 spec'd, 24.8% pass@1 on n=141 with worker crash at #151.
+    # C3 traffic now escalates to cloud; flash-moe is research-only pending Sylveste-6f0.
 
   # Complexity tier -> preferred local model
-  # Updated 2026-03-27 (sylveste-86r): use 35B MoE for C1/C2 (zero marginal cost,
-  # same speed as 9B thanks to 3B active params), 122B MoE for C3 (Clavain only).
+  # Updated 2026-04-29 (Sylveste-2ss): 3.5 → 3.6 across C1/C2; C3 escalates to cloud
+  # because flash-moe's wins are a strict subset of cloud's at this budget.
   complexity_routing:
-    C1: "local:qwen3.5-35b-a3b-4bit"         # MoE 3B active, 88 tok/s — was 9B
-    C2: "local:qwen3.5-35b-a3b-4bit"         # same model, zero marginal cost
-    C3: "flash-moe:qwen3.5-397b"             # SSD-streamed, ~1 tok/s, quality=122B at 6GB RAM
+    C1: "local:qwen3.6-35b-a3b-4bit"         # MoE 3B active, 15s median gen — Qwen3.6 plain 4bit, no thinking
+    C2: "local:qwen3.6-35b-a3b-4bit"         # same model, zero marginal cost vs C1
+    C3: "cloud"                              # GPT-5.5 xhigh fast (codex CLI) — 84.0% pass@1 on LCB v6, dominates flash-moe
 
   # Confidence cascade: if first-3-token avg probability < threshold, escalate
   confidence_cascade:
