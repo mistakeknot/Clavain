@@ -2,13 +2,13 @@
 
 [![Tests](https://github.com/mistakeknot/Clavain/actions/workflows/test.yml/badge.svg)](https://github.com/mistakeknot/Clavain/actions/workflows/test.yml)
 
-Clavain is an opinionated, self-improving Claude Code agent rig that codifies product and engineering discipline into composable workflows for building software from brainstorm to ship. It orchestrates heterogeneous AI models: Claude, Codex, GPT-5.2 Pro via Oracle: into a reliable system for getting things built, where the review phases matter more than the building phases. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
+Clavain is the reference Claude Code rig for Sylveste, the platform that orchestrates agents by human/machine comparative advantage. It codifies product and engineering discipline into composable workflows for building software from brainstorm to ship, using Claude, Codex, and Oracle-style second opinions where their different failure modes help. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 19 skills, 6 agents, 52 commands, 14 hooks, and 0 MCP servers, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
-> **Want the full platform?** Clavain is part of [Sylveste](https://github.com/mistakeknot/Sylveste), which installs the complete ecosystem (55+ plugins, Go services, TUI tools) in one command. See the [Sylveste Quick Start](https://github.com/mistakeknot/Sylveste#quick-start).
+> **Want the full platform?** Clavain is part of [Sylveste](https://github.com/mistakeknot/Sylveste), which installs the companion ecosystem, Go services, and TUI tools in one command. See the [Sylveste Quick Start](https://github.com/mistakeknot/Sylveste#quick-start).
 
 ```bash
 # Full rig install (recommended): installs Clavain + companions, MCP servers, env vars, and conflict resolution
@@ -87,7 +87,7 @@ A few operating principles that shape every design decision:
 
 **Human attention is the bottleneck.** Optimize for the human's time, not the agent's. Multi-agent output must be presented so humans can review quickly and confidently, not just cheaply.
 
-**Multi-AI > single-vendor.** No one model is best at everything. Clavain is built on Claude Code and uses Codex and Oracle as complements: architecturally multi-model while remaining platform-native.
+**Multi-AI > single-vendor.** No one model is best at everything. Clavain is built on Claude Code and uses Codex and Oracle-style review as complements: architecturally multi-model while remaining platform-native.
 
 **Discipline before automation.** Encode judgment into checks before removing the human. Agents without discipline ship slop.
 
@@ -113,7 +113,7 @@ This inverts the typical "design the API first" approach: build too-tightly-coup
 
 **Not for non-builders.** Clavain is for people who build software with agents. It is not a no-code tool, not an AI assistant for non-technical users, not a chatbot framework.
 
-**Platform-native, not vendor-neutral.** Clavain is built on Claude Code. It dispatches to Codex CLI, GPT-5.2 Pro (via Oracle), and other models as complements, but it is not trying to be a universal agent orchestrator for any LLM platform.
+**Platform-native, not vendor-neutral.** Clavain is built on Claude Code. It dispatches to Codex CLI, Oracle-style review, and other model lanes as complements, but it is not trying to be a universal agent orchestrator for any LLM platform.
 
 ## Workflow
 
@@ -190,12 +190,12 @@ Trust claim is **tamper-evident-post-write**, not tamper-proof: an attacker who 
 `/flux-drive`, named after the [Flux Review](https://read.fluxcollective.org/), is the most versatile standalone command. You can point it at a file, a plan, or an entire repo and it determines which reviewer agents are relevant for the given context. It selects from three categories of review agents:
 
 - **Project Agents**: Per-project `fd-*.md` agents that live in your repo and know your specific codebase (bootstrapped via Codex when interserve mode is active)
-- **Plugin Agents**: 7 core agents (Architecture & Design, Safety, Correctness, Quality & Style, User & Product, Performance, Game Design) that auto-detect project docs: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices
-- **Cross-AI (Oracle)**: GPT-5.2 Pro for cross-model perspective on complex decisions
+- **Plugin Agents**: Built-in reviewer agents that auto-detect project docs: when CLAUDE.md/AGENTS.md exist, they provide codebase-aware analysis; otherwise they fall back to general best practices
+- **Cross-AI (Oracle)**: model-diverse perspective on complex decisions
 
 It only launches what's relevant. A simple markdown doc might get 2 agents; a full repo review might get 8. The agents run in parallel in the background, and you get a synthesized report with findings prioritized by severity. Over time, flux-drive builds a knowledge layer from review findings: patterns discovered in one review are injected as context into future reviews.
 
-When Oracle is part of the review, `flux-drive` chains into the **interpeer stack**: comparing what Claude-based agents found against what GPT-5.2 Pro found, flagging disagreements, and optionally escalating critical decisions to a full multi-model council.
+When Oracle is part of the review, `flux-drive` chains into the **interpeer stack**: comparing what Claude-based agents found against what the Oracle lane found, flagging disagreements, and optionally escalating critical decisions to a full multi-model council.
 
 ### Cross-Agent review with `/interpeer`
 
@@ -210,7 +210,7 @@ The `/interpeer` stack escalates in depth:
 | `/interpeer council` | Full LLM Council: multi-model consensus | Slow |
 | `/interpeer mine` | Post-processor: turns disagreements into tests and specs | N/A |
 
-`/interpeer` defaults to quick mode: it auto-detects whether you're running in Claude Code or Codex CLI and calls the other one. For deeper analysis, `deep` mode builds optimized prompts for Oracle (GPT-5.2 Pro) and shows you the enhanced prompt before sending. `council` mode runs a full multi-model review when the stakes are high: critical architecture or security decisions where you want genuine consensus, not just one model's opinion.
+`/interpeer` defaults to quick mode: it auto-detects whether you're running in Claude Code or Codex CLI and calls the other one. For deeper analysis, `deep` mode builds optimized prompts for Oracle and shows you the enhanced prompt before sending. `council` mode runs a full multi-model review when the stakes are high: critical architecture or security decisions where you want genuine consensus, not just one model's opinion.
 
 `mine` mode is particularly useful for complex, ambiguous contexts. It takes the *disagreements* between models and converts them into concrete artifacts: tests that would prove one side right, spec clarifications that would resolve ambiguity, and stakeholder questions that surface hidden assumptions.
 
@@ -290,7 +290,7 @@ Full semantics: `docs/canon/authz-token-model.md`.
 
 ## What's included
 
-### Skills (19)
+### Skills
 
 Skills are workflow disciplines: they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -319,15 +319,15 @@ Skills are workflow disciplines: they guide **how** you work, not what tools to 
 
 Skills extracted to companion plugins: **interpeer** (cross-AI review: interpeer, prompterpeer, winterpeer, splinterpeer), **intertest** (quality disciplines: systematic-debugging, test-driven-development, verification-before-completion), **interdev** (meta-tooling: working-with-claude-code, developing-claude-code-plugins, create-agent-skills, writing-skills).
 
-### Agents (6)
+### Agents
 
 Agents are specialized execution units dispatched by skills and commands. They run as subagents with their own context window.
 
-**Review (2):** plan-reviewer and data-migration-expert for specialized review tasks. The 7 core fd-* review agents and 5 research agents live in **interflux**. The agent-native-reviewer lives in **intercraft**.
+**Review:** specialized reviewers handle planning, migration, and code-quality tasks. Broader review and research swarms live in companion plugins such as **interflux** and **intercraft**.
 
-**Workflow (2):** PR comment resolution and bug reproduction validation.
+**Workflow:** PR comment resolution and bug reproduction validation.
 
-### Commands (52)
+### Commands
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -378,7 +378,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
-### Hooks (14)
+### Hooks
 
 - **SessionStart**: Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When interserve mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
 - **PreToolUse**: Guards `~/.claude/plugins/cache/` from accidental edits (`guard-plugin-cache.sh`).
@@ -388,7 +388,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 ### MCP servers (via companions)
 
-Clavain itself ships 0 MCP servers. These are provided by companion plugins in the rig:
+MCP server capability comes from companion plugins in the rig:
 
 - **context7**: Library documentation lookup via [Context7](https://context7.com) *(required companion)*
 - **qmd**: Semantic search *(lives in the **interflux** companion plugin)*
@@ -450,10 +450,10 @@ Clavain is opinionated but not rigid. A few things worth knowing:
 ## Architecture
 
 ```
-skills/       # 19 discipline skills (SKILL.md each)
-agents/       # 6 agents (review/ + workflow/)
-commands/     # 52 slash commands
-hooks/        # 8 hooks (SessionStart×1, PreToolUse×1, PostToolUse×4, Stop×1, SessionEnd×1)
+skills/       # discipline skills (SKILL.md each)
+agents/       # review and workflow agents
+commands/     # slash commands
+hooks/        # Claude Code hook registrations
 config/       # dispatch routing
 scripts/      # debate, codex dispatch, codex auto-refresh, upstream sync
 ```
