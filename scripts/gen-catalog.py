@@ -256,25 +256,28 @@ def update_claude_md_counts(text: str, counts: dict[str, int], path: Path) -> st
 
 
 def update_readme_counts(text: str, counts: dict[str, int], path: Path) -> str:
+    # README is now a narrative positioning doc (commit 17a96c0, 2026-05-01),
+    # not a status dashboard — the canonical counts strings may or may not
+    # appear. Tolerate any pattern being absent so the catalog hook does not
+    # block commits when README diverges from internal docs intentionally.
+    # CLAUDE.md / AGENTS.md / plugin.json keep strict enforcement.
     mcp = counts["mcp_servers"]
-    updated = replace_once(
+    updated = replace_optional(
         text,
         r"\d+ skills, \d+ agents, \d+ commands, \d+ hooks, and \d+ MCP servers?",
         f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, and {mcp} {_mcp_label(mcp)}",
-        path,
     )
-    updated = replace_once(updated, r"### Skills \(\d+\)", f"### Skills ({counts['skills']})", path)
-    updated = replace_once(updated, r"### Commands \(\d+\)", f"### Commands ({counts['commands']})", path)
-    updated = replace_once(
+    updated = replace_optional(updated, r"### Skills \(\d+\)", f"### Skills ({counts['skills']})")
+    updated = replace_optional(updated, r"### Commands \(\d+\)", f"### Commands ({counts['commands']})")
+    updated = replace_optional(
         updated,
         r"# \d+ discipline skills \(SKILL\.md each\)",
         f"# {counts['skills']} discipline skills (SKILL.md each)",
-        path,
     )
-    updated = replace_once(updated, r"# \d+ slash commands", f"# {counts['commands']} slash commands", path)
-    updated = replace_once(updated, r"### Hooks \(\d+\)", f"### Hooks ({counts['hooks']})", path)
-    updated = replace_once(updated, r"\d+ review agents", f"{counts['review']} review agents", path)
-    updated = replace_once(updated, r"### Agents \(\d+\)", f"### Agents ({counts['agents']})", path)
+    updated = replace_optional(updated, r"# \d+ slash commands", f"# {counts['commands']} slash commands")
+    updated = replace_optional(updated, r"### Hooks \(\d+\)", f"### Hooks ({counts['hooks']})")
+    updated = replace_optional(updated, r"\d+ review agents", f"{counts['review']} review agents")
+    updated = replace_optional(updated, r"### Agents \(\d+\)", f"### Agents ({counts['agents']})")
     return updated
 
 
