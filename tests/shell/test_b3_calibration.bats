@@ -578,3 +578,118 @@ JSON
     [[ "$result" == "haiku" ]]
     unset INTERSPECT_ROUTING_MODE
 }
+
+# ═══════════════════════════════════════════════════════════════════
+# Audit-trail emission (Sylveste-a5u — closes audit-trail unconformity)
+#
+# When B3 calibration runs in shadow mode, every decision branch — including
+# the no-op short-circuit where calibrated == base — must emit a
+# VerificationStep to .clavain/interspect/microrouter-shadow.jsonl. Without
+# this, operators cannot tell "calibration agreed with base" from
+# "calibration was never read".
+# ═══════════════════════════════════════════════════════════════════
+
+# Helper: write a routing.yaml + calibration.json that makes shadow mode emit.
+# After this, sourcing lib-routing.sh and calling routing_resolve_model
+# --agent <agent> for the configured agent will produce a JSONL line.
+_setup_shadow_audit() {
+    local recommended="$1" base="${2:-sonnet}"
+    unset _ROUTING_LOADED
+    mkdir -p "$TEST_DIR/config" "$TEST_DIR/.clavain/interspect"
+    cat > "$TEST_DIR/config/routing.yaml" << YAML
+subagents:
+  defaults:
+    model: $base
+
+calibration:
+  mode: shadow
+YAML
+    cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << JSON
+{
+    "schema_version": 1,
+    "agents": {
+        "fd-game-design": {
+            "recommended_model": "$recommended",
+            "confidence": 0.85,
+            "evidence_sessions": 5
+        }
+    }
+}
+JSON
+    export CLAVAIN_ROUTING_CONFIG="$TEST_DIR/config/routing.yaml"
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    export CLAVAIN_RUN_ID="test-run"
+}
+
+@test "audit: shadow no-op (calibrated == base) emits passthrough VerificationStep" {
+    _setup_shadow_audit "sonnet" "sonnet"  # calibrated matches base → no-op
+    source "$SCRIPTS_DIR/lib-routing.sh"
+
+    routing_resolve_model --agent fd-game-design >/dev/null 2>&1
+
+    local log="$TEST_DIR/.clavain/interspect/microrouter-shadow.jsonl"
+    [[ -f "$log" ]]
+
+    local line
+    line=$(tail -n 1 "$log")
+    [[ -n "$line" ]]
+    [[ $(jq -r '.name' <<< "$line") == "calibration-passthrough" ]]
+    [[ $(jq -r '.state' <<< "$line") == "VERIFIED" ]]
+    [[ $(jq -r '.decision_type' <<< "$line") == "passthrough" ]]
+    [[ $(jq -r '.evidence' <<< "$line") == *"matched B3 calibration:sonnet"* ]]
+    [[ $(jq -r '.evidence' <<< "$line") == *"fd-game-design"* ]]
+}
+
+@test "audit: shadow override (calibrated != base) emits override VerificationStep" {
+    _setup_shadow_audit "haiku" "sonnet"  # calibrated differs from base → override
+    source "$SCRIPTS_DIR/lib-routing.sh"
+
+    routing_resolve_model --agent fd-game-design >/dev/null 2>&1
+
+    local log="$TEST_DIR/.clavain/interspect/microrouter-shadow.jsonl"
+    [[ -f "$log" ]]
+
+    local line
+    line=$(tail -n 1 "$log")
+    [[ $(jq -r '.name' <<< "$line") == "calibration-override" ]]
+    [[ $(jq -r '.state' <<< "$line") == "VERIFIED" ]]
+    [[ $(jq -r '.decision_type' <<< "$line") == "override" ]]
+    [[ $(jq -r '.evidence' <<< "$line") == *"base=sonnet"* ]]
+    [[ $(jq -r '.evidence' <<< "$line") == *"calibrated=haiku"* ]]
+}
+
+@test "audit: FLUX_RUN_UUID flows into emitted records" {
+    _setup_shadow_audit "sonnet" "sonnet"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+
+    FLUX_RUN_UUID="audit-run-xyz" routing_resolve_model --agent fd-game-design >/dev/null 2>&1
+
+    local log="$TEST_DIR/.clavain/interspect/microrouter-shadow.jsonl"
+    local line; line=$(tail -n 1 "$log")
+    [[ $(jq -r '.run_uuid' <<< "$line") == "audit-run-xyz" ]]
+}
+
+@test "audit: enforce mode does NOT emit (no shadow short-circuit to record)" {
+    _setup_shadow_audit "haiku" "sonnet"
+    # Override mode to enforce — calibration applies directly, no shadow branch
+    sed -i 's/mode: shadow/mode: enforce/' "$TEST_DIR/config/routing.yaml"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+
+    routing_resolve_model --agent fd-game-design >/dev/null 2>&1
+
+    local log="$TEST_DIR/.clavain/interspect/microrouter-shadow.jsonl"
+    [[ ! -f "$log" ]]
+}
+
+@test "audit: emit failure (missing primitive) writes diagnostic to stderr" {
+    _setup_shadow_audit "sonnet" "sonnet"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+
+    # Hide the primitive so emission fails. Helper must surface the gap on
+    # stderr — silent-fail would recreate the audit-erasure bug.
+    _ROUTING_LIB_DIR="/nonexistent/scripts"
+
+    run routing_resolve_model --agent fd-game-design
+    [[ "$status" -eq 0 ]]  # routing must NOT fail just because audit failed
+    [[ "$output" == *"verification-emit-fail"* ]]
+}

@@ -21,6 +21,10 @@
 # Guard: only load once per shell process
 [[ -n "${_ROUTING_LOADED:-}" ]] && return 0
 
+# Resolve our own scripts/ directory once so verification helpers can locate
+# the vendored _verification.py primitive without re-walking the tree per call.
+declare -g _ROUTING_LIB_DIR="${BASH_SOURCE[0]%/*}"
+
 # --- Global cache (populated by _routing_load_cache) ---
 declare -g _ROUTING_SA_DEFAULT_MODEL=""
 declare -gA _ROUTING_SA_DEFAULTS=()       # [category]=model
@@ -749,6 +753,67 @@ _routing_read_override() {
   [[ -n "$result" ]] && echo "$result"
 }
 
+# --- Internal: resolve audit log path for routing decisions ---
+# Returns the path to .clavain/interspect/microrouter-shadow.jsonl under the
+# project root, or empty string if no project root is resolvable.
+# Path matches the schema in sylveste-s3z6.19.5 — when the microrouter resolver
+# (B6) lands it will write to the same log so passthrough/override entries
+# from B3 calibration and B6 microrouter share one stream.
+_routing_audit_log_path() {
+  local root=""
+  if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
+    root="$CLAUDE_PROJECT_DIR"
+  else
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || root=""
+  fi
+  [[ -z "$root" ]] && return 0
+  echo "${root}/.clavain/interspect/microrouter-shadow.jsonl"
+}
+
+# --- Internal: emit a VerificationStep audit record ---
+# Closes Sylveste-a5u: the "no-op short-circuit" pattern erases the audit trail
+# unless every branch — including the skip-because-already-correct branch —
+# emits a record. See scripts/_verification.py for the schema and the contract
+# that UNVERIFIABLE is NOT success.
+#
+# Usage:
+#   _routing_emit_verification <name> <state> <evidence> [decision_type]
+# Where:
+#   <state> ∈ {VERIFIED, FAILED_VERIFICATION, UNVERIFIABLE}
+#
+# Best-effort: emission failures (no python3, log path not writable, etc.)
+# write a single [verification-emit-fail] line to stderr but do NOT fail the
+# resolver. The audit gap becomes observable instead of silent.
+# run_uuid auto-flows through FLUX_RUN_UUID env (see _verification.py).
+_routing_emit_verification() {
+  local name="$1" state="$2" evidence="$3" decision_type="${4:-}"
+
+  local log_path
+  log_path=$(_routing_audit_log_path) || log_path=""
+  [[ -z "$log_path" ]] && return 0  # no project root, nowhere to log
+
+  local primitive="${_ROUTING_LIB_DIR}/_verification.py"
+  if [[ ! -f "$primitive" ]]; then
+    echo "[verification-emit-fail] primitive missing: $primitive" >&2
+    return 1
+  fi
+
+  local args=(
+    emit
+    --name "$name"
+    --state "$state"
+    --evidence "$evidence"
+    --log-path "$log_path"
+  )
+  [[ -n "$decision_type" ]] && args+=(--decision-type "$decision_type")
+
+  python3 "$primitive" "${args[@]}" 2>/dev/null || {
+    echo "[verification-emit-fail] $name ($state)" >&2
+    return 1
+  }
+  return 0
+}
+
 # --- B5: Check interfer availability (cached) ---
 _routing_b5_available() {
   [[ -z "$_ROUTING_B5_ENDPOINT" ]] && { echo "no"; return; }
@@ -918,9 +983,23 @@ routing_resolve_model() {
           base_for_shadow="${_ROUTING_SA_DEFAULT_MODEL:-sonnet}"
         fi
         [[ "$base_for_shadow" == "inherit" ]] && base_for_shadow="sonnet"
+        local agent_short="${agent##*:}"
         if [[ "$cal_model" != "$base_for_shadow" ]]; then
-          echo "[interspect-shadow] ${agent##*:}: base=$base_for_shadow, calibrated=$cal_model" >&2
-          command -v ic >/dev/null 2>&1 && ic route record --rule "B3" --agent "${agent##*:}" --selected-model "$base_for_shadow" --meta "calibrated=$cal_model" 2>/dev/null || true
+          echo "[interspect-shadow] $agent_short: base=$base_for_shadow, calibrated=$cal_model" >&2
+          command -v ic >/dev/null 2>&1 && ic route record --rule "B3" --agent "$agent_short" --selected-model "$base_for_shadow" --meta "calibrated=$cal_model" 2>/dev/null || true
+          _routing_emit_verification \
+            "calibration-override" "VERIFIED" \
+            "B3 calibration would override base=$base_for_shadow with calibrated=$cal_model for $agent_short" \
+            "override"
+        else
+          # No-op short-circuit (Sylveste-a5u): cal_model matched base. The
+          # legacy code emitted nothing, leaving operators unable to tell
+          # "calibration agreed with base" from "calibration was never read".
+          # VerificationStep with decision_type=passthrough closes the gap.
+          _routing_emit_verification \
+            "calibration-passthrough" "VERIFIED" \
+            "matched B3 calibration:$cal_model for $agent_short" \
+            "passthrough"
         fi
       fi
     fi
