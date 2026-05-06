@@ -10,15 +10,15 @@ bead: sylveste-mvaw
 
 # Feedback for Claude Code — What to Build Natively to Deprecate the Sylveste Plugins
 
-The 63 plugins (and 19 Clavain orchestration skills) are the dataset. Each is evidence of a Claude Code primitive that is missing, mis-shaped, or write-only. Distilled from a multi-track flux-review.
+Distilled from a multi-track flux-review across the 63 Sylveste plugins and 19 Clavain orchestration skills that compose them. Each plugin is treated as evidence of a Claude Code primitive that is missing, mis-shaped, or write-only.
 
 ## TL;DR
 
-> The seven primitives that look obvious aren't seven — they are seven instances of one missing substrate. Ship the substrate first (a typed, durable, append-only evidence ledger with a registrar primitive), reshape five of the seven as MCP-protocol moves rather than host moves, sequence the rest in three tiers with Origin-Trials-style stability flags, and explicitly resist absorbing four named ceilings.
+> The seven primitives in the prior pass collapse into one missing substrate. Ship that first (a typed, durable, append-only evidence ledger with a registrar primitive), frame five of the seven as MCP capabilities, sequence the rest in three tiers with Origin-Trials-style stability flags, and leave four named ceilings to the marketplace.
 
 ## The meta-diagnosis
 
-Claude Code ships write-only primitives: TodoWrite, TaskCreate, single-shot Agent, ephemeral session memory, an MCP catalog with no telemetry on what worked. Sylveste's PHILOSOPHY.md states it directly: *"Every action produces evidence; evidence earns authority."* Anthropic ships the act half. Users build the reflect-compound half. Sixty-three times.
+Claude Code ships write-only primitives: TodoWrite, TaskCreate, single-shot Agent, ephemeral session memory, an MCP catalog with no telemetry on what worked. Sylveste's PHILOSOPHY.md states the design bet directly: *"Every action produces evidence; evidence earns authority."* Anthropic ships the act half; the sixty-three plugins in this dataset are users building the reflect-compound half.
 
 ---
 
@@ -34,26 +34,26 @@ A typed, durable, append-only evidence ledger with a registrar primitive — `ac
 - Content-addressed, signed at emission, offline-verifiable, vendor-portable.
 - Transfer mechanism: Datomic `(append fact) / (observe scope as_of) / (subscribe predicate replay-from-event-id)`, plus Git refs+reflog and OpenTelemetry's envelope shape.
 
-**Why first.** Without the substrate, every absorption reinvents its own ID space and the integration matrix grows quadratically. With it, 8–12 plugins collapse into feeders, and *"every action produces evidence"* becomes enforceable rather than aspirational.
+**Why first.** Without the substrate, every absorption reinvents its own ID space and the integration matrix grows quadratically. With it, 8–12 plugins collapse into feeders, and the principle *"every action produces evidence"* becomes enforceable.
 
-Four independent tracks named the same primitive: typed durable event ledger (adjacent), host-mediated typed event bus (orthogonal), museum accession + `chain_for` query (distant), Heian warifu split-tally + Ifá canon-arbitrated divergence resolution (esoteric).
+Four independent tracks named the same primitive from different vocabularies: typed durable event ledger (adjacent), host-mediated typed event bus (orthogonal), museum accession with `chain_for` query (distant), Heian warifu split-tally with Ifá canon-arbitrated divergence resolution (esoteric).
 
 ---
 
-## 2. Memory is not one primitive — decompose before absorbing (4/4)
+## 2. Memory is four primitives — decompose before absorbing (4/4)
 
 | Layer | Shape | Action |
 |---|---|---|
 | **1-League (substrate)** | accession + append log + `chain_for` | Ship native |
 | **1-Kontor (project-scoped)** | AGENTS.md / CLAUDE.md / project rules | Cross-vendor format only |
-| **1-Merchant (plugin-differentiated)** | Semantic retrieval, decay rules, embeddings | Do NOT absorb — this is where plugins compete |
+| **1-Merchant (plugin-differentiated)** | Semantic retrieval, decay rules, embeddings | Plugin territory |
 | **1b-Compilation (training-time)** | Absorb declared content into agent baseline before first turn | Ship as a separate primitive |
 
-The esoteric track adds the timing axis the others miss: training-time vs runtime is *additional to* the boundary-level split.
+The esoteric track adds the timing axis the others miss: training-time and runtime are independent decomposition axes from the boundary-level split.
 
-Eight plugins want the compilation primitive that doesn't exist: intermem, interknow, interlearn, interlore, interfluence, interlens, interscribe, interseed. They fake it as runtime preamble, which is exactly the cost line Sylveste's 2,285-token preamble trim targeted.
+Eight plugins want a compilation primitive: intermem, interknow, interlearn, interlore, interfluence, interlens, interscribe, interseed. They fake it as runtime preamble today, which is exactly the cost line Sylveste's 2,285-token preamble trim targeted.
 
-**Marketplace shape inversion.** Plugins aren't runtime-vs-native competitors; they are *compilable inputs* feeding a baseline.
+**Marketplace shape inversion.** Plugins are compilable inputs awaiting a baseline.
 
 ---
 
@@ -62,24 +62,24 @@ Eight plugins want the compilation primitive that doesn't exist: intermem, inter
 Roughly 25 plugins displaced in one release cycle reads as predation regardless of per-absorption justification. Author-attrition kills future absorption candidates.
 
 **Tier 1 — ship now (broad benefit, weak per-plugin differentiation):**
-- Observability (#4) as canonical receipt format on the substrate
-- AGENTS.md (#7) as cross-vendor format only — publish JSON-Schema + write protocol; do not absorb authoring
+- Observability (#4) as a canonical receipt format on the substrate
+- AGENTS.md (#7) as a cross-vendor file format: publish a JSON-Schema and a write protocol; leave authoring to the marketplace
 - Durable task tracker (#6) to retire the TodoWrite/TaskCreate workaround
 
 **Tier 2 — ship after substrate convergence:**
 - Multi-session file coordination (#3)
 
-**Tier 3 — protocol/format only, NOT category absorption:**
+**Tier 3 — protocol or format only; the category itself stays in the marketplace:**
 - Memory (#1)
-- Parallel-fleet dispatch + finding-pipe (subset of #2)
-- Token-efficient code recon (#5) as tool-capability declaration, not algorithm
+- Parallel-fleet dispatch and finding-pipe (subset of #2)
+- Token-efficient code recon (#5) as a tool-capability declaration that plugins implement
 
 ### Per-absorption shipping requirements
 
 1. `STABILITY.md` declaring stable surface vs internal API vs deprecation runway. Without it, plugin authors freeze in wait-and-see for 6–18 months.
 2. `--enable-trial` for 2–3 release cycles before commitment (Origin Trials shape).
 3. WHATWG two-implementation rule. Absorption-ready only when ≥2 substrate implementations have converged on a shape. Of the prior 7, only coordination, observability, and AGENTS.md show convergence; memory, code recon, and task tracker do not.
-4. A named 3–5-item residual-niche statement per absorption (Sparkle survival template), so plugin authors don't price in predation risk and stop building.
+4. A named 3–5-item residual-niche statement per absorption (Sparkle survival template) so plugin authors stay invested instead of pricing in predation risk.
 5. Default-app replacement (iOS keychain pattern). Users redirect "Claude task" to their preferred plugin even after native ships.
 
 ---
@@ -88,56 +88,58 @@ Roughly 25 plugins displaced in one release cycle reads as predation regardless 
 
 1. **Marketplace UX.** Sylveste built five plugins — interplug, interpub, interform, intercheck, parts of interskill — just to make CC's marketplace usable: discovery, ranking, trust signals, install metrics, dependency resolution, version compatibility.
 2. **Tool-capability declaration.** No MCP/CC concept of "this tool returns code-aware excerpts at a token budget" vs. "raw bytes." Cross-vendor primitive opportunity.
-3. **Async session-resumption protocol.** CC's Task tool blocks; Devin and Codex Cloud have shipped async-by-default with session resumption for 12+ months. LSP-shaped `initialize/shutdown`. The difference between "review 12 findings" (works) and "kick off a 6-hour refactor and come back" (doesn't).
+3. **Async session-resumption protocol.** CC's Task tool blocks the parent; Devin and Codex Cloud shipped async-by-default with session resumption 12+ months ago. LSP-shaped `initialize/shutdown`. Sync handles short fan-outs; anything that wants to kick off a 6-hour refactor and come back to it later needs detach and resume.
 
 ## 5. Two more — single-track, unique, testable
 
 1. **Corrections feed with cadence (`chart-issue`).** Notice-to-Mariners shape. Weekly publication taking corrections from observability and reflect docs, propagating dated, monotonic, immutable corrections to every active session at session start. Required fields: `source_class (observed | inferred | synthesized)`, `as_observed_date`, `decay_rule`. Without cadence, the reflect-compound back-half is per-session and platform defaults silently drift across the fleet.
-2. **Bani-stamp unification.** interfluence + interlore are one primitive: a durable lineage signature on persisted facts. Required fields: `layer (kriti | manodharma)`, `source_class`, `bani_stamp`. Cross-checks become automatic — an artifact stamped bani-X is rejected if it violates the bani.
+2. **Bani-stamp unification.** interfluence and interlore are one primitive: a durable lineage signature on persisted facts. Required fields: `layer (kriti | manodharma)`, `source_class`, `bani_stamp`. An artifact stamped bani-X is rejected automatically if it violates the bani, so cross-checks no longer need a separate review pass.
 
 ---
 
 ## 6. Hidden coupling — the load-bearing reframe
 
-Three to four "independent" plugin clusters are actually one missing primitive in disguise:
+Four plugin clusters encode the same missing primitive:
 
 - **Signed-decision artifacts** (warifu shape): interlock + intercept + intertrust + interspect — four implementations of authority-at-signature-time.
 - **Canon-arbitrated divergence** (Ifá shape): intermem + interpeer + intertrust + intermonk + interspect — five implementations of one integrated divergence-resolution protocol.
 - **Training-time compilation** (rebbelib shape): intermem + interknow + interlearn + interlore + interfluence + interlens + interscribe + interseed — eight implementations of one absent compilation primitive.
-- **Hook-bus subscribers**: interwatch + interject + interlearn + tool-time + intercept + interspect + interpath + interlore + parts of intermem — all subscribe to events Claude Code doesn't publish.
+- **Hook-bus subscribers**: interwatch + interject + interlearn + tool-time + intercept + interspect + interpath + interlore + parts of intermem — all wait on an event stream Anthropic has yet to expose.
 
 intermem appears in three clusters; intertrust in two; interspect in three. **The single integrated primitive has three faces: signed-decision artifacts that compile into baseline behavior and resolve divergence by canonical precedent.**
 
 ---
 
-## 7. Counter-arguments — what NOT to build natively
+## 7. What stays in the marketplace
 
-| NOT build | Reasoning |
+The counter-arguments. Each row is a primitive that looks tempting to absorb and shouldn't be.
+
+| Stays in the marketplace | Reasoning |
 |---|---|
-| Native code-recon ranking | No shape convergence (Aider, Cursor, Cody all differ); fails the two-impl rule; predation converts authors into competitors. Ship a tool-capability declaration plus a reference implementation. |
-| Multi-agent synthesis policy | Three schools encode different scoring philosophies (Sylveste flux-drive ≠ Compound Engineering ≠ Superpowers). Absorbing collapses three to one. Ship the runner, not the workflow. |
-| Voice/style as runtime API | Word never absorbed Grammarly. No competitor ships voice as a platform primitive. Voice + philosophy unify as one *training-time* primitive — feed the compilation, do not run a voice API. |
-| AGENTS.md as runtime interpretation | A Codex user must validate offline. Build the cross-vendor file format + canonical compilation semantics; the file itself remains inert at runtime. |
+| Native code-recon ranking | Aider, Cursor, and Cody have all shipped different shapes; the space has not converged enough for the two-impl rule. Absorbing here turns plugin authors into competitors against a free first-party. Ship a tool-capability declaration plus a reference implementation. |
+| Multi-agent synthesis policy | Three schools encode different scoring philosophies (Sylveste flux-drive ≠ Compound Engineering ≠ Superpowers). Absorbing collapses three to one. Ship the dispatch runner and structured-finding pipe; let plugins ship the synthesis algorithms. |
+| Voice/style as runtime API | Word never absorbed Grammarly. Voice and philosophy unify as a single training-time commitment, fed into the compilation primitive in §2. |
+| AGENTS.md as runtime interpretation | A Codex user must validate offline. Build the cross-vendor file format and canonical compilation semantics; the file itself stays inert at runtime. |
 | Cognitive-lens databases (FLUX 288, philosophy observers) | Pure content. Anthropic has no authority on FLUX's lenses or any project's PHILOSOPHY.md. A small compiled subset is the right shape. |
-| Trust scoring as dashboard surface | Without compilation into routing-frequency consequence, the dashboard is theatrical. Specify trust as the consultation-frequency derivative; citation chain is mandatory. |
+| Trust scoring as dashboard surface | Without compilation into routing-frequency consequence, the dashboard is theatrical. Specify trust as the consultation-frequency derivative; require citation chains as a first-class field. |
 | Memory hierarchy/graduation/decay as one primitive | Policy-bundling. Decompose per §2; absorb only the substrate tier. |
 
 ---
 
 ## 8. Strategic / business-model angle
 
-The plugin ecosystem is Anthropic's competitive moat against Cursor, Codex, and Devin — not the model. Models commoditize within ~6 months; the ecosystem is a multi-year accumulation competitors cannot replicate quickly.
+Models commoditize within ~6 months. The plugin ecosystem accumulates over years, and that accumulation is what moats Anthropic against Cursor, Codex, and Devin.
 
 - **Absorb the floor** — durable substrate, coordination capability, cost-receipt envelope, async sessions, hook-event schema, training-time compilation. Healthy.
-- **Absorb the ceiling** — synthesis policy, voice content, AGENTS.md authoring, ranked code recon, lens curation. Trades a moated multi-year position for a quarterly feature win.
+- **Absorb the ceiling** — synthesis policy, voice content, AGENTS.md authoring, ranked code recon, lens curation. Trades a multi-year moat for a quarterly feature win.
 
-**The VSCode 2017–2019 lesson.** Ship 50+ floor primitives (LSP, DAP, terminal, tasks, settings sync); leave ceilings to plugins. The marketplace grew to 10× competitors. Same playbook applies here.
+**The VSCode 2017–2019 lesson.** Ship 50+ floor primitives (LSP, DAP, terminal, tasks, settings sync); leave the ceilings to plugins. The marketplace grew to 10× competitors. The same playbook applies here.
 
-**Cross-vendor governance is itself a competitive lever.** AGENTS.md already touches Codex, Cursor, and Gemini. Publishing a JSON-Schema + write protocol cross-vendor — a WHATWG-shape forum for agent platforms — beats absorbing authoring CC-internally on every dimension that matters.
+**Cross-vendor governance is itself a competitive lever.** AGENTS.md already touches Codex, Cursor, and Gemini. Publishing a JSON-Schema and write protocol cross-vendor (a WHATWG-shape forum for agent platforms) claims three wins at once: standards leadership, switching-cost economics, and a quality bar across the field that Anthropic helped set.
 
 ---
 
-## 9. Five of seven primitives are MCP-shaped, not host-shaped
+## 9. Five of seven primitives belong in MCP
 
 | Primitive | MCP shape |
 |---|---|
@@ -147,7 +149,7 @@ The plugin ecosystem is Anthropic's competitive moat against Cursor, Codex, and 
 | Parallel fleet | `sampling/createMessageBatch` extension |
 | AGENTS.md | `resources/subscribe` with drift-staleness notifications |
 
-Framing these as host primitives creates permanent cross-host fragmentation and locks Anthropic users in. A user with six months of curated memory who cannot switch hosts is a moat *against* Anthropic among power users.
+Framing these as host primitives creates permanent cross-host fragmentation and locks Anthropic users in. Six months of curated memory becomes a switching cost users hold over the host, which works against Anthropic among the power users most likely to evangelize.
 
 ---
 
@@ -161,6 +163,6 @@ If executed as recommended:
 
 **Survive forever as content / domain layer (~15):** interlens (288 FLUX), lattice, interlore (philosophy), interseed (idea garden), interfluence (voice), intersite, interchart, interfer (MLX), interkasten (Notion), interslack, intership, intername, tuivision, interform, intertrack.
 
-**Become cross-vendor specifications rather than CC-internal (~5):** interdoc, parts of intermem (graduation), parts of intercheck (validators), interplug (lifecycle), interpub (publishing).
+**Become cross-vendor specifications (~5):** interdoc, parts of intermem (graduation), parts of intercheck (validators), interplug (lifecycle), interpub (publishing).
 
 Net outcome: ~12 plugins gracefully retire, ~40 evolve up-stack onto a healthier substrate, and the marketplace continues to differentiate Anthropic from Cursor, Codex, and Devin.
