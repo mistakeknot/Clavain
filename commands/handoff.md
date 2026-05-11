@@ -1,52 +1,52 @@
 ---
 name: handoff
-description: Generate a concise session handoff summary for pasting into a new conversation
+description: Generate a concise session handoff summary as a dated markdown file
 argument-hint: "[focus area or notes]"
 ---
 
 # Session Handoff
 
-Generate a compact, high-signal summary of this session. Writes to three places: `docs/handoffs/` (git-tracked history), auto-memory (loaded into every future session), and clipboard output.
+Generate a compact, high-signal handoff file at `docs/handoffs/YYYY-MM-DD-<topic-slug>.md`. That file is the artifact — the user copies it into the next session when they want to resume.
 
 **Announce:** "Generating handoff summary..."
 
 ## What to include
 
-Scan the full conversation and produce a markdown block covering exactly these sections, in this order:
+Scan the full conversation and write exactly these sections, in this order. Bullets only. Absolute file paths. No padding.
 
 ### 1. Directive
-The most important section. Write as a direct instruction to the next agent.
+The most important section. A direct instruction to the next agent.
 - Lead with: `> Your job is to [X]. Start by [Y]. Verify with [Z].`
-- Be specific: name files to edit, tests to run, commands to verify
+- Name files to edit, tests to run, commands to verify
 - If multiple possible next steps, pick the highest-priority one as primary; list alternatives as `Fallback:` items
 - Include blockers or open decisions the next session must resolve
-- If beads are in progress, list IDs and status here (e.g., `Sylveste-abc1 — in_progress, claimed`)
+- If beads are in progress, list IDs and status (e.g., `Sylveste-abc1 — in_progress, claimed`)
 - If a long-running process is active (downloads, builds), include the check/restart command
 
 ### 2. Dead ends
-What was tried and didn't work. This is the highest-signal section for preventing wasted effort.
+What was tried and didn't work. Highest-signal section for preventing wasted effort.
 - Format: `[approach] — [why it failed or was abandoned]`
 - Include partial approaches that were promising but dropped, and why
-- If nothing failed this session, omit the section
+- Omit the section entirely if nothing failed this session
 
 ### 3. Non-obvious context
 Things a new session can't derive from `git log`, `git status`, or CLAUDE.md:
 - Why approach A was chosen over B
 - Gotchas discovered (workarounds, config quirks, tool behavior)
-- In-memory state: environment variables set, processes running, temporary config
+- In-memory state: env vars set, processes running, temporary config
 - Key file paths for work in progress (absolute paths)
 
 ## What to OMIT
 
-A new session will always run `git log`, `git status`, and read CLAUDE.md. Do not repeat:
-- Commit hashes, branch name, or last commit (derivable from git)
-- List of files changed (derivable from git status/diff)
-- What's working vs broken if obvious from tests (derivable from running tests)
+A new session will run `git log`, `git status`, and read CLAUDE.md. Do not repeat:
+- Commit hashes, branch name, last commit
+- List of files changed
+- What's working vs broken if obvious from running tests
 - Architecture or conventions already in CLAUDE.md
 
-## Step 1: Write to `docs/handoffs/`
+## Write the file
 
-Create the handoff file at `docs/handoffs/YYYY-MM-DD-<topic-slug>.md` with frontmatter:
+Create `docs/handoffs/YYYY-MM-DD-<topic-slug>.md` with frontmatter. Create the directory if missing.
 
 ```markdown
 ---
@@ -71,45 +71,9 @@ beads: [list of bead IDs touched this session]
 - [key file paths]
 ```
 
-Create `docs/handoffs/` directory if it doesn't exist. Update the symlink:
-```bash
-ln -sf "$(basename '<handoff-file>')" docs/handoffs/latest.md
-```
-
 Do NOT prune old handoffs — they serve as long-term session history.
 
-## Step 2: Write to auto-memory
-
-Also write a persistent memory file so future sessions load the handoff automatically. This is the high-value step — `docs/handoffs/` requires someone to read the file; auto-memory is injected into every conversation.
-
-Write to the project's auto-memory directory:
-
-```bash
-MEMORY_DIR="${CLAUDE_PROJECT_MEMORY_DIR:-$HOME/.claude/projects/-home-mk-projects-$(basename "$(pwd)")/memory}"
-```
-
-Create `${MEMORY_DIR}/handoff_latest.md` with this structure:
-
-```markdown
----
-name: Latest session handoff
-description: Session handoff from YYYY-MM-DD — <2-5 word topic>. Directive for next session, dead ends, non-obvious context.
-type: project
----
-
-[Same content as Step 1, without the docs/handoffs frontmatter]
-```
-
-**Overwrite** `handoff_latest.md` each time (only the latest handoff matters in memory — older ones are in `docs/handoffs/` git history).
-
-Update MEMORY.md if no handoff entry exists:
-- Check if MEMORY.md already has a line containing `handoff_latest.md`
-- If not, add under a `## Session Continuity` heading: `- [Latest handoff](handoff_latest.md) — directive, dead ends, and context for next session`
-- If it already exists, no change needed (the file content is overwritten, not the index line)
-
-## Step 3: Output for clipboard
-
-Also output the handoff content (without frontmatter) as a fenced code block (` ```markdown `) so the user can copy it. **Max 40 lines.** Terse bullets only. Absolute file paths.
+After writing, print only the absolute path of the file. The user copies the file into their next session when they want to resume; no other output is needed.
 
 ## Rules
 
@@ -118,4 +82,4 @@ Also output the handoff content (without frontmatter) as a fenced code block (` 
 - Do NOT duplicate what git or CLAUDE.md already provide
 - DO include session-specific knowledge that dies when this conversation closes
 - If the user provides a focus area argument, weight the summary toward that topic
-- The file is committed to git — any agent (Claude Code, Codex, Skaffen, tmux agents) can read it
+- Multi-agent safe: each invocation writes a uniquely-named dated file, never a shared `latest.md` symlink or memory slot
