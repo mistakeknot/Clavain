@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Smoke test for the gate wrappers. Does NOT hit real beads/dolt/git/ic;
 # instead, stubs those binaries on PATH and asserts the gate script:
-#   - calls `clavain-cli policy check` with the right op
+#   - calls `clavain-cli policy-check` with the right op
 #   - honors exit codes (auto/confirm/block)
 #   - calls `clavain-cli policy record` after a successful op
 #   - for v2: consumes a token when present; hard-fails on auth-failure;

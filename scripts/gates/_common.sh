@@ -2,7 +2,7 @@
 # Shared helpers for auto-proceed gate wrappers.
 #
 # Each gate wrapper:
-#   1. Calls `clavain-cli policy check <op>` with the op context.
+#   1. Calls `clavain-cli policy-check <op>` with the op context.
 #   2. Exit code 0 → auto, 1 → confirm (prompt if tty, else abort),
 #      2 → block (abort), 3 → malformed (abort).
 #   3. Runs the underlying op.
@@ -62,7 +62,7 @@ gate_resolve_agent() {
 
 # gate_check <op> [extra policy-check flags...]
 # Emits the JSON output on stdout (caller captures) and returns the numeric
-# exit code from `clavain-cli policy check`.
+# exit code from `clavain-cli policy-check`.
 #
 # Sets globals on success:
 #   GATE_POLICY_HASH
@@ -71,7 +71,11 @@ gate_check() {
   local op="$1"
   shift || true
   local raw rc
-  raw="$(clavain-cli policy check "$op" "$@" 2>&1)" && rc=0 || rc=$?
+  # CLI command is `policy-check` (hyphen); the legacy `policy check` (space)
+  # form returns rc=1 as an unknown-command error and forces every gate into
+  # the prompt-or-abort path. Fixed 2026-05-11 after diagnosing why
+  # `.beads/push.sh` always claimed "needs confirmation; no tty available".
+  raw="$(clavain-cli policy-check "$op" "$@" 2>&1)" && rc=0 || rc=$?
 
   # jq is optional; fall back to sed if missing. We only need two fields.
   if command -v jq >/dev/null 2>&1; then

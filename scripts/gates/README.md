@@ -1,6 +1,6 @@
 # Auto-proceed gate wrappers
 
-Wrappers around irreversible ops that consult `clavain-cli policy check`
+Wrappers around irreversible ops that consult `clavain-cli policy-check`
 before running the underlying command and `clavain-cli policy record`
 after. See `docs/canon/policy-merge.md` for merge semantics.
 

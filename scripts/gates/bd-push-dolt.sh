@@ -7,7 +7,7 @@
 # Intended to be called by .beads/push.sh after a `clavain-cli` check.
 set -euo pipefail
 
-DOLT="${DOLT:-/home/mk/.local/bin/dolt}"
+DOLT="${DOLT:-$(command -v dolt 2>/dev/null || echo /home/mk/.local/bin/dolt)}"
 DB_DIR="${1:-}"
 
 # shellcheck source=/dev/null
