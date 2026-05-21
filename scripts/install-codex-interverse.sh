@@ -93,8 +93,8 @@ skill_specs_overrides() {
   # Format: plugin_name|skill_rel_path|link_name
   cat <<'EOF'
 interdoc|skills/interdoc|interdoc
-interflux|skills/flux-drive|flux-drive
-interflux|skills/flux-research|flux-research
+interflux|skills/flux-engine|flux-drive
+interflux|skills/flux-engine|flux-research
 interphase|skills/beads-workflow|beads-workflow
 interpath|skills/artifact-gen|artifact-gen
 interwatch|skills/doc-watch|doc-watch
