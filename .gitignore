@@ -9,6 +9,7 @@ __pycache__/
 .pytest_cache/
 .upstream-work/
 .claude/*.local.md
+.claude/settings.local.json
 .serena/
 .tldrs/
 .beads/dolt/
