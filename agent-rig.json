@@ -344,10 +344,6 @@
         "description": "Documentation quality enforcement and refactoring"
       },
       {
-        "source": "intersense@interagency-marketplace",
-        "description": "Domain detection and project classification"
-      },
-      {
         "source": "intersight@interagency-marketplace",
         "description": "Automated UI/UX design analysis and W3C DTCG token extraction"
       },
