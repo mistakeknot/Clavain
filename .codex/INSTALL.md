@@ -39,7 +39,8 @@ bash ~/.codex/clavain/scripts/install-codex-interverse.sh install
 This installs Clavain plus the full **recommended Interverse plugin set** (from `agent-rig.json`) and links Codex-usable companion skills into native `~/.agents/skills` discovery.
 
 Notable linked skills include:
-- `flux-drive` / `flux-research` (interflux)
+- `flux-engine` (interflux engine used by `/flux-drive` and `/flux-research`)
+- `flux-review-engine` (interflux engine used by `/flux-review`)
 - `interpeer`
 - `systematic-debugging`, `test-driven-development`, `verification-before-completion` (intertest)
 - `interdoc`
@@ -49,6 +50,7 @@ Notable linked skills include:
 It also generates Interverse command wrappers in `~/.codex/prompts` as:
 - `/prompts:interflux-flux-drive`
 - `/prompts:interflux-flux-research`
+- `/prompts:interflux-flux-review`
 - `/prompts:interpath-roadmap`
 - `/prompts:interlock-interlock-status`
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -99,6 +100,11 @@ def test_interverse_doctor_skips_expected_override_collision(project_root, tmp_p
             "--json",
         ],
         capture_output=True,
+        env={
+            **os.environ,
+            "CODEX_HOME": str(tmp_path / "codex"),
+            "CODEX_PROMPTS_DIR": str(tmp_path / "codex" / "prompts"),
+        },
         text=True,
         timeout=20,
         check=False,
@@ -107,3 +113,74 @@ def test_interverse_doctor_skips_expected_override_collision(project_root, tmp_p
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["status"] == "ok"
     assert "skipping skill link name collision" not in result.stderr
+
+
+def test_interflux_codex_skill_links_use_engine_frontmatter_names(project_root, tmp_path):
+    """Interflux Codex links should follow current SKILL.md names, not stale paths."""
+    script = project_root / "scripts" / "install-codex-interverse.sh"
+    source_dir = tmp_path / "clavain"
+    clone_root = tmp_path / "clones"
+    skills_dir = tmp_path / "skills"
+
+    _write_stub_clavain_source(source_dir)
+    (source_dir / "agent-rig.json").write_text(
+        json.dumps(
+            {
+                "plugins": {
+                    "recommended": [
+                        {"source": "interflux@interagency-marketplace"},
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    repo_dir = clone_root / "interflux"
+    (repo_dir / ".git").mkdir(parents=True, exist_ok=True)
+    _write_skill(repo_dir / "skills" / "flux-drive", "flux-engine")
+    _write_skill(repo_dir / "skills" / "flux-review", "flux-review-engine")
+
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    (skills_dir / "flux-engine").symlink_to(repo_dir / "skills" / "flux-drive")
+    (skills_dir / "flux-review-engine").symlink_to(repo_dir / "skills" / "flux-review")
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(script),
+            "doctor",
+            "--source",
+            str(source_dir),
+            "--clone-root",
+            str(clone_root),
+            "--skills-dir",
+            str(skills_dir),
+            "--no-prompts",
+            "--json",
+        ],
+        capture_output=True,
+        env={
+            **os.environ,
+            "CODEX_HOME": str(tmp_path / "codex"),
+            "CODEX_PROMPTS_DIR": str(tmp_path / "codex" / "prompts"),
+        },
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["status"] == "ok"
+
+    companions = data["interverse_companions"]["companions"]
+    interflux_links = {
+        companion["link_name"]: companion["skill_path"]
+        for companion in companions
+        if companion["plugin"] == "interflux"
+    }
+    assert interflux_links == {
+        "flux-engine": str(repo_dir / "skills" / "flux-drive"),
+        "flux-review-engine": str(repo_dir / "skills" / "flux-review"),
+    }
