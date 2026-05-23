@@ -2,9 +2,10 @@
 # modpack-install.sh — Automated plugin installation driven by agent-rig.json
 #
 # Usage:
-#   modpack-install.sh [--dry-run] [--check-only] [--quiet] [--category=CATEGORY]
+#   modpack-install.sh [--dry-run] [--check-only] [--quiet] [--profile=PROFILE] [--category=CATEGORY]
 #
-# Categories: required, recommended, optional, hard_conflicts, peers, all (default: all)
+# Default mode installs core + required + the selected profile (default: default).
+# Categories: required, recommended, optional, hard_conflicts, peers, all
 # --dry-run:    Show what would be installed without making changes
 # --check-only: Alias for --dry-run
 # --quiet:      Suppress progress output, emit JSON only
@@ -21,18 +22,33 @@ CACHE_DIR="${HOME}/.claude/plugins/cache"
 # Parse arguments
 DRY_RUN=false
 QUIET=false
-CATEGORY="all"
+CATEGORY=""
+PROFILE="default"
 
-for arg in "$@"; do
-    case "$arg" in
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --dry-run|--check-only) DRY_RUN=true ;;
         --quiet) QUIET=true ;;
-        --category=*) CATEGORY="${arg#--category=}" ;;
+        --category=*) CATEGORY="${1#--category=}" ;;
+        --category)
+            CATEGORY="${2:?missing value for --category}"
+            shift
+            ;;
+        --profile=*) PROFILE="${1#--profile=}" ;;
+        --profile)
+            PROFILE="${2:?missing value for --profile}"
+            shift
+            ;;
         --help|-h)
             sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
             exit 0
             ;;
+        *)
+            echo '{"error": "Unknown option: '"$1"'"}'
+            exit 1
+            ;;
     esac
+    shift
 done
 
 # Validate
@@ -210,6 +226,43 @@ process_category() {
     done <<< "$sources"
 }
 
+profile_sources() {
+    local profile="$1"
+    jq -r --arg profile "$profile" '
+      def src:
+        if type == "string" then .
+        elif type == "object" then (.source // "")
+        else "" end;
+      if ($profile == "all" or $profile == "recommended") then
+        [
+          .plugins.recommended[]?,
+          .plugins.optional[]?
+        ][] | src
+      elif (.plugins.profiles[$profile]? != null) then
+        .plugins.profiles[$profile][]? | src
+      elif ($profile == "default") then
+        .plugins.recommended[]? | src
+      else
+        empty
+      end
+    ' "$RIG_FILE"
+}
+
+process_profile() {
+    local profile="$1"
+    local sources
+    sources=$(profile_sources "$profile")
+    if [[ -z "$sources" ]]; then
+        echo '{"error": "Unknown or empty profile: '"$profile"'"}'
+        return 1
+    fi
+
+    while IFS= read -r source; do
+        [[ -z "$source" ]] && continue
+        install_plugin "$source"
+    done <<< "$sources"
+}
+
 # Detect peer rigs without modifying anything. Peers coexist with Clavain;
 # they are reported, never disabled. Called from `peers` case (alone) or
 # from `all` mode (the two are mutually exclusive in main, so accumulators
@@ -239,9 +292,29 @@ process_peers() {
 log "Clavain Modpack Install"
 log "  Manifest: $RIG_FILE"
 log "  Mode: $(if $DRY_RUN; then echo 'dry-run'; else echo 'live'; fi)"
+log "  Profile: $PROFILE"
 log ""
 
 case "$CATEGORY" in
+    "")
+        log "=== Core ==="
+        process_category "core"
+        log ""
+        log "=== Required ==="
+        process_category "required"
+        log ""
+        log "=== Profile: $PROFILE ==="
+        process_profile "$PROFILE"
+        log ""
+        log "=== Optional (detection only) ==="
+        process_category "optional"
+        log ""
+        log "=== Hard Conflicts ==="
+        process_category "hard_conflicts"
+        log ""
+        log "=== Peers (detection only) ==="
+        process_peers
+        ;;
     all)
         log "=== Core ==="
         process_category "core"
@@ -307,6 +380,7 @@ peers_active_json=$(json_array "${peers_active[@]}")
 
 if [[ "$DRY_RUN" == true ]]; then
     jq -n \
+        --arg profile "$PROFILE" \
         --argjson would_install "$installed_json" \
         --argjson already_present "$present_json" \
         --argjson would_disable "$disabled_json" \
@@ -314,9 +388,10 @@ if [[ "$DRY_RUN" == true ]]; then
         --argjson optional_available "$optional_json" \
         --argjson peers_detected "$peers_detected_json" \
         --argjson peers_active "$peers_active_json" \
-        '{would_install: $would_install, already_present: $already_present, would_disable: $would_disable, already_disabled: $already_disabled, optional_available: $optional_available, peers_detected: $peers_detected, peers_active: $peers_active}'
+        '{profile: $profile, would_install: $would_install, already_present: $already_present, would_disable: $would_disable, already_disabled: $already_disabled, optional_available: $optional_available, peers_detected: $peers_detected, peers_active: $peers_active}'
 else
     jq -n \
+        --arg profile "$PROFILE" \
         --argjson installed "$installed_json" \
         --argjson already_present "$present_json" \
         --argjson failed "$failed_json" \
@@ -325,7 +400,7 @@ else
         --argjson optional_available "$optional_json" \
         --argjson peers_detected "$peers_detected_json" \
         --argjson peers_active "$peers_active_json" \
-        '{installed: $installed, already_present: $already_present, failed: $failed, disabled: $disabled, already_disabled: $already_disabled, optional_available: $optional_available, peers_detected: $peers_detected, peers_active: $peers_active}'
+        '{profile: $profile, installed: $installed, already_present: $already_present, failed: $failed, disabled: $disabled, already_disabled: $already_disabled, optional_available: $optional_available, peers_detected: $peers_detected, peers_active: $peers_active}'
 fi
 
 log "Done."

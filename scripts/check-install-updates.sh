@@ -253,7 +253,6 @@ interplug
 interpulse
 interrank
 interscribe
-intersense
 intership
 intersight
 interskill

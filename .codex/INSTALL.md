@@ -16,7 +16,7 @@ Enable Clavain in Codex using native skill discovery, plus optional command prom
 
 If this is your first time, this script clones `https://github.com/mistakeknot/Clavain.git` into `~/.codex/clavain` and runs the Codex ecosystem installer.
 
-- The install script links `~/.agents/skills/clavain`, installs the recommended Interverse companions, and generates wrappers under `~/.codex/prompts/clavain-*.md`.
+- The install script links `~/.agents/skills/clavain`, installs the default Interverse companion profile, and generates wrappers under `~/.codex/prompts/clavain-*.md`.
 - It manages a Clavain block in `~/.codex/AGENTS.md` and an MCP block in `~/.codex/config.toml`.
 - It writes a conversion report to `~/.codex/prompts/.clavain-conversion-report.json`.
 - It enforces clean-break migration by removing `~/.codex/skills/clavain` (symlink or directory) with backup-first safety.
@@ -36,18 +36,30 @@ For Sylveste (`clavain + interverse` Codex skills), run:
 bash ~/.codex/clavain/scripts/install-codex-interverse.sh install
 ```
 
-This installs Clavain plus the full **recommended Interverse plugin set** (from `agent-rig.json`) and links Codex-usable companion skills into native `~/.agents/skills` discovery.
+This installs Clavain plus the selected Interverse companion profile (from `agent-rig.json`) and links Codex-usable companion skills into native `~/.agents/skills` discovery.
 
-Notable linked skills include:
-- `flux-engine` (interflux engine used by `/flux-drive` and `/flux-research`)
-- `flux-review-engine` (interflux engine used by `/flux-review`)
+By default this now installs the small `default` profile, not every recommended Interverse plugin. Add explicit packs when you need them:
+
+```bash
+bash ~/.codex/clavain/scripts/install-codex-interverse.sh install --profile review
+bash ~/.codex/clavain/scripts/install-codex-interverse.sh install --profile docs
+bash ~/.codex/clavain/scripts/install-codex-interverse.sh install --profile all
+```
+
+Available profile packs are `default`, `review`, `docs`, `research`, `ops`, `observability`, `plugin-dev`, `design`, `mcp`, and `all`.
+
+Default linked skills include:
 - `interpeer`
 - `systematic-debugging`, `test-driven-development`, `verification-before-completion` (intertest)
 - `interdoc`
 - `tool-time` (Codex skill variant)
 - `tldrs-agent-workflow`
 
-It also generates Interverse command wrappers in `~/.codex/prompts` as:
+Optional `review` profile skills include:
+- `flux-engine` (interflux engine used by `/flux-drive` and `/flux-research`)
+- `flux-review-engine` (interflux engine used by `/flux-review`)
+
+It also generates Interverse command wrappers for the selected profile in `~/.codex/prompts`, such as:
 - `/prompts:interflux-flux-drive`
 - `/prompts:interflux-flux-research`
 - `/prompts:interflux-flux-review`

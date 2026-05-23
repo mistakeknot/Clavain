@@ -184,3 +184,145 @@ def test_interflux_codex_skill_links_use_engine_frontmatter_names(project_root, 
         "flux-engine": str(repo_dir / "skills" / "flux-drive"),
         "flux-review-engine": str(repo_dir / "skills" / "flux-review"),
     }
+
+
+def test_interverse_codex_doctor_filters_companions_by_profile(project_root, tmp_path):
+    """Default Codex profile should stay small; optional profiles are explicit."""
+    script = project_root / "scripts" / "install-codex-interverse.sh"
+    source_dir = tmp_path / "clavain"
+    clone_root = tmp_path / "clones"
+    skills_dir = tmp_path / "skills"
+
+    _write_stub_clavain_source(source_dir)
+    (source_dir / "agent-rig.json").write_text(
+        json.dumps(
+            {
+                "plugins": {
+                    "recommended": [
+                        {"source": "interphase@interagency-marketplace"},
+                        {"source": "interflux@interagency-marketplace"},
+                    ],
+                    "profiles": {
+                        "default": ["interphase@interagency-marketplace"],
+                        "review": ["interflux@interagency-marketplace"],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    interphase = clone_root / "interphase"
+    (interphase / ".git").mkdir(parents=True, exist_ok=True)
+    _write_skill(interphase / "skills" / "beads-workflow", "beads-workflow")
+
+    interflux = clone_root / "interflux"
+    (interflux / ".git").mkdir(parents=True, exist_ok=True)
+    _write_skill(interflux / "skills" / "flux-drive", "flux-engine")
+
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    (skills_dir / "beads-workflow").symlink_to(interphase / "skills" / "beads-workflow")
+    (skills_dir / "flux-engine").symlink_to(interflux / "skills" / "flux-drive")
+
+    env = {
+        **os.environ,
+        "CODEX_HOME": str(tmp_path / "codex"),
+        "CODEX_PROMPTS_DIR": str(tmp_path / "codex" / "prompts"),
+    }
+
+    default_result = subprocess.run(
+        [
+            "bash",
+            str(script),
+            "doctor",
+            "--source",
+            str(source_dir),
+            "--clone-root",
+            str(clone_root),
+            "--skills-dir",
+            str(skills_dir),
+            "--profile",
+            "default",
+            "--no-prompts",
+            "--json",
+        ],
+        capture_output=True,
+        env=env,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert default_result.returncode == 0, default_result.stderr
+    default_data = json.loads(default_result.stdout)
+    assert default_data["interverse_companions"]["profile"] == "default"
+    assert [plugin["name"] for plugin in default_data["interverse_companions"]["selected_plugins"]] == ["interphase"]
+
+    review_result = subprocess.run(
+        [
+            "bash",
+            str(script),
+            "doctor",
+            "--source",
+            str(source_dir),
+            "--clone-root",
+            str(clone_root),
+            "--skills-dir",
+            str(skills_dir),
+            "--profile",
+            "review",
+            "--no-prompts",
+            "--json",
+        ],
+        capture_output=True,
+        env=env,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert review_result.returncode == 0, review_result.stderr
+    review_data = json.loads(review_result.stdout)
+    assert review_data["interverse_companions"]["profile"] == "review"
+    assert [plugin["name"] for plugin in review_data["interverse_companions"]["selected_plugins"]] == ["interflux"]
+
+
+def test_claude_modpack_uses_default_profile_with_optional_packs(project_root, tmp_path):
+    """Claude Code modpack install should not install the full recommended set by default."""
+    script = project_root / "scripts" / "modpack-install.sh"
+    env = {**os.environ, "HOME": str(tmp_path)}
+
+    default_result = subprocess.run(
+        ["bash", str(script), "--dry-run", "--quiet"],
+        capture_output=True,
+        env=env,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert default_result.returncode == 0, default_result.stderr
+    default_data = json.loads(default_result.stdout)
+    assert "interphase@interagency-marketplace" in default_data["would_install"]
+    assert "interflux@interagency-marketplace" not in default_data["would_install"]
+
+    review_result = subprocess.run(
+        ["bash", str(script), "--dry-run", "--quiet", "--profile=review"],
+        capture_output=True,
+        env=env,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert review_result.returncode == 0, review_result.stderr
+    review_data = json.loads(review_result.stdout)
+    assert "interflux@interagency-marketplace" in review_data["would_install"]
+
+
+def test_codex_update_checker_fallback_excludes_archived_intersense(project_root):
+    """Jq-less fallback companion checks should not resurrect archived plugins."""
+    script = (project_root / "scripts" / "check-install-updates.sh").read_text(encoding="utf-8")
+    fallback = script.split("cat <<'EOF'", 1)[1].split("EOF", 1)[0]
+
+    assert "intersense" not in fallback

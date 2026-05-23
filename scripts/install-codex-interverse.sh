@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Install Clavain + Interverse recommended Codex capabilities via native skill discovery.
+# Install Clavain + selected Interverse Codex capabilities via native skill discovery.
 #
 # What this script sets up:
 # - Runs Clavain Codex install/doctor via scripts/install-codex.sh
-# - Ensures all Interverse plugins in agent-rig.json (recommended tier) are cloned under ~/.codex
+# - Ensures all Interverse plugins in the selected agent-rig.json profile are cloned under ~/.codex
 # - Installs Codex skill links for companion plugins that expose SKILL.md entrypoints
 # - Generates Codex prompt wrappers for companion plugin commands under ~/.codex/prompts
 # - Rewrites Clavain wrappers to route /inter*:command references to those prompts
@@ -30,10 +30,103 @@ BACKUP_ROOT="${CLAVAIN_BACKUP_ROOT:-$CLONE_ROOT/.clavain-backups}"
 INSTALL_PROMPTS=1
 DOCTOR_JSON=0
 BACKUP_SESSION_ROOT=""
+INTERVERSE_PROFILE="${CLAVAIN_INTERVERSE_PROFILE:-default}"
 
-recommended_interverse_plugins_fallback() {
+interverse_plugins_fallback() {
   # Keep this in sync with agent-rig.json for jq-less standalone installs.
-  cat <<'EOF'
+  case "$INTERVERSE_PROFILE" in
+    default)
+      cat <<'EOF'
+intercheck
+interdev
+interdoc
+interlock
+internext
+interpeer
+interphase
+intertest
+tldr-swinton
+tool-time
+EOF
+      ;;
+    review)
+      cat <<'EOF'
+intercheck
+interflux
+interpeer
+interrank
+intersynth
+intertest
+intertrace
+EOF
+      ;;
+    docs)
+      cat <<'EOF'
+interdoc
+intermem
+interpath
+interscribe
+intertree
+interwatch
+EOF
+      ;;
+    research)
+      cat <<'EOF'
+interdeep
+interknow
+interlearn
+intermonk
+intersearch
+EOF
+      ;;
+    ops)
+      cat <<'EOF'
+interhelm
+interlab
+interline
+intermux
+interslack
+EOF
+      ;;
+    observability)
+      cat <<'EOF'
+interchart
+intermap
+interpulse
+interspect
+interstat
+intertrack
+EOF
+      ;;
+    plugin-dev)
+      cat <<'EOF'
+intercraft
+interdev
+interplug
+interpub
+interskill
+EOF
+      ;;
+    design)
+      cat <<'EOF'
+interform
+intersight
+EOF
+      ;;
+    mcp)
+      cat <<'EOF'
+intercache
+interject
+interlens
+intermap
+intermux
+interrank
+intersearch
+tuivision
+EOF
+      ;;
+    all|recommended)
+      cat <<'EOF'
 interdoc
 interflux
 interphase
@@ -56,7 +149,6 @@ interplug
 interpulse
 interrank
 interscribe
-intersense
 intership
 intersight
 interskill
@@ -72,20 +164,53 @@ intertrack
 intertree
 intertrust
 EOF
+      ;;
+    *)
+      echo "Unknown Interverse profile: $INTERVERSE_PROFILE" >&2
+      return 1
+      ;;
+  esac
 }
 
 interverse_recommended_plugins() {
   local rig="$SOURCE_DIR/agent-rig.json"
   if command -v jq >/dev/null 2>&1 && [[ -f "$rig" ]]; then
-    jq -r '
-      .plugins.recommended[]?
-      | .source // empty
+    local query
+    query='
+      def src:
+        if type == "string" then .
+        elif type == "object" then (.source // "")
+        else "" end;
+      if ($profile == "all" or $profile == "recommended") then
+        [
+          .plugins.core?,
+          .plugins.recommended[]?,
+          .plugins.optional[]?
+        ][] | src
+      elif (.plugins.profiles[$profile]? != null) then
+        .plugins.profiles[$profile][]? | src
+      elif ($profile == "default") then
+        .plugins.recommended[]? | src
+      else
+        empty
+      end
       | select(endswith("@interagency-marketplace"))
       | split("@")[0]
-    ' "$rig" | sort -u
+    '
+    local selected
+    selected="$(jq -r --arg profile "$INTERVERSE_PROFILE" "$query" "$rig" | sort -u)"
+    if [[ -n "$selected" ]]; then
+      printf '%s\n' "$selected"
+      return
+    fi
+    if [[ "$INTERVERSE_PROFILE" != "default" ]]; then
+      echo "Unknown or empty Interverse profile in agent-rig.json: $INTERVERSE_PROFILE" >&2
+      return 1
+    fi
+    interverse_plugins_fallback
     return
   fi
-  recommended_interverse_plugins_fallback
+  interverse_plugins_fallback
 }
 
 skill_specs_overrides() {
@@ -127,14 +252,15 @@ Options:
   --clone-root <path>         Clone root for companion repos (default: ~/.codex)
   --skills-dir <path>         Codex native skills dir (default: ~/.agents/skills)
   --legacy-skills-dir <path>  Legacy skills dir for symlink cleanup (default: ~/.codex/skills)
+  --profile <name>            Interverse install profile (default: default; use all for full surface)
   --no-prompts                Skip Clavain prompt wrapper generation
   --json                      Emit doctor output as JSON
   -h, --help                  Show this help
 
 Notes:
   - Native Codex skill discovery path is ~/.agents/skills
-  - Recommended Interverse plugin list comes from agent-rig.json (fallback list if jq is unavailable)
-  - Companion skills are auto-discovered from recommended plugins (frontmatter name required)
+  - Interverse profiles come from agent-rig.json plugins.profiles (fallback lists if jq is unavailable)
+  - Companion skills are auto-discovered from selected plugins (frontmatter name required)
   - Interverse command wrappers are generated into ~/.codex/prompts as <plugin>-<command>.md
   - Legacy ~/.codex/skills paths are removed with backup-first safety
 EOF
@@ -157,6 +283,14 @@ while [[ $# -gt 0 ]]; do
     --legacy-skills-dir)
       LEGACY_SKILLS_DIR="${2:?missing value for --legacy-skills-dir}"
       shift 2
+      ;;
+    --profile)
+      INTERVERSE_PROFILE="${2:?missing value for --profile}"
+      shift 2
+      ;;
+    --profile=*)
+      INTERVERSE_PROFILE="${1#--profile=}"
+      shift
       ;;
     --no-prompts)
       INSTALL_PROMPTS=0
@@ -1090,10 +1224,11 @@ doctor_companions_text() {
   local plugin skill_rel link_name
 
   echo "== Interverse Codex Companion Doctor =="
+  echo "Profile: $INTERVERSE_PROFILE"
   echo "Clone root: $CLONE_ROOT"
   echo "Skills dir: $SKILLS_DIR"
   echo
-  echo "-- Recommended Interverse plugins --"
+  echo "-- Selected Interverse plugins --"
 
   while IFS= read -r plugin; do
     [[ -n "$plugin" ]] || continue
@@ -1245,12 +1380,17 @@ doctor_companions_json() {
 
   printf '{\n'
   printf '  "status":"%s",\n' "$status_text"
+  printf '  "profile":"%s",\n' "$(json_escape "$INTERVERSE_PROFILE")"
   printf '  "clone_root":"%s",\n' "$(json_escape "$CLONE_ROOT")"
   printf '  "skills_dir":"%s",\n' "$(json_escape "$SKILLS_DIR")"
   printf '  "counts":{\n'
+  printf '    "selected_plugin_count":%s,\n' "$plugin_count"
   printf '    "recommended_plugin_count":%s,\n' "$plugin_count"
   printf '    "skill_link_count":%s\n' "$skill_count"
   printf '  },\n'
+  printf '  "selected_plugins":'
+  cat "$plugins_file"
+  printf ',\n'
   printf '  "recommended_plugins":'
   cat "$plugins_file"
   printf ',\n'
@@ -1275,7 +1415,7 @@ case "$ACTION" in
     cleanup_legacy_predecessors
     clavain_install
     if install_companions; then
-      echo "Interverse recommended plugin repos and Codex skill links installed."
+      echo "Interverse profile '$INTERVERSE_PROFILE' plugin repos and Codex skill links installed."
       echo "Restart Codex so it reloads discovered skills."
       exit 0
     fi

@@ -114,6 +114,80 @@
       "source": "clavain@interagency-marketplace",
       "description": "The core Clavain multi-agent rig"
     },
+    "profiles": {
+      "default": [
+        "interphase@interagency-marketplace",
+        "interlock@interagency-marketplace",
+        "intertest@interagency-marketplace",
+        "interdoc@interagency-marketplace",
+        "interdev@interagency-marketplace",
+        "intercheck@interagency-marketplace",
+        "interpeer@interagency-marketplace",
+        "internext@interagency-marketplace",
+        "tldr-swinton@interagency-marketplace",
+        "tool-time@interagency-marketplace"
+      ],
+      "review": [
+        "interflux@interagency-marketplace",
+        "intercheck@interagency-marketplace",
+        "interpeer@interagency-marketplace",
+        "intersynth@interagency-marketplace",
+        "intertrace@interagency-marketplace",
+        "interrank@interagency-marketplace",
+        "intertest@interagency-marketplace"
+      ],
+      "docs": [
+        "interdoc@interagency-marketplace",
+        "interpath@interagency-marketplace",
+        "interwatch@interagency-marketplace",
+        "interscribe@interagency-marketplace",
+        "intermem@interagency-marketplace",
+        "intertree@interagency-marketplace"
+      ],
+      "research": [
+        "interdeep@interagency-marketplace",
+        "interknow@interagency-marketplace",
+        "intermonk@interagency-marketplace",
+        "intersearch@interagency-marketplace",
+        "interlearn@interagency-marketplace"
+      ],
+      "ops": [
+        "interline@interagency-marketplace",
+        "interslack@interagency-marketplace",
+        "interhelm@interagency-marketplace",
+        "interlab@interagency-marketplace",
+        "intermux@interagency-marketplace"
+      ],
+      "observability": [
+        "interpulse@interagency-marketplace",
+        "intertrack@interagency-marketplace",
+        "interspect@interagency-marketplace",
+        "intermap@interagency-marketplace",
+        "interstat@interagency-marketplace",
+        "interchart@interagency-marketplace"
+      ],
+      "plugin-dev": [
+        "interplug@interagency-marketplace",
+        "interskill@interagency-marketplace",
+        "interdev@interagency-marketplace",
+        "intercraft@interagency-marketplace",
+        "interpub@interagency-marketplace"
+      ],
+      "design": [
+        "interform@interagency-marketplace",
+        "intersight@interagency-marketplace"
+      ],
+      "mcp": [
+        "intercache@interagency-marketplace",
+        "interject@interagency-marketplace",
+        "interlens@interagency-marketplace",
+        "intermux@interagency-marketplace",
+        "intersearch@interagency-marketplace",
+        "interrank@interagency-marketplace",
+        "intermap@interagency-marketplace",
+        "tuivision@interagency-marketplace"
+      ]
+    },
     "infrastructure": [
       {
         "source": "gopls-lsp@claude-plugins-official",
