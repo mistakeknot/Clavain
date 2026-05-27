@@ -26,7 +26,7 @@ git clone https://github.com/mistakeknot/Clavain.git clavain
 bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ```
 
-Restart Codex after install. The default installer now refreshes Clavain plus the recommended Interverse companion set. It is idempotent and removes stale `clavain-*.md` wrappers.
+Restart Codex after install. The default installer now refreshes Clavain plus the full Interverse Codex ecosystem from the recommended and optional rig tiers. It is idempotent and removes stale `clavain-*.md` wrappers.
 It also manages a Clavain block in `~/.codex/AGENTS.md`, syncs MCP servers into `~/.codex/config.toml`, and writes conversion diagnostics to `~/.codex/prompts/.clavain-conversion-report.json`.
 Wrapper conversion also normalizes `AskUserQuestion` references to a Codex elicitation adapter policy:
 use `request_user_input` when available (Plan mode), otherwise ask in chat with numbered options and pause for response.
@@ -56,7 +56,7 @@ For unattended updates, use the new autonomous helper:
 bash scripts/codex-auto-refresh.sh
 ```
 
-For the full ecosystem install (all recommended Interverse plugins from `agent-rig.json` + linked Codex skills like `flux-drive`, `interpeer`, and `systematic-debugging`):
+For the full ecosystem install (all recommended and optional Interverse plugins from `agent-rig.json` that Codex can use through skill links and prompt wrappers):
 
 ```bash
 bash ~/.codex/clavain/scripts/install-codex-interverse.sh install
