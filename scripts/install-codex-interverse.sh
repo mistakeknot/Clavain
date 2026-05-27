@@ -1286,19 +1286,27 @@ doctor_companions_text() {
 
 doctor_companions_json() {
   local status=0
-  local plugin skill_rel link_name
-  local plugins_file skills_file prompts_file
+  local tier plugin skill_rel link_name
+  local plugins_file recommended_file optional_file skills_file prompts_file
   local plugin_count=0
+  local recommended_count=0
+  local optional_count=0
   local skill_count=0
 
   plugins_file="$(mktemp)"
+  recommended_file="$(mktemp)"
+  optional_file="$(mktemp)"
   skills_file="$(mktemp)"
   prompts_file="$(mktemp)"
   printf '[\n' > "$plugins_file"
+  printf '[\n' > "$recommended_file"
+  printf '[\n' > "$optional_file"
   printf '[\n' > "$skills_file"
 
   local first=true
-  while IFS= read -r plugin; do
+  local first_recommended=true
+  local first_optional=true
+  while IFS='|' read -r tier plugin; do
     [[ -n "$plugin" ]] || continue
     local repo_dir="$CLONE_ROOT/$plugin"
     local repo_ok=false
@@ -1316,14 +1324,43 @@ doctor_companions_json() {
     first=false
 
     printf '    {\n' >> "$plugins_file"
+    printf '      "tier":"%s",\n' "$(json_escape "$tier")" >> "$plugins_file"
     printf '      "name":"%s",\n' "$(json_escape "$plugin")" >> "$plugins_file"
     printf '      "repo_url":"%s",\n' "$(json_escape "$repo_url")" >> "$plugins_file"
     printf '      "repo_dir":"%s",\n' "$(json_escape "$repo_dir")" >> "$plugins_file"
     printf '      "repo_ok":%s\n' "$repo_ok" >> "$plugins_file"
     printf '    }' >> "$plugins_file"
     plugin_count=$((plugin_count + 1))
-  done < <(interverse_recommended_plugins)
+
+    if [[ "$tier" == "recommended" ]]; then
+      if [[ "$first_recommended" != true ]]; then
+        printf ',\n' >> "$recommended_file"
+      fi
+      first_recommended=false
+      printf '    {\n' >> "$recommended_file"
+      printf '      "name":"%s",\n' "$(json_escape "$plugin")" >> "$recommended_file"
+      printf '      "repo_url":"%s",\n' "$(json_escape "$repo_url")" >> "$recommended_file"
+      printf '      "repo_dir":"%s",\n' "$(json_escape "$repo_dir")" >> "$recommended_file"
+      printf '      "repo_ok":%s\n' "$repo_ok" >> "$recommended_file"
+      printf '    }' >> "$recommended_file"
+      recommended_count=$((recommended_count + 1))
+    elif [[ "$tier" == "optional" ]]; then
+      if [[ "$first_optional" != true ]]; then
+        printf ',\n' >> "$optional_file"
+      fi
+      first_optional=false
+      printf '    {\n' >> "$optional_file"
+      printf '      "name":"%s",\n' "$(json_escape "$plugin")" >> "$optional_file"
+      printf '      "repo_url":"%s",\n' "$(json_escape "$repo_url")" >> "$optional_file"
+      printf '      "repo_dir":"%s",\n' "$(json_escape "$repo_dir")" >> "$optional_file"
+      printf '      "repo_ok":%s\n' "$repo_ok" >> "$optional_file"
+      printf '    }' >> "$optional_file"
+      optional_count=$((optional_count + 1))
+    fi
+  done < <(interverse_plugin_entries)
   printf '\n  ]\n' >> "$plugins_file"
+  printf '\n  ]\n' >> "$recommended_file"
+  printf '\n  ]\n' >> "$optional_file"
 
   first=true
   while IFS='|' read -r plugin skill_rel link_name; do
@@ -1384,15 +1421,19 @@ doctor_companions_json() {
   printf '  "clone_root":"%s",\n' "$(json_escape "$CLONE_ROOT")"
   printf '  "skills_dir":"%s",\n' "$(json_escape "$SKILLS_DIR")"
   printf '  "counts":{\n'
-  printf '    "selected_plugin_count":%s,\n' "$plugin_count"
-  printf '    "recommended_plugin_count":%s,\n' "$plugin_count"
+  printf '    "plugin_count":%s,\n' "$plugin_count"
+  printf '    "recommended_plugin_count":%s,\n' "$recommended_count"
+  printf '    "optional_plugin_count":%s,\n' "$optional_count"
   printf '    "skill_link_count":%s\n' "$skill_count"
   printf '  },\n'
-  printf '  "selected_plugins":'
+  printf '  "plugins":'
   cat "$plugins_file"
   printf ',\n'
   printf '  "recommended_plugins":'
-  cat "$plugins_file"
+  cat "$recommended_file"
+  printf ',\n'
+  printf '  "optional_plugins":'
+  cat "$optional_file"
   printf ',\n'
   printf '  "companions":'
   cat "$skills_file"
@@ -1401,7 +1442,7 @@ doctor_companions_json() {
   cat "$prompts_file"
   printf '}\n'
 
-  rm -f "$plugins_file" "$skills_file" "$prompts_file"
+  rm -f "$plugins_file" "$recommended_file" "$optional_file" "$skills_file" "$prompts_file"
   return "$status"
 }
 
