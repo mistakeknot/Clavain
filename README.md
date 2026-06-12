@@ -415,7 +415,7 @@ Clavain is designed as an **agent rig**, inspired by [PC game mod packs](https:/
 | [interclode](https://github.com/interagency-marketplace) | Codex CLI dispatch infrastructure: powers `/interserve` |
 | [agent-sdk-dev](https://github.com/claude-plugins-official) | Agent SDK scaffolding |
 | [plugin-dev](https://github.com/claude-plugins-official) | Plugin development tools |
-| [serena](https://github.com/claude-plugins-official) | Semantic code analysis via LSP-like tools |
+| [tldr-swinton](https://github.com/mistakeknot/tldr-swinton) | Token-efficient code reconnaissance before broad reads and refactors |
 | [tool-time](https://github.com/interagency-marketplace) | Tool usage analytics across sessions |
 
 ### Disabled (Conflicts)

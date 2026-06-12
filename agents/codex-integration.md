@@ -61,7 +61,7 @@ These enhance the rig significantly but aren't hard dependencies.
 | **interdoc** | interagency-marketplace | AGENTS.md generation for any repo. |
 | **tool-time** | interagency-marketplace | Tool usage analytics across sessions. |
 | **security-guidance** | claude-plugins-official | Security warning hooks on file edits. Complements fd-safety agent. |
-| **serena** | claude-plugins-official | Semantic code analysis via LSP-like tools. |
+| **tldr-swinton** | interagency-marketplace | Token-efficient code reconnaissance before broad reads and refactors. |
 
 ### Infrastructure (language servers)
 

@@ -6,10 +6,10 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 
 | Action | Count | Plugins |
 |--------|-------|---------|
-| **KEEP** | 13 | clavain, interclode, interdoc, tool-time, context7, agent-sdk-dev, plugin-dev, serena, gopls-lsp, pyright-lsp, typescript-lsp, rust-analyzer-lsp, security-guidance |
+| **KEEP** | 13 | clavain, interclode, interdoc, tool-time, context7, agent-sdk-dev, plugin-dev, tldr-swinton, gopls-lsp, pyright-lsp, typescript-lsp, rust-analyzer-lsp, security-guidance |
 | **KEEP** (user pref) | 1 | explanatory-output-style |
-| **DISABLE** | 8 | code-review, code-simplifier, commit-commands, feature-dev, claude-md-management, frontend-design, pr-review-toolkit, hookify |
-| **EVALUATE** | 3 | tldrs, tldr-swinton, tuivision |
+| **DISABLE** | 9 | code-review, code-simplifier, commit-commands, feature-dev, claude-md-management, frontend-design, pr-review-toolkit, hookify, serena |
+| **EVALUATE** | 2 | tldrs, tuivision |
 | **CONDITIONAL** | 3 | supabase, vercel, github |
 
 ## Detailed Audit
@@ -26,6 +26,7 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 | **claude-md-management** | 1 skill, 1 cmd | `engineering-docs` skill + AGENTS.md conventions | Clavain already manages CLAUDE.md/AGENTS.md with its own opinions. |
 | **frontend-design** | 1 skill | `distinctive-design` skill | Same skill, Clavain's is customized. |
 | **hookify** | 1 skill, 1 agent, 4 cmds, hooks | Clavain manages hooks directly | Already OFF. Clavain owns hook management. Hookify would conflict. |
+| **serena** | MCP semantic editing tools | tldr-swinton, intermap, language-specific LSP plugins, and built-in grep/edit flows | Useful in some codebases, but not enough Sylveste-specific leverage to load by default; it adds tool-routing surface and has caused wrong-tool selections in prior audits. |
 | ~~explanatory-output-style~~ | ~~hooks only~~ | ~~Could be a Clavain hook option~~ | **KEPT — user preference.** Injects educational insights output style. |
 
 ### KEEP — Complementary
@@ -40,7 +41,7 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 | **context7** | Runtime doc fetching MCP server. Also declared in Clavain's plugin.json. |
 | **agent-sdk-dev** | Agent SDK scaffolding (`/new-sdk-app`, verifier agents). Fills a gap Clavain doesn't cover. |
 | **plugin-dev** | Plugin development (7 skills, 3 agents). More comprehensive than Clavain's `developing-claude-code-plugins`. Includes agent-creator, skill-reviewer, plugin-validator. |
-| **serena** | Semantic code analysis via LSP. Different tool class entirely. |
+| **tldr-swinton** | Token-efficient code reconnaissance and caller/context discovery. Stronger default fit for Sylveste because it is already integrated with the Interverse workflow. |
 | **gopls-lsp** | Go language server. Infrastructure, not workflow. |
 | **pyright-lsp** | Python type checking. Infrastructure. |
 | **typescript-lsp** | TypeScript language server. Infrastructure. |
@@ -52,7 +53,6 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 | Plugin | What It Does | Keep If... |
 |--------|-------------|------------|
 | **tldrs** | Token-efficient code reconnaissance. 84% token savings with semantic search, diff-context, symbol analysis. | You frequently hit context limits or want cheaper exploration. Try disabling for a week and see if you miss it. |
-| **tldr-swinton** | The underlying tool for tldrs. Required if tldrs stays. | Keep if tldrs stays, disable if tldrs goes. |
 | **tuivision** | TUI visual testing with Playwright for terminals. | You're actively building terminal apps. Otherwise disable. |
 
 ### CONDITIONAL — Domain-Specific
@@ -67,8 +67,8 @@ Audited 2026-02-08. 32 plugins enabled, 1 local dev.
 
 | Status | Before | After |
 |--------|--------|-------|
-| Enabled | 32 | 17-20 (depending on evaluate/conditional) |
-| Disabled | 1 | 13-16 |
+| Enabled | 32 | 17-19 (depending on evaluate/conditional) |
+| Disabled | 1 | 14-16 |
 
 ## Notes
 
