@@ -69,6 +69,11 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 |---|---|
 | `/clavain:refactor` | Refactors with duplication/risk controls |
 
+### Guardrails
+| `/clavain:freeze` | Restrict edits to declared paths (scope lock) |
+|---|---|
+| `/clavain:unfreeze` | Lift the scope lock |
+
 ### Meta
 | `/clavain:project-onboard` | Set up project with Sylveste automation |
 |---|---|
