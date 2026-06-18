@@ -114,6 +114,29 @@ cp "$FLUX_OUTPUT_DIR/synthesis.md" "$OUTPUT_DIR/synthesis.md" 2>/dev/null || tru
 cp "$FLUX_OUTPUT_DIR/synthesis.json" "$OUTPUT_DIR/synthesis.json" 2>/dev/null || true
 ```
 
+**Fail-closed guard.** Before any gate decision, verify a *fresh* review actually
+landed. The `|| true` above never aborts on a missing source, so this guard is the
+single source of fail-closed truth: if flux-drive errored, or the synthesis is
+absent or stale (left over from a prior run), block shipping rather than passing
+unreviewed code.
+
+```bash
+SYNTH_MD="$OUTPUT_DIR/synthesis.md"
+SYNTH_JSON="$OUTPUT_DIR/synthesis.json"
+if [[ "${FLUX_DRIVE_STATUS:-1}" -ne 0 ]]; then
+    echo "quality-gates: flux-drive did not complete (status=${FLUX_DRIVE_STATUS:-unset}); no fresh review produced. Gate FAILS CLOSED (blocking shipping). Re-run /clavain:quality-gates after fixing flux-drive." >&2
+    exit 1
+fi
+if [[ ! -f "$SYNTH_MD" || ! -f "$SYNTH_JSON" ]]; then
+    echo "quality-gates: review synthesis missing ($SYNTH_MD / $SYNTH_JSON). flux-drive produced no output. Gate FAILS CLOSED (blocking shipping). Re-run /clavain:quality-gates." >&2
+    exit 1
+fi
+if [[ "$SYNTH_MD" -ot "$DIFF_PATH" || "$SYNTH_JSON" -ot "$DIFF_PATH" ]]; then
+    echo "quality-gates: review synthesis is STALE (older than the diff under review); it was not regenerated this run. Gate FAILS CLOSED (blocking shipping). Re-run /clavain:quality-gates." >&2
+    exit 1
+fi
+```
+
 ## Phase 3: Gate Decision
 
 ### 3a: Record Verdicts to Interspect (silent, fail-open)
