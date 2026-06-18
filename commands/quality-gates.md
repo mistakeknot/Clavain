@@ -89,6 +89,17 @@ flux-drive will:
 3. Dispatch agents in stages
 4. Synthesize findings via intersynth
 
+**Capture flux-drive's outcome.** After flux-drive returns, record whether it
+completed successfully into `FLUX_DRIVE_STATUS` (export it) so the gate guard
+below can fail closed on error. Set `FLUX_DRIVE_STATUS=0` only if flux-drive ran
+to completion and reported success; set it to a non-zero value (e.g. `1`) if
+flux-drive errored, timed out, was interrupted, or produced no synthesis. Do NOT
+default it to `0` — absence of a clear success signal is a failure.
+
+```bash
+export FLUX_DRIVE_STATUS="${FLUX_DRIVE_STATUS:-1}"
+```
+
 After flux-drive completes, its output directory contains `synthesis.md` and per-agent findings.
 
 Locate the synthesis:
