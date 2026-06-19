@@ -1,9 +1,9 @@
 {
-  "generated": "2026-05-11T20:51:31Z",
+  "generated": "2026-06-19T19:30:56Z",
   "counts": {
     "skills": 19,
     "agents": 6,
-    "commands": 52,
+    "commands": 54,
     "hooks": 14,
     "mcp_servers": 0,
     "review": 2,
@@ -193,6 +193,10 @@
       "description": "Run build, capture error, fix it, re-run \u2014 fast loop for type errors and build failures without heavyweight debugging"
     },
     {
+      "name": "freeze",
+      "description": "Restrict file edits to declared paths \u2014 scope-lock for parallel-session safety"
+    },
+    {
       "name": "galiana",
       "description": "Discipline analytics \u2014 view KPIs, report defects, or reset cache"
     },
@@ -307,6 +311,10 @@
     {
       "name": "triage",
       "description": "Triage and categorize findings for the CLI todo system"
+    },
+    {
+      "name": "unfreeze",
+      "description": "Lift the /freeze scope lock \u2014 restore full edit permissions"
     },
     {
       "name": "update-check",

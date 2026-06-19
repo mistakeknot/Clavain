@@ -135,6 +135,40 @@ if [[ "$SYNTH_MD" -ot "$DIFF_PATH" || "$SYNTH_JSON" -ot "$DIFF_PATH" ]]; then
     echo "quality-gates: review synthesis is STALE (older than the diff under review); it was not regenerated this run. Gate FAILS CLOSED (blocking shipping). Re-run /clavain:quality-gates." >&2
     exit 1
 fi
+
+# Ship-class fd-safety enforcement (fail-closed). Ship-class surfaces — plugin
+# manifests, MCP configs, hook scripts, interlock/authorization/capability
+# files, signing-key paths, shell-out paths — execute or gate platform code, so
+# an unreviewed change is an RCE / supply-chain risk. When the diff touches any
+# of them, fd-safety is a MANDATORY reviewer (see interflux SKILL.md Step 1.2a)
+# and must have run THIS pass: its findings file must exist and be fresh. The
+# synthesis gate (Phase 3b) still decides pass/fail on the findings; this guard
+# only enforces that the mandatory reviewer actually ran. Mirrors the synthesis
+# freshness guard above. Override: CLAVAIN_SKIP_SECURITY='reason'.
+SHIP_CLASS_RE='(^|/)plugin\.json$|(^|/)mcp-[^/]*\.(json|ya?ml)$|(^|/)mcp-server\.|(^|/)hooks/[^/]*\.(sh|py|ts|js)$|(^|/)hooks\.json$|(^|/)(interlock|authorization|capability)[^/]*\.(json|ya?ml)$|(^|/)\.clavain/keys/|shell-exec'
+changed_files=$(grep -E '^\+\+\+ b/' "$DIFF_PATH" 2>/dev/null | sed 's|^+++ b/||')
+if printf '%s\n' "$changed_files" | grep -Eq "$SHIP_CLASS_RE"; then
+    if [[ -n "${CLAVAIN_SKIP_SECURITY:-}" ]]; then
+        echo "quality-gates: [WARNING] ship-class diff detected; fd-safety enforcement bypassed via CLAVAIN_SKIP_SECURITY='${CLAVAIN_SKIP_SECURITY}'. Recording the bypass as interspect evidence." >&2
+        # Reuse Phase 3a's interspect verdict loop: drop a SKIPPED verdict that
+        # the loop will record. Keeps the bypass auditable without re-sourcing
+        # lib-interspect here.
+        mkdir -p .clavain/verdicts 2>/dev/null || true
+        printf '{"agent":"fd-safety","status":"SKIPPED_SHIP_CLASS","findings_count":0,"model":"none","reason":"%s","ts":"%s"}\n' \
+            "${CLAVAIN_SKIP_SECURITY//\"/\'}" "$(date -u +%FT%TZ)" \
+            > .clavain/verdicts/fd-safety.json 2>/dev/null || true
+    else
+        FD_SAFETY_MD="$OUTPUT_DIR/fd-safety.md"
+        if [[ ! -f "$FD_SAFETY_MD" ]]; then
+            echo "quality-gates: ship-class diff (plugin/MCP/hooks/interlock/keys/shell-out) requires fd-safety review, but fd-safety did not run ($FD_SAFETY_MD missing). fd-safety is MANDATORY for ship-class diffs. Gate FAILS CLOSED. Re-run /clavain:quality-gates, or set CLAVAIN_SKIP_SECURITY='reason' to override." >&2
+            exit 1
+        fi
+        if [[ "$FD_SAFETY_MD" -ot "$DIFF_PATH" ]]; then
+            echo "quality-gates: ship-class diff — fd-safety findings are STALE (older than the diff under review). Gate FAILS CLOSED. Re-run /clavain:quality-gates." >&2
+            exit 1
+        fi
+    fi
+fi
 ```
 
 ## Phase 3: Gate Decision
