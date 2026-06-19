@@ -32,7 +32,7 @@ jobs:
           egress-policy: audit
 
       - id: parse
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const body = (context.payload.comment?.body || "").trim();
@@ -86,7 +86,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
           COMMAND: ${{ needs.parse-command.outputs.command }}
@@ -125,7 +125,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
           MODE: ${{ needs.parse-command.outputs.mode }}
@@ -187,7 +187,7 @@ jobs:
 
       - name: Fetch PR metadata
         id: prmeta
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
         with:
@@ -238,7 +238,7 @@ jobs:
             --json-schema {"type":"object","properties":{"response":{"type":"string"}},"required":["response"],"additionalProperties":false}
 
       - name: Post Claude review comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           CLAUDE_STRUCTURED: ${{ steps.claude.outputs.structured_output }}
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
@@ -306,7 +306,7 @@ jobs:
 
       - name: Fetch PR metadata
         id: prmeta
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
         with:
@@ -385,7 +385,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Post Codex review comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           CODEX_FINAL_MESSAGE: ${{ steps.codex_exec.outputs.result }}
           PR_NUMBER: ${{ needs.parse-command.outputs.pr_number }}
