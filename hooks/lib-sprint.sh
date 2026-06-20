@@ -1076,10 +1076,37 @@ enforce_gate() {
     gate_mode=$(spec_get_default "gate_mode") || gate_mode="enforce"
     [[ "$gate_mode" == "off" ]] && return 0
 
+    # Map the target phase to a stage up front so the no-run-id path below can
+    # decide its fail DIRECTION by safety class (sylveste-scx1).
+    local stage
+    stage=$(_sprint_phase_to_stage "$target_phase")
+
+    # Safety-critical stages gate code that can advance toward ship: design
+    # (plan must be reviewed) and ship (code must be reviewed + tested). These
+    # mirror degraded-modes.yaml's critical subsystems (review-fleet, test-suite).
+    local is_safety_stage=0
+    case "$stage" in
+        design|ship) is_safety_stage=1 ;;
+    esac
+
     # ALWAYS run ic gate check first (existing invariant — never bypassed)
     local run_id
     run_id=$(_sprint_resolve_run_id "$bead_id") || {
-        echo "spec: enforce_gate skipped — no ic run for bead '$bead_id'" >&2
+        # No ic run for this bead. Fail DIRECTION depends on stage safety class
+        # (sylveste-scx1: degraded-modes as an active breaker). Safety stages
+        # fail CLOSED — a missing kernel run means we cannot prove review/tests
+        # ran, so block rather than wave code through. The escape hatch is an
+        # explicit, logged CLAVAIN_SKIP_GATE=<reason>. Non-safety stages stay
+        # permissive so kernel-absent workflows are not bricked.
+        if [[ "$is_safety_stage" == "1" ]]; then
+            if [[ -n "${CLAVAIN_SKIP_GATE:-}" ]]; then
+                echo "spec: enforce_gate ($stage) FAIL-CLOSED override — no ic run for bead '$bead_id'; bypassed via CLAVAIN_SKIP_GATE='${CLAVAIN_SKIP_GATE}'" >&2
+                return 0
+            fi
+            echo "spec: enforce_gate ($stage) FAILS CLOSED — no ic run for bead '$bead_id'; cannot verify review/tests ran. Create the ic run, or set CLAVAIN_SKIP_GATE='reason' to override (audited)." >&2
+            return 1
+        fi
+        echo "spec: enforce_gate skipped — no ic run for bead '$bead_id' (non-safety stage $stage)" >&2
         return 0
     }
     if ! intercore_gate_check "$run_id"; then
@@ -1091,8 +1118,6 @@ enforce_gate() {
         return 0  # No spec — ic gate passed, we're done
     fi
 
-    local stage
-    stage=$(_sprint_phase_to_stage "$target_phase")
     local gates_json
     gates_json=$(spec_get_stage_gates "$stage") || return 0
 
