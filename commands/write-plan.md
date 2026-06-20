@@ -3,6 +3,17 @@ name: write-plan
 description: Create detailed implementation plan with bite-sized tasks
 ---
 
+## Progress Tracking
+
+This command is the **Decide** leg of the OODARC loop — it commits to an implementation approach. Display and update:
+
+```
+write-plan (OODARC: Decide):
+- [ ] Resolve input context (brainstorm/PRD artifacts)
+- [ ] Invoke clavain:writing-plans skill
+- [ ] Register plan artifact + advance phase to `planned`
+```
+
 **Before invoking the skill**, resolve input context:
 ```bash
 brainstorm_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null) || brainstorm_path=""

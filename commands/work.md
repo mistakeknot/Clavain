@@ -10,6 +10,19 @@ Execute a work plan (spec, plan, or todo file) systematically to ship complete f
 
 > **vs `/execute-plan`:** Use `/work` for autonomous feature shipping. Use `/execute-plan` for batch execution with architect review checkpoints every 3 tasks.
 
+## Progress Tracking
+
+`/work` is the **Act** leg of the OODARC loop (it executes a decided plan), with a self-contained Observe→Act→Observe→Act mini-cycle across its phases. Display and update:
+
+```
+work (OODARC: Act):
+- [ ] Phase 1:  Quick Start        (Orient — read plan, scope the work)
+- [ ] Phase 1b: Gate Check + Record (Validate — plan must be reviewed)
+- [ ] Phase 2:  Execute            (Act — implement)
+- [ ] Phase 3:  Quality Check      (Observe — tests/review; skipped inside a sprint)
+- [ ] Phase 4:  Ship               (Terminal — commit)
+```
+
 ## Input
 
 <input_document> #$ARGUMENTS </input_document>

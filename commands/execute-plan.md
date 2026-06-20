@@ -14,6 +14,18 @@ description: Execute plan in batches with review checkpoints
 6. **Never enter plan mode autonomously.** The plan already exists. Stop and ask if scope changes mid-execution.
 </BEHAVIORAL-RULES>
 
+## Progress Tracking
+
+`/execute-plan` is the **Act** leg of the OODARC loop, run in review-gated batches (each checkpoint is a mini Validate). Display and update:
+
+```
+execute-plan (OODARC: Act — batched):
+- [ ] Enforce gate + record `executing` phase transition
+- [ ] Execute batch (≤3 tasks)        (Act)
+- [ ] Architect review checkpoint     (Validate — pause for approval)
+- [ ] Repeat until plan complete
+```
+
 **Before starting execution**, enforce the gate and record phase transition:
 ```bash
 BEAD_ID=$(clavain-cli infer-bead "<plan_file_path>")
