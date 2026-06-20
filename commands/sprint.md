@@ -8,6 +8,8 @@ argument-hint: "[feature description or --from-step <step>]"
 
 Runs the full 10-phase lifecycle from brainstorm to ship. Normally invoked via `/route`. `CLAVAIN_BEAD_ID` set by caller; if unset, runs without bead tracking.
 
+The sprint **is** one full turn of the OODARC loop (Observe · Orient · Decide · Act · Reflect · Compound) at the per-sprint timescale — each step below is annotated with the leg it performs. Reflect+Compound (Step 9) is what closes the loop: it writes outcomes back so the next sprint's Orient starts smarter. See `PHILOSOPHY.md` § The OODARC Lens.
+
 - `--from-step <n>`: jump to step name (brainstorm, strategy, plan, plan-review, execute, test, quality-gates, resolve, reflect, ship)
 - Otherwise: `$ARGUMENTS` is feature description for Step 1
 
@@ -27,17 +29,17 @@ Non-negotiable:
 Display this checklist after bootstrap and update after each step. Use exact step names.
 
 ```
-Sprint Progress (<CLAVAIN_BEAD_ID>):
-- [ ] Step 1:  Brainstorm
-- [ ] Step 2:  Strategy
-- [ ] Step 3:  Write Plan
-- [ ] Step 4:  Plan Review
-- [ ] Step 5:  Execute
-- [ ] Step 6:  Test & Verify
-- [ ] Step 7:  Quality Gates
-- [ ] Step 8:  Resolve
-- [ ] Step 9:  Reflect
-- [ ] Step 10: Ship
+Sprint Progress (<CLAVAIN_BEAD_ID>):   # each step is one leg of the OODARC loop
+- [ ] Step 1:  Brainstorm      (Observe)
+- [ ] Step 2:  Strategy        (Orient)
+- [ ] Step 3:  Write Plan      (Decide)
+- [ ] Step 4:  Plan Review     (Validate — decision gate)
+- [ ] Step 5:  Execute         (Act)
+- [ ] Step 6:  Test & Verify   (Observe — execution signals)
+- [ ] Step 7:  Quality Gates   (Observe — review signals)
+- [ ] Step 8:  Resolve         (Act — corrective)
+- [ ] Step 9:  Reflect         (Reflect + Compound)
+- [ ] Step 10: Ship            (Terminal — commit to trunk)
 ```
 
 Mark each `[x]` as completed. Append artifact path: `✓ docs/plans/...`. After Step 10, sprint is **done** — no further steps exist.
@@ -142,7 +144,7 @@ After each artifact write, record its provenance vector via `bd set-state "$CLAV
 
 ---
 
-## Step 1: Brainstorm
+## Step 1: Brainstorm (OODARC: Observe)
 
 ### 1a: Generate brainstorm
 
@@ -203,7 +205,7 @@ if type -t _interspect_insert_evidence &>/dev/null; then
 fi
 ```
 
-## Step 2: Strategize
+## Step 2: Strategize (OODARC: Orient)
 
 ### 2a: Generate strategy
 
@@ -239,7 +241,7 @@ After passing: set `phase=strategy-reviewed`.
 
 Record review outcome (same pattern as Step 1c, with `"phase":"strategy","review_type":"flux-drive"`, including `tokens` and `cost_usd` from session-cost query).
 
-## Step 3: Write Plan
+## Step 3: Write Plan (OODARC: Decide)
 
 `/clavain:write-plan` → saves to `docs/plans/YYYY-MM-DD-<name>.md`. The command registers it via `set-artifact plan`.
 
@@ -247,7 +249,7 @@ If interserve mode active: write-plan auto-executes via Codex — skip Step 5.
 
 After plan written: set `phase=planned`; `clavain-cli record-cost-estimate "$CLAVAIN_BEAD_ID" "planned" 2>/dev/null || true`
 
-## Step 4: Review Plan
+## Step 4: Review Plan (OODARC: Validate — decision gate)
 
 **Auto-run — no AskUserQuestion before starting.** The Tier 2 checkpoint pauses *after* the review to present findings, not before.
 
@@ -299,7 +301,7 @@ When `lane_intent` is non-empty, check whether the plan contradicts it. Use a ha
 
 If no lane intent or `contradicts == false`: proceed silently to Step 5.
 
-## Step 5: Execute
+## Step 5: Execute (OODARC: Act)
 
 ```bash
 plan_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "plan" 2>/dev/null) || plan_path=""
@@ -319,7 +321,7 @@ At START of execution: set `phase=executing`; `clavain-cli record-cost-estimate 
 
 Parallel execution: use `dispatching-parallel-agents` skill for independent modules. Interserve mode auto-dispatches Codex agents.
 
-## Step 6: Test & Verify
+## Step 6: Test & Verify (OODARC: Observe — execution signals)
 
 Run project test suite + linter. If tests fail: stop and fix — do NOT proceed with broken build. If no test command: note and proceed.
 
@@ -343,7 +345,7 @@ else
 fi
 ```
 
-## Step 7: Quality Gates
+## Step 7: Quality Gates (OODARC: Observe — review signals)
 
 Budget context (same pattern as Step 4):
 ```bash
@@ -398,7 +400,7 @@ else
 fi
 ```
 
-## Step 8: Resolve Issues
+## Step 8: Resolve Issues (OODARC: Act — corrective)
 
 If resolve was already dispatched in parallel during Step 7, check if it completed:
 ```bash
@@ -410,7 +412,7 @@ If `resolution` is set, skip to Step 9 (already resolved). Otherwise run now:
 
 After resolving: if quality-gates found recurring patterns, run `/clavain:compound` to document in `config/flux-drive/knowledge/`. If findings revealed a plan-level mistake, add `## Lessons Learned` to the plan file.
 
-## Step 9: Reflect
+## Step 9: Reflect (OODARC: Reflect + Compound)
 
 ### 9a: Decomposition quality actuals (rsj.1.9.1)
 
@@ -428,7 +430,7 @@ Note: This advances `shipping → reflect` in the kernel. Step 7's `sprint-advan
 
 `/reflect` owns artifact registration AND the `reflect → done` advance — do NOT call sprint-advance after it returns. Gate is firm: Step 10 requires a reflect artifact with >= 3 substantive lines.
 
-## Step 10: Ship
+## Step 10: Ship (OODARC: Terminal)
 
 **Reflect gate (firm):**
 ```bash
