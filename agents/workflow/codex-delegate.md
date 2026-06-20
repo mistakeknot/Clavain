@@ -68,7 +68,7 @@ Use `timeout: 600000`.
 - Check `.verdict` sidecar first; `pass` → brief summary; `warn`/`fail` → read full output
 - Retry once with tighter scope; if retry fails, return failure to Claude
 
-**5. Record outcome**
+**5. Reflect — record outcome** (OODARC Reflect leg: the dispatch ran the *Act* leg; capturing its result here is how the caller Reflects and Compounds)
 ```bash
 _db="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.clavain/interspect/interspect.db"
 if command -v sqlite3 &>/dev/null && [ -f "$_db" ]; then
@@ -76,11 +76,13 @@ if command -v sqlite3 &>/dev/null && [ -f "$_db" ]; then
   _session="${CLAUDE_SESSION_ID:-unknown}"
   _project="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
   _seq=$(sqlite3 "$_db" "SELECT COALESCE(MAX(seq),0)+1 FROM evidence WHERE session_id='$_session';" 2>/dev/null || echo "1")
-  _ctx="{\"category\":\"$CATEGORY\",\"tier\":\"$TIER\",\"verdict\":\"$VERDICT\",\"retry_needed\":$RETRY,\"duration_s\":$DURATION}"
+  # oodarc_phase tags which leg this evidence is about, so cross-session
+  # learning can attribute by leg. The dispatch performed the Act leg.
+  _ctx="{\"category\":\"$CATEGORY\",\"tier\":\"$TIER\",\"verdict\":\"$VERDICT\",\"retry_needed\":$RETRY,\"duration_s\":$DURATION,\"oodarc_phase\":\"act\"}"
   sqlite3 "$_db" "INSERT INTO evidence (ts,session_id,seq,source,event,override_reason,context,project) VALUES ('$_ts','$_session',$_seq,'codex-delegate','delegation_outcome','','$_ctx','$_project');" 2>/dev/null || true
 fi
 ```
-Skip silently if DB missing.
+Skip silently if DB missing. This writes to the **existing** interspect `evidence` table (no new store — sylveste-104h); `oodarc_phase` is just an added field in the context JSON.
 
 **6. Return** tier used, verdict, key output, whether retry was needed.
 
