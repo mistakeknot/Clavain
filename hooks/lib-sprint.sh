@@ -300,6 +300,10 @@ sprint_read_state() {
     auto_advance="${auto_advance:-true}"
     token_budget="${token_budget:-0}"
 
+    # Canonical one-shot Observe call: `ic situation snapshot --run=<id>`
+    # (runs/dispatches/queue/budget/events). It does NOT yet project the
+    # artifacts map or phase-advance history sprint_status needs, so those
+    # stay as targeted queries below — see sylveste-owjn.2.1 (C1).
     # Launch 3 independent ic queries in parallel (artifacts, events, agents, tokens)
     local _tmp_dir
     _tmp_dir=$(mktemp -d) || { echo "{}"; return 0; }

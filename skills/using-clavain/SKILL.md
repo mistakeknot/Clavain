@@ -10,7 +10,7 @@ description: Use at start of any conversation — how to find/use skills, agents
 Clavain operates on **OODARC** — Observe · Orient · Decide · Act · Reflect · Compound — at nested timescales (per-turn, per-sprint, cross-session). Run it explicitly each turn:
 
 1. **Observe** — read the actual tool results, file state, and test output. Don't act on assumptions about what happened.
-2. **Orient** — situate against the goal and recent evidence. What changed? What's anomalous? (At sprint scale, `ic situation snapshot` gives this in one call.)
+2. **Orient** — situate against the goal and recent evidence. What changed? What's anomalous? At sprint scale, `ic situation snapshot --run=<id>` is the canonical one-shot Observe→Orient call — one query for runs, dispatches, queue, budget, and recent events, instead of polling each separately.
 3. **Decide** — choose the next action; prefer the known fast path, deliberate when novel or high-stakes.
 4. **Act** — invoke the tool / make the edit / advance the phase.
 5. **Reflect** — did the outcome match expectation? On a *significant* outcome (error, recovery, surprise, novel situation) pause and debrief before continuing; on routine ones, continue and let evidence accumulate.
@@ -33,6 +33,7 @@ The compounding half (Reflect + Compound) is what makes the system get smarter a
 | Resolve review findings | `/clavain:resolve` |
 | Set up a new project | `/clavain:project-onboard` |
 | Check project health | `/clavain:clavain-doctor` or `/clavain:sprint-status` |
+| One-shot situation snapshot (Observe) | `ic situation snapshot --run=<id>` |
 | Generate roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` |
 | Run scenario tests | `clavain-cli scenario-run <pattern>` |
