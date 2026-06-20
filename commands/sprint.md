@@ -330,13 +330,16 @@ clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "test-pass-sha" "$(git rev-parse HEA
 
 This SHA lets landing-a-change (Step 10) skip re-running tests when HEAD hasn't moved since the last pass.
 
-**Persist vetting signals** (consumed by the auto-proceed authz gate at ship time; see `docs/canon/policy-merge.md`):
+**Persist vetting signals** (consumed by the auto-proceed authz gate at ship time; see `docs/canon/policy-merge.md`). These signals must be **derived from the observed test outcome, not asserted unconditionally** (sylveste-qf1k): stamp them ONLY when the suite above actually passed. Set `TESTS_PASSED=1` when the test command exited 0 (or `TESTS_PASSED=skip` when there is genuinely no test command); leave it unset/0 on any failure. Do NOT default it to 1.
 ```bash
-if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+if [[ -n "${CLAVAIN_BEAD_ID:-}" && ( "${TESTS_PASSED:-0}" == "1" || "${TESTS_PASSED:-0}" == "skip" ) ]]; then
+  _tp=$([[ "${TESTS_PASSED}" == "skip" ]] && echo skipped || echo true)
   bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "sprint step 6 tests passed" 2>/dev/null || true
   bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "sprint step 6 tests passed" 2>/dev/null || true
-  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "sprint step 6 tests passed" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="$_tp"                --reason "sprint step 6 tests passed" 2>/dev/null || true
   bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "sprint step 6 tests passed" 2>/dev/null || true
+else
+  [[ -n "${CLAVAIN_BEAD_ID:-}" ]] && bd set-state "$CLAVAIN_BEAD_ID" tests_passed="false" --reason "sprint step 6 tests did not pass" 2>/dev/null || true
 fi
 ```
 
@@ -365,23 +368,33 @@ verdict_count_by_status # e.g., "3 CLEAN, 1 NEEDS_ATTENTION"
 - All CLEAN → proceed (one-line summary)
 - Any NEEDS_ATTENTION → read detail via `verdict_get_attention`; report per-agent STATUS in sprint summary
 
-Sprint-level gate check (verify quality-gates advanced phase):
+Sprint-level gate check (verify quality-gates advanced phase). Capture the gate
+result into `GATE_PASSED` so the vetting refresh below can derive its stamp from
+it (sylveste-qf1k) rather than asserting clean unconditionally:
 ```bash
-if ! clavain-cli enforce-gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
+if clavain-cli enforce-gate "$CLAVAIN_BEAD_ID" "shipping" ""; then
+    GATE_PASSED=1
+    clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"   # advance ONLY on pass
+else
+    GATE_PASSED=0
     echo "Gate blocked: re-run /clavain:quality-gates or set CLAVAIN_SKIP_GATE='reason'." >&2
-    # Stop
+    # Stop — do NOT advance the phase, do NOT stamp vetting signals below.
 fi
-clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "shipping"
 ```
 Do NOT set phase if gates FAIL.
 
-**Refresh vetting signals** after all quality gates pass (HEAD may have advanced since Step 6 if review produced fixup commits):
+**Refresh vetting signals** after all quality gates pass (HEAD may have advanced since Step 6 if review produced fixup commits). Derive `vetted` from **review artifact content, not orchestrator assertion** (sylveste-qf1k): refresh ONLY when the gate above passed AND no agent verdict is NEEDS_ATTENTION. Reuse the parsed verdict from `verdict_count_by_status` — a non-zero NEEDS_ATTENTION count must NOT be stamped clean.
 ```bash
-if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
-  bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "sprint step 7 gates clean" 2>/dev/null || true
-  bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "sprint step 7 gates clean" 2>/dev/null || true
-  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "sprint step 7 gates clean" 2>/dev/null || true
-  bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "sprint step 7 gates clean" 2>/dev/null || true
+# GATE_PASSED=1 only if the Step-7 enforce-gate above returned 0 (did not Stop).
+# needs_attention is DERIVED from the lib-verdict parse, never asserted.
+needs_attention=$(verdict_count_by_status 2>/dev/null | grep -oE '[0-9]+ NEEDS_ATTENTION' | grep -oE '^[0-9]+' || echo 0)
+if [[ -n "${CLAVAIN_BEAD_ID:-}" && "${GATE_PASSED:-0}" == "1" && "${needs_attention:-0}" -eq 0 ]]; then
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "sprint step 7 gates clean (verdict-derived)" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "sprint step 7 gates clean (verdict-derived)" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "sprint step 7 gates clean (verdict-derived)" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "sprint step 7 gates clean (verdict-derived)" 2>/dev/null || true
+else
+  [[ -n "${CLAVAIN_BEAD_ID:-}" ]] && bd set-state "$CLAVAIN_BEAD_ID" vetted_at="" --reason "sprint step 7 gate failed or findings open (${needs_attention:-?} NEEDS_ATTENTION) — vetting NOT stamped" 2>/dev/null || true
 fi
 ```
 

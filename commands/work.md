@@ -113,13 +113,16 @@ Run `/clavain:quality-gates` only for: large refactors (10+ files), security-sen
 - All tests pass; linting passes
 - Code follows existing patterns; no console errors
 
-**Persist vetting signals** (consumed by the auto-proceed authz gate in Phase 4; see `docs/canon/policy-merge.md`):
+**Persist vetting signals** (consumed by the auto-proceed authz gate in Phase 4; see `docs/canon/policy-merge.md`). Derive these from the **observed test outcome, not asserted unconditionally** (sylveste-qf1k): stamp ONLY when the checklist above actually passed. Set `TESTS_PASSED=1` when tests+linting passed (or `TESTS_PASSED=skip` when there is genuinely no test command); leave it unset/0 on any failure. Do NOT default it to 1.
 ```bash
-if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+if [[ -n "${CLAVAIN_BEAD_ID:-}" && ( "${TESTS_PASSED:-0}" == "1" || "${TESTS_PASSED:-0}" == "skip" ) ]]; then
+  _tp=$([[ "${TESTS_PASSED}" == "skip" ]] && echo skipped || echo true)
   bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "work phase 3 tests passed" 2>/dev/null || true
   bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "work phase 3 tests passed" 2>/dev/null || true
-  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "work phase 3 tests passed" 2>/dev/null || true
+  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="$_tp"                --reason "work phase 3 tests passed" 2>/dev/null || true
   bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "work phase 3 tests passed" 2>/dev/null || true
+else
+  [[ -n "${CLAVAIN_BEAD_ID:-}" ]] && bd set-state "$CLAVAIN_BEAD_ID" tests_passed="false" --reason "work phase 3 tests did not pass" 2>/dev/null || true
 fi
 ```
 
