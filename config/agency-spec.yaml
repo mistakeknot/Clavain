@@ -173,6 +173,7 @@ stages:
         type: git_commit
         required: true
     gates:
+      gate_mode: enforce  # sylveste-0ly7: ship is the strongest gate; do not inherit global shadow
       review_clean:
         type: verdict_clean
         max_needs_attention: 0
