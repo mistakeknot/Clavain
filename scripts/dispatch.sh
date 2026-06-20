@@ -484,7 +484,18 @@ if [[ -n "$INJECT_DOCS" ]]; then
     if [[ $PREFIX_SIZE -gt $INJECT_DOCS_WARN_THRESHOLD ]]; then
       echo "Warning: --inject-docs prepending ${PREFIX_SIZE} bytes of context. Consider --inject-docs=claude for smaller prompts." >&2
     fi
-    PROMPT="${DOCS_PREFIX}---
+    # OODARC Orient briefing (sylveste-owjn.1.4): the dispatched agent is the
+    # Act leg of the caller's OODARC loop. Frame the injected docs as Orient
+    # context so the agent reads conventions/patterns BEFORE acting, and knows
+    # to report findings so the caller can Reflect. Keeps Codex at parity with
+    # the interactive agent's per-turn loop (using-clavain SKILL.md).
+    ORIENT_BRIEFING="## Orient before you act
+You are executing the **Act** leg of an OODARC loop on behalf of a coordinating agent. Before changing anything: read the project conventions below (and AGENTS.md in the working dir), and match the existing patterns for this task class. When you finish, report what you did and any findings clearly (end with the VERDICT line) so the caller can **Reflect** on the outcome.
+
+---
+
+"
+    PROMPT="${ORIENT_BRIEFING}${DOCS_PREFIX}---
 
 ${PROMPT}"
   fi

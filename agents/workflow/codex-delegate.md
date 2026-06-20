@@ -47,10 +47,11 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 If not found, report failure — do not call codex directly.
 
 **2. Write prompt to `/tmp/codex-delegate-$(date +%s).md`**
-- Be specific about file paths
-- Include build/test commands for code changes
-- One clear objective per dispatch
-- End with: `VERDICT: CLEAN | NEEDS_ATTENTION` + one-line summary
+
+Frame the task as one OODARC **Act** leg (the dispatched agent will also receive an Orient briefing when `--inject-docs` is used):
+- **Orient:** name the relevant files/conventions and what "done right" looks like for this task class — be specific about file paths.
+- **Act:** one clear objective per dispatch; include build/test commands for code changes.
+- **Reflect:** end with `VERDICT: CLEAN | NEEDS_ATTENTION` + one-line summary, so you (the caller) can Reflect on the outcome and Compound any lesson.
 
 **3. Dispatch**
 ```bash
