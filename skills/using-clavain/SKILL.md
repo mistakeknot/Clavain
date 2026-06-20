@@ -5,6 +5,19 @@ description: Use at start of any conversation — how to find/use skills, agents
 
 **Proactive skill invocation is required.** When a skill matches the current task — even partially — invoke it before responding.
 
+## The OODARC Loop (how to work, every turn)
+
+Clavain operates on **OODARC** — Observe · Orient · Decide · Act · Reflect · Compound — at nested timescales (per-turn, per-sprint, cross-session). Run it explicitly each turn:
+
+1. **Observe** — read the actual tool results, file state, and test output. Don't act on assumptions about what happened.
+2. **Orient** — situate against the goal and recent evidence. What changed? What's anomalous? (At sprint scale, `ic situation snapshot` gives this in one call.)
+3. **Decide** — choose the next action; prefer the known fast path, deliberate when novel or high-stakes.
+4. **Act** — invoke the tool / make the edit / advance the phase.
+5. **Reflect** — did the outcome match expectation? On a *significant* outcome (error, recovery, surprise, novel situation) pause and debrief before continuing; on routine ones, continue and let evidence accumulate.
+6. **Compound** — persist the lesson so it changes future behavior (a fix, a calibration, a solution doc, a bead). Reflect without Compound is just journaling.
+
+The compounding half (Reflect + Compound) is what makes the system get smarter across sessions — it is not optional. See `PHILOSOPHY.md` § The OODARC Lens.
+
 # Quick Router — 19 skills, 6 agents, and 54 commands
 
 | You want to... | Run this |
