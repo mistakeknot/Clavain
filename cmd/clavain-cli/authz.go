@@ -162,6 +162,7 @@ func currentHeadSHA() string {
 //	--vetted-sha=<sha>
 //	--tests-passed             (flag; implies true)
 //	--sprint-or-work-flow      (flag; implies true)
+//	--committed-by-this-session (flag; implies true — HEAD committed this session)
 //	--head-sha=<sha>           default: `git rev-parse HEAD`
 //	--global=<path> --project=<path> --env=<path>  override policy paths
 //	--json                     emit JSON (default true in v1)
@@ -209,6 +210,9 @@ func cmdPolicyCheck(args []string) error {
 	}
 	if _, ok := flags["sprint-or-work-flow"]; ok {
 		input.SprintOrWorkFlow = true
+	}
+	if _, ok := flags["committed-by-this-session"]; ok {
+		input.CommittedByThisSession = true
 	}
 
 	result, err := authz.Check(merged, input)
@@ -351,6 +355,9 @@ func cmdPolicyExplain(args []string) error {
 	if _, ok := flags["sprint-or-work-flow"]; ok {
 		input.SprintOrWorkFlow = true
 	}
+	if _, ok := flags["committed-by-this-session"]; ok {
+		input.CommittedByThisSession = true
+	}
 
 	result, err := authz.Check(merged, input)
 	if err != nil {
@@ -459,13 +466,15 @@ func cmdPolicyAudit(args []string) error {
 // cmdPolicyLint validates the merged policy against invariants:
 //
 //  1. MUST have a terminal catchall (op: "*") last in merged order.
+//
 //  2. MUST NOT have a child layer loosening a required boolean without
 //     parent allow_override — surfaced as a merge error during LoadEffective.
+//
 //  3. Every op declared in .clavain/gates/*.gate MUST have a matching rule
 //     (or a catchall) in the merged policy.
 //
-//	clavain-cli policy lint [--global=...] [--project=...] [--env=...]
-//	                        [--gates-dir=.clavain/gates]
+//     clavain-cli policy lint [--global=...] [--project=...] [--env=...]
+//     [--gates-dir=.clavain/gates]
 func cmdPolicyLint(args []string) error {
 	flags := parseAuthzArgs(args)
 	globalPath, projectPath, envPath := policyResolvePaths(flags)
