@@ -150,19 +150,43 @@ sprint_beads_summary() {
 
 # Count stale beads (in_progress with no recent activity).
 # Prints count. Returns 0 if stale found, 1 if none.
+#
+# `bd stale` costs ~270-320ms (bd process startup), so the result is cached
+# behind a 5-minute TTL sentinel — same pattern as the bd doctor gate in
+# session-start.sh. The sentinel file's *contents* hold the last count, so a
+# cache hit returns the real number rather than zeroing the signal. Set
+# CLAVAIN_SPRINT_STALE_TTL=0 to force a fresh query (no caller does today; the
+# full scan tolerates a ≤5-min-old count since it's an interactive snapshot).
 sprint_stale_beads() {
     command -v bd &>/dev/null || return 1
     [[ -d "${SPRINT_PROJECT_DIR}/.beads" ]] || return 1
+
+    local sentinel="/tmp/clavain-bd-stale-${USER:-mk}"
+    local ttl="${CLAVAIN_SPRINT_STALE_TTL:-300}"
+    if [[ "$ttl" -gt 0 && -f "$sentinel" ]]; then
+        local age
+        age=$(( $(date +%s) - $(stat -c %Y "$sentinel" 2>/dev/null || stat -f %m "$sentinel" 2>/dev/null || echo 0) ))
+        if [[ "$age" -le "$ttl" ]]; then
+            local cached
+            cached=$(cat "$sentinel" 2>/dev/null)
+            case "$cached" in ''|*[!0-9]*) cached=0 ;; esac
+            echo "$cached"
+            [[ "$cached" -gt 0 ]] && return 0 || return 1
+        fi
+    fi
+
     local stale_output
     stale_output=$(bd stale 2>/dev/null) || return 1
-    if [[ -z "$stale_output" ]]; then
-        echo "0"
-        return 1
-    fi
     local count
-    count=$(echo "$stale_output" | grep -c '.' || echo 0)
+    if [[ -z "$stale_output" ]]; then
+        count=0
+    else
+        count=$(echo "$stale_output" | grep -c '.' || echo 0)
+    fi
+    # Cache the freshly computed count (best-effort).
+    echo "$count" > "$sentinel" 2>/dev/null || true
     echo "$count"
-    [[ $count -gt 0 ]] && return 0 || return 1
+    [[ "$count" -gt 0 ]] && return 0 || return 1
 }
 
 # Check if brainstorms exist but no PRDs (strategy gap).
