@@ -386,9 +386,12 @@ if command -v bd &>/dev/null && [[ -n "${TMUX:-}" ]]; then
         # Extract agent name from session: {terminal}-{project}-{agent}[-{number}]
         _fleet_name=$(echo "$_tmux_session" | sed -E 's/^[^-]+-[^-]+-//' | sed -E 's/-[0-9]+$//')
         if [[ -n "$_fleet_name" && "$_fleet_name" != "$_tmux_session" ]]; then
-            # Check if Mycroft assigned a bead to this agent
-            _mycroft_bead=$(bd list --json 2>/dev/null | jq -r --arg agent "$_fleet_name" \
-                '.[] | select(.state.assigned_agent == $agent and .status == "in_progress") | .id' 2>/dev/null | head -1) || _mycroft_bead=""
+            # Check if Mycroft assigned a bead to this agent. Filter to
+            # in_progress server-side (--status) so bd returns only the ~30
+            # active beads instead of serializing all 3000+; the jq then just
+            # matches the assignee (status is already guaranteed).
+            _mycroft_bead=$(bd list --status in_progress --json 2>/dev/null | jq -r --arg agent "$_fleet_name" \
+                '.[] | select(.state.assigned_agent == $agent) | .id' 2>/dev/null | head -1) || _mycroft_bead=""
             if [[ -n "$_mycroft_bead" ]]; then
                 _mycroft_phase=$(bd get-state "$_mycroft_bead" assigned_phase 2>/dev/null) || _mycroft_phase=""
                 _mycroft_ctx=$(bd get-state "$_mycroft_bead" context_file 2>/dev/null) || _mycroft_ctx=""
