@@ -152,18 +152,25 @@ sprint_beads_summary() {
 # Prints count. Returns 0 if stale found, 1 if none.
 #
 # `bd stale` costs ~270-320ms (bd process startup), so the result is cached
-# behind a 5-minute TTL sentinel — same pattern as the bd doctor gate in
+# behind a 5-minute TTL sentinel — same idea as the bd doctor gate in
 # session-start.sh. The sentinel file's *contents* hold the last count, so a
 # cache hit returns the real number rather than zeroing the signal. Set
 # CLAVAIN_SPRINT_STALE_TTL=0 to force a fresh query (no caller does today; the
 # full scan tolerates a ≤5-min-old count since it's an interactive snapshot).
+#
+# The sentinel lives in a user-private cache dir (mode 700), NOT world-writable
+# /tmp, and is only read/written when it is a regular file (not a symlink) — so
+# a local attacker cannot pre-plant a symlink to redirect the write.
 sprint_stale_beads() {
     command -v bd &>/dev/null || return 1
     [[ -d "${SPRINT_PROJECT_DIR}/.beads" ]] || return 1
 
-    local sentinel="/tmp/clavain-bd-stale-${USER:-mk}"
+    local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/clavain"
+    mkdir -p "$cache_dir" 2>/dev/null && chmod 700 "$cache_dir" 2>/dev/null
+    local sentinel="$cache_dir/bd-stale"
     local ttl="${CLAVAIN_SPRINT_STALE_TTL:-300}"
-    if [[ "$ttl" -gt 0 && -f "$sentinel" ]]; then
+    # Only trust the sentinel if it is a regular file we own, never a symlink.
+    if [[ "$ttl" -gt 0 && -f "$sentinel" && ! -L "$sentinel" ]]; then
         local age
         age=$(( $(date +%s) - $(stat -c %Y "$sentinel" 2>/dev/null || stat -f %m "$sentinel" 2>/dev/null || echo 0) ))
         if [[ "$age" -le "$ttl" ]]; then
@@ -183,7 +190,12 @@ sprint_stale_beads() {
     else
         count=$(echo "$stale_output" | grep -c '.' || echo 0)
     fi
-    # Cache the freshly computed count (best-effort).
+    # Cache the freshly computed count (best-effort). Refuse to write through a
+    # symlink or any non-regular file: remove it first so the redirect creates a
+    # fresh regular file we own.
+    if [[ -L "$sentinel" || ( -e "$sentinel" && ! -f "$sentinel" ) ]]; then
+        rm -f "$sentinel" 2>/dev/null
+    fi
     echo "$count" > "$sentinel" 2>/dev/null || true
     echo "$count"
     [[ "$count" -gt 0 ]] && return 0 || return 1
