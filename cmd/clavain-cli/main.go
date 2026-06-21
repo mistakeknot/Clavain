@@ -114,6 +114,8 @@ func main() {
 		err = cmdSprintStats(args)
 	case "recent-reflect-learnings":
 		err = cmdRecentReflectLearnings(args)
+	case "review-calibration":
+		err = cmdReviewCalibration(args)
 
 	// Agent tracking
 	case "sprint-track-agent":

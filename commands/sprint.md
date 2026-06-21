@@ -93,7 +93,7 @@ Display: `Autonomy: Tier $autonomy_tier`. Pass tier to sub-commands via `CLAVAIN
 
 **Tier 3 routing:** Full workflow with all three review gates interactive (AskUserQuestion at each).
 
-**Note:** All tiers run all reviews unconditionally until calibration fires. Each review records a `review_phase_outcome` event to interspect (phase, complexity, severity counts, agent count). When >= 20 events per phase exist, `_interspect_auto_calibrate` writes `review-phase-calibration.yaml` with tier-skip thresholds. The sprint reads this file to decide whether to skip or lighten reviews for low-complexity tiers.
+**Note:** All tiers run all reviews unconditionally until calibration fires. Each review records a `review_phase_outcome` event to interspect (phase, complexity, severity counts, agent count). When >= 20 events per phase exist, `_interspect_auto_calibrate` writes `review-phase-calibration.yaml` with per-(phase,complexity) actions (`skip`/`lighten`/`full`, keyed on the measured P0/P1 rate). Before each ceremonial review (brainstorm 1b, strategy 2b, plan 4b), the flow consults this calibration via `clavain-cli review-calibration <phase> <complexity>` and skips or lightens accordingly. The reader fails **safe**: an absent file, a missing entry, or any read error yields `full`, so a review is never silently skipped without positive calibration evidence. The live P0/P1-severity stop is always retained regardless of calibration.
 
 `--from-step` always overrides complexity routing. `--autonomy=<tier>` overrides tier. `bd set-state <bead> manual_pause true` forces pause at next checkpoint regardless of tier.
 
@@ -161,6 +161,14 @@ brainstorm_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "brainstorm" 2>/de
 ```
 
 If `brainstorm_path` is empty or file missing, skip review (brainstorm may not have produced an artifact for trivial features).
+
+**Calibration check (before running the review):**
+```bash
+review_action=$(clavain-cli review-calibration brainstorm "$complexity" 2>/dev/null) || review_action="full"
+```
+- `skip` → record the `brainstorm-reviewed` phase and proceed to Step 2 without running flux-review (the measured P0/P1 rate for this phase+complexity is below threshold). Still record a `review_phase_outcome` event with zero findings so calibration keeps tracking.
+- `lighten` → run the review with a reduced agent budget (`--quality=fast`) instead of the full multi-track pass.
+- `full` (default, and whenever the read fails) → run the review as written below.
 
 Budget context:
 ```bash
