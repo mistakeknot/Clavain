@@ -12,6 +12,7 @@ from orchestrate import (
     TaskResult,
     build_graph,
     build_prompt,
+    count_verdicts,
     load_manifest,
     summarize_output,
     validate_graph,
@@ -433,3 +434,72 @@ class TestLoadManifest:
         )
         with pytest.raises(SystemExit):
             load_manifest(str(f))
+# ---------------------------------------------------------------------------
+# TestCountVerdicts (PASS / WARN / FAIL / SKIPPED summary buckets)
+# ---------------------------------------------------------------------------
+
+
+def _r(tid: str, status: str) -> TaskResult:
+    return TaskResult(task_id=tid, status=status)
+
+
+class TestCountVerdicts:
+    def test_warn_not_rolled_into_pass(self):
+        """The sylveste-nfqo regression: WARN must not count as PASS."""
+        completed = {
+            "t1": _r("t1", "pass"),
+            "t2": _r("t2", "warn"),
+            "t3": _r("t3", "warn"),
+        }
+        counts = count_verdicts(completed)
+        assert counts["pass"] == 1
+        assert counts["warn"] == 2
+        assert counts["fail"] == 0
+        assert counts["skipped"] == 0
+
+    def test_all_four_buckets(self):
+        completed = {
+            "p1": _r("p1", "pass"),
+            "w1": _r("w1", "warn"),
+            "f1": _r("f1", "fail"),
+            "e1": _r("e1", "error"),
+            "s1": _r("s1", "skipped"),
+        }
+        counts = count_verdicts(completed)
+        assert counts["pass"] == 1
+        assert counts["warn"] == 1
+        # both "fail" and "error" land in the FAIL bucket
+        assert counts["fail"] == 2
+        assert counts["skipped"] == 1
+
+    def test_dry_run_counts_as_pass(self):
+        completed = {
+            "d1": _r("d1", "pass (dry-run)"),
+            "d2": _r("d2", "pass (dry-run)"),
+        }
+        counts = count_verdicts(completed)
+        assert counts["pass"] == 2
+        assert counts["warn"] == 0
+        assert counts["fail"] == 0
+
+    def test_empty(self):
+        counts = count_verdicts({})
+        assert counts == {"pass": 0, "warn": 0, "fail": 0, "skipped": 0}
+
+    def test_unknown_status_counts_as_fail(self):
+        """An unrecognized status must never be silently treated as a pass."""
+        completed = {"x1": _r("x1", "bogus")}
+        counts = count_verdicts(completed)
+        assert counts["fail"] == 1
+        assert counts["pass"] == 0
+
+    def test_counts_sum_to_total(self):
+        completed = {
+            "p1": _r("p1", "pass"),
+            "w1": _r("w1", "warn"),
+            "f1": _r("f1", "fail"),
+            "s1": _r("s1", "skipped"),
+            "s2": _r("s2", "skipped"),
+        }
+        counts = count_verdicts(completed)
+        assert sum(counts.values()) == len(completed)

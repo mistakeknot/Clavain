@@ -677,6 +677,38 @@ def _print_wave(
     print()
 
 
+def count_verdicts(completed: dict[str, TaskResult]) -> dict[str, int]:
+    """Bucket completed results into PASS / WARN / FAIL / SKIPPED counts.
+
+    WARN (needs_attention) is deliberately kept separate from PASS so the
+    summary does not roll caveated results into the clean-pass total — that
+    masking nearly caused a premature phase advance (sylveste-nfqo).
+
+    Buckets:
+      pass    — clean pass (status "pass", including dry-run)
+      warn    — needs-attention pass with a caveat (status "warn")
+      fail    — hard failure (status "fail" or "error")
+      skipped — dependency-blocked (status "skipped")
+    """
+    counts = {"pass": 0, "warn": 0, "fail": 0, "skipped": 0}
+    for result in completed.values():
+        status = result.status
+        if status == "warn":
+            counts["warn"] += 1
+        elif status == "skipped":
+            counts["skipped"] += 1
+        elif status in ("fail", "error"):
+            counts["fail"] += 1
+        elif status == "pass" or status.startswith("pass"):
+            # "pass" and "pass (dry-run)" both count as clean passes
+            counts["pass"] += 1
+        else:
+            # Unknown status — treat conservatively as a failure so it is
+            # never silently rolled into the pass total.
+            counts["fail"] += 1
+    return counts
+
+
 def _print_summary(
     completed: dict[str, TaskResult], tasks: dict[str, Task]
 ) -> None:
@@ -699,12 +731,22 @@ def _print_summary(
             print(f"    {tid}: {title}{extra}")
 
     total = len(completed)
-    passed = sum(
-        len(v) for k, v in by_status.items()
-        if k in ("pass", "warn", "pass (dry-run)")
+    counts = count_verdicts(completed)
+
+    # Color-code the four counters when stdout is an interactive TTY.
+    tty = sys.stdout.isatty()
+
+    def _c(code: str, text: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if tty else text
+
+    pass_str = _c("32", f"PASS: {counts['pass']}")        # green
+    warn_str = _c("33", f"WARN: {counts['warn']}")        # yellow
+    fail_str = _c("31", f"FAIL: {counts['fail']}")        # red
+    skip_str = _c("90", f"SKIPPED: {counts['skipped']}")  # grey
+
+    print(
+        f"\n  Total: {total}  |  {pass_str}  {warn_str}  {fail_str}  {skip_str}"
     )
-    failed = total - passed
-    print(f"\n  Total: {total}, Passed: {passed}, Failed/Skipped: {failed}")
     print("=" * 60)
 
 
