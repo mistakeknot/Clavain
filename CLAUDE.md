@@ -15,7 +15,7 @@ claude --plugin-dir /home/mk/projects/Sylveste/os/Clavain
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 17
 ls agents/{review,workflow}/*.md | wc -l  # Should be 6
-ls commands/*.md | wc -l              # Should be 54 (47 registered + 1 unregistered bead-sweep)
+ls commands/*.md | wc -l              # Should be 54 (all 54 registered in plugin.json)
 for f in hooks/*.sh; do bash -n "$f" && echo "$(basename $f) OK"; done  # Syntax check all hooks
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 python3 -c "import json; json.load(open('hooks/hooks.json'))"           # Hooks JSON check

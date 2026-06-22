@@ -39,6 +39,7 @@
     "./skills/writing-plans"
   ],
   "commands": [
+    "./commands/bead-sweep.md",
     "./commands/brainstorm.md",
     "./commands/campaign.md",
     "./commands/changelog.md",
@@ -63,6 +64,7 @@
     "./commands/land.md",
     "./commands/migration-safety.md",
     "./commands/model-routing.md",
+    "./commands/peers.md",
     "./commands/plan-review.md",
     "./commands/pr-triage.md",
     "./commands/quality-gates.md",
@@ -77,6 +79,7 @@
     "./commands/route.md",
     "./commands/setup.md",
     "./commands/smoke-test.md",
+    "./commands/sprint-dag.md",
     "./commands/sprint-status.md",
     "./commands/sprint.md",
     "./commands/status.md",
