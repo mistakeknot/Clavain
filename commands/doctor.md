@@ -164,6 +164,24 @@ else
 fi
 ```
 
+### 2i. Nested Repo Freshness
+
+Detects nested plugin/subproject git repos (`os/* interverse/* core/* sdk/* apps/*`, each its own repo) that are behind upstream, dirty, diverged, missing a remote, or on an unexpected branch. The root checkout can be clean while a nested plugin (e.g. interlock) is a commit behind `origin/main`, leaving stale code live in the plugin cache. Cache/generated untracked paths (`.claude/`, `docs/research/flux-*`, `__pycache__/`, etc.) are filtered out; stale **critical** plugins are highlighted and safe `pull --ff-only` commands are emitted. Read-only — never fetches or modifies. Only runs when invoked from inside the Sylveste monorepo.
+
+```bash
+# Locate the script: source tree first (most current), then plugin cache.
+_freshness=""
+for _c in scripts/nested-repo-freshness.sh os/Clavain/scripts/nested-repo-freshness.sh; do
+  [ -x "$_c" ] && { _freshness="$_c"; break; }
+done
+[ -z "$_freshness" ] && _freshness="$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/nested-repo-freshness.sh' 2>/dev/null | sort -V | tail -1)"
+if [ -z "$_freshness" ]; then
+  echo "nested-repo freshness: SKIP (nested-repo-freshness.sh not found)"
+else
+  bash "$_freshness" --quiet 2>/dev/null || true
+fi
+```
+
 ### 3. Beads
 
 ```bash
@@ -424,4 +442,4 @@ cat ~/.claude/plugins/cache/interagency-marketplace/clavain/*/plugin.json 2>/dev
 Present results as a compact table: `<check> [PASS|WARN|FAIL] <detail>`. Group by section.
 <!-- agent-rig:end:doctor-output -->
 
-**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin, marketplace association→auto-fixed by doctor or run `modpack-associate.sh` manually.
+**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin, marketplace association→auto-fixed by doctor or run `modpack-associate.sh` manually, nested-repo freshness→run the printed `git -C <dir> pull --ff-only` commands (or `scripts/nested-repo-freshness.sh --fetch` for live behind counts).

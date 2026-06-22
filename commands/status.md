@@ -23,6 +23,11 @@ Read `--scope` (or the first argument) and route accordingly:
 1. For `clavain` scope, report:
    - Key dependencies: `clavain`, `interdoc`, `interphase`, `interline`, `interpath`, `interwatch`, `interlock`, `qmd`, `oracle`, `tool-time`.
    - Whether `/clavain:doctor` checks can be run successfully.
+   - Nested subproject repo freshness (when in the Sylveste monorepo): run
+     `scripts/nested-repo-freshness.sh --quiet` (or the plugin-cache copy) and
+     report any nested plugin repos that are behind upstream, dirty, diverged,
+     missing a remote, or on an unexpected branch. Highlight stale critical
+     plugins and surface the printed `git -C <dir> pull --ff-only` commands.
 2. For each additional scope, execute the delegated command:
    - `interpath`: `/interpath:interpath-status`
    - `interwatch`: `/interwatch:interwatch-status`
@@ -35,5 +40,11 @@ Read `--scope` (or the first argument) and route accordingly:
    clavain-cli calibration-streak status
    ```
    Manual intervention means an explicit `/reflect` calibration, a direct human invocation of a calibration command, or a manual edit to routing/gate/phase calibration thresholds. Record such resets with `clavain-cli calibration-streak record-manual <routing|gate_threshold|phase_cost> <reason>`.
+
+5. Surface the microrouter architecture-decision deferral tier (sylveste-s3z6.19.10) by running:
+   ```bash
+   bash "$CLAUDE_PLUGIN_ROOT/scripts/microrouter-deferral-status.sh"
+   ```
+   The script reads the bead's deferral state fields (`deferral_check_in`, `deferral_deadline`, `decision_authority_primary/backup`, `auto_revert_action`, `d2_result`) and prints a `PASS`/`WARN`/`FAIL` section with the active check-in and deadline tier for today's date. It is fail-open and silent when the bead or its deferral fields are unavailable, so omit the microrouter section if the script prints nothing. Treat a `FAIL` (stale check-in, exceeded deadline, or `d2_result=kill-epic`) as an immediate next-action: run `/clavain:route sylveste-s3z6.19.10`.
 
 If a delegated command is missing, add a one-line remediation and continue.
