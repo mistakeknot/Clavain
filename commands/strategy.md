@@ -13,7 +13,7 @@ Bridge between brainstorming (WHAT) and planning (HOW). Takes an idea or brainst
 2. **Write output to files, read from files.** PRD MUST be written to `docs/prds/`.
 3. **Stop at checkpoints.** When a phase defines AskUserQuestion — stop and wait.
 4. **Halt on failure.** Report what failed and what the user can do.
-5. **Exactly 6 phases (0-5).** Do NOT invent, rename, or append phases. Planning and execution are the sprint orchestrator's domain — not yours.
+5. **Exactly 7 phases: 0, 0.5, 1, 2, 3, 4, 5.** Do NOT invent, rename, or append other phases. Phase 0.5 (Shipped-State Reconciliation) sits between Phase 0 and Phase 1. Planning and execution are the sprint orchestrator's domain — not yours.
 </BEHAVIORAL-RULES>
 
 ## Progress Tracking
@@ -23,6 +23,7 @@ Display this checklist at key transitions. Use these exact phase names — do no
 ```
 Strategy Progress:
 - [ ] Phase 0: Prior Art Check
+- [ ] Phase 0.5: Shipped-State Reconciliation
 - [ ] Phase 1: Extract Features
 - [ ] Phase 2: Write PRD
 - [ ] Phase 3: Create Beads
@@ -82,6 +83,110 @@ fi
 
 Default when prior art exists: integrate, not reimplement.
 
+## Phase 0.5: Shipped-State Reconciliation
+
+Phase 0 catches *external* prior art (other people's OSS). Phase 0.5 catches *internal* overlap: an in-tree epic — **open OR shipped** — that already covers the same architectural territory as the new design. Skipping this is how parallel implementations and redundant rebuilds of sunk work happen (canonical miss: the persona-lens-ontology PRD rebuilt `interweave` on AGE/Cypher; reconciliation `sylveste-9gn9` cut ~40% of the planned epic via a `subsume` verdict).
+
+**Enforcement scope (fail-safe to FULL).** Borrowing the review-calibration shape (`sprint.md`):
+
+- **Hard gate (verdict required before advancing):** `--type=epic` runs OR Tier-3 complexity. Strategy MUST NOT advance to Phase 1 until every overlap candidate above threshold carries an explicit verdict.
+- **Advisory (run the search, surface results, do NOT block):** simple features (Tier 1-2, non-epic).
+- **When the tier/type is unknown or unreadable, treat it as a hard gate** (fail safe to full) — never silently skip the verdict requirement.
+
+```bash
+# Determine enforcement mode. Default to hard gate when signal is missing.
+RECON_MODE="gate"   # gate | advisory
+_tier="${CLAVAIN_AUTONOMY_TIER:-}"
+_is_epic="false"
+# Epic when standalone strategy creates an epic, OR the sprint bead is an epic.
+if [[ -z "${CLAVAIN_BEAD_ID:-}" ]]; then
+    _is_epic="true"   # standalone strategy authors a new epic (Phase 3)
+else
+    _bt=$(bd show "$CLAVAIN_BEAD_ID" --json 2>/dev/null | jq -r '.type // empty' 2>/dev/null) || _bt=""
+    [[ "$_bt" == "epic" ]] && _is_epic="true"
+fi
+if [[ "$_is_epic" == "true" || "$_tier" == "3" ]]; then
+    RECON_MODE="gate"
+elif [[ "$_tier" == "1" || "$_tier" == "2" ]]; then
+    RECON_MODE="advisory"
+fi
+# Unknown tier on a non-epic run still defaults to "gate" above (fail safe to full).
+echo "Shipped-state reconciliation: mode=$RECON_MODE"
+```
+
+### Step A — Keyword extraction
+
+Derive **3-6 salient keywords** from the strategy/PRD title and the brainstorm's "What We're Building" section. Drop stopwords; keep domain nouns (`ontology`, `lens`, `persona`, `graph`, `routing`, `cache`, …). Avoid generic terms (`system`, `agent`, `data`) that match everything.
+
+### Step B — In-tree overlap search (open AND shipped epics)
+
+Search the bead corpus across BOTH open and closed/shipped epics, over the **text surface** — bead title + description + `close_reason` — plus the **doc-path artifact labels** (`artifact_prd:` / `artifact_plan:`). Do NOT search `artifact_implementation:` — it holds a git SHA, not a path; shipped file paths live in `close_reason`. Scope to `--type=epic`, status open OR closed.
+
+```bash
+# Grepping .beads/issues.jsonl directly is fine (one JSON issue per line; works in cloud sessions too).
+# For each keyword, find epics (open OR closed) whose title/description/close_reason or
+# artifact_prd/artifact_plan doc-path labels match.
+for kw in "${KEYWORDS[@]}"; do
+    grep -i "$kw" .beads/issues.jsonl 2>/dev/null \
+      | jq -c 'select(.issue_type=="epic")
+               | select(
+                   ((.title // "")            | ascii_downcase | contains($kw|ascii_downcase)) or
+                   ((.description // "")       | ascii_downcase | contains($kw|ascii_downcase)) or
+                   ((.close_reason // "")      | ascii_downcase | contains($kw|ascii_downcase)) or
+                   ((.labels // [] | map(select(startswith("artifact_prd:") or startswith("artifact_plan:"))) | join(" ") | ascii_downcase) | contains($kw|ascii_downcase))
+                 )
+               | {id, title, status, matched_kw:$kw,
+                  doc_paths: ((.labels // []) | map(select(startswith("artifact_prd:") or startswith("artifact_plan:"))))}' \
+        --arg kw "$kw" 2>/dev/null
+done | jq -s 'group_by(.id) | map({bead:.[0].id, title:.[0].title, status:.[0].status,
+                                   shipped: (.[0].status=="closed"),
+                                   matched_keywords:(map(.matched_kw)|unique),
+                                   doc_paths:(map(.doc_paths)|add|unique)})
+              | sort_by(-(.matched_keywords|length))'
+# (bd search "<kw>" --type epic --status all --desc-contains "<kw>" also works — searches titles + descriptions across open and closed epics.)
+```
+
+Output: a ranked candidate list `[{bead, title, status, shipped, matched_keywords, doc_paths}]`. Threshold: a candidate is in-scope for a verdict when it matches **≥2 keywords** (tune down if the design vocabulary is narrow; the goal is to catch the interweave/ontology case, not to force verdicts on single-word coincidences).
+
+### Step C — Verdict (the gate)
+
+For each candidate above threshold, record exactly one verdict:
+
+- **`orthogonal`** — overlap is keyword-only; scopes genuinely differ. One-line justification suffices.
+- **`subsume`** — the prior epic already covers this; the new work becomes an **extension** of it. Strategy **pivots**: the PRD is rewritten as extensions to the existing module (this is what the lattice reconciliation did). Requires a `rationale`; requires a reconciliation doc when the verdict changes the architecture (e.g. drops a storage engine).
+- **`supersede`** — the new design **replaces** the prior epic. The prior epic must be explicitly marked superseded and its shipped artifacts addressed (name what happens to the sunk work). Requires a `rationale`; requires a reconciliation doc when it abandons shipped code.
+
+**Gate (epic / Tier-3 only):** if any candidate above threshold is left without a verdict, this phase is **incomplete** — do NOT advance to Phase 1. In **advisory** mode, surface the candidates and recommended verdicts inline but do not block.
+
+### Output contract — `prior_implementations`
+
+Emit a `prior_implementations` block into the PRD (frontmatter + surfaced in the body, written in Phase 2) and record the reconciliation artifact on the epic bead:
+
+```yaml
+prior_implementations:
+  - bead: sylveste-46s
+    title: "interweave: generative ontology graph for agentic platforms"
+    status: open            # or closed
+    matched_keywords: [ontology, graph, lens, persona]
+    verdict: subsume        # orthogonal | subsume | supersede
+    rationale: "interweave already ships SQLite + named templates covering the entity types;
+                persona/lens become type-family extensions. Drop AGE/Cypher."
+    reconciliation_doc: docs/research/2026-MM-DD-<slug>-reconciliation.md  # required iff verdict changes architecture
+```
+
+- Empty list (`prior_implementations: []`) is allowed ONLY after the search actually ran and returned no candidates over threshold.
+- Record the result on the epic bead, reusing the **existing** `artifact_reconciliation:` label (no schema change):
+
+```bash
+if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+    # <doc> when a reconciliation doc was produced; "none-found" when the search ran clean.
+    RECON_ARTIFACT="${reconciliation_doc:-none-found}"
+    clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "reconciliation" "$RECON_ARTIFACT" 2>/dev/null || true
+fi
+```
+
+Recording `artifact_reconciliation:none-found` lets a downstream reviewer distinguish "checked, clean" from "never checked".
+
 ## Phase 1: Extract Features
 
 Identify discrete features from brainstorm/description. Each feature:
@@ -101,6 +206,15 @@ Write to `docs/prds/YYYY-MM-DD-<topic>.md` (ensure dir exists).
 artifact_type: prd
 bead: <CLAVAIN_BEAD_ID or "none">
 stage: design
+# From Phase 0.5. Use [] only if the search ran and found no candidates over threshold.
+prior_implementations:
+  - bead: <id>
+    title: "<epic title>"
+    status: <open|closed>
+    matched_keywords: [<kw>, ...]
+    verdict: <orthogonal|subsume|supersede>
+    rationale: "<one line; required for subsume/supersede>"
+    reconciliation_doc: <path>   # required iff verdict changes the architecture
 ---
 # PRD: <Title>
 
@@ -109,6 +223,11 @@ stage: design
 
 ## Solution
 [1-2 sentences]
+
+## Prior Implementations (Shipped-State Reconciliation)
+[Surface the Phase 0.5 verdicts in prose: which in-tree epics overlap, the verdict for each,
+and — for any subsume/supersede — how this PRD pivots. Write "None — search ran clean (no
+in-tree epic over threshold)." if the list is empty.]
 
 ## Features
 
@@ -220,14 +339,18 @@ This prediction will be compared against actuals at reflect time (reflect.md Ste
 
 ### Phase 3b: Record Phase (Reflect + Compound)
 
-Record the PRD artifact and advance the phase state machine.
+Record the PRD artifact, the Phase 0.5 reconciliation artifact, and advance the phase state machine.
 
 ```bash
 if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
     clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "prd" "<prd_path>"
+    # Phase 0.5 result (reuses the existing artifact_reconciliation: label).
+    # <reconciliation_doc> when a doc was produced; "none-found" when the search ran clean.
+    clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "reconciliation" "${RECON_ARTIFACT:-none-found}" 2>/dev/null || true
     clavain-cli advance-phase "$CLAVAIN_BEAD_ID" "strategized" "PRD: <prd_path>" "<prd_path>"
     clavain-cli checkpoint-write "$CLAVAIN_BEAD_ID" "strategized" "strategy" "<prd_path>" 2>/dev/null || true
 else
+    clavain-cli set-artifact "<epic_bead_id>" "reconciliation" "${RECON_ARTIFACT:-none-found}" 2>/dev/null || true
     clavain-cli advance-phase "<epic_bead_id>" "strategized" "PRD: <prd_path>" "<prd_path>"
 fi
 # Also advance-phase each child feature bead
