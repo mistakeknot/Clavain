@@ -1,5 +1,5 @@
 {
-  "generated": "2026-06-19T19:30:56Z",
+  "generated": "2026-06-27T09:31:59Z",
   "counts": {
     "skills": 19,
     "agents": 6,
@@ -206,7 +206,7 @@
     },
     {
       "name": "handoff",
-      "description": "Generate a concise session handoff summary as a dated markdown file"
+      "description": "Generate a concise session handoff summary as a dated markdown file, grounded in intercore run state"
     },
     {
       "name": "heal-skill",
