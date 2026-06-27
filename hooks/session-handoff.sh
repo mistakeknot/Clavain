@@ -160,14 +160,38 @@ else
     HANDOFF_PATH="HANDOFF.md"
 fi
 
+# Ground the auto-handoff in intercore run state (fail-open).
+# If an active run exists for this project, the handoff should resume at the
+# exact phase cursor rather than re-derive progress from the conversation.
+# Mirrors /clavain:handoff Step 0. All lookups are best-effort; empty on failure.
+RUN_LINE=""
+RUN_ARTIFACT_HINT=""
+if type intercore_run_current &>/dev/null; then
+    _run_id=$(intercore_run_current "$(pwd)" 2>/dev/null) || _run_id=""
+    if [[ -n "$_run_id" ]] && command -v jq &>/dev/null; then
+        _run_status=$(intercore_run_status "$_run_id" 2>/dev/null) || _run_status=""
+        _phase=$(echo "$_run_status" | jq -r '.phase // empty' 2>/dev/null) || _phase=""
+        _phases=$(echo "$_run_status" | jq -r '(.phases | length) // empty' 2>/dev/null) || _phases=""
+        if [[ -n "$_phase" ]]; then
+            RUN_LINE="Active intercore run: ${_run_id} at phase '${_phase}'"
+            [[ -n "$_phases" ]] && RUN_LINE="${RUN_LINE} (of ${_phases})"
+            RUN_LINE="${RUN_LINE}. Lead the Directive with this resume point."
+            RUN_ARTIFACT_HINT="
+6. Register the handoff on the run so the next session finds it automatically:
+   \`ic run artifact add ${_run_id} --phase='${_phase}' --path='${HANDOFF_PATH}' --type=handoff\`"
+        fi
+    fi
+fi
+
 # Build the handoff prompt
 REASON="Session handoff check: detected incomplete work signals [${SIGNALS}]. Before stopping, you MUST:
 
 1. Write a brief handoff file to ${HANDOFF_PATH} with:
-   - **Done**: What was accomplished this session (bullet points)
+   - **Directive**: The resume point — what the next session should do first. ${RUN_LINE}
    - **Pending**: What's still in progress or unfinished
-   - **Next**: Concrete next steps for the next session
+   - **Dead ends**: What was tried and abandoned, and why (prevents repeated effort)
    - **Context**: Any gotchas or decisions the next session needs to know
+   Prefer running \`/clavain:handoff\` if available — it grounds the file in intercore run/phase/scope/token state and registers it back on the run.
 
 2. Update the latest-handoff symlink so session-start finds it:
    \`ln -sf \"\$(basename '${HANDOFF_PATH}')\" \"\$(dirname '${HANDOFF_PATH}')/latest.md\"\`
@@ -178,7 +202,7 @@ REASON="Session handoff check: detected incomplete work signals [${SIGNALS}]. Be
 4. Run \`bd sync\` to flush beads state (compatibility no-op on beads >=0.51)
 
 5. Stage and commit your work (even if incomplete):
-   \`git add <files> && git commit -m \"wip: <what was done>\"\`
+   \`git add <files> && git commit -m \"wip: <what was done>\"\`${RUN_ARTIFACT_HINT}
 
 Keep it brief — the handoff file should be 10-20 lines, not a report."
 
