@@ -214,6 +214,7 @@ When all tasks are fully independent, use `mode: all-parallel` and a single stag
 - Exact commands with expected output
 - Reference relevant skills with @ syntax
 - DRY, YAGNI, TDD, frequent commits
+- Write for a weaker executor and validator: no "use your judgment" steps; `<verify>` blocks and Must-Haves must be checkable without frontier-model reasoning (see `/model-routing` § Capability-routing doctrine)
 
 ## Execution Handoff
 

@@ -14,6 +14,10 @@
 #   complexity tier promotion/demotion (if enabled) > tiers[name].model, with fallback chain
 #
 # When this file is absent, all consumers fall back to their existing defaults.
+#
+# Capability-routing doctrine (frontier windows, fable-tier sessions):
+#   see commands/model-routing.md § "Capability-routing doctrine" — frontier plans/reviews,
+#   sonnet executes, opus validates against plan criteria, two-strikes escalation.
 
 subagents:
   defaults:
