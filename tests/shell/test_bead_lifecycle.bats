@@ -60,6 +60,37 @@ _mock_bd_with_state() {
                     echo "(no ${key} state set)"
                 fi
                 ;;
+            update)
+                # bead_claim/bead_release write claim state via
+                # `bd update <id> --add-label "dimension:value"` (real bd's
+                # `bd state` reads state dimensions back out of labels — see
+                # `bd state --help`). Persist each --add-label pair into the
+                # same $BD_STATE_DIR backing store the `state` case above
+                # reads from, so claim/release round-trip correctly.
+                local bead_id="$2"
+                shift 2
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --add-label)
+                            local kv="$2"
+                            local key="${kv%%:*}"
+                            local val="${kv#*:}"
+                            mkdir -p "$BD_STATE_DIR/$bead_id"
+                            echo "$val" > "$BD_STATE_DIR/$bead_id/$key"
+                            shift 2
+                            ;;
+                        --remove-label)
+                            shift 2
+                            ;;
+                        --claim)
+                            shift
+                            ;;
+                        *)
+                            shift
+                            ;;
+                    esac
+                done
+                ;;
             close)
                 echo "closed $2" >> "$BD_CALL_LOG"
                 ;;

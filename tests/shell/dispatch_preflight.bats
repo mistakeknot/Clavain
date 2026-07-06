@@ -17,6 +17,20 @@ setup() {
     mkdir -p "$FAKE_BIN"
     ORIGINAL_PATH="$PATH"
 
+    # Base PATH for "tool is missing" scenarios: /usr/bin:/bin, minus any
+    # directory that actually resolves `go` on this runner. GitHub-hosted
+    # runners install Go via a hostedtoolcache path that can vary by image;
+    # hardcoding /usr/bin:/bin risked accidentally including a real `go`
+    # there on some runners, making "go missing" tests fail even though the
+    # scenario setup never put a stub in FAKE_BIN. Compute it dynamically so
+    # the test'"'"'s precondition (go is NOT resolvable) always holds.
+    NO_GO_PATH=""
+    local dir
+    for dir in /usr/bin /bin; do
+        [[ -x "$dir/go" ]] && continue
+        NO_GO_PATH="${NO_GO_PATH:+$NO_GO_PATH:}$dir"
+    done
+
     HELPERS="$TMPDIR_T/preflight.sh"
     awk '
         /^_preflight_toolchains\(\)[[:space:]]*\{/ { emit=1 }
@@ -68,7 +82,7 @@ EOF
 @test "preflight: go.mod present + go missing → warns but returns 0" {
     _load
     echo "module foo" > "$WORKDIR/go.mod"
-    export PATH="$FAKE_BIN:/usr/bin:/bin"   # go intentionally NOT in FAKE_BIN
+    export PATH="$FAKE_BIN:$NO_GO_PATH"   # go intentionally NOT in FAKE_BIN
     run _preflight_toolchains "$WORKDIR"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Warning: preflight"* ]]
@@ -79,7 +93,7 @@ EOF
 @test "preflight: strict mode + missing tool → exits 1" {
     _load
     echo "module foo" > "$WORKDIR/go.mod"
-    export PATH="$FAKE_BIN:/usr/bin:/bin"
+    export PATH="$FAKE_BIN:$NO_GO_PATH"
     export CLAVAIN_STRICT_PREFLIGHT=1
     run _preflight_toolchains "$WORKDIR"
     [ "$status" -eq 1 ]
@@ -98,7 +112,7 @@ EOF
 echo "home go"
 EOF
     chmod +x "$HOME_GO/go"
-    export PATH="$FAKE_BIN:/usr/bin:/bin"
+    export PATH="$FAKE_BIN:$NO_GO_PATH"
     export HOME="$TMPDIR_T/home"
     export CLAVAIN_PREFLIGHT_INJECT_PATH=1
     run _preflight_toolchains "$WORKDIR"
