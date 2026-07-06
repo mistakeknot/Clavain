@@ -43,6 +43,17 @@ if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
     fi
 fi
 
+# --- Fable-window detection (fc5.1) ---
+# Fail-closed: only explicit evidence opens the window. Honor a pre-set value.
+if [[ -z "${CLAVAIN_FABLE_AVAILABLE:-}" ]]; then
+  _clavain_session_model="${CLAUDE_MODEL:-${ANTHROPIC_MODEL:-${MODEL:-}}}"
+  if [[ "$_clavain_session_model" == *fable* ]]; then
+    export CLAVAIN_FABLE_AVAILABLE=1
+  else
+    export CLAVAIN_FABLE_AVAILABLE=0
+  fi
+fi
+
 # Clean up stale plugin cache versions.
 # Strategy: replace old DIRECTORIES with symlinks to current version (so any
 # still-running session's Stop hooks resolve), then remove stale SYMLINKS that

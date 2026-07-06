@@ -171,6 +171,70 @@ if printf '%s\n' "$changed_files" | grep -Eq "$SHIP_CLASS_RE"; then
 fi
 ```
 
+## Phase 2b: Plan Conformance (acceptance criteria)
+
+If the bead has a sealed acceptance-criteria artifact, validate execution against it — the validator judges ONLY the named criteria, never its own preferences (capability-routing doctrine Rule 3).
+
+```bash
+criteria_path=$(clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "acceptance-criteria" 2>/dev/null) || criteria_path=""
+if [[ -n "$criteria_path" && -f "$criteria_path" ]]; then
+  # Tamper check first (fc5.3): a criteria file modified after sealing FAILS the gate outright.
+  if ! clavain-cli verify-seal "$criteria_path"; then
+    echo "GATE FAIL: acceptance-criteria seal mismatch — criteria were modified after sealing" >&2
+    # write a FAILED plan-conformance verdict and skip the validator dispatch
+  fi
+fi
+```
+
+When the seal is intact, dispatch ONE validator subagent (Task tool, model **opus** — the validator tier; do not downgrade) with this prompt, substituting the criteria file content:
+
+> You are a plan-conformance validator. Judge the working tree ONLY against these acceptance criteria — no other opinions, no scope expansion. For each numbered criterion: if it carries a fenced `check` block, run that command and let its exit code decide; otherwise verify the stated outcome directly (read files, run greps). Return a markdown table: `criterion | pass/fail | evidence (one line)`, then a final line `CONFORMANCE: PASS` (all pass) or `CONFORMANCE: FAIL` (any fail).
+
+Persist the results (f-035 — Phase 4's source of record) and the verdict:
+
+```bash
+results_path="${criteria_path%.criteria.md}.criteria-results.md"
+# (write the validator's table + CONFORMANCE line to $results_path)
+clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "criteria-results" "$results_path" 2>/dev/null || true
+
+conf_status="CLEAN"; conf_findings=0
+grep -q 'CONFORMANCE: FAIL' "$results_path" && { conf_status="NEEDS_ATTENTION"; conf_findings=$(grep -c '| *fail' "$results_path" || echo 1); }
+mkdir -p .clavain/verdicts
+jq -n --arg s "$conf_status" --argjson f "$conf_findings" --arg d "$results_path" \
+  '{type:"plan-conformance", status:$s, model:"opus", tokens_spent:0, files_changed:0, findings_count:$f, summary:("plan conformance: " + $s), detail_path:$d, timestamp:(now|todate), session_id:(env.CLAUDE_SESSION_ID // "unknown")}' \
+  > .clavain/verdicts/plan-conformance.json
+```
+
+A `NEEDS_ATTENTION` plan-conformance verdict fails the gate exactly like any other agent verdict (Phase 3 already aggregates `.clavain/verdicts/*.json`). If no acceptance-criteria artifact exists, skip this phase silently (pre-fc5.3 beads).
+
+**Record the plan→execution outcome** (fc5.4 — the doctrine's Rule-7 metric; silent on error):
+
+```bash
+_il="${INTERSPECT_LIB:-$(git rev-parse --show-toplevel 2>/dev/null)/interverse/interspect/hooks/lib-interspect.sh}"
+if [[ -f "$_il" ]]; then
+  source "$_il"
+  _interspect_ensure_db 2>/dev/null || true
+  _author=$(bd state "$CLAVAIN_BEAD_ID" plan_author_model 2>/dev/null | tr -d '[:space:]') || _author=""
+  [[ -z "$_author" || "$_author" == *"(no"* ]] && _author="unknown"
+  _executor="${CLAUDE_MODEL:-${ANTHROPIC_MODEL:-unknown}}"
+  _crit_total=$(grep -cE '^\| *[0-9]' "$results_path" 2>/dev/null || echo 0)
+  _crit_failed=$(grep -cE '\| *fail' "$results_path" 2>/dev/null || echo 0)
+  _esc=0
+  if command -v ic >/dev/null 2>&1 && [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+    _chain=$(ic state get "dispatch.chain.${CLAVAIN_BEAD_ID}" escalation 2>/dev/null) || _chain=""
+    [[ -n "$_chain" ]] && _esc=$(printf '%s' "$_chain" | jq -r '.escalations // 0' 2>/dev/null || echo 0)
+  fi
+  _src=$(_interspect_classify_session_source "$CLAVAIN_BEAD_ID" 2>/dev/null) || _src="normal"
+  _ctx=$(jq -nc --arg a "$_author" --arg e "$_executor" --arg v "opus" \
+    --argjson ct "${_crit_total:-0}" --argjson cf "${_crit_failed:-0}" --argjson esc "${_esc:-0}" \
+    --arg src "$_src" --arg bead "$CLAVAIN_BEAD_ID" --arg cp "${criteria_path:-}" \
+    '{author_model:$a, executor_model:$e, validator_model:$v, criteria_total:$ct, criteria_failed:$cf, pass:($cf==0 and $ct>0), escalation_count:$esc, session_source:$src, bead:$bead, criteria_path:$cp}')
+  _interspect_insert_evidence "${CLAUDE_SESSION_ID:-unknown}" "quality-gates" "plan_execution_outcome" "" "$_ctx" 2>/dev/null || true
+fi
+```
+
+Note: `$results_path` and `$criteria_path` are in scope from Phase 2b. `validator_model` is `"opus"` because Phase 2b pins the validator tier (f-036: the axis is recorded even though it is currently constant — the drift check needs it the day it varies).
+
 ## Phase 3: Gate Decision
 
 ### 3a: Record Verdicts to Interspect (silent, fail-open)

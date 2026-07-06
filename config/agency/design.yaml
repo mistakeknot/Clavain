@@ -16,7 +16,7 @@ agents:
 
 models:
   strategized:
-    default: opus
+    default: fable      # was: opus
   planned:
     default: sonnet
 

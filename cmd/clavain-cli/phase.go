@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -321,19 +323,21 @@ func cmdEnforceGate(args []string) error {
 
 // knownArtifactTypes is the canonical set of artifact types for the sprint lifecycle.
 var knownArtifactTypes = map[string]bool{
-	"brainstorm":      true,
-	"prd":             true,
-	"plan":            true,
-	"plan-review":     true,
-	"implementation":  true,
-	"quality-verdict": true,
-	"resolution":      true,
-	"reflection":      true,
-	"landed":          true,
-	"closed":          true,
-	"degradation":     true,
-	"test-pass-sha":   true,
-	"prior-art":       true,
+	"brainstorm":          true,
+	"prd":                 true,
+	"plan":                true,
+	"plan-review":         true,
+	"implementation":      true,
+	"quality-verdict":     true,
+	"resolution":          true,
+	"reflection":          true,
+	"landed":              true,
+	"closed":              true,
+	"degradation":         true,
+	"test-pass-sha":       true,
+	"prior-art":           true,
+	"acceptance-criteria": true,
+	"criteria-results":    true,
 }
 
 // cmdSetArtifact records an artifact for the current phase.
@@ -348,6 +352,16 @@ func cmdSetArtifact(args []string) error {
 
 	if !knownArtifactTypes[artifactType] {
 		fmt.Fprintf(os.Stderr, "set-artifact: warning: unknown type %q\n", artifactType)
+	}
+
+	// Write-once seal for acceptance criteria (fc5.3, f-034): the standard a
+	// validator judges against must not be rewritable after execution starts —
+	// especially by an escalation-triggered re-plan that has seen why the
+	// first attempt failed. Seal = content-hash sidecar; independent of bd/ic.
+	if artifactType == "acceptance-criteria" {
+		if err := sealArtifact(artifactPath); err != nil {
+			return err
+		}
 	}
 
 	// Always store in bd state as fallback (works without ic run)
@@ -687,3 +701,59 @@ func recordPhaseTokens(beadID, phase string) {
 }
 
 // phaseToStage is defined in budget.go.
+
+// sealArtifact enforces write-once semantics via a content-hash sidecar.
+// First call writes <path>.seal; later calls verify the hash and refuse a
+// changed file unless CLAVAIN_RESEAL=1.
+func sealArtifact(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("seal: cannot read %s: %w", path, err)
+	}
+	sum := sha256.Sum256(data)
+	hexSum := hex.EncodeToString(sum[:])
+	sealPath := path + ".seal"
+
+	existing, rerr := os.ReadFile(sealPath)
+	if rerr == nil {
+		if strings.TrimSpace(string(existing)) == hexSum {
+			return nil // unchanged content — idempotent re-register is fine
+		}
+		if os.Getenv("CLAVAIN_RESEAL") != "1" {
+			return fmt.Errorf("acceptance-criteria is sealed (write-once); content changed since seal.\nSet CLAVAIN_RESEAL=1 to re-seal deliberately (this is an audit event)")
+		}
+		fmt.Fprintf(os.Stderr, "set-artifact: RESEAL of acceptance-criteria %s (old %.12s → new %.12s)\n", path, strings.TrimSpace(string(existing)), hexSum)
+	}
+	return os.WriteFile(sealPath, []byte(hexSum+"\n"), 0o644)
+}
+
+// verifySeal reports whether path's content still matches its seal sidecar.
+func verifySeal(path string) error {
+	sealPath := path + ".seal"
+	want, err := os.ReadFile(sealPath)
+	if err != nil {
+		return fmt.Errorf("no seal found at %s", sealPath)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("cannot read sealed file: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	if hex.EncodeToString(sum[:]) != strings.TrimSpace(string(want)) {
+		return fmt.Errorf("SEAL MISMATCH: %s was modified after sealing", path)
+	}
+	return nil
+}
+
+// cmdVerifySeal is the CLI entry point for the verify-seal verb.
+// Usage: verify-seal <path>
+func cmdVerifySeal(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: verify-seal <path>")
+	}
+	if err := verifySeal(args[0]); err != nil {
+		return err
+	}
+	fmt.Println("seal ok")
+	return nil
+}

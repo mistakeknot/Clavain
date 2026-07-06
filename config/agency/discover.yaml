@@ -16,11 +16,11 @@ agents:
 
 models:
   brainstorm:
-    default: opus
+    default: fable      # was: opus
     categories:
       research: haiku
   brainstorm-reviewed:
-    default: opus
+    default: fable      # was: opus
 
 artifacts:
   required: []

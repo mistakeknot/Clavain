@@ -42,7 +42,7 @@ subagents:
 
   phases:
     brainstorm:
-      model: opus
+      model: fable  # frontier window; falls back to opus when closed (fc5.1)
       categories:
         # Research agents stay cheap even during brainstorm
         research: haiku

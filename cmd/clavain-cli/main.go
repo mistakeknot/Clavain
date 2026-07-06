@@ -66,6 +66,8 @@ func main() {
 		err = cmdSetArtifact(args)
 	case "get-artifact":
 		err = cmdGetArtifact(args)
+	case "verify-seal":
+		err = cmdVerifySeal(args)
 	case "infer-action":
 		err = cmdInferAction(args)
 	case "infer-bead":

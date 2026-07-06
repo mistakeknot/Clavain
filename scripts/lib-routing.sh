@@ -80,6 +80,7 @@ _routing_model_tier() {
     local:qwen3.5-122b-a10b-4bit)       echo 3 ;;  # Track B5: MoE opus-equivalent
     local:gpt-oss-120b-mxfp4)           echo 3 ;;  # Track B5: opus-equivalent
     flash-moe:qwen3.5-397b)             echo 3 ;;  # Track B5: SSD-streamed opus-equivalent
+    fable)                              echo 4 ;;  # frontier tier — capability-routing doctrine
     *)                                  echo 0 ;;
   esac
 }
@@ -127,6 +128,7 @@ _routing_downgrade() {
     local:qwen3-30b)    echo "local:qwen3-8b" ;;  # Track B5
     local:qwen2.5-72b)  echo "local:qwen3-8b" ;;  # Track B5
     local:qwen3-8b)     echo "local:qwen3-8b" ;;  # Track B5: already lowest
+    fable)              echo "opus" ;;
     *)                  echo "${1:-haiku}" ;;       # unknown → preserve or default
   esac
 }
@@ -1036,6 +1038,12 @@ routing_resolve_model() {
 
   # Guard: resolve_model MUST never return "inherit"
   [[ "$result" == "inherit" ]] && result="sonnet"
+
+  # Fable-window fallback: fable resolves only while the window is open (fail-closed).
+  if [[ "$result" == "fable" && "${CLAVAIN_FABLE_AVAILABLE:-0}" != "1" ]]; then
+    echo "[fable-window] fable→opus (window closed) phase=${phase:-} agent=${agent:-}" >&2
+    result="opus"
+  fi
 
   # Safety floor: clamp up to min_model if agent has one
   if [[ -n "$agent" && -n "$result" ]]; then

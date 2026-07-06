@@ -32,11 +32,11 @@ models:
   planned:
     default: sonnet
     categories:
-      review: opus
+      review: fable      # was: opus
   executing:
     default: sonnet
     categories:
-      review: opus
+      review: opus       # execution-phase review stays opus (validator tier)
 
 tools:
   review:
