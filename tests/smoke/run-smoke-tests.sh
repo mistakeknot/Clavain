@@ -38,8 +38,8 @@ AGENTS=(
 
 # Command roster — must match smoke-prompt.md
 COMMANDS=(
-  "commands/help.md"
-  "commands/doctor.md"
+  "commands/clavain-help.md"
+  "commands/clavain-doctor.md"
   "commands/changelog.md"
   "commands/brainstorm.md"
   "commands/quality-gates.md"

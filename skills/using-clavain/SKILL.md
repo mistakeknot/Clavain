@@ -26,7 +26,7 @@ The compounding half (Reflect + Compound) is what makes the system get smarter a
 | Force full lifecycle | `/clavain:sprint` |
 | Review code, docs, or plans | `/interflux:flux-drive` |
 | Quick review from git diff | `/clavain:quality-gates` |
-| Cross-AI second opinion | `/clavain:interpeer` |
+| Cross-AI second opinion | `/interpeer:interpeer` |
 | Plan an implementation | `/clavain:write-plan` → `/clavain:work` |
 | Fix a bug | `/clavain:repro-first-debugging` |
 | Fix build/test failure | `/clavain:fixbuild` |

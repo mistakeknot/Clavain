@@ -120,6 +120,6 @@ def test_reflect_command_marks_manual_phase_cost_intervention(project_root):
 
 def test_status_command_reports_calibration_streak(project_root):
     """Unified status includes the A:L3 no-touch streak surface."""
-    status = project_root / "commands" / "status.md"
+    status = project_root / "commands" / "clavain-status.md"
     content = status.read_text()
     assert "clavain-cli calibration-streak status" in content
