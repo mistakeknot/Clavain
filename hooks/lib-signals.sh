@@ -18,6 +18,11 @@
 #   bead-closed     (weight 1) — bd close in transcript
 #   recovery        (weight 2) — test/build failure followed by pass
 #   version-bump    (weight 2) — bump-version.sh or interpub:release
+#   goal-completed  (weight 0) — /goal completion or goal-scale milestone language.
+#                    Weight 0 by design: this is a STRUCTURAL trigger (see the
+#                    goal-cadence tier in auto-stop-actions.sh), not meant to
+#                    add to the compound/drift weight ladder. Surfaced in
+#                    CLAVAIN_SIGNALS for visibility/telemetry only.
 #
 # Removed: insight (weight 1) — ★ Insight block marker. This is a style artifact
 # from explanatory output mode, always present, and inflated signal weight.
@@ -71,6 +76,13 @@ detect_signals() {
     if echo "$text" | grep -q 'bump-version\|interpub:release'; then
         CLAVAIN_SIGNALS="${CLAVAIN_SIGNALS}version-bump,"
         CLAVAIN_SIGNAL_WEIGHT=$((CLAVAIN_SIGNAL_WEIGHT + 2))
+    fi
+
+    # 7. Goal completion / goal-scale milestone (weight 0 — structural trigger,
+    # not a weight-ladder contributor; see goal-cadence tier in
+    # auto-stop-actions.sh, which fires independently of CLAVAIN_SIGNAL_WEIGHT).
+    if echo "$text" | grep -iq '/goal\b.*\(complet\|done\|shipped\|landed\)\|goal.*\(is\|was\)\s*complet\|goal-scale milestone\|milestone.*landed\|epic.*\(closed\|complete\)\b'; then
+        CLAVAIN_SIGNALS="${CLAVAIN_SIGNALS}goal-completed,"
     fi
 
     # Remove trailing comma

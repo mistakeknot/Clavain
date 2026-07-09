@@ -99,3 +99,37 @@ teardown() {
     [[ "$CLAVAIN_SIGNALS" != *"," ]]  # no trailing comma
     [[ "$CLAVAIN_SIGNALS" == *","* ]]  # but has internal comma (2 signals)
 }
+
+@test "lib-signals: detects goal-completed signal (weight 0, structural)" {
+    local transcript='The goal is complete. Wrapping up this session.'
+    detect_signals "$transcript"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    [[ "$CLAVAIN_SIGNAL_WEIGHT" -eq 0 ]]
+}
+
+@test "lib-signals: detects goal-completed via /goal landed phrasing" {
+    local transcript='Ran /goal review and it landed successfully'
+    detect_signals "$transcript"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+}
+
+@test "lib-signals: detects goal-completed via goal-scale milestone phrasing" {
+    local transcript='This goal-scale milestone landed after three sprints'
+    detect_signals "$transcript"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+}
+
+@test "lib-signals: goal-completed does not fire on unrelated text" {
+    local transcript='Just fixed a typo in the README, nothing goal-related'
+    detect_signals "$transcript"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+}
+
+@test "lib-signals: goal-completed does not add to weight ladder alongside other signals" {
+    local transcript=$'Running "git commit -m fix"\nThe goal is complete.'
+    detect_signals "$transcript"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    [[ "$CLAVAIN_SIGNALS" == *"commit"* ]]
+    # commit(1) + goal-completed(0) = 1
+    [[ "$CLAVAIN_SIGNAL_WEIGHT" -eq 1 ]]
+}

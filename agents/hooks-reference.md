@@ -21,7 +21,7 @@
   - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace, syncs GitHub repo description with current component counts
   - `bead-agent-bind.sh` — binds agent identity to beads claimed with bd update/claim (warns on overlap, notifies other agent)
 - **Stop**:
-  - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh, weight >= 4 triggers /clavain:compound, weight >= 3 triggers /interwatch:watch
+  - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh; goal-completed signal triggers the goal-cadence tier (/clavain:next-goal, highest priority), weight >= 4 triggers /clavain:compound, bead-closed + opt-in triggers self-dispatch, weight >= 3 triggers /interwatch:watch
 - **SessionEnd**:
   - `dotfiles-sync.sh` — syncs dotfile changes at end of session
 

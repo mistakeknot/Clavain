@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Stop hook: unified post-turn actions (compound + dispatch + drift check)
+# Stop hook: unified post-turn actions (goal-cadence + compound + dispatch + drift check)
 #
 # Detects work signals once using lib-signals.sh, then applies tiered thresholds:
+#   - goal-completed signal → goal-cadence (structural Next-goal block, highest priority)
 #   - weight >= 4 → trigger /clavain:compound (non-trivial problem-solving)
 #   - bead-closed + CLAVAIN_SELF_DISPATCH=true → self-dispatch (autonomous bead pickup)
 #   - weight >= 3 → trigger /interwatch:watch (doc drift check)
@@ -9,6 +10,8 @@
 # Merged from auto-compound.sh + auto-drift-check.sh (iv-rn81).
 # Self-dispatch tier added in ysxe.3 (2026-03-20): merged here per flux-drive
 # review to avoid sentinel conflict with separate hook file.
+# Goal-cadence tier added mk-fx3 (2026-07-08): same rationale — folded in
+# rather than a second Stop hook, to avoid sentinel-dedup races.
 #
 # Guards: stop_hook_active, shared sentinel, per-repo opt-out, per-action throttle.
 # Returns JSON with decision:"block" + reason when action is warranted.
@@ -114,7 +117,10 @@ if [[ ! -f ".claude/clavain.no-shadow-enforce" ]]; then
     fi
 fi
 
-# Tiered decision: compound > dispatch > drift check
+# Tiered decision: goal-cadence > compound > dispatch > drift check
+# goal-completed signal: structural requirement — the completion message must
+#   END with a Next-goal block (2-4 candidates + recommendation), so this
+#   tier takes top priority and short-circuits the rest of the waterfall.
 # Weight >= 4: non-trivial problem-solving → compound (raised from 3)
 # bead-closed + opt-in: autonomous dispatch → claim next bead
 # Weight >= 3: shipped work → drift check (raised from 2)
@@ -126,7 +132,20 @@ fi
 
 REASON=""
 
-if [[ "$WEIGHT" -ge 4 ]]; then
+# Goal-cadence tier: fires on the goal-completed signal, ahead of every other
+# tier. Per-repo opt-out + throttle follow the same pattern as the other
+# tiers below. Fail-open: if bd/intercore are unavailable, /clavain:next-goal
+# itself degrades gracefully (see commands/next-goal.md) — this hook only
+# needs to fire the instruction, not resolve any bead data itself.
+if [[ "$SIGNALS" == *"goal-completed"* ]]; then
+    if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
+        if intercore_sentinel_check_or_legacy "goal_cadence_throttle" "$SESSION_ID" 60; then
+            REASON="Goal-cadence: this turn completed a /goal or goal-scale milestone. Per structural goal-cadence policy, your completion message to the user MUST end with a 'Next goal' block. Run /clavain:next-goal using the Skill tool to generate it (2-4 candidates with leverage rationale, a clear recommendation, and ready-to-paste /goal text), then append that block verbatim to the end of your reply."
+        fi
+    fi
+fi
+
+if [[ -z "$REASON" && "$WEIGHT" -ge 4 ]]; then
     # Check per-repo opt-out for compound
     if [[ ! -f ".claude/clavain.no-autocompound" ]]; then
         # Check compound-specific throttle (5-min cooldown)

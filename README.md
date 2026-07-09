@@ -375,6 +375,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/flux-gen` | Generate project-specific review agents from detected domain profiles |
 | `/help` | Show Clavain commands organized by daily drivers first |
 | `/doctor` | Quick health check: MCP servers, tools, beads, plugin conflicts |
+| `/next-goal` | Generate a Next-goal block (leverage-ranked candidates + recommendation) — required after a goal completes |
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
@@ -383,7 +384,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 - **SessionStart**: Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When interserve mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
 - **PreToolUse**: Guards `~/.claude/plugins/cache/` from accidental edits (`guard-plugin-cache.sh`).
 - **PostToolUse**: Auto-publish on `git push` in plugin repos (`auto-publish.sh`). Bead-agent binding on Bash (`bead-agent-bind.sh`). Catalog reminder on file edits (`catalog-reminder.sh`). Plugin edit validation (`validate-plugin-edit.sh`).
-- **Stop**: Auto-stop actions: compound check, session handoff, uncommitted work detection (`auto-stop-actions.sh`).
+- **Stop**: Auto-stop actions: goal-cadence (forces a Next-goal block when a goal completes), compound check, self-dispatch, drift check, shadow-tracker warning (`auto-stop-actions.sh`).
 - **SessionEnd**: Syncs dotfile changes at end of session (`dotfiles-sync.sh`).
 
 ### MCP servers (via companions)
