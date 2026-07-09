@@ -49,3 +49,12 @@ galiana_log_defect() {
         '{bead: $bead, defect_type: $defect_type, severity: $severity, escaped_gate: $escaped_gate, agents_reviewed: $agents_reviewed, agents_missed: $agents_missed}' \
         --arg bead "$1" --arg defect_type "$2" --arg severity "$3" --arg escaped_gate "$4" --arg agents_reviewed "$5" --arg agents_missed "$6"
 }
+
+# stop_loop_suppression: loop-breaker (mk-ax8) parked or silenced a
+# repeating Stop-hook demand. action: blocked_message | silent.
+# Frequency of these events is the loop-burn KPI.
+galiana_log_stop_suppression() {
+    _galiana_log "stop_loop_suppression" \
+        '{session_id: $session_id, reason_hash: $reason_hash, action: $action}' \
+        --arg session_id "$1" --arg reason_hash "$2" --arg action "$3"
+}

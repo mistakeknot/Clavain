@@ -155,4 +155,18 @@ After pushing, register the implementation artifact:
 clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "implementation" "$(git rev-parse HEAD)" 2>/dev/null || true
 ```
 
+**Record the routing outcome** (capability-routing doctrine Rule 7 — silent, fail-open). Skip this if `/clavain:quality-gates` ran for this bead — it already recorded the outcome. Set `_executor` to your model tier (`fable`/`opus`/`sonnet`/`haiku`), `_author` to the plan author's tier if a plan drove this work (else same as `_executor`), and `_validator` to `self` unless a separate model validated:
+
+```bash
+if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
+  interspect_root=$(_discover_interspect_plugin 2>/dev/null) || interspect_root=""
+  if [[ -n "$interspect_root" ]] && source "${interspect_root}/hooks/lib-interspect.sh" 2>/dev/null; then
+    _ctx=$(jq -nc --arg a "${_author}" --arg e "${_executor}" --arg v "${_validator:-self}" \
+      --arg bead "${CLAVAIN_BEAD_ID:-}" \
+      '{author_model:$a, executor_model:$e, validator_model:$v, criteria_total:0, criteria_failed:0, pass:true, escalation_count:0, session_source:"normal", bead:$bead, path:"work"}')
+    _interspect_insert_evidence "${CLAUDE_SESSION_ID:-unknown}" "work" "plan_execution_outcome" "" "$_ctx" 2>/dev/null || true
+  fi
+fi
+```
+
 Summarize what was completed, note follow-up work, suggest next steps.

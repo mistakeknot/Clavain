@@ -219,6 +219,17 @@ if [[ -z "$REASON" ]]; then
     exit 0
 fi
 
+# Loop breaker (mk-ax8): if this exact demand already fired and no commits
+# or file changes happened since, the session is blocked on a human gate —
+# emit one BLOCKED message, then go silent for the session instead of
+# re-demanding forever. Progress (new commit / changed worktree) resets it.
+source "${SCRIPT_DIR}/lib-loop-breaker.sh" 2>/dev/null || true
+if type loop_breaker_filter &>/dev/null; then
+    if ! REASON=$(loop_breaker_filter "$SESSION_ID" "$REASON"); then
+        exit 0
+    fi
+fi
+
 # Return block decision
 if command -v jq &>/dev/null; then
     jq -n --arg reason "$REASON" '{"decision":"block","reason":$reason}'
