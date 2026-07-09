@@ -1,9 +1,9 @@
 {
-  "generated": "2026-06-27T09:31:59Z",
+  "generated": "2026-07-09T16:31:10Z",
   "counts": {
     "skills": 19,
     "agents": 6,
-    "commands": 54,
+    "commands": 55,
     "hooks": 14,
     "mcp_servers": 0,
     "review": 2,
@@ -227,6 +227,10 @@
     {
       "name": "model-routing",
       "description": "Toggle subagent model routing between economy (smart defaults) and quality (all opus) mode"
+    },
+    {
+      "name": "next-goal",
+      "description": "Generate a Next-goal block (2-4 leverage-ranked candidates + recommendation + ready-to-paste /goal text) \u2014 required at the end of any goal-completion message"
     },
     {
       "name": "peers",

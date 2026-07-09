@@ -327,7 +327,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow:** PR comment resolution and bug reproduction validation.
 
-### Commands (54)
+### Commands (55)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
