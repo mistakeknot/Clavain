@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RIG_PATH = ROOT / "agent-rig.json"
 SETUP_PATH = ROOT / "commands" / "setup.md"
-DOCTOR_PATH = ROOT / "commands" / "doctor.md"
+DOCTOR_PATH = ROOT / "commands" / "clavain-doctor.md"
 MARKETPLACE_PATH = ROOT.parent.parent / "infra" / "marketplace" / ".claude-plugin" / "marketplace.json"
 
 

@@ -609,12 +609,15 @@ MOCKEOF
     assert_output "brainstorm"
 
     run sprint_next_step "brainstorm"
-    assert_output "strategy"
+    assert_output "flux-review"
 
     run sprint_next_step "brainstorm-reviewed"
     assert_output "strategy"
 
     run sprint_next_step "strategized"
+    assert_output "flux-drive"
+
+    run sprint_next_step "strategy-reviewed"
     assert_output "write-plan"
 
     run sprint_next_step "planned"

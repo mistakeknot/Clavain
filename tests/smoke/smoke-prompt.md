@@ -20,8 +20,8 @@ Before dispatching any agents, verify all agent files exist. Check each of these
 - agents/workflow/bug-reproduction-validator.md
 
 Also verify these command files exist:
-- commands/help.md
-- commands/doctor.md
+- commands/clavain-help.md
+- commands/clavain-doctor.md
 - commands/changelog.md
 - commands/brainstorm.md
 - commands/quality-gates.md

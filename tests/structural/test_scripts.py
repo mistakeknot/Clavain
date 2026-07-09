@@ -90,12 +90,57 @@ def test_scripts_have_shebang(script):
     )
 
 
+# Hooks that deliberately fail open (trap ERR -> exit 0) instead of using
+# 'set -euo pipefail', so an internal error never blocks/noises the user's
+# session. See 6d40e83 "fix(hooks): fail-open on errors to prevent PostToolUse
+# noise after updates".
+FAIL_OPEN_HOOKS = {
+    "agents-md-refresh.sh",
+    "auto-publish.sh",
+    "auto-push.sh",
+    "auto-stop-actions.sh",
+    "bead-agent-bind.sh",
+    "catalog-reminder.sh",
+    "dotfiles-sync.sh",
+    "guard-plugin-cache.sh",
+    "peer-routing-telemetry.sh",
+    "session-start.sh",
+    "validate-plugin-edit.sh",
+}
+
+# gate-calibration-session-end.sh fails open by a different mechanism: bare
+# `set -u` with every command wrapped in `|| true` and a hard `exit 0` at the
+# end, rather than `trap ERR -> exit 0`. Same intent, different idiom.
+FAIL_OPEN_HOOKS_NO_TRAP = {"gate-calibration-session-end.sh"}
+
+
 def test_hook_entry_points_have_set_euo_pipefail():
-    """Hook entry-point .sh files contain 'set -euo pipefail'. Excludes lib.sh."""
+    """Hook entry-point .sh files contain 'set -euo pipefail', except lib.sh and
+    deliberately fail-open hooks (FAIL_OPEN_HOOKS), which use trap ERR -> exit 0
+    instead so an internal error never blocks the user's session."""
     for script in HOOK_ENTRY_POINTS:
-        if script.name == "lib.sh":
+        if (
+            script.name == "lib.sh"
+            or script.name in FAIL_OPEN_HOOKS
+            or script.name in FAIL_OPEN_HOOKS_NO_TRAP
+        ):
             continue
         text = script.read_text(encoding="utf-8")
         assert "set -euo pipefail" in text, (
             f"Hook entry point {script.name} is missing 'set -euo pipefail'"
+        )
+
+
+def test_fail_open_hooks_use_trap_err_exit_zero():
+    """Fail-open hooks use trap ERR -> exit 0 instead of set -e, so they never
+    block the user's session on an internal error."""
+    for script in HOOK_ENTRY_POINTS:
+        if script.name not in FAIL_OPEN_HOOKS:
+            continue
+        text = script.read_text(encoding="utf-8")
+        assert "set -uo pipefail" in text, (
+            f"Fail-open hook {script.name} must use 'set -uo pipefail' (no -e)"
+        )
+        assert "trap" in text and "ERR" in text, (
+            f"Fail-open hook {script.name} must trap ERR to exit 0"
         )

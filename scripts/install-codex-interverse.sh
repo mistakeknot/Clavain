@@ -1357,7 +1357,7 @@ doctor_companions_json() {
       printf '    }' >> "$optional_file"
       optional_count=$((optional_count + 1))
     fi
-  done < <(interverse_plugin_entries)
+  done < <(interverse_recommended_plugins | sed 's/^/recommended|/')
   printf '\n  ]\n' >> "$plugins_file"
   printf '\n  ]\n' >> "$recommended_file"
   printf '\n  ]\n' >> "$optional_file"
@@ -1427,6 +1427,9 @@ doctor_companions_json() {
   printf '    "skill_link_count":%s\n' "$skill_count"
   printf '  },\n'
   printf '  "plugins":'
+  cat "$plugins_file"
+  printf ',\n'
+  printf '  "selected_plugins":'
   cat "$plugins_file"
   printf ',\n'
   printf '  "recommended_plugins":'
