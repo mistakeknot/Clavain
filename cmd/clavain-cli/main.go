@@ -383,7 +383,7 @@ Interspect Calibration:
   interspect-record-canary        --agent=<name> --override=<id> --metric=<m> --baseline=<v> --measured=<v> --outcome=<improved|degraded|neutral>
   interspect-calibrate-thresholds [--window-days=30]  Recalibrate confidence thresholds from canary outcomes
   calibrate-gate-tiers            [--auto]             Recalibrate gate tier thresholds
-  calibration-streak              <record-session-end|record-manual LOOP [REASON]|status [--json]>
+  calibration-streak              <record-receipt|record-manual LOOP [REASON]|status [--json]|verify [--target=10]>
 
 Policy:
   policy-check         <agent> <action> [--path=<p>] [--bead=<id>]  Check action against policy

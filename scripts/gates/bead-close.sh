@@ -14,6 +14,23 @@ REASON="${2:-}"
 # shellcheck source=/dev/null
 source "$(dirname "$0")/_common.sh"
 
+# A proof-labeled close gate is checked before authorization so a failed proof
+# cannot consume a one-shot token. Label lookup is read-only and unlabeled
+# beads retain the existing close path.
+bead_has_label() {
+  local bead="$1" label="$2" raw
+  raw="$(bd show "$bead" --json 2>/dev/null)" || return 1
+  if command -v jq >/dev/null 2>&1; then
+    jq -e --arg label "$label" '.[0].labels // [] | index($label) != null' <<<"$raw" >/dev/null 2>&1
+  else
+    printf '%s' "$raw" | grep -Fq "\"${label}\""
+  fi
+}
+
+if bead_has_label "$BEAD_ID" "close-gate:calibration-streak"; then
+  clavain-cli calibration-streak verify --target=10
+fi
+
 # v2 token path: if $CLAVAIN_AUTHZ_TOKEN is set, try to consume it first.
 # Hard-fails on auth-failure class (revoked | sig-verify | POP | mismatch);
 # state-class errors fall through to legacy gate_check below.
