@@ -621,6 +621,7 @@ esac
 func TestCalibratePhaseCostsStrictMissingProducer(t *testing.T) {
 	t.Setenv("CLAUDE_PLUGIN_ROOT", "")
 	t.Setenv("CLAVAIN_SOURCE_DIR", "")
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SPRINT_LIB_PROJECT_DIR", t.TempDir())
 
 	err := cmdCalibratePhaseCosts([]string{"--auto", "--strict"})
@@ -658,5 +659,24 @@ esac
 	}
 	if err := cmdCalibratePhaseCosts([]string{"--auto"}); err != nil {
 		t.Fatalf("auto mode without --strict returned %v, want fail-open nil", err)
+	}
+}
+
+func TestFindInterstatScriptUsesExplicitRoot(t *testing.T) {
+	root := t.TempDir()
+	script := filepath.Join(root, "scripts", "cost-query.sh")
+	if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("INTERSTAT_ROOT", root)
+	t.Setenv("CLAUDE_PLUGIN_ROOT", "")
+	t.Setenv("CLAVAIN_SOURCE_DIR", "")
+
+	if got := findInterstatScript(); got != script {
+		t.Fatalf("findInterstatScript() = %q, want explicit root %q", got, script)
 	}
 }

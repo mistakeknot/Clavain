@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -634,16 +635,33 @@ func cmdRecordPhaseTokens(args []string) error {
 
 // ─── Cost Recording Commands ────────────────────────────────────────
 
-// findInterstatScript locates cost-query.sh across environments.
-// Resolution: plugin cache → CLAVAIN_SOURCE_DIR → empty (skip).
+// findInterstatScript locates cost-query.sh across source and installed layouts.
 func findInterstatScript() string {
+	if interstatRoot := strings.TrimSpace(os.Getenv("INTERSTAT_ROOT")); interstatRoot != "" {
+		candidate := filepath.Join(interstatRoot, "scripts", "cost-query.sh")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+
 	// Plugin cache (Claude Code sessions)
 	pluginRoot := os.Getenv("CLAUDE_PLUGIN_ROOT")
 	if pluginRoot != "" {
-		// interstat lives alongside clavain in the plugin cache
+		// Retain the historical flat-cache lookup.
 		candidate := filepath.Join(filepath.Dir(pluginRoot), "interstat", "scripts", "cost-query.sh")
-		if _, err := os.Stat(candidate); err == nil {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 			return candidate
+		}
+
+		// Current caches are marketplace/plugin/version directories. Select the
+		// newest installed Interstat version deterministically.
+		marketplaceRoot := filepath.Dir(filepath.Dir(pluginRoot))
+		matches, _ := filepath.Glob(filepath.Join(marketplaceRoot, "interstat", "*", "scripts", "cost-query.sh"))
+		sort.Strings(matches)
+		for i := len(matches) - 1; i >= 0; i-- {
+			if info, err := os.Stat(matches[i]); err == nil && !info.IsDir() {
+				return matches[i]
+			}
 		}
 	}
 
@@ -651,8 +669,19 @@ func findInterstatScript() string {
 	sourceDir := os.Getenv("CLAVAIN_SOURCE_DIR")
 	if sourceDir != "" {
 		candidate := filepath.Join(sourceDir, "..", "..", "interverse", "interstat", "scripts", "cost-query.sh")
-		if _, err := os.Stat(candidate); err == nil {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 			return candidate
+		}
+	}
+
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		for _, candidate := range []string{
+			filepath.Join(home, "projects", "Sylveste", "interverse", "interstat", "scripts", "cost-query.sh"),
+			filepath.Join(home, "projects", "interverse", "interstat", "scripts", "cost-query.sh"),
+		} {
+			if info, statErr := os.Stat(candidate); statErr == nil && !info.IsDir() {
+				return candidate
+			}
 		}
 	}
 
