@@ -13,6 +13,8 @@ import (
 	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
 )
 
+var phaseAttributionSessionFile = "/tmp/interstat-session-id"
+
 // nextStep returns the static fallback next step for a given phase.
 // This matches the Bash sprint_next_step() fallback case statement.
 func nextStep(phase string) string {
@@ -191,6 +193,7 @@ func cmdSprintAdvance(args []string) error {
 		fromPhase = currentPhase
 	}
 	toPhase := result.ToPhase
+	refreshPhaseAdvanceAttribution(beadID, runID, toPhase)
 
 	// Invalidate caches
 	invalidateCaches()
@@ -200,6 +203,77 @@ func cmdSprintAdvance(args []string) error {
 
 	fmt.Fprintf(os.Stderr, "Phase: %s \u2192 %s (auto-advancing)\n", fromPhase, toPhase)
 	return nil
+}
+
+// refreshPhaseAdvanceAttribution updates both durable Intercore attribution and
+// Interstat's compatibility context after Intercore has committed an advance.
+// Failures are warnings: returning an error here would falsely report the
+// already-committed phase transition as failed.
+func refreshPhaseAdvanceAttribution(beadID, runID, phase string) {
+	sessionID := phaseAttributionSessionID()
+	if sessionID == "" {
+		fmt.Fprintln(os.Stderr, "sprint_advance: WARNING: phase attribution skipped: no session ID")
+		return
+	}
+	if phase == "" {
+		fmt.Fprintln(os.Stderr, "sprint_advance: WARNING: phase attribution skipped: advance returned no target phase")
+		return
+	}
+
+	if _, err := runIC(
+		"session", "attribute",
+		"--session="+sessionID,
+		"--bead="+beadID,
+		"--run="+runID,
+		"--phase="+phase,
+	); err != nil {
+		fmt.Fprintf(os.Stderr, "sprint_advance: WARNING: Intercore attribution failed: %v\n", err)
+	}
+
+	script := findPhaseInterstatContextScript()
+	if script == "" {
+		fmt.Fprintln(os.Stderr, "sprint_advance: WARNING: Interstat attribution failed: set-bead-context.sh not found")
+		return
+	}
+	if _, err := runCommandExec("bash", script, sessionID, beadID, phase); err != nil {
+		fmt.Fprintf(os.Stderr, "sprint_advance: WARNING: Interstat attribution failed: %v\n", err)
+	}
+}
+
+func phaseAttributionSessionID() string {
+	if sessionID := strings.TrimSpace(os.Getenv("CLAUDE_SESSION_ID")); sessionID != "" {
+		return sessionID
+	}
+	data, err := os.ReadFile(phaseAttributionSessionFile)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// findPhaseInterstatContextScript is intentionally local to phase handling;
+// budget.go has a separate cost-query discovery contract.
+func findPhaseInterstatContextScript() string {
+	var candidates []string
+	if root := strings.TrimSpace(os.Getenv("INTERSTAT_ROOT")); root != "" {
+		candidates = append(candidates, filepath.Join(root, "scripts", "set-bead-context.sh"))
+	}
+	if pluginRoot := strings.TrimSpace(os.Getenv("CLAUDE_PLUGIN_ROOT")); pluginRoot != "" {
+		candidates = append(candidates, filepath.Join(filepath.Dir(pluginRoot), "interstat", "scripts", "set-bead-context.sh"))
+	}
+	if sourceDir := strings.TrimSpace(os.Getenv("CLAVAIN_SOURCE_DIR")); sourceDir != "" {
+		candidates = append(candidates, filepath.Join(sourceDir, "..", "..", "interverse", "interstat", "scripts", "set-bead-context.sh"))
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		candidates = append(candidates, filepath.Join(home, "projects", "Sylveste", "interverse", "interstat", "scripts", "set-bead-context.sh"))
+	}
+
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return filepath.Clean(candidate)
+		}
+	}
+	return ""
 }
 
 // cmdSprintShouldPause checks if a sprint should pause before advancing.
