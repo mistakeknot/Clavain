@@ -104,18 +104,22 @@ def test_session_end_calibration_hook_closes_core_loops(project_root):
     assert "timeout" in content
 
 
-def test_session_end_calibration_hook_tracks_no_touch_streak(project_root):
-    """SessionEnd calibration updates the A:L3 no-touch streak read model."""
+def test_session_end_calibration_hook_records_evidence_receipts(project_root):
+    """SessionEnd advances A:L3 proof only through evidence receipts."""
     hook = project_root / "hooks" / "gate-calibration-session-end.sh"
     content = hook.read_text()
-    assert "calibration-streak record-session-end" in content
+    assert "calibration-streak record-receipt" in content
+    assert "calibration-streak record-session-end" not in content
+    assert "calibration-streak status --json" in content
 
 
-def test_reflect_command_marks_manual_phase_cost_intervention(project_root):
-    """Manual /reflect calibration resets the phase-cost no-touch streak."""
+def test_reflect_command_leaves_receipted_calibration_to_session_end(project_root):
+    """Normal reflect cannot mutate artifacts outside the receipt boundary."""
     reflect = project_root / "commands" / "reflect.md"
     content = reflect.read_text()
-    assert "calibration-streak record-manual phase_cost reflect-command" in content
+    assert "calibration-streak record-manual" not in content
+    assert "calibrate-phase-costs" not in content
+    assert "_interspect_write_routing_calibration" not in content
 
 
 def test_status_command_reports_calibration_streak(project_root):
