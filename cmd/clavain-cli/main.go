@@ -252,6 +252,9 @@ func main() {
 	}
 
 	if err != nil {
+		if errors.Is(err, ErrNoUsablePhaseData) {
+			os.Exit(2)
+		}
 		if errors.Is(err, ErrNoNewSignals) {
 			os.Exit(2)
 		}
@@ -309,7 +312,7 @@ Budget:
   sprint-record-phase-tokens    <bead_id> <phase>
   record-cost-actuals           <bead_id>
   record-cost-estimate          <bead_id> <phase>
-  calibrate-phase-costs         (reads interstat history, writes calibration file)
+  calibrate-phase-costs         [--auto] [--strict] (reads interstat history, writes calibration file)
 
 Complexity:
   classify-complexity <bead_id> <description>

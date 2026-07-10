@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -12,6 +13,10 @@ import (
 
 	pkgphase "github.com/mistakeknot/intercore/pkg/phase"
 )
+
+// ErrNoUsablePhaseData is the machine-readable no-op result for strict phase
+// calibration. main translates it to exit 2, distinct from hard failures.
+var ErrNoUsablePhaseData = errors.New("calibrate-phase-costs: no usable phase data")
 
 // ─── Pure Functions (no subprocess calls — unit testable) ───────────
 
@@ -831,12 +836,22 @@ func recordCostAnomalyIfNeeded(beadID, runID string, snapshot CostSnapshot) {
 // computes per-run averages (aggregate + per-model), and writes
 // .clavain/phase-cost-calibration.json.
 // This is Stage 3 of the closed-loop pattern: calibrate from history.
-// Silent on failure — defaults remain active (Stage 4).
+// Manual and auto modes run the same calibration. --auto labels operational
+// logs; --strict changes fail-open skips into exit-significant outcomes.
 func cmdCalibratePhaseCosts(args []string) error {
+	opts := phaseCalibrationOptions{}
+	for _, arg := range args {
+		switch arg {
+		case "--auto":
+			opts.auto = true
+		case "--strict":
+			opts.strict = true
+		}
+	}
+
 	script := findInterstatScript()
 	if script == "" {
-		fmt.Fprintln(os.Stderr, "interstat not found — skipping calibration")
-		return nil
+		return phaseCalibrationFailure(opts, errors.New("interstat producer not found"))
 	}
 
 	type phaseRow struct {
@@ -859,25 +874,21 @@ func cmdCalibratePhaseCosts(args []string) error {
 	// Query aggregate per-phase data
 	out, err := runCommand("bash", script, "by-phase")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "by-phase query failed — skipping calibration")
-		return nil
+		return phaseCalibrationFailure(opts, fmt.Errorf("by-phase query failed: %w", err))
 	}
 
 	outStr := strings.TrimSpace(string(out))
 	if outStr == "" || outStr == "[]" || outStr == "null" {
-		fmt.Println("no phase data — calibration skipped")
-		return nil
+		return phaseCalibrationNoop(opts, "no phase data")
 	}
 
 	var rows []phaseRow
 	if err := json.Unmarshal(out, &rows); err != nil {
-		fmt.Fprintf(os.Stderr, "parse error: %v — skipping calibration\n", err)
-		return nil
+		return phaseCalibrationFailure(opts, fmt.Errorf("parse by-phase output: %w", err))
 	}
 
 	if len(rows) == 0 {
-		fmt.Println("no phase data — calibration skipped")
-		return nil
+		return phaseCalibrationNoop(opts, "no phase data")
 	}
 
 	// Build aggregate per-phase averages
@@ -896,17 +907,25 @@ func cmdCalibratePhaseCosts(args []string) error {
 	}
 
 	if len(phases) == 0 {
-		fmt.Println("no valid phase data — calibration skipped")
-		return nil
+		return phaseCalibrationNoop(opts, "no valid phase data")
 	}
 
-	// Query per-phase-model breakdown (best-effort — aggregate is sufficient)
+	// Aggregate data is sufficient in legacy mode. Strict mode requires the
+	// model producer to be queryable and parseable so rc=0 means a complete run.
 	modelOut, err := runCommand("bash", script, "by-phase-model")
-	if err == nil {
+	if err != nil {
+		if opts.strict {
+			return phaseCalibrationFailure(opts, fmt.Errorf("by-phase-model query failed: %w", err))
+		}
+	} else {
 		modelStr := strings.TrimSpace(string(modelOut))
 		if modelStr != "" && modelStr != "[]" && modelStr != "null" {
 			var modelRows []phaseModelRow
-			if json.Unmarshal(modelOut, &modelRows) == nil {
+			if err := json.Unmarshal(modelOut, &modelRows); err != nil {
+				if opts.strict {
+					return phaseCalibrationFailure(opts, fmt.Errorf("parse by-phase-model output: %w", err))
+				}
+			} else {
 				for _, mr := range modelRows {
 					if mr.Runs <= 0 || mr.Phase == "" || mr.Model == "" {
 						continue
@@ -937,22 +956,50 @@ func cmdCalibratePhaseCosts(args []string) error {
 
 	data, err := json.MarshalIndent(cal, "", "  ")
 	if err != nil {
-		return nil
+		return phaseCalibrationFailure(opts, fmt.Errorf("marshal calibration: %w", err))
 	}
 
 	// Ensure .clavain/ directory exists
 	calPath := calibrationFilePath()
 	if err := os.MkdirAll(filepath.Dir(calPath), 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "cannot create dir: %v\n", err)
-		return nil
+		return phaseCalibrationFailure(opts, fmt.Errorf("create calibration directory: %w", err))
 	}
 
 	if err := os.WriteFile(calPath, data, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "cannot write calibration: %v\n", err)
-		return nil
+		return phaseCalibrationFailure(opts, fmt.Errorf("write calibration: %w", err))
 	}
 
-	fmt.Printf("calibrated %d phases from %d total runs → %s\n", len(phases), totalRuns, calPath)
+	fmt.Printf("calibrate-phase-costs(%s): calibrated %d phases from %d total runs → %s\n",
+		opts.invoker(), len(phases), totalRuns, calPath)
+	return nil
+}
+
+type phaseCalibrationOptions struct {
+	auto   bool
+	strict bool
+}
+
+func (o phaseCalibrationOptions) invoker() string {
+	if o.auto {
+		return "auto"
+	}
+	return "manual"
+}
+
+func phaseCalibrationFailure(opts phaseCalibrationOptions, err error) error {
+	err = fmt.Errorf("calibrate-phase-costs(%s): %w", opts.invoker(), err)
+	if opts.strict {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "%v — skipping calibration\n", err)
+	return nil
+}
+
+func phaseCalibrationNoop(opts phaseCalibrationOptions, reason string) error {
+	fmt.Fprintf(os.Stderr, "calibrate-phase-costs(%s): %s — calibration skipped\n", opts.invoker(), reason)
+	if opts.strict {
+		return ErrNoUsablePhaseData
+	}
 	return nil
 }
 

@@ -55,6 +55,7 @@ type gateSignal struct {
 var ErrNoNewSignals = errors.New("calibrate-gate-tiers: no new signals")
 
 // cmdCalibrateGateTiers recalibrates gate tier assignments from signal data.
+// Manual is the default invoker; --auto records machine invocation provenance.
 // Usage: calibrate-gate-tiers [--auto] [--dry-run]
 func cmdCalibrateGateTiers(args []string) error {
 	autoMode := false
@@ -83,10 +84,6 @@ func cmdCalibrateGateTiers(args []string) error {
 	defer s.Close()
 
 	ctx := context.Background()
-	if err := s.MigrateFromV1(ctx, calPath); err != nil {
-		return fmt.Errorf("calibrate-gate-tiers: migrate: %w", err)
-	}
-
 	sinceID := int64(0)
 	if err := s.DB().QueryRowContext(ctx, `SELECT COALESCE(MAX(since_id_after), 0) FROM drain_log WHERE drain_committed IS NOT NULL`).Scan(&sinceID); err != nil {
 		return fmt.Errorf("calibrate-gate-tiers: read cursor: %w", err)
@@ -95,6 +92,16 @@ func cmdCalibrateGateTiers(args []string) error {
 	var sr signalResult
 	if err := runICJSON(&sr, "gate", "signals", "--since-id="+strconv.FormatInt(sinceID, 10)); err != nil {
 		return fmt.Errorf("calibrate-gate-tiers: fetch signals: %w", err)
+	}
+	if len(sr.Signals) == 0 {
+		fmt.Fprintln(os.Stderr, "calibrate-gate-tiers: signals=0, state_changes=0 → no update")
+		return ErrNoNewSignals
+	}
+
+	// Migration can archive the legacy artifact, so it must happen only when
+	// this invocation has signals and will produce a replacement export.
+	if err := s.MigrateFromV1(ctx, calPath); err != nil {
+		return fmt.Errorf("calibrate-gate-tiers: migrate: %w", err)
 	}
 
 	signals := make([]gatecal.GateSignal, 0, len(sr.Signals))
@@ -116,6 +123,10 @@ func cmdCalibrateGateTiers(args []string) error {
 	if err != nil {
 		return fmt.Errorf("calibrate-gate-tiers: drain: %w", err)
 	}
+	if res.SignalsProcessed == 0 {
+		fmt.Fprintf(os.Stderr, "calibrate-gate-tiers: signals=0, state_changes=0 → no update\n")
+		return ErrNoNewSignals
+	}
 
 	if !dryRun {
 		if err := s.ExportV1JSON(ctx, calPath, res.SinceIDAfter); err != nil {
@@ -129,9 +140,6 @@ func cmdCalibrateGateTiers(args []string) error {
 
 	fmt.Fprintf(os.Stderr, "calibrate-gate-tiers: signals=%d, state_changes=%d → %s\n",
 		res.SignalsProcessed, res.StateChanges, calPath)
-	if res.SignalsProcessed == 0 {
-		return ErrNoNewSignals
-	}
 	return nil
 }
 

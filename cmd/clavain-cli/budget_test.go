@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -476,5 +477,186 @@ func TestRemainingEstimateUSDModelAware(t *testing.T) {
 	expected := 3.57
 	if math.Abs(modelAware-expected) > 0.01 {
 		t.Errorf("model-aware estimate = %.4f, want ~%.2f", modelAware, expected)
+	}
+}
+
+func setupPhaseCalibrationProducer(t *testing.T, body string) string {
+	t.Helper()
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "Sylveste", "os", "Clavain")
+	scriptPath := filepath.Join(root, "Sylveste", "interverse", "interstat", "scripts", "cost-query.sh")
+	if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
+		t.Fatalf("mkdir producer: %v", err)
+	}
+	if err := os.WriteFile(scriptPath, []byte("#!/usr/bin/env bash\nset -u\n"+body), 0o755); err != nil {
+		t.Fatalf("write producer: %v", err)
+	}
+
+	projectDir := filepath.Join(root, "project")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	t.Setenv("CLAUDE_PLUGIN_ROOT", "")
+	t.Setenv("CLAVAIN_SOURCE_DIR", sourceDir)
+	t.Setenv("SPRINT_LIB_PROJECT_DIR", projectDir)
+	return filepath.Join(projectDir, ".clavain", "phase-cost-calibration.json")
+}
+
+func TestCalibratePhaseCostsStrictNoDataPreservesArtifact(t *testing.T) {
+	calPath := setupPhaseCalibrationProducer(t, `
+case "$1" in
+  by-phase) printf '%s\n' '[]' ;;
+  by-phase-model) printf '%s\n' '[]' ;;
+esac
+`)
+	if err := os.MkdirAll(filepath.Dir(calPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte(`{"calibrated_at":"keep","run_count":1,"phases":{"executing":{"runs":1}}}`)
+	if err := os.WriteFile(calPath, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdCalibratePhaseCosts([]string{"--auto", "--strict"})
+	if !errors.Is(err, ErrNoUsablePhaseData) {
+		t.Fatalf("strict empty calibration error = %v, want ErrNoUsablePhaseData", err)
+	}
+	after, readErr := os.ReadFile(calPath)
+	if readErr != nil {
+		t.Fatalf("read preserved artifact: %v", readErr)
+	}
+	if string(after) != string(original) {
+		t.Fatalf("strict no-op changed artifact:\n got: %s\nwant: %s", after, original)
+	}
+}
+
+func TestCalibratePhaseCostsStrictUpdatesArtifact(t *testing.T) {
+	calPath := setupPhaseCalibrationProducer(t, `
+case "$1" in
+  by-phase) printf '%s\n' '[{"phase":"executing","runs":3,"input_tokens":300,"output_tokens":150}]' ;;
+  by-phase-model) printf '%s\n' '[{"phase":"executing","model":"sonnet","runs":3,"input_tokens":180,"output_tokens":90}]' ;;
+esac
+`)
+
+	if err := cmdCalibratePhaseCosts([]string{"--auto", "--strict"}); err != nil {
+		t.Fatalf("strict calibration update returned %v", err)
+	}
+	data, err := os.ReadFile(calPath)
+	if err != nil {
+		t.Fatalf("read calibration: %v", err)
+	}
+	var got PhaseCalibration
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("parse calibration: %v", err)
+	}
+	phase := got.Phases["executing"]
+	if phase.InputTokens != 100 || phase.OutputTokens != 50 {
+		t.Fatalf("aggregate averages = %d/%d, want 100/50", phase.InputTokens, phase.OutputTokens)
+	}
+	model := phase.Models["sonnet"]
+	if model.InputTokens != 60 || model.OutputTokens != 30 {
+		t.Fatalf("model averages = %d/%d, want 60/30", model.InputTokens, model.OutputTokens)
+	}
+}
+
+func TestCalibratePhaseCostsStrictFailures(t *testing.T) {
+	validAggregate := `[{"phase":"executing","runs":3,"input_tokens":300,"output_tokens":150}]`
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "aggregate query",
+			body: `
+case "$1" in
+  by-phase) exit 9 ;;
+  by-phase-model) printf '%s\n' '[]' ;;
+esac
+`,
+		},
+		{
+			name: "aggregate parse",
+			body: `
+case "$1" in
+  by-phase) printf '%s\n' '{not-json' ;;
+  by-phase-model) printf '%s\n' '[]' ;;
+esac
+`,
+		},
+		{
+			name: "model query",
+			body: `
+case "$1" in
+  by-phase) printf '%s\n' '` + validAggregate + `' ;;
+  by-phase-model) exit 9 ;;
+esac
+`,
+		},
+		{
+			name: "model parse",
+			body: `
+case "$1" in
+  by-phase) printf '%s\n' '` + validAggregate + `' ;;
+  by-phase-model) printf '%s\n' '{not-json' ;;
+esac
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calPath := setupPhaseCalibrationProducer(t, tt.body)
+			err := cmdCalibratePhaseCosts([]string{"--auto", "--strict"})
+			if err == nil || errors.Is(err, ErrNoUsablePhaseData) {
+				t.Fatalf("strict %s error = %v, want hard failure", tt.name, err)
+			}
+			if _, statErr := os.Stat(calPath); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("strict %s wrote artifact, stat error = %v", tt.name, statErr)
+			}
+		})
+	}
+}
+
+func TestCalibratePhaseCostsStrictMissingProducer(t *testing.T) {
+	t.Setenv("CLAUDE_PLUGIN_ROOT", "")
+	t.Setenv("CLAVAIN_SOURCE_DIR", "")
+	t.Setenv("SPRINT_LIB_PROJECT_DIR", t.TempDir())
+
+	err := cmdCalibratePhaseCosts([]string{"--auto", "--strict"})
+	if err == nil || errors.Is(err, ErrNoUsablePhaseData) {
+		t.Fatalf("strict missing producer error = %v, want hard failure", err)
+	}
+}
+
+func TestCalibratePhaseCostsStrictWriteFailure(t *testing.T) {
+	calPath := setupPhaseCalibrationProducer(t, `
+case "$1" in
+  by-phase) printf '%s\n' '[{"phase":"executing","runs":3,"input_tokens":300,"output_tokens":150}]' ;;
+  by-phase-model) printf '%s\n' '[]' ;;
+esac
+`)
+	if err := os.WriteFile(filepath.Dir(calPath), []byte("not-a-directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdCalibratePhaseCosts([]string{"--auto", "--strict"})
+	if err == nil || errors.Is(err, ErrNoUsablePhaseData) {
+		t.Fatalf("strict write error = %v, want hard failure", err)
+	}
+}
+
+func TestCalibratePhaseCostsLegacyRemainsFailOpen(t *testing.T) {
+	setupPhaseCalibrationProducer(t, `
+case "$1" in
+  by-phase) exit 9 ;;
+esac
+`)
+
+	if err := cmdCalibratePhaseCosts(nil); err != nil {
+		t.Fatalf("manual legacy mode returned %v, want fail-open nil", err)
+	}
+	if err := cmdCalibratePhaseCosts([]string{"--auto"}); err != nil {
+		t.Fatalf("auto mode without --strict returned %v, want fail-open nil", err)
 	}
 }
