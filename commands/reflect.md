@@ -86,19 +86,16 @@ Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no fur
 
 7. **Drift check (non-blocking).** Run `interwatch:watch` via Skill tool. Report findings but don't block.
 
-8. **Calibrate costs (silent).** Explicit `/reflect` calibration is a manual intervention for A:L3 no-touch tracking.
-   ```bash
-   clavain-cli calibration-streak record-manual phase_cost reflect-command 2>/dev/null || true
-   clavain-cli calibrate-phase-costs 2>/dev/null || true
-   ```
+8. **Leave receipt calibration to SessionEnd.** Do not invoke the receipted
+   calibrators from `/reflect`. SessionEnd owns routing, gate-threshold, and
+   phase-cost calibration after it verifies the completed sprint markers.
 
-9. **Calibrate routing + decomposition (silent).**
+9. **Calibrate decomposition (silent).**
    ```bash
    if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
        interspect_root=$(_discover_interspect_plugin 2>/dev/null)
        if [[ -n "$interspect_root" ]]; then
            source "${interspect_root}/hooks/lib-interspect.sh"
-           _interspect_write_routing_calibration 2>/dev/null || true
 
            # Decomposition quality collection (rsj.1.9.1)
            # If this sprint worked on an epic that has a decomp_prediction,
