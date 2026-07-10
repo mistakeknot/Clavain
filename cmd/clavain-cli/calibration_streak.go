@@ -13,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -542,11 +540,7 @@ func withCalibrationStreakLock(root string, fn func() error) error {
 		return fmt.Errorf("calibration-streak: open lock: %w", err)
 	}
 	defer lock.Close()
-	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
-		return fmt.Errorf("calibration-streak: acquire lock: %w", err)
-	}
-	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN) //nolint:errcheck
-	return fn()
+	return withCalibrationFileLock(lock, fn)
 }
 
 func validateCalibrationReceipt(receipt CalibrationReceipt) error {
