@@ -22,7 +22,7 @@ Read `--scope` (or the first argument) and route accordingly:
 
 1. For `clavain` scope, report:
    - Key dependencies: `clavain`, `interdoc`, `interphase`, `interline`, `interpath`, `interwatch`, `interlock`, `qmd`, `oracle`, `tool-time`.
-   - Whether `/clavain:doctor` checks can be run successfully.
+   - Whether `/clavain:clavain-doctor` checks can be run successfully.
    - Nested subproject repo freshness (when in the Sylveste monorepo): run
      `scripts/nested-repo-freshness.sh --quiet` (or the plugin-cache copy) and
      report any nested plugin repos that are behind upstream, dirty, diverged,

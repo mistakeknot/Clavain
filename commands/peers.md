@@ -10,7 +10,7 @@ Read-only diagnostic. Never makes changes — does not modify `~/.claude/setting
 
 ## What This Does
 
-Reports which peer agent rigs (alternative Claude Code rigs that share vocabulary with Clavain) are present on this system, whether they are active, and which bridge skill documents the methodology mapping. Mirrors the inspection pattern of `/clavain:doctor`.
+Reports which peer agent rigs (alternative Claude Code rigs that share vocabulary with Clavain) are present on this system, whether they are active, and which bridge skill documents the methodology mapping. Mirrors the inspection pattern of `/clavain:clavain-doctor`.
 
 Peer rigs are never auto-disabled by `/clavain:setup`. Users opt into Clavain alongside their existing rig; both coexist.
 
@@ -31,8 +31,8 @@ Detected peer rigs:
   - gsd-plugin@jnuyens                           [not installed]          bridge: skills/interop-with-gsd
 
 No peer rigs are auto-disabled by /clavain:setup. To inspect interop guidance for a detected peer:
-  /clavain:help interop-with-superpowers
-  /clavain:help interop-with-gsd
+  /clavain:clavain-help interop-with-superpowers
+  /clavain:clavain-help interop-with-gsd
 ```
 
 ## Codex CLI

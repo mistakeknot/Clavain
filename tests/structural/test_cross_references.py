@@ -63,3 +63,20 @@ def test_routing_table_references(project_root):
     assert not unresolved, (
         f"Unresolved clavain: references in using-clavain/SKILL.md: {sorted(unresolved)}"
     )
+
+
+def test_command_clavain_references_resolve(project_root):
+    """Every clavain: reference in a command resolves to a command or skill."""
+    skills_dir = project_root / "skills"
+    commands_dir = project_root / "commands"
+    unresolved = set()
+
+    for command_path in commands_dir.glob("*.md"):
+        text = command_path.read_text(encoding="utf-8")
+        for ref in re.findall(r"/clavain:([a-z0-9][-a-z0-9]*)", text):
+            skill_exists = (skills_dir / ref / "SKILL.md").exists()
+            command_exists = (commands_dir / f"{ref}.md").exists()
+            if not skill_exists and not command_exists:
+                unresolved.add((command_path.name, ref))
+
+    assert not unresolved, f"Unresolved command clavain: references: {sorted(unresolved)}"

@@ -47,7 +47,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 |---|---|
 | `/clavain:review-discipline` | Disciplined code review + feedback triage |
 | `/clavain:quality-gates` | Quick review from git diff |
-| `/clavain:review` | PR-focused multi-agent review |
+| `/clavain:clavain-review` | PR-focused multi-agent review |
 | `/clavain:review-doc` | Single-pass doc refinement |
 | `/interpeer:interpeer` | Cross-AI peer review |
 | `/clavain:migration-safety` | DB migration safety checks |
@@ -78,8 +78,8 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/clavain:project-onboard` | Set up project with Sylveste automation |
 |---|---|
 | `/clavain:setup` | Bootstrap Clavain |
-| `/clavain:help` | This command |
-| `/clavain:doctor` | Health check |
+| `/clavain:clavain-help` | This command |
+| `/clavain:clavain-doctor` | Health check |
 | `/clavain:codex-bootstrap` | Keep Codex installation fresh |
 | `/clavain:create-agent-skill` | Create agent skills |
 | `/clavain:generate-command` | Scaffold a new command |
