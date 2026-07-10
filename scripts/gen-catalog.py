@@ -267,6 +267,11 @@ def update_readme_counts(text: str, counts: dict[str, int], path: Path) -> str:
         r"\d+ skills, \d+ agents, \d+ commands, \d+ hooks, and \d+ MCP servers?",
         f"{counts['skills']} skills, {counts['agents']} agents, {counts['commands']} commands, {counts['hooks']} hooks, and {mcp} {_mcp_label(mcp)}",
     )
+    updated = replace_optional(
+        updated,
+        r"\d+ skills, \d+ agents, and \d+ commands",
+        f"{counts['skills']} skills, {counts['agents']} agents, and {counts['commands']} commands",
+    )
     updated = replace_optional(updated, r"### Skills \(\d+\)", f"### Skills ({counts['skills']})")
     updated = replace_optional(updated, r"### Commands \(\d+\)", f"### Commands ({counts['commands']})")
     updated = replace_optional(
