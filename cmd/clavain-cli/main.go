@@ -392,8 +392,10 @@ Interspect Calibration:
   calibration-streak              <record-receipt|record-manual LOOP [REASON]|status [--json]|verify [--target=10]>
 
 Policy:
-  policy-check         <agent> <action> [--path=<p>] [--bead=<id>]  Check action against policy
-  policy-show                                        Display current policy
+  policy              <check|record|record-signed|audit|sign|verify|doctor|token>  Auto-proceed authorization
+  scenario-policy-check <agent> <action> [--path=<p>]  Check scenario-access policy
+  scenario-policy-show                                Display scenario-access policy
+  policy-check                                         Deprecated scenario-policy-check alias
 
 Handoff:
   validate-handoff    <artifact_path> [--type=<type>]     Validate artifact against handoff contract

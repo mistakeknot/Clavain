@@ -14,6 +14,9 @@ shift
 # shellcheck source=/dev/null
 source "$(dirname "$0")/_common.sh"
 
+gate_resolve_authz_root "$PLUGIN_DIR" target
+gate_require_signer
+
 HEAD_SHA="$(git -C "$PLUGIN_DIR" rev-parse HEAD 2>/dev/null || echo)"
 
 if ! gate_token_consume ic-publish-patch "$PLUGIN_DIR"; then
@@ -33,9 +36,7 @@ if [[ "${GATE_CONSUMED:-0}" != "1" ]]; then
   rc=0
   gate_check ic-publish-patch "${check_flags[@]}" >/dev/null || rc=$?
   gate_decide_mode "$rc" ic-publish-patch
+  gate_record_signed ic-publish-patch "$PLUGIN_DIR" "" --vetted-sha="$HEAD_SHA"
 fi
 
 ic publish --patch "$PLUGIN_DIR" "$@"
-
-gate_record ic-publish-patch "$PLUGIN_DIR" "" --vetted-sha="$HEAD_SHA"
-gate_sign   ic-publish-patch "$PLUGIN_DIR" ""

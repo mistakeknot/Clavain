@@ -57,8 +57,14 @@ func policyDefaultPaths() (global, project, env string) {
 
 // policyResolvePaths applies --global/--project/--env flag overrides over
 // defaults. Missing files are skipped (empty path passed to LoadEffective).
-func policyResolvePaths(args map[string]string) (global, project, env string) {
+func policyResolvePaths(args map[string]string) (global, project, env string, err error) {
 	g, p, e := policyDefaultPaths()
+	if root, explicit, rootErr := explicitAuthzProjectRoot(args); rootErr != nil {
+		return "", "", "", rootErr
+	} else if explicit {
+		p = filepath.Join(root, ".clavain", "policy.yaml")
+		e = filepath.Join(root, ".clavain", "policy.env.yaml")
+	}
 	if v, ok := args["global"]; ok {
 		g = v
 	}
@@ -68,7 +74,7 @@ func policyResolvePaths(args map[string]string) (global, project, env string) {
 	if v, ok := args["env"]; ok {
 		e = v
 	}
-	return emptyIfMissing(g), emptyIfMissing(p), emptyIfMissing(e)
+	return emptyIfMissing(g), emptyIfMissing(p), emptyIfMissing(e), nil
 }
 
 func emptyIfMissing(path string) string {
@@ -102,9 +108,51 @@ func parseAuthzArgs(args []string) map[string]string {
 	return out
 }
 
-// findIntercoreDB walks up from CWD looking for .clavain/intercore.db.
-// Returns the path if found, or empty string.
-func findIntercoreDB() string {
+const authzProjectRootEnv = "CLAVAIN_AUTHZ_PROJECT_ROOT"
+
+// explicitAuthzProjectRoot resolves the authoritative authz root from a CLI
+// flag or environment override. Explicit selection never falls back to an
+// ancestor DB: a missing DB at this root is an error at open time.
+func explicitAuthzProjectRoot(flags map[string]string) (string, bool, error) {
+	root := strings.TrimSpace(flags["project-root"])
+	if root == "" {
+		root = strings.TrimSpace(os.Getenv(authzProjectRootEnv))
+	}
+	if root == "" {
+		return "", false, nil
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return "", true, fmt.Errorf("resolve authz project root %s: %w", root, err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", true, fmt.Errorf("authz project root %s: %w", abs, err)
+	}
+	if !info.IsDir() {
+		return "", true, fmt.Errorf("authz project root %s is not a directory", abs)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	return filepath.Clean(abs), true, nil
+}
+
+// findIntercoreDB resolves an explicit project root when supplied, otherwise
+// preserving the legacy CWD walk-up behavior for direct CLI callers.
+func findIntercoreDB(flagSets ...map[string]string) string {
+	flags := map[string]string{}
+	if len(flagSets) > 0 && flagSets[0] != nil {
+		flags = flagSets[0]
+	}
+	if root, explicit, err := explicitAuthzProjectRoot(flags); err == nil && explicit {
+		candidate := filepath.Join(root, ".clavain", "intercore.db")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		return ""
+	}
+
 	dir, err := os.Getwd()
 	if err != nil {
 		return ""
@@ -125,9 +173,20 @@ func findIntercoreDB() string {
 
 // openIntercoreDB opens the project intercore.db with the required PRAGMAs.
 // The caller is responsible for closing.
-func openIntercoreDB() (*sql.DB, string, error) {
-	path := findIntercoreDB()
+func openIntercoreDB(flagSets ...map[string]string) (*sql.DB, string, error) {
+	flags := map[string]string{}
+	if len(flagSets) > 0 && flagSets[0] != nil {
+		flags = flagSets[0]
+	}
+	root, explicit, err := explicitAuthzProjectRoot(flags)
+	if err != nil {
+		return nil, "", err
+	}
+	path := findIntercoreDB(flags)
 	if path == "" {
+		if explicit {
+			return nil, "", fmt.Errorf("intercore.db not found at explicit authz root %s", filepath.Join(root, ".clavain", "intercore.db"))
+		}
 		return nil, "", fmt.Errorf("intercore.db not found in .clavain/ (walk from CWD)")
 	}
 	db, err := sql.Open("sqlite", path+"?_busy_timeout=5000")
@@ -175,7 +234,10 @@ func cmdPolicyCheck(args []string) error {
 	op := args[0]
 	flags := parseAuthzArgs(args[1:])
 
-	globalPath, projectPath, envPath := policyResolvePaths(flags)
+	globalPath, projectPath, envPath, err := policyResolvePaths(flags)
+	if err != nil {
+		return err
+	}
 	merged, hash, err := authz.LoadEffective(globalPath, projectPath, envPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -258,7 +320,7 @@ func cmdPolicyRecord(args []string) error {
 			return fmt.Errorf("policy record: missing --%s", k)
 		}
 	}
-	db, _, err := openIntercoreDB()
+	db, _, err := openIntercoreDB(flags)
 	if err != nil {
 		return err
 	}
@@ -288,7 +350,10 @@ func cmdPolicyRecord(args []string) error {
 //	clavain-cli policy list [--global=...] [--project=...] [--env=...]
 func cmdPolicyList(args []string) error {
 	flags := parseAuthzArgs(args)
-	globalPath, projectPath, envPath := policyResolvePaths(flags)
+	globalPath, projectPath, envPath, err := policyResolvePaths(flags)
+	if err != nil {
+		return err
+	}
 	merged, hash, err := authz.LoadEffective(globalPath, projectPath, envPath)
 	if err != nil {
 		return fmt.Errorf("policy list: %w", err)
@@ -322,7 +387,10 @@ func cmdPolicyExplain(args []string) error {
 	op := args[0]
 	flags := parseAuthzArgs(args[1:])
 
-	globalPath, projectPath, envPath := policyResolvePaths(flags)
+	globalPath, projectPath, envPath, err := policyResolvePaths(flags)
+	if err != nil {
+		return err
+	}
 	merged, hash, err := authz.LoadEffective(globalPath, projectPath, envPath)
 	if err != nil {
 		return fmt.Errorf("policy explain: %w", err)
@@ -390,14 +458,14 @@ func displayPath(p string) string {
 // `ic-publish-patch` target projects (best-effort; v1 reports only).
 func cmdPolicyAudit(args []string) error {
 	flags := parseAuthzArgs(args)
-	db, _, err := openIntercoreDB()
+	db, dbPath, err := openIntercoreDB(flags)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
 	if _, ok := flags["verify"]; ok {
-		return maybeAuditVerify(db, flags)
+		return maybeAuditVerify(db, projectRootForDB(dbPath), flags)
 	}
 
 	where := []string{"1=1"}
@@ -477,7 +545,10 @@ func cmdPolicyAudit(args []string) error {
 //     [--gates-dir=.clavain/gates]
 func cmdPolicyLint(args []string) error {
 	flags := parseAuthzArgs(args)
-	globalPath, projectPath, envPath := policyResolvePaths(flags)
+	globalPath, projectPath, envPath, err := policyResolvePaths(flags)
+	if err != nil {
+		return err
+	}
 	merged, _, err := authz.LoadEffective(globalPath, projectPath, envPath)
 	if err != nil {
 		return fmt.Errorf("policy lint: merge failed: %w", err)
@@ -504,7 +575,13 @@ func cmdPolicyLint(args []string) error {
 
 	gatesDir := flags["gates-dir"]
 	if gatesDir == "" {
-		gatesDir = ".clavain/gates"
+		if root, explicit, rootErr := explicitAuthzProjectRoot(flags); rootErr != nil {
+			return rootErr
+		} else if explicit {
+			gatesDir = filepath.Join(root, ".clavain", "gates")
+		} else {
+			gatesDir = ".clavain/gates"
+		}
 	}
 	if ops, err := declaredGateOps(gatesDir); err == nil {
 		sort.Strings(ops)
@@ -576,7 +653,7 @@ func declaredGateOps(dir string) ([]string, error) {
 // cmdPolicy is the `policy` subcommand dispatcher.
 func cmdPolicy(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: policy <check|record|explain|audit|list|lint|init-key|sign|verify|rotate-key|quarantine|token> [...]")
+		return fmt.Errorf("usage: policy <check|record|record-signed|explain|audit|list|lint|init-key|sign|verify|doctor|rotate-key|quarantine|token> [...]")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -584,6 +661,8 @@ func cmdPolicy(args []string) error {
 		return cmdPolicyCheck(rest)
 	case "record":
 		return cmdPolicyRecord(rest)
+	case "record-signed":
+		return cmdPolicyRecordSigned(rest)
 	case "explain":
 		return cmdPolicyExplain(rest)
 	case "audit":
@@ -598,6 +677,8 @@ func cmdPolicy(args []string) error {
 		return cmdPolicySign(rest)
 	case "verify":
 		return cmdPolicyVerify(rest)
+	case "doctor":
+		return cmdPolicyDoctor(rest)
 	case "rotate-key":
 		return cmdPolicyRotateKey(rest)
 	case "quarantine":
@@ -605,7 +686,7 @@ func cmdPolicy(args []string) error {
 	case "token":
 		return cmdPolicyToken(rest)
 	default:
-		return fmt.Errorf("unknown policy subcommand: %s (check|record|explain|audit|list|lint|init-key|sign|verify|rotate-key|quarantine|token)", sub)
+		return fmt.Errorf("unknown policy subcommand: %s (check|record|record-signed|explain|audit|list|lint|init-key|sign|verify|doctor|rotate-key|quarantine|token)", sub)
 	}
 }
 

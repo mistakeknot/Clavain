@@ -12,20 +12,24 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 CLAVAIN_ROOT="${ROOT}/os/Clavain"
-CLI_BIN="${CLAVAIN_ROOT}/cmd/clavain-cli/clavain-cli"
-
-if [[ ! -x "$CLI_BIN" ]]; then
-  (cd "${CLAVAIN_ROOT}/cmd/clavain-cli" && PATH="/usr/local/go/bin:$PATH" go build .)
-fi
-
 SANDBOX="$(mktemp -d)"
 cleanup() { rm -rf "$SANDBOX"; }
 trap cleanup EXIT
+unset CLAVAIN_AUTHZ_PROJECT_ROOT GATE_AUTHZ_TOKEN
+export GOCACHE="${SANDBOX}/go-build-cache"
+
+mkdir -p "${SANDBOX}/real-bin"
+CLI_BIN="${SANDBOX}/real-bin/clavain-cli"
+(cd "${CLAVAIN_ROOT}/cmd/clavain-cli" && PATH="/usr/local/go/bin:$PATH" go build -o "$CLI_BIN" .)
 
 STUB_BIN="${SANDBOX}/bin"
 mkdir -p "$STUB_BIN"
 cat > "${STUB_BIN}/bd" <<'STUB'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "show" ]]; then
+  printf '[{"id":"%s","labels":[]}]\n' "${2:-unknown}"
+  exit 0
+fi
 printf 'bd %s\n' "$*" >> "$BD_CALL_LOG"
 STUB
 cat > "${STUB_BIN}/clavain-cli" <<STUB
@@ -59,6 +63,7 @@ YAML
 python3 - <<PY
 import sqlite3, time
 db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
+db.execute("PRAGMA user_version = 35")
 db.executescript("""
 CREATE TABLE authorizations (
   id TEXT PRIMARY KEY, op_type TEXT NOT NULL, target TEXT NOT NULL,

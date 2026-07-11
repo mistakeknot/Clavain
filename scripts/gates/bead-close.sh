@@ -14,12 +14,15 @@ REASON="${2:-}"
 # shellcheck source=/dev/null
 source "$(dirname "$0")/_common.sh"
 
+gate_resolve_authz_root "$PWD" beads
+gate_require_signer
+
 # A proof-labeled close gate is checked before authorization so a failed proof
 # cannot consume a one-shot token. Label lookup is read-only and unlabeled
 # beads retain the existing close path.
 bead_has_label() {
   local bead="$1" label="$2" raw
-  raw="$(bd show "$bead" --json 2>/dev/null)" || return 1
+  raw="$(env -u CLAVAIN_AUTHZ_TOKEN bd show "$bead" --json 2>/dev/null)" || return 1
   if command -v jq >/dev/null 2>&1; then
     jq -e --arg label "$label" '.[0].labels // [] | index($label) != null' <<<"$raw" >/dev/null 2>&1
   else
@@ -28,14 +31,14 @@ bead_has_label() {
 }
 
 if bead_has_label "$BEAD_ID" "close-gate:calibration-streak"; then
-  clavain-cli calibration-streak verify --target=10
+  env -u CLAVAIN_AUTHZ_TOKEN clavain-cli calibration-streak verify --target=10
 fi
 
 # Runtime evidence is durable once bound. Requirement discovery therefore goes
 # through the CLI instead of consulting only the bead's current labels. Every
 # fallible proof operation, including the durable summary write, precedes
 # one-shot authorization consumption.
-runtime_required="$(clavain-cli runtime-evidence required "$BEAD_ID")" || {
+runtime_required="$(env -u CLAVAIN_AUTHZ_TOKEN clavain-cli runtime-evidence required "$BEAD_ID")" || {
   echo "runtime-evidence: failed to determine requirement for $BEAD_ID" >&2
   exit 1
 }
@@ -47,7 +50,7 @@ case "$runtime_required" in
       exit 1
     }
 
-    runtime_summary="$(clavain-cli runtime-evidence verify "$BEAD_ID")" || {
+    runtime_summary="$(env -u CLAVAIN_AUTHZ_TOKEN clavain-cli runtime-evidence verify "$BEAD_ID")" || {
       echo "runtime-evidence: verification failed for $BEAD_ID" >&2
       exit 1
     }
@@ -72,7 +75,7 @@ case "$runtime_required" in
       echo "runtime-evidence: verified summary has no run ID" >&2
       exit 1
     }
-    runtime_run="$(ic --json run status "$runtime_run_id")" || {
+    runtime_run="$(env -u CLAVAIN_AUTHZ_TOKEN ic --json run status "$runtime_run_id")" || {
       echo "runtime-evidence: cannot read associated run $runtime_run_id" >&2
       exit 1
     }
@@ -104,7 +107,7 @@ case "$runtime_required" in
         echo "runtime-evidence: durable state field exceeds the safe Beads label size" >&2
         exit 1
       fi
-      bd set-state "$BEAD_ID" "$runtime_state" \
+      env -u CLAVAIN_AUTHZ_TOKEN bd set-state "$BEAD_ID" "$runtime_state" \
         --reason="Verified installed runtime before close"
     done
     ;;
@@ -134,6 +137,7 @@ if [[ "${GATE_CONSUMED:-0}" != "1" ]]; then
   rc=0
   gate_check bead-close "${check_flags[@]}" >/dev/null || rc=$?
   gate_decide_mode "$rc" bead-close
+  gate_record_signed bead-close "$BEAD_ID" "$BEAD_ID"
 fi
 
 if [[ -n "$REASON" ]]; then
@@ -141,6 +145,3 @@ if [[ -n "$REASON" ]]; then
 else
   bd close "$BEAD_ID"
 fi
-
-gate_record bead-close "$BEAD_ID" "$BEAD_ID"
-gate_sign   bead-close "$BEAD_ID" "$BEAD_ID"

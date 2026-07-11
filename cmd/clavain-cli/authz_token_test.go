@@ -25,6 +25,7 @@ func setupTokenSandbox(t *testing.T) string {
 	origWD, _ := os.Getwd()
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
+	t.Setenv(authzProjectRootEnv, "")
 
 	dir := t.TempDir()
 	clavainDir := filepath.Join(dir, ".clavain")
@@ -243,6 +244,95 @@ func TestPolicyTokenIssue_Success(t *testing.T) {
 	}
 }
 
+func TestPolicyTokenIssue_AuditFailureRollsBackToken(t *testing.T) {
+	setupTokenSandbox(t)
+	t.Setenv("CLAVAIN_AGENT_ID", "claude")
+	db, _, err := openIntercoreDB()
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER reject_token_issue_audit
+		BEFORE INSERT ON authorizations
+		WHEN NEW.op_type = 'authz.token-issue'
+		BEGIN
+			SELECT RAISE(ABORT, 'reject token issue audit');
+		END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+	db.Close()
+
+	_, issueErr := captureTokenStdout(t, func() error {
+		return cmdPolicyTokenIssue([]string{
+			"--op=bead-close",
+			"--target=rollback-test",
+			"--for=codex",
+			"--ttl=60m",
+		})
+	})
+	if issueErr == nil {
+		t.Fatal("expected audit insertion failure")
+	}
+
+	db, _, err = openIntercoreDB()
+	if err != nil {
+		t.Fatalf("reopen db: %v", err)
+	}
+	defer db.Close()
+	var tokens int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM authz_tokens WHERE target='rollback-test'`).Scan(&tokens); err != nil {
+		t.Fatalf("count tokens: %v", err)
+	}
+	if tokens != 0 {
+		t.Fatalf("tokens after failed audit=%d, want 0", tokens)
+	}
+}
+
+func TestPolicyTokenIssue_ExplicitProjectRootOverridesCWD(t *testing.T) {
+	selected := setupTokenSandbox(t)
+	cwd := setupTokenSandbox(t)
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir cwd sandbox: %v", err)
+	}
+	t.Setenv("CLAVAIN_AGENT_ID", "issuer")
+
+	out, err := captureTokenStdout(t, func() error {
+		return cmdPolicyTokenIssue([]string{
+			"--project-root=" + selected,
+			"--op=bead-close",
+			"--target=selected-bead",
+			"--for=consumer",
+			"--ttl=10m",
+		})
+	})
+	if err != nil {
+		t.Fatalf("issue selected token: %v", err)
+	}
+	id, _, err := authz.ParseTokenString(strings.TrimSpace(out))
+	if err != nil {
+		t.Fatalf("parse token: %v", err)
+	}
+
+	countToken := func(root string) int {
+		db, err := sql.Open("sqlite", filepath.Join(root, ".clavain", "intercore.db"))
+		if err != nil {
+			t.Fatalf("open %s: %v", root, err)
+		}
+		defer db.Close()
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM authz_tokens WHERE id=?`, id).Scan(&count); err != nil {
+			t.Fatalf("count %s: %v", root, err)
+		}
+		return count
+	}
+	if got := countToken(selected); got != 1 {
+		t.Fatalf("selected root tokens=%d, want 1", got)
+	}
+	if got := countToken(cwd); got != 0 {
+		t.Fatalf("cwd root tokens=%d, want 0", got)
+	}
+}
+
 func TestPolicyTokenIssue_ErrorPaths(t *testing.T) {
 	setupTokenSandbox(t)
 
@@ -301,6 +391,25 @@ func TestPolicyTokenConsume_Success(t *testing.T) {
 	}
 	if !strings.Contains(out, "# authz-unset-end") {
 		t.Errorf("stdout missing unset-end sentinel: %q", out)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 4 || !strings.HasPrefix(lines[0], "# authz-receipt ") {
+		t.Fatalf("stdout missing structured receipt: %q", out)
+	}
+	var receipt struct {
+		Schema  int    `json:"schema"`
+		Status  string `json:"status"`
+		Op      string `json:"op"`
+		Target  string `json:"target"`
+		AuditID string `json:"audit_id"`
+		Signed  bool   `json:"signed"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[0], "# authz-receipt ")), &receipt); err != nil {
+		t.Fatalf("unmarshal receipt: %v", err)
+	}
+	if receipt.Schema != 1 || receipt.Status != "consumed" || receipt.Op != "bead-close" ||
+		receipt.Target != "sylveste-qdqr.28" || receipt.AuditID == "" || !receipt.Signed {
+		t.Fatalf("unexpected receipt: %+v", receipt)
 	}
 }
 

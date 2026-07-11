@@ -8,10 +8,8 @@
 #      signature length = 64 and `policy audit --verify` exits 0.
 #   3. Direct-SQL tamper on a signed row flips `policy audit --verify` to
 #      exit 1 with the mutated row flagged in the JSON report.
-#   4. `policy rotate-key` archives the old key under its fingerprint and
-#      writes a fresh one at the canonical paths; old rows remain
-#      verifiable against the archived pubkey (which we load manually and
-#      inline-verify).
+#   4. `policy rotate-key` refuses to invalidate signed history; the active
+#      fingerprint remains unchanged and the retained ledger still verifies.
 #
 # Scenarios 4-6 from the plan (ic-publish freshness / marker fallback) are
 # covered by Go tests in internal/publish/approval_test.go — the shell
@@ -20,24 +18,27 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 CLAVAIN_ROOT="${ROOT}/os/Clavain"
-CLI_BIN="${CLAVAIN_ROOT}/cmd/clavain-cli/clavain-cli"
-IC_BIN="${ROOT}/core/intercore/cmd/ic/ic"
-
-if [[ ! -x "$CLI_BIN" ]]; then
-  (cd "${CLAVAIN_ROOT}/cmd/clavain-cli" && PATH="/usr/local/go/bin:$PATH" GOTOOLCHAIN=local go build .)
-fi
-if [[ ! -x "$IC_BIN" ]]; then
-  (cd "${ROOT}/core/intercore" && PATH="/usr/local/go/bin:$PATH" GOTOOLCHAIN=local go build -o cmd/ic/ic ./cmd/ic)
-fi
-
 SANDBOX="$(mktemp -d)"
 cleanup() { rm -rf "$SANDBOX"; }
 trap cleanup EXIT
+unset CLAVAIN_AUTHZ_PROJECT_ROOT GATE_AUTHZ_TOKEN
+export GOCACHE="${SANDBOX}/go-build-cache"
+
+
+mkdir -p "${SANDBOX}/real-bin"
+CLI_BIN="${SANDBOX}/real-bin/clavain-cli"
+IC_BIN="${SANDBOX}/real-bin/ic"
+(cd "${CLAVAIN_ROOT}/cmd/clavain-cli" && PATH="/usr/local/go/bin:$PATH" GOTOOLCHAIN=local go build -o "$CLI_BIN" .)
+(cd "${ROOT}/core/intercore" && PATH="/usr/local/go/bin:$PATH" GOTOOLCHAIN=local go build -o "$IC_BIN" ./cmd/ic)
 
 STUB_BIN="${SANDBOX}/bin"
 mkdir -p "$STUB_BIN"
 cat > "${STUB_BIN}/bd" <<'STUB'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "show" ]]; then
+  printf '[{"id":"%s","labels":[]}]\n' "${2:-unknown}"
+  exit 0
+fi
 printf 'bd %s\n' "$*" >> "$BD_CALL_LOG"
 STUB
 cat > "${STUB_BIN}/clavain-cli" <<STUB
@@ -75,13 +76,47 @@ if [[ ! -f "${SANDBOX}/.clavain/keys/authz-project.key" ]]; then
   echo "FAIL scenario 1: signing key not created"
   exit 1
 fi
-perms="$(stat -c '%a' "${SANDBOX}/.clavain/keys/authz-project.key")"
+perms="$(stat -f '%Lp' "${SANDBOX}/.clavain/keys/authz-project.key" 2>/dev/null || stat -c '%a' "${SANDBOX}/.clavain/keys/authz-project.key")"
 [[ "$perms" == "400" ]] || { echo "FAIL scenario 1: key perms=$perms, want 400"; exit 1; }
 clavain-cli policy audit --verify >/dev/null 2>&1 || {
   echo "FAIL scenario 1: audit --verify did not pass after bootstrap"
   exit 1
 }
 echo "PASS scenario 1: bootstrap (authz-init.sh) — key 0400, marker signed, verify OK"
+
+# Explicit --project-root must outrank an ambient root for every init step.
+EXPLICIT_ROOT="${SANDBOX}/explicit-root"
+mkdir -p "$EXPLICIT_ROOT"
+CLAVAIN_AUTHZ_PROJECT_ROOT="$SANDBOX" \
+  bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$EXPLICIT_ROOT" >/dev/null
+[[ -f "$EXPLICIT_ROOT/.clavain/intercore.db" ]] || { echo "FAIL scenario 1a: explicit DB missing"; exit 1; }
+[[ -f "$EXPLICIT_ROOT/.clavain/keys/authz-project.key" ]] || { echo "FAIL scenario 1a: explicit key missing"; exit 1; }
+clavain-cli policy doctor --project-root="$EXPLICIT_ROOT" --require-signer >/dev/null \
+  || { echo "FAIL scenario 1a: explicit signer doctor failed"; exit 1; }
+echo "PASS scenario 1a: explicit project root outranks ambient root"
+
+# An existing signer with unsafe private-key permissions must fail bootstrap
+# even when every current authorization row is already signed.
+chmod 0600 "$EXPLICIT_ROOT/.clavain/keys/authz-project.key"
+if bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$EXPLICIT_ROOT" >/dev/null 2>&1; then
+  echo "FAIL scenario 1b: authz-init accepted unsafe signer permissions"
+  exit 1
+fi
+chmod 0400 "$EXPLICIT_ROOT/.clavain/keys/authz-project.key"
+echo "PASS scenario 1b: existing signer requires a healthy doctor preflight"
+
+# A checkout containing only the tracked public key is verifier-only and must
+# never mint or overwrite a private identity.
+VERIFIER_ROOT="${SANDBOX}/verifier-root"
+mkdir -p "$VERIFIER_ROOT/.clavain/keys"
+cp -f "$SANDBOX/.clavain/keys/authz-project.pub" "$VERIFIER_ROOT/.clavain/keys/authz-project.pub"
+cp -f "$SANDBOX/.clavain/intercore.db" "$VERIFIER_ROOT/.clavain/intercore.db"
+bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$VERIFIER_ROOT" >/dev/null
+[[ ! -e "$VERIFIER_ROOT/.clavain/keys/authz-project.key" ]] \
+  || { echo "FAIL scenario 1c: verifier checkout minted a private key"; exit 1; }
+clavain-cli policy doctor --project-root="$VERIFIER_ROOT" >/dev/null \
+  || { echo "FAIL scenario 1c: verifier doctor failed"; exit 1; }
+echo "PASS scenario 1c: public-only checkout remains verifier-only"
 
 # authz-init installed the full production policy globally (with strict
 # `requires` on bead-close — including vetted_sha_matches_head). Init a
@@ -166,7 +201,7 @@ clavain-cli policy audit --verify >/dev/null 2>&1 || {
   exit 1
 }
 
-# ─── Scenario 4: rotate-key preserves historical verifiability ────────
+# ─── Scenario 4: rotate-key refuses signed history ─────────────────────
 old_fp="$({ clavain-cli policy verify --json 2>/dev/null || true; } | python3 -c "
 import json,sys
 r = json.load(sys.stdin)
@@ -174,40 +209,24 @@ print(r.get('fingerprint',''))
 ")"
 [[ -n "$old_fp" ]] || { echo "FAIL scenario 4: could not read current fingerprint"; exit 1; }
 
-clavain-cli policy rotate-key >/dev/null
-# Archived pubkey should exist at keys/authz-project.pub.<old_fp>.
-archived_pub="${SANDBOX}/.clavain/keys/authz-project.pub.${old_fp}"
-[[ -f "$archived_pub" ]] || { echo "FAIL scenario 4: archived pubkey not found at $archived_pub"; exit 1; }
+if clavain-cli policy rotate-key >/dev/null 2>&1; then
+  echo "FAIL scenario 4: rotate-key should refuse signed history"
+  exit 1
+fi
 new_fp="$({ clavain-cli policy verify --json 2>/dev/null || true; } | python3 -c "
 import json,sys
 r = json.load(sys.stdin)
 print(r.get('fingerprint',''))
 ")"
-[[ -n "$new_fp" && "$new_fp" != "$old_fp" ]] || {
-  echo "FAIL scenario 4: new fingerprint ($new_fp) did not change from old ($old_fp)"
+[[ -n "$new_fp" && "$new_fp" == "$old_fp" ]] || {
+  echo "FAIL scenario 4: fingerprint changed after refused rotation ($old_fp -> $new_fp)"
   exit 1
 }
-# After rotation, existing rows signed with old key FAIL verify under new
-# pubkey — that's expected and documented. Re-signing a row requires the
-# new key, which `policy sign` now uses. Verify fails → re-sign → verify
-# passes.
-if clavain-cli policy audit --verify >/dev/null 2>&1; then
-  echo "FAIL scenario 4: verify should fail under new key before re-sign"
-  exit 1
-fi
-# Clear old signatures and re-sign with the new key.
-python3 - <<PY
-import sqlite3
-db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
-db.execute("UPDATE authorizations SET signature=NULL, signed_at=NULL WHERE sig_version >= 1")
-db.commit()
-PY
-clavain-cli policy sign >/dev/null
 clavain-cli policy audit --verify >/dev/null 2>&1 || {
-  echo "FAIL scenario 4: verify should pass after re-sign with new key"
+  echo "FAIL scenario 4: verify should still pass after refused rotation"
   exit 1
 }
-echo "PASS scenario 4: rotate-key archives old pair; new pair signs + verifies"
+echo "PASS scenario 4: rotate-key refuses signed history without changing trust"
 
 echo ""
 echo "PASS: authz-v15-e2e (all 4 scenarios)"

@@ -2,14 +2,103 @@
 # Shared helpers for auto-proceed gate wrappers.
 #
 # Each gate wrapper:
-#   1. Calls `clavain-cli policy-check <op>` with the op context.
-#   2. Exit code 0 → auto, 1 → confirm (prompt if tty, else abort),
+#   1. Resolves one explicit authz project root and requires a ready signer.
+#   2. Calls `clavain-cli policy check <op>` with the op context.
+#   3. Exit code 0 → auto, 1 → confirm (prompt if tty, else abort),
 #      2 → block (abort), 3 → malformed (abort).
-#   3. Runs the underlying op.
-#   4. Calls `clavain-cli policy record` with the policy_hash pinned from check.
+#   4. Records and signs the exact decision with the pinned policy hash.
+#   5. Runs the underlying op.
 #
 # This file is sourced by individual gate scripts; callers must have:
 #     set -euo pipefail
+
+# Capture a one-shot token in a shell-only variable before any subprocess is
+# launched. Only the trusted consume command receives it as an argument.
+_gate_incoming_token="${CLAVAIN_AUTHZ_TOKEN:-}"
+unset CLAVAIN_AUTHZ_TOKEN GATE_AUTHZ_TOKEN
+GATE_AUTHZ_TOKEN="$_gate_incoming_token"
+unset _gate_incoming_token
+export -n GATE_AUTHZ_TOKEN 2>/dev/null || true
+
+# gate_resolve_authz_root [target-dir] [target|beads]
+# Selects one authorization domain for the whole wrapper invocation. Explicit
+# env wins. Bead operations then consult the active tracker; push/publish
+# operations bind directly to their target Git root.
+gate_resolve_authz_root() {
+  local target="${1:-$PWD}" scope="${2:-target}"
+  local root="${CLAVAIN_AUTHZ_PROJECT_ROOT:-}" context=""
+
+  if [[ -z "$root" && "$scope" == "beads" && -n "${BEADS_DIR:-}" ]]; then
+    local beads_dir="$BEADS_DIR"
+    [[ "$beads_dir" != /* ]] && beads_dir="$PWD/$beads_dir"
+    if [[ "$(basename "$beads_dir")" == ".beads" ]]; then
+      root="$(dirname "$beads_dir")"
+    fi
+  fi
+
+  if [[ -z "$root" && "$scope" == "beads" ]] && command -v bd >/dev/null 2>&1; then
+    context="$(env -u CLAVAIN_AUTHZ_TOKEN bd context --json 2>/dev/null || true)"
+    if command -v jq >/dev/null 2>&1; then
+      root="$(printf '%s' "$context" | jq -r '.repo_root // empty' 2>/dev/null || true)"
+    else
+      root="$(printf '%s' "$context" | sed -n 's/.*"repo_root"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+    fi
+  fi
+
+  if [[ -z "$root" ]]; then
+    [[ -d "$target" ]] || target="$(dirname "$target")"
+    root="$(git -C "$target" rev-parse --show-toplevel 2>/dev/null || true)"
+  fi
+  if [[ -z "$root" && -f "$target/.clavain/intercore.db" ]]; then
+    root="$target"
+  fi
+  if [[ -z "$root" || ! -d "$root" ]]; then
+    echo "policy: cannot resolve authz project root; set CLAVAIN_AUTHZ_PROJECT_ROOT" >&2
+    return 1
+  fi
+
+  CLAVAIN_AUTHZ_PROJECT_ROOT="$(cd "$root" && pwd -P)"
+  export CLAVAIN_AUTHZ_PROJECT_ROOT
+}
+
+gate_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | awk '{print $1}'
+  else
+    openssl dgst -sha256 | awk '{print $NF}'
+  fi
+}
+
+gate_require_jq() {
+  if ! command -v jq >/dev/null 2>&1 || ! jq --version >/dev/null 2>&1; then
+    echo "policy: jq is required for fail-closed authorization parsing" >&2
+    return 1
+  fi
+}
+
+# gate_require_signer
+# Fails before any proof-state mutation, token consumption, or irreversible op
+# when the selected DB/keypair is missing, stale, mismatched, or unsafe.
+gate_require_signer() {
+  local out
+  gate_require_jq || return 1
+  if ! out="$(clavain-cli policy doctor --require-signer \
+      --project-root="$CLAVAIN_AUTHZ_PROJECT_ROOT" 2>&1)"; then
+    echo "policy: signer preflight failed for $CLAVAIN_AUTHZ_PROJECT_ROOT" >&2
+    [[ -n "$out" ]] && echo "$out" >&2
+    return 1
+  fi
+  if ! printf '%s' "$out" | jq -e --arg root "$CLAVAIN_AUTHZ_PROJECT_ROOT" '
+    .status == "ok" and .role == "signer" and .schema == 35 and
+    .project_root == $root and
+    (.fingerprint | type == "string" and test("^[0-9a-f]{16}$"))
+  ' >/dev/null 2>&1; then
+    echo "policy: malformed signer preflight response; operation not run" >&2
+    return 1
+  fi
+}
 
 # gate_bd_state <bead> <dimension>
 # Queries `bd state <bead> <dim>` and echoes the value (empty on miss).
@@ -19,7 +108,7 @@ gate_bd_state() {
   if [[ -z "$bead" ]] || ! command -v bd >/dev/null 2>&1; then
     return 0
   fi
-  bd state "$bead" "$dim" 2>/dev/null || true
+  env -u CLAVAIN_AUTHZ_TOKEN bd state "$bead" "$dim" 2>/dev/null || true
 }
 
 # gate_populate_vetting <bead>
@@ -60,9 +149,9 @@ gate_resolve_agent() {
   printf '%s@%s' "$user" "$host"
 }
 
-# gate_check <op> [extra policy-check flags...]
+# gate_check <op> [extra policy check flags...]
 # Emits the JSON output on stdout (caller captures) and returns the numeric
-# exit code from `clavain-cli policy-check`.
+# exit code from `clavain-cli policy check`.
 #
 # Sets globals on success:
 #   GATE_POLICY_HASH
@@ -70,21 +159,26 @@ gate_resolve_agent() {
 gate_check() {
   local op="$1"
   shift || true
-  local raw rc
-  # CLI command is `policy-check` (hyphen); the legacy `policy check` (space)
-  # form returns rc=1 as an unknown-command error and forces every gate into
-  # the prompt-or-abort path. Fixed 2026-05-11 after diagnosing why
-  # `.beads/push.sh` always claimed "needs confirmation; no tty available".
-  raw="$(clavain-cli policy-check "$op" "$@" 2>&1)" && rc=0 || rc=$?
+  local raw rc policy_mode=""
+  raw="$(clavain-cli policy check "$op" \
+      --project-root="$CLAVAIN_AUTHZ_PROJECT_ROOT" "$@" 2>&1)" && rc=0 || rc=$?
 
-  # jq is optional; fall back to sed if missing. We only need two fields.
-  if command -v jq >/dev/null 2>&1; then
-    GATE_POLICY_HASH="$(printf '%s' "$raw" | jq -r '.policy_hash // empty' 2>/dev/null || true)"
-    GATE_POLICY_MATCH="$(printf '%s' "$raw" | jq -r '.policy_match // empty' 2>/dev/null || true)"
-  else
-    GATE_POLICY_HASH="$(printf '%s' "$raw" | sed -n 's/.*"policy_hash":"\([^"]*\)".*/\1/p' | head -n1)"
-    GATE_POLICY_MATCH="$(printf '%s' "$raw" | sed -n 's/.*"policy_match":"\([^"]*\)".*/\1/p' | head -n1)"
+  GATE_POLICY_HASH="$(printf '%s' "$raw" | jq -r '.policy_hash // empty' 2>/dev/null || true)"
+  GATE_POLICY_MATCH="$(printf '%s' "$raw" | jq -r '.policy_match // empty' 2>/dev/null || true)"
+  policy_mode="$(printf '%s' "$raw" | jq -r '.mode // empty' 2>/dev/null || true)"
+  if ! printf '%s' "$raw" | jq -e '
+    .schema == 1 and
+    (.mode == "auto" or .mode == "force_auto" or .mode == "confirm" or .mode == "block") and
+    (.policy_hash | type == "string" and length > 0) and
+    (.policy_match | type == "string" and length > 0)
+  ' >/dev/null 2>&1; then
+    rc=3
   fi
+
+  case "$rc:$policy_mode" in
+    0:auto|0:force_auto|1:confirm|2:block|3:*) ;;
+    *) rc=3 ;;
+  esac
 
   export GATE_POLICY_HASH GATE_POLICY_MATCH
   return "$rc"
@@ -111,7 +205,7 @@ gate_prompt_or_abort() {
 }
 
 # gate_decide_mode <rc> <op>
-# Translates policy-check rc into action. On success, sets GATE_MODE to one of
+# Translates policy check rc into action. On success, sets GATE_MODE to one of
 # auto | confirmed. On failure, exits with a user-facing message.
 gate_decide_mode() {
   local rc="$1" op="$2"
@@ -124,10 +218,9 @@ gate_decide_mode() {
   esac
 }
 
-# gate_record <op> <target> <bead-or-empty> [extra flags...]
-# Writes the authorization audit row. Uses GATE_MODE, GATE_POLICY_MATCH,
-# GATE_POLICY_HASH set by earlier gate_check/gate_decide_mode calls.
-gate_record() {
+# gate_record_signed <op> <target> <bead-or-empty> [extra flags...]
+# Records and signs exactly one authorization decision before the operation.
+gate_record_signed() {
   local op="$1" target="$2" bead="$3"
   shift 3 || true
   local agent
@@ -143,34 +236,22 @@ gate_record() {
   if [[ -n "$bead" ]]; then
     args+=( --bead="$bead" )
   fi
-  if ! clavain-cli policy record "${args[@]}" "$@"; then
-    # Recording is best-effort; never block the op on audit-write failure
-    # (the op has already succeeded by this point).
-    echo "policy: record failed (op=${op} target=${target}); op succeeded" >&2
+  local raw
+  if ! raw="$(clavain-cli policy record-signed \
+      --project-root="$CLAVAIN_AUTHZ_PROJECT_ROOT" "${args[@]}" "$@" 2>&1)"; then
+    echo "policy: signed authorization record failed (op=${op} target=${target}); operation not run" >&2
+    [[ -n "$raw" ]] && echo "$raw" >&2
+    return 1
   fi
-}
-
-# gate_sign <op> <target> [bead-or-empty]
-# Signs the just-recorded audit row via `clavain-cli policy sign`. Best-effort:
-# missing key, unwritable DB, or any signing failure is logged but does not
-# fail the op — the row remains unsigned and will be caught by the next
-# `policy audit --verify` pass. Called AFTER gate_record so the row exists.
-#
-# Filters narrow the signer to just this wrapper's row; without filters the
-# signer would cover every unsigned row in the table, which is fine but noisy.
-gate_sign() {
-  local op="$1" target="$2" bead="${3:-}"
-  local args=( --op="$op" --target="$target" )
-  if [[ -n "$bead" ]]; then
-    args+=( --bead="$bead" )
-  fi
-  if ! clavain-cli policy sign "${args[@]}" >/dev/null 2>&1; then
-    echo "policy: sign failed (op=${op} target=${target}); row remains unsigned" >&2
+  if ! printf '%s' "$raw" | jq -e '.status == "ok" and .signed == 1 and (.id | type == "string" and length > 0)' >/dev/null 2>&1; then
+    echo "policy: malformed record-signed response; operation not run" >&2
+    return 1
   fi
 }
 
 # gate_token_consume <op> <target>
-# If $CLAVAIN_AUTHZ_TOKEN is set, attempts to consume it against the given
+# If a token was captured from $CLAVAIN_AUTHZ_TOKEN, attempts to consume it
+# against the given
 # op/target scope. Sets GATE_CONSUMED=1 on success and unsets the env var to
 # prevent child-process leakage. Exit contract (per authz v2 plan r3):
 #
@@ -188,32 +269,47 @@ gate_sign() {
 #                              override the revoke. Return 1.
 #   CLI exit 1/other         → unexpected (DB/IO/programmer). HARD FAIL. Return 1.
 #
-# Empty $CLAVAIN_AUTHZ_TOKEN is a no-op: GATE_CONSUMED=0, return 0 (legacy
+# An empty captured token is a no-op: GATE_CONSUMED=0, return 0 (legacy
 # path runs). The caller MUST check this function's return code BEFORE
 # checking $GATE_CONSUMED.
 gate_token_consume() {
   local op="$1" target="$2"
   GATE_CONSUMED=0
   export GATE_CONSUMED
-  if [[ -z "${CLAVAIN_AUTHZ_TOKEN:-}" ]]; then
+  if [[ -z "${GATE_AUTHZ_TOKEN:-}" ]]; then
     return 0
   fi
 
   local out rc
   out="$(clavain-cli policy token consume \
-          --token="$CLAVAIN_AUTHZ_TOKEN" \
+          --project-root="$CLAVAIN_AUTHZ_PROJECT_ROOT" \
+          --token="$GATE_AUTHZ_TOKEN" \
           --expect-op="$op" \
           --expect-target="$target" 2>&1)" && rc=0 || rc=$?
 
   case "$rc" in
     0)
+      local receipt_line receipt_json receipt_tail
+      receipt_line="${out%%$'\n'*}"
+      receipt_json="${receipt_line#\# authz-receipt }"
+      receipt_tail="${out#*$'\n'}"
+      if [[ "$receipt_line" == "$out" || "$receipt_line" != '# authz-receipt '* ]] ||
+         ! printf '%s' "$receipt_json" | jq -e --arg op "$op" --arg target "$target" '
+           .schema == 1 and .status == "consumed" and
+           .op == $op and .target == $target and
+           (.audit_id | type == "string" and length > 0) and .signed == true
+         ' >/dev/null 2>&1 ||
+         [[ "$receipt_tail" != $'# authz-unset-begin\nunset CLAVAIN_AUTHZ_TOKEN\n# authz-unset-end' ]]; then
+        echo "authz: malformed token-consume success receipt; gate hard-fails" >&2
+        return 1
+      fi
       GATE_CONSUMED=1
       GATE_MODE=auto
       export GATE_CONSUMED GATE_MODE
       # Belt: unset in this process so child ops don't re-see a consumed
       # token. The CLI also emits an eval-friendly `unset CLAVAIN_AUTHZ_TOKEN`
       # block to stdout for interactive shells.
-      unset CLAVAIN_AUTHZ_TOKEN
+      unset GATE_AUTHZ_TOKEN CLAVAIN_AUTHZ_TOKEN
       echo "authz: token consumed for ${op} ${target}" >&2
       return 0
       ;;

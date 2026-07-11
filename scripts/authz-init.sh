@@ -67,7 +67,8 @@ if [[ ! -f "$GLOBAL_POLICY" ]]; then
     log "WARN: policy example not found at $POLICY_EXAMPLE; skipping global install"
   else
     mkdir -p "${HOME}/.clavain"
-    cp "$POLICY_EXAMPLE" "$GLOBAL_POLICY"
+    cp -f "$POLICY_EXAMPLE" "$GLOBAL_POLICY"
+    chmod 0644 "$GLOBAL_POLICY"
     log "installed global policy: $GLOBAL_POLICY"
   fi
 else
@@ -76,41 +77,61 @@ fi
 
 # 3. Init signing key (never overwrites).
 KEY_FILE="${PROJECT_ROOT}/.clavain/keys/authz-project.key"
-if [[ -f "$KEY_FILE" ]]; then
+PUB_FILE="${PROJECT_ROOT}/.clavain/keys/authz-project.pub"
+IS_SIGNER=0
+if [[ -f "$KEY_FILE" && -f "$PUB_FILE" ]]; then
   log "signing key already present: $KEY_FILE"
+  IS_SIGNER=1
+elif [[ -f "$KEY_FILE" ]]; then
+  echo "authz-init: private key exists without the trusted public key: $KEY_FILE" >&2
+  exit 1
+elif [[ -f "$PUB_FILE" ]]; then
+  log "public key present without private key; configuring verifier-only checkout"
 else
   log "generating project signing key"
-  clavain-cli policy init-key >/dev/null
+  clavain-cli policy init-key --project-root="$PROJECT_ROOT" >/dev/null
+  IS_SIGNER=1
 fi
 
 # 4. Sign cutover marker + any unsigned post-cutover rows.
-log "signing unsigned post-cutover rows (covers migration marker)"
-if ! clavain-cli policy sign >/dev/null 2>&1; then
-  log "WARN: policy sign failed; unsigned rows will remain"
+if [[ "$IS_SIGNER" == "1" ]]; then
+	log "checking signer readiness"
+	clavain-cli policy doctor --project-root="$PROJECT_ROOT" --require-signer >/dev/null
+	log "signing unsigned post-cutover rows (covers migration marker)"
+	clavain-cli policy sign --project-root="$PROJECT_ROOT" >/dev/null
+else
+	log "checking verifier readiness"
+	clavain-cli policy doctor --project-root="$PROJECT_ROOT" >/dev/null
+	log "verifier-only checkout: skipping signing"
 fi
 
 # 5. Sanity check.
 log "verifying audit integrity"
-if clavain-cli policy audit --verify --json >/tmp/authz-init-verify.json 2>&1; then
+VERIFY_FILE="$(mktemp "${TMPDIR:-/tmp}/authz-init-verify.XXXXXX")"
+trap 'rm -f "$VERIFY_FILE"' EXIT
+if clavain-cli policy audit --verify --json --project-root="$PROJECT_ROOT" >"$VERIFY_FILE" 2>&1; then
   log "policy audit --verify: OK"
 else
   log "WARN: policy audit --verify reported failures; details:"
-  cat /tmp/authz-init-verify.json >&2 || true
+  cat "$VERIFY_FILE" >&2 || true
   exit 1
 fi
 
 # Emit a one-line summary for wrappers/scripts that parse authz-init output.
 if command -v jq >/dev/null 2>&1; then
-  summary="$(jq -c '.summary' /tmp/authz-init-verify.json 2>/dev/null || echo '{}')"
+  summary="$(jq -c '.summary' "$VERIFY_FILE" 2>/dev/null || echo '{}')"
   log "summary: ${summary}"
 fi
-rm -f /tmp/authz-init-verify.json
+rm -f "$VERIFY_FILE"
+trap - EXIT
 
 # Optional: issue a demo bead-close token to validate v2 end-to-end.
 if [[ "$WITH_TOKEN_DEMO" == "1" ]]; then
   AGENT_ID="${CLAVAIN_AGENT_ID:-demo-agent}"
   TARGET="demo-$(date +%s)"
-  if TOKEN="$(CLAVAIN_AGENT_ID="$AGENT_ID" clavain-cli policy token issue --op=bead-close --target="$TARGET" --for="$AGENT_ID" --ttl=5m 2>/tmp/authz-init-demo.err)"; then
+  if [[ "$IS_SIGNER" != "1" ]]; then
+    log "WARN: verifier-only checkout cannot issue a demo token"
+  elif TOKEN="$(CLAVAIN_AGENT_ID="$AGENT_ID" clavain-cli policy token issue --project-root="$PROJECT_ROOT" --op=bead-close --target="$TARGET" --for="$AGENT_ID" --ttl=5m 2>/tmp/authz-init-demo.err)"; then
     echo "Demo token issued: $TOKEN"
     echo "Use with (one-shot, preferred):"
     echo "  CLAVAIN_AUTHZ_TOKEN=$TOKEN bead-close some-bead-id"

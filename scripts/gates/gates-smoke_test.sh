@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Smoke test for the gate wrappers. Does NOT hit real beads/dolt/git/ic;
 # instead, stubs those binaries on PATH and asserts the gate script:
-#   - calls `clavain-cli policy-check` with the right op
+#   - calls `clavain-cli policy check` with the right op
 #   - honors exit codes (auto/confirm/block)
 #   - calls `clavain-cli policy record` after a successful op
 #   - for v2: consumes a token when present; hard-fails on auth-failure;
@@ -27,14 +27,15 @@ done
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 GATES="${ROOT}/os/Clavain/scripts/gates"
 
-if [[ ! -x "${ROOT}/os/Clavain/cmd/clavain-cli/clavain-cli" ]]; then
-  echo "skip: clavain-cli binary not built; run 'go build ./cmd/clavain-cli' first"
-  exit 0
-fi
-
 SANDBOX="$(mktemp -d)"
 cleanup() { rm -rf "$SANDBOX"; }
 trap cleanup EXIT
+unset CLAVAIN_AUTHZ_PROJECT_ROOT GATE_AUTHZ_TOKEN
+export GOCACHE="${GOCACHE:-${SANDBOX}/go-build-cache}"
+
+mkdir -p "${SANDBOX}/real-bin"
+CLI_BIN="${SANDBOX}/real-bin/clavain-cli"
+(cd "${ROOT}/os/Clavain/cmd/clavain-cli" && go build -trimpath -o "$CLI_BIN" .)
 
 # Stubs — capture arguments into a log for assertion. bd close is idempotent
 # per-ID in the stub (just logs); the wrapper may call it many times across
@@ -53,24 +54,31 @@ if [[ "${1:-}" == "state" ]]; then
   fi
   exit 0
 fi
+if [[ "${1:-} ${2:-}" == "context --json" ]]; then
+  printf '{"repo_root":"%s","beads_dir":"%s/.beads"}\n' "$GATE_SMOKE_ROOT" "$GATE_SMOKE_ROOT"
+  exit 0
+fi
 printf 'bd %s\n' "$*" >> "$BD_CALL_LOG"
 STUB
 cat > "${STUB_BIN}/clavain-cli" <<STUB
 #!/usr/bin/env bash
-exec "${ROOT}/os/Clavain/cmd/clavain-cli/clavain-cli" "\$@"
+exec "${CLI_BIN}" "\$@"
 STUB
 chmod +x "${STUB_BIN}/bd" "${STUB_BIN}/clavain-cli"
 
 export PATH="${STUB_BIN}:${PATH}"
 export BD_CALL_LOG="${SANDBOX}/bd-calls.log"
+export GATE_SMOKE_ROOT="$SANDBOX"
 : > "$BD_CALL_LOG"
 
-# Minimal policy: bead-close is auto (no requires); catchall confirms.
+# Minimal policy: tested irreversible operations are auto; catchall confirms.
 mkdir -p "${SANDBOX}/.clavain"
 cat > "${SANDBOX}/.clavain/policy.yaml" <<YAML
 version: 1
 rules:
   - op: bead-close
+    mode: auto
+  - op: git-push-main
     mode: auto
   - op: "*"
     mode: confirm
@@ -81,6 +89,7 @@ YAML
 python3 - <<PY
 import sqlite3, time
 db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
+db.execute("PRAGMA user_version = 35")
 db.executescript("""
 CREATE TABLE authorizations (
   id TEXT PRIMARY KEY, op_type TEXT NOT NULL, target TEXT NOT NULL,
@@ -121,6 +130,17 @@ PY
 
 export HOME="${SANDBOX}"
 cd "${SANDBOX}"
+
+git init -q
+git config user.email "gates-smoke@example.invalid"
+git config user.name "gates-smoke"
+git config commit.gpgsign false
+touch smoke-marker
+git add smoke-marker
+git commit -q -m "gate smoke fixture"
+git remote add origin https://example.invalid/gates-smoke.git
+git init --bare -q "${SANDBOX}/push.git"
+git remote set-url --push origin "${SANDBOX}/push.git"
 
 clavain-cli policy init-key >/dev/null
 clavain-cli policy sign >/dev/null
@@ -170,6 +190,37 @@ print(row[0] if row and row[0] is not None else 0)
     exit 1
   fi
   echo "PASS: legacy bead-close auto path"
+}
+
+scenario_git_push_binds_source_and_pushurl() {
+	echo "=== legacy: git push binds source object and push URL ==="
+	git branch source-branch
+	git checkout -q -b checkout-other
+	printf 'other\n' > checkout-other
+	git add checkout-other
+	git commit -q -m "checkout differs from source"
+	local head_sha source_sha pushed_sha audit_target push_hash
+	head_sha="$(git rev-parse HEAD)"
+	source_sha="$(git rev-parse source-branch)"
+	[[ "$head_sha" != "$source_sha" ]] || { echo "FAIL: fixture SHAs should differ"; exit 1; }
+
+	CLAVAIN_AGENT_ID=smoke-agent bash "${GATES}/git-push-main.sh" origin source-branch:main >/dev/null
+	pushed_sha="$(git --git-dir="${SANDBOX}/push.git" rev-parse refs/heads/main)"
+	[[ "$pushed_sha" == "$source_sha" ]] || {
+		echo "FAIL: pushed SHA=$pushed_sha, want authorized source=$source_sha"
+		exit 1
+	}
+	push_hash="$(python3 -c 'import hashlib,sys; print(hashlib.sha256((sys.argv[1]+"\n").encode()).hexdigest())' "${SANDBOX}/push.git")"
+	audit_target="$(python3 -c "
+import sqlite3
+db = sqlite3.connect('${SANDBOX}/.clavain/intercore.db')
+print(db.execute(\"SELECT target FROM authorizations WHERE op_type='git-push-main' ORDER BY created_at DESC LIMIT 1\").fetchone()[0])
+")"
+	[[ "$audit_target" == "repo=sha256:${push_hash};ref=refs/heads/main;head=${source_sha}" ]] || {
+		echo "FAIL: audit target not bound to source/pushurl: $audit_target"
+		exit 1
+	}
+	echo "PASS: git push authorization binds immutable source + push URL"
 }
 
 # ─── token scenarios ──────────────────────────────────────────────────
@@ -291,7 +342,7 @@ scenario_token_expect_mismatch() {
 
   local rc=0
   CLAVAIN_AGENT_ID=smoke-consumer CLAVAIN_AUTHZ_TOKEN="$opaque" \
-    bash "${GATES}/git-push-main.sh" origin main >/dev/null 2>"${SANDBOX}/mismatch.err" || rc=$?
+    bash "${GATES}/git-push-main.sh" origin source-branch:main >/dev/null 2>"${SANDBOX}/mismatch.err" || rc=$?
 
   if [[ "$rc" == "0" ]]; then
     echo "FAIL: expect-mismatch should hard-fail (rc=$rc)"
@@ -378,6 +429,7 @@ scenario_no_token_legacy() {
 case "$FOCUS" in
   legacy)
     scenario_legacy_bead_close
+		scenario_git_push_binds_source_and_pushurl
     ;;
   token)
     scenario_runtime_proof_precedes_token
@@ -390,6 +442,7 @@ case "$FOCUS" in
     ;;
   all)
     scenario_legacy_bead_close
+		scenario_git_push_binds_source_and_pushurl
     scenario_runtime_proof_precedes_token
     scenario_token_valid
     scenario_token_revoked_hard_fail

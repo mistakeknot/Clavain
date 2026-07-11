@@ -28,6 +28,7 @@ func setupAuthzSandbox(t *testing.T, projectPolicyYAML string) string {
 	// set HOME to a path where ~/.clavain/policy.yaml does not exist.
 	fakeHome := t.TempDir()
 	t.Setenv("HOME", fakeHome)
+	t.Setenv(authzProjectRootEnv, "")
 
 	dir := t.TempDir()
 	clavainDir := filepath.Join(dir, ".clavain")
@@ -100,6 +101,72 @@ func captureStdoutAuthz(t *testing.T, fn func() error) ([]byte, error) {
 	os.Stdout = old
 	out := <-done
 	return out, err
+}
+
+func TestPolicyCheck_ExplicitProjectRootSelectsPolicy(t *testing.T) {
+	selected := setupAuthzSandbox(t, policyAutoBeadClose)
+	cwd := setupAuthzSandbox(t, `version: 1
+rules:
+  - op: bead-close
+    mode: confirm
+  - op: "*"
+    mode: confirm
+`)
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir cwd sandbox: %v", err)
+	}
+
+	out, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicyCheck([]string{"bead-close", "--project-root=" + selected})
+	})
+	if err != nil {
+		t.Fatalf("explicit project policy should auto-allow: %v\nout=%s", err, out)
+	}
+	var got PolicyCheckOutput
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("unmarshal: %v (out=%s)", err, out)
+	}
+	if got.Mode != "auto" || got.PolicyHash == "" || got.PolicyMatch == "" {
+		t.Fatalf("unexpected policy decision: %+v", got)
+	}
+}
+
+func TestPolicyRecord_ExplicitProjectRootOverridesCWD(t *testing.T) {
+	selected := setupAuthzSandbox(t, policyAutoBeadClose)
+	cwd := setupAuthzSandbox(t, policyAutoBeadClose)
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir cwd sandbox: %v", err)
+	}
+
+	err := cmdPolicyRecord([]string{
+		"--project-root=" + selected,
+		"--op=bead-close",
+		"--target=selected-bead",
+		"--agent=test-agent",
+		"--mode=auto",
+	})
+	if err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	countRows := func(root string) int {
+		db, err := sql.Open("sqlite", filepath.Join(root, ".clavain", "intercore.db"))
+		if err != nil {
+			t.Fatalf("open %s: %v", root, err)
+		}
+		defer db.Close()
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM authorizations WHERE target='selected-bead'`).Scan(&count); err != nil {
+			t.Fatalf("count %s: %v", root, err)
+		}
+		return count
+	}
+	if got := countRows(selected); got != 1 {
+		t.Fatalf("selected root rows=%d, want 1", got)
+	}
+	if got := countRows(cwd); got != 0 {
+		t.Fatalf("cwd root rows=%d, want 0", got)
+	}
 }
 
 // policyAutoBeadClose is a minimal valid policy: bead-close auto + catchall confirm.
@@ -258,6 +325,27 @@ rules:
 	}
 	if !strings.Contains(err.Error(), "problem") {
 		t.Errorf("err=%v, want 'problem(s)'", err)
+	}
+}
+
+func TestPolicyLint_ExplicitProjectRootOverridesCWD(t *testing.T) {
+	selected := setupAuthzSandbox(t, policyAutoBeadClose)
+	cwd := setupAuthzSandbox(t, `version: 1
+rules:
+  - op: bead-close
+    mode: auto
+`)
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir cwd sandbox: %v", err)
+	}
+	out, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicyLint([]string{"--project-root=" + selected})
+	})
+	if err != nil {
+		t.Fatalf("lint selected root: %v\nout=%s", err, out)
+	}
+	if !strings.Contains(string(out), "policy lint: OK") {
+		t.Fatalf("unexpected lint output: %s", out)
 	}
 }
 

@@ -33,6 +33,9 @@ if [[ -z "$DB_DIR" || ! -d "$DB_DIR" ]]; then
   exit 1
 fi
 
+gate_resolve_authz_root "$DB_DIR" beads
+gate_require_signer
+
 if ! gate_token_consume bd-push-dolt "$DB_DIR"; then
   exit 1
 fi
@@ -44,6 +47,7 @@ if [[ "${GATE_CONSUMED:-0}" != "1" ]]; then
   rc=0
   gate_check bd-push-dolt "${check_flags[@]}" >/dev/null || rc=$?
   gate_decide_mode "$rc" bd-push-dolt
+  gate_record_signed bd-push-dolt "$DB_DIR" ""
 fi
 
 cd "$DB_DIR"
@@ -55,6 +59,3 @@ if [[ "$status" != "0" ]]; then
   exit "$status"
 fi
 echo "bd-push-dolt: ok"
-
-gate_record bd-push-dolt "$DB_DIR" ""
-gate_sign   bd-push-dolt "$DB_DIR" ""

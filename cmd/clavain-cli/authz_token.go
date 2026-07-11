@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -117,7 +118,7 @@ func cmdPolicyTokenIssue(args []string) error {
 		return err
 	}
 
-	db, _, root, err := openIntercoreDBAndRoot()
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
@@ -137,7 +138,12 @@ func cmdPolicyTokenIssue(args []string) error {
 		IssuedBy: agentID,
 		TTL:      ttl,
 	}
-	tok, opaque, err := authz.IssueToken(db, kp.Priv, spec, now)
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin token issue: %w", err)
+	}
+	defer tx.Rollback()
+	tok, opaque, err := authz.IssueTokenTx(tx, kp.Priv, spec, now)
 	if err != nil {
 		return reportTokenErr(err)
 	}
@@ -148,7 +154,7 @@ func cmdPolicyTokenIssue(args []string) error {
 		"delegate_to": forAgent,
 		"expires_at":  tok.ExpiresAt,
 	}
-	if err := authz.Record(db, authz.RecordArgs{
+	auditID, err := authz.RecordWithID(tx, authz.RecordArgs{
 		OpType:    "authz.token-issue",
 		Target:    tok.ID,
 		AgentID:   agentID,
@@ -156,8 +162,15 @@ func cmdPolicyTokenIssue(args []string) error {
 		Mode:      "auto",
 		Vetting:   vetting,
 		CreatedAt: now,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("audit issue: %w", err)
+	}
+	if err := signAuthorizationByID(tx, kp, auditID, now); err != nil {
+		return fmt.Errorf("sign issue audit: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit token issue: %w", err)
 	}
 
 	fmt.Println(opaque)
@@ -167,8 +180,8 @@ func cmdPolicyTokenIssue(args []string) error {
 // ─── consume ──────────────────────────────────────────────────────────
 
 // cmdPolicyTokenConsume atomically claims a single-use token. The audit
-// record is written inside ConsumeToken's transaction; this handler only
-// emits the sentinel-wrapped unset-env payload for `eval`-consumption.
+// record is written and signed inside the same transaction; this handler emits
+// its structured receipt plus the sentinel-wrapped unset payload.
 //
 //	clavain-cli policy token consume [--token=<str>] --expect-op=<o>
 //	                                 --expect-target=<t>
@@ -195,25 +208,37 @@ func cmdPolicyTokenConsume(args []string) error {
 		return err
 	}
 
-	db, _, root, err := openIntercoreDBAndRoot()
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	pub, err := authz.LoadPubKey(root)
+	kp, err := authz.LoadPrivKey(root)
 	if err != nil {
-		return fmt.Errorf("load pub key: %w", err)
+		return fmt.Errorf("load signing key: %w", err)
 	}
 
 	now := time.Now().Unix()
-	if _, err := authz.ConsumeToken(db, pub, tokenStr, agentID, expectOp, expectTarget, now); err != nil {
+	tok, auditID, err := authz.ConsumeTokenSignedWithAudit(db, kp, tokenStr, agentID, expectOp, expectTarget, now)
+	if err != nil {
 		return reportTokenErr(err)
 	}
 
-	// Sentinel-wrapped unset so `eval "$(clavain-cli policy token consume …)"`
-	// can clear the env var, and a paranoid caller can grep the block and
-	// reject stdout that emits anything between the begin/end markers.
+	receipt, err := json.Marshal(map[string]interface{}{
+		"schema":   1,
+		"status":   "consumed",
+		"op":       tok.OpType,
+		"target":   tok.Target,
+		"audit_id": auditID,
+		"signed":   true,
+	})
+	if err != nil {
+		return fmt.Errorf("encode consume receipt: %w", err)
+	}
+	// The receipt is a shell comment so the complete output remains safe for
+	// the documented eval-clear workflow after a caller validates it.
+	fmt.Printf("# authz-receipt %s\n", receipt)
 	fmt.Println("# authz-unset-begin")
 	fmt.Println("unset CLAVAIN_AUTHZ_TOKEN")
 	fmt.Println("# authz-unset-end")
@@ -245,7 +270,7 @@ func cmdPolicyTokenDelegate(args []string) error {
 		return err
 	}
 
-	db, _, root, err := openIntercoreDBAndRoot()
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
@@ -289,7 +314,7 @@ func cmdPolicyTokenRevoke(args []string) error {
 		return fmt.Errorf("usage: policy token revoke --token=<id> [--cascade] | --issued-since=<duration>")
 	}
 
-	db, _, _, err := openIntercoreDBAndRoot()
+	db, _, _, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
@@ -350,7 +375,7 @@ func cmdPolicyTokenList(args []string) error {
 		filter.Now = time.Now().Unix()
 	}
 
-	db, _, _, err := openIntercoreDBAndRoot()
+	db, _, _, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
@@ -376,7 +401,7 @@ func cmdPolicyTokenShow(args []string) error {
 		return fmt.Errorf("usage: policy token show --token=<id>")
 	}
 
-	db, _, root, err := openIntercoreDBAndRoot()
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
@@ -426,7 +451,7 @@ func cmdPolicyTokenVerify(args []string) error {
 		return reportTokenErr(err)
 	}
 
-	db, _, root, err := openIntercoreDBAndRoot()
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}

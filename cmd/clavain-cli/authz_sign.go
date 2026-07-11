@@ -21,8 +21,8 @@ func projectRootForDB(dbPath string) string {
 }
 
 // openIntercoreDBAndRoot opens the DB and returns (db, dbPath, projectRoot).
-func openIntercoreDBAndRoot() (*sql.DB, string, string, error) {
-	db, path, err := openIntercoreDB()
+func openIntercoreDBAndRoot(flagSets ...map[string]string) (*sql.DB, string, string, error) {
+	db, path, err := openIntercoreDB(flagSets...)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -71,15 +71,24 @@ func cmdPolicyInitKey(args []string) error {
 // ─── policy rotate-key ─────────────────────────────────────────────────
 
 // cmdPolicyRotateKey archives the current keypair under its fingerprint and
-// writes a fresh one at the canonical paths. The archived key remains readable
-// so pre-rotation signatures stay verifiable against its pub file.
+// writes a fresh one at the canonical paths. Rotation is refused once signed
+// history exists because the verifier currently trusts one active public key.
 //
 //	clavain-cli policy rotate-key [--project-root=<path>]
 func cmdPolicyRotateKey(args []string) error {
 	flags := parseAuthzArgs(args)
-	root, err := resolveProjectRoot(flags)
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
-		return err
+		return fmt.Errorf("policy rotate-key: %w", err)
+	}
+	defer db.Close()
+
+	var signedRows int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM authorizations WHERE signature IS NOT NULL`).Scan(&signedRows); err != nil {
+		return fmt.Errorf("policy rotate-key: inspect signed history: %w", err)
+	}
+	if signedRows > 0 {
+		return fmt.Errorf("policy rotate-key: refused: %d signed authorization row(s) depend on the active key; multi-key verification is not implemented", signedRows)
 	}
 
 	newKP, err := authz.GenerateKey()
@@ -111,7 +120,7 @@ func cmdPolicyRotateKey(args []string) error {
 //	                        [--since=<duration>] [--project-root=<path>]
 func cmdPolicySign(args []string) error {
 	flags := parseAuthzArgs(args)
-	db, _, root, err := openIntercoreDBAndRoot()
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
@@ -194,6 +203,120 @@ func cmdPolicySign(args []string) error {
 	})
 }
 
+// cmdPolicyRecordSigned records one authorization decision and signs that
+// exact row in a single transaction. Gate wrappers call this before executing
+// the authorized operation, so an audit failure cannot produce an unaudited
+// irreversible action and matching injected rows are never swept up.
+func cmdPolicyRecordSigned(args []string) error {
+	flags := parseAuthzArgs(args)
+	for _, key := range []string{"op", "target", "agent", "mode"} {
+		if flags[key] == "" {
+			return fmt.Errorf("policy record-signed: missing --%s", key)
+		}
+	}
+	db, _, root, err := openIntercoreDBAndRoot(flags)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	kp, err := authz.LoadPrivKey(root)
+	if err != nil {
+		return fmt.Errorf("policy record-signed: %w", err)
+	}
+
+	now := time.Now().Unix()
+	record := authz.RecordArgs{
+		OpType:         flags["op"],
+		Target:         flags["target"],
+		AgentID:        flags["agent"],
+		BeadID:         flags["bead"],
+		Mode:           flags["mode"],
+		PolicyMatch:    flags["policy-match"],
+		PolicyHash:     flags["policy-hash"],
+		VettedSHA:      flags["vetted-sha"],
+		CrossProjectID: flags["cross-project-id"],
+		CreatedAt:      now,
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("policy record-signed: begin: %w", err)
+	}
+	defer tx.Rollback()
+	id, err := authz.RecordWithID(tx, record)
+	if err != nil {
+		return fmt.Errorf("policy record-signed: record: %w", err)
+	}
+	row := authz.SignRow{
+		ID:             id,
+		OpType:         record.OpType,
+		Target:         record.Target,
+		AgentID:        record.AgentID,
+		BeadID:         record.BeadID,
+		Mode:           record.Mode,
+		PolicyMatch:    record.PolicyMatch,
+		PolicyHash:     record.PolicyHash,
+		VettedSHA:      record.VettedSHA,
+		CrossProjectID: record.CrossProjectID,
+		CreatedAt:      now,
+	}
+	sig, err := authz.Sign(kp.Priv, row)
+	if err != nil {
+		return fmt.Errorf("policy record-signed: sign: %w", err)
+	}
+	result, err := tx.Exec(`UPDATE authorizations SET signature=?, signed_at=? WHERE id=? AND signature IS NULL`, sig, now, id)
+	if err != nil {
+		return fmt.Errorf("policy record-signed: update: %w", err)
+	}
+	if affected, err := result.RowsAffected(); err != nil || affected != 1 {
+		return fmt.Errorf("policy record-signed: signed rows=%d, want 1 (err=%v)", affected, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("policy record-signed: commit: %w", err)
+	}
+	return outputJSON(map[string]interface{}{
+		"status":      "ok",
+		"id":          id,
+		"signed":      1,
+		"fingerprint": authz.KeyFingerprint(kp.Pub),
+	})
+}
+
+type authorizationRowStore interface {
+	QueryRow(query string, args ...interface{}) *sql.Row
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
+func signAuthorizationByID(store authorizationRowStore, kp authz.KeyPair, id string, signedAt int64) error {
+	var row authz.SignRow
+	var existing []byte
+	if err := store.QueryRow(`
+		SELECT id, op_type, target, agent_id, IFNULL(bead_id,''), mode,
+		       IFNULL(policy_match,''), IFNULL(policy_hash,''), IFNULL(vetted_sha,''),
+		       IFNULL(vetting,''), IFNULL(cross_project_id,''), created_at, signature
+		FROM authorizations WHERE id=?`, id,
+	).Scan(&row.ID, &row.OpType, &row.Target, &row.AgentID, &row.BeadID, &row.Mode,
+		&row.PolicyMatch, &row.PolicyHash, &row.VettedSHA, &row.Vetting,
+		&row.CrossProjectID, &row.CreatedAt, &existing); err != nil {
+		return fmt.Errorf("load authorization %s: %w", id, err)
+	}
+	if existing != nil {
+		return fmt.Errorf("authorization %s already signed", id)
+	}
+	sig, err := authz.Sign(kp.Priv, row)
+	if err != nil {
+		return fmt.Errorf("sign authorization %s: %w", id, err)
+	}
+	result, err := store.Exec(`UPDATE authorizations SET signature=?, signed_at=? WHERE id=? AND signature IS NULL`, sig, signedAt, id)
+	if err != nil {
+		return fmt.Errorf("update authorization %s: %w", id, err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil || affected != 1 {
+		return fmt.Errorf("authorization %s signed rows=%d, want 1 (err=%v)", id, affected, err)
+	}
+	return nil
+}
+
 // ─── policy verify ────────────────────────────────────────────────────
 
 // verifyRow is the per-row verify report emitted by cmdPolicyVerify and
@@ -225,7 +348,7 @@ type verifySummary struct {
 //	                          [--project-root=<path>]
 func cmdPolicyVerify(args []string) error {
 	flags := parseAuthzArgs(args)
-	db, _, root, err := openIntercoreDBAndRoot()
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
@@ -379,7 +502,7 @@ func cmdPolicyQuarantine(args []string) error {
 		return fmt.Errorf("policy quarantine: --before-key must be hex (≥8 chars)")
 	}
 
-	db, _, root, err := openIntercoreDBAndRoot()
+	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
 	}
@@ -424,11 +547,10 @@ func cmdPolicyQuarantine(args []string) error {
 // intercore.db walk-up. Used by key-management handlers that don't need the
 // DB open (init-key, rotate-key).
 func resolveProjectRoot(flags map[string]string) (string, error) {
-	if v, ok := flags["project-root"]; ok && v != "" {
-		if _, err := os.Stat(v); err != nil {
-			return "", fmt.Errorf("--project-root %s: %w", v, err)
-		}
-		return v, nil
+	if root, explicit, err := explicitAuthzProjectRoot(flags); err != nil {
+		return "", err
+	} else if explicit {
+		return root, nil
 	}
 	dbPath := findIntercoreDB()
 	if dbPath == "" {
@@ -443,12 +565,7 @@ func resolveProjectRoot(flags map[string]string) (string, error) {
 // maybeAuditVerify is called by cmdPolicyAudit when --verify is passed. It
 // replaces the audit rowset with the verify report and sets an error return
 // when any post-signing row fails.
-func maybeAuditVerify(db *sql.DB, flags map[string]string) error {
-	root := projectRootForDB(findIntercoreDB())
-	if root == "" || root == "." {
-		cwd, _ := os.Getwd()
-		root = cwd
-	}
+func maybeAuditVerify(db *sql.DB, root string, flags map[string]string) error {
 	report, err := runPolicyVerify(db, root, flags)
 	if err != nil {
 		return fmt.Errorf("policy audit --verify: %w", err)
@@ -462,3 +579,89 @@ func maybeAuditVerify(db *sql.DB, flags map[string]string) error {
 	return nil
 }
 
+// cmdPolicyDoctor reports whether an authz domain has a usable database and
+// public trust anchor, and whether this host owns the matching private key.
+// It never emits private-key paths or material.
+//
+//	clavain-cli policy doctor [--project-root=<path>] [--require-signer]
+//	                          [--expected-pub=<fingerprint>]
+func cmdPolicyDoctor(args []string) error {
+	flags := parseAuthzArgs(args)
+	db, dbPath, root, err := openIntercoreDBAndRoot(flags)
+	if err != nil {
+		return fmt.Errorf("policy doctor: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("policy doctor: database unavailable: %w", err)
+	}
+	var schema int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&schema); err != nil {
+		return fmt.Errorf("policy doctor: read schema: %w", err)
+	}
+	if schema != 35 {
+		return fmt.Errorf("policy doctor: unsupported intercore schema %d; require 35", schema)
+	}
+	var quickCheck string
+	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&quickCheck); err != nil {
+		return fmt.Errorf("policy doctor: database quick_check: %w", err)
+	}
+	if quickCheck != "ok" {
+		return fmt.Errorf("policy doctor: database quick_check=%q, want ok", quickCheck)
+	}
+	if _, err := db.Exec(`
+		SELECT id, op_type, target, agent_id, bead_id, mode, policy_match,
+		       policy_hash, vetted_sha, vetting, cross_project_id, created_at,
+		       sig_version, signature, signed_at
+		FROM authorizations LIMIT 0`); err != nil {
+		return fmt.Errorf("policy doctor: authorizations schema invalid: %w", err)
+	}
+	pub, err := authz.LoadPubKey(root)
+	if err != nil {
+		return fmt.Errorf("policy doctor: public key unavailable: %w", err)
+	}
+	fingerprint := authz.KeyFingerprint(pub)
+	if expected := strings.TrimSpace(flags["expected-pub"]); expected != "" && expected != fingerprint {
+		return fmt.Errorf("policy doctor: public key fingerprint %s does not match expected %s", fingerprint, expected)
+	}
+
+	role := "signer"
+	if _, err := authz.LoadPrivKey(root); err != nil {
+		if err == authz.ErrKeyNotFound {
+			role = "verifier"
+		} else {
+			return fmt.Errorf("policy doctor: private key invalid: %w", err)
+		}
+	}
+	if _, required := flags["require-signer"]; required && role != "signer" {
+		return fmt.Errorf("policy doctor: signer required at %s; this host is verifier-only", root)
+	}
+	if role == "signer" {
+		probeTx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("policy doctor: begin write probe: %w", err)
+		}
+		probeID := fmt.Sprintf("doctor-probe-%d", time.Now().UnixNano())
+		_, probeErr := probeTx.Exec(`
+			INSERT INTO authorizations (id, op_type, target, agent_id, mode, created_at, sig_version)
+			VALUES (?, 'policy.doctor-probe', 'rollback', 'clavain-cli:doctor', 'auto', ?, 1)`,
+			probeID, time.Now().Unix())
+		rollbackErr := probeTx.Rollback()
+		if probeErr != nil {
+			return fmt.Errorf("policy doctor: database is not writable: %w", probeErr)
+		}
+		if rollbackErr != nil {
+			return fmt.Errorf("policy doctor: rollback write probe: %w", rollbackErr)
+		}
+	}
+
+	return outputJSON(map[string]interface{}{
+		"status":       "ok",
+		"role":         role,
+		"project_root": root,
+		"database":     dbPath,
+		"schema":       schema,
+		"fingerprint":  fingerprint,
+	})
+}

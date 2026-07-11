@@ -18,18 +18,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 CLAVAIN_ROOT="${ROOT}/os/Clavain"
 INTERCORE_ROOT="${ROOT}/core/intercore"
-CLI_BIN="${CLAVAIN_ROOT}/cmd/clavain-cli/clavain-cli"
-IC_BIN="${INTERCORE_ROOT}/cmd/ic/ic"
 
 export PATH="/usr/local/go/bin:$PATH"
 export GOTOOLCHAIN=local
-
-if [[ ! -x "$CLI_BIN" ]]; then
-  (cd "${CLAVAIN_ROOT}/cmd/clavain-cli" && go build .)
-fi
-if [[ ! -x "$IC_BIN" ]]; then
-  (cd "${INTERCORE_ROOT}" && go build -o cmd/ic/ic ./cmd/ic)
-fi
 
 SANDBOX="$(mktemp -d)"
 cleanup() {
@@ -39,6 +30,14 @@ cleanup() {
   rm -rf "$SANDBOX"
 }
 trap cleanup EXIT
+unset CLAVAIN_AUTHZ_PROJECT_ROOT GATE_AUTHZ_TOKEN
+export GOCACHE="${SANDBOX}/go-build-cache"
+
+mkdir -p "${SANDBOX}/real-bin"
+CLI_BIN="${SANDBOX}/real-bin/clavain-cli"
+IC_BIN="${SANDBOX}/real-bin/ic"
+(cd "${CLAVAIN_ROOT}/cmd/clavain-cli" && go build -o "$CLI_BIN" .)
+(cd "${INTERCORE_ROOT}" && go build -o "$IC_BIN" ./cmd/ic)
 
 # Preserve the real GOMODCACHE so scenario 13's `go test -tags=testfault`
 # reuses the user's mod cache instead of re-downloading into the sandbox
@@ -52,6 +51,10 @@ mkdir -p "$STUB_BIN"
 
 cat > "${STUB_BIN}/bd" <<'STUB'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "show" ]]; then
+  printf '[{"id":"%s","labels":[]}]\n' "${2:-unknown}"
+  exit 0
+fi
 printf 'bd %s\n' "$*" >> "${BD_CALL_LOG:-/dev/null}"
 # Leak-probe: child processes spawned by the wrapper MUST NOT see
 # CLAVAIN_AUTHZ_TOKEN in their env. The wrapper unsets it after a
@@ -377,7 +380,7 @@ PLUGIN_A_ABS="$(cd plugin-a && pwd)"
 # We pass the absolute path in both places for stability.
 TOK14="$(CLAVAIN_AGENT_ID=claude clavain-cli policy token issue --op=ic-publish-patch --target="$PLUGIN_A_ABS" --for=claude --ttl=5m)"
 TID14="$(echo "$TOK14" | cut -d. -f1)"
-env CLAVAIN_AGENT_ID=claude CLAVAIN_AUTHZ_TOKEN="$TOK14" \
+env CLAVAIN_AGENT_ID=claude CLAVAIN_AUTHZ_TOKEN="$TOK14" CLAVAIN_AUTHZ_PROJECT_ROOT="$SANDBOX" \
   bash "${CLAVAIN_ROOT}/scripts/gates/ic-publish-patch.sh" "$PLUGIN_A_ABS" --patch >/dev/null 2>/tmp/v2e2e.s14.err \
   || { cat /tmp/v2e2e.s14.err >&2; fail 14 "ic-publish-patch wrapper failed"; }
 via="$(dbq "SELECT json_extract(vetting, '\$.via') FROM authorizations WHERE op_type='ic-publish-patch' AND json_extract(vetting, '\$.token_id')='${TID14}'")"
@@ -403,7 +406,7 @@ PLUGIN_B_ABS="$(cd plugin-b && pwd)"
 
 TOK15="$(CLAVAIN_AGENT_ID=claude clavain-cli policy token issue --op=ic-publish-patch --target="$PLUGIN_A_ABS" --for=claude --ttl=5m)"
 set +e
-env CLAVAIN_AGENT_ID=claude CLAVAIN_AUTHZ_TOKEN="$TOK15" \
+env CLAVAIN_AGENT_ID=claude CLAVAIN_AUTHZ_TOKEN="$TOK15" CLAVAIN_AUTHZ_PROJECT_ROOT="$SANDBOX" \
   bash "${CLAVAIN_ROOT}/scripts/gates/ic-publish-patch.sh" "$PLUGIN_B_ABS" --patch >/tmp/v2e2e.s15.out 2>/tmp/v2e2e.s15.err
 rc=$?
 set -e
@@ -415,7 +418,7 @@ echo "PASS scenario 15: publish token wrong target → wrapper hard-fails"
 # ─── Scenario 16: publish token wrong agent → exit 4 ──────────────────
 TOK16="$(CLAVAIN_AGENT_ID=claude clavain-cli policy token issue --op=ic-publish-patch --target="$PLUGIN_A_ABS" --for=claude --ttl=5m)"
 set +e
-env CLAVAIN_AGENT_ID=codex CLAVAIN_AUTHZ_TOKEN="$TOK16" \
+env CLAVAIN_AGENT_ID=codex CLAVAIN_AUTHZ_TOKEN="$TOK16" CLAVAIN_AUTHZ_PROJECT_ROOT="$SANDBOX" \
   bash "${CLAVAIN_ROOT}/scripts/gates/ic-publish-patch.sh" "$PLUGIN_A_ABS" --patch >/tmp/v2e2e.s16.out 2>/tmp/v2e2e.s16.err
 rc=$?
 set -e

@@ -1,8 +1,10 @@
 # Auto-proceed gate wrappers
 
-Wrappers around irreversible ops that consult `clavain-cli policy-check`
-before running the underlying command and `clavain-cli policy record`
-after. See `docs/canon/policy-merge.md` for merge semantics.
+Wrappers around irreversible ops that resolve one explicit authorization
+domain, require a ready signer, consult `clavain-cli policy check`, and write a
+signed audit row before the operation. Safety parsing requires `jq`; wrappers
+fail before the operation when it is missing or unusable. See
+`docs/canon/policy-merge.md` for merge semantics.
 
 ## Installation
 
@@ -22,7 +24,7 @@ the wrappers over raw `bd close` / `git push` / `ic publish --patch` /
 | Op                 | Script                    | Underlying command              |
 |--------------------|---------------------------|---------------------------------|
 | `bead-close`       | `bead-close.sh`           | `bd close <bead-id>`            |
-| `git-push-main`    | `git-push-main.sh`        | `git push origin main`          |
+| `git-push-main`    | `git-push-main.sh`        | Push authorized SHA to main     |
 | `bd-push-dolt`     | `bd-push-dolt.sh`         | `dolt push origin main`         |
 | `ic-publish-patch` | `ic-publish-patch.sh`     | `ic publish --patch <plugin>`   |
 
@@ -34,6 +36,7 @@ vetting context that the wrappers forward to `policy check`:
 | Env var                       | Meaning                                        |
 |-------------------------------|------------------------------------------------|
 | `CLAVAIN_AGENT_ID`            | Identity for the `--agent` audit field         |
+| `CLAVAIN_AUTHZ_PROJECT_ROOT`  | Explicit DB, policy, and signing-key owner      |
 | `CLAVAIN_VETTED_AT`           | Unix seconds when tests last passed            |
 | `CLAVAIN_VETTED_SHA`          | HEAD SHA when tests last passed                |
 | `CLAVAIN_TESTS_PASSED=1`      | Tests passed for the latest vetted snapshot    |
@@ -43,6 +46,11 @@ Missing vars are absent at check time, which will fail `requires` that
 demand those signals — the wrapper then falls back to confirm or block
 per policy.
 
+Root resolution is stable for the whole operation: an explicit
+`CLAVAIN_AUTHZ_PROJECT_ROOT` wins, then the active `BEADS_DIR`/`bd context`
+repo, then the target Git root. `policy doctor --require-signer` runs before
+proof-state writes, token consumption, or the irreversible command.
+
 ## Registry
 
 Each wrapper has a companion marker in `.clavain/gates/<op>.gate` at
@@ -51,7 +59,8 @@ declared op has no matching rule (and no catchall) in the merged policy.
 
 ## TOCTOU
 
-The policy hash emitted by `policy check` is pinned and passed through
-to `policy record`. If the YAML changes between check and record, the
-record still captures the hash used for the actual decision, which the
-audit can flag later.
+The policy hash emitted by `policy check` is pinned and passed through to the
+atomic `policy record-signed` call. Git pushes also pin the resolved source
+commit, normalized destination ref, and configured push URL set, then push the
+immutable authorized SHA. If any signed precondition changes, the wrapper
+refuses before the underlying command.
