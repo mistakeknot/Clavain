@@ -20,7 +20,7 @@ def test_runtime_close_gate_verifies_and_persists_before_token_consumption(proje
     required = script.index('runtime-evidence required "$BEAD_ID"')
     verify = script.index('runtime-evidence verify "$BEAD_ID"')
     completed = script.index('run status "$runtime_run_id"')
-    persist = script.index('runtime_evidence_summary=$runtime_summary')
+    persist = script.index('runtime_evidence_schema=$runtime_schema')
     consume = script.index("gate_token_consume bead-close")
 
     assert required < verify < completed < persist < consume

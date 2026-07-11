@@ -127,13 +127,25 @@ EOF
   run bash "$TEST_ROOT/scripts/gates/bead-close.sh" runtime-bead shipped
 
   [ "$status" -eq 0 ]
-  grep -q '^bd:set-state runtime-bead runtime_evidence_summary=' "$CALL_LOG"
+  [ "$(grep -c '^bd:set-state runtime-bead runtime_evidence_' "$CALL_LOG")" -eq 6 ]
+  grep -q '^bd:set-state runtime-bead runtime_evidence_proof_hash=sha256:a\{64\} ' "$CALL_LOG"
+  grep -q '^bd:set-state runtime-bead runtime_evidence_run_id=run-proof ' "$CALL_LOG"
+  grep -q '^bd:set-state runtime-bead runtime_evidence_git_head=b\{40\} ' "$CALL_LOG"
+  grep -q '^bd:set-state runtime-bead runtime_evidence_verified_at=2026-07-11T12:00:00Z ' "$CALL_LOG"
+  grep -q '^bd:set-state runtime-bead runtime_evidence_host_fingerprint=sha256:c\{64\} ' "$CALL_LOG"
+  grep -q '^bd:set-state runtime-bead runtime_evidence_schema=1 ' "$CALL_LOG"
+  ! grep -q '^bd:set-state runtime-bead runtime_evidence_summary=' "$CALL_LOG"
+  while IFS= read -r state_call; do
+    state_value="${state_call#bd:set-state runtime-bead }"
+    state_value="${state_value%% --reason=*}"
+    [ "${#state_value}" -le 200 ]
+  done < <(grep '^bd:set-state runtime-bead runtime_evidence_' "$CALL_LOG")
   grep -q '^bd:close runtime-bead --reason=shipped$' "$CALL_LOG"
 
   required_line=$(grep -n '^clavain-cli:runtime-evidence required runtime-bead$' "$CALL_LOG" | cut -d: -f1)
   verify_line=$(grep -n '^clavain-cli:runtime-evidence verify runtime-bead$' "$CALL_LOG" | cut -d: -f1)
   status_line=$(grep -n '^ic:--json run status run-proof$' "$CALL_LOG" | cut -d: -f1)
-  persist_line=$(grep -n '^bd:set-state runtime-bead runtime_evidence_summary=' "$CALL_LOG" | cut -d: -f1)
+  persist_line=$(grep -n '^bd:set-state runtime-bead runtime_evidence_schema=1 ' "$CALL_LOG" | cut -d: -f1)
   consume_line=$(grep -n 'policy token consume' "$CALL_LOG" | cut -d: -f1)
   close_line=$(grep -n '^bd:close runtime-bead --reason=shipped$' "$CALL_LOG" | cut -d: -f1)
 

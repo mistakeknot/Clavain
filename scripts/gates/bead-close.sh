@@ -83,8 +83,30 @@ case "$runtime_required" in
       exit 1
     fi
 
-    bd set-state "$BEAD_ID" "runtime_evidence_summary=$runtime_summary" \
-      --reason="Verified installed runtime before close"
+    runtime_schema="$(jq -er '.schema_version | tostring' <<<"$runtime_summary")"
+    runtime_proof_hash="$(jq -er '.proof_hash' <<<"$runtime_summary")"
+    runtime_git_head="$(jq -er '.git_head' <<<"$runtime_summary")"
+    runtime_verified_at="$(jq -er '.verified_at' <<<"$runtime_summary")"
+    runtime_host_fingerprint="$(jq -er '.host_fingerprint' <<<"$runtime_summary")"
+
+    # Beads state is label-backed and truncates long values. Persist bounded
+    # fields separately, writing the schema marker last as the completion bit.
+    runtime_state_pairs=(
+      "runtime_evidence_proof_hash=$runtime_proof_hash"
+      "runtime_evidence_run_id=$runtime_run_id"
+      "runtime_evidence_git_head=$runtime_git_head"
+      "runtime_evidence_verified_at=$runtime_verified_at"
+      "runtime_evidence_host_fingerprint=$runtime_host_fingerprint"
+      "runtime_evidence_schema=$runtime_schema"
+    )
+    for runtime_state in "${runtime_state_pairs[@]}"; do
+      if (( ${#runtime_state} > 200 )); then
+        echo "runtime-evidence: durable state field exceeds the safe Beads label size" >&2
+        exit 1
+      fi
+      bd set-state "$BEAD_ID" "$runtime_state" \
+        --reason="Verified installed runtime before close"
+    done
     ;;
   false) ;;
   *)

@@ -143,6 +143,16 @@ _valid_summary() {
     '{schema_version:1,proof_hash:("sha256:" + ("a" * 64)),run_id:$run_id,git_head:("b" * 40),verified_at:$verified_at,host_fingerprint:("sha256:" + $host_hash)}'
 }
 
+_write_summary_states() {
+  local bead_id="$1" summary="$2"
+  _write_state "$bead_id" "runtime_evidence_schema" "$(jq -r '.schema_version' <<<"$summary")"
+  _write_state "$bead_id" "runtime_evidence_proof_hash" "$(jq -r '.proof_hash' <<<"$summary")"
+  _write_state "$bead_id" "runtime_evidence_run_id" "$(jq -r '.run_id' <<<"$summary")"
+  _write_state "$bead_id" "runtime_evidence_git_head" "$(jq -r '.git_head' <<<"$summary")"
+  _write_state "$bead_id" "runtime_evidence_verified_at" "$(jq -r '.verified_at' <<<"$summary")"
+  _write_state "$bead_id" "runtime_evidence_host_fingerprint" "$(jq -r '.host_fingerprint' <<<"$summary")"
+}
+
 @test "runtime evidence audit reports an active labeled bead with no bound run" {
   _write_beads '[{"id":"bead-missing","status":"in_progress","labels":["close-gate:runtime-evidence"]}]'
   _write_scope "bead-missing" '[]'
@@ -229,17 +239,21 @@ _valid_summary() {
 @test "runtime evidence audit reports closed beads with missing or malformed durable summaries" {
   _write_beads '[
     {"id":"bead-closed-missing","status":"closed","labels":["close-gate:runtime-evidence"]},
-    {"id":"bead-closed-malformed","status":"closed","labels":["close-gate:runtime-evidence"]}
+    {"id":"bead-closed-malformed","status":"closed","labels":["close-gate:runtime-evidence"]},
+    {"id":"bead-closed-partial","status":"closed","labels":["close-gate:runtime-evidence"]}
   ]'
   _write_state "bead-closed-missing" "ic_run_id" "run-closed-missing"
   _write_state "bead-closed-malformed" "ic_run_id" "run-closed-malformed"
   _write_state "bead-closed-malformed" "runtime_evidence_summary" '{"schema_version":1,"run_id":"wrong-run"}'
+  _write_state "bead-closed-partial" "ic_run_id" "run-closed-partial"
+  _write_state "bead-closed-partial" "runtime_evidence_proof_hash" "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
   _run_fixture
 
   [ "$status" -eq 1 ]
   _assert_finding "durable_summary_missing" "bead-closed-missing"
   _assert_finding "durable_summary_malformed" "bead-closed-malformed"
+  _assert_finding "durable_summary_malformed" "bead-closed-partial"
   [ "$(grep -c '^ic:' "$AUDIT_CALL_LOG" || true)" -eq 0 ]
   [ "$(grep -c '^clavain-cli:' "$AUDIT_CALL_LOG" || true)" -eq 0 ]
 }
@@ -253,8 +267,9 @@ _valid_summary() {
     {"id":"bead-remote-history","status":"closed","labels":["close-gate:runtime-evidence"]}
   ]'
   _write_state "bead-local-history" "ic_run_id" "run-local-history"
-  _write_state "bead-local-history" "runtime_evidence_summary" "$local_summary"
+  _write_summary_states "bead-local-history" "$local_summary"
   _write_state "bead-remote-history" "ic_run_id" "run-remote-history"
+  # Legacy single-value summaries remain readable for trackers without label limits.
   _write_state "bead-remote-history" "runtime_evidence_summary" "$remote_summary"
 
   _run_fixture

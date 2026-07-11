@@ -118,6 +118,50 @@ summary_valid() {
   ' >/dev/null 2>&1 <<<"$summary"
 }
 
+read_durable_summary() {
+  local bead_id="$1" schema proof_hash run_id git_head verified_at host_fingerprint present=0
+  schema="$(read_state "$bead_id" runtime_evidence_schema)" || return 1
+  proof_hash="$(read_state "$bead_id" runtime_evidence_proof_hash)" || return 1
+  run_id="$(read_state "$bead_id" runtime_evidence_run_id)" || return 1
+  git_head="$(read_state "$bead_id" runtime_evidence_git_head)" || return 1
+  verified_at="$(read_state "$bead_id" runtime_evidence_verified_at)" || return 1
+  host_fingerprint="$(read_state "$bead_id" runtime_evidence_host_fingerprint)" || return 1
+
+  [[ -n "$schema" ]] && present=$((present + 1))
+  [[ -n "$proof_hash" ]] && present=$((present + 1))
+  [[ -n "$run_id" ]] && present=$((present + 1))
+  [[ -n "$git_head" ]] && present=$((present + 1))
+  [[ -n "$verified_at" ]] && present=$((present + 1))
+  [[ -n "$host_fingerprint" ]] && present=$((present + 1))
+
+  if [[ "$present" -eq 6 ]]; then
+    jq -cn \
+      --arg schema "$schema" \
+      --arg proof_hash "$proof_hash" \
+      --arg run_id "$run_id" \
+      --arg git_head "$git_head" \
+      --arg verified_at "$verified_at" \
+      --arg host_fingerprint "$host_fingerprint" \
+      '{
+        schema_version: (try ($schema | tonumber) catch $schema),
+        proof_hash: $proof_hash,
+        run_id: $run_id,
+        git_head: $git_head,
+        verified_at: $verified_at,
+        host_fingerprint: $host_fingerprint
+      }'
+    return
+  fi
+  if [[ "$present" -gt 0 ]]; then
+    printf '{}'
+    return
+  fi
+
+  # Backward compatibility for trackers whose state backend can retain the
+  # original single-value JSON summary.
+  read_state "$bead_id" runtime_evidence_summary
+}
+
 run_is_bound() {
   local run_json="$1" bead_id="$2"
   jq -e --arg bead "$bead_id" --arg requirement "$ARTIFACT_TYPE" '
@@ -170,7 +214,7 @@ while IFS= read -r bead_json; do
   # receipt path or apply the live freshness window after the bead is closed.
   if [[ "$bead_status" == "closed" ]]; then
     durable_summary=""
-    if ! durable_summary="$(read_state "$bead_id" runtime_evidence_summary)"; then
+    if ! durable_summary="$(read_durable_summary "$bead_id")"; then
       add_finding "durable_summary_malformed" "error" "$bead_id" "$linked_run_id" \
         "The closed bead's durable runtime proof summary cannot be read." \
         "Restore the sanitized close summary from canonical tracker history."
