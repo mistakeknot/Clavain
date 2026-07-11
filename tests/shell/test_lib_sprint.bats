@@ -635,7 +635,7 @@ MOCKEOF
     assert_output "reflect"
 
     run sprint_next_step "reflect"
-    assert_output "done"
+    assert_output "ship"
 
     run sprint_next_step "done"
     assert_output "done"
@@ -651,6 +651,39 @@ MOCKEOF
 
     run sprint_next_step "garbage"
     assert_output "brainstorm"
+}
+
+@test "sprint_next_step routes reflected sprint with local artifact to terminal ship" {
+    _source_sprint_lib
+    local reflection="$TEST_PROJECT/reflection.md"
+    printf 'reflection\n' > "$reflection"
+    export CLAVAIN_BEAD_ID="iv-reflected"
+    bd() {
+        case "$3" in
+            artifact_reflection) printf '%s\n' "$reflection" ;;
+            ic_run_id) return 1 ;;
+        esac
+    }
+    export reflection
+
+    run sprint_next_step "reflect"
+    assert_success
+    assert_output "ship"
+}
+
+@test "sprint_next_step repeats reflection for stale artifact registration" {
+    _source_sprint_lib
+    export CLAVAIN_BEAD_ID="iv-reflected"
+    bd() {
+        case "$3" in
+            artifact_reflection) printf '%s\n' "$TEST_PROJECT/missing.md" ;;
+            ic_run_id) return 1 ;;
+        esac
+    }
+
+    run sprint_next_step "reflect"
+    assert_success
+    assert_output "reflect"
 }
 
 # ═══════════════════════════════════════════════════════════════════

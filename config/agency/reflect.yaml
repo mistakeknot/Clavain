@@ -1,10 +1,10 @@
 # Agency spec: Reflect stage
 # Phases: reflect, done
-# Purpose: Capture learnings, close sprint
+# Purpose: Capture learnings before terminal shipping
 
 meta:
   stage: reflect
-  description: Capture learnings, close sprint
+  description: Capture learnings before terminal shipping
   phases: [reflect, done]
 
 agents:
@@ -12,7 +12,7 @@ agents:
     command: /clavain:reflect
     mode: interactive
     priority: 0
-    description: Capture sprint learnings and advance to done
+    description: Capture sprint learnings; terminal shipping advances to done
 
 models:
   reflect:

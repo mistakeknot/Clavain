@@ -164,7 +164,7 @@ bash_cli() {
         [plan-reviewed]="work"
         [executing]="quality-gates"
         [shipping]="reflect"
-        [reflect]="done"
+        [reflect]="ship"
         [done]="done"
     )
 

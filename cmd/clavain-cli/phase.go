@@ -34,7 +34,7 @@ func nextStep(phase string) string {
 	case pkgphase.LegacyShipping:
 		return "reflect"
 	case pkgphase.Reflect:
-		return "done"
+		return "ship"
 	case pkgphase.Done:
 		return "done"
 	default:
@@ -59,7 +59,7 @@ func commandToStep(cmd string) string {
 	case "/clavain:quality-gates":
 		return "quality-gates"
 	case "/clavain:resolve":
-		return "ship"
+		return "resolve"
 	case "/reflect", "/clavain:reflect":
 		return "reflect"
 	default:
@@ -80,6 +80,10 @@ func cmdSprintNextStep(args []string) error {
 
 	// Try kernel action list if bead ID is available
 	beadID := os.Getenv("CLAVAIN_BEAD_ID")
+	if phase == pkgphase.Reflect && beadID != "" {
+		fmt.Println(reflectionResumeStep(beadID, artifactPathForBead))
+		return nil
+	}
 	if beadID != "" {
 		runID, err := resolveRunID(beadID)
 		if err == nil && runID != "" {
@@ -99,6 +103,18 @@ func cmdSprintNextStep(args []string) error {
 	// Fallback: static phase->step mapping
 	fmt.Println(nextStep(phase))
 	return nil
+}
+
+func reflectionResumeStep(beadID string, lookup func(string, string) (string, error)) string {
+	path, err := lookup(beadID, "reflection")
+	if err != nil || path == "" {
+		return "reflect"
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return "reflect"
+	}
+	return "ship"
 }
 
 // cmdSprintAdvance advances a sprint to the next phase.
@@ -496,7 +512,15 @@ func cmdGetArtifact(args []string) error {
 	}
 	beadID := args[0]
 	artifactType := args[1]
+	path, err := artifactPathForBead(beadID, artifactType)
+	if err != nil {
+		return err
+	}
+	fmt.Println(path)
+	return nil
+}
 
+func artifactPathForBead(beadID, artifactType string) (string, error) {
 	// Try ic first (if run exists)
 	runID, err := resolveRunID(beadID)
 	if err == nil {
@@ -509,8 +533,7 @@ func cmdGetArtifact(args []string) error {
 					if a.Status != "" && a.Status != "active" {
 						continue
 					}
-					fmt.Println(a.Path)
-					return nil
+					return a.Path, nil
 				}
 			}
 		}
@@ -522,13 +545,12 @@ func cmdGetArtifact(args []string) error {
 		if err == nil {
 			path := strings.TrimSpace(string(out))
 			if path != "" && !strings.HasPrefix(path, "(no") {
-				fmt.Println(path)
-				return nil
+				return path, nil
 			}
 		}
 	}
 
-	return fmt.Errorf("no artifact of type %q found for %s", artifactType, beadID)
+	return "", fmt.Errorf("no artifact of type %q found for %s", artifactType, beadID)
 }
 
 // cmdRecordPhase records phase completion — just invalidates caches.

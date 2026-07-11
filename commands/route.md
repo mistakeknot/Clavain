@@ -25,11 +25,11 @@ sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count
 
 - **0 sprints** → Step 2.
 - **1 sprint** → auto-resume:
-  a. Read: `sprint_id=$(echo "$active_sprints"|jq -r '.[0].id')`, `clavain-cli sprint-read-state "$sprint_id"`
+  a. Read: `sprint_id=$(echo "$active_sprints"|jq -r '.[0].id')`, `sprint_state=$(clavain-cli sprint-read-state "$sprint_id")`, `sprint_phase=$(echo "$sprint_state"|jq -r '.phase // ""')`
   b. Claim: `clavain-cli sprint-claim "$sprint_id" "$CLAUDE_SESSION_ID"` (fail→offer force-claim or fresh)
   c. `CLAVAIN_BEAD_ID="$sprint_id"`, run token-attribution
   d. Checkpoint: `clavain-cli checkpoint-read`. If SHA changed→AskUserQuestion(resume/restart/re-plan). Clean→use steps silently.
-  e. Route by `clavain-cli sprint-next-step`: brainstorm→`/sprint`, strategy→`/sprint --from-step strategy`, write-plan→`/sprint --from-step plan`, work→`/clavain:work`, ship→`/clavain:quality-gates`, reflect→`/clavain:reflect`, done→tell user. Display: `Resuming sprint <id> — <title>`. **Stop.**
+  e. If `sprint_phase=reflect`, read `reflection=$(clavain-cli get-artifact "$sprint_id" "reflection" 2>/dev/null) || reflection=""`; `[[ -n "$reflection" && -f "$reflection" ]]` routes to `/clavain:sprint --from-step ship`, otherwise route to `/clavain:reflect`. For every other phase, route by `clavain-cli sprint-next-step`: brainstorm→`/sprint`, strategy→`/sprint --from-step strategy`, write-plan→`/sprint --from-step plan`, work→`/clavain:work`, resolve→`/clavain:resolve`, ship→`/clavain:sprint --from-step ship`, reflect→`/clavain:reflect`, done→tell user. Display: `Resuming sprint <id> — <title>`. **Stop.**
 - **Multiple** → AskUserQuestion sorted by recency: `"Resume <id> — <title> (phase, last active)"`. Include "Start fresh".
 
 ## Step 2: Parse Arguments

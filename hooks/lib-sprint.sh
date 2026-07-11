@@ -1143,8 +1143,37 @@ enforce_gate() {
 # Determine the next command for a sprint based on its current phase.
 # Maps current phase → command that handles the next action.
 # Phase chain lives in ic (passed at creation time). This just maps phases to commands.
+_sprint_reflection_resume_step() {
+    local bead_id="$1" reflection="" run_id="" artifacts=""
+
+    run_id=$(_sprint_resolve_run_id "$bead_id" 2>/dev/null) || run_id=""
+    if [[ -n "$run_id" ]] && intercore_available && command -v jq &>/dev/null; then
+        artifacts=$("$INTERCORE_BIN" run artifact list "$run_id" --json 2>/dev/null) || artifacts="[]"
+        reflection=$(echo "$artifacts" | jq -r '
+            [.[] | select(.type == "reflection" and ((.status // "active") == "active"))]
+            | last | .path // ""' 2>/dev/null) || reflection=""
+    fi
+    if [[ -z "$reflection" ]] && command -v bd &>/dev/null; then
+        reflection=$(bd state "$bead_id" artifact_reflection 2>/dev/null) || reflection=""
+        [[ "$reflection" == \(no\ * || "$reflection" == "null" ]] && reflection=""
+    fi
+
+    if [[ -n "$reflection" && -f "$reflection" ]]; then
+        echo "ship"
+    else
+        echo "reflect"
+    fi
+}
+
 sprint_next_step() {
     local phase="$1"
+
+    # Reflection capture is intentionally non-terminal. Once its artifact is
+    # local, resume at Step 10 before consulting the phase's /reflect action.
+    if [[ "$phase" == "reflect" && -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+        _sprint_reflection_resume_step "$CLAVAIN_BEAD_ID"
+        return 0
+    fi
 
     # Query kernel for registered phase actions (if run exists)
     if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
@@ -1169,7 +1198,7 @@ sprint_next_step() {
                         /interflux:flux-review)    echo "flux-review" ;;
                         /clavain:work)             echo "work" ;;
                         /clavain:quality-gates)    echo "quality-gates" ;;
-                        /clavain:resolve)          echo "ship" ;;
+                        /clavain:resolve)          echo "resolve" ;;
                         /reflect|/clavain:reflect) echo "reflect" ;;
                         *)                         echo "$cmd" ;;
                     esac
@@ -1190,7 +1219,7 @@ sprint_next_step() {
         plan-reviewed)       echo "work" ;;
         executing)           echo "quality-gates" ;;
         shipping)            echo "reflect" ;;
-        reflect)             echo "done" ;;
+        reflect)             echo "ship" ;;
         done)                echo "done" ;;
         *)                   echo "brainstorm" ;;
     esac

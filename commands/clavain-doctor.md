@@ -282,7 +282,54 @@ if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
 fi
 ```
 
-### 3d. Calibration Stage Maturity
+### 3d. Runtime Evidence Reconciliation
+
+Run the complete read-only reconciliation for every bead marked with the
+installed-runtime close gate. Findings retain the audit command's exit status;
+doctor never converts a failed or incomplete audit into a pass.
+
+```bash
+_runtime_audit=""
+for _candidate in \
+  scripts/runtime-evidence-audit.sh \
+  os/Clavain/scripts/runtime-evidence-audit.sh \
+  "${CLAUDE_PLUGIN_ROOT:-}/scripts/runtime-evidence-audit.sh"; do
+  if [ -f "$_candidate" ]; then _runtime_audit="$_candidate"; break; fi
+done
+if [ -z "$_runtime_audit" ]; then
+  _runtime_audit=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/runtime-evidence-audit.sh' 2>/dev/null | sort -V | tail -1)
+fi
+
+if [ -z "$_runtime_audit" ]; then
+  echo "runtime evidence audit: WARN (runtime-evidence-audit.sh not found)"
+else
+  if _audit_json=$(bash "$_runtime_audit" --json 2>/dev/null); then
+    _audit_rc=0
+  else
+    _audit_rc=$?
+  fi
+  if ! echo "$_audit_json" | jq -e '.schema_version == 1 and (.supported | type == "boolean") and (.findings | type == "array")' >/dev/null 2>&1; then
+    echo "runtime evidence audit: FAIL (malformed audit output, rc=$_audit_rc)"
+  elif [ "$_audit_rc" -gt 1 ]; then
+    echo "runtime evidence audit: FAIL (audit could not complete, rc=$_audit_rc)"
+  elif [ "$(echo "$_audit_json" | jq -r '.supported')" != "true" ]; then
+    echo "runtime evidence audit: WARN ($(echo "$_audit_json" | jq -r '.reason // "unsupported"'))"
+  else
+    _audit_count=$(echo "$_audit_json" | jq '.findings | length')
+    _audit_errors=$(echo "$_audit_json" | jq '[.findings[] | select(.severity == "error")] | length')
+    if [ "$_audit_rc" -eq 0 ] && [ "$_audit_count" -eq 0 ]; then
+      echo "runtime evidence audit: PASS"
+    elif [ "$_audit_errors" -gt 0 ]; then
+      echo "runtime evidence audit: FAIL ($_audit_count finding(s), rc=$_audit_rc)"
+    else
+      echo "runtime evidence audit: WARN ($_audit_count finding(s))"
+    fi
+    echo "$_audit_json" | jq -r '.findings[] | "  - [\(.severity)] \(.bead_id): \(.code) — \(.message)"'
+  fi
+fi
+```
+
+### 3e. Calibration Stage Maturity
 
 ```bash
 _stages_file="docs/calibration-stages.yaml"

@@ -72,3 +72,26 @@ def test_children_raw_close_is_preceded_by_runtime_requirement_guard(project_roo
         assert section.count('runBD("close"') == 1
         assert "runtimeEvidenceAutoCloseAllowed" in section
         assert section.index("runtimeEvidenceAutoCloseAllowed") < section.index('runBD("close"')
+
+
+def test_reflected_sprint_resumes_at_terminal_ship_step(project_root):
+    route = _read(project_root, "commands/route.md")
+    reflect_spec = _read(project_root, "config/agency/reflect.yaml")
+
+    assert 'get-artifact "$sprint_id" "reflection"' in route
+    assert '[[ -n "$reflection" && -f "$reflection" ]]' in route
+    assert "/clavain:sprint --from-step ship" in route
+    assert "resolve→`/clavain:resolve`" in route
+    assert "advance to done" not in reflect_spec
+
+
+def test_doctor_runs_full_runtime_evidence_audit(project_root):
+    doctor = _read(project_root, "commands/clavain-doctor.md")
+
+    assert "scripts/runtime-evidence-audit.sh" in doctor
+    assert '"$_runtime_audit" --json' in doctor
+    assert "runtime evidence audit: PASS" in doctor
+    assert "runtime evidence audit: FAIL" in doctor
+    rc_failure = doctor.index('elif [ "$_audit_rc" -gt 1 ]')
+    unsupported = doctor.index('elif [ "$(echo "$_audit_json" | jq -r \'.supported\')" != "true" ]')
+    assert rc_failure < unsupported

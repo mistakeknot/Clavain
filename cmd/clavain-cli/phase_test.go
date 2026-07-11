@@ -18,7 +18,7 @@ func TestNextStep(t *testing.T) {
 		{"plan-reviewed", "work"},
 		{"executing", "quality-gates"},
 		{"shipping", "reflect"},
-		{"reflect", "done"},
+		{"reflect", "ship"},
 		{"done", "done"},
 		{"unknown", "brainstorm"},
 		{"", "brainstorm"},
@@ -65,7 +65,7 @@ func TestCommandToStep(t *testing.T) {
 		{"/interflux:flux-drive", "flux-drive"},
 		{"/clavain:work", "work"},
 		{"/clavain:quality-gates", "quality-gates"},
-		{"/clavain:resolve", "ship"},
+		{"/clavain:resolve", "resolve"},
 		{"/reflect", "reflect"},
 		{"/clavain:reflect", "reflect"},
 		{"/custom:command", "/custom:command"},
@@ -75,6 +75,52 @@ func TestCommandToStep(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("commandToStep(%q) = %q, want %q", tt.cmd, got, tt.want)
 		}
+	}
+}
+
+func TestReflectionResumeStep(t *testing.T) {
+	reflection := filepath.Join(t.TempDir(), "reflection.md")
+	if err := os.WriteFile(reflection, []byte("reflection\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		lookup func(string, string) (string, error)
+		want   string
+	}{
+		{
+			name: "registered local artifact resumes terminal shipping",
+			lookup: func(beadID, artifactType string) (string, error) {
+				if beadID != "iv-test" || artifactType != "reflection" {
+					t.Fatalf("lookup arguments = %q/%q", beadID, artifactType)
+				}
+				return reflection, nil
+			},
+			want: "ship",
+		},
+		{
+			name: "missing registration repeats reflection",
+			lookup: func(string, string) (string, error) {
+				return "", os.ErrNotExist
+			},
+			want: "reflect",
+		},
+		{
+			name: "stale registration repeats reflection",
+			lookup: func(string, string) (string, error) {
+				return filepath.Join(t.TempDir(), "missing.md"), nil
+			},
+			want: "reflect",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := reflectionResumeStep("iv-test", tt.lookup); got != tt.want {
+				t.Fatalf("reflectionResumeStep() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
