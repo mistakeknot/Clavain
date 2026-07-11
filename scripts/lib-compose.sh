@@ -83,21 +83,36 @@ compose_warn_if_expected() {
 }
 
 _compose_find_cli() {
-    # 1. Plugin cache (Claude Code sessions)
-    local candidate="${CLAUDE_PLUGIN_ROOT:-}/bin/clavain-cli-go"
-    [[ -x "$candidate" ]] && { echo "$candidate"; return 0; }
+    local root candidate
+    for root in "${CLAUDE_PLUGIN_ROOT:-}" "${CLAVAIN_DIR:-}" "${CLAVAIN_SOURCE_DIR:-}"; do
+        [[ -n "$root" ]] || continue
+        candidate=$(_compose_cli_from_root "$root") || continue
+        echo "$candidate"
+        return 0
+    done
 
-    # 2. CLAVAIN_DIR (installed)
-    candidate="${CLAVAIN_DIR:-}/bin/clavain-cli-go"
-    [[ -x "$candidate" ]] && { echo "$candidate"; return 0; }
-
-    # 3. CLAVAIN_SOURCE_DIR (dev)
-    candidate="${CLAVAIN_SOURCE_DIR:-}/bin/clavain-cli-go"
-    [[ -x "$candidate" ]] && { echo "$candidate"; return 0; }
-
-    # 4. PATH
+    # PATH
+    command -v clavain-cli 2>/dev/null && return 0
     command -v clavain-cli-go 2>/dev/null && return 0
 
+    return 1
+}
+
+_compose_cli_from_root() {
+    local root="$1" os_name arch_name candidate
+    os_name="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    arch_name="$(uname -m)"
+    case "$arch_name" in
+        x86_64) arch_name="amd64" ;;
+        aarch64) arch_name="arm64" ;;
+    esac
+
+    for candidate in \
+        "$root/bin/clavain-cli" \
+        "$root/bin/clavain-cli-go-${os_name}-${arch_name}" \
+        "$root/bin/clavain-cli-go"; do
+        [[ -x "$candidate" ]] && { echo "$candidate"; return 0; }
+    done
     return 1
 }
 

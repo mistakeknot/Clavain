@@ -120,6 +120,38 @@ MOCK
     [ "$agent_id" = "fallback" ]
 }
 
+@test "_compose_find_cli selects the shipped wrapper from plugin cache" {
+    local root="$BATS_TEST_TMPDIR/plugin"
+    mkdir -p "$root/bin"
+    printf '#!/usr/bin/env bash\n' >"$root/bin/clavain-cli"
+    chmod +x "$root/bin/clavain-cli"
+
+    CLAUDE_PLUGIN_ROOT="$root" CLAVAIN_DIR="" CLAVAIN_SOURCE_DIR="" run _compose_find_cli
+
+    [ "$status" -eq 0 ]
+    [ "$output" = "$root/bin/clavain-cli" ]
+}
+
+@test "_compose_find_cli falls back to the shipped platform binary" {
+    local root="$BATS_TEST_TMPDIR/plugin"
+    local os_name arch_name candidate
+    os_name="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    arch_name="$(uname -m)"
+    case "$arch_name" in
+        x86_64) arch_name="amd64" ;;
+        aarch64) arch_name="arm64" ;;
+    esac
+    candidate="$root/bin/clavain-cli-go-${os_name}-${arch_name}"
+    mkdir -p "$root/bin"
+    printf '#!/usr/bin/env bash\n' >"$candidate"
+    chmod +x "$candidate"
+
+    CLAUDE_PLUGIN_ROOT="$root" CLAVAIN_DIR="" CLAVAIN_SOURCE_DIR="" run _compose_find_cli
+
+    [ "$status" -eq 0 ]
+    [ "$output" = "$candidate" ]
+}
+
 @test "source lib-compose.sh has no side effects" {
     run bash -c "source '$SCRIPTS_DIR/lib-compose.sh' 2>&1"
     assert_success

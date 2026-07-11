@@ -5,6 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$SCRIPT_DIR/.."
 SRC_DIR="$SCRIPT_DIR/../cmd/clavain-cli"
 OUT_DIR="$SCRIPT_DIR/../bin"
 STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/clavain-build-release.XXXXXX")"
@@ -18,6 +19,15 @@ fi
 
 if [[ ! -d "$SRC_DIR" ]]; then
     echo "build-release: source dir not found at $SRC_DIR" >&2
+    exit 1
+fi
+
+if ! git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "build-release: source is not a Git worktree" >&2
+    exit 1
+fi
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=normal)" ]]; then
+    echo "build-release: source worktree is not clean" >&2
     exit 1
 fi
 
@@ -36,14 +46,14 @@ for target in "${TARGETS[@]}"; do
     artifact="clavain-cli-go-${os}-${arch}"
     out="$STAGE_DIR/$artifact"
     echo "Building ${os}/${arch}..." >&2
-    CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -C "$SRC_DIR" -o "$out" .
+    CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go -C "$SRC_DIR" build -trimpath -o "$out" .
     artifacts+=("$artifact")
     built=$((built + 1))
 done
 
 # Also build native binary for local use
 echo "Building native binary..." >&2
-go build -C "$SRC_DIR" -o "$STAGE_DIR/clavain-cli-go" .
+go -C "$SRC_DIR" build -trimpath -o "$STAGE_DIR/clavain-cli-go" .
 artifacts+=("clavain-cli-go")
 
 # Promote only after every build succeeds. Building directly into the tracked
