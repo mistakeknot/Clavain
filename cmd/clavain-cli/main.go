@@ -180,6 +180,8 @@ func main() {
 		err = cmdEvidencePack(args)
 	case "evidence-list":
 		err = cmdEvidenceList(args)
+	case "runtime-evidence":
+		err = cmdRuntimeEvidence(args)
 
 	// Interspect Calibration
 	case "interspect-record-canary":
@@ -381,6 +383,7 @@ Evidence:
   evidence-to-scenario <finding-id> [--bead=<id>]  Convert finding to dev scenario
   evidence-pack        <bead-id> [--type=<type>]   Create evidence pack from sprint data
   evidence-list        [bead-id]                    List evidence packs
+  runtime-evidence     <required|bind|adopt|collect|verify>  Installed-runtime close proof
 
 Interspect Calibration:
   interspect-record-canary        --agent=<name> --override=<id> --metric=<m> --baseline=<v> --measured=<v> --outcome=<improved|degraded|neutral>

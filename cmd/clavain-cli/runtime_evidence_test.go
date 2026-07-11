@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -10,6 +12,321 @@ import (
 
 	"github.com/mistakeknot/intercore/pkg/runtimeproof"
 )
+
+func TestRuntimeEvidenceBindSealsRequirementBeforeMarker(t *testing.T) {
+	var calls []string
+	ops := runtimeEvidenceOps{
+		labels: func(string) ([]string, error) { return []string{runtimeEvidenceLabel}, nil },
+		state:  func(string, string) (string, error) { return "", nil },
+		setState: func(_, key, value string) error {
+			calls = append(calls, "state:"+key+"="+value)
+			return nil
+		},
+		resolveRun: func(string) (string, error) { return "run-1", nil },
+		loadRun: func(string) (Run, error) {
+			return Run{ID: "run-1", ProjectDir: "/tmp/project"}, nil
+		},
+		mergeRunMetadata: func(runID, patch string) error {
+			calls = append(calls, "merge:"+runID+":"+patch)
+			var metadata runtimeRunMetadata
+			if err := decodeStrictJSON([]byte(patch), &metadata); err != nil {
+				t.Fatalf("invalid metadata patch: %v", err)
+			}
+			if metadata.CloseGate == nil || metadata.CloseGate.BeadID != "iv-1" || !containsString(metadata.CloseGate.Requirements, runtimeEvidenceArtifactType) {
+				t.Fatalf("wrong close gate patch: %s", patch)
+			}
+			return nil
+		},
+	}
+
+	if err := bindRuntimeEvidence(ops, "iv-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 2 || !strings.HasPrefix(calls[0], "merge:") || calls[1] != "state:runtime_evidence_required=1" {
+		t.Fatalf("calls = %#v, want metadata then durable marker", calls)
+	}
+}
+
+func TestRuntimeEvidenceBindSurvivesLabelRemovalAndRejectsMissingRun(t *testing.T) {
+	sealed := `{"close_gate":{"requirements":["runtime-evidence/v1"],"bead_id":"iv-1"}}`
+	markerWrites := 0
+	ops := runtimeEvidenceOps{
+		labels:     func(string) ([]string, error) { return nil, nil },
+		state:      func(string, string) (string, error) { return "1", nil },
+		setState:   func(string, string, string) error { markerWrites++; return nil },
+		resolveRun: func(string) (string, error) { return "run-1", nil },
+		loadRun:    func(string) (Run, error) { return Run{ID: "run-1", Metadata: sealed}, nil },
+		mergeRunMetadata: func(string, string) error {
+			t.Fatal("already sealed run must not be rebound")
+			return nil
+		},
+	}
+	if err := bindRuntimeEvidence(ops, "iv-1"); err != nil {
+		t.Fatal(err)
+	}
+	if markerWrites != 1 {
+		t.Fatalf("marker writes = %d, want 1", markerWrites)
+	}
+
+	ops.resolveRun = func(string) (string, error) { return "", errors.New("no run") }
+	if err := bindRuntimeEvidence(ops, "iv-2"); err == nil || !strings.Contains(err.Error(), "runtime-evidence adopt") {
+		t.Fatalf("missing-run error = %v", err)
+	}
+}
+
+func TestRuntimeEvidenceBindRequiresExplicitLabelOnFirstActivation(t *testing.T) {
+	ops := runtimeEvidenceOps{
+		labels:     func(string) ([]string, error) { return nil, nil },
+		state:      func(string, string) (string, error) { return "", nil },
+		setState:   func(string, string, string) error { return nil },
+		resolveRun: func(string) (string, error) { return "run-1", nil },
+		loadRun:    func(string) (Run, error) { return Run{ID: "run-1"}, nil },
+		mergeRunMetadata: func(string, string) error {
+			t.Fatal("unlabelled run must not be mutated")
+			return nil
+		},
+	}
+	if err := bindRuntimeEvidence(ops, "iv-1"); err == nil || !strings.Contains(err.Error(), runtimeEvidenceLabel) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestRuntimeEvidenceLabelsFromBDJSON(t *testing.T) {
+	for _, raw := range []string{
+		`[{"id":"iv-1","labels":["close-gate:runtime-evidence","P1"]}]`,
+		`{"id":"iv-1","labels":["close-gate:runtime-evidence","P1"]}`,
+	} {
+		labels, err := runtimeEvidenceLabelsFromBDJSON([]byte(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !containsString(labels, runtimeEvidenceLabel) {
+			t.Fatalf("labels = %#v", labels)
+		}
+	}
+	if _, err := runtimeEvidenceLabelsFromBDJSON([]byte(`{"labels":"wrong"}`)); err == nil {
+		t.Fatal("malformed labels must fail closed")
+	}
+}
+
+func TestInspectRuntimeEvidenceRequirementDetectsUnboundDurableState(t *testing.T) {
+	ops := runtimeEvidenceOps{
+		labels:     func(string) ([]string, error) { return nil, nil },
+		state:      func(string, string) (string, error) { return "1", nil },
+		resolveRun: func(string) (string, error) { return "run-1", nil },
+		loadRun:    func(string) (Run, error) { return Run{ID: "run-1"}, nil },
+	}
+	status, err := inspectRuntimeEvidenceRequirement(ops, "iv-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Required || status.Bound || status.RunID != "run-1" {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestRuntimeEvidenceCommandRejectsUnknownSubcommand(t *testing.T) {
+	if err := cmdRuntimeEvidence([]string{"unknown"}); err == nil || !strings.Contains(err.Error(), "unknown subcommand") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestRuntimeEvidenceAdoptCreatesMinimalRunAndPersistsIdentity(t *testing.T) {
+	var created runtimeAdoptCreate
+	var stateWrites []string
+	ops := runtimeEvidenceOps{
+		labels:     func(string) ([]string, error) { return []string{runtimeEvidenceLabel}, nil },
+		state:      func(string, string) (string, error) { return "", nil },
+		resolveRun: func(string) (string, error) { return "", errors.New("no run") },
+		findScopeRuns: func(string) ([]Run, error) {
+			return nil, nil
+		},
+		validateAdoption: func(projectRoot, path string) (json.RawMessage, error) {
+			if projectRoot != "/tmp/project" || path != "/tmp/provenance.json" {
+				t.Fatalf("validation args = %q %q", projectRoot, path)
+			}
+			return json.RawMessage(`{"schema_version":1,"verified":true}`), nil
+		},
+		createRun: func(spec runtimeAdoptCreate) (string, error) {
+			created = spec
+			return "run-adopted", nil
+		},
+		loadRun: func(runID string) (Run, error) {
+			return Run{ID: runID, ProjectDir: "/tmp/project", Phase: "reflect", Metadata: created.Metadata}, nil
+		},
+		setState: func(_ string, key, value string) error {
+			stateWrites = append(stateWrites, key+"="+value)
+			return nil
+		},
+	}
+
+	runID, err := adoptRuntimeEvidence(ops, "iv-1", "/tmp/project", "/tmp/provenance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runID != "run-adopted" {
+		t.Fatalf("run ID = %q", runID)
+	}
+	if strings.Join(created.Phases, ",") != "reflect,done" || created.ScopeID != "iv-1" {
+		t.Fatalf("create spec = %+v", created)
+	}
+	metadata, bound, err := runtimeEvidenceMetadataState("iv-1", created.Metadata)
+	if err != nil || !bound || len(metadata.CloseGate.Adoption) == 0 {
+		t.Fatalf("metadata = %+v, bound=%v, err=%v", metadata, bound, err)
+	}
+	wantWrites := []string{"ic_run_id=run-adopted", "phase=reflect", "runtime_evidence_required=1"}
+	if strings.Join(stateWrites, ",") != strings.Join(wantWrites, ",") {
+		t.Fatalf("state writes = %#v, want %#v", stateWrites, wantWrites)
+	}
+}
+
+func TestRuntimeEvidenceAdoptRetryRepairsStateWithoutDuplicateRun(t *testing.T) {
+	metadata := `{"close_gate":{"requirements":["runtime-evidence/v1"],"bead_id":"iv-1","adoption":{"schema_version":1}}}`
+	createCalls := 0
+	ops := runtimeEvidenceOps{
+		labels:     func(string) ([]string, error) { return nil, nil },
+		state:      func(string, string) (string, error) { return "1", nil },
+		resolveRun: func(string) (string, error) { return "", errors.New("state write was lost") },
+		findScopeRuns: func(string) ([]Run, error) {
+			return []Run{{ID: "run-existing", Status: "active", Phase: "reflect", ProjectDir: "/tmp/project", Metadata: metadata}}, nil
+		},
+		validateAdoption: func(string, string) (json.RawMessage, error) {
+			return json.RawMessage(`{"schema_version":1}`), nil
+		},
+		createRun: func(runtimeAdoptCreate) (string, error) {
+			createCalls++
+			return "", nil
+		},
+		setState: func(string, string, string) error { return nil },
+	}
+	runID, err := adoptRuntimeEvidence(ops, "iv-1", "/tmp/project", "/tmp/provenance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runID != "run-existing" || createCalls != 0 {
+		t.Fatalf("run=%q createCalls=%d", runID, createCalls)
+	}
+}
+
+func TestRuntimeEvidenceAdoptRejectsExistingUnboundRun(t *testing.T) {
+	ops := runtimeEvidenceOps{
+		labels:     func(string) ([]string, error) { return []string{runtimeEvidenceLabel}, nil },
+		state:      func(string, string) (string, error) { return "", nil },
+		resolveRun: func(string) (string, error) { return "run-ordinary", nil },
+		loadRun:    func(string) (Run, error) { return Run{ID: "run-ordinary"}, nil },
+	}
+	if _, err := adoptRuntimeEvidence(ops, "iv-1", "/tmp/project", "/tmp/provenance.json"); err == nil || !strings.Contains(err.Error(), "runtime-evidence bind") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestValidateRuntimeAdoptionProvenance(t *testing.T) {
+	planRepo, planHead := initRuntimeEvidenceGitRepo(t, "docs/plan.md", "approved plan\n")
+	projectRepo, projectHead := initRuntimeEvidenceGitRepo(t, "README.md", "project\n")
+	planBytes, err := os.ReadFile(filepath.Join(planRepo, "docs", "plan.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	provenance := runtimeAdoptionProvenanceFile{
+		SchemaVersion: 1,
+		Plan: runtimeAdoptionPlan{
+			Repository: planRepo,
+			Path:       "docs/plan.md",
+			Digest:     digestForRuntimeEvidence(planBytes),
+			Head:       planHead,
+		},
+		Sources: []runtimeAdoptionSource{{Repository: projectRepo, Head: projectHead}},
+	}
+	path := writeRuntimeAdoptionFile(t, provenance)
+	validated, err := validateRuntimeAdoptionProvenance(projectRepo, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(validated), projectHead) || !strings.Contains(string(validated), planHead) {
+		t.Fatalf("validated provenance lost heads: %s", validated)
+	}
+
+	t.Run("plan digest mismatch", func(t *testing.T) {
+		bad := provenance
+		bad.Plan.Digest = digestForRuntimeEvidence([]byte("wrong"))
+		_, err := validateRuntimeAdoptionProvenance(projectRepo, writeRuntimeAdoptionFile(t, bad))
+		if err == nil || !strings.Contains(err.Error(), "digest") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+	t.Run("source head mismatch", func(t *testing.T) {
+		bad := provenance
+		bad.Sources = append([]runtimeAdoptionSource(nil), provenance.Sources...)
+		bad.Sources[0].Head = strings.Repeat("f", 40)
+		_, err := validateRuntimeAdoptionProvenance(projectRepo, writeRuntimeAdoptionFile(t, bad))
+		if err == nil || !strings.Contains(err.Error(), "HEAD") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+	t.Run("project source missing", func(t *testing.T) {
+		bad := provenance
+		bad.Sources = []runtimeAdoptionSource{{Repository: planRepo, Head: planHead}}
+		_, err := validateRuntimeAdoptionProvenance(projectRepo, writeRuntimeAdoptionFile(t, bad))
+		if err == nil || !strings.Contains(err.Error(), "project repository") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+	t.Run("untracked plan", func(t *testing.T) {
+		untracked := filepath.Join(planRepo, "docs", "untracked.md")
+		if err := os.WriteFile(untracked, []byte("not committed\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		bad := provenance
+		bad.Plan.Path = "docs/untracked.md"
+		bad.Plan.Digest = digestForRuntimeEvidence([]byte("not committed\n"))
+		_, err := validateRuntimeAdoptionProvenance(projectRepo, writeRuntimeAdoptionFile(t, bad))
+		if err == nil || !strings.Contains(err.Error(), "tracked") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+}
+
+func initRuntimeEvidenceGitRepo(t *testing.T, path, content string) (string, string) {
+	t.Helper()
+	repo := t.TempDir()
+	runRuntimeEvidenceGit(t, repo, "init", "-q")
+	runRuntimeEvidenceGit(t, repo, "config", "user.email", "runtime-evidence@example.invalid")
+	runRuntimeEvidenceGit(t, repo, "config", "user.name", "Runtime Evidence Test")
+	abs := filepath.Join(repo, filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(abs, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runRuntimeEvidenceGit(t, repo, "add", "--", path)
+	runRuntimeEvidenceGit(t, repo, "commit", "-q", "-m", "fixture")
+	head := strings.TrimSpace(runRuntimeEvidenceGit(t, repo, "rev-parse", "HEAD"))
+	return repo, head
+}
+
+func runRuntimeEvidenceGit(t *testing.T, repo string, args ...string) string {
+	t.Helper()
+	cmdArgs := append([]string{"-C", repo}, args...)
+	out, err := exec.Command("git", cmdArgs...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(cmdArgs, " "), err, out)
+	}
+	return string(out)
+}
+
+func writeRuntimeAdoptionFile(t *testing.T, value runtimeAdoptionProvenanceFile) string {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "provenance.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
 
 func TestRuntimeEvidenceRequiredStateIsMonotonic(t *testing.T) {
 	tests := []struct {
