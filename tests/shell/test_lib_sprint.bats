@@ -658,13 +658,14 @@ MOCKEOF
     local reflection="$TEST_PROJECT/reflection.md"
     printf 'reflection\n' > "$reflection"
     export CLAVAIN_BEAD_ID="iv-reflected"
+    export REFLECTION_FIXTURE="$reflection"
     bd() {
         case "$3" in
-            artifact_reflection) printf '%s\n' "$reflection" ;;
+            artifact_reflection) printf '%s\n' "$REFLECTION_FIXTURE" ;;
             ic_run_id) return 1 ;;
         esac
     }
-    export reflection
+    export -f bd
 
     run sprint_next_step "reflect"
     assert_success
@@ -674,12 +675,14 @@ MOCKEOF
 @test "sprint_next_step repeats reflection for stale artifact registration" {
     _source_sprint_lib
     export CLAVAIN_BEAD_ID="iv-reflected"
+    export REFLECTION_FIXTURE="$TEST_PROJECT/missing.md"
     bd() {
         case "$3" in
-            artifact_reflection) printf '%s\n' "$TEST_PROJECT/missing.md" ;;
+            artifact_reflection) printf '%s\n' "$REFLECTION_FIXTURE" ;;
             ic_run_id) return 1 ;;
         esac
     }
+    export -f bd
 
     run sprint_next_step "reflect"
     assert_success

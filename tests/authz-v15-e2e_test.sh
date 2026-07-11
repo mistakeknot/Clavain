@@ -76,7 +76,11 @@ if [[ ! -f "${SANDBOX}/.clavain/keys/authz-project.key" ]]; then
   echo "FAIL scenario 1: signing key not created"
   exit 1
 fi
-perms="$(stat -f '%Lp' "${SANDBOX}/.clavain/keys/authz-project.key" 2>/dev/null || stat -c '%a' "${SANDBOX}/.clavain/keys/authz-project.key")"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  perms="$(stat -f '%Lp' "${SANDBOX}/.clavain/keys/authz-project.key")"
+else
+  perms="$(stat -c '%a' "${SANDBOX}/.clavain/keys/authz-project.key")"
+fi
 [[ "$perms" == "400" ]] || { echo "FAIL scenario 1: key perms=$perms, want 400"; exit 1; }
 clavain-cli policy audit --verify >/dev/null 2>&1 || {
   echo "FAIL scenario 1: audit --verify did not pass after bootstrap"
