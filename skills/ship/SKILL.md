@@ -40,7 +40,9 @@ If push fails (diverged), stop and report — do not force push.
 ## Step 4: Close Beads
 
 ```bash
-bd close <id1> <id2> ...
+for bead_id in <id1> <id2> ...; do
+  "${CLAUDE_PLUGIN_ROOT}/scripts/gates/bead-close.sh" "$bead_id" "Shipped after successful push"
+done
 ```
 
 If no IDs provided, list `in_progress` beads for this session and ask which to close.

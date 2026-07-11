@@ -212,14 +212,20 @@ Two patterns: (1) open/in-progress beads with `phase=done`; (2) dot-children (e.
 ```bash
 if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
   _zc=0
+  _zskip=0
+  _close_gate="${CLAUDE_PLUGIN_ROOT:-}/scripts/gates/bead-close.sh"
   _open_ids=$( (bd list --status=open --json 2>/dev/null; bd list --status=in_progress --json 2>/dev/null) | jq -r '.[].id' 2>/dev/null | sort -u) || _open_ids=""
 
   for _id in $_open_ids; do
     _phase=$(bd state "$_id" phase 2>/dev/null) || _phase=""
     if [ "$_phase" = "done" ]; then
       echo "  ZOMBIE: $_id (phase=done but still open)"
-      bd close "$_id" --reason="Zombie sweep: phase=done" 2>/dev/null || true
-      _zc=$((_zc+1))
+      if [ -x "$_close_gate" ] && "$_close_gate" "$_id" "Zombie sweep: phase=done" >/dev/null 2>&1; then
+        _zc=$((_zc+1))
+      else
+        echo "    SKIPPED: canonical close gate did not clear"
+        _zskip=$((_zskip+1))
+      fi
     fi
   done
 
@@ -232,12 +238,22 @@ if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
     _par=$(bd show "$_parent" 2>/dev/null | head -1) || continue
     if echo "$_par" | grep -q "CLOSED"; then
       echo "  ZOMBIE: $_id (parent $_parent closed)"
-      bd close "$_id" --reason="Zombie sweep: parent closed" 2>/dev/null || true
-      _zc=$((_zc+1))
+      if [ -x "$_close_gate" ] && "$_close_gate" "$_id" "Zombie sweep: parent closed" >/dev/null 2>&1; then
+        _zc=$((_zc+1))
+      else
+        echo "    SKIPPED: canonical close gate did not clear"
+        _zskip=$((_zskip+1))
+      fi
     fi
   done
 
-  [ "$_zc" -eq 0 ] && echo "zombie beads: PASS" || echo "zombie beads: FIXED (auto-closed $_zc)"
+  if [ "$_zskip" -gt 0 ]; then
+    echo "zombie beads: WARN (closed $_zc; skipped $_zskip at canonical gate)"
+  elif [ "$_zc" -gt 0 ]; then
+    echo "zombie beads: FIXED (auto-closed $_zc)"
+  else
+    echo "zombie beads: PASS"
+  fi
 fi
 ```
 
@@ -262,7 +278,7 @@ if [ -d .beads ] && command -v bd >/dev/null 2>&1; then
       _oc=$((_oc+1))
     done
   fi
-  [ "$_oc" -eq 0 ] && echo "orphan beads: PASS" || { echo "orphan beads: WARN ($_oc open bead(s) referenced in commits)"; printf "%b" "$_of"; echo "  └─ Review with 'bd show <id>' — if work shipped, close with 'bd close <id> --reason \"Already shipped\"'"; }
+  [ "$_oc" -eq 0 ] && echo "orphan beads: PASS" || { echo "orphan beads: WARN ($_oc open bead(s) referenced in commits)"; printf "%b" "$_of"; echo "  └─ Review with 'bd show <id>' — if work shipped, use '${CLAUDE_PLUGIN_ROOT}/scripts/gates/bead-close.sh <id> \"Already shipped\"'"; }
 fi
 ```
 

@@ -2,7 +2,7 @@
 # Auto-close beads that have artifact_implementation state but are still open.
 #
 # The common failure mode: code ships, artifact state is set, session ends
-# before bd close runs. This script catches those "phantom" beads.
+# before the canonical close gate runs. This script catches those "phantom" beads.
 #
 # Usage:
 #   bead-close-shipped.sh [--dry-run] [--session-id ID]
@@ -17,6 +17,9 @@ set -uo pipefail
 
 DRY_RUN=false
 SESSION_FILTER=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Canonical repository route: scripts/gates/bead-close.sh
+CLOSE_GATE="${SCRIPT_DIR}/gates/bead-close.sh"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -28,6 +31,7 @@ done
 
 command -v bd &>/dev/null || exit 0
 command -v jq &>/dev/null || exit 0
+[[ -x "$CLOSE_GATE" ]] || { echo "CLOSE_GATE_MISSING:${CLOSE_GATE}" >&2; exit 0; }
 
 # Get open + in_progress beads as JSON
 beads_json=$(bd list --status=open --limit 0 --json 2>/dev/null) || exit 0
@@ -40,6 +44,7 @@ count=$(echo "$beads_json" | jq 'length' 2>/dev/null) || count=0
 [[ "$count" -eq 0 ]] && exit 0
 
 closed=0
+skipped=0
 phantoms=""
 
 while IFS= read -r bead_id; do
@@ -76,8 +81,11 @@ while IFS= read -r bead_id; do
         continue
     fi
 
-    # Close the bead
-    bd close "$bead_id" 2>/dev/null && closed=$((closed + 1)) || true
+    if "$CLOSE_GATE" "$bead_id" "Artifact implementation verified at $commit_sha" >/dev/null 2>&1; then
+        closed=$((closed + 1))
+    else
+        skipped=$((skipped + 1))
+    fi
 
 done < <(echo "$beads_json" | jq -r '.[].id' 2>/dev/null)
 
@@ -86,7 +94,7 @@ if [[ -n "$phantoms" ]]; then
         echo "PHANTOM_BEADS"
         echo -e "$phantoms"
     else
-        echo "AUTO_CLOSED:${closed}"
+        echo "AUTO_CLOSED:${closed} SKIPPED:${skipped}"
         echo -e "$phantoms"
     fi
 fi

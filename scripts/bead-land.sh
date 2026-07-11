@@ -16,6 +16,9 @@ set -euo pipefail
 
 DRY_RUN=false
 AUTO_YES=false
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Canonical repository route: scripts/gates/bead-close.sh
+CLOSE_GATE="${SCRIPT_DIR}/gates/bead-close.sh"
 
 for arg in "$@"; do
     case "$arg" in
@@ -32,6 +35,7 @@ done
 
 command -v bd &>/dev/null || { echo "bd not found" >&2; exit 1; }
 command -v jq &>/dev/null || { echo "jq not found" >&2; exit 1; }
+[[ -x "$CLOSE_GATE" ]] || { echo "close gate not found: $CLOSE_GATE" >&2; exit 1; }
 
 # Get orphaned beads from bd
 orphans_json="$(bd orphans --json 2>/dev/null || echo "null")"
@@ -99,5 +103,20 @@ if [[ "$AUTO_YES" != "true" ]]; then
     fi
 fi
 
-# Close them
-bd close "${to_close[@]}" --reason="Landed: referenced in pushed commits" 2>&1
+# Close individually because the canonical wrapper verifies and records each
+# bead's authorization and any installed-runtime evidence requirement.
+closed=0
+failed=()
+for bid in "${to_close[@]}"; do
+    if "$CLOSE_GATE" "$bid" "Landed: referenced in pushed commits"; then
+        closed=$((closed + 1))
+    else
+        failed+=("$bid")
+    fi
+done
+
+echo "Closed $closed orphaned bead(s)."
+if [[ ${#failed[@]} -gt 0 ]]; then
+    echo "Not closed by the canonical gate: ${failed[*]}" >&2
+    exit 1
+fi

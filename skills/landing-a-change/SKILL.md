@@ -63,13 +63,15 @@ options:
 
 **Commit and push / Commit locally:**
 ```bash
-bd close <issue-ids>          # if .beads/ exists
 git add <specific files>      # NOT git add .
 git commit -m "feat(scope): description
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
-git push                      # skip if "locally" chosen
+git push                      # only for "Commit and push"
 ```
+
+`Commit locally` leaves associated beads open. A close is only eligible after
+the implementation commit is visible on the remote.
 
 **Changelog first:** Run `/clavain:changelog`, then commit.
 
@@ -92,6 +94,22 @@ fi
 
 If canary fails: warn user, emit `quality_failure` event to Interspect, do NOT record sprint as successful. If canary passes: normal flow continues.
 
+## Step 5.6: Close After Push
+
+Only after the push and post-push canary succeed, close each selected bead
+through the canonical gate:
+
+```bash
+for bead_id in <issue-ids>; do
+  "${CLAUDE_PLUGIN_ROOT}/scripts/gates/bead-close.sh" "$bead_id" "Landed in pushed commit $(git rev-parse --short HEAD)"
+done
+bd dolt push
+git push
+```
+
+The wrapper verifies any installed-runtime evidence requirement before changing
+tracker state. If it rejects a bead, leave that bead open and report the gate.
+
 ## Step 6: Capture Learnings (Optional)
 
 Run `/clavain:compound` or note insights in project memory files.
@@ -99,6 +117,7 @@ Run `/clavain:compound` or note insights in project memory files.
 ## Red Flags
 
 - Never push without verified tests
+- Never close a bead before its implementation commit is pushed
 - Never `git add .` — stage specific files
 - Never auto-push without user selecting Option 1
 - Never skip the evidence checklist

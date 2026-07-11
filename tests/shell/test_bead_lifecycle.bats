@@ -19,6 +19,21 @@ setup() {
     BD_CALL_LOG="$TEST_PROJECT/bd_calls.log"
     export BD_CALL_LOG
 
+    CLOSE_GATE_LOG="$TEST_PROJECT/close_gate_calls.log"
+    export CLOSE_GATE_LOG
+    unset CLOSE_GATE_BLOCK_BEAD
+    export SPRINT_CLOSE_GATE="$TEST_PROJECT/bead-close-gate"
+    cat > "$SPRINT_CLOSE_GATE" <<'GATEEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "gate $*" >> "$CLOSE_GATE_LOG"
+if [[ "${CLOSE_GATE_BLOCK_BEAD:-}" == "$1" ]]; then
+    exit 1
+fi
+bd close "$1" --reason="${2:-}"
+GATEEOF
+    chmod +x "$SPRINT_CLOSE_GATE"
+
     # State store for mock bd set-state / bd state
     BD_STATE_DIR="$TEST_PROJECT/bd_state"
     mkdir -p "$BD_STATE_DIR"
@@ -246,11 +261,50 @@ SHOWEOF
     export -f bd
 
     run sprint_close_parent_if_done "iv-child"
-    assert_success
-    assert_output "iv-parent"
+    [ "$status" -eq 0 ]
+    [ "$output" = "iv-parent" ]
 
     # Verify bd close was called on parent
     grep -q "closed iv-parent" "$BD_CALL_LOG"
+    grep -q "gate iv-parent" "$CLOSE_GATE_LOG"
+}
+
+@test "sprint_close_parent_if_done: skips parent rejected by canonical gate" {
+    _source_sprint_lib
+
+    bd() {
+        echo "bd $*" >> "$BD_CALL_LOG"
+        case "$1" in
+            show)
+                if [[ "$2" == "iv-child" ]]; then
+                    cat <<'SHOWEOF'
+iv-child: Child bead (OPEN, P2)
+PARENT
+  ↑ ✓ iv-parent: Parent epic
+SHOWEOF
+                elif [[ "$2" == "iv-parent" ]]; then
+                    cat <<'SHOWEOF'
+iv-parent: Parent epic (OPEN, P1)
+CHILDREN
+  ↳ ✓ iv-child: Child bead
+SHOWEOF
+                fi
+                ;;
+            close)
+                echo "closed $2" >> "$BD_CALL_LOG"
+                ;;
+        esac
+        return 0
+    }
+    export -f bd
+    export CLOSE_GATE_BLOCK_BEAD="iv-parent"
+
+    run sprint_close_parent_if_done "iv-child"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"skipped iv-parent"* ]]
+    grep -q "gate iv-parent" "$CLOSE_GATE_LOG"
+    run grep -q "closed iv-parent" "$BD_CALL_LOG"
+    [ "$status" -ne 0 ]
 }
 
 @test "sprint_close_parent_if_done: keeps parent open when children remain" {

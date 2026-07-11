@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -121,6 +122,17 @@ func countOpenChildren(output string) int {
 	return count
 }
 
+// runtimeEvidenceAutoCloseAllowed prevents background hierarchy cleanup from
+// becoming a second, weaker close path. Runtime-gated beads must be closed by
+// the canonical wrapper after their installed-runtime proof is complete.
+func runtimeEvidenceAutoCloseAllowed(ops runtimeEvidenceOps, beadID string) (bool, error) {
+	status, err := inspectRuntimeEvidenceRequirement(ops, beadID)
+	if err != nil {
+		return false, err
+	}
+	return !status.Required, nil
+}
+
 // cmdCloseChildren closes open beads blocked by the given epic.
 // Args: <epic_id> [reason]
 // Outputs the count of successfully closed beads.
@@ -155,7 +167,17 @@ func cmdCloseChildren(args []string) error {
 	}
 
 	closed := 0
+	runtimeOps := defaultRuntimeEvidenceOps()
 	for _, id := range blockedIDs {
+		allowed, requirementErr := runtimeEvidenceAutoCloseAllowed(runtimeOps, id)
+		if requirementErr != nil {
+			fmt.Fprintf(os.Stderr, "close-children: skipped %s: runtime requirement check failed: %v\n", id, requirementErr)
+			continue
+		}
+		if !allowed {
+			fmt.Fprintf(os.Stderr, "close-children: skipped runtime-gated bead %s; use scripts/gates/bead-close.sh after proof collection\n", id)
+			continue
+		}
 		_, cerr := runBD("close", id, fmt.Sprintf("--reason=%s", reason))
 		if cerr == nil {
 			closed++
@@ -214,6 +236,15 @@ func cmdCloseParentIfDone(args []string) error {
 	// Count open children of parent
 	openChildren := countOpenChildren(string(parentOut))
 	if openChildren == 0 {
+		allowed, requirementErr := runtimeEvidenceAutoCloseAllowed(defaultRuntimeEvidenceOps(), parentID)
+		if requirementErr != nil {
+			fmt.Fprintf(os.Stderr, "close-parent-if-done: skipped %s: runtime requirement check failed: %v\n", parentID, requirementErr)
+			return nil
+		}
+		if !allowed {
+			fmt.Fprintf(os.Stderr, "close-parent-if-done: skipped runtime-gated bead %s; use scripts/gates/bead-close.sh after proof collection\n", parentID)
+			return nil
+		}
 		_, cerr := runBD("close", parentID, fmt.Sprintf("--reason=%s", reason))
 		if cerr == nil {
 			fmt.Println(parentID)

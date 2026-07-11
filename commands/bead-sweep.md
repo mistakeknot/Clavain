@@ -64,7 +64,7 @@ For each deterministic hit:
 
 ## Step 5: Close or Report
 
-- **Done + `--auto-close`**: `bd close <id> --reason="Bead sweep: <evidence summary>"`
+- **Done + `--auto-close`**: `"${CLAUDE_PLUGIN_ROOT}/scripts/gates/bead-close.sh" "<id>" "Bead sweep: <evidence summary>"`
 - **Done, no flag**: ask per bead via AskUserQuestion
 - **Partial**: report what's missing
 

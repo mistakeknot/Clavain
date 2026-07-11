@@ -30,11 +30,24 @@ If a plan document exists: check all checkboxes, resolve TODOs, load `verificati
 
 ### Step 5: Execute
 
-Close beads (`bd close <ids>`), stage specific files (not `git add .`), `bd sync`, commit with conventional message + Co-Authored-By, push if chosen.
+Stage specific files (not `git add .`), commit with a conventional message +
+Co-Authored-By, then push when that option was chosen. A local-only commit leaves
+its beads open.
+
+```bash
+git push  # only for the commit-and-push option
+```
 
 ### Step 5.5: Post-Push Canary
 
 After push, if in a sprint: `sprint_canary_check "$CLAVAIN_BEAD_ID"`. On failure: warn, emit `quality_failure` to Interspect, do NOT close bead. Skip with `CLAVAIN_SKIP_CANARY=true`.
+
+### Step 5.6: Close After Push
+
+After the push and canary succeed, close each selected bead through
+`"${CLAUDE_PLUGIN_ROOT}/scripts/gates/bead-close.sh" "$bead_id" "Landed in pushed commit"`,
+run `bd dolt push`, then `git push` again. If the gate rejects a bead, leave it
+open and report the failure.
 
 ### Step 6: Capture Learnings (optional)
 
@@ -42,7 +55,7 @@ If notable learnings: run `/clavain:compound` or update memory files.
 
 ## Red Flags
 
-Never push without passing tests. Never `git add .`. Never auto-push without user choosing it.
+Never push without passing tests. Never close before push. Never `git add .`. Never auto-push without user choosing it.
 
 ---
 

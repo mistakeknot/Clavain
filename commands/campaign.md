@@ -204,9 +204,16 @@ After all phases complete:
      [FAIL] Error rate < 0.1% — current: 0.3%
      ```
    - If any FAIL: AskUserQuestion — "DoD criteria not met. Fix issues / Override / Defer"
-   - If all PASS + MANUAL confirmed: "Epic DoD satisfied. Close with `bd close $EPIC_ID`."
+   - If all PASS + MANUAL confirmed: report "Epic DoD satisfied" and instruct the user to run:
+     ```bash
+     "${CLAUDE_PLUGIN_ROOT}/scripts/gates/bead-close.sh" "$EPIC_ID" "Epic DoD satisfied"
+     ```
 
-   If no `epic_dod`: "No DoD criteria set. All children are closed. Review and close with `bd close $EPIC_ID` when satisfied."
+   If no `epic_dod`: report "No DoD criteria set. All children are closed."
+   After explicit review, instruct the user to run:
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/scripts/gates/bead-close.sh" "$EPIC_ID" "All campaign children shipped"
+   ```
 
 4. **Do NOT close the epic automatically.** Even with DoD satisfied, epic closure is an explicit human decision.
 

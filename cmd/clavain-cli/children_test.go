@@ -1,6 +1,68 @@
 package main
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
+
+func TestRuntimeEvidenceAutoCloseAllowed(t *testing.T) {
+	tests := []struct {
+		name     string
+		labels   []string
+		marker   string
+		metadata string
+		want     bool
+		wantErr  bool
+	}{
+		{name: "ordinary bead may be auto-closed", want: true},
+		{name: "labelled bead is skipped", labels: []string{runtimeEvidenceLabel}},
+		{name: "durably marked bead is skipped", marker: "1"},
+		{
+			name:     "sealed run remains gated after label removal",
+			metadata: `{"close_gate":{"requirements":["runtime-evidence/v1"],"bead_id":"iv-child"}}`,
+		},
+		{name: "malformed sealed metadata fails closed", metadata: `{"close_gate":`, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ops := runtimeEvidenceOps{
+				labels: func(string) ([]string, error) { return tt.labels, nil },
+				state:  func(string, string) (string, error) { return tt.marker, nil },
+				resolveRun: func(string) (string, error) {
+					if tt.metadata != "" {
+						return "run-1", nil
+					}
+					return "", errRuntimeRunNotBound
+				},
+				loadRun: func(string) (Run, error) { return Run{ID: "run-1", Metadata: tt.metadata}, nil },
+			}
+			got, err := runtimeEvidenceAutoCloseAllowed(ops, "iv-child")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("runtimeEvidenceAutoCloseAllowed() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Fatalf("runtimeEvidenceAutoCloseAllowed() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeEvidenceAutoCloseAllowedFailsClosed(t *testing.T) {
+	wantErr := errors.New("tracker unavailable")
+	ops := runtimeEvidenceOps{
+		labels: func(string) ([]string, error) { return nil, wantErr },
+		state:  func(string, string) (string, error) { return "", nil },
+	}
+
+	allowed, err := runtimeEvidenceAutoCloseAllowed(ops, "iv-child")
+	if err == nil {
+		t.Fatal("runtimeEvidenceAutoCloseAllowed() error = nil, want failure")
+	}
+	if allowed {
+		t.Fatal("runtimeEvidenceAutoCloseAllowed() = true on inspection failure, want false")
+	}
+}
 
 func TestParseBlockedIDs(t *testing.T) {
 	tests := []struct {
@@ -327,14 +389,14 @@ func TestBeadIDRegex(t *testing.T) {
 		{"iv-1xtgd.12", true},
 		{"FOO-bar2", true},
 		{"A-b", true},
-		{"abc", false},          // no dash
-		{"-abc", false},         // starts with dash
-		{"123-abc", false},      // starts with digit
-		{"iv-", false},          // nothing after dash
-		{"", false},             // empty
-		{"iv-abc def", false},   // space
-		{"iv-abc:xyz", false},   // colon
-		{"iv-abc.1.2", true},    // double dots
+		{"abc", false},        // no dash
+		{"-abc", false},       // starts with dash
+		{"123-abc", false},    // starts with digit
+		{"iv-", false},        // nothing after dash
+		{"", false},           // empty
+		{"iv-abc def", false}, // space
+		{"iv-abc:xyz", false}, // colon
+		{"iv-abc.1.2", true},  // double dots
 	}
 
 	for _, tt := range tests {

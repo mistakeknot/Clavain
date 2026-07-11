@@ -30,6 +30,7 @@ SPRINT_LIB_PROJECT_DIR="${SPRINT_LIB_PROJECT_DIR:-.}"
 # Source interphase phase primitives (via Clavain shim)
 _SPRINT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SPRINT_LIB_DIR}/lib.sh" 2>/dev/null || true
+SPRINT_CLOSE_GATE="${SPRINT_CLOSE_GATE:-${_SPRINT_LIB_DIR}/../scripts/gates/bead-close.sh}"
 
 # Gate enforcement now uses ic gate check via enforce_gate() → intercore_gate_check.
 # lib-gates.sh is deprecated — no longer sourced here.
@@ -1592,6 +1593,16 @@ checkpoint_clear() {
 
 # ─── Close Sweep ──────────────────────────────────────────────────
 
+_sprint_close_bead() {
+    local bead_id="${1:?bead_id required}"
+    local reason="${2:-}"
+    if [[ ! -x "$SPRINT_CLOSE_GATE" ]]; then
+        echo "sprint close: canonical gate unavailable at $SPRINT_CLOSE_GATE" >&2
+        return 1
+    fi
+    "$SPRINT_CLOSE_GATE" "$bead_id" "$reason"
+}
+
 # Auto-close open beads that are blocked by a completed epic.
 # Prevents the "bulk audit→bead" anti-pattern where child beads stay
 # open after the parent epic ships them as part of its plan.
@@ -1617,7 +1628,11 @@ sprint_close_children() {
     local closed=0
     while IFS= read -r child_id; do
         [[ -z "$child_id" ]] && continue
-        bd close "$child_id" --reason="$reason" >/dev/null 2>&1 && closed=$((closed + 1))
+        if _sprint_close_bead "$child_id" "$reason" >/dev/null 2>&1; then
+            closed=$((closed + 1))
+        else
+            echo "sprint_close_children: skipped $child_id; canonical close gate did not clear" >&2
+        fi
     done <<< "$blocked_ids"
 
     # After closing children, try closing parent if all siblings are done
@@ -1660,7 +1675,11 @@ sprint_close_parent_if_done() {
         | grep -cE '↳ [○◐]' 2>/dev/null) || open_children=0
 
     if [[ "$open_children" -eq 0 ]]; then
-        bd close "$parent_id" --reason="$reason" >/dev/null 2>&1 && echo "$parent_id"
+        if _sprint_close_bead "$parent_id" "$reason" >/dev/null 2>&1; then
+            echo "$parent_id"
+        else
+            echo "sprint_close_parent_if_done: skipped $parent_id; canonical close gate did not clear" >&2
+        fi
     fi
 }
 
