@@ -121,6 +121,8 @@ Incremental commits use no attribution footer — the final Phase 4 commit inclu
 
 Run `/clavain:quality-gates` only for: large refactors (10+ files), security-sensitive changes, performance-critical paths, complex algorithms, or user-requested review. For most features: tests + linting + patterns is sufficient.
 
+**Smoke test (conditional):** If the project has a detectable dev-server surface — a `dev`/`start` script in package.json, a listener named in README/AGENTS.md, or an obvious HTTP entrypoint — invoke the `smoke-test` skill against the top 1-3 user journeys before declaring Phase 3 complete. Skip silently when no server surface exists (CLI/library repos), when inside a sprint (sprint Step 6 covers it), or when the per-repo opt-out file `.claude/no-smoke-test` exists.
+
 **Final checklist:**
 - All TodoWrite tasks completed
 - All tests pass; linting passes

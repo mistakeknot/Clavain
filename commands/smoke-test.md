@@ -55,4 +55,4 @@ Result: <N>/<total> passed
 
 Failing journeys: provide actionable details (HTTP status, missing element, error message).
 
-**Integration:** called automatically by `/work` after execution when a dev server is detectable.
+**Integration:** invoked by `/work` Phase 3 (Quality Check) when a dev-server surface is detectable; per-repo opt-out via `.claude/no-smoke-test`.
