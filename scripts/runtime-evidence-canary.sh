@@ -659,22 +659,26 @@ RESULT="$(jq -n \
       clavain_head: $clavain_head,
       canary_project_head: $canary_project_head
     },
-    binaries: {
-      intercore_digest: $ic_digest,
-      clavain_digest: $clavain_digest,
-      fixture_build_digest: $build_digest,
-      fixture_installed_digest: $install_digest
-    }
-    + (if $ic_path == "" then {} else {
-        paths: {
-          intercore: $ic_path,
-          clavain: $clavain_path
-        }
-        + (if $fixture_path == "" then {} else {
-            runtime_fixture: $fixture_path,
-            runtime_probe: $probe_path
-          } end)
-      } end),
+    binaries: (
+      {
+        intercore_digest: $ic_digest,
+        clavain_digest: $clavain_digest,
+        fixture_build_digest: $build_digest,
+        fixture_installed_digest: $install_digest
+      }
+      + (if $ic_path == "" then {} else {
+          paths: (
+            {
+              intercore: $ic_path,
+              clavain: $clavain_path
+            }
+            + (if $fixture_path == "" then {} else {
+                runtime_fixture: $fixture_path,
+                runtime_probe: $probe_path
+              } end)
+          )
+        } end)
+    ),
     outcomes: {
       missing: {
         run_id: $missing_run,
