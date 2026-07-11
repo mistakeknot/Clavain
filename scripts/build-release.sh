@@ -7,6 +7,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DIR="$SCRIPT_DIR/../cmd/clavain-cli"
 OUT_DIR="$SCRIPT_DIR/../bin"
+STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/clavain-build-release.XXXXXX")"
+trap 'rm -rf "$STAGE_DIR"' EXIT
 
 # Validate build environment
 if ! command -v go &>/dev/null; then
@@ -27,20 +29,29 @@ TARGETS=(
 )
 
 built=0
+artifacts=()
 for target in "${TARGETS[@]}"; do
     os="${target%%:*}"
     arch="${target##*:}"
-    out="$OUT_DIR/clavain-cli-go-${os}-${arch}"
+    artifact="clavain-cli-go-${os}-${arch}"
+    out="$STAGE_DIR/$artifact"
     echo "Building ${os}/${arch}..." >&2
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -C "$SRC_DIR" -o "$out" .
-    chmod +x "$out"
-    echo "  → $out ($(du -h "$out" | cut -f1))" >&2
+    artifacts+=("$artifact")
     built=$((built + 1))
 done
 
 # Also build native binary for local use
 echo "Building native binary..." >&2
-go build -C "$SRC_DIR" -o "$OUT_DIR/clavain-cli-go" .
-echo "  → $OUT_DIR/clavain-cli-go" >&2
+go build -C "$SRC_DIR" -o "$STAGE_DIR/clavain-cli-go" .
+artifacts+=("clavain-cli-go")
+
+# Promote only after every build succeeds. Building directly into the tracked
+# bin directory makes later targets embed vcs.modified=true.
+mkdir -p "$OUT_DIR"
+for artifact in "${artifacts[@]}"; do
+    install -m 0755 "$STAGE_DIR/$artifact" "$OUT_DIR/$artifact"
+    echo "  → $OUT_DIR/$artifact ($(du -h "$OUT_DIR/$artifact" | cut -f1))" >&2
+done
 
 echo "build-release: $built platform binaries + native binary built" >&2
