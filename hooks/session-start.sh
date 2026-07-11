@@ -201,6 +201,67 @@ if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     fi
 fi
 
+# Runtime-evidence reconciliation is read-only and intentionally infrequent.
+# A mkdir lock works on both macOS and Linux; the subshell trap releases it
+# even when the audit reports findings with a non-zero status.
+if [[ "$_hook_source" == "startup" || "$_hook_source" == "resume" ]]; then
+    _runtime_audit_script="${CLAVAIN_RUNTIME_EVIDENCE_AUDIT:-${PLUGIN_ROOT}/scripts/runtime-evidence-audit.sh}"
+    _runtime_audit_interval="${CLAVAIN_RUNTIME_AUDIT_INTERVAL_SECONDS:-21600}"
+    _runtime_audit_cache="${CLAVAIN_RUNTIME_AUDIT_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/clavain}"
+    [[ "$_runtime_audit_interval" =~ ^[0-9]+$ ]] || _runtime_audit_interval=21600
+
+    if [[ -x "$_runtime_audit_script" ]]; then
+        mkdir -p "$_runtime_audit_cache" 2>/dev/null || true
+        _runtime_audit_scope="${CLAUDE_PROJECT_DIR:-$PWD}"
+        if [[ -d "$_runtime_audit_scope" ]]; then
+            _runtime_audit_scope=$(git -C "$_runtime_audit_scope" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$_runtime_audit_scope")
+        fi
+        _runtime_audit_scope_key="${CLAVAIN_RUNTIME_AUDIT_SCOPE_KEY:-}"
+        if [[ ! "$_runtime_audit_scope_key" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            _runtime_audit_scope_key=$(printf '%s' "$_runtime_audit_scope" | cksum | awk '{print $1}')
+        fi
+        _runtime_audit_stamp="$_runtime_audit_cache/runtime-evidence-audit-${_runtime_audit_scope_key}.stamp"
+        _runtime_audit_lock="$_runtime_audit_cache/runtime-evidence-audit-${_runtime_audit_scope_key}.lock"
+        _runtime_audit_now=$(date +%s)
+        _runtime_audit_mtime=0
+        [[ -f "$_runtime_audit_stamp" ]] && \
+            _runtime_audit_mtime=$(stat -c %Y "$_runtime_audit_stamp" 2>/dev/null || stat -f %m "$_runtime_audit_stamp" 2>/dev/null || echo 0)
+        _runtime_audit_age=$((_runtime_audit_now - _runtime_audit_mtime))
+
+        if [[ "$_runtime_audit_age" -ge "$_runtime_audit_interval" ]]; then
+            _runtime_audit_locked=false
+            if mkdir "$_runtime_audit_lock" 2>/dev/null; then
+                _runtime_audit_locked=true
+            elif [[ -d "$_runtime_audit_lock" ]]; then
+                _runtime_lock_mtime=$(stat -c %Y "$_runtime_audit_lock" 2>/dev/null || stat -f %m "$_runtime_audit_lock" 2>/dev/null || echo "$_runtime_audit_now")
+                if [[ $((_runtime_audit_now - _runtime_lock_mtime)) -gt 900 ]]; then
+                    rmdir "$_runtime_audit_lock" 2>/dev/null || true
+                    mkdir "$_runtime_audit_lock" 2>/dev/null && _runtime_audit_locked=true
+                fi
+            fi
+
+            if [[ "$_runtime_audit_locked" == "true" ]]; then
+                _runtime_audit_json=$(
+                    trap 'rmdir "$_runtime_audit_lock" 2>/dev/null || true' EXIT
+                    cd "$_runtime_audit_scope" 2>/dev/null || exit 0
+                    "$_runtime_audit_script" --json 2>/dev/null || true
+                    touch "$_runtime_audit_stamp" 2>/dev/null || true
+                )
+                if jq -e '.supported == true and (.findings | type == "array" and length > 0)' \
+                    >/dev/null 2>&1 <<<"$_runtime_audit_json"; then
+                    _runtime_audit_items=$(jq -r '
+                        [.findings[:3][] | "\(.bead_id): \(.message) \(.action)"] | join(" | ")
+                    ' <<<"$_runtime_audit_json" 2>/dev/null) || _runtime_audit_items=""
+                    if [[ -n "$_runtime_audit_items" ]]; then
+                        _runtime_audit_items=$(escape_for_json "$_runtime_audit_items")
+                        companion_context="${companion_context}\\n- runtime evidence audit: ${_runtime_audit_items}"
+                    fi
+                fi
+            fi
+        fi
+    fi
+fi
+
 # Oracle
 if command -v oracle &>/dev/null && pgrep -f "Xvfb :99" &>/dev/null; then
     companion_list="${companion_list}oracle,"
