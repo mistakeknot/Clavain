@@ -31,6 +31,68 @@ if bead_has_label "$BEAD_ID" "close-gate:calibration-streak"; then
   clavain-cli calibration-streak verify --target=10
 fi
 
+# Runtime evidence is durable once bound. Requirement discovery therefore goes
+# through the CLI instead of consulting only the bead's current labels. Every
+# fallible proof operation, including the durable summary write, precedes
+# one-shot authorization consumption.
+runtime_required="$(clavain-cli runtime-evidence required "$BEAD_ID")" || {
+  echo "runtime-evidence: failed to determine requirement for $BEAD_ID" >&2
+  exit 1
+}
+
+case "$runtime_required" in
+  true)
+    command -v jq >/dev/null 2>&1 || {
+      echo "runtime-evidence: jq is required to validate the proof summary" >&2
+      exit 1
+    }
+
+    runtime_summary="$(clavain-cli runtime-evidence verify "$BEAD_ID")" || {
+      echo "runtime-evidence: verification failed for $BEAD_ID" >&2
+      exit 1
+    }
+    if ! runtime_summary="$(jq -ce '
+      select(
+        type == "object" and
+        (keys | sort) == ["git_head","host_fingerprint","proof_hash","run_id","schema_version","verified_at"] and
+        .schema_version == 1 and
+        (.proof_hash | type == "string" and test("^sha256:[0-9a-f]{64}$")) and
+        (.run_id | type == "string" and length > 0) and
+        (.git_head | type == "string" and test("^[0-9a-f]{40,64}$")) and
+        (.verified_at | type == "string" and length > 0) and
+        (.host_fingerprint | type == "string" and test("^sha256:[0-9a-f]{64}$"))
+      ) |
+      {schema_version,proof_hash,run_id,git_head,verified_at,host_fingerprint}
+    ' <<<"$runtime_summary")"; then
+      echo "runtime-evidence: verifier returned a malformed or unsafe summary" >&2
+      exit 1
+    fi
+
+    runtime_run_id="$(jq -er '.run_id' <<<"$runtime_summary")" || {
+      echo "runtime-evidence: verified summary has no run ID" >&2
+      exit 1
+    }
+    runtime_run="$(ic --json run status "$runtime_run_id")" || {
+      echo "runtime-evidence: cannot read associated run $runtime_run_id" >&2
+      exit 1
+    }
+    if ! jq -e --arg run "$runtime_run_id" '
+      type == "object" and .id == $run and .status == "completed" and .phase == "done"
+    ' >/dev/null 2>&1 <<<"$runtime_run"; then
+      echo "runtime-evidence: associated run must be completed at done" >&2
+      exit 1
+    fi
+
+    bd set-state "$BEAD_ID" "runtime_evidence_summary=$runtime_summary" \
+      --reason="Verified installed runtime before close"
+    ;;
+  false) ;;
+  *)
+    echo "runtime-evidence: unexpected requirement result for $BEAD_ID: $runtime_required" >&2
+    exit 1
+    ;;
+esac
+
 # v2 token path: if $CLAVAIN_AUTHZ_TOKEN is set, try to consume it first.
 # Hard-fails on auth-failure class (revoked | sig-verify | POP | mismatch);
 # state-class errors fall through to legacy gate_check below.

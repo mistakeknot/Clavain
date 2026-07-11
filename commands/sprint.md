@@ -463,7 +463,9 @@ Note: This advances `shipping → reflect` in the kernel. Step 7's `sprint-advan
 
 `/reflect`
 
-`/reflect` owns artifact registration AND the `reflect → done` advance — do NOT call sprint-advance after it returns. Gate is firm: Step 10 requires a reflect artifact with >= 3 substantive lines.
+`/reflect` owns reflection capture and artifact registration only. It deliberately
+leaves the Intercore run in `reflect`; Step 10 owns landing, installed-runtime
+proof, the terminal advance, and gated bead closure.
 
 ## Step 10: Ship (OODARC: Terminal)
 
@@ -482,9 +484,51 @@ if [[ "$body_lines" -lt 3 ]]; then
 fi
 ```
 
-Use `clavain:landing-a-change` skill to verify, document, commit.
+Use `clavain:landing-a-change` skill to verify, document, commit, and push. Do
+not continue until the push succeeds and the landed source is the exact source
+the installed-runtime collector will verify.
 
-After ship: `clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "closed" "$(git rev-parse HEAD)" 2>/dev/null || true`; set `phase=done`; `bd close "$CLAVAIN_BEAD_ID" 2>/dev/null || true`
+Determine whether installed-runtime proof is required. Requirement lookup is
+durable: removing the current label does not bypass a previously bound gate.
+For a nonstandard config, set bead state `runtime_evidence_config` to its path.
+
+```bash
+runtime_required=$(clavain-cli runtime-evidence required "$CLAVAIN_BEAD_ID") || {
+    echo "ERROR: could not determine runtime-evidence requirement" >&2
+    exit 1
+}
+case "$runtime_required" in
+    true)
+        runtime_config=$(bd state "$CLAVAIN_BEAD_ID" runtime_evidence_config 2>/dev/null) || runtime_config=""
+        if [[ "$runtime_config" == "null" || "$runtime_config" == \(no\ * ]]; then
+            runtime_config=""
+        fi
+        if [[ -z "$runtime_config" && -f .clavain/runtime-evidence.json ]]; then
+            runtime_config=.clavain/runtime-evidence.json
+        fi
+        if [[ -z "$runtime_config" ]]; then
+            echo "ERROR: runtime evidence is required but no config is set. Set bead state runtime_evidence_config or commit .clavain/runtime-evidence.json." >&2
+            exit 1
+        fi
+        clavain-cli runtime-evidence collect "$CLAVAIN_BEAD_ID" --config="$runtime_config"
+        ;;
+    false) ;;
+    *)
+        echo "ERROR: unexpected runtime-evidence requirement result: $runtime_required" >&2
+        exit 1
+        ;;
+esac
+```
+
+Only after landing and any required collection, perform the terminal Intercore
+transition and close through the canonical gate wrapper. Neither operation is
+best-effort: failure leaves the bead open for a safe retry.
+
+```bash
+clavain-cli sprint-advance "$CLAVAIN_BEAD_ID" "reflect"
+"${CLAUDE_PLUGIN_ROOT}/scripts/gates/bead-close.sh" "$CLAVAIN_BEAD_ID" "Shipped and runtime-verified"
+clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "closed" "$(git rev-parse HEAD)" 2>/dev/null || true
+```
 
 Close sweep:
 ```bash

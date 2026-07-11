@@ -43,6 +43,16 @@ STUB_BIN="${SANDBOX}/bin"
 mkdir -p "${STUB_BIN}"
 cat > "${STUB_BIN}/bd" <<'STUB'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "show" ]]; then
+  printf '[{"id":"%s","labels":[]}]\n' "${2:-unknown}"
+  exit 0
+fi
+if [[ "${1:-}" == "state" ]]; then
+  if [[ "${3:-}" == "runtime_evidence_required" && -n "${BD_RUNTIME_REQUIRED:-}" ]]; then
+    printf '%s\n' "$BD_RUNTIME_REQUIRED"
+  fi
+  exit 0
+fi
 printf 'bd %s\n' "$*" >> "$BD_CALL_LOG"
 STUB
 cat > "${STUB_BIN}/clavain-cli" <<STUB
@@ -211,6 +221,32 @@ scenario_token_valid() {
   echo "PASS: token valid → short-circuit + consumed_at set"
 }
 
+scenario_runtime_proof_precedes_token() {
+  echo "=== token: invalid runtime proof preserves one-shot token ==="
+  local opaque id rc=0
+  opaque="$(issue_token bead-close iv-smoke-proof smoke-consumer 60m)"
+  id="${opaque%%.*}"
+
+  BD_RUNTIME_REQUIRED=1 CLAVAIN_AGENT_ID=smoke-consumer CLAVAIN_AUTHZ_TOKEN="$opaque" \
+    bash "${GATES}/bead-close.sh" iv-smoke-proof reason \
+    >"${SANDBOX}/runtime-proof.out" 2>"${SANDBOX}/runtime-proof.err" || rc=$?
+
+  if [[ "$rc" == "0" ]]; then
+    echo "FAIL: missing runtime proof should reject close"
+    exit 1
+  fi
+  if grep -q "bd close iv-smoke-proof" "$BD_CALL_LOG"; then
+    echo "FAIL: runtime-gated bead closed without proof"
+    exit 1
+  fi
+  local ca; ca="$(token_row_consumed_at "$id")"
+  if [[ "$ca" != "0" ]]; then
+    echo "FAIL: invalid runtime proof consumed one-shot token (id=$id)"
+    exit 1
+  fi
+  echo "PASS: runtime proof rejects before token consumption"
+}
+
 scenario_token_revoked_hard_fail() {
   echo "=== token: revoked → hard fail ==="
   local opaque id
@@ -344,6 +380,7 @@ case "$FOCUS" in
     scenario_legacy_bead_close
     ;;
   token)
+    scenario_runtime_proof_precedes_token
     scenario_token_valid
     scenario_token_revoked_hard_fail
     scenario_token_expect_mismatch
@@ -353,6 +390,7 @@ case "$FOCUS" in
     ;;
   all)
     scenario_legacy_bead_close
+    scenario_runtime_proof_precedes_token
     scenario_token_valid
     scenario_token_revoked_hard_fail
     scenario_token_expect_mismatch

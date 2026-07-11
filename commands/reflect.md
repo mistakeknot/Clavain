@@ -1,13 +1,14 @@
 ---
 name: reflect
-description: Capture sprint learnings and advance from reflect to done
+description: Capture sprint learnings and register the reflection artifact
 argument-hint: "[optional: brief context about what was learned]"
 disable-model-invocation: false
 ---
 
 # /reflect
 
-Capture sprint learnings and advance `reflect → done`.
+Capture sprint learnings and register the reflection artifact. The sprint
+orchestrator owns landing, runtime proof, and the terminal transition.
 
 <BEHAVIORAL-RULES>
 1. **Execute steps in order.** No skipping or reordering.
@@ -23,13 +24,14 @@ Reflect Progress:
 - [ ] Step 3: Capture learnings
 - [ ] Step 4: Register artifact
 - [ ] Step 5: Export transcript
-- [ ] Step 6: Advance sprint
+- [ ] Step 6: Confirm artifact
 - [ ] Step 7: Drift check
 - [ ] Step 8: Calibrate costs
 - [ ] Step 9: Calibrate routing
 ```
 
-Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no further steps exist.
+Mark each `[x]` as you complete it. After Step 9, reflection work is complete,
+but the sprint remains in `reflect` until its terminal ship step succeeds.
 
 ## Context
 
@@ -79,9 +81,13 @@ Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no fur
    fi
    ```
 
-6. **Advance sprint.**
+6. **Confirm the registered artifact.**
    ```bash
-   clavain-cli sprint-advance "<sprint_id>" "reflect"
+   registered=$(clavain-cli get-artifact "<sprint_id>" "reflection" 2>/dev/null) || registered=""
+   if [[ -z "$registered" || ! -f "$registered" ]]; then
+       echo "ERROR: reflection artifact registration did not persist" >&2
+       exit 1
+   fi
    ```
 
 7. **Drift check (non-blocking).** Run `interwatch:watch` via Skill tool. Report findings but don't block.
@@ -172,4 +178,5 @@ Mark each `[x]` as you complete it. After Step 9, reflect is **done** — no fur
 
 Reflect gate is firm: requires a registered `"reflection"` artifact with >= 3 substantive lines. Step 10 will block without it.
 
-Do NOT display additional unchecked phases or pending steps after this. The reflect command's scope ends here.
+Do NOT perform landing, runtime collection, terminal transition, or bead closure
+from this command. Return control to the sprint orchestrator after Step 9.

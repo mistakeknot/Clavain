@@ -1,5 +1,5 @@
 {
-  "generated": "2026-07-09T16:31:10Z",
+  "generated": "2026-07-11T14:46:21Z",
   "counts": {
     "skills": 19,
     "agents": 6,
@@ -258,7 +258,7 @@
     },
     {
       "name": "reflect",
-      "description": "Capture sprint learnings and advance from reflect to done"
+      "description": "Capture sprint learnings and register the reflection artifact"
     },
     {
       "name": "repro-first-debugging",
