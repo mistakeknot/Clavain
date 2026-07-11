@@ -5,7 +5,8 @@
 #
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET_VERSION="${1:-}"
 
 # Intercore invokes this hook before writing plugin.json, but passes the target

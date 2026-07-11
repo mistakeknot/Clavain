@@ -16,7 +16,7 @@ def test_post_bump_updates_prd_to_target_version(tmp_path: Path) -> None:
 
     subprocess.run(
         ["bash", str(tmp_path / "scripts" / "post-bump.sh"), "0.1.1"],
-        cwd=tmp_path,
+        cwd=tmp_path.parent,
         check=True,
     )
 
