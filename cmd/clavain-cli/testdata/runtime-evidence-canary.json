@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "build_path": "cmd/clavain-cli/testdata/bin/runtimefixture",
+  "installed_paths": {
+    "darwin-arm64": "/replace/with/installed/runtimefixture",
+    "linux-amd64": "/replace/with/installed/runtimefixture"
+  },
+  "start_argv": [
+    "{installed_path}"
+  ],
+  "probe_argv": [
+    "{project_root}/cmd/clavain-cli/testdata/bin/runtimeprobe"
+  ],
+  "probe_digests": {
+    "darwin-arm64": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "linux-amd64": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "timeout_seconds": 10,
+  "required_subsystems": [
+    "store"
+  ],
+  "not_applicable_failure_classes": [
+    "dependency_injection",
+    "projection_catchup"
+  ],
+  "required_assertions": [
+    "state-delta"
+  ],
+  "expected_surfaces": [
+    "diag/health",
+    "diag/smoke-test"
+  ],
+  "required_resources": [
+    {
+      "kind": "port",
+      "ownership": "ephemeral"
+    }
+  ]
+}
