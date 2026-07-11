@@ -76,6 +76,37 @@ var defaultActions = map[string]any{
 	"shipping":      map[string]string{"command": "/clavain:reflect", "mode": "interactive"},
 }
 
+type sprintCreateArgs struct {
+	Title           string
+	Complexity      int
+	Lane            string
+	RuntimeEvidence bool
+}
+
+func parseSprintCreateArgs(args []string) sprintCreateArgs {
+	parsed := sprintCreateArgs{Title: "Sprint", Complexity: 3}
+	positionals := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--runtime-evidence" {
+			parsed.RuntimeEvidence = true
+			continue
+		}
+		positionals = append(positionals, arg)
+	}
+	if len(positionals) > 0 && positionals[0] != "" {
+		parsed.Title = positionals[0]
+	}
+	if len(positionals) > 1 {
+		if complexity, err := strconv.Atoi(positionals[1]); err == nil && complexity >= 1 && complexity <= 5 {
+			parsed.Complexity = complexity
+		}
+	}
+	if len(positionals) > 2 {
+		parsed.Lane = positionals[2]
+	}
+	return parsed
+}
+
 // Pre-marshalled JSON for constant data — avoids per-call json.Marshal overhead.
 var (
 	defaultPhasesJSON  []byte
@@ -91,20 +122,10 @@ func init() {
 // Args: <title> [complexity] [lane]
 // Output: bead ID (plain text) on stdout.
 func cmdSprintCreate(args []string) error {
-	title := "Sprint"
-	if len(args) > 0 && args[0] != "" {
-		title = args[0]
-	}
-	complexity := 3
-	if len(args) > 1 {
-		if c, err := strconv.Atoi(args[1]); err == nil && c >= 1 && c <= 5 {
-			complexity = c
-		}
-	}
-	lane := ""
-	if len(args) > 2 {
-		lane = args[2]
-	}
+	parsed := parseSprintCreateArgs(args)
+	title := parsed.Title
+	complexity := parsed.Complexity
+	lane := parsed.Lane
 
 	if !icAvailable() {
 		fmt.Fprintln(os.Stderr, "Sprint requires intercore (ic). Install ic or use beads directly for task tracking.")
@@ -137,6 +158,12 @@ func cmdSprintCreate(args []string) error {
 		if lane != "" {
 			runBD("label", "add", sprintID, "lane:"+lane)
 		}
+		if parsed.RuntimeEvidence {
+			if _, err := runBD("label", "add", sprintID, runtimeEvidenceLabel); err != nil {
+				runBD("update", sprintID, "--status=cancelled")
+				return fmt.Errorf("sprint_create: add runtime evidence label: %w", err)
+			}
+		}
 	}
 
 	// Use bead ID as scope_id, or generate a placeholder
@@ -157,6 +184,13 @@ func cmdSprintCreate(args []string) error {
 		"--scope-id=" + scopeID,
 		"--token-budget=" + strconv.FormatInt(tokenBudget, 10),
 		"--actions=" + string(defaultActionsJSON),
+	}
+	if parsed.RuntimeEvidence {
+		metadata, err := runtimeEvidenceMetadataForBead(scopeID)
+		if err != nil {
+			return fmt.Errorf("sprint_create: runtime evidence metadata: %w", err)
+		}
+		icArgs = append(icArgs, "--metadata="+metadata)
 	}
 
 	runIDOut, err := runIC(icArgs...)
@@ -205,6 +239,11 @@ func cmdSprintCreate(args []string) error {
 			return fmt.Errorf("failed to write ic_run_id to bead: %w", err)
 		}
 		runBD("set-state", sprintID, "token_budget="+strconv.FormatInt(tokenBudget, 10))
+		if parsed.RuntimeEvidence {
+			if _, err := runBD("set-state", sprintID, "runtime_evidence_required=1"); err != nil {
+				return fmt.Errorf("sprint_create: persist runtime evidence marker: %w", err)
+			}
+		}
 	}
 
 	// Load default agency specs if available

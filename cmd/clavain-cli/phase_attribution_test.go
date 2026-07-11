@@ -37,6 +37,10 @@ func setupPhaseAdvanceHarness(t *testing.T, attributeFails, interstatFails bool)
 	writeExecutable(filepath.Join(binDir, "bd"), `#!/usr/bin/env bash
 set -eu
 printf 'bd:%s\n' "$*" >>"$PHASE_ATTR_LOG"
+if [[ "${1:-}" == "show" && "${3:-}" == "--json" ]]; then
+  printf '%s\n' '[{"id":"bead-7","labels":[]}]'
+  exit 0
+fi
 if [[ "${1:-}" == "state" && "${3:-}" == "ic_run_id" ]]; then
   printf 'run-42\n'
 fi
@@ -46,6 +50,10 @@ set -eu
 printf 'ic:%s\n' "$*" >>"$PHASE_ATTR_LOG"
 if [[ "${1:-}" == "--json" && "${2:-}" == "run" && "${3:-}" == "advance" ]]; then
   printf '%s\n' '{"advanced":true,"from_phase":"planned","to_phase":"executing","event_type":"advance"}'
+  exit 0
+fi
+if [[ "${1:-}" == "--json" && "${2:-}" == "run" && "${3:-}" == "status" ]]; then
+  printf '%s\n' '{"id":"run-42","project_dir":"/tmp/project","phase":"planned","status":"active","created_at":1}'
   exit 0
 fi
 if [[ "${1:-}" == "session" && "${2:-}" == "attribute" && "${IC_ATTRIBUTE_FAIL:-0}" == "1" ]]; then

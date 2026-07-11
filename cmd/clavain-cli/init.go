@@ -61,6 +61,9 @@ func cmdSprintInit(args []string) error {
 		return fmt.Errorf("bead %s not found", beadID)
 	}
 	title := parseBDTitle(string(titleOut))
+	if err := validateRuntimeEvidenceBinding(defaultRuntimeEvidenceOps(), beadID); err != nil {
+		return fmt.Errorf("sprint-init: %w", err)
+	}
 
 	// Parallel queries for complexity, phase, budget
 	var (

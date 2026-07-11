@@ -70,11 +70,14 @@ type AdvanceResult struct {
 
 // Artifact from ic run artifact list.
 type Artifact struct {
-	ID    string `json:"id,omitempty"`
-	RunID string `json:"run_id"`
-	Phase string `json:"phase"`
-	Path  string `json:"path"`
-	Type  string `json:"type,omitempty"`
+	ID          string `json:"id,omitempty"`
+	RunID       string `json:"run_id"`
+	Phase       string `json:"phase"`
+	Path        string `json:"path"`
+	Type        string `json:"type,omitempty"`
+	ContentHash string `json:"content_hash,omitempty"`
+	Status      string `json:"status,omitempty"`
+	CreatedAt   int64  `json:"created_at,omitempty"`
 }
 
 // TokenAgg from ic run tokens.

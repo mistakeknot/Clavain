@@ -3,18 +3,24 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/mistakeknot/intercore/pkg/runtimeproof"
@@ -31,6 +37,7 @@ type runtimeEvidenceConfigFile struct {
 	InstalledPaths              map[string]string                  `json:"installed_paths"`
 	StartArgv                   []string                           `json:"start_argv"`
 	ProbeArgv                   []string                           `json:"probe_argv"`
+	ProbeDigests                map[string]string                  `json:"probe_digests"`
 	TimeoutSeconds              int                                `json:"timeout_seconds"`
 	RequiredSubsystems          []string                           `json:"required_subsystems"`
 	NotApplicableFailureClasses []string                           `json:"not_applicable_failure_classes"`
@@ -44,6 +51,7 @@ type resolvedRuntimeEvidenceConfig struct {
 	InstalledPath string
 	StartArgv     []string
 	ProbeArgv     []string
+	ProbeDigest   string
 	Timeout       time.Duration
 	Expectations  runtimeproof.Expectations
 }
@@ -70,6 +78,12 @@ type runtimeProbeObservations struct {
 	ObservedSurfaces []string                          `json:"observed_surfaces"`
 	Resources        []runtimeObservedResource         `json:"resources"`
 	Collisions       []string                          `json:"collisions"`
+}
+
+type runtimeEndpointDiscovery struct {
+	SchemaVersion int                       `json:"schema_version"`
+	Endpoint      string                    `json:"endpoint"`
+	Resources     []runtimeObservedResource `json:"resources"`
 }
 
 type runtimeReceiptInput struct {
@@ -101,15 +115,19 @@ type runtimeRunMetadata struct {
 }
 
 type runtimeEvidenceOps struct {
-	labels           func(string) ([]string, error)
-	state            func(string, string) (string, error)
-	setState         func(string, string, string) error
-	resolveRun       func(string) (string, error)
-	loadRun          func(string) (Run, error)
-	mergeRunMetadata func(string, string) error
-	findScopeRuns    func(string) ([]Run, error)
-	validateAdoption func(string, string) (json.RawMessage, error)
-	createRun        func(runtimeAdoptCreate) (string, error)
+	labels            func(string) ([]string, error)
+	state             func(string, string) (string, error)
+	setState          func(string, string, string) error
+	resolveRun        func(string) (string, error)
+	loadRun           func(string) (Run, error)
+	mergeRunMetadata  func(string, string) error
+	findScopeRuns     func(string) ([]Run, error)
+	validateAdoption  func(string, string) (json.RawMessage, error)
+	createRun         func(runtimeAdoptCreate) (string, error)
+	listArtifacts     func(string) ([]Artifact, error)
+	verifyFile        func(context.Context, string, runtimeproof.VerifyOptions) (*runtimeproof.Result, error)
+	registerArtifact  func(string, string, string, string, string) error
+	removePrivateRoot func(string) error
 }
 
 type runtimeAdoptCreate struct {
@@ -139,6 +157,8 @@ type runtimeAdoptionSource struct {
 }
 
 var runtimeGitHeadPattern = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
+var runtimeDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+var errRuntimeRunNotBound = errors.New("runtime evidence run is not bound")
 
 type runtimeEvidenceRequirementStatus struct {
 	Required bool
@@ -181,17 +201,50 @@ func cmdRuntimeEvidence(args []string) error {
 		if !ok || strings.TrimSpace(provenancePath) == "" {
 			return errors.New("runtime-evidence adopt: --provenance is required")
 		}
-		if _, err := runIC("lock", "acquire", "runtime-evidence-adopt", args[1], "--timeout=2s"); err != nil {
+		lockOwner := fmt.Sprintf("clavain-runtime-adopt:%d", os.Getpid())
+		if _, err := runIC("lock", "acquire", "runtime-evidence-adopt", args[1], "--timeout=2s", "--owner="+lockOwner); err != nil {
 			return fmt.Errorf("runtime-evidence adopt: acquire serialization lock: %w", err)
 		}
 		defer func() {
-			_, _ = runIC("lock", "release", "runtime-evidence-adopt", args[1])
+			_, _ = runIC("lock", "release", "runtime-evidence-adopt", args[1], "--owner="+lockOwner)
 		}()
 		runID, err := adoptRuntimeEvidence(defaultRuntimeEvidenceOps(), args[1], projectRoot, provenancePath)
 		if err != nil {
 			return err
 		}
 		fmt.Println(runID)
+		return nil
+	case "verify":
+		if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
+			return errors.New("usage: runtime-evidence verify <bead_id>")
+		}
+		summary, err := verifyRuntimeEvidence(defaultRuntimeEvidenceOps(), args[1])
+		if err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(summary)
+		if err != nil {
+			return fmt.Errorf("runtime-evidence verify: encode summary: %w", err)
+		}
+		fmt.Println(string(encoded))
+		return nil
+	case "collect":
+		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+			return errors.New("usage: runtime-evidence collect <bead_id> --config=<path>")
+		}
+		configPath, ok := runtimeFlagValue(args[2:], "config")
+		if !ok || strings.TrimSpace(configPath) == "" {
+			return errors.New("runtime-evidence collect: --config is required")
+		}
+		summary, err := collectRuntimeEvidence(defaultRuntimeEvidenceOps(), args[1], configPath)
+		if err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(summary)
+		if err != nil {
+			return fmt.Errorf("runtime-evidence collect: encode summary: %w", err)
+		}
+		fmt.Println(string(encoded))
 		return nil
 	default:
 		return fmt.Errorf("runtime-evidence: unknown subcommand %q", args[0])
@@ -222,7 +275,21 @@ func defaultRuntimeEvidenceOps() runtimeEvidenceOps {
 			_, err := runBD("set-state", beadID, key+"="+value)
 			return err
 		},
-		resolveRun: resolveRunIDQuiet,
+		resolveRun: func(beadID string) (string, error) {
+			if runID, ok := runIDCache[beadID]; ok && strings.TrimSpace(runID) != "" {
+				return runID, nil
+			}
+			out, err := runBDQuiet("state", beadID, "ic_run_id")
+			if err != nil {
+				return "", err
+			}
+			runID := strings.TrimSpace(string(out))
+			if runID == "" || runID == "null" || strings.HasPrefix(runID, "(no ") {
+				return "", errRuntimeRunNotBound
+			}
+			runIDCache[beadID] = runID
+			return runID, nil
+		},
 		loadRun: func(runID string) (Run, error) {
 			var run Run
 			if err := runICJSONQuiet(&run, "run", "status", runID); err != nil {
@@ -260,6 +327,24 @@ func defaultRuntimeEvidenceOps() runtimeEvidenceOps {
 			}
 			return strings.TrimSpace(string(out)), nil
 		},
+		listArtifacts: func(runID string) ([]Artifact, error) {
+			var artifacts []Artifact
+			if err := runICJSONQuiet(&artifacts, "run", "artifact", "list", runID); err != nil {
+				return nil, err
+			}
+			return artifacts, nil
+		},
+		verifyFile: runtimeproof.VerifyFile,
+		registerArtifact: func(beadID, runID, phase, path, artifactType string) error {
+			if _, err := runBD("set-state", beadID, "artifact_"+artifactType+"="+path); err != nil {
+				return fmt.Errorf("register runtime evidence in Beads: %w", err)
+			}
+			if _, err := runIC("run", "artifact", "add", runID, "--phase="+phase, "--path="+path, "--type="+artifactType); err != nil {
+				return fmt.Errorf("register runtime evidence in Intercore: %w", err)
+			}
+			return nil
+		},
+		removePrivateRoot: removeRuntimePrivateRoot,
 	}
 }
 
@@ -321,6 +406,9 @@ func inspectRuntimeEvidenceRequirement(ops runtimeEvidenceOps, beadID string) (r
 		Marked:   runtimeMarkerSet(markerValue),
 	}
 	runID, resolveErr := ops.resolveRun(beadID)
+	if resolveErr != nil && !errors.Is(resolveErr, errRuntimeRunNotBound) {
+		return runtimeEvidenceRequirementStatus{}, fmt.Errorf("runtime-evidence required: resolve run binding: %w", resolveErr)
+	}
 	if resolveErr == nil && strings.TrimSpace(runID) != "" {
 		status.RunID = runID
 		status.Run, err = ops.loadRun(runID)
@@ -334,6 +422,287 @@ func inspectRuntimeEvidenceRequirement(ops runtimeEvidenceOps, beadID string) (r
 	}
 	status.Required = status.Labelled || status.Marked || status.Bound
 	return status, nil
+}
+
+func validateRuntimeEvidenceBinding(ops runtimeEvidenceOps, beadID string) error {
+	status, err := inspectRuntimeEvidenceRequirement(ops, beadID)
+	if err != nil {
+		return err
+	}
+	if !status.Required {
+		return nil
+	}
+	if status.RunID == "" {
+		return fmt.Errorf("runtime evidence is required for %s but no run is bound; use `clavain-cli runtime-evidence adopt %s --project=<root> --provenance=<json>`", beadID, beadID)
+	}
+	if !status.Bound {
+		return fmt.Errorf("runtime evidence is required for %s but run %s is not sealed; use `clavain-cli runtime-evidence bind %s`", beadID, status.RunID, beadID)
+	}
+	return nil
+}
+
+func runtimeEvidenceMetadataForBead(beadID string) (string, error) {
+	if strings.TrimSpace(beadID) == "" {
+		return "", errors.New("runtime evidence metadata requires a bead or scope ID")
+	}
+	data, err := json.Marshal(runtimeRunMetadata{CloseGate: &runtimeCloseGateMetadata{
+		Requirements: []string{runtimeEvidenceArtifactType},
+		BeadID:       beadID,
+	}})
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func verifyRuntimeEvidence(ops runtimeEvidenceOps, beadID string) (runtimeproof.Summary, error) {
+	status, err := inspectRuntimeEvidenceRequirement(ops, beadID)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence verify: %w", err)
+	}
+	if !status.Required {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence verify: bead %s does not require runtime evidence", beadID)
+	}
+	if !status.Bound || status.RunID == "" {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence verify: bead %s is required but not bound to a sealed run", beadID)
+	}
+	metadata, _, err := runtimeEvidenceMetadataState(beadID, status.Run.Metadata)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence verify: %w", err)
+	}
+	if metadata.CloseGate == nil || metadata.CloseGate.RuntimeExpectations == nil || metadata.CloseGate.ConfigDigest == "" {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence verify: sealed runtime expectations and config digest are missing")
+	}
+	if !runtimeDigestPattern.MatchString(metadata.CloseGate.ConfigDigest) {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence verify: sealed config digest is invalid")
+	}
+	if err := runtimeproof.ValidateExpectations(*metadata.CloseGate.RuntimeExpectations); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence verify: sealed expectations: %w", err)
+	}
+	if !filepath.IsAbs(status.Run.ProjectDir) {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence verify: run project directory must be absolute")
+	}
+	artifacts, err := ops.listArtifacts(status.RunID)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence verify: list artifacts: %w", err)
+	}
+	var newest *Artifact
+	for idx := len(artifacts) - 1; idx >= 0; idx-- {
+		artifact := artifacts[idx]
+		if artifact.Type == runtimeEvidenceArtifactType && artifact.Status == "active" {
+			newest = &artifact
+			break
+		}
+	}
+	if newest == nil {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence verify: no active runtime-evidence/v1 artifact is registered")
+	}
+	if !runtimeDigestPattern.MatchString(newest.ContentHash) {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence verify: newest runtime evidence artifact has no valid content hash")
+	}
+	result, err := ops.verifyFile(context.Background(), newest.Path, runtimeproof.VerifyOptions{
+		ExpectedBeadID:       beadID,
+		ExpectedRunID:        status.RunID,
+		ExpectedProjectRoot:  filepath.Clean(status.Run.ProjectDir),
+		ExpectedArtifactHash: newest.ContentHash,
+		RunCreatedAt:         time.Unix(status.Run.CreatedAt, 0),
+		Expectations:         *metadata.CloseGate.RuntimeExpectations,
+	})
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence verify: %w", err)
+	}
+	return result.Summary, nil
+}
+
+func collectRuntimeEvidence(ops runtimeEvidenceOps, beadID, configPath string) (summary runtimeproof.Summary, returnErr error) {
+	if err := bindRuntimeEvidence(ops, beadID); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: %w", err)
+	}
+	status, err := inspectRuntimeEvidenceRequirement(ops, beadID)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: %w", err)
+	}
+	if !status.Bound || status.RunID == "" || !filepath.IsAbs(status.Run.ProjectDir) {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: required run is not durably bound to an absolute project root")
+	}
+	if status.Run.CreatedAt <= 0 {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: run creation time is missing")
+	}
+	projectRoot := filepath.Clean(status.Run.ProjectDir)
+	resolved, configDigest, err := loadRuntimeEvidenceConfig(projectRoot, configPath)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: %w", err)
+	}
+	metadataPatch, err := json.Marshal(map[string]any{"close_gate": map[string]any{
+		"runtime_expectations": resolved.Expectations,
+		"config_digest":        configDigest,
+	}})
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: encode expectations: %w", err)
+	}
+	if err := ops.mergeRunMetadata(status.RunID, string(metadataPatch)); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: seal expectations: %w", err)
+	}
+	status, err = inspectRuntimeEvidenceRequirement(ops, beadID)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: reload sealed run: %w", err)
+	}
+	metadata, bound, err := runtimeEvidenceMetadataState(beadID, status.Run.Metadata)
+	if err != nil || !bound || metadata.CloseGate == nil || metadata.CloseGate.RuntimeExpectations == nil || metadata.CloseGate.ConfigDigest != configDigest {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: sealed expectations failed read-after-write verification")
+	}
+
+	buildDigest, _, err := hashRuntimeRegularFile(resolved.BuildPath, runtimeproof.DefaultMaxArtifactBytes)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: build artifact: %w", err)
+	}
+	installedDigest, installedMode, err := hashRuntimeRegularFile(resolved.InstalledPath, runtimeproof.DefaultMaxArtifactBytes)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: installed artifact: %w", err)
+	}
+	if installedMode&0o111 == 0 {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: installed artifact is not executable")
+	}
+	if buildDigest != installedDigest {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: build and installed artifact digests differ")
+	}
+	gitHead, err := runtimeGitOutput(projectRoot, "rev-parse", "HEAD")
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: resolve git HEAD: %w", err)
+	}
+	gitHead = strings.TrimSpace(gitHead)
+	if !runtimeGitHeadPattern.MatchString(gitHead) {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: git HEAD is invalid")
+	}
+	host, err := os.Hostname()
+	if err != nil || strings.TrimSpace(host) == "" {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: hostname is unavailable")
+	}
+	instanceNonce, err := newRuntimeEvidenceID()
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: nonce: %w", err)
+	}
+	eventID, err := newRuntimeEvidenceID()
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: event ID: %w", err)
+	}
+
+	stateDir, err := runtimeEvidenceStateDir(projectRoot)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: state directory: %w", err)
+	}
+	privateRoot, err := os.MkdirTemp(stateDir, ".probe-")
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: private probe directory: %w", err)
+	}
+	removePrivateRoot := ops.removePrivateRoot
+	if removePrivateRoot == nil {
+		removePrivateRoot = removeRuntimePrivateRoot
+	}
+	privateRootRemoved := false
+	defer func() {
+		if !privateRootRemoved {
+			if cleanupErr := removePrivateRoot(privateRoot); cleanupErr != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("runtime-evidence collect: deferred private probe directory cleanup: %w", cleanupErr))
+			}
+		}
+	}()
+	if err := os.Chmod(privateRoot, 0o700); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: private probe permissions: %w", err)
+	}
+	endpointPath := filepath.Join(privateRoot, "endpoint.json")
+	if _, err := os.Lstat(endpointPath); !errors.Is(err, os.ErrNotExist) {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: endpoint discovery path was not fresh")
+	}
+	generatedEnv := map[string]string{
+		"CLAVAIN_RUNTIME_BEAD_ID":        beadID,
+		"CLAVAIN_RUNTIME_RUN_ID":         status.RunID,
+		"CLAVAIN_RUNTIME_GIT_HEAD":       gitHead,
+		"CLAVAIN_RUNTIME_INSTANCE_NONCE": instanceNonce,
+		"CLAVAIN_RUNTIME_EVENT_ID":       eventID,
+		"CLAVAIN_RUNTIME_ENDPOINT_FILE":  endpointPath,
+	}
+	childEnv := runtimeEvidenceEnvironment(generatedEnv)
+	startedAt := time.Now().UTC()
+	process, err := startRuntimeManagedProcess(resolved.StartArgv, childEnv, projectRoot, 256<<10)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: start installed runtime: %w", err)
+	}
+	generatedEnv["CLAVAIN_RUNTIME_PROCESS_ID"] = strconv.Itoa(process.pid)
+	childEnv = runtimeEvidenceEnvironment(generatedEnv)
+	processStopped := false
+	discoveryLoaded := false
+	var cleanupResources []runtimeObservedResource
+	defer func() {
+		if !processStopped {
+			if cleanupErr := process.stop(2 * time.Second); cleanupErr != nil {
+				returnErr = errors.Join(returnErr, fmt.Errorf("runtime-evidence collect: deferred process-group cleanup: %w", cleanupErr))
+			}
+			if discoveryLoaded {
+				if cleanupErr := verifyRuntimeResourceCleanup(cleanupResources); cleanupErr != nil {
+					returnErr = errors.Join(returnErr, fmt.Errorf("runtime-evidence collect: deferred resource cleanup: %w", cleanupErr))
+				}
+			}
+		}
+	}()
+
+	discovery, err := waitRuntimeEndpointDiscovery(endpointPath, privateRoot, startedAt, resolved.Timeout, process)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: %w", err)
+	}
+	discoveryLoaded = true
+	cleanupResources = append([]runtimeObservedResource(nil), discovery.Resources...)
+	probeOutput, err := runRuntimeBoundedCommand(resolved.ProbeArgv, childEnv, projectRoot, resolved.Timeout, 256<<10)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: probe: %w", err)
+	}
+	if exited, exitErr := process.exited(); exited {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: installed runtime exited before cleanup: %v", exitErr)
+	}
+	var observations runtimeProbeObservations
+	if err := decodeStrictJSON(probeOutput, &observations); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: decode probe output: %w", err)
+	}
+	if err := validateRuntimeProbeScope(observations, discovery, resolved.Expectations, instanceNonce, eventID); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: %w", err)
+	}
+	if err := process.stop(2 * time.Second); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: stop installed runtime: %w", err)
+	}
+	processStopped = true
+	if process.stdout.overflowed() || process.stderr.overflowed() {
+		return runtimeproof.Summary{}, errors.New("runtime-evidence collect: installed runtime output exceeded limit")
+	}
+	if err := verifyRuntimeResourceCleanup(discovery.Resources); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: cleanup: %w", err)
+	}
+	if err := removePrivateRoot(privateRoot); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: private probe directory cleanup: %w", err)
+	}
+	privateRootRemoved = true
+
+	receipt, err := buildRuntimeEvidenceReceipt(runtimeReceiptInput{
+		BeadID: beadID, RunID: status.RunID, ProjectRoot: projectRoot, GitHead: gitHead, Host: host,
+		CreatedAt: time.Now().UTC(), StartedAt: startedAt,
+		BuildDigest: buildDigest, InstalledDigest: installedDigest,
+		ProcessID: process.pid, InstanceNonce: instanceNonce, EventID: eventID,
+		Expectations: resolved.Expectations,
+	}, observations)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: assemble receipt: %w", err)
+	}
+	receiptPath, _, err := writeAndVerifyRuntimeReceipt(stateDir, beadID, status.Run, receipt, resolved.Expectations)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: receipt: %w", err)
+	}
+	if err := ops.registerArtifact(beadID, status.RunID, status.Run.Phase, receiptPath, runtimeEvidenceArtifactType); err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: register receipt: %w", err)
+	}
+	summary, err = verifyRuntimeEvidence(ops, beadID)
+	if err != nil {
+		return runtimeproof.Summary{}, fmt.Errorf("runtime-evidence collect: post-registration verification: %w", err)
+	}
+	return summary, nil
 }
 
 func bindRuntimeEvidence(ops runtimeEvidenceOps, beadID string) error {
@@ -352,7 +721,13 @@ func bindRuntimeEvidence(ops runtimeEvidenceOps, beadID string) error {
 	marker := runtimeMarkerSet(markerValue)
 
 	runID, err := ops.resolveRun(beadID)
-	if err != nil || strings.TrimSpace(runID) == "" {
+	if err != nil {
+		if !errors.Is(err, errRuntimeRunNotBound) {
+			return fmt.Errorf("runtime-evidence bind: resolve existing run: %w", err)
+		}
+		return fmt.Errorf("runtime-evidence bind: bead %s has no Intercore run; use `clavain-cli runtime-evidence adopt %s --project=<root> --provenance=<json>`", beadID, beadID)
+	}
+	if strings.TrimSpace(runID) == "" {
 		return fmt.Errorf("runtime-evidence bind: bead %s has no Intercore run; use `clavain-cli runtime-evidence adopt %s --project=<root> --provenance=<json>`", beadID, beadID)
 	}
 	run, err := ops.loadRun(runID)
@@ -397,6 +772,9 @@ func adoptRuntimeEvidence(ops runtimeEvidenceOps, beadID, projectRoot, provenanc
 		return "", errors.New("runtime-evidence adopt: project root must be absolute")
 	}
 	root = filepath.Clean(root)
+	if resolvedRoot, resolveErr := filepath.EvalSymlinks(root); resolveErr == nil {
+		root = filepath.Clean(resolvedRoot)
+	}
 
 	labels, err := ops.labels(beadID)
 	if err != nil {
@@ -409,7 +787,11 @@ func adoptRuntimeEvidence(ops runtimeEvidenceOps, beadID, projectRoot, provenanc
 	labelled := containsString(labels, runtimeEvidenceLabel)
 	marked := runtimeMarkerSet(markerValue)
 
-	if runID, resolveErr := ops.resolveRun(beadID); resolveErr == nil && strings.TrimSpace(runID) != "" {
+	runID, resolveErr := ops.resolveRun(beadID)
+	if resolveErr != nil && !errors.Is(resolveErr, errRuntimeRunNotBound) {
+		return "", fmt.Errorf("runtime-evidence adopt: resolve existing run binding: %w", resolveErr)
+	}
+	if resolveErr == nil && strings.TrimSpace(runID) != "" {
 		run, loadErr := ops.loadRun(runID)
 		if loadErr != nil {
 			return "", fmt.Errorf("runtime-evidence adopt: load existing run %s: %w", runID, loadErr)
@@ -420,6 +802,9 @@ func adoptRuntimeEvidence(ops runtimeEvidenceOps, beadID, projectRoot, provenanc
 		}
 		if !bound {
 			return "", fmt.Errorf("runtime-evidence adopt: bead already has run %s; use `clavain-cli runtime-evidence bind %s`", runID, beadID)
+		}
+		if filepath.Clean(run.ProjectDir) != root {
+			return "", fmt.Errorf("runtime-evidence adopt: existing run %s project root %q does not match %q", runID, run.ProjectDir, root)
 		}
 		if err := persistAdoptedRuntimeRun(ops, beadID, run); err != nil {
 			return "", err
@@ -433,13 +818,20 @@ func adoptRuntimeEvidence(ops runtimeEvidenceOps, beadID, projectRoot, provenanc
 	}
 	var recovered []Run
 	for _, run := range runs {
+		if run.Status == "cancelled" {
+			continue
+		}
+		if filepath.Clean(run.ProjectDir) != root {
+			return "", fmt.Errorf("runtime-evidence adopt: scope run %s project root %q does not match %q", run.ID, run.ProjectDir, root)
+		}
 		_, bound, metadataErr := runtimeEvidenceMetadataState(beadID, run.Metadata)
 		if metadataErr != nil {
 			return "", fmt.Errorf("runtime-evidence adopt: scope run %s: %w", run.ID, metadataErr)
 		}
-		if bound && run.Status != "cancelled" {
-			recovered = append(recovered, run)
+		if !bound {
+			return "", fmt.Errorf("runtime-evidence adopt: conflicting unbound scope run %s already exists", run.ID)
 		}
+		recovered = append(recovered, run)
 	}
 	if len(recovered) > 1 {
 		return "", fmt.Errorf("runtime-evidence adopt: %d matching runs exist for %s; refusing ambiguous adoption", len(recovered), beadID)
@@ -479,7 +871,7 @@ func adoptRuntimeEvidence(ops runtimeEvidenceOps, beadID, projectRoot, provenanc
 		Phases:      []string{"reflect", "done"},
 		Metadata:    string(metadataBytes),
 	}
-	runID, err := ops.createRun(spec)
+	runID, err = ops.createRun(spec)
 	if err != nil {
 		return "", fmt.Errorf("runtime-evidence adopt: create run: %w", err)
 	}
@@ -689,6 +1081,390 @@ func readRuntimeRegularFile(path string, limit int64) ([]byte, error) {
 	return data, nil
 }
 
+func hashRuntimeRegularFile(path string, limit int64) (string, os.FileMode, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", 0, err
+	}
+	if !info.Mode().IsRegular() {
+		return "", 0, errors.New("path is not a regular file")
+	}
+	if info.Size() > limit {
+		return "", 0, fmt.Errorf("file exceeds %d-byte limit", limit)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil {
+		return "", 0, err
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		return "", 0, errors.New("file identity changed while opening")
+	}
+	hash := sha256.New()
+	written, err := io.Copy(hash, io.LimitReader(file, limit+1))
+	if err != nil {
+		return "", 0, err
+	}
+	if written > limit {
+		return "", 0, fmt.Errorf("file exceeds %d-byte limit", limit)
+	}
+	return fmt.Sprintf("sha256:%x", hash.Sum(nil)), opened.Mode(), nil
+}
+
+func newRuntimeEvidenceID() (string, error) {
+	data := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, data); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", data), nil
+}
+
+func runtimeEvidenceStateDir(projectRoot string) (string, error) {
+	base := strings.TrimSpace(os.Getenv("XDG_STATE_HOME"))
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(home, ".local", "state")
+	}
+	if !filepath.IsAbs(base) {
+		return "", errors.New("XDG_STATE_HOME must be absolute")
+	}
+	projectHash := strings.TrimPrefix(digestForRuntimeEvidence([]byte(filepath.Clean(projectRoot))), "sha256:")[:16]
+	dir := filepath.Join(base, "clavain", "runtime-evidence", projectHash)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("runtime evidence state path is not a private directory")
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func removeRuntimePrivateRoot(path string) error {
+	if err := os.RemoveAll(path); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+		if err == nil {
+			return errors.New("private probe directory still exists")
+		}
+		return err
+	}
+	return nil
+}
+
+func runtimeEvidenceEnvironment(generated map[string]string) []string {
+	allowed := map[string]bool{
+		"HOME": true, "PATH": true, "TMPDIR": true,
+		"LANG": true, "LC_ALL": true, "SSL_CERT_FILE": true, "SSL_CERT_DIR": true,
+		"XDG_RUNTIME_DIR": true,
+	}
+	env := make([]string, 0, len(allowed)+len(generated))
+	for _, entry := range os.Environ() {
+		key, _, ok := strings.Cut(entry, "=")
+		if ok && allowed[key] {
+			env = append(env, entry)
+		}
+	}
+	keys := make([]string, 0, len(generated))
+	for key := range generated {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		env = append(env, key+"="+generated[key])
+	}
+	return env
+}
+
+type runtimeLimitedCapture struct {
+	mu       sync.Mutex
+	limit    int
+	data     []byte
+	overflow bool
+}
+
+func (capture *runtimeLimitedCapture) Write(data []byte) (int, error) {
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	remaining := capture.limit - len(capture.data)
+	if remaining > 0 {
+		keep := len(data)
+		if keep > remaining {
+			keep = remaining
+		}
+		capture.data = append(capture.data, data[:keep]...)
+	}
+	if len(data) > remaining {
+		capture.overflow = true
+	}
+	return len(data), nil
+}
+
+func (capture *runtimeLimitedCapture) bytes() []byte {
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	return append([]byte(nil), capture.data...)
+}
+
+func (capture *runtimeLimitedCapture) overflowed() bool {
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	return capture.overflow
+}
+
+type runtimeManagedProcess struct {
+	cmd     *exec.Cmd
+	pid     int
+	done    chan struct{}
+	mu      sync.Mutex
+	waitErr error
+	stdout  *runtimeLimitedCapture
+	stderr  *runtimeLimitedCapture
+}
+
+func startRuntimeManagedProcess(argv, env []string, dir string, outputLimit int) (*runtimeManagedProcess, error) {
+	if len(argv) == 0 {
+		return nil, errors.New("empty command")
+	}
+	stdout := &runtimeLimitedCapture{limit: outputLimit}
+	stderr := &runtimeLimitedCapture{limit: outputLimit}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = dir
+	cmd.Env = env
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	process := &runtimeManagedProcess{
+		cmd: cmd, pid: cmd.Process.Pid, done: make(chan struct{}), stdout: stdout, stderr: stderr,
+	}
+	go func() {
+		err := cmd.Wait()
+		process.mu.Lock()
+		process.waitErr = err
+		process.mu.Unlock()
+		close(process.done)
+	}()
+	return process, nil
+}
+
+func (process *runtimeManagedProcess) exited() (bool, error) {
+	select {
+	case <-process.done:
+		process.mu.Lock()
+		defer process.mu.Unlock()
+		return true, process.waitErr
+	default:
+		return false, nil
+	}
+}
+
+func (process *runtimeManagedProcess) stop(timeout time.Duration) error {
+	// Signal the group even when the leader has already exited. Descendants
+	// inherit the collector-created PGID and otherwise survive an early leader.
+	if err := signalRuntimeProcessGroup(process.pid, syscall.SIGTERM); err != nil {
+		return err
+	}
+	if waitRuntimeProcessGroupExit(process, timeout) {
+		return nil
+	}
+	if err := signalRuntimeProcessGroup(process.pid, syscall.SIGKILL); err != nil {
+		return err
+	}
+	if !waitRuntimeProcessGroupExit(process, timeout) {
+		return errors.New("process group remains after SIGKILL")
+	}
+	return nil
+}
+
+func signalRuntimeProcessGroup(pid int, signal syscall.Signal) error {
+	err := syscall.Kill(-pid, signal)
+	if err != nil && !errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	return nil
+}
+
+func waitRuntimeProcessGroupExit(process *runtimeManagedProcess, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		leaderExited, _ := process.exited()
+		groupErr := syscall.Kill(-process.pid, 0)
+		groupGone := errors.Is(groupErr, syscall.ESRCH)
+		if leaderExited && groupGone {
+			return true
+		}
+		if groupErr != nil && !groupGone {
+			return false
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func waitRuntimeEndpointDiscovery(path, privateRoot string, startedAt time.Time, timeout time.Duration, process *runtimeManagedProcess) (runtimeEndpointDiscovery, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if exited, exitErr := process.exited(); exited {
+			return runtimeEndpointDiscovery{}, fmt.Errorf("installed runtime exited before endpoint discovery: %v; stderr=%s", exitErr, strings.TrimSpace(string(process.stderr.bytes())))
+		}
+		info, err := os.Lstat(path)
+		if err == nil {
+			if !info.Mode().IsRegular() || info.ModTime().Before(startedAt.Add(-time.Second)) {
+				return runtimeEndpointDiscovery{}, errors.New("endpoint discovery file is stale or non-regular")
+			}
+			data, readErr := readRuntimeRegularFile(path, 64<<10)
+			if readErr != nil {
+				return runtimeEndpointDiscovery{}, readErr
+			}
+			var discovery runtimeEndpointDiscovery
+			if decodeErr := decodeStrictJSON(data, &discovery); decodeErr != nil {
+				return runtimeEndpointDiscovery{}, fmt.Errorf("decode endpoint discovery: %w", decodeErr)
+			}
+			if validateErr := validateRuntimeEndpointDiscovery(discovery, privateRoot, startedAt); validateErr != nil {
+				return runtimeEndpointDiscovery{}, validateErr
+			}
+			return discovery, nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return runtimeEndpointDiscovery{}, err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return runtimeEndpointDiscovery{}, errors.New("timed out waiting for fresh endpoint discovery")
+}
+
+func runRuntimeBoundedCommand(argv, env []string, dir string, timeout time.Duration, outputLimit int) ([]byte, error) {
+	process, err := startRuntimeManagedProcess(argv, env, dir, outputLimit)
+	if err != nil {
+		return nil, err
+	}
+	select {
+	case <-process.done:
+	case <-time.After(timeout):
+		if cleanupErr := process.stop(time.Second); cleanupErr != nil {
+			return nil, fmt.Errorf("command timed out and process-group cleanup failed: %w", cleanupErr)
+		}
+		return nil, errors.New("command timed out")
+	}
+	process.mu.Lock()
+	waitErr := process.waitErr
+	process.mu.Unlock()
+	if err := process.stop(time.Second); err != nil {
+		return nil, fmt.Errorf("command process-group cleanup: %w", err)
+	}
+	if process.stdout.overflowed() || process.stderr.overflowed() {
+		return nil, errors.New("command output exceeded limit")
+	}
+	if waitErr != nil {
+		return nil, fmt.Errorf("command failed: %w; stderr=%s", waitErr, strings.TrimSpace(string(process.stderr.bytes())))
+	}
+	return process.stdout.bytes(), nil
+}
+
+func verifyRuntimeResourceCleanup(resources []runtimeObservedResource) error {
+	for _, resource := range resources {
+		switch resource.Kind {
+		case "port":
+			connection, err := net.DialTimeout("tcp", resource.Identifier, 150*time.Millisecond)
+			if err == nil {
+				connection.Close()
+				return fmt.Errorf("loopback port %s still accepts connections", digestForRuntimeEvidence([]byte(resource.Identifier)))
+			}
+			if !runtimePortCleanupConfirmed(err) {
+				return fmt.Errorf("loopback port cleanup is UNVERIFIABLE: %w", err)
+			}
+		case "path":
+			if _, err := os.Lstat(resource.Identifier); !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("private path %s remains", digestForRuntimeEvidence([]byte(resource.Identifier)))
+			}
+		default:
+			return fmt.Errorf("resource kind %q is UNVERIFIABLE", resource.Kind)
+		}
+	}
+	return nil
+}
+
+func runtimePortCleanupConfirmed(err error) bool {
+	return errors.Is(err, syscall.ECONNREFUSED)
+}
+
+func writeAndVerifyRuntimeReceipt(stateDir, beadID string, run Run, receipt runtimeproof.Receipt, expectations runtimeproof.Expectations) (string, *runtimeproof.Result, error) {
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		return "", nil, err
+	}
+	data = append(data, '\n')
+	temp, err := os.CreateTemp(stateDir, ".receipt-*.tmp")
+	if err != nil {
+		return "", nil, err
+	}
+	tempPath := temp.Name()
+	committed := false
+	defer func() {
+		_ = temp.Close()
+		if !committed {
+			_ = os.Remove(tempPath)
+		}
+	}()
+	if err := temp.Chmod(0o600); err != nil {
+		return "", nil, err
+	}
+	if _, err := temp.Write(data); err != nil {
+		return "", nil, err
+	}
+	if err := temp.Sync(); err != nil {
+		return "", nil, err
+	}
+	if err := temp.Close(); err != nil {
+		return "", nil, err
+	}
+	proofHash := digestForRuntimeEvidence(data)
+	result, err := runtimeproof.VerifyFile(context.Background(), tempPath, runtimeproof.VerifyOptions{
+		ExpectedBeadID:       beadID,
+		ExpectedRunID:        run.ID,
+		ExpectedProjectRoot:  filepath.Clean(run.ProjectDir),
+		ExpectedArtifactHash: proofHash,
+		RunCreatedAt:         time.Unix(run.CreatedAt, 0),
+		Expectations:         expectations,
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	safeBead := regexp.MustCompile(`[^A-Za-z0-9._-]+`).ReplaceAllString(beadID, "_")
+	suffix, err := newRuntimeEvidenceID()
+	if err != nil {
+		return "", nil, err
+	}
+	finalPath := filepath.Join(stateDir, safeBead+"-"+suffix+".json")
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return "", nil, err
+	}
+	committed = true
+	if err := os.Chmod(finalPath, 0o600); err != nil {
+		return "", nil, err
+	}
+	return finalPath, result, nil
+}
+
 func runtimeEvidenceRequiredState(beadID string, labelled, marker bool, metadata string) (bool, error) {
 	_, bound, err := runtimeEvidenceMetadataState(beadID, metadata)
 	if err != nil {
@@ -802,6 +1578,10 @@ func resolveRuntimeEvidenceConfig(projectRoot string, cfg runtimeEvidenceConfigF
 	if !filepath.IsAbs(probeArgv[0]) {
 		return resolvedRuntimeEvidenceConfig{}, errors.New("runtime evidence probe executable must resolve inside the project root")
 	}
+	probeDigest, ok := cfg.ProbeDigests[platform]
+	if !ok || !runtimeDigestPattern.MatchString(probeDigest) {
+		return resolvedRuntimeEvidenceConfig{}, fmt.Errorf("runtime evidence config has no valid probe_digests entry for %s", platform)
+	}
 	probeRel, err := filepath.Rel(root, filepath.Clean(probeArgv[0]))
 	if err != nil || probeRel == ".." || strings.HasPrefix(probeRel, ".."+string(filepath.Separator)) {
 		return resolvedRuntimeEvidenceConfig{}, errors.New("runtime evidence probe executable must resolve inside the project root")
@@ -829,9 +1609,141 @@ func resolveRuntimeEvidenceConfig(projectRoot string, cfg runtimeEvidenceConfigF
 	return resolvedRuntimeEvidenceConfig{
 		BuildPath: buildPath, InstalledPath: installedPath,
 		StartArgv: startArgv, ProbeArgv: probeArgv,
+		ProbeDigest:  probeDigest,
 		Timeout:      time.Duration(cfg.TimeoutSeconds) * time.Second,
 		Expectations: expectations,
 	}, nil
+}
+
+func loadRuntimeEvidenceConfig(projectRoot, configPath string) (resolvedRuntimeEvidenceConfig, string, error) {
+	root, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", fmt.Errorf("runtime evidence project root: %w", err)
+	}
+	root = filepath.Clean(root)
+	if resolvedRoot, resolveErr := filepath.EvalSymlinks(root); resolveErr == nil {
+		root = filepath.Clean(resolvedRoot)
+	}
+	path := configPath
+	if !filepath.IsAbs(path) {
+		path, err = joinWithinProject(root, path)
+		if err != nil {
+			return resolvedRuntimeEvidenceConfig{}, "", fmt.Errorf("runtime evidence config path: %w", err)
+		}
+	}
+	path = filepath.Clean(path)
+	originalInfo, originalErr := os.Lstat(path)
+	if originalErr != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", fmt.Errorf("runtime evidence config: %w", originalErr)
+	}
+	if originalInfo.Mode()&os.ModeSymlink != 0 {
+		return resolvedRuntimeEvidenceConfig{}, "", errors.New("runtime evidence config must not be a symlink")
+	}
+	if resolvedPath, resolveErr := filepath.EvalSymlinks(path); resolveErr == nil {
+		path = filepath.Clean(resolvedPath)
+	}
+	data, err := readRuntimeRegularFile(path, 256<<10)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", fmt.Errorf("runtime evidence config: %w", err)
+	}
+	rel, relErr := filepath.Rel(root, path)
+	if relErr != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return resolvedRuntimeEvidenceConfig{}, "", errors.New("runtime evidence config must be inside the project root")
+	}
+	repo, repoErr := canonicalRuntimeGitRepository(root)
+	if repoErr != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", fmt.Errorf("runtime evidence config repository: %w", repoErr)
+	}
+	repoRel, relErr := filepath.Rel(repo, path)
+	if relErr != nil || repoRel == ".." || strings.HasPrefix(repoRel, ".."+string(filepath.Separator)) {
+		return resolvedRuntimeEvidenceConfig{}, "", errors.New("runtime evidence config is not inside the project repository")
+	}
+	repoRel = filepath.ToSlash(repoRel)
+	if _, gitErr := runtimeGitOutput(repo, "ls-files", "--error-unmatch", "--", repoRel); gitErr != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", errors.New("runtime evidence config inside the project must be tracked")
+	}
+	committed, gitErr := runtimeGitOutputBytes(repo, "show", "HEAD:"+repoRel)
+	if gitErr != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", fmt.Errorf("read committed runtime evidence config: %w", gitErr)
+	}
+	if !bytes.Equal(committed, data) {
+		return resolvedRuntimeEvidenceConfig{}, "", errors.New("runtime evidence config bytes differ from the committed version")
+	}
+	var cfg runtimeEvidenceConfigFile
+	if err := decodeStrictJSON(data, &cfg); err != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", fmt.Errorf("runtime evidence config decode: %w", err)
+	}
+	resolved, err := resolveRuntimeEvidenceConfig(root, cfg)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", err
+	}
+	resolved, err = canonicalizeRuntimeCollectorPaths(root, resolved)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, "", err
+	}
+	return resolved, digestForRuntimeEvidence(data), nil
+}
+
+func canonicalizeRuntimeCollectorPaths(projectRoot string, resolved resolvedRuntimeEvidenceConfig) (resolvedRuntimeEvidenceConfig, error) {
+	root, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, fmt.Errorf("runtime evidence project root: %w", err)
+	}
+	root = filepath.Clean(root)
+	canonicalFile := func(label, path string, mustBeInProject bool) (string, os.FileMode, error) {
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			return "", 0, fmt.Errorf("runtime evidence %s: %w", label, statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return "", 0, fmt.Errorf("runtime evidence %s must be a non-symlink regular file", label)
+		}
+		canonical, resolveErr := filepath.EvalSymlinks(path)
+		if resolveErr != nil {
+			return "", 0, fmt.Errorf("runtime evidence %s: %w", label, resolveErr)
+		}
+		canonical = filepath.Clean(canonical)
+		if mustBeInProject {
+			rel, relErr := filepath.Rel(root, canonical)
+			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return "", 0, fmt.Errorf("runtime evidence %s resolves outside the project root", label)
+			}
+		}
+		return canonical, info.Mode(), nil
+	}
+
+	buildPath, _, err := canonicalFile("build artifact", resolved.BuildPath, true)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, err
+	}
+	installedPath, installedMode, err := canonicalFile("installed artifact", resolved.InstalledPath, false)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, err
+	}
+	if installedMode&0o111 == 0 {
+		return resolvedRuntimeEvidenceConfig{}, errors.New("runtime evidence installed artifact is not executable")
+	}
+	probePath, probeMode, err := canonicalFile("probe executable", resolved.ProbeArgv[0], true)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, err
+	}
+	if probeMode&0o111 == 0 {
+		return resolvedRuntimeEvidenceConfig{}, errors.New("runtime evidence probe executable is not executable")
+	}
+	probeDigest, _, err := hashRuntimeRegularFile(probePath, runtimeproof.DefaultMaxArtifactBytes)
+	if err != nil {
+		return resolvedRuntimeEvidenceConfig{}, fmt.Errorf("runtime evidence probe digest: %w", err)
+	}
+	if probeDigest != resolved.ProbeDigest {
+		return resolvedRuntimeEvidenceConfig{}, fmt.Errorf("runtime evidence probe digest mismatch: got %s, want %s", probeDigest, resolved.ProbeDigest)
+	}
+	resolved.BuildPath = buildPath
+	resolved.InstalledPath = installedPath
+	resolved.StartArgv[0] = installedPath
+	resolved.ProbeArgv[0] = probePath
+	resolved.Expectations.ExpectedBuildPath = buildPath
+	resolved.Expectations.ExpectedInstalledPath = installedPath
+	return resolved, nil
 }
 
 func joinWithinProject(root, relative string) (string, error) {
@@ -962,6 +1874,206 @@ func buildRuntimeEvidenceReceipt(input runtimeReceiptInput, obs runtimeProbeObse
 		Isolation: runtimeproof.Isolation{Resources: resources, Collisions: collisions},
 		Cleanup:   runtimeproof.Cleanup{OwnedResourcesRemaining: []string{}},
 	}, nil
+}
+
+func validateRuntimeEndpointDiscovery(discovery runtimeEndpointDiscovery, privateRoot string, startedAt time.Time) error {
+	if discovery.SchemaVersion != 1 {
+		return fmt.Errorf("runtime endpoint discovery schema_version = %d, want 1", discovery.SchemaVersion)
+	}
+	parsed, err := url.Parse(discovery.Endpoint)
+	if err != nil || parsed.Scheme != "http" {
+		return errors.New("runtime endpoint must use http on a loopback IP literal")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		return errors.New("runtime endpoint must be an unadorned loopback origin")
+	}
+	host := parsed.Hostname()
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return errors.New("runtime endpoint host must be a loopback IP literal")
+	}
+	if !ip.IsLoopback() {
+		return errors.New("runtime endpoint must be loopback")
+	}
+	port := parsed.Port()
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return errors.New("runtime endpoint must name a valid loopback port")
+	}
+	if len(discovery.Resources) == 0 {
+		return errors.New("runtime endpoint discovery has no isolated resources")
+	}
+	privateRoot, err = filepath.Abs(privateRoot)
+	if err != nil {
+		return fmt.Errorf("resolve private root: %w", err)
+	}
+	privateRoot = filepath.Clean(privateRoot)
+	seen := make(map[string]struct{}, len(discovery.Resources))
+	portMatched := false
+	for _, resource := range discovery.Resources {
+		key := resource.Kind + "\x00" + resource.Identifier
+		if _, exists := seen[key]; exists {
+			return errors.New("runtime endpoint discovery contains duplicate resources")
+		}
+		seen[key] = struct{}{}
+		switch resource.Kind {
+		case "port":
+			resourceHost, resourcePort, splitErr := net.SplitHostPort(resource.Identifier)
+			resourceIP := net.ParseIP(resourceHost)
+			if splitErr != nil || resourceIP == nil || !resourceIP.IsLoopback() {
+				return errors.New("runtime port resource must be a loopback IP literal and port")
+			}
+			if resourcePort == port && resourceIP.Equal(ip) {
+				portMatched = true
+			}
+		case "path":
+			if _, pathErr := validateRuntimePathResource(resource.Identifier, privateRoot, startedAt); pathErr != nil {
+				return pathErr
+			}
+		default:
+			return fmt.Errorf("runtime resource kind %q is UNVERIFIABLE", resource.Kind)
+		}
+	}
+	if !portMatched {
+		return errors.New("runtime endpoint port is not declared as an owned resource")
+	}
+	return nil
+}
+
+func validateRuntimePathResource(path, privateRoot string, startedAt time.Time) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", errors.New("runtime path resource must be absolute and private")
+	}
+	root, err := filepath.EvalSymlinks(privateRoot)
+	if err != nil {
+		return "", fmt.Errorf("runtime path private root: %w", err)
+	}
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", errors.New("runtime path resource must exist when discovered")
+	}
+	if err != nil {
+		return "", fmt.Errorf("runtime path resource: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("runtime path resource must not be a symlink")
+	}
+	if !info.Mode().IsRegular() && !info.IsDir() {
+		return "", errors.New("runtime path resource must be a regular file or directory")
+	}
+	if !startedAt.IsZero() && info.ModTime().Before(startedAt.Add(-time.Second)) {
+		return "", errors.New("runtime path resource is not fresh for this collector launch")
+	}
+	canonical, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("runtime path resource: %w", err)
+	}
+	canonical = filepath.Clean(canonical)
+	rel, err := filepath.Rel(filepath.Clean(root), canonical)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", errors.New("runtime path resource is outside the collector private root")
+	}
+	return canonical, nil
+}
+
+func validateRuntimeProbeScope(obs runtimeProbeObservations, discovery runtimeEndpointDiscovery, expectations runtimeproof.Expectations, instanceNonce, eventID string) error {
+	if obs.SchemaVersion != 1 {
+		return fmt.Errorf("runtime probe schema_version = %d, want 1", obs.SchemaVersion)
+	}
+	if obs.ObservedNonce != instanceNonce {
+		return errors.New("runtime probe nonce does not identify the collector-started instance")
+	}
+	if obs.ObservedEventID != eventID {
+		return errors.New("runtime probe event correlation mismatch")
+	}
+	if len(obs.Subsystems) != len(expectations.RequiredSubsystems) {
+		return errors.New("runtime probe subsystem scope differs from trusted expectations")
+	}
+	for _, subsystem := range expectations.RequiredSubsystems {
+		if obs.Subsystems[subsystem] != "healthy" {
+			return fmt.Errorf("runtime probe subsystem %q is not healthy", subsystem)
+		}
+	}
+	requiredClasses := []string{"startup", "dependency_injection", "connection", "projection_catchup"}
+	if len(obs.FailureClasses) != len(requiredClasses) {
+		return errors.New("runtime probe must report exactly four failure classes")
+	}
+	for _, class := range requiredClasses {
+		result, ok := obs.FailureClasses[class]
+		if !ok {
+			return fmt.Errorf("runtime probe failure class %q is missing", class)
+		}
+		if strings.TrimSpace(result.Evidence) == "" {
+			return fmt.Errorf("runtime probe failure class %q has no evidence", class)
+		}
+		if class == "startup" && result.State != runtimeproof.StateVerified {
+			return fmt.Errorf("runtime probe startup = %s", result.State)
+		}
+		if result.State == runtimeproof.StateNotApplicable && !expectations.NotApplicableFailureClasses[class] {
+			return fmt.Errorf("runtime probe failure class %q is NOT_APPLICABLE without authorization", class)
+		}
+		if result.State != runtimeproof.StateVerified && result.State != runtimeproof.StateNotApplicable {
+			return fmt.Errorf("runtime probe failure class %q = %s", class, result.State)
+		}
+	}
+	if !runtimeDigestPattern.MatchString(obs.BeforeDigest) || !runtimeDigestPattern.MatchString(obs.AfterDigest) || obs.BeforeDigest == obs.AfterDigest {
+		return errors.New("runtime probe event did not produce a valid state delta")
+	}
+	assertionNames := make([]string, 0, len(obs.Assertions))
+	for _, assertion := range obs.Assertions {
+		if assertion.State != runtimeproof.StateVerified || strings.TrimSpace(assertion.Evidence) == "" {
+			return fmt.Errorf("runtime probe assertion %q is not VERIFIED with evidence", assertion.Name)
+		}
+		assertionNames = append(assertionNames, assertion.Name)
+	}
+	if !sameRuntimeStringSet(assertionNames, expectations.RequiredAssertions) {
+		return errors.New("runtime probe assertion scope differs from trusted expectations")
+	}
+	if !sameRuntimeStringSet(obs.ObservedSurfaces, expectations.ExpectedSurfaces) {
+		return errors.New("runtime probe surface scope differs from trusted expectations")
+	}
+	if len(obs.Collisions) != 0 {
+		return errors.New("runtime probe reported an isolation collision")
+	}
+	if len(obs.Resources) != len(discovery.Resources) || len(obs.Resources) != len(expectations.RequiredResources) {
+		return errors.New("runtime probe resource scope differs from discovery and trusted expectations")
+	}
+	discovered := make(map[string]struct{}, len(discovery.Resources))
+	for _, resource := range discovery.Resources {
+		discovered[resource.Kind+"\x00"+resource.Identifier] = struct{}{}
+	}
+	observedKinds := make([]string, 0, len(obs.Resources))
+	expectedKinds := make([]string, 0, len(expectations.RequiredResources))
+	for _, expected := range expectations.RequiredResources {
+		expectedKinds = append(expectedKinds, expected.Kind)
+	}
+	for _, resource := range obs.Resources {
+		if resource.Kind != "port" && resource.Kind != "path" {
+			return fmt.Errorf("runtime probe resource kind %q is UNVERIFIABLE", resource.Kind)
+		}
+		if _, ok := discovered[resource.Kind+"\x00"+resource.Identifier]; !ok {
+			return errors.New("runtime probe resource does not match fresh child discovery")
+		}
+		observedKinds = append(observedKinds, resource.Kind)
+	}
+	if !sameRuntimeStringSet(observedKinds, expectedKinds) {
+		return errors.New("runtime probe resource kinds differ from trusted expectations")
+	}
+	return nil
+}
+
+func sameRuntimeStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	aa := sortedStrings(a)
+	bb := sortedStrings(b)
+	for idx := range aa {
+		if aa[idx] != bb[idx] || strings.TrimSpace(aa[idx]) == "" || (idx > 0 && aa[idx] == aa[idx-1]) {
+			return false
+		}
+	}
+	return true
 }
 
 func digestForRuntimeEvidence(data []byte) string {

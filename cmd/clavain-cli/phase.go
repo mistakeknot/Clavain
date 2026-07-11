@@ -112,6 +112,9 @@ func cmdSprintAdvance(args []string) error {
 	}
 	beadID := args[0]
 	currentPhase := args[1]
+	if err := validateRuntimeEvidenceBinding(defaultRuntimeEvidenceOps(), beadID); err != nil {
+		return fmt.Errorf("sprint-advance: %w", err)
+	}
 
 	runID, err := resolveRunID(beadID)
 	if err != nil {
@@ -397,21 +400,22 @@ func cmdEnforceGate(args []string) error {
 
 // knownArtifactTypes is the canonical set of artifact types for the sprint lifecycle.
 var knownArtifactTypes = map[string]bool{
-	"brainstorm":          true,
-	"prd":                 true,
-	"plan":                true,
-	"plan-review":         true,
-	"implementation":      true,
-	"quality-verdict":     true,
-	"resolution":          true,
-	"reflection":          true,
-	"landed":              true,
-	"closed":              true,
-	"degradation":         true,
-	"test-pass-sha":       true,
-	"prior-art":           true,
-	"acceptance-criteria": true,
-	"criteria-results":    true,
+	"brainstorm":                true,
+	"prd":                       true,
+	"plan":                      true,
+	"plan-review":               true,
+	"implementation":            true,
+	"quality-verdict":           true,
+	"resolution":                true,
+	"reflection":                true,
+	"landed":                    true,
+	"closed":                    true,
+	"degradation":               true,
+	"test-pass-sha":             true,
+	"prior-art":                 true,
+	"acceptance-criteria":       true,
+	"criteria-results":          true,
+	runtimeEvidenceArtifactType: true,
 }
 
 // cmdSetArtifact records an artifact for the current phase.
@@ -440,17 +444,26 @@ func cmdSetArtifact(args []string) error {
 
 	// Always store in bd state as fallback (works without ic run)
 	if bdAvailable() {
-		_, _ = runBD("set-state", beadID, "artifact_"+artifactType+"="+artifactPath)
+		_, stateErr := runBD("set-state", beadID, "artifact_"+artifactType+"="+artifactPath)
+		if stateErr != nil && artifactType == runtimeEvidenceArtifactType {
+			return fmt.Errorf("set-artifact: register runtime evidence in Beads: %w", stateErr)
+		}
 	}
 
 	runID, err := resolveRunID(beadID)
 	if err != nil {
+		if artifactType == runtimeEvidenceArtifactType {
+			return fmt.Errorf("set-artifact: runtime evidence requires a bound Intercore run: %w", err)
+		}
 		return nil // no ic run — bd fallback already written
 	}
 
 	// Get current phase
 	phaseOut, err := runIC("run", "phase", runID)
 	if err != nil {
+		if artifactType == runtimeEvidenceArtifactType {
+			return fmt.Errorf("set-artifact: resolve runtime evidence phase: %w", err)
+		}
 		phaseOut = []byte("unknown")
 	}
 	phase := string(phaseOut)
@@ -461,6 +474,9 @@ func cmdSetArtifact(args []string) error {
 		"--path="+artifactPath,
 		"--type="+artifactType)
 	if err != nil {
+		if artifactType == runtimeEvidenceArtifactType {
+			return fmt.Errorf("set-artifact: register runtime evidence in Intercore: %w", err)
+		}
 		// Fail-safe: log but don't fail
 		fmt.Fprintf(os.Stderr, "set-artifact: warning: %v\n", err)
 	}
@@ -487,8 +503,12 @@ func cmdGetArtifact(args []string) error {
 		var artifacts []Artifact
 		err = runICJSON(&artifacts, "run", "artifact", "list", runID)
 		if err == nil {
-			for _, a := range artifacts {
+			for idx := len(artifacts) - 1; idx >= 0; idx-- {
+				a := artifacts[idx]
 				if a.Type == artifactType {
+					if a.Status != "" && a.Status != "active" {
+						continue
+					}
 					fmt.Println(a.Path)
 					return nil
 				}
