@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "build_path": ".clavain/scratch/runtimefixture-v1",
+  "installed_paths": {
+    "darwin-arm64": "/Users/sma/.local/lib/clavain/runtimefixture-v1",
+    "linux-amd64": "/home/mk/.local/lib/clavain/runtimefixture-v1"
+  },
+  "start_argv": [
+    "{installed_path}"
+  ],
+  "probe_argv": [
+    "{project_root}/.clavain/scratch/runtimeprobe-v1"
+  ],
+  "probe_digests": {
+    "darwin-arm64": "sha256:d5a1d86d7052606e88f533d318543a594d2f68c6607305f2176cd5b3c699b0a3",
+    "linux-amd64": "sha256:eeea264267b1cad345199b7398abb2d7223b722d649f2d35a7c0f8d4ffe2ec6f"
+  },
+  "timeout_seconds": 10,
+  "required_subsystems": [
+    "store"
+  ],
+  "not_applicable_failure_classes": [
+    "dependency_injection",
+    "projection_catchup"
+  ],
+  "required_assertions": [
+    "state-delta"
+  ],
+  "expected_surfaces": [
+    "diag/health",
+    "diag/smoke-test"
+  ],
+  "required_resources": [
+    {
+      "kind": "port",
+      "ownership": "ephemeral"
+    }
+  ]
+}
