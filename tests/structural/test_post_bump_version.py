@@ -13,6 +13,12 @@ def test_post_bump_updates_prd_to_target_version(tmp_path: Path) -> None:
     shutil.copy2(ROOT / "scripts" / "post-bump.sh", tmp_path / "scripts" / "post-bump.sh")
     prd = tmp_path / "docs" / "PRD.md"
     prd.write_text("# Test\n\n**Version:** 0.1.0\n", encoding="utf-8")
+    (tmp_path / "scripts" / "gen-catalog.py").write_text(
+        "from pathlib import Path\n"
+        "Path(__file__).parents[1].joinpath('docs/PRD.md').write_text("
+        "'# Test\\n\\n**Version:** 0.1.0\\n', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
 
     subprocess.run(
         ["bash", str(tmp_path / "scripts" / "post-bump.sh"), "0.1.1"],
