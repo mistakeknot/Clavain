@@ -171,7 +171,7 @@ Every gate wrapper records and signs one exact authorization row with Ed25519 be
 bash /path/to/Clavain/scripts/authz-init.sh
 ```
 
-That script migrates the project's `.clavain/intercore.db` to the current schema, installs `~/.clavain/policy.yaml` from the example if absent, generates `.clavain/keys/authz-project.{key,pub}` (mode 0400 / 0444) only when neither half exists, signs the cutover marker + any unsigned post-cutover rows, and creates a signed empty legacy manifest for a fresh ledger. It never auto-anchors nonempty history: bootstrap stops and prints the read-only inspection command so an operator can review the exact count and digest first. A public-only checkout is treated as a verifier and is never overwritten with a new identity.
+That script preflights an established ledger before migration, installs `~/.clavain/policy.yaml` from the example if absent, and generates `.clavain/keys/authz-project.{key,pub}` (mode 0400 / 0444) only when neither half exists. Only for a DB created by that invocation does it sign fresh migration markers and create a signed empty legacy manifest. It never repairs or auto-anchors established unsigned history: bootstrap stops and prints the read-only inspection command so an operator can review the exact count and digest first. A public-only checkout is treated as a verifier and is never overwritten with a new identity.
 
 For Sylveste, run the signing bootstrap only on zklw. zklw is the sole canonical signer and owns the writable authorization ledger. Mac is verifier-only and receives the committed public key, signed legacy manifest, and signed DB snapshot; verify that snapshot with `clavain-cli policy doctor --project-root="$PWD"` and `clavain-cli policy audit --verify --project-root="$PWD"`.
 
