@@ -6,8 +6,8 @@
 #      sign marker → verify). Assert exit 0 + 0 failed rows.
 #   2. Gate wrapper (bead-close) runs, produces a signed audit row. Assert
 #      signature length = 64 and `policy audit --verify` exits 0.
-#   3. Direct-SQL sig_version downgrade and signed-field tampering both flip
-#      `policy audit --verify` to exit 1, including through display filters.
+#   3. Bootstrap cannot sign an injected sig_version=1 row, and direct-SQL
+#      downgrade/tampering flips verification even through display filters.
 #   4. `policy rotate-key` refuses to invalidate signed history; the active
 #      fingerprint remains unchanged and the retained ledger still verifies.
 #
@@ -138,6 +138,7 @@ python3 - <<PY
 import sqlite3
 db = sqlite3.connect("${LEGACY_ROOT}/.clavain/intercore.db")
 db.execute("INSERT INTO authorizations (id,op_type,target,agent_id,mode,created_at,sig_version) VALUES ('review-required','bead-close','legacy','legacy-agent','auto',1,0)")
+db.execute("PRAGMA user_version=35")
 db.commit()
 PY
 if bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$LEGACY_ROOT" >/dev/null 2>&1; then
@@ -146,7 +147,27 @@ if bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$LEGACY_ROOT" >/
 fi
 [[ ! -e "$LEGACY_ROOT/.clavain/keys/authz-legacy-manifest.json" ]] \
   || { echo "FAIL scenario 1d: bootstrap created an unreviewed manifest"; exit 1; }
+legacy_schema="$(python3 -c "import sqlite3; db=sqlite3.connect('${LEGACY_ROOT}/.clavain/intercore.db'); print(db.execute('PRAGMA user_version').fetchone()[0])")"
+[[ "$legacy_schema" == "35" ]] \
+  || { echo "FAIL scenario 1d: refusal advanced schema to $legacy_schema, want 35"; exit 1; }
 echo "PASS scenario 1d: nonempty legacy history requires operator review"
+
+# A schema-35 public-only verifier cannot create the manifest and must receive
+# the canonical schema-36 snapshot plus signed artifact from the signer.
+LEGACY_VERIFIER_ROOT="${SANDBOX}/legacy-verifier-root"
+mkdir -p "$LEGACY_VERIFIER_ROOT/.clavain/keys"
+cp -f "$LEGACY_ROOT/.clavain/keys/authz-project.pub" "$LEGACY_VERIFIER_ROOT/.clavain/keys/authz-project.pub"
+cp -f "$LEGACY_ROOT/.clavain/intercore.db" "$LEGACY_VERIFIER_ROOT/.clavain/intercore.db"
+if bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$LEGACY_VERIFIER_ROOT" >/dev/null 2>&1; then
+  echo "FAIL scenario 1e: schema-35 verifier bootstrap should require canonical signer artifacts"
+  exit 1
+fi
+verifier_schema="$(python3 -c "import sqlite3; db=sqlite3.connect('${LEGACY_VERIFIER_ROOT}/.clavain/intercore.db'); print(db.execute('PRAGMA user_version').fetchone()[0])")"
+[[ "$verifier_schema" == "35" ]] \
+  || { echo "FAIL scenario 1e: verifier refusal advanced schema to $verifier_schema, want 35"; exit 1; }
+[[ ! -e "$LEGACY_VERIFIER_ROOT/.clavain/keys/authz-project.key" ]] \
+  || { echo "FAIL scenario 1e: verifier minted a private key"; exit 1; }
+echo "PASS scenario 1e: schema-35 verifier remains unchanged"
 
 # authz-init installed the full production policy globally (with strict
 # `requires` on bead-close — including vetted_sha_matches_head). Init a
@@ -185,7 +206,33 @@ clavain-cli policy audit --verify >/dev/null 2>&1 || {
 }
 echo "PASS scenario 2: gate wrapper → signed row → verify OK"
 
-# ─── Scenario 2a: sig_version downgrade is globally rejected ──────────
+# Rerunning bootstrap against an established anchor must inspect before any
+# mutation. An injected unsigned sig_version=1 row is evidence of corruption,
+# never backlog for the bootstrap signer.
+python3 - <<PY
+import sqlite3
+db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
+db.execute("INSERT INTO authorizations (id,op_type,target,agent_id,mode,created_at,sig_version) VALUES ('bootstrap-signing-oracle','bead-close','injected','attacker','auto',2,1)")
+db.commit()
+PY
+if bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$SANDBOX" >/dev/null 2>&1; then
+  echo "FAIL scenario 2a: bootstrap signed an injected post-anchor row"
+  exit 1
+fi
+injected_sig_state="$(python3 -c "import sqlite3; db=sqlite3.connect('${SANDBOX}/.clavain/intercore.db'); r=db.execute(\"SELECT signature,signed_at FROM authorizations WHERE id='bootstrap-signing-oracle'\").fetchone(); print('null' if r == (None, None) else 'mutated')")"
+[[ "$injected_sig_state" == "null" ]] \
+  || { echo "FAIL scenario 2a: bootstrap mutated injected signing fields"; exit 1; }
+python3 - <<PY
+import sqlite3
+db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
+db.execute("DELETE FROM authorizations WHERE id='bootstrap-signing-oracle'")
+db.commit()
+PY
+clavain-cli policy audit --verify >/dev/null 2>&1 \
+  || { echo "FAIL scenario 2a: cleanup did not restore verification"; exit 1; }
+echo "PASS scenario 2a: bootstrap refuses injected sig_version=1 history"
+
+# ─── Scenario 2b: sig_version downgrade is globally rejected ──────────
 python3 - <<PY
 import sqlite3
 db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
@@ -193,7 +240,7 @@ db.execute("UPDATE authorizations SET sig_version=0 WHERE op_type='bead-close'")
 db.commit()
 PY
 if clavain-cli policy audit --verify --op=git-push-main >/dev/null 2>&1; then
-  echo "FAIL scenario 2a: filtered audit accepted a signed row downgraded to sig_version=0"
+  echo "FAIL scenario 2b: filtered audit accepted a signed row downgraded to sig_version=0"
   exit 1
 fi
 python3 - <<PY
@@ -203,8 +250,8 @@ db.execute("UPDATE authorizations SET sig_version=1 WHERE op_type='bead-close'")
 db.commit()
 PY
 clavain-cli policy audit --verify >/dev/null 2>&1 \
-  || { echo "FAIL scenario 2a: restoring sig_version did not restore verification"; exit 1; }
-echo "PASS scenario 2a: filtered audit rejects sig_version downgrade"
+  || { echo "FAIL scenario 2b: restoring sig_version did not restore verification"; exit 1; }
+echo "PASS scenario 2b: filtered audit rejects sig_version downgrade"
 
 # ─── Scenario 3: tamper detection ─────────────────────────────────────
 python3 - <<PY
