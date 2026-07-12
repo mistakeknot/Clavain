@@ -902,7 +902,8 @@ routing_resolve_model() {
     local _ovr_root; _ovr_root=$(git rev-parse --show-toplevel 2>/dev/null) || _ovr_root=""
     [[ -n "$_ovr_root" && -f "${_ovr_root}/.claude/routing-overrides.json" ]] && _ovr_check="yes"
   fi
-  if [[ -z "${CLAVAIN_RUN_ID:-}" && -z "$_ovr_check" ]] && command -v ic >/dev/null 2>&1; then
+  # Skip fast path when CLAVAIN_ROUTING_CONFIG is set — explicit config override (tests/fixtures) the Go router doesn't read.
+  if [[ -z "${CLAVAIN_RUN_ID:-}" && -z "$_ovr_check" && -z "${CLAVAIN_ROUTING_CONFIG:-}" ]] && command -v ic >/dev/null 2>&1; then
     local _ic_result
     _ic_result=$(ic route model "$@" 2>/dev/null) && {
       echo "$_ic_result"
@@ -1232,7 +1233,8 @@ routing_resolve_dispatch_tier_complex() {
 # --- Public: resolve dispatch tier to model ---
 routing_resolve_dispatch_tier() {
   # Fast path: delegate to compiled Go router when available.
-  if command -v ic >/dev/null 2>&1; then
+  # Skip fast path when CLAVAIN_ROUTING_CONFIG is set — explicit config override (tests/fixtures) the Go router doesn't read.
+  if [[ -z "${CLAVAIN_ROUTING_CONFIG:-}" ]] && command -v ic >/dev/null 2>&1; then
     local _ic_result
     _ic_result=$(ic route dispatch --tier="$1" 2>/dev/null) && {
       echo "$_ic_result"
@@ -1394,7 +1396,8 @@ routing_resolve_agents() {
 
   # Fast path: delegate to compiled Go router when available.
   # Skips when CLAVAIN_RUN_ID is set, complexity mode is active, or Go router unavailable.
-  if [[ -z "${CLAVAIN_RUN_ID:-}" && "${_ROUTING_CX_MODE:-off}" == "off" ]] && command -v ic >/dev/null 2>&1; then
+  # Skip fast path when CLAVAIN_ROUTING_CONFIG is set — explicit config override (tests/fixtures) the Go router doesn't read.
+  if [[ -z "${CLAVAIN_RUN_ID:-}" && "${_ROUTING_CX_MODE:-off}" == "off" && -z "${CLAVAIN_ROUTING_CONFIG:-}" ]] && command -v ic >/dev/null 2>&1; then
     local _phase="" _agents_csv=""
     local _args=("$@")
     for (( _i=0; _i<${#_args[@]}; _i++ )); do
