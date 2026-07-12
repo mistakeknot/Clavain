@@ -998,7 +998,9 @@ EOF
     # Safety floor may clamp this up, but override was applied
     # fd-safety has min_model sonnet in agent-roles, so haiku gets clamped to sonnet
     # Without agent-roles loaded, it should be haiku
-    [[ "$output" == "haiku" || "$output" == "sonnet" ]]
+    # Use the last line: a safety-floor clamp emits a diagnostic line to stderr first,
+    # which `run` merges into $output ahead of the actual resolved model.
+    [[ "${lines[-1]}" == "haiku" || "${lines[-1]}" == "sonnet" ]]
 }
 
 @test "override: pending proposal has no effect" {
