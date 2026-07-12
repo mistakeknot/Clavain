@@ -84,12 +84,12 @@ rules:
     mode: confirm
 YAML
 
-# Schema v34: authorizations + authz_tokens + v1 cutover marker. Kept in
-# sync with core/intercore/internal/db/db.go §v33→v34.
+# Schema v36: authorizations + authz_tokens + signed legacy seal. Kept in
+# sync with core/intercore/internal/db/db.go.
 python3 - <<PY
 import sqlite3, time
 db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
-db.execute("PRAGMA user_version = 35")
+db.execute("PRAGMA user_version = 36")
 db.executescript("""
 CREATE TABLE authorizations (
   id TEXT PRIMARY KEY, op_type TEXT NOT NULL, target TEXT NOT NULL,
@@ -144,6 +144,7 @@ git remote set-url --push origin "${SANDBOX}/push.git"
 
 clavain-cli policy init-key >/dev/null
 clavain-cli policy sign >/dev/null
+clavain-cli policy anchor-legacy --expect-empty >/dev/null
 
 # ─── legacy scenario ──────────────────────────────────────────────────
 

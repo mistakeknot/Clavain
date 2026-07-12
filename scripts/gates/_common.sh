@@ -91,9 +91,10 @@ gate_require_signer() {
     return 1
   fi
   if ! printf '%s' "$out" | jq -e --arg root "$CLAVAIN_AUTHZ_PROJECT_ROOT" '
-    .status == "ok" and .role == "signer" and .schema == 35 and
+    .status == "ok" and .role == "signer" and .schema == 36 and
     .project_root == $root and
-    (.fingerprint | type == "string" and test("^[0-9a-f]{16}$"))
+    (.fingerprint | type == "string" and test("^[0-9a-f]{16}$")) and
+    (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$"))
   ' >/dev/null 2>&1; then
     echo "policy: malformed signer preflight response; operation not run" >&2
     return 1

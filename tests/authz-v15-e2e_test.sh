@@ -6,8 +6,8 @@
 #      sign marker → verify). Assert exit 0 + 0 failed rows.
 #   2. Gate wrapper (bead-close) runs, produces a signed audit row. Assert
 #      signature length = 64 and `policy audit --verify` exits 0.
-#   3. Direct-SQL tamper on a signed row flips `policy audit --verify` to
-#      exit 1 with the mutated row flagged in the JSON report.
+#   3. Direct-SQL sig_version downgrade and signed-field tampering both flip
+#      `policy audit --verify` to exit 1, including through display filters.
 #   4. `policy rotate-key` refuses to invalidate signed history; the active
 #      fingerprint remains unchanged and the retained ledger still verifies.
 #
@@ -76,6 +76,10 @@ if [[ ! -f "${SANDBOX}/.clavain/keys/authz-project.key" ]]; then
   echo "FAIL scenario 1: signing key not created"
   exit 1
 fi
+if [[ ! -f "${SANDBOX}/.clavain/keys/authz-legacy-manifest.json" ]]; then
+  echo "FAIL scenario 1: signed empty legacy manifest not created"
+  exit 1
+fi
 if [[ "$(uname -s)" == "Darwin" ]]; then
   perms="$(stat -f '%Lp' "${SANDBOX}/.clavain/keys/authz-project.key")"
 else
@@ -114,6 +118,7 @@ echo "PASS scenario 1b: existing signer requires a healthy doctor preflight"
 VERIFIER_ROOT="${SANDBOX}/verifier-root"
 mkdir -p "$VERIFIER_ROOT/.clavain/keys"
 cp -f "$SANDBOX/.clavain/keys/authz-project.pub" "$VERIFIER_ROOT/.clavain/keys/authz-project.pub"
+cp -f "$SANDBOX/.clavain/keys/authz-legacy-manifest.json" "$VERIFIER_ROOT/.clavain/keys/authz-legacy-manifest.json"
 cp -f "$SANDBOX/.clavain/intercore.db" "$VERIFIER_ROOT/.clavain/intercore.db"
 bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$VERIFIER_ROOT" >/dev/null
 [[ ! -e "$VERIFIER_ROOT/.clavain/keys/authz-project.key" ]] \
@@ -121,6 +126,27 @@ bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$VERIFIER_ROOT" >/d
 clavain-cli policy doctor --project-root="$VERIFIER_ROOT" >/dev/null \
   || { echo "FAIL scenario 1c: verifier doctor failed"; exit 1; }
 echo "PASS scenario 1c: public-only checkout remains verifier-only"
+
+# A nonempty legacy set must stop for explicit operator review. Bootstrap may
+# create an empty anchor, but it must never snapshot existing vintage rows.
+LEGACY_ROOT="${SANDBOX}/legacy-review-root"
+mkdir -p "$LEGACY_ROOT"
+(cd "$LEGACY_ROOT" && ic init --db=.clavain/intercore.db >/dev/null)
+clavain-cli policy init-key --project-root="$LEGACY_ROOT" >/dev/null
+clavain-cli policy sign --project-root="$LEGACY_ROOT" >/dev/null
+python3 - <<PY
+import sqlite3
+db = sqlite3.connect("${LEGACY_ROOT}/.clavain/intercore.db")
+db.execute("INSERT INTO authorizations (id,op_type,target,agent_id,mode,created_at,sig_version) VALUES ('review-required','bead-close','legacy','legacy-agent','auto',1,0)")
+db.commit()
+PY
+if bash "${CLAVAIN_ROOT}/scripts/authz-init.sh" --project-root="$LEGACY_ROOT" >/dev/null 2>&1; then
+  echo "FAIL scenario 1d: authz-init silently anchored nonempty legacy history"
+  exit 1
+fi
+[[ ! -e "$LEGACY_ROOT/.clavain/keys/authz-legacy-manifest.json" ]] \
+  || { echo "FAIL scenario 1d: bootstrap created an unreviewed manifest"; exit 1; }
+echo "PASS scenario 1d: nonempty legacy history requires operator review"
 
 # authz-init installed the full production policy globally (with strict
 # `requires` on bead-close — including vetted_sha_matches_head). Init a
@@ -158,6 +184,27 @@ clavain-cli policy audit --verify >/dev/null 2>&1 || {
   exit 1
 }
 echo "PASS scenario 2: gate wrapper → signed row → verify OK"
+
+# ─── Scenario 2a: sig_version downgrade is globally rejected ──────────
+python3 - <<PY
+import sqlite3
+db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
+db.execute("UPDATE authorizations SET sig_version=0 WHERE op_type='bead-close'")
+db.commit()
+PY
+if clavain-cli policy audit --verify --op=git-push-main >/dev/null 2>&1; then
+  echo "FAIL scenario 2a: filtered audit accepted a signed row downgraded to sig_version=0"
+  exit 1
+fi
+python3 - <<PY
+import sqlite3
+db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
+db.execute("UPDATE authorizations SET sig_version=1 WHERE op_type='bead-close'")
+db.commit()
+PY
+clavain-cli policy audit --verify >/dev/null 2>&1 \
+  || { echo "FAIL scenario 2a: restoring sig_version did not restore verification"; exit 1; }
+echo "PASS scenario 2a: filtered audit rejects sig_version downgrade"
 
 # ─── Scenario 3: tamper detection ─────────────────────────────────────
 python3 - <<PY

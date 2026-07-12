@@ -59,11 +59,11 @@ rules:
     mode: confirm
 YAML
 
-# Schema for authorizations (v33: signing columns + partial index + marker).
+# Schema for authorizations (v36: signing columns + external legacy seal).
 python3 - <<PY
 import sqlite3, time
 db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
-db.execute("PRAGMA user_version = 35")
+db.execute("PRAGMA user_version = 36")
 db.executescript("""
 CREATE TABLE authorizations (
   id TEXT PRIMARY KEY, op_type TEXT NOT NULL, target TEXT NOT NULL,
@@ -89,6 +89,7 @@ cd "$SANDBOX"
 # Bootstrap signing so gate_sign has a key and the marker gets signed.
 clavain-cli policy init-key >/dev/null
 clavain-cli policy sign >/dev/null
+clavain-cli policy anchor-legacy --expect-empty >/dev/null
 
 # Populate vetting signals as if /work Phase 3 or /sprint Step 6 had just run.
 export CLAVAIN_AGENT_ID=e2e-test
