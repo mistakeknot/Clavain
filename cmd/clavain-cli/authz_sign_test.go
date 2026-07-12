@@ -38,7 +38,7 @@ func setupSigningSandbox(t *testing.T) string {
 	db.SetMaxOpenConns(1)
 	// v33-equivalent schema: v32 + signing columns + partial index + marker.
 	stmts := []string{
-		`PRAGMA user_version = 35`,
+		`PRAGMA user_version = 36`,
 		`CREATE TABLE IF NOT EXISTS authorizations (
 			id               TEXT PRIMARY KEY,
 			op_type          TEXT NOT NULL,
@@ -197,6 +197,7 @@ func TestPolicyRotateKey_RefusesSignedHistory(t *testing.T) {
 	if _, err := captureStdoutAuthz(t, func() error { return cmdPolicySign(nil) }); err != nil {
 		t.Fatalf("sign: %v", err)
 	}
+	anchorEmptyLegacyForTest(t, root)
 	oldPub, err := authz.LoadPubKey(root)
 	if err != nil {
 		t.Fatalf("load old public key: %v", err)
@@ -302,6 +303,7 @@ func TestPolicyDoctor_SignerAndVerifierRoles(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("init key: %v", err)
 	}
+	anchorEmptyLegacyForTest(t, root)
 
 	out, err := captureStdoutAuthz(t, func() error {
 		return cmdPolicyDoctor([]string{"--project-root=" + root, "--require-signer"})
@@ -374,6 +376,7 @@ func TestPolicyDoctor_RejectsReadOnlyDatabase(t *testing.T) {
 	if _, err := captureStdoutAuthz(t, func() error { return cmdPolicyInitKey(nil) }); err != nil {
 		t.Fatalf("init key: %v", err)
 	}
+	anchorEmptyLegacyForTest(t, root)
 	dbPath := filepath.Join(root, ".clavain", "intercore.db")
 	if err := os.Chmod(dbPath, 0o444); err != nil {
 		t.Fatalf("chmod DB: %v", err)
@@ -477,6 +480,7 @@ func TestPolicyVerify_DetectsMutation(t *testing.T) {
 	if _, err := captureStdoutAuthz(t, func() error { return cmdPolicySign(nil) }); err != nil {
 		t.Fatalf("sign: %v", err)
 	}
+	anchorEmptyLegacyForTest(t, root)
 
 	// First verify: should pass.
 	out, err := captureStdoutAuthz(t, func() error { return cmdPolicyVerify(nil) })
@@ -523,6 +527,7 @@ func TestPolicyVerify_ExitCodes(t *testing.T) {
 	if _, err := captureStdoutAuthz(t, func() error { return cmdPolicySign(nil) }); err != nil {
 		t.Fatalf("sign marker: %v", err)
 	}
+	anchorEmptyLegacyForTest(t, root)
 	if _, err := captureStdoutAuthz(t, func() error { return cmdPolicyVerify(nil) }); err != nil {
 		t.Fatalf("verify should succeed with only signed marker: %v", err)
 	}
@@ -551,6 +556,20 @@ func TestPolicyAuditVerify_UsesSameReport(t *testing.T) {
 	}
 	if report.Summary.Marker == 0 {
 		t.Error("marker row not classified")
+	}
+}
+
+func anchorEmptyLegacyForTest(t *testing.T, root string) {
+	t.Helper()
+	if _, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicySign([]string{"--project-root=" + root})
+	}); err != nil {
+		t.Fatalf("sign before empty anchor: %v", err)
+	}
+	if _, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicyAnchorLegacy([]string{"--project-root=" + root, "--expect-empty"})
+	}); err != nil {
+		t.Fatalf("anchor empty legacy set: %v", err)
 	}
 }
 

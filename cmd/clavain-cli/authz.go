@@ -653,7 +653,7 @@ func declaredGateOps(dir string) ([]string, error) {
 // cmdPolicy is the `policy` subcommand dispatcher.
 func cmdPolicy(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: policy <check|record|record-signed|explain|audit|list|lint|init-key|sign|verify|doctor|rotate-key|quarantine|token> [...]")
+		return fmt.Errorf("usage: policy <check|record|record-signed|explain|audit|list|lint|init-key|anchor-legacy|sign|verify|doctor|rotate-key|quarantine|token> [...]")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -673,6 +673,8 @@ func cmdPolicy(args []string) error {
 		return cmdPolicyLint(rest)
 	case "init-key":
 		return cmdPolicyInitKey(rest)
+	case "anchor-legacy":
+		return cmdPolicyAnchorLegacy(rest)
 	case "sign":
 		return cmdPolicySign(rest)
 	case "verify":
@@ -686,7 +688,7 @@ func cmdPolicy(args []string) error {
 	case "token":
 		return cmdPolicyToken(rest)
 	default:
-		return fmt.Errorf("unknown policy subcommand: %s (check|record|record-signed|explain|audit|list|lint|init-key|sign|verify|doctor|rotate-key|quarantine|token)", sub)
+		return fmt.Errorf("unknown policy subcommand: %s (check|record|record-signed|explain|audit|list|lint|init-key|anchor-legacy|sign|verify|doctor|rotate-key|quarantine|token)", sub)
 	}
 }
 

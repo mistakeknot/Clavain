@@ -392,7 +392,7 @@ Interspect Calibration:
   calibration-streak              <record-receipt|record-manual LOOP [REASON]|status [--json]|verify [--target=10]>
 
 Policy:
-  policy              <check|record|record-signed|audit|sign|verify|doctor|token>  Auto-proceed authorization
+  policy              <check|record|record-signed|audit|anchor-legacy|sign|verify|doctor|token>  Auto-proceed authorization
   scenario-policy-check <agent> <action> [--path=<p>]  Check scenario-access policy
   scenario-policy-show                                Display scenario-access policy
   policy-check                                         Deprecated scenario-policy-check alias
