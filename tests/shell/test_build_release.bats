@@ -13,8 +13,8 @@ setup() {
 set -euo pipefail
 
 require_sanitized_go_env() {
-    [[ "${GOWORK:-}" == "off" && -z "${GOFLAGS:-}" ]] || {
-        echo "fake go: unsanitized GOWORK/GOFLAGS" >&2
+    [[ "${GOENV:-}" == "off" && "${GOWORK:-}" == "off" && -z "${GOFLAGS:-}" ]] || {
+        echo "fake go: unsanitized GOENV/GOWORK/GOFLAGS" >&2
         exit 11
     }
 }
@@ -192,7 +192,7 @@ write_release_fixture() {
     [ "$(jq -r '.intercore_revision' "$FIXTURE_ROOT/bin/release-manifest.json")" = "$expected_revision" ]
     [ "$(jq -r '.source_revision' "$FIXTURE_ROOT/bin/release-manifest.json")" = "$(git -C "$FIXTURE_ROOT" rev-parse HEAD)" ]
     [ "$(jq -r '.go_version' "$FIXTURE_ROOT/bin/release-manifest.json")" = "go1.26.4" ]
-    release_env env GOWORK=off GOFLAGS= go version -m "$FIXTURE_ROOT/bin/clavain-cli-go-linux-amd64" | \
+    release_env env GOENV=off GOWORK=off GOFLAGS= go version -m "$FIXTURE_ROOT/bin/clavain-cli-go-linux-amd64" | \
         grep -F $'\tbuild\t-tags=intercore_rev_'"$expected_revision" >/dev/null
 
     run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
@@ -209,8 +209,9 @@ write_release_fixture() {
     done <"$FIXTURE_ROOT/go.log"
 }
 
-@test "release build sanitizes inherited Go workspace and overlay flags" {
+@test "release build disables persisted and inherited Go build overrides" {
     run release_env env \
+        GOENV="$BATS_TEST_TMPDIR/hostile-goenv" \
         GOWORK="$BATS_TEST_TMPDIR/hostile.work" \
         GOFLAGS="-overlay=$BATS_TEST_TMPDIR/hostile-overlay.json" \
         bash "$FIXTURE_ROOT/scripts/build-release.sh"

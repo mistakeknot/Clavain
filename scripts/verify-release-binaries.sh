@@ -24,7 +24,7 @@ hash_file() {
 
 resolve_intercore_root() {
     local root
-    root="$(GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -m -f '{{with .Replace}}{{.Dir}}{{end}}' github.com/mistakeknot/intercore)" ||
+    root="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -m -f '{{with .Replace}}{{.Dir}}{{end}}' github.com/mistakeknot/intercore)" ||
         die "cannot resolve the Intercore module replacement"
     [[ -n "$root" && -d "$root" ]] ||
         die "github.com/mistakeknot/intercore must use a local module replacement"
@@ -97,7 +97,7 @@ while IFS=$'\t' read -r platform path expected_digest goos goarch; do
     actual_digest="$(hash_file "$artifact")"
     [[ "$actual_digest" == "$expected_digest" ]] || die "$platform digest mismatch"
 
-    metadata="$(GOWORK=off GOFLAGS='' go version -m "$artifact")" || die "$platform build metadata is unreadable"
+    metadata="$(GOENV=off GOWORK=off GOFLAGS='' go version -m "$artifact")" || die "$platform build metadata is unreadable"
     binary_go_version="$(printf '%s\n' "$metadata" | awk 'NR == 1 { print $2 }')"
     [[ "$binary_go_version" == "$go_version" ]] || die "$platform Go version mismatch"
     [[ "$metadata" == *$'\tbuild\tvcs.revision='"$source_revision"* ]] ||

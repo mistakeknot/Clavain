@@ -38,7 +38,7 @@ hash_file() {
 
 resolve_intercore_root() {
     local root
-    root="$(GOWORK=off GOFLAGS='' go -C "$SRC_DIR" list -m -f '{{with .Replace}}{{.Dir}}{{end}}' github.com/mistakeknot/intercore)" ||
+    root="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$SRC_DIR" list -m -f '{{with .Replace}}{{.Dir}}{{end}}' github.com/mistakeknot/intercore)" ||
         die "cannot resolve the Intercore module replacement"
     [[ -n "$root" && -d "$root" ]] ||
         die "github.com/mistakeknot/intercore must use a local module replacement"
@@ -83,7 +83,7 @@ fi
 
 SOURCE_REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 INTERCORE_REVISION="$(git -C "$INTERCORE_ROOT" rev-parse HEAD)"
-GO_VERSION="$(GOWORK=off GOFLAGS='' go version | awk '{print $3}')"
+GO_VERSION="$(GOENV=off GOWORK=off GOFLAGS='' go version | awk '{print $3}')"
 [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]] || die "invalid source revision"
 [[ "$INTERCORE_REVISION" =~ ^[0-9a-f]{40}$ ]] || die "invalid Intercore revision"
 [[ "$GO_VERSION" == go* ]] || die "invalid Go version"
@@ -120,7 +120,7 @@ for target in "${TARGETS[@]}"; do
     artifact="clavain-cli-go-${os}-${arch}"
     out="$STAGE_DIR/$artifact"
     echo "Building ${os}/${arch}..." >&2
-    GOWORK=off GOFLAGS='' CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+    GOENV=off GOWORK=off GOFLAGS='' CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
         go -C "$BUILD_SRC_DIR" build -trimpath -tags "$INTERCORE_BUILD_TAG" -o "$out" .
     artifacts+=("$artifact")
     built=$((built + 1))
@@ -128,7 +128,7 @@ done
 
 # Also build native binary for local use
 echo "Building native binary..." >&2
-GOWORK=off GOFLAGS='' go -C "$BUILD_SRC_DIR" build -trimpath -tags "$INTERCORE_BUILD_TAG" -o "$STAGE_DIR/clavain-cli-go" .
+GOENV=off GOWORK=off GOFLAGS='' go -C "$BUILD_SRC_DIR" build -trimpath -tags "$INTERCORE_BUILD_TAG" -o "$STAGE_DIR/clavain-cli-go" .
 artifacts+=("clavain-cli-go")
 
 # A compiler invocation must not race source edits after the preflight. The
