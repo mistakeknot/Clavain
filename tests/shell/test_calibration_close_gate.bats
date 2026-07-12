@@ -57,7 +57,7 @@ if [[ "$1 $2" == "policy doctor" ]]; then
 	if [[ "${SIGNER_DOCTOR_RC:-0}" != "0" ]]; then
 		exit "$SIGNER_DOCTOR_RC"
 	fi
-	printf '{"status":"ok","role":"signer","schema":35,"project_root":"%s","fingerprint":"0123456789abcdef"}\n' "$AUTHZ_REPO_ROOT"
+	printf '{"status":"ok","role":"signer","schema":36,"project_root":"%s","fingerprint":"0123456789abcdef","manifest_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}\n' "$AUTHZ_REPO_ROOT"
 	exit 0
 fi
 if [[ "$1 $2" == "policy check" ]]; then
