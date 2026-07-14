@@ -149,4 +149,3 @@ requirements:
 - run: `bash scripts/remontoire-attention.sh --format=hook`
   expect: exit 0
 </verify>
-
