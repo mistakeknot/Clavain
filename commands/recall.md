@@ -15,17 +15,30 @@ Unified retrieval across C4 (curated knowledge) and C5 (ephemeral memory). Retur
 
 ## Sources
 
-| Source | Layer | Path |
-|--------|-------|------|
+| Source | Layer | Path / Interface |
+|--------|-------|------------------|
+| Entity graph | C3 | CanonGraph MCP (`mcp__canongraph__*`) — entities, relationships, decisions-with-rationale |
 | Compound docs | C4 | `docs/solutions/**/*.md` |
+| Legacy knowledge | C4 | `config/knowledge/*.md` (prefer qmd MCP over grep) |
 | Auto-memory | C5 | Project memory dir (`MEMORY.md` + topic files) |
-| Legacy knowledge | C4 | `config/knowledge/*.md` |
+| bd memories | C5 | `bd memories <keyword>` (repo-scoped; run from the repo) |
+
+Lane map + provenance shapes: `~/projects/Sylveste/ops/canongraph/recall-lanes.md`.
 
 ## Execution
 
 ### 1. Parse query
 
 Extract from context arg. If empty, ask the user.
+
+### 1.5. Query the entity graph (C3 — skip silently if canongraph MCP absent)
+
+If the query names (or implies) a **thing** — a project, person, plugin, machine, client — or asks "what did we decide":
+1. `mcp__canongraph__resolve` the candidate name against likely entity types (project, then plugin, person, machine, client). A hit returns the entity's properties.
+2. On a project/plugin hit: `mcp__canongraph__query` `decisions_for_project` (or `concerns_plugin` via the plugin queries) for its decision history with rationale and who made the call.
+3. For "what did we decide in <session/run>": `decisions_in_run`. For location questions: `projects_on_machine`.
+
+Graph results carry event-sourced provenance (source, confidence) — rank them FIRST when they answer the question directly.
 
 ### 2. Search docs/solutions/ (C4 curated)
 
@@ -41,11 +54,15 @@ Check `.claude/projects/` memory dir, then `.clavain/memory/`. Grep all `.md` fi
 
 ### 4. Search legacy knowledge (C4 fallback)
 
-Only if fewer than 5 results found. Check `config/knowledge/*.md`. Skip `README.md` and `archive/`.
+Prefer qmd MCP when available: `mcp__plugin_interknow_qmd__query` with paired sub-queries (`lex` + `vec`) and an `intent` string. Fallback: only if fewer than 5 results found, Grep `config/knowledge/*.md`. Skip `README.md` and `archive/`.
+
+### 4.5. Search bd memories (C5 — skip silently if bd absent)
+
+`bd memories <keyword>` from the current repo (bd is cwd-sensitive). Repo-scoped task insights only — never rank above a graph or C4 hit that answers the same question.
 
 ### 5. Rank and deduplicate
 
-Priority: semantic similarity → provenance quality (`independent` > `primed`) → recency → C4 curated > C4 legacy > C5. Deduplicate: keep `docs/solutions/` over `config/knowledge/` for same pattern. Cap: 8 results (5 C4, 3 C5).
+Priority: **C3 graph** (typed, event-sourced, answers "what/who/why-decided" directly) → semantic similarity → provenance quality (`independent` > `primed`) → recency → C4 curated > C4 legacy > C5 memory → C5 bd. Deduplicate: keep `docs/solutions/` over `config/knowledge/` for same pattern; when a memory file merely points at a graph entity, show the graph entity and cite the pointer. Cap: 10 results (2 C3, 5 C4, 3 C5).
 
 ### 6. Present results
 
@@ -66,6 +83,6 @@ Searched: {N} docs/solutions, {M} memory files, {L} legacy entries
 Matched: {total} ({method: semantic|keyword})
 ```
 
-Tags: `[C4:solutions]` `[C4:legacy]` `[C5:memory]`
+Tags: `[C3:graph]` `[C4:solutions]` `[C4:legacy]` `[C5:memory]` `[C5:bd]`
 
 If no matches: "No knowledge entries match this query. Try broader keywords or check `docs/solutions/INDEX.md`."
