@@ -1,9 +1,9 @@
 {
-  "generated": "2026-07-11T14:46:21Z",
+  "generated": "2026-07-14T19:39:18Z",
   "counts": {
-    "skills": 19,
+    "skills": 20,
     "agents": 6,
-    "commands": 55,
+    "commands": 56,
     "hooks": 14,
     "mcp_servers": 0,
     "review": 2,
@@ -61,6 +61,10 @@
     {
       "name": "refactor-safely",
       "description": "Use for significant refactoring \u2014 duplication detection, characterization tests, staged execution, simplicity review."
+    },
+    {
+      "name": "remontoire",
+      "description": "Use when operating the Remontoire portfolio agency - inspect status, run shadow or proposal cycles, make an explicit approval decision, resume approved work, or verify receipts"
     },
     {
       "name": "ship",
@@ -259,6 +263,10 @@
     {
       "name": "reflect",
       "description": "Capture sprint learnings and register the reflection artifact"
+    },
+    {
+      "name": "remontoire",
+      "description": "Operate the Remontoire portfolio agency across hosts with explicit approval and receipt boundaries"
     },
     {
       "name": "repro-first-debugging",

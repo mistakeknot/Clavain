@@ -23,6 +23,14 @@ Read `--scope` (or the first argument) and route accordingly:
 1. For `clavain` scope, report:
    - Key dependencies: `clavain`, `interdoc`, `interphase`, `interline`, `interpath`, `interwatch`, `interlock`, `qmd`, `oracle`, `tool-time`.
    - Whether `/clavain:clavain-doctor` checks can be run successfully.
+   - The latest Remontoire portfolio cycle, using the first available
+     `remontoire-operator.sh` path documented by the `clavain:remontoire`
+     skill. Run `bash "$adapter" status`; never read cycle files directly.
+     Report the cycle ID, stage, and one next action:
+     `awaiting_approval` -> inspect then approve or decline;
+     `approved|executing|reviewing|compounding` -> resume;
+     `completed|declined|failed` -> show or replay the receipt. If no cycle
+     exists, recommend an explicit shadow or proposal run.
    - Nested subproject repo freshness (when in the Sylveste monorepo): run
      `scripts/nested-repo-freshness.sh --quiet` (or the plugin-cache copy) and
      report any nested plugin repos that are behind upstream, dirty, diverged,

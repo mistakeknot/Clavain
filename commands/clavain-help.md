@@ -17,6 +17,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/interflux:flux-drive` | Deep multi-agent review (any input) | `/flux-drive docs/plans/my-plan.md` |
 | `/clavain:quality-gates` | Gate orchestrator — delegates to flux-drive, enforces pass/fail | `/quality-gates` |
 | `/clavain:resolve` | Fix findings from TODOs/PR comments | `/resolve` |
+| `/clavain:remontoire` | Operate the portfolio agency across hosts | `/remontoire status` |
 | `/interpeer:interpeer` | Cross-AI peer review (Claude ↔ Codex/Oracle) | `/interpeer` |
 
 ## By Stage
@@ -36,6 +37,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 ### Execute
 | `/clavain:route` | Adaptive entry |
 |---|---|
+| `/clavain:remontoire` | Shadow, propose, inspect, approve, decline, resume, and verify receipts |
 | `/clavain:work` | Execute plans |
 | `/clavain:execute-plan` | Execute in separate session |
 | `/clavain:sprint` | Full autonomous pipeline |

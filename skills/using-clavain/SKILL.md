@@ -18,7 +18,7 @@ Clavain operates on **OODARC** — Observe · Orient · Decide · Act · Reflect
 
 The compounding half (Reflect + Compound) is what makes the system get smarter across sessions — it is not optional. See `PHILOSOPHY.md` § The OODARC Lens.
 
-# Quick Router — 19 skills, 6 agents, and 55 commands
+# Quick Router — 20 skills, 6 agents, and 56 commands
 
 | You want to... | Run this |
 |----------------|----------|
@@ -33,6 +33,7 @@ The compounding half (Reflect + Compound) is what makes the system get smarter a
 | Resolve review findings | `/clavain:resolve` |
 | Set up a new project | `/clavain:project-onboard` |
 | Check project health | `/clavain:clavain-doctor` or `/clavain:sprint-status` |
+| Operate the portfolio agency | `/clavain:remontoire status` |
 | One-shot situation snapshot (Observe) | `ic situation snapshot --run=<id>` |
 | Generate roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
 | Check doc freshness | `/interwatch:watch` |

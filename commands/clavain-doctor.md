@@ -188,6 +188,30 @@ else
 fi
 ```
 
+### 2j. Remontoire Agency
+
+Run the read-only Remontoire doctor through the same cross-host adapter used by
+`/clavain:remontoire`. Do not start or resume a cycle.
+
+```bash
+_remontoire_adapter=""
+for _candidate in \
+  "${CLAUDE_PLUGIN_ROOT:-}/scripts/remontoire-operator.sh" \
+  "scripts/remontoire-operator.sh" \
+  "$HOME/.codex/clavain/scripts/remontoire-operator.sh" \
+  "$HOME/projects/Sylveste/os/Clavain/scripts/remontoire-operator.sh"; do
+  [ -f "$_candidate" ] && { _remontoire_adapter="$_candidate"; break; }
+done
+if [ -z "$_remontoire_adapter" ]; then
+  echo "remontoire: SKIP (Clavain operator adapter not installed)"
+elif _remontoire_report=$(bash "$_remontoire_adapter" doctor 2>&1); then
+  echo "remontoire: PASS"
+else
+  _remontoire_detail=$(printf '%s' "$_remontoire_report" | head -c 240)
+  echo "remontoire: WARN (${_remontoire_detail}) — Fix: /clavain:remontoire doctor"
+fi
+```
+
 ### 3. Beads
 
 ```bash
@@ -511,4 +535,4 @@ cat ~/.claude/plugins/cache/interagency-marketplace/clavain/*/plugin.json 2>/dev
 Present results as a compact table: `<check> [PASS|WARN|FAIL] <detail>`. Group by section.
 <!-- agent-rig:end:doctor-output -->
 
-**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, canongraph→`uv tool install "canongraph @ git+https://github.com/jvattimo1/canongraph"` then `canongraph doctor`, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:clavain-init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin, marketplace association→auto-fixed by doctor or run `modpack-associate.sh` manually, nested-repo freshness→run the printed `git -C <dir> pull --ff-only` commands (or `scripts/nested-repo-freshness.sh --fetch` for live behind counts).
+**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, canongraph→`uv tool install "canongraph @ git+https://github.com/jvattimo1/canongraph"` then `canongraph doctor`, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, remontoire→`/clavain:remontoire doctor`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:clavain-init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin, marketplace association→auto-fixed by doctor or run `scripts/modpack-associate.sh` manually, nested-repo freshness→run the printed `git -C <dir> pull --ff-only` commands (or `scripts/nested-repo-freshness.sh --fetch` for live behind counts).

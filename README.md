@@ -4,7 +4,7 @@
 
 Clavain is the reference Claude Code rig for Sylveste, the platform that orchestrates agents by human/machine comparative advantage. It codifies product and engineering discipline into composable workflows for building software from brainstorm to ship, using Claude, Codex, and Oracle-style second opinions where their different failure modes help. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 19 skills, 6 agents, and 55 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 20 skills, 6 agents, and 56 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -302,7 +302,7 @@ Full semantics: `docs/canon/authz-token-model.md`.
 
 ## What's included
 
-### Skills (19)
+### Skills (20)
 
 Skills are workflow disciplines: they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 
@@ -324,6 +324,7 @@ Skills are workflow disciplines: they guide **how** you work, not what tools to 
 | `file-todos` | File-based todo tracking across sessions |
 | **Setup** | |
 | `project-onboard` | One-command project setup: introspect, scaffold, seed content |
+| `remontoire` | Operate the portfolio agency with explicit approval boundaries |
 | **Utilities** | |
 | `using-clavain` | Bootstrap routing: maps tasks to the right component |
 | `using-tmux-for-interactive-commands` | Interactive CLI tools in tmux |
@@ -339,7 +340,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow:** PR comment resolution and bug reproduction validation.
 
-### Commands (55)
+### Commands (56)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -377,6 +378,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/land` | Run landing checklist for trunk-based handoff |
 | `/triage` | Categorize and prioritize findings |
 | `/resolve` | Resolve findings from any source (auto-detects TODOs, PR comments, or todo files) |
+| `/remontoire` | Operate Remontoire on zklw: status, shadow, proposal, decisions, resume, receipts |
 | `/create-agent-skill` | Create new skills or agents |
 | `/generate-command` | Generate new commands |
 | `/heal-skill` | Fix broken skills |
@@ -390,6 +392,25 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/next-goal` | Generate a Next-goal block (leverage-ranked candidates + recommendation) — required after a goal completes |
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
+
+Remontoire is a separate L2 portfolio agency, not a Clavain fleet worker.
+Clavain provides only its operator facade; Remontoire and Intercore remain the
+owners of cycle behavior and durable state. Common flows are:
+
+```text
+/clavain:remontoire doctor
+/clavain:remontoire status
+/clavain:remontoire shadow
+/clavain:remontoire proposal
+/clavain:remontoire inspect CYCLE_ID
+/clavain:remontoire approve CYCLE_ID --actor=PRINCIPAL
+/clavain:remontoire resume CYCLE_ID
+/clavain:remontoire receipt show CYCLE_ID
+```
+
+Approval records a principal decision and stops. Execution requires the
+separate `resume` command. Remontoire never pushes, merges, deploys, or
+publishes experiment output.
 
 ### Hooks
 

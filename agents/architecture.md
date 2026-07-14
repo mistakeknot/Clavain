@@ -5,11 +5,11 @@
 ```
 Clavain/
 ├── .claude-plugin/plugin.json     # Plugin manifest (name, version, MCP servers)
-├── skills/                        # 16 discipline skills (ls skills/*/SKILL.md)
+├── skills/                        # 20 discipline skills (ls skills/*/SKILL.md)
 ├── agents/
 │   ├── review/                    # 2: plan-reviewer, data-migration-expert
 │   └── workflow/                  # 2: bug-reproduction-validator, pr-comment-resolver
-├── commands/                      # 45 slash commands (ls commands/*.md)
+├── commands/                      # 56 slash commands (ls commands/*.md)
 │   └── interpeer.md              # Quick cross-AI peer review (+ 43 others)
 ├── hooks/                         # 7 active hooks + 8 lib-*.sh libraries
 │   ├── hooks.json                 # Hook registration (4 event types, 6 bindings)
