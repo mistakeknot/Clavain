@@ -1,0 +1,45 @@
+version: 1
+mode: dependency-driven
+tier: deep
+max_parallel: 1
+timeout_per_task: 600
+
+stages:
+  - name: Canonical projection
+    tasks:
+      - id: task-1
+        title: Add the Remontoire attention projection
+        files:
+          - ../Remontoire/internal/adapters/beads.go
+          - ../Remontoire/internal/app/app.go
+        depends: []
+  - name: Shared classifier
+    tasks:
+      - id: task-2
+        title: Add the Clavain attention classifier
+        files:
+          - scripts/remontoire-attention.sh
+          - scripts/remontoire-operator.sh
+        depends: [task-1]
+  - name: Consumers
+    tasks:
+      - id: task-3
+        title: Wire Claude and Codex SessionStart consumers
+        files:
+          - hooks/hooks.json
+          - scripts/install-codex.sh
+        depends: [task-2]
+      - id: task-4
+        title: Feed ready promotions into next-goal ranking
+        files:
+          - commands/next-goal.md
+        depends: [task-2]
+  - name: Release
+    tasks:
+      - id: task-5
+        title: Verify, install, publish, and deploy
+        files:
+          - README.md
+          - skills/remontoire/SKILL.md
+          - docs/README.codex.md
+        depends: [task-3, task-4]
