@@ -37,6 +37,7 @@ python3 scripts/interverse_agency.py install remontoire
 |---|---|---|
 | Health | `doctor` | Read-only runtime and dependency checks |
 | Latest status | `status` | Read the latest canonical cycle |
+| Ambient attention | `attention` | Read latest cycle plus canonical ready promotions; never mutate or decide |
 | Specific status | `inspect CYCLE_ID` | Read one cycle and its evidence contract |
 | Shadow cycle | `shadow` | Observe and rank without creating backlog work |
 | Proposal cycle | `proposal` | May create one deduplicated P4 experiment, then stops |
@@ -48,6 +49,13 @@ python3 scripts/interverse_agency.py install remontoire
 
 The adapter always requests JSON and returns the Remontoire exit status without
 changing its payload.
+
+Scheduled operation is exception-driven. Do not run `status`, `shadow`, or
+`proposal` merely because a new agent session started. The shared SessionStart
+consumer calls only `attention`, remains silent for normal and completed stages,
+and surfaces a command only for a principal decision or recoverable exception.
+Ready promotions enter `next-goal` ranking separately; selecting one with
+`/goal` starts ordinary implementation and does not alter the source cycle.
 
 ## Decision Boundary
 

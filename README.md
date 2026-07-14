@@ -395,7 +395,17 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 
 Remontoire is a separate L2 portfolio agency, not a Clavain fleet worker.
 Clavain provides only its operator facade; Remontoire and Intercore remain the
-owners of cycle behavior and durable state. Common flows are:
+owners of cycle behavior and durable state.
+
+Normal use is exception-driven. Remontoire runs its scheduled cycles on zklw,
+and Claude Code or Codex stays silent at session start unless the latest cycle
+needs a principal decision, an explicit resume, receipt recovery, or diagnosis.
+Completed experiments do not create startup noise. Their ready promotion beads
+join `/clavain:next-goal` ranking, where measured evidence is one leverage signal
+rather than an automatic winner. Use `/goal` only after choosing a promotion for
+normal implementation; `/goal` never approves or resumes a Remontoire cycle.
+
+Common explicit operator flows are:
 
 ```text
 /clavain:remontoire doctor
@@ -408,13 +418,16 @@ owners of cycle behavior and durable state. Common flows are:
 /clavain:remontoire receipt show CYCLE_ID
 ```
 
+Codex uses the generated `/prompts:clavain-remontoire` and
+`/prompts:clavain-next-goal` forms for the same workflows.
+
 Approval records a principal decision and stops. Execution requires the
 separate `resume` command. Remontoire never pushes, merges, deploys, or
 publishes experiment output.
 
 ### Hooks
 
-- **SessionStart**: Injects the `using-clavain` routing table into every session (start, resume, clear, compact). When interserve mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
+- **SessionStart**: Injects the `using-clavain` routing table and silently checks Remontoire for exception states (start, resume, clear, compact). When interserve mode is active, injects the behavioral contract for Codex delegation (`session-start.sh`).
 - **PreToolUse**: Guards `~/.claude/plugins/cache/` from accidental edits (`guard-plugin-cache.sh`).
 - **PostToolUse**: Auto-publish on `git push` in plugin repos (`auto-publish.sh`). Bead-agent binding on Bash (`bead-agent-bind.sh`). Catalog reminder on file edits (`catalog-reminder.sh`). Plugin edit validation (`validate-plugin-edit.sh`).
 - **Stop**: Auto-stop actions: goal-cadence (forces a Next-goal block when a goal completes), compound check, self-dispatch, drift check, shadow-tracker warning (`auto-stop-actions.sh`).

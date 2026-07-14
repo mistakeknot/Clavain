@@ -23,26 +23,59 @@ encouraged) to invoke manually any time you want a fresh set of candidates.
 Never skip the block because bead data is unavailable — degrade to a
 lighter-weight recommendation (see Step 3) rather than omitting it.
 
-## Step 1: Gather candidates from `bd ready`
+## Step 1: Gather ready and promoted candidates
 
 ```bash
 SCOPE="${ARGUMENTS:-}"
-READY_JSON=""
+LOCAL_READY_JSON="[]"
 if command -v bd &>/dev/null; then
     if [[ -n "$SCOPE" ]]; then
-        READY_JSON=$(bd ready --json --limit 20 --parent "$SCOPE" 2>/dev/null) || READY_JSON=""
+        LOCAL_READY_JSON=$(bd ready --json --limit 20 --parent "$SCOPE" 2>/dev/null) || LOCAL_READY_JSON="[]"
     fi
-    if [[ -z "$READY_JSON" || "$READY_JSON" == "[]" ]]; then
-        READY_JSON=$(bd ready --json --limit 20 2>/dev/null) || READY_JSON=""
+    if [[ -z "$LOCAL_READY_JSON" || "$LOCAL_READY_JSON" == "[]" ]]; then
+        LOCAL_READY_JSON=$(bd ready --json --limit 20 2>/dev/null) || LOCAL_READY_JSON="[]"
     fi
 fi
+
+# Remontoire owns canonical promotion discovery. Its helper is read-only and
+# fails silent when the agency or zklw is unavailable.
+REMONTOIRE_HELPER=""
+for candidate in \
+    "${CLAUDE_PLUGIN_ROOT:-}/scripts/remontoire-attention.sh" \
+    "$HOME/.codex/clavain/scripts/remontoire-attention.sh" \
+    "$HOME/projects/Sylveste/os/Clavain/scripts/remontoire-attention.sh"
+do
+    if [[ -f "$candidate" ]]; then
+        REMONTOIRE_HELPER="$candidate"
+        break
+    fi
+done
+
+PROMOTIONS_JSON="[]"
+if [[ -n "$REMONTOIRE_HELPER" ]] && command -v jq &>/dev/null; then
+    REMONTOIRE_JSON=$(bash "$REMONTOIRE_HELPER" --format=json 2>/dev/null) || REMONTOIRE_JSON=""
+    PROMOTIONS_JSON=$(jq -ce '
+      select(.schema_version == "clavain.remontoire-attention/v1")
+      | if .available == true then
+          [(.promotions // [])[]
+           | select((.labels // []) | index("remontoire-promotion"))]
+        else [] end
+    ' <<<"$REMONTOIRE_JSON" 2>/dev/null) || PROMOTIONS_JSON="[]"
+fi
+
+READY_JSON=$(jq -cn \
+    --argjson local "${LOCAL_READY_JSON:-[]}" \
+    --argjson promoted "${PROMOTIONS_JSON:-[]}" \
+    '$local + $promoted | unique_by(.id)' 2>/dev/null) || READY_JSON="$LOCAL_READY_JSON"
 ```
 
 `bd ready` already applies blocker-aware semantics (excludes in_progress,
 blocked, deferred, hooked) — it is the right primitive, not `bd list
 --ready`. If `bd` is not installed, or the current directory has no beads
-database, `READY_JSON` stays empty — proceed to Step 3's degraded path, do
-not error or block on this.
+database, `LOCAL_READY_JSON` stays empty. The Remontoire projection supplies
+ready beads labeled `remontoire-promotion` from the agency's canonical
+portfolio tracker. If either source is unavailable, continue with the other;
+if both are empty, proceed to Step 3's degraded path without error.
 
 If the repo is one of several trackers relevant to the session (e.g. a
 monorepo alongside a companion plugin repo, or the workstation vs. a synced
@@ -63,6 +96,10 @@ the `bd ready --json` schema:
 - Proximity to what this session just shipped — candidates that share a
   label, parent epic, or title keyword with the just-completed goal are
   higher leverage (continuing momentum) than a cold-start elsewhere
+- `remontoire-promotion` provenance — a bounded experiment produced evidence
+  that this item is worth considering. That evidence is a positive leverage
+  signal, but the promotion **must not automatically win**: compare it with
+  priority, blocker impact, `dependent_count`, risk, and session continuity.
 
 Rank and select the **top 2-4** candidates. Do not just take the top 2-4 by
 `bd`'s default sort — apply the leverage lens above; a `--sort hybrid` or
@@ -103,4 +140,7 @@ Keep rationales to one line each — this block closes out the message, it
 does not reopen a planning discussion. If the recommended candidate has a
 bead ID, the `/goal` line should reference it (e.g. `/goal Continue
 sylveste-abcd — <short description>`); if degraded (Step 3), it should be a
-self-contained free-text goal description.
+self-contained free-text goal description. When the recommendation is a
+Remontoire promotion, identify it as coming from the canonical portfolio
+backlog in the `/goal` text so the next session does not assume the bead is
+stored in the current repository's tracker.

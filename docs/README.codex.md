@@ -89,20 +89,22 @@ Then restart Codex.
 
 ## Usage Pattern
 
-1. Use Clavain skills directly in Codex (native discovery from `~/.agents/skills/clavain`).
-2. Use generated prompt wrappers for command-style workflows:
+1. Let the Remontoire SessionStart hook stay ambient. It emits nothing for normal or completed cycles; when it surfaces an exception, use the exact `/prompts:clavain-remontoire` inspect, resume, receipt, or doctor command shown. Approval and resume remain separate explicit actions.
+2. Use `/prompts:clavain-next-goal` after completing a goal or when choosing work. Ready Remontoire promotions are ranked with local ready beads; use `/goal` only after selecting one for implementation.
+3. Use Clavain skills directly in Codex (native discovery from `~/.agents/skills/clavain`).
+4. Use generated prompt wrappers for command-style workflows:
    - `clavain-lfg`
    - `clavain-brainstorm`
    - `clavain-write-plan`
    - `clavain-work`
    - `clavain-review`
-3. Use generated Interverse prompt wrappers when you want command-style companion invocation:
+5. Use generated Interverse prompt wrappers when you want command-style companion invocation:
    - `/prompts:interflux-flux-drive`
    - `/prompts:interflux-flux-research`
    - `/prompts:interpath-roadmap`
    - `/prompts:interlock-interlock-status`
-4. Use `scripts/dispatch.sh` when you want Codex-agent delegation behavior from `codex`.
-5. Use the Codex helper CLI for discovery/bootstrap:
+6. Use `scripts/dispatch.sh` when you want Codex-agent delegation behavior from `codex`.
+7. Use the Codex helper CLI for discovery/bootstrap:
    - `~/.codex/clavain/.codex/clavain-codex bootstrap`
    - `~/.codex/clavain/.codex/clavain-codex find-skills`
    - `~/.codex/clavain/.codex/clavain-codex use-skill using-clavain`

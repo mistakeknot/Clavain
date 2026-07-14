@@ -74,3 +74,15 @@ def test_command_body_nonempty(cmd_file):
     assert len(body_stripped) >= 10, (
         f"{cmd_file.name} body is too short ({len(body_stripped)} chars)"
     )
+
+
+def test_next_goal_merges_remontoire_promotions_without_forcing(project_root):
+    """Measured Remontoire promotions enter ranking but never bypass it."""
+    content = (project_root / "commands" / "next-goal.md").read_text()
+
+    assert "remontoire-attention.sh" in content
+    assert "--format=json" in content
+    assert "remontoire-promotion" in content
+    assert "unique_by(.id)" in content
+    assert "must not automatically win" in content
+    assert "dependent_count" in content
