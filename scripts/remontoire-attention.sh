@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 format="hook"
 case "${1:-}" in
@@ -24,6 +24,8 @@ degrade() {
   fi
   exit 0
 }
+
+trap degrade ERR
 
 command -v jq >/dev/null 2>&1 || degrade
 

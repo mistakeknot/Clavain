@@ -6,6 +6,7 @@
 # - ~/.codex/prompts/clavain-*.md prompt wrappers generated from commands/*.md
 # - ~/.codex/AGENTS.md managed Clavain Codex tool map block
 # - ~/.codex/config.toml managed MCP server block synced from .claude-plugin/plugin.json
+# - ~/.codex/hooks.json merged Remontoire attention SessionStart hook
 #
 # Clean-break policy:
 # - Removes legacy ~/.codex/skills/clavain path (symlink or directory) with backup-first safety.
@@ -32,6 +33,7 @@ CODEX_PROMPTS_DIR="${CODEX_PROMPTS_DIR:-$CODEX_HOME/prompts}"
 CODEX_SKILLS_DIR="${CODEX_SKILLS_DIR:-$CODEX_HOME/skills}"
 CODEX_AGENTS_FILE="${CODEX_AGENTS_FILE:-$CODEX_HOME/AGENTS.md}"
 CODEX_CONFIG_FILE="${CODEX_CONFIG_FILE:-$CODEX_HOME/config.toml}"
+CODEX_HOOKS_FILE="${CODEX_HOOKS_FILE:-$CODEX_HOME/hooks.json}"
 LOCAL_BIN_DIR="${LOCAL_BIN_DIR:-$HOME/.local/bin}"
 CLAVAIN_CLI_LINK="${CLAVAIN_CLI_LINK:-$LOCAL_BIN_DIR/clavain-cli}"
 BACKUP_ROOT="${CLAVAIN_BACKUP_ROOT:-$CODEX_HOME/.clavain-backups}"
@@ -97,6 +99,7 @@ while [[ $# -gt 0 ]]; do
       CODEX_SKILLS_DIR="$CODEX_HOME/skills"
       CODEX_AGENTS_FILE="$CODEX_HOME/AGENTS.md"
       CODEX_CONFIG_FILE="$CODEX_HOME/config.toml"
+      CODEX_HOOKS_FILE="$CODEX_HOME/hooks.json"
       LOCAL_BIN_DIR="$HOME/.local/bin"
       CLAVAIN_CLI_LINK="$LOCAL_BIN_DIR/clavain-cli"
       BACKUP_ROOT="$CODEX_HOME/.clavain-backups"
@@ -176,7 +179,7 @@ ensure_clone() {
 
 resolve_source_dir() {
   if [[ -n "$SOURCE_DIR" ]]; then
-    SOURCE_DIR="$(cd "$SOURCE_DIR" && pwd)"
+    SOURCE_DIR="$(cd "$SOURCE_DIR" && pwd -P)"
     if ! is_clavain_root "$SOURCE_DIR"; then
       echo "Invalid --source path (not a Clavain root): $SOURCE_DIR" >&2
       exit 1
@@ -841,6 +844,121 @@ sync_mcp_servers() {
   fi
 }
 
+codex_remontoire_hook_command() {
+  local hook_script="$SOURCE_DIR/scripts/remontoire-attention.sh"
+  local quoted_hook_script
+  printf -v quoted_hook_script '%q' "$hook_script"
+  printf 'CLAVAIN_AGENT_SURFACE=codex bash %s' "$quoted_hook_script"
+}
+
+validate_codex_hooks_file() {
+  local file="$1"
+  jq -e '
+    type == "object"
+    and ((.hooks // {}) | type) == "object"
+    and ((.hooks.SessionStart // []) | type) == "array"
+    and all((.hooks.SessionStart // [])[];
+      type == "object" and ((.hooks // []) | type) == "array")
+  ' "$file" >/dev/null 2>&1
+}
+
+sync_codex_remontoire_hook() {
+  command -v jq >/dev/null 2>&1 || {
+    echo "jq is required to merge Codex hooks safely." >&2
+    exit 1
+  }
+
+  local hook_script="$SOURCE_DIR/scripts/remontoire-attention.sh"
+  if [[ ! -x "$hook_script" ]]; then
+    echo "Missing executable Remontoire attention hook: $hook_script" >&2
+    exit 1
+  fi
+
+  local source_file
+  source_file="$(mktemp)"
+  if [[ -f "$CODEX_HOOKS_FILE" ]]; then
+    if ! validate_codex_hooks_file "$CODEX_HOOKS_FILE"; then
+      rm -f "$source_file"
+      echo "Refusing to overwrite malformed Codex hooks file: $CODEX_HOOKS_FILE" >&2
+      exit 1
+    fi
+    cp -f "$CODEX_HOOKS_FILE" "$source_file"
+  else
+    printf '{"hooks":{}}\n' > "$source_file"
+  fi
+
+  local hook_command candidate
+  hook_command="$(codex_remontoire_hook_command)"
+  candidate="$(mktemp)"
+  jq --arg command "$hook_command" '
+    def without_remontoire:
+      . as $group
+      | .hooks = [
+          ($group.hooks // [])[]
+          | select(((.command // "") | contains("remontoire-attention.sh")) | not)
+        ];
+    .hooks = (.hooks // {})
+    | .hooks.SessionStart = (
+        [(.hooks.SessionStart // [])[]
+          | without_remontoire
+          | select((.hooks | length) > 0)]
+        + [{
+            hooks: [{
+              type: "command",
+              command: $command,
+              timeout: 15
+            }]
+          }]
+      )
+  ' "$source_file" > "$candidate"
+  rm -f "$source_file"
+
+  if [[ -f "$CODEX_HOOKS_FILE" ]] && cmp -s "$CODEX_HOOKS_FILE" "$candidate"; then
+    rm -f "$candidate"
+    echo "Managed Codex Remontoire hook already up to date: $CODEX_HOOKS_FILE"
+    return 0
+  fi
+
+  backup_copy_file "$CODEX_HOOKS_FILE"
+  mkdir -p "$(dirname "$CODEX_HOOKS_FILE")"
+  mv -f "$candidate" "$CODEX_HOOKS_FILE"
+  echo "Updated managed Codex Remontoire hook: $CODEX_HOOKS_FILE"
+  echo "Codex will request its normal one-time trust decision for the hook at next launch."
+}
+
+remove_codex_remontoire_hook() {
+  [[ -f "$CODEX_HOOKS_FILE" ]] || return 0
+  if ! command -v jq >/dev/null 2>&1 || ! validate_codex_hooks_file "$CODEX_HOOKS_FILE"; then
+    echo "Skip malformed Codex hooks file during uninstall: $CODEX_HOOKS_FILE" >&2
+    return 1
+  fi
+
+  local candidate
+  candidate="$(mktemp)"
+  jq '
+    def without_remontoire:
+      . as $group
+      | .hooks = [
+          ($group.hooks // [])[]
+          | select(((.command // "") | contains("remontoire-attention.sh")) | not)
+        ];
+    .hooks.SessionStart = [
+      (.hooks.SessionStart // [])[]
+      | without_remontoire
+      | select((.hooks | length) > 0)
+    ]
+  ' "$CODEX_HOOKS_FILE" > "$candidate"
+
+  if cmp -s "$CODEX_HOOKS_FILE" "$candidate"; then
+    rm -f "$candidate"
+    return 0
+  fi
+
+  backup_copy_file "$CODEX_HOOKS_FILE"
+  mv -f "$candidate" "$CODEX_HOOKS_FILE"
+  echo "Removed managed Codex Remontoire hook: $CODEX_HOOKS_FILE"
+}
+
 cleanup_legacy_mcp_server_tables() {
   local config_file="$1"
   [[ -f "$config_file" ]] || return 0
@@ -917,6 +1035,7 @@ install_all() {
 
   install_managed_agents_block
   sync_mcp_servers
+  sync_codex_remontoire_hook
 
   if [[ "$INSTALL_PROMPTS" -eq 1 ]]; then
     generate_prompts
@@ -957,6 +1076,9 @@ doctor() {
   local prompts_dir_ok="false"
   local agents_block_ok="false"
   local mcp_block_ok="false"
+  local codex_hooks_file_ok="false"
+  local remontoire_hook_present="false"
+  local remontoire_hook_match="false"
   local conversion_report_ok="false"
 
   local skill_dir_count=0
@@ -1126,6 +1248,43 @@ doctor() {
     status=1
   fi
 
+  if [[ -f "$CODEX_HOOKS_FILE" ]] && validate_codex_hooks_file "$CODEX_HOOKS_FILE"; then
+    codex_hooks_file_ok="true"
+    local expected_hook_command managed_hook_count matching_hook_count
+    expected_hook_command="$(codex_remontoire_hook_command)"
+    managed_hook_count="$(jq -r '
+      [.hooks.SessionStart[]?.hooks[]?
+       | select((.command // "") | contains("remontoire-attention.sh"))]
+      | length
+    ' "$CODEX_HOOKS_FILE")"
+    matching_hook_count="$(jq -r --arg command "$expected_hook_command" '
+      [.hooks.SessionStart[]?.hooks[]?
+       | select(
+           .type == "command"
+           and .command == $command
+           and ((.timeout | type) == "number")
+           and (.timeout > 0 and .timeout <= 15)
+         )]
+      | length
+    ' "$CODEX_HOOKS_FILE")"
+
+    if [[ "$managed_hook_count" -gt 0 ]]; then
+      remontoire_hook_present="true"
+    else
+      issues+=("managed Remontoire SessionStart hook missing: $CODEX_HOOKS_FILE")
+      status=1
+    fi
+    if [[ "$managed_hook_count" -eq 1 && "$matching_hook_count" -eq 1 ]]; then
+      remontoire_hook_match="true"
+    else
+      issues+=("managed Remontoire SessionStart hook differs from source or is duplicated: $CODEX_HOOKS_FILE")
+      status=1
+    fi
+  else
+    issues+=("Codex hooks file missing or malformed: $CODEX_HOOKS_FILE")
+    status=1
+  fi
+
   if [[ -f "$CONVERSION_REPORT_FILE" ]]; then
     conversion_report_ok="true"
     if command -v jq >/dev/null 2>&1; then
@@ -1169,6 +1328,9 @@ doctor() {
     printf '    "prompts_dir_exists":%s,\n' "$prompts_dir_ok"
     printf '    "managed_agents_block_present":%s,\n' "$agents_block_ok"
     printf '    "managed_mcp_block_present":%s,\n' "$mcp_block_ok"
+    printf '    "codex_hooks_file_present":%s,\n' "$codex_hooks_file_ok"
+    printf '    "remontoire_session_start_hook_present":%s,\n' "$remontoire_hook_present"
+    printf '    "remontoire_session_start_hook_match":%s,\n' "$remontoire_hook_match"
     printf '    "conversion_report_present":%s\n' "$conversion_report_ok"
     printf '  },\n'
     printf '  "counts":{\n'
@@ -1186,6 +1348,7 @@ doctor() {
     printf '    "clavain_cli_link":"%s",\n' "$(json_escape "$CLAVAIN_CLI_LINK")"
     printf '    "agents_file":"%s",\n' "$(json_escape "$CODEX_AGENTS_FILE")"
     printf '    "config_file":"%s",\n' "$(json_escape "$CODEX_CONFIG_FILE")"
+    printf '    "hooks_file":"%s",\n' "$(json_escape "$CODEX_HOOKS_FILE")"
     printf '    "conversion_report":"%s"\n' "$(json_escape "$CONVERSION_REPORT_FILE")"
     printf '  },\n'
     printf '  "issues":['
@@ -1208,6 +1371,7 @@ doctor() {
   echo "skill dirs in source:   $skill_dir_count"
   echo "commands in source:     $command_count"
   echo "prompt wrappers:        $present_wrappers/$expected_wrappers present; $missing_wrappers missing; $stale_wrappers stale; $wrapper_count total"
+  echo "Remontoire hook:        present=$remontoire_hook_present match=$remontoire_hook_match"
   echo "conversion unresolved:  $conversion_unresolved"
   echo
 
@@ -1231,6 +1395,7 @@ uninstall_all() {
   remove_prompts
   remove_block_from_file "$CODEX_AGENTS_FILE" "$AGENTS_BLOCK_START" "$AGENTS_BLOCK_END" || true
   remove_block_from_file "$CODEX_CONFIG_FILE" "$MCP_BLOCK_START" "$MCP_BLOCK_END" || true
+  remove_codex_remontoire_hook || true
 
   if [[ "$REMOVE_CLONE" -eq 1 ]]; then
     rm -rf "$CLONE_DIR"
@@ -1245,7 +1410,6 @@ case "$ACTION" in
     install_all
     ;;
   update)
-    ensure_clone
     install_all
     ;;
   doctor)

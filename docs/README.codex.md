@@ -27,7 +27,8 @@ bash ~/.codex/clavain/.codex/agent-install.sh --update --json
 ```
 
 Restart Codex after install. The default installer now refreshes Clavain plus the full Interverse Codex ecosystem from the recommended and optional rig tiers. It is idempotent and removes stale `clavain-*.md` wrappers.
-It also manages a Clavain block in `~/.codex/AGENTS.md`, syncs MCP servers into `~/.codex/config.toml`, and writes conversion diagnostics to `~/.codex/prompts/.clavain-conversion-report.json`.
+It also manages a Clavain block in `~/.codex/AGENTS.md`, syncs MCP servers into `~/.codex/config.toml`, merges the read-only Remontoire attention hook into `~/.codex/hooks.json`, and writes conversion diagnostics to `~/.codex/prompts/.clavain-conversion-report.json`.
+On the first Codex launch after install or after the hook changes, review and trust that hook through Codex's normal hook review screen. The installer does not modify Codex's trust state.
 Wrapper conversion also normalizes `AskUserQuestion` references to a Codex elicitation adapter policy:
 use `request_user_input` when available (Plan mode), otherwise ask in chat with numbered options and pause for response.
 
@@ -83,7 +84,7 @@ Then restart Codex.
 | Skills (`skills/*/SKILL.md`) | Full | Installed via symlink for native discovery |
 | Command workflows | High | Installer generates `~/.codex/prompts/clavain-*.md` wrappers from `commands/*.md` |
 | Codex dispatch scripts | Full | `scripts/dispatch.sh` and `scripts/debate.sh` are native shell tools |
-| Claude hooks (`hooks/*.sh`) | N/A | Claude-only hook system |
+| Lifecycle hooks | Partial | Installer merges the Remontoire `SessionStart` attention hook into `~/.codex/hooks.json`; normal Codex hook trust review applies |
 | Claude plugin manifest (`.claude-plugin/plugin.json`) | N/A | Claude-only plugin loading |
 
 ## Usage Pattern
@@ -138,6 +139,7 @@ Checks:
 - Conversion report in `~/.codex/prompts/.clavain-conversion-report.json`
 - Managed Clavain block in `~/.codex/AGENTS.md`
 - Managed Clavain MCP block in `~/.codex/config.toml`
+- Managed Remontoire attention entry in `~/.codex/hooks.json`
 - Codex CLI availability
 - For Codex sessions, you can run `make codex-bootstrap` to repair + validate state before work.
 
