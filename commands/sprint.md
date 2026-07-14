@@ -48,6 +48,7 @@ Non-negotiable:
 4. Halt on failure — report what failed, what succeeded, what user can do. No silent retry or skip.
 5. Local subagents (Task tool) by default — external agents (Codex, interserve) require explicit opt-in.
 6. Never call EnterPlanMode — plan was created before this runs. Scope changes → stop and ask.
+7. Decision emission (fail-open): whenever a gate ratifies a real choice — plan approved over a considered alternative, a pivot/descope at plan-review, a quality-gate override with rationale — and the `canongraph` MCP tools are available, `resolve`+`ingest` a `decision` entity (title, rationale, decided_on) with `made_by`/`concerns_*` edges and `decided_in` → the active `ic` run. At the moment of the call, not at handoff. Skip silently when tools are absent or errors occur; never block a gate on it. Policy: `~/projects/Sylveste/ops/canongraph/memory-lanes.md`.
 7. **Exactly 10 steps.** Do NOT invent, rename, or append steps beyond the 10 defined below.
 </BEHAVIORAL-RULES>
 

@@ -363,6 +363,14 @@ clavain-cli advance-phase "<feature_bead_id>" "strategized" "PRD: <prd_path>" ""
 
 **Standalone** (no sprint): `/interflux:flux-drive docs/prds/YYYY-MM-DD-<topic>.md` — catches scope creep, missing AC, architectural risks.
 
+### Phase 4.5: Emit ratified decisions to CanonGraph (fail-open)
+
+If the `canongraph` MCP tools are available (`mcp__canongraph__*`), capture the PRD's **load-bearing decisions** into the memory graph *now*, at the moment they are ratified — not later from handoff prose. Skip silently if the tools are absent or any call errors; this is enrichment, never a gate. Follow the memory-lanes policy (`~/projects/Sylveste/ops/canongraph/memory-lanes.md`).
+
+What qualifies: Phase 0.5 verdicts (subsume/supersede), scope calls that rejected a real alternative ("chose X over Y because Z"), and explicit non-goals with rationale. What does not: feature lists, task breakdowns, routine defaults.
+
+For each: `resolve` then `ingest` a `decision` entity (title, rationale, status=decided, decided_on=today) with `made_by` → the deciding person, `concerns_project`/`concerns_plugin` → the target, and `decided_in` → the active run (`ic run current`) when one resolved. `source` = the PRD path; honest `confidence`.
+
 ## Phase 5: Handoff (Terminal)
 
 This is the **final phase**. After this, strategy is complete. Do NOT add phases 6, 7, or beyond — planning, execution, and review are the sprint orchestrator's responsibility.
