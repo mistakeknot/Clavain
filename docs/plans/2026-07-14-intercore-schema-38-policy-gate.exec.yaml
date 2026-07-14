@@ -1,0 +1,28 @@
+version: 1
+mode: all-sequential
+tier: deep
+max_parallel: 1
+timeout_per_task: 600
+
+stages:
+  - name: "Compatibility and release"
+    tasks:
+      - id: task-1
+        title: "Implement Go authorization schema compatibility"
+        files:
+          - cmd/clavain-cli/authz_sign.go
+          - cmd/clavain-cli/authz_sign_test.go
+        depends: []
+      - id: task-2
+        title: "Implement shell gate compatibility and enforcement tests"
+        files:
+          - scripts/gates/_common.sh
+          - tests/shell/test_bd_push_dolt_gate.bats
+        depends: [task-1]
+      - id: task-3
+        title: "Verify, install, publish, and close"
+        files:
+          - .claude-plugin/plugin.json
+          - agent-rig.json
+          - docs/PRD.md
+        depends: [task-2]
