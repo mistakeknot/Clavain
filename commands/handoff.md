@@ -133,6 +133,16 @@ This makes the handoff discoverable via `ic run status <id>` and the session-sta
 
 After registering, print only the absolute path of the file. The next session reads the file (or finds it via the run artifact) when it resumes; no other output is needed.
 
+## Step 6 — Capture session decisions into CanonGraph (fail-open)
+
+If the `canongraph` MCP tools are available (`mcp__canongraph__*`), make session continuity *queryable*: ingest the session's durable decisions into the memory graph, tied to the run. Skip silently if the tools are absent or any call errors — like intercore, this is enrichment, never required. Follow the memory-lanes policy (`~/projects/Sylveste/ops/canongraph/memory-lanes.md`): decisions and world-facts only, no behavioral prefs, no engineering patterns.
+
+1. `resolve` then `ingest` a `run` entity: `run_id` = `$RUN_ID` when a run resolved in Step 0, else the Claude session id; `goal` = the run/session goal; `started_on` = today.
+2. For each **decision** recorded in the handoff (a real "we chose X over Y because Z", not a task): `resolve` + `ingest` a `decision` entity (title, rationale, status, decided_on) with relationship events `made_by` → the deciding person, `decided_in` → the run, and `concerns_project`/`concerns_plugin` → what it affects. Set honest `confidence`; `source` = the handoff filename.
+3. Do not duplicate: `resolve` first; if a decision already exists (`is_new=false`), skip its entity event and add only missing edges.
+
+This makes "what did we decide about X, and in which run?" answerable via the `decisions_for_project` / `decisions_in_run` graph queries.
+
 ## Rules
 
 - The Directive is the lead section — a new session receiving this handoff should start working immediately without asking "what should I do?"
