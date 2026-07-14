@@ -44,6 +44,7 @@ def test_facade_maps_read_and_cycle_flows(project_root: Path, tmp_path: Path) ->
     cases = {
         ("doctor",): ["doctor", "--json"],
         ("status",): ["status", "--json"],
+        ("attention",): ["attention", "--json"],
         ("inspect", "cycle-1"): ["status", "cycle-1", "--json"],
         ("shadow",): ["cycle", "--mode=shadow", "--json"],
         ("proposal",): ["cycle", "--mode=proposal", "--json"],

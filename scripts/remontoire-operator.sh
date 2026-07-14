@@ -8,6 +8,7 @@ usage: remontoire-operator.sh <operation> [arguments]
 operations:
   doctor
   status [cycle-id]
+  attention
   shadow
   proposal
   inspect <cycle-id>
@@ -35,6 +36,10 @@ case "$operation" in
   status)
     [[ $# -le 1 ]] || usage
     runtime_args=(status "$@")
+    ;;
+  attention)
+    [[ $# -eq 0 ]] || usage
+    runtime_args=(attention)
     ;;
   shadow)
     [[ $# -eq 0 ]] || usage
