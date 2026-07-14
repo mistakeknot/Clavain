@@ -82,7 +82,9 @@ gate_require_jq() {
 # Fails before any proof-state mutation, token consumption, or irreversible op
 # when the selected DB/keypair is missing, stale, mismatched, or unsafe.
 gate_require_signer() {
-  local out
+  # Schemas 37 and 38 add tables outside the signed authorization ledger. Keep
+  # this range closed so a future Intercore migration requires another audit.
+  local out min_schema=36 max_schema=38
   gate_require_jq || return 1
   if ! out="$(clavain-cli policy doctor --require-signer \
       --project-root="$CLAVAIN_AUTHZ_PROJECT_ROOT" 2>&1)"; then
@@ -90,8 +92,14 @@ gate_require_signer() {
     [[ -n "$out" ]] && echo "$out" >&2
     return 1
   fi
-  if ! printf '%s' "$out" | jq -e --arg root "$CLAVAIN_AUTHZ_PROJECT_ROOT" '
-    .status == "ok" and .role == "signer" and .schema == 36 and
+  if ! printf '%s' "$out" | jq -e \
+      --arg root "$CLAVAIN_AUTHZ_PROJECT_ROOT" \
+      --argjson min_schema "$min_schema" \
+      --argjson max_schema "$max_schema" '
+    .status == "ok" and .role == "signer" and
+    (.schema | type == "number") and
+    (.schema == (.schema | floor)) and
+    .schema >= $min_schema and .schema <= $max_schema and
     .project_root == $root and
     (.fingerprint | type == "string" and test("^[0-9a-f]{16}$")) and
     (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$"))

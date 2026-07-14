@@ -143,6 +143,24 @@ func TestPolicyAnchorLegacy_ExplicitEmptyBootstrap(t *testing.T) {
 	}
 }
 
+func TestPolicyAnchorLegacy_AcceptsAuditedCurrentSchema(t *testing.T) {
+	root := setupLegacyProposalDomain(t, 0)
+	setSigningSandboxSchema(t, root, 38)
+
+	proposal := inspectLegacyAnchor(t, root)
+	if proposal.Schema != 38 || proposal.LegacyCount != 0 {
+		t.Fatalf("schema-38 proposal = %+v", proposal)
+	}
+	if _, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicyAnchorLegacy([]string{"--project-root=" + root, "--expect-empty"})
+	}); err != nil {
+		t.Fatalf("anchor schema-38 domain: %v", err)
+	}
+	if _, err := authz.LoadLegacyManifest(root); err != nil {
+		t.Fatalf("load schema-38 manifest: %v", err)
+	}
+}
+
 func TestPolicyVerify_RejectsDowngradeOutsideDisplayFilter(t *testing.T) {
 	root := setupLegacyAnchoredDomain(t, 2)
 	signedID := insertSignableRow(t, root, "downgrade-target", "bead-close")

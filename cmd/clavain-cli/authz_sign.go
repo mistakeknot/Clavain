@@ -14,6 +14,16 @@ import (
 	"github.com/mistakeknot/intercore/pkg/authz"
 )
 
+const (
+	legacyAnchorInspectionSchema  = 35
+	minAuditedAuthorizationSchema = 36
+	maxAuditedAuthorizationSchema = 38
+)
+
+func isAuditedAuthorizationSchema(schema int) bool {
+	return schema >= minAuditedAuthorizationSchema && schema <= maxAuditedAuthorizationSchema
+}
+
 // ─── Project root helpers ──────────────────────────────────────────────
 
 // projectRootForDB returns the project root given an intercore.db path.
@@ -412,8 +422,8 @@ func cmdPolicyAnchorLegacy(args []string) error {
 	if err != nil {
 		return fmt.Errorf("policy anchor-legacy: inspect locked ledger: %w", err)
 	}
-	if proposal.Snapshot.Schema != 36 {
-		return fmt.Errorf("policy anchor-legacy: schema %d is inspect-only; run the reviewed schema-36 migration before creating the anchor", proposal.Snapshot.Schema)
+	if !isAuditedAuthorizationSchema(proposal.Snapshot.Schema) {
+		return fmt.Errorf("policy anchor-legacy: schema %d is inspect-only; require an audited authorization schema from %d through %d before creating the anchor", proposal.Snapshot.Schema, minAuditedAuthorizationSchema, maxAuditedAuthorizationSchema)
 	}
 	if err := validateLegacyAnchorExpectation(flags, proposal.Manifest); err != nil {
 		return fmt.Errorf("policy anchor-legacy: %w", err)
@@ -475,8 +485,8 @@ func buildLegacyAnchorProposal(ctx context.Context, q authorizationSnapshotQuery
 	if err != nil {
 		return legacyAnchorProposal{}, err
 	}
-	if snapshot.Schema != 35 && snapshot.Schema != 36 {
-		return legacyAnchorProposal{}, fmt.Errorf("unsupported intercore schema %d; require 35 for inspection or 36 for sealing", snapshot.Schema)
+	if snapshot.Schema != legacyAnchorInspectionSchema && !isAuditedAuthorizationSchema(snapshot.Schema) {
+		return legacyAnchorProposal{}, fmt.Errorf("unsupported intercore schema %d; require %d for inspection or an audited schema from %d through %d for sealing", snapshot.Schema, legacyAnchorInspectionSchema, minAuditedAuthorizationSchema, maxAuditedAuthorizationSchema)
 	}
 
 	var marker authz.SignRow
@@ -731,8 +741,8 @@ func runPolicyVerify(db *sql.DB, root string, flags map[string]string) (policyVe
 
 func verifyLegacyAnchorSnapshot(root string, pub []byte, pubErr error, snapshot authorizationSnapshot) legacyAnchorVerifyStatus {
 	status := legacyAnchorVerifyStatus{}
-	if snapshot.Schema != 36 {
-		status.Reason = fmt.Sprintf("unsupported intercore schema %d; require 36", snapshot.Schema)
+	if !isAuditedAuthorizationSchema(snapshot.Schema) {
+		status.Reason = fmt.Sprintf("unsupported intercore schema %d; require an audited schema from %d through %d", snapshot.Schema, minAuditedAuthorizationSchema, maxAuditedAuthorizationSchema)
 		return status
 	}
 	if pubErr != nil {
@@ -933,8 +943,8 @@ func cmdPolicyDoctor(args []string) error {
 	if err := db.QueryRow(`PRAGMA user_version`).Scan(&schema); err != nil {
 		return fmt.Errorf("policy doctor: read schema: %w", err)
 	}
-	if schema != 36 {
-		return fmt.Errorf("policy doctor: unsupported intercore schema %d; require 36", schema)
+	if !isAuditedAuthorizationSchema(schema) {
+		return fmt.Errorf("policy doctor: unsupported intercore schema %d; require an audited schema from %d through %d", schema, minAuditedAuthorizationSchema, maxAuditedAuthorizationSchema)
 	}
 	var quickCheck string
 	if err := db.QueryRow(`PRAGMA quick_check`).Scan(&quickCheck); err != nil {

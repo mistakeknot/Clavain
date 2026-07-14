@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +75,30 @@ func setupSigningSandbox(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.Chdir(origWD) })
 	return dir
+}
+
+func setSigningSandboxSchema(t *testing.T, root string, schema int) {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(root, ".clavain", "intercore.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("PRAGMA user_version = " + strconv.Itoa(schema)); err != nil {
+		t.Fatalf("set schema %d: %v", schema, err)
+	}
+}
+
+func setupAnchoredSigningSandbox(t *testing.T) string {
+	t.Helper()
+	root := setupSigningSandbox(t)
+	if _, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicyInitKey([]string{"--project-root=" + root})
+	}); err != nil {
+		t.Fatalf("init key: %v", err)
+	}
+	anchorEmptyLegacyForTest(t, root)
+	return root
 }
 
 // insertSignableRow inserts a post-cutover row (sig_version=1, signature NULL)
@@ -343,6 +369,83 @@ func TestPolicyDoctor_SignerAndVerifierRoles(t *testing.T) {
 		return cmdPolicyDoctor([]string{"--project-root=" + root, "--require-signer"})
 	}); err == nil {
 		t.Fatal("verifier-only checkout should fail --require-signer")
+	}
+}
+
+func TestPolicyDoctor_AcceptsAuditedAdditiveSchemas(t *testing.T) {
+	for _, schema := range []int{37, 38} {
+		t.Run("schema-"+strconv.Itoa(schema), func(t *testing.T) {
+			root := setupAnchoredSigningSandbox(t)
+			setSigningSandboxSchema(t, root, schema)
+
+			out, err := captureStdoutAuthz(t, func() error {
+				return cmdPolicyDoctor([]string{"--project-root=" + root, "--require-signer"})
+			})
+			if err != nil {
+				t.Fatalf("doctor schema %d: %v (out=%s)", schema, err, out)
+			}
+			var report struct {
+				Schema int    `json:"schema"`
+				Role   string `json:"role"`
+			}
+			if err := json.Unmarshal(out, &report); err != nil {
+				t.Fatalf("decode doctor output: %v (out=%s)", err, out)
+			}
+			if report.Schema != schema || report.Role != "signer" {
+				t.Fatalf("doctor report = %+v, want schema=%d role=signer", report, schema)
+			}
+		})
+	}
+}
+
+func TestPolicyDoctor_RejectsUnsupportedSchemas(t *testing.T) {
+	for _, schema := range []int{35, 39} {
+		t.Run("schema-"+strconv.Itoa(schema), func(t *testing.T) {
+			root := setupAnchoredSigningSandbox(t)
+			setSigningSandboxSchema(t, root, schema)
+
+			_, err := captureStdoutAuthz(t, func() error {
+				return cmdPolicyDoctor([]string{"--project-root=" + root, "--require-signer"})
+			})
+			if err == nil {
+				t.Fatalf("doctor accepted unsupported schema %d", schema)
+			}
+			if !strings.Contains(err.Error(), "unsupported intercore schema") {
+				t.Fatalf("doctor schema %d error = %v", schema, err)
+			}
+		})
+	}
+}
+
+func TestPolicyDoctor_Schema38StillRequiresSigner(t *testing.T) {
+	root := setupAnchoredSigningSandbox(t)
+	setSigningSandboxSchema(t, root, 38)
+	privPath, _ := authz.KeyPaths(root)
+	if err := os.Remove(privPath); err != nil {
+		t.Fatalf("remove private key: %v", err)
+	}
+
+	out, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicyDoctor([]string{"--project-root=" + root})
+	})
+	if err != nil {
+		t.Fatalf("verifier doctor at schema 38: %v (out=%s)", err, out)
+	}
+	var report struct {
+		Role string `json:"role"`
+	}
+	if err := json.Unmarshal(out, &report); err != nil {
+		t.Fatalf("decode verifier output: %v (out=%s)", err, out)
+	}
+	if report.Role != "verifier" {
+		t.Fatalf("doctor role = %q, want verifier", report.Role)
+	}
+
+	_, err = captureStdoutAuthz(t, func() error {
+		return cmdPolicyDoctor([]string{"--project-root=" + root, "--require-signer"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "signer required") {
+		t.Fatalf("schema 38 --require-signer error = %v", err)
 	}
 }
 
