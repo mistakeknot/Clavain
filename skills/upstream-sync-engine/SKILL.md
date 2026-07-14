@@ -17,6 +17,7 @@ Clavain bundles knowledge from upstream tools. This skill tracks their releases 
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux-for-interactive-commands` |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |
+| CanonGraph | `jvattimo1/canongraph` | `canongraph` external plugin (entity-graph memory lane; see `Sylveste/ops/canongraph/memory-lanes.md`) |
 
 ## Automated Pipeline
 

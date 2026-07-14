@@ -25,6 +25,7 @@ UPSTREAMS=(
   "obra/superpowers-lab|using-tmux-for-interactive-commands,slack-messaging,mcp-cli,finding-duplicate-functions"
   "obra/superpowers-developing-for-claude-code|developing-claude-code-plugins,working-with-claude-code"
   "EveryInc/compound-engineering-plugin|multiple (founding source)"
+  "jvattimo1/canongraph|canongraph (external plugin), memory-lanes policy"
 )
 
 # Repos configured as floating in upstreams.json (tracked at HEAD for commit drift)

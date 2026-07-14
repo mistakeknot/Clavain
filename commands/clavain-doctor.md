@@ -29,9 +29,15 @@ Multiple scopes space-separated. Run all checks in parallel, then present result
 ### 2. External Tools
 
 ```bash
-for t in oracle codex bd qmd; do
+for t in oracle codex bd qmd canongraph; do
   echo "$t: $(command -v $t >/dev/null 2>&1 && echo installed || echo 'not found')"
 done
+
+# canongraph ships its own doctor — surface its verdict when installed
+if command -v canongraph >/dev/null 2>&1; then
+  canongraph doctor >/dev/null 2>&1 && echo "canongraph doctor: PASS" \
+    || echo "canongraph doctor: WARN (profile unhealthy) — Fix: canongraph doctor for details"
+fi
 ```
 
 ### 2b. Soft Dependencies
@@ -505,4 +511,4 @@ cat ~/.claude/plugins/cache/interagency-marketplace/clavain/*/plugin.json 2>/dev
 Present results as a compact table: `<check> [PASS|WARN|FAIL] <detail>`. Group by section.
 <!-- agent-rig:end:doctor-output -->
 
-**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:clavain-init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin, marketplace association→auto-fixed by doctor or run `modpack-associate.sh` manually, nested-repo freshness→run the printed `git -C <dir> pull --ff-only` commands (or `scripts/nested-repo-freshness.sh --fetch` for live behind counts).
+**Recommendations** (only for FAIL/WARN): context7→restart session, qmd→`qmd` install, canongraph→`uv tool install "canongraph @ git+https://github.com/jvattimo1/canongraph"` then `canongraph doctor`, conflicts→`/clavain:setup`, beads→`bd init` or `.beads/recover.sh`, interlock→`claude plugin install interlock@interagency-marketplace`, intermute→`/clavain:setup --scope interlock`, pyyaml→`pip install pyyaml`, yq→install from github, node→nodejs.org, PATH→add `~/.local/bin`, config FAIL→fix YAML, hooks→check syntax, shadows→`/bead-sweep`, zombies→review closed, .clavain→`/clavain:clavain-init`, skill budget→trim or move to references/, routing shadow→set `mode: enforce`, cache empty→reinstall plugin, marketplace association→auto-fixed by doctor or run `modpack-associate.sh` manually, nested-repo freshness→run the printed `git -C <dir> pull --ff-only` commands (or `scripts/nested-repo-freshness.sh --fetch` for live behind counts).
