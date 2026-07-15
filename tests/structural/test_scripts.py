@@ -144,3 +144,17 @@ def test_fail_open_hooks_use_trap_err_exit_zero():
         assert "trap" in text and "ERR" in text, (
             f"Fail-open hook {script.name} must trap ERR to exit 0"
         )
+
+
+def test_auto_publish_delegates_release_integrity_to_ic():
+    """The hook may report publish state, but only ic owns release mutations."""
+    root = Path(__file__).resolve().parent.parent.parent
+    text = (root / "hooks" / "auto-publish.sh").read_text(encoding="utf-8")
+
+    assert '"$ic_bin" publish --auto --cwd="$cwd"' in text
+    assert "build-release.sh" not in text, (
+        "auto-publish must not run a best-effort release build outside ic"
+    )
+    assert "_manual_publish" not in text, (
+        "auto-publish must not bypass ic with manual version, marketplace, or cache edits"
+    )

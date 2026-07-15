@@ -16,90 +16,6 @@
 set -uo pipefail
 trap 'exit 0' ERR
 
-# Manual publish fallback when ic publish is locked.
-# Bumps patch version, updates marketplace.json, syncs cache.
-_manual_publish() {
-    local cwd="$1" plugin_name="$2"
-    command -v python3 &>/dev/null || return 1
-
-    local plugin_json="$cwd/.claude-plugin/plugin.json"
-    [[ -f "$plugin_json" ]] || return 1
-
-    # Find marketplace.json
-    local marketplace=""
-    local git_root
-    git_root="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)"
-    # Plugin might be nested in a monorepo — walk up to find marketplace
-    local search_dir="$cwd"
-    for _ in 1 2 3 4 5; do
-        search_dir="$(dirname "$search_dir")"
-        [[ -f "$search_dir/core/marketplace/.claude-plugin/marketplace.json" ]] && {
-            marketplace="$search_dir/core/marketplace/.claude-plugin/marketplace.json"
-            break
-        }
-    done
-    [[ -n "$marketplace" ]] || return 1
-
-    # Bump patch version
-    local new_ver
-    new_ver="$(python3 -c "
-import json
-with open('$plugin_json') as f:
-    d = json.load(f)
-parts = d['version'].split('.')
-parts[-1] = str(int(parts[-1]) + 1)
-d['version'] = '.'.join(parts)
-with open('$plugin_json', 'w') as f:
-    json.dump(d, f, indent=2)
-    f.write('\n')
-print('.'.join(parts))
-" 2>/dev/null)" || return 1
-
-    # Commit + push version bump
-    git -C "$cwd" add .claude-plugin/plugin.json 2>/dev/null || true
-    git -C "$cwd" -c user.name="mistakeknot" -c user.email="mistakeknot@users.noreply.github.com" \
-        commit -m "chore: bump to v${new_ver}" >/dev/null 2>&1 || true
-    git -C "$cwd" push >/dev/null 2>&1 || true
-
-    # Update marketplace.json
-    python3 -c "
-import json
-with open('$marketplace') as f:
-    m = json.load(f)
-plugins = m if isinstance(m, list) else m.get('plugins', [])
-for p in plugins:
-    if p['name'] == '$plugin_name':
-        p['version'] = '$new_ver'
-        break
-with open('$marketplace', 'w') as f:
-    json.dump(m, f, indent=2)
-    f.write('\n')
-" 2>/dev/null || true
-
-    # Cross-compile Go binaries before cache sync
-    if [[ -x "$cwd/scripts/build-release.sh" ]]; then
-        "$cwd/scripts/build-release.sh" 2>/dev/null || true
-    elif [[ -x "$cwd/scripts/build-clavain-cli.sh" ]]; then
-        "$cwd/scripts/build-clavain-cli.sh" 2>/dev/null || true
-    fi
-
-    # Sync cache
-    local cache_root="$HOME/.claude/plugins/cache/interagency-marketplace"
-    if [[ -d "$cache_root" ]]; then
-        mkdir -p "$cache_root/$plugin_name/$new_ver"
-        rsync -a --delete \
-            --exclude='.git' --exclude='.clavain' --exclude='.tldrs' \
-            --exclude='node_modules' --exclude='__pycache__' --exclude='.venv' \
-            "$cwd/" "$cache_root/$plugin_name/$new_ver/" 2>/dev/null || true
-        # Clean old versions
-        for old in "$cache_root/$plugin_name"/*/; do
-            [[ "$(basename "$old")" != "$new_ver" ]] && rm -rf "$old"
-        done
-    fi
-
-    echo "${plugin_name} v${new_ver} published (manual fallback)"
-}
-
 main() {
     command -v jq &>/dev/null || exit 0
 
@@ -132,14 +48,6 @@ main() {
     # Check if this is a plugin repo
     [[ -f "$cwd/.claude-plugin/plugin.json" ]] || exit 0
 
-    # Cross-compile Go binaries so they ship with the published cache.
-    # Uses build-release.sh (cross-compile) if available, falls back to build-clavain-cli.sh (native only).
-    if [[ -x "$cwd/scripts/build-release.sh" ]]; then
-        "$cwd/scripts/build-release.sh" 2>/dev/null || true
-    elif [[ -x "$cwd/scripts/build-clavain-cli.sh" ]]; then
-        "$cwd/scripts/build-clavain-cli.sh" 2>/dev/null || true
-    fi
-
     # Delegate to ic publish --auto
     local ic_bin
     ic_bin="$(command -v ic 2>/dev/null || true)"
@@ -160,16 +68,11 @@ main() {
         _sync_github_description "$cwd" || true
         jq -n --arg msg "$output" '{"additionalContext": $msg}'
     elif [[ -n "$output" && "$output" == *"in progress"* ]]; then
-        # ic publish lock stuck — try manual fallback
-        local fallback_result
-        fallback_result="$(_manual_publish "$cwd" "$plugin_name" 2>&1 || true)"
-        if [[ -n "$fallback_result" && "$fallback_result" == *"published"* ]]; then
-            _sync_github_description "$cwd" || true
-            jq -n --arg msg "$fallback_result" '{"additionalContext": $msg}'
-        else
-            jq -n --arg msg "Publish stale: ${plugin_name} pushed but not published (ic lock stuck). Run /interpub:sweep to sync." \
-                '{"additionalContext": $msg}'
-        fi
+        jq -n --arg msg "Publish stale: ${plugin_name} pushed but not published (ic lock active). Retry after the active publish finishes." \
+            '{"additionalContext": $msg}'
+    elif [[ -n "$output" && "$output" == *"release artifacts are stale"* ]]; then
+        jq -n --arg msg "Publish blocked for ${plugin_name}: ${output}" \
+            '{"additionalContext": $msg}'
     fi
 }
 
