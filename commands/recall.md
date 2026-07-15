@@ -36,7 +36,8 @@ Extract from context arg. If empty, ask the user.
 If the query names (or implies) a **thing** — a project, person, plugin, machine, client — or asks "what did we decide":
 1. `mcp__canongraph__resolve` the candidate name against likely entity types (project, then plugin, person, machine, client). A hit returns the entity's properties.
 2. On a project/plugin hit: `mcp__canongraph__query` `decisions_for_project` (or `concerns_plugin` via the plugin queries) for its decision history with rationale and who made the call.
-3. For "what did we decide in <session/run>": `decisions_in_run`. For location questions: `projects_on_machine`.
+3. For "what did we decide in <session/run>": `decisions_in_run`. For location questions: `projects_on_machine`. For serving/URL questions: `serving_map` or `project_card`.
+4. `mcp__canongraph__search` the query text — the graph's document lane holds the migrated world-fact memories (38 project/reference files, lane migration 2026-07-15); passages return verbatim content with source provenance. Treat hits as memory-file-grade evidence.
 
 Graph results carry event-sourced provenance (source, confidence) — rank them FIRST when they answer the question directly.
 
