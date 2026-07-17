@@ -45,3 +45,6 @@ vendor-src/cxdb/
 bin/clavain-cli-go
 # Platform release binaries ARE tracked (shipped with plugin)
 !bin/clavain-cli-go-*
+
+# Local git worktrees (upstream-sync etc.) — never tracked
+.worktrees/
