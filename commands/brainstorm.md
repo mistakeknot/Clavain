@@ -143,6 +143,8 @@ Propose **2-3 concrete approaches** based on research and dialogue. For each:
 
 Lead with recommendation and rationale. Apply YAGNI — prefer simpler.
 
+**Wide or high-stakes approach spaces — escalate to melange (if interflux is installed):** when the space is genuinely open (gap analysis, "what are we missing", architecture pivots, cross-domain design) or a missed approach is expensive, run `/interflux:flux-melange <research inputs or target dir> --goal="<the question>"` and derive the 2-3 proposed approaches from its surfaced findings rather than inventing them inline. Cite the melange synthesis path under Key Decisions in the brainstorm doc. For routine feature brainstorms, propose approaches directly — melange loops, so it costs more.
+
 AskUserQuestion: which approach does the user prefer?
 
 ### Phase 3: Capture the Design

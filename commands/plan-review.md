@@ -10,10 +10,13 @@ This command is the **Validate** leg of the OODARC loop — a decision gate that
 
 ```
 plan-review (OODARC: Validate — decision gate):
+- [ ] Route: fixed trio (routine plan) vs /flux-melange (high-stakes or open-ended)
 - [ ] Dispatch 3 review agents in parallel (plan-reviewer, fd-architecture, fd-quality)
 - [ ] Collect all three verdicts
 - [ ] Synthesize into a unified, prioritized review
 ```
+
+**Routing (first checkbox):** if the plan is high-stakes or open-ended — architecture pivot, migration, certification gate, novel subsystem, or anywhere a missed flaw is expensive — prefer `/interflux:flux-melange <plan file> --goal="find what makes this plan fail and what it's missing" --weights=risk-hunt` over the fixed trio (requires interflux). Its adaptive rounds chase the scary-but-unconfirmed finding rather than reporting it once. The fixed trio below remains correct for routine plans.
 
 Launch three review agents in parallel using the Task tool to review the provided plan:
 
