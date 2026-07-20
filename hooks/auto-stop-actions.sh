@@ -30,6 +30,16 @@ if ! command -v jq &>/dev/null; then
     exit 0
 fi
 
+# Headless guard (Sylveste-364): a decision:"block" in a `claude -p` run is
+# fed back as a prompt turn and REPLACES the caller's reply — never inject
+# into non-interactive sessions.
+source "${BASH_SOURCE[0]%/*}/lib-headless.sh" 2>/dev/null || true
+if declare -F clavain_is_headless >/dev/null 2>&1; then
+    if clavain_is_headless; then
+        exit 0
+    fi
+fi
+
 # Read hook input
 INPUT=$(cat)
 
