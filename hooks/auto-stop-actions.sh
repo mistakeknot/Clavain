@@ -58,6 +58,7 @@ fi
 # Detect signals ONCE using shared library
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib-signals.sh"
+source "${SCRIPT_DIR}/lib-goal-audit.sh"
 detect_signals "$RECENT"
 
 # Persist signals for Galiana analytics (regardless of threshold)
@@ -142,6 +143,15 @@ if [[ "$SIGNALS" == *"goal-completed"* ]]; then
         if intercore_sentinel_check_or_legacy "goal_cadence_throttle" "$SESSION_ID" 60; then
             REASON="Goal-cadence: this turn completed a /goal or goal-scale milestone. Per structural goal-cadence policy, your completion message to the user MUST end with a 'Next goal' block. Run /clavain:next-goal using the Skill tool to generate it (2-4 candidates with leverage rationale, a clear recommendation, and ready-to-paste /goal text), then append that block verbatim to the end of your reply."
         fi
+    fi
+fi
+
+# Entity-backed goal audit (f-016): the standing auditor, independent of
+# prose signals. Only consulted when no higher tier fired.
+if [[ -z "$REASON" ]] && [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
+    AUDIT_REASON=$(goal_audit_reason "$SESSION_ID")
+    if [[ -n "$AUDIT_REASON" ]]; then
+        REASON="$AUDIT_REASON"
     fi
 fi
 
