@@ -58,6 +58,14 @@ func TestClassifyComplexity(t *testing.T) {
 	}
 }
 
+func TestClassify_BlastRadiusBump(t *testing.T) {
+	base := classifyComplexity("update the widget list rendering")
+	risky := classifyComplexity("update the widget list and migrate the prod auth table")
+	if risky <= base {
+		t.Errorf("blast-radius text scored %d, want > %d", risky, base)
+	}
+}
+
 func TestComplexityLabel(t *testing.T) {
 	tests := []struct {
 		name  string

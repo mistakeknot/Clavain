@@ -26,6 +26,14 @@ var ambiguitySignals = map[string]bool{
 	"approach": true, "option": true,
 }
 
+// blastRadiusSignals bump complexity +1 when ANY is found (f-009).
+// Rarer, stronger signals than ambiguitySignals, hence threshold 1 not >2.
+var blastRadiusSignals = map[string]bool{
+	"delete": true, "migrate": true, "drop": true,
+	"auth": true, "prod": true, "production": true,
+	"irreversible": true, "destructive": true,
+}
+
 // simplicitySignals bump complexity -1 when >2 are found.
 var simplicitySignals = map[string]bool{
 	"like": true, "similar": true, "existing": true,
@@ -36,6 +44,7 @@ var simplicitySignals = map[string]bool{
 var trivialKeywordsList = mapKeys(trivialKeywords)
 var researchKeywordsList = mapKeys(researchKeywords)
 var ambiguitySignalsList = mapKeys(ambiguitySignals)
+var blastRadiusSignalsList = mapKeys(blastRadiusSignals)
 var simplicitySignalsList = mapKeys(simplicitySignals)
 
 func mapKeys(m map[string]bool) []string {
@@ -94,6 +103,9 @@ func classifyComplexity(desc string) int {
 
 	// Adjust: >2 signals indicates a real pattern, not noise from common words
 	if ambiguityCount > 2 {
+		score++
+	}
+	if countMatchesInText(lowered, blastRadiusSignalsList) > 0 {
 		score++
 	}
 	if simplicityCount > 2 {

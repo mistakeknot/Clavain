@@ -99,6 +99,10 @@ func main() {
 	case "bead-heartbeat":
 		err = cmdBeadHeartbeat(args)
 
+	// Goals
+	case "goal-mint":
+		err = cmdGoalMint(args)
+
 	// Complexity
 	case "classify-complexity":
 		err = cmdClassifyComplexity(args)
@@ -319,6 +323,9 @@ Budget:
 Complexity:
   classify-complexity <bead_id> <description>
   complexity-label    <score>
+
+Goals:
+  goal-mint           <title> --project=<dir> --condition-file=<path> [--charter=<path>] [--complexity=N] [--bead=<id>]
 
 Children:
   close-children           <bead_id> <reason>
