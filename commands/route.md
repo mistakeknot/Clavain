@@ -38,6 +38,11 @@ sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count
 
 **Empty args** → `route_mode="discovery"` → Step 3.
 
+**Goal-scale input** (mentions "goal", spans multiple work items, or names an
+outcome rather than a task): route to `/clavain:goal-form` — the formation
+ritual owns charter + mint + /goal handoff. Do not start ordinary
+implementation for goal-scale asks.
+
 **Bead ID** (format `[A-Za-z]+-[a-z0-9]+`):
 - `bd show "$ARGUMENTS"` — if fails, tell user and fall through to Step 3
 - Set `route_mode="bead"`, `bead_id="$ARGUMENTS"`, `CLAVAIN_BEAD_ID="$ARGUMENTS"`

@@ -69,6 +69,10 @@ READY_JSON=$(jq -cn \
     '$local + $promoted | unique_by(.id)' 2>/dev/null) || READY_JSON="$LOCAL_READY_JSON"
 ```
 
+Also run `ic goal audit --project="$PWD"` (fail-open if ic missing) — audit
+defects (dormant goals, stuck closes, missing successors) are candidate
+material and MUST be surfaced ahead of new work (f-030).
+
 `bd ready` already applies blocker-aware semantics (excludes in_progress,
 blocked, deferred, hooked) — it is the right primitive, not `bd list
 --ready`. If `bd` is not installed, or the current directory has no beads
@@ -144,3 +148,7 @@ self-contained free-text goal description. When the recommendation is a
 Remontoire promotion, identify it as coming from the canonical portfolio
 backlog in the `/goal` text so the next session does not assume the bead is
 stored in the current repository's tracker.
+
+Frame each candidate as a DRAFT CHARTER seed: the recommendation's /goal text
+must be lint-clean (`ic goal lint-condition`) and the block should note that
+`/clavain:goal-form` turns a candidate into a ratified charter (KD 7).
