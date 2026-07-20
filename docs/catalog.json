@@ -1,9 +1,9 @@
 {
-  "generated": "2026-07-14T21:28:06Z",
+  "generated": "2026-07-20T17:48:28Z",
   "counts": {
     "skills": 20,
     "agents": 6,
-    "commands": 56,
+    "commands": 57,
     "hooks": 15,
     "mcp_servers": 0,
     "review": 2,
@@ -207,6 +207,10 @@
     {
       "name": "generate-command",
       "description": "Create a new custom slash command following conventions and best practices"
+    },
+    {
+      "name": "goal-form",
+      "description": "Collaborative goal-formation ritual: research-first inter-elicitation \u2192 charter \u2192 stakes-routed review \u2192 mint (ic goal) \u2192 /goal handoff"
     },
     {
       "name": "handoff",

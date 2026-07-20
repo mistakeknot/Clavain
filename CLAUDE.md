@@ -4,7 +4,7 @@
 
 ## Overview
 
-Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Sylveste stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 20 skills, 6 agents, 56 commands, 15 hooks, 0 MCP servers. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
+Autonomous software agency — orchestrates the full development lifecycle from problem discovery through shipped code. Layer 2 (OS) in the Sylveste stack: sits between Intercore (L1 kernel) and Autarch (L3 apps). 20 skills, 6 agents, 57 commands, 15 hooks, 0 MCP servers. Key companions: `interflux` (multi-agent review + research), `interphase` (phase tracking, gates, discovery), `interspect` (profiler, evidence, routing), `interline` (statusline renderer).
 
 ## Quick Commands
 
@@ -15,7 +15,7 @@ claude --plugin-dir /home/mk/projects/Sylveste/os/Clavain
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 20
 ls agents/{review,workflow}/*.md | wc -l  # Should be 6
-ls commands/*.md | wc -l              # Should be 56 (all 56 registered in plugin.json)
+ls commands/*.md | wc -l              # Should be 57 (all 57 registered in plugin.json)
 for f in hooks/*.sh; do bash -n "$f" && echo "$(basename $f) OK"; done  # Syntax check all hooks
 python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"  # Manifest check
 python3 -c "import json; json.load(open('hooks/hooks.json'))"           # Hooks JSON check

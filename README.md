@@ -4,7 +4,7 @@
 
 Clavain is the reference Claude Code rig for Sylveste, the platform that orchestrates agents by human/machine comparative advantage. It codifies product and engineering discipline into composable workflows for building software from brainstorm to ship, using Claude, Codex, and Oracle-style second opinions where their different failure modes help. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 20 skills, 6 agents, and 56 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 20 skills, 6 agents, and 57 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -340,7 +340,7 @@ Agents are specialized execution units dispatched by skills and commands. They r
 
 **Workflow:** PR comment resolution and bug reproduction validation.
 
-### Commands (56)
+### Commands (57)
 
 Slash commands are the user-facing entry points. Most of them load a skill underneath.
 
@@ -390,6 +390,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/help` | Show Clavain commands organized by daily drivers first |
 | `/doctor` | Quick health check: MCP servers, tools, beads, plugin conflicts |
 | `/next-goal` | Generate a Next-goal block (leverage-ranked candidates + recommendation) — required after a goal completes |
+| `/goal-form` | Goal-formation ritual: research-first inter-elicitation → charter → lint → `ic goal` mint → `/goal` handoff |
 
 *(All commands are prefixed with `/clavain:` when invoked.)*
 
