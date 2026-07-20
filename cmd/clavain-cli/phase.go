@@ -221,6 +221,11 @@ func cmdSprintAdvance(args []string) error {
 	recordPhaseTokens(beadID, currentPhase)
 
 	fmt.Fprintf(os.Stderr, "Phase: %s \u2192 %s (auto-advancing)\n", fromPhase, toPhase)
+
+	// Sideband parity (KD 11): keep the statusline current without interphase.
+	if sid := os.Getenv("CLAUDE_SESSION_ID"); sid != "" {
+		_ = writeBeadSideband(sid, beadID, toPhase, "sprint-advance")
+	}
 	return nil
 }
 
