@@ -48,3 +48,4 @@ bin/clavain-cli-go
 
 # Local git worktrees (upstream-sync etc.) — never tracked
 .worktrees/
+.publish-approved
