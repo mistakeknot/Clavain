@@ -70,18 +70,23 @@ subagents:
       model: sonnet
 
 dispatch:
+  # 2026-07-20 (Sylveste-ym0 run): gpt-5.3-codex* rejected by ChatGPT-account
+  # Codex (HTTP 400), and gpt-5.6-codex* lacks model metadata in codex
+  # v0.144.4 (exit 101 after fallback metadata). gpt-5.6-sol is the verified
+  # working model end-to-end through dispatch.sh; re-tier fast/deep when the
+  # codex models cache knows the 5.6-codex family.
   tiers:
     fast:
-      model: gpt-5.3-codex-spark
+      model: gpt-5.6-sol
       description: Scoped read-only tasks, exploration, verification, quick reviews
     fast-clavain:
-      model: gpt-5.3-codex-spark-xhigh
+      model: gpt-5.6-sol
       description: Clavain interserve-mode default for read-only/administrative tasks
     deep:
-      model: gpt-5.3-codex
+      model: gpt-5.6-sol
       description: Generative tasks, implementation, complex reasoning, debates
     deep-clavain:
-      model: gpt-5.3-codex-xhigh
+      model: gpt-5.6-sol
       description: Clavain interserve-mode high-complexity/research/flux-drive dispatch
 
   # Fallback if a tier is unavailable (API returns model_not_found)
