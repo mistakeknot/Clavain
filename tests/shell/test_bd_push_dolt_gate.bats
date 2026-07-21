@@ -70,7 +70,8 @@ EOF
 }
 
 @test "unaudited future schema blocks before policy evaluation or Dolt push" {
-  export SIGNER_SCHEMA=39
+  # First schema beyond the audited range (36–39 as of the v39 audit)
+  export SIGNER_SCHEMA=40
 
   run bash "$TEST_ROOT/scripts/gates/bd-push-dolt.sh" "$DB_DIR"
 
