@@ -432,6 +432,16 @@ cd "$PROJECT"
 [[ -f "$INTERCORE_DB_PATH" && ! -L "$INTERCORE_DB_PATH" ]] ||
   die "isolated Intercore database was not created as a local regular file"
 
+# Seed the sandbox signer identity: bead-close.sh's gate_require_signer
+# fails closed without a project keypair + anchored ledger (authz-init.sh
+# bootstrap order: init-key → sign fresh markers → anchor-legacy).
+"$CLAVAIN_EXEC" policy init-key --project-root="$PROJECT" >/dev/null ||
+  die "canary sandbox policy init-key failed"
+"$CLAVAIN_EXEC" policy sign --project-root="$PROJECT" >/dev/null ||
+  die "canary sandbox policy sign failed"
+"$CLAVAIN_EXEC" policy anchor-legacy --project-root="$PROJECT" --expect-empty >/dev/null ||
+  die "canary sandbox policy anchor failed"
+
 create_canary_run() {
   local scenario="$1"
   local bead="canary-$scenario"
