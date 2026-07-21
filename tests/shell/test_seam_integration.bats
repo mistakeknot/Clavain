@@ -270,7 +270,8 @@ teardown() {
 @test "artifact: gate check sees artifact (hard gate pass)" {
     # Create run with custom phases and gate rule requiring artifact at step1→step2
     # Key format uses → arrow: "from→to"
-    local gates_json='{"step1→step2":[{"check":"artifact_exists","phase":"step1","tier":"hard"}]}'
+    # Gate maps must now cover every active-chain transition ([] = ungated)
+    local gates_json='{"step1→step2":[{"check":"artifact_exists","phase":"step1","tier":"hard"}],"step2→done":[]}'
     local run_id
     run_id=$("$IC_BIN" run create --project="$TEST_PROJECT" --goal="Gate artifact test" \
         --phases='["step1","step2","done"]' --gates="$gates_json" --db="$TEST_DB" 2>/dev/null)
@@ -382,6 +383,10 @@ teardown() {
     local rc=0
     "$IC_BIN" run budget "$run_id" --db="$TEST_DB" 2>/dev/null || rc=$?
     [[ "$rc" -eq 0 ]]
+
+    # Satisfy the default brainstorm artifact hard gate so the advance
+    # isolates budget behavior (defaults now gate artifact_exists).
+    intercore_run_artifact_add "$run_id" "brainstorm" "docs/brainstorms/test.md" "file"
 
     # Advance should succeed
     local result
