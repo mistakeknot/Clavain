@@ -17,6 +17,12 @@
           },
           {
             "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/release-canary-check.sh",
+            "async": true,
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/remontoire-attention.sh",
             "async": true,
             "timeout": 15
