@@ -11,6 +11,10 @@ setup() {
     # Reset the double-source guard so we can re-source in each test
     unset _SPRINT_SCAN_LOADED
     source "$HOOKS_DIR/sprint-scan.sh"
+
+    # Hermetic: block real network calls — on machines with a live
+    # intermute (zklw), sprint_brief_scan otherwise reports real agents.
+    stub_network
 }
 
 teardown() {
