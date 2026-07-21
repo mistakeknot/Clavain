@@ -373,7 +373,7 @@ func TestPolicyDoctor_SignerAndVerifierRoles(t *testing.T) {
 }
 
 func TestPolicyDoctor_AcceptsAuditedAdditiveSchemas(t *testing.T) {
-	for _, schema := range []int{37, 38} {
+	for _, schema := range []int{37, 38, 39} {
 		t.Run("schema-"+strconv.Itoa(schema), func(t *testing.T) {
 			root := setupAnchoredSigningSandbox(t)
 			setSigningSandboxSchema(t, root, schema)
@@ -399,7 +399,7 @@ func TestPolicyDoctor_AcceptsAuditedAdditiveSchemas(t *testing.T) {
 }
 
 func TestPolicyDoctor_RejectsUnsupportedSchemas(t *testing.T) {
-	for _, schema := range []int{35, 39} {
+	for _, schema := range []int{35, 40} {
 		t.Run("schema-"+strconv.Itoa(schema), func(t *testing.T) {
 			root := setupAnchoredSigningSandbox(t)
 			setSigningSandboxSchema(t, root, schema)

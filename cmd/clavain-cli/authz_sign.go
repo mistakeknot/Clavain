@@ -17,7 +17,9 @@ import (
 const (
 	legacyAnchorInspectionSchema  = 35
 	minAuditedAuthorizationSchema = 36
-	maxAuditedAuthorizationSchema = 38
+	// v39 audited 2026-07-21: goal containment only (runs.goal_id + goals
+	// table); authorization tables untouched (last authz change: v35→v36).
+	maxAuditedAuthorizationSchema = 39
 )
 
 func isAuditedAuthorizationSchema(schema int) bool {
