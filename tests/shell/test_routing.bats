@@ -86,6 +86,10 @@ _source_routing() {
     _ROUTING_B5_HEALTH_CACHE=""
     _ROUTING_B5_HEALTH_TIME=0
     export CLAVAIN_ROUTING_CONFIG="${1:-$TEST_DIR/config/routing.yaml}"
+    # Pin roles config to the fixture dir — without this, monorepo layouts
+    # leak the real interflux agent-roles.yaml into these hermetic tests
+    # (finder step 1 prefers the interflux sibling over the fixture dir).
+    export CLAVAIN_ROLES_CONFIG="$TEST_DIR/config/agent-roles.yaml"
     source "$SCRIPTS_DIR/lib-routing.sh"
 }
 

@@ -1377,7 +1377,11 @@ doctor_companions_json() {
     [[ -d "$skill_target" ]] && skill_ok=true
     if [[ -L "$link_path" ]]; then
       target="$(readlink -f "$link_path" 2>/dev/null || true)"
-      if [[ "$target" == "$skill_target" ]]; then
+      # Canonicalize both sides: on macOS /var -> /private/var, so the
+      # resolved link never string-matches an uncanonicalized expectation.
+      local canon_skill_target
+      canon_skill_target="$(cd "$skill_target" 2>/dev/null && pwd -P)" || canon_skill_target="$skill_target"
+      if [[ "$target" == "$skill_target" || "$target" == "$canon_skill_target" ]]; then
         link_ok=true
       fi
     fi

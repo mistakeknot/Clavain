@@ -672,7 +672,7 @@ JSON
 @test "audit: enforce mode does NOT emit (no shadow short-circuit to record)" {
     _setup_shadow_audit "haiku" "sonnet"
     # Override mode to enforce — calibration applies directly, no shadow branch
-    sed -i 's/mode: shadow/mode: enforce/' "$TEST_DIR/config/routing.yaml"
+    sed -i.bak 's/mode: shadow/mode: enforce/' "$TEST_DIR/config/routing.yaml" && rm -f "$TEST_DIR/config/routing.yaml.bak"
     source "$SCRIPTS_DIR/lib-routing.sh"
 
     routing_resolve_model --agent fd-game-design >/dev/null 2>&1

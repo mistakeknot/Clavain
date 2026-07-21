@@ -864,7 +864,15 @@ sprint_claim() {
         fi
         local created_at_str now_epoch created_at age_minutes
         created_at_str=$(echo "$active_agents" | jq -r '.[0].created_at // "1970-01-01T00:00:00Z"')
-        created_at=$(date -d "$created_at_str" +%s 2>/dev/null) || created_at=0
+        # GNU date -d with BSD date -j -u -f fallback (macOS has no -d);
+        # fractional seconds and Z/+00:00 suffixes normalized first.
+        created_at=$(date -d "$created_at_str" +%s 2>/dev/null) || created_at=""
+        if [[ -z "$created_at" ]]; then
+            local _created_norm="${created_at_str%%.*}"
+            _created_norm="${_created_norm%+00:00}"
+            _created_norm="${_created_norm%Z}"
+            created_at=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "$_created_norm" +%s 2>/dev/null) || created_at=0
+        fi
         now_epoch=$(date +%s)
         age_minutes=$(( (now_epoch - created_at) / 60 ))
         if [[ $age_minutes -lt 60 ]]; then

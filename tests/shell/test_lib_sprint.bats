@@ -385,19 +385,16 @@ MOCKEOF
     command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     _source_sprint_lib
 
-    # Override intercore_state_delete_all to just do the file cleanup
+    # Cache invalidation is fully delegated to intercore state (the legacy
+    # /tmp cache files are retired) — record the delegation call.
     intercore_state_delete_all() {
-        local _key="$1" glob="$2"
-        rm -f $glob 2>/dev/null || true
+        echo "$1" > "$BATS_TEST_TMPDIR/delete-all-called"
     }
-
-    # Create a cache file
-    touch /tmp/clavain-discovery-brief-test123.cache
 
     sprint_record_phase_completion "iv-test1" "brainstorm"
 
-    # Cache should be deleted
-    [[ ! -f /tmp/clavain-discovery-brief-test123.cache ]]
+    [[ -f "$BATS_TEST_TMPDIR/delete-all-called" ]]
+    [[ "$(cat "$BATS_TEST_TMPDIR/delete-all-called")" == "discovery_brief" ]]
 }
 
 # ═══════════════════════════════════════════════════════════════════
@@ -483,7 +480,7 @@ MOCKEOF
     _source_sprint_lib
 
     local expired_ts
-    expired_ts=$(date -u -d "61 minutes ago" +%Y-%m-%dT%H:%M:%SZ)
+    expired_ts=$(date -u -d "61 minutes ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-61M +%Y-%m-%dT%H:%M:%SZ)
 
     # Mock: one expired session agent
     intercore_run_agent_list() {
@@ -517,7 +514,7 @@ MOCKEOF
     _source_sprint_lib
 
     local recent_ts
-    recent_ts=$(date -u -d "59 minutes ago" +%Y-%m-%dT%H:%M:%SZ)
+    recent_ts=$(date -u -d "59 minutes ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-59M +%Y-%m-%dT%H:%M:%SZ)
 
     intercore_run_agent_list() {
         echo "[{\"id\":\"agent-001\",\"name\":\"session-active\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":\"$IC_RECENT_TS\"}]"
@@ -695,26 +692,19 @@ MOCKEOF
 
 # ─── 22. sprint_invalidate_caches removes cache files ────────────
 
-@test "sprint_invalidate_caches removes cache files" {
+@test "sprint_invalidate_caches delegates to intercore state delete-all" {
     command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
     _source_sprint_lib
 
-    # Override intercore_state_delete_all to just do the file cleanup
+    # Legacy /tmp cache-file cleanup is retired — the contract is one
+    # intercore_state_delete_all call for the discovery_brief namespace.
     intercore_state_delete_all() {
-        local _key="$1" glob="$2"
-        rm -f $glob 2>/dev/null || true
+        echo "$1" > "$BATS_TEST_TMPDIR/delete-all-called"
     }
-
-    # Create several cache files
-    touch /tmp/clavain-discovery-brief-aaa.cache
-    touch /tmp/clavain-discovery-brief-bbb.cache
-    touch /tmp/clavain-discovery-brief-ccc.cache
 
     sprint_invalidate_caches
 
-    [[ ! -f /tmp/clavain-discovery-brief-aaa.cache ]]
-    [[ ! -f /tmp/clavain-discovery-brief-bbb.cache ]]
-    [[ ! -f /tmp/clavain-discovery-brief-ccc.cache ]]
+    [[ "$(cat "$BATS_TEST_TMPDIR/delete-all-called")" == "discovery_brief" ]]
 }
 
 # ═══════════════════════════════════════════════════════════════════
@@ -851,8 +841,10 @@ MOCKEOF
     # sprint_advance sends status to stderr; BATS `run` merges stderr into $output
     run sprint_advance "iv-test1" "brainstorm"
     assert_success
-    # Status message appears in output (BATS captures stderr via 2>&1)
-    assert_output "Phase: brainstorm → brainstorm-reviewed (auto-advancing)"
+    # Advancing is now reported as a structured log line, not prose
+    assert_output --partial '"msg":"phase advancing"'
+    assert_output --partial '"from":"brainstorm"'
+    assert_output --partial '"to":"brainstorm-reviewed"'
 }
 
 # ─── 27. sprint_advance returns pause when blocked ───────────────

@@ -269,15 +269,16 @@ _extract_agent_task() {
     local content
     content=$(head -1 "$jsonl_path" 2>/dev/null | jq -r '.message.content // empty' 2>/dev/null) || { echo "unknown"; return; }
     [[ -z "$content" ]] && { echo "unknown"; return; }
-    # Try "save your FULL analysis to:" pattern (flux-drive agent prompts)
+    # Try "save your FULL analysis to:" pattern (flux-drive agent prompts).
+    # sed, not grep -oP: -P is GNU-only and silently unavailable on BSD grep.
     local match
-    match=$(echo "$content" | grep -oP 'save your FULL analysis to:\s*\K\S+' 2>/dev/null | head -1) || true
+    match=$(echo "$content" | sed -n 's/.*save your FULL analysis to:[[:space:]]*\([^[:space:]]\{1,\}\).*/\1/p' 2>/dev/null | head -1) || true
     if [[ -n "$match" ]]; then
         echo "${match:0:80}"
         return
     fi
     # Try "Read and execute" pattern (file-indirection prompts)
-    match=$(echo "$content" | grep -oP 'Read and execute\s+\K\S+' 2>/dev/null | head -1) || true
+    match=$(echo "$content" | sed -n 's/.*Read and execute[[:space:]]\{1,\}\([^[:space:]]\{1,\}\).*/\1/p' 2>/dev/null | head -1) || true
     if [[ -n "$match" ]]; then
         echo "${match:0:80}"
         return
