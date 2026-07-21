@@ -53,8 +53,8 @@ main() {
     ic_bin="$(command -v ic 2>/dev/null || true)"
     [[ -n "$ic_bin" ]] || exit 0
 
-    local output
-    output="$("$ic_bin" publish --auto --cwd="$cwd" 2>&1 || true)"
+    local output rc=0
+    output="$("$ic_bin" publish --auto --cwd="$cwd" 2>&1)" || rc=$?
 
     # Extract plugin name for the report
     local plugin_name
@@ -73,6 +73,13 @@ main() {
     elif [[ -n "$output" && "$output" == *"release artifacts are stale"* ]]; then
         jq -n --arg msg "Publish blocked for ${plugin_name}: ${output}" \
             '{"additionalContext": $msg}'
+    elif [[ $rc -ne 0 || "$output" == *[Ee]rror* ]]; then
+        # Sylveste-dc9: an unrecognized failure used to fall through every
+        # branch and vanish — publishes silently didn't happen. Surface it.
+        local tail_out
+        tail_out="$(tail -n 6 <<<"$output")"
+        jq -n --arg msg "AUTO-PUBLISH FAILED for ${plugin_name} (ic exit ${rc}): ${tail_out}" \
+            '{"systemMessage": $msg, "additionalContext": $msg}'
     fi
 }
 
