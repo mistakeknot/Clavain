@@ -317,7 +317,7 @@ _detect_inflight_agents() {
         [[ "$agent_id" == agent-acompact-* ]] && continue
         # Calculate age
         local mtime
-        mtime=$(stat -c %Y "$jsonl_file" 2>/dev/null) || continue
+        mtime=$(stat -c %Y "$jsonl_file" 2>/dev/null || stat -f %m "$jsonl_file" 2>/dev/null) || continue
         age_secs=$(( $(date +%s) - mtime ))
         age_mins=$(( age_secs / 60 ))
         task=$(_extract_agent_task "$jsonl_file")

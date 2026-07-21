@@ -170,8 +170,8 @@ apply_namespace_replacements_to_file() {
   local file="$1"
   for old in "${!NS_REPLACEMENTS[@]}"; do
     local new="${NS_REPLACEMENTS[$old]}"
-    # Use sed for in-place replacement (GNU sed)
-    sed -i "s|${old}|${new}|g" "$file"
+    # In-place replacement, portable across GNU and BSD sed (Sylveste-sne)
+    sed -i.bak "s|${old}|${new}|g" "$file" && rm -f "${file}.bak"
   done
 }
 

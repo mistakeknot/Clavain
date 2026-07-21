@@ -8,8 +8,10 @@ export CLAUDE_PLUGIN_ROOT="$BATS_TEST_DIRNAME/../.."
 
 # Load bats-support and bats-assert
 # Try local tests/node_modules first, then npm global paths
+# (Linux, macOS Homebrew, and the active npm prefix)
 BATS_LIBS=""
-for candidate in "$BATS_TEST_DIRNAME/../node_modules" /usr/lib/node_modules /usr/local/lib/node_modules; do
+for candidate in "$BATS_TEST_DIRNAME/../node_modules" /usr/lib/node_modules /usr/local/lib/node_modules \
+                 /opt/homebrew/lib/node_modules "$(npm root -g 2>/dev/null)"; do
     if [[ -d "$candidate/bats-support" ]]; then
         BATS_LIBS="$candidate"
         break

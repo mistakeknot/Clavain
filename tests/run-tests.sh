@@ -62,7 +62,11 @@ case "${1:-}" in
     run_structural
     run_shell
     echo ""
-    echo "Tiers 1+2 passed. Run with --smoke for Tier 3 or --all for everything."
+    if [[ "$FAILED" -eq 0 ]]; then
+      echo "Tiers 1+2 passed. Run with --smoke for Tier 3 or --all for everything."
+    else
+      echo "Tiers 1+2 FAILED (exit $FAILED). See failures above."
+    fi
     ;;
 esac
 

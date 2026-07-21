@@ -15,7 +15,7 @@
 # Env overrides (test harness): CLAVAIN_CANARY_FILE, CLAVAIN_INSTALLED_FILE.
 # Exit: 0 always (fail-open).
 
-set -uo pipefail
+set -euo pipefail
 trap 'exit 0' ERR
 
 CANARY_FILE="${CLAVAIN_CANARY_FILE:-$HOME/.clavain/release-canaries.json}"

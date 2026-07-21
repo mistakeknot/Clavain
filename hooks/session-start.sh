@@ -141,7 +141,7 @@ companion_context=""
 if command -v ockham &>/dev/null; then
     _ock_sentinel="$HOME/.config/ockham/.check-ttl"
     _ock_age=999
-    [[ -f "$_ock_sentinel" ]] && _ock_age=$(( $(date +%s) - $(stat -c %Y "$_ock_sentinel" 2>/dev/null || echo 0) ))
+    [[ -f "$_ock_sentinel" ]] && _ock_age=$(( $(date +%s) - $(stat -c %Y "$_ock_sentinel" 2>/dev/null || stat -f %m "$_ock_sentinel" 2>/dev/null || echo 0) ))
     if [[ "$_ock_age" -gt 300 ]]; then
         ockham check 2>/dev/null || true
         mkdir -p "$(dirname "$_ock_sentinel")" 2>/dev/null || true
@@ -156,7 +156,7 @@ if [[ -d "${PLUGIN_ROOT}/../../.beads" ]] || [[ -d ".beads" ]]; then
     if command -v bd &>/dev/null; then
         _bd_sentinel="/tmp/clavain-bd-doctor-${USER:-mk}"
         _bd_age=999
-        [[ -f "$_bd_sentinel" ]] && _bd_age=$(( $(date +%s) - $(stat -c %Y "$_bd_sentinel" 2>/dev/null || echo 0) ))
+        [[ -f "$_bd_sentinel" ]] && _bd_age=$(( $(date +%s) - $(stat -c %Y "$_bd_sentinel" 2>/dev/null || stat -f %m "$_bd_sentinel" 2>/dev/null || echo 0) ))
         if [[ "$_bd_age" -gt 300 ]]; then
             _bd_result=$( (bd doctor --json 2>/dev/null || true) )
             beads_errors=$(echo "$_bd_result" | jq '[.checks[]? | select(.status == "error")] | length' 2>/dev/null) || beads_errors="0"

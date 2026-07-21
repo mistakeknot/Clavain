@@ -47,7 +47,7 @@ spec_load() {
     # Already loaded — check mtime for staleness
     if [[ "$_SPEC_LOADED" == "ok" && -n "$_SPEC_PATH" && -n "$_SPEC_MTIME" ]]; then
         local current_mtime
-        current_mtime=$(stat -c %Y "$_SPEC_PATH" 2>/dev/null) || current_mtime=""
+        current_mtime=$(stat -c %Y "$_SPEC_PATH" 2>/dev/null || stat -f %m "$_SPEC_PATH" 2>/dev/null) || current_mtime=""
         if [[ "$current_mtime" == "$_SPEC_MTIME" ]]; then
             return 0  # Still fresh
         fi
@@ -105,7 +105,7 @@ spec_load() {
     # Set data FIRST, then guard
     _SPEC_JSON="$json_output"
     _SPEC_PATH="$spec_path"
-    _SPEC_MTIME=$(stat -c %Y "$spec_path" 2>/dev/null) || _SPEC_MTIME=""
+    _SPEC_MTIME=$(stat -c %Y "$spec_path" 2>/dev/null || stat -f %m "$spec_path" 2>/dev/null) || _SPEC_MTIME=""
     _SPEC_LOADED="ok"
 
     # Validate against schema (non-blocking — warn only)
