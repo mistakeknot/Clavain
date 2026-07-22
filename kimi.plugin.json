@@ -1,0 +1,119 @@
+{
+  "name": "clavain",
+  "version": "0.6.283",
+  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, monitors its own docs, and surfaces conservative update drift. Orchestrates Claude, Codex, and Oracle through 6 agents, 57 commands, 20 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
+  "license": "MIT",
+  "keywords": [
+    "multi-agent",
+    "self-improving",
+    "workflow-automation",
+    "code-review",
+    "cross-ai-review",
+    "brainstorm-to-ship",
+    "tdd",
+    "planning",
+    "agents",
+    "oracle",
+    "council"
+  ],
+  "author": "mistakeknot",
+  "interface": {
+    "displayName": "clavain",
+    "shortDescription": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to sh..."
+  },
+  "skills": "./skills/",
+  "commands": "./commands/",
+  "sessionStart": {
+    "skill": "using-clavain"
+  },
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "matcher": "startup|resume",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/session-start.sh"
+    },
+    {
+      "event": "SessionStart",
+      "matcher": "startup|resume",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/peer-telemetry.sh",
+      "timeout": 3
+    },
+    {
+      "event": "SessionStart",
+      "matcher": "startup|resume",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/release-canary-check.sh",
+      "timeout": 5
+    },
+    {
+      "event": "SessionStart",
+      "matcher": "startup|resume",
+      "command": "${KIMI_PLUGIN_ROOT}/scripts/remontoire-attention.sh",
+      "timeout": 15
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": "Edit|Write",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/guard-plugin-cache.sh",
+      "timeout": 5
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Skill",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/peer-routing-telemetry.sh",
+      "timeout": 3
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Bash",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/auto-publish.sh",
+      "timeout": 15
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Bash",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/bead-agent-bind.sh",
+      "timeout": 5
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Bash",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/agents-md-refresh.sh",
+      "timeout": 5
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Edit|Write",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/catalog-reminder.sh",
+      "timeout": 5
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Edit|Write",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/validate-plugin-edit.sh",
+      "timeout": 10
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Edit|Write",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/temple-invariant.sh",
+      "timeout": 5
+    },
+    {
+      "event": "Stop",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/auto-stop-actions.sh",
+      "timeout": 5
+    },
+    {
+      "event": "SessionEnd",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/dotfiles-sync.sh"
+    },
+    {
+      "event": "SessionEnd",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/auto-push.sh"
+    },
+    {
+      "event": "SessionEnd",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/gate-calibration-session-end.sh"
+    }
+  ]
+}

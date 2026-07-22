@@ -56,6 +56,10 @@
     "codex": {
       "installScript": "scripts/install-codex-interverse.sh",
       "skillsDir": "~/.agents/skills/clavain"
+    },
+    "kimi": {
+      "installScript": "scripts/install-kimi.sh",
+      "skillsDir": "~/.agents/skills/clavain"
     }
   },
   "plugins": {
