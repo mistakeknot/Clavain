@@ -4,7 +4,7 @@
 
 Clavain is the reference Claude Code rig for Sylveste, the platform that orchestrates agents by human/machine comparative advantage. It codifies product and engineering discipline into composable workflows for building software from brainstorm to ship, using Claude, Codex, and Oracle-style second opinions where their different failure modes help. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 20 skills, 6 agents, and 57 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 26 skills, 6 agents, and 57 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
@@ -302,7 +302,7 @@ Full semantics: `docs/canon/authz-token-model.md`.
 
 ## What's included
 
-### Skills (20)
+### Skills (26)
 
 Skills are workflow disciplines: they guide **how** you work, not what tools to call. Each one is a markdown playbook that Claude follows step by step.
 

@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Agent-to-skill ports for cross-host use (Kimi Code / Codex): the 6 custom subagents (`plan-reviewer`, `data-migration-expert`, `bug-reproduction-validator`, `codex-delegate`, `pr-comment-resolver`, `ui-polish`) are now also available as skills under `skills/<name>/SKILL.md`, discoverable via `~/.agents/skills/clavain`. Original `agents/*/*.md` definitions are unchanged — Claude Code continues to use them. Skill count 20 → 26.
 - Structural goal-cadence (mk-fx3): a completed `/goal` or goal-scale milestone now forces the session's completion message to end with a "Next goal" block. New `goal-completed` signal in `hooks/lib-signals.sh`; new highest-priority tier in `hooks/auto-stop-actions.sh` that blocks the turn with an instruction to run the new `/clavain:next-goal` command, which ranks `bd ready` candidates by leverage (dependent_count, priority, momentum) and emits 2-4 candidates + a recommendation + ready-to-paste `/goal` text. Fail-open: degrades to a bd-free recommendation if beads is unavailable. Per-repo opt-out via `.claude/clavain.no-goalcadence`.
 
 ### Changed

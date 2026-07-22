@@ -18,7 +18,7 @@ Clavain operates on **OODARC** — Observe · Orient · Decide · Act · Reflect
 
 The compounding half (Reflect + Compound) is what makes the system get smarter across sessions — it is not optional. See `PHILOSOPHY.md` § The OODARC Lens.
 
-# Quick Router — 20 skills, 6 agents, and 57 commands
+# Quick Router — 26 skills, 6 agents, and 57 commands
 
 | You want to... | Run this |
 |----------------|----------|

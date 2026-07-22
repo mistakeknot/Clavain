@@ -1,7 +1,7 @@
 {
   "name": "clavain",
   "version": "0.6.283",
-  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, monitors its own docs, and surfaces conservative update drift. Orchestrates Claude, Codex, and Oracle through 6 agents, 57 commands, 20 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
+  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, monitors its own docs, and surfaces conservative update drift. Orchestrates Claude, Codex, and Oracle through 6 agents, 57 commands, 26 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
   "author": {
     "name": "mistakeknot"
   },
@@ -39,7 +39,13 @@
     "./skills/using-tmux-for-interactive-commands",
     "./skills/writing-plans",
     "./skills/interop-with-gsd",
-    "./skills/interop-with-superpowers"
+    "./skills/interop-with-superpowers",
+    "./skills/plan-reviewer",
+    "./skills/data-migration-expert",
+    "./skills/bug-reproduction-validator",
+    "./skills/codex-delegate",
+    "./skills/pr-comment-resolver",
+    "./skills/ui-polish"
   ],
   "commands": [
     "./commands/bead-sweep.md",

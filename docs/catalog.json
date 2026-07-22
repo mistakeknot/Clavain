@@ -1,7 +1,7 @@
 {
-  "generated": "2026-07-21T04:24:49Z",
+  "generated": "2026-07-22T14:34:15Z",
   "counts": {
-    "skills": 20,
+    "skills": 26,
     "agents": 6,
     "commands": 57,
     "hooks": 16,
@@ -11,8 +11,20 @@
   },
   "skills": [
     {
+      "name": "bug-reproduction-validator",
+      "description": "Use when you receive a bug report or issue that needs verification \u2014 systematically reproduces and validates reported behavior to confirm whether it is an actual bug."
+    },
+    {
       "name": "code-review-discipline",
       "description": "Use when requesting or receiving code review \u2014 dispatch reviewers, handle feedback rigorously, avoid performative agreement."
+    },
+    {
+      "name": "codex-delegate",
+      "description": "Use proactively for well-scoped implementation, exploration, search, test generation, and code review tasks with clear scope and success criteria \u2014 delegates to Codex CLI via dispatch.sh for cost-efficient execution. Keep architecture, brainstorming, and interactive work in the main agent."
+    },
+    {
+      "name": "data-migration-expert",
+      "description": "Use when PRs involve data migrations, backfills, or production data transformations \u2014 ID mappings, column renames, enum conversions, or schema changes. Validates migrations against production reality."
     },
     {
       "name": "dispatching-parallel-agents",
@@ -55,6 +67,14 @@
       "description": "Manage thematic work lanes \u2014 discover, create, tag beads, show velocity and starvation scores"
     },
     {
+      "name": "plan-reviewer",
+      "description": "Use when a major project step has been completed and needs to be reviewed against the original plan and coding standards."
+    },
+    {
+      "name": "pr-comment-resolver",
+      "description": "Use when PR review comments need to be resolved with code changes \u2014 implements the requested changes and reports clearly on each resolution."
+    },
+    {
       "name": "project-onboard",
       "description": "Use to set up any Sylveste project (new or existing) \u2014 introspects, creates repo, scaffolds docs/automation/observability, seeds via interpath."
     },
@@ -73,6 +93,10 @@
     {
       "name": "subagent-driven-development",
       "description": "Use when executing implementation plans with independent tasks in the current session"
+    },
+    {
+      "name": "ui-polish",
+      "description": "Use when the user provides visual feedback about a web or TUI interface \u2014 iterates on UI refinements (tooltips, labels, layouts, mobile fixes, spacing, chart styling) from a screenshot or URL plus natural-language instruction."
     },
     {
       "name": "upstream-sync-engine",
