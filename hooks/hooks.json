@@ -7,25 +7,29 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
-            "async": true
+            "async": true,
+            "args": []
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/peer-telemetry.sh",
             "async": true,
-            "timeout": 3
+            "timeout": 3,
+            "args": []
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/release-canary-check.sh",
             "async": true,
-            "timeout": 5
+            "timeout": 5,
+            "args": []
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/remontoire-attention.sh",
             "async": true,
-            "timeout": 15
+            "timeout": 15,
+            "args": []
           }
         ]
       }
@@ -37,7 +41,8 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/guard-plugin-cache.sh",
-            "timeout": 5
+            "timeout": 5,
+            "args": []
           }
         ]
       }
@@ -50,7 +55,8 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/peer-routing-telemetry.sh",
             "async": true,
-            "timeout": 3
+            "timeout": 3,
+            "args": []
           }
         ]
       },
@@ -60,17 +66,21 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-publish.sh",
-            "timeout": 15
+            "timeout": 15,
+            "args": []
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/bead-agent-bind.sh",
-            "timeout": 5
+            "timeout": 5,
+            "args": []
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/agents-md-refresh.sh",
-            "timeout": 5
+            "timeout": 5,
+            "args": [],
+            "continueOnBlock": true
           }
         ]
       },
@@ -80,7 +90,8 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/catalog-reminder.sh",
-            "timeout": 5
+            "timeout": 5,
+            "args": []
           }
         ]
       },
@@ -90,7 +101,8 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/validate-plugin-edit.sh",
-            "timeout": 10
+            "timeout": 10,
+            "args": []
           }
         ]
       },
@@ -100,7 +112,8 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/temple-invariant.sh",
-            "timeout": 5
+            "timeout": 5,
+            "args": []
           }
         ]
       }
@@ -111,7 +124,8 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-stop-actions.sh",
-            "timeout": 5
+            "timeout": 5,
+            "args": []
           }
         ]
       }
@@ -122,17 +136,20 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/dotfiles-sync.sh",
-            "async": true
+            "async": true,
+            "args": []
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/auto-push.sh",
-            "async": true
+            "async": true,
+            "args": []
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/gate-calibration-session-end.sh",
-            "async": true
+            "async": true,
+            "args": []
           }
         ]
       }
