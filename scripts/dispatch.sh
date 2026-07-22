@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# clavain dispatch — wraps codex exec with sensible defaults
+# clavain dispatch — wraps codex exec (or kimi -p) with sensible defaults
 #
 # Usage:
 #   bash dispatch.sh -C /path/to/project -o /tmp/output.md "prompt"
 #   bash dispatch.sh -C /path --inject-docs --name vet -o /tmp/codex-{name}.md "prompt"
 #   bash dispatch.sh --inject-docs=claude -C /path --prompt-file task.md -o /tmp/out.md
 #   bash dispatch.sh --dry-run -C /path -o /tmp/out.md "prompt"
+#   bash dispatch.sh --to kimi --tier fast -C /path -o /tmp/out.md "prompt"
 
 set -euo pipefail
 
@@ -13,7 +14,9 @@ set -euo pipefail
 INJECT_DOCS_WARN_THRESHOLD=20000
 
 # Defaults
+ENGINE="codex"
 SANDBOX="workspace-write"
+SANDBOX_SET=false
 WORKDIR=""
 OUTPUT=""
 MODEL=""
@@ -120,18 +123,26 @@ _dispatch_cleanup_state() {
 
 show_help() {
   cat <<'HELP'
-clavain dispatch — wraps codex exec with sensible defaults
+clavain dispatch — wraps codex exec (or kimi -p) with sensible defaults
 
 Usage:
   dispatch.sh [OPTIONS] "prompt"
   dispatch.sh [OPTIONS] --prompt-file <file>
 
 Options:
+  --to, --engine <codex|kimi>   Dispatch backend (default: codex)
+                                  codex — codex exec (full sandbox/JSONL/statusline support)
+                                  kimi  — kimi -p (second-opinion backend; different
+                                          model family. -s/--sandbox, -i/--image and codex
+                                          passthrough flags are ignored with a warning)
   -C, --cd <DIR>                Working directory (required for --inject-docs)
   -o, --output-last-message <FILE>  Output file ({name} replaced by --name value)
   -s, --sandbox <MODE>          Sandbox: read-only | workspace-write | danger-full-access
-  -m, --model <MODEL>           Override model (default: from ~/.codex/config.toml)
+  -m, --model <MODEL>           Override model (default: from ~/.codex/config.toml,
+                                  or ~/.kimi-code/config.toml default_model for --to kimi)
   --tier <fast|deep>            Resolve model from config/routing.yaml dispatch section
+                                  (codex), or map to a kimi model alias (--to kimi):
+                                  fast → kimi-code/kimi-for-coding, deep → kimi-code/k3.
                                   Mutually exclusive with -m (use -m to override)
   --phase <NAME>                Sprint phase context (stored for future phase-aware dispatch)
   -i, --image <FILE>            Attach image to prompt (repeatable)
@@ -145,7 +156,7 @@ Options:
   --template <FILE>             Assemble prompt from template + task description
                                   Task description uses KEY: sections (GOAL:, IMPLEMENT:, etc.)
                                   Template uses {{KEY}} placeholders replaced by section values
-  --dry-run                     Print the codex exec command without executing
+  --dry-run                     Print the backend command without executing
   --help                        Show this help
 
 Examples:
@@ -153,6 +164,7 @@ Examples:
   dispatch.sh --inject-docs -C /root/projects/Foo --name vet -o /tmp/codex-{name}.md "Vet the signals package"
   dispatch.sh --inject-docs=claude -C /root/projects/Foo --prompt-file /tmp/task.md -o /tmp/out.md
   dispatch.sh --template megaprompt.md --prompt-file /tmp/task.md -C /root/projects/Foo -o /tmp/out.md
+  dispatch.sh --to kimi --tier deep -C /root/projects/Foo -o /tmp/kimi-out.md "Review the auth changes"
   dispatch.sh --dry-run --inject-docs -C /root/projects/Foo -o /tmp/out.md "Test prompt"
 HELP
   exit 0
@@ -208,11 +220,54 @@ resolve_tier_model() {
   echo "$model"
 }
 
+# Check whether a kimi model alias is defined in the kimi config.
+# Config path overridable via KIMI_CONFIG (used by tests).
+_kimi_model_alias_exists() {
+  local alias="$1"
+  local cfg="${KIMI_CONFIG:-$HOME/.kimi-code/config.toml}"
+  [[ -f "$cfg" ]] || return 1
+  grep -qF "[models.\"${alias}\"]" "$cfg"
+}
+
+# Map a dispatch tier to a kimi model alias. Prints the alias on stdout;
+# returns non-zero (and prints nothing) when the tier is unknown or the
+# alias is not defined in the kimi config — caller falls back to the
+# config's default_model.
+resolve_tier_model_kimi() {
+  local tier="$1"
+  local alias=""
+  case "$tier" in
+    fast) alias="kimi-code/kimi-for-coding" ;;
+    deep) alias="kimi-code/k3" ;;
+    *)
+      echo "Warning: tier '$tier' has no kimi mapping — using kimi default model" >&2
+      return 1
+      ;;
+  esac
+  if ! _kimi_model_alias_exists "$alias"; then
+    echo "Warning: kimi model alias '$alias' not found in ${KIMI_CONFIG:-$HOME/.kimi-code/config.toml} — using kimi default model" >&2
+    return 1
+  fi
+  echo "$alias"
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --help|-h)
       show_help
+      ;;
+    --to|--engine)
+      require_arg "$1" "${2:-}"
+      ENGINE="$2"
+      case "$ENGINE" in
+        codex|kimi) ;;
+        *)
+          echo "Error: $1 must be 'codex' or 'kimi' (got '$ENGINE')" >&2
+          exit 1
+          ;;
+      esac
+      shift 2
       ;;
     -C|--cd)
       require_arg "$1" "${2:-}"
@@ -227,6 +282,7 @@ while [[ $# -gt 0 ]]; do
     -s|--sandbox)
       require_arg "$1" "${2:-}"
       SANDBOX="$2"
+      SANDBOX_SET=true
       shift 2
       ;;
     -m|--model)
@@ -336,11 +392,20 @@ if [[ -n "$TIER" ]]; then
     echo "Error: Cannot use both --tier and --model" >&2
     exit 1
   fi
-  if RESOLVED_MODEL=$(resolve_tier_model "$TIER"); then
-    MODEL="$RESOLVED_MODEL"
-    echo "Tier '$TIER' resolved to model: $MODEL" >&2
+  if [[ "$ENGINE" == "kimi" ]]; then
+    # Kimi tiers map to kimi model aliases, not routing.yaml (which holds codex models)
+    if RESOLVED_MODEL=$(resolve_tier_model_kimi "$TIER"); then
+      MODEL="$RESOLVED_MODEL"
+      echo "Tier '$TIER' resolved to kimi model: $MODEL" >&2
+    fi
+    # If resolution fails, warning already printed — MODEL stays empty (kimi default_model)
+  else
+    if RESOLVED_MODEL=$(resolve_tier_model "$TIER"); then
+      MODEL="$RESOLVED_MODEL"
+      echo "Tier '$TIER' resolved to model: $MODEL" >&2
+    fi
+    # If resolution fails, warning already printed — MODEL stays empty (uses config.toml default)
   fi
-  # If resolution fails, warning already printed — MODEL stays empty (uses config.toml default)
 fi
 
 # Log phase context (stored for future B2 phase-aware dispatch)
@@ -622,31 +687,57 @@ if [[ -n "${MYCROFT_TIER:-}" ]]; then
   fi
 fi
 
-# Build codex exec command
-CMD=(codex exec)
-CMD+=(-s "$SANDBOX")
+# Build backend command
+if [[ "$ENGINE" == "kimi" ]]; then
+  # Kimi non-interactive mode: kimi -p "<prompt>".
+  # Codex-only options don't translate — warn and drop them.
+  if [[ "$SANDBOX_SET" == true ]]; then
+    echo "Warning: -s/--sandbox is codex-only — ignored for --to kimi (kimi -p runs non-interactively with its own permission mode)" >&2
+  fi
+  if [[ ${#IMAGES[@]} -gt 0 ]]; then
+    echo "Warning: -i/--image is not supported for --to kimi — ignoring ${#IMAGES[@]} image(s)" >&2
+  fi
+  if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+    echo "Warning: codex passthrough flags are not supported for --to kimi — ignoring: ${EXTRA_ARGS[*]}" >&2
+  fi
 
-if [[ -n "$WORKDIR" ]]; then
-  CMD+=(-C "$WORKDIR")
+  # NOTE: kimi v0.29 rejects combining -p with --auto/--yolo ("Cannot combine
+  # --prompt with --auto") — prompt mode is already fully non-interactive, so
+  # plain `kimi -p` is the correct dispatch form.
+  CMD=(kimi)
+  if [[ -n "$MODEL" ]]; then
+    CMD+=(-m "$MODEL")
+  fi
+  CMD+=(-p "$PROMPT")
+  # WORKDIR is applied at execution time via cd (kimi has no -C flag);
+  # OUTPUT is written by teeing kimi's stdout (kimi has no -o flag).
+else
+  # Build codex exec command
+  CMD=(codex exec)
+  CMD+=(-s "$SANDBOX")
+
+  if [[ -n "$WORKDIR" ]]; then
+    CMD+=(-C "$WORKDIR")
+  fi
+
+  if [[ -n "$OUTPUT" ]]; then
+    CMD+=(-o "$OUTPUT")
+  fi
+
+  if [[ -n "$MODEL" ]]; then
+    CMD+=(-m "$MODEL")
+  fi
+
+  for img in "${IMAGES[@]+"${IMAGES[@]}"}"; do
+    CMD+=(-i "$img")
+  done
+
+  if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+    CMD+=("${EXTRA_ARGS[@]}")
+  fi
+
+  CMD+=("$PROMPT")
 fi
-
-if [[ -n "$OUTPUT" ]]; then
-  CMD+=(-o "$OUTPUT")
-fi
-
-if [[ -n "$MODEL" ]]; then
-  CMD+=(-m "$MODEL")
-fi
-
-for img in "${IMAGES[@]+"${IMAGES[@]}"}"; do
-  CMD+=(-i "$img")
-done
-
-if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
-  CMD+=("${EXTRA_ARGS[@]}")
-fi
-
-CMD+=("$PROMPT")
 
 # Dry run: print command and exit
 if [[ "$DRY_RUN" == true ]]; then
@@ -660,14 +751,24 @@ if [[ "$DRY_RUN" == true ]]; then
     PROMPT_PREVIEW+="... (${#PROMPT} bytes total)"
   fi
   # Reconstruct display command
-  DISPLAY_CMD=(codex exec -s "$SANDBOX")
-  if [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
-  if [[ -n "$OUTPUT" ]]; then DISPLAY_CMD+=(-o "$OUTPUT"); fi
-  if [[ -n "$MODEL" ]]; then DISPLAY_CMD+=(-m "$MODEL"); fi
-  for img in "${IMAGES[@]+"${IMAGES[@]}"}"; do DISPLAY_CMD+=(-i "$img"); done
-  if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then DISPLAY_CMD+=("${EXTRA_ARGS[@]}"); fi
-  printf '%q ' "${DISPLAY_CMD[@]}"
-  echo ""
+  if [[ "$ENGINE" == "kimi" ]]; then
+    DISPLAY_CMD=(kimi)
+    if [[ -n "$MODEL" ]]; then DISPLAY_CMD+=(-m "$MODEL"); fi
+    DISPLAY_CMD+=(-p)
+    if [[ -n "$WORKDIR" ]]; then printf 'cd %q && ' "$WORKDIR"; fi
+    printf '%q ' "${DISPLAY_CMD[@]}"
+    if [[ -n "$OUTPUT" ]]; then printf '> %q' "$OUTPUT"; fi
+    echo ""
+  else
+    DISPLAY_CMD=(codex exec -s "$SANDBOX")
+    if [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
+    if [[ -n "$OUTPUT" ]]; then DISPLAY_CMD+=(-o "$OUTPUT"); fi
+    if [[ -n "$MODEL" ]]; then DISPLAY_CMD+=(-m "$MODEL"); fi
+    for img in "${IMAGES[@]+"${IMAGES[@]}"}"; do DISPLAY_CMD+=(-i "$img"); done
+    if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then DISPLAY_CMD+=("${EXTRA_ARGS[@]}"); fi
+    printf '%q ' "${DISPLAY_CMD[@]}"
+    echo ""
+  fi
   echo ""
   if [[ -n "$TEMPLATE_FILE" ]]; then
     echo "# Template: $TEMPLATE_FILE"
@@ -675,6 +776,12 @@ if [[ "$DRY_RUN" == true ]]; then
   echo "# Prompt (${#PROMPT} bytes):"
   echo "$PROMPT_PREVIEW"
   exit 0
+fi
+
+# Backend preflight: fail fast with a clear message when the CLI is missing
+if [[ "$ENGINE" == "kimi" ]] && ! command -v kimi >/dev/null 2>&1; then
+  echo "Error: kimi CLI not found on PATH (required for --to kimi). See https://moonshotai.github.io/kimi-code/" >&2
+  exit 1
 fi
 
 # Write dispatch state file for statusline visibility
@@ -697,7 +804,7 @@ fi
 STARTED_TS="$(date +%s)"
 
 # Initial state
-_dispatch_write_state_files "${NAME:-codex}" "${WORKDIR:-.}" "$STARTED_TS" "starting" "0" "0" "0"
+_dispatch_write_state_files "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "starting" "0" "0" "0"
 
 # Check if gawk is available for JSONL streaming (match() with capture groups + systime() are gawk extensions)
 HAS_GAWK=false
@@ -957,7 +1064,55 @@ _surface_codex_errors() {
   fi
 }
 
-if [[ "$HAS_GAWK" == true ]]; then
+if [[ "$ENGINE" == "kimi" ]]; then
+  # kimi -p prints the response on stdout and exits 0 on success. There is no
+  # codex-style JSONL event stream, so the statusline parser is skipped and the
+  # state file stays at "starting" until completion; summary/verdict sidecars
+  # are still produced. WORKDIR is applied via cd (kimi has no -C flag) and
+  # OUTPUT by teeing stdout (kimi has no -o flag).
+  set +e
+  if [[ -n "$OUTPUT" ]]; then
+    if [[ -n "$WORKDIR" ]]; then
+      ( cd "$WORKDIR" && "${CMD[@]}" ) 2> >(tee "$STDERR_FILE" >&2) | tee "$OUTPUT"
+    else
+      "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2) | tee "$OUTPUT"
+    fi
+  else
+    if [[ -n "$WORKDIR" ]]; then
+      ( cd "$WORKDIR" && "${CMD[@]}" ) 2> >(tee "$STDERR_FILE" >&2)
+    else
+      "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2)
+    fi
+  fi
+  KIMI_EXIT="${PIPESTATUS[0]}"
+  set -e
+
+  # Summary sidecar (no turn/token stats — kimi -p doesn't expose them)
+  if [[ -n "$SUMMARY_FILE" ]]; then
+    ELAPSED=$(( $(date +%s) - STARTED_TS ))
+    MINS=$(( ELAPSED / 60 ))
+    SECS=$(( ELAPSED % 60 ))
+    printf 'Dispatch: %s\nDuration: %dm %ds\n' "${NAME:-$ENGINE}" "$MINS" "$SECS" > "$SUMMARY_FILE"
+  fi
+
+  # Extract verdict sidecar from output
+  [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
+
+  # Surface a failed kimi run in the verdict sidecar. The codex error
+  # heuristics (HTTP status lines, zero-turn state) don't apply to kimi -p,
+  # which exits non-zero on failure.
+  if [[ "$KIMI_EXIT" != "0" && -n "$OUTPUT" ]]; then
+    _write_error_verdict "$OUTPUT" "error" "kimi -p exited $KIMI_EXIT (see stderr above)"
+    echo "Warning: dispatch surfaced kimi error — verdict overridden: kimi -p exited $KIMI_EXIT" >&2
+  fi
+
+  # Post-dispatch validation: scope check + secret scan
+  _post_dispatch_validate "$WORKDIR"
+
+  _dispatch_sync_interband_from_legacy
+
+  exit "$KIMI_EXIT"
+elif [[ "$HAS_GAWK" == true ]]; then
   # Add --json to capture JSONL stream, pipe through parser
   CMD+=(--json)
 
@@ -966,7 +1121,7 @@ if [[ "$HAS_GAWK" == true ]]; then
   # set -e is disabled around the pipeline so a non-zero codex exit still lets
   # us run verdict override + cleanup before exiting with the captured code.
   set +e
-  "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2) | _jsonl_parser "$STATE_FILE" "${NAME:-codex}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+  "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2) | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
   CODEX_EXIT="${PIPESTATUS[0]}"
   set -e
 
@@ -975,7 +1130,7 @@ if [[ "$HAS_GAWK" == true ]]; then
     ELAPSED=$(( $(date +%s) - STARTED_TS ))
     MINS=$(( ELAPSED / 60 ))
     SECS=$(( ELAPSED % 60 ))
-    printf 'Dispatch: %s\nDuration: %dm %ds\n' "${NAME:-codex}" "$MINS" "$SECS" > "$SUMMARY_FILE"
+    printf 'Dispatch: %s\nDuration: %dm %ds\n' "${NAME:-$ENGINE}" "$MINS" "$SECS" > "$SUMMARY_FILE"
   fi
 
   # Extract verdict sidecar from output, then override on codex-level errors.

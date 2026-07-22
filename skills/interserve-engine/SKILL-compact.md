@@ -24,6 +24,10 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 
 `--tier` and `-m` are mutually exclusive. For x-high: `CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" ...`
 
+## Backend Selection (`--to`)
+
+`--to codex` (default) builds `codex exec`; `--to kimi` builds `kimi [-m alias] -p` — use kimi for second opinions from a different model family. Kimi tiers: fast→`kimi-code/kimi-for-coding`, deep→`kimi-code/k3` (falls back to kimi `default_model` if the alias is undefined). Never dispatch via bare interactive `kimi` — always `kimi -p` (dispatch.sh handles this); do NOT add `--auto`/`--yolo`, kimi v0.29 rejects them in prompt mode. Codex-only options (`-s`, `-i`, passthrough flags) are dropped with a warning on the kimi path.
+
 ## Routing
 
 | Situation | Mode |

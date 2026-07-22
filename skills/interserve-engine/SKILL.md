@@ -1,7 +1,7 @@
 ---
 name: interserve-engine
 description: Invoked from /clavain:interserve — dispatches tasks to Codex CLI agents (megaprompt or parallel), with debate triggers and Oracle escalation. Internal; users invoke via slash command.
-version: 0.4.1
+version: 0.5.0
 user-invocable: false
 ---
 
@@ -52,6 +52,30 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 | deep | `gpt-5.3-codex` | Implementation, complex reasoning, debates |
 
 For x-high: set `CLAVAIN_DISPATCH_PROFILE=interserve` when invoking — then fast→`gpt-5.3-codex-spark-xhigh`, deep→`gpt-5.3-codex-xhigh`. `--tier` and `-m` are mutually exclusive. Missing `routing.yaml` degrades gracefully.
+
+## Backend Selection (`--to`)
+
+`dispatch.sh --to <codex|kimi>` picks the dispatch backend. **Codex is the default** — existing invocations are unchanged.
+
+| Backend | Command built | Use for |
+|---------|---------------|---------|
+| `codex` (default) | `codex exec -s <sandbox> -C <dir> -o <file> "prompt"` | Primary implementation/exploration — full sandbox, JSONL statusline, verdict pipeline |
+| `kimi` | `kimi [-m alias] -p "prompt"` | Second opinions from a different model family (Kimi k3 / kimi-for-coding), cross-checking a Codex result, or when Codex is rate-limited |
+
+Kimi specifics:
+- **Never** use bare interactive `kimi` or `kimi "prompt"` for dispatch — non-interactive mode is `kimi -p "prompt"` (dispatch.sh builds this for you). Like Codex, there is **no `--file` flag** — use dispatch.sh `--prompt-file`, which inlines the file into `-p`.
+- Do **not** add `--auto` or `--yolo` to prompt mode — kimi v0.29 rejects both (`Cannot combine --prompt with --auto`). `kimi -p` is already fully non-interactive.
+- Tiers map to kimi model aliases instead of `routing.yaml`: fast→`kimi-code/kimi-for-coding`, deep→`kimi-code/k3`. If the alias isn't defined in `~/.kimi-code/config.toml`, dispatch.sh warns and falls back to the config's `default_model`.
+- Codex-only options don't translate: `-s/--sandbox`, `-i/--image`, and codex passthrough flags are dropped with a warning. `-C` is applied via `cd`, `-o` by teeing stdout. No JSONL statusline updates on the kimi path.
+- Prereqs for kimi: `command -v kimi` and `~/.kimi-code/config.toml` (dispatch.sh preflights the binary and fails fast if missing).
+
+Example — second opinion on a Codex-produced diff:
+```bash
+bash "$DISPATCH" --to kimi --tier deep \
+  --prompt-file "$REVIEW_TASK" \
+  -C "$PROJECT_DIR" \
+  -o "/tmp/kimi-review-$(date +%s).md"
+```
 
 ## Dispatch Routing
 
