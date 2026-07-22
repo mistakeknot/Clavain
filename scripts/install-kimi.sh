@@ -466,7 +466,32 @@ remove_kimi_mcp() {
   echo "Removed Clavain MCP servers from: $KIMI_MCP_FILE"
 }
 
+# Returns 0 when the clavain plugin is installed and enabled in Kimi's own
+# plugin manager. In that state the plugin's kimi.plugin.json already carries
+# the full hook set, so the config.toml hooks block must NOT be installed —
+# otherwise every hook fires twice.
+clavain_plugin_enabled() {
+  local installed_json="$KIMI_CODE_HOME/plugins/installed.json"
+  [[ -f "$installed_json" ]] || return 1
+  python3 - "$installed_json" <<'PY'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+for plugin in data.get("plugins", []):
+    if plugin.get("id") == "clavain" and plugin.get("enabled"):
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
 install_managed_hooks_block() {
+  if clavain_plugin_enabled; then
+    remove_block_from_file "$KIMI_CONFIG_FILE" "$HOOKS_BLOCK_START" "$HOOKS_BLOCK_END" || true
+    echo "clavain plugin is installed and enabled; skipping config.toml hooks block (plugin manifest owns the hooks)."
+    return 0
+  fi
   local block
   block="$(build_hooks_block)"
   if update_file_with_block "$KIMI_CONFIG_FILE" "$HOOKS_BLOCK_START" "$HOOKS_BLOCK_END" "$block"; then
@@ -600,6 +625,9 @@ doctor() {
   if [[ -f "$KIMI_CONFIG_FILE" ]] \
     && grep -Fq "$HOOKS_BLOCK_START" "$KIMI_CONFIG_FILE" \
     && grep -Fq "$HOOKS_BLOCK_END" "$KIMI_CONFIG_FILE"; then
+    hooks_block_ok="true"
+  elif clavain_plugin_enabled; then
+    # Plugin route: kimi.plugin.json owns the hooks; config block intentionally absent.
     hooks_block_ok="true"
   else
     issues+=("managed hooks block missing or malformed: $KIMI_CONFIG_FILE")
