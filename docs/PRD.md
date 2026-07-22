@@ -1,6 +1,6 @@
 # Clavain — Product Requirements Document
 
-**Version:** 0.6.283
+**Version:** 0.6.284
 **Last updated:** 2026-02-19
 **Vision:** [`docs/vision.md`](vision.md)
 **Dev guide:** [`AGENTS.md`](../AGENTS.md)
