@@ -28,6 +28,8 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 
 `--to codex` (default) builds `codex exec`; `--to kimi` builds `kimi [-m alias] -p` — use kimi for second opinions from a different model family. Kimi tiers: fast→`kimi-code/kimi-for-coding`, deep→`kimi-code/k3` (falls back to kimi `default_model` if the alias is undefined). Never dispatch via bare interactive `kimi` — always `kimi -p` (dispatch.sh handles this); do NOT add `--auto`/`--yolo`, kimi v0.29 rejects them in prompt mode. Codex-only options (`-s`, `-i`, passthrough flags) are dropped with a warning on the kimi path.
 
+`--via zaka` spawns a steerable tmux session instead of a one-shot exec (`zaka spawn` + `zaka steer`, prints session name, returns immediately — no verdict/output file). Use for long-running work you want to steer or kill (`zaka steer`/`zaka kill`); use the default exec for fire-and-forget with a verdict. Adapter defaults to `claude-code`; `--to codex|kimi|claude-code` map to same-named adapters. Requires zaka + tmux.
+
 ## Routing
 
 | Situation | Mode |

@@ -7,6 +7,7 @@
 #   bash dispatch.sh --inject-docs=claude -C /path --prompt-file task.md -o /tmp/out.md
 #   bash dispatch.sh --dry-run -C /path -o /tmp/out.md "prompt"
 #   bash dispatch.sh --to kimi --tier fast -C /path -o /tmp/out.md "prompt"
+#   bash dispatch.sh --via zaka --to kimi -C /path "prompt"   (steerable tmux session)
 
 set -euo pipefail
 
@@ -15,6 +16,8 @@ INJECT_DOCS_WARN_THRESHOLD=20000
 
 # Defaults
 ENGINE="codex"
+ENGINE_SET=false
+VIA=""  # empty=one-shot exec (default), "zaka"=steerable tmux session via zaka
 SANDBOX="workspace-write"
 SANDBOX_SET=false
 WORKDIR=""
@@ -135,6 +138,15 @@ Options:
                                   kimi  — kimi -p (second-opinion backend; different
                                           model family. -s/--sandbox, -i/--image and codex
                                           passthrough flags are ignored with a warning)
+  --via zaka                    Spawn a steerable tmux session via zaka instead of a
+                                  one-shot headless exec. The engine maps to a zaka
+                                  adapter (codex→codex, kimi→kimi, claude-code→claude-code);
+                                  without --to the adapter defaults to claude-code (zaka's
+                                  most capable adapter). Prints the session name and
+                                  returns immediately — steer/kill it with
+                                  `zaka steer <session>` / `zaka kill <session>`.
+                                  -s, -i, -o, --name and passthrough flags are ignored
+                                  with a warning. Requires zaka and tmux on PATH.
   -C, --cd <DIR>                Working directory (required for --inject-docs)
   -o, --output-last-message <FILE>  Output file ({name} replaced by --name value)
   -s, --sandbox <MODE>          Sandbox: read-only | workspace-write | danger-full-access
@@ -165,6 +177,7 @@ Examples:
   dispatch.sh --inject-docs=claude -C /root/projects/Foo --prompt-file /tmp/task.md -o /tmp/out.md
   dispatch.sh --template megaprompt.md --prompt-file /tmp/task.md -C /root/projects/Foo -o /tmp/out.md
   dispatch.sh --to kimi --tier deep -C /root/projects/Foo -o /tmp/kimi-out.md "Review the auth changes"
+  dispatch.sh --via zaka --to kimi -C /root/projects/Foo "Long-running refactor — steer as it goes"
   dispatch.sh --dry-run --inject-docs -C /root/projects/Foo -o /tmp/out.md "Test prompt"
 HELP
   exit 0
@@ -260,10 +273,23 @@ while [[ $# -gt 0 ]]; do
     --to|--engine)
       require_arg "$1" "${2:-}"
       ENGINE="$2"
+      ENGINE_SET=true
       case "$ENGINE" in
-        codex|kimi) ;;
+        codex|kimi|claude-code) ;;
         *)
           echo "Error: $1 must be 'codex' or 'kimi' (got '$ENGINE')" >&2
+          exit 1
+          ;;
+      esac
+      shift 2
+      ;;
+    --via)
+      require_arg "$1" "${2:-}"
+      VIA="$2"
+      case "$VIA" in
+        zaka) ;;
+        *)
+          echo "Error: --via must be 'zaka' (got '$VIA')" >&2
           exit 1
           ;;
       esac
@@ -373,6 +399,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# claude-code is only a valid engine in zaka mode (it has no one-shot exec form here)
+if [[ "$ENGINE" == "claude-code" && "$VIA" != "zaka" ]]; then
+  echo "Error: --to claude-code requires --via zaka (claude-code dispatch runs as a steerable zaka session)" >&2
+  exit 1
+fi
 
 # Detect whether Clavain-specific tier remapping should be used. This is opt-in via:
 # - explicit CLAVAIN_DISPATCH_PROFILE=interserve (or legacy: clavain)
@@ -685,6 +717,101 @@ if [[ -n "${MYCROFT_TIER:-}" ]]; then
       # auto: silent pass
     esac
   fi
+fi
+
+# ─── Zaka steerable-session mode (--via zaka) ───────────────────────────────
+# Instead of a one-shot headless exec, spawn the agent in a tmux session via
+# zaka and steer it with the assembled prompt. The session stays alive for
+# interactive steering; dispatch prints the session name and returns
+# immediately — no state files, verdicts, or JSONL parsing (that's the point).
+if [[ "$VIA" == "zaka" ]]; then
+  # Engine → zaka adapter (identity mapping). Default to claude-code when
+  # --to was not given — it's zaka's most capable adapter (resume support,
+  # richest steering). Note: steer infers the adapter from the
+  # zaka-<agent>-<millis> session name, so --name overrides are dropped.
+  if [[ "$ENGINE_SET" == true ]]; then
+    ZAKA_AGENT="$ENGINE"
+  else
+    ZAKA_AGENT="claude-code"
+  fi
+
+  # Options that don't translate to an interactive zaka session — warn and drop.
+  if [[ "$SANDBOX_SET" == true ]]; then
+    echo "Warning: -s/--sandbox is codex-only — ignored for --via zaka (zaka spawns the agent's own TUI)" >&2
+  fi
+  if [[ ${#IMAGES[@]} -gt 0 ]]; then
+    echo "Warning: -i/--image is not supported for --via zaka — ignoring ${#IMAGES[@]} image(s)" >&2
+  fi
+  if [[ -n "$OUTPUT" ]]; then
+    echo "Warning: -o/--output-last-message is not supported for --via zaka — the session is interactive; read output from the TUI (tmux capture-pane)" >&2
+  fi
+  if [[ -n "$NAME" ]]; then
+    echo "Warning: --name is not supported for --via zaka — zaka steer infers the adapter from the generated zaka-<agent>-<millis> session name" >&2
+  fi
+  if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+    echo "Warning: codex passthrough flags are not supported for --via zaka — ignoring: ${EXTRA_ARGS[*]}" >&2
+  fi
+
+  ZAKA_SPAWN=(zaka spawn --agent "$ZAKA_AGENT")
+  if [[ -n "$WORKDIR" ]]; then
+    ZAKA_SPAWN+=(--workdir "$WORKDIR")
+  fi
+  if [[ -n "$MODEL" ]]; then
+    ZAKA_SPAWN+=(--model "$MODEL")
+  fi
+
+  # Dry run: print the zaka commands and exit (preflight skipped, like the
+  # codex/kimi dry-run paths which don't require the backend binary either)
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "# Would execute:" >&2
+    printf '%q ' "${ZAKA_SPAWN[@]}"
+    echo ""
+    PROMPT_PREVIEW="${PROMPT:0:200}"
+    if [[ ${#PROMPT} -gt 200 ]]; then
+      PROMPT_PREVIEW+="... (${#PROMPT} bytes total)"
+    fi
+    printf 'zaka steer <session> %q\n' "$PROMPT_PREVIEW"
+    echo ""
+    echo "# Prompt (${#PROMPT} bytes):"
+    echo "$PROMPT_PREVIEW"
+    echo "# Returns immediately — steer with: zaka steer <session> \"...\"; kill with: zaka kill <session>"
+    exit 0
+  fi
+
+  # Backend preflight: fail fast with a clear message when zaka/tmux are missing
+  if ! command -v zaka >/dev/null 2>&1; then
+    echo "Error: zaka CLI not found on PATH (required for --via zaka). See /Users/sma/projects/Sylveste/os/Zaka" >&2
+    exit 1
+  fi
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo "Error: tmux not found on PATH (required for --via zaka — zaka spawns agents in tmux sessions)" >&2
+    exit 1
+  fi
+
+  # Spawn prints the generated session name (zaka-<agent>-<millis>) on stdout
+  ZAKA_SESSION="$("${ZAKA_SPAWN[@]}")"
+  if [[ -z "$ZAKA_SESSION" ]]; then
+    echo "Error: zaka spawn did not return a session name" >&2
+    exit 1
+  fi
+
+  echo ""
+  echo "════════════════════════════════════════════════════════════"
+  echo "Zaka session: $ZAKA_SESSION"
+  echo "  steer:  zaka steer $ZAKA_SESSION \"<follow-up prompt>\""
+  echo "  watch:  tmux attach -t $ZAKA_SESSION   (detach: Ctrl-b d)"
+  echo "  kill:   zaka kill $ZAKA_SESSION"
+  echo "════════════════════════════════════════════════════════════"
+  echo ""
+
+  # Give the agent TUI a moment to boot before typing the prompt into it
+  sleep "${CLAVAIN_ZAKA_BOOT_DELAY:-5}"
+
+  zaka steer "$ZAKA_SESSION" "$PROMPT"
+
+  echo ""
+  echo "Dispatched (not waiting — session is interactive). Steer or kill with the commands above."
+  exit 0
 fi
 
 # Build backend command

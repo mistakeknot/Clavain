@@ -77,6 +77,18 @@ bash "$DISPATCH" --to kimi --tier deep \
   -o "/tmp/kimi-review-$(date +%s).md"
 ```
 
+## Steerable Sessions (`--via zaka`)
+
+`dispatch.sh --via zaka` trades the one-shot headless exec for a **steerable tmux session** driven by zaka: dispatch = `zaka spawn` + `zaka steer <session> <prompt>`. It prints the session name and returns immediately — no verdict sidecars, no output file, no waiting. Use it for long-running or exploratory work where you want to watch, steer mid-task, or kill; use the default one-shot exec for fire-and-forget tasks with a verdict.
+
+- Without `--to`, the adapter defaults to `claude-code` (zaka's most capable adapter — resume support, richest steering). `--to codex` / `--to kimi` / `--to claude-code` map to the same-named zaka adapters (`zaka agents` lists what's installed).
+- `-s`, `-i`, `-o`, `--name`, and codex passthrough flags don't apply to an interactive session — dropped with a warning. `-C` becomes `zaka spawn --workdir`, `-m` becomes `--model`.
+- After dispatch, drive the session yourself: `zaka steer <session> "..."`, `tmux attach -t <session>`, `zaka kill <session>`. Prereqs: `command -v zaka` and `command -v tmux` (preflighted).
+
+```bash
+bash "$DISPATCH" --via zaka --to kimi -C "$PROJECT_DIR" "Long-running refactor — I'll steer as you go"
+```
+
 ## Dispatch Routing
 
 | Situation | Mode |
