@@ -8,11 +8,19 @@ import (
 	"time"
 )
 
-// writeBeadSideband mirrors interphase's _gate_update_statusline envelope
+// writeBeadSideband writes the kernel-authored interband envelope
 // (interband protocol 1.0.0) so the statusline keeps working as interphase
-// retires (brainstorm KD 11). Both writes are atomic tmp+rename,
-// best-effort at call sites.
+// retires (brainstorm KD 11). Atomic tmp+rename, best-effort at call sites.
+// Session keying (Sylveste-23k): an empty sessionID falls back to
+// CLAUDE_SESSION_ID then CLAUDE_CODE_SESSION_ID (exported to every Bash
+// subprocess since CC 2.1.132), so callers need not thread session ids.
 func writeBeadSideband(sessionID, beadID, phase, reason string) error {
+	if sessionID == "" {
+		sessionID = os.Getenv("CLAUDE_SESSION_ID")
+	}
+	if sessionID == "" {
+		sessionID = os.Getenv("CLAUDE_CODE_SESSION_ID")
+	}
 	if sessionID == "" {
 		return nil
 	}
@@ -49,16 +57,7 @@ func writeBeadSideband(sessionID, beadID, phase, reason string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if err := atomicWrite(filepath.Join(dir, sessionID+".json"), envelopeBytes); err != nil {
-		return err
-	}
-
-	// Legacy fallback path interline still reads.
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	return atomicWrite(filepath.Join("/tmp", "clavain-bead-"+sessionID+".json"), payloadBytes)
+	return atomicWrite(filepath.Join(dir, sessionID+".json"), envelopeBytes)
 }
 
 func atomicWrite(path string, data []byte) error {

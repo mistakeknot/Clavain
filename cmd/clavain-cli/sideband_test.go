@@ -11,8 +11,6 @@ func TestWriteBeadSideband_EnvelopeShape(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("INTERBAND_ROOT", root)
 	sessionID := "sess-1"
-	legacyPath := filepath.Join("/tmp", "clavain-bead-"+sessionID+".json")
-	t.Cleanup(func() { _ = os.Remove(legacyPath) })
 
 	if err := writeBeadSideband(sessionID, "bead-9", "executing", "advanced"); err != nil {
 		t.Fatalf("writeBeadSideband: %v", err)
@@ -45,35 +43,48 @@ func TestWriteBeadSideband_EnvelopeShape(t *testing.T) {
 	}
 }
 
-func TestWriteBeadSideband_LegacyPayloadShape(t *testing.T) {
+func TestWriteBeadSideband_NoLegacyWrite(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("INTERBAND_ROOT", root)
-	sessionID := "sideband-test-legacy"
+	sessionID := "sideband-test-no-legacy"
 	legacyPath := filepath.Join("/tmp", "clavain-bead-"+sessionID+".json")
-	t.Cleanup(func() { _ = os.Remove(legacyPath) })
+	_ = os.Remove(legacyPath)
 
 	if err := writeBeadSideband(sessionID, "bead-9", "executing", "advanced"); err != nil {
 		t.Fatalf("writeBeadSideband: %v", err)
 	}
-	b, err := os.ReadFile(legacyPath)
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Errorf("legacy /tmp sideband must not be written (Sylveste-zlc); stat err = %v", err)
+	}
+}
+
+func TestWriteBeadSideband_EnvSessionFallback(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("INTERBAND_ROOT", root)
+	t.Setenv("CLAUDE_SESSION_ID", "")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "env-sess-7")
+
+	if err := writeBeadSideband("", "bead-9", "executing", "advanced"); err != nil {
+		t.Fatalf("writeBeadSideband: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(root, "interphase", "bead", "env-sess-7.json"))
 	if err != nil {
-		t.Fatalf("read legacy payload: %v", err)
+		t.Fatalf("envelope not keyed by CLAUDE_CODE_SESSION_ID (Sylveste-23k): %v", err)
 	}
-	var payload struct {
-		ID     string `json:"id"`
-		Phase  string `json:"phase"`
-		Reason string `json:"reason"`
-		Ts     int64  `json:"ts"`
+	var env struct {
+		SessionID string `json:"session_id"`
 	}
-	if err := json.Unmarshal(b, &payload); err != nil {
-		t.Fatalf("unmarshal legacy payload: %v", err)
+	if err := json.Unmarshal(b, &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
-	if payload.ID != "bead-9" || payload.Phase != "executing" || payload.Reason != "advanced" || payload.Ts == 0 {
-		t.Errorf("legacy payload: %+v", payload)
+	if env.SessionID != "env-sess-7" {
+		t.Errorf("session_id = %q, want env-sess-7", env.SessionID)
 	}
 }
 
 func TestWriteBeadSideband_NoSessionIsNoop(t *testing.T) {
+	t.Setenv("CLAUDE_SESSION_ID", "")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
 	if err := writeBeadSideband("", "b", "p", ""); err != nil {
 		t.Errorf("empty session should no-op, got %v", err)
 	}

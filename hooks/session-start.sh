@@ -82,7 +82,7 @@ fi
 # These accumulate when sessions crash or kill without running Stop hooks.
 # TTL: 60 minutes — active sessions refresh heartbeats every ~60s.
 if [[ "$_hook_source" == "startup" ]]; then
-    find /tmp -maxdepth 1 \( -name 'clavain-heartbeat-*' -o -name 'clavain-bead-*' -o -name 'clavain-compose-*' -o -name 'clavain-agents-md-*' \) -mmin +60 -delete 2>/dev/null || true
+    find /tmp -maxdepth 1 \( -name 'clavain-heartbeat-*' -o -name 'clavain-compose-*' -o -name 'clavain-agents-md-*' \) -mmin +60 -delete 2>/dev/null || true
 fi
 
 # First-run setup verification — surface critical issues on first session only.
