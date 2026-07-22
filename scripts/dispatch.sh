@@ -831,7 +831,10 @@ if [[ "$ENGINE" == "kimi" ]]; then
   # NOTE: kimi v0.29 rejects combining -p with --auto/--yolo ("Cannot combine
   # --prompt with --auto") — prompt mode is already fully non-interactive, so
   # plain `kimi -p` is the correct dispatch form.
-  CMD=(kimi)
+  # KIMI_BD_PRIME_SKIP opts out of the user-level bd-prime UserPromptSubmit
+  # hook (~/.kimi-code/hooks/bd-prime-inject.sh) so dispatched output isn't
+  # prefixed with beads workflow context; interactive sessions keep it.
+  CMD=(env KIMI_BD_PRIME_SKIP=1 kimi)
   if [[ -n "$MODEL" ]]; then
     CMD+=(-m "$MODEL")
   fi
