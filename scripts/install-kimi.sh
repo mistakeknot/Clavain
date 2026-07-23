@@ -372,7 +372,7 @@ run_manifest_generator() {
     echo "WARN: Kimi manifest generator not found, skipping: $MANIFEST_GENERATOR" >&2
     return 0
   fi
-  if python3 "$MANIFEST_GENERATOR" --root "$REPO_ROOT"; then
+  if python3 "$MANIFEST_GENERATOR" --root "$REPO_ROOT" --plugin clavain; then
     echo "Generated Kimi plugin manifests (kimi.plugin.json)."
   else
     echo "WARN: Kimi manifest generator failed (non-fatal, continuing): $MANIFEST_GENERATOR" >&2
