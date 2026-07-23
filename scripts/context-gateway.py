@@ -308,6 +308,19 @@ def _receipt_dir() -> Path:
     return state_root / "context-gateway"
 
 
+def _writable_receipt_dir() -> Path:
+    preferred = _receipt_dir()
+    try:
+        preferred.mkdir(parents=True, exist_ok=True)
+        return preferred
+    except OSError:
+        if os.environ.get("CLAVAIN_CONTEXT_GATEWAY_RECEIPT_DIR"):
+            raise
+    fallback = Path(tempfile.gettempdir()) / f"clavain-context-gateway-{os.getuid()}"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
 def persist_receipt(
     decision: Decision,
     *,
@@ -317,8 +330,7 @@ def persist_receipt(
     mode: str,
     duration_ms: int,
 ) -> Path:
-    directory = _receipt_dir()
-    directory.mkdir(parents=True, exist_ok=True)
+    directory = _writable_receipt_dir()
     timestamp = datetime.now(timezone.utc)
     payload = {
         "schema_version": SCHEMA_VERSION,
@@ -469,9 +481,8 @@ def command_hook(args: argparse.Namespace) -> int:
 
 
 def _doctor_receipt_directory() -> dict[str, Any]:
-    directory = _receipt_dir()
     try:
-        directory.mkdir(parents=True, exist_ok=True)
+        directory = _writable_receipt_dir()
         descriptor, temporary = tempfile.mkstemp(prefix=".doctor-", dir=directory)
         os.close(descriptor)
         os.unlink(temporary)

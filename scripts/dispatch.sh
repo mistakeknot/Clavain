@@ -36,6 +36,7 @@ TEMPLATE_FILE=""
 IMAGES=()
 EXTRA_ARGS=()
 PHASE=""
+CONTEXT_GATEWAY_MODE="${CLAVAIN_CONTEXT_GATEWAY_MODE:-auto}"
 DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${CLAUDE_SESSION_ID:-}"
@@ -174,6 +175,8 @@ Options:
                                   Template uses {{KEY}} placeholders replaced by section values
   --dry-run                     Print the backend command without executing
   --kimi-unsafe                 Use the unrestricted kimi -p form (trusted input only)
+  --context-gateway <MODE>      tldrs context policy: off | auto | required
+                                  (default: CLAVAIN_CONTEXT_GATEWAY_MODE or auto)
   --help                        Show this help
 
 Examples:
@@ -303,7 +306,7 @@ while [[ $# -gt 0 ]]; do
       case "$ENGINE" in
         codex|kimi|claude-code|auto) ;;
         *)
-          echo "Error: $1 must be 'codex', 'kimi', 'claude-code', or 'auto' (got '$ENGINE')" >&2
+          echo "Error: $1 must be 'codex' or 'kimi' (or 'claude-code'/'auto'; got '$ENGINE')" >&2
           exit 1
           ;;
       esac
@@ -396,6 +399,18 @@ while [[ $# -gt 0 ]]; do
     --kimi-unsafe)
       KIMI_UNSAFE=true
       shift
+      ;;
+    --context-gateway)
+      require_arg "$1" "${2:-}"
+      CONTEXT_GATEWAY_MODE="$2"
+      case "$CONTEXT_GATEWAY_MODE" in
+        off|auto|required) ;;
+        *)
+          echo "Error: --context-gateway must be 'off', 'auto', or 'required' (got '$CONTEXT_GATEWAY_MODE')" >&2
+          exit 1
+          ;;
+      esac
+      shift 2
       ;;
     --)
       # End of options — next arg is the prompt even if it starts with -
@@ -723,6 +738,50 @@ _preflight_toolchains() {
 
 if [[ -n "$WORKDIR" ]]; then
   _preflight_toolchains "$WORKDIR"
+fi
+
+# ─── tldrs Context Gateway ──────────────────────────────────────────────────
+# Make one auditable packet decision after all prompt assembly and before any
+# harness-specific command is built. The outer --to auto router skips this
+# boundary because its selected recursive backend invocation applies it.
+_apply_context_gateway() {
+  local gateway="${CLAVAIN_CONTEXT_GATEWAY_BIN:-${DISPATCH_SCRIPT_DIR}/context-gateway.py}"
+  local project="${WORKDIR:-$PWD}"
+  local harness="generic"
+  local enriched=""
+  local gateway_status=0
+
+  if [[ "$VIA" == "zaka" && "$ENGINE_SET" != true ]]; then
+    harness="claude"
+  else
+    case "$ENGINE" in
+      codex) harness="codex" ;;
+      kimi) harness="kimi" ;;
+      claude-code) harness="claude" ;;
+    esac
+  fi
+
+  if [[ ! -x "$gateway" ]]; then
+    echo "Error: Clavain context gateway is missing or not executable: $gateway" >&2
+    return 127
+  fi
+
+  if enriched="$(printf '%s' "$PROMPT" | "$gateway" prepare \
+      --project "$project" \
+      --harness "$harness" \
+      --mode "$CONTEXT_GATEWAY_MODE")"; then
+    PROMPT="$enriched"
+    return 0
+  else
+    gateway_status=$?
+  fi
+
+  echo "Error: tldrs context gateway rejected the task (mode=$CONTEXT_GATEWAY_MODE, status=$gateway_status)" >&2
+  return "$gateway_status"
+}
+
+if [[ "$ENGINE" != "auto" || "$VIA" == "zaka" ]]; then
+  _apply_context_gateway
 fi
 
 # ─── Compound Autonomy Guard (rsj.1.8) ──────────────────────────────────────
