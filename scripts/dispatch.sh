@@ -389,6 +389,10 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=true
       shift
       ;;
+    --dry-run=false)
+      DRY_RUN=false
+      shift
+      ;;
     --kimi-unsafe)
       KIMI_UNSAFE=true
       shift
