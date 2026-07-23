@@ -30,6 +30,7 @@ INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents"
 NAME=""
 DRY_RUN=false
 KIMI_UNSAFE=false
+TASK_CLASS=""
 PROMPT_FILE=""
 TEMPLATE_FILE=""
 IMAGES=()
@@ -134,11 +135,12 @@ Usage:
   dispatch.sh [OPTIONS] --prompt-file <file>
 
 Options:
-  --to, --engine <codex|kimi>   Dispatch backend (default: codex)
+  --to, --engine <codex|kimi|auto>   Dispatch backend (default: codex)
                                   codex — codex exec (full sandbox/JSONL/statusline support)
                                   kimi  — kimi -p (second-opinion backend; different
                                           model family. -s/--sandbox, -i/--image and codex
                                           passthrough flags are ignored with a warning)
+                                  auto  — ordered executor failover by task class
   --via zaka                    Spawn a steerable tmux session via zaka instead of a
                                   one-shot headless exec. The engine maps to a zaka
                                   adapter (codex→codex, kimi→kimi, claude-code→claude-code);
@@ -158,6 +160,7 @@ Options:
                                   fast → kimi-code/kimi-for-coding, deep → kimi-code/k3.
                                   Mutually exclusive with -m (use -m to override)
   --phase <NAME>                Sprint phase context (stored for future phase-aware dispatch)
+  --class <NAME>                Task class for --to auto executor routing
   -i, --image <FILE>            Attach image to prompt (repeatable)
   --inject-docs[=SCOPE]         Prepend docs from working dir to prompt
                                   (no value)  CLAUDE.md only (recommended — Codex reads AGENTS.md natively)
@@ -266,6 +269,27 @@ resolve_tier_model_kimi() {
   echo "$alias"
 }
 
+# Preserve the original invocation for --to auto recursive backend dispatch.
+# Filter only the routing controls so every other argument is passed through
+# exactly, including prompt files, templates, and positional prompts.
+ORIGINAL_ARGS=("$@")
+PASSTHROUGH=()
+for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
+  case "${ORIGINAL_ARGS[$i]}" in
+    --to|--engine)
+      if [[ "${ORIGINAL_ARGS[$((i + 1))]:-}" == "auto" ]]; then
+        i=$((i + 1))
+        continue
+      fi
+      ;;
+    --class)
+      i=$((i + 1))
+      continue
+      ;;
+  esac
+  PASSTHROUGH+=("${ORIGINAL_ARGS[$i]}")
+done
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -277,9 +301,9 @@ while [[ $# -gt 0 ]]; do
       ENGINE="$2"
       ENGINE_SET=true
       case "$ENGINE" in
-        codex|kimi|claude-code) ;;
+        codex|kimi|claude-code|auto) ;;
         *)
-          echo "Error: $1 must be 'codex' or 'kimi' (got '$ENGINE')" >&2
+          echo "Error: $1 must be 'codex', 'kimi', 'claude-code', or 'auto' (got '$ENGINE')" >&2
           exit 1
           ;;
       esac
@@ -326,6 +350,11 @@ while [[ $# -gt 0 ]]; do
     --phase)
       require_arg "$1" "${2:-}"
       PHASE="$2"
+      shift 2
+      ;;
+    --class)
+      require_arg "$1" "${2:-}"
+      TASK_CLASS="$2"
       shift 2
       ;;
     -i|--image)
@@ -818,6 +847,28 @@ if [[ "$VIA" == "zaka" ]]; then
   echo ""
   echo "Dispatched (not waiting — session is interactive). Steer or kill with the commands above."
   exit 0
+fi
+
+# Ordered executor failover for --to auto. The recursive invocation receives
+# the exact original arguments except the routing controls, so it cannot
+# recurse and preserves all backend-specific dispatch behavior.
+if [[ "$ENGINE" == "auto" ]]; then
+  # shellcheck source=scripts/lib-routing.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/lib-routing.sh" 2>/dev/null || true
+  order=""
+  if declare -f routing_resolve_executor_order >/dev/null 2>&1; then
+    order="$(routing_resolve_executor_order "${TASK_CLASS:-}")"
+  fi
+  [[ -z "$order" ]] && order="codex"   # safe default: paid/stronger
+  rc=1
+  for backend in $order; do
+    if "${BASH_SOURCE[0]}" --to "$backend" "${PASSTHROUGH[@]}"; then
+      rc=0
+      break
+    fi
+    echo "dispatch: backend '$backend' failed for class '${TASK_CLASS:-default}', trying next" >&2
+  done
+  exit "$rc"
 fi
 
 # Build backend command
