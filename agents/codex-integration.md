@@ -7,6 +7,10 @@
 - GitHub web PR agent commands (`/clavain:claude-review`, `/clavain:codex-review`, `/clavain:dual-review`) are documented in `docs/runbooks/codex-sync.md`
 - GitHub issue command `/clavain:upstream-sync` (for `upstream-sync` issues) is documented in `docs/runbooks/codex-sync.md`
 
+## Worktree Coordination
+
+- Codex sandboxes and Sylveste worktrees follow the [worktree-first coordination contract](../../../docs/guide-worktree-first-coordination.md): native worktrees isolate edits, interlock coordinates shared trees, and isolation is **per nested repo** (a root worktree materializes almost no nested plugins). Codex install paths targeting nested repos must operate on that repo's checkout, not a root worktree.
+
 ## Interserve Dispatch
 
 - dispatch.sh does NOT support `--template` — use `--prompt-file`
