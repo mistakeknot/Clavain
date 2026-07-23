@@ -226,6 +226,34 @@ def test_prepare_bypasses_a_small_explicit_target_set(
     assert _one_receipt(receipt_dir)["reason"] == "known_small_target_set"
 
 
+def test_prepare_retries_receipt_in_temp_when_default_state_dir_is_unwritable(
+    tmp_path: Path, gateway_env: tuple[dict[str, str], Path, Path]
+) -> None:
+    env, _, _ = gateway_env
+    env.pop("CLAVAIN_CONTEXT_GATEWAY_RECEIPT_DIR")
+    state_dir = tmp_path / "state"
+    receipt_dir = state_dir / "context-gateway"
+    receipt_dir.mkdir(parents=True)
+    receipt_dir.chmod(0o500)
+    fallback_tmp = tmp_path / "fallback-tmp"
+    fallback_tmp.mkdir()
+    env["CLAVAIN_STATE_DIR"] = str(state_dir)
+    env["TMPDIR"] = str(fallback_tmp)
+    prompt = "Fix scripts/dispatch.sh."
+
+    result = _run(
+        ["prepare", "--project", str(tmp_path), "--mode", "off"],
+        prompt=prompt,
+        env=env,
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == prompt
+    fallback = fallback_tmp / f"clavain-context-gateway-{os.getuid()}"
+    assert _one_receipt(fallback)["decision"] == "bypass"
+
+
 @pytest.mark.parametrize("stub_mode", ["error", "malformed", "fallback"])
 def test_auto_mode_preserves_prompt_on_tldrs_fallback(
     tmp_path: Path,

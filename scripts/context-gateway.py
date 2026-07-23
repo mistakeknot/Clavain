@@ -326,9 +326,32 @@ def _writable_receipt_dir() -> Path:
     except OSError:
         if os.environ.get("CLAVAIN_CONTEXT_GATEWAY_RECEIPT_DIR"):
             raise
-    fallback = Path(tempfile.gettempdir()) / f"clavain-context-gateway-{os.getuid()}"
+    fallback = _fallback_receipt_dir()
     fallback.mkdir(parents=True, exist_ok=True)
     return fallback
+
+
+def _fallback_receipt_dir() -> Path:
+    return Path(tempfile.gettempdir()) / f"clavain-context-gateway-{os.getuid()}"
+
+
+def _write_receipt(directory: Path, filename: str, payload: dict[str, Any]) -> Path:
+    descriptor, temporary = tempfile.mkstemp(prefix=".receipt-", dir=directory)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        destination = directory / filename
+        os.replace(temporary, destination)
+        return destination
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def persist_receipt(
@@ -363,22 +386,16 @@ def persist_receipt(
         f"{timestamp.strftime('%Y%m%dT%H%M%S.%fZ')}-{os.getpid()}-"
         f"{payload['task_sha256'][:10]}.json"
     )
-    descriptor, temporary = tempfile.mkstemp(prefix=".receipt-", dir=directory)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        destination = directory / filename
-        os.replace(temporary, destination)
-        return destination
-    except BaseException:
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
+        return _write_receipt(directory, filename, payload)
+    except OSError:
+        if os.environ.get("CLAVAIN_CONTEXT_GATEWAY_RECEIPT_DIR"):
+            raise
+        fallback = _fallback_receipt_dir()
+        if directory == fallback:
+            raise
+        fallback.mkdir(parents=True, exist_ok=True)
+        return _write_receipt(fallback, filename, payload)
 
 
 def decide(
