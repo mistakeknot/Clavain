@@ -24,11 +24,13 @@ provider = "managed:kimi-code"
 model = "k3"
 EOF
     export KIMI_CONFIG="$KIMI_CFG"
+    export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 }
 
 teardown() {
     rm -rf "$TMPDIR_T"
     unset KIMI_CONFIG
+    unset CLAVAIN_CONTEXT_GATEWAY_MODE
 }
 
 @test "engine: default (no --to) builds codex exec command" {
