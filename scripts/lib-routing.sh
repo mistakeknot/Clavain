@@ -163,6 +163,26 @@ _routing_find_config() {
   return 1
 }
 
+# Resolve the executor backend order for a task class from
+# executor_routing in routing.yaml. Prints space-separated backends
+# (e.g. "kimi codex"); empty if the section is off/absent (caller uses
+# its own default). Pure yaml read via python3 (already a dep of lib-routing).
+routing_resolve_executor_order() {
+  local class="$1"
+  local cfg; cfg="$(_routing_find_config)" || return 0
+  [[ -n "$cfg" && -f "$cfg" ]] || return 0
+  python3 - "$cfg" "$class" <<'PY' 2>/dev/null || true
+import sys, yaml
+cfg, cls = sys.argv[1], sys.argv[2]
+d = yaml.safe_load(open(cfg)) or {}
+e = d.get("executor_routing") or {}
+if e.get("mode", "off") == "off":
+    sys.exit(0)
+order = (e.get("classes") or {}).get(cls) or e.get("default") or []
+print(" ".join(order))
+PY
+}
+
 # --- Find agent-roles.yaml (companion to routing.yaml) ---
 _routing_find_roles_config() {
   # 0. Explicit env var — if set, use it (or fail if not a regular file)
