@@ -93,6 +93,25 @@ done
 [ "$_errs" -eq 0 ] && echo "hook syntax: PASS" || echo "hook syntax: WARN ($_errs hooks have syntax errors)"
 ```
 
+### 2e2. Worktree-first contract (nested-repo hazard)
+
+```bash
+# Fails loud if this session runs in a ROOT-repo worktree, where nested repos
+# are absent and publish/sweep operations silently no-op.
+# See docs/guide-worktree-first-coordination.md §5, §7.
+_wt_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+while [ -n "$_wt_root" ] && [ ! -x "$_wt_root/scripts/check-worktree-nested-repos.sh" ] && [ "$_wt_root" != "/" ]; do
+  _wt_root="$(dirname "$_wt_root")"
+done
+if [ -x "$_wt_root/scripts/check-worktree-nested-repos.sh" ]; then
+  if "$_wt_root/scripts/check-worktree-nested-repos.sh" 2>&1; then
+    echo "worktree contract: PASS (main checkout or nested-repo worktree)"
+  fi
+else
+  echo "worktree contract: SKIP (check not found)"
+fi
+```
+
 ### 2e. Routing Activation Status
 
 ```bash
