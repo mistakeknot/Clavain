@@ -129,21 +129,28 @@ def _resolve_inside_project(project: Path, relative: str) -> Path | None:
     return candidate
 
 
-def _is_known_small_target(project: Path, paths: list[str]) -> bool:
+def _known_small_target_count(project: Path, paths: list[str]) -> int:
     source_paths = [path for path in paths if Path(path).suffix.lower() in SOURCE_SUFFIXES]
-    if len(source_paths) != 1:
-        return False
-    candidate = _resolve_inside_project(project, source_paths[0])
-    if candidate is None or not candidate.is_file():
-        return False
-    try:
-        with candidate.open("rb") as handle:
-            for line_number, _ in enumerate(handle, 1):
-                if line_number >= 200:
-                    return False
-    except OSError:
-        return False
-    return True
+    if not source_paths or len(source_paths) > 3:
+        return 0
+    total_bytes = 0
+    total_lines = 0
+    line_limit = 200 if len(source_paths) == 1 else 400
+    for source_path in source_paths:
+        candidate = _resolve_inside_project(project, source_path)
+        if candidate is None or not candidate.is_file():
+            return 0
+        try:
+            total_bytes += candidate.stat().st_size
+            if total_bytes > 8_000:
+                return 0
+            with candidate.open("rb") as handle:
+                total_lines += sum(1 for _ in handle)
+            if total_lines >= line_limit:
+                return 0
+        except OSError:
+            return 0
+    return len(source_paths)
 
 
 def assess_eligibility(prompt: str, project: Path, mode: str) -> Decision | None:
@@ -164,8 +171,11 @@ def assess_eligibility(prompt: str, project: Path, mode: str) -> Decision | None
             Path(path).suffix.lower() in SOURCE_SUFFIXES for path in paths
         ):
             return Decision("bypass", "docs_or_config")
-        if _is_known_small_target(project, paths):
+        small_target_count = _known_small_target_count(project, paths)
+        if small_target_count == 1:
             return Decision("bypass", "known_small_target")
+        if small_target_count > 1:
+            return Decision("bypass", "known_small_target_set")
 
     has_source_path = any(
         Path(path).suffix.lower() in SOURCE_SUFFIXES for path in paths

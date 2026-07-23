@@ -198,6 +198,34 @@ def test_prepare_bypasses_one_known_small_target(
     assert _one_receipt(receipt_dir)["reason"] == "known_small_target"
 
 
+def test_prepare_bypasses_a_small_explicit_target_set(
+    tmp_path: Path, gateway_env: tuple[dict[str, str], Path, Path]
+) -> None:
+    env, receipt_dir, log_path = gateway_env
+    hook = tmp_path / "hooks" / "context-gateway.sh"
+    test = tmp_path / "tests" / "context_gateway_hook.bats"
+    hook.parent.mkdir()
+    test.parent.mkdir()
+    hook.write_text("#!/bin/sh\nexec gateway hook\n")
+    test.write_text('@test "hook fails open" { run hook; }\n')
+    prompt = (
+        "Fix hooks/context-gateway.sh and update "
+        "tests/context_gateway_hook.bats so failures remain fail-open."
+    )
+
+    result = _run(
+        ["prepare", "--project", str(tmp_path), "--harness", "kimi"],
+        prompt=prompt,
+        env=env,
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == prompt
+    assert not log_path.exists()
+    assert _one_receipt(receipt_dir)["reason"] == "known_small_target_set"
+
+
 @pytest.mark.parametrize("stub_mode", ["error", "malformed", "fallback"])
 def test_auto_mode_preserves_prompt_on_tldrs_fallback(
     tmp_path: Path,
