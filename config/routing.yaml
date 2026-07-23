@@ -19,6 +19,17 @@
 #   see commands/model-routing.md § "Capability-routing doctrine" — frontier plans/reviews,
 #   sonnet executes, opus validates against plan criteria, two-strikes escalation.
 
+# Executor routing (CLI-backend dimension) — ported from FLUXrig doctrine.
+# Per task CLASS, an ordered backend list; first that succeeds wins (free-first).
+# A class is added ONLY after its parity eval passes (executor-parity-eval).
+# Unmapped class -> `default` (safe: paid/stronger). See
+# docs/brainstorms/2026-07-23-executor-routing-doctrine-port.md.
+executor_routing:
+  mode: enforce            # off | shadow | enforce
+  classes:
+    tagging:   [kimi, codex]    # FLUXrig-aeu: Kimi holds parity (100% cov, 0 drops, faster)
+    reasoning: [codex]          # FLUXrig-92u: Luna-only (Kimi 7.7x slower, worse cov+drops)
+  default:     [codex]          # safe default for unmapped classes
 subagents:
   defaults:
     model: sonnet
