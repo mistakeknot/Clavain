@@ -108,10 +108,13 @@ FAIL_OPEN_HOOKS = {
     "validate-plugin-edit.sh",
 }
 
-# gate-calibration-session-end.sh fails open by a different mechanism: bare
-# `set -u` with every command wrapped in `|| true` and a hard `exit 0` at the
-# end, rather than `trap ERR -> exit 0`. Same intent, different idiom.
-FAIL_OPEN_HOOKS_NO_TRAP = {"gate-calibration-session-end.sh"}
+# These hooks fail open by a different mechanism: bare `set -u` with expected
+# failures handled explicitly and a hard `exit 0` at the end, rather than
+# `trap ERR -> exit 0`. Same intent, different idiom.
+FAIL_OPEN_HOOKS_NO_TRAP = {
+    "context-gateway.sh",
+    "gate-calibration-session-end.sh",
+}
 
 
 def test_hook_entry_points_have_set_euo_pipefail():

@@ -38,17 +38,19 @@ teardown() {
     [[ "$output" != *"kimi -p"* ]]
 }
 
-@test "engine: --to kimi builds kimi -p command" {
+@test "engine: --to kimi builds restricted kimi command" {
     run bash "$DISPATCH_SCRIPT" --to kimi --dry-run "test prompt"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"kimi -p"* ]]
+    [[ "$output" == *"kimi --agent-file"* ]]
+    [[ "$output" == *"--prompt=test"* ]]
     [[ "$output" != *"codex exec"* ]]
 }
 
 @test "engine: --engine kimi is an alias for --to kimi" {
     run bash "$DISPATCH_SCRIPT" --engine kimi --dry-run "test prompt"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"kimi -p"* ]]
+    [[ "$output" == *"kimi --agent-file"* ]]
+    [[ "$output" == *"--prompt=test"* ]]
 }
 
 @test "engine: invalid backend value exits 1" {
@@ -87,7 +89,7 @@ teardown() {
 @test "kimi: -m overrides model directly" {
     run bash "$DISPATCH_SCRIPT" --to kimi -m custom/model --dry-run "test prompt"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"kimi -m custom/model -p"* ]]
+    [[ "$output" == *"-m custom/model --prompt=test"* ]]
 }
 
 @test "kimi: --tier and -m are mutually exclusive" {
@@ -99,13 +101,15 @@ teardown() {
 @test "kimi: -C displays as cd prefix" {
     run bash "$DISPATCH_SCRIPT" --to kimi --dry-run -C /tmp "test prompt"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"cd /tmp && kimi -p"* ]]
+    [[ "$output" == *"cd /tmp && env KIMI_BD_PRIME_SKIP=1"* ]]
+    [[ "$output" == *"kimi --agent-file"* ]]
 }
 
 @test "kimi: -o displays as stdout redirect" {
     run bash "$DISPATCH_SCRIPT" --to kimi --dry-run -o /tmp/kimi-out.md "test prompt"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"-p > /tmp/kimi-out.md"* ]]
+    [[ "$output" == *"--prompt=test"* ]]
+    [[ "$output" == *"> /tmp/kimi-out.md"* ]]
 }
 
 @test "kimi: codex-only options warn and are dropped" {
@@ -117,10 +121,11 @@ teardown() {
     [[ "$output" != *"--full-auto -p"* ]]
 }
 
-@test "kimi: --prompt-file is read and passed via -p" {
+@test "kimi: --prompt-file is read and passed via bound prompt option" {
     printf 'review the auth handler\n' > "$TMPDIR_T/task.md"
     run bash "$DISPATCH_SCRIPT" --to kimi --dry-run --prompt-file "$TMPDIR_T/task.md"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"kimi -p"* ]]
+    [[ "$output" == *"kimi --agent-file"* ]]
+    [[ "$output" == *"--prompt=review"* ]]
     [[ "$output" == *"review the auth handler"* ]]
 }
