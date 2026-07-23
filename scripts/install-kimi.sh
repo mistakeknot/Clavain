@@ -27,6 +27,7 @@ KIMI_CODE_HOME="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
 KIMI_CONFIG_FILE="${KIMI_CONFIG_FILE:-$KIMI_CODE_HOME/config.toml}"
 KIMI_AGENTS_FILE="${KIMI_AGENTS_FILE:-$KIMI_CODE_HOME/AGENTS.md}"
 KIMI_MCP_FILE="${KIMI_MCP_FILE:-$KIMI_CODE_HOME/mcp.json}"
+KIMI_MANAGED_CLAVAIN_ROOT="${KIMI_MANAGED_CLAVAIN_ROOT:-$KIMI_CODE_HOME/plugins/managed/clavain}"
 BACKUP_ROOT="${CLAVAIN_KIMI_BACKUP_ROOT:-$KIMI_CODE_HOME/.clavain-backups}"
 
 HOOKS_BLOCK_START="# BEGIN CLAVAIN KIMI HOOKS"
@@ -75,6 +76,7 @@ while [[ $# -gt 0 ]]; do
       KIMI_CONFIG_FILE="$KIMI_CODE_HOME/config.toml"
       KIMI_AGENTS_FILE="$KIMI_CODE_HOME/AGENTS.md"
       KIMI_MCP_FILE="$KIMI_CODE_HOME/mcp.json"
+      KIMI_MANAGED_CLAVAIN_ROOT="$KIMI_CODE_HOME/plugins/managed/clavain"
       BACKUP_ROOT="$KIMI_CODE_HOME/.clavain-backups"
       shift 2
       ;;
@@ -471,11 +473,8 @@ remove_kimi_mcp() {
   echo "Removed Clavain MCP servers from: $KIMI_MCP_FILE"
 }
 
-# Returns 0 when the clavain plugin is installed and enabled in Kimi's own
-# plugin manager. In that state the plugin's kimi.plugin.json already carries
-# the full hook set, so the config.toml hooks block must NOT be installed —
-# otherwise every hook fires twice.
-clavain_plugin_enabled() {
+# Print the root of Kimi's enabled Clavain plugin, regardless of its source.
+clavain_plugin_root() {
   local installed_json="$KIMI_CODE_HOME/plugins/installed.json"
   [[ -f "$installed_json" ]] || return 1
   python3 - "$installed_json" <<'PY'
@@ -485,10 +484,78 @@ try:
 except Exception:
     sys.exit(1)
 for plugin in data.get("plugins", []):
-    if plugin.get("id") == "clavain" and plugin.get("enabled"):
+    if (
+        plugin.get("id") == "clavain"
+        and plugin.get("enabled")
+        and isinstance(plugin.get("root"), str)
+        and plugin["root"]
+    ):
+        print(plugin["root"])
         sys.exit(0)
 sys.exit(1)
 PY
+}
+
+# Print the refreshable managed root only when Kimi records this exact checkout
+# as an enabled local-path Clavain plugin. The destination is deliberately fixed
+# to Kimi's Clavain managed directory so malformed metadata cannot redirect the
+# archive extraction.
+managed_clavain_plugin_root() {
+  local installed_json="$KIMI_CODE_HOME/plugins/installed.json"
+  [[ -f "$installed_json" ]] || return 1
+  python3 - "$installed_json" "$SOURCE_DIR" "$KIMI_MANAGED_CLAVAIN_ROOT" <<'PY'
+import json
+import os
+import sys
+
+installed_json, source_dir, expected_root = sys.argv[1:]
+try:
+    data = json.load(open(installed_json))
+except Exception:
+    sys.exit(1)
+
+source_dir = os.path.realpath(source_dir)
+expected_root = os.path.realpath(expected_root)
+for plugin in data.get("plugins", []):
+    if (
+        plugin.get("id") == "clavain"
+        and plugin.get("enabled")
+        and plugin.get("source") == "local-path"
+        and isinstance(plugin.get("root"), str)
+        and isinstance(plugin.get("originalSource"), str)
+        and os.path.realpath(plugin["root"]) == expected_root
+        and os.path.realpath(plugin["originalSource"]) == source_dir
+    ):
+        print(expected_root)
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
+# Returns 0 when the clavain plugin is installed and enabled in Kimi's own
+# plugin manager. In that state the installed plugin's kimi.plugin.json carries
+# the full hook set, so the config.toml hooks block must NOT be installed —
+# otherwise every hook fires twice.
+clavain_plugin_enabled() {
+  clavain_plugin_root >/dev/null
+}
+
+sync_managed_local_plugin() {
+  local managed_root
+  managed_root="$(managed_clavain_plugin_root)" || return 0
+
+  if [[ "$managed_root" != "$KIMI_MANAGED_CLAVAIN_ROOT" ]]; then
+    echo "Refusing unexpected Kimi managed plugin root: $managed_root" >&2
+    return 1
+  fi
+  if ! git -C "$SOURCE_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
+    echo "WARN: Clavain source has no committed HEAD; skipping Kimi managed plugin refresh." >&2
+    return 0
+  fi
+
+  mkdir -p "$managed_root"
+  git -C "$SOURCE_DIR" archive HEAD | tar -x -C "$managed_root"
+  echo "Refreshed Kimi managed Clavain plugin from committed source: $managed_root"
 }
 
 install_managed_hooks_block() {
@@ -523,6 +590,7 @@ install_all() {
 
   install_skills_link
   run_manifest_generator
+  sync_managed_local_plugin
   sync_kimi_mcp
   install_managed_hooks_block
   install_managed_agents_block
@@ -553,6 +621,7 @@ doctor() {
   local bridge_ok="false"
   local manifest_generator_present="false"
   local context_gateway_hook_present="false"
+  local managed_plugin_current="false"
   local context_gateway_tldrs_executable="false"
   local context_gateway_packet_schema="false"
   local context_gateway_receipt_directory="false"
@@ -646,16 +715,29 @@ doctor() {
   elif clavain_plugin_enabled; then
     # Plugin route: kimi.plugin.json owns the hooks; config block intentionally absent.
     hooks_block_ok="true"
-    if [[ -f "$SOURCE_DIR/kimi.plugin.json" ]] \
+    local installed_plugin_root=""
+    installed_plugin_root="$(clavain_plugin_root)" || true
+    local installed_manifest="$installed_plugin_root/kimi.plugin.json"
+    local source_version=""
+    local installed_version=""
+    source_version="$(jq -r '.version // empty' "$SOURCE_DIR/kimi.plugin.json" 2>/dev/null || true)"
+    installed_version="$(jq -r '.version // empty' "$installed_manifest" 2>/dev/null || true)"
+    if [[ -n "$installed_plugin_root" ]] \
+      && [[ -f "$installed_manifest" ]] \
+      && [[ -n "$source_version" ]] \
+      && [[ "$installed_version" == "$source_version" ]] \
       && jq -e '
         [.hooks[]?
          | select(.event == "UserPromptSubmit")
          | select((.command // "") | contains("context-gateway.sh"))]
         | length == 1
-      ' "$SOURCE_DIR/kimi.plugin.json" >/dev/null 2>&1; then
+      ' "$installed_manifest" >/dev/null 2>&1 \
+      && [[ -x "$installed_plugin_root/hooks/context-gateway.sh" ]] \
+      && [[ -x "$installed_plugin_root/scripts/context-gateway.py" ]]; then
       context_gateway_hook_present="true"
+      managed_plugin_current="true"
     else
-      issues+=("Kimi plugin UserPromptSubmit context gateway hook missing: $SOURCE_DIR/kimi.plugin.json")
+      issues+=("installed Kimi Clavain plugin is stale or missing its UserPromptSubmit context gateway: $installed_plugin_root")
       status=1
     fi
   else
@@ -737,6 +819,7 @@ doctor() {
     printf '    "hook_bridge_executable":%s,\n' "$bridge_ok"
     printf '    "manifest_generator_present":%s,\n' "$manifest_generator_present"
     printf '    "context_gateway_hook_present":%s,\n' "$context_gateway_hook_present"
+    printf '    "managed_plugin_current":%s,\n' "$managed_plugin_current"
     printf '    "context_gateway_tldrs_executable":%s,\n' "$context_gateway_tldrs_executable"
     printf '    "context_gateway_packet_schema":%s,\n' "$context_gateway_packet_schema"
     printf '    "context_gateway_receipt_directory":%s\n' "$context_gateway_receipt_directory"

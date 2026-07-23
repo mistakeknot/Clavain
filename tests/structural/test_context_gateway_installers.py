@@ -23,6 +23,8 @@ def test_post_bump_keeps_kimi_release_metadata_in_sync(project_root: Path) -> No
 def test_kimi_installer_wires_and_diagnoses_context_gateway(project_root: Path) -> None:
     installer = (project_root / "scripts" / "install-kimi.sh").read_text()
     assert "--plugin clavain" in installer
+    assert 'git -C "$SOURCE_DIR" archive HEAD' in installer
+    assert "managed_plugin_current" in installer
     assert 'event = "UserPromptSubmit"' in installer
     assert "CLAVAIN_CONTEXT_GATEWAY_HARNESS=kimi" in installer
     assert "context-gateway.sh" in installer
