@@ -1,0 +1,63 @@
+version: 1
+mode: all-sequential
+tier: deep
+max_parallel: 1
+timeout_per_task: 900
+
+stages:
+  - name: "Upstream packet contract"
+    tasks:
+      - id: task-1
+        title: "Harden tldr-swinton source selection"
+        files:
+          - /Users/sma/projects/tldr-swinton/src/tldr_swinton/modules/core/task_context.py
+          - /Users/sma/projects/tldr-swinton/tests/test_task_context.py
+        depends: []
+      - id: task-2
+        title: "Add packet assessment and receipt schema"
+        files:
+          - /Users/sma/projects/tldr-swinton/src/tldr_swinton/modules/core/task_context.py
+          - /Users/sma/projects/tldr-swinton/src/tldr_swinton/cli.py
+          - /Users/sma/projects/tldr-swinton/tests/test_task_context.py
+        depends: [task-1]
+      - id: task-3
+        title: "Modernize tldr-swinton Kimi packaging"
+        files:
+          - /Users/sma/projects/tldr-swinton/kimi.plugin.json
+          - /Users/sma/projects/tldr-swinton/tests/test_harness_guidance.py
+          - /Users/sma/projects/tldr-swinton/tests/test_version_consistency.py
+        depends: [task-2]
+  - name: "Clavain gateway"
+    tasks:
+      - id: task-4
+        title: "Build the Clavain gateway core"
+        files:
+          - scripts/context-gateway.py
+          - tests/structural/test_context_gateway.py
+        depends: [task-2]
+      - id: task-5
+        title: "Enforce the gateway in Clavain dispatch"
+        files:
+          - scripts/dispatch.sh
+          - tests/shell/dispatch_context_gateway.bats
+          - tests/shell/dispatch_kimi.bats
+          - tests/shell/dispatch_zaka.bats
+        depends: [task-4]
+      - id: task-6
+        title: "Wire interactive hooks and installer doctors"
+        files:
+          - hooks/context-gateway.sh
+          - hooks/hooks.json
+          - scripts/install-codex.sh
+          - scripts/install-kimi.sh
+          - tests/structural/test_hooks_json.py
+          - tests/shell/test_codex_installer.bats
+          - kimi.plugin.json
+        depends: [task-4, task-5]
+  - name: "Evidence and release"
+    tasks:
+      - id: task-7
+        title: "Validate outcomes, document, release, and push"
+        files:
+          - docs/research/2026-07-23-clavain-context-gateway-validation.md
+        depends: [task-1, task-2, task-3, task-4, task-5, task-6]
