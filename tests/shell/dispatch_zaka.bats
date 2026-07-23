@@ -9,10 +9,12 @@ setup() {
 
     DISPATCH_SCRIPT="$BATS_TEST_DIRNAME/../../scripts/dispatch.sh"
     TMPDIR_T="$(mktemp -d)"
+    export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 }
 
 teardown() {
     rm -rf "$TMPDIR_T"
+    unset CLAVAIN_CONTEXT_GATEWAY_MODE
 }
 
 @test "zaka: default (no --to) spawns claude-code adapter" {
