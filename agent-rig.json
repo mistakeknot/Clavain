@@ -63,6 +63,10 @@
     }
   },
   "plugins": {
+    "core": {
+      "source": "clavain@interagency-marketplace",
+      "description": "The core Clavain multi-agent rig"
+    },
     "hard_conflicts": [
       {
         "source": "code-review@claude-plugins-official",
@@ -97,6 +101,78 @@
         "reason": "Conflicts with hook management"
       }
     ],
+    "infrastructure": [
+      {
+        "source": "gopls-lsp@claude-plugins-official",
+        "description": "Go language server"
+      },
+      {
+        "source": "pyright-lsp@claude-plugins-official",
+        "description": "Python language server"
+      },
+      {
+        "source": "typescript-lsp@claude-plugins-official",
+        "description": "TypeScript language server"
+      },
+      {
+        "source": "rust-analyzer-lsp@claude-plugins-official",
+        "description": "Rust language server"
+      }
+    ],
+    "optional": [
+      {
+        "source": "interfluence@interagency-marketplace",
+        "description": "Voice profile and style adaptation"
+      },
+      {
+        "source": "interject@interagency-marketplace",
+        "description": "Ambient discovery and research engine (MCP)"
+      },
+      {
+        "source": "interstat@interagency-marketplace",
+        "description": "Token efficiency benchmarking"
+      },
+      {
+        "source": "interkasten@interagency-marketplace",
+        "description": "Notion sync and documentation"
+      },
+      {
+        "source": "interlens@interagency-marketplace",
+        "description": "Cognitive augmentation lenses (MCP)"
+      },
+      {
+        "source": "intersearch@interagency-marketplace",
+        "description": "Shared embedding and Exa search library"
+      },
+      {
+        "source": "interpub@interagency-marketplace",
+        "description": "Plugin publishing automation"
+      },
+      {
+        "source": "tuivision@interagency-marketplace",
+        "description": "TUI automation and visual testing (MCP)"
+      },
+      {
+        "source": "intermux@interagency-marketplace",
+        "description": "Agent activity visibility and tmux monitoring (MCP)"
+      },
+      {
+        "source": "interleave@interagency-marketplace",
+        "description": "Deterministic skeleton + LLM islands pattern"
+      },
+      {
+        "source": "interlearn@interagency-marketplace",
+        "description": "Cross-repo institutional knowledge index"
+      },
+      {
+        "source": "intercache@interagency-marketplace",
+        "description": "Cross-session semantic cache (MCP)"
+      },
+      {
+        "source": "interchart@interagency-marketplace",
+        "description": "Interactive ecosystem diagram generator"
+      }
+    ],
     "peers": [
       {
         "source": "superpowers@superpowers-marketplace",
@@ -114,10 +190,6 @@
         "bridge_skill": "skills/interop-with-gsd"
       }
     ],
-    "core": {
-      "source": "clavain@interagency-marketplace",
-      "description": "The core Clavain multi-agent rig"
-    },
     "profiles": {
       "default": [
         "interphase@interagency-marketplace",
@@ -192,78 +264,6 @@
         "tuivision@interagency-marketplace"
       ]
     },
-    "infrastructure": [
-      {
-        "source": "gopls-lsp@claude-plugins-official",
-        "description": "Go language server"
-      },
-      {
-        "source": "pyright-lsp@claude-plugins-official",
-        "description": "Python language server"
-      },
-      {
-        "source": "typescript-lsp@claude-plugins-official",
-        "description": "TypeScript language server"
-      },
-      {
-        "source": "rust-analyzer-lsp@claude-plugins-official",
-        "description": "Rust language server"
-      }
-    ],
-    "optional": [
-      {
-        "source": "interfluence@interagency-marketplace",
-        "description": "Voice profile and style adaptation"
-      },
-      {
-        "source": "interject@interagency-marketplace",
-        "description": "Ambient discovery and research engine (MCP)"
-      },
-      {
-        "source": "interstat@interagency-marketplace",
-        "description": "Token efficiency benchmarking"
-      },
-      {
-        "source": "interkasten@interagency-marketplace",
-        "description": "Notion sync and documentation"
-      },
-      {
-        "source": "interlens@interagency-marketplace",
-        "description": "Cognitive augmentation lenses (MCP)"
-      },
-      {
-        "source": "intersearch@interagency-marketplace",
-        "description": "Shared embedding and Exa search library"
-      },
-      {
-        "source": "interpub@interagency-marketplace",
-        "description": "Plugin publishing automation"
-      },
-      {
-        "source": "tuivision@interagency-marketplace",
-        "description": "TUI automation and visual testing (MCP)"
-      },
-      {
-        "source": "intermux@interagency-marketplace",
-        "description": "Agent activity visibility and tmux monitoring (MCP)"
-      },
-      {
-        "source": "interleave@interagency-marketplace",
-        "description": "Deterministic skeleton + LLM islands pattern"
-      },
-      {
-        "source": "interlearn@interagency-marketplace",
-        "description": "Cross-repo institutional knowledge index"
-      },
-      {
-        "source": "intercache@interagency-marketplace",
-        "description": "Cross-session semantic cache (MCP)"
-      },
-      {
-        "source": "interchart@interagency-marketplace",
-        "description": "Interactive ecosystem diagram generator"
-      }
-    ],
     "recommended": [
       {
         "source": "interdoc@interagency-marketplace",
@@ -448,6 +448,10 @@
       {
         "source": "interlab@interagency-marketplace",
         "description": "Autonomous experiment loop with mutation provenance tracking — init, run, log experiments with JSONL persistence, git isolation, SQLite mutation store, and ic events bridge."
+      },
+      {
+        "source": "intercut@interagency-marketplace",
+        "description": "Friction journal: papercut CLI + /papercuts review — log small friction in the moment, cluster it later"
       }
     ],
     "required": [
@@ -468,7 +472,7 @@
       "",
       "Auto-proceed authz (v1.5): run scripts/authz-init.sh from each project",
       "root to enable signed audit records for bd close / git push / ic publish.",
-      "  bash <(claude plugin-path clavain)/scripts/authz-init.sh",
+      "  bash \u003c(claude plugin-path clavain)/scripts/authz-init.sh",
       "See README.md § \"Signing audit records (v1.5)\" for the full quickstart."
     ]
   },
