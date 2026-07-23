@@ -1,7 +1,7 @@
 {
   "name": "clavain",
-  "version": "0.6.283",
-  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, monitors its own docs, and surfaces conservative update drift. Orchestrates Claude, Codex, and Oracle through 6 agents, 57 commands, 20 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
+  "version": "0.6.284",
+  "description": "Self-improving agent rig: codifies product and engineering discipline into composable workflows from brainstorm to ship. Compounds knowledge, generates domain agents, monitors its own docs, and surfaces conservative update drift. Orchestrates Claude, Codex, and Oracle through 6 agents, 57 commands, 26 skills, 0 MCP servers. Factory substrate: CXDB turn DAG, scenario bank with satisfaction scoring, evidence pipeline, agent capability policies. Companions: interspect, interphase, interline, interflux, interpath, interwatch, interslack, interform, intercraft, interdev, interpeer, intertest.",
   "license": "MIT",
   "keywords": [
     "multi-agent",
@@ -27,6 +27,11 @@
     "skill": "using-clavain"
   },
   "hooks": [
+    {
+      "event": "UserPromptSubmit",
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/context-gateway.sh",
+      "timeout": 30
+    },
     {
       "event": "SessionStart",
       "matcher": "startup|resume",

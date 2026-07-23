@@ -12,7 +12,7 @@ setup() {
 
 @test "hooks.json: all hook types are valid event types" {
     # Extract all hook type keys and check each one
-    local valid="PreToolUse PostToolUse Notification SessionStart SessionEnd Stop"
+    local valid="PreToolUse PostToolUse Notification SessionStart SessionEnd Stop UserPromptSubmit"
     local keys
     keys=$(jq -r '.hooks | keys[]' "$HOOKS_DIR/hooks.json")
     for key in $keys; do
@@ -28,6 +28,21 @@ setup() {
             return 1
         fi
     done
+}
+
+@test "hooks.json: UserPromptSubmit has one bounded context gateway hook" {
+    local hooks
+    hooks="$(jq -c '[
+      .hooks.UserPromptSubmit[]?.hooks[]?
+      | select((.command // "") | contains("context-gateway.sh"))
+    ]' "$HOOKS_DIR/hooks.json")"
+
+    [ "$(jq 'length' <<<"$hooks")" -eq 1 ]
+    jq -e '.[0]
+      | .type == "command"
+      and (.timeout > 0 and .timeout <= 30)
+      and (.command | contains("${CLAUDE_PLUGIN_ROOT}/hooks/context-gateway.sh"))
+    ' <<<"$hooks" >/dev/null
 }
 
 @test "hooks.json: matchers are valid regex" {

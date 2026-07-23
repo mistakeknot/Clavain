@@ -293,6 +293,11 @@ $HOOKS_BLOCK_START
 # Kimi hook entries allow exactly: event, matcher, command, timeout (1-600s).
 
 [[hooks]]
+event = "UserPromptSubmit"
+command = $(toml_literal "env CLAVAIN_CONTEXT_GATEWAY_HARNESS=kimi $bridge $hooks_dir/context-gateway.sh")
+timeout = 30
+
+[[hooks]]
 event = "SessionStart"
 matcher = "startup|resume"
 command = $(toml_literal "$bridge $hooks_dir/session-start.sh")
@@ -547,6 +552,10 @@ doctor() {
   local agents_block_ok="false"
   local bridge_ok="false"
   local manifest_generator_present="false"
+  local context_gateway_hook_present="false"
+  local context_gateway_tldrs_executable="false"
+  local context_gateway_packet_schema="false"
+  local context_gateway_receipt_directory="false"
 
   local skill_dir_count=0
   local mcp_server_count=0
@@ -626,9 +635,29 @@ doctor() {
     && grep -Fq "$HOOKS_BLOCK_START" "$KIMI_CONFIG_FILE" \
     && grep -Fq "$HOOKS_BLOCK_END" "$KIMI_CONFIG_FILE"; then
     hooks_block_ok="true"
+    if grep -Fq 'event = "UserPromptSubmit"' "$KIMI_CONFIG_FILE" \
+      && grep -Fq "CLAVAIN_CONTEXT_GATEWAY_HARNESS=kimi" "$KIMI_CONFIG_FILE" \
+      && grep -Fq "context-gateway.sh" "$KIMI_CONFIG_FILE"; then
+      context_gateway_hook_present="true"
+    else
+      issues+=("managed Kimi UserPromptSubmit context gateway hook missing: $KIMI_CONFIG_FILE")
+      status=1
+    fi
   elif clavain_plugin_enabled; then
     # Plugin route: kimi.plugin.json owns the hooks; config block intentionally absent.
     hooks_block_ok="true"
+    if [[ -f "$SOURCE_DIR/kimi.plugin.json" ]] \
+      && jq -e '
+        [.hooks[]?
+         | select(.event == "UserPromptSubmit")
+         | select((.command // "") | contains("context-gateway.sh"))]
+        | length == 1
+      ' "$SOURCE_DIR/kimi.plugin.json" >/dev/null 2>&1; then
+      context_gateway_hook_present="true"
+    else
+      issues+=("Kimi plugin UserPromptSubmit context gateway hook missing: $SOURCE_DIR/kimi.plugin.json")
+      status=1
+    fi
   else
     issues+=("managed hooks block missing or malformed: $KIMI_CONFIG_FILE")
     status=1
@@ -652,6 +681,33 @@ doctor() {
 
   if [[ -f "$MANIFEST_GENERATOR" ]]; then
     manifest_generator_present="true"
+  fi
+
+  local gateway_doctor="$SOURCE_DIR/scripts/context-gateway.py"
+  local gateway_report=""
+  if [[ -x "$gateway_doctor" ]]; then
+    gateway_report="$("$gateway_doctor" doctor --project "$SOURCE_DIR" --json 2>/dev/null)" || true
+    if [[ -n "$gateway_report" ]] && jq -e '.checks.tldrs_executable.ok == true' <<<"$gateway_report" >/dev/null 2>&1; then
+      context_gateway_tldrs_executable="true"
+    else
+      issues+=("context gateway cannot resolve tldrs executable")
+      status=1
+    fi
+    if [[ -n "$gateway_report" ]] && jq -e '.checks.packet_schema.ok == true' <<<"$gateway_report" >/dev/null 2>&1; then
+      context_gateway_packet_schema="true"
+    else
+      issues+=("context gateway tldrs packet schema check failed")
+      status=1
+    fi
+    if [[ -n "$gateway_report" ]] && jq -e '.checks.receipt_directory.ok == true' <<<"$gateway_report" >/dev/null 2>&1; then
+      context_gateway_receipt_directory="true"
+    else
+      issues+=("context gateway receipt directory is not writable")
+      status=1
+    fi
+  else
+    issues+=("context gateway missing or not executable: $gateway_doctor")
+    status=1
   fi
 
   if [[ -d "$skills_target" ]]; then
@@ -679,7 +735,11 @@ doctor() {
     printf '    "managed_hooks_block_present":%s,\n' "$hooks_block_ok"
     printf '    "managed_agents_block_present":%s,\n' "$agents_block_ok"
     printf '    "hook_bridge_executable":%s,\n' "$bridge_ok"
-    printf '    "manifest_generator_present":%s\n' "$manifest_generator_present"
+    printf '    "manifest_generator_present":%s,\n' "$manifest_generator_present"
+    printf '    "context_gateway_hook_present":%s,\n' "$context_gateway_hook_present"
+    printf '    "context_gateway_tldrs_executable":%s,\n' "$context_gateway_tldrs_executable"
+    printf '    "context_gateway_packet_schema":%s,\n' "$context_gateway_packet_schema"
+    printf '    "context_gateway_receipt_directory":%s\n' "$context_gateway_receipt_directory"
     printf '  },\n'
     printf '  "counts":{\n'
     printf '    "skill_dirs":%s,\n' "$skill_dir_count"

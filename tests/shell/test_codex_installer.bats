@@ -17,7 +17,7 @@ setup() {
     CODEX_HOME="$HOME/.codex"
     LOCAL_BIN_DIR="$HOME/.local/bin"
 
-    mkdir -p "$SOURCE_DIR/scripts" "$SOURCE_DIR/skills/core" "$SOURCE_DIR/commands" "$SOURCE_DIR/bin" "$SOURCE_DIR/.claude-plugin"
+    mkdir -p "$SOURCE_DIR/scripts" "$SOURCE_DIR/hooks" "$SOURCE_DIR/skills/core" "$SOURCE_DIR/commands" "$SOURCE_DIR/bin" "$SOURCE_DIR/.claude-plugin"
     mkdir -p "$AGENTS_SKILLS_DIR" "$CODEX_HOME" "$LOCAL_BIN_DIR"
 
     _write_stub_clavain_source
@@ -65,6 +65,21 @@ EOF
 exit 0
 EOF
     chmod +x "$SOURCE_DIR/scripts/remontoire-attention.sh"
+
+    cat > "$SOURCE_DIR/scripts/context-gateway.py" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "doctor" ]]; then
+  printf '%s\n' '{"ok":true,"checks":{"tldrs_executable":{"ok":true},"packet_schema":{"ok":true},"receipt_directory":{"ok":true}}}'
+fi
+exit 0
+EOF
+    chmod +x "$SOURCE_DIR/scripts/context-gateway.py"
+
+    cat > "$SOURCE_DIR/hooks/context-gateway.sh" <<'EOF'
+#!/usr/bin/env bash
+exec "$(dirname "$0")/../scripts/context-gateway.py" hook --harness "${1:-claude}"
+EOF
+    chmod +x "$SOURCE_DIR/hooks/context-gateway.sh"
 
     cat > "$SOURCE_DIR/bin/clavain-cli" <<'EOF'
 #!/usr/bin/env bash
@@ -121,7 +136,7 @@ EOF
     [ ! -e "$LOCAL_BIN_DIR/clavain-cli" ]
 }
 
-@test "install merges one bounded Codex SessionStart hook and doctor validates it" {
+@test "install merges bounded SessionStart and UserPromptSubmit hooks and doctor validates them" {
     run "$SCRIPT_UNDER_TEST" install \
         --source "$SOURCE_DIR" \
         --codex-home "$CODEX_HOME"
@@ -137,6 +152,15 @@ EOF
         and ($managed[0].command | contains("CLAVAIN_AGENT_SURFACE=codex"))
         and ($managed[0].command | contains($source))
     ' "$CODEX_HOME/hooks.json" >/dev/null
+    jq -e --arg source "$SOURCE_DIR/hooks/context-gateway.sh" '
+      [.hooks.UserPromptSubmit[]?.hooks[]?
+       | select((.command // "") | contains("context-gateway.sh"))] as $managed
+      | ($managed | length) == 1
+        and ($managed[0].type == "command")
+        and ($managed[0].timeout > 0 and $managed[0].timeout <= 30)
+        and ($managed[0].command | contains($source))
+        and ($managed[0].command | endswith(" codex"))
+    ' "$CODEX_HOME/hooks.json" >/dev/null
 
     run "$SCRIPT_UNDER_TEST" doctor \
         --source "$SOURCE_DIR" \
@@ -149,6 +173,11 @@ EOF
       and .checks.codex_hooks_file_present == true
       and .checks.remontoire_session_start_hook_present == true
       and .checks.remontoire_session_start_hook_match == true
+      and .checks.context_gateway_user_prompt_hook_present == true
+      and .checks.context_gateway_user_prompt_hook_match == true
+      and .checks.context_gateway_tldrs_executable == true
+      and .checks.context_gateway_packet_schema == true
+      and .checks.context_gateway_receipt_directory == true
       and .paths.hooks_file == $hooks
     ' >/dev/null
 }
@@ -181,6 +210,7 @@ EOF
       and ([.hooks.SessionStart[]?.hooks[]? | select(.command == "echo keep-session")] | length) == 1
       and ([.hooks.Notification[]?.hooks[]? | select(.command == "echo keep-notification")] | length) == 1
       and ([.hooks.SessionStart[]?.hooks[]? | select((.command // "") | contains("remontoire-attention.sh"))] | length) == 1
+      and ([.hooks.UserPromptSubmit[]?.hooks[]? | select((.command // "") | contains("context-gateway.sh"))] | length) == 1
     ' "$CODEX_HOME/hooks.json" >/dev/null
 }
 
@@ -202,5 +232,6 @@ EOF
     jq -e '
       ([.hooks.SessionStart[]?.hooks[]? | select(.command == "echo keep")] | length) == 1
       and ([.hooks.SessionStart[]?.hooks[]? | select((.command // "") | contains("remontoire-attention.sh"))] | length) == 0
+      and ([.hooks.UserPromptSubmit[]?.hooks[]? | select((.command // "") | contains("context-gateway.sh"))] | length) == 0
     ' "$CODEX_HOME/hooks.json" >/dev/null
 }

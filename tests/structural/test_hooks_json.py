@@ -10,10 +10,18 @@ VALID_EVENT_TYPES = {
     "SessionStart",
     "SessionEnd",
     "Stop",
+    "UserPromptSubmit",
 }
 
 # Exact event types Clavain should register
-EXPECTED_EVENT_TYPES = {"SessionStart", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"}
+EXPECTED_EVENT_TYPES = {
+    "SessionStart",
+    "PreToolUse",
+    "PostToolUse",
+    "Stop",
+    "SessionEnd",
+    "UserPromptSubmit",
+}
 
 
 def test_hooks_json_valid(hooks_json):
@@ -84,6 +92,18 @@ def test_hooks_json_matchers_valid(hooks_json):
                     raise AssertionError(
                         f"Invalid regex matcher {matcher!r} in {event_type}: {e}"
                     )
+
+
+def test_user_prompt_submit_has_one_bounded_context_gateway(hooks_json):
+    hooks = [
+        hook
+        for group in hooks_json["hooks"]["UserPromptSubmit"]
+        for hook in group.get("hooks", [])
+        if "context-gateway.sh" in hook.get("command", "")
+    ]
+    assert len(hooks) == 1
+    assert hooks[0]["type"] == "command"
+    assert 0 < hooks[0]["timeout"] <= 30
 
 
 def test_session_start_interserve_injection(project_root):

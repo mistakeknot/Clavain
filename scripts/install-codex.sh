@@ -851,13 +851,23 @@ codex_remontoire_hook_command() {
   printf 'CLAVAIN_AGENT_SURFACE=codex bash %s' "$quoted_hook_script"
 }
 
+codex_context_gateway_hook_command() {
+  local hook_script="$SOURCE_DIR/hooks/context-gateway.sh"
+  local quoted_hook_script
+  printf -v quoted_hook_script '%q' "$hook_script"
+  printf 'bash %s codex' "$quoted_hook_script"
+}
+
 validate_codex_hooks_file() {
   local file="$1"
   jq -e '
     type == "object"
     and ((.hooks // {}) | type) == "object"
     and ((.hooks.SessionStart // []) | type) == "array"
+    and ((.hooks.UserPromptSubmit // []) | type) == "array"
     and all((.hooks.SessionStart // [])[];
+      type == "object" and ((.hooks // []) | type) == "array")
+    and all((.hooks.UserPromptSubmit // [])[];
       type == "object" and ((.hooks // []) | type) == "array")
   ' "$file" >/dev/null 2>&1
 }
@@ -871,6 +881,11 @@ sync_codex_remontoire_hook() {
   local hook_script="$SOURCE_DIR/scripts/remontoire-attention.sh"
   if [[ ! -x "$hook_script" ]]; then
     echo "Missing executable Remontoire attention hook: $hook_script" >&2
+    exit 1
+  fi
+  local context_gateway_hook="$SOURCE_DIR/hooks/context-gateway.sh"
+  if [[ ! -x "$context_gateway_hook" ]]; then
+    echo "Missing executable context gateway hook: $context_gateway_hook" >&2
     exit 1
   fi
 
@@ -887,10 +902,11 @@ sync_codex_remontoire_hook() {
     printf '{"hooks":{}}\n' > "$source_file"
   fi
 
-  local hook_command candidate
+  local hook_command context_gateway_command candidate
   hook_command="$(codex_remontoire_hook_command)"
+  context_gateway_command="$(codex_context_gateway_hook_command)"
   candidate="$(mktemp)"
-  jq --arg command "$hook_command" '
+  jq --arg command "$hook_command" --arg context_command "$context_gateway_command" '
     def without_remontoire:
       . as $group
       | .hooks = [
@@ -910,19 +926,34 @@ sync_codex_remontoire_hook() {
             }]
           }]
       )
+    | .hooks.UserPromptSubmit = (
+        [(.hooks.UserPromptSubmit // [])[]
+          | .hooks = [
+              (.hooks // [])[]
+              | select(((.command // "") | contains("context-gateway.sh")) | not)
+            ]
+          | select((.hooks | length) > 0)]
+        + [{
+            hooks: [{
+              type: "command",
+              command: $context_command,
+              timeout: 30
+            }]
+          }]
+      )
   ' "$source_file" > "$candidate"
   rm -f "$source_file"
 
   if [[ -f "$CODEX_HOOKS_FILE" ]] && cmp -s "$CODEX_HOOKS_FILE" "$candidate"; then
     rm -f "$candidate"
-    echo "Managed Codex Remontoire hook already up to date: $CODEX_HOOKS_FILE"
+    echo "Managed Codex hooks already up to date: $CODEX_HOOKS_FILE"
     return 0
   fi
 
   backup_copy_file "$CODEX_HOOKS_FILE"
   mkdir -p "$(dirname "$CODEX_HOOKS_FILE")"
   mv -f "$candidate" "$CODEX_HOOKS_FILE"
-  echo "Updated managed Codex Remontoire hook: $CODEX_HOOKS_FILE"
+  echo "Updated managed Codex hooks: $CODEX_HOOKS_FILE"
   echo "Codex will request its normal one-time trust decision for the hook at next launch."
 }
 
@@ -947,6 +978,14 @@ remove_codex_remontoire_hook() {
       | without_remontoire
       | select((.hooks | length) > 0)
     ]
+    | .hooks.UserPromptSubmit = [
+      (.hooks.UserPromptSubmit // [])[]
+      | .hooks = [
+          (.hooks // [])[]
+          | select(((.command // "") | contains("context-gateway.sh")) | not)
+        ]
+      | select((.hooks | length) > 0)
+    ]
   ' "$CODEX_HOOKS_FILE" > "$candidate"
 
   if cmp -s "$CODEX_HOOKS_FILE" "$candidate"; then
@@ -956,7 +995,7 @@ remove_codex_remontoire_hook() {
 
   backup_copy_file "$CODEX_HOOKS_FILE"
   mv -f "$candidate" "$CODEX_HOOKS_FILE"
-  echo "Removed managed Codex Remontoire hook: $CODEX_HOOKS_FILE"
+  echo "Removed managed Codex hooks: $CODEX_HOOKS_FILE"
 }
 
 cleanup_legacy_mcp_server_tables() {
@@ -1079,6 +1118,11 @@ doctor() {
   local codex_hooks_file_ok="false"
   local remontoire_hook_present="false"
   local remontoire_hook_match="false"
+  local context_gateway_user_prompt_hook_present="false"
+  local context_gateway_user_prompt_hook_match="false"
+  local context_gateway_tldrs_executable="false"
+  local context_gateway_packet_schema="false"
+  local context_gateway_receipt_directory="false"
   local conversion_report_ok="false"
 
   local skill_dir_count=0
@@ -1280,8 +1324,65 @@ doctor() {
       issues+=("managed Remontoire SessionStart hook differs from source or is duplicated: $CODEX_HOOKS_FILE")
       status=1
     fi
+
+    local expected_context_command context_hook_count matching_context_count
+    expected_context_command="$(codex_context_gateway_hook_command)"
+    context_hook_count="$(jq -r '
+      [.hooks.UserPromptSubmit[]?.hooks[]?
+       | select((.command // "") | contains("context-gateway.sh"))]
+      | length
+    ' "$CODEX_HOOKS_FILE")"
+    matching_context_count="$(jq -r --arg command "$expected_context_command" '
+      [.hooks.UserPromptSubmit[]?.hooks[]?
+       | select(
+           .type == "command"
+           and .command == $command
+           and ((.timeout | type) == "number")
+           and (.timeout > 0 and .timeout <= 30)
+         )]
+      | length
+    ' "$CODEX_HOOKS_FILE")"
+    if [[ "$context_hook_count" -gt 0 ]]; then
+      context_gateway_user_prompt_hook_present="true"
+    else
+      issues+=("managed context gateway UserPromptSubmit hook missing: $CODEX_HOOKS_FILE")
+      status=1
+    fi
+    if [[ "$context_hook_count" -eq 1 && "$matching_context_count" -eq 1 ]]; then
+      context_gateway_user_prompt_hook_match="true"
+    else
+      issues+=("managed context gateway UserPromptSubmit hook differs from source or is duplicated: $CODEX_HOOKS_FILE")
+      status=1
+    fi
   else
     issues+=("Codex hooks file missing or malformed: $CODEX_HOOKS_FILE")
+    status=1
+  fi
+
+  local gateway_doctor="$SOURCE_DIR/scripts/context-gateway.py"
+  local gateway_report=""
+  if [[ -x "$gateway_doctor" ]]; then
+    gateway_report="$("$gateway_doctor" doctor --project "$SOURCE_DIR" --json 2>/dev/null)" || true
+    if [[ -n "$gateway_report" ]] && jq -e '.checks.tldrs_executable.ok == true' <<<"$gateway_report" >/dev/null 2>&1; then
+      context_gateway_tldrs_executable="true"
+    else
+      issues+=("context gateway cannot resolve tldrs executable")
+      status=1
+    fi
+    if [[ -n "$gateway_report" ]] && jq -e '.checks.packet_schema.ok == true' <<<"$gateway_report" >/dev/null 2>&1; then
+      context_gateway_packet_schema="true"
+    else
+      issues+=("context gateway tldrs packet schema check failed")
+      status=1
+    fi
+    if [[ -n "$gateway_report" ]] && jq -e '.checks.receipt_directory.ok == true' <<<"$gateway_report" >/dev/null 2>&1; then
+      context_gateway_receipt_directory="true"
+    else
+      issues+=("context gateway receipt directory is not writable")
+      status=1
+    fi
+  else
+    issues+=("context gateway missing or not executable: $gateway_doctor")
     status=1
   fi
 
@@ -1331,6 +1432,11 @@ doctor() {
     printf '    "codex_hooks_file_present":%s,\n' "$codex_hooks_file_ok"
     printf '    "remontoire_session_start_hook_present":%s,\n' "$remontoire_hook_present"
     printf '    "remontoire_session_start_hook_match":%s,\n' "$remontoire_hook_match"
+    printf '    "context_gateway_user_prompt_hook_present":%s,\n' "$context_gateway_user_prompt_hook_present"
+    printf '    "context_gateway_user_prompt_hook_match":%s,\n' "$context_gateway_user_prompt_hook_match"
+    printf '    "context_gateway_tldrs_executable":%s,\n' "$context_gateway_tldrs_executable"
+    printf '    "context_gateway_packet_schema":%s,\n' "$context_gateway_packet_schema"
+    printf '    "context_gateway_receipt_directory":%s,\n' "$context_gateway_receipt_directory"
     printf '    "conversion_report_present":%s\n' "$conversion_report_ok"
     printf '  },\n'
     printf '  "counts":{\n'
@@ -1372,6 +1478,8 @@ doctor() {
   echo "commands in source:     $command_count"
   echo "prompt wrappers:        $present_wrappers/$expected_wrappers present; $missing_wrappers missing; $stale_wrappers stale; $wrapper_count total"
   echo "Remontoire hook:        present=$remontoire_hook_present match=$remontoire_hook_match"
+  echo "Context gateway hook:   present=$context_gateway_user_prompt_hook_present match=$context_gateway_user_prompt_hook_match"
+  echo "Context gateway doctor: tldrs=$context_gateway_tldrs_executable schema=$context_gateway_packet_schema receipts=$context_gateway_receipt_directory"
   echo "conversion unresolved:  $conversion_unresolved"
   echo
 
