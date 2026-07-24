@@ -186,15 +186,23 @@ routing_resolve_executor_order() {
   local class="$1"
   local cfg; cfg="$(_routing_find_config)" || return 0
   [[ -n "$cfg" && -f "$cfg" ]] || return 0
-  python3 - "$cfg" "$class" <<'PY' 2>/dev/null || true
+  python3 - "$cfg" "$class" <<'PY' || true
 import sys, yaml
 cfg, cls = sys.argv[1], sys.argv[2]
 d = yaml.safe_load(open(cfg)) or {}
 e = d.get("executor_routing") or {}
-if e.get("mode", "off") == "off":
+mode = e.get("mode", "off")
+if mode == "off":
     sys.exit(0)
-order = (e.get("classes") or {}).get(cls) or e.get("default") or []
-print(" ".join(order))
+classes = e.get("classes") or {}
+default = e.get("default") or []
+would = classes.get(cls) or default
+if mode == "shadow":
+    # log what WOULD route, then return the safe (default) order — route nothing new
+    sys.stderr.write(f"[executor-shadow] class={cls} would-route={' '.join(would)} routed={' '.join(default)}\n")
+    print(" ".join(default))
+else:  # enforce
+    print(" ".join(would))
 PY
 }
 
