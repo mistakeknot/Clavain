@@ -25,7 +25,19 @@
 # Unmapped class -> `default` (safe: paid/stronger). See
 # docs/brainstorms/2026-07-23-executor-routing-doctrine-port.md.
 executor_routing:
-  mode: enforce            # off | shadow | enforce
+  mode: shadow             # off | shadow | enforce  (phase-1 adoption: shadow)
+  # category -> parity class. Source = delegation.categories; class = what the
+  # parity eval verdicts on. implementation spans mechanical+reasoning -> safe
+  # (reasoning) until sub-classified. Unmapped category -> reasoning (safe).
+  category_class_map:
+    test-generation: tagging
+    doc-update:      tagging
+    exploration:     reasoning
+    implementation:  reasoning
+    review:          reasoning
+    architecture:    reasoning
+    brainstorm:      reasoning
+    interactive:     reasoning
   classes:
     tagging:   [kimi, codex]    # FLUXrig-aeu: Kimi holds parity (100% cov, 0 drops, faster)
     reasoning: [codex]          # FLUXrig-92u: Luna-only (Kimi 7.7x slower, worse cov+drops)
