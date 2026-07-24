@@ -163,6 +163,21 @@ _routing_find_config() {
   return 1
 }
 
+# Map a delegation category to a parity class via executor_routing.category_class_map.
+# Unmapped/empty category -> "reasoning" (the safe class). Prints the class.
+routing_resolve_class_for_category() {
+  local category="$1"
+  local cfg; cfg="$(_routing_find_config)" || { echo reasoning; return 0; }
+  [[ -n "$cfg" && -f "$cfg" ]] || { echo reasoning; return 0; }
+  python3 - "$cfg" "$category" <<'PY' 2>/dev/null || echo reasoning
+import sys, yaml
+cfg, cat = sys.argv[1], sys.argv[2]
+d = yaml.safe_load(open(cfg)) or {}
+m = ((d.get("executor_routing") or {}).get("category_class_map") or {})
+print(m.get(cat, "reasoning"))
+PY
+}
+
 # Resolve the executor backend order for a task class from
 # executor_routing in routing.yaml. Prints space-separated backends
 # (e.g. "kimi codex"); empty if the section is off/absent (caller uses
