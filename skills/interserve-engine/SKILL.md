@@ -42,6 +42,22 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 [ -z "$DISPATCH" ] && DISPATCH=$(find ~/projects/Clavain -name dispatch.sh -path '*/scripts/*' 2>/dev/null | head -1)
 ```
 
+### Executor class (--class)
+
+After classifying the task (Step 1), pass `--class` so the shipped
+executor-routing layer can log/route (phase-1 SHADOW routes nothing to kimi —
+it only records the would-route decision for the phase-2 parity evals). Resolve
+the class from the task category:
+
+    CLASS=$(bash "$(dirname "$DISPATCH")/lib-routing.sh" >/dev/null 2>&1; \
+            source "$(dirname "$DISPATCH")/lib-routing.sh"; \
+            routing_resolve_class_for_category "<category>")
+
+Then add `--class "$CLASS"` to the dispatch invocation. `<category>` is the
+delegation category (implementation | exploration | review | test-generation |
+doc-update | architecture). Unmapped/unsure -> the resolver returns `reasoning`
+(safe).
+
 ## Model Tiers
 
 `--tier fast|deep` resolves from `config/routing.yaml` (dispatch section):
@@ -126,11 +142,16 @@ Save to `/tmp/codex-task-$(date +%s).md`. **CRITICAL — Scope test commands**: 
 ### Step 2: Dispatch
 
 ```bash
+CATEGORY=implementation  # result of Step 1 classification
+CLASS=$(bash "$(dirname "$DISPATCH")/lib-routing.sh" >/dev/null 2>&1; \
+        source "$(dirname "$DISPATCH")/lib-routing.sh"; \
+        routing_resolve_class_for_category "$CATEGORY")
 CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" \
   --prompt-file "$TASK_FILE" \
   -C "$PROJECT_DIR" \
   -o "/tmp/codex-result-$(date +%s).md" \
   -s workspace-write \
+  --class "$CLASS" \
   --tier deep
 ```
 Use `timeout: 600000` on the Bash tool call.
@@ -178,11 +199,16 @@ One prompt file per task (same format as megaprompt Step 1).
 Launch all Bash calls **in a single message**. Set `timeout: 600000` on each.
 
 ```bash
+CATEGORY=implementation  # result of Step 1 classification for this task
+CLASS=$(bash "$(dirname "$DISPATCH")/lib-routing.sh" >/dev/null 2>&1; \
+        source "$(dirname "$DISPATCH")/lib-routing.sh"; \
+        routing_resolve_class_for_category "$CATEGORY")
 CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" \
   --prompt-file /tmp/task1.md \
   -C "$PROJECT_DIR" \
   --name fix-auth -o /tmp/codex-{name}.md \
   -s workspace-write \
+  --class "$CLASS" \
   --tier deep
 ```
 
