@@ -2,6 +2,7 @@
 name: clavain-doctor
 description: Quick health check — verifies MCP servers, external tools, beads, and plugin configuration without making changes
 argument-hint: "[optional: --scope=clavain|interpath|interwatch|interlock|notion|all, --check-only]"
+disable-model-invocation: true
 ---
 
 # Doctor

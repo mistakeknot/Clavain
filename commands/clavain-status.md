@@ -2,6 +2,7 @@
 name: clavain-status
 description: Unified status view across Clavain, artifact generation, doc drift, and coordination
 argument-hint: "[all|clavain|interpath|interwatch|interlock]"
+disable-model-invocation: true
 ---
 
 # Unified Status

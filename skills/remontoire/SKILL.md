@@ -1,6 +1,6 @@
 ---
 name: remontoire
-description: Use when operating the Remontoire portfolio agency - inspect status, run shadow or proposal cycles, make an explicit approval decision, resume approved work, or verify receipts
+description: Operate the Remontoire portfolio agency — status, shadow/proposal cycles, approval decisions, resuming approved work, verifying receipts.
 ---
 
 # Remontoire Operator

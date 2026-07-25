@@ -2,6 +2,7 @@
 name: sprint-dag
 description: Visualize sprint execution as a DAG — shows phases, dispatches, and artifacts
 argument-hint: "[sprint bead ID or empty for active sprint]"
+disable-model-invocation: true
 ---
 
 # Sprint DAG

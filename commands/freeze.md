@@ -2,6 +2,7 @@
 name: freeze
 description: Restrict file edits to declared paths — scope-lock for parallel-session safety
 argument-hint: "<path> [path...]"
+disable-model-invocation: true
 ---
 
 # Freeze — Scope Lock

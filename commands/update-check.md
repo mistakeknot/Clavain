@@ -2,6 +2,7 @@
 name: update-check
 description: Conservative update check — reports available Sylveste/Clavain/Codex updates without changing anything
 argument-hint: "[optional: --full --refresh]"
+disable-model-invocation: true
 ---
 
 # Update Check

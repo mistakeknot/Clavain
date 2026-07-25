@@ -1,6 +1,6 @@
 ---
 name: data-migration-expert
-description: Use when PRs involve data migrations, backfills, or production data transformations — ID mappings, column renames, enum conversions, or schema changes. Validates migrations against production reality.
+description: Validate data migrations, backfills, ID mappings, column renames, enum conversions, and schema changes against production reality.
 ---
 
 # Data Migration Expert

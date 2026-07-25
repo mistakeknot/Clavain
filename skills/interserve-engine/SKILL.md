@@ -1,6 +1,6 @@
 ---
 name: interserve-engine
-description: Invoked from /clavain:interserve — dispatches tasks to Codex CLI agents (megaprompt or parallel), with debate triggers and Oracle escalation. Internal; users invoke via slash command.
+description: Internal engine for /clavain:interserve — dispatches tasks to Codex CLI agents with debate triggers and Oracle escalation.
 version: 0.5.0
 user-invocable: false
 ---

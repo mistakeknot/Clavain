@@ -2,6 +2,7 @@
 name: distill
 description: Synthesize accumulated docs into categorized solutions and generate missing SKILL-compact.md files
 argument-hint: "[--mode interactive|batch] [--scope compound|reflect|research|skills|all]"
+disable-model-invocation: true
 ---
 
 # Knowledge Distillation
