@@ -1,6 +1,7 @@
 ---
 name: remontoire
 description: Operate the Remontoire portfolio agency — status, shadow/proposal cycles, approval decisions, resuming approved work, verifying receipts.
+disable-model-invocation: true
 ---
 
 # Remontoire Operator

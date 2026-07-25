@@ -2,6 +2,7 @@
 name: setup
 description: Bootstrap Clavain for the active runtime (Codex or Claude Code) and verify health
 argument-hint: "[optional: --check-only to verify without making changes, --scope=clavain|interlock|all]"
+disable-model-invocation: true
 ---
 
 # Clavain Modpack Setup

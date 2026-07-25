@@ -2,6 +2,7 @@
 name: peers
 description: Read-only viewer for detected peer agent rigs (superpowers, GSD, compound-engineering). Lists detection state and recommended bridge skills. Never makes changes.
 argument-hint: "[no arguments]"
+disable-model-invocation: true
 ---
 
 # Clavain Peer Status

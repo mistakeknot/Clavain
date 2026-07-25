@@ -1,6 +1,7 @@
 ---
 name: file-todos
 description: Manage the file-based todo system in todos/ — create, status, dependencies, triage, and code-review integration.
+disable-model-invocation: true
 ---
 
 <!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same file naming, YAML schema, and workflow instructions. -->

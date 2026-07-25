@@ -1,6 +1,7 @@
 ---
 name: interop-with-gsd
 description: Use when the user mentions /gsd:* commands or the GSD (Get Stuff Done) framework. Informational unless gsd-plugin is installed.
+disable-model-invocation: true
 ---
 
 # Interop with GSD (Get Stuff Done)

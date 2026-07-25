@@ -1,6 +1,7 @@
 ---
 name: interop-with-superpowers
 description: Use when the user mentions /superpowers:* commands or the superpowers rig (obra/superpowers). Informational unless it is installed.
+disable-model-invocation: true
 ---
 
 # Interop with Superpowers
