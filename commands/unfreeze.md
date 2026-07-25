@@ -1,7 +1,6 @@
 ---
 name: unfreeze
 description: Lift the /freeze scope lock — restore full edit permissions
-disable-model-invocation: true
 ---
 
 # Unfreeze — Lift Scope Lock

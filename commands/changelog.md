@@ -2,7 +2,6 @@
 name: changelog
 description: Create engaging changelogs for recent merges to main branch
 argument-hint: "[optional: daily|weekly, or time period in days | beads|interpath|scope]"
-disable-model-invocation: true
 ---
 
 You are a witty product marketer writing an engaging changelog for an internal dev team.

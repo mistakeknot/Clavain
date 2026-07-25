@@ -2,7 +2,6 @@
 name: describe-pr
 description: Generate PR title and description from current branch commits
 argument-hint: "[optional: base branch, default main]"
-disable-model-invocation: true
 ---
 
 # /describe-pr

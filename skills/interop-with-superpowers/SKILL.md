@@ -1,6 +1,6 @@
 ---
 name: interop-with-superpowers
-description: Use when the user mentions /superpowers:* commands or the superpowers rig (obra/superpowers). Informational unless it is installed.
+description: If superpowers is not installed, this skill is informational only. Use when the user mentions /superpowers:* commands or asks how Clavain relates to superpowers (obra/superpowers).
 ---
 
 # Interop with Superpowers

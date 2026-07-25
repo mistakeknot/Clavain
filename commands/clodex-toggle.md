@@ -3,7 +3,6 @@ name: clodex-toggle
 description: Toggle interserve execution mode
 allowed-tools:
   - Bash
-disable-model-invocation: true
 ---
 
 # Interserve Mode Toggle

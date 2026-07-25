@@ -1,6 +1,6 @@
 ---
 name: using-clavain
-description: How to find and use Clavain skills, agents, and commands. Load at the start of a Clavain workflow.
+description: Use at start of any conversation — how to find/use skills, agents, commands. Requires Skill invocation before ANY response, including clarifying questions.
 ---
 
 **Proactive skill invocation is required.** When a skill matches the current task — even partially — invoke it before responding.
@@ -18,12 +18,7 @@ Clavain operates on **OODARC** — Observe · Orient · Decide · Act · Reflect
 
 The compounding half (Reflect + Compound) is what makes the system get smarter across sessions — it is not optional. See `PHILOSOPHY.md` § The OODARC Lens.
 
-# Quick Router — 26 skills, 7 agents, and 57 commands
-
-Most commands are **user-invocable only** (`disable-model-invocation: true`), so their
-descriptions aren't in context and you can't reach for them yourself. They all still work when
-the user types them — surface the right one by name from this table or `/clavain:clavain-help`.
-The rows below marked ⌨ are user-typed; everything else you can invoke directly.
+# Quick Router — 26 skills, 6 agents, and 57 commands
 
 | You want to... | Run this |
 |----------------|----------|
@@ -33,18 +28,11 @@ The rows below marked ⌨ are user-typed; everything else you can invoke directl
 | Quick review from git diff | `/clavain:quality-gates` |
 | Cross-AI second opinion | `/interpeer:interpeer` |
 | Plan an implementation | `/clavain:write-plan` → `/clavain:work` |
-| Fix a bug | ⌨ `/clavain:repro-first-debugging` |
-| Fix build/test failure | ⌨ `/clavain:fixbuild` |
-| Test-drive a change | ⌨ `/clavain:tdd` |
-| Refactor safely | ⌨ `/clavain:refactor` |
-| Review a plan | ⌨ `/clavain:plan-review` |
-| Review a doc | ⌨ `/clavain:review-doc` |
-| Triage open PRs | ⌨ `/clavain:pr-triage` |
-| Land a finished change | ⌨ `/clavain:land` |
-| Scope-lock for parallel sessions | ⌨ `/clavain:freeze` / `/clavain:unfreeze` |
+| Fix a bug | `/clavain:repro-first-debugging` |
+| Fix build/test failure | `/clavain:fixbuild` |
 | Resolve review findings | `/clavain:resolve` |
 | Set up a new project | `/clavain:project-onboard` |
-| Check project health | ⌨ `/clavain:clavain-doctor` or `/clavain:sprint-status` |
+| Check project health | `/clavain:clavain-doctor` or `/clavain:sprint-status` |
 | Operate the portfolio agency | `/clavain:remontoire status` |
 | One-shot situation snapshot (Observe) | `ic situation snapshot --run=<id>` |
 | Generate roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |

@@ -1,7 +1,6 @@
 ---
 name: galiana
 description: Discipline analytics — view KPIs, report defects, or reset cache
-disable-model-invocation: true
 ---
 
 # Galiana Command

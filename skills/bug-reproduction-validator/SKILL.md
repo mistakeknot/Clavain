@@ -1,6 +1,6 @@
 ---
 name: bug-reproduction-validator
-description: Reproduce and validate a bug report to confirm whether the reported behavior is an actual bug.
+description: Use when you receive a bug report or issue that needs verification — systematically reproduces and validates reported behavior to confirm whether it is an actual bug.
 ---
 
 # Bug Reproduction Validator

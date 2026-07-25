@@ -2,7 +2,6 @@
 name: bead-sweep
 description: Scan open beads for stale trackers already implemented — deterministic checks then LLM verification.
 argument-hint: "[--auto-close] [--limit N] [plugin-name]"
-disable-model-invocation: true
 ---
 
 # Bead Sweep

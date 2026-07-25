@@ -1,6 +1,6 @@
 ---
 name: ui-polish
-description: Targeted frontend polish — tooltips, labels, layout, spacing, mobile, chart styling — from a screenshot or URL plus a natural-language instruction.
+description: Use when the user provides visual feedback about a web or TUI interface — iterates on UI refinements (tooltips, labels, layouts, mobile fixes, spacing, chart styling) from a screenshot or URL plus natural-language instruction.
 ---
 
 # UI Polish
