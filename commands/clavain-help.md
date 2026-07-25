@@ -91,5 +91,26 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/clavain:sprint-status` | Sprint workflow state + recommendations |
 | `/clavain:model-routing` | Configure model routing |
 | `/clavain:interserve` | Launch full Codex workflow for large tasks |
+| `/clavain:clavain-status` | Unified status across Clavain, artifacts, drift |
+| `/clavain:update-check` | Report available updates without changing anything |
+| `/clavain:distill` | Synthesize docs into categorized solutions |
+| `/clavain:galiana` | Discipline analytics — KPIs, defects, cache |
+
+### Beads & goals
+| `/clavain:next-goal` | Propose leverage-ranked successor goals |
+|---|---|
+| `/clavain:goal-form` | Collaborative goal-formation ritual |
+| `/clavain:campaign` | Orchestrate epic execution across phases |
+| `/clavain:bead-sweep` | Find stale beads already implemented |
+| `/clavain:sprint-dag` | Visualize sprint execution as a DAG |
+| `/clavain:reflect` | Capture sprint learnings |
+| `/clavain:describe-pr` | PR title + description from branch commits |
+| `/clavain:clavain-init` | Scaffold .clavain/ in the current project |
+| `/clavain:peers` | View detected peer agent rigs |
+
+Most commands above are **user-invocable only** — type them; Claude won't reach
+for them on its own. That keeps their descriptions out of every session's
+context. The daily drivers (`route`, `work`, `sprint`, `ship`, `verify`,
+`quality-gates`) and anything `/clavain:route` dispatches to stay auto-invocable.
 
 For the full routing guide with skills and agents, use the `using-clavain` skill.

@@ -1,6 +1,6 @@
 ---
 name: interop-with-gsd
-description: If gsd-plugin is not installed, this skill is informational only. Use when the user mentions /gsd:* commands, references the GSD framework (Get Stuff Done), or asks how Clavain compares to spec-driven development workflows.
+description: Use when the user mentions /gsd:* commands or the GSD (Get Stuff Done) framework. Informational unless gsd-plugin is installed.
 ---
 
 # Interop with GSD (Get Stuff Done)

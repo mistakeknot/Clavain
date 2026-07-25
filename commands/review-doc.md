@@ -2,6 +2,7 @@
 name: review-doc
 description: Quick single-pass document refinement — assess clarity, score quality, fix issues, offer iteration
 argument-hint: "[document path]"
+disable-model-invocation: true
 ---
 
 # /review-doc

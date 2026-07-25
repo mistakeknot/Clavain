@@ -1,6 +1,7 @@
 ---
 name: pr-triage
 description: Triage all open PRs — batch by theme, review with parallel agents, generate report, walk through decisions
+disable-model-invocation: true
 ---
 
 # /pr-triage

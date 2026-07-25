@@ -2,6 +2,7 @@
 name: repro-first-debugging
 description: Disciplined bug investigation — reproduce first, then diagnose. Composes debugging agents.
 argument-hint: "[bug description or error message]"
+disable-model-invocation: true
 ---
 
 # Repro-First Debugging

@@ -1,6 +1,6 @@
 ---
 name: codex-delegate
-description: Use proactively for well-scoped implementation, exploration, search, test generation, and code review tasks with clear scope and success criteria — delegates to Codex CLI via dispatch.sh for cost-efficient execution. Keep architecture, brainstorming, and interactive work in the main agent.
+description: Delegate well-scoped implementation, exploration, search, test-generation, or code-review tasks to Codex CLI. Not for architecture or interactive work.
 ---
 
 # Codex Delegate
