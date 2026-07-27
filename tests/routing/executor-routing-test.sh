@@ -25,12 +25,29 @@ yaml_out="$(python3 -c "import yaml; d=yaml.safe_load(open('config/routing.yaml'
   || fail "routing YAML assertion failed"
 contains "$yaml_out" "YAML_OK"
 
-tag_order="$(bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging')" \
+# Expectations are mode-dependent (Sylveste-d3m flipped the default to shadow):
+#   off     -> resolver returns nothing
+#   shadow  -> logs the would-route order, returns the safe default (codex)
+#   enforce -> returns the class order (kimi codex for tagging)
+MODE="$(python3 -c "import yaml; print((yaml.safe_load(open('config/routing.yaml')).get('executor_routing') or {}).get('mode','off'))")" \
+  || fail "could not read executor_routing.mode"
+
+tag_order="$(bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging' 2>/dev/null)" \
   || fail "tagging resolver failed"
-unmapped_order="$(bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order somethingunmapped')" \
+unmapped_order="$(bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order somethingunmapped' 2>/dev/null)" \
   || fail "unmapped resolver failed"
-[[ "$tag_order" == "kimi codex" ]] || fail "tagging order was '$tag_order'"
-[[ "$unmapped_order" == "codex" ]] || fail "unmapped order was '$unmapped_order'"
+
+case "$MODE" in
+  enforce)
+    [[ "$tag_order" == "kimi codex" ]] || fail "enforce: tagging order was '$tag_order'"
+    [[ "$unmapped_order" == "codex" ]] || fail "enforce: unmapped order was '$unmapped_order'" ;;
+  shadow)
+    [[ "$tag_order" == "codex" ]] || fail "shadow: tagging order was '$tag_order' (expected the safe default)"
+    [[ "$unmapped_order" == "codex" ]] || fail "shadow: unmapped order was '$unmapped_order'" ;;
+  off)
+    [[ -z "$tag_order" ]] || fail "off: tagging order was '$tag_order' (expected empty)" ;;
+  *) fail "unknown executor_routing.mode '$MODE'" ;;
+esac
 
 safe="$(bash scripts/dispatch.sh --dry-run --to kimi -C /tmp "hello" 2>&1)" \
   || fail "safe kimi dry-run failed"
@@ -48,7 +65,17 @@ reasoning="$(bash scripts/dispatch.sh --dry-run --to auto --class reasoning -C /
   || fail "auto reasoning dry-run failed"
 bogus="$(bash scripts/dispatch.sh --dry-run --to auto --class bogus -C /tmp "hi" 2>&1)" \
   || fail "auto bogus dry-run failed"
-contains "$tagging" "kimi"
+# Strip the shadow log line before asserting on the backend: it contains the
+# literal "would-route=kimi codex", so a bare `contains "$tagging" "kimi"` passes
+# even when nothing is actually dispatched to kimi.
+tagging_cmd="$(printf '%s\n' "$tagging" | grep -v '\[executor-shadow\]')"
+case "$MODE" in
+  enforce) contains "$tagging_cmd" "kimi" ;;
+  shadow)  contains "$tagging" "[executor-shadow]"
+           not_contains "$tagging_cmd" "kimi"
+           contains "$tagging_cmd" "codex exec" ;;
+  off)     contains "$tagging_cmd" "codex exec" ;;
+esac
 contains "$reasoning" "codex exec"
 contains "$bogus" "codex exec"
 

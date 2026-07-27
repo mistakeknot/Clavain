@@ -45,6 +45,54 @@ contains "$dispatch" "[executor-shadow]"
 contains "$dispatch" "codex exec"
 not_contains "$dispatch" "kimi --agent-file"
 
+# The criterion above greps the whole output, which includes the shadow log line
+# ("would-route=kimi codex") — so a real kimi invocation could hide behind it.
+# Assert against the command body with the shadow line stripped.
+dispatch_cmd="$(printf '%s\n' "$dispatch" | grep -v '\[executor-shadow\]')"
+not_contains "$dispatch_cmd" "kimi"
+
+# Wiring regression (Sylveste-d3m): --class is only read on the `auto` path, so a
+# call site that passes --class without --to auto silently logs nothing and the
+# phase-2 parity corpus stays empty. Pin both halves at the only adopted call site.
+classless="$(bash scripts/dispatch.sh --dry-run --class tagging -C /tmp "hi" 2>&1)" \
+  || fail "class-without-auto dry-run failed"
+not_contains "$classless" "[executor-shadow]"
+
+for doc in skills/interserve-engine/SKILL.md skills/interserve-engine/SKILL-compact.md; do
+  doc_body="$(cat "$doc")"
+  contains "$doc_body" "--to auto"
+  contains "$doc_body" "--class"
+done
+
+# Mode normalization (Sylveste-d3m): YAML 1.1 parses a bare `mode: off` as the
+# boolean False. Before normalization that missed the "off" and "shadow" branches
+# and fell through to enforce — the documented kill switch routed live traffic to
+# kimi. Every non-enforce spelling must resolve to "route nothing new".
+mode_cfg="$(mktemp /tmp/executor-routing-mode.XXXXXX)" || exit 1
+trap 'rm -f "$fixture" "$shadow_log" "$mode_cfg"' EXIT
+for spelling in off on yes no bogus '"off"'; do
+  cat > "$mode_cfg" <<YAML
+executor_routing:
+  mode: $spelling
+  default: [codex]
+  classes:
+    tagging: [kimi, codex]
+YAML
+  got="$(CLAVAIN_ROUTING_CONFIG="$mode_cfg" bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging' 2>/dev/null)"
+  [[ -z "$got" ]] || fail "mode: $spelling resolved to '$got' (expected routing bypassed, not enforce)"
+done
+
+# enforce is still honored — the fix must not disable routing outright.
+cat > "$mode_cfg" <<'YAML'
+executor_routing:
+  mode: enforce
+  default: [codex]
+  classes:
+    tagging: [kimi, codex]
+YAML
+enforced="$(CLAVAIN_ROUTING_CONFIG="$mode_cfg" bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging' 2>/dev/null)"
+[[ "$enforced" == "kimi codex" ]] || fail "enforce mode resolved to '$enforced'"
+
 printf '%s\n' \
   '[executor-shadow] class=tagging would-route=kimi codex routed=codex' \
   '[executor-shadow] class=reasoning would-route=codex routed=codex' \
