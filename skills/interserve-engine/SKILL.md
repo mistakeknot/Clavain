@@ -151,9 +151,16 @@ CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" \
   -C "$PROJECT_DIR" \
   -o "/tmp/codex-result-$(date +%s).md" \
   -s workspace-write \
+  --to auto \
   --class "$CLASS" \
   --tier deep
 ```
+
+`--to auto` is required: `--class` is only read on the `auto` path. Without it
+dispatch.sh keeps its `codex` default, the executor-routing layer is never
+consulted, and no `[executor-shadow]` line is recorded — which would leave the
+phase-2 parity evals with an empty corpus. In phase-1 SHADOW `--to auto` still
+routes to codex, so this changes what gets *logged*, not what gets *run*.
 Use `timeout: 600000` on the Bash tool call.
 
 ### Step 3: Read Verdict

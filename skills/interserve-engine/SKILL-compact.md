@@ -28,6 +28,8 @@ DISPATCH=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/dispatch.sh' 
 
 `--to codex` (default) builds `codex exec`; `--to kimi` builds `kimi [-m alias] -p` — use kimi for second opinions from a different model family. Kimi tiers: fast→`kimi-code/kimi-for-coding`, deep→`kimi-code/k3` (falls back to kimi `default_model` if the alias is undefined). Never dispatch via bare interactive `kimi` — always `kimi -p` (dispatch.sh handles this); do NOT add `--auto`/`--yolo`, kimi v0.29 rejects them in prompt mode. Codex-only options (`-s`, `-i`, passthrough flags) are dropped with a warning on the kimi path.
 
+`--to auto --class <class>` routes via the executor-routing layer. Resolve the class from the Step-1 delegation category with `routing_resolve_class_for_category "$CATEGORY"` (sourced from `lib-routing.sh`; unmapped → `reasoning`). Both flags are required — `--class` is only read on the `auto` path, so without `--to auto` dispatch keeps its `codex` default and no `[executor-shadow]` line is recorded. Phase-1 SHADOW still routes to codex; it only logs the would-route decision for the phase-2 parity evals.
+
 `--via zaka` spawns a steerable tmux session instead of a one-shot exec (`zaka spawn` + `zaka steer`, prints session name, returns immediately — no verdict/output file). Use for long-running work you want to steer or kill (`zaka steer`/`zaka kill`); use the default exec for fire-and-forget with a verdict. Adapter defaults to `claude-code`; `--to codex|kimi|claude-code` map to same-named adapters. Requires zaka + tmux.
 
 ## Routing
