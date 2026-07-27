@@ -191,7 +191,20 @@ import sys, yaml
 cfg, cls = sys.argv[1], sys.argv[2]
 d = yaml.safe_load(open(cfg)) or {}
 e = d.get("executor_routing") or {}
-mode = e.get("mode", "off")
+raw_mode = e.get("mode", "off")
+# YAML 1.1 truthiness: a bare `mode: off` parses to False (likewise `on`/`yes`/`no`).
+# Comparing the raw value against "off"/"shadow" would miss both branches and fall
+# through to enforce — inverting the documented kill switch into live kimi routing.
+# Normalize to a string and fail safe: anything unrecognized disables routing.
+if raw_mode is False or raw_mode is None:
+    mode = "off"
+elif raw_mode is True:
+    mode = "off"  # `on` is not a valid mode; refuse to guess
+else:
+    mode = str(raw_mode).strip().lower()
+if mode not in ("off", "shadow", "enforce"):
+    sys.stderr.write(f"[executor-routing] unrecognized mode {raw_mode!r} — treating as off\n")
+    mode = "off"
 if mode == "off":
     sys.exit(0)
 classes = e.get("classes") or {}
