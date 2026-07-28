@@ -124,7 +124,7 @@ GPT-5.6 07-09; consensus 16).
 |------|--------------|----------------|-------|
 | Main thread / orchestration | Opus (1M) — interim operating choice, NOT a verdict; Q1 settles by dose data, not a winner (parley item 20) | n/a | inheritance safety (unpinned spawns inherit main model), token volume, context headroom |
 | Plan authoring | fable, fallback opus (`strategized` phase) | measure; provisional: reserve ≥1 fable call/window for escalation | §1 asymmetry; plan defects replicate into every consumer |
-| **Gauge review (NEW ROLE)** | any model ≠ plan author | 1 per plan, before freeze | pilot-1: 2/2 frontier-authored plans had exact code and defective verify gauges (feature-gated tests invisible to their own command; unescaped grep matching own prose; fallback value read as measurement). The verify block is a replicated, marking-grade artifact — an omission in it passes every downstream check (consensus 2/3) |
+| **Gauge dry-run + review** | `plan-gauge-lint.py` (mechanical, blocking) THEN any model ≠ plan author | lint every plan; 1 review per plan, both before freeze | pilot-1 rounds 1+2: 4/4 frontier-authored plan-executions struck out on the plan's OWN verify block, never on code (~60 edits byte-exact, zero drift). 6 gauge defects observed; 5 are "emitted text vs. a checker the same author wrote". Reviewing caught none of them across two rounds — the linter replays all 6. The verify block is a replicated, marking-grade artifact: an omission in it passes every downstream check (consensus 2/3) |
 | Plan review verdict | fable, fallback opus (`planned` phase); lens pools stay sonnet/haiku | dose guard in routing.yaml | leverage vs dose explosion |
 | Execution (execution-grade plans) | sonnet in-harness | bulk | measured 0.909 (n=11) |
 | Validation | opus, against FROZEN criteria only | per plan | verification asymmetry; criteria frozen before execution, exogenous to the treatment in any A/B (parley item 33) |
@@ -139,9 +139,23 @@ GPT-5.6 07-09; consensus 16).
    ONLY. Sandbox denials, approval-gate blocks, auth expiry, rate exhaustion,
    and infra errors are NOT strikes — counting them escalates to the scarcest
    tier for problems that are not capability failures.
-9. **Gauge review before freeze:** the plan's verify blocks and acceptance
-   criteria are reviewed by a model other than the author, then frozen. In any
-   A/B, the gauge is authored by NEITHER arm and runs unmodified against both.
+9. **Gauge DRY-RUN before freeze** (strengthened 2026-07-27 by pilot-1 round 2):
+   the plan's verify blocks are **executed against the plan's own emitted
+   output** — `scripts/plan-gauge-lint.py <plan> --repo-root <repo>`, blocking,
+   wired as step 0 of `/plan-review` — and only then reviewed by a model other
+   than the author, and frozen. In any A/B the gauge is authored by NEITHER arm
+   and runs unmodified against both.
+
+   Reading the gauge is not the control. Round 1 struck out both arms on gauge
+   defects; those gauges were repaired; **round 2 struck out both arms again, on
+   a third gauge defect each.** Six observed in total, five of one shape: *the
+   plan's emitted text is simultaneously the artifact and an input to a checker
+   the same author wrote, and nobody ever executed one against the other.* Two
+   frontier-tier authors, a frontier-tier reviewer, and the harness itself each
+   shipped an instance — so this is not an author-tier weakness a better
+   reviewer fixes. It is n=6 that reading cannot see it and execution can.
+   Meanwhile ~60 edits applied byte-exact across all four executions with zero
+   drift: the code was never what failed.
 10. **Panel protocol:** sealed first-pass findings with a validated schema and
     a disposition field; parley terminates semantically (one blind round, at
     most one response round, then an executable falsifier or a human decision;
