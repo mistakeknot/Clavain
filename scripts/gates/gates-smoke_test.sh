@@ -24,8 +24,12 @@ for arg in "$@"; do
   esac
 done
 
-ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-GATES="${ROOT}/os/Clavain/scripts/gates"
+# Resolve the tree under test from this script's own location, not by
+# reconstructing a path from the monorepo root. Reconstruction pinned the test
+# to os/Clavain, so running it from a worktree silently built and exercised the
+# main checkout's sources instead of the ones being tested.
+GATES="$(cd "$(dirname "$0")" && pwd)"
+CLAVAIN_ROOT="$(cd "${GATES}/../.." && pwd)"
 
 SANDBOX="$(mktemp -d)"
 cleanup() { rm -rf "$SANDBOX"; }
@@ -35,7 +39,7 @@ export GOCACHE="${GOCACHE:-${SANDBOX}/go-build-cache}"
 
 mkdir -p "${SANDBOX}/real-bin"
 CLI_BIN="${SANDBOX}/real-bin/clavain-cli"
-(cd "${ROOT}/os/Clavain/cmd/clavain-cli" && go build -trimpath -o "$CLI_BIN" .)
+(cd "${CLAVAIN_ROOT}/cmd/clavain-cli" && go build -trimpath -o "$CLI_BIN" .)
 
 # Stubs — capture arguments into a log for assertion. bd close is idempotent
 # per-ID in the stub (just logs); the wrapper may call it many times across
@@ -119,6 +123,10 @@ CREATE TABLE authz_tokens (
 CREATE INDEX tokens_by_root ON authz_tokens(root_token, consumed_at, revoked_at);
 CREATE INDEX tokens_by_parent ON authz_tokens(parent_token);
 CREATE INDEX tokens_by_agent ON authz_tokens(agent_id, created_at DESC);
+CREATE TABLE state (
+  key TEXT NOT NULL, scope_id TEXT NOT NULL, payload TEXT NOT NULL,
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()), expires_at INTEGER,
+  PRIMARY KEY (key, scope_id));
 """)
 db.execute(
   "INSERT INTO authorizations (id, op_type, target, agent_id, mode, created_at, sig_version) "
@@ -145,6 +153,31 @@ git remote set-url --push origin "${SANDBOX}/push.git"
 clavain-cli policy init-key >/dev/null
 clavain-cli policy sign >/dev/null
 clavain-cli policy anchor-legacy --expect-empty >/dev/null
+
+# set_delegation_level <0-5|unset>
+# Writes the declared human-delegation level straight into kernel state, the
+# way `ic config set autonomy.delegation_level` does. The smoke sandbox has no
+# `ic` on PATH, and the point under test is what the gate does with the value,
+# not how it got there.
+set_delegation_level() {
+  python3 - "$1" <<PY
+import sqlite3, sys
+level = sys.argv[1]
+db = sqlite3.connect("${SANDBOX}/.clavain/intercore.db")
+if level == "unset":
+    db.execute("DELETE FROM state WHERE key = 'kernel.autonomy.delegation_level'")
+else:
+    db.execute(
+        "INSERT OR REPLACE INTO state (key, scope_id, payload) VALUES (?, ?, ?)",
+        ("kernel.autonomy.delegation_level", "global", level))
+db.commit()
+PY
+}
+
+# The pre-existing push scenarios assert the authorization *binding* logic, not
+# the delegation ceiling. Declare L3 so they exercise the same path they always
+# did; the ceiling scenarios below set their own level.
+set_delegation_level 3
 
 # ─── legacy scenario ──────────────────────────────────────────────────
 
@@ -222,6 +255,92 @@ print(db.execute(\"SELECT target FROM authorizations WHERE op_type='git-push-mai
 		exit 1
 	}
 	echo "PASS: git push authorization binds immutable source + push URL"
+}
+
+# ─── delegation-ceiling scenarios ─────────────────────────────────────
+#
+# The policy rule for git-push-main is `mode: auto` in this fixture, so the
+# policy alone would authorize every push below. Anything that refuses one is
+# the declared delegation level doing it.
+
+# push_head_to_main → prints combined output, returns the wrapper's exit code.
+# Runs with stdin closed so the confirm path takes the no-tty branch, which is
+# the situation that matters: an agent pushing unattended.
+push_head_to_main() {
+	local out rc=0
+	out="$(CLAVAIN_AGENT_ID=smoke-agent bash "${GATES}/git-push-main.sh" origin HEAD:main 2>&1 </dev/null)" || rc=$?
+	printf '%s\n' "$out"
+	return "$rc"
+}
+
+scenario_delegation_refuses_push_below_floor() {
+	echo "=== delegation: L1 refuses an agent push the policy would allow ==="
+	local before out rc=0
+	before="$(git --git-dir="${SANDBOX}/push.git" rev-parse refs/heads/main)"
+
+	set_delegation_level 1
+	out="$(push_head_to_main)" || rc=$?
+
+	[[ "$rc" -ne 0 ]] || { echo "FAIL: push succeeded at L1"; echo "$out"; exit 1; }
+	grep -q "L1" <<<"$out" || { echo "FAIL: refusal does not name the level:"; echo "$out"; exit 1; }
+	grep -q "human approves at phase gates" <<<"$out" || {
+		echo "FAIL: refusal does not say what L1 means:"; echo "$out"; exit 1; }
+	grep -q "delegation level, not by the policy rule" <<<"$out" || {
+		echo "FAIL: refusal does not distinguish the ceiling from a policy denial:"; echo "$out"; exit 1; }
+
+	local after; after="$(git --git-dir="${SANDBOX}/push.git" rev-parse refs/heads/main)"
+	[[ "$after" == "$before" ]] || { echo "FAIL: remote main moved despite the refusal"; exit 1; }
+	# Echo the refusal: this text is the operator-facing contract, and a smoke
+	# run is the only place anyone sees it without provoking a real refusal.
+	sed 's/^/  | /' <<<"$out"
+	echo "PASS: L1 refuses the push and names the level"
+}
+
+scenario_delegation_undeclared_refuses_push() {
+	echo "=== delegation: an undeclared level refuses too, and says it is undeclared ==="
+	local out rc=0
+	set_delegation_level unset
+	out="$(push_head_to_main)" || rc=$?
+
+	[[ "$rc" -ne 0 ]] || { echo "FAIL: push succeeded with no declared level"; echo "$out"; exit 1; }
+	grep -q "undeclared" <<<"$out" || {
+		echo "FAIL: refusal must distinguish an undeclared level from a chosen one:"; echo "$out"; exit 1; }
+	echo "PASS: undeclared level fails closed"
+}
+
+scenario_delegation_allows_push_at_floor() {
+	echo "=== delegation: L3 lets the same push through ==="
+	local out rc=0 head_sha
+	head_sha="$(git rev-parse HEAD)"
+
+	set_delegation_level 3
+	out="$(push_head_to_main)" || rc=$?
+	[[ "$rc" -eq 0 ]] || { echo "FAIL: push refused at L3 (rc=$rc)"; echo "$out"; exit 1; }
+
+	local pushed; pushed="$(git --git-dir="${SANDBOX}/push.git" rev-parse refs/heads/main)"
+	[[ "$pushed" == "$head_sha" ]] || {
+		echo "FAIL: remote main=$pushed, want $head_sha"; exit 1; }
+
+	# The whole claim of this goal is that only the declared level changed.
+	local mode; mode="$(python3 -c "
+import sqlite3
+db = sqlite3.connect('${SANDBOX}/.clavain/intercore.db')
+print(db.execute(\"SELECT mode FROM authorizations WHERE op_type='git-push-main' ORDER BY created_at DESC LIMIT 1\").fetchone()[0])
+")"
+	[[ "$mode" == "auto" ]] || { echo "FAIL: audit mode=$mode, want auto"; exit 1; }
+	echo "PASS: L3 authorizes the push; audit row records mode=auto"
+}
+
+scenario_delegation_does_not_touch_unfloored_ops() {
+	echo "=== delegation: L0 still lets bead-close through (no delegation floor) ==="
+	set_delegation_level 0
+	CLAVAIN_AGENT_ID=smoke-agent bash "${GATES}/bead-close.sh" iv-smoke-nofloor test-reason >/dev/null 2>&1
+	grep -q "bd close iv-smoke-nofloor" "$BD_CALL_LOG" || {
+		echo "FAIL: bead-close blocked at L0; the ceiling is meant to be per-op, not blanket"
+		exit 1
+	}
+	set_delegation_level 3
+	echo "PASS: ops with no delegation floor are unaffected"
 }
 
 # ─── token scenarios ──────────────────────────────────────────────────
@@ -431,6 +550,10 @@ case "$FOCUS" in
   legacy)
     scenario_legacy_bead_close
 		scenario_git_push_binds_source_and_pushurl
+    scenario_delegation_refuses_push_below_floor
+    scenario_delegation_undeclared_refuses_push
+    scenario_delegation_allows_push_at_floor
+    scenario_delegation_does_not_touch_unfloored_ops
     ;;
   token)
     scenario_runtime_proof_precedes_token
@@ -444,6 +567,10 @@ case "$FOCUS" in
   all)
     scenario_legacy_bead_close
 		scenario_git_push_binds_source_and_pushurl
+    scenario_delegation_refuses_push_below_floor
+    scenario_delegation_undeclared_refuses_push
+    scenario_delegation_allows_push_at_floor
+    scenario_delegation_does_not_touch_unfloored_ops
     scenario_runtime_proof_precedes_token
     scenario_token_valid
     scenario_token_revoked_hard_fail

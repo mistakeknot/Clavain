@@ -166,6 +166,9 @@ gate_resolve_agent() {
 # Sets globals on success:
 #   GATE_POLICY_HASH
 #   GATE_POLICY_MATCH
+#   GATE_POLICY_REASON       human-facing explanation of the decision
+#   GATE_DELEGATION_CAPPED   "true" when the delegation level, not the policy,
+#                            is what withheld authorization
 gate_check() {
   local op="$1"
   shift || true
@@ -175,12 +178,21 @@ gate_check() {
 
   GATE_POLICY_HASH="$(printf '%s' "$raw" | jq -r '.policy_hash // empty' 2>/dev/null || true)"
   GATE_POLICY_MATCH="$(printf '%s' "$raw" | jq -r '.policy_match // empty' 2>/dev/null || true)"
+  GATE_POLICY_REASON="$(printf '%s' "$raw" | jq -r '.reason // empty' 2>/dev/null || true)"
+  GATE_DELEGATION_CAPPED="$(printf '%s' "$raw" | jq -r '.delegation.capped // false' 2>/dev/null || echo false)"
   policy_mode="$(printf '%s' "$raw" | jq -r '.mode // empty' 2>/dev/null || true)"
+  # schema >= 2 carries `delegation`. Requiring it is what makes the delegation
+  # ceiling non-optional: a clavain-cli old enough to omit that field cannot
+  # apply a ceiling at all, so pairing it with this gate must abort rather than
+  # push under an authority level nothing consulted.
   if ! printf '%s' "$raw" | jq -e '
-    .schema == 1 and
+    (.schema | type == "number") and .schema >= 2 and
     (.mode == "auto" or .mode == "force_auto" or .mode == "confirm" or .mode == "block") and
     (.policy_hash | type == "string" and length > 0) and
-    (.policy_match | type == "string" and length > 0)
+    (.policy_match | type == "string" and length > 0) and
+    (.delegation | type == "object") and
+    (.delegation.level | type == "number") and
+    (.delegation.declared | type == "boolean")
   ' >/dev/null 2>&1; then
     rc=3
   fi
@@ -190,8 +202,24 @@ gate_check() {
     *) rc=3 ;;
   esac
 
-  export GATE_POLICY_HASH GATE_POLICY_MATCH
+  export GATE_POLICY_HASH GATE_POLICY_MATCH GATE_POLICY_REASON GATE_DELEGATION_CAPPED
   return "$rc"
+}
+
+# gate_explain_withholding <op>
+# Prints why authorization was withheld, on stderr. A delegation-capped decision
+# is called out separately from a policy one: the operator's next move differs
+# — raise the declared level versus satisfy the rule's requires.
+gate_explain_withholding() {
+  local op="$1"
+  if [[ "${GATE_DELEGATION_CAPPED:-false}" == "true" ]]; then
+    echo "policy: ${op} withheld by the delegation level, not by the policy rule" >&2
+    [[ -n "${GATE_POLICY_REASON:-}" ]] && echo "  ${GATE_POLICY_REASON}" >&2
+    echo "  raise it with: ic config set autonomy.delegation_level <0-5>" >&2
+    echo "  see docs/canon/autonomy.md for what each level means" >&2
+  elif [[ -n "${GATE_POLICY_REASON:-}" ]]; then
+    echo "policy: ${op} — ${GATE_POLICY_REASON}" >&2
+  fi
 }
 
 # gate_prompt_or_abort <op>
@@ -199,6 +227,7 @@ gate_check() {
 # Sets GATE_MODE=confirmed on accept.
 gate_prompt_or_abort() {
   local op="$1"
+  gate_explain_withholding "$op"
   if [[ -t 0 ]]; then
     local ans
     read -rp "policy: ${op} requires confirmation. Proceed? [y/N] " ans
