@@ -29,7 +29,7 @@ For companion plugin roadmaps (interflux, interphase, interspect, etc.), see eac
 - **Sylveste-oac8** Clavain prompt token optimization — phase 2 *(in_progress)*
 - **Sylveste-ss15** F3: Progress tracker rollout to remaining 6 commands
 - **Sylveste-7uko** F2: Wire artifact bus into all 10 sprint commands *(blocked)*
-- **Sylveste-lcxa** F4: Graduated autonomy tier system for sprint *(blocked)*
+- ~~**Sylveste-lcxa** F4: Graduated autonomy tier system for sprint~~ — **shipped 2026-07-30** as `Sylveste-haqr`. The `lcxa` ID never existed in the beads DB; this line was stale. Runs now derive `auto_advance` from a declared delegation level in kernel state (`ic config set autonomy.delegation_level`), defined in [docs/canon/autonomy.md](../../../docs/canon/autonomy.md).
 - **Sylveste-lta9** Deep review + brainstorm of sprint lifecycle — phase coherence, OODARC alignment *(blocked)*
 - **iv-6u3s** F4: Sprint Scan Release Visibility
 
