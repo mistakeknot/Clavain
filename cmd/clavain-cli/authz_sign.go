@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mistakeknot/intercore/pkg/authz"
+	"github.com/mistakeknot/intercore/pkg/autonomy"
 )
 
 const (
@@ -239,6 +240,20 @@ func cmdPolicyRecordSigned(args []string) error {
 	}
 
 	now := time.Now().Unix()
+
+	// Resolve the level here rather than accepting it as a flag. The caller
+	// already knows it — it just ran `policy check` — but a recorder that
+	// writes back whatever it is told produces evidence exactly as trustworthy
+	// as the process being audited. `--delegation-capped` is the one fact that
+	// cannot be re-derived at record time, so it is the one fact taken on
+	// trust.
+	_, delegationCapped := flags["delegation-capped"]
+	delegation := authz.DelegationVetting(
+		autonomy.ResolveDB(context.Background(), db),
+		flags["op"],
+		delegationCapped,
+	)
+
 	record := authz.RecordArgs{
 		OpType:         flags["op"],
 		Target:         flags["target"],
@@ -249,7 +264,16 @@ func cmdPolicyRecordSigned(args []string) error {
 		PolicyHash:     flags["policy-hash"],
 		VettedSHA:      flags["vetted-sha"],
 		CrossProjectID: flags["cross-project-id"],
+		Vetting:        delegation,
 		CreatedAt:      now,
+	}
+
+	// Marshal once. RecordWithID stores this exact string and the SignRow below
+	// signs it; a second independent Marshal would verify today and fail the
+	// first time key ordering or a type changed.
+	vettingJSON, err := authz.MarshalVetting(record.Vetting)
+	if err != nil {
+		return fmt.Errorf("policy record-signed: %w", err)
 	}
 	tx, err := db.Begin()
 	if err != nil {
@@ -270,6 +294,7 @@ func cmdPolicyRecordSigned(args []string) error {
 		PolicyMatch:    record.PolicyMatch,
 		PolicyHash:     record.PolicyHash,
 		VettedSHA:      record.VettedSHA,
+		Vetting:        vettingJSON,
 		CrossProjectID: record.CrossProjectID,
 		CreatedAt:      now,
 	}
