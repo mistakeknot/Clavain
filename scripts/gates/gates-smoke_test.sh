@@ -343,6 +343,62 @@ scenario_delegation_does_not_touch_unfloored_ops() {
 	echo "PASS: ops with no delegation floor are unaffected"
 }
 
+# ─── inspectability scenarios ─────────────────────────────────────────
+#
+# A floor you cannot see coming is a refusal you cannot plan around. These
+# cover the read-only surface: `policy explain` must name the floor for a
+# floored op, stay silent for an exempt one, and survive an op the merged
+# policy has no rule for.
+
+scenario_explain_names_the_floor() {
+	echo "=== inspect: policy explain names the floor for a floored op ==="
+	local out
+	out="$(clavain-cli policy explain git-push-main 2>&1)" || {
+		echo "FAIL: policy explain exited non-zero for a floored op"
+		exit 1
+	}
+	grep -q "git-push-main needs L3 to auto-proceed" <<<"$out" || {
+		echo "FAIL: explain did not name the floor. Got:"
+		echo "$out"
+		exit 1
+	}
+	echo "PASS: explain names the floor"
+}
+
+scenario_explain_is_silent_for_exempt_ops() {
+	echo "=== inspect: policy explain says nothing about floors for an exempt op ==="
+	local out
+	out="$(clavain-cli policy explain bead-close 2>&1)" || {
+		echo "FAIL: policy explain exited non-zero for an exempt op"
+		exit 1
+	}
+	# Silence matters: printing "needs L0" for every unfloored op would train
+	# readers to ignore the line that carries the real refusals.
+	grep -q "to auto-proceed" <<<"$out" && {
+		echo "FAIL: explain announced a floor for an op that has none. Got:"
+		echo "$out"
+		exit 1
+	}
+	grep -q "^delegation:" <<<"$out" || {
+		echo "FAIL: explain dropped the delegation line entirely. Got:"
+		echo "$out"
+		exit 1
+	}
+	echo "PASS: exempt ops get the level without a floor claim"
+}
+
+scenario_explain_survives_op_with_no_policy_rule() {
+	echo "=== inspect: policy explain does not crash on an op policy never heard of ==="
+	# The floor table and the policy file are independent; a floor may name an
+	# op no rule matches, and the explain path must still render rather than
+	# fault on the missing rule.
+	clavain-cli policy explain iv-smoke-no-such-op >/dev/null 2>&1 || {
+		echo "FAIL: policy explain crashed on an op with no policy rule"
+		exit 1
+	}
+	echo "PASS: unknown ops explain cleanly"
+}
+
 # ─── token scenarios ──────────────────────────────────────────────────
 
 # issue_token <op> <target> <for-agent> <ttl> → prints opaque string
@@ -554,6 +610,9 @@ case "$FOCUS" in
     scenario_delegation_undeclared_refuses_push
     scenario_delegation_allows_push_at_floor
     scenario_delegation_does_not_touch_unfloored_ops
+    scenario_explain_names_the_floor
+    scenario_explain_is_silent_for_exempt_ops
+    scenario_explain_survives_op_with_no_policy_rule
     ;;
   token)
     scenario_runtime_proof_precedes_token
@@ -571,6 +630,9 @@ case "$FOCUS" in
     scenario_delegation_undeclared_refuses_push
     scenario_delegation_allows_push_at_floor
     scenario_delegation_does_not_touch_unfloored_ops
+    scenario_explain_names_the_floor
+    scenario_explain_is_silent_for_exempt_ops
+    scenario_explain_survives_op_with_no_policy_rule
     scenario_runtime_proof_precedes_token
     scenario_token_valid
     scenario_token_revoked_hard_fail
