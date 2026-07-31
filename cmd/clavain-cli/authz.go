@@ -555,6 +555,29 @@ func cmdPolicyAudit(args []string) error {
 			params = append(params, v)
 		}
 	}
+	_, wantCapped := flags["capped"]
+	_, wantCount := flags["count"]
+	if wantCapped && wantCount {
+		// Applying the filter to the denominator too would report
+		// total == capped, which reads as "the ceiling withheld every
+		// decision". --count already breaks capped out against the full
+		// window, so the combination is redundant as well as misleading.
+		return fmt.Errorf("policy audit: --capped and --count are mutually exclusive; " +
+			"--count already reports capped against the full window")
+	}
+	if wantCapped {
+		where = append(where, cappedPredicate)
+	}
+
+	// --count answers "how often has the ceiling actually withheld something"
+	// in SQL rather than by counting a truncated result page. The row listing
+	// is capped at --limit, so deriving a total from it would undercount
+	// silently past 200 — the same shape of error as a checker that inspects
+	// nothing and reports success.
+	if wantCount {
+		return auditCappedCount(db, where, params)
+	}
+
 	limit := 200
 	if v, ok := flags["limit"]; ok {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -597,6 +620,60 @@ func cmdPolicyAudit(args []string) error {
 		results = append(results, r)
 	}
 	return outputJSON(results)
+}
+
+// cappedPredicate selects rows the delegation ceiling actually changed.
+//
+// json_extract returns NULL for rows with no vetting blob, so authorizations
+// recorded before the ceiling carried evidence are excluded rather than
+// counted as "not capped" — an unclassifiable row is not the same as a row
+// classified negative, and folding the two would understate the rate.
+const cappedPredicate = `json_extract(vetting, '$.delegation.capped') = 1`
+
+// evidencePredicate selects rows that carry delegation evidence at all. It is
+// the honest denominator for a capped rate.
+const evidencePredicate = `json_extract(vetting, '$.delegation.capped') IS NOT NULL`
+
+// auditCappedCount aggregates the ceiling's observed effect over a window.
+func auditCappedCount(db *sql.DB, where []string, params []interface{}) error {
+	base := strings.Join(where, " AND ")
+	var total, withEvidence, capped int
+	row := db.QueryRow(fmt.Sprintf(`
+		SELECT COUNT(*),
+		       COUNT(*) FILTER (WHERE %s),
+		       COUNT(*) FILTER (WHERE %s)
+		FROM authorizations WHERE %s`,
+		evidencePredicate, cappedPredicate, base), params...)
+	if err := row.Scan(&total, &withEvidence, &capped); err != nil {
+		return fmt.Errorf("policy audit --count: %w", err)
+	}
+
+	byOp := map[string]int{}
+	rows, err := db.Query(fmt.Sprintf(`
+		SELECT op_type, COUNT(*) FROM authorizations
+		WHERE %s AND %s GROUP BY op_type ORDER BY op_type`, base, cappedPredicate), params...)
+	if err != nil {
+		return fmt.Errorf("policy audit --count: by-op: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var op string
+		var n int
+		if err := rows.Scan(&op, &n); err != nil {
+			return fmt.Errorf("policy audit --count: scan: %w", err)
+		}
+		byOp[op] = n
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("policy audit --count: %w", err)
+	}
+
+	return outputJSON(map[string]interface{}{
+		"total":         total,
+		"with_evidence": withEvidence,
+		"capped":        capped,
+		"capped_by_op":  byOp,
+	})
 }
 
 // ─── policy lint ──────────────────────────────────────────────────────

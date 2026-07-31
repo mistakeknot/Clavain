@@ -248,7 +248,7 @@ scenario_git_push_binds_source_and_pushurl() {
 	audit_target="$(python3 -c "
 import sqlite3
 db = sqlite3.connect('${SANDBOX}/.clavain/intercore.db')
-print(db.execute(\"SELECT target FROM authorizations WHERE op_type='git-push-main' ORDER BY created_at DESC LIMIT 1\").fetchone()[0])
+print(db.execute(\"SELECT target FROM authorizations WHERE op_type='git-push-main' ORDER BY created_at DESC, rowid DESC LIMIT 1\").fetchone()[0])
 ")"
 	[[ "$audit_target" == "repo=sha256:${push_hash};ref=refs/heads/main;head=${source_sha}" ]] || {
 		echo "FAIL: audit target not bound to source/pushurl: $audit_target"
@@ -322,10 +322,16 @@ scenario_delegation_allows_push_at_floor() {
 		echo "FAIL: remote main=$pushed, want $head_sha"; exit 1; }
 
 	# The whole claim of this goal is that only the declared level changed.
+	#
+	# rowid breaks the created_at tie. created_at is unix SECONDS, and the
+	# refusal recorded by the preceding L1 scenario lands in the same second as
+	# this push, so ordering by timestamp alone picks between them arbitrarily.
+	# rowid is insertion order, which is what "the row this push just wrote"
+	# actually means.
 	local mode; mode="$(python3 -c "
 import sqlite3
 db = sqlite3.connect('${SANDBOX}/.clavain/intercore.db')
-print(db.execute(\"SELECT mode FROM authorizations WHERE op_type='git-push-main' ORDER BY created_at DESC LIMIT 1\").fetchone()[0])
+print(db.execute(\"SELECT mode FROM authorizations WHERE op_type='git-push-main' ORDER BY created_at DESC, rowid DESC LIMIT 1\").fetchone()[0])
 ")"
 	[[ "$mode" == "auto" ]] || { echo "FAIL: audit mode=$mode, want auto"; exit 1; }
 	echo "PASS: L3 authorizes the push; audit row records mode=auto"
@@ -397,6 +403,106 @@ scenario_explain_survives_op_with_no_policy_rule() {
 		exit 1
 	}
 	echo "PASS: unknown ops explain cleanly"
+}
+
+# capped_rows [op] → count of rows the delegation ceiling withheld
+capped_rows() {
+  python3 - "${SANDBOX}/.clavain/intercore.db" "${1:-}" <<'SQL'
+import sqlite3, sys
+path, op = sys.argv[1], sys.argv[2]
+db = sqlite3.connect(path)
+q = ("SELECT COUNT(*) FROM authorizations "
+     "WHERE json_extract(vetting,'$.delegation.capped') = 1")
+args = ()
+if op:
+    q += " AND op_type = ?"
+    args = (op,)
+print(db.execute(q, args).fetchone()[0])
+SQL
+}
+
+scenario_ceiling_records_what_it_withheld() {
+	echo "=== evidence: a ceiling refusal writes a capped row ==="
+	local before after
+	before="$(capped_rows git-push-main)"
+
+	set_delegation_level 1
+	if CLAVAIN_AGENT_ID=smoke-agent bash "${GATES}/git-push-main.sh" \
+			origin "HEAD:refs/heads/main" >/dev/null 2>&1; then
+		echo "FAIL: the push proceeded at L1; the ceiling did not refuse"
+		exit 1
+	fi
+	after="$(capped_rows git-push-main)"
+	if [[ "$after" -le "$before" ]]; then
+		echo "FAIL: ceiling refused but wrote no capped row (before=$before after=$after)"
+		echo "      the refusal path exits before gate_record_signed, so a"
+		echo "      withheld decision must be recorded on the abort path"
+		exit 1
+	fi
+	set_delegation_level 3
+	echo "PASS: a withheld push is recorded, not merely printed"
+}
+
+scenario_policy_confirm_is_not_counted_as_a_ceiling_save() {
+	echo "=== evidence: a policy confirm is not miscounted as a ceiling save ==="
+	# L3 clears the floor, so anything withheld here is the policy's doing.
+	# Counting it would inflate the very number used to argue the ceiling earns
+	# its keep.
+	set_delegation_level 3
+	local before after
+	before="$(capped_rows bd-push-dolt)"
+	CLAVAIN_AGENT_ID=smoke-agent bash "${GATES}/bd-push-dolt.sh" >/dev/null 2>&1 || true
+	after="$(capped_rows bd-push-dolt)"
+	if [[ "$after" -ne "$before" ]]; then
+		echo "FAIL: a decision at L3 (above the floor) was recorded as ceiling-capped"
+		exit 1
+	fi
+	echo "PASS: only the ceiling's own withholdings are counted"
+}
+
+scenario_recording_did_not_change_the_decision() {
+	echo "=== evidence: recording is observational, not authorizing ==="
+	# The L3 push that passed before evidence existed must still pass, and the
+	# L1 push must still refuse. Audit writes must not become load-bearing.
+	set_delegation_level 3
+	if ! CLAVAIN_AGENT_ID=smoke-agent bash "${GATES}/git-push-main.sh" \
+			origin "HEAD:refs/heads/main" >/dev/null 2>&1; then
+		echo "FAIL: L3 push now refused; recording changed an authorization outcome"
+		exit 1
+	fi
+	set_delegation_level 1
+	if CLAVAIN_AGENT_ID=smoke-agent bash "${GATES}/git-push-main.sh" \
+			origin "HEAD:refs/heads/main" >/dev/null 2>&1; then
+		echo "FAIL: L1 push now allowed; recording changed an authorization outcome"
+		exit 1
+	fi
+	set_delegation_level 3
+	echo "PASS: decisions are unchanged with recording on"
+}
+
+scenario_evidence_rows_still_verify() {
+	echo "=== evidence: rows carrying delegation evidence still verify ==="
+	# `vetting` is inside the signed payload, so populating it is a change to
+	# what every new row signs. If the stored bytes and the signed bytes ever
+	# diverge — two independent json.Marshal calls would do it — every new row
+	# silently becomes unverifiable. This is the assertion that catches it.
+	local out
+	out="$(clavain-cli policy verify --project-root="$SANDBOX" 2>&1)" || {
+		echo "FAIL: policy verify errored"
+		echo "$out"
+		exit 1
+	}
+	if ! jq -e '(.invalid // 0) == 0 and (.unsigned // 0) == 0' >/dev/null 2>&1 <<<"$out"; then
+		echo "FAIL: signed rows did not verify after delegation evidence was added"
+		echo "$out"
+		exit 1
+	fi
+	local capped; capped="$(capped_rows)"
+	[[ "$capped" -gt 0 ]] || {
+		echo "FAIL: no capped rows existed, so verification proved nothing"
+		exit 1
+	}
+	echo "PASS: $capped capped row(s) present and all signatures verify"
 }
 
 # ─── token scenarios ──────────────────────────────────────────────────
@@ -613,6 +719,10 @@ case "$FOCUS" in
     scenario_explain_names_the_floor
     scenario_explain_is_silent_for_exempt_ops
     scenario_explain_survives_op_with_no_policy_rule
+    scenario_ceiling_records_what_it_withheld
+    scenario_policy_confirm_is_not_counted_as_a_ceiling_save
+    scenario_recording_did_not_change_the_decision
+    scenario_evidence_rows_still_verify
     ;;
   token)
     scenario_runtime_proof_precedes_token
@@ -633,6 +743,10 @@ case "$FOCUS" in
     scenario_explain_names_the_floor
     scenario_explain_is_silent_for_exempt_ops
     scenario_explain_survives_op_with_no_policy_rule
+    scenario_ceiling_records_what_it_withheld
+    scenario_policy_confirm_is_not_counted_as_a_ceiling_save
+    scenario_recording_did_not_change_the_decision
+    scenario_evidence_rows_still_verify
     scenario_runtime_proof_precedes_token
     scenario_token_valid
     scenario_token_revoked_hard_fail

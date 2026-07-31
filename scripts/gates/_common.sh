@@ -173,6 +173,14 @@ gate_check() {
   local op="$1"
   shift || true
   local raw rc policy_mode=""
+  # Remember the target so a refusal can be recorded against it. The abort path
+  # runs in gate_prompt_or_abort, which only receives the op.
+  GATE_TARGET=""
+  local _a
+  for _a in "$@"; do
+    case "$_a" in --target=*) GATE_TARGET="${_a#--target=}" ;; esac
+  done
+  export GATE_TARGET
   raw="$(clavain-cli policy check "$op" \
       --project-root="$CLAVAIN_AUTHZ_PROJECT_ROOT" "$@" 2>&1)" && rc=0 || rc=$?
 
@@ -225,6 +233,42 @@ gate_explain_withholding() {
 # gate_prompt_or_abort <op>
 # Called when policy check exits 1 (confirm). Prompts on tty, aborts otherwise.
 # Sets GATE_MODE=confirmed on accept.
+# gate_record_withheld <op>
+#
+# Records a decision that did NOT proceed. Without this the audit table holds
+# only granted authorizations, so "how often did the ceiling withhold a push"
+# has no rows to count — the refusal path exits before gate_record_signed ever
+# runs, which is exactly the case the evidence is meant to capture.
+#
+# Best-effort by construction: the operation is already being refused, and a
+# failure to write the audit row must never be able to change that. The grant
+# path deliberately keeps the opposite rule (record failure aborts the op).
+gate_record_withheld() {
+  local op="$1"
+  local target="${GATE_TARGET:-}"
+  # No target means nothing stable to key the row to; skip rather than invent
+  # one. Gates that do not pass --target simply contribute no refusal rows.
+  [[ -n "$target" ]] || return 0
+  local agent
+  agent="$(gate_resolve_agent)"
+  local args=(
+    --op="$op"
+    --target="$target"
+    --agent="$agent"
+    --mode=blocked
+    --policy-match="${GATE_POLICY_MATCH:-}"
+    --policy-hash="${GATE_POLICY_HASH:-}"
+  )
+  if [[ "${GATE_DELEGATION_CAPPED:-false}" == "true" ]]; then
+    args+=( --delegation-capped )
+  fi
+  if ! clavain-cli policy record-signed \
+      --project-root="$CLAVAIN_AUTHZ_PROJECT_ROOT" "${args[@]}" >/dev/null 2>&1; then
+    echo "policy: could not record the withheld ${op} decision; the refusal stands" >&2
+  fi
+  return 0
+}
+
 gate_prompt_or_abort() {
   local op="$1"
   gate_explain_withholding "$op"
@@ -237,9 +281,11 @@ gate_prompt_or_abort() {
       return 0
     fi
     echo "aborted" >&2
+    gate_record_withheld "$op"
     return 1
   fi
   echo "policy: ${op} requires confirmation; no tty available" >&2
+  gate_record_withheld "$op"
   return 1
 }
 
@@ -274,6 +320,13 @@ gate_record_signed() {
   )
   if [[ -n "$bead" ]]; then
     args+=( --bead="$bead" )
+  fi
+  # Whether the ceiling changed this decision is the one delegation fact the
+  # recorder cannot re-derive later: it depends on what the policy would have
+  # said, which only the check that already ran knows. Everything else about
+  # the level is re-read from kernel state at record time.
+  if [[ "${GATE_DELEGATION_CAPPED:-false}" == "true" ]]; then
+    args+=( --delegation-capped )
   fi
   local raw
   if ! raw="$(clavain-cli policy record-signed \
