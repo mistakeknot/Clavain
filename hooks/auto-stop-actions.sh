@@ -119,10 +119,30 @@ fi
 
 # Shadow tracker detection — orthogonal to tier waterfall
 # Runs independently; emits warning always, blocks only if no other tier claimed the cycle
+#
+# SCOPE (fixed 2026-07-30, doctor run): scan the enclosing git repo, not ".".
+# Shadow trackers are a property of a project, so the project is the right unit.
+# Scanning "." meant that ending a session in an umbrella directory like
+# ~/projects (which is not a repo and holds 60+ checkouts) swept every repo at
+# once — measured at 6.4s of a hook capped at 5s, so it always timed out there
+# and the goal-cadence/compound/drift instruction was silently dropped. No repo
+# => no project => nothing to enforce.
 SHADOW_WARNING=""
-if [[ ! -f ".claude/clavain.no-shadow-enforce" ]]; then
-    shadow_files=$(detect_shadow_trackers "." 2>/dev/null)
-    shadow_count=$?
+_SHADOW_SCAN_ROOT=""
+if command -v git &>/dev/null; then
+    _SHADOW_SCAN_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || _SHADOW_SCAN_ROOT=""
+fi
+if [[ -n "$_SHADOW_SCAN_ROOT" && ! -f ".claude/clavain.no-shadow-enforce" ]]; then
+    # detect_shadow_trackers returns the MATCH COUNT as its exit status, so a
+    # successful detection is a "failure" as far as bash is concerned. With the
+    # `trap 'exit 0' ERR` at the top of this file, a bare assignment therefore
+    # killed the whole hook the moment any shadow tracker was found — before
+    # the goal-cadence / compound / dispatch / drift waterfall below ever ran.
+    # In a repo with even one tracker this hook was a silent no-op end to end
+    # (~/projects/shadow-work has 25). The `|| shadow_count=$?` form both
+    # captures the count and keeps the ERR trap out of it. (doctor run, 2026-07-30)
+    shadow_count=0
+    shadow_files=$(detect_shadow_trackers "$_SHADOW_SCAN_ROOT" 2>/dev/null) || shadow_count=$?
     if [[ $shadow_count -gt 0 ]]; then
         SHADOW_WARNING="Shadow tracker detected: ${shadow_count} file(s) found using work-tracking outside beads:\n${shadow_files}\n\nThese drift silently and cause duplicate work. Run /bead-sweep to migrate to beads, or delete if already tracked."
     fi
