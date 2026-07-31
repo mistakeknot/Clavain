@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mistakeknot/intercore/pkg/authz"
+	"github.com/mistakeknot/intercore/pkg/autonomy"
 	_ "modernc.org/sqlite"
 )
 
@@ -31,15 +33,67 @@ var ErrPolicyMalformed = errors.New("policy: malformed")
 // ─── Policy check output schema ──────────────────────────────────────
 
 // policyCheckOutputSchema is bumped when the shape of PolicyCheckOutput changes.
-const policyCheckOutputSchema = 1
+//
+// v2 adds `delegation`. The gate wrappers require schema >= 2 and abort
+// otherwise, which is deliberate in both directions: an old binary paired with
+// a new gate cannot enforce the delegation ceiling, and a new binary paired
+// with an old gate would have its ceiling silently discarded. A mismatched pair
+// refuses the operation rather than guessing which half to trust.
+const policyCheckOutputSchema = 2
 
 // PolicyCheckOutput is the stdout JSON from `policy check`.
 type PolicyCheckOutput struct {
-	Schema      int    `json:"schema"`
-	Mode        string `json:"mode"`
-	PolicyMatch string `json:"policy_match"`
-	PolicyHash  string `json:"policy_hash"`
-	Reason      string `json:"reason"`
+	Schema      int               `json:"schema"`
+	Mode        string            `json:"mode"`
+	PolicyMatch string            `json:"policy_match"`
+	PolicyHash  string            `json:"policy_hash"`
+	Reason      string            `json:"reason"`
+	Delegation  *DelegationOutput `json:"delegation"`
+}
+
+// DelegationOutput reports the human-delegation level that was in force and
+// what it permitted, so a refused operation can say which rung refused it.
+type DelegationOutput struct {
+	Level      int    `json:"level"`
+	Name       string `json:"name"`
+	Declared   bool   `json:"declared"`
+	Source     string `json:"source"`
+	MinForAuto int    `json:"min_for_auto"`
+	Capped     bool   `json:"capped"`
+}
+
+// resolveDelegation reads the declared delegation level from kernel state.
+//
+// It never fails. An unreachable or unmigrated intercore.db resolves to
+// autonomy.DefaultLevel, which sits below the push floor — so a project whose
+// kernel cannot be read gets confirmation prompts, not silent pushes. The
+// result is always non-nil: the authorization path must never run without a
+// ceiling, even when the ceiling is the fallback one.
+func resolveDelegation(flags map[string]string) *autonomy.Resolution {
+	db, _, err := openIntercoreDB(flags)
+	if err != nil {
+		res := autonomy.Resolve(context.Background(), nil)
+		res.Source = fmt.Sprintf("default (kernel unreadable: %v)", err)
+		return &res
+	}
+	defer db.Close()
+	res := autonomy.ResolveDB(context.Background(), db)
+	return &res
+}
+
+// delegationOutput renders the resolved level for the `policy check` JSON.
+func delegationOutput(res *autonomy.Resolution, op string, capped bool) *DelegationOutput {
+	if res == nil {
+		return nil
+	}
+	return &DelegationOutput{
+		Level:      res.Level,
+		Name:       res.Name,
+		Declared:   res.Declared,
+		Source:     res.Source,
+		MinForAuto: autonomy.MinLevelForAuto(op),
+		Capped:     capped,
+	}
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -277,6 +331,8 @@ func cmdPolicyCheck(args []string) error {
 		input.CommittedByThisSession = true
 	}
 
+	input.Delegation = resolveDelegation(flags)
+
 	result, err := authz.Check(merged, input)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -288,6 +344,7 @@ func cmdPolicyCheck(args []string) error {
 		PolicyMatch: result.PolicyMatch,
 		PolicyHash:  hash,
 		Reason:      result.Reason,
+		Delegation:  delegationOutput(input.Delegation, op, result.DelegationCapped),
 	}
 	if err := outputJSON(out); err != nil {
 		return err
@@ -427,6 +484,8 @@ func cmdPolicyExplain(args []string) error {
 		input.CommittedByThisSession = true
 	}
 
+	input.Delegation = resolveDelegation(flags)
+
 	result, err := authz.Check(merged, input)
 	if err != nil {
 		return fmt.Errorf("policy explain: %w", err)
@@ -435,6 +494,17 @@ func cmdPolicyExplain(args []string) error {
 	fmt.Printf("decision:    %s\n", result.Mode)
 	fmt.Printf("rule match:  %s\n", result.PolicyMatch)
 	fmt.Printf("reason:      %s\n", result.Reason)
+	if d := input.Delegation; d != nil {
+		declared := "declared"
+		if !d.Declared {
+			declared = "undeclared, defaulted"
+		}
+		fmt.Printf("delegation:  L%d (%s) [%s]", d.Level, d.Name, declared)
+		if floor := autonomy.MinLevelForAuto(op); floor > 0 {
+			fmt.Printf(" — %s needs L%d to auto-proceed", op, floor)
+		}
+		fmt.Println()
+	}
 	fmt.Printf("policy hash: %s\n", hash)
 	fmt.Printf("sources:     global=%s project=%s env=%s\n", displayPath(globalPath), displayPath(projectPath), displayPath(envPath))
 	return nil

@@ -74,12 +74,36 @@ subagents:
         synthesis: haiku
     brainstorm-reviewed:
       model: sonnet
+    # Routing-table v2 (2026-07-27, melange subsidized-fleet-orchestration):
+    # plan authoring and plan review carry the doctrine's highest leverage —
+    # a plan defect replicates into every downstream consumer (§1 asymmetry,
+    # restated by the parley as fan-out multiplicity: count the consumers).
+    # fable on these phases; falls back to opus when unavailable (fc5.1, same
+    # machinery as brainstorm). DOSE GUARD (parley consensus 7): the phase
+    # default is for the author/verdict agent — bulk categories stay cheap so
+    # a 10-lens plan review never becomes 10 fable calls. Every fable call
+    # drains BOTH the shared weekly pool and the 50% fable sub-cap
+    # (ic state get model.fable.pool global; verified 2026-07-27, standing
+    # capacity since 2026-07-20 — the "limited window" era is over).
+    # PILOT-1 EVIDENCE (n=1/arm, provisional): both fable- and opus-authored
+    # plans produced exact code and DEFECTIVE VERIFY GAUGES — gauge review by
+    # a model other than the plan author is required before freeze; see
+    # commands/model-routing.md § Routing-table v2.
     strategized:
-      model: sonnet
+      model: fable  # plan authoring; falls back to opus when closed (fc5.1)
+      categories:
+        research: haiku
+        review: sonnet
+        synthesis: haiku
     strategy-reviewed:
       model: sonnet
     planned:
-      model: sonnet
+      model: fable  # plan-review verdict; falls back to opus when closed (fc5.1)
+      categories:
+        research: haiku
+        # fd-* lens pool stays cheap; the verdict/synthesis step rides the
+        # phase model above (fd-safety/fd-correctness floors still apply)
+        review: sonnet
     executing:
       model: sonnet
       categories:

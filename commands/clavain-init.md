@@ -2,7 +2,7 @@
 name: clavain-init
 description: Scaffold .clavain/ agent memory directory in the current project
 argument-hint: ""
-disable-model-invocation: false
+disable-model-invocation: true
 ---
 
 # /init

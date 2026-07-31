@@ -1,6 +1,7 @@
 ---
 name: file-todos
-description: This skill should be used when managing the file-based todo tracking system in the todos/ directory. It provides workflows for creating todos, managing status and dependencies, conducting triage, and integrating with slash commands and code review processes.
+description: Manage the file-based todo system in todos/ — create, status, dependencies, triage, and code-review integration.
+disable-model-invocation: true
 ---
 
 <!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same file naming, YAML schema, and workflow instructions. -->

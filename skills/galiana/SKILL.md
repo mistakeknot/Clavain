@@ -1,6 +1,7 @@
 ---
 name: galiana
 description: Show discipline analytics — defect escape rate, override rate, cost metrics, and agent scorecard
+disable-model-invocation: true
 ---
 
 # Galiana — Discipline Analytics

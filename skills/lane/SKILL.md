@@ -1,6 +1,7 @@
 ---
 name: lane
 description: Manage thematic work lanes — discover, create, tag beads, show velocity and starvation scores
+disable-model-invocation: true
 ---
 
 # Lane — Thematic Work Lane Management

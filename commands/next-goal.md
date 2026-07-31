@@ -152,3 +152,15 @@ stored in the current repository's tracker.
 Frame each candidate as a DRAFT CHARTER seed: the recommendation's /goal text
 must be lint-clean (`ic goal lint-condition`) and the block should note that
 `/clavain:goal-form` turns a candidate into a ratified charter (KD 7).
+
+**Lint-clean is a command you RUN, not a property you assert.** Pipe the
+drafted text through `ic goal lint-condition --text="..."` before emitting the
+block. Five consecutive goals shipped unlinted from this path because the
+requirement read as advice; the shape rules it now checks (ventriloquism,
+plan detail, pre-ruled calls) are exactly the defects that got through.
+
+The /goal text follows `docs/guide-goal-shape.md`. The rule that bites most
+often here: you are drafting for the user to paste, so a ruling written in
+their voice arrives pre-approved as canon. State open calls as questions and
+keep your recommendation in the prose above the block, where it reads as your
+recommendation.

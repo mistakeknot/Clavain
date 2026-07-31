@@ -1,5 +1,5 @@
 {
-  "generated": "2026-07-23T21:34:56Z",
+  "generated": "2026-07-27T18:37:34Z",
   "counts": {
     "skills": 26,
     "agents": 6,
@@ -12,7 +12,7 @@
   "skills": [
     {
       "name": "bug-reproduction-validator",
-      "description": "Use when you receive a bug report or issue that needs verification \u2014 systematically reproduces and validates reported behavior to confirm whether it is an actual bug."
+      "description": "Reproduce and validate a bug report to confirm whether the reported behavior is an actual bug."
     },
     {
       "name": "code-review-discipline",
@@ -20,11 +20,11 @@
     },
     {
       "name": "codex-delegate",
-      "description": "Use proactively for well-scoped implementation, exploration, search, test generation, and code review tasks with clear scope and success criteria \u2014 delegates to Codex CLI via dispatch.sh for cost-efficient execution. Keep architecture, brainstorming, and interactive work in the main agent."
+      "description": "Delegate well-scoped implementation, exploration, search, test-generation, or code-review tasks to Codex CLI. Not for architecture or interactive work."
     },
     {
       "name": "data-migration-expert",
-      "description": "Use when PRs involve data migrations, backfills, or production data transformations \u2014 ID mappings, column renames, enum conversions, or schema changes. Validates migrations against production reality."
+      "description": "Validate data migrations, backfills, ID mappings, column renames, enum conversions, and schema changes against production reality."
     },
     {
       "name": "dispatching-parallel-agents",
@@ -40,7 +40,7 @@
     },
     {
       "name": "file-todos",
-      "description": "This skill should be used when managing the file-based todo tracking system in the todos/ directory. It provides workflows for creating todos, managing status and dependencies, conducting triage, and integrating with slash commands and code review processes."
+      "description": "Manage the file-based todo system in todos/ \u2014 create, status, dependencies, triage, and code-review integration."
     },
     {
       "name": "galiana",
@@ -48,15 +48,15 @@
     },
     {
       "name": "interop-with-gsd",
-      "description": "If gsd-plugin is not installed, this skill is informational only. Use when the user mentions /gsd:* commands, references the GSD framework (Get Stuff Done), or asks how Clavain compares to spec-driven development workflows."
+      "description": "Use when the user mentions /gsd:* commands or the GSD (Get Stuff Done) framework. Informational unless gsd-plugin is installed."
     },
     {
       "name": "interop-with-superpowers",
-      "description": "If superpowers is not installed, this skill is informational only. Use when the user mentions /superpowers:* commands or asks how Clavain relates to superpowers (obra/superpowers)."
+      "description": "Use when the user mentions /superpowers:* commands or the superpowers rig (obra/superpowers). Informational unless it is installed."
     },
     {
       "name": "interserve-engine",
-      "description": "Invoked from /clavain:interserve \u2014 dispatches tasks to Codex CLI agents (megaprompt or parallel), with debate triggers and Oracle escalation. Internal; users invoke via slash command."
+      "description": "Internal engine for /clavain:interserve \u2014 dispatches tasks to Codex CLI agents with debate triggers and Oracle escalation."
     },
     {
       "name": "landing-a-change",
@@ -76,7 +76,7 @@
     },
     {
       "name": "project-onboard",
-      "description": "Use to set up any Sylveste project (new or existing) \u2014 introspects, creates repo, scaffolds docs/automation/observability, seeds via interpath."
+      "description": "Set up a Sylveste project, new or existing \u2014 introspect, create repo, scaffold docs/automation/observability, seed via interpath."
     },
     {
       "name": "refactor-safely",
@@ -84,7 +84,7 @@
     },
     {
       "name": "remontoire",
-      "description": "Use when operating the Remontoire portfolio agency - inspect status, run shadow or proposal cycles, make an explicit approval decision, resume approved work, or verify receipts"
+      "description": "Operate the Remontoire portfolio agency \u2014 status, shadow/proposal cycles, approval decisions, resuming approved work, verifying receipts."
     },
     {
       "name": "ship",
@@ -96,7 +96,7 @@
     },
     {
       "name": "ui-polish",
-      "description": "Use when the user provides visual feedback about a web or TUI interface \u2014 iterates on UI refinements (tooltips, labels, layouts, mobile fixes, spacing, chart styling) from a screenshot or URL plus natural-language instruction."
+      "description": "Targeted frontend polish \u2014 tooltips, labels, layout, spacing, mobile, chart styling \u2014 from a screenshot or URL plus a natural-language instruction."
     },
     {
       "name": "upstream-sync-engine",
@@ -104,11 +104,11 @@
     },
     {
       "name": "using-clavain",
-      "description": "Use at start of any conversation \u2014 how to find/use skills, agents, commands. Requires Skill invocation before ANY response, including clarifying questions."
+      "description": "How to find and use Clavain skills, agents, and commands. Load at the start of a Clavain workflow."
     },
     {
       "name": "using-tmux-for-interactive-commands",
-      "description": "Use for interactive CLI tools (vim, git rebase -i, REPLs) that need a real terminal \u2014 drives tmux detached sessions via send-keys/capture-pane."
+      "description": "Drive interactive CLI tools needing a real terminal (vim, git rebase -i, REPLs) via detached tmux send-keys/capture-pane."
     },
     {
       "name": "writing-plans",
@@ -123,7 +123,7 @@
     },
     {
       "name": "plan-reviewer",
-      "description": "Use this agent when a major project step has been completed and needs to be reviewed against the original plan and coding standards. Examples: <example>Context: The user is creating a code-review agent that should be called after a logical chunk of code is written. user: \"I've finished implementing the user authentication system as outlined in step 3 of our plan\" assistant: \"Great work! Now let me use the plan-reviewer agent to review the implementation against our plan and coding standards\" <commentary>Since a major project step has been completed, use the plan-reviewer agent to validate the work against the plan and identify any issues.</commentary></example> <example>Context: User has completed a significant feature implementation. user: \"The API endpoints for the task management system are now complete - that covers step 2 from our architecture document\" assistant: \"Excellent! Let me have the plan-reviewer agent examine this implementation to ensure it aligns with our plan and follows best practices\" <commentary>A numbered step from the planning document has been completed, so the plan-reviewer agent should review the work.</commentary></example>",
+      "description": "Use this agent when a major project step has been completed and needs to be reviewed against the original plan and coding standards.",
       "category": "review"
     },
     {

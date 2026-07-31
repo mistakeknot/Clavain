@@ -1,6 +1,6 @@
 ---
 name: project-onboard
-description: Use to set up any Sylveste project (new or existing) — introspects, creates repo, scaffolds docs/automation/observability, seeds via interpath.
+description: Set up a Sylveste project, new or existing — introspect, create repo, scaffold docs/automation/observability, seed via interpath.
 ---
 
 <!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. -->

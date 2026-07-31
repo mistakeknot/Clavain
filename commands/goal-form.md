@@ -47,6 +47,19 @@ LITERAL string handed to /goal — never a paraphrase; write it so the
 evaluator can judge it from surfaced output: commands, exit codes, bead
 closes; bound it with "or stop after N turns") · Successor obligations.
 
+**The completion condition follows `docs/guide-goal-shape.md`** —
+OUTCOME / GATE n / DONE WHEN / OUT, and its four rules. Two of them bind
+hardest on YOU as the drafter:
+
+- **State the outcome, not the mechanism.** Exact signatures, discriminant
+  numbers, and `file.rs:120` refs are plan content, not goal content.
+- **Never write the user's ruling in the user's voice.** "and I am ruling
+  it" in a charter you drafted satisfies a canon gate with your own
+  document. Carry the open call into the condition as a QUESTION; put your
+  recommendation in the handoff message, not inside the goal.
+
+An unresolved design call from Step 3 becomes a `GATE`, never a ruling.
+
 ## Step 5 — Lint + mint
 
 `ic goal lint-condition --file=<condition-extract>` — fix errors (the

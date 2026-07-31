@@ -25,6 +25,15 @@ die() {
     exit 1
 }
 
+# exit 3 means "this machine cannot build", as distinct from "the build
+# failed" (exit 1). intercore's release.go maps 3 to
+# ErrReleaseVerifierUnavailable so a toolchain gap is never reported as stale
+# artifacts. Keep in step with scripts/verify-release-binaries.sh.
+unavailable() {
+    echo "build-release: $*" >&2
+    exit 3
+}
+
 hash_file() {
     local path="$1"
     if command -v sha256sum >/dev/null 2>&1; then
@@ -32,25 +41,25 @@ hash_file() {
     elif command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$path" | awk '{print $1}'
     else
-        die "sha256sum or shasum is required"
+        unavailable "sha256sum or shasum is required"
     fi
 }
 
 resolve_intercore_root() {
     local root
     root="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$SRC_DIR" list -m -f '{{with .Replace}}{{.Dir}}{{end}}' github.com/mistakeknot/intercore)" ||
-        die "cannot resolve the Intercore module replacement"
+        unavailable "cannot resolve the Intercore module replacement"
     [[ -n "$root" && -d "$root" ]] ||
-        die "github.com/mistakeknot/intercore must use a local module replacement"
+        unavailable "github.com/mistakeknot/intercore must use a local module replacement"
     (cd "$root" && pwd)
 }
 
 # Validate build environment
 if ! command -v go &>/dev/null; then
-    die "Go not found"
+    unavailable "Go not found"
 fi
-command -v git >/dev/null 2>&1 || die "git is required"
-command -v jq >/dev/null 2>&1 || die "jq is required"
+command -v git >/dev/null 2>&1 || unavailable "git is required"
+command -v jq >/dev/null 2>&1 || unavailable "jq is required"
 
 if [[ ! -d "$SRC_DIR" ]]; then
     die "source dir not found at $SRC_DIR"
@@ -75,7 +84,7 @@ LOCK_HELD=1
 
 INTERCORE_ROOT="$(resolve_intercore_root)"
 if ! git -C "$INTERCORE_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    die "Intercore replacement is not a Git worktree"
+    unavailable "Intercore replacement is not a Git worktree"
 fi
 if [[ -n "$(git -C "$INTERCORE_ROOT" status --porcelain=v1 --untracked-files=normal)" ]]; then
     die "Intercore worktree is not clean"

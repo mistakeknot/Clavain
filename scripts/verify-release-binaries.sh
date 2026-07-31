@@ -6,9 +6,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST="$REPO_ROOT/bin/release-manifest.json"
 
+# Two failure classes, two exit codes, because they mean opposite things.
+#
+#   die (exit 1)         the verifier LOOKED and the artifacts do not match.
+#   unavailable (exit 3) the verifier could not look at all — a missing tool,
+#                        an unresolvable module replacement. Says nothing about
+#                        the artifacts.
+#
+# Collapsing these told operators "release artifacts are stale" on machines that
+# had simply never been able to check (mk-cg3z). Exit 3 is the reserved code
+# intercore's internal/publish/release.go maps to ErrReleaseVerifierUnavailable;
+# keep the two in step if either moves.
 die() {
     echo "verify-release-binaries: $*" >&2
     exit 1
+}
+
+unavailable() {
+    echo "verify-release-binaries: $*" >&2
+    exit 3
 }
 
 hash_file() {
@@ -18,22 +34,25 @@ hash_file() {
     elif command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$path" | awk '{print $1}'
     else
-        die "sha256sum or shasum is required"
+        unavailable "sha256sum or shasum is required"
     fi
 }
 
 resolve_intercore_root() {
     local root
+    # Environment, not staleness: a checkout laid out so the replacement cannot
+    # resolve (a worktree outside the tree, say) has told us nothing about the
+    # binaries.
     root="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -m -f '{{with .Replace}}{{.Dir}}{{end}}' github.com/mistakeknot/intercore)" ||
-        die "cannot resolve the Intercore module replacement"
+        unavailable "cannot resolve the Intercore module replacement"
     [[ -n "$root" && -d "$root" ]] ||
-        die "github.com/mistakeknot/intercore must use a local module replacement"
+        unavailable "github.com/mistakeknot/intercore must use a local module replacement"
     (cd "$root" && pwd)
 }
 
-command -v git >/dev/null 2>&1 || die "git is required"
-command -v go >/dev/null 2>&1 || die "go is required"
-command -v jq >/dev/null 2>&1 || die "jq is required"
+command -v git >/dev/null 2>&1 || unavailable "git is required"
+command -v go >/dev/null 2>&1 || unavailable "go is required"
+command -v jq >/dev/null 2>&1 || unavailable "jq is required"
 [[ -f "$MANIFEST" ]] || die "manifest is missing"
 
 jq -e '
@@ -74,7 +93,7 @@ git -C "$REPO_ROOT" diff --quiet "$source_revision"..HEAD -- cmd/clavain-cli ||
 
 intercore_root="$(resolve_intercore_root)"
 git -C "$intercore_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
-    die "Intercore replacement is not a Git worktree"
+    unavailable "Intercore replacement is not a Git worktree"
 actual_intercore_revision="$(git -C "$intercore_root" rev-parse HEAD)"
 [[ "$actual_intercore_revision" == "$intercore_revision" ]] ||
     die "Intercore revision mismatch: manifest=$intercore_revision checkout=$actual_intercore_revision"

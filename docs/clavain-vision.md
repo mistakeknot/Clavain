@@ -157,7 +157,7 @@ Each macro-stage has a different risk profile and corresponding safety controls:
 | **Build** | High — writes code, modifies files | Gate enforcement: plan must be reviewed before execution. Tests run continuously. Incremental commits enable rollback. Sandbox specs constrain agent file access (future). |
 | **Ship** | Highest — pushes to remote, closes work items | Quality gates must pass. Human explicitly approves push. No auto-push without confirmation. Override audit trail. |
 
-**Invariant (today):** The system never pushes code to a remote repository without human confirmation. This is a Level 1-2 safety control. As trust progresses through the ladder (PHILOSOPHY.md), auto-push becomes available under policy constraints (e.g., auto-push to staging branches, require confirmation for main). The constraint softens through gated processes, not removal.
+**Invariant (today):** The system never pushes code to a remote repository without human confirmation. This is a safety control of the human delegation ladder, not a permanent property — as trust progresses, auto-push becomes available under policy constraints (e.g., auto-push to staging branches, require confirmation for main). The constraint softens through gated processes, not removal. See [`docs/canon/autonomy.md` § Human delegation ladder](../../../docs/canon/autonomy.md#1-human-delegation-ladder-l0l5) for the level definitions and the current position.
 
 ## Collaboration Stance
 
@@ -223,16 +223,7 @@ Kernel events              thresholds shift             link related work
 - **Event-driven (reactive).** The scanner registers as a kernel event bus consumer. Run completions trigger search for related prior art. Work item creation checks for existing research. Dispatch completions with novel techniques trigger prior art search. Event-driven scans are targeted (using triggering event context); scheduled scans cast a wide net.
 - **User-initiated (on-demand).** The user triggers a full scan, submits a topic for triage, or searches stored discoveries via the kernel discovery API. User submissions receive a source trust bonus.
 
-**Confidence-tiered autonomy policy.** The kernel enforces tier boundaries; the OS decides the policy at each tier:
-
-| Tier | Score Range | OS Policy |
-|---|---|---|
-| **High** | ≥ 0.8 | Auto-create bead (P3 default), write briefing doc, notify in session inbox |
-| **Medium** | 0.5 – 0.8 | Write briefing draft, surface in inbox for human promote/dismiss/adjust |
-| **Low** | 0.3 – 0.5 | Log only, searchable via kernel discovery API |
-| **Discard** | < 0.3 | Record with `discarded` status for negative signal |
-
-**Adaptive thresholds.** Tier boundaries shift based on the promotion-to-discovery ratio. If humans consistently promote Medium items (>30% promotion rate — chosen as the point where manual triage cost exceeds auto-triage risk), the High threshold lowers by 0.02 per feedback cycle (small step to prevent oscillation). If humans consistently dismiss High items (<10% rate), the threshold rises. These defaults are tunable per-project. Convergence toward human judgment is tracked by Interspect.
+**Confidence-tiered autonomy policy.** The kernel enforces tier boundaries; the OS decides the policy at each tier. The four tiers (High / Medium / Low / Discard), their score ranges, the OS policy at each, and the adaptive-threshold rule are defined once in [`docs/canon/autonomy.md` § Discovery confidence tiers](../../../docs/canon/autonomy.md#4-discovery-confidence-tiers).
 
 **Backlog refinement rules.** The OS applies refinement policy using kernel primitives:
 - **Deduplication** — kernel enforces cosine similarity threshold (default 0.85, empirically tuned against interject's all-MiniLM-L6-v2 embeddings — adjust per embedding model); duplicates link as evidence to existing beads
@@ -257,7 +248,7 @@ Bead shipped     → Feedback signal → Discovery marked "validated"
                                       Similar future discoveries score higher
 ```
 
-Discovery is a capability track orthogonal to the autonomy ladder (see the [Sylveste vision](../../../docs/sylveste-vision.md) for the full ladder and capability track definitions). It operates at any autonomy level — the pipeline that finds work before it can be recorded.
+Discovery is a capability track orthogonal to the human delegation ladder (see [`docs/canon/autonomy.md`](../../../docs/canon/autonomy.md) for all four scales and how they relate). It operates at any delegation level — the pipeline that finds work before it can be recorded.
 
 **What already exists.** The interject plugin implements the core discovery engine: source adapters (arXiv, HN, GitHub, Anthropic docs, Exa), embedding-based scoring (all-MiniLM-L6-v2, 384 dims), adaptive thresholds, and bead/briefing output. The intersearch library provides shared embedding and Exa search infrastructure. What's missing is OS pipeline integration — feeding interject discoveries into the kernel event bus, event-driven scan triggers, and automated backlog refinement. The kernel primitives (discovery storage, confidence tiers, scoring, promotion/dismissal) shipped in E5.
 
@@ -420,7 +411,7 @@ Migrate Clavain from ephemeral state management to durable kernel-backed orchest
 
 #### Event Reactor Lifecycle (A3 Detail)
 
-At Level 2 autonomy, the OS runs an event reactor that drives automatic phase advancement. The reactor is an OS component — not a kernel daemon. The kernel remains stateless between CLI calls.
+At [delegation level L2](../../../docs/canon/autonomy.md#1-human-delegation-ladder-l0l5) (human reviews evidence post-hoc), the OS runs an event reactor that drives automatic phase advancement. The reactor is an OS component — not a kernel daemon. The kernel remains stateless between CLI calls.
 
 **Process model.** The reactor runs as a long-lived process that tails the kernel event log via a consumer cursor. It filters for `dispatch.completed`, `gate.passed`, and `gate.failed` events, and invokes the kernel's run-advance operation when conditions are met. The OS does not poll state tables — it tails the event log.
 
