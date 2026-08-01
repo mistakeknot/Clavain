@@ -460,6 +460,10 @@
       {
         "source": "interfer@interagency-marketplace",
         "description": "Local MLX-LM inference server for Apple Silicon. Custom serving layer with priority queuing, thermal-aware scheduling, and experiment hooks for Sylveste/Clavain."
+      },
+      {
+        "source": "interlore@interagency-marketplace",
+        "description": "Philosophy observer — detects latent design patterns and philosophy drift from decision artifacts, proposes PHILOSOPHY.md updates."
       }
     ],
     "required": [
