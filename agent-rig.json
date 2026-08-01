@@ -456,6 +456,10 @@
       {
         "source": "cujgel@interagency-marketplace",
         "description": "CUJ design system: discover → teardown → provoke → capture → derive → consume; evidence-first schema; agent-consumable specs."
+      },
+      {
+        "source": "interfer@interagency-marketplace",
+        "description": "Local MLX-LM inference server for Apple Silicon. Custom serving layer with priority queuing, thermal-aware scheduling, and experiment hooks for Sylveste/Clavain."
       }
     ],
     "required": [
