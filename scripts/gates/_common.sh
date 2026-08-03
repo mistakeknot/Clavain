@@ -193,24 +193,53 @@ gate_check() {
   # ceiling non-optional: a clavain-cli old enough to omit that field cannot
   # apply a ceiling at all, so pairing it with this gate must abort rather than
   # push under an authority level nothing consulted.
-  if ! printf '%s' "$raw" | jq -e '
-    (.schema | type == "number") and .schema >= 2 and
-    (.mode == "auto" or .mode == "force_auto" or .mode == "confirm" or .mode == "block") and
-    (.policy_hash | type == "string" and length > 0) and
-    (.policy_match | type == "string" and length > 0) and
-    (.delegation | type == "object") and
-    (.delegation.level | type == "number") and
-    (.delegation.declared | type == "boolean")
-  ' >/dev/null 2>&1; then
+  #
+  # Three unrelated failures used to arrive as the same "malformed policy (rc=3)":
+  # a CLI that printed something other than JSON, a CLI too old to speak this
+  # schema, and a response missing required fields. The operator's next move
+  # differs for each -- upgrade the CLI, versus fix a config -- and the old
+  # wording named the policy file, which is usually the one thing not at fault.
+  # Diagnosed on zklw 2026-08-02: schema 1 there against >= 2 here, reported as
+  # "malformed policy" (Sylveste-tozs). Record which failure it was, with numbers.
+  GATE_MALFORMED_REASON=""
+  GATE_OBSERVED_SCHEMA=""
+  local _req_schema=2 _missing=""
+  if ! printf '%s' "$raw" | jq -e . >/dev/null 2>&1; then
+    GATE_MALFORMED_REASON="clavain-cli returned no parseable JSON (its exit was ${rc}); first bytes: $(printf '%s' "$raw" | tr '\n' ' ' | cut -c1-140)"
     rc=3
+  else
+    GATE_OBSERVED_SCHEMA="$(printf '%s' "$raw" | jq -r '.schema // "absent"' 2>/dev/null || echo absent)"
+    if ! printf '%s' "$raw" | jq -e '(.schema | type == "number") and .schema >= 2' >/dev/null 2>&1; then
+      GATE_MALFORMED_REASON="response failed schema validation: clavain-cli reports schema ${GATE_OBSERVED_SCHEMA}, this gate requires >= ${_req_schema} (clavain-cli too old for this gate -- it cannot report a delegation ceiling, so proceeding would authorize under an authority level nothing consulted). The policy file is not implicated. Upgrade clavain-cli on this host."
+      rc=3
+    else
+      _missing="$(printf '%s' "$raw" | jq -r '
+        [ (if (.mode == "auto" or .mode == "force_auto" or .mode == "confirm" or .mode == "block") then empty else "mode" end),
+          (if ((.policy_hash | type) == "string" and (.policy_hash | length) > 0) then empty else "policy_hash" end),
+          (if ((.policy_match | type) == "string" and (.policy_match | length) > 0) then empty else "policy_match" end),
+          (if ((.delegation | type) == "object") then empty else "delegation" end),
+          (if ((.delegation | type) == "object" and (.delegation.level | type) == "number") then empty else "delegation.level" end),
+          (if ((.delegation | type) == "object" and (.delegation.declared | type) == "boolean") then empty else "delegation.declared" end)
+        ] | join(", ")' 2>/dev/null || echo "unknown")"
+      if [ -n "$_missing" ]; then
+        GATE_MALFORMED_REASON="response failed schema validation: schema ${GATE_OBSERVED_SCHEMA} is acceptable, but these fields are absent or mistyped: ${_missing}. The policy file is not implicated."
+        rc=3
+      fi
+    fi
   fi
 
   case "$rc:$policy_mode" in
     0:auto|0:force_auto|1:confirm|2:block|3:*) ;;
-    *) rc=3 ;;
+    *)
+      if [ -z "$GATE_MALFORMED_REASON" ]; then
+        GATE_MALFORMED_REASON="clavain-cli exit ${rc} does not agree with the mode it reported (mode=${policy_mode:-absent}); the response validated, so this is an engine disagreement rather than a schema or policy problem"
+      fi
+      rc=3
+      ;;
   esac
 
   export GATE_POLICY_HASH GATE_POLICY_MATCH GATE_POLICY_REASON GATE_DELEGATION_CAPPED
+  export GATE_MALFORMED_REASON GATE_OBSERVED_SCHEMA
   return "$rc"
 }
 
@@ -298,7 +327,16 @@ gate_decide_mode() {
     0) GATE_MODE=auto; export GATE_MODE; return 0 ;;
     1) gate_prompt_or_abort "$op" || exit 1; return 0 ;;
     2) echo "policy: ${op} blocked" >&2; exit 1 ;;
-    3) echo "policy: ${op} malformed policy (rc=3)" >&2; exit 1 ;;
+    3)
+      # "malformed policy" named the policy file for a failure that is almost
+      # never the policy file's. Say which of the three it was, and show the
+      # numbers, so the fix is readable from the refusal itself.
+      if [ -n "${GATE_MALFORMED_REASON:-}" ]; then
+        echo "policy: ${op} not authorized -- ${GATE_MALFORMED_REASON}" >&2
+      else
+        echo "policy: ${op} could not be authorized: the signer response did not validate and no reason was recorded (rc=3)" >&2
+      fi
+      exit 1 ;;
     *) echo "policy: ${op} engine error (rc=${rc})" >&2; exit 1 ;;
   esac
 }
