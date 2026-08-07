@@ -86,3 +86,52 @@ def test_next_goal_merges_remontoire_promotions_without_forcing(project_root):
     assert "unique_by(.id)" in content
     assert "must not automatically win" in content
     assert "dependent_count" in content
+
+
+def test_next_goal_reads_candidates_through_the_helper(project_root):
+    """Cross-tracker lookup is code, not an instruction to go looking.
+
+    The prose version of this ("if you know of other reachable bead roots...
+    merge results before ranking") was what bead mk-fx3 closed on, and it never
+    ran: bd resolves from $PWD and stops at the nearest git root, so from a
+    Sylveste subproject the command saw no tracker at all.
+    """
+    content = (project_root / "commands" / "next-goal.md").read_text()
+    helper = project_root / "scripts" / "next-goal-candidates.sh"
+
+    assert helper.exists(), "the cross-tracker lookup helper is missing"
+    assert helper.stat().st_mode & 0o111, "helper is not executable"
+    assert "next-goal-candidates.sh" in content
+    assert "TRACKER_REACHABLE" in content
+    # The old formulation collapsed "could not look" into "nothing there".
+    assert 'LOCAL_READY_JSON=$(bd ready --json --limit 20 2>/dev/null)' not in content
+
+
+def test_next_goal_degraded_path_names_which_degradation(project_root):
+    """An improvised block must be distinguishable from a tracker-ranked one.
+
+    Both produce candidates in the same format; only the wording tells a reader
+    whether the backlog was consulted. Without this the block is unauditable
+    after the fact, which is how it came to need double-checking.
+    """
+    content = (project_root / "commands" / "next-goal.md").read_text()
+
+    # The exact string the emitted block must carry when lookup failed.
+    assert "no tracker reachable" in content
+    # ...and the opposite case, which is a real fact rather than a failure.
+    assert "trackers reachable, nothing ready" in content
+    assert "LOOKUP_FAILURES" in content
+
+
+def test_next_goal_ranks_roadmap_only_when_fresh(project_root):
+    """A stale roadmap is withdrawn from ranking, not quietly ranked on."""
+    content = (project_root / "commands" / "next-goal.md").read_text()
+
+    assert 'roadmap.status == "fresh"' in content
+    # Freshness comes from the embedded stamp. Sylveste's roadmap.json carried
+    # an mtime eight days newer than its generated_at, so an mtime check called
+    # a 25-day-old artifact fresh.
+    assert "generated_at" in content
+    assert "mtime" in content
+    # Unknown freshness is its own state, never "fresh".
+    assert "undated" in content
