@@ -27,14 +27,39 @@ lighter-weight recommendation (see Step 3) rather than omitting it.
 
 ```bash
 SCOPE="${ARGUMENTS:-}"
+
+# Bead lookup runs through a helper, not inline bash, because `bd ready`
+# resolves from $PWD and stops at the nearest git root. Sylveste's subprojects
+# are nested git repos: from interverse/tool-time bd reports "no beads database
+# found" while the monorepo root has ready work and ~/projects has more. The
+# helper walks past those boundaries, deduplicates by the database bd actually
+# resolves to, and — critically — reports an unreachable tracker as its own
+# state instead of as an empty backlog.
+CANDIDATES_HELPER=""
+for candidate in \
+    "${CLAUDE_PLUGIN_ROOT:-}/scripts/next-goal-candidates.sh" \
+    "$HOME/.codex/clavain/scripts/next-goal-candidates.sh" \
+    "$HOME/projects/Sylveste/os/Clavain/scripts/next-goal-candidates.sh"
+do
+    if [[ -f "$candidate" ]]; then
+        CANDIDATES_HELPER="$candidate"
+        break
+    fi
+done
+
+CANDIDATES_JSON=""
 LOCAL_READY_JSON="[]"
-if command -v bd &>/dev/null; then
-    if [[ -n "$SCOPE" ]]; then
-        LOCAL_READY_JSON=$(bd ready --json --limit 20 --parent "$SCOPE" 2>/dev/null) || LOCAL_READY_JSON="[]"
-    fi
-    if [[ -z "$LOCAL_READY_JSON" || "$LOCAL_READY_JSON" == "[]" ]]; then
-        LOCAL_READY_JSON=$(bd ready --json --limit 20 2>/dev/null) || LOCAL_READY_JSON="[]"
-    fi
+TRACKER_REACHABLE="false"
+LOOKUP_FAILURES="[]"
+ROADMAP_JSON='{"status":"missing"}'
+if [[ -n "$CANDIDATES_HELPER" ]]; then
+    CANDIDATES_JSON=$(bash "$CANDIDATES_HELPER" "$SCOPE" 2>/dev/null) || CANDIDATES_JSON=""
+fi
+if [[ -n "$CANDIDATES_JSON" ]] && jq -e . >/dev/null 2>&1 <<<"$CANDIDATES_JSON"; then
+    LOCAL_READY_JSON=$(jq -c '.candidates // []'      <<<"$CANDIDATES_JSON")
+    TRACKER_REACHABLE=$(jq -r '.tracker_reachable'    <<<"$CANDIDATES_JSON")
+    LOOKUP_FAILURES=$(jq -c '.lookup_failures // []'  <<<"$CANDIDATES_JSON")
+    ROADMAP_JSON=$(jq -c '.roadmap // {status:"missing"}' <<<"$CANDIDATES_JSON")
 fi
 
 # Remontoire owns canonical promotion discovery. Its helper is read-only and
@@ -74,19 +99,31 @@ defects (dormant goals, stuck closes, missing successors) are candidate
 material and MUST be surfaced ahead of new work (f-030).
 
 `bd ready` already applies blocker-aware semantics (excludes in_progress,
-blocked, deferred, hooked) — it is the right primitive, not `bd list
---ready`. If `bd` is not installed, or the current directory has no beads
-database, `LOCAL_READY_JSON` stays empty. The Remontoire projection supplies
-ready beads labeled `remontoire-promotion` from the agency's canonical
-portfolio tracker. If either source is unavailable, continue with the other;
-if both are empty, proceed to Step 3's degraded path without error.
+blocked, deferred, hooked) — it is the right primitive, not `bd list --ready`.
+The helper applies it at every bead root it can reach and tags each candidate
+with `_root` so you can tell which tracker to file against. The Remontoire
+projection separately supplies ready beads labeled `remontoire-promotion` from
+the agency's canonical portfolio tracker. If either source is unavailable,
+continue with the other.
 
-If the repo is one of several trackers relevant to the session (e.g. a
-monorepo alongside a companion plugin repo, or the workstation vs. a synced
-server), and you know of other reachable bead roots from this session's
-context, run `bd ready --json` in each and merge results before ranking.
-Don't go hunting for trackers you have no evidence of — use what's already
-in context (recent `bd` invocations, CLAUDE.md pointers, session state).
+**`TRACKER_REACHABLE` is the field that decides whether this block may be
+improvised.** An empty `LOCAL_READY_JSON` means one of two completely
+different things, and they must not be treated alike:
+
+| `candidates` | `tracker_reachable` | meaning | what to do |
+|---|---|---|---|
+| `[]` | `true` | the backlog is genuinely clear | Step 3, and say the tracker is clear |
+| `[]` | `false` | we could not look at all | Step 3, and say so — see the required wording |
+
+Until 2026-08-07 this command could not tell those apart: it ran `bd ready
+--json 2>/dev/null || LOCAL_READY_JSON="[]"`, which turned "no beads database
+found" into the same `[]` a clean tracker produces. Every improvised block then
+presented as though it had consulted the trackers. Read `LOOKUP_FAILURES` for
+the per-root reason; each entry carries `{root, reason}`.
+
+This is the code half of bead `mk-fx3`, which closed on the strength of "the
+goal-complete hook enriches from bd ready + open epics across trackers" while
+the across-trackers part shipped as advice in this paragraph.
 
 ## Step 2: Rank by leverage
 
@@ -105,24 +142,70 @@ the `bd ready --json` schema:
   signal, but the promotion **must not automatically win**: compare it with
   priority, blocker impact, `dependent_count`, risk, and session continuity.
 
+### The roadmap signal (`ROADMAP_JSON`)
+
+`docs/roadmap.json` carries `modules`, `open_beads`, and `blocked` — portfolio
+shape that `bd ready` alone does not show. Use it to break ties: a candidate in
+a module the roadmap marks blocked, or one that closes out a module already
+near-complete, outranks an isolated task of equal priority.
+
+**Rank on it only when `.roadmap.status == "fresh"`.** The four states:
+
+- `fresh` — generated within `stale_after_days` (default 7). Usable.
+- `stale` — older than that. Do **not** rank on it; mention the staleness and
+  the `age_days` if a candidate would otherwise have been justified by it.
+- `undated` — no `generated_at` field, so freshness is unknowable. Treat as
+  stale. Unknown is not healthy.
+- `missing` / `unreadable` — no roadmap at this root. Rank without it.
+
+Freshness comes from the embedded `generated_at`, never the file's mtime. On
+2026-08-07 Sylveste's roadmap.json had an mtime of 2026-07-21 and a
+`generated_at` of 2026-07-13: a rebase had touched the file without
+regenerating it, and any mtime-based check would have called a 25-day-old
+artifact eight days fresher than it was. Regeneration is
+`scripts/sync-roadmap-json.sh`, scheduled daily by the
+`com.arouth.sylveste-roadmap` LaunchAgent; a `stale` verdict therefore usually
+means that scheduler has been down, which is worth saying out loud.
+
 Rank and select the **top 2-4** candidates. Do not just take the top 2-4 by
 `bd`'s default sort — apply the leverage lens above; a `--sort hybrid` or
 `--explain` pass can help surface why something is ready if the ranking
 isn't obvious from the JSON fields alone.
 
-## Step 3: Degraded path (no bd data)
+## Step 3: Degraded path — and which degradation it is
 
-If `READY_JSON` is empty (bd unavailable, no database, or zero ready
-issues), do not fabricate bead IDs. Instead:
-- Look at what's actually in front of you this session: open TODOs
-  mentioned in conversation, a natural next phase of the epic just
-  completed, obvious follow-on work visible in the repo (failing tests,
-  stubbed functions, a CHANGELOG "Unreleased" item without a corresponding
-  bead).
-- Present 2-3 candidates in the same format, but with `/goal <free-text
-  description>` instead of a bead ID, and note plainly: "(no beads tracker
-  detected — describe scope in the /goal text, or run `bd init` to start
-  tracking here)".
+If `READY_JSON` is empty, do not fabricate bead IDs. Build candidates from what
+is actually in front of you this session: open TODOs mentioned in conversation,
+the natural next phase of the epic just completed, obvious follow-on work
+visible in the repo (failing tests, stubbed functions, a CHANGELOG "Unreleased"
+item without a corresponding bead). Present 2-3 in the same format with
+`/goal <free-text description>` instead of a bead ID.
+
+Then state which degradation produced them. This is not optional garnish — it
+is the whole reason the caller can trust or distrust the block:
+
+**`TRACKER_REACHABLE == "false"`** — the block **must** contain the literal
+string `no tracker reachable`, followed by the failing root and its reason from
+`LOOKUP_FAILURES`. For example:
+
+```
+(no tracker reachable — /Users/sma/projects/Sylveste/interverse/tool-time:
+no beads database found. Candidates below are improvised from this session,
+not ranked from the backlog.)
+```
+
+**`TRACKER_REACHABLE == "true"` with zero candidates** — the trackers answered
+and there is genuinely nothing ready. Say that instead; it is a real and useful
+fact, not a failure:
+
+```
+(trackers reachable, nothing ready — candidates below are new work, not
+existing beads.)
+```
+
+Never emit an improvised block that reads as though it were tracker-ranked. A
+reader cannot audit the difference after the fact, which is exactly how five
+consecutive goals went out unlinted from this path.
 
 ## Step 4: Emit the block
 
