@@ -53,7 +53,55 @@ ROADMAP_STALE_DAYS="${CLAVAIN_ROADMAP_STALE_DAYS:-7}"
 SCOPE="${1:-}"
 [[ "$SCOPE" == --* ]] && SCOPE=""
 
+# ------------------------------------------------------------------ provenance
+#
+# Every run leaves a receipt saying whether a tracker actually answered. The
+# Stop hook reads it to tell a tracker-ranked Next-goal block from an
+# improvised one (hooks/lib-next-goal-provenance.sh).
+#
+# WHY A RECEIPT AND NOT A LIVE RE-QUERY: the Stop hook is capped at 5s, and
+# lib-shadow-tracker.sh already documents what happens when a hook overruns it
+# — the whole waterfall is silently dropped. Each root here gets up to 25s of
+# bd, so re-querying from the hook would blow the cap on the first root.
+#
+# The receipt is keyed by session because the useful question is "did the
+# helper run for THIS conversation" — a stale receipt from yesterday must not
+# vouch for today's block. An ABSENT receipt is the load-bearing case: a block
+# emitted without ever running this script has no tracker provenance by
+# construction, which is exactly the state that needs flagging.
+PROVENANCE_SCHEMA="clavain.next-goal-provenance/v1"
+PROVENANCE_DIR="${CLAVAIN_PROVENANCE_DIR:-$HOME/.cache/clavain/next-goal-provenance}"
+PROVENANCE_SESSION="${CLAUDE_SESSION_ID:-unknown}"
+
+record_provenance() {
+    # $1 = tracker_reachable (true|false), $2 = compact JSON object of extras
+    local reachable="$1" extras="${2:-\{\}}"
+    [[ "${CLAVAIN_PROVENANCE_DISABLE:-0}" == "1" ]] && return 0
+    mkdir -p "$PROVENANCE_DIR" 2>/dev/null || return 0
+    local stamp
+    stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    # Written via a temp file + mv so a hook reading concurrently never sees a
+    # half-written object and mistakes it for a malformed receipt.
+    local tmp="${PROVENANCE_DIR}/.${PROVENANCE_SESSION}.$$.tmp"
+    if command -v jq >/dev/null 2>&1; then
+        jq -cn --arg schema "$PROVENANCE_SCHEMA" --arg session "$PROVENANCE_SESSION" \
+               --arg stamp "$stamp" --argjson reachable "$reachable" --argjson extras "$extras" \
+            '{schema_version: $schema, session_id: $session, recorded_at: $stamp,
+              tracker_reachable: $reachable} + $extras' >"$tmp" 2>/dev/null || return 0
+    else
+        printf '{"schema_version":"%s","session_id":"%s","recorded_at":"%s","tracker_reachable":%s}\n' \
+            "$PROVENANCE_SCHEMA" "$PROVENANCE_SESSION" "$stamp" "$reachable" >"$tmp" 2>/dev/null || return 0
+    fi
+    mv -f "$tmp" "${PROVENANCE_DIR}/${PROVENANCE_SESSION}.json" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+    return 0
+}
+
 die_json() {
+    # A run that dies here looked at nothing, so the receipt says so. Without
+    # this the two failure modes diverge: the payload would report
+    # available:false while the hook, seeing no receipt at all, could not tell
+    # a crashed helper from a helper that was never invoked.
+    record_provenance false "$(printf '{"reason":%s}' "$1")"
     printf '{"schema_version":"%s","available":false,"reason":%s,"roots":[],"candidates":[],"lookup_failures":[%s],"roadmap":{"status":"unknown"}}\n' \
         "$SCHEMA_VERSION" "$1" "$1"
     exit 0
@@ -272,7 +320,7 @@ FAILURES_JSON="$(join_array "${FAILURES[@]+"${FAILURES[@]}"}")"
 CANDIDATES_JSON="$(join_array "${CANDIDATE_SETS[@]+"${CANDIDATE_SETS[@]}"}")"
 CANDIDATES_JSON="$(jq -c 'add // [] | unique_by(.id)' <<<"$CANDIDATES_JSON" 2>/dev/null || echo '[]')"
 
-jq -cn \
+PAYLOAD="$(jq -cn \
     --arg schema "$SCHEMA_VERSION" \
     --argjson roots "$ROOTS_JSON" \
     --argjson candidates "$CANDIDATES_JSON" \
@@ -286,4 +334,19 @@ jq -cn \
        lookup_failures: $failures,
        roadmap: (if $roadmap == null then {status: "missing"} else $roadmap end),
        tracker_reachable: ([$roots[] | select(.status == "ok" or .status == "empty")] | length > 0)
-     }'
+     }')"
+
+# The receipt carries the reachable roots by prefix so the hook can say WHICH
+# tracker vouched for the block, not merely that one did. Same reason the
+# payload keeps lookup_failures: "reachable" without a name is the kind of
+# unfalsifiable claim this whole change exists to remove.
+record_provenance \
+    "$(jq -r '.tracker_reachable' <<<"$PAYLOAD")" \
+    "$(jq -c '{
+         roots_ok: [.roots[] | select(.status == "ok" or .status == "empty") | .prefix // .root],
+         lookup_failures: [.lookup_failures[] | .root],
+         candidate_count: (.candidates | length),
+         roadmap_status: (.roadmap.status // "unknown")
+       }' <<<"$PAYLOAD")"
+
+printf '%s\n' "$PAYLOAD"

@@ -207,6 +207,26 @@ Never emit an improvised block that reads as though it were tracker-ranked. A
 reader cannot audit the difference after the fact, which is exactly how five
 consecutive goals went out unlinted from this path.
 
+### This is checked, not merely requested
+
+`scripts/next-goal-candidates.sh` leaves a receipt at
+`~/.cache/clavain/next-goal-provenance/$CLAUDE_SESSION_ID.json` recording
+whether any tracker answered. The Stop hook reads it
+(`hooks/lib-next-goal-provenance.sh`) and compares it against what you actually
+emitted. A block that omits the degradation disclosure is taken as claiming
+tracker provenance, so it needs a receipt saying a tracker was reached.
+
+Two things follow, and the second is the one worth internalising:
+
+1. Emitting the disclosure when it applies is enforced, not trusted.
+2. **Skipping this command does not skip the check.** No run means no receipt,
+   and a Next-goal block with no receipt is flagged as improvised — which it
+   is. Writing the block from session context to save a tool call produces a
+   warning on the next turn, not a shortcut.
+
+Set `CLAVAIN_PROVENANCE_AUDIT_DISABLE=1` to silence the audit, or
+`.claude/clavain.no-goalcadence` to opt a repo out of the whole tier.
+
 ## Step 4: Emit the block
 
 Format exactly:
