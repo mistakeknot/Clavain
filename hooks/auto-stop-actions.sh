@@ -148,6 +148,23 @@ if [[ -n "$_SHADOW_SCAN_ROOT" && ! -f ".claude/clavain.no-shadow-enforce" ]]; th
     fi
 fi
 
+# Next-goal provenance audit — orthogonal to the tier waterfall, same shape as
+# the shadow-tracker scan above: computed unconditionally, consumed below.
+#
+# Cheap by construction. It reads one small receipt file that
+# scripts/next-goal-candidates.sh wrote when it ran; it never calls bd. That
+# matters here specifically — lib-shadow-tracker.sh documents this hook timing
+# out at 5s and silently dropping the entire waterfall, and the candidate
+# lookup allows 25s per bead root. Re-querying trackers from inside the hook
+# would reintroduce exactly that failure.
+PROVENANCE_WARNING=""
+if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
+    source "${SCRIPT_DIR}/lib-next-goal-provenance.sh" 2>/dev/null || true
+    if declare -F next_goal_provenance_warning >/dev/null 2>&1; then
+        PROVENANCE_WARNING="$(next_goal_provenance_warning "$SESSION_ID" "$RECENT" 2>/dev/null || true)"
+    fi
+fi
+
 # Tiered decision: goal-cadence > compound > dispatch > drift check
 # goal-completed signal: structural requirement — the completion message must
 #   END with a Next-goal block (2-4 candidates + recommendation), so this
@@ -163,12 +180,29 @@ fi
 
 REASON=""
 
+# Provenance tier: ahead of goal-cadence, because a block that already exists
+# and cannot back its claim is a more specific defect than the absence of one —
+# and its remedy (run /clavain:next-goal, re-derive the candidates) subsumes
+# what the goal-cadence tier would have asked for anyway.
+if [[ -n "$PROVENANCE_WARNING" ]]; then
+    if intercore_sentinel_check_or_legacy "next_goal_provenance_throttle" "$SESSION_ID" 300; then
+        REASON="$PROVENANCE_WARNING"
+    fi
+fi
+
 # Goal-cadence tier: fires on the goal-completed signal, ahead of every other
 # tier. Per-repo opt-out + throttle follow the same pattern as the other
 # tiers below. Fail-open: if bd/intercore are unavailable, /clavain:next-goal
 # itself degrades gracefully (see commands/next-goal.md) — this hook only
 # needs to fire the instruction, not resolve any bead data itself.
-if [[ "$SIGNALS" == *"goal-completed"* ]]; then
+#
+# The `-z "$REASON"` guard is load-bearing as of the provenance tier above:
+# this tier used to be first in the waterfall and so assigned unconditionally.
+# Left that way it would overwrite the provenance warning with the weaker
+# "please emit a block" instruction — for a block that had already been
+# emitted. The short-circuit also keeps this tier's sentinel unclaimed when
+# provenance took the cycle.
+if [[ -z "$REASON" && "$SIGNALS" == *"goal-completed"* ]]; then
     if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
         if intercore_sentinel_check_or_legacy "goal_cadence_throttle" "$SESSION_ID" 60; then
             REASON="Goal-cadence: this turn completed a /goal or goal-scale milestone. Per structural goal-cadence policy, your completion message to the user MUST end with a 'Next goal' block. Run /clavain:next-goal using the Skill tool to generate it (2-4 candidates with leverage rationale, a clear recommendation, and ready-to-paste /goal text), then append that block verbatim to the end of your reply."
