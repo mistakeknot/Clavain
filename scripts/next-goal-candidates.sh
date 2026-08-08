@@ -156,6 +156,7 @@ roadmap_state() {
     ROADMAP_REPO="$repo_copy" ROADMAP_CACHE="$cache_copy" ROADMAP_STALE_DAYS="$ROADMAP_STALE_DAYS" \
     python3 - <<'PY' 2>/dev/null || echo 'null'
 import json, os, sys
+from collections import Counter
 from datetime import datetime, timezone
 
 limit = int(os.environ["ROADMAP_STALE_DAYS"])
@@ -170,6 +171,54 @@ def parse(stamp):
     except ValueError:
         return None
     return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
+def backlog_view(doc):
+    """The backlog signal, taken from the roadmap rather than from backlog.md.
+
+    docs/backlog.md announces itself as "generated from roadmap.json" and is a
+    filtered rendering of it: 435 markdown bullets over the same 499 items,
+    carrying no field the JSON lacks and no timestamp of its own beyond a
+    date-only "Last synced". Parsing markdown to recover data that is already
+    structured one file upstream would add a parser and lose precision, so the
+    signal is derived here and gated on the same freshness rule.
+
+    `deferred` is the load-bearing part. Deferred beads are work someone
+    explicitly parked, and proposing one as a next goal re-opens a decision
+    that was already made. Until interpath#1 the generator had no deferred
+    branch at all and all 18 of them read as ordinary open work, so this
+    signal could not have been computed correctly before that fix.
+    """
+    roadmap = doc.get("roadmap") or {}
+    items = []
+    for phase in ("now", "next", "later"):
+        for entry in (roadmap.get(phase) or []):
+            if isinstance(entry, dict) and entry.get("id"):
+                items.append(entry)
+
+    deferred, blocked, per_module, per_priority = set(), set(), Counter(), Counter()
+    for entry in items:
+        status = entry.get("status")
+        if status == "closed":
+            continue
+        if status == "deferred":
+            deferred.add(entry["id"])
+            continue
+        if status == "blocked":
+            blocked.add(entry["id"])
+        per_module[entry.get("module") or "unknown"] += 1
+        per_priority[entry.get("priority") or "unknown"] += 1
+
+    # Capped: this rides in a payload the command reads inline, and a tracker
+    # with thousands of parked items should not crowd out the candidates.
+    return {
+        "deferred": len(deferred),
+        "deferred_ids": sorted(deferred)[:200],
+        "blocked": len(blocked),
+        "blocked_ids": sorted(blocked)[:200],
+        "by_priority": dict(sorted(per_priority.items())),
+        "module_load": [{"module": m, "open": n} for m, n in per_module.most_common(8)],
+    }
 
 
 def load(path, source):
@@ -202,6 +251,7 @@ def load(path, source):
         "open_beads": doc.get("open_beads"),
         "blocked": doc.get("blocked"),
         "module_count": doc.get("module_count"),
+        "backlog": backlog_view(doc),
         "_when": when,
     }
 

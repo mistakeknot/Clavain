@@ -167,6 +167,35 @@ artifact eight days fresher than it was. Regeneration is
 `com.arouth.sylveste-roadmap` LaunchAgent; a `stale` verdict therefore usually
 means that scheduler has been down, which is worth saying out loud.
 
+### The backlog signal (`.roadmap.backlog`)
+
+Same object, same freshness gate — `backlog` rides inside `roadmap`, so if
+`.roadmap.status` is not `fresh`, this is not usable either.
+
+- **`deferred_ids` / `deferred`** — work that was explicitly parked. **Never
+  propose a deferred bead as a next goal.** Deferring was a decision; putting
+  it back up for selection silently reopens it. If a candidate from `bd ready`
+  appears in `deferred_ids`, drop it and say why.
+- **`blocked_ids` / `blocked`** — real dependency edges, not merely items whose
+  own status says blocked. A blocked candidate can still be the right goal when
+  the goal is *unblocking* it, but say what it is waiting on.
+- **`module_load`** — open items per module, highest first. Use it for leverage:
+  a candidate in a module carrying most of the backlog compounds more than an
+  equal-priority task in a module with two items.
+- **`by_priority`** — P0..P4 distribution, for whether the backlog is
+  top-heavy.
+
+Derived from `roadmap.json`, not from `docs/backlog.md`. The markdown is itself
+generated from the JSON — a filtered rendering with no field the JSON lacks and
+no timestamp of its own — so parsing it would add a parser and lose precision.
+
+One caveat worth carrying: `deferred` was only ever computable after
+interpath#1. The generator had no `deferred` branch, so all 18 deferred beads
+read as ordinary open work. A roadmap generated before that fix reports
+`deferred: 0` — which is indistinguishable from a tracker with nothing parked.
+If `deferred` is 0 and the roadmap predates 2026-08-07, treat it as unknown
+rather than as a real zero.
+
 Rank and select the **top 2-4** candidates. Do not just take the top 2-4 by
 `bd`'s default sort — apply the leverage lens above; a `--sort hybrid` or
 `--explain` pass can help surface why something is ready if the ranking
