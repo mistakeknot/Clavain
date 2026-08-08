@@ -259,3 +259,71 @@ print(datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))")"
     [ "$(jq -r '.schema_version' <<<"$output")" = "clavain.next-goal-candidates/v1" ]
     [ "$(jq -r '.available' <<<"$output")" = "true" ]
 }
+
+# ------------------------------------------------------------- backlog signal
+#
+# Derived from roadmap.json, not from docs/backlog.md: the markdown is a
+# filtered rendering of the same JSON, so parsing it would add a parser and
+# lose precision. Gated on the same freshness rule, because the signal rides
+# inside the roadmap object rather than beside it.
+
+# One root whose roadmap carries a mix of statuses: open, blocked, deferred,
+# and closed. Every assertion below turns on keeping those four apart.
+make_backlog_root() {
+    local stamp="$1"
+    local root
+    root="$(make_root backlog '[]')"
+    mkdir -p "$root/docs"
+    jq -n --arg t "$stamp" '{
+      project: "demo", generated_at: $t, open_beads: 4, blocked: 1, module_count: 2,
+      roadmap: {
+        now:  [{id:"d-1",title:"a",module:"core",priority:"P1",status:"open"}],
+        next: [{id:"d-2",title:"b",module:"core",priority:"P2",status:"blocked"},
+               {id:"d-3",title:"c",module:"edge",priority:"P2",status:"open"}],
+        later:[{id:"d-4",title:"d",module:"core",priority:"P3",status:"deferred"},
+               {id:"d-5",title:"e",module:"edge",priority:"P3",status:"closed"}]
+      }}' > "$root/docs/roadmap.json"
+    echo "$root"
+}
+
+@test "backlog: deferred beads are counted and named" {
+    root="$(make_backlog_root "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+    run_helper "$root"
+    [ "$(jq -r '.roadmap.status' <<<"$output")" = "fresh" ]
+    [ "$(jq -r '.roadmap.backlog.deferred' <<<"$output")" = "1" ]
+    [ "$(jq -r '.roadmap.backlog.deferred_ids[0]' <<<"$output")" = "d-4" ]
+}
+
+@test "backlog: a deferred bead does not inflate module load" {
+    root="$(make_backlog_root "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+    run_helper "$root"
+    # core holds d-1 and d-2 live plus d-4 parked. Counting the parked one
+    # would make a module nobody is working make look like the busiest.
+    core="$(jq -r '.roadmap.backlog.module_load[] | select(.module=="core") | .open' <<<"$output")"
+    [ "$core" = "2" ]
+}
+
+@test "backlog: closed items are excluded from every count" {
+    root="$(make_backlog_root "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+    run_helper "$root"
+    total="$(jq -r '[.roadmap.backlog.by_priority | to_entries[] | .value] | add' <<<"$output")"
+    [ "$total" = "3" ]
+    edge="$(jq -r '.roadmap.backlog.module_load[] | select(.module=="edge") | .open' <<<"$output")"
+    [ "$edge" = "1" ]
+}
+
+@test "backlog: blocked ids are named, not just counted" {
+    root="$(make_backlog_root "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+    run_helper "$root"
+    [ "$(jq -r '.roadmap.backlog.blocked' <<<"$output")" = "1" ]
+    [ "$(jq -r '.roadmap.backlog.blocked_ids[0]' <<<"$output")" = "d-2" ]
+}
+
+@test "backlog: one freshness gate, shared with the roadmap" {
+    # A stale roadmap must not yield a backlog the caller treats as current.
+    # The gate is .roadmap.status — a second gate that could disagree with it
+    # would recreate the ambiguity this helper exists to remove.
+    root="$(make_backlog_root "2020-01-01T00:00:00Z")"
+    run_helper "$root"
+    [ "$(jq -r '.roadmap.status' <<<"$output")" = "stale" ]
+}
