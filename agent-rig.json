@@ -464,6 +464,10 @@
       {
         "source": "interlore@interagency-marketplace",
         "description": "Philosophy observer — detects latent design patterns and philosophy drift from decision artifacts, proposes PHILOSOPHY.md updates."
+      },
+      {
+        "source": "intervox@interagency-marketplace",
+        "description": "Voice engine with a closed loop: generate and edit prose in your voice, then verify it against your measured fingerprint. Register-aware profile (Team/Internal/External/Open Source), stylometric baseline, LLMism linter, exemplar retrieval, critique-revise apply. Successor to interfluence and intervoice."
       }
     ],
     "required": [
