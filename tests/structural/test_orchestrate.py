@@ -484,7 +484,10 @@ class TestCountVerdicts:
 
     def test_empty(self):
         counts = count_verdicts({})
-        assert counts == {"pass": 0, "warn": 0, "fail": 0, "skipped": 0}
+        assert counts == {
+            "pass": 0, "warn": 0, "fail": 0, "skipped": 0,
+            "escalated": 0, "question": 0,
+        }
 
     def test_unknown_status_counts_as_fail(self):
         """An unrecognized status must never be silently treated as a pass."""

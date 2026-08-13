@@ -165,7 +165,11 @@ fi""",
     )
     monkeypatch.setenv("CLAVAIN_DISPATCH_SH", str(stub))
 
-    results = orc.orchestrate(str(manifest), project_dir=str(project))
+    # review_enabled=False: this test pins DISPATCH timeout semantics in
+    # isolation — the review pipeline has its own tests.
+    results = orc.orchestrate(
+        str(manifest), project_dir=str(project), review_enabled=False,
+    )
 
     assert results["task-1"].status == "warn", results["task-1"].error
     assert results["task-2"].status == "pass"
@@ -190,7 +194,10 @@ def test_missing_verdict_nonzero_exit_with_work_is_warn(orc, tmp_path, monkeypat
     )
     monkeypatch.setenv("CLAVAIN_DISPATCH_SH", str(stub))
 
-    results = orc.orchestrate(str(manifest), project_dir=str(project))
+    # review_enabled=False: pins verdict-channel semantics in isolation.
+    results = orc.orchestrate(
+        str(manifest), project_dir=str(project), review_enabled=False,
+    )
     assert results["task-1"].status == "warn"
 
 

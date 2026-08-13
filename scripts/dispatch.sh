@@ -30,6 +30,7 @@ INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents"
 NAME=""
 DRY_RUN=false
 KIMI_UNSAFE=false
+CLAUDE_UNSAFE=false
 TASK_CLASS=""
 PROMPT_FILE=""
 TEMPLATE_FILE=""
@@ -136,8 +137,11 @@ Usage:
   dispatch.sh [OPTIONS] --prompt-file <file>
 
 Options:
-  --to, --engine <codex|kimi|auto>   Dispatch backend (default: codex)
+  --to, --engine <codex|kimi|claude|auto>   Dispatch backend (default: codex)
                                   codex — codex exec (full sandbox/JSONL/statusline support)
+                                  claude — claude -p one-shot (review seat: reads + runs
+                                          commands, file mutation disallowed unless
+                                          --claude-unsafe; tier: fast→sonnet, deep→opus)
                                   kimi  — kimi -p (second-opinion backend; different
                                           model family. -s/--sandbox, -i/--image and codex
                                           passthrough flags are ignored with a warning)
@@ -254,6 +258,23 @@ _kimi_model_alias_exists() {
 # returns non-zero (and prints nothing) when the tier is unknown or the
 # alias is not defined in the kimi config — caller falls back to the
 # config's default_model.
+# Map a dispatch tier to a claude model alias per the capability-routing
+# doctrine (commands/model-routing.md: sonnet executes, opus validates —
+# the claude engine exists first for the validator seat, so deep = opus).
+# Overridable per-host via CLAVAIN_CLAUDE_MODEL_FAST / _DEEP.
+resolve_tier_model_claude() {
+  local tier="$1" model=""
+  case "$tier" in
+    fast) model="${CLAVAIN_CLAUDE_MODEL_FAST:-sonnet}" ;;
+    deep) model="${CLAVAIN_CLAUDE_MODEL_DEEP:-opus}" ;;
+    *)
+      echo "Warning: tier '$tier' has no claude mapping — using claude default model" >&2
+      return 1
+      ;;
+  esac
+  echo "$model"
+}
+
 resolve_tier_model_kimi() {
   local tier="$1"
   local alias=""
@@ -304,9 +325,9 @@ while [[ $# -gt 0 ]]; do
       ENGINE="$2"
       ENGINE_SET=true
       case "$ENGINE" in
-        codex|kimi|claude-code|auto) ;;
+        codex|kimi|claude|claude-code|auto) ;;
         *)
-          echo "Error: $1 must be 'codex' or 'kimi' (or 'claude-code'/'auto'; got '$ENGINE')" >&2
+          echo "Error: $1 must be 'codex', 'kimi', or 'claude' (or 'claude-code'/'auto'; got '$ENGINE')" >&2
           exit 1
           ;;
       esac
@@ -400,6 +421,10 @@ while [[ $# -gt 0 ]]; do
       KIMI_UNSAFE=true
       shift
       ;;
+    --claude-unsafe)
+      CLAUDE_UNSAFE=true
+      shift
+      ;;
     --context-gateway)
       require_arg "$1" "${2:-}"
       CONTEXT_GATEWAY_MODE="$2"
@@ -459,6 +484,11 @@ if [[ "$ENGINE" == "claude-code" && "$VIA" != "zaka" ]]; then
   echo "Error: --to claude-code requires --via zaka (claude-code dispatch runs as a steerable zaka session)" >&2
   exit 1
 fi
+# claude is the one-shot headless engine (claude -p) — the inverse constraint.
+if [[ "$ENGINE" == "claude" && "$VIA" == "zaka" ]]; then
+  echo "Error: --to claude is the one-shot headless engine — for a steerable zaka session use --to claude-code" >&2
+  exit 1
+fi
 
 # Detect whether Clavain-specific tier remapping should be used. This is opt-in via:
 # - explicit CLAVAIN_DISPATCH_PROFILE=interserve (or legacy: clavain)
@@ -485,6 +515,12 @@ if [[ -n "$TIER" ]]; then
       echo "Tier '$TIER' resolved to kimi model: $MODEL" >&2
     fi
     # If resolution fails, warning already printed — MODEL stays empty (kimi default_model)
+  elif [[ "$ENGINE" == "claude" ]]; then
+    if RESOLVED_MODEL=$(resolve_tier_model_claude "$TIER"); then
+      MODEL="$RESOLVED_MODEL"
+      echo "Tier '$TIER' resolved to claude model: $MODEL" >&2
+    fi
+    # On failure the warning is printed — MODEL stays empty (claude CLI default)
   else
     if RESOLVED_MODEL=$(resolve_tier_model "$TIER"); then
       MODEL="$RESOLVED_MODEL"
@@ -983,6 +1019,35 @@ AGENT
   fi
   # WORKDIR is applied at execution time via cd (kimi has no -C flag);
   # OUTPUT is written by teeing kimi's stdout (kimi has no -o flag).
+elif [[ "$ENGINE" == "claude" ]]; then
+  # Claude headless one-shot: claude -p "<prompt>". Added for the review
+  # seat in orchestrated delegation (goal 7d610151): an independent
+  # validator from a different model family than the codex executors.
+  # Codex-only options don't translate — warn and drop them, kimi-style.
+  if [[ "$SANDBOX_SET" == true ]]; then
+    echo "Warning: -s/--sandbox is codex-only — ignored for --to claude (tool policy is the claude analogue; see --claude-unsafe)" >&2
+  fi
+  if [[ ${#IMAGES[@]} -gt 0 ]]; then
+    echo "Warning: -i/--image is not supported for --to claude — ignoring ${#IMAGES[@]} image(s)" >&2
+  fi
+  if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+    echo "Warning: codex passthrough flags are not supported for --to claude — ignoring: ${EXTRA_ARGS[*]}" >&2
+  fi
+
+  CMD=(claude)
+  if [[ -n "$MODEL" ]]; then
+    CMD+=(--model "$MODEL")
+  fi
+  # Reviewer profile by default: the agent may read anything and run
+  # commands (tests, git diff) without prompting, but cannot mutate files.
+  # --claude-unsafe lifts the mutation ban for executor-seat dispatches.
+  CMD+=(--permission-mode "${CLAVAIN_CLAUDE_PERMISSION_MODE:-dontAsk}")
+  if [[ "$CLAUDE_UNSAFE" != true ]]; then
+    CMD+=(--disallowedTools "Edit,Write,NotebookEdit")
+  fi
+  CMD+=(-p "$PROMPT")
+  # WORKDIR via cd and OUTPUT via tee at execution time, same as kimi
+  # (claude -p prints the response on stdout; no -C/-o flags used).
 else
   # Build codex exec command
   CMD=(codex exec)
@@ -1040,6 +1105,15 @@ if [[ "$DRY_RUN" == true ]]; then
     printf '%q ' "${DISPLAY_CMD[@]}"
     if [[ -n "$OUTPUT" ]]; then printf '> %q' "$OUTPUT"; fi
     echo ""
+  elif [[ "$ENGINE" == "claude" ]]; then
+    # CMD's last element is the prompt — display everything before it,
+    # then the truncated preview in its place.
+    DISPLAY_CMD=("${CMD[@]:0:${#CMD[@]}-1}")
+    if [[ -n "$WORKDIR" ]]; then printf 'cd %q && ' "$WORKDIR"; fi
+    printf '%q ' "${DISPLAY_CMD[@]}"
+    printf '%q' "$PROMPT_PREVIEW"
+    if [[ -n "$OUTPUT" ]]; then printf ' > %q' "$OUTPUT"; fi
+    echo ""
   else
     DISPLAY_CMD=(codex exec -s "$SANDBOX")
     if [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
@@ -1062,6 +1136,10 @@ fi
 # Backend preflight: fail fast with a clear message when the CLI is missing
 if [[ "$ENGINE" == "kimi" ]] && ! command -v kimi >/dev/null 2>&1; then
   echo "Error: kimi CLI not found on PATH (required for --to kimi). See https://moonshotai.github.io/kimi-code/" >&2
+  exit 1
+fi
+if [[ "$ENGINE" == "claude" ]] && ! command -v claude >/dev/null 2>&1; then
+  echo "Error: claude CLI not found on PATH (required for --to claude)." >&2
   exit 1
 fi
 
@@ -1345,12 +1423,12 @@ _surface_codex_errors() {
   fi
 }
 
-if [[ "$ENGINE" == "kimi" ]]; then
-  # kimi -p prints the response on stdout and exits 0 on success. There is no
-  # codex-style JSONL event stream, so the statusline parser is skipped and the
-  # state file stays at "starting" until completion; summary/verdict sidecars
-  # are still produced. WORKDIR is applied via cd (kimi has no -C flag) and
-  # OUTPUT by teeing stdout (kimi has no -o flag).
+if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
+  # kimi -p and claude -p both print the response on stdout and exit 0 on
+  # success. Neither emits the codex-style JSONL event stream, so the
+  # statusline parser is skipped and the state file stays at "starting"
+  # until completion; summary/verdict sidecars are still produced. WORKDIR
+  # is applied via cd and OUTPUT by teeing stdout (no -C/-o flags).
   set +e
   if [[ -n "$OUTPUT" ]]; then
     if [[ -n "$WORKDIR" ]]; then
@@ -1379,12 +1457,12 @@ if [[ "$ENGINE" == "kimi" ]]; then
   # Extract verdict sidecar from output
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
 
-  # Surface a failed kimi run in the verdict sidecar. The codex error
-  # heuristics (HTTP status lines, zero-turn state) don't apply to kimi -p,
-  # which exits non-zero on failure.
+  # Surface a failed run in the verdict sidecar. The codex error heuristics
+  # (HTTP status lines, zero-turn state) don't apply to kimi -p / claude -p,
+  # which exit non-zero on failure.
   if [[ "$KIMI_EXIT" != "0" && -n "$OUTPUT" ]]; then
-    _write_error_verdict "$OUTPUT" "error" "kimi -p exited $KIMI_EXIT (see stderr above)"
-    echo "Warning: dispatch surfaced kimi error — verdict overridden: kimi -p exited $KIMI_EXIT" >&2
+    _write_error_verdict "$OUTPUT" "error" "$ENGINE -p exited $KIMI_EXIT (see stderr above)"
+    echo "Warning: dispatch surfaced $ENGINE error — verdict overridden: $ENGINE -p exited $KIMI_EXIT" >&2
   fi
 
   # Post-dispatch validation: scope check + secret scan

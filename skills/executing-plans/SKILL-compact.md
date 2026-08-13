@@ -16,7 +16,7 @@ Read plan. Raise concerns with user before starting. If no concerns, create Todo
 
 **INTERSERVE →** Classify tasks (independent → Codex parallel, sequential → ordered, exploratory → Claude subagent). Group into batches (max 5). Use `clavain:interserve` to dispatch. Read `.verdict` sidecar first. Between batches: report and wait for feedback.
 
-**ORCHESTRATED →** If `.exec.yaml` manifest exists alongside plan, use `orchestrate.py --dry-run` first. Present wave breakdown (total waves, parallelism, stage grouping) and get approval before dispatching. Takes priority over other modes.
+**ORCHESTRATED →** If `.exec.yaml` manifest exists alongside plan, use `orchestrate.py --dry-run` first. Present wave breakdown (total waves, parallelism, stage grouping) and get approval before dispatching. Takes priority over other modes. Review pipeline is ON by default: plan `<verify>` blocks run as machine gates, an independent reviewer (fast→codex, deep→claude/opus) reads the task diff — never the self-report — and failures loop through ≤2 fix rounds before parking as `escalated`; `question` parks an executor that asked instead of guessing. Both parked states need controller judgment before re-run. `--no-review` restores legacy self-report gating.
 
 **DIRECT →** Execute first 3 tasks per batch. Per task: mark in_progress → follow plan steps exactly → run verifications → mark completed.
 

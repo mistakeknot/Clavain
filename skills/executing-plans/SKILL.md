@@ -57,7 +57,10 @@ Default: first 3 tasks per batch. Per task: mark in_progress → follow steps ex
 3. **Dry-run:** `python3 "$ORCHESTRATE" --dry-run "$MANIFEST"` — present wave breakdown (parallelism, cross-stage deps, tasks missing files)
 4. **Ask for approval** (AskUserQuestion): Approve | Edit mode | Skip to manual
 5. **Execute:** `python3 "$ORCHESTRATE" "$MANIFEST" --plan "$PLAN_PATH" --project-dir "$(pwd)"` with `timeout: 600000`
-6. **Read summary:** `pass` → trust; `warn` → read output, assess; `fail`/`error` → offer retry/manual/skip; `skipped` → report dep failure
+   - **Review pipeline is ON by default** (goal 7d610151): per task, the orchestrator runs the plan's `<verify>` blocks as machine gates, then dispatches an INDEPENDENT reviewer on the task-scoped git diff (never the executor's self-report), then loops fix→re-review up to 2 rounds. Reviewer engine is tier-routed: `fast` → codex, `deep` → claude (opus, via dispatch.sh `--to claude`). Force one with `ORC_REVIEW_ENGINE=codex|claude`; adjust rounds with `ORC_MAX_FIX_ROUNDS`; the sealed `<plan>.criteria.md` sidecar is handed to reviewers automatically when present. `--no-review` restores self-report gating.
+6. **Read summary:** `pass` → reviewed and approved (with review on); `warn` → read output, assess; `fail`/`error` → offer retry/manual/skip; `skipped` → report dep failure
+   - **`escalated`** → review/verify still failing after the fix-round budget (two strikes). Read the task's `review-*.md` + `verify-*.txt` artifacts, rule on the findings yourself (controller judgment — this is the doctrine's escalation seat), then re-run or fix via 2B.
+   - **`question`** → the executor asked instead of guessing (`VERDICT: QUESTION …` — the question is in the summary line). Answer it, fold the answer into the plan or task prompt, re-run.
 7. **On partial failure:** Offer re-run orchestrator (skips finished tasks) | execute failed tasks via 2B | skip
 
 ## Step 2D: Post-Task Verification

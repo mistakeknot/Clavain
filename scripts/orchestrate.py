@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -56,11 +57,13 @@ class Task:
 @dataclass
 class TaskResult:
     task_id: str
-    status: str  # pass, warn, fail, error, skipped
+    status: str  # pass, warn, fail, error, skipped, escalated, question
     output_path: str | None = None
     verdict_path: str | None = None
     error: str | None = None
     duration_s: float = 0.0
+    # Review/fix rounds consumed by the pipeline (0 = passed first review).
+    rounds: int = 0
 
 
 @dataclass
@@ -358,6 +361,11 @@ def build_prompt(
         When done, report:
         VERDICT: CLEAN | NEEDS_ATTENTION [reason]
         FILES_CHANGED: [list]
+
+        If a decision you cannot make yourself blocks the work (an ambiguous
+        spec, conflicting constraints), do NOT guess: report
+        VERDICT: QUESTION <the one-line question>
+        and stop. The orchestrator parks the task for the coordinator.
     """))
 
     return "\n".join(sections)
@@ -398,6 +406,447 @@ def _read_verdict_status(verdict_path: str) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Review pipeline (goal 7d610151) — implement → machine verify → independent
+# review → bounded fix loop.
+#
+# The executor's self-reported VERDICT is never the gate. That was the gap
+# that kept this mode weaker than subagent-driven: a task's own "CLEAN" was
+# taken at its word. Here, the plan's <verify> blocks run as machine gates
+# first (free, deterministic — no reviewer is paid for a task that fails its
+# own commands), then an INDEPENDENT reviewer reads the task-scoped git diff
+# — never the executor's report — and rules pass/fail. Failures dispatch a
+# fix and re-review, at most ORC_MAX_FIX_ROUNDS times; after two strikes the
+# task parks as `escalated` for the controller, matching the capability-
+# routing doctrine's escalation rule. A task that cannot proceed without a
+# decision reports `VERDICT: QUESTION <q>` and parks as `question` instead
+# of guessing.
+#
+# Reviewer engine is tier-routed (mk's ruling, 2026-08-13): fast-tier tasks
+# get a codex reviewer, deep-tier tasks get a claude reviewer (dispatch.sh's
+# --to claude engine; deep resolves to opus per the validator doctrine).
+# ORC_REVIEW_ENGINE=codex|claude forces one for the whole run.
+# ---------------------------------------------------------------------------
+
+MAX_FIX_ROUNDS = int(os.environ.get("ORC_MAX_FIX_ROUNDS", "2"))
+REVIEW_DIFF_MAX_LINES = 600
+
+_TASK_HEADING = re.compile(r"^#{2,3}\s+Task\s+(\d+)\s*[:.]", re.MULTILINE)
+_VERIFY_BLOCK = re.compile(r"<verify>\n(.*?)</verify>", re.DOTALL)
+_VERIFY_ENTRY = re.compile(r"-\s+run:\s+`([^`]+)`\s*\n\s+expect:\s+(.+)")
+
+
+@dataclass
+class PlanTask:
+    """One plan task's spec text and machine gates, as the reviewer sees it."""
+    section: str
+    verify: list[dict[str, str]] = field(default_factory=list)
+
+
+def parse_plan_tasks(plan_path: str | None) -> dict[int, PlanTask]:
+    """Split a plan into per-task sections and their <verify> entries.
+
+    Keyed by task NUMBER (``## Task 3: …`` → 3), which maps to manifest ids
+    by trailing digits (``task-3``). Plans without task headings, or a
+    missing plan, yield {} — the pipeline then reviews on diff alone.
+    """
+    if not plan_path or not os.path.exists(plan_path):
+        return {}
+    with open(plan_path, errors="replace") as f:
+        text = f.read()
+    matches = list(_TASK_HEADING.finditer(text))
+    out: dict[int, PlanTask] = {}
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        section = text[m.start():end]
+        verify: list[dict[str, str]] = []
+        for vb in _VERIFY_BLOCK.finditer(section):
+            for ve in _VERIFY_ENTRY.finditer(vb.group(1)):
+                verify.append({"run": ve.group(1), "expect": ve.group(2).strip()})
+        out[int(m.group(1))] = PlanTask(section=section, verify=verify)
+    return out
+
+
+def _task_plan_num(task_id: str) -> int | None:
+    m = re.search(r"(\d+)$", task_id)
+    return int(m.group(1)) if m else None
+
+
+def run_verify_entries(
+    entries: list[dict[str, str]], project_dir: str, timeout: int = 600,
+) -> tuple[bool, str]:
+    """Execute a task's <verify> entries. Returns (all_passed, report).
+
+    ``expect: exit N`` checks the return code; ``expect: contains "s"``
+    checks combined stdout+stderr; anything else falls back to exit 0.
+    """
+    if not entries:
+        return True, "(no verify entries for this task)"
+    ok = True
+    lines: list[str] = []
+    for e in entries:
+        cmd, expect = e["run"], e["expect"]
+        combined = ""
+        try:
+            p = subprocess.run(
+                cmd, shell=True, cwd=project_dir,
+                capture_output=True, text=True, timeout=timeout,
+            )
+            combined = (p.stdout or "") + (p.stderr or "")
+            if expect.startswith("exit "):
+                passed = p.returncode == int(expect.split()[1])
+            elif expect.startswith("contains"):
+                m = re.search(r'contains\s+"([^"]*)"', expect)
+                passed = bool(m) and m.group(1) in combined
+            else:
+                passed = p.returncode == 0
+        except subprocess.TimeoutExpired:
+            passed = False
+            combined = f"(timed out after {timeout}s)"
+        ok = ok and passed
+        line = f"{'PASS' if passed else 'FAIL'}: `{cmd}` (expect {expect})"
+        if not passed:
+            tail = "\n".join(combined.strip().splitlines()[-15:])
+            line += f"\n{tail}"
+        lines.append(line)
+    return ok, "\n".join(lines)
+
+
+def _git(project_dir: str, *args: str) -> str:
+    try:
+        p = subprocess.run(
+            ["git", "-C", project_dir, *args],
+            capture_output=True, text=True, timeout=60,
+        )
+        return p.stdout if p.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def _git_head(project_dir: str) -> str | None:
+    out = _git(project_dir, "rev-parse", "HEAD").strip()
+    return out or None
+
+
+def task_diff(project_dir: str, head0: str | None) -> str:
+    """The reviewer's ground truth: everything that changed since the task
+    started — committed and uncommitted — plus the contents of new untracked
+    files, which `git diff` alone would silently omit."""
+    parts: list[str] = []
+    if head0:
+        parts.append(_git(project_dir, "diff", "--stat", head0))
+        parts.append(_git(project_dir, "diff", head0))
+    else:
+        parts.append(_git(project_dir, "diff"))
+    untracked = _git(
+        project_dir, "ls-files", "--others", "--exclude-standard",
+    ).strip()
+    if untracked:
+        parts.append("## Untracked files created by this task:\n" + untracked)
+        for f in untracked.splitlines()[:5]:
+            fp = os.path.join(project_dir, f)
+            try:
+                with open(fp, errors="replace") as fh:
+                    content = fh.read()
+            except OSError:
+                continue
+            clines = content.splitlines()
+            if len(clines) > 200:
+                content = "\n".join(clines[:200]) + f"\n... ({len(clines) - 200} more lines)"
+            parts.append(f"### {f}\n```\n{content}\n```")
+    text = "\n".join(p for p in parts if p and p.strip())
+    tlines = text.splitlines()
+    if len(tlines) > REVIEW_DIFF_MAX_LINES:
+        text = "\n".join(tlines[:REVIEW_DIFF_MAX_LINES]) + (
+            f"\n... (truncated at {REVIEW_DIFF_MAX_LINES} lines; run"
+            f" `git diff {head0 or ''}` in the repo for the rest)"
+        )
+    return text or "(no changes detected in the repository)"
+
+
+def extract_question(output_path: str | None) -> str | None:
+    """A parked question, if the executor reported one instead of guessing."""
+    if not output_path or not os.path.exists(output_path):
+        return None
+    with open(output_path, errors="replace") as f:
+        for line in f:
+            s = line.strip()
+            if s.startswith("VERDICT: QUESTION"):
+                return (
+                    s[len("VERDICT: QUESTION"):].strip()
+                    or "(question text missing — see the task output)"
+                )
+    return None
+
+
+def build_review_prompt(
+    task: Task,
+    section: str,
+    criteria_path: str | None,
+    diff_text: str,
+    verify_report: str,
+    self_report: str,
+) -> str:
+    """The independent reviewer's brief. The diff is the evidence; the
+    executor's self-report is context to be DISTRUSTED, included only so the
+    reviewer can flag divergence between claim and diff."""
+    parts = [textwrap.dedent(f"""\
+        You are an independent spec-compliance reviewer for one task of a
+        larger orchestrated plan. You did not write this code. Do NOT trust
+        the executor's self-report — judge only what the diff and the
+        repository actually show. You may run read-only commands (tests,
+        `git log`, linters) to check claims; do not modify any file.
+
+        ## The task under review: {task.title}
+        Declared files: {", ".join(task.files) if task.files else "(none declared)"}
+    """)]
+    if section:
+        parts.append("## The plan's specification for this task\n\n" + section)
+    if criteria_path and os.path.exists(criteria_path):
+        parts.append(
+            f"## Sealed acceptance criteria\n\nRead {criteria_path} — where a"
+            " criterion touches this task, hold the diff to it."
+        )
+    parts.append("## Machine verification (already run by the orchestrator)\n\n" + verify_report)
+    parts.append("## The diff since this task started (ground truth)\n\n" + diff_text)
+    parts.append("## Executor's self-report (untrusted, for divergence-spotting only)\n\n" + self_report)
+    parts.append(textwrap.dedent("""\
+        ## Your ruling
+
+        Check, in order: (1) everything the spec requires is present in the
+        diff; (2) nothing beyond the spec was built; (3) the change is
+        correct — probe edge cases the spec implies, not just the happy
+        path; (4) the self-report's claims match the diff.
+
+        List concrete findings first (file, line, what is wrong, why it
+        matters), each one actionable by a fix agent that has not seen this
+        conversation. Then end your reply with EXACTLY one line:
+
+        VERDICT: CLEAN
+        (if the task passes review), or
+        VERDICT: NEEDS_ATTENTION <one-line summary of the blocking findings>
+    """))
+    return "\n\n".join(parts)
+
+
+def build_fix_prompt(
+    task: Task, section: str, review_text: str, verify_report: str,
+) -> str:
+    parts = [textwrap.dedent(f"""\
+        You are fixing review findings on a task you (or a prior agent)
+        implemented as part of an orchestrated plan. Address EVERY finding
+        below — do not re-litigate them, do not expand scope beyond them.
+        Commit your fixes when done.
+
+        ## The task: {task.title}
+        Declared files: {", ".join(task.files) if task.files else "(none declared)"}
+    """)]
+    if section:
+        parts.append("## The plan's specification for this task\n\n" + section)
+    parts.append("## Machine verification results\n\n" + verify_report)
+    parts.append("## Review findings to fix\n\n" + review_text)
+    parts.append(textwrap.dedent("""\
+        When done, report:
+        VERDICT: CLEAN | NEEDS_ATTENTION [reason]
+        FILES_CHANGED: [list]
+
+        If a finding cannot be fixed without a decision only the coordinator
+        can make, report VERDICT: QUESTION <the one-line question> instead
+        of guessing.
+    """))
+    return "\n\n".join(parts)
+
+
+def _review_engine_for(tier: str) -> str:
+    forced = os.environ.get("ORC_REVIEW_ENGINE", "").strip()
+    if forced in ("codex", "claude"):
+        return forced
+    return "claude" if tier == "deep" else "codex"
+
+
+def dispatch_review(
+    task: Task,
+    tier: str,
+    section: str,
+    criteria_path: str | None,
+    project_dir: str,
+    head0: str | None,
+    verify_report: str,
+    impl_result: TaskResult,
+    dispatch_sh: str,
+    run_dir: str,
+    round_num: int,
+    manifest: Manifest,
+) -> tuple[bool, str]:
+    """Dispatch the independent reviewer. Returns (approved, review_text).
+
+    Approved ONLY on an explicit clean verdict (sidecar STATUS pass). A
+    malformed or missing verdict is not approval — conservative by design.
+    """
+    task_dir = os.path.join(run_dir, task.id)
+    engine = _review_engine_for(tier)
+
+    self_report = "(no executor output)"
+    if impl_result.output_path and os.path.exists(impl_result.output_path):
+        with open(impl_result.output_path, errors="replace") as f:
+            self_report = "\n".join(f.read().splitlines()[-30:])
+
+    prompt = build_review_prompt(
+        task, section, criteria_path,
+        task_diff(project_dir, head0), verify_report, self_report,
+    )
+    prompt_path = os.path.join(task_dir, f"review-{round_num}.prompt.md")
+    output_path = os.path.join(task_dir, f"review-{round_num}.md")
+    with open(prompt_path, "w") as f:
+        f.write(prompt)
+
+    cmd = [
+        "bash", dispatch_sh,
+        "--prompt-file", prompt_path,
+        "-C", project_dir,
+        "-o", output_path,
+        "--to", engine,
+        "--tier", tier,
+    ]
+    if engine == "codex":
+        # The codex reviewer needs workspace-write to RUN tests; the prompt
+        # forbids edits and the dirty-tree check below catches violations.
+        cmd += ["-s", "workspace-write"]
+
+    dirty_before = _git(project_dir, "status", "--porcelain")
+    try:
+        p = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=manifest.timeout_per_task,
+        )
+        with open(os.path.join(task_dir, f"review-{round_num}.log"), "w") as f:
+            f.write(_as_text(p.stdout))
+            if p.stderr:
+                f.write("\n--- stderr ---\n" + _as_text(p.stderr))
+    except subprocess.TimeoutExpired:
+        return False, f"(reviewer timed out after {manifest.timeout_per_task}s — treated as not approved)"
+    except Exception as e:  # noqa: BLE001 — any dispatch failure is a non-approval
+        return False, f"(reviewer dispatch failed: {type(e).__name__}: {e})"
+
+    review_text = "(reviewer produced no output)"
+    if os.path.exists(output_path):
+        with open(output_path, errors="replace") as f:
+            review_text = f.read()
+
+    approved = _read_verdict_status(f"{output_path}.verdict") == "pass"
+
+    dirty_after = _git(project_dir, "status", "--porcelain")
+    if dirty_after != dirty_before:
+        approved = False
+        review_text += (
+            "\n\n(orchestrator: the REVIEWER modified the working tree — "
+            "review invalidated; treat with suspicion and re-run.)"
+        )
+    return approved, review_text
+
+
+def _write_text(path: str, text: str) -> None:
+    with open(path, "w") as f:
+        f.write(text)
+
+
+def run_task_pipeline(
+    task: Task,
+    manifest: Manifest,
+    project_dir: str,
+    plan_path: str | None,
+    plan_tasks: dict[int, PlanTask],
+    criteria_path: str | None,
+    dep_outputs: dict[str, TaskResult],
+    dispatch_sh: str,
+    run_id: str,
+    run_dir: str,
+    use_tmux: bool = False,
+    review_enabled: bool = True,
+) -> TaskResult:
+    """implement → verify → review → (fix → verify → review)*, bounded.
+
+    Falls back to plain dispatch_task semantics with --no-review.
+    """
+    task_dir = os.path.join(run_dir, task.id)
+    head0 = _git_head(project_dir)
+
+    result = dispatch_task(
+        task, manifest, project_dir, plan_path,
+        dep_outputs, dispatch_sh, run_id, run_dir, use_tmux,
+    )
+    q = extract_question(result.output_path)
+    if q:
+        result.status = "question"
+        result.error = f"executor asks: {q}"
+        return result
+    if result.status == "error" or not review_enabled:
+        return result
+
+    num = _task_plan_num(task.id)
+    plan_info = plan_tasks.get(num) if num is not None else None
+    section = plan_info.section if plan_info else ""
+    verify_entries = plan_info.verify if plan_info else []
+    tier = task.tier or manifest.tier
+
+    rounds = 0
+    while True:
+        vok, vreport = run_verify_entries(verify_entries, project_dir)
+        _write_text(os.path.join(task_dir, f"verify-{rounds}.txt"), vreport)
+
+        if vok:
+            approved, review_text = dispatch_review(
+                task, tier, section, criteria_path, project_dir, head0,
+                vreport, result, dispatch_sh, run_dir, rounds + 1, manifest,
+            )
+        else:
+            # Machine gates already failed — don't pay a reviewer to say so.
+            approved = False
+            review_text = (
+                "Machine verification failed — the findings to fix are the"
+                f" failing gates below.\n\n{vreport}"
+            )
+
+        if approved:
+            result.rounds = rounds
+            if rounds:
+                result.error = (
+                    (result.error + "; " if result.error else "")
+                    + f"review passed after {rounds} fix round(s)"
+                )
+            print(f"  [review] {task.id}: approved (round {rounds})", flush=True)
+            return result
+
+        if rounds >= MAX_FIX_ROUNDS:
+            result.status = "escalated"
+            result.rounds = rounds
+            result.error = (
+                f"review/verify still failing after {rounds} fix round(s) — "
+                f"two strikes, parked for the controller. Artifacts: {task_dir}"
+            )
+            return result
+
+        rounds += 1
+        print(f"  [review] {task.id}: not approved — fix round {rounds}", flush=True)
+        fix_prompt = build_fix_prompt(task, section, review_text, vreport)
+        result = dispatch_task(
+            task, manifest, project_dir, plan_path,
+            dep_outputs, dispatch_sh, run_id, run_dir, use_tmux,
+            prompt_text=fix_prompt, phase=f"fix-{rounds}",
+        )
+        q = extract_question(result.output_path)
+        if q:
+            result.status = "question"
+            result.rounds = rounds
+            result.error = f"fix agent asks: {q}"
+            return result
+        if result.status == "error":
+            result.status = "escalated"
+            result.rounds = rounds
+            result.error = f"fix dispatch {rounds} errored — parked. {result.error or ''}"
+            return result
+
+
 def _dispatch_via_tmux(
     cmd: list[str],
     env: dict[str, str],
@@ -405,14 +854,16 @@ def _dispatch_via_tmux(
     task_id: str,
     stall_timeout: int,
     session: str,
+    stem: str = "",
 ) -> tuple[int, bool]:
     """Run cmd in a dedicated tmux window; timeout on OUTPUT STALL, not wall
     clock — no log growth for stall_timeout seconds kills the task, but a
     slow-and-steady task runs up to a 6x wall-clock backstop (Sylveste-e9y
-    stage 2). Returns (returncode, timed_out)."""
-    exit_file = os.path.join(task_dir, "exit")
-    log_path = os.path.join(task_dir, "dispatch.log")
-    runner = os.path.join(task_dir, "runner.sh")
+    stage 2). Returns (returncode, timed_out). ``stem`` keeps pipeline fix
+    rounds from clobbering the implement round's artifact names."""
+    exit_file = os.path.join(task_dir, f"{stem}exit")
+    log_path = os.path.join(task_dir, f"{stem}dispatch.log")
+    runner = os.path.join(task_dir, f"{stem}runner.sh")
 
     exports = "".join(
         f"export {k}={shlex.quote(env[k])}\n"
@@ -468,20 +919,27 @@ def dispatch_task(
     run_id: str,
     run_dir: str,
     use_tmux: bool = False,
+    prompt_text: str | None = None,
+    phase: str | None = None,
 ) -> TaskResult:
     """Dispatch a single task via dispatch.sh and return the result.
 
     All per-task artifacts (prompt, dispatch log, output, verdict, meta)
     persist under run_dir/<task_id>/ and SURVIVE failure — never written
-    to a cleaned-up temp dir (Sylveste-e9y)."""
+    to a cleaned-up temp dir (Sylveste-e9y).
+
+    ``prompt_text`` overrides the built prompt (fix rounds); ``phase``
+    prefixes the artifact filenames so pipeline rounds don't clobber the
+    implement round's legacy names (prompt.md / output.md)."""
     task_dir = os.path.join(run_dir, task.id)
     os.makedirs(task_dir, exist_ok=True)
-    prompt_path = os.path.join(task_dir, "prompt.md")
-    output_path = os.path.join(task_dir, "output.md")
+    stem = f"{phase}." if phase else ""
+    prompt_path = os.path.join(task_dir, f"{stem}prompt.md")
+    output_path = os.path.join(task_dir, f"{stem}output.md")
     verdict_path = f"{output_path}.verdict"
-    log_path = os.path.join(task_dir, "dispatch.log")
+    log_path = os.path.join(task_dir, f"{stem}dispatch.log")
 
-    prompt = build_prompt(task, plan_path, dep_outputs, manifest.tasks)
+    prompt = prompt_text or build_prompt(task, plan_path, dep_outputs, manifest.tasks)
     with open(prompt_path, "w") as f:
         f.write(prompt)
 
@@ -510,6 +968,7 @@ def dispatch_task(
                 cmd, env, task_dir, task.id,
                 manifest.timeout_per_task,
                 _tmux_session_name(project_dir, run_id),
+                stem=stem,
             )
         else:
             result = subprocess.run(
@@ -558,9 +1017,10 @@ def dispatch_task(
     else:
         status = "pass"
 
-    with open(os.path.join(task_dir, "meta.json"), "w") as f:
+    with open(os.path.join(task_dir, f"{stem}meta.json"), "w") as f:
         json.dump({
             "task": task.id, "title": task.title, "tier": tier,
+            "phase": phase or "implement",
             "cmd": cmd, "returncode": returncode, "timed_out": timed_out,
             "duration_s": round(duration, 1), "status": status, "note": note,
         }, f, indent=2)
@@ -586,6 +1046,9 @@ def dispatch_batch(
     run_id: str,
     run_dir: str,
     use_tmux: bool = False,
+    plan_tasks: dict[int, PlanTask] | None = None,
+    criteria_path: str | None = None,
+    review_enabled: bool = True,
 ) -> dict[str, TaskResult]:
     """Dispatch a batch of tasks in parallel, collecting ALL results.
 
@@ -601,9 +1064,11 @@ def dispatch_batch(
             for dep_id in graph.get(tid, set())
             if dep_id in completed and completed[dep_id].status in ("pass", "warn")
         }
-        return dispatch_task(
+        return run_task_pipeline(
             task, manifest, project_dir, plan_path,
+            plan_tasks or {}, criteria_path,
             dep_outputs, dispatch_sh, run_id, run_dir, use_tmux,
+            review_enabled=review_enabled,
         )
 
     max_workers = min(manifest.max_parallel, len(task_ids))
@@ -735,6 +1200,7 @@ def orchestrate(
     use_tmux: bool = False,
     keep_tmux: bool = False,
     no_push_guard: bool = False,
+    review_enabled: bool = True,
 ) -> dict[str, TaskResult]:
     """Run the full orchestration loop."""
     # Live progress even when stdout is a redirected file (Sylveste-e9y).
@@ -767,6 +1233,15 @@ def orchestrate(
     completed: dict[str, TaskResult] = {}
     total_tasks = len(manifest.tasks)
 
+    # Review-pipeline inputs: the plan's per-task sections + <verify> blocks,
+    # and the sealed criteria sidecar when one sits next to the plan.
+    plan_tasks = parse_plan_tasks(plan_path)
+    criteria_path: str | None = None
+    if plan_path and plan_path.endswith(".md"):
+        candidate = plan_path[:-3] + ".criteria.md"
+        if os.path.exists(candidate):
+            criteria_path = candidate
+
     # Persistent per-run artifact dir — survives failure by design.
     run_dir = os.path.join(project_dir, ".clavain", "orchestrate-runs", run_id)
     if not dry_run:
@@ -787,6 +1262,18 @@ def orchestrate(
         )
 
     print(f"Orchestrating {total_tasks} tasks (mode: {mode}, max_parallel: {manifest.max_parallel})")
+    if review_enabled:
+        forced = os.environ.get("ORC_REVIEW_ENGINE", "").strip()
+        routing = forced if forced else "fast→codex, deep→claude"
+        print(
+            f"Review pipeline: on (verify blocks: "
+            f"{sum(len(t.verify) for t in plan_tasks.values())} across "
+            f"{len(plan_tasks)} plan task(s); criteria: "
+            f"{criteria_path or 'none'}; reviewer: {routing}; "
+            f"max fix rounds: {MAX_FIX_ROUNDS})"
+        )
+    else:
+        print("Review pipeline: OFF (--no-review) — executor self-reports gate task status")
     if not dry_run:
         print(f"Run artifacts: {run_dir}")
         if guards:
@@ -819,6 +1306,7 @@ def orchestrate(
                 batch_results = dispatch_batch(
                     ready, manifest, graph, project_dir, plan_path,
                     completed, dispatch_sh, run_id, run_dir, use_tmux,  # type: ignore[arg-type]
+                    plan_tasks, criteria_path, review_enabled,
                 )
                 for tid, result in batch_results.items():
                     completed[tid] = result
@@ -829,10 +1317,10 @@ def orchestrate(
                         for skip_id in skipped:
                             completed[skip_id] = TaskResult(
                                 task_id=skip_id, status="skipped",
-                                error=f"Dependency {tid} failed",
+                                error=f"Dependency {tid} {result.status}",
                             )
                         if skipped:
-                            print(f"  Skipped {len(skipped)} tasks due to {tid} failure: {skipped}")
+                            print(f"  Skipped {len(skipped)} tasks due to {tid} {result.status}: {skipped}")
         else:
             # Static batch modes
             if mode == "all-parallel":
@@ -859,6 +1347,7 @@ def orchestrate(
                 batch_results = dispatch_batch(
                     active, manifest, graph, project_dir, plan_path,
                     completed, dispatch_sh, run_id, run_dir, use_tmux,  # type: ignore[arg-type]
+                    plan_tasks, criteria_path, review_enabled,
                 )
                 for tid, result in batch_results.items():
                     completed[tid] = result
@@ -975,18 +1464,27 @@ def count_verdicts(completed: dict[str, TaskResult]) -> dict[str, int]:
     masking nearly caused a premature phase advance (sylveste-nfqo).
 
     Buckets:
-      pass    — clean pass (status "pass", including dry-run)
-      warn    — needs-attention pass with a caveat (status "warn")
-      fail    — hard failure (status "fail" or "error")
-      skipped — dependency-blocked (status "skipped")
+      pass      — clean pass (status "pass", including dry-run)
+      warn      — needs-attention pass with a caveat (status "warn")
+      fail      — hard failure (status "fail" or "error")
+      skipped   — dependency-blocked (status "skipped")
+      escalated — review/verify failing after the fix-round budget; parked
+                  for the controller (two-strikes doctrine, goal 7d610151)
+      question  — the executor asked instead of guessing; parked for the
+                  coordinator's answer
     """
-    counts = {"pass": 0, "warn": 0, "fail": 0, "skipped": 0}
+    counts = {
+        "pass": 0, "warn": 0, "fail": 0, "skipped": 0,
+        "escalated": 0, "question": 0,
+    }
     for result in completed.values():
         status = result.status
         if status == "warn":
             counts["warn"] += 1
         elif status == "skipped":
             counts["skipped"] += 1
+        elif status in ("escalated", "question"):
+            counts[status] += 1
         elif status in ("fail", "error"):
             counts["fail"] += 1
         elif status == "pass" or status.startswith("pass"):
@@ -1033,10 +1531,20 @@ def _print_summary(
     warn_str = _c("33", f"WARN: {counts['warn']}")        # yellow
     fail_str = _c("31", f"FAIL: {counts['fail']}")        # red
     skip_str = _c("90", f"SKIPPED: {counts['skipped']}")  # grey
+    esc_str = _c("35", f"ESCALATED: {counts['escalated']}")  # magenta
+    q_str = _c("36", f"QUESTION: {counts['question']}")      # cyan
 
     print(
-        f"\n  Total: {total}  |  {pass_str}  {warn_str}  {fail_str}  {skip_str}"
+        f"\n  Total: {total}  |  {pass_str}  {warn_str}  {fail_str}  "
+        f"{skip_str}  {esc_str}  {q_str}"
     )
+    if counts["escalated"] or counts["question"]:
+        print(
+            "\n  Parked tasks need the controller: answer each QUESTION / rule"
+            "\n  on each ESCALATED task's findings (see its artifacts dir),"
+            "\n  then re-run — completed tasks are skipped by their dependents"
+            "\n  only when they failed, so a re-run redispatches parked work."
+        )
     print("=" * 60)
 
 
@@ -1071,6 +1579,12 @@ def main() -> None:
         "--no-push-guard", action="store_true",
         help="Skip installing the executor pre-push guard (guard is ON by default)",
     )
+    parser.add_argument(
+        "--no-review", action="store_true",
+        help="Skip the per-task review pipeline (verify blocks + independent "
+             "reviewer + fix rounds); executor self-reports gate task status "
+             "as before goal 7d610151",
+    )
 
     args = parser.parse_args()
 
@@ -1096,6 +1610,7 @@ def main() -> None:
         use_tmux=args.tmux,
         keep_tmux=args.keep_tmux,
         no_push_guard=args.no_push_guard,
+        review_enabled=not args.no_review,
     )
 
 
