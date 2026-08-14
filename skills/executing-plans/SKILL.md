@@ -61,7 +61,7 @@ Default: first 3 tasks per batch. Per task: mark in_progress → follow steps ex
 6. **Read summary:** `pass` → reviewed and approved (with review on); `warn` → read output, assess; `fail`/`error` → offer retry/manual/skip; `skipped` → report dep failure
    - **`escalated`** → review/verify still failing after the fix-round budget (two strikes). Read the task's `review-*.md` + `verify-*.txt` artifacts, rule on the findings yourself (controller judgment — this is the doctrine's escalation seat), then re-run or fix via 2B.
    - **`question`** → the executor asked instead of guessing (`VERDICT: QUESTION …` — the question is in the summary line). Answer it, fold the answer into the plan or task prompt, re-run.
-7. **On partial failure:** Offer re-run orchestrator (skips finished tasks) | execute failed tasks via 2B | skip
+7. **On partial failure or a killed run:** re-run with `--resume <run_id>` (the run id is the directory name under `.clavain/orchestrate-runs/` — its `journal.jsonl` records which tasks finished; complete tasks are skipped with dependency edges satisfied, everything else re-dispatches into the same run dir) | execute failed tasks via 2B | skip. A killed run's stranded push guard is swept automatically on the next invocation.
 
 ## Step 2D: Post-Task Verification
 

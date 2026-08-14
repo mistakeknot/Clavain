@@ -887,7 +887,10 @@ def _dispatch_via_tmux(
         check=True, capture_output=True,
     )
 
-    start = time.time()
+    # Monotonic clock: it pauses during system sleep (macOS and Linux), so a
+    # closed lid doesn't read as an output stall and falsely kill the task
+    # on wake (goal e453fc6a).
+    start = time.monotonic()
     last_size, last_change = -1, start
     while True:
         if os.path.exists(exit_file):
@@ -896,7 +899,7 @@ def _dispatch_via_tmux(
                     return int(f.read().strip() or "1"), False
             except ValueError:
                 return 1, False
-        now = time.time()
+        now = time.monotonic()
         size = os.path.getsize(log_path) if os.path.exists(log_path) else -1
         if size != last_size:
             last_size, last_change = size, now
@@ -960,6 +963,7 @@ def dispatch_task(
         env["CLAVAIN_DISPATCH_PROFILE"] = "interserve"
 
     start = time.time()
+    start_mono = time.monotonic()
     timed_out = False
     returncode: int | None = None
     try:
@@ -995,6 +999,7 @@ def dispatch_task(
         )
 
     duration = time.time() - start
+    duration_mono = time.monotonic() - start_mono
 
     # Verdict resolution: sidecar first, then outcome cross-check. A timeout
     # or missing sidecar is NOT proof of failure — check what actually
@@ -1017,12 +1022,26 @@ def dispatch_task(
     else:
         status = "pass"
 
+    # timeout_per_task runs on the monotonic clock, which pauses during
+    # system sleep on macOS — surface the divergence so a 2624s wall reading
+    # against an 1800s ceiling reads as "lid closed", not "timeout broken"
+    # (run 9d5d116d task-2, goal e453fc6a).
+    slept = duration - duration_mono
+    if slept > 120:
+        sleep_note = (
+            f"wall-clock exceeded monotonic by {int(slept)}s — system likely "
+            "slept mid-dispatch; timeout_per_task counts monotonic time only"
+        )
+        note = f"{note}; {sleep_note}" if note else sleep_note
+
     with open(os.path.join(task_dir, f"{stem}meta.json"), "w") as f:
         json.dump({
             "task": task.id, "title": task.title, "tier": tier,
             "phase": phase or "implement",
             "cmd": cmd, "returncode": returncode, "timed_out": timed_out,
-            "duration_s": round(duration, 1), "status": status, "note": note,
+            "duration_s": round(duration, 1),
+            "duration_monotonic_s": round(duration_mono, 1),
+            "status": status, "note": note,
         }, f, indent=2)
 
     return TaskResult(
@@ -1049,11 +1068,14 @@ def dispatch_batch(
     plan_tasks: dict[int, PlanTask] | None = None,
     criteria_path: str | None = None,
     review_enabled: bool = True,
+    journal_path: str | None = None,
 ) -> dict[str, TaskResult]:
     """Dispatch a batch of tasks in parallel, collecting ALL results.
 
     Prints a flushed per-task completion line as each task finishes so the
-    output stream carries live progress (Sylveste-e9y)."""
+    output stream carries live progress (Sylveste-e9y). Each completion is
+    journaled immediately (not at batch end) so a kill mid-wave loses only
+    in-flight tasks, never finished ones (goal e453fc6a)."""
     results: dict[str, TaskResult] = {}
 
     def _dispatch_one(tid: str) -> TaskResult:
@@ -1089,8 +1111,82 @@ def dispatch_batch(
                 f"  [{res.status.upper()}] {tid} ({res.duration_s:.0f}s){note}",
                 flush=True,
             )
+            if journal_path:
+                _journal_append(
+                    journal_path,
+                    _journal_task_entry(run_dir, project_dir, res),
+                )
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Run journal — kill-safe record of per-task completion (goal e453fc6a)
+# ---------------------------------------------------------------------------
+
+def _now_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
+def _journal_append(journal_path: str, entry: dict) -> None:
+    """Append one JSONL entry, fsynced — the journal must survive SIGKILL
+    arriving the instant after a task completes."""
+    with open(journal_path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _read_journal(run_dir: str) -> list[dict]:
+    path = os.path.join(run_dir, "journal.jsonl")
+    entries: list[dict] = []
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue  # torn write from a kill mid-append
+    except OSError:
+        pass
+    return entries
+
+
+def _journal_completed(entries: list[dict]) -> dict[str, dict]:
+    """Tasks whose LAST journal entry is terminal-complete (pass/warn).
+
+    With the review pipeline on, pass/warn is only reachable through review
+    approval, so these are safe to skip on resume. escalated / question /
+    error / skipped tasks re-dispatch."""
+    last: dict[str, dict] = {}
+    for e in entries:
+        if e.get("event") == "task" and e.get("task"):
+            last[e["task"]] = e
+    return {
+        tid: e for tid, e in last.items()
+        if e.get("status") in ("pass", "warn")
+    }
+
+
+def _journal_task_entry(run_dir: str, project_dir: str, res: TaskResult) -> dict:
+    task_dir = Path(run_dir) / res.task_id
+    reviews = sorted(task_dir.glob("review-*.md.verdict"))
+    return {
+        "event": "task",
+        "task": res.task_id,
+        "status": res.status,
+        "rounds": res.rounds,
+        "error": res.error,
+        "duration_s": round(res.duration_s, 1),
+        "output": res.output_path,
+        "verdict": res.verdict_path,
+        "review_verdict": str(reviews[-1]) if reviews else None,
+        "head": _git_head(project_dir),
+        "ts": _now_iso(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1161,6 +1257,11 @@ def _install_push_guards(
         if hook.exists() and GUARD_MARKER not in hook.read_text(errors="replace"):
             backup = hooks / "pre-push.orc-bak"
             shutil.move(str(hook), str(backup))
+        elif (hooks / "pre-push.orc-bak").exists():
+            # A stranded guard's backup with no original hook left to sweep —
+            # adopt it so this run's teardown restores the user's real hook
+            # instead of leaving it as .orc-bak forever.
+            backup = hooks / "pre-push.orc-bak"
         hook.write_text(
             "#!/bin/sh\n"
             f"# {GUARD_MARKER} run={run_id}\n"
@@ -1187,6 +1288,50 @@ def _remove_push_guards(installed: list[tuple[Path, Path | None]]) -> None:
             pass
 
 
+def _pid_alive(pidfile: str) -> bool:
+    try:
+        with open(pidfile) as f:
+            pid = int(f.read().strip())
+        os.kill(pid, 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _sweep_stranded_guards(repos: set[str]) -> None:
+    """Remove/restore pre-push guards stranded by a killed orchestrator.
+
+    SIGKILL skips orchestrate()'s finally-teardown, so both scene-pilot kills
+    (runs 3155e212, 9d5d116d) left the guard blocking all pushes until a human
+    deleted it. A guard is stranded when the run that installed it — located
+    via the push-attempts.log path in the hook body — has no live orchestrator
+    pid. A live pid means a concurrent run owns the guard: leave it."""
+    for repo in sorted(repos):
+        hooks = _git_hooks_dir(repo)
+        if hooks is None:
+            continue
+        hook = hooks / "pre-push"
+        if not hook.exists():
+            continue
+        text = hook.read_text(errors="replace")
+        if GUARD_MARKER not in text:
+            continue
+        m = re.search(r">> '?([^'\n]*push-attempts\.log)", text)
+        old_run_dir = os.path.dirname(m.group(1)) if m else None
+        if old_run_dir and _pid_alive(os.path.join(old_run_dir, "orchestrator.pid")):
+            continue
+        backup = hooks / "pre-push.orc-bak"
+        try:
+            hook.unlink()
+            if backup.exists():
+                shutil.move(str(backup), str(hook))
+                print(f"Swept stranded push guard in {repo} (original pre-push restored)")
+            else:
+                print(f"Swept stranded push guard in {repo}")
+        except OSError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Main orchestration loop
 # ---------------------------------------------------------------------------
@@ -1201,8 +1346,14 @@ def orchestrate(
     keep_tmux: bool = False,
     no_push_guard: bool = False,
     review_enabled: bool = True,
+    resume_run_id: str | None = None,
 ) -> dict[str, TaskResult]:
-    """Run the full orchestration loop."""
+    """Run the full orchestration loop.
+
+    ``resume_run_id`` resumes a prior (killed or partially failed) run: the
+    prior run's journal.jsonl identifies terminal-complete tasks, which are
+    skipped with their dependency edges treated as satisfied; everything
+    else re-dispatches into the SAME run dir (goal e453fc6a)."""
     # Live progress even when stdout is a redirected file (Sylveste-e9y).
     try:
         sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
@@ -1229,9 +1380,34 @@ def orchestrate(
     # Narrow type for dispatch calls (guarded by sys.exit above)
     assert dispatch_sh is not None or dry_run
 
-    run_id = uuid4().hex[:8]
     completed: dict[str, TaskResult] = {}
     total_tasks = len(manifest.tasks)
+
+    if resume_run_id:
+        run_id = resume_run_id
+        run_dir = os.path.join(project_dir, ".clavain", "orchestrate-runs", run_id)
+        if not os.path.exists(os.path.join(run_dir, "journal.jsonl")):
+            print(
+                f"ERROR: cannot resume run {run_id} — no journal at "
+                f"{run_dir}/journal.jsonl",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        for tid, e in sorted(_journal_completed(_read_journal(run_dir)).items()):
+            if tid not in manifest.tasks:
+                continue
+            completed[tid] = TaskResult(
+                task_id=tid,
+                status=e["status"],
+                output_path=e.get("output"),
+                verdict_path=e.get("verdict"),
+                error="resumed: complete in prior run",
+                duration_s=0.0,
+                rounds=e.get("rounds", 0) or 0,
+            )
+    else:
+        run_id = uuid4().hex[:8]
+        run_dir = os.path.join(project_dir, ".clavain", "orchestrate-runs", run_id)
 
     # Review-pipeline inputs: the plan's per-task sections + <verify> blocks,
     # and the sealed criteria sidecar when one sits next to the plan.
@@ -1242,16 +1418,42 @@ def orchestrate(
         if os.path.exists(candidate):
             criteria_path = candidate
 
+    # Sweep BEFORE writing this run's pidfile: a resume reuses the killed
+    # run's run_dir, and writing our own (live) pid first would make the
+    # stranded guard look like a concurrent run's and never get swept.
+    guards: list[tuple[Path, Path | None]] = []
+    repos: set[str] = set()
+    if not dry_run and not no_push_guard:
+        repos = _find_task_repos(project_dir, manifest.tasks)
+        _sweep_stranded_guards(repos)
+
     # Persistent per-run artifact dir — survives failure by design.
-    run_dir = os.path.join(project_dir, ".clavain", "orchestrate-runs", run_id)
+    journal_path: str | None = None
     if not dry_run:
         os.makedirs(run_dir, exist_ok=True)
+        # Liveness marker: lets a later invocation distinguish a stranded
+        # push guard (dead pid) from a concurrent run's live one.
+        with open(os.path.join(run_dir, "orchestrator.pid"), "w") as f:
+            f.write(str(os.getpid()))
+        journal_path = os.path.join(run_dir, "journal.jsonl")
 
-    guards: list[tuple[Path, Path | None]] = []
-    if not dry_run and not no_push_guard:
-        guards = _install_push_guards(
-            _find_task_repos(project_dir, manifest.tasks), run_id, run_dir,
-        )
+    if repos:
+        guards = _install_push_guards(repos, run_id, run_dir)
+
+    if journal_path:
+        _journal_append(journal_path, {
+            "event": "resume" if resume_run_id else "run_start",
+            "run_id": run_id,
+            "pid": os.getpid(),
+            "manifest": os.path.abspath(manifest_path),
+            "plan": os.path.abspath(plan_path) if plan_path else None,
+            "resumed_complete": sorted(completed) if resume_run_id else [],
+            "guards": [
+                {"hook": str(h), "backup": str(b) if b else None}
+                for h, b in guards
+            ],
+            "ts": _now_iso(),
+        })
 
     tmux_session = _tmux_session_name(project_dir, run_id)
     if use_tmux and not dry_run:
@@ -1262,6 +1464,11 @@ def orchestrate(
         )
 
     print(f"Orchestrating {total_tasks} tasks (mode: {mode}, max_parallel: {manifest.max_parallel})")
+    if resume_run_id:
+        print(
+            f"Resuming run {run_id}: {len(completed)} task(s) journaled "
+            f"complete, skipped: {', '.join(sorted(completed)) or '(none)'}"
+        )
     if review_enabled:
         forced = os.environ.get("ORC_REVIEW_ENGINE", "").strip()
         routing = forced if forced else "fast→codex, deep→claude"
@@ -1295,6 +1502,14 @@ def orchestrate(
                 ready = scheduler.get_ready()
                 if not ready:
                     break
+                # Drain resumed tasks: journaled complete in a prior run —
+                # mark done (edges satisfied) without dispatching.
+                for tid in ready:
+                    if tid in completed:
+                        scheduler.mark_done(tid)
+                ready = [tid for tid in ready if tid not in completed]
+                if not ready:
+                    continue
                 wave += 1
                 _print_wave(wave, ready, manifest.tasks, dry_run)
                 if dry_run:
@@ -1306,7 +1521,7 @@ def orchestrate(
                 batch_results = dispatch_batch(
                     ready, manifest, graph, project_dir, plan_path,
                     completed, dispatch_sh, run_id, run_dir, use_tmux,  # type: ignore[arg-type]
-                    plan_tasks, criteria_path, review_enabled,
+                    plan_tasks, criteria_path, review_enabled, journal_path,
                 )
                 for tid, result in batch_results.items():
                     completed[tid] = result
@@ -1347,7 +1562,7 @@ def orchestrate(
                 batch_results = dispatch_batch(
                     active, manifest, graph, project_dir, plan_path,
                     completed, dispatch_sh, run_id, run_dir, use_tmux,  # type: ignore[arg-type]
-                    plan_tasks, criteria_path, review_enabled,
+                    plan_tasks, criteria_path, review_enabled, journal_path,
                 )
                 for tid, result in batch_results.items():
                     completed[tid] = result
@@ -1358,6 +1573,12 @@ def orchestrate(
         # Artifacts in run_dir persist deliberately (Sylveste-e9y) — only the
         # push guards and (on clean runs) the tmux session are torn down.
         _remove_push_guards(guards)
+        if journal_path:
+            _journal_append(journal_path, {
+                "event": "run_end",
+                "counts": count_verdicts(completed),
+                "ts": _now_iso(),
+            })
         if use_tmux and not dry_run and not keep_tmux:
             all_ok = all(
                 r.status in ("pass", "warn") or r.status.startswith("pass")
@@ -1585,6 +1806,12 @@ def main() -> None:
              "reviewer + fix rounds); executor self-reports gate task status "
              "as before goal 7d610151",
     )
+    parser.add_argument(
+        "--resume", metavar="RUN_ID",
+        help="Resume a prior run: tasks its journal records as complete "
+             "(pass/warn) are skipped with dependency edges satisfied; "
+             "everything else re-dispatches into the same run dir",
+    )
 
     args = parser.parse_args()
 
@@ -1611,6 +1838,7 @@ def main() -> None:
         keep_tmux=args.keep_tmux,
         no_push_guard=args.no_push_guard,
         review_enabled=not args.no_review,
+        resume_run_id=args.resume,
     )
 
 
