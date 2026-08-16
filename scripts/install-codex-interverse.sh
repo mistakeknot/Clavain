@@ -12,6 +12,17 @@
 
 set -euo pipefail
 
+# --- Windows (Git Bash / MSYS) portability -----------------------------------
+# Native Windows jq emits CRLF line endings; unwrapped `jq -r | read` loops
+# then carry a trailing \r into values ("intercheck\r" -> invalid clone paths).
+# Wrapping jq once here makes every call site safe, including future ones.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
+
+# MSYS `ln -s` degrades to a recursive copy unless Windows Developer Mode is
+# enabled. Installers refresh such copies in place; doctors report them as
+# valid-but-non-tracking installs instead of failing.
+on_msys() { [[ -n "${MSYSTEM:-}" ]] || [[ "$(uname -s 2>/dev/null)" == MINGW* || "$(uname -s 2>/dev/null)" == MSYS* ]]; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -795,8 +806,14 @@ safe_link() {
     fi
     rm -f "$link_path"
   elif [[ -e "$link_path" ]]; then
-    echo "Non-symlink path blocks install: $link_path" >&2
-    return 1
+    if on_msys; then
+      # A previous MSYS copy-fallback install; refresh the copy in place so
+      # re-runs keep tracking the source checkout.
+      rm -rf "$link_path"
+    else
+      echo "Non-symlink path blocks install: $link_path" >&2
+      return 1
+    fi
   fi
 
   ln -s "$target" "$link_path"
@@ -1265,6 +1282,10 @@ doctor_companions_text() {
         echo "[FAIL] link mismatch: $link_path -> $resolved (expected $skill_target)"
         ok=false
       fi
+    elif on_msys && [[ -e "$link_path" ]]; then
+      # MSYS symlink fallback: the skill is installed as a copy. Valid, but
+      # non-tracking — the session-refresh hook (or a re-run) keeps it fresh.
+      echo "[note] skill installed as copy (MSYS symlink fallback): $link_path"
     else
       echo "[FAIL] link missing: $link_path"
       ok=false

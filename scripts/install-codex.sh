@@ -6,12 +6,24 @@
 # - ~/.codex/prompts/clavain-*.md prompt wrappers generated from commands/*.md
 # - ~/.codex/AGENTS.md managed Clavain Codex tool map block
 # - ~/.codex/config.toml managed MCP server block synced from .claude-plugin/plugin.json
-# - ~/.codex/hooks.json merged Remontoire attention SessionStart hook
+# - ~/.codex/hooks.json merged SessionStart hooks: Remontoire attention +
+#   codex-session-refresh (daily source pull + reinstall when upstream moves)
 #
 # Clean-break policy:
 # - Removes legacy ~/.codex/skills/clavain path (symlink or directory) with backup-first safety.
 
 set -euo pipefail
+
+# --- Windows (Git Bash / MSYS) portability -----------------------------------
+# Native Windows jq emits CRLF line endings; unwrapped `jq -r | read` loops
+# then carry a trailing \r into values that become invalid paths. Wrapping jq
+# once here makes every call site safe, including future ones.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
+
+# MSYS `ln -s` degrades to a recursive copy unless Windows Developer Mode is
+# enabled. Installers refresh such copies in place; doctors report them as
+# valid-but-non-tracking installs instead of failing.
+on_msys() { [[ -n "${MSYSTEM:-}" ]] || [[ "$(uname -s 2>/dev/null)" == MINGW* || "$(uname -s 2>/dev/null)" == MSYS* ]]; }
 
 REPO_URL_DEFAULT="https://github.com/mistakeknot/Clavain.git"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -227,8 +239,14 @@ safe_link() {
     fi
     rm -f "$link_path"
   elif [[ -e "$link_path" ]]; then
-    echo "Skip non-symlink path (manual cleanup needed): $link_path" >&2
-    return 1
+    if on_msys; then
+      # A previous MSYS copy-fallback install; refresh the copy in place so
+      # re-runs keep tracking the source checkout.
+      rm -rf "$link_path"
+    else
+      echo "Skip non-symlink path (manual cleanup needed): $link_path" >&2
+      return 1
+    fi
   fi
 
   ln -s "$target" "$link_path"
@@ -858,6 +876,13 @@ codex_context_gateway_hook_command() {
   printf 'bash %s codex' "$quoted_hook_script"
 }
 
+codex_session_refresh_hook_command() {
+  local hook_script="$SOURCE_DIR/scripts/codex-session-refresh.sh"
+  local quoted_hook_script
+  printf -v quoted_hook_script '%q' "$hook_script"
+  printf 'bash %s' "$quoted_hook_script"
+}
+
 validate_codex_hooks_file() {
   local file="$1"
   jq -e '
@@ -888,6 +913,11 @@ sync_codex_remontoire_hook() {
     echo "Missing executable context gateway hook: $context_gateway_hook" >&2
     exit 1
   fi
+  local session_refresh_hook="$SOURCE_DIR/scripts/codex-session-refresh.sh"
+  if [[ ! -f "$session_refresh_hook" ]]; then
+    echo "Missing session refresh hook: $session_refresh_hook" >&2
+    exit 1
+  fi
 
   local source_file
   source_file="$(mktemp)"
@@ -902,16 +932,20 @@ sync_codex_remontoire_hook() {
     printf '{"hooks":{}}\n' > "$source_file"
   fi
 
-  local hook_command context_gateway_command candidate
+  local hook_command context_gateway_command session_refresh_command candidate
   hook_command="$(codex_remontoire_hook_command)"
   context_gateway_command="$(codex_context_gateway_hook_command)"
+  session_refresh_command="$(codex_session_refresh_hook_command)"
   candidate="$(mktemp)"
-  jq --arg command "$hook_command" --arg context_command "$context_gateway_command" '
+  jq --arg command "$hook_command" --arg context_command "$context_gateway_command" --arg refresh_command "$session_refresh_command" '
     def without_remontoire:
       . as $group
       | .hooks = [
           ($group.hooks // [])[]
-          | select(((.command // "") | contains("remontoire-attention.sh")) | not)
+          | select(
+              (((.command // "") | contains("remontoire-attention.sh"))
+               or ((.command // "") | contains("codex-session-refresh.sh")))
+              | not)
         ];
     .hooks = (.hooks // {})
     | .hooks.SessionStart = (
@@ -923,6 +957,13 @@ sync_codex_remontoire_hook() {
               type: "command",
               command: $command,
               timeout: 15
+            }]
+          },
+          {
+            hooks: [{
+              type: "command",
+              command: $refresh_command,
+              timeout: 90
             }]
           }]
       )
@@ -1158,6 +1199,14 @@ doctor() {
     else
       issues+=("agents skills link target mismatch: $agents_link -> $source_agents_link (expected $skills_target)")
       status=1
+    fi
+  elif on_msys && [[ -d "$agents_link" ]]; then
+    # MSYS symlink fallback: skills installed as a copy. Valid but
+    # non-tracking; the session-refresh hook (or a re-run) keeps it fresh.
+    agents_link_ok="true"
+    agents_link_match="true"
+    if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+      echo "agents skills copy:  $agents_link (MSYS symlink fallback)"
     fi
   else
     issues+=("agents skills link missing: $agents_link")

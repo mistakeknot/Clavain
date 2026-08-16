@@ -12,6 +12,11 @@
 
 set -euo pipefail
 
+# --- Windows (Git Bash / MSYS) portability -----------------------------------
+# See install-codex.sh: native Windows jq emits CRLF; MSYS ln -s copies.
+jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
+on_msys() { [[ -n "${MSYSTEM:-}" ]] || [[ "$(uname -s 2>/dev/null)" == MINGW* || "$(uname -s 2>/dev/null)" == MSYS* ]]; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Script lives at <repo>/os/Clavain/scripts/install-kimi.sh — repo root is three levels up.
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -665,6 +670,13 @@ doctor() {
     else
       issues+=("agents skills link broken or target mismatch: $agents_link -> $source_agents_link (expected $skills_target)")
       status=1
+    fi
+  elif on_msys && [[ -d "$agents_link" ]]; then
+    # MSYS symlink fallback: skills installed as a copy (see install-codex.sh).
+    agents_link_ok="true"
+    agents_link_match="true"
+    if [[ "$DOCTOR_JSON" -eq 0 ]]; then
+      echo "agents skills copy:   $agents_link (MSYS symlink fallback)"
     fi
   else
     issues+=("agents skills link missing: $agents_link")
