@@ -164,6 +164,17 @@ stage: discover
 
 Ensure `docs/brainstorms/` exists before writing.
 
+**One-pager (REQUIRED at epic scale).** When the design is epic-scale — it
+spans multiple systems or sessions, proposes a new epic, or the brainstorm
+doc runs past ~120 lines — distill a companion one-pager to
+`docs/onepagers/YYYY-MM-DD-<topic>.md` per the `docs/templates/onepager.md`
+template (thesis · how it works · lineage · refusals · top-3 open calls ·
+status; ~500 words max; frontmatter `artifact_type: onepager` with
+`distills:` pointing at the brainstorm doc). Below epic scale it is
+optional but encouraged. The one-pager is the artifact later phases,
+reviewers, and future sessions load FIRST — keep it current when rulings
+land, and never let it grow past one page.
+
 ### Phase 3b: Record Phase (Reflect + Compound)
 
 Record the brainstorm artifact and advance the phase state machine. This is the OODARC Reflect+Compound step — it writes the outcome back into the system so the sprint orchestrator can route correctly.
@@ -171,6 +182,7 @@ Record the brainstorm artifact and advance the phase state machine. This is the 
 ```bash
 BEAD_ID=$(clavain-cli infer-bead "<brainstorm_doc_path>")
 clavain-cli set-artifact "$BEAD_ID" "brainstorm" "<brainstorm_doc_path>" 2>/dev/null || true
+[ -f "<onepager_path>" ] && clavain-cli set-artifact "$BEAD_ID" "onepager" "<onepager_path>" 2>/dev/null || true
 clavain-cli advance-phase "$BEAD_ID" "brainstorm" "Brainstorm: <brainstorm_doc_path>" "<brainstorm_doc_path>"
 clavain-cli checkpoint-write "$BEAD_ID" "brainstorm" "brainstorm" "<brainstorm_doc_path>" 2>/dev/null || true
 ```
@@ -196,6 +208,7 @@ Display exactly this template, then **stop**:
 Brainstorm complete!
 
 Document: docs/brainstorms/YYYY-MM-DD-<topic>-brainstorm.md
+One-pager: docs/onepagers/YYYY-MM-DD-<topic>.md   (omit line if not produced)
 
 Key decisions:
 - [Decision 1]

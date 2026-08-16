@@ -11,7 +11,10 @@ Write comprehensive implementation plans assuming zero codebase context and ques
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
-**Context:** Run after `/brainstorm` has captured the design.
+**Context:** Run after `/brainstorm` has captured the design. If a
+companion one-pager exists (`docs/onepagers/`, frontmatter `distills:`
+pointing at the brainstorm), read it FIRST — it is the design's spine
+(thesis, refusals, open calls) — then the brainstorm for detail.
 
 **Save plan to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
 **Save manifest to:** `docs/plans/YYYY-MM-DD-<feature-name>.exec.yaml`
