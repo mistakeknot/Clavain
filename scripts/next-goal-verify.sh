@@ -85,8 +85,16 @@ unavailable() {
 }
 
 command -v jq >/dev/null 2>&1 || unavailable "jq not installed"
-command -v bd >/dev/null 2>&1 || unavailable "bd not installed"
 [[ ${#IDS[@]} -gt 0 || ${#PATHS[@]} -gt 0 ]] || unavailable "nothing to verify"
+
+# bd is required only for BEAD IDs. A --path run asks the filesystem whether an
+# artifact exists and never touches a tracker, so demanding bd for it made the
+# whole run report `available: false` on any host without bd — surrendering the
+# half of the check that was still perfectly answerable. Caught on a CI runner
+# that has no bd: a paths-only invocation returned no `paths` array at all.
+if [[ ${#IDS[@]} -gt 0 ]]; then
+    command -v bd >/dev/null 2>&1 || unavailable "bd not installed"
+fi
 
 # ---------------------------------------------------------------- root discovery
 #
