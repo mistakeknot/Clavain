@@ -197,6 +197,15 @@ DISQUALIFIED="$(jq -cn --argjson b "$BEADS_JSON" --argjson p "$PATHS_JSON" \
     '[($b[] | select(.verdict == "disqualified") | .id),
       ($p[] | select(.verdict == "disqualified") | .path)]')"
 
+# `ok: (($disq | length) == 0)` — the OUTER parentheses are load-bearing. jq 1.7
+# (Debian, and the CI runner) rejects `key: a == b` inside an object literal
+# with "syntax error, unexpected ==", while jq 1.8 accepts it. Written the
+# permissive way, this script emitted a compile error instead of JSON on every
+# Linux host and parsed fine on the machine it was written on — the third time
+# in this change's own history that a platform difference hid a defect, and the
+# reason the header insists the environment where a bug cannot appear is not
+# evidence it is absent. CI is the guard here; there is no way to pin a jq
+# version from inside a test.
 PAYLOAD="$(jq -cn \
     --arg schema "$SCHEMA_VERSION" \
     --arg stamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -208,7 +217,7 @@ PAYLOAD="$(jq -cn \
       roots_discovered: ($roots_seen == 1),
       beads: $beads, paths: $paths, disqualified: $disq,
       warnings: [$beads[] | select(.verdict == "warn") | .id],
-      ok: ($disq | length) == 0}')"
+      ok: (($disq | length) == 0)}')"
 
 if [[ "$(jq -r '.ok' <<<"$PAYLOAD")" == "true" ]]; then
     emit_and_exit "$PAYLOAD" 0
