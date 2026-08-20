@@ -112,6 +112,11 @@ discover_roots() {
 mapfile -t ROOTS < <(discover_roots | awk 'NF && !seen[$0]++' | head -n "$MAX_ROOTS")
 [[ ${#ROOTS[@]} -gt 0 ]] && ROOTS_OK=1 || ROOTS_OK=0
 
+# Reachability is decided AFTER the loop, by whether a tracker actually
+# answered — see the ANSWERED check below. Counting roots here would not do it:
+# CLAVAIN_NEXT_GOAL_ROOTS is taken on trust, so a configured path with no
+# tracker behind it produces a root that cannot answer anything.
+
 bd_show() {
     # $1 = root, $2 = id. Prints the raw JSON, or nothing.
     #
@@ -127,6 +132,7 @@ bd_show() {
 
 BEADS_JSON="[]"
 DISQUALIFIED="[]"
+ANSWERED=0
 
 for id in ${IDS[@]+"${IDS[@]}"}; do
     found=""
@@ -136,7 +142,13 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
         [[ -z "$raw" ]] && continue
         # An array means bd resolved it. An object carries {"error": ...}.
         if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$raw"; then
-            found="$raw"; found_root="$root"; break
+            found="$raw"; found_root="$root"; ANSWERED=1; break
+        fi
+        # A parseable error object is still a TRACKER ANSWERING — it looked and
+        # said no. That is the only thing that earns the right to call an id
+        # nonexistent below, and it is a different fact from silence.
+        if jq -e 'type == "object" and has("error")' >/dev/null 2>&1 <<<"$raw"; then
+            ANSWERED=1
         fi
     done
 
@@ -169,6 +181,20 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
     fi
     BEADS_JSON="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$BEADS_JSON")"
 done
+
+# SILENCE IS NOT A VERDICT — and this script shipped its first draft getting
+# that wrong, which is precisely the defect it exists to prevent.
+#
+# If no tracker answered for ANY id, every one of them fell through to the
+# not-found branch and the run reported `no such bead in any reachable tracker`
+# about beads that were perfectly alive, then exited 3. A gate that says "your
+# candidate does not exist" when the truth is "I never reached a tracker" is
+# worse than no gate: it is confidently wrong in the direction that drops real
+# work, and next-goal-candidates.sh carries ten lines of comment on the same
+# distinction one level out. Found by running it on a host missing `awk`.
+if [[ ${#IDS[@]} -gt 0 && $ANSWERED -eq 0 ]]; then
+    unavailable "no bead root reachable, so a live candidate cannot be told from a closed one"
+fi
 
 # ------------------------------------------------------------------ path checks
 #

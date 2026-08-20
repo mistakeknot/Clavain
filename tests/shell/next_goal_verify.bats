@@ -107,22 +107,36 @@ bead_json() {
     # An unrun check is not a passed one. If this ever returns ok:true the
     # caller cannot distinguish "verified" from "could not verify".
     #
-    # The PATH is built rather than trimmed. This was `PATH=/usr/bin:/bin`,
-    # which is bd-free only on hosts that happen not to install bd there: it
-    # passed on macOS and on the CI runner and failed on a Linux box carrying
-    # /usr/bin/bd, where the "absent" binary was present and the assertion
-    # tested nothing it claimed to. A directory holding one symlink is bd-free
-    # everywhere by construction.
-    local mini bash_bin
-    bash_bin="$(command -v bash)"
-    mini="$(mktemp -d)"
-    ln -s "$(command -v jq)" "$mini/jq"
-    run env PATH="$mini" "$bash_bin" "$SCRIPT" x-1
+    # Unavailability is provoked by REMOVING THE TRACKER, not by hiding a
+    # binary. Two earlier attempts hid bd via PATH and both tested the host
+    # rather than the script: `PATH=/usr/bin:/bin` is bd-free only where bd is
+    # not installed there, and a hand-built PATH still lost to a `bd` resolved
+    # from the environment. Pointing at a root with no .beads is hermetic
+    # everywhere, and it exercises the same contract.
+    make_bd_stub "$(bead_json open)"
+    CLAVAIN_NEXT_GOAL_ROOTS="$WORK_DIR/no-tracker-here" run bash "$SCRIPT" x-1
     [ "$status" -eq 0 ]
     [ "$(jq -r '.available' <<<"$output")" = "false" ]
     [ "$(jq -r '.ok' <<<"$output")" = "null" ]
-    [[ "$(jq -r '.reason' <<<"$output")" == *"bd"* ]]
-    rm -rf "$mini"
+}
+
+@test "no reachable root must NOT disqualify — could-not-look is not not-there" {
+    # The defect this whole gate exists to prevent, found in the gate itself:
+    # with no root reachable every id fell through to "no such bead in any
+    # reachable tracker" and the run exited 3, condemning live candidates on
+    # the strength of never having looked at them.
+    make_bd_stub "$(bead_json open)"
+    CLAVAIN_NEXT_GOAL_ROOTS="$WORK_DIR/no-tracker-here" run bash "$SCRIPT" x-1
+    [ "$status" -ne 3 ]
+    [ "$(jq -r '.disqualified | length' <<<"$output")" = "0" ]
+    [[ "$(jq -r '.reason' <<<"$output")" == *"no bead root reachable"* ]]
+}
+
+@test "paths are still answerable with no tracker — they never needed bd" {
+    mkdir -p "$WORK_DIR/present"
+    CLAVAIN_NEXT_GOAL_ROOTS="$WORK_DIR/no-tracker-here" run bash "$SCRIPT" --path "$WORK_DIR/present"
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.paths[0].verdict' <<<"$output")" = "disqualified" ]
 }
 
 @test "a receipt is left for the session, keyed by session id" {
