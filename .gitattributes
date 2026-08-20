@@ -1,3 +1,7 @@
 
 # Use bd merge for beads JSONL files
 .beads/issues.jsonl merge=beads
+
+# Shell scripts must stay LF: bash heredocs and read loops on Windows
+# Git Bash choke on CRLF (plugin lists become "name" -> invalid paths).
+*.sh text eol=lf
