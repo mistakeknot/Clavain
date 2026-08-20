@@ -106,14 +106,23 @@ bead_json() {
 @test "missing bd fails OPEN but reports ok:null, never true" {
     # An unrun check is not a passed one. If this ever returns ok:true the
     # caller cannot distinguish "verified" from "could not verify".
-    cat > "$STUB_DIR/hide-bd" <<'EOF'
-placeholder
-EOF
-    run env PATH="/usr/bin:/bin" bash "$SCRIPT" x-1
+    #
+    # The PATH is built rather than trimmed. This was `PATH=/usr/bin:/bin`,
+    # which is bd-free only on hosts that happen not to install bd there: it
+    # passed on macOS and on the CI runner and failed on a Linux box carrying
+    # /usr/bin/bd, where the "absent" binary was present and the assertion
+    # tested nothing it claimed to. A directory holding one symlink is bd-free
+    # everywhere by construction.
+    local mini bash_bin
+    bash_bin="$(command -v bash)"
+    mini="$(mktemp -d)"
+    ln -s "$(command -v jq)" "$mini/jq"
+    run env PATH="$mini" "$bash_bin" "$SCRIPT" x-1
     [ "$status" -eq 0 ]
     [ "$(jq -r '.available' <<<"$output")" = "false" ]
     [ "$(jq -r '.ok' <<<"$output")" = "null" ]
     [[ "$(jq -r '.reason' <<<"$output")" == *"bd"* ]]
+    rm -rf "$mini"
 }
 
 @test "a receipt is left for the session, keyed by session id" {
