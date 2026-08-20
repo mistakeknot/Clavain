@@ -20,6 +20,12 @@ If a plan document exists: check all checkboxes, resolve TODOs, load `verificati
 - [ ] No debug artifacts (console.log, fmt.Println)
 - [ ] Changes in logical commit units
 - [ ] Deploy verification plan (if deploy-relevant)
+- [ ] Shipped-surface sweep (if readers/users see the change): no pipeline
+  vocabulary on reader surfaces; every interaction the copy names exists
+  (affordance parity); each viewer mode matches that viewer's capabilities
+  (audience parity); one CTA per action per view; controls on different
+  scopes look different; status copy spatially true. Judge as the fresh
+  reader, not the builder.
 
 ### Step 4: Present Options via AskUserQuestion
 
