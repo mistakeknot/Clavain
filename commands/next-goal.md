@@ -21,7 +21,7 @@ turn with an instruction to run this command. This command is also safe (and
 encouraged) to invoke manually any time you want a fresh set of candidates.
 
 Never skip the block because bead data is unavailable — degrade to a
-lighter-weight recommendation (see Step 3) rather than omitting it.
+lighter-weight recommendation (see Step 4) rather than omitting it.
 
 ## Step 1: Gather ready and promoted candidates
 
@@ -112,8 +112,8 @@ different things, and they must not be treated alike:
 
 | `candidates` | `tracker_reachable` | meaning | what to do |
 |---|---|---|---|
-| `[]` | `true` | the backlog is genuinely clear | Step 3, and say the tracker is clear |
-| `[]` | `false` | we could not look at all | Step 3, and say so — see the required wording |
+| `[]` | `true` | the backlog is genuinely clear | Step 4, and say the tracker is clear |
+| `[]` | `false` | we could not look at all | Step 4, and say so — see the required wording |
 
 Until 2026-08-07 this command could not tell those apart: it ran `bd ready
 --json 2>/dev/null || LOCAL_READY_JSON="[]"`, which turned "no beads database
@@ -201,7 +201,85 @@ Rank and select the **top 2-4** candidates. Do not just take the top 2-4 by
 `--explain` pass can help surface why something is ready if the ranking
 isn't obvious from the JSON fields alone.
 
-## Step 3: Degraded path — and which degradation it is
+## Step 3: Verify the shortlist at source
+
+Ranking picked 2-4 candidates. Before any of them is written into a block,
+**re-read each one at source.** This is a command, not an act of recall:
+
+```bash
+VERIFY_HELPER=""
+for candidate in \
+    "${CLAUDE_PLUGIN_ROOT:-}/scripts/next-goal-verify.sh" \
+    "$HOME/.codex/clavain/scripts/next-goal-verify.sh" \
+    "$HOME/projects/Sylveste/os/Clavain/scripts/next-goal-verify.sh"
+do
+    [[ -f "$candidate" ]] && { VERIFY_HELPER="$candidate"; break; }
+done
+
+# Every bead ID the block will cite. Add --path for anything a candidate
+# proposes to CREATE (see below). Exits 3 if any candidate is disqualified.
+VERIFY_JSON=$(bash "$VERIFY_HELPER" solwend-abcd mk-1234 \
+                   --path apps/web/components/thing/ 2>/dev/null)
+```
+
+`.beads[].verdict` is per candidate, and they are not interchangeable:
+
+| verdict | when | what to do |
+|---|---|---|
+| `ok` | open | usable |
+| `warn` | `in_progress` / `blocked` | usable only if the goal is to FINISH or UNBLOCK it — and the block must say which, and name what it waits on |
+| `disqualified` | `closed`, `deferred`, or no such bead | **drop it.** Do not cite it, not even with a caveat |
+
+**Any candidate whose verb is build / create / add must assert the artifact's
+absence** with `--path`. A bead's status cannot catch this: an epic can be
+legitimately open while the thing you propose building is already on disk.
+
+### Why this exists, and why provenance did not already cover it
+
+Step 1's receipt answers *did a tracker answer at all*. On 2026-08-14 a block
+passed that check and was still wrong: it cited `solwend-w46q` — a real ID, from
+a reachable tracker, correctly formed — and recommended continuing it. The epic
+had been **CLOSED as "all steps complete" for two weeks**, and the deliverables
+it proposed building were already on disk: eight components, a 337-line token
+sheet, a `/plan` page. The recommendation was to build what existed.
+
+Provenance asks whether you looked. This asks whether what you cited is still
+true. A stale ID and a live one are byte-identical in a block, so the reader
+cannot tell them apart either — which is the same argument that put the
+provenance receipt here, one level in.
+
+The failure is context-RICH, not context-poor. The longer a session runs, the
+more fluently it can name a bead from memory, and the likelier that memory
+predates the close. Continuity is what makes it convincing. That is why the
+check is mechanical rather than a reminder to be careful: it must not depend on
+the judgement of the thing whose judgement is compromised.
+
+### Assertions in the /goal text are claims until verified
+
+The same discipline applies to the prose you draft. On 2026-08-14 a `/goal` also
+asserted a "compounding rebase cost" across a PR stack and that its versions
+"conflicted"; the stack was strictly linear and the version ladder already
+consistent. One command each would have settled it. Anything phrased as a fact
+about repo state — *X does not exist*, *these conflict*, *no rebase is needed* —
+must either be checked before emission or rewritten as an instruction to check.
+A wrong fact in a `/goal` is worse than a missing one: it arrives pre-approved
+and the next session builds on it.
+
+### This is checked, not merely requested
+
+`scripts/next-goal-verify.sh` leaves a receipt at
+`~/.cache/clavain/next-goal-verify/$CLAUDE_SESSION_ID.json`, and the Stop hook
+reads it (`next_goal_verification_warning` in
+`hooks/lib-next-goal-provenance.sh`). A block emitted with no receipt is flagged
+as unverified; a block emitted while the receipt lists disqualified candidates
+is flagged with their names. It runs only when the provenance audit is already
+clean, so a session that skipped the lookup entirely gets one warning, not two.
+
+If bd is unreachable the helper reports `ok: null`, never `true` — an unrun
+check is not a passed one, and the block is then required to say the candidates
+are unverified.
+
+## Step 4: Degraded path — and which degradation it is
 
 If `READY_JSON` is empty, do not fabricate bead IDs. Build candidates from what
 is actually in front of you this session: open TODOs mentioned in conversation,
@@ -256,7 +334,7 @@ Two things follow, and the second is the one worth internalising:
 Set `CLAVAIN_PROVENANCE_AUDIT_DISABLE=1` to silence the audit, or
 `.claude/clavain.no-goalcadence` to opt a repo out of the whole tier.
 
-## Step 4: Emit the block
+## Step 5: Emit the block
 
 Format exactly:
 

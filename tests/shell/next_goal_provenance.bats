@@ -264,3 +264,65 @@ $(block_claiming_provenance)"
     [[ "$output" == *"Next-goal provenance"* ]]
     [[ "$output" != *"Goal-cadence:"* ]]
 }
+
+# ---------------------------------------------------- verification (2026-08-14)
+#
+# The second claim a block makes. Provenance asks whether a tracker answered;
+# these ask whether the candidates it named are still live. A block cited a bead
+# that had been closed for two weeks and every provenance signal read clean.
+
+verify_receipt() {
+    # $1 = session, $2 = the `ok` value, $3 = compact JSON array of disqualified
+    mkdir -p "$VERIFY_DIR"
+    printf '{"schema_version":"clavain.next-goal-verify/v1","ok":%s,"disqualified":%s}\n' \
+        "$2" "${3:-[]}" > "$VERIFY_DIR/$1.json"
+}
+
+setup_verify_dir() {
+    VERIFY_DIR="$(mktemp -d)"
+    CLAVAIN_VERIFY_DIR="$VERIFY_DIR"
+}
+
+@test "verification: silent when every cited candidate verified clean" {
+    setup_verify_dir
+    verify_receipt "v-ok" true '[]'
+    run next_goal_verification_warning "v-ok" "$(block_claiming_provenance)"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "verification: flags a block whose candidates were never re-read" {
+    setup_verify_dir
+    run next_goal_verification_warning "v-missing" "$(block_claiming_provenance)"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"never ran in this session"* ]]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "verification: names the disqualified candidates — the w46q case" {
+    setup_verify_dir
+    verify_receipt "v-bad" false '["solwend-w46q","apps/web/components/thing/"]'
+    run next_goal_verification_warning "v-bad" "$(block_claiming_provenance)"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"DISQUALIFIED"* ]]
+    [[ "$output" == *"solwend-w46q"* ]]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "verification: ok:null is reported as unverified, never as passing" {
+    setup_verify_dir
+    verify_receipt "v-null" null '[]'
+    run next_goal_verification_warning "v-null" "$(block_claiming_provenance)"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"could not reach bd"* ]]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "verification: says nothing when no Next-goal block was emitted" {
+    setup_verify_dir
+    run next_goal_verification_warning "v-none" "$(assistant_line "Just a normal reply.")"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    rm -rf "$VERIFY_DIR"
+}
