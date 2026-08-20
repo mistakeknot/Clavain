@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+#
+# next-goal-verify.sh — re-read every candidate a Next-goal block is about to
+# cite, at source, immediately before it is emitted.
+#
+# WHY THIS EXISTS, and why it is NOT the same check as the provenance receipt.
+#
+# next-goal-candidates.sh answers "did a tracker answer at all", and the Stop
+# hook flags a block with no receipt as improvised. That closed the failure
+# where a block was written from session context without consulting anything.
+#
+# It does not close this one. On 2026-08-14 a Next-goal block cited
+# `solwend-w46q` — a real bead ID, correctly formed, from a reachable tracker,
+# so every provenance signal read clean — and recommended continuing it. The
+# epic had been CLOSED as "all steps complete" since 2026-07-31, and the
+# deliverables it proposed building were already on disk: eight components, a
+# 337-line token sheet, a /plan page. The recommendation was to build what
+# existed.
+#
+# The gap is exact: provenance asks WHETHER YOU LOOKED. Nothing asked WHETHER
+# WHAT YOU CITED IS STILL TRUE. A stale ID and a live one are byte-identical in
+# a block, so the reader cannot tell them apart either — the same argument that
+# put the provenance receipt here in the first place, one level in.
+#
+# The failure mode is specifically a CONTEXT-RICH one. The longer a session
+# runs, the more confidently it can name a bead from memory, and the likelier
+# that memory predates the close. So the check has to be mechanical: it must
+# not depend on the judgement of the thing whose judgement is compromised.
+#
+# Usage:
+#   next-goal-verify.sh <bead-id> [<bead-id>...]
+#   next-goal-verify.sh --path apps/web/components/x/ <bead-id>     # see --path
+#
+# Exit: 0 = every candidate usable (or verification unavailable — fail-open),
+#       3 = at least one candidate DISQUALIFIED. Always prints one JSON object.
+
+set -uo pipefail
+
+SCHEMA_VERSION="clavain.next-goal-verify/v1"
+MAX_ROOTS="${CLAVAIN_NEXT_GOAL_MAX_ROOTS:-6}"
+BD_TIMEOUT="${CLAVAIN_NEXT_GOAL_BD_TIMEOUT:-20}"
+
+RECEIPT_DIR="${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}"
+RECEIPT_SESSION="${CLAUDE_SESSION_ID:-unknown}"
+
+IDS=()
+PATHS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --path) PATHS+=("${2:-}"); shift 2 || shift ;;
+        --path=*) PATHS+=("${1#--path=}"); shift ;;
+        -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+        *) IDS+=("$1"); shift ;;
+    esac
+done
+
+emit_and_exit() {
+    # $1 = compact JSON payload, $2 = exit code
+    record_receipt "$1"
+    printf '%s\n' "$1"
+    exit "$2"
+}
+
+record_receipt() {
+    # Mirrors next-goal-candidates.sh's receipt discipline: session-keyed, so a
+    # yesterday's verification cannot vouch for today's block, and written via
+    # temp+mv so a concurrent hook read never sees a half-written object.
+    [[ "${CLAVAIN_PROVENANCE_DISABLE:-0}" == "1" ]] && return 0
+    mkdir -p "$RECEIPT_DIR" 2>/dev/null || return 0
+    local tmp="${RECEIPT_DIR}/.${RECEIPT_SESSION}.$$.tmp"
+    printf '%s\n' "$1" >"$tmp" 2>/dev/null || return 0
+    mv -f "$tmp" "${RECEIPT_DIR}/${RECEIPT_SESSION}.json" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+    return 0
+}
+
+unavailable() {
+    # FAIL-OPEN, but never fail-SILENT. `ok` is null rather than true: an
+    # unrun check is not a passed one, and the caller is required to say which
+    # it got. Same reason the roadmap's `undated` is treated as stale here —
+    # unknown is not healthy.
+    local payload
+    payload="$(printf '{"schema_version":"%s","available":false,"ok":null,"reason":"%s","beads":[],"paths":[],"disqualified":[]}' \
+        "$SCHEMA_VERSION" "$1")"
+    emit_and_exit "$payload" 0
+}
+
+command -v jq >/dev/null 2>&1 || unavailable "jq not installed"
+command -v bd >/dev/null 2>&1 || unavailable "bd not installed"
+[[ ${#IDS[@]} -gt 0 || ${#PATHS[@]} -gt 0 ]] || unavailable "nothing to verify"
+
+# ---------------------------------------------------------------- root discovery
+#
+# Deliberately identical to next-goal-candidates.sh: walk up crossing nested-git
+# boundaries, because bd resolves from $PWD and stops at the first git root, and
+# then add the workspace tracker, which is not an ancestor of every checkout.
+# Two different resolution schemes for the same ID space would be a way for the
+# gate to disagree with the thing it is gating.
+discover_roots() {
+    if [[ -n "${CLAVAIN_NEXT_GOAL_ROOTS:-}" ]]; then
+        printf '%s\n' "${CLAVAIN_NEXT_GOAL_ROOTS}" | tr ':' '\n'
+        return
+    fi
+    local dir="$PWD" depth=0
+    while [[ -n "$dir" && "$dir" != "/" && $depth -lt 12 ]]; do
+        [[ -d "$dir/.beads" ]] && printf '%s\n' "$dir"
+        dir="$(dirname "$dir")"
+        depth=$((depth + 1))
+    done
+    [[ -d "$HOME/projects/.beads" ]] && printf '%s\n' "$HOME/projects"
+}
+
+mapfile -t ROOTS < <(discover_roots | awk 'NF && !seen[$0]++' | head -n "$MAX_ROOTS")
+[[ ${#ROOTS[@]} -gt 0 ]] && ROOTS_OK=1 || ROOTS_OK=0
+
+bd_show() {
+    # $1 = root, $2 = id. Prints the raw JSON, or nothing.
+    #
+    # `bd show <missing-id> --json` EXITS 0 and prints {"error": ...}. The exit
+    # status is not the answer; the payload is. A gate that trusted `$?` here
+    # would clear every fabricated ID it was built to catch.
+    if command -v timeout >/dev/null 2>&1; then
+        (cd "$1" 2>/dev/null && timeout "$BD_TIMEOUT" bd show "$2" --json 2>/dev/null)
+    else
+        (cd "$1" 2>/dev/null && bd show "$2" --json 2>/dev/null)
+    fi
+}
+
+BEADS_JSON="[]"
+DISQUALIFIED="[]"
+
+for id in ${IDS[@]+"${IDS[@]}"}; do
+    found=""
+    found_root=""
+    for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
+        raw="$(bd_show "$root" "$id")"
+        [[ -z "$raw" ]] && continue
+        # An array means bd resolved it. An object carries {"error": ...}.
+        if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$raw"; then
+            found="$raw"; found_root="$root"; break
+        fi
+    done
+
+    if [[ -z "$found" ]]; then
+        entry="$(jq -cn --arg id "$id" \
+            '{id: $id, root: null, status: null, verdict: "disqualified",
+              reason: "no such bead in any reachable tracker — do not cite an ID that cannot be read back"}')"
+    else
+        entry="$(jq -c --arg root "$found_root" '
+            .[0]
+            | {id, root: $root, status, issue_type, priority,
+               title: (.title // ""), closed_at: (.closed_at // null)}
+            | . + (
+                if   .status == "closed"
+                then {verdict: "disqualified",
+                      reason: ("already closed" + (if .closed_at then " (" + .closed_at + ")" else "" end)
+                               + " — proposing it recommends work that is already done")}
+                elif .status == "deferred"
+                then {verdict: "disqualified",
+                      reason: "deferred — parking it was a decision, and re-proposing it silently reopens that decision"}
+                elif .status == "in_progress"
+                then {verdict: "warn",
+                      reason: "already in progress — usable only if the goal is to finish it, and say so"}
+                elif .status == "blocked"
+                then {verdict: "warn",
+                      reason: "blocked — usable only if the goal is to unblock it, and name what it waits on"}
+                else {verdict: "ok", reason: "open"}
+                end)
+        ' <<<"$found")"
+    fi
+    BEADS_JSON="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$BEADS_JSON")"
+done
+
+# ------------------------------------------------------------------ path checks
+#
+# The second half of the 2026-08-14 failure: the block proposed BUILDING things
+# that already existed. A bead status check cannot catch that — the epic could
+# have been open and the components still present. So a candidate whose verb is
+# "create"/"build"/"add" has to assert the artifact's absence, and asserting is
+# a command, not a belief.
+for p in ${PATHS[@]+"${PATHS[@]}"}; do
+    if [[ -e "$p" ]]; then
+        detail="exists"
+        [[ -d "$p" ]] && detail="exists, $(find "$p" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ') file(s)"
+        entry="$(jq -cn --arg path "$p" --arg d "$detail" \
+            '{path: $path, exists: true, verdict: "disqualified",
+              reason: ("already present (" + $d + ") — a goal to build it would rebuild what is there")}')"
+    else
+        entry="$(jq -cn --arg path "$p" \
+            '{path: $path, exists: false, verdict: "ok", reason: "absent, so there is something to build"}')"
+    fi
+    PATHS_JSON="${PATHS_JSON:-[]}"
+    PATHS_JSON="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$PATHS_JSON")"
+done
+PATHS_JSON="${PATHS_JSON:-[]}"
+
+DISQUALIFIED="$(jq -cn --argjson b "$BEADS_JSON" --argjson p "$PATHS_JSON" \
+    '[($b[] | select(.verdict == "disqualified") | .id),
+      ($p[] | select(.verdict == "disqualified") | .path)]')"
+
+PAYLOAD="$(jq -cn \
+    --arg schema "$SCHEMA_VERSION" \
+    --arg stamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson roots_seen "$ROOTS_OK" \
+    --argjson beads "$BEADS_JSON" \
+    --argjson paths "$PATHS_JSON" \
+    --argjson disq "$DISQUALIFIED" \
+    '{schema_version: $schema, available: true, verified_at: $stamp,
+      roots_discovered: ($roots_seen == 1),
+      beads: $beads, paths: $paths, disqualified: $disq,
+      warnings: [$beads[] | select(.verdict == "warn") | .id],
+      ok: ($disq | length) == 0}')"
+
+if [[ "$(jq -r '.ok' <<<"$PAYLOAD")" == "true" ]]; then
+    emit_and_exit "$PAYLOAD" 0
+fi
+emit_and_exit "$PAYLOAD" 3

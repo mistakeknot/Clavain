@@ -163,6 +163,15 @@ if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
     if declare -F next_goal_provenance_warning >/dev/null 2>&1; then
         PROVENANCE_WARNING="$(next_goal_provenance_warning "$SESSION_ID" "$RECENT" 2>/dev/null || true)"
     fi
+    # The verification audit — "is what you cited still true" — runs only when
+    # provenance came back clean. Not to spare the noise: when no lookup ran at
+    # all, both receipts are missing and both would fire, and the provenance
+    # remedy (run /clavain:next-goal, re-derive) already produces the
+    # verification receipt as a side effect. Same subsumption argument the
+    # provenance tier makes against goal-cadence, one level in.
+    if [[ -z "$PROVENANCE_WARNING" ]] && declare -F next_goal_verification_warning >/dev/null 2>&1; then
+        PROVENANCE_WARNING="$(next_goal_verification_warning "$SESSION_ID" "$RECENT" 2>/dev/null || true)"
+    fi
 fi
 
 # Tiered decision: goal-cadence > compound > dispatch > drift check

@@ -165,3 +165,85 @@ next_goal_provenance_warning() {
     esac
     return 0
 }
+
+# ---------------------------------------------------------------- verification
+#
+# THE SECOND CLAIM A BLOCK MAKES, AND THE ONE NOTHING ABOVE CHECKS
+#
+# Everything above answers "did a tracker answer at all". On 2026-08-14 a block
+# passed every one of those checks and was still wrong: it cited `solwend-w46q`,
+# a real ID from a reachable tracker, and recommended continuing it. The epic had
+# been CLOSED as "all steps complete" for two weeks, and the deliverables it
+# proposed building were already on disk.
+#
+# Provenance asks WHETHER YOU LOOKED. This asks WHETHER WHAT YOU CITED IS STILL
+# TRUE. A stale ID and a live one are byte-identical in a block, so the reader
+# cannot separate them either — the same argument that put the provenance
+# receipt here, applied one level in.
+#
+# Note the failure is context-RICH, not context-poor: the longer a session runs
+# the more confidently it names a bead from memory, and the likelier that memory
+# predates the close. So it has to be mechanical. It cannot be delegated to the
+# judgement of the thing whose judgement is the problem.
+CLAVAIN_VERIFY_DIR="${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}"
+
+# next_goal_verify_receipt_state <session_id>
+# Echoes one of: missing | unreadable | clean | disqualified | unavailable
+#
+# `unavailable` (the helper ran but bd/jq were absent) is kept distinct from
+# `clean` for the reason the whole file keeps repeating: an unrun check is not a
+# passed one. scripts/next-goal-verify.sh writes ok:null for exactly this, and
+# folding null into true here would discard the distinction it took care to make.
+next_goal_verify_receipt_state() {
+    local path="${CLAVAIN_VERIFY_DIR}/${1:-unknown}.json"
+    [[ -f "$path" ]] || { printf 'missing\n'; return 0; }
+    command -v jq >/dev/null 2>&1 || { printf 'unreadable\n'; return 0; }
+    local ok
+    ok="$(jq -r '.ok | tostring' "$path" 2>/dev/null)" || { printf 'unreadable\n'; return 0; }
+    case "$ok" in
+        true)  printf 'clean\n' ;;
+        false) printf 'disqualified\n' ;;
+        null)  printf 'unavailable\n' ;;
+        *)     printf 'unreadable\n' ;;
+    esac
+}
+
+# next_goal_verify_disqualified <session_id> — comma-joined ids/paths, if any.
+next_goal_verify_disqualified() {
+    local path="${CLAVAIN_VERIFY_DIR}/${1:-unknown}.json"
+    [[ -f "$path" ]] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    jq -r '(.disqualified // []) | join(", ")' "$path" 2>/dev/null || true
+}
+
+# next_goal_verification_warning <session_id> <transcript_text>
+# Echoes a warning when a block cites candidates that were never re-read, or
+# that failed the re-read. Silent otherwise. Always exits 0 — a nudge, not a gate.
+next_goal_verification_warning() {
+    local session="${1:-unknown}" text="${2:-}"
+
+    [[ "${CLAVAIN_PROVENANCE_AUDIT_DISABLE:-0}" == "1" ]] && return 0
+    next_goal_block_emitted "$text" || return 0
+
+    local state detail
+    state="$(next_goal_verify_receipt_state "$session")"
+    [[ "$state" == "clean" ]] && return 0
+    detail="$(next_goal_verify_disqualified "$session")"
+
+    case "$state" in
+        missing)
+            printf 'Next-goal verification: this turn emitted a Next-goal block, but scripts/next-goal-verify.sh never ran in this session, so no cited candidate was re-read at source. A bead that closed since you last saw it looks exactly like one that is still open. Re-run the shortlist through the verifier before standing behind the block.\n'
+            ;;
+        disqualified)
+            printf 'Next-goal verification: the verifier DISQUALIFIED %s, but a Next-goal block went out anyway. A closed, deferred, or nonexistent bead must not be proposed — and a path that already exists must not be proposed as something to build. Drop those candidates and re-derive.\n' \
+                "${detail:-one or more candidates}"
+            ;;
+        unavailable)
+            printf 'Next-goal verification: the verifier ran but could not reach bd, so no cited candidate was confirmed to still be open. Unknown is not healthy — say in the block that the candidates are unverified, or re-run once the tracker is reachable.\n'
+            ;;
+        unreadable)
+            printf 'Next-goal verification: a verification receipt exists for session %s but could not be parsed, so whether the cited candidates are live is unknown. Re-run scripts/next-goal-verify.sh.\n' "$session"
+            ;;
+    esac
+    return 0
+}
