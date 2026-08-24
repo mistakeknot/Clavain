@@ -14,11 +14,12 @@ setup() {
     OUTPUT="$TMPDIR_T/out.md"
     VERDICT_FILE="${OUTPUT}.verdict"
 
-    # Extract both helpers into a sourced snippet (stop before the invocation block)
+    # Extract the helpers into a sourced snippet (stop before the invocation block)
     HELPERS="$TMPDIR_T/helpers.sh"
     awk '
         /^_detect_codex_error\(\)[[:space:]]*\{/ { emit=1 }
         /^_write_error_verdict\(\)[[:space:]]*\{/ { emit=1 }
+        /^_extract_verdict\(\)[[:space:]]*\{/ { emit=1 }
         emit {
             print
             if ($0 ~ /^}[[:space:]]*$/) { emit=0 }
@@ -123,4 +124,77 @@ PRE
     run _detect_codex_error "$STDERR_FILE" "" 0
     [ "$status" -eq 0 ]
     [[ "$output" != *$'\x1b'* ]]
+}
+
+# --- mk-1hrx: zero-turn misread must not clobber a real pass -----------------
+# Recorded incident (uncrancher run 61c1faeb, 2026-08-17): codex produced a
+# full review ending "VERDICT: CLEAN", the verdict sidecar said STATUS: pass,
+# but the JSONL meta parser read zero turns/messages/commands — and the warn
+# override overwrote the pass. The state counters are a PROXY for "did
+# anything happen"; the output file is direct evidence. When they disagree,
+# the proxy is what's broken.
+
+@test "detect: zero-state but real output → no override (mk-1hrx)" {
+    _load
+    : > "$STDERR_FILE"
+    printf '{"turns":0,"messages":0,"commands":0}\n' > "$STATE_FILE"
+    printf 'Full review body here.\nVERDICT: CLEAN\n' > "$OUTPUT"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 0 "$OUTPUT"
+    [ "$status" -ne 0 ]
+}
+
+@test "detect: zero-state and EMPTY output still warns (heuristic keeps its job)" {
+    _load
+    : > "$STDERR_FILE"
+    printf '{"turns":0,"messages":0,"commands":0}\n' > "$STATE_FILE"
+    : > "$OUTPUT"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 0 "$OUTPUT"
+    [ "$status" -eq 0 ]
+    [[ "$output" == warn$'\t'* ]]
+}
+
+@test "detect: zero-state, no output file given → warn (old callers unaffected)" {
+    _load
+    : > "$STDERR_FILE"
+    printf '{"turns":0,"messages":0,"commands":0}\n' > "$STATE_FILE"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 0
+    [ "$status" -eq 0 ]
+    [[ "$output" == warn$'\t'* ]]
+}
+
+@test "detect: real HTTP error is NOT suppressed by output existing" {
+    _load
+    echo "stream error: unexpected status 500 Internal Server Error" > "$STDERR_FILE"
+    printf '{"turns":0,"messages":0,"commands":0}\n' > "$STATE_FILE"
+    printf 'partial output before the failure\n' > "$OUTPUT"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 0 "$OUTPUT"
+    [ "$status" -eq 0 ]
+    [[ "$output" == error$'\t'* ]]
+}
+
+# --- ungrounded pass: unrecognized VERDICT line must not synthesize a pass ---
+# _extract_verdict's fallback defaulted STATUS to pass when a VERDICT: line
+# existed but matched neither CLEAN nor NEEDS_ATTENTION — so "VERDICT:
+# QUESTION <q>" (or any future verdict vocabulary) produced a sidecar that
+# orchestrate.py:736 reads as approved. An unrecognized verdict is not a pass.
+
+@test "extract: VERDICT: QUESTION synthesizes warn, not pass" {
+    _load
+    printf 'Which schema should win?\nVERDICT: QUESTION which schema should win?\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q "^STATUS: warn$" "$VERDICT_FILE"
+}
+
+@test "extract: unknown verdict vocabulary synthesizes warn, not pass" {
+    _load
+    printf 'body\nVERDICT: SHIPSHAPE\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q "^STATUS: warn$" "$VERDICT_FILE"
+}
+
+@test "extract: CLEAN still synthesizes pass" {
+    _load
+    printf 'body\nVERDICT: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q "^STATUS: pass$" "$VERDICT_FILE"
 }

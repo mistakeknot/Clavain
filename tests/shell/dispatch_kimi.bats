@@ -58,7 +58,7 @@ teardown() {
 @test "engine: invalid backend value exits 1" {
     run bash "$DISPATCH_SCRIPT" --to bogus "test prompt"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"must be 'codex' or 'kimi'"* ]]
+    [[ "$output" == *"must be 'codex', 'kimi', or 'claude'"* ]]
 }
 
 @test "kimi tier: fast maps to kimi-code/kimi-for-coding" {
