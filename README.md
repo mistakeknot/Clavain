@@ -293,7 +293,7 @@ clavain-cli policy token revoke --cascade --token=<root> # revoke a root + all d
 **Audit**
 
 ```bash
-clavain-cli policy audit --tokens   # delegation tree per root
+clavain-cli policy token list   # delegation tree per root
 ```
 
 Every consume writes a v1.5-shaped authorizations row with `vetting.via="token"`. The existing `policy audit --verify` continues to walk the signature chain; v2 doesn't change the signing model.

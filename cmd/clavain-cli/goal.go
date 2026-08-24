@@ -25,7 +25,10 @@ func cmdGoalMint(args []string) error {
 		return fmt.Errorf("usage: goal-mint <title> --project=<dir> --condition-file=<path> [--charter=] [--complexity=] [--bead=]")
 	}
 	title := args[0]
-	flags := parseAuthzArgs(args[1:])
+	flags, err := parseAuthzArgsStrict("goal-mint", args[1:], "bead", "charter", "complexity", "condition-file", "project")
+	if err != nil {
+		return err
+	}
 	project := flags["project"]
 	conditionFile := flags["condition-file"]
 	if project == "" || conditionFile == "" {
