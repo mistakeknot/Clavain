@@ -1290,7 +1290,12 @@ _extract_verdict() {
     local verdict_line
     verdict_line=$(grep -m1 "^VERDICT:" "$output_file" 2>/dev/null) || verdict_line=""
 
-    local status="pass"
+    # Default is warn, not pass: this branch synthesizes a verdict the model
+    # never structured, and orchestrate reads STATUS: pass as approved. A
+    # VERDICT line this parser does not recognize (QUESTION, or vocabulary
+    # added after it) must surface for a human, not slide through as a pass
+    # nothing grounded.
+    local status="warn"
     local summary="No structured verdict found."
     if [[ "$verdict_line" == *"NEEDS_ATTENTION"* ]]; then
         status="warn"
@@ -1301,6 +1306,9 @@ _extract_verdict() {
     elif [[ -z "$verdict_line" ]]; then
         status="warn"
         summary="No verdict line in agent output."
+    else
+        status="warn"
+        summary="Unrecognized verdict: ${verdict_line#VERDICT: }"
     fi
 
     cat > "$verdict_file" <<VERDICT
@@ -1323,7 +1331,7 @@ VERDICT
 #   retry  — HTTP 429 rate-limit (caller can back off)
 #   warn   — codex exited 0 but produced zero turns/messages/commands
 _detect_codex_error() {
-    local stderr_file="$1" state_file="$2" exit_code="${3:-0}"
+    local stderr_file="$1" state_file="$2" exit_code="${3:-0}" output_file="${4:-}"
     local kind="" detail="" line=""
 
     if [[ -f "$stderr_file" ]]; then
@@ -1360,14 +1368,24 @@ _detect_codex_error() {
     fi
 
     # Zero-output heuristic: successful exit but nothing happened → suspicious.
+    # The counters are a PROXY read by the JSONL meta parser; the output file
+    # is direct evidence. When the counters say "nothing happened" but real
+    # output exists, the parser is what's broken, not the run — firing warn
+    # here overwrote a genuine STATUS: pass and struck out a clean task
+    # (mk-1hrx, uncrancher run 61c1faeb, 2026-08-17). Direct evidence wins;
+    # the disagreement is logged, not enthroned as a verdict.
     if [[ -z "$kind" && -f "$state_file" ]] && command -v jq >/dev/null 2>&1; then
         local turns msgs cmds
         turns=$(jq -r '.turns // 0' "$state_file" 2>/dev/null || echo 0)
         msgs=$(jq -r '.messages // 0' "$state_file" 2>/dev/null || echo 0)
         cmds=$(jq -r '.commands // 0' "$state_file" 2>/dev/null || echo 0)
         if [[ "$turns" == "0" && "$msgs" == "0" && "$cmds" == "0" ]]; then
-            kind="warn"
-            detail="No model output — zero turns, messages, and commands."
+            if [[ -n "$output_file" && -s "$output_file" ]]; then
+                echo "Warning: state file reports zero turns but output exists — meta parser suspect, verdict left intact ($state_file)" >&2
+            else
+                kind="warn"
+                detail="No model output — zero turns, messages, and commands."
+            fi
         fi
     fi
 
@@ -1415,7 +1433,7 @@ _surface_codex_errors() {
   local exit_code="$1"
   [[ -z "$OUTPUT" ]] && return 0
   local err_info=""
-  if err_info=$(_detect_codex_error "$STDERR_FILE" "$STATE_FILE" "$exit_code"); then
+  if err_info=$(_detect_codex_error "$STDERR_FILE" "$STATE_FILE" "$exit_code" "$OUTPUT"); then
     local err_kind err_detail
     IFS=$'\t' read -r err_kind err_detail <<< "$err_info"
     _write_error_verdict "$OUTPUT" "$err_kind" "$err_detail"

@@ -100,7 +100,10 @@ func parseTTL(s string) (time.Duration, error) {
 //	clavain-cli policy token issue --op=<o> --target=<t> --for=<agent>
 //	                               --ttl=<dur> [--bead=<id>]
 func cmdPolicyTokenIssue(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy token issue", args, "bead", "for", "op", "project-root", "target", "ttl")
+	if err != nil {
+		return err
+	}
 	op := flags["op"]
 	target := flags["target"]
 	forAgent := flags["for"]
@@ -190,7 +193,10 @@ func cmdPolicyTokenIssue(args []string) error {
 // --expect-target are optional but wrappers always pass them; an empty value
 // produces a scope-skipped warning to stderr for observability (r3 P2).
 func cmdPolicyTokenConsume(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy token consume", args, "expect-op", "expect-target", "project-root", "token")
+	if err != nil {
+		return err
+	}
 	tokenStr := flags["token"]
 	if tokenStr == "" {
 		tokenStr = os.Getenv("CLAVAIN_AUTHZ_TOKEN")
@@ -254,7 +260,10 @@ func cmdPolicyTokenConsume(args []string) error {
 //	clavain-cli policy token delegate --from=<parent-ulid> --to=<agent>
 //	                                  --ttl=<dur>
 func cmdPolicyTokenDelegate(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy token delegate", args, "from", "project-root", "to", "ttl")
+	if err != nil {
+		return err
+	}
 	parentID := flags["from"]
 	toAgent := flags["to"]
 	ttlStr := flags["ttl"]
@@ -306,7 +315,10 @@ func cmdPolicyTokenDelegate(args []string) error {
 //	clavain-cli policy token revoke --token=<id> [--cascade]
 //	clavain-cli policy token revoke --issued-since=<duration>  # bulk
 func cmdPolicyTokenRevoke(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy token revoke", args, "cascade", "issued-since", "project-root", "token")
+	if err != nil {
+		return err
+	}
 	tokenID := flags["token"]
 	_, cascade := flags["cascade"]
 	issuedSince := flags["issued-since"]
@@ -364,7 +376,10 @@ func cmdPolicyTokenRevoke(args []string) error {
 //	clavain-cli policy token list [--root=<id>] [--agent=<id>] [--op=<o>]
 //	                              [--status=consumable|consumed|revoked|expired]
 func cmdPolicyTokenList(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy token list", args, "agent", "op", "project-root", "root", "status")
+	if err != nil {
+		return err
+	}
 	filter := authz.ListFilter{
 		RootToken: flags["root"],
 		AgentID:   flags["agent"],
@@ -395,7 +410,10 @@ func cmdPolicyTokenList(args []string) error {
 //
 //	clavain-cli policy token show --token=<id>
 func cmdPolicyTokenShow(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy token show", args, "project-root", "token")
+	if err != nil {
+		return err
+	}
 	tokenID := flags["token"]
 	if tokenID == "" {
 		return fmt.Errorf("usage: policy token show --token=<id>")
@@ -440,7 +458,10 @@ func cmdPolicyTokenShow(args []string) error {
 //
 //	clavain-cli policy token verify --token=<opaque>
 func cmdPolicyTokenVerify(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy token verify", args, "project-root", "token")
+	if err != nil {
+		return err
+	}
 	opaque := flags["token"]
 	if opaque == "" {
 		return fmt.Errorf("usage: policy token verify --token=<opaque-string>")

@@ -53,7 +53,10 @@ func openIntercoreDBAndRoot(flagSets ...map[string]string) (*sql.DB, string, str
 //
 //	clavain-cli policy init-key [--rotate] [--project-root=<path>]
 func cmdPolicyInitKey(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy init-key", args, "project-root", "rotate")
+	if err != nil {
+		return err
+	}
 	root, err := resolveProjectRoot(flags)
 	if err != nil {
 		return err
@@ -91,7 +94,13 @@ func cmdPolicyInitKey(args []string) error {
 //
 //	clavain-cli policy rotate-key [--project-root=<path>]
 func cmdPolicyRotateKey(args []string) error {
-	flags := parseAuthzArgs(args)
+	// "rotate" is accepted though unread here: cmdPolicyInitKey forwards its
+	// raw args when --rotate routes it to this command, so the routing flag
+	// itself arrives with them.
+	flags, err := parseAuthzArgsStrict("policy rotate-key", args, "project-root", "rotate")
+	if err != nil {
+		return err
+	}
 	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return fmt.Errorf("policy rotate-key: %w", err)
@@ -134,7 +143,10 @@ func cmdPolicyRotateKey(args []string) error {
 //	clavain-cli policy sign [--op=<op>] [--target=<t>] [--bead=<id>]
 //	                        [--since=<duration>] [--project-root=<path>]
 func cmdPolicySign(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy sign", args, "bead", "op", "project-root", "since", "target")
+	if err != nil {
+		return err
+	}
 	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
@@ -223,7 +235,10 @@ func cmdPolicySign(args []string) error {
 // the authorized operation, so an audit failure cannot produce an unaudited
 // irreversible action and matching injected rows are never swept up.
 func cmdPolicyRecordSigned(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy record-signed", args, "agent", "bead", "cross-project-id", "delegation-capped", "mode", "op", "policy-hash", "policy-match", "project-root", "target", "vetted-sha")
+	if err != nil {
+		return err
+	}
 	for _, key := range []string{"op", "target", "agent", "mode"} {
 		if flags[key] == "" {
 			return fmt.Errorf("policy record-signed: missing --%s", key)
@@ -401,7 +416,10 @@ type legacyAnchorReport struct {
 //	clavain-cli policy anchor-legacy --expect-count=<n> --expect-digest=<sha256>
 //	clavain-cli policy anchor-legacy --expect-empty
 func cmdPolicyAnchorLegacy(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy anchor-legacy", args, "expect-count", "expect-digest", "expect-empty", "inspect", "project-root")
+	if err != nil {
+		return err
+	}
 	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return fmt.Errorf("policy anchor-legacy: %w", err)
@@ -632,7 +650,10 @@ type verifySummary struct {
 //	clavain-cli policy verify [--json] [--since=<duration>] [--op=<op>]
 //	                          [--project-root=<path>]
 func cmdPolicyVerify(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy verify", args, "agent", "bead", "op", "project-root", "since")
+	if err != nil {
+		return err
+	}
 	db, _, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return err
@@ -860,7 +881,10 @@ func verifyWithPub(pub []byte, row authz.SignRow, sig []byte) bool {
 //	clavain-cli policy quarantine --before-key=<fp> [--reason=<text>]
 //	                              [--project-root=<path>]
 func cmdPolicyQuarantine(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy quarantine", args, "before-key", "project-root", "reason")
+	if err != nil {
+		return err
+	}
 	fp, ok := flags["before-key"]
 	if !ok || fp == "" {
 		return fmt.Errorf("policy quarantine: --before-key=<fingerprint> required")
@@ -956,7 +980,10 @@ func maybeAuditVerify(db *sql.DB, root string, flags map[string]string) error {
 //	clavain-cli policy doctor [--project-root=<path>] [--require-signer]
 //	                          [--expected-pub=<fingerprint>]
 func cmdPolicyDoctor(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy doctor", args, "expected-pub", "project-root", "require-signer")
+	if err != nil {
+		return err
+	}
 	db, dbPath, root, err := openIntercoreDBAndRoot(flags)
 	if err != nil {
 		return fmt.Errorf("policy doctor: %w", err)

@@ -10,7 +10,7 @@
 #   4. Sign fresh migration markers only for a DB created by this invocation.
 #   5. Create an explicit empty legacy anchor for a fresh ledger. Nonempty
 #      legacy history stops for operator review; it is never auto-anchored.
-#   6. Sanity-check with `policy audit --verify --json`.
+#   6. Sanity-check with `policy audit --verify`.
 #
 # Run from a project root (directory containing .clavain/ or where you want
 # .clavain/ created).
@@ -184,7 +184,7 @@ fi
 log "verifying audit integrity"
 VERIFY_FILE="$(mktemp "${TMPDIR:-/tmp}/authz-init-verify.XXXXXX")"
 trap 'rm -f "$VERIFY_FILE"' EXIT
-if clavain-cli policy audit --verify --json --project-root="$PROJECT_ROOT" >"$VERIFY_FILE" 2>&1; then
+if clavain-cli policy audit --verify --project-root="$PROJECT_ROOT" >"$VERIFY_FILE" 2>&1; then
   log "policy audit --verify: OK"
 else
   log "WARN: policy audit --verify reported failures; details:"

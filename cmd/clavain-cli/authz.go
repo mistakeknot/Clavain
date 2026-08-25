@@ -141,6 +141,39 @@ func emptyIfMissing(path string) string {
 	return path
 }
 
+// parseAuthzArgsStrict parses like parseAuthzArgs but rejects any --flag not
+// in allowed. Positional args pass through untouched.
+//
+// Sylveste-8umf: the permissive parser collected every --key into a map and
+// commands read only the keys they knew, so an unrecognized flag was a no-op
+// that LOOKED answered — `policy audit --count` against a binary predating
+// --count printed the full 62KB listing instead of a count, and every script
+// shelling out to an older clavain-cli got plausible wrong output instead of
+// a failure. A flag the command will not read must be an error the caller
+// sees, because the alternative is a caller believing a filter, a scope, or a
+// gate was applied when nothing read it.
+func parseAuthzArgsStrict(cmdName string, args []string, allowed ...string) (map[string]string, error) {
+	flags := parseAuthzArgs(args)
+	ok := make(map[string]bool, len(allowed))
+	for _, a := range allowed {
+		ok[a] = true
+	}
+	var unknown []string
+	for k := range flags {
+		if strings.HasPrefix(k, "_pos_") || ok[k] {
+			continue
+		}
+		unknown = append(unknown, "--"+k)
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		sort.Strings(allowed)
+		return nil, fmt.Errorf("%s: unknown flag %s (allowed: --%s)",
+			cmdName, strings.Join(unknown, ", "), strings.Join(allowed, ", --"))
+	}
+	return flags, nil
+}
+
 // parseAuthzArgs parses --key=val pairs and flags into a string map.
 // Positional args are stored under "_pos_<N>".
 func parseAuthzArgs(args []string) map[string]string {
@@ -286,7 +319,10 @@ func cmdPolicyCheck(args []string) error {
 		return fmt.Errorf("usage: policy check <op> [flags]")
 	}
 	op := args[0]
-	flags := parseAuthzArgs(args[1:])
+	flags, err := parseAuthzArgsStrict("policy check", args[1:], "bead", "committed-by-this-session", "env", "global", "head-sha", "project", "project-root", "sprint-or-work-flow", "target", "tests-passed", "vetted-at", "vetted-sha")
+	if err != nil {
+		return err
+	}
 
 	globalPath, projectPath, envPath, err := policyResolvePaths(flags)
 	if err != nil {
@@ -370,7 +406,10 @@ func cmdPolicyCheck(args []string) error {
 //	                          [--bead=<id>] [--policy-match=<s>] [--policy-hash=<h>]
 //	                          [--vetted-sha=<sha>] [--cross-project-id=<id>]
 func cmdPolicyRecord(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy record", args, "agent", "bead", "cross-project-id", "mode", "op", "policy-hash", "policy-match", "project-root", "target", "vetted-sha")
+	if err != nil {
+		return err
+	}
 	required := []string{"op", "target", "agent", "mode"}
 	for _, k := range required {
 		if _, ok := flags[k]; !ok {
@@ -406,7 +445,10 @@ func cmdPolicyRecord(args []string) error {
 //
 //	clavain-cli policy list [--global=...] [--project=...] [--env=...]
 func cmdPolicyList(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy list", args, "env", "global", "project")
+	if err != nil {
+		return err
+	}
 	globalPath, projectPath, envPath, err := policyResolvePaths(flags)
 	if err != nil {
 		return err
@@ -442,7 +484,10 @@ func cmdPolicyExplain(args []string) error {
 		return fmt.Errorf("usage: policy explain <op> [flags]")
 	}
 	op := args[0]
-	flags := parseAuthzArgs(args[1:])
+	flags, err := parseAuthzArgsStrict("policy explain", args[1:], "bead", "committed-by-this-session", "env", "global", "head-sha", "project", "project-root", "sprint-or-work-flow", "tests-passed", "vetted-at", "vetted-sha")
+	if err != nil {
+		return err
+	}
 
 	globalPath, projectPath, envPath, err := policyResolvePaths(flags)
 	if err != nil {
@@ -527,7 +572,10 @@ func displayPath(p string) string {
 // `--verify` surfaces cross_project_id groups with missing rows across
 // `ic-publish-patch` target projects (best-effort; v1 reports only).
 func cmdPolicyAudit(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy audit", args, "agent", "bead", "capped", "count", "limit", "op", "project-root", "since", "verify")
+	if err != nil {
+		return err
+	}
 	db, dbPath, err := openIntercoreDB(flags)
 	if err != nil {
 		return err
@@ -691,7 +739,10 @@ func auditCappedCount(db *sql.DB, where []string, params []interface{}) error {
 //     clavain-cli policy lint [--global=...] [--project=...] [--env=...]
 //     [--gates-dir=.clavain/gates]
 func cmdPolicyLint(args []string) error {
-	flags := parseAuthzArgs(args)
+	flags, err := parseAuthzArgsStrict("policy lint", args, "env", "gates-dir", "global", "project", "project-root")
+	if err != nil {
+		return err
+	}
 	globalPath, projectPath, envPath, err := policyResolvePaths(flags)
 	if err != nil {
 		return err

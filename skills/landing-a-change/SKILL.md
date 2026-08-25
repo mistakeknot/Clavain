@@ -45,6 +45,23 @@ If a plan existed, invoke `verification-before-completion` skill. Otherwise proc
 - [ ] No debug artifacts (`console.log`, `fmt.Println`, etc.)
 - [ ] Changes in logical commits with descriptive messages
 - [ ] Deploy verification plan exists (if deploy-relevant)
+- [ ] Shipped-surface sweep (if the change touches anything a reader/user sees —
+  pages, UI strings, error messages, emails, docs meant for outsiders). Six
+  parity questions, each answered against the *fresh reader*, not the builder:
+  1. **No pipeline vocabulary** — lane/wave/slice/version labels, generator
+     diagnostics, internal status enums visible to readers?
+  2. **Affordance parity** — does every interaction the copy names actually
+     exist on that surface?
+  3. **Audience parity** — does each viewer mode only show instructions and
+     widgets that viewer can actually use?
+  4. **One CTA per action per view** — no duplicate entry points?
+  5. **Scope-distinct controls** — do controls operating on different scopes
+     look/read differently?
+  6. **Spatially true status** — does status copy match where it renders
+     ("below" means below)?
+  Origin: Kublai soft launch, 2026-08-19 — thirteen outside-reader reports,
+  all preventable by this sweep. Mechanical floor (banned-vocab lint) is
+  per-repo where one exists; these six are the judgment half.
 
 If deploy-relevant, consider invoking `fd-safety`.
 
