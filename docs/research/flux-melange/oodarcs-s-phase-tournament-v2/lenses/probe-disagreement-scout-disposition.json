@@ -1,0 +1,31 @@
+{
+  "id": "probe-disagreement-scout-disposition",
+  "kind": "probe-adjudicator",
+  "round_introduced": 3,
+  "parents": [],
+  "probe_of": [
+    "f-011",
+    "f-023",
+    "f-036"
+  ],
+  "domain": "adjudication of the round-2/3 Scout disposition disagreement \u2014 whether a read+web/no-write collection half is an unoccupied gate signature, resolved against Skaffen's live gate matrix",
+  "axioms": [
+    "A claimed gate delta is settled by tracing tool registration to the phase map, not by weighing rhetoric.",
+    "Web tool registration lives in builtin.go, not defaultGates, so a reader of registry.go alone will miss half the signature.",
+    "An enforcement vocabulary with fewer values than the candidate field cannot discriminate it."
+  ],
+  "primitives": [
+    "realized gate signature per phase",
+    "registration site (defaultGates vs builtin.go)",
+    "cardinality of the enforcement axis",
+    "capability vs state vs routing vs authority delta"
+  ],
+  "failure_mode": [
+    "Settles the enforceability question and can under-serve semantic distinctness.",
+    "Risks reading 'no capability delta' as 'no delta of any kind'."
+  ],
+  "findings": [
+    "f-060",
+    "f-061"
+  ]
+}

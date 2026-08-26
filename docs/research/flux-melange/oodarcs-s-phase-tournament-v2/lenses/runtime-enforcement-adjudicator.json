@@ -1,0 +1,24 @@
+{
+  "id": "runtime-enforcement-adjudicator",
+  "kind": "probe-adjudicator",
+  "round_introduced": 1,
+  "parents": [],
+  "domain": "adjudication of contradictory runtime-enforcement claims against Skaffen's actual gate machinery — GateConstraint expressiveness, (Phase, tool) keying, rate-counter lifecycle",
+  "probe_of": ["f-011", "f-023"],
+  "axioms": [
+    "A claimed enforcement delta is settled by reading the registry, not by weighing the rhetoric of either claim.",
+    "A constraint that GateConstraint cannot express is an output-contract claim, not a runtime one, and must be labelled as such.",
+    "A bound whose counter never resets is exhaustion, not throttling."
+  ],
+  "primitives": [
+    "realized capability set of a phase",
+    "gate signature as (Phase, toolName) -> GateConstraint",
+    "budget namespace and its reset boundary",
+    "expressible versus inexpressible constraint"
+  ],
+  "failure_mode": [
+    "Answers only the enforceability question and can under-weigh semantic distinctness, which is the charter's actual subject.",
+    "Risks treating 'unenforceable today' as 'not worth doing' when the fix is a small runtime change."
+  ],
+  "findings": ["f-036", "f-037"]
+}

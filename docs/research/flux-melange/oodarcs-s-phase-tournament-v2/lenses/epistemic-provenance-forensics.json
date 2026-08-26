@@ -1,0 +1,31 @@
+{
+  "id": "epistemic-provenance-forensics",
+  "kind": "probe-adjudicator",
+  "round_introduced": 2,
+  "parents": [],
+  "probe_of": [
+    "f-016",
+    "f-020",
+    "f-021"
+  ],
+  "domain": "forensic adjudication of contradictory provenance claims about Compound's durable write channel — what the manifest globs actually reach, what contextfiles.Load actually reads back, and at what authority grade",
+  "axioms": [
+    "A carrier claim is settled by tracing the write glob to the read path, not by weighing the rhetoric of either side.",
+    "Naming a carrier does not close a capability gap; the carrier must itself pass the grade/namespace/read-filter/expiry clauses.",
+    "An append-only channel with a reader and no remover is an authority ratchet."
+  ],
+  "primitives": [
+    "write-glob to read-path trace",
+    "authority grade at the point of read",
+    "separating namespace vs instruction channel",
+    "remover/expirer presence"
+  ],
+  "failure_mode": [
+    "Can indict the incumbent so thoroughly that it under-serves the tournament's actual candidate-selection question.",
+    "Risks treating a permitted-but-unused write path as an occurring failure."
+  ],
+  "findings": [
+    "f-050",
+    "f-051"
+  ]
+}

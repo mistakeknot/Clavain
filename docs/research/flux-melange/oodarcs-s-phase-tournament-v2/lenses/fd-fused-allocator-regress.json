@@ -1,0 +1,52 @@
+{
+  "id": "fd-fused-allocator-regress",
+  "kind": "fusion",
+  "parents": [
+    "fd-foraging-exploration-generator",
+    "fd-fused-grading-arm-allocation"
+  ],
+  "domain": "the allocator's own budget \u2014 optimal-foraging and bandit axioms (patch depletion, non-stationarity, trigger predicates, stop rules, regret against a null, variation rate under shear) applied to the POLICY THAT SETS parent B's probe:grade split. Split-setting is an arm: re-striking the exchange rate draws on the same pool it partitions, so adaptive allocation has a cost, a trigger, a dwell time, a stop rule, and a regress that must be knowingly terminated. The second half of the fused object is B's untested premise that a loop has ONE pool: read through foraging, a pool is a patch \u2014 clocked, layered, heterogeneous \u2014 so across OODARC's pace layers a single exchange rate is several rates wearing one name, and the pre-registered corpus that selects the policy is itself stock consumed by being assayed.",
+  "axioms": [
+    "An allocator is an arm. Re-striking the probe:grade split costs pool-attention drawn from the pool it partitions, so 'make the ratio adaptive' is a candidate with a budget, a trigger, and a regret \u2014 not a free repair to someone else's contract. A throttle-setter exempt from the throttle is the same escape parent B diagnosed, one floor up.",
+    "The regress terminates or the loop starves. Dating the split requires a rule for dating, which requires its own expiry; a design must name the level at which it stops adapting, the stationary ratio it adopts below that level, and the linear regret it knowingly buys. Terminating by silence is unfalsifiability relocated, not removed \u2014 and the admissible criticism is never 'you did not go one level further', only 'you went one level further and did not say you stopped'.",
+    "'One pool' is itself a stationary constant. Attention is pooled only within a pace layer and a clock; where probing and grading fall on different layers \u2014 per-turn Act/Observe, per-session Reflect, slow Compound \u2014 a single split rule guarantees over-grading at one layer and under-probing at another while the aggregate meter balances perfectly and hides both.",
+    "Shear is the trigger predicate, congestion is not. Backlog depth means the furnace is busy; the rate at which fast-layer results invalidate slow-layer stock means the world moved. Only the second satisfies foraging's own condition that exploration policy respond to a named non-stationarity signal.",
+    "A policy that adapts fast enough to be right is fast enough to thrash. Without a hysteresis band, a minimum dwell, and a cap on re-strikes, adaptive allocation converts non-stationarity into churn that reads as vigorous exploration on every meter while producing no sample deep enough to grade.",
+    "The instrument that selects the policy depletes. Hidden-mechanism, false-analogy and no-benefit corpus items are single-use, so arm count and evaluation order are allocation decisions; a losing condition is falsifiable only against reserved, unconsumed stock.",
+    "Meta-work is grading work. Trigger evaluation, re-striking, policy records, dwell bookkeeping and per-layer metering are verification turns; a contract billing them to no arm has escaped the split it invented, and an adaptive candidate then beats a fixed-ratio rival on a comparison that never charged it for adapting.",
+    "Deciding what S means is itself a draw on the pool. The meta-regret of running the tournament is real and must be weighed against the compounding cost of never asking \u2014 and re-paid every time the split is re-struck."
+  ],
+  "primitives": [
+    "the allocator as an arm \u2014 cost, trigger, dwell, stop rule, and regret of re-striking the split",
+    "the regress and its termination level \u2014 the frozen level, the stationary ratio adopted, the linear regret knowingly bought",
+    "pool identity as an empirical claim \u2014 one purse per clock, not one purse per loop",
+    "per-pace-layer exchange rates and per-layer stop rules (Act/Observe vs Reflect vs Compound)",
+    "shear rate as non-stationarity signal versus backlog depth as congestion signal",
+    "hysteresis band, minimum dwell, and re-strike budget (a stop rule on the ADAPTATION)",
+    "corpus depletion \u2014 the pre-registered evaluation set as single-use stock; run order, arm count, reserved items",
+    "meta-currency accounting \u2014 split-setting, audit, and record-keeping turns billed to an arm",
+    "second-order censoring \u2014 a split policy fitted only to the layers and candidates that happened to be metered",
+    "the tournament's own pool draw and the meta-regret of asking versus never asking",
+    "policy-state contracts \u2014 operations whose output is a dated, dwelling allocation state rather than a report",
+    "conservation as a generator \u2014 retiring arms and corpus items to preserve discriminating power and release meta-overhead"
+  ],
+  "tension": "Parent B's founding move is that a loop has one indivisible attention pool and the split between probing and grading is the object; every finding must be denominated in pool-attention. Parent A holds that pools are patches \u2014 clocked, layered, renewing, non-stationary \u2014 and that a lens which generates no candidate has failed however safe its criticism sounds. Turned on B, foraging says B's 'one pool' is exactly the stationary constant B condemns in others, and B's split audit is itself a grading operation billed to no arm: B invented a throttle and exempted the throttle-setter, then prescribed a date letter on the split without dating the rule that dates it. Turned back on A, B's accounting replies that a mandate to generate is an unpriced draw on the same purse \u2014 every contract minted adds grading load the generativity floor never budgets, so 'always generate' is a probe-rate floor with no declared denominator. Both are correct. The lens does not choose. It locates, contract by contract, where the question was already settled by omission \u2014 almost always by treating the allocation policy as free, instantaneous, and universal across layers, and by treating the corpus that selects it as a fixed wall rather than as stock consumed by being assayed.",
+  "hard_constraint": "Intersection-only. A finding is admissible only if it requires BOTH parents and carries an intersection_justification naming the foraging primitive, the meta-allocation primitive, and what fails if either is removed. Because parent B already contains parent A, a finding is fused here ONLY if foraging is applied to the ALLOCATOR itself: split-setting as an arm with its own cost and dwell; the regress of meta-policies and the level at which it is knowingly frozen; 'one pool' tested against OODARC pace-layer shear; the pre-registered corpus as a depleting instrument whose consumption can decide the tournament. Anything that still stands with split-setting treated as free and instantaneous is parent B's finding; anything single-currency is parent A's.",
+  "failure_mode": [
+    "The regress is a universal solvent: every contract can be attacked for not dating its dating rule, so the lens can manufacture unfalsifiable meta-criticism and eliminate the entire field on a move that applies equally to all of it.",
+    "Meter obsession squared \u2014 parent B already risks spending the round on split arithmetic; this lens can spend it metering the meter and never touch the charter's actual question of whether any S deserves a letter.",
+    "'Add a dwell time and a re-strike cap' is a universal-sounding repair that inflates every contract and postpones the hard-gate eliminations the charter wants made.",
+    "Pace-layer shear is easy to assert and hard to measure; where the loop genuinely runs on one clock the lens manufactures a heterogeneity that does not exist and prescribes per-layer meters no runtime can supply.",
+    "Its own generativity mandate can produce policy-only candidates \u2014 a state variable with no operator, no observable artifact, and nothing a runtime could enforce \u2014 which is the ornamental-phase failure in allocation vocabulary.",
+    "Inherits both parents' indifference to mnemonic quality, phase count, and adoption: will favor contracts that account beautifully and read terribly, and is P3-by-construction on naming.",
+    "Third-order fusion risk: can re-file parent B's split, censoring and absorbing-barrier findings with 'and the allocator is an arm' appended as ornament rather than as the load-bearing cross term.",
+    "Under-attends to disconfirmation and severe testing as such, pricing a falsification candidate by its allocation signature and missing that its value is error correction, not reallocation.",
+    "Licensed to reason about the tournament's own draw, it can drift into charter meta-commentary the charter explicitly rules out of scope."
+  ],
+  "findings": [
+    "f-066",
+    "f-067",
+    "f-068",
+    "f-069"
+  ]
+}

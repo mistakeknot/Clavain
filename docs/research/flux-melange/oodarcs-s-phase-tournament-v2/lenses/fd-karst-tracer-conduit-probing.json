@@ -1,0 +1,44 @@
+{
+  "id": "fd-karst-tracer-conduit-probing",
+  "kind": "base",
+  "parents": [],
+  "domain": "Karst hydrogeology and cave survey — mapping unseen limestone drainage by injecting fluorescent tracer at a sinking stream and watching a pre-placed detector array at candidate springs; fast conduit flow versus slow diffuse matrix storage; non-detection as durable connectivity evidence; recovery ratios below one; sumps, chokes and dig faces as terminations; lead ledgers marking passages unpushed, pushed-and-closed or dug-out; and post-flood reorganization that expires an old connection map.",
+  "axioms": [
+    "The network is opaque and mostly unconnected: the prior on any given candidate connection existing is low, so probe budget, not insight, is the binding constraint.",
+    "A non-detection is a hard-won, durable result about connectivity and must be recorded as carefully as a detection, or the same probe gets paid for twice.",
+    "The detector array must be fixed before injection; a result readable only after the fact is not a result.",
+    "The decision under contention is where to inject next, not what document to write; the primary output of probing is a change in allocation and frontier state.",
+    "The same system runs at incompatible speeds — hours in the conduit, years in the matrix — and an operation licensed on the fast layer must not rewrite the slow one.",
+    "Effort can leave the accounting entirely: recovery below one means some probing went somewhere never sampled, and that unrecovered cost belongs in every comparison.",
+    "Connection maps perish; a survey carries a grade and an age, and reorganization means old connectivity claims expire rather than accumulate.",
+    "Closing a lead is a real and valuable act: retiring a direction stops future budget from draining into it."
+  ],
+  "primitives": [
+    "sink / injection point (probe site)",
+    "tracer dose (bounded probe cost)",
+    "detector array and detection window (pre-registered success criteria)",
+    "positive trace / null trace (retained negative result)",
+    "recovery ratio (unaccounted exploratory effort)",
+    "conduit vs matrix (fast and slow pace layers)",
+    "lead ledger: unpushed / pushed-and-closed / dug-out (frontier state instead of an artifact)",
+    "sump, choke, dig face (stop rules and losing conditions)",
+    "survey grade (provenance carried by the map)",
+    "post-flood reorganization (expiry of a connectivity claim)"
+  ],
+  "failure_mode": [
+    "Weak on authority and provenance of individual claims: it grades the map, not the assertion, so it can let speculative material circulate ungraded and miss laundering paths at hard gate 4.",
+    "Biased toward state over artifact — may undervalue candidates whose real contribution is a legible, reviewable document a human consumer actually reads.",
+    "Assumes probes are cheap, reversible and independently interpretable; candidates whose probes are entangled, irreversible, or only meaningful in combination are outside its intuition.",
+    "Has no account of teaching, transfer, or propagation across contexts; a discovered conduit is local, so cross-context adaptation candidates get systematically underrated.",
+    "Frontier-ledger thinking can metastasize into unbounded bookkeeping, adding cognitive cost the charter explicitly prices as a criterion.",
+    "Its low prior on connectivity can shade into pessimism that suppresses generation — the safety-through-never-generating failure mode dressed as budget discipline.",
+    "Naturally geological rather than semantic: it can classify operations by cost and allocation effect while missing whether the epistemic transformation is genuinely distinct from Observe or Orient."
+  ],
+  "findings": [
+    "f-031",
+    "f-032",
+    "f-033",
+    "f-034",
+    "f-035"
+  ]
+}

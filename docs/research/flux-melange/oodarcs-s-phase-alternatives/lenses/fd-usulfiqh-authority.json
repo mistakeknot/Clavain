@@ -1,0 +1,45 @@
+{
+  "id": "fd-usulfiqh-authority",
+  "kind": "base",
+  "parents": [],
+  "domain": "Classical jurisprudence of transmitted knowledge — usul al-fiqh's formal analogy procedure (qiyas), graded reliability in hadith criticism and ilm al-rijal, isnad transmission chains, ikhtilaf as preserved disagreement, and the responsa tradition of non-binding opinion",
+  "axioms": [
+    "No claim travels without a grade; an artifact whose reliability level is not attached to it will eventually be read as established.",
+    "A grade ladder is real only when both directions are specified: promotion and demotion each need a named act, a named actor, and stated conditions — a specified promotion path with an unspecified demotion path is the mechanism by which opinion hardens into precedent.",
+    "Every established claim must carry an auditable chain back to its source, so that discrediting one link forces re-grading of everything built on it.",
+    "An analogy is valid only when the shared effective cause is named and the point of breakage is stated; unnamed correspondence is surface resemblance and is not transferable.",
+    "Derived reasoning is barred where the case is already directly governed by local evidence; imported mechanism must not pre-empt what the system already knows about the target.",
+    "Strength sufficient to act on is not strength sufficient to establish: a single chain may license practice while remaining unable to license certainty.",
+    "Disagreement is preserved with its reasoning rather than resolved by fiat; a verdict without its live minority positions and its flip conditions destroys information."
+  ],
+  "primitives": [
+    "grade (reliability level attached to a claim)",
+    "grade ladder (ordered rungs with transition acts)",
+    "promotion act / demotion act / abrogation (named acts with actors and conditions)",
+    "isnad (provenance chain: source domain -> report -> probe -> compounded lesson)",
+    "link discredit and cascading re-grade",
+    "effective cause (the named shared mechanism licensing a transfer)",
+    "disanalogy (the stated point of breakage)",
+    "direct local evidence (which bars derived transfer)",
+    "single-chain vs multiply-attested claim",
+    "storage and retrieval boundary (store, index, summarization path)",
+    "citation scenario (how the artifact is read later, by whom, with what stripped)",
+    "preserved disagreement and flip conditions"
+  ],
+  "failure_mode": [
+    "Over-indexes on contamination risk and under-values generativity: a design that is epistemically airtight but produces nothing useful scores well, so it will systematically prefer restrictive contracts and the no-S null over exploratory candidates.",
+    "Cannot judge structural or implementation cost — indifferent to whether enforcing a grade ladder requires re-cutting the phase machine, the schema, and the router, so its recommendations can be unbuildable at reasonable cost.",
+    "Assumes an institution of careful readers and auditors exists; where the actual consumer is an automated retrieval or summarization step with no obligation to preserve metadata, its remedies (labels, caveats, grades) may be structurally unenforceable in ways it will not spontaneously notice.",
+    "Procedural bias: mistakes formal apparatus for epistemic quality, so a candidate that mints correctly graded but worthless claims can pass while an informally reasoned but genuinely load-bearing one fails.",
+    "Preserving disagreement is a terminal value for this lens, so it resists collapsing to a single recommendation and may under-deliver the crisp verdict the charter demands.",
+    "Pace layers, cadence, shear, and timing are invisible to it: it grades claims, not clocks, and will not detect a design whose trigger rate contradicts its natural rhythm.",
+    "Naming and mnemonic durability are treated as irrelevant to a claim's standing, so adoption failure is a blind spot."
+  ],
+  "findings": [
+    "f-021",
+    "f-022",
+    "f-023",
+    "f-024",
+    "f-025"
+  ]
+}

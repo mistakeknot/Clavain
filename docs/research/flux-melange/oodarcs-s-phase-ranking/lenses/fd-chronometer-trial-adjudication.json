@@ -1,0 +1,42 @@
+{
+  "id": "fd-chronometer-trial-adjudication",
+  "kind": "base",
+  "parents": [],
+  "domain": "Observatory chronometer trials (Greenwich, Neuchatel, Kew, Geneva, Besancon): sealed rival instruments run side by side under one published programme of temperature and position, judged on variation of rate rather than best rate, scored by a published trial formula, certified by bulletin de marche with residuals, with premiums withheld when nothing clears threshold, a discrimination limit set by the standard clock's own error, the documented trial-tuned instrument that fails at sea, and re-rating after transport or repair",
+  "axioms": [
+    "A submitted rate sheet is re-examined - conditions, arithmetic, provenance - before its numbers are admitted into any comparison.",
+    "One chamber, one published programme: arms observed under different conditions cannot be compared, and a conditions mismatch invalidates rather than caveats the comparison.",
+    "Consistency across the programme is the judged quantity; best-case showing is not.",
+    "The apparatus has its own error, so there exists a discrimination limit below which two entrants cannot honestly be ordered; declared ties are correct output and invented orderings are a defect.",
+    "Withholding the award is a normal verdict: the null wins whenever no entrant clears a threshold stated in advance.",
+    "Submitters tune to the published programme; a measure that can be gamed will be, and this is a predictable force to design against rather than misconduct to deplore.",
+    "A certificate is a statement about a particular instrument in a particular period, so it carries its own re-rating trigger and revocation condition.",
+    "Class certificates are awarded within class, so entrants are compared as class winners rather than by entrant count."
+  ],
+  "primitives": [
+    "trial entrant (sealed submission) and trial arm",
+    "published programme (temperature cycles, positions) = matched conditions",
+    "mean daily rate vs variation of rate",
+    "trial number / scoring formula and its resolution floor",
+    "standard clock error and the discrimination limit",
+    "bulletin de marche: observed behaviour plus residuals",
+    "threshold, withheld premium, class certificate",
+    "trial-tuned instrument (the gaming construct)",
+    "re-rating trigger, certificate period, revocation"
+  ],
+  "failure_mode": [
+    "Cannot judge semantic novelty at all: two entrants that behave identically under the programme are indistinguishable to it, even if one embodies a genuinely new operation and the other is a renaming.",
+    "Its authority depends on a programme existing; where conditions cannot be matched or a candidate's value only appears outside any runnable programme, it will systematically under-rate rather than acknowledge the blind spot.",
+    "Conservative by construction - it withholds under uncertainty, so it will miss a real but not-yet-measurable improvement and will under-reward candidates whose payoff is long-horizon or qualitative.",
+    "Prices measurable behaviour and ignores learnability, naming, mnemonic economy, and the human cost of operating a design.",
+    "Treats entrants as sealed, independent, and interchangeable, so it is blind to interaction effects between candidates and to topology or composition effects when several are adopted together.",
+    "Assumes a single scalar-ish verdict per class; genuinely multi-dimensional or conditional recommendations strain its certificate format and may get flattened."
+  ],
+  "findings": [
+    "f-021",
+    "f-022",
+    "f-023",
+    "f-024",
+    "f-025"
+  ]
+}

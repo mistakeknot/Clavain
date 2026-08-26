@@ -1,0 +1,37 @@
+{
+  "id": "fd-transfer-propagation-contracts",
+  "kind": "base",
+  "parents": [],
+  "domain": "organizational learning, knowledge transfer, analogical reasoning, and pedagogy",
+  "axioms": [
+    "Reuse of a mechanism in a new context is a distinct and frequently failing operation, not an automatic consequence of having recorded it.",
+    "Agent topology is orthogonal to epistemic operation: moving knowledge across a channel is plumbing, re-contextualizing it is an operation.",
+    "Transfer requires structure mapping plus an explicit breakpoint statement; without breakpoints, false transfer is undetectable.",
+    "The receiving context has preconditions (absorptive capacity); a transfer contract that assumes a perfect receiver is untestable.",
+    "Knowledge shaped as a reusable procedure or worked example is a different artifact class from a validated claim.",
+    "Duplication against Compound and Orient must be tested at trace level, not settled by assertion."
+  ],
+  "primitives": [
+    "source context and destination context",
+    "mechanism, structure mapping, and breakpoint",
+    "near versus far transfer distance",
+    "receiving-context precondition / absorptive capacity",
+    "reusable procedure or worked example",
+    "propagation channel across agents, projects, and pace layers",
+    "false-transfer cost event"
+  ],
+  "failure_mode": [
+    "Prone to smuggling multi-agent orchestration into the loop definition and calling a broadcast channel a phase.",
+    "Optimistic about transfer value; systematically under-weights false-transfer and attention costs.",
+    "Weak on epistemic separation: transfer artifacts easily acquire validated status as they cross contexts.",
+    "Under-generates disconfirmation and retirement candidates; transfer literature rarely models removal.",
+    "Its candidates cluster densely around Compound, risking synonym inflation rather than genuinely different operations."
+  ],
+  "findings": [
+    "f-016",
+    "f-017",
+    "f-018",
+    "f-019",
+    "f-020"
+  ]
+}

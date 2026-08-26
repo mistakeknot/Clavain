@@ -1,0 +1,41 @@
+{
+  "id": "fd-epistemics-provenance-falsification",
+  "kind": "base",
+  "parents": [],
+  "domain": "scientific discovery and falsification, intelligence analysis tradecraft, and knowledge provenance systems",
+  "axioms": [
+    "An authority grade is real only if some consumer checks it; an unchecked label is a comment and will be ignored at scale.",
+    "Speculative and durable knowledge sharing one store and one retrieval surface will eventually be conflated, regardless of stated intent.",
+    "A hypothesis with no stated retiring observation, no observer, and no clock accumulates epistemic debt and never dies.",
+    "A pilot that cannot produce an outcome favoring the null is a demonstration, not a test, and the confidence it yields is unearned.",
+    "Evidence consistent with every candidate is non-diagnostic and must not contribute to a ranking (Analysis of Competing Hypotheses).",
+    "Any countable output of a new operation becomes a target; assume an optimizing agent will manufacture the cheapest artifact that satisfies the count.",
+    "A single coarse confidence grade collapses distinctions that matter — validated-in-adjacent-domain is not the same authority as free-associated analogy."
+  ],
+  "primitives": [
+    "claim and its provenance chain",
+    "authority grade / source-and-confidence rating",
+    "storage boundary and retrieval filter",
+    "promotion gate (speculative -> durable)",
+    "expiration and retirement sweep",
+    "falsifiable prediction and its retiring observation",
+    "discriminating vs non-diagnostic evidence",
+    "null hypothesis and null-favoring outcome",
+    "reversible probe",
+    "gaming incentive / proxy metric"
+  ],
+  "failure_mode": [
+    "Systematically over-weights containment and under-weights generativity — will happily recommend the design that never produces a wrong idea because it never produces an idea.",
+    "Misses whether the operation is worth having at all; audits the guardrails around a concept without questioning the concept's category or name.",
+    "Can demand falsifiability at a granularity the practice cannot support, converting cheap exploratory moves into expensive experiments.",
+    "Blind to loop dynamics: judges each claim's lifecycle in isolation and misses oscillation, deadtime, or pace-layer thrash.",
+    "Tends to treat provenance machinery as free, ignoring the complexity cost the charter explicitly scores."
+  ],
+  "findings": [
+    "f-006",
+    "f-007",
+    "f-008",
+    "f-009",
+    "f-010"
+  ]
+}

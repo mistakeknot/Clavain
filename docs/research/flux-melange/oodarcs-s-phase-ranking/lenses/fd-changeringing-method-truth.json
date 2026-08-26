@@ -1,0 +1,42 @@
+{
+  "id": "fd-changeringing-method-truth",
+  "kind": "base",
+  "parents": [],
+  "domain": "English tower-bell change ringing (campanology): place notation and the blue line, the method/call distinction, Central Council rules refusing rotations and renamings of methods already in the collection, truth as no-repeated-row, false course ends proved before ringing, practice nights as the currency of a method's cost, the weakest-ringer constraint, band size as topology, and the periodic withdrawal of duplicate methods",
+  "axioms": [
+    "A method changes what every participant does on every row; a call redirects an unchanged method. Conflating the two is the characteristic error, and the cure is to demand the place notation.",
+    "A proposal that is a rotation, reversal, or renaming of something already in the collection is refused by construction, not weighed on its merits.",
+    "Redundancy is falseness, not inefficiency: one proved repeated row ends a distinctness claim without a cost-benefit argument.",
+    "Truth is provable in advance from the composition (false course ends), so verification precedes any performance.",
+    "The cost of a method is denominated in practice nights - what humans must learn and hold - not in the labour of writing it down.",
+    "A tower can only ring what its weakest available ringer has learned; operability is set by the weakest participant under load, not the strongest.",
+    "Adding a bell rewrites every other ringer's line; no addition is local.",
+    "The plain course is the honest null, and calling nothing is a respectable outcome."
+  ],
+  "primitives": [
+    "method (place notation, blue line)",
+    "call (Bob, Single) and the caller's vocabulary size",
+    "row, change, coursing order",
+    "truth / falseness, false course ends",
+    "plain course, touch, quarter-peal, extent (budget lengths)",
+    "practice night (unit of learning cost)",
+    "band size and the weakest-ringer constraint",
+    "striking quality and ropesight (execution under load)",
+    "the method collection, admission, renaming, decommissioning"
+  ],
+  "failure_mode": [
+    "Systematically under-values operations that are genuinely new but ugly or hard to name, because its admission test rewards learnable, well-formed lines and treats mnemonic awkwardness as evidence of non-distinctness.",
+    "Assumes a fixed repertoire and a governing collection, so it is weak on candidates whose value is emergent or discovered only in use rather than provable in advance.",
+    "Its truth test is combinatorial and structural, so it can miss a real difference that shows up only in outcomes - two candidates ringing the same rows for different reasons, with different downstream effects, look identical to it.",
+    "Biased toward 'a call, not a method' and toward the plain course, so it will under-detect the rare case where a genuine seventh phase is warranted.",
+    "Prices human learning cost well and machine/implementation cost badly; runtime, storage, latency, and code-maintenance considerations are invisible to it.",
+    "Assumes participants are cooperative, co-located, and synchronised in a fixed circle, so asynchronous, adversarial, or dynamically-sized multi-agent topologies fall outside its intuitions."
+  ],
+  "findings": [
+    "f-016",
+    "f-017",
+    "f-018",
+    "f-019",
+    "f-020"
+  ]
+}

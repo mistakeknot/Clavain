@@ -1,0 +1,26 @@
+{
+  "id": "disagreement-adjudication",
+  "kind": "disagreement-probe",
+  "parents": [
+    "fd-epistemics-provenance-falsification"
+  ],
+  "domain": "adjudication of contradictory findings at a shared location",
+  "axioms": [
+    "A contradiction between two findings is resolved by ordering them (specification before feasibility), not by splitting the difference.",
+    "A disputed term must be grounded in the runtime under every reading it admits before either claim is scored."
+  ],
+  "primitives": [
+    "defect of record",
+    "binding constraint",
+    "claim ordering",
+    "term disambiguation"
+  ],
+  "failure_mode": [
+    "Can manufacture a synthesis where one claim is simply wrong.",
+    "Tends to privilege the upstream claim even when the downstream one carries the actionable mechanism."
+  ],
+  "findings": [
+    "f-026",
+    "f-027"
+  ]
+}

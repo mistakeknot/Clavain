@@ -1,0 +1,38 @@
+{
+  "id": "fd-cybernetics-parsimony-adversary",
+  "kind": "base",
+  "parents": [],
+  "domain": "cybernetics and control theory, systems parsimony, linguistics, and mnemonic design",
+  "axioms": [
+    "Every added loop element is added deadtime, and every added letter is a permanent cognitive tax that must be earned.",
+    "If deleting the box leaves observable behavior unchanged, it was never a phase; effects reachable as a trigger predicate, routing rule, or annotation do not need a stage.",
+    "The same knife must cut incumbents: Observe, Orient, Reflect, and Compound face the identical distinctness test.",
+    "The no-S null must be specified affirmatively, naming which existing operations carry exploration, falsification, simulation, transfer, and retirement today.",
+    "Elimination is a later-round privilege; generative positions must produce operational contracts first, or the null wins by procedure rather than comparison.",
+    "Requisite variety sets a floor as well as a ceiling: a controller with too little variety fails just as an over-elaborated one does.",
+    "Names are interface: verb-shaped, pronounceable, non-colliding names outlive the arguments that produced them."
+  ],
+  "primitives": [
+    "loop element, edge, and trigger predicate",
+    "deadtime, gain, and oscillation",
+    "pace layer and shear",
+    "requisite variety",
+    "capability versus phase versus side-loop versus artifact classification",
+    "letter economy and acronym morphology",
+    "consolidation candidate pair"
+  ],
+  "failure_mode": [
+    "Systematically prefers the null; can rationalize any candidate away as an edge modifier and produce safety-through-never-generating at the tournament level.",
+    "Blind to long-tailed, hard-to-model payoffs from cheap speculation.",
+    "Applies control-theoretic vocabulary (deadtime, oscillation) where no measurement exists, giving elimination arguments false rigor.",
+    "Undervalues epistemic provenance work as bureaucracy rather than as a hard gate.",
+    "Aesthetic judgments about naming can leak into semantic verdicts and eliminate a contract on taste grounds."
+  ],
+  "findings": [
+    "f-021",
+    "f-022",
+    "f-023",
+    "f-024",
+    "f-025"
+  ]
+}

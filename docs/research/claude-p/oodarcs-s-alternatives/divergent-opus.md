@@ -1,0 +1,253 @@
+# OODARC(+S) — Divergence Pass
+
+Read: ranking charter; alternatives synthesis; tournament-v2 synthesis; `oodarcs-s-phase-ranking/heat-ledger.jsonl` (f-001…f-037); `pi-package/README.md`. Spot-verified against the tree: `internal/agent/deps.go:61-96`, `internal/session/session.go:78-102`, `internal/agentloop/autocompact.go:135-187`, `internal/contextfiles/contextfiles.go:22,38-61`.
+
+## 0. Where the prior field is thin
+
+Three runs produced 20+ candidates and almost all of them are **producers or allocators**: they emit a report (Scout/Trace/Assay/Frontier/Ash) or they turn a dial (Fallow/Stint/Season/Slacken/Divert/Widen/Survey). Ranking-run `f-017` collapses four of the policy five into one dial. Tournament `f-072` collapses four emitters into one persistence class.
+
+What no candidate in any run contracted:
+
+| Gap | Named by | Contract filed? |
+|---|---|---|
+| Evidence destroyed at the compaction boundary while the assertion survives | tournament f-070 (raw) | none |
+| Machine prose entering the system prompt at human authority via `*.md` | tournament f-050 | none |
+| No reversibility substrate for *any* subtractive act | ranking f-028 | none — f-028 names the gap and files no contract |
+| Who authors a retirement *predicate* (Reprove only consumes one) | ranking f-030 | none |
+| Nothing in the runtime ever narrows capability | — | never raised |
+
+That is where the divergence is. Not a thesaurus of exploration verbs — **the missing S is mostly a missing substrate, not a missing operation, and certainly not a missing phase.**
+
+`★ Insight ─────────────────────────────────────`
+The prior corpus' sharpest tool is ranking-`f-018`/tournament-`f-060`: in Skaffen a phase *is* a capability gate, so "phase vs capability" is a set difference. Applied to my field it cuts the other way from Scout: `Shed` needs a mutation path to `defaultGates` that does not exist, `Stash` needs a write namespace no phase grants, `Sequester` needs an authority dimension in `contextfiles.Load` that has no analogue. Non-empty deltas — but all three are *tool/substrate* deltas, not *phase* deltas. A non-empty gate delta earns a capability, not a letter.
+`─────────────────────────────────────────────────`
+
+## 1. Raw field — 21 candidates, 7 families
+
+Class key: **SEM** semantic operation · **CAP** capability/tool · **POL** control/allocation policy · **SAF** safety operation · **SUB** substrate · **ART** artifact · **REJ** rejected.
+
+### A. Compaction & residue (new family)
+| # | Name | One-line contract | Disposition |
+|---|---|---|---|
+| 1 | **Spool** | Elided `tool_result` payload → durable record + in-band *handle* replacing the content-free stub | **CAP — advance** |
+| 2 | Sediment | Periodic distillation of elided payloads into a growing session digest | REJ — dominated by Spool; a digest is lossy where a handle is not, and it re-creates the "interpretation without evidence" failure f-070 describes |
+| 3 | **Stratify** | Assign each message a pace/authority stratum; make the discard law authority-aware, not tool-class-aware | REJ as operation — this is a repair to `internal/session/scoring.go` (mutation 10.0 / assistant-reasoning 2.0, per ranking f-033), a policy fix with no input→output transformation. **Keep as a required fix**, not a candidate |
+| 4 | Sift | Pre-elision keep/drop selection by declared relevance | REJ — Stratify plus existing `ScoreMessages`; no residue |
+
+### B. Provenance & authority channel (new family)
+| # | Name | One-line contract | Disposition |
+|---|---|---|---|
+| 5 | **Sequester** | Machine-authored durable prose relocated out of the human-authority context channel into a lower-precedence labeled region | **SAF — advance** |
+| 6 | Seal | Machine-verifiable authorship header on machine-written artifacts | REJ standalone — annotation-only, the exact class f-070 invalidates. Survives only as Sequester's header field |
+| 7 | Sidecar | Speculative *production* written to a channel never merged into `messages` | REJ — dominated: Sequester handles the durable direction, Spool the in-context direction; Sidecar's residue is the intersection |
+
+### C. Reversibility substrate (new family)
+| # | Name | One-line contract | Disposition |
+|---|---|---|---|
+| 8 | **Stash** | Prior bytes of any durable authority-path file copied content-addressed before mutation | **SUB — advance** |
+| 9 | Splice | Replay a stash object to reverse a specific past write | REJ as candidate — it is Stash's read tool, not a second operation |
+| 10 | Shore | Pin a compounded claim against modification for N sessions | REJ — immutability is not subtraction; produces exactly the un-retirable authority the whole subtractive class exists to remove |
+
+### D. Standing falsification (the unfilled Stress-test slot)
+| # | Name | One-line contract | Disposition |
+|---|---|---|---|
+| 11 | **Sentinel** | At Compound, author a mechanically evaluable defeasibility predicate for the claim being written | **SEM — advance** |
+| 12 | Sever | On predicate failure, cut the claim from the read path | REJ — this is Melt's read filter and Retire's status transition (tournament f-029/f-006); Sentinel's failure signal is its trigger |
+| 13 | Spar | Adversarial self-play against a compounded belief | REJ — Reflect plus one Act turn; no durable object, no expiry |
+| 14 | Sound | Depth-graded probing of a lead | REJ — this is Trace renamed (f-041's own suggestion) |
+
+### E. Capability narrowing / safety (absent from the entire prior field)
+| # | Name | One-line contract | Disposition |
+|---|---|---|---|
+| 15 | **Shed** | Once intent is declared, narrow the run's gate set irreversibly for the rest of the run | **SAF — advance** |
+| 16 | Shackle | Operator-set hard caps on tool classes | REJ — composition config, not an operation; already expressible via `defaultGates` at build time |
+
+### F. Allocation / control (saturated — included to be refused honestly)
+| # | Name | One-line contract | Disposition |
+|---|---|---|---|
+| 17 | Satisfice | Stop at first adequate rather than best; adequacy predicate rather than budget | REJ — the only untried *stopping-rule* shape in the corpus (every prior policy candidate is a quota, clock, frame, or redirection), but it has no enforcement seat: it is a prompt clause inside Decide |
+| 18 | Stagger | Desynchronize the two compaction clocks so they cannot co-fire | REJ — a bug fix for ranking f-033, correctly filed as a pilot control (f-027), not a candidate |
+| 19 | Shear | Emit one number: divergence between the turn clock and the compounded-belief clock | REJ as operation, **keep as ART** — the prior corpus uses "shear" as a trigger word with no referent anywhere in the repo (alternatives f-002); one measured number would fix that, but a measurement is not an operation |
+
+### G. Identification & multi-instance
+| # | Name | One-line contract | Disposition |
+|---|---|---|---|
+| 20 | Stamp | Arm/run identity on every durable row so pilot arms are separable | REJ as candidate — a schema field. But it **gates every pilot in the ranking charter**: ranking f-012/f-023/f-024 show all arms share `~/.skaffen/mutations/quality-signals.jsonl`, re-read every Orient turn |
+| 21 | Stake | Lease a lead before probing so two instances don't duplicate | REJ — no multi-instance observability exists in Skaffen (tournament Caveat 7), and this is interlock's problem, not OODARC's |
+
+**Rejected: 16 of 21.** Advancing: Spool, Sequester, Stash, Sentinel, Shed.
+
+## 2. Strongest five — full contracts
+
+Common note: **Stash and Spool are the same discipline at two substrates** ("before destroying X, write X somewhere addressable"). Under tournament f-072's persistence clustering rule a reviewer may legitimately merge them into one capability with two adapters, leaving four. I keep them separate because their triggers, stores, and lifetimes differ; I flag the merge rather than hide it.
+
+---
+
+### 2.1 Stash — SUB (reversibility substrate)
+
+| Field | Contract |
+|---|---|
+| **Input** | Current bytes of any file about to be durably mutated on an authority path: `SKAFFEN.md`/`CLAUDE.md`/`AGENTS.md` (`contextfiles.go:22`), `.skaffen/**`, `~/.skaffen/**` |
+| **Trigger** | Mechanical, pre-write, in the write/edit tool path and in Compound's manifest-glob write. No model judgment |
+| **Transformation** | prior bytes → content-addressed object + append-only index row `{path, sha, session, turn, tool, ts}` |
+| **Output** | `~/.skaffen/stash/<sha>` + index. A separate store, not an annotation |
+| **Consumer** | `stash_restore(path, ts\|sha)`; and Sentinel / Sequester / Reprove / Melt as their precondition |
+| **Pace** | Per-write (fastest layer); index read at operator cadence |
+| **Expiry** | Object GC when ≥N successors exist AND age > window; index rows never deleted; the GC is itself stash-exempt and pre-registered |
+| **Does not collapse into** | `internal/git`: `AutoCommit`/`Undo` (`git.go:35,:46`) have one importer (`tui/app.go:33`), the only production commit is a human-typed `/commit` (`commands.go:801-820`), and `runPrint` never constructs a Git (`main.go:208-240`). **Headless Skaffen has zero reversibility today** |
+
+- **Steelman.** Every subtractive candidate in both prior runs — Reprove, Melt, Retire, and my Sequester — asserts reversibility against a substrate that is versioned only by a human chore. Ranking `f-028` proves the class is unsafe as specified. Stash is the cheapest thing that makes the class shippable, and its correctness is verifiable by unit test, not by the confounded pilot instrument.
+- **Attack.** It is plumbing with an S name. It transforms no knowledge, informs no decision, and is invisible to the model. Calling it an OODARC operation is category inflation; it should ship as a bug fix and never enter this tournament.
+- **Pilot.** Replay pilot, no LLM outcome measure. Take recorded sessions containing durable `*.md` writes; run each proposed demotion/relocation with Stash active; attempt exact byte restoration of every pre-mutation state. Metrics: restoration success rate, bytes unrecoverable, store growth per session.
+- **Kill.** Any unrecoverable write, or store growth that outpaces a plausible retention window.
+- **Reversal.** If git-based versioning is made unconditional (an `AutoCommit` call in the non-TUI path), Stash is redundant and should be deleted.
+
+### 2.2 Spool — CAP (Stash's context-block adapter)
+
+| Field | Contract |
+|---|---|
+| **Input** | A `tool_result` block with `len(ResultContent) > 200` at the moment `microCompact` elides it (`autocompact.go:149`) |
+| **Trigger** | Mechanical, inside `microCompact`, before the stub is written |
+| **Transformation** | payload → durable record keyed by `ToolUseID`; the stub becomes `[output spooled — N chars — tool <name> — handle <id>]` instead of `[output truncated — N chars]` (`autocompact.go:157`) |
+| **Output** | A spool record; the in-band text carries a *handle*, never content |
+| **Consumer** | `spool_fetch(handle)`; Sentinel's evaluator, which can then cite an elided observation |
+| **Pace** | Per-compaction event (fast layer) |
+| **Expiry** | End of session, unless fetched — a fetched spool promotes into Stash |
+| **Does not collapse into** | `snip` (`autocompact.go:194`) deletes whole messages and inserts prose with no handle; the current stub keeps `ToolUseID`/`IsError` and drops the payload with no durable counterpart; `Evidence` records tool *names* only (`deps.go:66`). Nothing can recover an elided observation |
+
+- **Steelman.** This is the one design that satisfies f-070 without relying on the annotation class f-070 invalidates: separation is carried by a handle into a distinct store, so the assertion left in context is *self-warranting* — it points at its own evidence. It is also the only candidate in any run that touches the fast pace layer.
+- **Attack.** It buys recoverability the model may never exercise. If no turn ever calls `spool_fetch`, the store is write-only and the token cost of the longer stub is pure loss. Worse, it may *encourage* the loop to lean on unread evidence.
+- **Pilot.** Instrument re-issued tool calls: count how often a turn following a `microCompact` event re-issues the same tool with the same arguments. This requires one schema field (`Evidence.ToolCalls` is names only, ranking f-025) — say so rather than claim zero instrumentation. Arm A: current stub. Arm B: handle + fetch tool. Metrics: fetch rate, duplicate-reissue rate, tokens spent re-fetching.
+- **Kill.** Fetch rate near zero *and* duplicate-reissue rate unchanged.
+- **Reversal.** If the provider gains server-side context persistence that makes elision lossless, Spool is redundant.
+
+### 2.3 Sequester — SAF
+
+| Field | Contract |
+|---|---|
+| **Input** | A durable prose write proposed by Compound landing on a path `contextfiles.Load` reads (`contextfiles.go:22,52-60`) |
+| **Trigger** | Mechanical, at the write, on path match |
+| **Transformation** | machine prose at human authority → same prose in `.skaffen/compounded/<date>.md` with an authority header, loaded at a precedence *below* every human-authored section |
+| **Output** | A separate file in a separate directory + an authority tier in `Load`'s ordering. Today ordering is purely outermost-first (`contextfiles.go:47-61`) — there is **no authority dimension at all** |
+| **Consumer** | `contextfiles.Load` → system-prompt prefix (`main.go:840-843`); and Sentinel, which can only bind predicates to addressable material |
+| **Pace** | Per-Compound (slowest layer) |
+| **Expiry** | Section drops from the prefix when its Sentinel fails, or after a pre-registered age with no re-affirmation |
+| **Does not collapse into** | Melt (defaces a mutations-store row) and Retire (a status transition) both act on the store fenced behind `Store.Inspire`/`formatQualityHistory`. Sequester acts on the **unfenced** channel tournament `f-050` identified, which no candidate in either field targets |
+
+- **Steelman.** Tournament `f-050` is the corpus' cleanest checkable fact: transfer *is* carried, by a carrier that fails all four of the charter's own epistemic-safety clauses, at top precedence, byte-indistinguishable from human text. This is the largest live hazard in the system and it currently has no candidate at all.
+- **Attack.** Two heads. (a) `*.md` is shared with Claude Code and Codex CLI; moving content out of `CLAUDE.md` degrades *other agents'* context — an externality nobody has priced. (b) If demoting precedence makes the model ignore the region, sequestration is deletion, and it destroys the only transfer channel the system has.
+- **Pilot.** Marked-sentence pilot. Write a known-false, harmless, uniquely-worded claim into a compounded section; run K later sessions in each arm; measure whether the claim is asserted, contradicted, or ignored. Arm A: `CLAUDE.md` as today. Arm B: sequestered region. Metric: assertion rate and citation rate by arm.
+- **Kill.** Arm B assertion rate *and* citation rate both ≈0 — the region is dead weight, and the honest move is to delete the write, not relocate it.
+- **Reversal.** If Compound's durable prose write is removed entirely (a live option after `f-050`), Sequester has no input.
+
+### 2.4 Sentinel — SEM
+
+| Field | Contract |
+|---|---|
+| **Input** | A claim at the moment it is compounded: lesson text + the artifacts it was read off (paths, commit SHA, test name, config key) |
+| **Trigger** | Authored at Compound; evaluated at session start and on the Orient read |
+| **Transformation** | assertion → assertion + a mechanically evaluable defeasibility predicate ("holds while the hash of `registry.go:49-69` is X"; "holds while `go test ./internal/router` passes"; "holds while `phaseOrder` has 6 members"). A claim admitting no predicate is written `sentinel: none` — itself a grade |
+| **Output** | A row in a store separate from the claim: `{claim_ref, predicate_kind, predicate_arg, authored_at, last_eval, last_result}` |
+| **Consumer** | The Orient injection (`session.go:80-91`) drops claims whose sentinel last evaluated false; Reprove/Melt consume the failure as their trigger |
+| **Pace** | Authored slow (Compound), evaluated medium (session start). Two clocks, deliberately |
+| **Expiry** | False for K consecutive evaluations → retired: read-gated, bytes retained under Stash. `sentinel: none` claims expire on age alone |
+| **Does not collapse into** | Reflect judges the turn just taken and emits no durable predicate. Compound emits the assertion, not its defeat condition. Reprove *consumes* a staleness signal and its only predicate is source-commit equality. `grep -rni 'authority\|speculative\|provenance' internal/` returns nothing (alternatives f-009/f-022); `QualitySignal` has no TTL/status/validity field |
+
+- **Steelman.** This is the only candidate in the whole corpus whose output is a *new kind of object* — a defeasibility condition. No OODARC letter emits one. It also converts retirement from a hunch into a computation, and it read-gates rather than deletes, which sidesteps the irreversibility problem ranking `f-028` found fatal to Reprove/Melt as specified. And it is the missing authoring half that `f-030` shows the subtractive class needs.
+- **Attack.** Goodhart at the point of authorship: the model chooses its own predicate, so the cheapest strategy is a predicate that never fails (`sentinel: none`, or "holds while the repo exists"). The grade attaches to the act of authoring, not to the strength of the check — the exact defect alternatives-`f-025` scored −2 against Scout's correspondence mapping.
+- **Pilot.** Retrospective, zero new LLM instrumentation. Hand-author predicates over the *existing* compounded corpus and evaluate them against the current tree. Metric: fraction of durable claims currently injected into Orient that are already mechanically false. Second metric: predicate-authorability rate (what fraction of existing claims admit *any* mechanical predicate).
+- **Kill.** Already-false fraction near zero (nothing to retire), **or** authorability rate so low that most claims land `sentinel: none` — in which case Sentinel is an expiry-by-age rule wearing a predicate costume, and age alone is cheaper.
+- **Reversal.** If the predicate distribution turns out to be dominated by one kind (source-commit staleness), Sentinel collapses into Reprove and should be dropped in Reprove's favour.
+
+> Note: this pilot has Fallow's celebrated virtue — countable against existing artifacts — while measuring a *hazard* rather than a baseline. Comparable cost, strictly more information.
+
+### 2.5 Shed — SAF
+
+| Field | Contract |
+|---|---|
+| **Input** | The run's effective gate set + the plan Decide committed to |
+| **Trigger** | Once, at the Decide→Act edge, on model or operator declaration |
+| **Transformation** | gate set → a strictly smaller run-scoped gate set for the remainder of the run (drop `web_search`/`web_fetch` once the plan is local; drop `bash` once the plan is read-and-edit) |
+| **Output** | A run-scoped gate override consulted by `Registry.Allowed` (`registry.go:243-256`) + an evidence row naming what was shed |
+| **Consumer** | The tool-call filter; the evidence stream — a shed set is a compact, checkable statement of declared intent |
+| **Pace** | Once per run, at one edge |
+| **Expiry** | End of run. Never widens mid-run; re-widening needs a new run or an explicit operator command |
+| **Does not collapse into** | `defaultGates` (`registry.go:49-69`) is a static table with `nil` constraints for Observe/Orient/Decide. `internal/trust` evaluates individual approvals, not scope. `SetModelOverride`/`SetThinkingBudget` (`agent.go:137,:154`) are the only run-scoped dials and neither touches gates. **Nothing in Skaffen narrows capability** |
+
+- **Steelman.** Every candidate in three runs adds a store, a report, or a dial. Shed is the only one that *subtracts capability*, it has a verified enforcement seat where ranking `f-035` shows the incumbent has none (three phases with all-`nil` constraints), and its evidence row is a falsifiable prediction: "this run will not need the web."
+- **Attack.** It optimizes a risk nobody has measured. No incident, no denial-rate complaint, no operator report motivates it — ranking `f-035`'s relief test applies against it exactly as hard as against the policy field: name the deflecting incumbent. There isn't one. And a wrongly-shed capability costs a whole run.
+- **Pilot.** Dry-run shadow mode. Log what Shed *would* have denied across recorded sessions without enforcing. Metrics: size of the would-deny set; count of would-deny calls that actually occurred and mattered (over-narrowing); count of post-plan tool calls outside the declared plan (the risk it targets).
+- **Kill.** Would-deny set essentially empty (nothing to shed) **or** it contains calls that were load-bearing (over-narrowing at unacceptable rate).
+- **Reversal.** If gate constraints are given a real enforcement history — a live `ResetRateCounts` and a non-empty constraint map on Observe/Orient/Decide — Shed's seat is occupied by ordinary configuration.
+
+## 3. Comparisons
+
+### 3.1 Strongest candidate vs no-S
+
+Strongest overall on marginal value: **Sentinel**. Against the null:
+
+| Dimension | no-S (Orient/Reflect/Compound + tools) | Sentinel |
+|---|---|---|
+| Expiry vocabulary | none — zero grep hits for `authority\|speculative\|provenance`; only forgetting is `ReadRecent(n)` recency | authors a defeasibility predicate at write time |
+| Retirement trigger | human hunch, unscheduled | mechanical predicate evaluation |
+| Cost | zero | one store, one evaluator, one read filter |
+| Phase cost | zero | **also zero** — Sentinel needs no letter |
+
+The honest result is asymmetric: **no-S wins the phase question outright and loses the capability question.** Sentinel is *no-S-compatible* — it ships as a tool plus a schema, leaving OODARC six letters. That is not a hedge; it is the finding. Every candidate that survived my divergence pass is letter-independent, which means the acronym question and the capability question were never the same question.
+
+### 3.2 vs the Scout/Trace cluster
+
+Scout/Trace produce **new speculative material**; my five produce **governance over existing material**. On the corpus' own mechanical discriminator (alternatives f-018, tournament f-060), Scout's gate delta against Orient is ∅ and Trace's claimed signature is Decide's set verbatim. My five all have non-empty deltas — a write namespace (Stash), a compaction hook (Spool), a precedence dimension (Sequester), a read filter (Sentinel), a gate mutation path (Shed) — none of which any existing phase grants. But every one of those deltas is a *tool or substrate* delta. Passing Scout's failed test does not promote anything to phasehood; it promotes it to capability.
+
+Second difference: Scout/Trace increase the volume of ungraded material flowing into a channel that has no remover (tournament f-051). Mine reduce it or fence it. Under the prior corpus' own scoring rule — tournament f-021's generalization, *any candidate that adds a writer without adding a grade is net-negative against no-S* — Scout/Trace are net-negative and Sentinel/Sequester are net-positive by construction.
+
+### 3.3 vs the Sunset/Reprove subtractive cluster
+
+**Not rivals — the completion.** Ranking `f-030` establishes Reprove/Retire/Melt are three stages of one act (trigger / state transition / representation discipline). Two stages were missing:
+
+- **Predicate authoring** (Sentinel). Reprove's only trigger today is source-commit equality — one predicate. Sentinel generalizes it and, crucially, authors it at the moment the claim is made, when the artifacts it depends on are still known.
+- **Reversibility substrate** (Stash). Ranking `f-028` shows Melt's "deface, never `os.Remove`" is a reversibility claim against an unversioned substrate, and that Reprove's own reversal condition ("did demotion remove claims still load-bearing?") is *unanswerable* because the pre-demotion text is gone. Stash makes it answerable.
+
+Sequestration is a third thing the cluster lacks: **reversible subtraction by relocation**. Melt defaces bytes; Sequester moves them and changes their read precedence. Relocation is reversible against an unversioned substrate in a way defacement is not — the bytes still exist and still parse.
+
+Full sequence: Sentinel authors → predicate fails → Reprove fires → Stash preserves → Melt/Sequester demotes → the read filter is the retirement.
+
+### 3.4 Pace/shear placement
+
+The prior policy field's seven candidates all seat on one layer (allocation) — that is `f-017`'s dial finding restated. This cluster distributes by design: Spool at the compaction clock (fast), Shed at one run edge, Sentinel authored slow and evaluated medium (two clocks, deliberately), Sequester at the slowest. Weakness stated plainly: **none of my five is a pace *policy***. That lane belongs to Slacken/Season, where the seat is disputed (ranking f-018 vs f-027 vs the refuted f-032) and ranking f-033 — still `status: raw` — shows there are two compaction clocks with different discard laws. I do not resolve that.
+
+## 4. Three verdicts
+
+### Best semantic S — **Sentinel**, in capability form
+
+Moderate-to-high confidence on distinctness; moderate on value. It is the only candidate across three runs whose output is an object type no OODARC operation emits: a defeasibility condition. It is not a phase and does not want to be. The value estimate rides entirely on one unmeasured quantity — the fraction of currently-injected compounded claims that are already mechanically false — which its own pilot measures for roughly Fallow's cost.
+
+If Sentinel's authorability rate is low, the correct answer to "best semantic S" becomes **none**, and expiry-by-age is the cheaper design.
+
+### Best runtime S — **none**
+
+High confidence. Converging, code-verified, and now cross-run: the FSM is forward-only with one human caller (`commands.go:196`); the gate space has three distinguishable signatures for a field of twenty (tournament f-061); one incumbent phase is already enforcement-vacuous (tournament f-022); the FSM holds six phases and the TUI holds five (ranking f-013); and seven cut sites are already out of sync for the *sixth* member (ranking f-037). Nothing I generated needs phasehood, and nothing in the prior field does either. This verdict would only move if the runtime gained real per-phase enforcement first — in which case re-ask it then.
+
+### Best first harness implementation — **Stash**, then **Sequester**
+
+Moderate-to-high confidence. Reasoning, in order:
+
+1. Every subtractive and relocating operation in both fields — Reprove, Melt, Retire, Sequester — is unsafe until the substrate exists (ranking f-028), and headless Skaffen has no reversibility at all.
+2. Its correctness is checkable by unit test and replay, so it does not depend on the pilot instrument that six independent findings show is confounded (ranking f-011, f-021, f-024, f-033; tournament f-028, f-044, f-055).
+3. It unblocks the two verdicts above without prejudging them.
+
+Ship **Sequester** second, because tournament `f-050` is the largest verified live hazard: machine prose at top precedence, indistinguishable from human text, in a channel with no remover. Ship **Sentinel** third, gated on its retrospective pilot.
+
+Do **not** ship Spool or Shed yet. Spool depends on `f-070`, still `status: raw`. Shed fails ranking `f-035`'s relief test — no incumbent is deflecting under the load it would relieve.
+
+Two prerequisites that are not candidates and should not be ranked as such: **Stamp** (arm/run identity on durable rows — without it no pilot in the ranking charter is interpretable, per f-012/f-023/f-024) and **Stratify** (make `scoring.go`'s discard law authority-aware rather than tool-class-aware, per f-033).
+
+## 5. Unresolved unknowns
+
+1. **D1 is still open.** Spool and Sequester are designed on the assumption `f-070` holds (in-band separation is unreliable because `microCompact` strips evidence and keeps assertions). `f-070` is `status: raw` and was never independently adjudicated. If it falls, Spool's whole rationale weakens.
+2. **Ranking `f-033` is raw** — two compaction clocks with different discard laws, one of them TUI-only. Spool's trigger site depends on which fires first, and I did not resolve it.
+3. **Sentinel's base rate is unmeasured.** The fraction of already-false compounded claims is the single number the semantic verdict rides on. Unknown.
+4. **Sequester has a cross-tool blast radius nobody has priced.** `CLAUDE.md`/`AGENTS.md` are read by Claude Code and Codex CLI. Relocating machine prose out of them changes *other agents'* context. No artifact in three runs mentions this.
+5. **Precedence has no representation.** `contextfiles.Load` orders sections outermost-first with no authority dimension (`contextfiles.go:47-61`). Whether an authority tier can be added without breaking the project-last-wins contract is untested.
+6. **Every lens in the alternatives run declared an anti-S bias** (its own Caveat 1), and no pro-S lens ever ran. My pass inherits that: I read the ledgers, not a counter-corpus. Treat my rejections of the allocation family as inherited, not independent.
+7. **Naming is incidental.** Stash, Spool, Sequester, Sentinel and Shed are genuinely S-initial, but none needs the letter and none should be renamed to keep it. Note also that the tournament synthesis' claim that the field "contains zero S-names" is false (ranking `f-020`: Survey, Slacken, Stint, Season, Sweep) — so the mnemonic argument as inherited rests on a checkably wrong premise and should not carry weight in either direction.

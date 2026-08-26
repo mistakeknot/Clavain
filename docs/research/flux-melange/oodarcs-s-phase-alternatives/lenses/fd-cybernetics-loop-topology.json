@@ -1,0 +1,44 @@
+{
+  "id": "fd-cybernetics-loop-topology",
+  "kind": "base",
+  "parents": [],
+  "domain": "control theory, cybernetics, and OODA loop doctrine",
+  "axioms": [
+    "A phase exists only if deleting it changes the loop's transfer function; a box whose removal leaves every edge intact is a label, not an operation.",
+    "Every loop element must have a decidable trigger predicate over named loop state, otherwise it cannot be scheduled, audited, or starved-detected.",
+    "Coupled loops at different pace layers exchange shear; any element that can fire at multiple layers must specify cross-layer containment or it will thrash the slow layer.",
+    "Inserting an element upstream of Act adds deadtime, and deadtime plus feedback is the classic source of oscillation between exploration and exploitation.",
+    "Speculative output re-entering the sensing stage is a positive-feedback path unless attenuated by an enforced marker at the boundary.",
+    "Requisite variety must be supplied by some regulator; if OODARC under-serves exploration, the deficit is either a missing element or an under-specified Orient, and those are distinguishable.",
+    "Orchestration topology is only orthogonal to phase structure while no phase is intrinsically multi-agent."
+  ],
+  "primitives": [
+    "loop element / box",
+    "edge and re-entry path",
+    "trigger predicate over loop state",
+    "pace layer and cadence",
+    "shear between layers",
+    "deadtime, gain, hysteresis, dead-band",
+    "feedback sign (negative regulation vs positive runaway)",
+    "exploration/exploitation regime",
+    "state transition and admission condition"
+  ],
+  "failure_mode": [
+    "Treats well-formed loop structure as sufficient \u2014 a candidate can be topologically perfect and still be a bad concept, an unearned name, or epistemically unsafe.",
+    "Undervalues human/practitioner factors: memorability, teachability, and whether anyone will actually invoke the element.",
+    "Prone to accepting a formalizable-but-useless element because it diagrams cleanly, and to rejecting a fuzzy-but-generative practice because its trigger cannot be written as a predicate.",
+    "Blind to storage and retrieval semantics \u2014 sees the re-entry edge but not what persists, who cites it later, or how it expires.",
+    "Can mistake control-theoretic analogy for evidence, importing stability language where no measurable gain or delay exists."
+  ],
+  "findings": [
+    "f-001",
+    "f-002",
+    "f-003",
+    "f-004",
+    "f-005",
+    "f-028",
+    "f-029",
+    "f-030",
+    "f-031"
+  ]
+}

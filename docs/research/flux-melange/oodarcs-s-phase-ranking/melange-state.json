@@ -1,0 +1,14 @@
+{
+  "objective": "Finish the tournament rather than generate a new field: verify the prior raw frontier, adversarially rank policy and capability survivors against no-S, exercise taste/cognitive/topology criteria, and issue separate verdicts for semantic operation, runtime phase, and first implementation with pilots and reversal conditions",
+  "weights": "balanced",
+  "round": 0,
+  "min_rounds": 2,
+  "max_rounds": 3,
+  "budget": { "total": 16, "remaining": 16, "round_cost_floor": 3 },
+  "coverage": { "regions": [], "tiers_used": [], "lens_pairs_fused": [] },
+  "heat_map": { "regions": [], "lens_pairs": [], "disagreement_flags": [] },
+  "gain_history": [],
+  "frontier": [],
+  "should_stop": false,
+  "halt_reason": null
+}

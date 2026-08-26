@@ -1,0 +1,37 @@
+{
+  "id": "fd-foraging-exploration-generator",
+  "kind": "base",
+  "parents": [],
+  "domain": "behavioral ecology, evolutionary biology, multi-armed bandits, and optimal foraging theory",
+  "axioms": [
+    "Search is resource allocation under patch depletion and non-stationarity; a new loop element is a change to the allocation policy, not to vocabulary.",
+    "Exploration has positive expected value only when the environment is non-stationary or the current patch is depleting; a candidate must say which signal it responds to.",
+    "The cost of never exploring is real and compounding, so a lens that generates no candidate has failed even if its criticism sounds safe.",
+    "An operation that changes only what is written down, and not what the next unit of attention is spent on, is an artifact rather than a phase.",
+    "Exploration must be budgeted and stoppable; unbounded search is indistinguishable from distraction.",
+    "Value is measurable as regret or discovery rate against a null policy, not as rhetorical appeal."
+  ],
+  "primitives": [
+    "patch and patch-depletion signal",
+    "search budget / attention allocation unit",
+    "arm, sample, and regret",
+    "trigger predicate and stop rule",
+    "variation-generation rate under shear",
+    "exploration/exploitation policy state",
+    "discovery event on the pre-registered corpus"
+  ],
+  "failure_mode": [
+    "Systematically undervalues error correction and pruning; frames the loop's deficit as under-generation by default.",
+    "Treats provenance, authority grade, and laundering risk as downstream implementation detail rather than as gate conditions.",
+    "Optimizes for discovery rate and may accept candidates that inflate exploration on no-benefit tasks.",
+    "Weak on naming, mnemonic economy, and whether an operation deserves a permanent letter.",
+    "Prone to importing ecological metaphor where no measurable analogue exists in an agent loop."
+  ],
+  "findings": [
+    "f-001",
+    "f-002",
+    "f-003",
+    "f-004",
+    "f-005"
+  ]
+}

@@ -1,0 +1,190 @@
+{
+  "runtime": "claude",
+  "rounds": 4,
+  "halt_reason": "BUDGET",
+  "gain_history": [
+    {
+      "round": 0,
+      "yield": 25,
+      "novel_cluster_rate": 0.77
+    },
+    {
+      "round": 1,
+      "yield": 4,
+      "novel_cluster_rate": 0.36
+    },
+    {
+      "round": 2,
+      "yield": 5,
+      "novel_cluster_rate": 0.6
+    },
+    {
+      "round": 3,
+      "yield": 0,
+      "novel_cluster_rate": 0.57
+    }
+  ],
+  "spice_trail": [
+    {
+      "round": 0,
+      "event": "assay",
+      "findings": 35,
+      "agents_dispatched": 2
+    },
+    {
+      "round": 1,
+      "event": "probe",
+      "directives": [
+        {
+          "type": "PROBE-DISAGREEMENT",
+          "rationale": "open contradiction — adjudicate",
+          "lens": null
+        },
+        {
+          "type": "DEEPEN",
+          "rationale": "risk 6, unconfirmed — confirm or refute",
+          "lens": "fd-falsification-disconfirmation-contracts"
+        },
+        {
+          "type": "FUSE",
+          "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+          "lens": "fd-fused-graded-allocation"
+        },
+        {
+          "type": "FUSE",
+          "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+          "lens": "fd-fused-assay-limited-foraging"
+        }
+      ],
+      "findings": 14,
+      "failed": 0
+    },
+    {
+      "round": 1,
+      "event": "assay",
+      "findings": 14,
+      "agents_dispatched": 4
+    },
+    {
+      "round": 2,
+      "event": "probe",
+      "directives": [
+        {
+          "type": "PROBE-DISAGREEMENT",
+          "rationale": "open contradiction — adjudicate",
+          "lens": null
+        },
+        {
+          "type": "FUSE",
+          "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+          "lens": "fd-fused-grading-arm-allocation"
+        },
+        {
+          "type": "FUSE",
+          "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+          "lens": "fd-fused-warranted-variation"
+        }
+      ],
+      "findings": 10,
+      "failed": 0
+    },
+    {
+      "round": 2,
+      "event": "assay",
+      "findings": 10,
+      "agents_dispatched": 3
+    },
+    {
+      "round": 3,
+      "event": "probe",
+      "directives": [
+        {
+          "type": "PROBE-DISAGREEMENT",
+          "rationale": "open contradiction — adjudicate",
+          "lens": null
+        },
+        {
+          "type": "FUSE",
+          "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+          "lens": "fd-fused-quota-blinded-foraging"
+        },
+        {
+          "type": "FUSE",
+          "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+          "lens": "fd-fused-allocator-regress"
+        },
+        {
+          "type": "STEER-WIDE",
+          "rationale": "novel_cluster_rate 0.60 >= 0.6 — widening still pays",
+          "lens": "fd-gamelan-irama-stratification"
+        }
+      ],
+      "findings": 14,
+      "failed": 0
+    },
+    {
+      "round": 3,
+      "event": "assay",
+      "findings": 14,
+      "agents_dispatched": 4
+    }
+  ],
+  "slots_spent": 25,
+  "directive_history": [
+    {
+      "type": "PROBE-DISAGREEMENT",
+      "rationale": "open contradiction — adjudicate",
+      "lens": null
+    },
+    {
+      "type": "DEEPEN",
+      "rationale": "risk 6, unconfirmed — confirm or refute",
+      "lens": "fd-falsification-disconfirmation-contracts"
+    },
+    {
+      "type": "FUSE",
+      "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+      "lens": "fd-fused-graded-allocation"
+    },
+    {
+      "type": "FUSE",
+      "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+      "lens": "fd-fused-assay-limited-foraging"
+    },
+    {
+      "type": "PROBE-DISAGREEMENT",
+      "rationale": "open contradiction — adjudicate",
+      "lens": null
+    },
+    {
+      "type": "FUSE",
+      "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+      "lens": "fd-fused-grading-arm-allocation"
+    },
+    {
+      "type": "FUSE",
+      "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+      "lens": "fd-fused-warranted-variation"
+    },
+    {
+      "type": "PROBE-DISAGREEMENT",
+      "rationale": "open contradiction — adjudicate",
+      "lens": null
+    },
+    {
+      "type": "FUSE",
+      "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+      "lens": "fd-fused-quota-blinded-foraging"
+    },
+    {
+      "type": "FUSE",
+      "rationale": "shared_heat 0, complementarity 2, redundancy 0",
+      "lens": "fd-fused-allocator-regress"
+    },
+    {
+      "type": "STEER-WIDE",
+      "rationale": "novel_cluster_rate 0.60 >= 0.6 — widening still pays",
+      "lens": "fd-gamelan-irama-stratification"
+    }
+  ]
+}

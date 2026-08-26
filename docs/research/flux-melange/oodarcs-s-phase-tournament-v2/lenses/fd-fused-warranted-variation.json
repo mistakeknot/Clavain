@@ -1,0 +1,48 @@
+{
+  "id": "fd-fused-warranted-variation",
+  "kind": "fusion",
+  "parents": [
+    "fd-foraging-exploration-generator",
+    "fd-fused-graded-allocation"
+  ],
+  "domain": "Fusion of optimal-foraging/bandit GENERATION theory (variation rate under shear, patch depletion, marginal value of the next sample, regret against a null policy, trigger predicates and stop rules) with the warrant doctrine of graded, tasked, expiring exploration budget (issuing authority separate from spender, grade struck per probe, dual store, expiry and re-tasking, laundering into behavior). The fused object is the VARIATION WARRANT — a licence to MINT hypotheses at a rate, a different instrument from the licence to SPEND attention on one probe: different authority, different budget, different clock, different grading evidence.",
+  "tension": "A quota is simultaneously the only external tasking a generator can receive and a guaranteed source of grade inflation. Parent A imposes a floor on production (a lens that generates nothing has failed, and the cost of never exploring compounds); parent B imposes a ceiling on release (budget released by the party that wants it is authority laundering, so tasking must come from outside). The only outside instrument that can task a generator is a RATE — 'at least three contracts', 'at least twelve candidates' — and a rate floor is indistinguishable in its output from a rich patch. Tighten the grade until only warrantable variation is minted and A's compounding cost bites at once. The lens does not resolve this: it locates, per contract, where the candidate sits on the rate/grade diagonal.",
+  "axioms": [
+    "A licence to MINT hypotheses at a rate is a different instrument from a licence to SPEND attention on a probe; a contract that names one and implies the other has left half its exploration ungoverned.",
+    "The only external tasking a generator can receive is a quota, and a quota manufactures the evidence of its own success: nothing downstream of a rate floor can distinguish a rich patch from a generous licence.",
+    "Generation has two stop rules — a per-cohort stop and an expiry on the rate itself; a design with only the first is bounded at every level it inspects and unbounded in aggregate.",
+    "The candidate field is both a patch and a record: an eliminated candidate loses its standing as a belief while retaining its full effect on where the next mint goes, so elimination is an allocation act and must be graded as one.",
+    "Variation yield is uninterpretable unless grade-weighted and attributed to the warrant that authorized it; a prolific arm otherwise beats a correct arm under every discovery metric.",
+    "Minting cadence and warrant cadence sit on different pace layers; when the licence expires slower than the patch depletes, the operation manufactures variation into an exhausted field on valid authority — an ornamental phase that passes every gate because its paperwork is in order.",
+    "A fused finding must collapse if either parent's primitive is removed: strip the rate and it is parent B's single-probe warrant; strip the warrant and it is parent A's 'explore more'."
+  ],
+  "primitives": [
+    "variation warrant (licence to mint at a rate: authority, grade, expiry)",
+    "mint licence versus spend licence (two budgets, two clocks)",
+    "quota / rate floor as issued tasking",
+    "rate-versus-richness confound",
+    "grade-weighted variation yield per warrant",
+    "cohort (batch of hypotheses under one warrant) and its grade distribution",
+    "per-cohort stop rule versus rate expiry / re-ratification",
+    "the candidate field as an ungraded, non-decaying store steering the next mint",
+    "closed-lead ledger versus decaying speculative belief",
+    "pre-committed allocation (unmarkable at run time, markable at ratification time)",
+    "minting cadence versus warrant cadence (shear between pace layers)",
+    "incumbent minting rate of the no-S null"
+  ],
+  "failure_mode": [
+    "Can convert every question into a licensing question and file governance apparatus where the honest answer is that the operation is simply not worth doing — inflating implementation and cognitive cost, the ornamental-seventh-step risk in a new register.",
+    "Its central instrument (grade-weighted yield per warrant) presumes a grading scale exists for cross-domain speculation; where no scale is available it may demand precision no candidate can supply and eliminate viable generative candidates at a hard gate.",
+    "Biased toward candidates whose output is countable in cohorts; a genuinely sparse S that fires twice a quarter has almost no rate to measure and may be undervalued for lacking a distribution.",
+    "Inherits parent B's blindness to structural and implementation cost — indifferent to whether ratifying a rate requires re-cutting the phase machine, router, and schema.",
+    "Because both parents are allocation-theoretic, it under-attends to disconfirmation and severe testing as such: it will price a falsification candidate by its mint rate and miss that its value is error correction, not variation.",
+    "Treats naming and mnemonic durability as noise (P3 by construction), so adoption failure of a winning contract is a blind spot.",
+    "Second-order fusion risk: parent B is itself a fusion, so the lens can drift into re-filing B's warrant arguments with 'rate' added as ornament rather than as the load-bearing cross term."
+  ],
+  "findings": [
+    "f-056",
+    "f-057",
+    "f-058",
+    "f-059"
+  ]
+}

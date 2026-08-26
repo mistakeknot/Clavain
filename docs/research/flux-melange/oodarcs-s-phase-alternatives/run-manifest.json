@@ -1,0 +1,114 @@
+{
+  "runtime": "claude",
+  "rounds": 3,
+  "halt_reason": "DRY",
+  "gain_history": [
+    {
+      "round": 0,
+      "yield": 20,
+      "novel_cluster_rate": 0.64
+    },
+    {
+      "round": 1,
+      "yield": 2,
+      "novel_cluster_rate": 0.67
+    },
+    {
+      "round": 2,
+      "yield": 1,
+      "novel_cluster_rate": 0.5
+    }
+  ],
+  "spice_trail": [
+    {
+      "round": 0,
+      "event": "assay",
+      "findings": 25,
+      "agents_dispatched": 2
+    },
+    {
+      "round": 1,
+      "event": "probe",
+      "directives": [
+        {
+          "type": "PROBE-DISAGREEMENT",
+          "rationale": "open contradiction — adjudicate",
+          "lens": null
+        },
+        {
+          "type": "DEEPEN",
+          "rationale": "risk 6, unconfirmed — confirm or refute",
+          "lens": "fd-cybernetics-loop-topology"
+        }
+      ],
+      "findings": 6,
+      "failed": 0
+    },
+    {
+      "round": 1,
+      "event": "assay",
+      "findings": 6,
+      "agents_dispatched": 2
+    },
+    {
+      "round": 2,
+      "event": "probe",
+      "directives": [
+        {
+          "type": "PROBE-DISAGREEMENT",
+          "rationale": "open contradiction — adjudicate",
+          "lens": null
+        }
+      ],
+      "findings": 2,
+      "failed": 0
+    },
+    {
+      "round": 2,
+      "event": "assay",
+      "findings": 2,
+      "agents_dispatched": 1
+    }
+  ],
+  "slots_spent": 13,
+  "directive_history": [
+    {
+      "round": 1,
+      "type": "PROBE-DISAGREEMENT",
+      "rationale": "open contradiction — adjudicate",
+      "lens": null,
+      "spawned_lens": "disagreement-adjudication",
+      "target": "docs/research/2026-08-24-oodarcs-s-phase-alternatives-charter.md:119",
+      "findings": [
+        "f-026",
+        "f-027"
+      ]
+    },
+    {
+      "round": 1,
+      "type": "DEEPEN",
+      "rationale": "risk 6, unconfirmed — confirm or refute",
+      "lens": "fd-cybernetics-loop-topology",
+      "spawned_lens": null,
+      "target": "fd-cybernetics-loop-topology findings f-014/f-020 region",
+      "findings": [
+        "f-028",
+        "f-029",
+        "f-030",
+        "f-031"
+      ]
+    },
+    {
+      "round": 2,
+      "type": "PROBE-DISAGREEMENT",
+      "rationale": "open contradiction — adjudicate",
+      "lens": null,
+      "spawned_lens": "control-flow-archaeology",
+      "target": "docs/research/2026-08-24-oodarcs-s-phase-alternatives-charter.md:41-47",
+      "findings": [
+        "f-032",
+        "f-033"
+      ]
+    }
+  ]
+}

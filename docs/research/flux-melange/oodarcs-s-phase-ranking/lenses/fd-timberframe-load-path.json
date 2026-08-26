@@ -1,0 +1,51 @@
+{
+  "id": "fd-timberframe-load-path",
+  "kind": "base",
+  "parents": [],
+  "domain": "Traditional timber framing (Japanese temple carpentry / miyadaiku and European scribe-rule framing): load path traced from ridge through posts to a sill resting unanchored on stone, joinery as controlled weakening that removes section from the member already carrying the load, the categorical split between posts that carry gravity and braces or wedged penetrating ties that carry none and only stop the frame racking, the raising sequence in which geometry fixes assembly order so a forgotten member is spliced in weakly or admitted by cutting what stands, over-constraint where a well-meant extra post redirects load and crushes a sill, wood that keeps moving for decades so wedges are re-driven and any fit assuming finished dimensions fails, kuse as the individual warp of each actual stick, the strict separation of miegakari finish work judged by the eye and carrying nothing from hidden structure judged only by strength, kiwari proportional module by which members are sized from inherited canon rather than calculation, the story pole and full-scale layout board from which every mark is struck, and the sacrificial-layer doctrine of the sill that rots first, the roof rethatched on schedule, and the shrine rebuilt whole every twenty years",
+  "axioms": [
+    "Only the load path decides structure: a member that nothing travels through is trim, however large, well named, or prominent in the plan.",
+    "A new member earns its place by relief - some existing member must be deflecting under a load it will take off; support added where nothing is failing is over-constraint, and over-constraint is worse than absence because it redirects load.",
+    "Every joint is a controlled weakening: admitting a new member costs section in the member that was already carrying the load, so admission is priced in damage to what stands, not in the size of what is added.",
+    "Posts and braces are different kinds of thing - one carries gravity, the other carries none and resists racking - and a comparison across kinds is a category error, not a close ranking.",
+    "A frame can be complete, plumb, and beautiful in plan and still fold under a load arriving from the side; what resists racking is usually not visible in the drawing.",
+    "Exposed work and hidden work are judged by different standards and neither face's evidence settles the other: a thing can be right where it shows and wrong where it holds.",
+    "Assembly order is fixed by geometry, not preference; what cannot be entered once the frame stands is either designed in from the start or admitted on a weaker splice, and the splice's strength is not the designed member's strength.",
+    "Everything keeps moving after it is finished; a fit that assumed nothing would change size is a joint that will be loose, and every tight fit implies a wedge someone re-drives.",
+    "Layout is struck against the actual stick, not the drawing: each piece has its own warp, so the same nominal operation is a different act at every site.",
+    "Re-cutting an existing member, or taking a bay down and rebuilding it, is ordinary work rather than an admission of failure, and must be scored alongside every proposed addition.",
+    "What will be replaced is chosen at design time: name the sacrificial layer and its interval, or the whole becomes unrepairable.",
+    "Inherited proportion is a real value and never a structural argument; say which one you are making."
+  ],
+  "primitives": [
+    "load path (what travels through a member and where it goes next)",
+    "the relief test (which existing member is deflecting)",
+    "post (carries gravity) vs brace / wedged penetrating tie (resists racking, carries none)",
+    "racking, and the plane in which a frame has no bracing",
+    "joint as controlled weakening; net section lost at the mortise; where the cut lands relative to the strain",
+    "over-constraint (support added where nothing was failing, redirecting load)",
+    "the raising sequence; the weaker splice for a late-admitted member",
+    "wood movement, loosened joints, the wedge that is re-driven; kigoroshi",
+    "kuse - the warp of the actual stick; layout against material, not drawing",
+    "miegakari (exposed finish, judged by eye, carries nothing) vs hidden structure (judged by strength)",
+    "kiwari - the proportional module inherited rather than calculated",
+    "the story pole and full-scale layout board",
+    "sacrificial layer (sill, roof) with a designed replacement interval; rebuild-the-bay as ordinary work"
+  ],
+  "failure_mode": [
+    "Structuralist to a fault: it recognizes only what carries load, so anything whose value is expressive, epistemic, or ergonomic gets classified as trim - and the charter's mnemonic/taste and human-operability criteria are precisely where it is blind and openly hostile.",
+    "Load is a metaphor in software, and this lens will assert force diagrams with craft crispness that the domain does not license; it can reify an invented load path and then reason confidently from it.",
+    "Conservative toward addition and biased to the monolith: it prefers fewer, larger, integral members and will systematically underrate genuinely modular, pluggable, or cheaply-experimental designs that a frame has no analogue for.",
+    "Geometric determinism about ordering: it imports 'cannot be inserted once standing' into a domain where refactoring really can insert things later, manufacturing false path-dependence and overstating the weakness of the splice.",
+    "No statistical apparatus at all - no sampling, rates, discrimination, or uncertainty. It wants one right answer per joint and will state a judgment where a measurement was needed, and it cannot tell two similar candidates apart on evidence.",
+    "No account of adversaries, strategic actors, or systems with their own agenda; the frame does not push back, so gaming, Goodharting, and self-directed runtime behaviour are invisible to it.",
+    "Slow-craft time preference: seasoning measured in years and replacement intervals in decades, so it favours full-scale layout and deliberation over a cheap fast trial that would have answered the question this week.",
+    "Proportion-conservatism: kiwari trains it to defend an inherited module, so it may argue for preserving a six-phase shape on canonical grounds while believing itself to be arguing structure - the exact bias the charter warns against when it says prefer the smallest coherent architecture over preserving the acronym."
+  ],
+  "findings": [
+    "f-034",
+    "f-035",
+    "f-036",
+    "f-037"
+  ]
+}

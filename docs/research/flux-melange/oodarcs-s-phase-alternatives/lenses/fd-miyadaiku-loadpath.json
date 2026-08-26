@@ -1,0 +1,43 @@
+{
+  "id": "fd-miyadaiku-loadpath",
+  "kind": "base",
+  "parents": [],
+  "domain": "Japanese temple carpentry (miyadaiku) — kigumi fastener-free interlocking joinery, the kiwari proportional module system, timber seasoning and grain reading, and the shikinen sengu periodic rebuild cycle",
+  "axioms": [
+    "A frame is a closed system of forces: every member exists because a specific load must travel a specific path, and a member that carries no load unique to it is ornament regardless of how well it is carved.",
+    "Two members carrying the same load is not redundancy that adds safety but ambiguity that hides which member failed.",
+    "The joint is the contract: geometry cut to tolerance, not intent, is what makes a member seat — a contract specified on only one mating surface cannot be cut.",
+    "Members are pegged, not glued: anything added must be withdrawable without dismantling what stands around it.",
+    "All sizes derive from one module (kiwari); an off-module member forces every neighbour to be re-cut, so the true cost of an addition is measured in re-cuts, not in the member itself.",
+    "Timber has a seasoning time and the structure has a rebuild cadence; a member loaded at a cadence its material cannot hold splits, so trigger rate and pace layer must agree.",
+    "The standing structure is the incumbent and wins ties; an addition must be justified by an observable failure of the frame as it stands, not by a felt gap in its vocabulary."
+  ],
+  "primitives": [
+    "load (the concrete artifact or state entering an operation)",
+    "force path (entry member, transfer members, exit)",
+    "member (a phase or operation asserted to carry load)",
+    "joint / mating surface (input-output contract, state transition, storage location)",
+    "tolerance (whether a contract is machinable by an implementer as written)",
+    "peg vs glue (reversible, withdrawable artifact vs irreversible commitment)",
+    "kiwari module unit (the existing naming, gating, schema, and router conventions)",
+    "re-cut count (downstream changes an addition forces)",
+    "seasoning time / rebuild cadence (pace layer)",
+    "grain direction (the direction the surrounding architecture already runs)",
+    "shore vs member (temporary side-loop vs continuous-load phase)"
+  ],
+  "failure_mode": [
+    "Systematically undervalues operations whose payoff is diffuse, generative, or probabilistic — anything whose 'load' is a raised hit rate rather than a nameable artifact reads to this lens as ornament, so it will be biased toward the no-S null and against Scout, Speculate, and any exploration-shaped candidate.",
+    "Treats the existing six phases as a sound standing frame rather than as an artifact that may itself be mis-cut; will not notice when the right answer is to re-cut Orient or Compound rather than to add or refuse a seventh member.",
+    "Conflates crispness with correctness: a candidate with a beautifully machinable contract around the wrong operation will outscore a vaguely specified candidate around the right one.",
+    "Blind to record integrity — cannot see contamination, authority drift, provenance loss, or citation hardening, because none of those are forces travelling through members.",
+    "Structural conservatism reads change cost as change risk, so it under-weights the cost of the status quo and has no vocabulary for opportunity cost or for compounding returns over time.",
+    "Naming, mnemonic quality, and social adoption of the model are outside its force diagram entirely, so it will not object to an unmemorable or unadoptable design that happens to be structurally sound."
+  ],
+  "findings": [
+    "f-016",
+    "f-017",
+    "f-018",
+    "f-019",
+    "f-020"
+  ]
+}

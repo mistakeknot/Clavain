@@ -1,0 +1,40 @@
+{
+  "id": "fd-fused-graded-allocation",
+  "kind": "fusion",
+  "parents": [
+    "fd-foraging-exploration-generator",
+    "fd-reconnaissance-provenance-contracts"
+  ],
+  "domain": "fusion of optimal-foraging/bandit allocation theory with intelligence-collection provenance doctrine — the tasking, grading, and expiry of exploration budget itself, whose fused object is the warrant: a tasked, graded, expiring unit of search spend",
+  "axioms": [
+    "An allocation change is a product: a shift in budget, model tier, or next-turn attention is a claim about the world and must be traceable to a warrant even though nothing was written down.",
+    "The parents' tension is structural and is investigated, not resolved: exactly the candidates that move attention are the ones no read filter can stop, and exactly the candidates a read filter can stop may move no attention. Every contract sits somewhere on that diagonal and must say where.",
+    "Expiry and patch memory pull on the same record — what must decay as belief must persist as budget state — so a contract that names only one store has not answered the question.",
+    "A trigger keyed to the agent's own state estimate is self-tasking; without an issuing authority, exploration budget is released by the party that wants it, which is authority laundering in the budget domain.",
+    "Discovery counts are meaningless without a warrant per probe: an unattributed discovery cannot distinguish a better policy from a larger licence from a contaminated shared store.",
+    "A fused finding must collapse if either parent's primitive is removed; anything that survives single-parent reasoning belongs to that parent."
+  ],
+  "primitives": [
+    "warrant — a tasked, graded, expiring unit of exploration budget",
+    "markable versus unmarkable output (graded product versus behavior change)",
+    "patch prior as an ungraded inherited claim that steers spend",
+    "self-tasking predicate and its issuing authority",
+    "dual store: decaying belief record versus non-decaying lead/budget ledger",
+    "grade-weighted, arm-attributed discovery event and regret",
+    "laundering-into-behavior path (unpromoted speculation to allocation knob)",
+    "stop-rule lapse and re-tasking"
+  ],
+  "failure_mode": [
+    "Can manufacture cross-terms rhetorically — risks relabeling a single-parent finding as fused by attaching a decorative intersection_justification.",
+    "Its central move, demanding a warrant for every spend, imports bureaucracy that may cost more than the exploration it governs.",
+    "Treats 'add a record' as the universal repair, inflating contracts rather than eliminating candidates at the hard gates.",
+    "May over-index on the pilot's measurement machinery and under-serve the semantic-phase question the charter actually asks.",
+    "Weak on mnemonic quality, phase count, and whether any of this deserves a letter at all."
+  ],
+  "findings": [
+    "f-042",
+    "f-043",
+    "f-044",
+    "f-045"
+  ]
+}

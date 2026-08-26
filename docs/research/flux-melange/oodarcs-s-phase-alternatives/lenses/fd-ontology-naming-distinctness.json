@@ -1,0 +1,40 @@
+{
+  "id": "fd-ontology-naming-distinctness",
+  "kind": "base",
+  "parents": [],
+  "domain": "conceptual ontology and taxonomy design, organizational learning and knowledge transfer, and naming/mnemonic craft",
+  "axioms": [
+    "A concept is distinct only if practitioners given one-line definitions sort real cases the same way; if the surrounding prose must adjudicate, the joint has not been carved.",
+    "Conditional, non-mandatory invocation is strong evidence of a capability or side-loop rather than a lifecycle phase.",
+    "Constraining the candidate search to one initial letter is a search-space distortion, and any operation renamed or dropped to fit the acronym is a disclosed cost.",
+    "Organizational learning research treats knowledge transfer as a capability exercised inside existing stages; promoting it to a named stage requires local evidence that overrides that default.",
+    "A term that cannot be spoken mid-cycle, written as a log verb, and turned into an artifact noun will not survive daily use.",
+    "Near-synonyms with identical input/output contracts are one candidate, and scoring them separately manufactures false diversity.",
+    "Adding a letter to a model is a permanent taxonomy cost paid by every future reader, not a one-time design decision."
+  ],
+  "primitives": [
+    "concept definition and its boundary cases",
+    "category verdict: phase / side-loop / capability / artifact type",
+    "input-output contract",
+    "semantic overlap with Observe, Orient, Reflect, Compound",
+    "longlist diversity and synonym clusters",
+    "term: verb-shape, imperative form, artifact noun, abbreviation",
+    "acronym constraint",
+    "sorting/agreement test over cycle vignettes",
+    "absorptive capacity and boundary object"
+  ],
+  "failure_mode": [
+    "Can talk itself out of every candidate on parsimony grounds and miss a genuinely novel operation that happens to be adjacent to an existing one.",
+    "Over-indexes on definitional tidiness and naming taste while ignoring whether the mechanism actually improves learning or transfer in practice.",
+    "Blind to runtime behavior: says nothing about triggers, cadence, stability, or what happens when the operation fires a thousand times.",
+    "Ignores governance — a well-named, well-carved operation can still create a competing truth channel and this lens will not see it.",
+    "Risks importing organizational-learning findings from human institutions into an agent runtime without checking that the transfer holds."
+  ],
+  "findings": [
+    "f-011",
+    "f-012",
+    "f-013",
+    "f-014",
+    "f-015"
+  ]
+}

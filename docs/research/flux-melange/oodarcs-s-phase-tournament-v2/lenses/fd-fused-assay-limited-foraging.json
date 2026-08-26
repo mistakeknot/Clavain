@@ -1,0 +1,47 @@
+{
+  "id": "fd-fused-assay-limited-foraging",
+  "kind": "fusion",
+  "parents": [
+    "fd-foraging-exploration-generator",
+    "fd-assay-hallmark-grading"
+  ],
+  "domain": "assay-limited foraging — the exchange rate between a loop's search budget and its grading capacity, where probe economics (patch depletion, bandit allocation, regret) meets hallmarking authority (two-tier assay, mark, remedy tolerance, date letter, sampled re-trial, melt with retained record)",
+  "axioms": [
+    "An S contract has two budgets, not one: the cost of taking a probe and the cost of grading it. A candidate that states only the first will accumulate ungraded speculative stock at exactly the rate its exploration succeeds.",
+    "Throughput is a laundering mechanism. Unmarked material that can travel gets priced as graded, so raising the probe rate past the assay rate creates a competing truth channel without any read filter ever being violated.",
+    "A discovery count that does not charge the sample the assay consumed is not a measurement; profligate candidates outscore frugal ones whenever the corpus scores hits and not costs.",
+    "Expiry is an allocation signal, not metadata: a date letter that lapses is a patch-depletion signal about knowledge already exploited, and a scheduled sampled re-assay of promoted material is a policy change disguised as bookkeeping.",
+    "The generator of a candidate may not grade it. This binds the tournament itself: blind scores struck by the lens that produced the candidate are self-struck punches.",
+    "Retirement must be arm-indexed. Melting a failed probe while keeping its record only pays for itself if the record lowers the sampling weight of the source domain that produced it.",
+    "A losing condition without a remedy tolerance is a coin flip; the pass band belongs to the claim, denominated in regret-or-discovery against the null after probe costs.",
+    "Collapsing the touchstone screen into the cupellation destroys both: the cheap indicative probe stops being cheap and the destructive dispositive test stops being severe."
+  ],
+  "primitives": [
+    "assay-limited search budget (probe rate slaved to grading throughput)",
+    "exchange rate: probes per unit of grading capacity",
+    "two-tier probe ladder (touchstone screen -> cupellation) and its promotion rule",
+    "charged discovery accounting (discovery rate net of consumed sample)",
+    "date letter as patch-depletion signal / staleness trigger",
+    "Pyx re-assay of promoted Compound material (subtractive policy operation)",
+    "maker/office separation inside a single loop, including inside the pilot's scoring",
+    "arm-indexed failure record (negative transfer as a prior over the source patch)",
+    "remedy tolerance on the losing condition (pass band in regret units)",
+    "circulation boundary as an arm restriction (leaked stock inflates value estimates and corrupts regret itself)"
+  ],
+  "tension": "Foraging holds that probing is cheap, repeatable and virtuous because the cost of never exploring compounds and a lens that generates nothing has failed. Assaying holds that probing irreversibly consumes the sample, that every claim must be marked, dated and tolerated by an office distinct from the maker, and that ungraded work which can travel is already a lie. The lens does not resolve this: it locates, in each candidate, where the disagreement is being silently settled by omission — usually by stating a turn budget for exploration and no budget at all for verification.",
+  "hard_constraint": "Intersection-only. A finding is admissible only if it requires BOTH parent perspectives and carries an intersection_justification naming the foraging contribution, the assay contribution, and why neither parent alone reaches it. Bare 'no stop rule' or bare 'no authority grade' findings are parent-alone and must be discarded.",
+  "failure_mode": [
+    "Institution inflation: the assay half tends to answer every gap with another office, ceremony, or artifact type, which is precisely the ornamental-seventh-step and cognitive-cost risk the charter warns against.",
+    "Can strangle generation by pricing verification so high that no exploration contract clears its own gate — reproducing safety-through-never-generating by an economic route rather than a rhetorical one.",
+    "Assumes a gradeable dimension exists; where cross-domain transfer has no fineness scale, the lens may demand tiers and tolerances that no viable candidate can supply.",
+    "Both parents are weak on mnemonic economy and on whether an operation deserves a permanent letter, so it will over-favor contracts that are operationally crisp but badly named.",
+    "Cycles are calendrical (date letter, annual Pyx) and rate-based (probe budget) rather than pace-layered, so fast/slow shear coupling between OODARC layers can go unexamined.",
+    "May over-apply the maker/office separation to a single-agent loop where no second office exists, converting a design constraint into an unsatisfiable topology requirement."
+  ],
+  "findings": [
+    "f-046",
+    "f-047",
+    "f-048",
+    "f-049"
+  ]
+}

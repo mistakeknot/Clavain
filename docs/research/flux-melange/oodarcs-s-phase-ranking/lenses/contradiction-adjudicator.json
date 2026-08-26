@@ -1,0 +1,30 @@
+{
+  "id": "contradiction-adjudicator",
+  "kind": "probe",
+  "parents": [
+    "fd-decision-comparative-ranking-integrity",
+    "fd-changeringing-method-truth"
+  ],
+  "domain": "Adjudication probe for round 1 PROBE-DISAGREEMENT targeting: rules on the disputed pair at charter :36/:54 (rating-scale underdetermination vs policy-field-is-one-dial), deciding on the filed contracts rather than by taste, and reporting any new defect the contradiction exposes.",
+  "axioms": [
+    "A disputed location is decided on the filed contracts where they decide it; only where they do not is it an irreducible taste call.",
+    "Two defects at one location are ranked, not averaged: state which dominates and whether remedying one worsens the other.",
+    "Precision applied to a malformed object launders it; check that a proposed repair does not remove the visible softness that flags a result as non-load-bearing."
+  ],
+  "primitives": [
+    "disputed-location adjudication",
+    "dominance ordering between co-located defects",
+    "anti-alignment of remedies",
+    "misfiling detection (candidate vs control)"
+  ],
+  "failure_mode": [
+    "Bounded to the disputed location; it does not sweep for new regions.",
+    "Can over-credit whichever prior finding cites more source contracts."
+  ],
+  "findings": [
+    "f-026",
+    "f-027",
+    "f-032",
+    "f-033"
+  ]
+}

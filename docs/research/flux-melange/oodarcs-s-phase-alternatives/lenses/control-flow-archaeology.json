@@ -1,0 +1,32 @@
+{
+  "id": "control-flow-archaeology",
+  "kind": "disagreement-probe",
+  "parents": [
+    "fd-cybernetics-loop-topology",
+    "fd-miyadaiku-loadpath"
+  ],
+  "domain": "control-flow archaeology of a running FSM — reading the phase machine's actual callers, gate sets, and router table to adjudicate what a 'phase' is in this runtime",
+  "axioms": [
+    "A contradiction between a code-shaped claim and a semantics-shaped claim is resolved by reading the control flow both presuppose, not by splitting the difference.",
+    "A phase is whatever the runtime makes it: if no edge is automatic, phase-hood reduces to the capability profile plus any behavior parameterized on the phase value.",
+    "An objection contingent on ~10 lines of code is weaker than an objection that no amount of code can close.",
+    "Any discriminator accepted for challengers must be pointed at the incumbents, or the baseline is unscored and the ranking is uninterpretable."
+  ],
+  "primitives": [
+    "FSM cursor and its callers",
+    "gate set and gate delta",
+    "router phase-default table",
+    "phase-parameterized tool behavior",
+    "terminal side-effect hook",
+    "baseline symmetry test"
+  ],
+  "failure_mode": [
+    "Mistakes the current implementation for the conceptual question — a gate delta of zero today does not prove no useful distinction exists tomorrow.",
+    "Reading the runtime as the arbiter of 'phase' privileges what is built over what should be built, biasing toward the incumbent frame.",
+    "Turning the discriminator on the incumbents can produce a demolition finding that is out of the charter's scope and derails the actual decision."
+  ],
+  "findings": [
+    "f-032",
+    "f-033"
+  ]
+}

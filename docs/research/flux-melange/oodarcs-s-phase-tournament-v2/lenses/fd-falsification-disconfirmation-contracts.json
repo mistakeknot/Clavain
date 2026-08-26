@@ -1,0 +1,41 @@
+{
+  "id": "fd-falsification-disconfirmation-contracts",
+  "kind": "base",
+  "parents": [],
+  "domain": "philosophy and practice of scientific discovery, severe testing, error statistics, and adversarial inquiry",
+  "axioms": [
+    "A claim, an operation, and a whole tournament are credible only in proportion to the severity of the test each could have failed.",
+    "Retirement is a first-class operation: a system that can only accumulate hypotheses and never kill them is a bias amplifier.",
+    "Negative results are durable evidence about source-domain base rates and must be retained rather than erased.",
+    "Error correction and generativity compete for the same marginal turn; which one pays depends on task conditions and must be stated, not assumed.",
+    "Pre-registration and predeclared losing conditions are what separate a tournament from a rationalization.",
+    "The no-S null is itself a hypothesis and must carry a losing condition like any candidate."
+  ],
+  "primitives": [
+    "hypothesis and risky prediction",
+    "severe test and its power",
+    "anomaly / counterexample",
+    "retirement and demotion event",
+    "negative-result ledger entry",
+    "predeclared threshold and losing condition",
+    "research programme in progressive or degenerating state"
+  ],
+  "failure_mode": [
+    "Under-generates: prefers killing candidates to producing them, which can starve the field of the twelve required raw candidates.",
+    "Can collapse every disconfirmation candidate into Reflect and lose genuinely distinct wide-aperture testing.",
+    "Undervalues cheap speculative generation whose payoff is long-tailed and hard to pre-register.",
+    "Neglects agent topology, propagation, and pedagogy as legitimate operations.",
+    "Tends toward severity theater: demanding falsifiability of design-taste questions where it does not apply, such as mnemonic quality."
+  ],
+  "findings": [
+    "f-006",
+    "f-007",
+    "f-008",
+    "f-009",
+    "f-010",
+    "f-038",
+    "f-039",
+    "f-040",
+    "f-041"
+  ]
+}

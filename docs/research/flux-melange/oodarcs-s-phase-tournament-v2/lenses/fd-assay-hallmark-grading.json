@@ -1,0 +1,42 @@
+{
+  "id": "fd-assay-hallmark-grading",
+  "kind": "base",
+  "parents": [],
+  "domain": "Precious-metal assaying and the hallmarking trades — touchstone streak testing against graded needles, destructive fire assay by cupellation on a drawn sample, the four-part hallmark punch (maker, fineness, assay office, date letter), statutory remedy tolerances, the Trial of the Pyx as an independently juried re-assay of a whole production year, and the assay office's power to deface or melt down substandard work rather than return it unmarked.",
+  "axioms": [
+    "A grade is a mark struck onto the artifact, not a property of the store the artifact happens to sit in; ungraded material that can travel will eventually be priced as graded.",
+    "The office that grades must be constitutionally distinct from the maker that produced the work; self-certification is the definition of authority laundering.",
+    "Testing is a two-tier ladder: a cheap non-destructive indicative screen, and a costly destructive dispositive assay. Collapsing the tiers destroys both cheapness and severity.",
+    "A claim is incomplete without a date letter and a tolerance: staleness and the pass band are parts of the claim, not metadata about it.",
+    "What already shipped must be re-tried on a schedule against an independent standard, by sampling, because production drifts under adversarial incentive.",
+    "Failing material is removed from circulation but its failure is recorded; defacement and melting are not the same act as erasing the evidence of the assay.",
+    "The assay consumes the sample: probing has irreversible cost, so a discovery count that does not charge that cost is not a measurement."
+  ],
+  "primitives": [
+    "mark / hallmark punch (authority grade carried by the artifact)",
+    "assay office vs maker (grading authority separation)",
+    "touchstone screen (cheap indicative probe)",
+    "cupellation (costly destructive dispositive test)",
+    "remedy tolerance (pass band / losing condition)",
+    "date letter (issue time, expiry, staleness)",
+    "trial plate and jury (independent standard, re-verification)",
+    "Trial of the Pyx (scheduled sampled re-trial of promoted material)",
+    "melt / deface (retirement of an artifact with retained failure record)",
+    "circulation boundary (read filter between marked and unmarked stock)"
+  ],
+  "failure_mode": [
+    "Systematically underweights generation: the assay trades certify material they did not create, so this lens can drift toward gatekeeping and under-produce affirmative exploration contracts unless forced to file its own first.",
+    "Blind to exploration/exploitation allocation — it has no theory of where to probe next, only of how to grade what arrives.",
+    "Assumes a stable external standard (trial plate) exists; in open-ended cross-domain transfer there may be no fineness scale, so it may demand a grading precision that no candidate can supply and eliminate viable candidates at hard gate 4.",
+    "Institution-heavy: tends to propose an extra office or ceremony, inflating implementation and cognitive cost, which is exactly the ornamental-seventh-step risk the charter warns about.",
+    "Treats value as one-dimensional (fineness), so it may flatten candidates whose worth is lateral or generative rather than gradeable.",
+    "Under-attends to pace layering and shear; its cycles are calendrical (date letter, annual Pyx) rather than layered, so it can miss fast/slow coupling failures."
+  ],
+  "findings": [
+    "f-026",
+    "f-027",
+    "f-028",
+    "f-029",
+    "f-030"
+  ]
+}

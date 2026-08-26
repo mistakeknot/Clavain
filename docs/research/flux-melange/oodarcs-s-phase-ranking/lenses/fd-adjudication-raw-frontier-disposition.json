@@ -1,0 +1,39 @@
+{
+  "id": "fd-adjudication-raw-frontier-disposition",
+  "kind": "base",
+  "parents": [],
+  "domain": "Evidence adjudication for multi-round review ledgers — claim-status discipline (raw / verified / refuted / bounded), independent confirmation versus lens self-attestation, citation forensics against source code, tracking of claims that silently depend on already-refuted claims, and the equivalence/clustering predicates that decide whether two filed contracts are one candidate or two.",
+  "axioms": [
+    "A file:line citation written by the lens that filed the claim is a claim, not a confirmation; verification requires a check performed by a party that did not benefit from the finding.",
+    "Disposition is not binary — 'verified', 'refuted', and 'bounded to a narrower scope' are different outcomes, and a charter that offers only the first two forces overclaiming on partially-true findings.",
+    "A candidate inherits the status of the premises its contract rests on; if a supporting finding was refuted or repaired, that dependency must travel with the candidate into ranking or the ranking is built on a knocked-down premise.",
+    "Clustering happens before scoring and therefore decides outcomes: an incomplete equivalence key silently merges distinct candidates or splits one, and no downstream comparison can recover from it.",
+    "'Give X its strongest contract or explain why it dissolves' is only executable if the dissolution test is named; otherwise the answer is decided by whichever framing is written first.",
+    "Unverified findings may inform prioritization but must not be cited as settled in a recommendation; the charter is defective if it permits that laundering rather than merely failing to forbid it."
+  ],
+  "primitives": [
+    "finding id and its status field (raw / verified / refuted / demoted-to-convergence)",
+    "self-attestation versus independent adjudication as distinct evidence classes",
+    "citation triple: claim, file:line, and the check that would falsify it",
+    "refutation-dependency edge (candidate → refuted or repaired parent finding)",
+    "disposition vocabulary and the artifact each disposition must name",
+    "equivalence/clustering key and its known-missing dimensions (spend, issuing authority, persistence)",
+    "dissolution test for a candidate absorbed into an existing phase or contract",
+    "coupling rule between disposition status and eligibility for shortlisting"
+  ],
+  "failure_mode": [
+    "Procedural bias — will judge whether a conclusion is properly established and can pass a well-documented but substantively wrong disposition while flagging a correct one that is under-cited.",
+    "Cannot assess whether a candidate is a good design; it has no criteria for semantic distinctness, taste, or cost, so it under-serves the ranking half of the charter entirely.",
+    "Tends to inflate process requirements — can demand verification machinery whose cost exceeds the decision's stakes, especially for P3-shaped findings that will never be load-bearing.",
+    "Blind to measurement feasibility: will accept 'verify against the runtime' as executable without asking whether the runtime exposes the quantity at all.",
+    "Prone to treating the prior ledger as authoritative structure rather than as one more artifact that may itself be mis-clustered.",
+    "Weak on aggregate effects — audits findings one at a time and can miss that a set of individually adequate dispositions still leaves the frontier's top unverified."
+  ],
+  "findings": [
+    "f-001",
+    "f-002",
+    "f-003",
+    "f-004",
+    "f-005"
+  ]
+}

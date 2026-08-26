@@ -1,0 +1,57 @@
+{
+  "id": "fd-fused-quota-blinded-foraging",
+  "kind": "fusion",
+  "parents": [
+    "fd-foraging-exploration-generator",
+    "fd-fused-warranted-variation"
+  ],
+  "domain": "quota-blinded foraging -- fisheries stock assessment as the mechanism domain where optimal-foraging GENERATION theory meets the VARIATION WARRANT, and the fused object is FISHERY-DEPENDENT EVIDENCE: the issuer of minting licences is itself a forager allocating a scarce licence portfolio, and every observation it has was produced under the quota it set. A rate floor is not only a source of grade inflation; it is an intervention on the measurement channel that the warrant's own renewal decision depends on, so output is hyperstable -- flat at the floor whether the patch is rich or exhausted -- exactly as catch-per-unit-effort stays flat while a stock collapses.",
+  "axioms": [
+    "A quota is an intervention on the measurement channel, not merely an authority instrument. Mint rate under a floor is pinned by the floor, so volume carries zero information about patch richness and the arm that is still producing looks identical whether the field is rich or empty.",
+    "Warrant renewal is therefore a decision without evidence: the signal that should trigger rate expiry is the yield the quota flattened, so every contract chooses between a calendar expiry (a stationary stop rule in a non-stationary world) and a signal-driven expiry read off contaminated data -- and almost none states which horn it took.",
+    "Under a binding floor the mean cohort grade is a property of the floor and the MARGINAL grade -- the last item minted -- is a property of the patch. A junk tail at the end of a cohort is the signature of a quota that exceeded its patch, and it is the cheapest discriminator available to the tournament.",
+    "Yield is computed on landings, not catch. A generator under a floor rationally high-grades, killing weak hypotheses before they enter the record, so the most disciplined-looking arm may be the one discarding hardest, and its unrecorded mortality is invisible to every gate the charter specifies.",
+    "The only uncontaminated estimate of richness is what is still minted when no licence is issued. Withholding tasking for a bounded window is a measurement, not an abstention, and an untasked fixed-effort survey is the loop's only fishery-independent channel -- deliberately uneconomic, worthless as exploration, indispensable as calibration.",
+    "Issuing licences across generators is a second bandit whose feedback the issuer manufactured; regret must be denominated per warrant, and an issuer that has never run a fallow window has no unbiased estimator for any arm it has been licensing generously.",
+    "Grades drift with cohort volume because a quota forces a distribution, and the no-S null's incumbent exploration rate was itself set under earlier tasking, so 'value relative to the null' can be measuring a moved arm against a moved reference with a stretching ruler.",
+    "A fused finding must collapse if either parent is removed: strip the quota and it is parent A's ordinary demand to measure discovery against a null; strip foraging's depletion sensor and it is parent B's ordinary worry that tasking authority inflates grades."
+  ],
+  "primitives": [
+    "hyperstable mint rate (catch-per-unit-effort pinned to the floor)",
+    "fishery-dependent versus fishery-independent evidence about a patch",
+    "the licence portfolio and the issuer's regret (allocating warrants as a second bandit)",
+    "marginal cohort grade -- the last item minted under a warrant -- versus mean grade",
+    "landings versus catch: minted-and-recorded / minted-and-discarded / never-minted",
+    "high-grading and discard mortality under a binding quota",
+    "the fallow window (withheld tasking) as an instrument, and the spontaneous zero-licence mint rate as a giving-up read",
+    "the untasked fixed-effort survey producing base rates rather than leads",
+    "blind expiry: calendar stop rule versus depletion predicate read through a contaminated channel",
+    "ruler drift -- grade as rank-within-ordered-cohort versus absolute standard",
+    "effort creep: the rising attention price of a constant quota",
+    "shifting baseline of the no-S null's incumbent minting rate",
+    "the empty-field test (what would be observed if the patch were exhausted)"
+  ],
+  "tension": "Parent A holds that the cost of never exploring is real and compounding, and that a floor is the only external tasking a generator can be given -- a lens that produces nothing has failed however safe its criticism sounds. Parent B holds that a quota manufactures the evidence of its own success. Read through A's allocation axioms the consequence is worse than grade inflation: the floor destroys the depletion signal that A's own policy needs, so the issuer is blind in the one direction that always reads healthy. Remove the floor to restore the sensor and the generator receives no tasking at all; keep the floor to task the generator and the renewal decision runs on evidence the floor produced. The lens does not choose. It locates, contract by contract, where the choice was already made by omission -- almost always by naming a trigger and a rate while never naming what would be observed, through what uncontaminated channel, if the field were empty.",
+  "hard_constraint": "Intersection-only. A finding is admissible only if it requires BOTH parents and carries an intersection_justification naming the foraging primitive, the warrant primitive, and what fails if either is removed. Because parent B already contains parent A, a finding is fused here ONLY if the quota is treated as an intervention on the measurement channel -- hyperstability under a floor, issuer as forager with self-generated feedback, fallow window and untasked survey as instruments, marginal cohort grade as the binding-quota test, discards as yield that never reaches the record. Anything that stands with the quota read purely as an authority instrument is parent B's finding; anything single-channel is parent A's.",
+  "generated_candidates": [
+    "FALLOW -- policy-class candidate that withholds exploration tasking for a bounded, pre-declared window and records what is still minted spontaneously; emits no report, changes only exploration/exploitation policy state (fills the charter's under-served policy-not-report slot).",
+    "SURVEY -- untasked fixed-effort, fixed-schedule sampling of the pre-registered corpus whose product is source-domain base rates rather than leads; explicitly not Scout (tasked search, lead as output) and named in neither charter.",
+    "SUNSET -- primarily subtractive candidate that retires arms and expires warrants on marginal cohort grade rather than on a calendar; its output is a smaller licence portfolio, not an artifact."
+  ],
+  "failure_mode": [
+    "Metrological nihilism: can argue that no generated field is interpretable, including the field it is itself producing under the charter's own quota, and talk itself out of every affirmative candidate -- safety-through-never-generating arriving from the measurement side.",
+    "Its central instrument (the fallow read / untasked survey) requires counterfactual data no single-shot review round can collect, so it may demand evidence that cannot exist at tournament timescale and eliminate viable candidates for lacking it.",
+    "Assumes minting licences are the scarce good; where generation is cheap and grading or execution is the true constraint, the portfolio framing misprices the whole field.",
+    "Inherits both parents' allocation bias and therefore under-attends disconfirmation and severe testing as such: it will price a falsification candidate by its mint rate and miss that its value is error correction rather than variation.",
+    "Blind to structural and implementation cost -- indifferent to whether withholding tasking, scheduling an untasked survey, or recording discards requires re-cutting the phase machine, router, and schema.",
+    "Treats naming and mnemonic durability as noise by construction (P3), so adoption failure of a winning contract is a blind spot.",
+    "Second-order fusion risk: parent B is itself a fusion, so the lens can drift into re-filing B's rate-versus-richness confound with the word 'signal' added as ornament instead of doing the sensor-blinding work.",
+    "The fisheries analogy can be pushed past its measurable analogue in an agent loop -- discards, effort creep, and hyperstability all presume a recording path fine-grained enough to detect them, which the current runtime may simply not have."
+  ],
+  "findings": [
+    "f-062",
+    "f-063",
+    "f-064",
+    "f-065"
+  ]
+}

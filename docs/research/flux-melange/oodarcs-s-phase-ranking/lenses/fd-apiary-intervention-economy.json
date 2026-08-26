@@ -1,0 +1,51 @@
+{
+  "id": "fd-apiary-intervention-economy",
+  "kind": "base",
+  "parents": [],
+  "domain": "Traditional apiculture and bee husbandry (skep, log-hive, and movable-frame): the beekeeper's year with its flow and dearth windows, inspection as a treatment that costs the colony, non-invasive reads (hefting for stores, watching the entrance) preferred over opening the box, the super/split asymmetry of removable addition against irreversible multiplication, the winter take/leave share whose error is invisible in September and lethal in February, requeening and rendering old comb as the highest-yield subtractive acts, the proliferation of near-identical named swarm-control manipulations that practitioners collapse to one or two, swarming as the colony's own decision taken without the keeper's policy, drift and robbing across a shared yard with the hive tool as vector on the operator's hands, the nucleus colony as small reversible trial, the hive record card as the memory that outlives the keeper, and the let-alone school as a rival doctrine with real overwintering results",
+  "axioms": [
+    "Opening the box is a treatment, not an observation: any measurement that requires disturbing an arm has become part of the arm, and must be charged to it.",
+    "Prefer the read you can take from outside - heft the hive, watch the entrance - and accept a coarser answer obtained without disturbance over a precise one obtained by opening.",
+    "The right act is set by where you are in the year; an act correct in a flow is fatal in dearth, so a recommendation without a window and a condition is a mis-timed recommendation.",
+    "Additions are paid forever: what you add you tend every cycle, and per-cycle upkeep - not build effort - is the cost that decides the ranking.",
+    "At equal expected benefit, what can be taken back off next week outranks what creates a second thing to be maintained and wintered permanently.",
+    "The colony has its own agenda: before mandating a behaviour, establish the rate at which it already happens unbidden, and count only what the spontaneous rate leaves on the table.",
+    "Removal is ordinarily the high-yield act - requeen, cull, render the comb - and addition is ordinarily the one people prefer to do; the literature reflects the preference, not the yield.",
+    "Named manipulations multiply in books and collapse in the hands of anyone working under load; the test of a distinct policy is a situation in which a practitioner would do one and not the other.",
+    "The unit of decision is the yard, not the hive: what leaks between colonies travels through shared substrate and through the keeper's own hands.",
+    "Every arrangement is eventually untended; judge it by what fails first when nobody tends it.",
+    "A failure that is silent until after the reversal window has closed is not covered by a reversal condition; name the early symptom or lower your confidence.",
+    "Doing less is a real school with real results, and must be beaten on stated evidence rather than assumed away."
+  ],
+  "primitives": [
+    "inspection (and its price: a day's setback, chilled brood, provoked robbing)",
+    "hefting and entrance-watching (the outside-the-box read)",
+    "the bee-year: build-up, flow, dearth, wintering",
+    "super (removable addition) vs split / artificial swarm (irreversible multiplication)",
+    "the take/leave share of winter stores",
+    "requeening, culling a drone-layer, rendering old comb (subtractive acts)",
+    "swarming as spontaneous behaviour; swarm-control manipulations (Demaree, Pagden, Snelgrove, Taranov) as near-synonymous named acts",
+    "drift and robbing between colonies; the hive tool as vector",
+    "the nucleus colony (small reversible trial on the same stock)",
+    "the hive record card (memory that outlives the keeper)",
+    "the yard/apiary as unit of decision",
+    "standing obligation: per-cycle upkeep per thing kept",
+    "let-alone doctrine as the null"
+  ],
+  "failure_mode": [
+    "Conservative by accounting rather than by argument, so it systematically under-detects the rare case where a genuinely new phase or capability is warranted; its default verdict is 'fewer things, tended better' and it will reach that verdict on thin evidence.",
+    "Prices recurring upkeep well and one-time construction badly, so it over-penalizes designs with high build cost and near-zero maintenance, and under-penalizes cheap-to-maintain designs that are conceptually wrong.",
+    "Assumes a living system with its own agenda that partly regulates itself; where the runtime is genuinely inert and does nothing unless instructed, its 'it happens anyway' and 'leave them alone' arguments misfire and it will credit a null that has no mechanism.",
+    "Calendar-bound: it imports seasonal irreversibility into a domain where many acts are cheap and reversible, so it can manufacture false urgency ('the window closes') or false fatalism about changes that could simply be redone.",
+    "Its evidence standard is practitioner observation, which slides easily into unfalsifiable craft intuition; it is weak at formal proof, at ledger and citation forensics, and at saying precisely how it knows.",
+    "Blind to structural and representational identity: it detects sameness only through 'nobody would ever choose between these in practice', so two candidates that are formally distinct but practically merged look identical to it, and two that are formally identical but feel different in the hand may not.",
+    "Assumes a benevolent single keeper and a non-strategic system; it has no account of adversarial participants, of deliberate gaming, or of asynchronous multi-agent coordination beyond contamination through shared substrate.",
+    "Treats measurement disturbance as pervasive, so it may over-reject pilots that in software genuinely can be instrumented without perturbing the thing measured."
+  ],
+  "findings": [
+    "f-028",
+    "f-029",
+    "f-030",
+    "f-031"
+  ]
+}

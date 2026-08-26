@@ -1,0 +1,50 @@
+{
+  "id": "fd-fused-grading-arm-allocation",
+  "kind": "fusion",
+  "parents": [
+    "fd-foraging-exploration-generator",
+    "fd-fused-assay-limited-foraging"
+  ],
+  "domain": "grading-arm allocation — foraging axioms applied reflexively to the assay apparatus that throttles them, where the fused object is THE SPLIT: one indivisible pool of loop attention contested by probing and grading, so grading capacity is an arm rather than a wall, the assay queue is a depleting patch, and the choice of which speculative stock is ever graded is a second bandit with its own regret",
+  "axioms": [
+    "A loop has one attention pool, not two purses. Every graded punch is a probe not taken, so the probes-per-punch exchange rate is an allocation decision with its own regret — and a contract that budgets exploration without budgeting verification has not been throttled by the assay rule, it has escaped it, because a throttle with no declared denominator binds nothing.",
+    "Slaving the probe rate to a fixed grading throughput is a stationary policy asserted as a physical constant; in a non-stationary environment that is linear regret by construction. The split itself needs a date letter, a trigger, and a stop rule, exactly like the artifacts it governs.",
+    "You cannot grade everything, so what reaches the furnace is an arm-choice. A queue ordered by expected promotion value is pure exploitation inside the assay bandit, and the stock never pulled from its tail is a cost no discovery count records.",
+    "Never-assayed is not assayed-and-failed. Any arm-indexed retirement prior fed by a queue selected on expected success is learning source-domain base rates from a censored sample, and a two-state record (promoted / not promoted) makes the retention of failed probes uninterpretable rather than merely incomplete.",
+    "A sampling weight that can only fall is an absorbing barrier: the patch is never re-probed, so the record that condemned it can never be corrected. Retirement needs a decay clock and a sampling floor or patch abandonment becomes self-confirming — unfalsifiability that lives in budget weights, where no read filter, grade, or expiry can reach it.",
+    "Regret must be denominated in pool-attention, not in probes. An arm that transfers spend from grading to probing at a constant turn count has bought its margin from the other side of the same purse, and the no-S null is undercharged whenever the grading its Reflect and Compound legs already perform is billed to no arm.",
+    "Governance clauses are priced in probes. In a single-agent loop, maker/office separation is a temporal split, so a mandated independent grader is a probe-rate cut written in someone else's vocabulary; and every contract bounds probing while none bounds grading, leaving verification spend unbounded on the side no hard gate inspects.",
+    "Subtraction is a generator: pruning stock releases grading capacity and therefore makes probes affordable, so a retirement candidate's yield is denominated in probes freed, not beliefs deleted."
+  ],
+  "primitives": [
+    "the split — one pool, two draws (probe spend versus grade spend)",
+    "probes-per-punch exchange rate as a decision variable with its own regret and expiry",
+    "the assay queue as a depleting patch (marginal value of further grading; rational tail abandonment)",
+    "the second bandit — assay-exploitation (cupel the best) versus assay-exploration (screen to estimate a domain's base rate)",
+    "screen-rate and cupel-rate as separate arms at different unit costs",
+    "censored prior — never-assayed masquerading as graded negative in an arm-indexed record",
+    "three-state stock record: promoted / assayed-and-failed / never-assayed",
+    "absorbing barrier and sampling floor on retirement weights; decay clock on melt records",
+    "two-currency regret and the pilot's pool meter (grading turn versus probing turn in the recording path)",
+    "the office turn — separation of maker and office priced as foregone probes",
+    "stop rule on the verification side (termination and capacity cap on re-assay)",
+    "staleness of policy rather than product — expiry on the split, queue rule, and sampling weights"
+  ],
+  "tension": "Parent B contains parent A and then freezes it: it borrows foraging's vocabulary for the probe side and turns the assay side into a wall. Turned back on B, foraging says the wall is an arm — under-grading a rich patch is rational allocation, the queue's tail is rightly abandoned, and a fixed exchange rate is a stationary policy accruing linear regret. Assaying says that same loop is a mint of unmarked stock that will travel, that a sample never fire-assayed is not a negative result, and that the office must be paid. Both are correct and the lens does not choose. It locates, contract by contract, where the disagreement was already settled by omission — almost always by declaring a turn budget for exploration and no budget, no split rule, and no queue policy at all for verification.",
+  "hard_constraint": "Intersection-only. A finding is admissible only if it requires BOTH parents and carries an intersection_justification naming the foraging primitive, the assay primitive, and what fails if either is removed. Because parent B already embeds parent A, a finding is fused here ONLY if foraging's axioms are applied REFLEXIVELY to the assay apparatus — grading budget as arm, assay queue as depleting patch, retirement prior as censored sample, exchange rate as stationary policy under non-stationarity. Anything that still stands with the assay half treated as a fixed wall is parent B's finding; anything single-currency is parent A's.",
+  "failure_mode": [
+    "Meter obsession: can spend the whole round on pilot accounting and split arithmetic while under-serving the semantic-phase question the charter actually asks — whether any S deserves a letter at all.",
+    "Assumes a single fungible attention pool; where probing and grading genuinely draw on different resources (wall-clock versus human review, or a second agent with idle capacity), the split framing manufactures a scarcity that does not exist.",
+    "The censoring critique demands randomized assay-audit capacity, which is real spend on stock expected to fail — an easy route to strangling generation by an economic argument, reproducing safety-through-never-generating from the opposite direction.",
+    "'Add a decay clock and a sampling floor' is a universal-sounding repair that inflates contracts and postpones hard-gate eliminations the charter wants made.",
+    "Inherits both parents' weakness on mnemonic quality and phase count: will favor contracts that meter beautifully and read terribly.",
+    "Its cycles are rate-based and queue-based rather than pace-layered, so fast/slow shear coupling across OODARC layers can go unexamined.",
+    "Risks manufacturing the reflexive move rhetorically — relabeling a parent-B throttle finding as fused by asserting that the throttle 'is really an arm' without showing what the allocation reading changes."
+  ],
+  "findings": [
+    "f-052",
+    "f-053",
+    "f-054",
+    "f-055"
+  ]
+}

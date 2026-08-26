@@ -1,0 +1,37 @@
+{
+  "id": "fd-reconnaissance-provenance-contracts",
+  "kind": "base",
+  "parents": [],
+  "domain": "intelligence analysis, reconnaissance and scouting doctrine, source grading, and structured analytic techniques",
+  "axioms": [
+    "Collection and interpretation are separable operations with different licenses; conflating them is the standard route to unearned confidence.",
+    "Every speculative product carries provenance, a source grade, and a confidence grade that must survive every hop to the decision point.",
+    "A store without a read filter is a competing truth channel; separation is enforced by the reader, not by the writer's good intentions.",
+    "Speculation decays: unpromoted product must expire or be re-tasked rather than quietly inherited as background belief.",
+    "Tasking is upstream of collection; an operation with no tasking predicate fires arbitrarily or never.",
+    "Authority laundering is a structural failure mode, so it must be traced end to end rather than asserted away."
+  ],
+  "primitives": [
+    "tasking / standing requirement",
+    "collection bound and source",
+    "source grade and confidence grade",
+    "speculative product / report artifact",
+    "dissemination boundary and read filter",
+    "namespace or store separation",
+    "expiry, review condition, and re-tasking event"
+  ],
+  "failure_mode": [
+    "Biased toward steelmanning the incumbent Scout, so may under-weight candidates that displace it entirely.",
+    "Can over-engineer metadata and grading schemas past what a small agent runtime can enforce, inflating implementation cost.",
+    "Treats exploration policy and search budget as someone else's problem, so its candidates may emit reports without changing behavior.",
+    "Weak on subtraction and pruning; reconnaissance doctrine accumulates product.",
+    "Prone to importing institutional apparatus (compartments, clearances) that has no agent-runtime analogue."
+  ],
+  "findings": [
+    "f-011",
+    "f-012",
+    "f-013",
+    "f-014",
+    "f-015"
+  ]
+}

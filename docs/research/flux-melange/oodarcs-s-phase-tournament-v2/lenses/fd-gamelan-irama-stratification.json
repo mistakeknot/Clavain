@@ -1,0 +1,49 @@
+{
+  "id": "fd-gamelan-irama-stratification",
+  "kind": "base",
+  "round_introduced": 3,
+  "parents": [],
+  "domain": "Central Javanese gamelan practice (karawitan) \u2014 a fixed skeletal melody (balungan) on bronze while every other instrument simultaneously realizes its own denser elaboration (garap) of the same piece; irama levels, where halving the structural pulse doubles elaboration density inside an unchanged frame; the kendhang as the single voice licensed to call an irama change, signalled in-band with an audible lead-in rather than through a separate command channel; pathet, a modal admissibility filter keyed to the third of the night rather than to the merit or age of the material; the gong ageng cycle and seleh goal tones, which fix the landing point in advance so elaboration inside the cycle needs no permission; suwuk, a pre-signalled ending formula, since the ensemble may not simply stop; irama lancar thinning, where ornament is the first thing shed when the frame speeds up; and garap dying at the gong while only the skeleton and each player's private cengkok stock persist.",
+  "axioms": [
+    "Separation you can hear beats separation someone promises to label: speculative material carried on a different instrument, register, channel or artifact type cannot be mistaken for validated material by a consumer who reads no metadata, whereas a grade field, namespace prefix or read-filter rule is a promise that will eventually not be kept.",
+    "Exploration capacity is made by stretching the frame, not stolen from a fixed purse \u2014 an operation that changes the loop's base clock is a different class of thing from one that spends turns inside it, and scoring both on one matrix answers the design question by accident.",
+    "An operation does not exist in an ensemble unless there is a role licensed to call it and a sound by which everyone knows it was called; a trigger predicate is not a caller and a log entry is not a cue.",
+    "A change everyone must act on simultaneously needs a lead-in long enough that adoption is whole; without one the characteristic failure is not error but incoherence \u2014 half the loop shifts and half does not.",
+    "Fix the landing point in advance and the exploration between the gongs needs no gate at all; a contract may leave its scope loose or its re-entry loose, never both.",
+    "Admissibility can be keyed to where the loop is rather than to what the material is: material that is unplayable in this position needs no decay clock and cannot be laundered by waiting.",
+    "Stopping is an announced, cued, shared act, not a budget running out; exploration that ends by exhaustion leaves the rest of the loop without a signal that it ended.",
+    "Ornament is the first thing shed under speed, and the shedding order should be designed rather than improvised, or the operation is dropped whole in exactly the conditions that most need a cheap version of it.",
+    "An entire night of elaboration may be discarded on purpose, leaving only the skeleton and a changed private stock \u2014 deliberate non-retention is what lets a tradition speculate without limit and never form a competing truth channel.",
+    "This domain has no theory of truth: nothing an elaborating instrument plays is correct or incorrect about the world, only fitting or unfitting to a frame, a mode, and an hour."
+  ],
+  "primitives": [
+    "balungan / garap \u2014 skeleton versus elaboration, separated by the material that carries them",
+    "irama level change \u2014 a pace-layer operation that emits no artifact",
+    "density inversion \u2014 slower frame, denser elaboration",
+    "kendhang authority and the in-band lead-in cue (who may call it, in what channel, with how much warning)",
+    "ensemble splitting \u2014 partial adoption as the signature failure of a policy-class operation",
+    "pathet \u2014 positional admissibility keyed to the hour, not to grade or age",
+    "gong cycle and seleh \u2014 pre-registered landing point that licenses loose exploration",
+    "suwuk \u2014 announced termination formula",
+    "irama lancar thinning \u2014 designed shedding order under time pressure",
+    "rambahan \u2014 repeated traversal of an unchanged frame, variation without a new artifact",
+    "cengkok stock \u2014 the private residue that survives when the elaboration does not",
+    "what survives the gong: artifact / changed stock / nothing (a clustering axis)"
+  ],
+  "failure_mode": [
+    "No theory of truth at all \u2014 cannot argue falsifiability, disconfirmation, or calibration, so it will under-serve the charter's falsifiable-output hard gate and can wave through a pace-change candidate that has no losing condition.",
+    "Assumes a shared canonical skeleton exists; where a task has no stable frame to elaborate against, stratification has nothing to attach to and the lens's central move is unavailable.",
+    "Assumes real-time co-presence and a fixed ensemble; in a single-agent loop 'who may call it' collapses to a temporal distinction and the authority argument thins considerably.",
+    "Its non-retention discipline runs directly against the charter's settled lesson that failed probes must never be erased; if it argues rather than locates that disagreement it will generate contracts that lose durable negative-transfer evidence.",
+    "Over-values governance and signalling \u2014 can spend the round on who may call an operation and how the cue travels while under-serving whether the epistemic transformation is distinct at all.",
+    "Aestheticism: its findings can drift into metaphor the moment they leave bronze, register, cue, hour, and gong, at which point they are unfalsifiable taste dressed as mechanism.",
+    "Has no account of provenance for an individual claim \u2014 it grades the stratum, not the assertion, so laundering paths that run through a correctly-stratified channel are invisible to it.",
+    "Structural separation is expensive: demanding a distinct artifact type, store, rendering, or emitting role inflates implementation cost, a criterion the charter prices explicitly."
+  ],
+  "findings": [
+    "f-070",
+    "f-071",
+    "f-072",
+    "f-073"
+  ]
+}

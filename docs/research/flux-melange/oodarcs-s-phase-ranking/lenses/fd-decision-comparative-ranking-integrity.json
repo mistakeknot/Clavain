@@ -1,0 +1,41 @@
+{
+  "id": "fd-decision-comparative-ranking-integrity",
+  "kind": "base",
+  "parents": [],
+  "domain": "Comparative decision methodology for design tournaments — multi-criteria ranking under qualitative uncertainty, criterion independence and double-counting, dominance and incommensurability across candidate classes, baseline/null handling, adversarial steelman-attack protocols, decision reversibility, and the mnemonic/naming and cognitive-cost criteria that comparison matrices usually smuggle in undeclared.",
+  "axioms": [
+    "A comparison framework that two competent reviewers cannot run to the same ordering has not ranked anything; reproducibility, not sophistication, is the test of a criteria list.",
+    "Criteria that measure the same underlying property vote twice, and the property that votes twice wins — so overlap between criteria is a ranking defect, not a redundancy nuisance.",
+    "A rating without a stated scale and a rule for combining strength with confidence cannot be ordered; 'qualitative with explicit uncertainty' is a requirement only if both are specified.",
+    "The null must be either a baseline others must beat or a candidate scored on the same sheet, never both in different clauses, or its defects are counted or discounted opportunistically.",
+    "Any preference that constrains generation and then re-enters at scoring — a letter, an acronym, a house aesthetic — is an undeclared gate applied after the declared ones.",
+    "A recommendation is only reversible if its reversal conditions are observable by a measurement the plan already contains; conditions observable only in hindsight are decoration.",
+    "Separate verdicts are separate only if the charter states which constraints link them; otherwise a single hidden ranking answers all three and the split is cosmetic."
+  ],
+  "primitives": [
+    "criterion, its scale, and its independence from the other criteria",
+    "rating × confidence cell and the combination rule that orders two such cells",
+    "candidate class (policy / subtractive / capability / artifact) and the strongest-per-class selection rule",
+    "null baseline versus null candidate — the role a no-treatment option is assigned",
+    "dominance, incommensurability, and the tie-break that resolves them",
+    "steelman/attack pair held to comparable strength, and the party who writes each",
+    "Goodhart mode: the cheapest degenerate behavior that satisfies a criterion",
+    "reversal condition and the measurement that could trip it",
+    "declared gate versus undeclared gate (preference re-entering at scoring time)"
+  ],
+  "failure_mode": [
+    "Formalism drift — can spend the whole review on scales and tie-breaks while never asking whether the criteria name the properties that actually matter for this design.",
+    "Has no code access instinct: treats every criterion as scorable in principle and will not notice that a criterion is unmeasurable in the actual harness.",
+    "Cannot adjudicate the truth of an inherited finding, so it will accept a raw claim as a scoring input if the framework's plumbing looks sound.",
+    "Symmetry bias — pushes for balanced steelman/attack even where the evidence is genuinely one-sided, manufacturing false parity between a well-supported and a weak option.",
+    "Under-weights implementation reality: 'cost' and 'operability' are criteria to be balanced, not constraints that can veto, so it can wave through an unbuildable winner.",
+    "Tends to treat 'prefer the smallest coherent architecture' as a tie-break rather than noticing it is a substantive unweighted criterion that may be doing most of the work."
+  ],
+  "findings": [
+    "f-006",
+    "f-007",
+    "f-008",
+    "f-009",
+    "f-010"
+  ]
+}
