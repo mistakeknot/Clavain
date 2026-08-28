@@ -12,7 +12,7 @@ This command is the **Validate** leg of the OODARC loop — a decision gate that
 ```
 plan-review (OODARC: Validate — decision gate):
 - [ ] Gauge lint (BLOCKING): plan-gauge-lint.py <plan> --repo-root <repo>
-- [ ] Route: fixed trio (routine plan) vs /flux-melange (high-stakes or open-ended)
+- [ ] Route: /flux-melange (DEFAULT for design-shaping plans) vs fixed trio (routine mechanical plans only)
 - [ ] Dispatch 3 review agents in parallel (plan-reviewer, fd-architecture, fd-quality)
 - [ ] Collect all three verdicts
 - [ ] Synthesize into a unified, prioritized review
@@ -53,7 +53,7 @@ absent.
 `--self-test` replays all six pilot-1 defects plus a clean control; run it to confirm
 the linter still works after any change to it. `--json` for machine consumption.
 
-**Routing (first checkbox):** if the plan is high-stakes or open-ended — architecture pivot, migration, certification gate, novel subsystem, or anywhere a missed flaw is expensive — prefer `/interflux:flux-melange <plan file> --goal="find what makes this plan fail and what it's missing" --weights=risk-hunt` over the fixed trio (requires interflux). Its adaptive rounds chase the scary-but-unconfirmed finding rather than reporting it once. The fixed trio below remains correct for routine plans.
+**Routing (first checkbox — standing rule 2026-08-28):** `/interflux:flux-melange <plan file> --goal="find what makes this plan fail and what it's missing" --weights=risk-hunt` is the DEFAULT review for any design-shaping plan — one derived from a brainstorm/PRD, an architecture pivot, a migration, a novel subsystem, or anywhere a missed flaw is expensive (requires interflux). Its adaptive rounds chase the scary-but-unconfirmed finding rather than reporting it once. The fixed trio below is the exception, reserved for routine mechanical plans (small bugfix or refactor plans with no design content).
 
 Launch three review agents in parallel using the Task tool to review the provided plan:
 

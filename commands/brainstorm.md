@@ -175,6 +175,17 @@ optional but encouraged. The one-pager is the artifact later phases,
 reviewers, and future sessions load FIRST — keep it current when rulings
 land, and never let it grow past one page.
 
+**Melange review (DEFAULT for design-shaping brainstorms; standing rule
+2026-08-28).** After the doc (and one-pager) are written, review the
+captured design with
+`/interflux:flux-melange <brainstorm doc> --goal="stress-test this design:
+what makes it fail, what is it missing"` (requires interflux). This is not
+the Phase 2 escalation — it runs on the *captured artifact*, every time,
+for any brainstorm that shapes a product, game, architecture, or process.
+Skip only for trivial/mechanical scopes (a rename, a config toggle). Fold
+findings back into Key Decisions / Open Questions before handoff; cite the
+melange synthesis path in the doc.
+
 ### Phase 3b: Record Phase (Reflect + Compound)
 
 Record the brainstorm artifact and advance the phase state machine. This is the OODARC Reflect+Compound step — it writes the outcome back into the system so the sprint orchestrator can route correctly.

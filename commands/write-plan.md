@@ -55,3 +55,13 @@ fi
 ```
 
 The seal (`.seal` sidecar) makes the criteria write-once: an escalation-triggered re-plan cannot silently rewrite the standard after seeing why execution failed. Re-sealing requires explicit `CLAVAIN_RESEAL=1`.
+
+**Then review the plan before execution handoff (standing rule 2026-08-28):**
+design-shaping plans — anything derived from a brainstorm/PRD, or with design
+content beyond a mechanical fix — get a melange review:
+`/interflux:flux-melange <plan file> --goal="find what makes this plan fail and
+what it's missing" --weights=risk-hunt` (the `/clavain:plan-review` routing
+default; requires interflux). Fold findings into the plan before dispatching
+executors; if the Acceptance Criteria change, re-seal explicitly with
+`CLAVAIN_RESEAL=1`. Routine mechanical plans may use the plan-review fixed trio
+instead.
