@@ -1045,7 +1045,14 @@ elif [[ "$ENGINE" == "claude" ]]; then
   if [[ "$CLAUDE_UNSAFE" != true ]]; then
     CMD+=(--disallowedTools "Edit,Write,NotebookEdit")
   fi
-  CMD+=(-p "$PROMPT")
+  # The prompt goes via stdin, never argv: review prompts routinely exceed
+  # ARG_MAX (macOS ~1MB incl. env), and `claude -p` with a too-long argv dies
+  # with "Argument list too long" / exit 126 before the model ever runs
+  # (real-names migration run 39676448, 2026-08-30). `claude -p` with no
+  # positional reads the prompt from stdin.
+  PROMPT_STDIN_FILE=$(mktemp "${TMPDIR:-/tmp}/dispatch-claude-prompt.XXXXXX")
+  printf '%s' "$PROMPT" > "$PROMPT_STDIN_FILE"
+  CMD+=(-p)
   # WORKDIR via cd and OUTPUT via tee at execution time, same as kimi
   # (claude -p prints the response on stdout; no -C/-o flags used).
 else
@@ -1448,20 +1455,24 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # until completion; summary/verdict sidecars are still produced. WORKDIR
   # is applied via cd and OUTPUT by teeing stdout (no -C/-o flags).
   set +e
+  # kimi carries its prompt in argv; claude reads it from PROMPT_STDIN_FILE
+  # (see the claude CMD build). /dev/null for kimi so neither engine ever
+  # inherits the orchestrator's stdin.
   if [[ -n "$OUTPUT" ]]; then
     if [[ -n "$WORKDIR" ]]; then
-      ( cd "$WORKDIR" && "${CMD[@]}" ) 2> >(tee "$STDERR_FILE" >&2) | tee "$OUTPUT"
+      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> >(tee "$STDERR_FILE" >&2) | tee "$OUTPUT"
     else
-      "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2) | tee "$OUTPUT"
+      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> >(tee "$STDERR_FILE" >&2) | tee "$OUTPUT"
     fi
   else
     if [[ -n "$WORKDIR" ]]; then
-      ( cd "$WORKDIR" && "${CMD[@]}" ) 2> >(tee "$STDERR_FILE" >&2)
+      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> >(tee "$STDERR_FILE" >&2)
     else
-      "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2)
+      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> >(tee "$STDERR_FILE" >&2)
     fi
   fi
   KIMI_EXIT="${PIPESTATUS[0]}"
+  [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
   set -e
 
   # Summary sidecar (no turn/token stats — kimi -p doesn't expose them)
