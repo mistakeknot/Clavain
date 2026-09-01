@@ -1341,7 +1341,13 @@ _detect_codex_error() {
     local stderr_file="$1" state_file="$2" exit_code="${3:-0}" output_file="${4:-}"
     local kind="" detail="" line=""
 
-    if [[ -f "$stderr_file" ]]; then
+    # Stderr pattern-scan only when the process actually failed. An executor's
+    # streamed output routinely QUOTES error-shaped text (grep results, docs
+    # content — "401 Unauthorized" inside a docs/solutions snippet overrode a
+    # genuine CLEAN verdict on run 39676448 round 13); every real codex
+    # failure this scan has caught exited nonzero. rc=0 runs are still policed
+    # by the zero-output heuristic below.
+    if [[ "$exit_code" != "0" && -f "$stderr_file" ]]; then
         # HTTP-coded error lines (codex format: "stream error: unexpected status 400 Bad Request: ...")
         line=$(grep -m1 -E '(unexpected status|HTTP/?[0-9.]*|status code)[[:space:]]*:?[[:space:]]*(4[0-9]{2}|5[0-9]{2})' "$stderr_file" 2>/dev/null || true)
         if [[ -z "$line" ]]; then
