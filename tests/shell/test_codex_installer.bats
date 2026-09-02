@@ -75,6 +75,13 @@ exit 0
 EOF
     chmod +x "$SOURCE_DIR/scripts/context-gateway.py"
 
+    # install-codex.sh refuses a source tree without the session refresh hook
+    # (scripts/codex-session-refresh.sh); the stub grew it with mk-7zuk.
+    cat > "$SOURCE_DIR/scripts/codex-session-refresh.sh" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$SOURCE_DIR/scripts/codex-session-refresh.sh"
     cat > "$SOURCE_DIR/hooks/context-gateway.sh" <<'EOF'
 #!/usr/bin/env bash
 exec "$(dirname "$0")/../scripts/context-gateway.py" hook --harness "${1:-claude}"

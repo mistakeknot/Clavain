@@ -14,7 +14,11 @@ on:
         default: false
 
 jobs:
-  structural-and-shell:
+  # Two jobs, not one. When these were steps of a single job, a failure in the
+  # structural tier skipped the bats tier entirely, and main reported the shell
+  # tests as green for weeks while nine of them failed on every host (mk-7zuk).
+  # A check that cannot run reports nothing, and nothing reads as fine.
+  structural:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -31,11 +35,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
 
-      - name: Install bats-core and shellcheck
-        run: sudo apt-get update && sudo apt-get install -y bats shellcheck
-
-      - name: Install bats helpers
-        run: npm install -g bats-support bats-assert
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Tier 0 — Shell lint (shellcheck)
         run: |
@@ -48,6 +49,23 @@ jobs:
 
       - name: Tier 1 — Structural tests (pytest)
         run: cd tests && uv run pytest structural/ -v --tb=short
+
+  shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v4
+
+      - name: Install bats-core
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Install bats helpers
+        run: npm install -g bats-support bats-assert
 
       - name: Tier 2 — Shell tests (bats)
         run: bats tests/shell/ --recursive --tap

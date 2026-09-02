@@ -36,7 +36,9 @@ if [[ "$1 $2" == "policy doctor" ]]; then
   exit 0
 fi
 if [[ "$1 $2" == "policy check" ]]; then
-  printf '{"schema":1,"mode":"%s","policy_hash":"hash-test","policy_match":"bd-push-dolt#0"}\n' "$POLICY_MODE"
+  # schema 2: the gate requires a delegation object (scripts/gates/_common.sh);
+  # a schema-1 stub made all four authz tests fail on every host (mk-7zuk).
+  printf '{"schema":2,"mode":"%s","policy_hash":"hash-test","policy_match":"bd-push-dolt#0","delegation":{"level":3,"declared":true,"capped":false}}\n' "$POLICY_MODE"
   exit "$POLICY_RC"
 fi
 if [[ "$1 $2" == "policy record-signed" ]]; then

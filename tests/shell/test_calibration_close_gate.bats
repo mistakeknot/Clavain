@@ -61,7 +61,8 @@ if [[ "$1 $2" == "policy doctor" ]]; then
 	exit 0
 fi
 if [[ "$1 $2" == "policy check" ]]; then
-  printf '{"schema":1,"mode":"auto","policy_hash":"h","policy_match":"m"}\n'
+  # schema 2 with a delegation object, as scripts/gates/_common.sh requires (mk-7zuk)
+  printf '{"schema":2,"mode":"auto","policy_hash":"h","policy_match":"m","delegation":{"level":3,"declared":true,"capped":false}}\n'
   exit 0
 fi
 if [[ "$1 $2" == "policy record-signed" ]]; then

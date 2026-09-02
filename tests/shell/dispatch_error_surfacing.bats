@@ -197,6 +197,22 @@ PRE
     [[ "$output" == *"500"* ]]
 }
 
+# --- rc=0 gating (25e2b44): error-shaped text quoted by a successful run is not an error ---
+#
+# Before the gate, an executor that merely quoted "401 Unauthorized" from a docs
+# snippet had its CLEAN verdict overwritten and was redispatched forever
+# (shadow-work run 39676448 rounds 11-13). The five scan tests above pass a
+# nonzero exit because every real codex failure the scan has caught exited
+# nonzero; this one pins the other half of the contract.
+
+@test "detect: error-shaped stderr with exit 0 is NOT an error (quoted, not raised)" {
+    _load
+    echo "grep hit: docs/solutions/x.md: 'HTTP 401 Unauthorized' means the token expired" > "$STDERR_FILE"
+    run _detect_codex_error "$STDERR_FILE" "" 0
+    [ "$status" -eq 1 ]
+    [ -z "$output" ]
+}
+
 # --- ungrounded pass: unrecognized VERDICT line must not synthesize a pass ---
 # _extract_verdict's fallback defaulted STATUS to pass when a VERDICT: line
 # existed but matched neither CLEAN nor NEEDS_ATTENTION — so "VERDICT:
