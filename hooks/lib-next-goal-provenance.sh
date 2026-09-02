@@ -375,6 +375,117 @@ next_goal_verify_disqualified() {
     jq -r '(.disqualified // []) | join(", ")' "$path" 2>/dev/null || true
 }
 
+# ---------------------------------------------------- cited ⊆ verified (W5)
+#
+# A clean verify receipt says the IDs IT READ BACK are live. It says nothing
+# about an ID the block cites that the verifier was never given — and on
+# 2026-09-01 the #1 candidate ("Merge PR #26") carried no ID at all, so there
+# was nothing to verify and nothing to re-find next session. Known prefixes
+# come from the receipts themselves (roots_ok of the provenance receipt, and
+# the prefix of every verified bead), because "flux-drive" and "next-goal"
+# fit the ID grammar and a registry of trackers does not exist. A token with
+# an unknown prefix is therefore never accused of being a bead; but on a
+# candidate line that carries no known ID it is NAMED, because "solwend-w46q
+# from a tracker the verifier never reached" is the 2026-08-14 failure exactly.
+
+# next_goal_id_tokens <text>
+# Every whole token shaped like a bead ID: <prefix>-<slug>[.<n>]*, prefix
+# starting with a letter, slug 2-8 lowercase alphanumerics. Whole tokens, so
+# "fix/mk-hxgi-next-goal-audit" is not "mk-hxgi" truncated; trailing dots are
+# sentence punctuation, not part of the ID.
+next_goal_id_tokens() {
+    printf '%s\n' "${1:-}" \
+        | tr -cs 'A-Za-z0-9_.-' '\n' \
+        | sed 's/\.*$//' \
+        | grep -E '^[A-Za-z][A-Za-z0-9]*-[a-z0-9]{2,8}(\.[0-9]+)*$' 2>/dev/null \
+        | awk '!seen[$0]++'
+}
+
+# next_goal_known_prefixes <session_id> — lowercased, one per line.
+next_goal_known_prefixes() {
+    local ppath vpath
+    ppath="$(next_goal_receipt_path "${1:-unknown}")"
+    vpath="${CLAVAIN_VERIFY_DIR}/${1:-unknown}.json"
+    {
+        [[ -f "$ppath" ]] && jq -r '(.roots_ok // [])[] | tostring | select(test("/") | not)' "$ppath" 2>/dev/null
+        [[ -f "$vpath" ]] && jq -r '(.beads // [])[] | (.id // "") | select(. != "") | split("-")[0]' "$vpath" 2>/dev/null
+        true
+    } | tr 'A-Z' 'a-z' | awk 'NF && !seen[$0]++'
+}
+
+# next_goal_verified_ids <session_id> — the IDs the verifier read back.
+next_goal_verified_ids() {
+    local vpath="${CLAVAIN_VERIFY_DIR}/${1:-unknown}.json"
+    [[ -f "$vpath" ]] || return 0
+    jq -r '(.beads // [])[] | (.id // "") | select(. != "")' "$vpath" 2>/dev/null
+    return 0
+}
+
+# next_goal_cited_warning <session_id> <transcript_text>
+# Echoes a warning when the block cites an ID the verifier never saw, or
+# ranks a candidate that carries no verified ID in a block that does not
+# disclose degradation. Silent otherwise. Always exits 0.
+next_goal_cited_warning() {
+    local session="${1:-unknown}" text="${2:-}"
+    next_goal_block_discloses_degradation "$text" && return 0
+    local start assistant region
+    start="$(next_goal_turn_started_at "$text")"
+    assistant="$(next_goal_assistant_text "$text" "$start")"
+    region="$(next_goal_block_region "$assistant")"
+    [[ -z "$region" ]] && return 0
+
+    local known verified
+    known="$(next_goal_known_prefixes "$session")"
+    verified="$(next_goal_verified_ids "$session")"
+
+    local -a unverified=() idless=()
+    local tok prefix
+    while IFS= read -r tok; do
+        [[ -n "$tok" ]] || continue
+        prefix="$(printf '%s' "${tok%%-*}" | tr 'A-Z' 'a-z')"
+        grep -qxF -- "$prefix" <<<"$known" 2>/dev/null || continue
+        grep -qixF -- "$tok" <<<"$verified" 2>/dev/null || unverified+=("$tok")
+    done < <(next_goal_id_tokens "$region")
+
+    local line n=0 has_known hint
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*[0-9]+\.[[:space:]] ]] || continue
+        n=$((n + 1))
+        has_known=0
+        hint=""
+        while IFS= read -r tok; do
+            [[ -n "$tok" ]] || continue
+            prefix="$(printf '%s' "${tok%%-*}" | tr 'A-Z' 'a-z')"
+            if grep -qxF -- "$prefix" <<<"$known" 2>/dev/null; then
+                has_known=1
+            else
+                hint="${hint:+$hint, }$tok"
+            fi
+        done < <(next_goal_id_tokens "$line")
+        [[ $has_known -eq 1 ]] && continue
+        if [[ -n "$hint" ]]; then
+            idless+=("candidate $n (it mentions $hint; if that is a bead ID, its tracker was never reached by the verifier)")
+        else
+            idless+=("candidate $n")
+        fi
+    done <<<"$region"
+
+    local out="" joined
+    if [[ ${#unverified[@]} -gt 0 ]]; then
+        joined="$(printf '%s, ' "${unverified[@]}")"; joined="${joined%, }"
+        next_goal_audit_log "$session" "verification-cited-unverified" "$joined"
+        out+="$(printf 'Next-goal verification: the block cites %s, which the verifier never saw — a receipt vouches only for the IDs it read back, and an ID it did not read back may be closed, deferred, or invented. Re-run scripts/next-goal-verify.sh with every ID the block cites.' "$joined")"
+    fi
+    if [[ ${#idless[@]} -gt 0 ]]; then
+        joined="$(printf '%s; ' "${idless[@]}")"; joined="${joined%; }"
+        next_goal_audit_log "$session" "verification-idless-candidate" "$joined"
+        [[ -n "$out" ]] && out+=$'\n'
+        out+="$(printf 'Next-goal verification: %s carries no tracker ID the verifier reached, in a block that reads as tracker-ranked. A candidate without an ID cannot be verified now or re-found next session: file it and cite the ID, or say in the block that it is improvised ("%s").' "$joined" "$CLAVAIN_NO_TRACKER_PHRASE")"
+    fi
+    [[ -n "$out" ]] && printf '%s\n' "$out"
+    return 0
+}
+
 # next_goal_verification_warning <session_id> <transcript_text>
 # Echoes a warning when a block cites candidates that were never re-read, or
 # that failed the re-read. Silent otherwise. Always exits 0 — a nudge, not a gate.
@@ -388,7 +499,12 @@ next_goal_verification_warning() {
     state="$(next_goal_verify_receipt_state "$session")"
     if [[ "$state" == "clean" ]]; then
         stamp="$(jq -r '.verified_at // empty' "${CLAVAIN_VERIFY_DIR}/${session}.json" 2>/dev/null)"
-        [[ "$(next_goal_receipt_freshness "$stamp" "$text")" == "stale" ]] || return 0
+        if [[ "$(next_goal_receipt_freshness "$stamp" "$text")" != "stale" ]]; then
+            # Fresh and clean for what it read. Now: is what the block cites
+            # a subset of what it read?
+            next_goal_cited_warning "$session" "$text"
+            return 0
+        fi
         next_goal_audit_log "$session" "verification-stale" "$stamp"
         printf 'Next-goal verification: STALE receipt. scripts/next-goal-verify.sh last ran for session %s at %s, but %s — the candidates this block cites were re-read for an earlier block, and a bead can close between turns. Re-run the verifier on every ID this block cites before standing behind it.\n' \
             "$session" "$stamp" "$(next_goal_freshness_anchor "$text")"

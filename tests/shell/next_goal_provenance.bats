@@ -343,6 +343,7 @@ EOF
         printf '{"session_id":"%s","transcript_path":"%s","stop_hook_active":false}' \
             "$session" "$tmp/transcript.jsonl" \
         | PATH="$tmp:$PATH" CLAVAIN_PROVENANCE_DIR="$CLAVAIN_PROVENANCE_DIR" \
+              CLAVAIN_VERIFY_DIR="${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}" \
               CLAVAIN_LOOP_BREAKER_DIR="$tmp/loop-breaker" \
               bash "$BATS_TEST_DIRNAME/../../hooks/auto-stop-actions.sh"
     )
@@ -423,7 +424,7 @@ setup_verify_dir() {
 
 @test "verification: silent when every cited candidate verified clean" {
     setup_verify_dir
-    verify_receipt "v-ok" true '[]'
+    verify_receipt "v-ok" true '[]' '[{"id":"mk-i43y"}]'
     run next_goal_verification_warning "v-ok" "$(block_claiming_provenance)"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
@@ -569,4 +570,144 @@ block_only_turn() {
     run next_goal_provenance_warning "sess-1" "$(block_claiming_provenance)"
     [ -z "$output" ]
     [ ! -f "$CLAVAIN_PROVENANCE_DIR/audit-log.jsonl" ]
+}
+
+# ------------------------------- cited must be a subset of verified (W5)
+#
+# A clean verify receipt says the IDs IT READ BACK are live. It says nothing
+# about an ID the block cites that the verifier was never given, and on
+# 2026-09-01 the #1 candidate ("Merge PR #26") carried no ID at all, so there
+# was nothing to verify and nothing to re-find next session. Known prefixes
+# come from the receipts themselves: roots_ok of the provenance receipt and
+# the prefixes of every verified bead. A token with an unknown prefix is not
+# accused of being a bead — but on a candidate line with no known ID it is
+# named, because "solwend-w46q from a tracker the verifier never reached" is
+# exactly the original 2026-08-14 failure.
+
+cited_setup() {
+    setup_verify_dir
+    write_receipt true    # roots_ok: sylveste, mk
+}
+
+@test "cited: flags a cited ID the verifier never saw" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]'
+    body="$(assistant_line "## Next goal\\n\\n1. Close mk-i43y — nearly done\\n2. Land mk-zzzz — the other one\\n\\n**Recommendation:** 2\\n\\n/goal Land mk-zzzz.")"
+    run next_goal_verification_warning "sess-1" "$body"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"mk-zzzz"* ]]
+    [[ "$output" == *"never saw"* ]]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "cited: silent when every cited ID is in the receipt" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"},{"id":"sylveste-7t3n"}]'
+    body="$(assistant_line "## Next goal\\n\\n1. Close mk-i43y — nearly done\\n2. Finish sylveste-7t3n — shape rules\\n\\n**Recommendation:** 1\\n\\n/goal Close mk-i43y.")"
+    run next_goal_verification_warning "sess-1" "$body"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "cited: flags an ID-less candidate in a non-degraded block (the merge-PR-#26 case)" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]'
+    body="$(assistant_line "## Next goal\\n\\n1. **Merge PR #26** — lands the close protocol\\n2. Close mk-i43y — nearly done\\n\\n**Recommendation:** 1\\n\\n/goal Merge PR #26 so the protocol lands.")"
+    run next_goal_verification_warning "sess-1" "$body"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"candidate 1"* ]]
+    [[ "$output" == *"no tracker ID"* ]]
+    [[ "$output" != *"candidate 2"* ]]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "cited: an ID-less candidate is fine when the block discloses degradation" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[]'
+    body="$(assistant_line "## Next goal\\n\\nno tracker reachable — improvised from session context.\\n\\n1. **Merge PR #26** — lands the close protocol\\n\\n/goal Merge PR #26.")"
+    run next_goal_verification_warning "sess-1" "$body"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "cited: IDs mentioned outside the block region are not cited" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]'
+    body="$(assistant_line "Earlier I looked at mk-qqqq and set it aside.\\n\\n## Next goal\\n\\n1. Close mk-i43y — nearly done\\n\\n/goal Close mk-i43y.")"
+    run next_goal_verification_warning "sess-1" "$body"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "cited: an unknown-prefix token on an ID-less candidate is named as a hint, not accused" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]'
+    body="$(assistant_line "## Next goal\\n\\n1. Continue solwend-w46q — the scene slice\\n2. Close mk-i43y — nearly done\\n\\n/goal Continue solwend-w46q.")"
+    run next_goal_verification_warning "sess-1" "$body"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"candidate 1"* ]]
+    [[ "$output" == *"solwend-w46q"* ]]
+    [[ "$output" == *"never reached"* ]]
+    [[ "$output" != *"never saw"* ]]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "cited: a branch name or hyphenated phrase is not an ID" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]'
+    body="$(assistant_line "## Next goal\\n\\n1. Close mk-i43y on fix/mk-hxgi-next-goal-audit — the next-goal audit, plan-clavain-hxgi.md\\n\\n/goal Close mk-i43y.")"
+    run next_goal_verification_warning "sess-1" "$body"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "cited: the id-token helper keeps child suffixes and drops trailing punctuation" {
+    # "next-goal" alone fits the grammar (which is why prefixes are filtered
+    # against the receipts); "next-goal-audit" and "fix/mk-hxgi-next" do not.
+    run next_goal_id_tokens "see mk-i43y, mk-i43y.2 and (sylveste-7t3n). Not fix/mk-hxgi-next or v0.2.86 or next-goal-audit, but next-goal."
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(printf 'mk-i43y\nmk-i43y.2\nsylveste-7t3n\nnext-goal')" ]
+}
+
+# ------------------------------------------- end to end through the hook (f-002)
+
+@test "hook surfaces a cited-but-unverified ID end to end" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]'
+    body="$(assistant_line "## Next goal\\n\\n1. Close mk-i43y — nearly done\\n2. Land mk-zzzz — the other one\\n\\n/goal Land mk-zzzz.")"
+    run run_stop_hook "$body" "sess-1"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'"decision"'* ]]
+    [[ "$output" == *"Next-goal verification"* ]]
+    [[ "$output" == *"mk-zzzz"* ]]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "hook surfaces a stale provenance receipt end to end" {
+    write_receipt true    # 2026-08-07, weeks before the turn below
+    run run_stop_hook "$(fresh_turn)" "sess-1"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Next-goal provenance: STALE"* ]]
+}
+
+# ---------------------------------------------------- the hook budget (f-018)
+
+@test "timing: the full audit path stays inside the hook budget on an 80-line window" {
+    cited_setup
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]'
+    body=""
+    for i in $(seq 1 78); do
+        body+="$(assistant_line "Filler line $i mentioning mk-i43y and the next steps, with a /goal-looking token inline.")"$'\n'
+    done
+    body+="$(block_claiming_provenance)"
+    start=$(date +%s)
+    run run_stop_hook "$body" "sess-timing"
+    end=$(date +%s)
+    [ "$status" -eq 0 ]
+    [ $((end - start)) -le 4 ]
+    rm -rf "$VERIFY_DIR"
 }
