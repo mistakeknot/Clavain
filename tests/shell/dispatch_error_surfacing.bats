@@ -59,6 +59,9 @@ _load() {
     run _detect_codex_error "$STDERR_FILE" "" 1
     [ "$status" -eq 0 ]
     [[ "$output" == error$'\t'* ]]
+    # The nonzero-exit fallback also yields "error" — require the scanned
+    # stderr text so this pins the prefix scan, not the fallback.
+    [[ "$output" == *"something went wrong"* ]]
 }
 
 # rc=0 gating (25e2b44): an executor QUOTING error-shaped text — grep results,
@@ -140,6 +143,9 @@ PRE
     run _detect_codex_error "$STDERR_FILE" "" 1
     [ "$status" -eq 0 ]
     [[ "$output" != *$'\x1b'* ]]
+    # Fallback detail naturally has no escapes — require the scanned line's
+    # content so stripping is actually what passed.
+    [[ "$output" == *"400"* ]]
 }
 
 # --- mk-1hrx: zero-turn misread must not clobber a real pass -----------------
@@ -186,6 +192,9 @@ PRE
     run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 1 "$OUTPUT"
     [ "$status" -eq 0 ]
     [[ "$output" == error$'\t'* ]]
+    # Any nonzero exit yields "error" via fallback — require the HTTP detail
+    # so this pins the scan-over-suppression branch it names.
+    [[ "$output" == *"500"* ]]
 }
 
 # --- ungrounded pass: unrecognized VERDICT line must not synthesize a pass ---
