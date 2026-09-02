@@ -139,6 +139,24 @@ bead_json() {
     [ "$(jq -r '.paths[0].verdict' <<<"$output")" = "disqualified" ]
 }
 
+@test "with CLAUDE_SESSION_ID unset the receipt is keyed on CLAUDE_CODE_SESSION_ID" {
+    make_bd_stub "$(bead_json open)"
+    unset CLAUDE_SESSION_ID
+    CLAUDE_CODE_SESSION_ID="alt-session" run bash "$SCRIPT" x-1
+    [ "$status" -eq 0 ]
+    [ -f "$RECEIPTS/alt-session.json" ]
+    [ ! -f "$RECEIPTS/unknown.json" ]
+}
+
+@test "CLAUDE_SESSION_ID wins when both are set" {
+    # session-start.sh writes it from the hook's own stdin when it runs, which
+    # is the more authoritative register; the Bash tool's export is the fallback.
+    make_bd_stub "$(bead_json open)"
+    CLAUDE_CODE_SESSION_ID="alt-session" run bash "$SCRIPT" x-1
+    [ -f "$RECEIPTS/test-session.json" ]
+    [ ! -f "$RECEIPTS/alt-session.json" ]
+}
+
 @test "a receipt is left for the session, keyed by session id" {
     make_bd_stub "$(bead_json closed)"
     run bash "$SCRIPT" x-1

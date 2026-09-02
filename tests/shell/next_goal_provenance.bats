@@ -30,6 +30,27 @@ user_line() {
     printf '{"type":"user","message":{"content":"%s"}}\n' "$1"
 }
 
+# Timestamped variants, in the shape Claude Code 2.1.x writes: a human prompt is
+# a user line with STRING content and no isMeta; a skill expansion or the Stop
+# hook's own injected feedback is also a user line, but isMeta:true. The
+# distinction is what next_goal_turn_started_at keys on.
+user_line_ts() {
+    printf '{"type":"user","timestamp":"%s","message":{"content":"%s"}}\n' "$1" "$2"
+}
+meta_user_line_ts() {
+    printf '{"type":"user","isMeta":true,"timestamp":"%s","message":{"content":"%s"}}\n' "$1" "$2"
+}
+assistant_line_ts() {
+    printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"text","text":"%s"}]}}\n' "$1" "$2"
+}
+
+# The 2026-09-01 shape: a real block, ranked and recommended, with paste-ready
+# /goal text — and NO "OUTCOME:" anywhere. 19 of 24 minted goals look like this,
+# and the old detector (which required the literal OUTCOME:) saw none of them.
+block_without_outcome() {
+    assistant_line "## Next goal\n\n1. **Merge PR #26** — lands the close protocol\n2. **Close mk-i43y** — unblocks the wave\n\n**Recommendation:** 2\n\n/goal Close mk-i43y so the wave can run."
+}
+
 # A block that reads as tracker-ranked: names a Next goal, carries paste-ready
 # /goal text, says nothing about degradation.
 block_claiming_provenance() {
@@ -151,6 +172,69 @@ EOF
     [ -z "$output" ]
 }
 
+# ------------------------------------------ detection keys on the /goal line (W2)
+#
+# The old detector required the literal "OUTCOME:". Only 5 of 24 minted goals
+# carry it, so from 2026-08-14 to 2026-09-01 every real block was invisible to
+# both audits and the hook fired goal-cadence seven times at blocks that were
+# already there. The paste-ready /goal line is the marker every block has.
+
+@test "detects a block that carries a /goal line and no OUTCOME: (the 2026-09-01 shape)" {
+    run next_goal_block_emitted "$(block_without_outcome)"
+    [ "$status" -eq 0 ]
+    run next_goal_provenance_warning "sess-1" "$(block_without_outcome)"
+    [[ "$output" == *"never ran in this session"* ]]
+}
+
+@test "the hook's own wording 'ready-to-paste /goal text' mid-sentence is not a block" {
+    injected=$(assistant_line "Goal-cadence: your completion message MUST end with a Next goal block. Run /clavain:next-goal (2-4 candidates, a recommendation, and ready-to-paste /goal text), then append it.")
+    run next_goal_block_emitted "$injected"
+    [ "$status" -ne 0 ]
+}
+
+@test "a /goal placeholder quoted from the template is not a block" {
+    # commands/next-goal.md shows the format with `/goal <ready-to-paste text ...>`.
+    # A turn that quotes the template must not read as having emitted a block.
+    quoted=$(assistant_line "The format is:\n\n## Next goal\n\n1. **<title>** — <rationale>\n\n    /goal <ready-to-paste text for the recommended candidate>")
+    run next_goal_block_emitted "$quoted"
+    [ "$status" -ne 0 ]
+}
+
+@test "a 'next goal' mention far from a quoted /goal line is not a block" {
+    body="I will add a next goal block later."
+    for i in $(seq 1 50); do body+="\nfiller line $i"; done
+    body+="\nExample syntax:\n/goal Ship the thing."
+    run next_goal_block_emitted "$(assistant_line "$body")"
+    [ "$status" -ne 0 ]
+}
+
+@test "a block emitted before this turn's prompt is not this turn's block" {
+    earlier="$(assistant_line_ts 2026-09-01T10:00:00.000Z "## Next goal\n\n1. Close mk-i43y\n\n/goal Ship it.")
+$(user_line_ts 2026-09-01T11:00:00.000Z "what's next?")
+$(assistant_line_ts 2026-09-01T11:00:05.000Z "Just an ordinary reply.")"
+    run next_goal_block_emitted "$earlier"
+    [ "$status" -ne 0 ]
+    run next_goal_provenance_warning "sess-1" "$earlier"
+    [ -z "$output" ]
+}
+
+@test "a skill expansion or hook injection does not start a new turn" {
+    # Both are user lines with isMeta:true. If either reset the turn, a block
+    # emitted before a mid-turn Skill call would vanish from the audit.
+    body="$(user_line_ts 2026-09-01T10:00:00.000Z "what's next?")
+$(assistant_line_ts 2026-09-01T10:05:00.000Z "## Next goal\n\n1. Close mk-i43y\n\n/goal Ship it.")
+$(meta_user_line_ts 2026-09-01T10:06:00.000Z "Stop hook feedback: Goal-cadence: your reply MUST end with a Next goal block.")"
+    run next_goal_turn_started_at "$body"
+    [ "$output" = "2026-09-01T10:00:00.000Z" ]
+    run next_goal_block_emitted "$body"
+    [ "$status" -eq 0 ]
+}
+
+@test "the existing OUTCOME-carrying fixture is still a block" {
+    run next_goal_block_emitted "$(block_claiming_provenance)"
+    [ "$status" -eq 0 ]
+}
+
 # ---------------------------------------------------------------- escape hatch
 
 @test "audit can be disabled outright" {
@@ -198,6 +282,36 @@ EOF
     run next_goal_receipt_state "sess-helper"
     [ "$output" = "reachable" ]
 
+    rm -rf "$stub_dir" "$root"
+}
+
+@test "with CLAUDE_SESSION_ID unset the candidates receipt is keyed on CLAUDE_CODE_SESSION_ID" {
+    # Claude Code 2.1.258's Bash tool exports CLAUDE_CODE_SESSION_ID. Clavain's
+    # CLAUDE_SESSION_ID only exists when session-start.sh ran and wrote the env
+    # file. Keyed on the second alone, every receipt landed as unknown.json and
+    # every detected block was flagged as improvised.
+    stub_dir="$(mktemp -d)"
+    cat > "$stub_dir/bd" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "where" ]]; then
+    echo "$PWD/.beads"; echo "  prefix: tst"; echo "  database: $PWD/.beads/tst.db"; exit 0
+fi
+if [[ "$1" == "ready" ]]; then echo '[{"id":"tst-1","title":"a ready bead"}]'; exit 0; fi
+exit 0
+EOF
+    chmod +x "$stub_dir/bd"
+    root="$(mktemp -d)"; mkdir -p "$root/.beads"
+    (
+        cd "$root" || exit 1
+        unset CLAUDE_SESSION_ID
+        PATH="$stub_dir:$PATH" \
+        CLAUDE_CODE_SESSION_ID="sess-code" \
+        CLAVAIN_PROVENANCE_DIR="$CACHE_DIR" \
+        CLAVAIN_NEXT_GOAL_ROOTS="$root" \
+            "$BATS_TEST_DIRNAME/../../scripts/next-goal-candidates.sh" >/dev/null
+    )
+    [ -f "$CACHE_DIR/sess-code.json" ]
+    [ ! -f "$CACHE_DIR/unknown.json" ]
     rm -rf "$stub_dir" "$root"
 }
 
@@ -263,6 +377,27 @@ $(block_claiming_provenance)"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Next-goal provenance"* ]]
     [[ "$output" != *"Goal-cadence:"* ]]
+}
+
+@test "hook finds a receipt keyed on the writer's register when stdin's session id differs" {
+    # The writer keys on CLAUDE_SESSION_ID / CLAUDE_CODE_SESSION_ID; the hook
+    # gets .session_id on stdin. Nothing guaranteed the two strings agree, so
+    # the reader tries every register the writer could have used.
+    cat > "$CLAVAIN_PROVENANCE_DIR/sess-env.json" <<'EOF'
+{"schema_version":"clavain.next-goal-provenance/v1","session_id":"sess-env",
+ "tracker_reachable":true,"roots_ok":["mk"],"lookup_failures":[]}
+EOF
+    export CLAUDE_CODE_SESSION_ID="sess-env"
+    run run_stop_hook "$(block_claiming_provenance)" "sess-stdin"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Next-goal provenance"* ]]
+}
+
+@test "hook still flags when no register has a receipt" {
+    export CLAUDE_CODE_SESSION_ID="sess-env-absent"
+    run run_stop_hook "$(block_claiming_provenance)" "sess-stdin-2"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Next-goal provenance"* ]]
 }
 
 # ---------------------------------------------------- verification (2026-08-14)

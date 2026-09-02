@@ -41,9 +41,18 @@
 # and that injection is itself written to the transcript. Matching on the
 # phrase alone would fire on the hook's own request every time it fired — the
 # hook would audit itself and always find a violation. A real block also
-# carries paste-ready /goal text, so both markers are required, and only
-# assistant lines are considered (a user pasting a /goal is not the assistant
-# claiming provenance for it).
+# carries a paste-ready /goal LINE (a line that begins with `/goal ` and real
+# text, not the template's `<placeholder>`), within a few lines of a "next
+# goal" heading. That region is the block. Only assistant lines are considered
+# (a user pasting a /goal is not the assistant claiming provenance for it), and
+# only assistant lines from THIS turn: a human prompt is a user line with
+# string content and no isMeta flag; skill expansions and the Stop hook's own
+# feedback are user lines too, but isMeta:true, and must not reset the turn.
+#
+# The first version of this detector required the literal "OUTCOME:". Only 5
+# of 24 minted goals carry it, so from 2026-08-14 to 2026-09-01 every real block
+# was invisible to both audits, and the goal-cadence tier demanded a block
+# seven times from replies that already ended with one (mk-hxgi).
 #
 # KNOWN GAP, STATED RATHER THAN PAPERED OVER
 #
@@ -65,18 +74,85 @@ CLAVAIN_PROVENANCE_DIR="${CLAVAIN_PROVENANCE_DIR:-$HOME/.cache/clavain/next-goal
 # one spelling instead of three drifting copies.
 CLAVAIN_NO_TRACKER_PHRASE="no tracker reachable"
 
+# next_goal_session_key <stdin_session_id>
+# The register the WRITER used. scripts/next-goal-candidates.sh and
+# scripts/next-goal-verify.sh key receipts on CLAUDE_SESSION_ID, else
+# CLAUDE_CODE_SESSION_ID; the Stop hook gets .session_id on stdin. Nothing
+# guarantees those strings agree on a live turn, so the reader tries each
+# register the writer could have used and settles on the first that has a
+# receipt on disk. Falls back to the stdin id, so a missing receipt is still
+# reported under the id the hook knows.
+next_goal_session_key() {
+    local given="${1:-unknown}" cand
+    for cand in "$given" "${CLAUDE_SESSION_ID:-}" "${CLAUDE_CODE_SESSION_ID:-}"; do
+        [[ -n "$cand" ]] || continue
+        if [[ -f "$(next_goal_receipt_path "$cand")" || -f "${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}/${cand}.json" ]]; then
+            printf '%s\n' "$cand"
+            return 0
+        fi
+    done
+    printf '%s\n' "$given"
+}
+
+# next_goal_turn_started_at <transcript_text>
+# Timestamp of the most recent human prompt in the window. Empty when the
+# window holds none — which callers must treat as "not judged", never as
+# "fresh" (see next_goal_receipt_freshness).
+next_goal_turn_started_at() {
+    printf '%s\n' "${1:-}" | jq -R -r '
+        fromjson? | select(.type == "user")
+        | select((.message.content | type) == "string")
+        | select(.isMeta != true)
+        | .timestamp // empty' 2>/dev/null | tail -n 1
+}
+
+# next_goal_assistant_text <transcript_text> [turn_start]
+# The assistant's text blocks from this turn, one real line per line. Lines
+# with no timestamp (older transcripts, fixtures) are kept: a line that cannot
+# be placed is not evidence that it is from an earlier turn.
+next_goal_assistant_text() {
+    local text="${1:-}" start="${2-}"
+    printf '%s\n' "$text" | jq -R -r --arg start "$start" '
+        fromjson? | select(.type == "assistant")
+        | select($start == "" or .timestamp == null or ((.timestamp | tostring) >= $start))
+        | .message.content
+        | if type == "array" then (.[] | select(.type == "text") | .text)
+          elif type == "string" then .
+          else empty end' 2>/dev/null
+}
+
+# next_goal_block_region <assistant_text>
+# The block itself: from the nearest preceding "next goal" line to the
+# paste-ready /goal line, inclusive. Anchored on the LAST /goal line so prose
+# after a block ("next goal after that") cannot hide it, and bounded to 40
+# lines so a "next goal" mention far from a quoted /goal example is not one.
+# A /goal line whose text opens with "<" is the template's placeholder, not a
+# paste-ready goal.
+next_goal_block_region() {
+    printf '%s\n' "${1:-}" | awk '
+        { line[NR] = $0 }
+        tolower($0) ~ /next[ -]goal/ { heading[NR] = 1 }
+        $0 ~ /^[[:space:]]*\/goal[[:space:]]+[^[:space:]<]/ { last_goal = NR }
+        END {
+            if (!last_goal) exit
+            for (i = last_goal - 1; i >= 1 && i >= last_goal - 40; i--) {
+                if (heading[i]) {
+                    for (j = i; j <= last_goal; j++) print line[j]
+                    exit
+                }
+            }
+        }' 2>/dev/null
+}
+
 # next_goal_block_emitted <transcript_text>
-# 0 if the assistant emitted something with the shape of a Next-goal block.
+# 0 if the assistant emitted something with the shape of a Next-goal block
+# during this turn.
 next_goal_block_emitted() {
-    local text="$1"
-    local assistant
-    assistant="$(printf '%s\n' "$text" | grep '"type":"assistant"' 2>/dev/null || true)"
+    local text="${1:-}" start assistant
+    start="$(next_goal_turn_started_at "$text")"
+    assistant="$(next_goal_assistant_text "$text" "$start")"
     [[ -z "$assistant" ]] && return 1
-    grep -qiE 'next[ -]goal' <<<"$assistant" 2>/dev/null || return 1
-    # Paste-ready /goal text: the marker that separates a block from a mention
-    # of one. Matches the OUTCOME: line every goal carries per goal-shape.
-    grep -q 'OUTCOME:' <<<"$assistant" 2>/dev/null || return 1
-    return 0
+    [[ -n "$(next_goal_block_region "$assistant")" ]]
 }
 
 # next_goal_block_discloses_degradation <transcript_text>

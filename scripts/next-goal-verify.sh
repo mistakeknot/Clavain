@@ -41,7 +41,10 @@ MAX_ROOTS="${CLAVAIN_NEXT_GOAL_MAX_ROOTS:-6}"
 BD_TIMEOUT="${CLAVAIN_NEXT_GOAL_BD_TIMEOUT:-20}"
 
 RECEIPT_DIR="${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}"
-RECEIPT_SESSION="${CLAUDE_SESSION_ID:-unknown}"
+# Same register order as next-goal-candidates.sh, for the same reason: the
+# hook reads receipts by session id, and a receipt filed under "unknown"
+# vouches for nobody.
+RECEIPT_SESSION="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
 
 IDS=()
 PATHS=()

@@ -71,7 +71,12 @@ SCOPE="${1:-}"
 # construction, which is exactly the state that needs flagging.
 PROVENANCE_SCHEMA="clavain.next-goal-provenance/v1"
 PROVENANCE_DIR="${CLAVAIN_PROVENANCE_DIR:-$HOME/.cache/clavain/next-goal-provenance}"
-PROVENANCE_SESSION="${CLAUDE_SESSION_ID:-unknown}"
+# CLAUDE_SESSION_ID is written by hooks/session-start.sh from the hook's own
+# stdin, when that hook runs. Claude Code 2.1.258's Bash tool exports
+# CLAUDE_CODE_SESSION_ID unconditionally. Keyed on the first alone, every
+# receipt from a session whose start hook never fired landed as unknown.json,
+# and the Stop hook then flagged each real block as improvised (mk-hxgi).
+PROVENANCE_SESSION="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
 
 record_provenance() {
     # $1 = tracker_reachable (true|false), $2 = compact JSON object of extras
