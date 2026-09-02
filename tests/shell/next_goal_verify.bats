@@ -188,3 +188,74 @@ EOF
     [ "$(jq -r '.beads[] | select(.id=="ghost-1") | .verdict' <<<"$output")" = "disqualified" ]
     [ "$(jq -r '.disqualified | length' <<<"$output")" = "2" ]
 }
+
+# ------------------------------------- the verifier surfaces what it reads (W4)
+#
+# bd show --json returns notes, updated_at and comment_count, and the verifier
+# read them and threw them away. That is how mk-ud80 ("CLEARED MOST OF THIS"
+# in its notes, untouched since 2026-07-29) was ranked #2 on the strength of
+# its title. Evidence the gate read must reach the reader.
+
+days_ago() { jq -rn --argjson d "$1" 'now - ($d * 86400) | todate'; }
+
+@test "a bead with notes warns and carries the excerpt — the mk-ud80 case" {
+    make_bd_stub "$(bead_json open ',"notes":"CLEARED MOST OF THIS -- see the new plan; only the walker remains","updated_at":"2026-07-29T00:00:00Z","comment_count":0')"
+    run bash "$SCRIPT" x-1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "true" ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "warn" ]
+    [ "$(jq -r '.beads[0].has_notes' <<<"$output")" = "true" ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"has notes"* ]]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"CLEARED MOST OF THIS"* ]]
+    [ "$(jq -r '.beads[0].updated_at' <<<"$output")" = "2026-07-29T00:00:00Z" ]
+    [ "$(jq -r '.warnings[0]' <<<"$output")" = "x-1" ]
+}
+
+@test "an open bead untouched for 60 days warns as stale" {
+    make_bd_stub "$(bead_json open ",\"updated_at\":\"$(days_ago 60)\"")"
+    run bash "$SCRIPT" x-1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "warn" ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"untouched for"* ]]
+    age="$(jq -r '.beads[0].age_days' <<<"$output")"
+    [ "$age" -ge 59 ] && [ "$age" -le 61 ]
+}
+
+@test "the stale threshold is configurable" {
+    make_bd_stub "$(bead_json open ",\"updated_at\":\"$(days_ago 60)\"")"
+    CLAVAIN_NEXT_GOAL_STALE_DAYS=90 run bash "$SCRIPT" x-1
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+}
+
+@test "a fresh note-free open bead is still ok" {
+    make_bd_stub "$(bead_json open ",\"updated_at\":\"$(days_ago 1)\",\"notes\":\"\",\"comment_count\":2")"
+    run bash "$SCRIPT" x-1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+    [ "$(jq -r '.beads[0].has_notes' <<<"$output")" = "false" ]
+    [ "$(jq -r '.beads[0].comment_count' <<<"$output")" = "2" ]
+    [ "$(jq -r '.beads[0].age_days' <<<"$output")" -le 1 ]
+}
+
+@test "an unparseable updated_at yields age_days null and no stale warning" {
+    make_bd_stub "$(bead_json open ',"updated_at":"yesterday-ish"')"
+    run bash "$SCRIPT" x-1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].age_days' <<<"$output")" = "null" ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "ok" ]
+}
+
+@test "a status warn is not downgraded or relabelled by the notes rule" {
+    make_bd_stub "$(bead_json in_progress ',"notes":"half done"')"
+    run bash "$SCRIPT" x-1
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "warn" ]
+    [[ "$(jq -r '.beads[0].reason' <<<"$output")" == *"already in progress"* ]]
+    [ "$(jq -r '.beads[0].has_notes' <<<"$output")" = "true" ]
+}
+
+@test "a closed bead with notes stays disqualified" {
+    make_bd_stub "$(bead_json closed ',"notes":"done"')"
+    run bash "$SCRIPT" x-1
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
+}
