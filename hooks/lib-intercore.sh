@@ -13,7 +13,9 @@ INTERCORE_WRAPPER_VERSION="1.1.0"
 # multiple Stop hooks from firing in the same stop cycle.
 INTERCORE_STOP_DEDUP_SENTINEL="stop"
 
-INTERCORE_BIN=""
+# Preset by tests to a stub; production never exports it, so this only
+# matters to a shell that sourced the lib with a mock already in place (mk-7zuk).
+INTERCORE_BIN="${INTERCORE_BIN:-}"
 INTERCORE_WARNED=false
 
 # Trace context: IC_TRACE_ID and IC_SPAN_ID are inherited from the environment.
