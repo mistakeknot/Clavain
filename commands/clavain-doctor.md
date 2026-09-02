@@ -147,19 +147,23 @@ fi
 
 ### 2g. Plugin Cache Verification
 
+Walks every entry in `installed_plugins.json` (not a hardcoded list) and checks that its `installPath` resolves to a real directory. On 2026-09-01 clavain's own cache was a symlink loop (`0.6.300 -> 0.6.302 -> 0.6.300`), so every Clavain hook failed to start for weeks; this check iterated seven companion plugins and never looked at clavain (mk-i3u8).
+
 ```bash
-_cache_dir="${HOME}/.claude/plugins/cache/interagency-marketplace"
-_warns=0
-for _p in interphase interline interspect interflux interpath interwatch interlock; do
-  _pd=$(find "$_cache_dir" -maxdepth 1 -name "$_p" -type d 2>/dev/null | head -1)
-  [ -z "$_pd" ] && continue
-  _latest=$(ls -d "$_pd"/*/ 2>/dev/null | sort -V | tail -1)
-  if [ -z "$_latest" ]; then echo "  $_p: WARN (no version directory)"; _warns=$((_warns+1)); continue; fi
-  _n=$(find "$_latest" -type f 2>/dev/null | wc -l)
-  if [ "$_n" -le 2 ]; then echo "  $_p: WARN (only $_n files — likely empty cache, reinstall)"; _warns=$((_warns+1))
-  else echo "  $_p: $_n files  PASS"; fi
+_pcc=""
+for _c in "${CLAUDE_PLUGIN_ROOT:-}/scripts/check-plugin-cache.sh" \
+          "$HOME/.codex/clavain/scripts/check-plugin-cache.sh" \
+          "$HOME/projects/Sylveste/os/Clavain/scripts/check-plugin-cache.sh"; do
+  [ -f "$_c" ] && { _pcc="$_c"; break; }
 done
-[ "$_warns" -eq 0 ] && echo "plugin caches: PASS"
+if [ -z "$_pcc" ]; then
+  echo "plugin cache: SKIP (check-plugin-cache.sh not found)"
+else
+  bash "$_pcc"; _rc=$?
+  # exit 1 = at least one plugin cannot run hooks (FAIL lines name them);
+  # exit 2 = the check itself could not run — report it, never as PASS.
+  [ "$_rc" -eq 2 ] && echo "plugin cache: could not evaluate (see above)"
+fi
 ```
 
 ### 2h. Marketplace Association
