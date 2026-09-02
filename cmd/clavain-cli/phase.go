@@ -463,11 +463,16 @@ func cmdSetArtifact(args []string) error {
 	}
 
 	// Always store in bd state as fallback (works without ic run)
+	bdWritten := false
+	var bdErr error
 	if bdAvailable() {
-		_, stateErr := runBD("set-state", beadID, "artifact_"+artifactType+"="+artifactPath)
-		if stateErr != nil && artifactType == runtimeEvidenceArtifactType {
-			return fmt.Errorf("set-artifact: register runtime evidence in Beads: %w", stateErr)
+		_, bdErr = runBD("set-state", beadID, "artifact_"+artifactType+"="+artifactPath)
+		if bdErr != nil && artifactType == runtimeEvidenceArtifactType {
+			return fmt.Errorf("set-artifact: register runtime evidence in Beads: %w", bdErr)
 		}
+		bdWritten = bdErr == nil
+	} else {
+		bdErr = fmt.Errorf("bd not available on PATH")
 	}
 
 	runID, err := resolveRunID(beadID)
@@ -475,7 +480,13 @@ func cmdSetArtifact(args []string) error {
 		if artifactType == runtimeEvidenceArtifactType {
 			return fmt.Errorf("set-artifact: runtime evidence requires a bound Intercore run: %w", err)
 		}
-		return nil // no ic run — bd fallback already written
+		if !bdWritten {
+			// Neither store took the write. Callers record verdict evidence
+			// through this command; success over a double-failure is a quiet
+			// pass (observed live 2026-09-02, rc=0 with no store reachable).
+			return fmt.Errorf("set-artifact: %s not recorded anywhere for %s: bd fallback failed (%v); no Intercore run (%v)", artifactType, beadID, bdErr, err)
+		}
+		return nil // no ic run — bd fallback holds the artifact
 	}
 
 	// Get current phase
@@ -497,7 +508,10 @@ func cmdSetArtifact(args []string) error {
 		if artifactType == runtimeEvidenceArtifactType {
 			return fmt.Errorf("set-artifact: register runtime evidence in Intercore: %w", err)
 		}
-		// Fail-safe: log but don't fail
+		if !bdWritten {
+			return fmt.Errorf("set-artifact: %s not recorded anywhere for %s: bd fallback failed (%v); Intercore add failed (%v)", artifactType, beadID, bdErr, err)
+		}
+		// Fail-safe: bd fallback holds the artifact; log but don't fail
 		fmt.Fprintf(os.Stderr, "set-artifact: warning: %v\n", err)
 	}
 
