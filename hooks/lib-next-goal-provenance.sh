@@ -41,9 +41,18 @@
 # and that injection is itself written to the transcript. Matching on the
 # phrase alone would fire on the hook's own request every time it fired — the
 # hook would audit itself and always find a violation. A real block also
-# carries paste-ready /goal text, so both markers are required, and only
-# assistant lines are considered (a user pasting a /goal is not the assistant
-# claiming provenance for it).
+# carries a paste-ready /goal LINE (a line that begins with `/goal ` and real
+# text, not the template's `<placeholder>`), within a few lines of a "next
+# goal" heading. That region is the block. Only assistant lines are considered
+# (a user pasting a /goal is not the assistant claiming provenance for it), and
+# only assistant lines from THIS turn: a human prompt is a user line with
+# string content and no isMeta flag; skill expansions and the Stop hook's own
+# feedback are user lines too, but isMeta:true, and must not reset the turn.
+#
+# The first version of this detector required the literal "OUTCOME:". Only 5
+# of 24 minted goals carry it, so from 2026-08-14 to 2026-09-01 every real block
+# was invisible to both audits, and the goal-cadence tier demanded a block
+# seven times from replies that already ended with one (mk-hxgi).
 #
 # KNOWN GAP, STATED RATHER THAN PAPERED OVER
 #
@@ -65,18 +74,85 @@ CLAVAIN_PROVENANCE_DIR="${CLAVAIN_PROVENANCE_DIR:-$HOME/.cache/clavain/next-goal
 # one spelling instead of three drifting copies.
 CLAVAIN_NO_TRACKER_PHRASE="no tracker reachable"
 
+# next_goal_session_key <stdin_session_id>
+# The register the WRITER used. scripts/next-goal-candidates.sh and
+# scripts/next-goal-verify.sh key receipts on CLAUDE_SESSION_ID, else
+# CLAUDE_CODE_SESSION_ID; the Stop hook gets .session_id on stdin. Nothing
+# guarantees those strings agree on a live turn, so the reader tries each
+# register the writer could have used and settles on the first that has a
+# receipt on disk. Falls back to the stdin id, so a missing receipt is still
+# reported under the id the hook knows.
+next_goal_session_key() {
+    local given="${1:-unknown}" cand
+    for cand in "$given" "${CLAUDE_SESSION_ID:-}" "${CLAUDE_CODE_SESSION_ID:-}"; do
+        [[ -n "$cand" ]] || continue
+        if [[ -f "$(next_goal_receipt_path "$cand")" || -f "${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}/${cand}.json" ]]; then
+            printf '%s\n' "$cand"
+            return 0
+        fi
+    done
+    printf '%s\n' "$given"
+}
+
+# next_goal_turn_started_at <transcript_text>
+# Timestamp of the most recent human prompt in the window. Empty when the
+# window holds none — which callers must treat as "not judged", never as
+# "fresh" (see next_goal_receipt_freshness).
+next_goal_turn_started_at() {
+    printf '%s\n' "${1:-}" | jq -R -r '
+        fromjson? | select(.type == "user")
+        | select((.message.content | type) == "string")
+        | select(.isMeta != true)
+        | .timestamp // empty' 2>/dev/null | tail -n 1
+}
+
+# next_goal_assistant_text <transcript_text> [turn_start]
+# The assistant's text blocks from this turn, one real line per line. Lines
+# with no timestamp (older transcripts, fixtures) are kept: a line that cannot
+# be placed is not evidence that it is from an earlier turn.
+next_goal_assistant_text() {
+    local text="${1:-}" start="${2-}"
+    printf '%s\n' "$text" | jq -R -r --arg start "$start" '
+        fromjson? | select(.type == "assistant")
+        | select($start == "" or .timestamp == null or ((.timestamp | tostring) >= $start))
+        | .message.content
+        | if type == "array" then (.[] | select(.type == "text") | .text)
+          elif type == "string" then .
+          else empty end' 2>/dev/null
+}
+
+# next_goal_block_region <assistant_text>
+# The block itself: from the nearest preceding "next goal" line to the
+# paste-ready /goal line, inclusive. Anchored on the LAST /goal line so prose
+# after a block ("next goal after that") cannot hide it, and bounded to 40
+# lines so a "next goal" mention far from a quoted /goal example is not one.
+# A /goal line whose text opens with "<" is the template's placeholder, not a
+# paste-ready goal.
+next_goal_block_region() {
+    printf '%s\n' "${1:-}" | awk '
+        { line[NR] = $0 }
+        tolower($0) ~ /next[ -]goal/ { heading[NR] = 1 }
+        $0 ~ /^[[:space:]]*\/goal[[:space:]]+[^[:space:]<]/ { last_goal = NR }
+        END {
+            if (!last_goal) exit
+            for (i = last_goal - 1; i >= 1 && i >= last_goal - 40; i--) {
+                if (heading[i]) {
+                    for (j = i; j <= last_goal; j++) print line[j]
+                    exit
+                }
+            }
+        }' 2>/dev/null
+}
+
 # next_goal_block_emitted <transcript_text>
-# 0 if the assistant emitted something with the shape of a Next-goal block.
+# 0 if the assistant emitted something with the shape of a Next-goal block
+# during this turn.
 next_goal_block_emitted() {
-    local text="$1"
-    local assistant
-    assistant="$(printf '%s\n' "$text" | grep '"type":"assistant"' 2>/dev/null || true)"
+    local text="${1:-}" start assistant
+    start="$(next_goal_turn_started_at "$text")"
+    assistant="$(next_goal_assistant_text "$text" "$start")"
     [[ -z "$assistant" ]] && return 1
-    grep -qiE 'next[ -]goal' <<<"$assistant" 2>/dev/null || return 1
-    # Paste-ready /goal text: the marker that separates a block from a mention
-    # of one. Matches the OUTCOME: line every goal carries per goal-shape.
-    grep -q 'OUTCOME:' <<<"$assistant" 2>/dev/null || return 1
-    return 0
+    [[ -n "$(next_goal_block_region "$assistant")" ]]
 }
 
 # next_goal_block_discloses_degradation <transcript_text>
@@ -86,6 +162,79 @@ next_goal_block_discloses_degradation() {
     printf '%s\n' "$text" \
         | grep '"type":"assistant"' 2>/dev/null \
         | grep -qi "$CLAVAIN_NO_TRACKER_PHRASE" 2>/dev/null
+}
+
+# next_goal_block_stamp <transcript_text>
+# Timestamp of the last assistant line in the window: when the block went out.
+next_goal_block_stamp() {
+    printf '%s\n' "${1:-}" | jq -R -r '
+        fromjson? | select(.type == "assistant") | .timestamp // empty' 2>/dev/null | tail -n 1
+}
+
+# next_goal_receipt_freshness <receipt_stamp> <transcript_text>
+# Echoes fresh | stale | unknown.
+#
+# A RECEIPT IS A PER-TURN FACT. Sessions live for months and receipts had no
+# expiry, so one next-goal run vouched for every block the session emitted
+# after it. A receipt is fresh when it was written at or after this turn's
+# human prompt. When the window holds no prompt at all (a long, tool-heavy
+# turn — exactly the kind likeliest to carry a stale receipt), the block's own
+# timestamp minus CLAVAIN_NEXT_GOAL_RECEIPT_BUDGET_MIN (default 30) bounds it
+# instead; the fixed 80-line tail must not be a way to fail open. With no
+# stamps on either side the answer is unknown, and unknown is not fresh — but
+# it is not flagged either, because a transcript with no timestamps is a
+# fixture, not a session.
+#
+# Both stamps are read off the same host clock: Claude Code writes the
+# transcript and runs the helper on the same machine, so no skew allowance is
+# needed. Comparison is on the first 19 characters (YYYY-MM-DDTHH:MM:SS) of
+# UTC stamps; the transcript carries milliseconds and the receipt does not.
+next_goal_receipt_freshness() {
+    local stamp="${1:-}" text="${2:-}" start block budget
+    [[ -z "$stamp" || "$stamp" == "null" ]] && { printf 'unknown\n'; return 0; }
+    start="$(next_goal_turn_started_at "$text")"
+    if [[ -n "$start" ]]; then
+        if [[ "${stamp:0:19}" < "${start:0:19}" ]]; then printf 'stale\n'; else printf 'fresh\n'; fi
+        return 0
+    fi
+    block="$(next_goal_block_stamp "$text")"
+    [[ -z "$block" ]] && { printf 'unknown\n'; return 0; }
+    budget="${CLAVAIN_NEXT_GOAL_RECEIPT_BUDGET_MIN:-30}"
+    [[ "$budget" =~ ^[0-9]+$ ]] || budget=30
+    jq -rn --arg s "${stamp:0:19}Z" --arg b "${block:0:19}Z" --argjson m "$budget" '
+        try (if ($s | fromdateiso8601) >= (($b | fromdateiso8601) - ($m * 60))
+             then "fresh" else "stale" end)
+        catch "unknown"' 2>/dev/null || printf 'unknown\n'
+}
+
+# next_goal_freshness_anchor <transcript_text>
+# The clause a STALE message names as the other side of the comparison.
+next_goal_freshness_anchor() {
+    local start block
+    start="$(next_goal_turn_started_at "${1:-}")"
+    if [[ -n "$start" ]]; then
+        printf 'this turn began at %s' "$start"
+        return 0
+    fi
+    block="$(next_goal_block_stamp "${1:-}")"
+    printf 'the block went out at %s with no prompt in the window, and a receipt more than %s minutes older than the block is not this turn'"'"'s' \
+        "$block" "${CLAVAIN_NEXT_GOAL_RECEIPT_BUDGET_MIN:-30}"
+}
+
+# next_goal_audit_log <session_id> <kind> [detail]
+# One line per emitted warning, so "how often does this fire, and for what"
+# has a data source. The plan that shipped these audits gated promotion of
+# its warnings on measurement; this is the measurement. Best-effort, never
+# fails the caller, nothing written when nothing fired.
+next_goal_audit_log() {
+    [[ "${CLAVAIN_NEXT_GOAL_AUDIT_LOG_DISABLE:-0}" == "1" ]] && return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    mkdir -p "$CLAVAIN_PROVENANCE_DIR" 2>/dev/null || return 0
+    jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg session "${1:-unknown}" \
+        --arg kind "${2:-unknown}" --arg detail "${3:-}" \
+        '{ts: $ts, session: $session, kind: $kind, detail: $detail}' \
+        >> "$CLAVAIN_PROVENANCE_DIR/audit-log.jsonl" 2>/dev/null || true
+    return 0
 }
 
 # next_goal_receipt_path <session_id>
@@ -145,11 +294,21 @@ next_goal_provenance_warning() {
     next_goal_block_emitted "$text" || return 0
     next_goal_block_discloses_degradation "$text" && return 0
 
-    local state detail
+    local state detail stamp
     state="$(next_goal_receipt_state "$session")"
-    [[ "$state" == "reachable" ]] && return 0
+    if [[ "$state" == "reachable" ]]; then
+        # A receipt that exists and says reachable still has to be THIS
+        # turn's receipt. Fail-open only when there is nothing to compare.
+        stamp="$(jq -r '.recorded_at // empty' "$(next_goal_receipt_path "$session")" 2>/dev/null)"
+        [[ "$(next_goal_receipt_freshness "$stamp" "$text")" == "stale" ]] || return 0
+        next_goal_audit_log "$session" "provenance-stale" "$stamp"
+        printf 'Next-goal provenance: STALE receipt. scripts/next-goal-candidates.sh last ran for session %s at %s, but %s — that receipt vouches for an earlier block, not this one, and the backlog it ranked may have moved since. A receipt is a per-turn fact: re-run /clavain:next-goal (or the helper) in this turn and re-derive the candidates.\n' \
+            "$session" "$stamp" "$(next_goal_freshness_anchor "$text")"
+        return 0
+    fi
 
     detail="$(next_goal_receipt_detail "$session")"
+    next_goal_audit_log "$session" "provenance-$state" "$detail"
 
     case "$state" in
         missing)
@@ -216,6 +375,117 @@ next_goal_verify_disqualified() {
     jq -r '(.disqualified // []) | join(", ")' "$path" 2>/dev/null || true
 }
 
+# ---------------------------------------------------- cited ⊆ verified (W5)
+#
+# A clean verify receipt says the IDs IT READ BACK are live. It says nothing
+# about an ID the block cites that the verifier was never given — and on
+# 2026-09-01 the #1 candidate ("Merge PR #26") carried no ID at all, so there
+# was nothing to verify and nothing to re-find next session. Known prefixes
+# come from the receipts themselves (roots_ok of the provenance receipt, and
+# the prefix of every verified bead), because "flux-drive" and "next-goal"
+# fit the ID grammar and a registry of trackers does not exist. A token with
+# an unknown prefix is therefore never accused of being a bead; but on a
+# candidate line that carries no known ID it is NAMED, because "solwend-w46q
+# from a tracker the verifier never reached" is the 2026-08-14 failure exactly.
+
+# next_goal_id_tokens <text>
+# Every whole token shaped like a bead ID: <prefix>-<slug>[.<n>]*, prefix
+# starting with a letter, slug 2-8 lowercase alphanumerics. Whole tokens, so
+# "fix/mk-hxgi-next-goal-audit" is not "mk-hxgi" truncated; trailing dots are
+# sentence punctuation, not part of the ID.
+next_goal_id_tokens() {
+    printf '%s\n' "${1:-}" \
+        | tr -cs 'A-Za-z0-9_.-' '\n' \
+        | sed 's/\.*$//' \
+        | grep -E '^[A-Za-z][A-Za-z0-9]*-[a-z0-9]{2,8}(\.[0-9]+)*$' 2>/dev/null \
+        | awk '!seen[$0]++'
+}
+
+# next_goal_known_prefixes <session_id> — lowercased, one per line.
+next_goal_known_prefixes() {
+    local ppath vpath
+    ppath="$(next_goal_receipt_path "${1:-unknown}")"
+    vpath="${CLAVAIN_VERIFY_DIR}/${1:-unknown}.json"
+    {
+        [[ -f "$ppath" ]] && jq -r '(.roots_ok // [])[] | tostring | select(test("/") | not)' "$ppath" 2>/dev/null
+        [[ -f "$vpath" ]] && jq -r '(.beads // [])[] | (.id // "") | select(. != "") | split("-")[0]' "$vpath" 2>/dev/null
+        true
+    } | tr 'A-Z' 'a-z' | awk 'NF && !seen[$0]++'
+}
+
+# next_goal_verified_ids <session_id> — the IDs the verifier read back.
+next_goal_verified_ids() {
+    local vpath="${CLAVAIN_VERIFY_DIR}/${1:-unknown}.json"
+    [[ -f "$vpath" ]] || return 0
+    jq -r '(.beads // [])[] | (.id // "") | select(. != "")' "$vpath" 2>/dev/null
+    return 0
+}
+
+# next_goal_cited_warning <session_id> <transcript_text>
+# Echoes a warning when the block cites an ID the verifier never saw, or
+# ranks a candidate that carries no verified ID in a block that does not
+# disclose degradation. Silent otherwise. Always exits 0.
+next_goal_cited_warning() {
+    local session="${1:-unknown}" text="${2:-}"
+    next_goal_block_discloses_degradation "$text" && return 0
+    local start assistant region
+    start="$(next_goal_turn_started_at "$text")"
+    assistant="$(next_goal_assistant_text "$text" "$start")"
+    region="$(next_goal_block_region "$assistant")"
+    [[ -z "$region" ]] && return 0
+
+    local known verified
+    known="$(next_goal_known_prefixes "$session")"
+    verified="$(next_goal_verified_ids "$session")"
+
+    local -a unverified=() idless=()
+    local tok prefix
+    while IFS= read -r tok; do
+        [[ -n "$tok" ]] || continue
+        prefix="$(printf '%s' "${tok%%-*}" | tr 'A-Z' 'a-z')"
+        grep -qxF -- "$prefix" <<<"$known" 2>/dev/null || continue
+        grep -qixF -- "$tok" <<<"$verified" 2>/dev/null || unverified+=("$tok")
+    done < <(next_goal_id_tokens "$region")
+
+    local line n=0 has_known hint
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*[0-9]+\.[[:space:]] ]] || continue
+        n=$((n + 1))
+        has_known=0
+        hint=""
+        while IFS= read -r tok; do
+            [[ -n "$tok" ]] || continue
+            prefix="$(printf '%s' "${tok%%-*}" | tr 'A-Z' 'a-z')"
+            if grep -qxF -- "$prefix" <<<"$known" 2>/dev/null; then
+                has_known=1
+            else
+                hint="${hint:+$hint, }$tok"
+            fi
+        done < <(next_goal_id_tokens "$line")
+        [[ $has_known -eq 1 ]] && continue
+        if [[ -n "$hint" ]]; then
+            idless+=("candidate $n (it mentions $hint; if that is a bead ID, its tracker was never reached by the verifier)")
+        else
+            idless+=("candidate $n")
+        fi
+    done <<<"$region"
+
+    local out="" joined
+    if [[ ${#unverified[@]} -gt 0 ]]; then
+        joined="$(printf '%s, ' "${unverified[@]}")"; joined="${joined%, }"
+        next_goal_audit_log "$session" "verification-cited-unverified" "$joined"
+        out+="$(printf 'Next-goal verification: the block cites %s, which the verifier never saw — a receipt vouches only for the IDs it read back, and an ID it did not read back may be closed, deferred, or invented. Re-run scripts/next-goal-verify.sh with every ID the block cites.' "$joined")"
+    fi
+    if [[ ${#idless[@]} -gt 0 ]]; then
+        joined="$(printf '%s; ' "${idless[@]}")"; joined="${joined%; }"
+        next_goal_audit_log "$session" "verification-idless-candidate" "$joined"
+        [[ -n "$out" ]] && out+=$'\n'
+        out+="$(printf 'Next-goal verification: %s carries no tracker ID the verifier reached, in a block that reads as tracker-ranked. A candidate without an ID cannot be verified now or re-found next session: file it and cite the ID, or say in the block that it is improvised ("%s").' "$joined" "$CLAVAIN_NO_TRACKER_PHRASE")"
+    fi
+    [[ -n "$out" ]] && printf '%s\n' "$out"
+    return 0
+}
+
 # next_goal_verification_warning <session_id> <transcript_text>
 # Echoes a warning when a block cites candidates that were never re-read, or
 # that failed the re-read. Silent otherwise. Always exits 0 — a nudge, not a gate.
@@ -225,10 +495,23 @@ next_goal_verification_warning() {
     [[ "${CLAVAIN_PROVENANCE_AUDIT_DISABLE:-0}" == "1" ]] && return 0
     next_goal_block_emitted "$text" || return 0
 
-    local state detail
+    local state detail stamp
     state="$(next_goal_verify_receipt_state "$session")"
-    [[ "$state" == "clean" ]] && return 0
+    if [[ "$state" == "clean" ]]; then
+        stamp="$(jq -r '.verified_at // empty' "${CLAVAIN_VERIFY_DIR}/${session}.json" 2>/dev/null)"
+        if [[ "$(next_goal_receipt_freshness "$stamp" "$text")" != "stale" ]]; then
+            # Fresh and clean for what it read. Now: is what the block cites
+            # a subset of what it read?
+            next_goal_cited_warning "$session" "$text"
+            return 0
+        fi
+        next_goal_audit_log "$session" "verification-stale" "$stamp"
+        printf 'Next-goal verification: STALE receipt. scripts/next-goal-verify.sh last ran for session %s at %s, but %s — the candidates this block cites were re-read for an earlier block, and a bead can close between turns. Re-run the verifier on every ID this block cites before standing behind it.\n' \
+            "$session" "$stamp" "$(next_goal_freshness_anchor "$text")"
+        return 0
+    fi
     detail="$(next_goal_verify_disqualified "$session")"
+    next_goal_audit_log "$session" "verification-$state" "$detail"
 
     case "$state" in
         missing)

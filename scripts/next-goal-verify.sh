@@ -39,9 +39,16 @@ set -uo pipefail
 SCHEMA_VERSION="clavain.next-goal-verify/v1"
 MAX_ROOTS="${CLAVAIN_NEXT_GOAL_MAX_ROOTS:-6}"
 BD_TIMEOUT="${CLAVAIN_NEXT_GOAL_BD_TIMEOUT:-20}"
+# An open bead nobody has touched for this many days is surfaced as a warn:
+# the condition its title describes may no longer hold (mk-hxgi W4).
+STALE_DAYS="${CLAVAIN_NEXT_GOAL_STALE_DAYS:-30}"
+[[ "$STALE_DAYS" =~ ^[0-9]+$ ]] || STALE_DAYS=30
 
 RECEIPT_DIR="${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}"
-RECEIPT_SESSION="${CLAUDE_SESSION_ID:-unknown}"
+# Same register order as next-goal-candidates.sh, for the same reason: the
+# hook reads receipts by session id, and a receipt filed under "unknown"
+# vouches for nobody.
+RECEIPT_SESSION="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
 
 IDS=()
 PATHS=()
@@ -165,10 +172,26 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
             '{id: $id, root: null, status: null, verdict: "disqualified",
               reason: "no such bead in any reachable tracker — do not cite an ID that cannot be read back"}')"
     else
-        entry="$(jq -c --arg root "$found_root" '
+        # THE EVIDENCE THE GATE READS MUST REACH THE READER. bd show returns
+        # notes, updated_at and comment_count, and the first version of this
+        # script read them and threw them away. That is how mk-ud80 — notes
+        # "CLEARED MOST OF THIS", untouched since 2026-07-29 — was ranked #2
+        # on the strength of its title. Notes and age are surfaced as `warn`
+        # (advisory, never disqualifying: a note may supersede the title or
+        # merely annotate it, and only a reader can tell which). Status-based
+        # verdicts are decided first and take precedence.
+        #
+        # jq 1.7: every `a == b` / `a > b` inside an object literal is
+        # parenthesised — see the note above PAYLOAD below.
+        entry="$(jq -c --arg root "$found_root" --argjson now "$(date +%s)" --argjson stale "$STALE_DAYS" '
             .[0]
             | {id, root: $root, status, issue_type, priority,
-               title: (.title // ""), closed_at: (.closed_at // null)}
+               title: (.title // ""), closed_at: (.closed_at // null),
+               updated_at: (.updated_at // null),
+               age_days: (try ((($now - (.updated_at | fromdateiso8601)) / 86400) | floor) catch null),
+               comment_count: (.comment_count // 0),
+               has_notes: ((((.notes // "") | tostring) | length) > 0),
+               notes_excerpt: (((.notes // "") | tostring) | gsub("\\s+"; " ") | .[0:200])}
             | . + (
                 if   .status == "closed"
                 then {verdict: "disqualified",
@@ -185,6 +208,15 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
                       reason: "blocked — usable only if the goal is to unblock it, and name what it waits on"}
                 else {verdict: "ok", reason: "open"}
                 end)
+            | if (.verdict == "ok") and .has_notes
+              then .verdict = "warn"
+                 | .reason = ("has notes (updated " + (.updated_at // "at an unknown time")
+                              + ") that may supersede the title — read them before citing: " + .notes_excerpt)
+              elif (.verdict == "ok") and (.age_days != null) and (.age_days > $stale)
+              then .verdict = "warn"
+                 | .reason = ("untouched for " + (.age_days | tostring)
+                              + " days — re-verify that the condition it describes still holds")
+              else . end
         ' <<<"$found")"
     fi
     BEADS_JSON="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$BEADS_JSON")"
