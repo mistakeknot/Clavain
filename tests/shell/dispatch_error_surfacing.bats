@@ -36,29 +36,45 @@ _load() {
     source "$HELPERS"
 }
 
-@test "detect: HTTP 400 in stderr → error" {
+@test "detect: HTTP 400 in stderr + nonzero exit → error" {
     _load
     echo "stream error: unexpected status 400 Bad Request: model gpt-5.3-codex-xhigh not supported on ChatGPT account" > "$STDERR_FILE"
-    run _detect_codex_error "$STDERR_FILE" "" 0
+    run _detect_codex_error "$STDERR_FILE" "" 1
     [ "$status" -eq 0 ]
     [[ "$output" == error$'\t'* ]]
     [[ "$output" == *"400"* ]]
 }
 
-@test "detect: HTTP 429 in stderr → retry" {
+@test "detect: HTTP 429 in stderr + nonzero exit → retry" {
     _load
     echo "429 Too Many Requests: rate limited" > "$STDERR_FILE"
-    run _detect_codex_error "$STDERR_FILE" "" 0
+    run _detect_codex_error "$STDERR_FILE" "" 1
     [ "$status" -eq 0 ]
     [[ "$output" == retry$'\t'* ]]
 }
 
-@test "detect: ERROR prefix without HTTP code → error" {
+@test "detect: ERROR prefix without HTTP code + nonzero exit → error" {
     _load
     echo "ERROR: something went wrong" > "$STDERR_FILE"
-    run _detect_codex_error "$STDERR_FILE" "" 0
+    run _detect_codex_error "$STDERR_FILE" "" 1
     [ "$status" -eq 0 ]
     [[ "$output" == error$'\t'* ]]
+}
+
+# rc=0 gating (25e2b44): an executor QUOTING error-shaped text — grep results,
+# docs snippets ("401 Unauthorized" inside a docs/solutions entry) — had a
+# genuine CLEAN overwritten and the task redispatched forever (shadow-work run
+# 39676448 rounds 11-13). Every real codex failure the scan has caught exited
+# nonzero, so the stderr scan is gated on rc != 0; rc=0 runs stay policed by
+# the zero-output heuristic below.
+
+@test "detect: error-shaped stderr with rc=0 → no override (quoted text is not a failure)" {
+    _load
+    echo "docs excerpt: server returned 401 Unauthorized — see auth guide" > "$STDERR_FILE"
+    printf '{"turns":3,"messages":2,"commands":1}\n' > "$STATE_FILE"
+    printf 'Full review body.\nVERDICT: CLEAN\n' > "$OUTPUT"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 0 "$OUTPUT"
+    [ "$status" -ne 0 ]
 }
 
 @test "detect: non-zero exit with empty stderr → error" {
@@ -121,7 +137,7 @@ PRE
 @test "detect: ANSI escapes stripped from error detail" {
     _load
     printf '\x1b[31mstream error: unexpected status 400 Bad Request\x1b[0m\n' > "$STDERR_FILE"
-    run _detect_codex_error "$STDERR_FILE" "" 0
+    run _detect_codex_error "$STDERR_FILE" "" 1
     [ "$status" -eq 0 ]
     [[ "$output" != *$'\x1b'* ]]
 }
@@ -167,7 +183,7 @@ PRE
     echo "stream error: unexpected status 500 Internal Server Error" > "$STDERR_FILE"
     printf '{"turns":0,"messages":0,"commands":0}\n' > "$STATE_FILE"
     printf 'partial output before the failure\n' > "$OUTPUT"
-    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 0 "$OUTPUT"
+    run _detect_codex_error "$STDERR_FILE" "$STATE_FILE" 1 "$OUTPUT"
     [ "$status" -eq 0 ]
     [[ "$output" == error$'\t'* ]]
 }
