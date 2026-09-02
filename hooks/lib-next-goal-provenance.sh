@@ -164,6 +164,79 @@ next_goal_block_discloses_degradation() {
         | grep -qi "$CLAVAIN_NO_TRACKER_PHRASE" 2>/dev/null
 }
 
+# next_goal_block_stamp <transcript_text>
+# Timestamp of the last assistant line in the window: when the block went out.
+next_goal_block_stamp() {
+    printf '%s\n' "${1:-}" | jq -R -r '
+        fromjson? | select(.type == "assistant") | .timestamp // empty' 2>/dev/null | tail -n 1
+}
+
+# next_goal_receipt_freshness <receipt_stamp> <transcript_text>
+# Echoes fresh | stale | unknown.
+#
+# A RECEIPT IS A PER-TURN FACT. Sessions live for months and receipts had no
+# expiry, so one next-goal run vouched for every block the session emitted
+# after it. A receipt is fresh when it was written at or after this turn's
+# human prompt. When the window holds no prompt at all (a long, tool-heavy
+# turn — exactly the kind likeliest to carry a stale receipt), the block's own
+# timestamp minus CLAVAIN_NEXT_GOAL_RECEIPT_BUDGET_MIN (default 30) bounds it
+# instead; the fixed 80-line tail must not be a way to fail open. With no
+# stamps on either side the answer is unknown, and unknown is not fresh — but
+# it is not flagged either, because a transcript with no timestamps is a
+# fixture, not a session.
+#
+# Both stamps are read off the same host clock: Claude Code writes the
+# transcript and runs the helper on the same machine, so no skew allowance is
+# needed. Comparison is on the first 19 characters (YYYY-MM-DDTHH:MM:SS) of
+# UTC stamps; the transcript carries milliseconds and the receipt does not.
+next_goal_receipt_freshness() {
+    local stamp="${1:-}" text="${2:-}" start block budget
+    [[ -z "$stamp" || "$stamp" == "null" ]] && { printf 'unknown\n'; return 0; }
+    start="$(next_goal_turn_started_at "$text")"
+    if [[ -n "$start" ]]; then
+        if [[ "${stamp:0:19}" < "${start:0:19}" ]]; then printf 'stale\n'; else printf 'fresh\n'; fi
+        return 0
+    fi
+    block="$(next_goal_block_stamp "$text")"
+    [[ -z "$block" ]] && { printf 'unknown\n'; return 0; }
+    budget="${CLAVAIN_NEXT_GOAL_RECEIPT_BUDGET_MIN:-30}"
+    [[ "$budget" =~ ^[0-9]+$ ]] || budget=30
+    jq -rn --arg s "${stamp:0:19}Z" --arg b "${block:0:19}Z" --argjson m "$budget" '
+        try (if ($s | fromdateiso8601) >= (($b | fromdateiso8601) - ($m * 60))
+             then "fresh" else "stale" end)
+        catch "unknown"' 2>/dev/null || printf 'unknown\n'
+}
+
+# next_goal_freshness_anchor <transcript_text>
+# The clause a STALE message names as the other side of the comparison.
+next_goal_freshness_anchor() {
+    local start block
+    start="$(next_goal_turn_started_at "${1:-}")"
+    if [[ -n "$start" ]]; then
+        printf 'this turn began at %s' "$start"
+        return 0
+    fi
+    block="$(next_goal_block_stamp "${1:-}")"
+    printf 'the block went out at %s with no prompt in the window, and a receipt more than %s minutes older than the block is not this turn'"'"'s' \
+        "$block" "${CLAVAIN_NEXT_GOAL_RECEIPT_BUDGET_MIN:-30}"
+}
+
+# next_goal_audit_log <session_id> <kind> [detail]
+# One line per emitted warning, so "how often does this fire, and for what"
+# has a data source. The plan that shipped these audits gated promotion of
+# its warnings on measurement; this is the measurement. Best-effort, never
+# fails the caller, nothing written when nothing fired.
+next_goal_audit_log() {
+    [[ "${CLAVAIN_NEXT_GOAL_AUDIT_LOG_DISABLE:-0}" == "1" ]] && return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    mkdir -p "$CLAVAIN_PROVENANCE_DIR" 2>/dev/null || return 0
+    jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg session "${1:-unknown}" \
+        --arg kind "${2:-unknown}" --arg detail "${3:-}" \
+        '{ts: $ts, session: $session, kind: $kind, detail: $detail}' \
+        >> "$CLAVAIN_PROVENANCE_DIR/audit-log.jsonl" 2>/dev/null || true
+    return 0
+}
+
 # next_goal_receipt_path <session_id>
 next_goal_receipt_path() {
     printf '%s/%s.json' "$CLAVAIN_PROVENANCE_DIR" "${1:-unknown}"
@@ -221,11 +294,21 @@ next_goal_provenance_warning() {
     next_goal_block_emitted "$text" || return 0
     next_goal_block_discloses_degradation "$text" && return 0
 
-    local state detail
+    local state detail stamp
     state="$(next_goal_receipt_state "$session")"
-    [[ "$state" == "reachable" ]] && return 0
+    if [[ "$state" == "reachable" ]]; then
+        # A receipt that exists and says reachable still has to be THIS
+        # turn's receipt. Fail-open only when there is nothing to compare.
+        stamp="$(jq -r '.recorded_at // empty' "$(next_goal_receipt_path "$session")" 2>/dev/null)"
+        [[ "$(next_goal_receipt_freshness "$stamp" "$text")" == "stale" ]] || return 0
+        next_goal_audit_log "$session" "provenance-stale" "$stamp"
+        printf 'Next-goal provenance: STALE receipt. scripts/next-goal-candidates.sh last ran for session %s at %s, but %s — that receipt vouches for an earlier block, not this one, and the backlog it ranked may have moved since. A receipt is a per-turn fact: re-run /clavain:next-goal (or the helper) in this turn and re-derive the candidates.\n' \
+            "$session" "$stamp" "$(next_goal_freshness_anchor "$text")"
+        return 0
+    fi
 
     detail="$(next_goal_receipt_detail "$session")"
+    next_goal_audit_log "$session" "provenance-$state" "$detail"
 
     case "$state" in
         missing)
@@ -301,10 +384,18 @@ next_goal_verification_warning() {
     [[ "${CLAVAIN_PROVENANCE_AUDIT_DISABLE:-0}" == "1" ]] && return 0
     next_goal_block_emitted "$text" || return 0
 
-    local state detail
+    local state detail stamp
     state="$(next_goal_verify_receipt_state "$session")"
-    [[ "$state" == "clean" ]] && return 0
+    if [[ "$state" == "clean" ]]; then
+        stamp="$(jq -r '.verified_at // empty' "${CLAVAIN_VERIFY_DIR}/${session}.json" 2>/dev/null)"
+        [[ "$(next_goal_receipt_freshness "$stamp" "$text")" == "stale" ]] || return 0
+        next_goal_audit_log "$session" "verification-stale" "$stamp"
+        printf 'Next-goal verification: STALE receipt. scripts/next-goal-verify.sh last ran for session %s at %s, but %s — the candidates this block cites were re-read for an earlier block, and a bead can close between turns. Re-run the verifier on every ID this block cites before standing behind it.\n' \
+            "$session" "$stamp" "$(next_goal_freshness_anchor "$text")"
+        return 0
+    fi
     detail="$(next_goal_verify_disqualified "$session")"
+    next_goal_audit_log "$session" "verification-$state" "$detail"
 
     case "$state" in
         missing)

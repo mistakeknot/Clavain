@@ -62,10 +62,10 @@ block_disclosing_degradation() {
 }
 
 write_receipt() {
-    # $1 = tracker_reachable literal (true|false)
+    # $1 = tracker_reachable literal (true|false), $2 = recorded_at (optional)
     cat > "$CLAVAIN_PROVENANCE_DIR/sess-1.json" <<EOF
 {"schema_version":"clavain.next-goal-provenance/v1","session_id":"sess-1",
- "recorded_at":"2026-08-07T12:00:00Z","tracker_reachable":$1,
+ "recorded_at":"${2:-2026-08-07T12:00:00Z}","tracker_reachable":$1,
  "roots_ok":["sylveste","mk"],"lookup_failures":[],"candidate_count":40,
  "roadmap_status":"fresh"}
 EOF
@@ -407,10 +407,13 @@ EOF
 # that had been closed for two weeks and every provenance signal read clean.
 
 verify_receipt() {
-    # $1 = session, $2 = the `ok` value, $3 = compact JSON array of disqualified
+    # $1 = session, $2 = the `ok` value, $3 = JSON array of disqualified,
+    # $4 = JSON array of beads the verifier read back (optional),
+    # $5 = verified_at (optional; absent means freshness is not judged)
     mkdir -p "$VERIFY_DIR"
-    printf '{"schema_version":"clavain.next-goal-verify/v1","ok":%s,"disqualified":%s}\n' \
-        "$2" "${3:-[]}" > "$VERIFY_DIR/$1.json"
+    jq -cn --argjson ok "$2" --argjson disq "${3:-[]}" --argjson beads "${4:-[]}" --arg at "${5:-}" '
+        {schema_version: "clavain.next-goal-verify/v1", ok: $ok, disqualified: $disq, beads: $beads}
+        + (if $at == "" then {} else {verified_at: $at} end)' > "$VERIFY_DIR/$1.json"
 }
 
 setup_verify_dir() {
@@ -460,4 +463,110 @@ setup_verify_dir() {
     [ "$status" -eq 0 ]
     [ -z "$output" ]
     rm -rf "$VERIFY_DIR"
+}
+
+# ------------------------------------------ freshness: a receipt is per turn (W3)
+#
+# Sessions live for months and a receipt had no expiry, so the receipt from a
+# next-goal run weeks ago vouched for every block the session emitted since.
+# A receipt now vouches only for the turn it was written in: it must postdate
+# the last human prompt in the window. When the window holds no prompt (a
+# long, tool-heavy turn), the block's own timestamp minus a budget bounds it
+# instead — the fixed 80-line tail must not become a way to fail open.
+# Both stamps come from the same host clock: Claude Code writes the transcript
+# and runs the helper on the same machine.
+
+fresh_turn() {
+    # a human prompt at 10:00, the block at 10:05
+    printf '%s\n%s\n' \
+        "$(user_line_ts 2026-09-01T10:00:00.000Z "what's next?")" \
+        "$(assistant_line_ts 2026-09-01T10:05:00.000Z "## Next goal\\n\\n1. Close mk-i43y\\n\\n/goal Ship it.")"
+}
+
+block_only_turn() {
+    # no prompt in the window at all: only the block, at 10:05
+    assistant_line_ts 2026-09-01T10:05:00.000Z "## Next goal\\n\\n1. Close mk-i43y\\n\\n/goal Ship it."
+}
+
+@test "freshness: a receipt older than this turn's prompt does not vouch (provenance)" {
+    write_receipt true    # recorded 2026-08-07T12:00:00Z
+    run next_goal_provenance_warning "sess-1" "$(fresh_turn)"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"STALE"* ]]
+    [[ "$output" == *"2026-08-07T12:00:00Z"* ]]
+    [[ "$output" == *"2026-09-01T10:00:00"* ]]
+}
+
+@test "freshness: a receipt older than this turn's prompt does not vouch (verification)" {
+    setup_verify_dir
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]' "2026-08-07T12:00:00Z"
+    run next_goal_verification_warning "sess-1" "$(fresh_turn)"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"STALE"* ]]
+    [[ "$output" == *"2026-08-07T12:00:00Z"* ]]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "freshness: a receipt written during this turn vouches" {
+    write_receipt true 2026-09-01T10:03:00Z
+    run next_goal_provenance_warning "sess-1" "$(fresh_turn)"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    setup_verify_dir
+    verify_receipt "sess-1" true '[]' '[{"id":"mk-i43y"}]' "2026-09-01T10:04:00Z"
+    run next_goal_verification_warning "sess-1" "$(fresh_turn)"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    rm -rf "$VERIFY_DIR"
+}
+
+@test "freshness: no timestamps anywhere means freshness is not judged" {
+    write_receipt true
+    run next_goal_provenance_warning "sess-1" "$(block_claiming_provenance)"
+    [ -z "$output" ]
+    run next_goal_receipt_freshness "2026-08-07T12:00:00Z" "$(block_claiming_provenance)"
+    [ "$output" = "unknown" ]
+    run next_goal_receipt_freshness "" "$(fresh_turn)"
+    [ "$output" = "unknown" ]
+}
+
+@test "freshness: with no prompt in the window, the block's own timestamp bounds it" {
+    write_receipt true    # 2026-08-07: weeks before a block at 2026-09-01T10:05
+    run next_goal_provenance_warning "sess-1" "$(block_only_turn)"
+    [[ "$output" == *"STALE"* ]]
+    write_receipt true 2026-09-01T09:50:00Z    # 15 minutes before the block
+    run next_goal_provenance_warning "sess-1" "$(block_only_turn)"
+    [ -z "$output" ]
+    CLAVAIN_NEXT_GOAL_RECEIPT_BUDGET_MIN=10 run next_goal_provenance_warning "sess-1" "$(block_only_turn)"
+    [[ "$output" == *"STALE"* ]]
+}
+
+@test "freshness: the prompt, not the block, is the anchor when both are present" {
+    # receipt 20 minutes before the block, but before the prompt: stale
+    write_receipt true 2026-09-01T09:45:00Z
+    run next_goal_provenance_warning "sess-1" "$(fresh_turn)"
+    [[ "$output" == *"STALE"* ]]
+}
+
+# ------------------------------------------------- every warning is logged (f-003)
+#
+# The plan's own promotion gates ("warning now, error if measured") had no
+# measurement. Each emitted warning appends one line to the audit log so the
+# question "how often does this fire, and for what" has a data source.
+
+@test "audit log: a flagged block leaves a line naming the warning kind" {
+    run next_goal_provenance_warning "sess-1" "$(block_claiming_provenance)"
+    [ -f "$CLAVAIN_PROVENANCE_DIR/audit-log.jsonl" ]
+    grep -q '"kind":"provenance-missing"' "$CLAVAIN_PROVENANCE_DIR/audit-log.jsonl"
+    write_receipt true
+    run next_goal_provenance_warning "sess-1" "$(fresh_turn)"
+    grep -q '"kind":"provenance-stale"' "$CLAVAIN_PROVENANCE_DIR/audit-log.jsonl"
+    [ "$(jq -r 'select(.session=="sess-1") | .session' "$CLAVAIN_PROVENANCE_DIR/audit-log.jsonl" | wc -l | tr -d ' ')" = "2" ]
+}
+
+@test "audit log: a quiet audit writes nothing" {
+    write_receipt true
+    run next_goal_provenance_warning "sess-1" "$(block_claiming_provenance)"
+    [ -z "$output" ]
+    [ ! -f "$CLAVAIN_PROVENANCE_DIR/audit-log.jsonl" ]
 }
