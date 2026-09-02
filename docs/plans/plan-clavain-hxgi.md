@@ -162,3 +162,32 @@ other 20 `CLAUDE_SESSION_ID` readers (follow-up bead); the script-ranked shortli
 3. Is restricting W5's ID check to receipt-known prefixes too permissive (a bead from an unvisited
    tracker slips through)?
 4. Are the W6 heuristics narrow enough to be warnings that people will not learn to ignore?
+
+## Melange fold (2026-09-02, run wf_aa9aaf49-7a4: 3 rounds, DRY halt, 19 findings / 15 upheld / 2 refuted)
+
+The synthesis agent hit the session limit; the ledger is intact at
+`docs/research/flux-melange/next-goal-audit-repair-hxgi/heat-ledger.jsonl`. Dispositions, by finding:
+
+| finding | prescription | disposition |
+|---|---|---|
+| f-012 (N3, R9) reader/writer register mismatch | reader resolves the key across the same registers | **done** — `next_goal_session_key` tries stdin id, `CLAUDE_SESSION_ID`, `CLAUDE_CODE_SESSION_ID`; hook wiring test |
+| f-001 / f-016 (R9) freshness fails open when the prompt scrolls out of the 80-line tail | anchor to the block's own timestamp minus a budget | **done** — prompt when present, else block − `CLAVAIN_NEXT_GOAL_RECEIPT_BUDGET_MIN` (30); tested both ways |
+| f-002 STALE in provenance suppresses W4/W5 for the turn | integration test | **accepted as designed** — the STALE remedy (re-run) regenerates both receipts; end-to-end tests for both the stale and the cited-unverified paths |
+| f-003 (R9) no warning is logged | log via the hook's analytics | **done** — `audit-log.jsonl` in the library, one line per warning, tested; galiana left alone (its schema is signals, not audits) |
+| f-004 promotion gates name no metric/owner | name one | **done in prose** — guide-goal-shape.md names the metric, threshold and owner; follow-up bead below |
+| f-006 ID regex has no right boundary | add one | **done** — whole-token extraction (`tr` + anchored grep), so a branch name is never a truncated ID |
+| f-008 / f-013 (R9) unknown-prefix IDs are never checked | warn instead of skipping | **done, with precision** — a token with an unknown prefix is never accused (`flux-drive` fits the grammar) but is NAMED on an ID-less candidate line, which is the solwend-w46q shape |
+| f-009 / f-019 landing rule: "Ship it." missed, bare verb over-fires | verb + landing-shaped object; add ship/release/roll out/cut | **done** — both required; "merge the ranked lists" is quiet, "Ship it." warns; GATE-named merges are exempt |
+| f-010 (R9) warnings never reach the mechanical gate | route canonical form through `--force`-overridable error | **not done, by decision** — GATE 1 stands (warning until measured); the metric and promotion rule are written down so the decision has a date |
+| f-011 / f-017 (raw) relaxed detector fires on quoted template / discussion | bound `/goal` to a Next-goal section; exclude placeholders | **done** — 40-line bound to a "next goal" line; `/goal <…>` excluded; both tested |
+| f-014 has_notes is a presence test | keep advisory; needs a supersession qualifier before blocking | **accepted** — Q2 answered "no", precondition recorded |
+| f-015 clock skew assumption unstated | state it | **done** — same-host clock stated in the library |
+| f-018 new jq passes run ahead of goal-cadence's REASON; no timing test | wall-clock-bounded test | **done** — 80-line window, both receipts, ≤ 4 s |
+| f-005, f-007 | refuted (fixtures without timestamps are handled; jq 1.7 form stated) | — |
+
+## Answers to the review questions
+
+1. Prompt when present; else the block's own timestamp minus a budget. Never fail open on absence alone.
+2. No — advisory. A presence test cannot tell a superseding note from an annotation.
+3. It was too permissive as a skip; as a NAMED hint on an ID-less candidate line it catches the solwend-w46q shape without accusing every hyphenated word.
+4. The canonical-form and merge-near-PR rules are narrow; the verb-prefix rule was not, and now requires a landing-shaped object.

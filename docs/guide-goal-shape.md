@@ -72,6 +72,30 @@ a bird" is the user stating an outcome and reads well. "mine to decide", "do I
 reverse that?" is the deliberative form and is exactly right. What is caught
 is first person attached to a decision being made *inside the goal text*.
 
+## Two form warnings (mk-hxgi, 2026-09-02)
+
+**Canonical form.** A goal with no `OUTCOME:` or no `DONE WHEN:` line gets
+*`canonical form: no OUTCOME: line`* (or `DONE WHEN:`). Only 5 of the 24 goals
+minted before this rule carried both; without them a successor session cannot
+tell finished from abandoned.
+
+**Landing is not a goal.** A goal that opens with merge / rebuild / reinstall /
+install / bump / tag / publish / deploy / push / ship / release / roll out /
+cut, *aimed at* a PR, branch, release, version, environment, plugin, or a bare
+"it", gets *`landing-first`*. A goal that asks the agent to merge a PR gets
+*`merge is not the agent's`*. Both are an mk-step or the tail of the current
+goal. "Merge the ranked lists" is a technical goal and does not warn; "GATE:
+mk merges PR #26" is the recommended form and does not warn.
+
+Both are **warnings**, by decision, until measured. The measurement: the Stop
+hook's audit log (`~/.cache/clavain/next-goal-provenance/audit-log.jsonl`, one
+line per emitted warning) and `ic goal list --json`. Promotion rule proposed
+for mk to ratify: when 30 consecutive days of minted goals carry both markers
+in at least 80% of cases, the canonical-form warning has done its work and can
+become an error (`ic goal create` then blocks unless `--force`); the landing
+rules stay warnings because their objects are heuristic. Tracked as a
+follow-up bead on mk-hxgi.
+
 ## What stays allowed
 
 The lint's ventriloquism rule is an error, so its precision is load-bearing —
