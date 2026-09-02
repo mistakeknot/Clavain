@@ -229,7 +229,7 @@ Record review outcome for calibration (silent, skip on error):
 _review_tokens=0; _review_cost_usd="0"
 _interstat_cost_script="${INTERSTAT_ROOT:-$HOME/projects/Sylveste/interverse/interstat}/scripts/cost-query.sh"
 if [[ -f "$_interstat_cost_script" ]]; then
-    _cost_json=$(bash "$_interstat_cost_script" session-cost --session="${CLAUDE_SESSION_ID:-}" 2>/dev/null) || _cost_json=""
+    _cost_json=$(bash "$_interstat_cost_script" session-cost --session="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}" 2>/dev/null) || _cost_json=""
     if [[ -n "$_cost_json" ]]; then
         _review_tokens=$(echo "$_cost_json" | jq -r '.[0].total_tokens // 0' 2>/dev/null) || _review_tokens=0
         _review_cost_usd=$(echo "$_cost_json" | jq -r '.[0].cost_usd // 0' 2>/dev/null) || _review_cost_usd="0"
@@ -237,7 +237,7 @@ if [[ -f "$_interstat_cost_script" ]]; then
 fi
 _review_outcome='{"phase":"brainstorm","complexity":'$complexity',"review_type":"flux-review","p0":'${p0_count:-0}',"p1":'${p1_count:-0}',"p2":'${p2_count:-0}',"agents":'${agent_count:-0}',"tokens":'${_review_tokens}',"cost_usd":'${_review_cost_usd}'}'
 if type -t _interspect_insert_evidence &>/dev/null; then
-    _interspect_insert_evidence "${CLAUDE_SESSION_ID:-unknown}" "sprint" "review_phase_outcome" "" "$_review_outcome" "sprint-review-calibration" 2>/dev/null || true
+    _interspect_insert_evidence "${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}" "sprint" "review_phase_outcome" "" "$_review_outcome" "sprint-review-calibration" 2>/dev/null || true
 fi
 ```
 

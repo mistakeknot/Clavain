@@ -411,13 +411,13 @@ sprint_set_artifact() {
 #
 # Args: $1=sprint_id, $2=contract_file_path
 #       $3=scope (optional, defaults to project name)
-#       $4=owner (optional, defaults to CLAUDE_SESSION_ID)
+#       $4=owner (optional, defaults to the session id: CLAUDE_SESSION_ID, then CLAUDE_CODE_SESSION_ID)
 # Returns: 0 on success, 1 on failure (fail-safe: never blocks sprint)
 sprint_publish_contract() {
     local sprint_id="$1"
     local contract_path="$2"
     local scope="${3:-}"
-    local owner="${4:-${CLAUDE_SESSION_ID:-unknown}}"
+    local owner="${4:-${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}}"
     [[ -z "$sprint_id" || -z "$contract_path" ]] && return 0
     [[ ! -f "$contract_path" ]] && return 0
 
@@ -643,7 +643,7 @@ sprint_record_phase_tokens() {
         local db_path="${HOME}/.claude/interstat/metrics.db"
         if [[ -f "$db_path" ]]; then
             cumulative_tokens=$(sqlite3 "$db_path" \
-                "SELECT COALESCE(SUM(COALESCE(input_tokens,0) + COALESCE(output_tokens,0)), 0) FROM agent_runs WHERE session_id='${CLAUDE_SESSION_ID:-none}'" 2>/dev/null) || cumulative_tokens=""
+                "SELECT COALESCE(SUM(COALESCE(input_tokens,0) + COALESCE(output_tokens,0)), 0) FROM agent_runs WHERE session_id='${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-none}}'" 2>/dev/null) || cumulative_tokens=""
         fi
     fi
 
@@ -1280,7 +1280,7 @@ sprint_escalate_strategic_contradiction() {
 
     # Record Interspect evidence
     local session_id context_json
-    session_id="${CLAUDE_SESSION_ID:-unknown}"
+    session_id="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
     context_json=$(jq -n \
         --arg bead "$sprint_id" \
         --arg lane "$lane_name" \
@@ -1729,7 +1729,7 @@ sprint_close_parent_if_done() {
 # Returns: 0 if claimed, 1 if already claimed or lock contention exhausted
 bead_claim() {
     local bead_id="${1:?bead_id required}"
-    local session_id="${2:-${CLAUDE_SESSION_ID:-unknown}}"
+    local session_id="${2:-${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}}"
     local soft=false
     [[ "${3:-}" == "--soft" ]] && soft=true
     command -v bd &>/dev/null || return 0
@@ -1796,7 +1796,7 @@ bead_release() {
     # Only release if we own the claim (or claim is empty/stale)
     local current_claimer
     current_claimer=$(bd state "$bead_id" claimed_by 2>/dev/null) || current_claimer=""
-    local our_session="${CLAUDE_SESSION_ID:-unknown}"
+    local our_session="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
     if [[ -n "$current_claimer" \
           && "$current_claimer" != "(no claimed_by state set)" \
           && "$current_claimer" != "released" \
@@ -1898,7 +1898,7 @@ sprint_canary_check() {
             source "$_interspect_lib" 2>/dev/null || true
             _interspect_ensure_db 2>/dev/null || true
             _interspect_insert_evidence \
-                "${CLAUDE_SESSION_ID:-unknown}" \
+                "${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}" \
                 "canary" \
                 "quality_failure" \
                 "post_merge_canary_failed" \

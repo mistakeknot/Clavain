@@ -84,7 +84,7 @@ CLAVAIN_NO_TRACKER_PHRASE="no tracker reachable"
 # reported under the id the hook knows.
 next_goal_session_key() {
     local given="${1:-unknown}" cand
-    for cand in "$given" "${CLAUDE_SESSION_ID:-}" "${CLAUDE_CODE_SESSION_ID:-}"; do
+    for cand in "$given" "${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}" "${CLAUDE_CODE_SESSION_ID:-}"; do
         [[ -n "$cand" ]] || continue
         if [[ -f "$(next_goal_receipt_path "$cand")" || -f "${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}/${cand}.json" ]]; then
             printf '%s\n' "$cand"

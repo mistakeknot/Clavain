@@ -12,7 +12,7 @@ Auto-dispatch to `/sprint` or `/work`. New project? → `/clavain:project-onboar
 
 **token-attribution:** `_is_sid=$(cat /tmp/interstat-session-id 2>/dev/null||echo ""); [[ -n "$_is_sid" ]] && echo "$CLAVAIN_BEAD_ID" > "/tmp/interstat-bead-${_is_sid}" 2>/dev/null||true; ic session attribute --session="${_is_sid}" --bead="$CLAVAIN_BEAD_ID" 2>/dev/null||true`
 
-**claim-identity:** `bd set-state "$CLAVAIN_BEAD_ID" "claimed_by=${CLAUDE_SESSION_ID:-unknown}" 2>/dev/null||true; bd set-state "$CLAVAIN_BEAD_ID" "claimed_at=$(date +%s)" 2>/dev/null||true`
+**claim-identity:** `bd set-state "$CLAVAIN_BEAD_ID" "claimed_by=${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}" 2>/dev/null||true; bd set-state "$CLAVAIN_BEAD_ID" "claimed_at=$(date +%s)" 2>/dev/null||true`
 
 **claim-bead:** `bd update "$CLAVAIN_BEAD_ID" --claim`. Failure: "already claimed"→re-run discovery; "lock"/"timeout"→retry once then re-run. Never fall back to `--status=in_progress`. Success: run claim-identity then token-attribution.
 
@@ -26,7 +26,7 @@ sprint_count=$(echo "$active_sprints" | jq 'length' 2>/dev/null) || sprint_count
 - **0 sprints** → Step 2.
 - **1 sprint** → auto-resume:
   a. Read: `sprint_id=$(echo "$active_sprints"|jq -r '.[0].id')`, `sprint_state=$(clavain-cli sprint-read-state "$sprint_id")`, `sprint_phase=$(echo "$sprint_state"|jq -r '.phase // ""')`
-  b. Claim: `clavain-cli sprint-claim "$sprint_id" "$CLAUDE_SESSION_ID"` (fail→offer force-claim or fresh)
+  b. Claim: `clavain-cli sprint-claim "$sprint_id" "${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"` (fail→offer force-claim or fresh)
   c. `CLAVAIN_BEAD_ID="$sprint_id"`, run token-attribution
   d. Checkpoint: `clavain-cli checkpoint-read`. If SHA changed→AskUserQuestion(resume/restart/re-plan). Clean→use steps silently.
   e. If `sprint_phase=reflect`, read `reflection=$(clavain-cli get-artifact "$sprint_id" "reflection" 2>/dev/null) || reflection=""`; `[[ -n "$reflection" && -f "$reflection" ]]` routes to `/clavain:sprint --from-step ship`, otherwise route to `/clavain:reflect`. For every other phase, route by `clavain-cli sprint-next-step`: brainstorm→`/sprint`, strategy→`/sprint --from-step strategy`, write-plan→`/sprint --from-step plan`, work→`/clavain:work`, resolve→`/clavain:resolve`, ship→`/clavain:sprint --from-step ship`, reflect→`/clavain:reflect`, done→tell user. Display: `Resuming sprint <id> — <title>`. **Stop.**
