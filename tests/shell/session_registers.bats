@@ -156,3 +156,14 @@ EOF
     run grep -c -- '--add-label claimed_by:env-app' "$log"
     assert_output "1"
 }
+
+@test "clavain_session_id: both env registers set and different — CLAUDE_SESSION_ID wins (A1, documented)" {
+    # The register session-start.sh writes is deliberately first, so a runtime
+    # that sets it by hand keeps working. Evidence for the ordering being safe:
+    # a session id survives /compact (this suite's own session did, twice).
+    export CLAUDE_SESSION_ID=old-start
+    export CLAUDE_CODE_SESSION_ID=new-app
+    run clavain_session_id
+    assert_success
+    assert_output "old-start"
+}

@@ -5,8 +5,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
+
+// sessionRegisterID is the session this process runs in, read from the
+// registers Claude Code actually populates (mk-rd9f): CLAUDE_SESSION_ID
+// (written by clavain's session-start hook, so absent in every session whose
+// start hook did not fire) and then CLAUDE_CODE_SESSION_ID (exported by Claude
+// Code itself into the Bash tool). Empty when neither is set; callers choose
+// their own fallback. This is the ONLY place the binary may read either
+// variable directly — tests/structural/test_session_registers.py fails on any
+// other os.Getenv("CLAUDE_SESSION_ID").
+func sessionRegisterID() string {
+	if v := strings.TrimSpace(os.Getenv("CLAUDE_SESSION_ID")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(os.Getenv("CLAUDE_CODE_SESSION_ID"))
+}
 
 // writeBeadSideband writes the kernel-authored interband envelope
 // (interband protocol 1.0.0) so the statusline keeps working as interphase
@@ -16,10 +32,7 @@ import (
 // subprocess since CC 2.1.132), so callers need not thread session ids.
 func writeBeadSideband(sessionID, beadID, phase, reason string) error {
 	if sessionID == "" {
-		sessionID = os.Getenv("CLAUDE_SESSION_ID")
-	}
-	if sessionID == "" {
-		sessionID = os.Getenv("CLAUDE_CODE_SESSION_ID")
+		sessionID = sessionRegisterID()
 	}
 	if sessionID == "" {
 		return nil

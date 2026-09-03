@@ -22,7 +22,7 @@ Whether hook processes inherit `CLAUDE_CODE_SESSION_ID` is not established and t
 ## Assumptions
 
 - **A1.** When `CLAUDE_SESSION_ID` and `CLAUDE_CODE_SESSION_ID` are both set they name the same session. Precedence stays `CLAUDE_SESSION_ID` first, matching what mk-hxgi shipped on the base branch and what the mk-rd9f bead asked for, so a runtime that sets `CLAUDE_SESSION_ID` by hand keeps working. Reversible in one line of the helper.
-- **A2.** "interphase statusline state" in the goal's DONE WHEN is the bead-claim state (`claimed_by`, `claimed_at`, the `/tmp/interphase-bead-<session>` marker) that `bead-autoclaim.sh` writes and that heartbeat, session-end-release and interline's lane resolver key on. The `_gate_update_statusline` function that `session-start.sh` names no longer exists.
+- **A2.** "interphase statusline state" in the goal's DONE WHEN is two things, and the plan as first written saw only one. The bead-claim state (`claimed_by`, `claimed_at`, the `/tmp/interphase-bead-<session>` marker) that `bead-autoclaim.sh` writes and that heartbeat, session-end-release and interline's lane resolver key on is the first. The second is the interband bead envelope `~/.interband/interphase/bead/<session>.json` that interline's statusline actually renders, written by `writeBeadSideband` in `cmd/clavain-cli/sideband.go` — the kernel-authored successor to the retired `_gate_update_statusline` that `session-start.sh` still names (melange f-024, f-018). `sideband.go` already chained both registers; the seven other Go sites did not, and the fold below covers them.
 - **A3.** "Published HEAD" for the rig check is `origin/main` of `mistakeknot/Clavain`, which is what the marketplace entry's source URL resolves to and what `ic publish` copies into the cache. A version tag is not used because the repo has none.
 
 ## Constraints the executor must respect
@@ -107,7 +107,40 @@ W1 → W2 → W3 on the Clavain branch (three commits, structural test last so i
 
 1. Precedence when both env registers are set and differ (A1). Is there a resume or compaction path where `CLAUDE_SESSION_ID` from the env file is the old id and `CLAUDE_CODE_SESSION_ID` is the new one, and which should key state then?
 2. Is fail-on-drift right for `clavain-deployed`, given the window between a main push and the publish wave, or does the mk-rd1x standing logic make fail safe enough?
-3. Is comparing seven roots the right surface, or should the check compare the whole tracked tree and accept a longer finding list?
+3. Is comparing eight roots the right surface, or should the check compare the whole tracked tree and accept a longer finding list?
 4. Should a failed fetch in step 3 downgrade the verdict to warn rather than carry a caveat?
 5. Is A2 the right reading of "interphase statusline state", or is there a sideband writer this plan did not find?
 6. What in this plan would let the register defect return silently in a new hook?
+
+## Melange fold (2026-09-02, run wf_7d06d476-cda: 3 rounds, DRY halt, 28 findings / 15 upheld / 0 refuted; the synthesis authored f-029 to f-031 with the repos in hand)
+
+Ledger and synthesis under `docs/research/flux-melange/session-registers-deployed-head/`. The synthesis ran against code that had already landed (W1 to W4 and the first cut of W5), so the register findings are defect reports against merged commits and were folded as follow-up commits on the same branches.
+
+| finding | disposition | what changed |
+|---|---|---|
+| f-013, f-008, f-025, f-026, f-024, f-003, f-018 — seven bare `os.Getenv("CLAUDE_SESSION_ID")` sites in `cmd/clavain-cli`, outside W3's walk; `sideband.go` is the statusline writer that matters | folded | `sessionRegisterID()` in `sideband.go`, the seven sites converted (`claim.go` ×3, `phase.go`, `budget.go`, `evidence.go`, `init.go`), `session_test.go`, `phase_attribution_test.go` scrubs the app register; the structural test walks `cmd/**/*.go` and flags any direct read of either register outside the helper, plus the Python idioms (f-005, f-015). Proven red on a bare Go read. A2 corrected. |
+| f-031 (synthesis) — `origin/main` is the wrong baseline: 42% of the last 26 days main was ahead of the published cache | folded | Measured: 9 version bumps and 21 root-touching non-bump commits in 30 days. The cache is now compared against the published commit (marketplace clone's `origin/main` version, resolved to the commit that set `plugin.json`); `VERSION-BEHIND` names a publish the machine never took; main's lead is printed, not judged — that is `publish-drift`'s question, and the pair together is the OUTCOME's "the fix reached the running plugin". The CLI stays against `origin/main` because it runs from the checkout. One test case pins the choice: a hook changed on main without a publish is clean here. |
+| f-009 — STANDING converts fail to warn with no re-escalation | folded | `RIG_CLAVAIN_STANDING_MAX_DAYS` (7): past it the wiring withholds the signature and the check fails again daily until the drift clears or grows. Tested by backdating `first_failed_at_epoch`. |
+| f-010 — a persistent fetch failure degrades silently | folded | `FETCH-STALE` after `RIG_CLAVAIN_STALE_FETCH_DAYS` (7); the age is the ref file's, not `FETCH_HEAD`'s, because a failed fetch still touches `FETCH_HEAD`. |
+| f-027 — the resolved checkout's origin is never verified | folded | `CLI-WRONG-REPO` (`RIG_CLAVAIN_ORIGIN_MATCH`, default `mistakeknot/Clavain`). |
+| f-014, f-011 — seven vs eight roots; a green run reads as complete | folded | Eight roots stated; the summary prints bytes hashed, seconds, and how many top-level entries were not compared (37 of 45 live). `cmd/` stays out: the shipped artefact is `bin/`, source is not executed by a session. |
+| f-006, f-007 — dotfiles' own bare readers, including the writer's run-kind classification | folded | `rig-health-write.py`, `lib-hook-log.sh` and its two callers, `log-tool-invocation.sh` chain `CLAUDE_CODE_SESSION_ID`; every harness `env -u` scrub includes it (the writer test had been misclassifying runs on a machine where Claude Code sets it). |
+| f-012 — 55 MB of binaries hashed per run with no ceiling | refuted by measurement | 54 MiB in 0.06 s; the figure is now printed each run. |
+| f-016 — both registers set and different | folded | A bats case documents that `CLAUDE_SESSION_ID` wins (A1). |
+| f-019 — the fail-open helper has no telemetry for its own collapse | follow-up | Bead filed for a periodic sentinel-rate rig check; per-invocation noise on the hot path is the wrong altitude. |
+| f-001, f-002, f-020, f-021, f-023 — the session id changes across compact/resume, so claim and release disagree | declined, with evidence | The cluster rests on one comment in `session-start.sh`. This session's own id (45f5fb3c) survived two compactions on 2026-09-02: the SessionStart:compact hook printed the same id both times. No round observed a change. If one is ever observed, the repair belongs in the claim protocol, not the register chain. |
+| f-022 — key claims on `BD_ACTOR` instead | declined | `BD_ACTOR` is written by the same start hook and is absent in exactly the sessions this plan exists for. |
+| f-017, f-028 — no magnitude term in the signature | not needed | The signature is `kind:path` (and `CLI-BEHIND:<n>`), so growth by path or by count re-fails by construction; tested. |
+| f-004 — the cache key passes an empty stdin argument | accepted as-is | Documented pattern; the fallback is `$$` on purpose. |
+| f-029 (synthesis) — subagents see `CLAUDE_SESSION_ID` absent and `CLAUDE_CODE_SESSION_ID` = the spawning session | recorded | The chain already resolves it; noted in the register facts. |
+
+Open measurement the review named and nobody has taken: whether hook processes inherit `CLAUDE_CODE_SESSION_ID`. Hooks read stdin first, so the exposure is the library callers without stdin (`lib-sprint.sh`'s six sites) when sourced inside a hook rather than the Bash tool. One `env` line inside a hook settles it.
+
+## Answers to the review questions
+
+1. Precedence: `CLAUDE_SESSION_ID` first, kept. Both registers name the same session in every case observed, including across compaction; the bats case documents the choice.
+2. Fail-on-drift was right for the wrong baseline. Against `origin/main` it would have been red two days in five; against the published commit it is red only when this machine did not take a publish, and the 7-day STANDING ceiling stops the downgrade from becoming permanent.
+3. Eight roots, stated as such, with what was left out printed. The whole tree would add `docs/` and `tests/` churn a session never executes.
+4. A failed fetch stays a caveat for a week and becomes `FETCH-STALE` after; the verdict is never skipped.
+5. A2 was half right. The claim state is proven under the real session; the statusline envelope writer in `sideband.go` is now covered by the Go helper and its test.
+6. The Go binary. Two directories outside the structural walk, seven bare reads, and a structural test that passed 11/11 while they sat there. The walk now includes `cmd/` and any direct read of either register outside the helper is a failure.

@@ -1,0 +1,42 @@
+{
+  "id": "fd-chronometry-precedence",
+  "kind": "base",
+  "parents": [],
+  "domain": "Marine time service and chronometer rating — the observatory time signal, the rating certificate, the going rate, the hack watch carried below, logged discontinuities, and the rule against rating a clock against another clock of its own rank.",
+  "axioms": [
+    "No clock is right. A usable value is a reading, plus a rate, plus the interval elapsed since the last comparison against a higher authority; a bare reading with no interval attached is not evidence.",
+    "Authority is a chain terminating in an observatory signal. Two instruments of the same rank agreeing establishes agreement, never truth, so a test that sets both sides of a comparison proves nothing about either.",
+    "A carried correction is valid only across the interval its rate was measured over; preferring an older carried value to a live signal requires an explicit bound on its age.",
+    "An unlogged discontinuity — a stoppage, a reset, an instrument carried ashore and returned — voids every correction derived before it, and the classic loss comes from a step nobody recorded rather than from a rate nobody measured.",
+    "Most error enters at the unrated intermediary: the hack watch between the chronometer room and the point of use is the link no certificate covers.",
+    "An error that is steady can be applied as a correction; an error that merely looks steady because only its sign or its name is being recorded is the dangerous case, and only its magnitude distinguishes them.",
+    "An instrument with no failure indication is indistinguishable from a working one, and an alarm that fires on schedule stops being read; the rating certificate exists because neither silence nor routine noise survives as information."
+  ],
+  "primitives": [
+    "reading",
+    "rate / going",
+    "epoch of last comparison",
+    "interval since comparison",
+    "time signal (higher authority)",
+    "hack watch (unrated intermediary)",
+    "rating certificate",
+    "discontinuity / step",
+    "error budget",
+    "sign versus magnitude of an error",
+    "rank of an instrument",
+    "standing correction"
+  ],
+  "failure_mode": [
+    "Models the world as a single scalar carried by a small number of ranked instruments, so it systematically misses set-shaped questions: which files exist, which directories were walked, what was never placed under comparison at all.",
+    "Treats content as undifferentiated — it can ask how stale a copy is but not what the copy contains, so a textual rule's evadability and a comparison surface's completeness fall outside it.",
+    "Inclined to accept any proxy that carries a rating, so it can under-detect a proxy that is well-behaved and measuring the wrong mechanism entirely unless explicitly pointed at the consumer.",
+    "Assumes a single authoritative reference exists and is identifiable; where the reference is itself plural or contested it will pick one and reason confidently from it rather than questioning the choice.",
+    "Its instinct on every uncertainty is to add a comparison, so it will propose more frequent or more instrumented checking where the cheaper fix is to remove the derived value altogether."
+  ],
+  "findings": [
+    "f-016",
+    "f-017",
+    "f-018",
+    "f-019"
+  ]
+}

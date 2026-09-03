@@ -1,0 +1,24 @@
+{
+  "runtime": "claude",
+  "rounds": 3,
+  "halt_reason": "DRY",
+  "gain_history": [
+    {"round": 0, "yield": 9, "novel_cluster_rate": 0.68},
+    {"round": 1, "yield": 4, "novel_cluster_rate": 0.44}
+  ],
+  "spice_trail": [
+    {"round": 0, "event": "assay", "findings": 19, "agents_dispatched": 2},
+    {"round": 1, "event": "probe", "directives": [
+      {"type": "DEEPEN", "rationale": "risk 6, unconfirmed — confirm or refute", "lens": "fd-staticanalysis-lint-evasion"},
+      {"type": "DEEPEN", "rationale": "risk 6, unconfirmed — confirm or refute", "lens": "fd-staticanalysis-lint-evasion"},
+      {"type": "STEER-WIDE", "rationale": "novel_cluster_rate 0.68 >= 0.6 — widening still pays", "lens": "fd-apiary-queenright"}
+    ], "findings": 9, "failed": 0},
+    {"round": 1, "event": "assay", "findings": 9, "agents_dispatched": 3}
+  ],
+  "slots_spent": 8,
+  "directive_history": [
+    {"round": 1, "type": "DEEPEN", "rationale": "risk 6, unconfirmed — confirm or refute", "lens": "fd-staticanalysis-lint-evasion"},
+    {"round": 1, "type": "DEEPEN", "rationale": "risk 6, unconfirmed — confirm or refute", "lens": "fd-staticanalysis-lint-evasion"},
+    {"round": 1, "type": "STEER-WIDE", "rationale": "novel_cluster_rate 0.68 >= 0.6 — widening still pays", "lens": "fd-apiary-queenright"}
+  ]
+}

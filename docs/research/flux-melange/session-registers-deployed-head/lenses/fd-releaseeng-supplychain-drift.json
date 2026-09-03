@@ -1,0 +1,33 @@
+{
+  "id": "fd-releaseeng-supplychain-drift",
+  "kind": "base",
+  "parents": [],
+  "domain": "release engineering / GitOps supply-chain integrity (deployed-artifact-vs-published-source drift detection)",
+  "axioms": [
+    "'Published' is only as authoritative as the ref used to define it; a ref that can itself go stale (a failed fetch, a lagging mirror) inherits that staleness into every verdict built on it",
+    "There is always a lag between a commit landing and a deployment mechanism propagating it; a drift check that doesn't account for that lag will alarm on every ordinary release cycle",
+    "A comparison surface (roots, files, hashes) is a sampling decision; anything outside the sample is invisible drift, and anything noisy inside the sample degrades signal quality",
+    "Byte-identity to a reference is necessary but not sufficient for correctness -- an artifact can be byte-identical to a HEAD that is itself broken",
+    "A severity policy that downgrades repeated identical findings trades alert fatigue for the risk of a permanent failure going quiet exactly when it matters most"
+  ],
+  "primitives": [
+    "published HEAD (ground-truth ref)",
+    "comparison root/surface",
+    "content hash (git blob SHA)",
+    "drift finding (STALE/MISSING/EXTRA)",
+    "fail vs warn verdict",
+    "standing-failure downgrade signature",
+    "fetch-failure caveat"
+  ],
+  "failure_mode": [
+    "does not evaluate the session-identity register semantics of W1-W4, only the deployed-artifact drift-detection design of W5",
+    "not positioned to judge whether the structural grep test (W3) can be evaded by code-level syntax tricks",
+    "may apply general release-engineering caution around fetch failures that is more conservative than this specific internal tool's stakes warrant"
+  ],
+  "findings": [
+    "f-009",
+    "f-010",
+    "f-011",
+    "f-012"
+  ]
+}
