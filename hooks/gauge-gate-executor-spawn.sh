@@ -11,18 +11,18 @@
 # cannot read the plan (exit 2 or any other non-zero). Prompts without the
 # first marker are not executor spawns and pass through silently, as do empty
 # prompts and non-JSON stdin. Allowing = print nothing, exit 0.
-set -uo pipefail
+set -euo pipefail
 
-payload=$(cat)
+payload=$(cat) || true
 [[ -z "$payload" ]] && exit 0
 
 prompt=$(jq -r '.tool_input.prompt // empty' <<<"$payload" 2>/dev/null) || exit 0
 [[ -z "$prompt" ]] && exit 0
 
-plan=$(printf '%s\n' "$prompt" | sed -n 's/^PATTERN-F EXECUTOR PLAN:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')
+plan=$(printf '%s\n' "$prompt" | sed -n 's/^PATTERN-F EXECUTOR PLAN:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//') || true
 [[ -z "$plan" ]] && exit 0
 
-repo=$(printf '%s\n' "$prompt" | sed -n 's/^REPO:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')
+repo=$(printf '%s\n' "$prompt" | sed -n 's/^REPO:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//') || true
 [[ -z "$repo" ]] && repo="${CLAUDE_PROJECT_DIR:-$PWD}"
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -38,8 +38,8 @@ block() {
 [[ -f "$linter" ]] || block "pattern-f gauge gate: plan-gauge-lint.py not found at $linter"
 
 # --repo-root must precede the positional plan path (argparse layout).
-lint_out=$(python3 "$linter" --repo-root "$repo" "$plan" 2>&1)
-rc=$?
+rc=0
+lint_out=$(python3 "$linter" --repo-root "$repo" "$plan" 2>&1) || rc=$?
 case "$rc" in
   0) exit 0 ;;
   1)

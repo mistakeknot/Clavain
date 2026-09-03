@@ -12,9 +12,9 @@ These contracts apply when a plan is executed by a fresh-context executor subage
 
 ## Plan grammar (what the gauge linter reads)
 
-The linter parses exactly this; anything else is invisible to it.
+The linter reads the edit pairs and the verify fences below and nothing else: it ignores the Preconditions and Commit sections, pathspecs, the trailer, and new-file blocks (Sylveste-yibw.14), and it finds verify steps by a heuristic on the prose near a fence, not by the heading. Everything outside its reach is the orchestrator's to check by hand.
 
-- Each edit to an existing file: a line `In \`relative/path\`:` then a line `old_string:` followed by a fenced block with the exact current text, then `new_string:` followed by a fenced block with the replacement. New files: `Create \`relative/path\` with:` followed by one fenced block holding the COMPLETE file content.
+- Each edit to an existing file: a line naming the file in backticks and ending with a colon (In relative/path:), then a line reading old_string: followed by a fenced block with the exact current text, then a line reading new_string: followed by a fenced block with the replacement. New files: a line reading Create relative/path with: (the path in backticks) followed by one fenced block holding the COMPLETE file content.
 - Each verify step: a heading `### Verify <task>` followed by ONE fenced `bash` block holding the commands (run from REPO PATH), then a prose line starting `Expected:` stating the observable result. Say "prints NOTHING" or "exit 1" ONLY when that is literally true (the linter treats those as zero-output claims and checks them against your own edits). For a command that must succeed, write `Expected: exit 0`.
 - Sections in order: `## Preconditions` (one fenced bash block, must all exit 0), `## Task N` blocks with edits and their `### Verify` steps, `## Commit` (message file path + pathspec list).
 
@@ -42,7 +42,7 @@ You are a Pattern F executor. Apply the plan at <plan path> to the repo at <repo
 
 ## Validator prompt
 
-The validator is an Agent subagent (`subagent_type: "general-purpose"`, `model: "opus"`, spawned only after the executor reports). `<HASH>` is the executor's commit and `<REPORT>` is the executor's report pasted whole. The prompt is exactly:
+The validator is an Agent subagent (`subagent_type: "general-purpose"`, `model: "opus"`), spawned only after the executor reports. `<HASH>` is the executor's commit and `<REPORT>` is the executor's report pasted whole. The prompt is exactly:
 
 ```
 You are a Pattern F validator. Read the plan at <plan path> and the executor report below. In the repo at <repo path>, at commit <HASH>, re-run the plan's VERIFY block yourself and judge ONLY against the plan's frozen criteria: output line 1 `VERDICT: PASS` or `VERDICT: FAIL`, line 2 `CRITERION: <the failing VERIFY line quoted, or none>`. Then output a section headed `BEYOND THE GAUGE:` listing, as bullets, real defects or risks in the change that the VERIFY block did not check (empty list allowed, say `- none`). Never restate the plan; never fix anything. Executor report: <REPORT>
@@ -64,7 +64,7 @@ When the executor reports a defect, the orchestrator fixes the plan (never the r
 
 ## Verdict register (mandatory)
 
-If a verdict is not in the register, it did not happen. After the validator reports, the orchestrator records every verdict with `scripts/pattern-f-verdict.sh`, using the same `--session` for every row of the run and the live register as `--db` (default: `$INTERSPECT_DB`, else `.clavain/interspect/interspect.db` under the repo root). The rows:
+If a verdict is not in the register, it did not happen. After the validator reports, the orchestrator records every verdict with `scripts/pattern-f-verdict.sh`, using the same `--session` for every row of the run and the live register as `--db` (resolution: `--db`, else `$INTERSPECT_DB`, else `.clavain/interspect/interspect.db` under the Clavain checkout the script lives in, which is not the run's repo when Clavain runs from the plugin cache; pass `--db` explicitly). The rows:
 
 One row for the executor's VERIFY run (kind `replay`):
 
