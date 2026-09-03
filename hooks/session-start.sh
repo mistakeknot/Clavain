@@ -17,10 +17,13 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hooks/lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
-# Persist session_id as CLAUDE_SESSION_ID so downstream tools (interphase's
-# _gate_update_statusline) can write bead state for the statusline to read.
+# The session id comes from the hook payload. Persist it as CLAUDE_SESSION_ID so
+# downstream tools (interphase's bead-autoclaim, heartbeat and session-end
+# hooks; interline's lane resolver; every clavain_session_id caller) can key
+# state on it. Readers must still fall back to CLAUDE_CODE_SESSION_ID: this
+# block only runs when the start hook fires (mk-rd9f).
+_session_id=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _session_id=""
 if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
-    _session_id=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null) || _session_id=""
     if [[ -n "$_session_id" ]]; then
         echo "export CLAUDE_SESSION_ID=${_session_id}" >> "$CLAUDE_ENV_FILE"
     fi
@@ -468,7 +471,7 @@ if command -v bd &>/dev/null && [[ -n "${TMUX:-}" ]]; then
                 _mycroft_phase=$(bd get-state "$_mycroft_bead" assigned_phase 2>/dev/null) || _mycroft_phase=""
                 _mycroft_ctx=$(bd get-state "$_mycroft_bead" context_file 2>/dev/null) || _mycroft_ctx=""
                 # Write identity linkage
-                bd set-state "$_mycroft_bead" session_id="${CLAUDE_SESSION_ID:-unknown}" 2>/dev/null || true
+                bd set-state "$_mycroft_bead" session_id="${_session_id:-${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}}" 2>/dev/null || true
                 if [[ -n "${INTERLOCK_ID:-}" ]]; then
                     bd set-state "$_mycroft_bead" interlock_agent_id="$INTERLOCK_ID" 2>/dev/null || true
                 fi

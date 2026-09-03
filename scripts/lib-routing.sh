@@ -1556,7 +1556,7 @@ _routing_emit_decisions() {
   [[ -n "$complexity" ]] && rule="B2"
 
   local sid
-  sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "${CLAUDE_SESSION_ID:-unknown}")
+  sid=$(cat /tmp/interstat-session-id 2>/dev/null || echo "${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}")
 
   # Parse model_json and record each agent's decision
   # model_json format: {"agent1":"model1","agent2":"model2"}

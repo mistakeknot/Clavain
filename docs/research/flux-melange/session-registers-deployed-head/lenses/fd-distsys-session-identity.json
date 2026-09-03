@@ -1,0 +1,33 @@
+{
+  "id": "fd-distsys-session-identity",
+  "kind": "base",
+  "parents": [],
+  "domain": "distributed systems / correlation-ID propagation (session identity across process forks, resume, and compaction boundaries)",
+  "axioms": [
+    "An identity token is only as good as the last boundary that refreshed it; if a lifecycle transition doesn't rewrite it, the token silently outlives its referent",
+    "A precedence rule between registers encodes a bet about which one updates first on any given transition, and the bet can be wrong on transitions the design didn't enumerate",
+    "Two processes that both lose all signal collapse to the same fallback value and become indistinguishable, regardless of how many registers feed the chain",
+    "Environment-variable inheritance is boundary-specific (exec vs spawn vs tool-managed-env) and cannot be assumed uniform across a codebase's call sites",
+    "A cross-runtime handoff (e.g. a Claude subprocess launched under a Codex parent) can leave foreign registers set in the child's environment purely by inheritance, not by intent"
+  ],
+  "primitives": [
+    "session identity token",
+    "environment register",
+    "lifecycle transition (spawn/resume/compaction)",
+    "process boundary",
+    "precedence chain",
+    "fallback value",
+    "environment inheritance path"
+  ],
+  "failure_mode": [
+    "does not have visibility into the actual Claude Code runtime internals -- claims about resume/compaction behavior are inferential, not verified against the binary",
+    "may over-index on distributed-tracing analogies that don't map cleanly onto a single-machine CLI tool's process model",
+    "not positioned to judge the git/hash mechanics of the rig check or the evadability of the structural grep pattern"
+  ],
+  "findings": [
+    "f-001",
+    "f-002",
+    "f-003",
+    "f-004"
+  ]
+}

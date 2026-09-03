@@ -147,7 +147,7 @@ func cmdEvidencePack(args []string) error {
 	caseDir := filepath.Join(evidenceDir(), beadID)
 	os.MkdirAll(caseDir, 0755)
 
-	sessionID := os.Getenv("CLAUDE_SESSION_ID")
+	sessionID := sessionRegisterID()
 	phase := ""
 	if bdAvailable() {
 		out, err := runBD("state", beadID, "phase")

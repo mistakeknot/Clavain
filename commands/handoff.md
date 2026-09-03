@@ -93,7 +93,7 @@ Create `docs/handoffs/YYYY-MM-DD-<topic-slug>.md` with frontmatter. Create the d
 ```markdown
 ---
 date: YYYY-MM-DD
-session: <first 8 chars of CLAUDE_SESSION_ID or "unknown">
+session: <first 8 chars of the session id (CLAUDE_SESSION_ID, else CLAUDE_CODE_SESSION_ID) or "unknown">
 topic: <2-5 word topic>
 beads: [list of bead IDs touched this session]
 run: <RUN_ID, only if resolved>

@@ -281,7 +281,7 @@ and the next session builds on it.
 ### This is checked, not merely requested
 
 `scripts/next-goal-verify.sh` leaves a receipt at
-`~/.cache/clavain/next-goal-verify/$CLAUDE_SESSION_ID.json`, and the Stop hook
+`~/.cache/clavain/next-goal-verify/<session id>.json`, and the Stop hook
 reads it (`next_goal_verification_warning` in
 `hooks/lib-next-goal-provenance.sh`). A block emitted with no receipt is flagged
 as unverified; a block emitted while the receipt lists disqualified candidates
@@ -330,7 +330,7 @@ consecutive goals went out unlinted from this path.
 ### This is checked, not merely requested
 
 `scripts/next-goal-candidates.sh` leaves a receipt at
-`~/.cache/clavain/next-goal-provenance/$CLAUDE_SESSION_ID.json` recording
+`~/.cache/clavain/next-goal-provenance/<session id>.json` recording
 whether any tracker answered. The Stop hook reads it
 (`hooks/lib-next-goal-provenance.sh`) and compares it against what you actually
 emitted. A block that omits the degradation disclosure is taken as claiming

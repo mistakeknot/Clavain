@@ -81,7 +81,7 @@ if [[ -f "$FINDINGS_JSON" ]]; then
     if [[ -n "$TRUST_PLUGIN" ]]; then
         source "$TRUST_PLUGIN"
         PROJECT=$(_trust_project_name)
-        SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+        SESSION_ID="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
     fi
 fi
 ```
@@ -101,7 +101,7 @@ After trust feedback, check findings with `severity_conflict`. Emit kernel event
 
 ```bash
 if [[ -f "$FINDINGS_JSON" ]] && command -v ic &>/dev/null; then
-    SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+    SESSION_ID="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
     PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
     jq -c '.findings[] | select(.severity_conflict != null)' "$FINDINGS_JSON" 2>/dev/null | while IFS= read -r finding; do

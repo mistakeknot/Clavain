@@ -1,0 +1,44 @@
+{
+  "id": "fd-apiary-queenright",
+  "kind": "base",
+  "parents": [],
+  "domain": "Apiary husbandry \u2014 queen identity across swarming and supersedure, the marked queen and its year colour, the latency of queenlessness, the test frame of eggs, drifting and robbing between hives, varroa threshold counts, and the cost of opening a colony to look.",
+  "axioms": [
+    "A mark records which queen you last saw, not which queen is in the box; every carried identifier is a statement about a past inspection, and a lifecycle event nobody attended voids it without erasing it.",
+    "After a split the number stays on the stand and the rated queen leaves with the flying bees, so location-identity and organism-identity diverge at exactly the moment either would be useful.",
+    "Queenlessness has a latency: the colony forages normally for weeks after the fault, and the first honest sign is an absence (no eggs), which is a harder observation than the presence it replaces.",
+    "The honest test is not to look for the queen but to give the colony a frame of young eggs and let it answer in its own currency; a check that asks a person to find a mark cannot distinguish absence from not-looking.",
+    "Bees drift into whichever hive looks like theirs, so two boxes that present the same face to the world are one box as far as the population is concerned, however distinct the records claim they are.",
+    "Robbing looks like prosperity: a colony being emptied shows the busiest entrance in the yard, so activity is never evidence of health, and a mechanism that fires often is not thereby working.",
+    "Infestation is a count against a threshold with a doubling time, never a presence test; a standing high count that has stopped being acted on is the ordinary way a colony dies in the autumn.",
+    "Opening a hive costs the colony, so cadence is chosen against the price of looking, and the cheapest repair for a queenright problem is a mated queen \u2014 equipment and stock, not another inspection."
+  ],
+  "primitives": [
+    "colony (the unit that persists)",
+    "queen",
+    "queen mark and year colour",
+    "queenright / queenless",
+    "swarm, supersedure, emergency requeening",
+    "test frame of eggs (behavioural probe)",
+    "brood pattern",
+    "laying workers (past-recovery state)",
+    "drifting between hives",
+    "robbing",
+    "mite count, threshold, doubling time",
+    "inspection cadence and its cost",
+    "hive record card",
+    "nuc / mated queen on standby"
+  ],
+  "failure_mode": [
+    "Reasons about a self-regulating population, so it can over-credit systems with a homeostasis they do not have and propose 'let the state settle' where software needs an explicit rule and an explicit writer.",
+    "Has no vocabulary for textual form: it can ask whether a probe answers in the system's own currency but cannot enumerate regex evasions, per-language read shapes, or git blob-hashing mechanics, and will under-detect defects that live in syntax.",
+    "Thinks in seasons and rounds, so it over-indexes on cadence, latency and cost-of-looking and under-indexes on one-shot set-completeness questions \u2014 which roots, which files, which directories were enumerated at all.",
+    "Its reflex is to inspect less and build the answer into the equipment, so it will under-weight the cases where more frequent checking is genuinely cheap and correct, and may argue for a structural fix whose real cost it cannot price.",
+    "Treats identity as a colony-level property inferred from behaviour, so a question about which of two named registers is authoritative can get dodged into 'never mind the tag, is there brood?' \u2014 a useful reframing that can leave the plan's actual precedence question unanswered.",
+    "Assumes an attentive keeper with a yard of a knowable size; it has no model of a rule enforced by nobody, and will reach for the operator's judgement where the system has only a hook."
+  ],
+  "findings": [
+    "f-027",
+    "f-028"
+  ]
+}
