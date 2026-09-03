@@ -36,7 +36,7 @@ fi
 clavain-cli advance-phase "$BEAD_ID" "executing" "Executing: <plan_file_path>" "<plan_file_path>"
 ```
 
-Invoke the `clavain:executing-plans` skill and follow it exactly.
+Invoke the `clavain:executing-plans` skill and follow it exactly. For offload runs (a fresh-context executor subagent plus a separate validator subagent), the executor and validator contracts are in `skills/executing-plans/references/pattern-f-contracts.md`.
 
 **On plan completion** (all tasks executed, final checkpoint approved), record the routing outcome (capability-routing doctrine Rule 7 — silent, fail-open). Skip if `/clavain:quality-gates` ran for this plan — it already recorded the outcome. Set `_executor` to your model tier (`fable`/`opus`/`sonnet`/`haiku`); `_author` to the plan author's tier (from the plan's frontmatter/provenance if recorded, else `unknown`); `_validator` to the tier that validated (`self` when the review checkpoints were the only validation). Count the plan's `<verify>` blocks into `_ct` and how many failed on final run into `_cf`:
 

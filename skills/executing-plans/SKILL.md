@@ -11,6 +11,8 @@ Load plan, review critically, execute tasks in batches, report for review betwee
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
+**Pattern F (offload) runs:** when this plan is executed by a fresh-context executor subagent with a separate validator, follow `references/pattern-f-contracts.md` in this skill directory for the executor and validator prompts, the gauge precondition, and the verdict register write.
+
 ## Step 1: Load and Review Plan
 
 1. Read plan file
