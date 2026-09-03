@@ -81,8 +81,10 @@ DISPLAY=:99 CHROME_PATH=/usr/local/bin/google-chrome-wrapper \
 
 Do NOT read agent output files yourself. Delegate to subagent:
 
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
+
 ```
-Task(intersynth:synthesize-review):
+Task(intersynth:synthesize-review, model="haiku"):
   OUTPUT_DIR={OUTPUT_DIR}
   VERDICT_LIB={CLAUDE_PLUGIN_ROOT}/hooks/lib-verdict.sh
   MODE=review

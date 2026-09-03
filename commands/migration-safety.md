@@ -23,12 +23,14 @@ Read migration files. Identify: affected tables/columns, schema change vs backfi
 
 ### Phase 2: Run Safety Agents in Parallel
 
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
+
 ```
-Task(data-migration-expert): "Review for safety: <context>. Check: ID mapping correctness, swapped values, orphaned associations, dual-write patterns. Produce validation queries."
+Task(data-migration-expert, model="sonnet"): "Review for safety: <context>. Check: ID mapping correctness, swapped values, orphaned associations, dual-write patterns. Produce validation queries."
 
-Task(interflux:review:fd-correctness): "Review for integrity: <context>. Check: referential integrity, transaction boundaries, privacy compliance, constraint violations. Identify invariants."
+Task(interflux:review:fd-correctness, model="sonnet"): "Review for integrity: <context>. Check: referential integrity, transaction boundaries, privacy compliance, constraint violations. Identify invariants."
 
-Task(interflux:review:fd-safety): "Create Go/No-Go checklist for: <context>. Include: pre-deploy verification queries, post-deploy checks, rollback procedure, monitoring plan."
+Task(interflux:review:fd-safety, model="sonnet"): "Create Go/No-Go checklist for: <context>. Include: pre-deploy verification queries, post-deploy checks, rollback procedure, monitoring plan."
 ```
 
 ### Phase 3: Synthesize Results

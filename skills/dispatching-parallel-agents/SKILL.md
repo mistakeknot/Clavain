@@ -23,10 +23,13 @@ Group by what's broken. E.g.: File A = tool approval flow, File B = batch comple
 Each agent gets: specific scope, clear goal, constraints (don't touch other code), expected output format.
 
 ### 3. Dispatch in Parallel
+
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
+
 ```typescript
-Task("Fix agent-tool-abort.test.ts failures")
-Task("Fix batch-completion-behavior.test.ts failures")
-Task("Fix tool-approval-race-conditions.test.ts failures")
+Task("Fix agent-tool-abort.test.ts failures", model="sonnet")
+Task("Fix batch-completion-behavior.test.ts failures", model="sonnet")
+Task("Fix tool-approval-race-conditions.test.ts failures", model="sonnet")
 // All three run concurrently
 ```
 
@@ -72,9 +75,9 @@ After agents return: review each summary → check for same-file conflicts → r
 ### Parallel Specialists
 Independent tasks, distinct domains, no shared files. All dispatched in one message.
 ```
-Task("Review authentication module")   ─┐
-Task("Review database migrations")     ─┤── all in one message
-Task("Review API error handling")      ─┘
+Task("Review authentication module", model="sonnet")   ─┐
+Task("Review database migrations", model="sonnet")     ─┤── all in one message
+Task("Review API error handling", model="sonnet")      ─┘
 ```
 Use when plan has 3+ independent modules.
 
@@ -90,9 +93,9 @@ Use when tasks have strict data dependencies.
 ### Fan-out / Fan-in
 N agents, same question, different perspectives → synthesize.
 ```
-Task("Review from security perspective")     ─┐
-Task("Review from performance perspective")  ─┤── fan-out
-Task("Review from UX perspective")           ─┘
+Task("Review from security perspective", model="sonnet")     ─┐
+Task("Review from performance perspective", model="sonnet")  ─┤── fan-out
+Task("Review from UX perspective", model="sonnet")           ─┘
                      │
               Synthesize findings              ── fan-in
 ```

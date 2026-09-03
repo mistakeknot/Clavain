@@ -38,7 +38,9 @@ If an external tool has an "adopt" verdict, default to integration over reimplem
 3. Search past sessions: `cass search "<keywords>" --limit 3 --json --fast-only 2>/dev/null`
 4. If matches found: read frontmatter (limit:30 lines), add `## Prior Learnings` section after Architecture, encode gotchas into relevant task steps
 5. No matches: proceed without mention
-6. Fallback if both unavailable: spawn `Task(subagent_type="interflux:learnings-researcher")`
+6. Fallback if both unavailable: spawn `Task(subagent_type="interflux:learnings-researcher", model="haiku")`
+
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
 
 ## Bite-Sized Task Granularity
 

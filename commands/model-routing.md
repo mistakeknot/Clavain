@@ -28,47 +28,18 @@ Phase overrides:
 
 ## `economy`
 
-Cost-optimized defaults: research→haiku, review→sonnet, workflow→sonnet, synthesis→haiku. Brainstorm stays on opus.
+Cost-optimized defaults: research→haiku, review→sonnet, workflow→sonnet, synthesis→haiku. Doctrine phases (brainstorm, strategized, planned) are never rewritten by a mode toggle — see § Routing-table v2 (Sylveste-0pk).
 
 ```bash
-sed -i '/^subagents:/,/^dispatch:/{
-  /^  defaults:/,/^  phases:/{
-    s/^\(    model:\).*/\1 sonnet/
-    /^    categories:/,/^  [a-z]/{
-      s/^\(      research:\).*/\1 haiku/
-      s/^\(      review:\).*/\1 sonnet/
-      s/^\(      workflow:\).*/\1 sonnet/
-      s/^\(      synthesis:\).*/\1 haiku/
-    }
-  }
-}' config/routing.yaml
-
-sed -i '/^  phases:/,/^dispatch:/{
-  /^\(      model:\).*/s//\1 sonnet/
-  /brainstorm:/{n;s/^\(      model:\).*/\1 opus/}
-}' config/routing.yaml
+bash "${CLAUDE_PLUGIN_ROOT:-.}/scripts/routing-mode.sh" economy
 ```
 
 ## `quality`
 
-All agents on opus. Set defaults, then all phase models and category overrides to `inherit`.
+All agents on opus. Sets defaults, then non-doctrine phase models and category overrides to `inherit`; brainstorm, strategized, planned keep their doctrine entries (Sylveste-0pk).
 
 ```bash
-sed -i '/^subagents:/,/^dispatch:/{
-  /^  defaults:/,/^  phases:/{
-    s/^\(    model:\).*/\1 opus/
-    /^    categories:/,/^  [a-z]/{
-      s/^\(      research:\).*/\1 opus/
-      s/^\(      review:\).*/\1 opus/
-      s/^\(      workflow:\).*/\1 opus/
-      s/^\(      synthesis:\).*/\1 opus/
-    }
-  }
-}' config/routing.yaml
-
-sed -i '/^  phases:/,/^dispatch:/{ s/^\(      model:\).*/\1 inherit/ }' config/routing.yaml
-
-sed -i '/^  phases:/,/^dispatch:/{ /^        [a-z].*:/{ s/^\(        [a-z][a-z0-9_-]*:\).*/\1 inherit/ } }' config/routing.yaml
+bash "${CLAUDE_PLUGIN_ROOT:-.}/scripts/routing-mode.sh" quality
 ```
 
 ## Notes
@@ -77,6 +48,7 @@ sed -i '/^  phases:/,/^dispatch:/{ /^        [a-z].*:/{ s/^\(        [a-z][a-z0-
 - Economy saves ~5x on research, ~3x on review vs quality
 - Individual agents overrideable via `model: <tier>` in Task call
 - `fd-safety` and `fd-correctness` always resolve to ≥sonnet regardless of mode (enforced by `agent-roles.yaml`)
+- Mode toggles go through `scripts/routing-mode.sh`, which skips the doctrine phases; tested in `tests/shell/routing_mode.bats`.
 
 ## Capability-routing doctrine (frontier-tier sessions)
 

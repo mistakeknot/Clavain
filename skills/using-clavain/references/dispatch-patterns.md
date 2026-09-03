@@ -8,12 +8,14 @@ Launch at most **3-4 background agents concurrently** (stability limit — sessi
 
 Full agent prompts inlined in `Task()` calls consume ~3K chars each in parent context. For multi-agent dispatch, write prompts to files first:
 
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
+
 ```
 # Write prompt file (doesn't enter LLM context as tool_use content)
 Write /tmp/flux-dispatch-{ts}/fd-architecture.md: [full prompt]
 
 # Task call is minimal (~200 chars vs ~3K)
-Task(fd-architecture, run_in_background=true):
+Task(fd-architecture, run_in_background=true, model="sonnet"):
   "Read and execute /tmp/flux-dispatch-{ts}/fd-architecture.md"
 ```
 

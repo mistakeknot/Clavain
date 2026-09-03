@@ -57,10 +57,12 @@ the linter still works after any change to it. `--json` for machine consumption.
 
 Launch three review agents in parallel using the Task tool to review the provided plan:
 
-1. **plan-reviewer** — Use the Task tool with `subagent_type: "clavain:review:plan-reviewer"` to review the plan against implementation standards and completeness.
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model. These reviewers are review-category: `model: sonnet`.
 
-2. **fd-architecture** — Use the Task tool with `subagent_type: "interflux:review:fd-architecture"` to evaluate architectural decisions, component boundaries, and design patterns.
+1. **plan-reviewer** — Use the Task tool with `subagent_type: "clavain:review:plan-reviewer"`, `model: "sonnet"` to review the plan against implementation standards and completeness.
 
-3. **fd-quality** — Use the Task tool with `subagent_type: "interflux:review:fd-quality"` to check for over-engineering, unnecessary complexity, and YAGNI violations.
+2. **fd-architecture** — Use the Task tool with `subagent_type: "interflux:review:fd-architecture"`, `model: "sonnet"` to evaluate architectural decisions, component boundaries, and design patterns.
+
+3. **fd-quality** — Use the Task tool with `subagent_type: "interflux:review:fd-quality"`, `model: "sonnet"` to check for over-engineering, unnecessary complexity, and YAGNI violations.
 
 All three agents should receive the plan content and run concurrently (use a single message with multiple Task tool calls). After all agents complete, synthesize their findings into a unified review with prioritized issues.

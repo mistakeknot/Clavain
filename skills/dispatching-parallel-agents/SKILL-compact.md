@@ -18,10 +18,12 @@ Each agent gets: specific scope (one file/subsystem), clear goal, constraints ("
 
 ### 3. Dispatch in Parallel
 
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
+
 Launch all Task calls in a single message:
 ```
-Task("Fix agent-tool-abort.test.ts failures")
-Task("Fix batch-completion-behavior.test.ts failures")
+Task("Fix agent-tool-abort.test.ts failures", model="sonnet")
+Task("Fix batch-completion-behavior.test.ts failures", model="sonnet")
 ```
 
 ### 4. Review and Integrate

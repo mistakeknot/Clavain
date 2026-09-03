@@ -15,9 +15,11 @@ Load the `systematic-debugging` skill for the full debugging methodology.
 
 ## Phase 1: Reproduce
 
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
+
 Spawn `bug-reproduction-validator`:
 ```
-Task(bug-reproduction-validator): "Reproduce this bug: <bug_description>. Find minimal steps to trigger it reliably."
+Task(bug-reproduction-validator, model="sonnet"): "Reproduce this bug: <bug_description>. Find minimal steps to trigger it reliably."
 ```
 
 - **Success**: capture exact steps, proceed to Phase 2
@@ -27,7 +29,7 @@ Task(bug-reproduction-validator): "Reproduce this bug: <bug_description>. Find m
 
 Check for regression — spawn `interflux:research:git-history-analyzer`:
 ```
-Task(interflux:research:git-history-analyzer): "This bug: <description>. When did it start? Find the most likely commit that introduced it. Focus on recent changes to: <affected files>"
+Task(interflux:research:git-history-analyzer, model="haiku"): "This bug: <description>. When did it start? Find the most likely commit that introduced it. Focus on recent changes to: <affected files>"
 ```
 
 - **Regression found**: focus debugging on that commit's changes

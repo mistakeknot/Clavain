@@ -39,8 +39,10 @@ In interactive mode: ask which categories to proceed with.
 
 ## Phase 3: Synthesis (compound/research)
 
+Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
+
 For each approved cluster:
-1. `Task(subagent_type="intersynth:synthesize-documents")` with cluster contents + overlapping solutions tags
+1. `Task(subagent_type="intersynth:synthesize-documents", model="haiku")` with cluster contents + overlapping solutions tags
 2. Interactive: per-doc approval. Batch: collect all, batch approval.
 3. Write to `docs/solutions/[category]/`
 4. Update source frontmatter: `synthesized_into: [new doc path]`
