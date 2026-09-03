@@ -37,7 +37,8 @@ block() {
 [[ -f "$plan" ]] || block "pattern-f gauge gate: plan not found: $plan"
 [[ -f "$linter" ]] || block "pattern-f gauge gate: plan-gauge-lint.py not found at $linter"
 
-# --repo-root must precede the positional plan path (argparse layout).
+# --repo-root is required for a real dry run; without it the linter matches
+# emitted text only and still exits 0. Argument order does not matter.
 rc=0
 lint_out=$(python3 "$linter" --repo-root "$repo" "$plan" 2>&1) || rc=$?
 case "$rc" in
