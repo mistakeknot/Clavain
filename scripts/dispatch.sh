@@ -962,6 +962,14 @@ if [[ "$ENGINE" == "auto" ]]; then
   if declare -f routing_executor_mode >/dev/null 2>&1; then
     routing_mode="$(routing_executor_mode)"
   fi
+  # would_route = the configured order BEFORE the safe-default fallback, so a
+  # shadow-mode corpus row records what routing WOULD have done. The resolver
+  # prints nothing in shadow mode, so re-read the raw order here.
+  would_route="$order"
+  if [[ -z "$would_route" && "$routing_mode" != "off" ]] && declare -f routing_executor_order_raw >/dev/null 2>&1; then
+    would_route="$(routing_executor_order_raw "${TASK_CLASS:-}")"
+  fi
+  [[ -z "$would_route" ]] && would_route="codex"
   [[ -z "$order" ]] && order="codex"   # safe default: paid/stronger
   rc=1
   chosen=""
@@ -978,7 +986,7 @@ if [[ "$ENGINE" == "auto" ]]; then
   # (the test suite sets one), so `--dry-run` never pollutes the corpus.
   if declare -f routing_executor_shadow_log >/dev/null 2>&1; then
     if [[ "${DRY_RUN:-false}" != true || -n "${CLAVAIN_EXECUTOR_SHADOW_LOG:-}" ]]; then
-      routing_executor_shadow_log "${TASK_CLASS:-}" "$routing_mode" "$order" "${chosen:-none}" "${PROMPT_FILE:-}" "$PWD"
+      routing_executor_shadow_log "${TASK_CLASS:-}" "$routing_mode" "$would_route" "${chosen:-none}" "${PROMPT_FILE:-}" "$PWD"
     fi
   fi
   exit "$rc"

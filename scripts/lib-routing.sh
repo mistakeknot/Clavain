@@ -199,6 +199,7 @@ PY
 # phase 1). Every --to auto dispatch is logged, in enforce AND shadow mode, so
 # the phase-2 parity eval can replay the same task on the other backend.
 # Args: <class> <mode> <would_route> <chosen_backend> <prompt_file> <cwd>
+# Called ONLY from dispatch.sh's --to auto block (single logging site).
 # Log path: CLAVAIN_EXECUTOR_SHADOW_LOG, default ~/.clavain/executor-routing-shadow.jsonl
 routing_executor_shadow_log() {
   local class="${1:-}" mode="${2:-}" would="${3:-}" chosen="${4:-}" prompt_file="${5:-}" cwd="${6:-}"
@@ -231,8 +232,10 @@ routing_resolve_executor_order() {
   [[ "$mode" == "off" ]] && return 0
   local order; order="$(routing_executor_order_raw "$class")"
   if [[ "$mode" == "shadow" ]]; then
+    # Corpus logging happens at the dispatch site (dispatch.sh --to auto block),
+    # never here: one dispatch must yield exactly one row, and a resolver call
+    # from a test or a dry run must not touch the corpus.
     echo "[executor-routing shadow] class=${class:-default} would_route=${order:-codex} — routing to default" >&2
-    routing_executor_shadow_log "$class" shadow "$order" "" "" "$PWD"
     return 0
   fi
   [[ -n "$order" ]] && echo "$order"

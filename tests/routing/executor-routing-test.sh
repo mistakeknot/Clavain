@@ -70,10 +70,19 @@ rm -f "$shadow_log"
 shadow_tag="$(CLAVAIN_EXECUTOR_ROUTING_MODE=shadow CLAVAIN_EXECUTOR_SHADOW_LOG="$shadow_log" bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging' 2>/dev/null)" \
   || fail "shadow tagging resolver failed"
 [[ -z "$shadow_tag" ]] || fail "shadow mode must print no order, got '$shadow_tag'"
-[[ -s "$shadow_log" ]] || fail "shadow mode wrote no corpus row"
+[[ ! -s "$shadow_log" ]] || fail "the resolver must not write the corpus; dispatch.sh is the single logging site"
+
+rm -f "$shadow_log"
+shadow_dispatch="$(CLAVAIN_EXECUTOR_ROUTING_MODE=shadow CLAVAIN_EXECUTOR_SHADOW_LOG="$shadow_log" bash scripts/dispatch.sh --dry-run --to auto --class tagging -C /tmp "hi" 2>&1)" \
+  || fail "shadow tagging dry-run failed"
+contains "$shadow_dispatch" "codex exec"
+not_contains "$shadow_dispatch" "--agent-file"
+[[ -s "$shadow_log" ]] || fail "shadow dispatch wrote no corpus row"
+[[ "$(wc -l < "$shadow_log" | tr -d ' ')" == "1" ]] || fail "expected exactly one corpus row per dispatch, got $(wc -l < "$shadow_log")"
 contains "$(cat "$shadow_log")" '"class": "tagging"'
 contains "$(cat "$shadow_log")" '"mode": "shadow"'
 contains "$(cat "$shadow_log")" '"would_route": ["kimi", "codex"]'
+contains "$(cat "$shadow_log")" '"chosen": "codex"'
 
 off_tag="$(CLAVAIN_EXECUTOR_ROUTING_MODE=off bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging')" \
   || fail "off resolver failed"
@@ -96,8 +105,9 @@ python3 -c "import json,sys; [json.loads(l) for l in open('$shadow_log')]; print
 default_log="$HOME/.clavain/executor-routing-shadow.jsonl"
 before_lines=0; [[ -f "$default_log" ]] && before_lines="$(wc -l < "$default_log" | tr -d ' ')"
 bash scripts/dispatch.sh --dry-run --to auto --class interserve-deep -C /tmp "hi" >/dev/null 2>&1 || fail "auto interserve-deep dry-run failed"
+CLAVAIN_EXECUTOR_ROUTING_MODE=shadow bash scripts/dispatch.sh --dry-run --to auto --class tagging -C /tmp "hi" >/dev/null 2>&1 || fail "shadow dry-run failed"
 after_lines=0; [[ -f "$default_log" ]] && after_lines="$(wc -l < "$default_log" | tr -d ' ')"
-[[ "$before_lines" == "$after_lines" ]] || fail "dry-run must not write the default corpus log"
+[[ "$before_lines" == "$after_lines" ]] || fail "dry-run must not write the default corpus log (enforce or shadow)"
 
 grep -q -- '--to auto --class interserve-deep' skills/interserve-engine/SKILL.md || fail "interserve-engine does not pass --class"
 rm -f "$shadow_log"
