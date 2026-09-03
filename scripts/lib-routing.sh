@@ -163,11 +163,25 @@ _routing_find_config() {
   return 1
 }
 
-# Resolve the executor backend order for a task class from
-# executor_routing in routing.yaml. Prints space-separated backends
-# (e.g. "kimi codex"); empty if the section is off/absent (caller uses
-# its own default). Pure yaml read via python3 (already a dep of lib-routing).
-routing_resolve_executor_order() {
+# Effective executor-routing mode: CLAVAIN_EXECUTOR_ROUTING_MODE env wins,
+# else executor_routing.mode from routing.yaml, else "off".
+routing_executor_mode() {
+  if [[ -n "${CLAVAIN_EXECUTOR_ROUTING_MODE:-}" ]]; then
+    echo "$CLAVAIN_EXECUTOR_ROUTING_MODE"
+    return 0
+  fi
+  local cfg; cfg="$(_routing_find_config)" || { echo off; return 0; }
+  [[ -n "$cfg" && -f "$cfg" ]] || { echo off; return 0; }
+  python3 - "$cfg" <<'PY' 2>/dev/null || echo off
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1])) or {}
+print(((d.get("executor_routing") or {}).get("mode")) or "off")
+PY
+}
+
+# Ordered backend list for a task class, WITHOUT applying the mode. Prints
+# classes[<class>] or default, space-separated; empty when unconfigured.
+routing_executor_order_raw() {
   local class="$1"
   local cfg; cfg="$(_routing_find_config)" || return 0
   [[ -n "$cfg" && -f "$cfg" ]] || return 0
@@ -176,11 +190,53 @@ import sys, yaml
 cfg, cls = sys.argv[1], sys.argv[2]
 d = yaml.safe_load(open(cfg)) or {}
 e = d.get("executor_routing") or {}
-if e.get("mode", "off") == "off":
-    sys.exit(0)
 order = (e.get("classes") or {}).get(cls) or e.get("default") or []
 print(" ".join(order))
 PY
+}
+
+# Append one JSON row to the executor-routing shadow corpus (Sylveste-d3m
+# phase 1). Every --to auto dispatch is logged, in enforce AND shadow mode, so
+# the phase-2 parity eval can replay the same task on the other backend.
+# Args: <class> <mode> <would_route> <chosen_backend> <prompt_file> <cwd>
+# Log path: CLAVAIN_EXECUTOR_SHADOW_LOG, default ~/.clavain/executor-routing-shadow.jsonl
+routing_executor_shadow_log() {
+  local class="${1:-}" mode="${2:-}" would="${3:-}" chosen="${4:-}" prompt_file="${5:-}" cwd="${6:-}"
+  local log="${CLAVAIN_EXECUTOR_SHADOW_LOG:-$HOME/.clavain/executor-routing-shadow.jsonl}"
+  mkdir -p "$(dirname "$log")" 2>/dev/null || return 0
+  python3 - "$log" "$class" "$mode" "$would" "$chosen" "$prompt_file" "$cwd" <<'PY' 2>/dev/null || true
+import json, sys, datetime
+log, cls, mode, would, chosen, pf, cwd = sys.argv[1:8]
+row = {
+    "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "class": cls or "default",
+    "mode": mode,
+    "would_route": would.split() if would else [],
+    "chosen": chosen,
+    "prompt_file": pf,
+    "cwd": cwd,
+}
+with open(log, "a") as fh:
+    fh.write(json.dumps(row) + "\n")
+PY
+}
+
+# Ordered backend list honoring the mode:
+#   off     -> prints nothing (dispatch falls back to its default backend)
+#   shadow  -> prints nothing, logs the would-route decision (Sylveste-d3m phase 1)
+#   enforce -> prints the order
+routing_resolve_executor_order() {
+  local class="$1"
+  local mode; mode="$(routing_executor_mode)"
+  [[ "$mode" == "off" ]] && return 0
+  local order; order="$(routing_executor_order_raw "$class")"
+  if [[ "$mode" == "shadow" ]]; then
+    echo "[executor-routing shadow] class=${class:-default} would_route=${order:-codex} — routing to default" >&2
+    routing_executor_shadow_log "$class" shadow "$order" "" "" "$PWD"
+    return 0
+  fi
+  [[ -n "$order" ]] && echo "$order"
+  return 0
 }
 
 # --- Find agent-roles.yaml (companion to routing.yaml) ---

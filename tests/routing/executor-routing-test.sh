@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Executor-routing doctrine acceptance suite. All backend checks are dry-run or
 # self-test paths; this suite never invokes a real codex/kimi/claude backend.
+# Sylveste-d3m phase 1: also covers executor shadow mode and the parity corpus log.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -61,5 +62,44 @@ contains "$self_test" "SELFTEST_OK"
 wrapper_test="$(EXECUTOR_PARITY_LOG_INTERVAL=0.1 bash scripts/executor-parity-eval.sh --self-test 2>&1)" \
   || fail "parity wrapper self-test failed"
 contains "$wrapper_test" "SELFTEST_OK"
+
+# --- Sylveste-d3m phase 1: shadow mode + parity corpus ---------------------
+shadow_log="$(mktemp)"
+rm -f "$shadow_log"
+
+shadow_tag="$(CLAVAIN_EXECUTOR_ROUTING_MODE=shadow CLAVAIN_EXECUTOR_SHADOW_LOG="$shadow_log" bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging' 2>/dev/null)" \
+  || fail "shadow tagging resolver failed"
+[[ -z "$shadow_tag" ]] || fail "shadow mode must print no order, got '$shadow_tag'"
+[[ -s "$shadow_log" ]] || fail "shadow mode wrote no corpus row"
+contains "$(cat "$shadow_log")" '"class": "tagging"'
+contains "$(cat "$shadow_log")" '"mode": "shadow"'
+contains "$(cat "$shadow_log")" '"would_route": ["kimi", "codex"]'
+
+off_tag="$(CLAVAIN_EXECUTOR_ROUTING_MODE=off bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging')" \
+  || fail "off resolver failed"
+[[ -z "$off_tag" ]] || fail "off mode must print no order, got '$off_tag'"
+
+enforce_tag="$(CLAVAIN_EXECUTOR_ROUTING_MODE=enforce bash -c 'source scripts/lib-routing.sh; routing_resolve_executor_order tagging')" \
+  || fail "enforce resolver failed"
+[[ "$enforce_tag" == "kimi codex" ]] || fail "enforce tagging order was '$enforce_tag'"
+
+rm -f "$shadow_log"
+fast="$(CLAVAIN_EXECUTOR_SHADOW_LOG="$shadow_log" bash scripts/dispatch.sh --dry-run --to auto --class interserve-fast -C /tmp "hi" 2>&1)" \
+  || fail "auto interserve-fast dry-run failed"
+contains "$fast" "codex exec"
+not_contains "$fast" "kimi"
+[[ -s "$shadow_log" ]] || fail "dispatch --to auto wrote no corpus row"
+contains "$(cat "$shadow_log")" '"class": "interserve-fast"'
+contains "$(cat "$shadow_log")" '"chosen": "codex"'
+python3 -c "import json,sys; [json.loads(l) for l in open('$shadow_log')]; print('CORPUS_JSON_OK')" | grep -q CORPUS_JSON_OK || fail "corpus rows are not valid JSON lines"
+
+default_log="$HOME/.clavain/executor-routing-shadow.jsonl"
+before_lines=0; [[ -f "$default_log" ]] && before_lines="$(wc -l < "$default_log" | tr -d ' ')"
+bash scripts/dispatch.sh --dry-run --to auto --class interserve-deep -C /tmp "hi" >/dev/null 2>&1 || fail "auto interserve-deep dry-run failed"
+after_lines=0; [[ -f "$default_log" ]] && after_lines="$(wc -l < "$default_log" | tr -d ' ')"
+[[ "$before_lines" == "$after_lines" ]] || fail "dry-run must not write the default corpus log"
+
+grep -q -- '--to auto --class interserve-deep' skills/interserve-engine/SKILL.md || fail "interserve-engine does not pass --class"
+rm -f "$shadow_log"
 
 echo "PASS: executor routing suite"

@@ -958,15 +958,29 @@ if [[ "$ENGINE" == "auto" ]]; then
   if declare -f routing_resolve_executor_order >/dev/null 2>&1; then
     order="$(routing_resolve_executor_order "${TASK_CLASS:-}")"
   fi
+  routing_mode="off"
+  if declare -f routing_executor_mode >/dev/null 2>&1; then
+    routing_mode="$(routing_executor_mode)"
+  fi
   [[ -z "$order" ]] && order="codex"   # safe default: paid/stronger
   rc=1
+  chosen=""
   for backend in $order; do
     if "${BASH_SOURCE[0]}" --to "$backend" "${PASSTHROUGH[@]}"; then
       rc=0
+      chosen="$backend"
       break
     fi
     echo "dispatch: backend '$backend' failed for class '${TASK_CLASS:-default}', trying next" >&2
   done
+  # Sylveste-d3m phase 1: every --to auto dispatch feeds the parity corpus.
+  # Dry runs stay out of the default log unless a log path is set explicitly
+  # (the test suite sets one), so `--dry-run` never pollutes the corpus.
+  if declare -f routing_executor_shadow_log >/dev/null 2>&1; then
+    if [[ "${DRY_RUN:-false}" != true || -n "${CLAVAIN_EXECUTOR_SHADOW_LOG:-}" ]]; then
+      routing_executor_shadow_log "${TASK_CLASS:-}" "$routing_mode" "$order" "${chosen:-none}" "${PROMPT_FILE:-}" "$PWD"
+    fi
+  fi
   exit "$rc"
 fi
 

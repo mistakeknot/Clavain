@@ -34,6 +34,15 @@ If Codex unavailable, fall back to `clavain:subagent-driven-development`.
 
 See `references/cli-reference.md` for full flag reference.
 
+## Executor class (Sylveste-d3m phase 1 — shadow wiring)
+
+Every interserve dispatch goes through `--to auto --class <class>` so executor routing sees it:
+
+- `interserve-fast` — read-only, administrative, exploration, verification, quick reviews (the tasks you would send with `--tier fast`)
+- `interserve-deep` — implementation, complex reasoning, debates, generative work (`--tier deep`)
+
+Both classes are deliberately UNMAPPED in `config/routing.yaml` (`executor_routing.classes`), so they fall through to `default: [codex]` and behavior is unchanged. What changes: each dispatch appends a row to `~/.clavain/executor-routing-shadow.jsonl` (class, mode, would-route, chosen backend, prompt file). That corpus is the phase-2 parity eval's input; a class is mapped to a cheaper backend only after its eval passes (doctrine: `config/routing.yaml` header). Do not map these classes by hand.
+
 ## Step 0: Resolve dispatch.sh
 
 `$CLAUDE_PLUGIN_ROOT` is not exported to Bash. Find the path:
@@ -131,6 +140,7 @@ CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" \
   -C "$PROJECT_DIR" \
   -o "/tmp/codex-result-$(date +%s).md" \
   -s workspace-write \
+  --to auto --class interserve-deep \
   --tier deep
 ```
 Use `timeout: 600000` on the Bash tool call.
@@ -183,6 +193,7 @@ CLAVAIN_DISPATCH_PROFILE=interserve bash "$DISPATCH" \
   -C "$PROJECT_DIR" \
   --name fix-auth -o /tmp/codex-{name}.md \
   -s workspace-write \
+  --to auto --class interserve-deep \
   --tier deep
 ```
 
