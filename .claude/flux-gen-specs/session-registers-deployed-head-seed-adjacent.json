@@ -1,0 +1,130 @@
+[
+  {
+    "name": "fd-distsys-session-identity",
+    "focus": "Evaluate whether session-identity resolution (stdin, CLAUDE_SESSION_ID, CLAUDE_CODE_SESSION_ID) stays correct across every process-boundary and lifecycle transition the plan's hooks run through -- spawn, resume, compaction, and subprocess inheritance -- not just the steady-state case the design describes.",
+    "persona": "Apply the perspective of a distributed-systems engineer who has built correlation-ID propagation and trace-context libraries (W3C traceparent, OpenTelemetry baggage) across process forks, subprocess spawns, and long-lived session resumption, and has debugged production incidents caused by a stale identity token surviving past the boundary that was supposed to refresh it.",
+    "decision_lens": "Does every point where a session identity is read or cached correctly resolve to the CURRENT session's identity -- not a stale, cached, or half-initialized one -- across every process boundary and lifecycle transition, or does the precedence rule just relocate the old single-register failure onto a new pair of registers?",
+    "review_areas": [
+      "Precedence chain correctness across resume/compaction: CLAUDE_SESSION_ID is written once by session-start.sh into CLAUDE_ENV_FILE -- on a resumed or compacted session, is that file re-sourced, and could a stale pre-resume CLAUDE_SESSION_ID outrank a fresh CLAUDE_CODE_SESSION_ID the runtime issues for the resumed run, since A1 fixes precedence to CLAUDE_SESSION_ID first",
+      "Fallback-collision risk under the new chain: multiple concurrent processes that all lack both registers now share one fallback ('unknown') just as before -- does moving from a single register to a two-register chain change the odds of that collision, or just move where it can occur",
+      "Subprocess/hook-environment inheritance: hooks spawned by the Claude Code binary as separate OS processes vs. commands run inside the Bash tool have different environment inheritance paths; the plan itself states CLAUDE_CODE_SESSION_ID's presence in hook environments is 'not established' -- for hooks that also lack a usable stdin session_id for that event, does the chain actually save them or is the fallback still silently 'unknown'",
+      "Cross-runtime telemetry correlation: peer-telemetry.sh keeps CODEX_SESSION_ID last in the chain -- could a Claude subprocess launched under a Codex parent inherit stale CLAUDE_SESSION_ID/CLAUDE_CODE_SESSION_ID from its shell environment and shadow the real CODEX identity, misattributing a joint telemetry record",
+      "A1's same-session assumption under a split-identity resume: what documented Claude Code behavior would actually rewrite CLAUDE_CODE_SESSION_ID on resume while leaving the env-file CLAUDE_SESSION_ID pointing at the terminated original session, and is there anything in the design that would surface such a split rather than silently keying half the hooks on the dead session"
+    ],
+    "severity_examples": [
+      {
+        "severity": "P0",
+        "scenario": "A resumed session inherits its original CLAUDE_ENV_FILE with the pre-resume CLAUDE_SESSION_ID still exported, while the runtime issues a new CLAUDE_CODE_SESSION_ID for the resumed run; because A1 fixes precedence to CLAUDE_SESSION_ID first, every hook (bead-autoclaim, heartbeat, catalog-reminder) keys state to the dead session, so the resumed session's claims collide with or shadow the terminated one -- the exact 'wrong register' class of bug the plan exists to prevent, reintroduced by the precedence rule itself.",
+        "condition": "session-start.sh is not re-run on resume, so CLAUDE_ENV_FILE and its exported CLAUDE_SESSION_ID are never refreshed."
+      },
+      {
+        "severity": "P1",
+        "scenario": "A hook process spawned directly by the Claude Code binary does not inherit CLAUDE_CODE_SESSION_ID, because the binary only injects it into the Bash tool's managed environment, not into general hook subprocess environments; a hook that also lacks a usable session_id in its stdin payload for that event silently falls to 'unknown' exactly as before, and W3's structural test passes because the chain syntax is present even though it is dead code in that hook.",
+        "condition": "the plan ships the fallback into 23+ files without ever probing whether hook-subprocess environments actually carry CLAUDE_CODE_SESSION_ID."
+      },
+      {
+        "severity": "P2",
+        "scenario": "peer-telemetry.sh's chain (stdin, then env, then CODEX_SESSION_ID last) records a Claude-runtime session id for a process actually driven by a Codex parent whose shell happens to have a stale CLAUDE_SESSION_ID exported, misattributing a telemetry record's origin runtime.",
+        "condition": "no origin-runtime marker is checked before falling through the chain, only presence or absence of each variable."
+      }
+    ],
+    "success_hints": [
+      "Names the exact resume/compaction code path (or its documented absence) that would refresh or fail to refresh CLAUDE_ENV_FILE, rather than reasoning about A1 purely in the abstract",
+      "Distinguishes hook-subprocess environment inheritance from Bash-tool environment inheritance with a concrete claim about which specific hooks in W2/W4 rely on which",
+      "Proposes a cheap structural or runtime probe that would surface a split-identity resume case instead of letting it silently key state on the stale id",
+      "Flags any caller where the fallback-to-unknown collision risk got worse (two registers absent instead of one) rather than strictly better"
+    ],
+    "task_context": "This plan generalizes a repair: a five-layer audit shipped dead because its hooks keyed on an env var that only exists when a start hook ran, and because the hook a session runs is a plugin-cache copy nobody checks against HEAD. Find what in this plan would let either defect return silently: a new hook that reads the wrong register, a cache or CLI that drifts without the new rig check noticing, or a check that goes red so often it gets ignored. Challenge specifically: the register precedence (stdin, then CLAUDE_SESSION_ID, then CLAUDE_CODE_SESSION_ID) across resume and compaction; whether the structural grep can be evaded; whether origin/main is the right definition of published HEAD and whether the seven compared roots are enough; fail-on-drift severity with the standing-failure downgrade; and whether the interphase claim state is the right proof of statusline state. Surface anything the Why section missed and any fix that would be cheaper at a different altitude. This agent's angle: hold the register-precedence design (W1, W2, W4, and assumption A1) to distributed-systems standards for identity propagation across process and lifecycle boundaries -- resume, compaction, subprocess spawn, and cross-runtime handoff -- rather than evaluating it only in the single-process steady state the plan's own examples describe.",
+    "anti_overlap": [
+      "fd-staticanalysis-lint-evasion covers whether W3's grep pattern can be gamed by syntax, not whether the resolved identity is semantically correct",
+      "fd-releaseeng-supplychain-drift covers W5's cache/CLI drift detection against origin/main, not session-identity correctness",
+      "Does not evaluate the rig-check's git/hash mechanics, root coverage, or fail/warn severity policy"
+    ]
+  },
+  {
+    "name": "fd-staticanalysis-lint-evasion",
+    "focus": "Evaluate whether the structural grep-based test (W3) that is supposed to keep the register-precedence fix from regressing actually closes the space of bare reads, or whether its pattern-matching leaves evadable gaps, blind spots outside its walked roots, or check-fatigue failure modes.",
+    "persona": "Apply the perspective of a static-analysis tooling engineer who designs and red-teams CI linting gates -- grep- and AST-based custom lint rules, secret scanners, dependency-pinning enforcers -- and has watched teams route around exactly these gates within a sprint of them landing.",
+    "decision_lens": "Is the accepted-forms set in the structural test complete and unambiguous enough that every semantically-bare read of the variable is caught, and specific enough that the check does not false-positive on prose or comments to the point where someone disables or suppresses it?",
+    "review_areas": [
+      "Pattern completeness: the check flags `$CLAUDE_SESSION_ID`, `${CLAUDE_SESSION_ID`, and `env.CLAUDE_SESSION_ID` -- does it also need to catch indirect reads that evade literal string matching, such as bash indirection (`var=\"CLAUDE_SESSION_ID\"; echo \"${!var}\"`), `printenv CLAUDE_SESSION_ID`, `eval \"echo \\$CLAUDE_SESSION_ID\"`, Python's `os.environ.get('CLAUDE_SESSION_ID')`, or a jq filter written without the `env.` prefix",
+      "Same-expression vs same-file matching: if the walker's accepted-form check only requires both register names to appear SOMEWHERE in the file rather than in the SAME expression at the flagged line, a bare `${CLAUDE_SESSION_ID}` read sitting near an unrelated mention of `CLAUDE_CODE_SESSION_ID` elsewhere in the file would pass silently",
+      "Root and format coverage: the walk covers hooks/, scripts/, commands/, skills/, agents/ -- does it also need tests/ itself (fixtures that normalize a bad pattern), any templated source that generates hooks/commands from elsewhere, or non-shell/non-jq languages (Python, etc.) whose equivalent bare reads use syntax the walker's patterns do not recognize at all",
+      "New-plugin blind spot: a brand-new hook, or a hook in a plugin the structural test does not walk (interspect, interflux -- explicitly out of scope per the plan), can reintroduce the identical anti-pattern in a directory this test never sees while the suite stays green",
+      "Check-fatigue and suppressibility: does the test recognize any suppression convention, and if it occasionally false-positives on legitimate prose containing the literal variable name (a heredoc emitting a user-facing message), does a resulting suppression pragma become a new evasion vector for a genuine bare read added later in the same file",
+      "CI wiring: is W3 actually gated in CI so a PR cannot merge with it failing, or is it a local-only pytest invocation that must be remembered, meaning the register fix could regress and ship anyway"
+    ],
+    "severity_examples": [
+      {
+        "severity": "P0",
+        "scenario": "A future contributor adds a new hook using `id=\"${CLAUDE_SESSION_ID}\"` with no fallback and no accepted form on that line, but the same file happens to also reference `CLAUDE_CODE_SESSION_ID` elsewhere for an unrelated reason; if the accepted-form check is implemented as 'both substrings present somewhere in the file' rather than 'both substrings present in the same expression at this line', the bare read passes silently.",
+        "condition": "the structural test's per-line acceptance check actually operates at file granularity rather than expression granularity."
+      },
+      {
+        "severity": "P1",
+        "scenario": "A hook reads the identity via a Python one-liner (`os.environ.get('CLAUDE_SESSION_ID','unknown')`) invoked from a shell wrapper; the walker's shell/jq-shaped patterns do not match Python attribute- or dict-style access, so a hook that reintroduces the exact single-register bug in a differently-worded form is invisible to W3 while CI reports the defect class closed.",
+        "condition": "the codebase mixes Python-based hooks and the pattern set was designed against shell and jq syntax only."
+      },
+      {
+        "severity": "P2",
+        "scenario": "The structural test's per-line grep flags a CHANGELOG or comment line that mentions `$CLAUDE_SESSION_ID` in prose explaining the fix, producing a false positive; a contributor resolves it with a broad per-file suppression pragma, which then also silences a real bare read added later in the same file.",
+        "condition": "no distinction between comment-context and code-context lines, and the suppression mechanism (if any) is per-file rather than per-line."
+      }
+    ],
+    "success_hints": [
+      "Gives a concrete bypass string or code shape the stated accepted-forms list would not catch, not just 'grep can always be evaded' as a generality",
+      "States plainly whether the match requires same-line/same-expression co-occurrence or just same-file co-occurrence of the two register names, since the plan's prose does not specify",
+      "Names a specific plugin, generator, or template path outside the five walked roots where the same anti-pattern could reappear invisibly",
+      "Addresses whether W3 is CI-blocking or locally-optional, since a correct test nobody runs has the same effect as no test"
+    ],
+    "task_context": "This plan generalizes a repair: a five-layer audit shipped dead because its hooks keyed on an env var that only exists when a start hook ran, and because the hook a session runs is a plugin-cache copy nobody checks against HEAD. Find what in this plan would let either defect return silently: a new hook that reads the wrong register, a cache or CLI that drifts without the new rig check noticing, or a check that goes red so often it gets ignored. Challenge specifically: the register precedence (stdin, then CLAUDE_SESSION_ID, then CLAUDE_CODE_SESSION_ID) across resume and compaction; whether the structural grep can be evaded; whether origin/main is the right definition of published HEAD and whether the seven compared roots are enough; fail-on-drift severity with the standing-failure downgrade; and whether the interphase claim state is the right proof of statusline state. Surface anything the Why section missed and any fix that would be cheaper at a different altitude. This agent's angle: treat W3's structural test itself as an adversarial target -- the question is not whether the register-precedence design is correct, but whether the automated guard the plan relies on to KEEP it correct can be silently defeated by syntax the walker's pattern set does not anticipate.",
+    "anti_overlap": [
+      "fd-distsys-session-identity covers whether the resolved identity is semantically correct across resume/compaction, not whether the linter's pattern-matching can be evaded",
+      "fd-releaseeng-supplychain-drift covers W5's cache-vs-HEAD drift detection using git blob hashing, a different mechanism from W3's source-line grep",
+      "Does not evaluate interphase's runtime bead-claim correctness, only the static-check mechanics of W3"
+    ]
+  },
+  {
+    "name": "fd-releaseeng-supplychain-drift",
+    "focus": "Evaluate whether the rig check's definition of published HEAD, its seven-root comparison surface, its git-blob hashing mechanics, and its fail-on-drift-with-standing-downgrade severity policy actually produce a drift signal that is both complete and trustworthy enough to act on.",
+    "persona": "Apply the perspective of a release engineer who has built provenance and attestation checks for package registries and GitOps reconcilers -- npm/pip lockfile integrity, Homebrew formula SHA pinning, ArgoCD drift detection -- and has been on call when a check reporting green missed a stale deployed artifact.",
+    "decision_lens": "Does the check's definition of 'published' and its comparison surface actually bound the space of drift that matters, and does its severity policy make the signal something an on-call engineer trusts rather than routes around?",
+    "review_areas": [
+      "Definition of published HEAD and publish-wave latency: origin/main is fetched live and used as ground truth -- in the window between a push to main and the publish wave finishing (ic publish copying into the marketplace cache), does the check fail DRIFT against a main that was just pushed but not yet published, going red on every ordinary merge before the publish step had a chance to run",
+      "Root coverage adequacy: is comparing exactly hooks, scripts, bin, commands, agents, skills, and .claude-plugin sufficient, or does a root outside those seven (a top-level lib/, a build-output directory, or a future addition) carry an executable or sourced file the seven roots miss, leaving a live drift path uncovered while the check reports zero findings; conversely does diffing .claude-plugin/plugin.json produce noisy STALE findings on ordinary version bumps unrelated to behavioral drift",
+      "Hash mechanics correctness: computing the git blob hash locally (blob <len>\\0<bytes>, SHA-1) without invoking git per file -- does this handle a cache file that is itself a symlink, or line-ending/`.gitattributes`-driven content filters that git would apply on checkout but the raw local file lacks, producing spurious STALE findings for content git itself would consider identical",
+      "CLI check conflation: the CLI step collapses four independent failure modes (absent, not-a-checkout, off-main/behind, byte-stale, behaviorally-permissive) into related but distinct finding codes -- does the summary line distinguish them clearly enough that an on-call reader knows whether the fix is 'pull the checkout' versus 'the CLI has a logic bug even though it matches HEAD', the latter being a case this check cannot catch by design since it only tests byte-identity to origin/main",
+      "Fail-on-drift plus STANDING downgrade interaction: walked through a concrete multi-day scenario where the publish wave has permanently stopped running (not just lagged), does the unchanged --signature settle the finding into STANDING-warn within one or two runs and stay there indefinitely, defeating the stated purpose ('a daily run that sees it means the auto-publish hook did not close it') by going quiet exactly when the underlying repair has permanently failed",
+      "Fetch-failure caveat handling: keeping a stale origin/main ref and reporting only a caveat rather than downgrading the verdict -- under an extended network outage, does this produce a false PASS (cache matches a week-old origin/main that itself no longer matches the true published HEAD) that reads as green to any automated consumer checking only the exit code"
+    ],
+    "severity_examples": [
+      {
+        "severity": "P0",
+        "scenario": "The daily rig-health-check run has silently lost network access to GitHub for several consecutive days (a Tailscale or DNS blip past the 60s fetch bound each time); each run keeps the last-known origin/main and reports exit 0 with a buried caveat, while the actual published HEAD has moved and the cache has genuinely drifted from it -- the exact failure this whole plan exists to catch now hides behind a check that reports success because its own ground-truth reference went stale.",
+        "condition": "no verdict downgrade or hard-fail path exists for a fetch that has failed across multiple consecutive runs, only a single-run caveat string."
+      },
+      {
+        "severity": "P1",
+        "scenario": "A push lands on origin/main and the asynchronous zklw publish wave takes its normal interval to copy the new commit into the marketplace cache; every rig-health-check run in that window reports STALE/MISSING findings against a HEAD that legitimately has not been published yet, so the check goes red on a normal, non-broken publish cadence -- training an on-call engineer to treat red as noise, which the STANDING downgrade only partially prevents since it suppresses REPEATED identical drift, not this transient every-push kind.",
+        "condition": "publish-wave latency is not measured against the check's run cadence and no grace window or debounce is applied to freshly-appeared drift."
+      },
+      {
+        "severity": "P2",
+        "scenario": "The seven compared roots exclude a top-level file (a root install script, or a future build-output directory) that is also deployed and executed; if Clavain grows a build step whose output lands outside the seven roots, the check reports clean while that artifact silently drifts, and nothing in the plan revisits root coverage as the plugin structure evolves.",
+        "condition": "the seven roots are hardcoded in the check rather than derived from the plugin manifest's own declared file list."
+      }
+    ],
+    "success_hints": [
+      "Walks the actual publish-wave timing/latency (or explicitly states it is unmeasured) rather than treating the push-vs-publish race as purely hypothetical",
+      "Distinguishes the CLI's several failure modes (absent/not-a-checkout/off-main/behind/stale-content/permissive) by what remediation each implies, and flags where the summary line could conflate them",
+      "Traces the STANDING-downgrade interaction through a concrete multi-day drift scenario rather than evaluating fail-vs-warn as a one-shot policy choice",
+      "Names a specific fetch-failure or hashing edge case (symlinks, line-ending filters, offline runs) with a concrete false-positive or false-negative outcome, not a generic 'hashing could be wrong'"
+    ],
+    "task_context": "This plan generalizes a repair: a five-layer audit shipped dead because its hooks keyed on an env var that only exists when a start hook ran, and because the hook a session runs is a plugin-cache copy nobody checks against HEAD. Find what in this plan would let either defect return silently: a new hook that reads the wrong register, a cache or CLI that drifts without the new rig check noticing, or a check that goes red so often it gets ignored. Challenge specifically: the register precedence (stdin, then CLAUDE_SESSION_ID, then CLAUDE_CODE_SESSION_ID) across resume and compaction; whether the structural grep can be evaded; whether origin/main is the right definition of published HEAD and whether the seven compared roots are enough; fail-on-drift severity with the standing-failure downgrade; and whether the interphase claim state is the right proof of statusline state. Surface anything the Why section missed and any fix that would be cheaper at a different altitude. This agent's angle: hold W5's rig-check design (the definition of published HEAD, the seven-root surface, the blob-hashing mechanics, and the fail-on-drift/STANDING severity policy) to release-engineering standards for drift detection that must stay trustworthy under real publish-wave latency and intermittent network conditions, not just in the single clean-fetch case the plan's own worked example describes.",
+    "anti_overlap": [
+      "fd-distsys-session-identity covers W1-W4's session-identity correctness across process/lifecycle boundaries, not W5's artifact-drift detection",
+      "fd-staticanalysis-lint-evasion covers W3's source-grep evasion surface, a different mechanism from W5's git-blob-hash comparison",
+      "Does not evaluate whether individual hooks read the correct session register, only whether the deployed artifact matches published HEAD and how that verdict is reported"
+    ]
+  }
+]
