@@ -57,6 +57,17 @@
             "args": []
           }
         ]
+      },
+      {
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/gauge-gate-executor-spawn.sh",
+            "timeout": 30,
+            "args": []
+          }
+        ]
       }
     ],
     "PostToolUse": [
