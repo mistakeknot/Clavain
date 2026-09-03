@@ -1,0 +1,53 @@
+{
+  "id": "fd-fused-causal-reserve-handoff-cox",
+  "kind": "fusion",
+  "parents": [
+    "fd-distributed-systems-handoff-cox",
+    "fd-batik-negative-reserve-cox"
+  ],
+  "domain": "causal reserve integrity across distributed staged transformations — the cross-product of handoff identity, retry, concurrency, and causal order with negative boundaries, protected ground, layer sequence, leakage, and repair windows",
+  "axioms": [
+    "Every handoff specifies two transitions at once: the positive change the next worker should produce and the negative reserve of state that must not be penetrated while producing it.",
+    "A reserve boundary is meaningful only relative to a plan revision, repository snapshot, attempt, and stage; a constraint can be internally valid yet protect yesterday's ground.",
+    "Independent workers cannot inherit protected ground from the orchestrator's tacit context. If the handoff does not make the negative boundary explicit and durable, the receiver has no protocol-level reserve to preserve.",
+    "A small omission in a handoff's reserve can survive preflight and local verification, then become visible only after a later or concurrent mutation consumes the contaminated state; the causal identity of the first leak must therefore survive the sequence.",
+    "Causal order and color sequence are one fused constraint: the same command, retry, repair, or validation action against a different stage does not establish the same resulting state or evidence.",
+    "A retry after partial success is a new attempt on already transformed material. Recording a fresh attempt identity does not make repetition restorative, and compensation cannot assume the protected ground still exists.",
+    "Inspection evidence has a validity window. Once a masking layer is removed, overwritten, or handed to a dependent item, a later validator may reveal contamination while being unable to localize its responsible transition or recover the earlier state.",
+    "Failure classification must join detector evidence to reserve evidence: worker failure, environment delay, missing inspection, boundary leakage, and delayed reveal are distinct outcomes even when all appear as an absent or failed handoff.",
+    "A thin orchestrator creates a real specification pressure: a finite durable envelope preserves transferable causality, while the protected ground may be open-ended, semantic, and stage-specific. Neither compactness nor exhaustiveness is sufficient by itself."
+  ],
+  "primitives": [
+    "causal-reserve cell = handoff coordinate × reserve coordinate",
+    "handoff coordinate: node or role, plan revision, repository snapshot, commit identity, handoff envelope, attempt identity, precondition, state transition, retry or compensation, and causal order",
+    "reserve coordinate: mori cloth or mutable artifact, canting or mutation tool, wax reserve, reserve boundary, dye bath or mutation stage, color sequence, boundary leakage, masking layer, intermediate inspection, reveal, protected ground, and path-dependent correction",
+    "protected-state envelope: a handoff envelope that names both the intended transition and the state surfaces reserved from change",
+    "negative precondition: an invariant stating what must still be untouched before a stage may begin",
+    "stage-bound reserve: protected ground identified by plan revision, snapshot, attempt, and current transformation layer",
+    "causal leak: a reserve-boundary violation attributed to the first transition that allowed a later mutation to penetrate protected state",
+    "latent stale reserve: a valid-looking exclusion whose artifact identity or stage no longer matches the receiver's state",
+    "inspection window: the interval in causal order when a reserve is observable and locally repairable",
+    "reveal-bound evidence: validation output tied to the exact layer, snapshot, commit, attempt, and inspection point it observed",
+    "path-dependent retry: a repeated operation whose result changes because the first attempt already altered the material or removed evidence",
+    "compensation limit: the point after leakage where inverse edits cannot restore the original ground or causal diagnosis",
+    "race-leak: a concurrent mutation viewed as both an ordering fault and penetration of another item's protected ground",
+    "reserve provenance: lineage from the plan's negative constraints through executor inspection, validator reveal, and landing",
+    "reserve completeness budget: the unresolved amount of negative state that can fit in a thin, durable handoff without recreating main-thread context"
+  ],
+  "tension": "The finite-handoff-envelope versus unbounded-protected-ground tension. Distributed workflow reliability needs a compact, explicit, durable message that lets each fresh worker identify the current plan, repository state, attempt, and legal transition. Negative-reserve craft shows that correctness also depends on everything the stage must not penetrate, including small or semantic boundary gaps that may remain invisible until a later transformation makes them costly, ambiguous, or irrecoverable. Expanding the envelope toward exhaustive protected ground can recreate the main-thread context Pattern F is meant to shed; keeping it thin can transfer positive intent and causal identifiers while omitting the reserve that makes the transition safe. The lens does not choose compactness or completeness. It locates where Pattern F and its pilots make that trade, which inspection window bears it, and whether later evidence can still identify the causal leak.",
+  "hard_constraint": "Intersection-only. Report a finding ONLY if it requires BOTH parent perspectives, and include an intersection_justification on every finding. The justification must name (1) the plan revision, repository snapshot, commit, handoff, attempt, precondition, transition, retry, concurrency, failure-detector, or causal-order fact contributed by distributed-systems reasoning; (2) the reserve boundary, masking layer, protected ground, dye-stage sequence, leakage, intermediate-inspection, reveal, or path-dependent-correction fact contributed by batik reasoning; and (3) why the failure scenario disappears or becomes materially different when either contribution is removed. Bare stale-state, retry, race, or identity findings belong to parent A. Bare missing exclusions, reserve gaps, late inspection, contamination, sequencing, or irreversibility findings belong to parent B.",
+  "failure_mode": [
+    "It can overstate irreversibility because source-controlled changes are often revertible, although generated artifacts, external effects, lost diagnostic evidence, and downstream consumption may not be.",
+    "Reserve completeness can become an unbounded demand to enumerate every untouched file and semantic invariant, bloating plans and executor reports until Pattern F loses its context advantage.",
+    "The spatial clarity of a wax boundary may falsely imply that software's protected surfaces are enumerable; many are relational, temporal, generated, or external to the repository.",
+    "It can recommend too many intermediate inspections, adding serial gates and validator work whose token and latency cost exceeds the demonstrated leakage risk.",
+    "It may label any out-of-scope diff as contamination even when the transition intentionally updates coupled state, turning a missing ownership rule into an allegedly broken reserve.",
+    "It can privilege preservation over productive refactoring: some stages should redraw the boundary rather than protect the previous ground, but the lens has no independent product criterion for deciding when.",
+    "Fusion laundering is a standing risk: a parent-alone stale-handoff or missing-constraint issue can be relabeled as intersectional by appending an incidental reserve or commit reference without showing a joint, path-dependent consequence."
+  ],
+  "findings": [
+    "f-029",
+    "f-030",
+    "f-031"
+  ]
+}

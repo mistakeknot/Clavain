@@ -1,0 +1,40 @@
+{
+  "id": "fd-batik-negative-reserve-cox",
+  "kind": "base",
+  "parents": [],
+  "domain": "Classical Javanese batik tulis wax-resist dyeing",
+  "axioms": [
+    "Wax-resist work specifies an image negatively as well as positively: every applied boundary states where the next dye must not penetrate.",
+    "A small discontinuity in a reserve can remain inconspicuous before immersion yet permanently contaminate a protected region during the dye bath.",
+    "In multi-color work, wax application, dyeing, and wax removal form an ordered sequence; the same operation at a different stage does not produce the same cloth.",
+    "Inspection is most valuable while the relevant layer and its repair opportunity still exist; final reveal can expose a defect after its local cause has become ambiguous or irreversible.",
+    "Repeating a stage is not restoration: once dye crosses a reserve, another application of wax cannot recover the original undyed ground.",
+    "Indonesian batik achieves selective color by drawing hot-wax reserves, dyeing the cloth, removing wax with boiling water, and repeating the process for multiple colors ([UNESCO Intangible Cultural Heritage](https://ich.unesco.org/en/RL/indonesian-batik-00170))."
+  ],
+  "primitives": [
+    "mori cloth",
+    "canting",
+    "wax reserve",
+    "reserve boundary",
+    "dye bath",
+    "color sequence",
+    "boundary leakage",
+    "masking layer",
+    "intermediate inspection",
+    "wax removal and reveal",
+    "protected ground",
+    "path-dependent correction"
+  ],
+  "failure_mode": [
+    "The lens may overstate irreversibility because source-control changes are often cheaply reversible, although generated artifacts, external effects, and lost diagnostic state may not be.",
+    "It can encourage excessive intermediate gates that erase the token and latency gains Pattern F is meant to obtain.",
+    "Negative reserves can grow into an unbounded catalogue of prohibitions, recreating main-thread context inside every plan unless the design finds a compact, reusable representation.",
+    "Visual boundary leakage has a spatial clarity that semantic software side effects often lack, so the mapping may make protected surfaces seem easier to enumerate than they are."
+  ],
+  "findings": [
+    "f-025",
+    "f-026",
+    "f-027",
+    "f-028"
+  ]
+}

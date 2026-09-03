@@ -1,0 +1,43 @@
+{
+  "id": "fd-evalscience-judge-validity",
+  "kind": "base",
+  "parents": [],
+  "domain": "Measurement science and evaluation methodology — construct validity, inter-rater reliability, and LLM-as-judge design; the applied discipline behind eval-harness design, human-eval calibration studies, and Goodhart's-law-aware metric design in ML systems",
+  "axioms": [
+    "Every gate or judge is a proxy for a construct it cannot directly observe; a proxy is useful only to the extent its correlation with the true construct has actually been checked, never merely assumed.",
+    "A measurement instrument can be gamed by any actor scored by it — the moment a metric becomes a target, the optimizing pressure on the metric diverges from the optimizing pressure on the construct unless the two are provably identical (Goodhart's law).",
+    "Two measurements of 'the same thing' by the same method against the same input are not independent evidence — re-running an identical procedure on an identical input measures the procedure's own variance (reliability), not the underlying truth (validity).",
+    "A judge's criteria can only be as complete as the domain expertise that authored them; criteria authored by the same party whose work they will later evaluate carry a conflict-of-interest risk on completeness, independent of anyone's good faith.",
+    "Self-report is a low-validity channel by default; it requires either independent verification or a structural reason the reporter cannot benefit from misreporting before it can be trusted as ground truth.",
+    "An evaluation result is interpretable only relative to the population and conditions it was measured under; results from a small or non-representative pilot generalize only as far as that pilot's own structure allows.",
+    "A verdict format that admits no partial or ambiguous state (pure PASS/FAIL) forces every edge case into the examiner's undocumented discretion, which quietly becomes a second, unaudited criterion."
+  ],
+  "primitives": [
+    "construct (the actual property the design needs measured, e.g. 'main-thread context bloat')",
+    "proxy metric (the token-share gate, standing in for the construct)",
+    "judge / rater (the validator, and what it does or does not share with the executor's own check)",
+    "criteria / rubric (the plan's frozen criteria — authored by the same party that will be judged against them)",
+    "reliability vs. validity (does a repeated measurement agree with itself, versus does it agree with the truth)",
+    "self-report (the executor's verbatim verify output, taken on trust)",
+    "sample / pilot (the three planned pilot runs, and what they can and cannot generalize to)"
+  ],
+  "failure_mode": [
+    "Focuses on whether an instrument measures the right thing, so it can miss failures that are purely mechanical — a message lost, a lock not taken — even when those mechanical failures would also corrupt the measurement; it will diagnose 'wrong construct' when the real bug is 'the input pipeline drops data', which looks identical from this lens.",
+    "Assumes rational, if imperfectly informed, actors constructing and gaming metrics in the abstract; it has no native vocabulary for why one specific actor — as opposed to metrics in general — is incentivized toward a particular defection, which is principal-agent territory, not measurement science.",
+    "Tends to demand more rigorous validation (calibration studies, inter-rater agreement measurement) than a fast-moving three-pilot phase can afford, and can under-weight that a somewhat-invalid gauge deployed now with a plan to recalibrate is sometimes the right call against the alternative of shipping with no gauge at all.",
+    "Treats each gate or verdict as a standalone instrument to be validated on its own terms, and is weak at reasoning about how instruments compose — e.g. whether a valid executor self-report combined with a redundant validator check produces a system that is jointly less reliable than either part alone."
+  ],
+  "findings": [
+    "f-006",
+    "f-007",
+    "f-008",
+    "f-009",
+    "f-010",
+    "f-029",
+    "f-030",
+    "f-031",
+    "f-043",
+    "f-044",
+    "f-045"
+  ]
+}

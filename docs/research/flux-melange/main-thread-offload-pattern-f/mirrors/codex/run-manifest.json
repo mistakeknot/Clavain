@@ -1,0 +1,37 @@
+{
+  "runtime": "codex",
+  "rounds": 3,
+  "halt_reason": "DRY",
+  "gain_history": [
+    {"round": 0, "yield": 11, "novel_cluster_rate": 0.71},
+    {"round": 1, "yield": 3, "novel_cluster_rate": 0.71},
+    {"round": 2, "yield": 0, "novel_cluster_rate": 0.09}
+  ],
+  "spice_trail": [
+    {"round": 0, "event": "assay", "findings": 21, "agents_dispatched": 2},
+    {"round": 1, "event": "probe", "directives": [
+      {"type": "FUSE", "rationale": "shared_heat 3, complementarity 2, redundancy 0", "lens": "fd-fused-causal-assurance-handoff-cox"},
+      {"type": "STEER-WIDE", "rationale": "novel_cluster_rate 0.71 >= 0.6 — widening still pays", "lens": "fd-batik-negative-reserve-cox"}
+    ], "findings": 7, "failed": 0},
+    {"round": 1, "event": "assay", "findings": 7, "agents_dispatched": 2},
+    {"round": 2, "event": "probe", "directives": [
+      {"type": "FUSE", "rationale": "shared_heat 2, complementarity 1, redundancy 0", "lens": "fd-fused-causal-reserve-handoff-cox"},
+      {"type": "FUSE", "rationale": "shared_heat 2, complementarity 1, redundancy 0", "lens": "fd-fused-reserve-accounting-cox"},
+      {"type": "STEER-WIDE", "rationale": "novel_cluster_rate 0.71 >= 0.6 — widening still pays", "lens": "fd-meroitic-furnace-steering-cox"}
+    ], "findings": 11, "failed": 0},
+    {"round": 2, "event": "assay", "findings": 11, "agents_dispatched": 3}
+  ],
+  "slots_spent": 14,
+  "directive_history": [
+    {"round": 0, "directives": []},
+    {"round": 1, "directives": [
+      {"type": "FUSE", "rationale": "shared_heat 3, complementarity 2, redundancy 0", "lens": "fd-fused-causal-assurance-handoff-cox"},
+      {"type": "STEER-WIDE", "rationale": "novel_cluster_rate 0.71 >= 0.6 — widening still pays", "lens": "fd-batik-negative-reserve-cox"}
+    ]},
+    {"round": 2, "directives": [
+      {"type": "FUSE", "rationale": "shared_heat 2, complementarity 1, redundancy 0", "lens": "fd-fused-causal-reserve-handoff-cox"},
+      {"type": "FUSE", "rationale": "shared_heat 2, complementarity 1, redundancy 0", "lens": "fd-fused-reserve-accounting-cox"},
+      {"type": "STEER-WIDE", "rationale": "novel_cluster_rate 0.71 >= 0.6 — widening still pays", "lens": "fd-meroitic-furnace-steering-cox"}
+    ]}
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "id": "fd-distsys-state-coherence",
+  "kind": "base",
+  "parents": [],
+  "domain": "Distributed systems reliability engineering \u2014 replication and consensus under partial failure, stale-read semantics in leader/replica topologies, idempotent retry design, distributed locking and leasing, and coordination protocols for ephemeral worker pools such as CI/CD runners, job queues, and sagas",
+  "axioms": [
+    "Correctness is defined relative to a stated consistency model; a system is 'wrong' only when it violates the model it claims to implement, not any stricter model an observer might prefer.",
+    "Every message between nodes can be delayed, duplicated, dropped, or reordered; a protocol not proven correct under those conditions is not proven correct, whatever the happy path looks like.",
+    "State that is not durably written to a log, a versioned store, or a file survives neither a node crash nor a restart \u2014 in-memory or in-context state is assumed lost at any point, without warning.",
+    "Idempotency of an operation is a property of the operation's specification, not of how carefully callers happen to invoke it; retries are assumed to happen and must be safe by design, not by convention.",
+    "Two nodes acting on the same mutable resource without an explicit coordination protocol \u2014 a lock, a lease, a compare-and-swap \u2014 are assumed to race, never assumed to cooperate by good manners.",
+    "A read is only as fresh as the version or timestamp it is pinned to; the wall-clock gap between a read and its use introduces staleness risk proportional to that gap, not to how careful the reader felt.",
+    "Failure detection is imperfect: a node that does not respond cannot be distinguished from one that is merely slow, without a timeout policy that trades false positives against latency \u2014 silence is never proof of success or failure."
+  ],
+  "primitives": [
+    "message (the plan file, the executor report, the verify-block result)",
+    "node / replica (orchestrator, executor, validator as stateless-per-invocation actors)",
+    "version / precondition pin (what the plan is written against \u2014 currently absent)",
+    "durable log entry (where a strike count or verdict would need to live to survive a reset)",
+    "lock / lease / reservation (what would exclude concurrent writers to the same files)",
+    "retry attempt (a second executor pass; a validator re-run of the same verify block)",
+    "consistency model (what 'the tree matches the plan' is supposed to mean and when)",
+    "failure detector / timeout (what distinguishes a crashed subagent from a slow one)"
+  ],
+  "failure_mode": [
+    "Treats every actor as a mechanical protocol participant, so it systematically misses failures that arise from an actor's judgment or incentive \u2014 an executor choosing to under-report a defect rather than flag it \u2014 since that is a principal-agent failure, not a coordination failure, and this lens has no vocabulary for motive.",
+    "Assumes the correctness target itself (the consistency model, the frozen criteria) is well-specified, so it will not catch a case where the coordination protocol works flawlessly but is faithfully enforcing a criterion that was wrong or incomplete to begin with \u2014 that is a measurement-validity failure, not a coordination failure.",
+    "Defaults to more explicit machinery \u2014 versioning, locking, precondition pinning \u2014 as the fix for every staleness finding, which can read as over-engineering when the real gap is organizational (no named owner) rather than mechanical (no commit-SHA field), and this lens will not itself flag that distinction.",
+    "Reasons about a single item's lifecycle in isolation; it is weak at noticing systemic effects that only appear in aggregate across many items and many goals, such as a token-share gate that can be satisfied while total context cost is untouched."
+  ],
+  "findings": [
+    "f-001",
+    "f-002",
+    "f-003",
+    "f-004",
+    "f-005",
+    "f-024",
+    "f-025",
+    "f-026",
+    "f-027",
+    "f-028",
+    "f-035",
+    "f-036",
+    "f-037",
+    "f-038",
+    "f-039",
+    "f-040"
+  ]
+}

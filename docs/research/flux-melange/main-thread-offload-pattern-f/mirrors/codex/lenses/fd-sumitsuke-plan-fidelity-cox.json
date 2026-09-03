@@ -1,0 +1,36 @@
+{
+  "id": "fd-sumitsuke-plan-fidelity-cox",
+  "kind": "base",
+  "parents": [],
+  "domain": "Traditional Japanese temple carpentry",
+  "axioms": [
+    "Layout marking must translate general design intent into marks that are specific to the actual member and its reference surfaces.",
+    "Full-scale layouts, templates, measuring rods, and hand boards carry geometric knowledge that reduced drawings may omit ([Takenaka Carpentry Tools Museum](https://www.jstage.jst.go.jp/article/dougukan/37/0/37_3703/_article/-char/en)).",
+    "A shared datum is load-bearing: independently accurate cuts can fail when they were measured from different references.",
+    "Material variation is expected, so contradiction between plan and member must be detected before irreversible work.",
+    "Trial fitting tests relationships among members; completion of isolated operations is not proof of assembly correctness.",
+    "The worker executing the marks should not silently redesign the structure when the marks and material disagree."
+  ],
+  "primitives": [
+    "timber member",
+    "reference face",
+    "ink line",
+    "full-scale layout",
+    "template",
+    "measuring rod",
+    "joint",
+    "trial fit",
+    "assembly datum"
+  ],
+  "failure_mode": [
+    "The lens over-privileges deterministic geometry and visible fit; software failures may be temporal, probabilistic, or external-service dependent.",
+    "It assumes the executor can inspect the relevant material state locally, which may not hold for remote services, permissions, or unpublished pool accounting.",
+    "Its master-craftsperson hierarchy can underweight executor feedback that should legitimately revise a defective plan."
+  ],
+  "findings": [
+    "f-014",
+    "f-015",
+    "f-016",
+    "f-017"
+  ]
+}

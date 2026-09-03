@@ -1,0 +1,40 @@
+{
+  "id": "fd-meroitic-furnace-steering-cox",
+  "kind": "base",
+  "parents": [],
+  "domain": "Meroitic bloomery ironmaking",
+  "axioms": [
+    "A smelting recipe fixes starting conditions and cadence, but successful operation also depends on choices made as material and furnace behavior unfold.",
+    "Bloomery ironmaking is a coupled transformation of ore, charcoal, air, heat, slag, and solid-state iron; changing one operating variable changes the conditions for later actions.",
+    "A process cue has a decision window. Accurate interpretation after that window may explain failure but cannot substitute for intervention while the state was live.",
+    "Delegating physical work without delegating bounded authority leaves the remote decision-maker inside the operational control loop.",
+    "A final bloom and slag record aggregate the campaign but do not preserve every transient cue, alternative action, or moment when recovery was still possible.",
+    "Experimental bloomery work shows that smelter choices affect products, and Meroe reconstructions require choices among materials, furnace design, air supply, charging, and slag handling ([Humphris et al.](https://discovery.ucl.ac.uk/id/eprint/10042893/); [Eliyahu-Behar et al.](https://doi.org/10.1007/s12520-022-01516-3))."
+  ],
+  "primitives": [
+    "ore charge",
+    "charcoal charge",
+    "furnace burden",
+    "forced draft and tuyere",
+    "charging cadence",
+    "reduction zone",
+    "slag pool and tap",
+    "transient process cue",
+    "decision window",
+    "bounded adjustment",
+    "abort condition",
+    "bloom extraction and consolidation"
+  ],
+  "failure_mode": [
+    "The lens can overstate continuous-time urgency for ordinary source-code edits whose local state safely waits during escalation.",
+    "It may legitimize executor improvisation under the label of bounded adjustment and weaken Pattern F's protection against scope drift.",
+    "Transient furnace state has no exact analogue in many deterministic verification tasks, where rerunning the same check is genuinely informative.",
+    "Meroitic operating knowledge is reconstructed from incomplete archaeological evidence and experiments; the lens must not present one experimental protocol as a complete account of ancient practice."
+  ],
+  "findings": [
+    "f-036",
+    "f-037",
+    "f-038",
+    "f-039"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "id": "fd-shepherd-outrun-discretion",
+  "kind": "base",
+  "parents": [],
+  "domain": "Hill shepherding and the working of dogs at distance — directing a delegated worker beyond line of sight and beyond voice: the outrun sent over a hill on a command given before the dog left, the small fixed whistle vocabulary (come-bye, away, lie down, walk on, that'll do) that is all that carries at that range, the requirement that a good dog read the sheep itself and refuse a command that would push them into a beck, the faults of gripping and of being too soft, 'that'll do' as a first-class command equal in standing to any go command, the young dog worked close under the eye on short outruns before it is trusted over the hill, the daily look — walking the flock with no task, which is where the lame ewe, the fly-strike, the fouled spring and the gap in the wall are found — the heft, a flock's inherited knowledge of its own range that lives in the animals and the ground rather than in any shepherd or record and takes generations to build and one dispersal to lose, and the gather, at which losses finally surface as a number that cannot say which loss it was or when it began",
+  "axioms": [
+    "Work sent beyond line of sight must carry its own judgment: at distance you can command or you can supervise, never both. A worker forbidden to read the material and impossible to watch is not a delegate, only a longer arm.",
+    "The channel at distance is narrow and different in kind, not merely quieter. A whistle carries where a voice does not, but only a handful of things can be whistled; anything outside the vocabulary simply cannot be said, and its absence is noticed by neither party.",
+    "Every command language needs 'that'll do'. Starting work and judging work are not enough — someone must hold the authority to stop it, and a worker left running keeps working the material to its harm.",
+    "Condition is read by walking through, not by counting at the gate. A tally reports losses; it never reports which loss, or that the loss had been building for three weeks in plain view of anyone present.",
+    "Most of what a shepherd learns in a day, he was not looking for. The lame ewe, the fouled spring, the gap in the wall — none was the task, and together they are the year's real intelligence. A regime that reports only on what was asked in advance learns at exactly the rate at which things break.",
+    "Knowledge can be held by the ground instead of by the person. A hefted flock knows its own range, so a new shepherd inherits it free; knowledge that lives only in one head must be re-transmitted at every changeover and is lost at every dispersal.",
+    "A heft takes generations to build and one dispersal to lose. Continuity is an asset with a slow accumulation curve and a cliff, and it appears as a cost line nowhere.",
+    "The good dog will refuse: it will not push sheep into the beck because it was told to. Perfect obedience from the worker closest to the material converts every authoring error into a completed error.",
+    "Trust is granted by distance, in increments. A young dog is worked close, under the eye, on short outruns, before it is sent over the hill — because the failure of an unwatched worker is discovered only in the result.",
+    "Losses surface at the gather, as a number, long after the cause. The interval between a failure and its only report is the risk, not the failure rate."
+  ],
+  "primitives": [
+    "the outrun (a fresh-context executor dispatched on a command issued before it left, beyond any channel to its author)",
+    "the whistle vocabulary (the total set of message types the design defines — a path inbound; verbatim verify output and PASS/FAIL outbound)",
+    "'that'll do' (the recall and stop command Pattern F never defines for a running executor or a stuck validator)",
+    "'lie down' (the hold — pausing a working executor without failing it)",
+    "the dog reading the sheep (executor discretion, banned by 'never expands scope'; validator judgment, banned by 'never its own taste')",
+    "gripping vs. being too soft (over-applying a plan vs. applying it so narrowly the item is technically done and useless — both arriving as the same PASS)",
+    "the daily look (unrequested peripheral observation; the free by-product of a 300K-context turn that Pattern F has no line item for)",
+    "the lame ewe and fly-strike (the class of problem visible for weeks to anyone present that produces no failing verify block)",
+    "the heft (orientation knowledge settled into the repo and inherited free by every fresh spawn, vs. carried in the orchestrator's 220-320K and re-sent every turn)",
+    "the gather (the moment losses finally surface as a count that cannot name the cause or the date — the latency to discovery)",
+    "the short outrun under the eye (graduated dispatch distance; reading one executor's transcript against its own report, once)",
+    "the strike (the only upward message the design defines that carries information, and it requires something to break first)"
+  ],
+  "failure_mode": [
+    "No model of adversarial or self-interested behaviour — a dog is loyal — so it cannot see gaming, metric manipulation, or an author who benefits from a thinner plan; it will read every gap as an oversight rather than as a pressure.",
+    "Romanticises tacit knowledge and continuous presence, so it systematically under-values written specification and can talk itself toward 'keep the frontier session in the loop', which is not an available option given the 85%-of-spend problem the design exists to solve.",
+    "No arithmetic vocabulary at all: cache-read pricing, pool weighting, token accounting, break-even item size are outside it, so it can say 'you stopped seeing' but cannot price that against the cost the shape saves.",
+    "Single-operator, single-flock frame — parallel executors, file locking, two workers on one tree, and cross-repo coordination are structurally invisible to it.",
+    "Assumes the worker is a trainable animal with a stable disposition that improves over years; fresh-context models are not, so its recommendations about graduated trust and calibration may have no mechanism to attach to.",
+    "Structurally biased toward opening channels, so it may over-prescribe side-channels and observation passes that quietly reintroduce the main-thread context bloat the design exists to remove; it must price every envelope it proposes and rarely wants to.",
+    "Weak on formal verification, criteria design, independence, and whether a PASS means anything — it judges by the condition of the flock, never by proof, so it cannot evaluate the validator on its own terms.",
+    "Its calendar framing (lambing, clipping, tupping) can over-generalise from a domain where the season, not a queue, sets the order of work, leading it to invent scheduling structure the design has no reason to want."
+  ],
+  "findings": [
+    "f-046",
+    "f-047",
+    "f-048"
+  ]
+}

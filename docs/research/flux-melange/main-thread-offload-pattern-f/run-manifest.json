@@ -1,0 +1,179 @@
+{
+  "runtime": "claude",
+  "rounds": 5,
+  "halt_reason": "DRY",
+  "gain_history": [
+    {
+      "round": 0,
+      "yield": 11,
+      "novel_cluster_rate": 0.74
+    },
+    {
+      "round": 1,
+      "yield": 5,
+      "novel_cluster_rate": 0.55
+    },
+    {
+      "round": 2,
+      "yield": 5,
+      "novel_cluster_rate": 0.88
+    },
+    {
+      "round": 3,
+      "yield": 3,
+      "novel_cluster_rate": 0.5
+    }
+  ],
+  "spice_trail": [
+    {
+      "round": 0,
+      "event": "assay",
+      "findings": 23,
+      "agents_dispatched": 2
+    },
+    {
+      "round": 1,
+      "event": "probe",
+      "directives": [
+        {
+          "type": "PROBE-DISAGREEMENT",
+          "rationale": "open contradiction — adjudicate",
+          "lens": null
+        },
+        {
+          "type": "DEEPEN",
+          "rationale": "risk 9, unconfirmed — confirm or refute",
+          "lens": "fd-distsys-state-coherence"
+        },
+        {
+          "type": "DEEPEN",
+          "rationale": "risk 6, unconfirmed — confirm or refute",
+          "lens": "fd-evalscience-judge-validity"
+        },
+        {
+          "type": "STEER-WIDE",
+          "rationale": "novel_cluster_rate 0.74 >= 0.6 — widening still pays",
+          "lens": "fd-warp-lot-economics"
+        }
+      ],
+      "findings": 11,
+      "failed": 0
+    },
+    {
+      "round": 1,
+      "event": "assay",
+      "findings": 11,
+      "agents_dispatched": 4
+    },
+    {
+      "round": 2,
+      "event": "probe",
+      "directives": [
+        {
+          "type": "DEEPEN",
+          "rationale": "risk 6, unconfirmed — confirm or refute",
+          "lens": "fd-distsys-state-coherence"
+        },
+        {
+          "type": "DEEPEN",
+          "rationale": "risk 6, unconfirmed — confirm or refute",
+          "lens": "fd-distsys-state-coherence"
+        },
+        {
+          "type": "FUSE",
+          "rationale": "shared_heat 2, complementarity 2, redundancy 1",
+          "lens": "fd-fused-replay-independence"
+        }
+      ],
+      "findings": 8,
+      "failed": 0
+    },
+    {
+      "round": 2,
+      "event": "assay",
+      "findings": 8,
+      "agents_dispatched": 3
+    },
+    {
+      "round": 3,
+      "event": "probe",
+      "directives": [
+        {
+          "type": "DEEPEN",
+          "rationale": "risk 6, unconfirmed — confirm or refute",
+          "lens": "fd-evalscience-judge-validity"
+        },
+        {
+          "type": "STEER-WIDE",
+          "rationale": "novel_cluster_rate 0.88 >= 0.6 — widening still pays",
+          "lens": "fd-shepherd-outrun-discretion"
+        }
+      ],
+      "findings": 6,
+      "failed": 0
+    },
+    {
+      "round": 3,
+      "event": "assay",
+      "findings": 6,
+      "agents_dispatched": 2
+    }
+  ],
+  "slots_spent": 19,
+  "directive_history": [
+    {
+      "round": 1,
+      "type": "PROBE-DISAGREEMENT",
+      "rationale": "open contradiction — adjudicate",
+      "lens": null
+    },
+    {
+      "round": 1,
+      "type": "DEEPEN",
+      "rationale": "risk 9, unconfirmed — confirm or refute",
+      "lens": "fd-distsys-state-coherence"
+    },
+    {
+      "round": 1,
+      "type": "DEEPEN",
+      "rationale": "risk 6, unconfirmed — confirm or refute",
+      "lens": "fd-evalscience-judge-validity"
+    },
+    {
+      "round": 1,
+      "type": "STEER-WIDE",
+      "rationale": "novel_cluster_rate 0.74 >= 0.6 — widening still pays",
+      "lens": "fd-warp-lot-economics"
+    },
+    {
+      "round": 2,
+      "type": "DEEPEN",
+      "rationale": "risk 6, unconfirmed — confirm or refute",
+      "lens": "fd-distsys-state-coherence"
+    },
+    {
+      "round": 2,
+      "type": "DEEPEN",
+      "rationale": "risk 6, unconfirmed — confirm or refute",
+      "lens": "fd-distsys-state-coherence"
+    },
+    {
+      "round": 2,
+      "type": "FUSE",
+      "rationale": "shared_heat 2, complementarity 2, redundancy 1",
+      "lens": "fd-fused-replay-independence"
+    },
+    {
+      "round": 3,
+      "type": "DEEPEN",
+      "rationale": "risk 6, unconfirmed — confirm or refute",
+      "lens": "fd-evalscience-judge-validity"
+    },
+    {
+      "round": 3,
+      "type": "STEER-WIDE",
+      "rationale": "novel_cluster_rate 0.88 >= 0.6 — widening still pays",
+      "lens": "fd-shepherd-outrun-discretion"
+    }
+  ]
+}

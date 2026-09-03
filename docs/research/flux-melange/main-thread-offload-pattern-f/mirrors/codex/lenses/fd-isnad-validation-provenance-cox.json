@@ -1,0 +1,37 @@
+{
+  "id": "fd-isnad-validation-provenance-cox",
+  "kind": "base",
+  "parents": [],
+  "domain": "Classical Islamic hadith criticism",
+  "axioms": [
+    "A transmitted report has both a provenance chain and substantive content; neither dimension is sufficient by itself ([Encyclopaedia Iranica](https://www.iranicaonline.org/articles/hadith-i-intro/)).",
+    "Continuity of transmission and the identity and reliability of each link affect the weight of a report.",
+    "Multiple reports strengthen a claim only to the extent that their transmission routes are genuinely independent.",
+    "Variant comparison can reveal common sources, divergence, compression, or defects hidden by a single polished account.",
+    "An apparently sound chain can still carry anomalous content or a concealed defect, so content criticism remains necessary.",
+    "Grades express evidence-relative confidence and should preserve uncertainty rather than convert every orderly chain into certainty."
+  ],
+  "primitives": [
+    "report",
+    "isnad",
+    "matn",
+    "transmitter",
+    "chain continuity",
+    "common link",
+    "variant",
+    "corroborating route",
+    "concealed defect",
+    "grade"
+  ],
+  "failure_mode": [
+    "The lens can overvalue provenance bookkeeping and underweight direct executable observation of the current system.",
+    "A machine-generated trace may be perfectly continuous and reproducible while repeatedly validating the wrong property.",
+    "Hadith-critical traditions are internally diverse; reducing them to chain independence and corroboration risks flattening important methodological differences."
+  ],
+  "findings": [
+    "f-018",
+    "f-019",
+    "f-020",
+    "f-021"
+  ]
+}

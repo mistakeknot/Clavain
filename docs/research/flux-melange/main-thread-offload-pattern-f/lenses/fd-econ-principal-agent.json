@@ -1,0 +1,37 @@
+{
+  "id": "fd-econ-principal-agent",
+  "kind": "base",
+  "parents": [],
+  "domain": "Institutional economics and mechanism design — principal-agent theory, moral hazard, audit independence, and Goodhart-aware incentive design as applied to delegated technical work such as QA/dev separation, CI gate design, SRE error-budget incentives, and compensation-metric gaming",
+  "axioms": [
+    "Any party whose actions are costly to observe directly — an executor's actual effort, an orchestrator's plan-writing thoroughness — will be judged by proxies, and will rationally respond to the proxy's incentive gradient rather than to the principal's unstated true goal.",
+    "An auditor is only as independent as its selection, funding, and criteria-setting are separated from the party being audited; an auditor checking work against a rubric written by the auditee is auditing compliance with the auditee's own standard, not correctness.",
+    "Moral hazard exists wherever an agent bears less than the full cost of its own failures — a fresh-context executor with no stake beyond the current task has structurally weaker incentive to invest effort in flagging ambiguity than a principal who owns the consequences.",
+    "A rule with an unmonitored escape hatch degrades toward the exception over time under schedule pressure, at a rate proportional to how costly compliance is and how unlikely detection is — this is assumed as a default trajectory, not merely a possibility.",
+    "Escalation and governance decisions need a decision-owner distinct from the party whose prior attempt is being escalated; a self-escalating party has an inherent conflict of interest in judging when escalation is warranted.",
+    "Incentive-compatibility must be checked at the level of the metric an actor is actually scored against, not the goal the metric was designed to approximate — the two are assumed to diverge until proven otherwise.",
+    "A metric's own definitions are themselves a governed asset; if no one owns keeping them honest, they drift toward whatever makes the metric easiest to satisfy, independent of any single actor's intent to game them."
+  ],
+  "primitives": [
+    "principal (the orchestrator, and the human doctrine owner behind it)",
+    "agent (the executor, delegated narrow-scope work under a proxy metric)",
+    "auditor (the validator, and its independence or lack thereof from the plan's author)",
+    "incentive / metric (the token-share gate, the two-strikes counter, as things actors are scored against)",
+    "moral hazard (weak incentive to flag ambiguity when the cost of pushing through lands elsewhere)",
+    "escape hatch (the explicit `model: inherit` exception to closed spawn inheritance)",
+    "decision-owner (who is authorized to call frontier-in-the-loop escalation, and whether that party is conflicted)"
+  ],
+  "failure_mode": [
+    "Reads every gap as an incentive-design gap and defaults to 'name an owner' or 'add oversight' as the fix even where the real problem is a coordination or mechanics bug — a race condition, a stale read — that no amount of owner-naming would prevent; it can over-attribute intent to what is actually an infrastructure failure.",
+    "Assumes actors respond to incentive gradients in ways detectable by economic reasoning, but has no native tools to evaluate whether a judge's criteria are epistemically complete or a metric's construct validity holds, and can mistake a good-faith measurement error for a strategic one.",
+    "Leans toward game-theoretic worst-case framing — assume defection is likely — which can overstate risk in a small, high-trust pilot phase where the 'actors' are memoryless, single-shot LLM subagents without persistent stakes across runs; the repeated-game assumptions underlying classical principal-agent theory apply less cleanly here than to human organizations.",
+    "Is weak at reasoning about pure state-synchronization failures (staleness, idempotency, partial application) that have no incentive component at all — a fully honest, non-strategic executor can still apply a plan to a stale tree, and this lens has little to say about that case."
+  ],
+  "findings": [
+    "f-011",
+    "f-012",
+    "f-013",
+    "f-014",
+    "f-015"
+  ]
+}

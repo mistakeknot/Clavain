@@ -1,0 +1,47 @@
+{
+  "id": "fd-fused-replay-independence",
+  "kind": "fusion",
+  "parents": [
+    "fd-distsys-state-coherence",
+    "fd-assay-independence"
+  ],
+  "domain": "replay-versus-independence \u2014 the exchange rate between the machinery that makes a re-run reproducible across ephemeral, fresh-context workers (version pins, frozen criteria, shared worktrees, durable strike logs, timeout policy, idempotent retries) and the machinery that makes a second examination mean anything (independent sample, standard, method and instrument; a remedy band fixed in advance; a durable register; a counter-assay that re-tests a mark already struck)",
+  "axioms": [
+    "A re-run is either a retry or a second examination and never both: the pins, freezes and shared worktrees that make it a safe retry are exactly what strip it of independent sample, standard, method and instrument. A protocol that does not name which one it is has specified neither.",
+    "Durability and reset are opposed requirements laid on the same record: a strike counter must reset when the plan is repaired, a plate-calibration register must never reset across revisions, and a design that keeps both in one place forfeits the ability to assay its own gauge.",
+    "Freezing a criterion is a version pin with no expiry \u2014 it buys reproducibility across spawns and buys plate staleness at the same rate \u2014 so a frozen plate needs a date letter as much as it needs a hash.",
+    "Silence is a verdict the design did not write. An unreturned subagent, a timeout, a sandbox denial and a half-applied tree each resolve to something; without a remedy band fixed in advance, that resolution is made at the discretion of the party that authored the criteria.",
+    "An instrument that reads state the measured party writes is not independent of it, and a read over asynchronously written distributed records is stale and partial by construction \u2014 so a gate can be satisfied by losing evidence rather than by changing behaviour.",
+    "A hallmark struck once at landing, with no post-landing consistency model, names no point at which a false PASS could ever be re-detected: universal pre-landing assay with zero counter-assay is the most expensive way to learn nothing.",
+    "Coordination is what gets the piece to the examination; independence is what makes the examination mean something. A defect lost in the handoff and a defect examined by a correlated method are indistinguishable afterwards \u2014 both read as PASS.",
+    "Every available fix belongs to one parent and is charged to the other; the design's real decisions are visible only where it takes a fix from one parent and never prices the loss to the other."
+  ],
+  "primitives": [
+    "re-run identity (retry-safe replay \u00d7 second examination) \u2014 one artifact carrying two incompatible specifications",
+    "frozen plate \u00d7 version pin (criteria hash with neither expiry nor date letter)",
+    "durable strike counter \u00d7 append-only assay register (opposed reset semantics in one record)",
+    "failure detector / timeout \u00d7 remedy band (what silence and every non-verdict resolve to, and who decides)",
+    "shared worktree \u00d7 sample independence (the same isolation choice makes replay safe and the sample common)",
+    "lease / lock \u00d7 sampling fraction (which items are examined at all, and who could have mutated them meanwhile)",
+    "consistency model \u00d7 counter-assay regime (what re-testing a landed PASS would even mean, and when)",
+    "profile.py as failure detector \u00d7 instrument independence (a stale, partial read taken over the measured party's own records)",
+    "token-share gate \u00d7 weight-vs-fineness (a coordination-observable standing in for work correctness)",
+    "executor report as droppable message \u00d7 register entry (an unversioned message asked to serve as the durable record)",
+    "plan-repair loop \u00d7 plate re-verification (a repaired plate re-entering service uncalibrated, resetting the strike count)",
+    "frontier-in-the-loop escalation \u00d7 maker-cannot-certify (the criterion's author becoming examiner of last resort)"
+  ],
+  "tension": "Distsys holds that a verdict is interpretable only when the re-run is pinned, isolated and idempotent \u2014 same commit, same tree, same block, replayed exactly \u2014 because anything else confounds a defect with drift, and it answers every staleness gap with more machinery: a pin, a lease, a durable log. Assay holds that a second examination sharing sample, standard, method and instrument certifies nothing however skilled the examiner, that the plate must itself be periodically assayed by a party other than its author, and that a mark nobody ever re-tests degrades to decoration. Each parent's fix is the other's defect: pinning the state correlates the evidence; varying the sample, plate or instrument to buy independence reintroduces exactly the drift that makes a FAIL uninterpretable. The lens does not resolve this. It locates, in Pattern F, every place where one artifact is silently asked to do both jobs \u2014 the verify block, the frozen criteria, the strike counter, the worktree, the token-share meter \u2014 and names which half the design quietly dropped.",
+  "hard_constraint": "Intersection-only. A finding is admissible only if it requires BOTH parent perspectives and carries an intersection_justification naming the coordination contribution, the assay contribution, and why the finding collapses if either is removed. Bare 'no commit-SHA precondition' (f-001) and bare 'the validator shares the method' (f-020) are parent-alone and must be discarded.",
+  "failure_mode": [
+    "Doubles both parents' machinery bias \u2014 distsys answers staleness with pins and locks, assay answers doubt with registers and counter-assays \u2014 so it can specify a protocol whose ceremony costs more than the main-thread spend Pattern F exists to cut, and it has no way to feel that.",
+    "Both parents are blind to motive, so an executor that under-reports a defect, or an orchestrator that repairs a plan until it passes rather than until it is right, is invisible here: that is principal-agent failure, not coordination or independence failure.",
+    "Neither parent can evaluate model capability, so anything turning on whether Sonnet can actually apply a plan or Opus can actually read a diff sits outside the frame \u2014 'who examines' stays doctrinally irrelevant even where it is the entire answer.",
+    "Reasons per item and per verdict; aggregate and systemic effects \u2014 quarter-scale context spend, adoption decay, whether anyone keeps the register at all \u2014 surface only if they can be restated as a coordination or assay property.",
+    "The intersection-only constraint suppresses true and urgent parent-alone findings: a P0 visible to exactly one parent will be discarded by this lens and has to be caught elsewhere in the round.",
+    "Assumes correctness is both stateable as a criterion and reachable as a state; diffuse, aesthetic or cross-item quality has neither a plate nor a pin, so this lens calls it unassayable rather than noticing it is the point."
+  ],
+  "findings": [
+    "f-041",
+    "f-042"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "fd-observability-token-gate-cox",
+  "kind": "base",
+  "parents": [],
+  "domain": "observability, performance engineering, and agent workload economics",
+  "axioms": [
+    "Every metric defines a system boundary, and work outside that boundary can invalidate the apparent improvement.",
+    "A ratio can improve because its denominator worsens even when its numerator does not.",
+    "Resource efficiency is meaningful only relative to a normalized workload and a successful outcome.",
+    "Attribution must be captured at event time because retrospective transcript classification is expensive and ambiguous.",
+    "Unknown accounting rules require sensitivity analysis rather than a single cost ranking.",
+    "Once a proxy becomes a gate, implementations adapt to the proxy unless independent guardrails constrain them."
+  ],
+  "primitives": [
+    "system boundary",
+    "metered event",
+    "numerator and denominator",
+    "attribution window",
+    "phase label",
+    "absolute token volume",
+    "cache traffic",
+    "wall-clock latency",
+    "attempt and retry",
+    "quality-normalized outcome"
+  ],
+  "failure_mode": [
+    "It can undervalue rare correctness failures whose expected cost is hard to estimate from three pilots.",
+    "It may turn an exploratory pilot into an instrumentation project and delay learning through excessive measurement demands.",
+    "It cannot judge frozen-criterion completeness or distributed-state safety without evidence from the sibling lenses."
+  ],
+  "findings": [
+    "f-009",
+    "f-010",
+    "f-011",
+    "f-012",
+    "f-013"
+  ]
+}

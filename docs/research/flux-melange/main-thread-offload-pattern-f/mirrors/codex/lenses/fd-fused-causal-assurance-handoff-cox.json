@@ -1,0 +1,51 @@
+{
+  "id": "fd-fused-causal-assurance-handoff-cox",
+  "kind": "fusion",
+  "parents": [
+    "fd-distributed-systems-handoff-cox",
+    "fd-software-verification-validator-value-cox"
+  ],
+  "domain": "causal assurance across mutable-state handoffs — the cross-product of distributed workflow identity and causality with verification claims, oracles, fault models, and experimental evidence",
+  "axioms": [
+    "A verdict is not about an implementation in the abstract; it is about a goal claim and criterion observed through a named oracle and fault model at a particular plan revision, repository snapshot, resulting commit, and attempt.",
+    "Preserving state identity makes evidence causally applicable but does not make it independent; changing the state, environment, oracle, or interpretation may add information but also creates a competing explanation for disagreement.",
+    "Frozen criteria and frozen repository state form one assurance boundary. Freezing either without identifying the other permits a valid check to become stale evidence or a current check to support an obsolete claim.",
+    "Evidence can accumulate across handoffs only when causal order and verdict provenance are both durable; a plan hash without an oracle identity is as incomplete as an oracle result without a commit identity.",
+    "A retry is simultaneously a workflow transition and a new experimental observation. Partial success, compensation, or environmental change can make the second result neither a clean replicate nor an independent counterfactual.",
+    "Concurrent mutation is both a race and a confound: it can change the artifact under judgment while manufacturing apparent validator catches, false rejections, or agreement that the intended commit never earned.",
+    "Failure classification must join detector evidence to the causal state that produced it; otherwise worker loss, stale evidence, plan defects, oracle defects, environment defects, and implementation defects collapse into the same strike.",
+    "A pilot can estimate validator value only when compared arms preserve the causal state needed for comparability while varying a declared evidentiary dimension whose unique contribution can be attributed."
+  ],
+  "primitives": [
+    "causal-assurance cell = handoff coordinate × assurance coordinate",
+    "handoff coordinate: node or role, plan revision, repository snapshot, commit identity, attempt identity, state transition, and causal order",
+    "assurance coordinate: goal claim, frozen criterion, test oracle, fault model, environment, verdict provenance, and counterfactual arm",
+    "claim-state binding: the exact goal and criterion asserted about the exact base and resulting state",
+    "evidence envelope: handoff envelope extended with oracle version, fault model, environment identity, verdict, and evidence digest",
+    "same-state/different-oracle cell for marginal semantic or fault-model evidence",
+    "different-state/same-oracle cell for drift and environmental discrimination",
+    "attempt-evidence lineage across partial success, retry, compensation, and revalidation",
+    "causal applicability: whether evidence produced at one transition may justify landing another",
+    "independence budget: the dimensions intentionally varied without destroying attribution",
+    "race-confound: one concurrent mutation viewed as both ordering failure and alternative causal explanation",
+    "strike taxonomy: worker, implementation, criterion, oracle, environment, stale-evidence, and indeterminate outcomes",
+    "unique catch with provenance: a validator-only detection tied to the same target state and a distinct declared fault model",
+    "counterfactual handoff arm: a pilot arm whose artifact identity is comparable and whose validation intervention is intentionally different"
+  ],
+  "tension": "The state-sameness versus evidence-independence tension. Distributed handoff reliability wants executor and validator evidence pinned to the same plan revision, repository snapshot, commit, attempt lineage, and causal order so the orchestrator knows exactly what passed. Verification value wants the validator to contribute a distinct oracle, fault model, environment, or interpretation so its verdict is not a correlated repetition of the executor's evidence. Make every condition identical and causal attribution is strong while marginal information may approach zero; vary conditions to gain information and a disagreement may be caused by drift rather than a defect in the implementation. The lens does not choose a universal balance. It locates each place where Pattern F or its pilots silently trade causal comparability for evidentiary independence, or claim to have both without recording enough provenance to tell.",
+  "hard_constraint": "Intersection-only. Report a finding ONLY if it requires BOTH parent perspectives, and include an intersection_justification on every finding. The justification must name (1) the plan, snapshot, commit, attempt, transition, retry, or causal-order fact contributed by distributed-systems handoff reasoning; (2) the claim, criterion, oracle, fault model, false-verdict, unique-catch, counterfactual, or verdict-provenance fact contributed by verification reasoning; and (3) why the finding collapses when either contribution is removed. Bare stale-state, retry, race, or identity findings belong to parent A. Bare incomplete-criteria, correlated-oracle, validator-value, or pilot-design findings belong to parent B.",
+  "failure_mode": [
+    "Traceability maximalism: it can demand a full evidence ledger for pilots whose risk would be adequately covered by a smaller immutable tuple, adding orchestration and report cost that undermines Pattern F's purpose.",
+    "It can mistake deliberate environmental diversity for a protocol defect and thereby suppress useful fault-model independence in pursuit of perfectly replayable state.",
+    "It can mistake any state variation for useful independence even when the variation is uncontrolled noise that makes validator disagreements less interpretable, not more informative.",
+    "The cross-product can explode combinatorially; enumerating every handoff coordinate against every assurance coordinate may obscure the few cells that can actually change a pilot decision.",
+    "It may overvalue machine-auditable provenance and underweight tacit maintainability, product judgment, or capability failures that neither parent represents well.",
+    "Its requirement for comparable counterfactual arms may be infeasible for one-off repository tasks, encouraging false experimental precision from three heterogeneous pilots.",
+    "Fusion laundering is a standing risk: a parent-alone finding can be relabeled by appending an incidental commit hash or oracle reference without showing that the joint interaction changes the failure scenario."
+  ],
+  "findings": [
+    "f-022",
+    "f-023",
+    "f-024"
+  ]
+}

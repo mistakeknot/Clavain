@@ -1,0 +1,45 @@
+{
+  "id": "fd-assay-independence",
+  "kind": "base",
+  "parents": [],
+  "domain": "Assay-office and hallmarking practice — cupellation and touchstone assay of precious metal, the Trial of the Pyx (independent jury judging sampled coin against a physical trial plate and a statutory 'remedy' tolerance, on its own balances), the sponsor/assay-office/standard/date mark chain as provenance, periodic verification of the trial plates themselves, and the assay register as the durable record",
+  "axioms": [
+    "Independence lives in the sample, the standard, the method, and the instrument — not in the examiner; a second examination that shares all four with the first certifies nothing however skilled the second examiner is.",
+    "The standard is itself an artifact that can be wrong and must be periodically assayed; a trial run against an unverified plate inherits the plate's defect rate, and every verdict from it is uninterpretable.",
+    "The party that makes the piece cannot certify its own standard; the author of a criterion is not a neutral judge of whether the criterion measures the thing.",
+    "A verdict without a tolerance fixed in advance is not a verdict: the remedy band must be written before the piece is made, or PASS and FAIL absorb every ambiguous case at the examiner's discretion.",
+    "Weight and fineness are different properties: a measure certifies exactly one, and readers will assume it certifies the other unless the design pairs it with a second measure.",
+    "Universal examination is one option among several: sampling plus a durable register plus a credible counter-assay can carry the same assurance far more cheaply — but a mark is worth only what the counter-assay regime behind it is worth, and a stamp nobody ever re-tests degrades to decoration.",
+    "Without a register of verdicts and the criterion each turned on, a run of trials produces an impression, not evidence, and nothing can be calibrated afterwards."
+  ],
+  "primitives": [
+    "assay method (the verify block as executed)",
+    "trial plate (the frozen criteria the verdict is measured against)",
+    "sample (the artifact and tree state actually examined)",
+    "second examination (the validator pass, and what it shares with the first)",
+    "remedy / tolerance band (the missing verdict between PASS and FAIL)",
+    "gauge defect (a criterion that measures the wrong thing — pilot-1's 6/6)",
+    "hallmark (the PASS verdict as a claim downstream parties act on)",
+    "counter-assay regime (what detects a false PASS, and who runs it)",
+    "sampling fraction (how much of production is examined at all)",
+    "weight vs. fineness (token-share gate vs. work correctness)",
+    "instrument independence (interstat profile.py relative to the party measured)",
+    "assay register (persisted per-item verdict, quoted criterion, executor report)"
+  ],
+  "failure_mode": [
+    "Indifferent to how the piece reached the examination: handoff losses, spawn-boundary state, stale preconditions, and half-applied trees are outside its frame entirely, so it will not notice a defect that never reaches a verdict.",
+    "Biased toward adding assurance machinery — registers, counter-assays, verified standards — and habitually under-prices the latency and cost of the regime it proposes; it has no way to feel that the ceremony might exceed the value of the goods being assayed.",
+    "Treats each item as a discrete piece with a stable identity, so it reasons poorly about work whose correctness is diffuse, aesthetic, or only visible across several items; anything without a stateable criterion looks to it like unassayable metal.",
+    "Cannot evaluate model capability, routing, or effort settings: 'who examines' is doctrinally irrelevant to it, so it will miss findings that turn on Sonnet's or Opus's specific competence.",
+    "Assumes an adversarial or careless producer whose incentive is to pass; where the producer is simply mistaken rather than motivated, some of its independence machinery is over-engineered and it will not say so.",
+    "Silent on organisational adoption — whether anyone will actually keep the register, run the counter-assay, or read the second measure — so it can specify a regime that is correct and unused."
+  ],
+  "findings": [
+    "f-020",
+    "f-021",
+    "f-022",
+    "f-023",
+    "f-024",
+    "f-025"
+  ]
+}

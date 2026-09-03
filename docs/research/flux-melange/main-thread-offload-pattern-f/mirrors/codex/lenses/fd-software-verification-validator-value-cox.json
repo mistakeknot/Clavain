@@ -1,0 +1,37 @@
+{
+  "id": "fd-software-verification-validator-value-cox",
+  "kind": "base",
+  "parents": [],
+  "domain": "software verification, assurance cases, and experimental design",
+  "axioms": [
+    "A passing check supports only the claims represented by its oracle and fault model.",
+    "Two observations add less evidence when they share criteria, implementation, environment, or interpretation.",
+    "Frozen criteria prevent taste drift but can freeze omissions and invalid assumptions.",
+    "Validator value is marginal information relative to the evidence already produced by the executor.",
+    "False acceptance and false rejection are distinct risks and require separate measurement.",
+    "A pilot answers a causal question only when it records a meaningful counterfactual and classifies outcomes consistently."
+  ],
+  "primitives": [
+    "goal claim",
+    "frozen criterion",
+    "test oracle",
+    "fault model",
+    "assurance evidence",
+    "unique catch",
+    "false acceptance",
+    "false rejection",
+    "counterfactual arm",
+    "verdict provenance"
+  ],
+  "failure_mode": [
+    "It can privilege faults that are easy to classify and underweight tacit maintainability or product-quality judgments.",
+    "It assumes a sufficiently stable goal against which criteria can be frozen and may resist legitimate discovery during execution.",
+    "It does not by itself solve stale repository state, retry safety, or total-resource accounting."
+  ],
+  "findings": [
+    "f-005",
+    "f-006",
+    "f-007",
+    "f-008"
+  ]
+}

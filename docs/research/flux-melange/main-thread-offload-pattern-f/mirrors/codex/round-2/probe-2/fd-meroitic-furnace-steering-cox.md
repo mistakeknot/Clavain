@@ -1,0 +1,46 @@
+# fd-meroitic-furnace-steering-cox — round 2
+
+## Findings Index
+
+- [P1] executor-has-no-control-envelope — Pattern F and the existing execution skill give opposite instructions for ordinary task-caused deviations, so a fresh executor must either stop too often or mutate beyond the frozen recipe. (§The shape)
+- [P1] escalation-arrives-after-the-cascade — A question or two-strike escalation is converted into transitive dependency skips before the controller can answer, making the frontier intervention too late for the current run. (§Escalation)
+- [P1] validator-replays-a-new-heat — The validator reruns against later live state, while the persisted handoff omits the transient cue and intervention history needed to know whether agreement concerns the same process. (§The shape)
+- [P2] q-b-misses-exception-traffic — Q-B's planning-versus-report dichotomy omits controller re-entry loops, and the token-share gate can pass while those loops waste attempts, time, and reacquisition context. (§Open questions the review should attack)
+
+## Findings
+
+### executor-has-no-control-envelope
+
+- **Severity:** P1.
+- **Where:** `docs/brainstorms/2026-09-03-main-thread-offload-pattern-f.md:15-19`; `commands/execute-plan.md:8-15`; `skills/executing-plans/SKILL.md:112-125`.
+- **What:** Pattern F says an executor never expands scope and reports a plan defect rather than repairing it. The execution skill it is meant to underlay instead requires the executor to auto-fix task-caused bugs, missing critical functionality, and blockers without permission, then continue after exhausting a three-attempt limit. A fresh executor encountering a task-caused missing import therefore has no single control policy: obey Pattern F and send a routine adjustment back to the 300K-context controller, or obey `executing-plans` and make a change the frozen item did not name. The first choice recreates the bloated main-thread control loop; the second makes executor behavior and validator input depend on which instruction won.
+- **Evidence:** `commands/execute-plan.md:14` says to stop and ask if scope changes, while `skills/executing-plans/SKILL.md:116-123` explicitly authorizes three families of unplanned inline changes and `:125` says to continue after three failed attempts. Pattern F provides no precedence rule or bounded adjustment envelope. This is a common deviation, not a speculative catastrophe: the existing skill names broken imports, missing dependencies, build configuration, validation, and error handling as expected cases.
+- **Suggestion:** Add a compact executor decision envelope to Pattern F and make it override or incorporate the existing deviation rules: **absorb** task-caused type/import/build fixes confined to declared files and not changing acceptance criteria; **abort** any irreversible external mutation or operation whose rollback boundary is unknown; **escalate** an architectural change, a plan/criterion contradiction, or any required edit outside the declared envelope. Record which branch was taken; do not ship a second context dump.
+
+### escalation-arrives-after-the-cascade
+
+- **Severity:** P1.
+- **Where:** `docs/brainstorms/2026-09-03-main-thread-offload-pattern-f.md:19`; `scripts/orchestrate.py:222-274,1497-1538`; `tests/structural/test_orchestrate.py:302-348`.
+- **What:** Pattern F promises that a question or exhausted two-strike item returns to the orchestrator for a repaired plan or frontier takeover. In dependency-driven execution, however, every result other than `pass`/`warn` immediately calls `mark_failed`; that marks the item done in the topological sorter and puts every transitive dependent in a permanent skip set. Thus an executor that parks on a resolvable ambiguity causes the scheduler to discard the downstream burden before the controller answers. The controller can repair the item, but cannot resume its dependents in the same scheduler because there is no `unskip`, `retry`, or provisional-blocked transition.
+- **Evidence:** `scripts/orchestrate.py:261-274` makes failure terminal and transitive; `:1526-1538` applies it to all non-pass/non-warn statuses, which includes `question` and `escalated`; and `tests/structural/test_orchestrate.py:307-348` asserts that skipped dependents are marked done and the scheduler completes. Concrete failure: task 1 asks whether a discovered compatibility shim is allowed; tasks 2 and 3 are skipped immediately; the frontier controller approves the shim minutes later, but the current run has already closed those tasks and must be reconstructed or restarted.
+- **Suggestion:** Introduce a nonterminal `blocked_for_decision` state for `question`/`escalated`. Freeze dependents without marking them done, obtain the controller ruling, then either resume the same item and release dependents or explicitly abort and propagate skips. Put a response deadline on the ruling so genuinely time-sensitive work fails safely rather than waiting indefinitely.
+
+### validator-replays-a-new-heat
+
+- **Severity:** P1.
+- **Where:** `docs/brainstorms/2026-09-03-main-thread-offload-pattern-f.md:16-17`; `scripts/orchestrate.py:1037-1054,1174-1189`.
+- **What:** The validator's rerun is a new run against later repository and environment state, not observation of the executor's run. The structured artifacts retain final command/status, duration, rounds, paths, HEAD, and timestamp, but no required sequence of observed cue, local adjustment, state change during a wait, or unresolved uncertainty. A validator can therefore agree after a warmed service, expired rate limit, released lock, or executor restart has erased the condition that required judgment. Agreement then proves only that the cooled artifact passes now; it does not show that the plan supplied adequate live control.
+- **Evidence:** Pattern F requires verbatim verify output and a later rerun, but `dispatch_task` metadata at `scripts/orchestrate.py:1037-1045` contains only final dispatch fields, and `_journal_task_entry` at `:1174-1189` contains only terminal result fields. Example: the executor's first health check fails while a service is still starting, it restarts or waits, and the final check passes; the later validator sees the already-warm service and passes. Neither PASS records the transient cue or establishes that the executor's intervention was authorized. The inverse case can misattribute a later environmental failure to executor quality.
+- **Suggestion:** Add a small exception record only when the nominal recipe is left: cue and timestamp, decision branch (`absorb`/`abort`/`escalate`), action taken, state known to have changed during the interval, and remaining uncertainty. Require the validator to label its evidence as `same artifact`, `cooled artifact`, or `new live run` and bound the claim accordingly.
+
+### q-b-misses-exception-traffic
+
+- **Severity:** P2.
+- **Where:** `docs/brainstorms/2026-09-03-main-thread-offload-pattern-f.md:15,31`; `skills/executing-plans/SKILL.md:61-64`; `commands/execute-plan.md:41-50`; `scripts/orchestrate.py:1174-1189`.
+- **What:** Q-B asks whether main-thread context goes to planning or reading reports, but the furnace analogue exposes a third and potentially dominant load: repeated control interventions. Each `question`, `warn`, or escalation makes the controller read artifacts, reconstruct the live situation, decide, rewrite a plan or prompt, and redispatch. Capping a report does not cap the number or latency of those turns. Likewise, `<=50%` main-thread generated tokens can look healthy when a large executor output dilutes many small controller turns, even though blocked minutes, discarded attempts, executor idle time, and repeated 300K-context reacquisition dominate resource-to-outcome performance.
+- **Evidence:** `skills/executing-plans/SKILL.md:61-64` explicitly routes warning assessment, artifact reading, controller rulings, prompt/plan revision, and reruns back through the coordinator. The task journal already retains per-item rounds and duration (`scripts/orchestrate.py:1174-1189`), but the normal `/execute-plan` outcome hardcodes `escalation_count:0` at `commands/execute-plan.md:47-50`, so the proposed pilot path erases the very control-burden count needed to falsify Q-B. Output share measures where prose was emitted, not how often the expensive control loop was re-entered.
+- **Suggestion:** Mark Q-B premise-defective and replace it with: “Do exception events per completed item, rather than report bytes or initial planning, predict main-thread reacquisition tokens and completion latency?” Alongside token share, record controller re-entry count, main-thread tokens between exception and redispatch, decision latency, executor blocked time, discarded attempt-seconds, and resumed-attempt count; populate the existing `escalation_count` instead of hardcoding zero.
+
+## Verdict
+
+Pattern F is not ready for its pilots until executor decision rights are explicit and `question`/`escalated` pauses occur before dependency failure propagation. The validator currently certifies a later cooled state rather than the live intervention, while Q-B and the token-share gate omit the exception traffic that can quietly rebuild the bloated main-thread control loop.

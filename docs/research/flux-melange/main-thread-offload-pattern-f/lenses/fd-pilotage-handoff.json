@@ -1,0 +1,42 @@
+{
+  "id": "fd-pilotage-handoff",
+  "kind": "base",
+  "parents": [],
+  "domain": "Maritime pilotage — compulsory harbour and river pilotage: berth-to-berth passage planning, the master-pilot exchange card, the pilot-ladder transfer, conduct-of-navigation ('the con') versus command, under-keel clearance and squat allowance, fixed abort points and the last point of no return, and the bridge-team duty to challenge a conning order",
+  "axioms": [
+    "The party taking conduct never receives the whole picture: local knowledge is largely undocumented, so every handoff is lossy by construction and the design question is which losses are detectable by the receiver rather than how to eliminate them.",
+    "A plan is a statement about conditions at the moment it was written; unless it pins those conditions, the receiver cannot tell a still-valid plan from a stale one, and a stale plan executes just as smoothly as a sound one.",
+    "Conduct transfers but responsibility does not: the party that wrote the plan remains accountable for it, which means the executor's duty on encountering a defect is to report and stop, and the design must say what stopping leaves behind.",
+    "Casualties cluster at the transfer itself — the ladder, not the channel — so the spawn boundary (environment, cwd, permissions, tool access, model pin, tree state) deserves more scrutiny than either role's steady-state behaviour.",
+    "Every passage needs a named abort point and a safe state reachable from it; a process that can only complete or fail leaves the vessel stopped in the channel.",
+    "Margins are allowances, not estimates: a context budget without a stated reserve is an assumption that will be discovered only when it is already exceeded.",
+    "Silent divergence between plan and world is the characteristic killer; loud failure is survivable because it recruits the party who still holds the picture."
+  ],
+  "primitives": [
+    "exchange card (what the plan file carries across the boundary)",
+    "undocumented local knowledge (session context the orchestrator holds and cannot transfer)",
+    "passage plan preconditions (commit SHA, clean tree, branch identity, dependency versions)",
+    "transfer moment (the spawn: env, cwd, worktree, permissions, tools, model resolution)",
+    "the con vs. command (executor scope authority vs. orchestrator responsibility)",
+    "challenge duty (whether the executor may or must dispute a plan order)",
+    "abort point and safe state (what a returned item leaves behind)",
+    "under-keel clearance / squat allowance (context budget and its reserve)",
+    "set and drift (repo state moving beneath a written plan)",
+    "passage report (the executor's return format and its size)",
+    "relieving the pilot (two-strikes escalation back to the orchestrator)"
+  ],
+  "failure_mode": [
+    "Sees only the joints: takes the three roles, the model assignment, and the economics as given, so it cannot argue that the whole shape is unnecessary or that a different decomposition would be cheaper.",
+    "Structurally conservative about handoffs — will recommend more preconditions, assertions, and fixed formats, and systematically under-weights the cost of the ceremony it adds; has no way to notice that a plan template heavy enough to satisfy it would push work back into the orchestrator's context and defeat the gate.",
+    "Blind to whether a check is worth running at all: it treats verification as an event at the boundary, not as evidence, so it cannot assess validator value, independence of criteria, or whether PASS means anything.",
+    "No vocabulary for cost, pricing, cache economics, or token accounting, so any finding about the gate's arithmetic or the pool's weighting is invisible to it.",
+    "Assumes an in-motion process with a single continuous item; poorly equipped for questions about batching, parallelism across many items, or which item classes should route to a different lane.",
+    "Over-indexes on the rare catastrophic transfer and may inflate the severity of losses that in practice recruit a loud, cheap retry."
+  ],
+  "findings": [
+    "f-016",
+    "f-017",
+    "f-018",
+    "f-019"
+  ]
+}

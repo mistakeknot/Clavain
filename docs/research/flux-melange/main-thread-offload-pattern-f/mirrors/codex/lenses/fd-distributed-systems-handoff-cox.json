@@ -1,0 +1,37 @@
+{
+  "id": "fd-distributed-systems-handoff-cox",
+  "kind": "base",
+  "parents": [],
+  "domain": "distributed systems reliability and workflow consistency",
+  "axioms": [
+    "A message or artifact can be internally valid yet stale relative to the receiver's current state.",
+    "Independent workers do not share state unless the protocol makes that state explicit and durable.",
+    "Retries are normal execution paths and must be safe after partial success, not only after clean failure.",
+    "End-to-end correctness requires identity and causality across every handoff, not correctness within each role in isolation.",
+    "Concurrent mutations turn implicit ordering assumptions into races.",
+    "A failure detector can be wrong, so protocols must distinguish worker failure, environment failure, and delayed evidence."
+  ],
+  "primitives": [
+    "node or role",
+    "plan revision",
+    "repository snapshot",
+    "commit identity",
+    "handoff envelope",
+    "attempt identity",
+    "precondition",
+    "state transition",
+    "retry and compensation",
+    "causal order"
+  ],
+  "failure_mode": [
+    "It can over-formalize a mostly sequential, human-supervised workflow and impose protocol cost beyond the observed race risk.",
+    "It does not determine whether Opus adds semantic judgment or whether a token metric reflects economic value.",
+    "It tends to treat model behavior as node reliability and may miss capability-specific reasoning failures that are not state-transfer faults."
+  ],
+  "findings": [
+    "f-001",
+    "f-002",
+    "f-003",
+    "f-004"
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "fd-fused-reserve-accounting-cox",
+  "kind": "fusion",
+  "parents": [
+    "fd-observability-token-gate-cox",
+    "fd-batik-negative-reserve-cox"
+  ],
+  "domain": "reserve-aware workload accounting across path-dependent staged work — the cross-product of observability, performance engineering, and agent workload economics with Classical Javanese batik tulis negative reserve, ordered dye sequence, intermediate inspection, and path-dependent correction",
+  "axioms": [
+    "A workload metric is trustworthy only when its system boundary is crossed with the reserve boundary active at that event; unmetered exposure or damage to protected ground can make an apparent efficiency gain false.",
+    "A metered event has different operational meaning before and after a path-dependent transition, so phase attribution must capture both resource use and reserve state while the relevant layer still exists.",
+    "A ratio can improve through numerator reduction or denominator expansion while reserve coverage worsens, inspection moves later, or boundary leakage creates rework outside the attribution window.",
+    "Workload normalization must include ordered process topology as well as nominal task size: equal token volume and final output across different stage counts, protected surfaces, and irreversible transitions are not equivalent workloads.",
+    "A retry is both a new accounting episode and a continuation from potentially contaminated ground; counting it as a clean repeated attempt hides the cost and quality consequences of path-dependent correction.",
+    "A successful outcome must include preservation of declared reserves and detection within a usable repair window, not merely final test passage or a landed artifact.",
+    "Once token share becomes a gate, implementations can adapt report size, lane placement, session boundaries, checkpoints, and reserve declarations to improve the proxy while shifting work or leakage beyond what it meters.",
+    "Unknown token prices and uncertain reserve-loss costs require sensitivity analysis over both accounting regimes; neither a single cost ranking nor a single irreversibility assumption can justify the pilot topology."
+  ],
+  "primitives": [
+    "reserve-accounting cell = workload coordinate × resist-process coordinate",
+    "workload coordinate: system boundary, metered event, numerator or denominator, attribution window, phase label, absolute token volume, cache traffic, wall-clock latency, attempt, retry, and quality-normalized outcome",
+    "resist-process coordinate: mori cloth or work surface, canting or boundary-making act, wax reserve, reserve boundary, dye bath or state-changing transition, color sequence, boundary leakage, masking layer, intermediate inspection, wax removal or final reveal, protected ground, and path-dependent correction",
+    "metered reserve state: the active protected invariants and exposed surface attached to a resource event",
+    "stage-attributed event: a token, cache, latency, tool, validation, or human-recovery event labeled with role, goal, attempt, sequence position, and reserve identifier at event time",
+    "reserve-weighted denominator: offloaded work volume interpreted alongside the protected surface and transition risk it introduces",
+    "leakage-adjusted numerator: main-thread savings interpreted alongside downstream rework, recovery, and quality loss caused by boundary penetration",
+    "inspection-yield cell: information gained and local repairability preserved per unit of validator traffic, latency, and human attention",
+    "masked-cost interval: work or damage that occurs after its causal evidence disappears but before final reveal or accounting closure",
+    "contaminated retry lineage: repeated work whose entry state includes leakage or irreversible effects from an earlier attempt",
+    "quality-normalized protected outcome: a successful result with declared reserves intact and consequential leaks detected within their repair windows",
+    "gate-adaptation path: a change to decomposition, reporting, sessioning, checkpoints, or reserve declaration that alters the metric without equivalent outcome improvement",
+    "dual sensitivity grid: token-accounting regime × reserve-loss or reversibility regime",
+    "stage topology: ordered transition count, reserve coverage, observation windows, masking points, and permitted recovery for one pilot item"
+  ],
+  "tension": "The aggregate-efficiency versus stage-local-preservation tension. Observability and workload economics want a stable boundary, normalized denominator, event-time attribution, and successful outcome so Pattern F's pilots can be compared and its <=50% main-thread token-share gate can make a decision. Batik reserve work insists that an operation's meaning depends on where it occurs in an ordered sequence, what negative space it protects, and whether inspection happens before immersion or reveal destroys the local repair opportunity. Aggregate too early and reserve leakage, late detection, and contaminated retries disappear inside a favorable ratio; instrument or checkpoint every boundary and the measurement regime adds the very token, latency, and orchestration work the pattern is meant to remove. The lens does not choose one side. It locates every place where Pattern F claims efficiency without preserving stage-local evidence, or preserves every layer without accounting for the workload that preservation creates.",
+  "hard_constraint": "Intersection-only. Report a finding ONLY if it requires BOTH parent perspectives, and include an intersection_justification on every finding. The justification must name (1) the system boundary, metered event, numerator or denominator, attribution window, phase label, token or cache volume, latency, attempt, retry, accounting regime, or quality-normalized outcome contributed by observability and workload-economics reasoning; (2) the reserve boundary, protected ground, ordered stage, dye-bath analogue, boundary leakage, masking layer, intermediate inspection, final reveal, or path-dependent correction contributed by batik reasoning; and (3) why the failure claim collapses when either contribution is removed. Bare token-gate, cost, attribution, or Goodhart findings belong to parent A. Bare negative-specification, late-inspection, leakage, sequence, or irreversibility findings belong to parent B.",
+  "failure_mode": [
+    "Instrumentation maximalism: crossing every event with every reserve and stage can recreate main-thread context and orchestration overhead, undermining the offload economics the lens is evaluating.",
+    "It can overstate software irreversibility by importing the permanence of dye into source-controlled work, even though many edits are cheaply reversible and only some generated artifacts, external effects, or lost diagnostic states are path-dependent.",
+    "It may privilege reserves that can be named and instrumented, leaving tacit user rulings or semantic invariants outside the scorecard while creating false confidence in measured coverage.",
+    "Reserve-weighted normalization can become subjective: protected surface and leakage cost may lack a stable unit across three heterogeneous pilots, making precise-looking comparisons fragile.",
+    "Adding intermediate inspection can change executor behavior and workload shape, so the lens may mistake an intervention effect for the cost of observing an otherwise fixed process.",
+    "The cross-product can explode combinatorially; enumerating every workload coordinate against every resist-process coordinate may obscure the few cells that can alter the pilot decision.",
+    "It does not by itself judge frozen-criterion completeness, repository-state identity, or validator epistemic independence unless those concerns change both reserve dynamics and workload accounting.",
+    "Fusion laundering is a standing risk: a parent-alone metric or reserve finding can be relabeled by appending incidental vocabulary from the other parent without showing a causal interaction that changes the outcome."
+  ],
+  "findings": [
+    "f-032",
+    "f-033",
+    "f-034",
+    "f-035"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "fd-warp-lot-economics",
+  "kind": "base",
+  "parents": [],
+  "domain": "Handloom warp economics and cloth finishing — the weaver's trade knowledge about setup cost, lot size, and when a measurement becomes true: warping and beaming a fixed-length warp, threading heddles and sleying the reed, tying-on a new warp to old ends to avoid re-threading, the thrums lost at every changeover, the header woven as a cheap sample, and the rule that cloth must be cut off and wet-finished before its real dimensions are known, because take-up, draw-in and shrinkage make every loom-state figure optimistic in a known direction",
+  "axioms": [
+    "The setup dominates the work: threading a loom costs more than weaving a yard, so the live question about any job is never whether a single pick is correct but how much cloth should come off one threading — a design that specifies the worker, the work, and the check but not the lot size has left its dominant cost term unwritten.",
+    "Every changeover leaves thrums. Waste per changeover is fixed and irreducible, so halving the lot doubles total waste while making every individual lot look more efficient than the last.",
+    "Cloth on the loom is a promise, not a measurement: it is under tension and unwashed, and any figure taken before cut-off and finishing is wrong in a direction the trade can name but not eliminate. The discipline is not to measure more carefully but to define the moment after which a number is allowed to count.",
+    "The written draft does not determine the cloth. Threading, tie-up and treadling are notated; sett, tension and beat are not — two hands working the same draft produce different cloth, and the difference shows only after finishing, which means the uncontrolled variables set the real cost.",
+    "Sample before committing the warp, and finish the sample. A header woven and properly wet-finished costs a day and saves a month; a header woven but measured on the loom is worse than no sample, because it invites confidence in a number that will shrink.",
+    "What is frozen at threading binds everything woven from it. A wrong setup decision cannot be corrected mid-warp — only by cutting off and starting over — so the cost of being wrong scales with the lot committed to it.",
+    "Amortization has a specific technique, not a general wish: tying-on reuses an expensive threading across warps, and it is the only escape from setup cost. Any design that forbids reuse must say what specifically breaks, or it is paying the largest fixed cost at the highest frequency by default rather than by decision.",
+    "A repair leaves a trace and a discrepancy: an end tied in mid-cloth hangs weighted at the back and never matches its neighbours' take-up. A retry does not restore the pre-failure state; it adds a permanent local anomaly to both the cloth and the accounting."
+  ],
+  "primitives": [
+    "warp length / lot size (how much work is packaged into one plan file and one executor dispatch)",
+    "setup: warping, beaming, threading, sleying (the per-item fixed cost — plan authoring, spawn, orientation reads — paid regardless of item size)",
+    "thrums (the ~20-40K priming no item amortizes, paid again by the validator and again by every retry)",
+    "tying-on vs. re-threading (reusing one executor or validator session across several items vs. mandated freshness)",
+    "the draft (what the plan file notates) vs. sett, tension and beat (executor behaviour the plan leaves free, and the cost it sets)",
+    "the header (the three pilots as a sample, and whether it was drawn from the same warp as production)",
+    "cut-off vs. wet-finishing (validator PASS vs. the moment a goal's cost is actually known)",
+    "take-up and draw-in (the predictable shrink between a pilot figure and a steady-state one)",
+    "yardage per threading (total work returned per unit of setup — the ratio the gate does not report)",
+    "broken-end repair (a retried item as a weighted, non-matching insertion rather than a restart)",
+    "sett for a given yarn (Q-C's per-class routing of item types to the codex lane)",
+    "the shop's standing threading (a global CLAUDE_CODE_SUBAGENT_MODEL default binding 48 sites at once)"
+  ],
+  "failure_mode": [
+    "No vocabulary for verification independence, judge design, or whether a PASS means anything — it treats the validator purely as a line in the setup budget and would recommend batching or deleting it on cost grounds while being unable to see what that would destroy epistemically.",
+    "Reasons in yields and waste fractions rather than per-item properties, so it can argue about defect rates and total cost but cannot pursue a specific silent failure that contaminates one specific item and leaves the aggregate looking healthy.",
+    "Assumes homogeneous, repeatable work — yards of the same cloth — and is poorly equipped for a goal whose items are heterogeneous and one-off; it will over-recommend standardization and fixed lot sizes where the real distribution of items may not support them.",
+    "Structurally biased toward larger lots and reuse, so it systematically under-weights the genuine reasons for fresh context (poisoning, drift, the cost curve of a long context) and may recommend amortization that quietly reintroduces the 300K-context problem the design exists to solve.",
+    "No model of adversarial or self-interested behaviour: it can say a ratio moves the wrong way mechanically but cannot see gaming, moral hazard, or an author who benefits from a thinner plan.",
+    "Nothing to say about concurrency, locking, or two workers on one tree — a loom is a single-operator machine — so parallel-executor interactions are invisible to it.",
+    "Weak on pricing mechanics specifically: it can insist that a number be taken after finishing, but has no way to reason about cache-read rates, pool weighting, or the arithmetic of Q-D beyond 'the optimum moves'.",
+    "Prone to treating the three-role decomposition as a given number of setups to be amortized, rather than asking whether a different decomposition would need fewer — it optimizes the lot, not the loom."
+  ],
+  "findings": [
+    "f-032",
+    "f-033",
+    "f-034"
+  ]
+}
