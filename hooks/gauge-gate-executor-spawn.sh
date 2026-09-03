@@ -43,7 +43,7 @@ lint_out=$(python3 "$linter" --repo-root "$repo" "$plan" 2>&1) || rc=$?
 case "$rc" in
   0) exit 0 ;;
   1)
-    findings=$(printf '%s\n' "$lint_out" | awk '/^  GAUGE[0-9]+/ { sub(/^  /, ""); if (n++) printf "; "; printf "%s", $0 }')
+    findings=$(printf '%s\n' "$lint_out" | awk '/^  GAUGE[0-9]+/ { sub(/^  /, ""); if (n++) printf "; "; printf "%s", $0 }') || true
     reason="pattern-f gauge gate: plan-gauge-lint refused $plan: $findings"
     block "${reason:0:600}"
     ;;
