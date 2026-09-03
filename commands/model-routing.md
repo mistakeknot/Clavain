@@ -184,3 +184,30 @@ Source: transcript profile of this Mac, 2026-08-04..09-03 (87K assistant message
 **Instrument.** `profile.py` (per-message model, `isSidechain`/path lane split, message.id dedupe — every streamed line of a message carries identical usage, verified) is the gate instrument. `cost.py`'s by-model table windows on a row's last-message timestamp and collapses same-name subagent files onto one row (Sylveste-balk); the installed interstat plugin runs the pre-fix parser until a release. `CLAVAIN_EXECUTOR_SHADOW_LOG` rows (Sylveste-d3m phase 1) are the parity corpus for classes `interserve-fast|deep`.
 
 **Pattern F integration owner:** mk (doctrine); integration surface is `/work`, `/execute-plan`, and `writing-plans` in Clavain. Spawn inheritance is closed at the settings level (`CLAUDE_CODE_SUBAGENT_MODEL=sonnet`; running sessions need a restart to pick it up).
+
+
+## Measured 2026-09-03 — Pattern F hardening, fresh session per pilot (goal c60de386)
+
+Source: four pilots, each orchestrated by its own headless `claude -p --model fable` session with a short brief and the Pattern F contract block, Sonnet executor, Opus validator, every verdict written to the interspect evidence register by `scripts/pattern-f-verdict.sh`. Charter and journal: `Sylveste/docs/goals/2026-09-03-pattern-f-hardening-{charter,condition,journal}.md`. Contract: `skills/executing-plans/references/pattern-f-contracts.md`.
+
+**What shipped.** interstat 0.3.3 released (the estate's SessionEnd parser now prices the Claude 5 family and counts streamed messages once). `scripts/pattern-f-verdict.sh` writes one evidence row per verdict with `verdict_kind` replay or independent and reads its own row back, exiting non-zero when the row is not visible (5f49c43). `hooks/gauge-gate-executor-spawn.sh`, a PreToolUse hook on `Task|Agent`, runs `plan-gauge-lint.py` on the plan named by an executor prompt's first line and blocks the spawn when the linter refuses (102d0d0; refusal demonstrated on a real payload). The executor and validator contracts are checked in with `BEYOND THE GAUGE:` as a named validator output and the register write as the last step (d0f6c51, corrected in pilot D).
+
+**Fresh-session profile (execution lanes only, `profile.py --session`).**
+
+| pilot | orchestrator turns | ctx/turn | main $ | executor + validator $ | main cost share | main token share | whole run $ |
+|---|---|---|---|---|---|---|---|
+| 1b53da77 (one 344K session, 5 runs) | 38 | 344K | 19 | 10 | 65% | 92% | 29 |
+| A verdict register | 12 | 80K | 4 | 1.5 | 81% | 93% | 5 |
+| B gauge gate | 10 | 80K | 3 | 1.5 | 75% | 98% | 4 |
+| C contracts | 16 | 82K | 3 | 2 | 64% | 80% | 5 |
+| D fix-forward | 14 | 71K | 3 | 1.5 | 63% | 92% | 5 |
+
+The fresh session did what offload alone could not: orchestrator context fell from 344K to 71–82K per turn, and the orchestrator's own cost per pilot fell from about $3.8 to about $3 while running the whole loop, with a pilot's whole cost holding near $5. The two share metrics barely moved, and one moved the wrong way, because they are scale-invariant: the executor and validator lanes shrank with the orchestrator. **Neither share is a fit gate for Pattern F.** The number that tracked the intent across both goals is absolute orchestrator cost per pilot (19/5 = $3.8 in the 344K session; $3 to $4 fresh) alongside context per turn. Proposed gate for mk to rule on, not ratified here: orchestrator context per turn ≤ 100K and orchestrator cost per pilot reported in dollars, with both shares printed for continuity.
+
+**Pass rate.** Executor runs this goal: 6 spawns, 5 commits. The one non-commit was the plan author's gauge defect (a stale brief premise about which structural tests fail at HEAD), which the executor correctly refused. Of the 5 commits, 4 were verbatim; pilot C's executor moved one parenthesis in a 109-line markdown block and reported the copy as verbatim, which the validator caught by diff. That is the first executor drift observed across both goals (10 committed runs); it was text, not code, and the shape caught it. One further one-line fix (7f2fa44, a `|| true` guard pilot D's validator asked for) was applied on the main thread under rule 4 and recorded in the register under the orchestrating session's id, including a correction row for a premature entry written before the edit had actually landed.
+
+**The second channel, measured again.** Replays: 5 of 5 PASS, no information. Independent findings registered: 5 + 7 + 5 + 6 = 23 rows across A–D, of which the orchestrating session confirmed the three gate-relevant ones by direct test (the red structural test, the drift, the unguarded pipeline). Three became beads (Sylveste-yibw.12 gate refusals recorded nowhere; .13 sanitize drops injection-like notes and the 48h quarantine hides verdict rows from calibration; .14 the linter has no new-file grammar, so both new-file pilots were ungauged in the sense that mattered). Q-A's premise from the design doc is now closed twice over.
+
+**Instrument notes.** `plan-gauge-lint.py` requires `--repo-root` before the positional plan path and reads only edit pairs and verify fences; Preconditions, Commit, pathspecs, and new-file blocks are outside its gauge. `profile.py --session <id>` is the lane instrument; the melange/review lane exclusion rule stands. The interspect quarantine (48h by default on every evidence row) means `pattern-f-verdict.sh --list` sees verdicts immediately but interspect's own calibration queries do not; whether verdict rows should bypass it is mk's call (it is the anti-feedback-loop guard).
+
+**Confounds.** Pilot A's first attempt hit the account's Fable weekly cap at turn 8 (the bucket was at 96% before the goal); it resumed in the same session id after mk switched accounts. Pilot B's hook shipped without `set -euo pipefail` on the orchestrating session's own instruction, which pilot C's executor found as a red structural test and pilot D fixed.
