@@ -5,6 +5,8 @@
 # the plan fails the gauge or the plan file is missing. Every test builds a
 # PreToolUse payload with jq and pipes it to the hook on stdin.
 
+bats_require_minimum_version 1.5.0
+
 setup() {
     load test_helper
     HOOK="$HOOKS_DIR/gauge-gate-executor-spawn.sh"
@@ -154,6 +156,7 @@ executor_prompt() {
     [ "${#lines[@]}" -eq 1 ]
     [[ "${lines[0]}" == *$'\tgate\tgate\tFAIL\t'* ]]
     [[ "${lines[0]}" == *GAUGE001* ]]
+    [[ "${lines[0]}" != *"plan-gauge-lint refused"* ]]
 }
 
 @test "gauge-gate: a refusal with no register still blocks and says the row was not recorded" {

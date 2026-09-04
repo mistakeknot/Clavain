@@ -114,7 +114,10 @@ PATH_RE = re.compile(r"[\w./-]*[\w-]+\.(?:rs|sh|toml|py|md|yaml|yml|json|ts|js|b
 # New-file grammar from the Pattern F contract: a prose line reading
 #     Create `relative/path` with:
 # followed by ONE fenced block holding the complete content of the new file.
-CREATE_RE = re.compile(r"^\s*(?:[-*]\s+)?create\s+`?([^`\s]+)`?\s+with\s*:?\s*$", re.I)
+# The path must contain a dot or a slash, so prose such as "Create fixtures
+# with:" does not make "fixtures" a file; a leading list marker ("- ", "1. ")
+# and a tail such as "with the following content:" are accepted.
+CREATE_RE = re.compile(r"^\s*(?:(?:[-*]|\d+[.)])\s+)?create\s+`?([^`\s]*[./][^`\s]*)`?\s+with\b[^:]*:\s*$", re.I)
 
 SHELL_LANGS = {"bash", "sh", "shell", "zsh", "console"}
 
@@ -691,7 +694,7 @@ def _strip_guarded_regions(body: str) -> str:
 def check_stale_artifact(blocks: list[Block], files: dict[str, str]) -> list[Finding]:
     """GAUGE005 - a verify that runs a built artifact only built when absent."""
     out = []
-    bodies = [(b.line, b.body) for b in blocks if b.kind in ("verify", "emit")]
+    bodies = [(b.line, b.body) for b in blocks if b.kind in ("verify", "emit", "create")]
     bodies += [(0, c) for n, c in files.items() if n.endswith(".sh")]
     for line, body in bodies:
         if not BIN_INVOKE_RE.search(body):

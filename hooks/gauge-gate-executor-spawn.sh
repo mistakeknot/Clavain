@@ -38,10 +38,12 @@ linter="$root/scripts/plan-gauge-lint.py"
 
 record_refusal() {
   local reason="$1" note sid db script
-  # The register keeps 100 characters of the note; put the informative part
-  # first by dropping the fixed prefix and shortening the plan path to its name.
+  # The register keeps 300 characters of the note; keep it to the findings by
+  # dropping the fixed prefixes (the row's plan field already carries the
+  # plan's basename) and shortening any remaining plan path to its name.
   note="${reason#pattern-f gauge gate: }"
   note="${note//"$plan"/"${plan##*/}"}"
+  note="${note#plan-gauge-lint refused "${plan##*/}": }"
   sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null) || sid=""
   [[ -n "$sid" ]] || sid="unknown-session"
   db="${INTERSPECT_DB:-${CLAUDE_PROJECT_DIR:-$repo}/.clavain/interspect/interspect.db}"

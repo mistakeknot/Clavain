@@ -411,3 +411,38 @@ Expected: prints NOTHING (exit 1).
     r = run_lint(str(plan), "--repo-root", str(repo))
     assert r.returncode == 1, r.stdout
     assert "GAUGE001" in codes(r.stdout), r.stdout
+
+
+def test_create_line_needs_a_path_like_token(repo: Path):
+    """A Create line whose object has no dot or slash is prose, not a path.
+
+    CREATE_RE accepted any one-token object, so "Create fixtures with:" made
+    a file called "fixtures" out of the next fenced block.
+    """
+    import json
+    plan = repo / "plan.md"
+    plan.write_text(
+        "## Task 1\n\nCreate fixtures with:\n```bash\necho \"TODO\"\n```\n\n"
+        "### Verify Task 1\n\n```bash\ngrep -c \"TODO\" scripts/x.sh\n```\n\n"
+        "Expected: prints NOTHING.\n"
+    )
+    r = run_lint(str(plan), "--repo-root", str(repo), "--json")
+    payload = json.loads(r.stdout)
+    assert all("fixtures" not in f["detail"] for f in payload["findings"]), payload
+
+
+def test_numbered_create_line_with_content_tail_is_parsed(repo: Path):
+    """A list-numbered Create line with a "with the following content:" tail
+    is still the new-file grammar, so the same GAUGE001 fires."""
+    import json
+    plan = repo / "plan.md"
+    plan.write_text(
+        CREATE_PLAN.replace(
+            "Create `scripts/hello.sh` with:",
+            "1. Create `scripts/hello.sh` with the following content:",
+        ).replace("%EXPECT%", "prints NOTHING (exit 1).")
+    )
+    r = run_lint(str(plan), "--repo-root", str(repo), "--json")
+    assert r.returncode == 1, r.stdout
+    payload = json.loads(r.stdout)
+    assert any(f["code"] == "GAUGE001" for f in payload["findings"]), payload

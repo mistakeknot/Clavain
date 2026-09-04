@@ -9,7 +9,9 @@
 #   event=pattern_f_verdict  source=pattern-f:<role>  source_kind=agent
 #   context={"path":"pattern-f","verdict_kind":K,"verdict":V,"role":R,
 #            "plan":<basename of --plan>,"commit":C,"criterion":<=100 chars,
-#            "note":<=100 chars,"note_enc":""|"b64","goal":G,"nonce":N}
+#            "note":<=300 chars,"note_enc":""|"b64","goal":G,"nonce":N}
+#   The note is kept to 300 chars and shrunk (note first, then criterion)
+#   only when the context would otherwise exceed 480 chars.
 #   note_enc is "b64" when the register's sanitizer rejected the plain context
 #   (it refuses text containing phrases such as "ignore previous" or
 #   "system:"); criterion and note are then stored base64-encoded and --list
@@ -41,7 +43,8 @@
 #
 # Exit codes: 0 recorded (or listed); 2 usage error; 3 register missing or
 # interspect library not found; 4 the write was not visible on read-back;
-# 5 context rejected by the sanitizer even after encoding (nothing written).
+# 5 context rejected by the sanitizer even after encoding, or still over
+#   480 chars after encoding and shrinking (nothing written).
 #
 # The context JSON is held under 480 characters: the library truncates the
 # context column to 500 characters, and a truncated JSON is unreadable.
@@ -149,12 +152,14 @@ if [[ "$mode" == list ]]; then
   fi
   # One TSV line per row, eight columns: ts, session, role, kind, verdict,
   # plan, commit, note. Encoded notes are decoded; tabs and newlines inside
-  # any field become spaces so every row stays on one parseable line.
+  # any field become spaces so every row stays on one parseable line. The
+  # fields are joined with a literal tab rather than @tsv, which would escape
+  # backslashes, so a note quoting a regex or a Windows path lists verbatim.
   sqlite3 -json "$db" "select ts, session_id, context from evidence where $where order by ts;" \
     | jq -r '.[] | (.context|fromjson) as $c
              | [.ts, .session_id, $c.role, $c.verdict_kind, $c.verdict, $c.plan, $c.commit,
                 (if $c.note_enc == "b64" then ($c.note|@base64d) else $c.note end)]
-             | map((. // "") | tostring | gsub("[\t\r\n]"; " ")) | @tsv'
+             | map((. // "") | tostring | gsub("[\t\r\n]"; " ")) | join("\t")'
   exit 0
 fi
 
@@ -178,7 +183,7 @@ export _INTERSPECT_DB="$db"
 nonce="$(date +%s)-$$-$RANDOM"
 plan_base=$(basename "$plan")
 lim_c=100
-lim_n=100
+lim_n=300
 # enc is "" (plain) or "b64": when the register's sanitizer rejects the plain
 # context, criterion and note are base64-encoded and note_enc records that.
 enc=""
@@ -204,7 +209,8 @@ done
 # on the context and, when the sanitizer rejects it (rc 1, empty output), still
 # inserts context='' with rc 0: an orphan row and exit 4 here. Ask the sanitizer
 # first; on rejection encode criterion and note (note_enc=b64) and re-shrink, so
-# the verdict survives. Exit 5 only if even the encoded context is rejected.
+# the verdict survives (note first, then criterion). Exit 5 if the encoded
+# context is still over 480 chars, or is rejected even after encoding.
 if ! _interspect_sanitize "$ctx" >/dev/null 2>&1; then
   enc=b64
   ctx=$(build_ctx)
@@ -212,6 +218,14 @@ if ! _interspect_sanitize "$ctx" >/dev/null 2>&1; then
     lim_n=$(( lim_n - 20 ))
     ctx=$(build_ctx)
   done
+  while (( ${#ctx} > 480 )) && (( lim_c > 0 )); do
+    lim_c=$(( lim_c - 20 ))
+    ctx=$(build_ctx)
+  done
+  if (( ${#ctx} > 480 )); then
+    echo "pattern-f-verdict: encoded context still exceeds 480 chars; nothing written" >&2
+    exit 5
+  fi
   if ! _interspect_sanitize "$ctx" >/dev/null 2>&1; then
     echo "pattern-f-verdict: context rejected by the register's sanitizer even after encoding; nothing written" >&2
     exit 5
