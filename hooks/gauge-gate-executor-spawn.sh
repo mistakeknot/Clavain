@@ -49,7 +49,11 @@ record_refusal() {
   db="${INTERSPECT_DB:-${CLAUDE_PROJECT_DIR:-$repo}/.clavain/interspect/interspect.db}"
   script="$root/scripts/pattern-f-verdict.sh"
   if [[ -f "$script" ]]; then
-    bash "$script" --db "$db" --session "$sid" --plan "$plan" --commit none \
+    # Bounded: a slow or locked register must not eat the hook's 30s budget,
+    # or the harness times the hook out and the spawn proceeds (fail-open).
+    local -a runner=(bash)
+    if command -v timeout >/dev/null 2>&1; then runner=(timeout 15 bash); fi
+    "${runner[@]}" "$script" --db "$db" --session "$sid" --plan "$plan" --commit none \
       --role gate --kind gate --verdict FAIL --note "$note" >&2 \
       || echo "pattern-f gauge gate: refusal NOT recorded in $db (rc $?)" >&2
   else
