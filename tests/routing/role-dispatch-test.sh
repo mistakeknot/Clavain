@@ -80,6 +80,19 @@ case "${FAKE_CODEX_MODE:-success}" in
     echo 'stream error: unexpected status 403 Forbidden: misalignment policy blocked request' >&2
     exit 1
     ;;
+  policy_account)
+    echo 'HTTP 403 Forbidden: misalignment policy blocked account access' >&2
+    exit 1
+    ;;
+  policy_after_rate)
+    echo 'HTTP 429 Too Many Requests' >&2
+    echo 'HTTP 403 Forbidden: misalignment policy blocked request' >&2
+    exit 1
+    ;;
+  policy_model)
+    echo 'HTTP 403 Forbidden: policy denied; model unavailable' >&2
+    exit 1
+    ;;
   rate429)
     echo 'stream error: unexpected status 429 Too Many Requests: rate limited' >&2
     exit 1
@@ -126,6 +139,16 @@ policy_rc=$?
 set -e
 [[ "$policy_rc" != "0" ]] || fail "policy 403 unexpectedly succeeded"
 [[ "$(wc -l < "$FAKE_CODEX_LOG" | tr -d ' ')" == "1" ]] || fail "policy 403 triggered fallback"
+
+for policy_mode in policy_account policy_after_rate policy_model; do
+  : > "$FAKE_CODEX_LOG"
+  set +e
+  FAKE_CODEX_MODE="$policy_mode" bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1
+  policy_rc=$?
+  set -e
+  [[ "$policy_rc" != "0" ]] || fail "$policy_mode unexpectedly succeeded"
+  [[ "$(wc -l < "$FAKE_CODEX_LOG" | tr -d ' ')" == "1" ]] || fail "$policy_mode triggered retry or fallback"
+done
 
 : > "$FAKE_CODEX_LOG"
 set +e

@@ -1760,6 +1760,13 @@ _classify_dispatch_failure() {
     return 0
   }
   if [[ -f "$stderr_file" ]]; then
+    # A request can report earlier transport failures before its final policy
+    # denial. Denials dominate the entire attempt: never retry or change model
+    # merely because the log also mentions account access or rate limiting.
+    if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then
+      echo terminal_policy
+      return 0
+    fi
     if grep -qiE '\b429\b|too many requests|rate.?limit' "$stderr_file"; then
       echo rate_limited
       return 0
@@ -1770,10 +1777,6 @@ _classify_dispatch_failure() {
     fi
     if grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then
       echo model_unavailable
-      return 0
-    fi
-    if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then
-      echo terminal_policy
       return 0
     fi
     if grep -qiE '\b4[0-9]{2}\b|bad request|unauthorized|forbidden' "$stderr_file"; then
