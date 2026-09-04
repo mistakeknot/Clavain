@@ -217,12 +217,18 @@ do
 done
 
 # Every bead ID the block will cite, with --recommend naming the pick. Add
-# --path for anything a candidate proposes to CREATE, and --beat when the pick
-# continues the lineage of the goals just closed (both below). Exits 3 if any
-# candidate is disqualified.
+# --path for anything a candidate proposes to CREATE, --beat when the pick
+# continues the lineage of the goals just closed, and ALWAYS --text with the
+# /goal line you are about to emit plus --out-of naming where the just-closed
+# goal's condition lives (all below). Exits 3 if any candidate is disqualified.
 VERIFY_JSON=$(bash "$VERIFY_HELPER" --recommend solwend-abcd solwend-abcd mk-1234 \
+                   --text "/goal solwend-abcd — OUTCOME: ..." --out-of solwend-epic \
                    --path apps/web/components/thing/ 2>/dev/null)
 ```
+
+A free-text pick (no bead) still goes through the verifier: pass `--text`
+alone. The pick can also be minted first (`bd create`) so the block cites an
+ID the next session can read back.
 
 `.beads[].verdict` is per candidate, and they are not interchangeable:
 
@@ -230,7 +236,7 @@ VERIFY_JSON=$(bash "$VERIFY_HELPER" --recommend solwend-abcd solwend-abcd mk-123
 |---|---|---|
 | `ok` | open | usable |
 | `warn` | `in_progress` / `blocked`, or in the lineage of the goals just closed | usable only if the goal is to FINISH or UNBLOCK it — and the block must say which, and name what it waits on. For lineage, see `--beat` below |
-| `disqualified` | `closed`, `deferred`, no such bead, or the `--recommend` pick continues the lineage without a `--beat` | **drop it.** Do not cite it, not even with a caveat |
+| `disqualified` | `closed`, `deferred`, no such bead, the `--recommend` pick continues the lineage without a `--beat`, or the pick is named in the OUT clause of the goal that just closed without an `--out-override` | **drop it.** Do not cite it, not even with a caveat |
 
 **Any candidate whose verb is build / create / add must assert the artifact's
 absence** with `--path`. A bead's status cannot catch this: an epic can be
@@ -255,6 +261,40 @@ consecutive goals (1b53da77, c60de386, c4cda02c) each recommended the next
 under one epic, and the fourth passed provenance, freshness, and shape before
 anything asked this. No `ic` on the host, or no goal store that answers, makes
 `.lineage.available` false and leaves the rest of the verdict standing.
+
+### The pick must not be what the last goal excluded: `--text` and `--out-of`
+
+A goal's `OUT:` clause is the user's decision about what this goal will not
+do. On 2026-09-04 the block that closed `jawnomicon ia-preview` recommended
+"export currency 646 to 694" — the second item of that goal's own OUT clause,
+excluded by the user in the text they had ratified. Nothing caught it: the pick
+was free text, so no bead was read back, and no check compared a
+recommendation against the exclusion list. The user asked "is that really the
+best next goal?" for the second time in the session.
+
+Run the verifier with `--text "<the /goal line>"` and `--out-of <where the
+just-closed goal's condition lives>`: a bead whose description carries the
+goal text (the epic, usually), a file, or the literal condition. `--out-of`
+repeats. When `ic goal list` answers, the most recently closed goal's
+`ConditionText` is read as a source automatically; on a host where goals are
+not minted into the store, `--out-of` is the only source, so pass it. A pick
+that names an item of any OUT clause is **disqualified**; the receipt's
+`.out_clause.matched` says which item and which source. If the exclusion has
+genuinely lapsed (the blocker landed, the user lifted the hold), pass
+`--out-override "<why>"`: the refusal becomes a warning, the reason is on the
+receipt, and the block must say it in prose — name the OUT item and why it is
+now in. Matching is by words, not exact phrase: "family and kind naming pass"
+matches "families v31 naming", and "export at canon 694" matches "export
+currency 646 to 694".
+
+### Worktrees read the main checkout's tracker
+
+Both helpers resolve a `.beads` found inside a linked git worktree (`git
+worktree add`, `bd worktree create`) to the main checkout. A worktree carries
+its own copy of the tracker that nothing syncs, so from inside one the beads a
+session created from the main checkout read as "no such bead" and `bd ready`
+is whatever was copied at creation — an empty result that is not a fact about
+the backlog. Two days of improvised blocks came from exactly that.
 
 ### Why this exists, and why provenance did not already cover it
 

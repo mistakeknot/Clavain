@@ -202,7 +202,7 @@ EOF
     make_bd_stub "$(bead_json closed)"
     run bash "$SCRIPT" x-1
     [ -f "$RECEIPTS/test-session.json" ]
-    [ "$(jq -r '.schema_version' "$RECEIPTS/test-session.json")" = "clavain.next-goal-verify/v2" ]
+    [ "$(jq -r '.schema_version' "$RECEIPTS/test-session.json")" = "clavain.next-goal-verify/v3" ]
     [ "$(jq -r '.ok' "$RECEIPTS/test-session.json")" = "false" ]
 }
 
@@ -324,5 +324,103 @@ EOF
     [ "$status" -eq 0 ]
     [ "$(jq -r '.ok' <<<"$output")" = "true" ]
     [ "$(jq -r '.lineage.available' <<<"$output")" = "false" ]
-    [ "$(jq -r '.schema_version' <<<"$output")" = "clavain.next-goal-verify/v2" ]
+    [ "$(jq -r '.schema_version' <<<"$output")" = "clavain.next-goal-verify/v3" ]
+}
+
+# ------------------------------------------------------------------ OUT clause
+#
+# 2026-09-04: the block that closed `jawnomicon ia-preview` recommended
+# "export currency 646 to 694", the second item of that goal's own OUT clause.
+# The pick was free text, so no bead was read back, and nothing compared a
+# recommendation against what the user had just excluded.
+
+OUT_TEXT='OUTCOME: a site. GATE 1 (mk): words. DONE WHEN: green. OUT: index density, export currency 646 to 694, families v31 naming, any edit to data, vocab, or committed batch records, any harvest.'
+
+@test "out-clause: a free-text pick named in the OUT clause is disqualified" {
+    run bash "$SCRIPT" --text "jawnomicon export-currency — OUTCOME: the site builds from an export at canon 694" --out-of "$OUT_TEXT"
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "false" ]
+    [ "$(jq -r '.out_clause.verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.out_clause.matched[0].item' <<<"$output")" = "export currency 646 to 694" ]
+    [ "$(jq -r '.out_clause.matched[0].source' <<<"$output")" = "text" ]
+    [ "$(jq -r '.disqualified | length' <<<"$output")" -eq 1 ]
+}
+
+@test "out-clause: words gate the match, numbers and word forms do not" {
+    # "families v31 naming" vs "family ... naming": families/family share a
+    # prefix, v31 is a tag and rides free.
+    run bash "$SCRIPT" --text "Family and kind naming pass — 44 family names and 19 cluster labels" --out-of "$OUT_TEXT"
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.out_clause.matched[0].item' <<<"$output")" = "families v31 naming" ]
+}
+
+@test "out-clause: a pick outside the OUT clause passes" {
+    run bash "$SCRIPT" --text "constellation-nav — every figure page leads to its nearest figures" --out-of "$OUT_TEXT"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "true" ]
+    [ "$(jq -r '.out_clause.verdict' <<<"$output")" = "ok" ]
+    [ "$(jq -r '.out_clause.items' <<<"$output")" -ge 3 ]
+}
+
+@test "out-clause: --out-override downgrades the refusal to a warning and records the reason" {
+    run bash "$SCRIPT" --text "export currency 646 to 694" --out-of "$OUT_TEXT" --out-override "xjq landed and the hold was lifted"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "true" ]
+    [ "$(jq -r '.out_clause.verdict' <<<"$output")" = "warn" ]
+    [ "$(jq -r '.out_clause.override' <<<"$output")" = "xjq landed and the hold was lifted" ]
+    [ "$(jq -r '.warnings | index("<text>")' <<<"$output")" != "null" ]
+}
+
+@test "out-clause: the clause is read from a bead's description and the recommended bead is disqualified" {
+    make_bd_stub "$(bead_json open ',"description":"jawnomicon ia-preview — OUTCOME: a site. OUT: index density, export currency 646 to 694, any harvest.\n\nFinding at intake: unrelated prose that mentions harvest twice."')"
+    run bash "$SCRIPT" --recommend x-1 --text "/goal x-1 — export currency: bring the site to canon 694" --out-of x-9 x-1
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.out_clause.matched[0].source' <<<"$output")" = "bead x-9" ]
+    [ "$(jq -r '.out_clause.subject' <<<"$output")" = "x-1" ]
+    [ "$(jq -r '.beads[0].verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.beads[0].reason' <<<"$output")" != "open" ]
+    [ "$(jq -r '.out_clause.items' <<<"$output")" -eq 3 ]
+}
+
+@test "out-clause: prose after the OUT paragraph is not part of the clause" {
+    # "harvest" appears in the intake paragraph below the clause; only the
+    # clause's own items count, and "harvest" is one of them here — so a pick
+    # about harvest is caught, but a pick about "intake" is not.
+    make_bd_stub "$(bead_json open ',"description":"OUT: any harvest.\n\nFinding at intake: the intake pass found nothing."')"
+    run bash "$SCRIPT" --text "intake pass: rerun the intake" --out-of x-9
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.out_clause.verdict' <<<"$output")" = "ok" ]
+}
+
+@test "out-clause: no source at all is reported as not evaluated, not as a pass" {
+    run bash "$SCRIPT" --text "anything"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.out_clause.available' <<<"$output")" = "false" ]
+    [ "$(jq -r '.out_clause.verdict' <<<"$output")" = "null" ]
+}
+
+@test "out-clause: a source with no OUT clause passes and says so" {
+    run bash "$SCRIPT" --text "anything" --out-of "OUTCOME: a goal with no exclusions."
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.out_clause.verdict' <<<"$output")" = "ok" ]
+    [[ "$(jq -r '.out_clause.reason' <<<"$output")" == "no OUT clause found in"* ]]
+}
+
+# ------------------------------------------------------------------- worktrees
+
+@test "worktree: a root inside a linked git worktree resolves to the main checkout" {
+    command -v git >/dev/null || skip "git not installed"
+    local main="$WORK_DIR/main"
+    mkdir -p "$main/.beads"
+    git -C "$WORK_DIR" init -q main
+    git -C "$main" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+    git -C "$main" worktree add -q "$main/wt" -b wt
+    mkdir -p "$main/wt/.beads"
+    make_bd_stub "$(bead_json open)"
+    unset CLAVAIN_NEXT_GOAL_ROOTS
+    pushd "$main/wt" >/dev/null
+    HOME="$WORK_DIR" run bash "$SCRIPT" x-1
+    popd >/dev/null
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.beads[0].root' <<<"$output")" = "$(cd "$main" && pwd -P)" ]
 }
