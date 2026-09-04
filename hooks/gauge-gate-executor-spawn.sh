@@ -32,6 +32,16 @@ plan=$(printf '%s\n' "$prompt" | sed -n 's/^PATTERN-F EXECUTOR PLAN:[[:space:]]*
 repo=$(printf '%s\n' "$prompt" | sed -n 's/^REPO:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//') || true
 [[ -z "$repo" ]] && repo="${CLAUDE_PROJECT_DIR:-$PWD}"
 
+contract=$(printf '%s\n' "$prompt" | sed -n 's/^PATTERN-F EXECUTOR CONTRACT:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]') || true
+[[ -n "$contract" ]] || contract="exact"
+case "$contract" in
+  brief|exact) ;;
+  *)
+    jq -nc --arg r "pattern-f gauge gate: unknown contract '$contract'" '{decision:"block",reason:$r}'
+    exit 0
+    ;;
+esac
+
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root="${CLAUDE_PLUGIN_ROOT:-$script_dir/..}"
 linter="$root/scripts/plan-gauge-lint.py"
@@ -73,7 +83,7 @@ block() {
 # --repo-root is required for a real dry run; without it the linter matches
 # emitted text only and still exits 0. Argument order does not matter.
 rc=0
-lint_out=$(python3 "$linter" --repo-root "$repo" "$plan" 2>&1) || rc=$?
+lint_out=$(python3 "$linter" --contract "$contract" --repo-root "$repo" "$plan" 2>&1) || rc=$?
 case "$rc" in
   0) exit 0 ;;
   1)

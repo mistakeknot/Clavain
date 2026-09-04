@@ -18,6 +18,7 @@ setup() {
     FIX_REPO="$BATS_TEST_TMPDIR/repo"
     BAD_PLAN="$BATS_TEST_TMPDIR/bad-plan.md"
     GOOD_PLAN="$BATS_TEST_TMPDIR/good-plan.md"
+    GOOD_BRIEF="$BATS_TEST_TMPDIR/good-brief.md"
     PAYLOAD="$BATS_TEST_TMPDIR/payload.json"
     mkdir -p "$FIX_REPO/src"
     printf 'echo old\n' > "$FIX_REPO/src/thing.sh"
@@ -49,6 +50,27 @@ grep -n 'TODO' src/thing.sh
 
 Expected: prints NOTHING (exit 1).
 PLAN
+    cat > "$GOOD_BRIEF" <<'BRIEF'
+# Task Brief
+Contract: brief
+
+## Objective
+Add the requested outcome.
+## Scope
+Only src/thing.sh and its focused test.
+## Constraints
+Preserve current behavior outside the scope.
+## Authority
+May edit and test. Do not push or deploy.
+## Acceptance Criteria
+- The requested outcome is observable.
+## Verification
+```bash
+bash -n src/thing.sh
+```
+## Deliverables
+Return the diff or commit, checks run, failures, and unresolved questions.
+BRIEF
     # GOOD PLAN: the verify claim is consistent with the edit; linter exits 0.
     cat > "$GOOD_PLAN" <<'PLAN'
 # Plan: good
@@ -90,6 +112,10 @@ executor_prompt() {
     printf 'PATTERN-F EXECUTOR PLAN: %s\nREPO: %s\nYou are a Pattern F executor.\n' "$1" "$2"
 }
 
+brief_prompt() {
+    printf 'PATTERN-F EXECUTOR PLAN: %s\nPATTERN-F EXECUTOR CONTRACT: brief\nREPO: %s\nYou are a Pattern F executor.\n' "$1" "$2"
+}
+
 @test "gauge-gate: prompt without the executor marker passes silently" {
     payload 'Summarise the README and report back.'
     run bash "$HOOK" < "$PAYLOAD"
@@ -107,6 +133,13 @@ executor_prompt() {
 
 @test "gauge-gate: plan that passes the gauge lets the spawn through" {
     payload "$(executor_prompt "$GOOD_PLAN" "$FIX_REPO")"
+    run bash "$HOOK" < "$PAYLOAD"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "gauge-gate: outcome brief passes without implementation edit blocks" {
+    payload "$(brief_prompt "$GOOD_BRIEF" "$FIX_REPO")"
     run bash "$HOOK" < "$PAYLOAD"
     [ "$status" -eq 0 ]
     [ -z "$output" ]

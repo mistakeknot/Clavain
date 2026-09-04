@@ -11,6 +11,25 @@ disable-model-invocation: true
 
 Single source of truth: `config/routing.yaml`.
 
+## Role dispatch (Astra adoption)
+
+Execution authority is explicit. Resolve the complete profile with `ic route dispatch --role=<role> --json`; do not re-resolve model fields in shell. `scripts/dispatch.sh --role <role>` passes backend, model, effort, service tier, and minimum Codex version exactly as resolved, and records the chosen role/profile plus producer-validator relationship in Intercore.
+
+| Role | Primary route | Policy |
+|------|---------------|--------|
+| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-5.6 Sol xhigh until Astra account access succeeds |
+| `scout` | GPT-5.6 Sol high | Read-only exploration |
+| `routine-execution` | GPT-5.6 Sol high | High-volume coding |
+| `deep-execution` | GPT-6 Astra high, Standard | Sol xhigh only for explicit model/account/version unavailability |
+| `validation` | Claude/Fable | Must differ from the producer; ordered Kimi/Sol fallbacks |
+| `release-preparation` | GPT-5.6 Sol high | Returns a compact release packet |
+| `release-authority` | main integrator | Never delegated implicitly |
+| `cross-lab-review` | provider/model unlike producer | Sealed first-pass findings |
+
+HTTP 429 retries are bounded and remain on the same resolved model. Misalignment-policy 403s and all other configuration 4xx responses are terminal and never trigger model/backend fallback. Bounded work uses headless execution; clarification-prone or long work uses `--via zaka` for steering.
+
+Pattern F uses `brief` by default for Astra and other capable executors: objective, scope, constraints, authority, acceptance criteria, verification, and deliverables. Use `exact` only when migrations, weaker-executor compatibility, or risk require prescribed mechanics. The executor owns implementation and test loops; the validator reports acceptance replay plus `BEYOND THE GAUGE`. Final acceptance always checks the actual checkout.
+
 ## `status` (default)
 
 Source `scripts/lib-routing.sh`, call `routing_list_mappings`. Inspect `config/routing.yaml`:
@@ -50,9 +69,9 @@ bash "${CLAUDE_PLUGIN_ROOT:-.}/scripts/routing-mode.sh" quality
 - `fd-safety` and `fd-correctness` always resolve to ≥sonnet regardless of mode (enforced by `agent-roles.yaml`)
 - Mode toggles go through `scripts/routing-mode.sh`, which skips the doctrine phases; tested in `tests/shell/routing_mode.bats`.
 
-## Capability-routing doctrine (frontier-tier sessions)
+## Capability-routing doctrine (legacy Claude-pool overlay)
 
-When a frontier-tier model (fable) is available — especially during a limited window — its capacity is the scarce resource. Route by capability, not habit:
+This section retains the measured Claude-pool economics behind older phase routing. The role-dispatch table above governs new cross-provider execution; concrete model names below describe the historical Claude-only overlay.
 
 | Role | Tier | Why |
 |------|------|-----|
@@ -67,7 +86,7 @@ When a frontier-tier model (fable) is available — especially during a limited 
 2. **Two-strikes escalation:** executor fails a task 2x, or validator rejects 2x → escalate the item to the frontier tier and record the failure mode. Never loop cheap retries — they aren't cheap.
 3. **Hard-problem exception:** work that previously stalled on lesser models does NOT get the split — the frontier model stays in the execution loop or reviews every diff itself. A validator can only catch what it can understand.
 4. **Small-task lane:** tasks under ~30 min of agent time skip the pipeline; one model end-to-end. Handoff overhead exceeds the savings.
-5. **Plans are written for a weaker executor** — the pipeline's silent failure mode is a plan that assumes frontier judgment. `writing-plans` already enforces exact paths, complete code, and machine-checkable verify blocks; do not relax those when the plan author is a frontier model.
+5. **Match the planning contract to the executor** — capable executors receive a `brief` and own implementation; weak-executor compatibility, migrations, or prescribed-risk mechanics use `exact`. Both freeze machine-replayable acceptance criteria.
 6. **Pilot before batching:** before fanning a plan backlog out to cheap executors, run 2-3 items through the full loop (plan → review → execute → validate → land) and fix the plan template while the frontier model is still available.
 7. **Measure plan→execution pass rate** (interspect delegation calibration), not just shipped count — it's the signal that the doctrine is holding.
 

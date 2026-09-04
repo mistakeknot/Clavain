@@ -329,6 +329,66 @@ def test_json_output_is_machine_readable(repo: Path):
     assert all({"code", "title", "line", "detail"} <= set(f) for f in payload["findings"])
 
 
+BRIEF = """
+# Task Brief
+
+Contract: brief
+
+## Objective
+Add role-aware dispatch without changing legacy tier behavior.
+
+## Scope
+Only `scripts/dispatch.sh` and its focused tests.
+
+## Constraints
+Preserve existing CLI compatibility and unrelated changes.
+
+## Authority
+May edit and test the scoped files and create one commit. Do not push or deploy.
+
+## Acceptance Criteria
+- A resolved profile passes model, effort, and service tier to Codex.
+- A policy 403 never changes models.
+
+## Verification
+```bash
+bash -n scripts/dispatch.sh
+bash tests/routing/role-dispatch-test.sh
+```
+
+## Deliverables
+Return the diff or commit, checks run, failures, and unresolved questions.
+"""
+
+
+def test_brief_contract_accepts_outcomes_without_prescribed_edits(repo: Path):
+    """A capable executor gets outcomes and owns its implementation loop."""
+    plan = repo / "brief.md"
+    plan.write_text(BRIEF)
+    r = run_lint(str(plan), "--repo-root", str(repo), "--contract", "brief")
+    assert r.returncode == 0, f"valid brief should pass:\n{r.stdout}\n{r.stderr}"
+
+
+def test_brief_contract_requires_authority(repo: Path):
+    plan = repo / "brief.md"
+    plan.write_text(BRIEF.replace(
+        "## Authority\nMay edit and test the scoped files and create one commit. Do not push or deploy.\n\n",
+        "",
+    ))
+    r = run_lint(str(plan), "--repo-root", str(repo), "--contract", "brief")
+    assert r.returncode == 1
+    assert "BRIEF001" in r.stdout
+    assert "authority" in r.stdout.lower()
+
+
+def test_auto_detects_declared_brief_contract(repo: Path):
+    plan = repo / "brief.md"
+    plan.write_text(BRIEF)
+    r = run_lint(str(plan), "--repo-root", str(repo))
+    assert r.returncode == 0, r.stdout
+    assert "contract=brief" in r.stdout
+
+
 CREATE_PLAN = """
 ## Task 1
 

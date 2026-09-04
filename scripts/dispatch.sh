@@ -24,6 +24,15 @@ WORKDIR=""
 OUTPUT=""
 MODEL=""
 TIER=""
+ROLE=""
+ROLE_RESOLVED=false
+RESOLVED_PROFILE_REF=""
+REASONING_EFFORT=""
+SERVICE_TIER=""
+MINIMUM_CODEX_VERSION=""
+FALLBACK_REASON=""
+PRODUCER_IDENTITY=""
+VALIDATOR_RELATIONSHIP=""
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
@@ -164,6 +173,11 @@ Options:
                                   (codex), or map to a kimi model alias (--to kimi):
                                   fast → kimi-code/kimi-for-coding, deep → kimi-code/k3.
                                   Mutually exclusive with -m (use -m to override)
+  --role <NAME>                 Resolve backend, model, reasoning effort, service tier,
+                                  minimum Codex version, and ordered fallbacks through
+                                  `ic route dispatch --role=<NAME> --json`
+  --producer-identity <ID>      Producer backend/model identity for validator audit records
+  --validator-relationship <R> Validator relationship recorded with the routing decision
   --phase <NAME>                Sprint phase context (stored for future phase-aware dispatch)
   --class <NAME>                Task class for --to auto executor routing
   -i, --image <FILE>            Attach image to prompt (repeatable)
@@ -314,6 +328,181 @@ for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
   PASSTHROUGH+=("${ORIGINAL_ARGS[$i]}")
 done
 
+# Arguments retained when a role dispatch invokes this script for a resolved
+# primary or fallback profile. Role-owned routing controls are replaced by the
+# exact profile returned from Intercore; all task and execution arguments stay.
+ROLE_PASSTHROUGH=()
+for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
+  case "${ORIGINAL_ARGS[$i]}" in
+    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--fallback-reason|--producer-identity|--validator-relationship)
+      i=$((i + 1))
+      ;;
+    --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*)
+      ;;
+    --role-resolved)
+      ;;
+    *)
+      ROLE_PASSTHROUGH+=("${ORIGINAL_ARGS[$i]}")
+      ;;
+  esac
+done
+
+CLAVAIN_LAST_FAILURE_CLASS=""
+
+_dispatch_write_failure_class() {
+  local class="${1:-terminal_error}"
+  [[ -n "${CLAVAIN_DISPATCH_FAILURE_FILE:-}" ]] || return 0
+  printf '%s\n' "$class" > "$CLAVAIN_DISPATCH_FAILURE_FILE"
+}
+
+_run_candidate_with_policy() {
+  local failure_file retries attempt rc failure_class backoff
+  failure_file="$(mktemp "${TMPDIR:-/tmp}/clavain-dispatch-failure.XXXXXX")"
+  retries="${CLAVAIN_429_MAX_RETRIES:-2}"
+  [[ "$retries" =~ ^[0-9]+$ ]] || retries=2
+  backoff="${CLAVAIN_429_BACKOFF_SECONDS:-2}"
+  [[ "$backoff" =~ ^[0-9]+$ ]] || backoff=2
+  attempt=0
+
+  while true; do
+    : > "$failure_file"
+    set +e
+    CLAVAIN_DISPATCH_FAILURE_FILE="$failure_file" "$@"
+    rc=$?
+    set -e
+    failure_class="$(head -1 "$failure_file" 2>/dev/null || true)"
+    if [[ "$rc" == "0" ]]; then
+      rm -f "$failure_file"
+      CLAVAIN_LAST_FAILURE_CLASS=""
+      return 0
+    fi
+    if [[ "$failure_class" == "rate_limited" && "$attempt" -lt "$retries" ]]; then
+      attempt=$((attempt + 1))
+      echo "dispatch: HTTP 429; retrying the same resolved model ($attempt/$retries)" >&2
+      if [[ "$backoff" -gt 0 ]]; then
+        sleep $((backoff * attempt))
+      fi
+      continue
+    fi
+    rm -f "$failure_file"
+    CLAVAIN_LAST_FAILURE_CLASS="${failure_class:-terminal_error}"
+    return "$rc"
+  done
+}
+
+_codex_version_at_least() {
+  local required="$1" current
+  command -v codex >/dev/null 2>&1 || return 1
+  current="$(codex --version 2>/dev/null | sed -nE 's/.*[^0-9]([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | tail -1)"
+  [[ -n "$current" ]] || return 1
+  awk -F. -v current="$current" -v required="$required" 'BEGIN {
+    split(current, c, "."); split(required, r, ".");
+    for (i = 1; i <= 3; i++) {
+      if ((c[i] + 0) > (r[i] + 0)) exit 0;
+      if ((c[i] + 0) < (r[i] + 0)) exit 1;
+    }
+    exit 0;
+  }'
+}
+
+_producer_is_model() {
+  local identity="$1" model="$2"
+  [[ "$identity" == "$model" || "$identity" == */"$model" || "$identity" == *:"$model" ]]
+}
+
+_dispatch_role_profile() {
+  local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
+  local fallback_reason="" rc=1 candidate_count=0
+  local -a resolved_args
+
+  if [[ "$role" == "validation" || "$role" == "cross-lab-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
+    echo "Error: role '$role' requires --producer-identity so producer and validator models can be separated" >&2
+    return 1
+  fi
+
+  command -v ic >/dev/null 2>&1 || {
+    echo "Error: ic is required for --role dispatch" >&2
+    return 1
+  }
+  command -v jq >/dev/null 2>&1 || {
+    echo "Error: jq is required for --role dispatch" >&2
+    return 1
+  }
+  resolved="$(ic --json route dispatch --role="$role")" || {
+    echo "Error: Intercore could not resolve dispatch role '$role'" >&2
+    return 1
+  }
+  candidates="$(jq -c '[{profile_ref:.profile_ref,profile:.profile}] + (.fallback_chain // []) | .[]' <<< "$resolved")" || {
+    echo "Error: invalid dispatch profile JSON for role '$role'" >&2
+    return 1
+  }
+
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" ]] || continue
+    candidate_count=$((candidate_count + 1))
+    profile_ref="$(jq -r '.profile_ref // empty' <<< "$candidate")"
+    backend="$(jq -r '.profile.backend // empty' <<< "$candidate")"
+    model="$(jq -r '.profile.model // empty' <<< "$candidate")"
+    effort="$(jq -r '.profile.reasoning_effort // empty' <<< "$candidate")"
+    service="$(jq -r '.profile.service_tier // empty' <<< "$candidate")"
+    minimum="$(jq -r '.profile.minimum_codex_version // empty' <<< "$candidate")"
+
+    if [[ -z "$profile_ref" || -z "$backend" || -z "$model" ]]; then
+      echo "Error: role '$role' resolved an incomplete profile" >&2
+      return 1
+    fi
+    if [[ "$backend" == "main" ]]; then
+      echo "Error: role '$role' is reserved for the main integrator and cannot be delegated" >&2
+      return 1
+    fi
+    if [[ -n "$PRODUCER_IDENTITY" ]] && _producer_is_model "$PRODUCER_IDENTITY" "$model"; then
+      fallback_reason="producer_model_conflict"
+      echo "dispatch: profile '$profile_ref' resolves to producer model '$model'; trying a different-model fallback" >&2
+      continue
+    fi
+    if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
+      fallback_reason="insufficient_codex_version"
+      echo "dispatch: profile '$profile_ref' requires Codex >= $minimum; trying its declared fallback" >&2
+      continue
+    fi
+
+    resolved_args=(
+      bash "${BASH_SOURCE[0]}"
+      --role-resolved
+      --role "$role"
+      --resolved-profile-ref "$profile_ref"
+      --to "$backend"
+      --model "$model"
+    )
+    [[ -n "$effort" ]] && resolved_args+=(--reasoning-effort "$effort")
+    [[ -n "$service" ]] && resolved_args+=(--service-tier "$service")
+    [[ -n "$minimum" ]] && resolved_args+=(--minimum-codex-version "$minimum")
+    [[ -n "$fallback_reason" ]] && resolved_args+=(--fallback-reason "$fallback_reason")
+    [[ -n "$PRODUCER_IDENTITY" ]] && resolved_args+=(--producer-identity "$PRODUCER_IDENTITY")
+    [[ -n "$VALIDATOR_RELATIONSHIP" ]] && resolved_args+=(--validator-relationship "$VALIDATOR_RELATIONSHIP")
+    resolved_args+=("${ROLE_PASSTHROUGH[@]}")
+
+    if _run_candidate_with_policy "${resolved_args[@]}"; then
+      return 0
+    else
+      rc=$?
+    fi
+    case "$CLAVAIN_LAST_FAILURE_CLASS" in
+      model_unavailable|account_access_absent|insufficient_codex_version)
+        fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
+        echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
+        ;;
+      *)
+        echo "dispatch: '$profile_ref' failed with terminal class '$CLAVAIN_LAST_FAILURE_CLASS'; fallback suppressed" >&2
+        return "$rc"
+        ;;
+    esac
+  done <<< "$candidates"
+
+  [[ "$candidate_count" -gt 0 ]] || echo "Error: role '$role' has no executable profiles" >&2
+  return "$rc"
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -369,6 +558,32 @@ while [[ $# -gt 0 ]]; do
     --tier)
       require_arg "$1" "${2:-}"
       TIER="$2"
+      shift 2
+      ;;
+    --role)
+      require_arg "$1" "${2:-}"
+      ROLE="$2"
+      shift 2
+      ;;
+    --role=*)
+      ROLE="${1#--role=}"
+      shift
+      ;;
+    --role-resolved)
+      ROLE_RESOLVED=true
+      shift
+      ;;
+    --resolved-profile-ref|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship)
+      require_arg "$1" "${2:-}"
+      case "$1" in
+        --resolved-profile-ref) RESOLVED_PROFILE_REF="$2" ;;
+        --reasoning-effort) REASONING_EFFORT="$2" ;;
+        --service-tier) SERVICE_TIER="$2" ;;
+        --minimum-codex-version) MINIMUM_CODEX_VERSION="$2" ;;
+        --fallback-reason) FALLBACK_REASON="$2" ;;
+        --producer-identity) PRODUCER_IDENTITY="$2" ;;
+        --validator-relationship) VALIDATOR_RELATIONSHIP="$2" ;;
+      esac
       shift 2
       ;;
     --phase)
@@ -500,6 +715,22 @@ if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/clodex-toggle.flag" ]]; } || {
       CLAVAIN_INTERSERVE_MODE=true
       ;;
   esac
+fi
+
+# A role is a complete Intercore-owned execution contract. The outer invocation
+# resolves it once, then invokes this script with the exact primary/fallback
+# profiles. Explicit engine/model/tier overrides would make the durable record
+# disagree with execution, so reject them at this boundary.
+if [[ -n "$ROLE" && "$ROLE_RESOLVED" != true ]]; then
+  if [[ "$ENGINE_SET" == true || -n "$MODEL" || -n "$TIER" || -n "$REASONING_EFFORT" || -n "$SERVICE_TIER" ]]; then
+    echo "Error: --role cannot be combined with --to, --model, --tier, --reasoning-effort, or --service-tier" >&2
+    exit 1
+  fi
+  set +e
+  _dispatch_role_profile "$ROLE"
+  role_rc=$?
+  set -e
+  exit "$role_rc"
 fi
 
 # Resolve --tier to a model name (mutually exclusive with -m)
@@ -893,6 +1124,14 @@ if [[ "$VIA" == "zaka" ]]; then
   if [[ -n "$MODEL" ]]; then
     ZAKA_SPAWN+=(--model "$MODEL")
   fi
+  if [[ "$ZAKA_AGENT" == "codex" && -n "$REASONING_EFFORT" ]]; then
+    ZAKA_SPAWN+=(--agent-arg=-c --agent-arg="model_reasoning_effort=$REASONING_EFFORT")
+  fi
+  if [[ "$ZAKA_AGENT" == "codex" && -n "$SERVICE_TIER" ]]; then
+    codex_service_tier="$SERVICE_TIER"
+    [[ "$codex_service_tier" == "standard" ]] && codex_service_tier="default"
+    ZAKA_SPAWN+=(--agent-arg=-c --agent-arg="service_tier=$codex_service_tier")
+  fi
 
   # Dry run: print the zaka commands and exit (preflight skipped, like the
   # codex/kimi dry-run paths which don't require the backend binary either)
@@ -974,12 +1213,22 @@ if [[ "$ENGINE" == "auto" ]]; then
   rc=1
   chosen=""
   for backend in $order; do
-    if "${BASH_SOURCE[0]}" --to "$backend" "${PASSTHROUGH[@]}"; then
+    if _run_candidate_with_policy bash "${BASH_SOURCE[0]}" --to "$backend" "${PASSTHROUGH[@]}"; then
       rc=0
       chosen="$backend"
       break
+    else
+      rc=$?
     fi
-    echo "dispatch: backend '$backend' failed for class '${TASK_CLASS:-default}', trying next" >&2
+    case "$CLAVAIN_LAST_FAILURE_CLASS" in
+      model_unavailable|account_access_absent|insufficient_codex_version)
+        echo "dispatch: backend '$backend' unavailable for class '${TASK_CLASS:-default}' ($CLAVAIN_LAST_FAILURE_CLASS); trying next" >&2
+        ;;
+      *)
+        echo "dispatch: backend '$backend' failed with terminal class '$CLAVAIN_LAST_FAILURE_CLASS'; fallback suppressed" >&2
+        break
+        ;;
+    esac
   done
   # Sylveste-d3m phase 1: every --to auto dispatch feeds the parity corpus.
   # Dry runs stay out of the default log unless a log path is set explicitly
@@ -1034,6 +1283,7 @@ AGENT
   if [[ -n "$MODEL" ]]; then
     CMD+=(-m "$MODEL")
   fi
+
   if [[ "$KIMI_UNSAFE" != true ]]; then
     CMD+=(--prompt="$PROMPT")   # =-bound: leading-dash prompt can't become a flag
   else
@@ -1094,6 +1344,15 @@ else
     CMD+=(-m "$MODEL")
   fi
 
+  if [[ -n "$REASONING_EFFORT" ]]; then
+    CMD+=(-c "model_reasoning_effort=$REASONING_EFFORT")
+  fi
+  if [[ -n "$SERVICE_TIER" ]]; then
+    codex_service_tier="$SERVICE_TIER"
+    [[ "$codex_service_tier" == "standard" ]] && codex_service_tier="default"
+    CMD+=(-c "service_tier=$codex_service_tier")
+  fi
+
   for img in "${IMAGES[@]+"${IMAGES[@]}"}"; do
     CMD+=(-i "$img")
   done
@@ -1148,6 +1407,12 @@ if [[ "$DRY_RUN" == true ]]; then
     if [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
     if [[ -n "$OUTPUT" ]]; then DISPLAY_CMD+=(-o "$OUTPUT"); fi
     if [[ -n "$MODEL" ]]; then DISPLAY_CMD+=(-m "$MODEL"); fi
+    if [[ -n "$REASONING_EFFORT" ]]; then DISPLAY_CMD+=(-c "model_reasoning_effort=$REASONING_EFFORT"); fi
+    if [[ -n "$SERVICE_TIER" ]]; then
+      codex_service_tier="$SERVICE_TIER"
+      [[ "$codex_service_tier" == "standard" ]] && codex_service_tier="default"
+      DISPLAY_CMD+=(-c "service_tier=$codex_service_tier")
+    fi
     for img in "${IMAGES[@]+"${IMAGES[@]}"}"; do DISPLAY_CMD+=(-i "$img"); done
     if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then DISPLAY_CMD+=("${EXTRA_ARGS[@]}"); fi
     printf '%q ' "${DISPLAY_CMD[@]}"
@@ -1164,11 +1429,23 @@ fi
 
 # Backend preflight: fail fast with a clear message when the CLI is missing
 if [[ "$ENGINE" == "kimi" ]] && ! command -v kimi >/dev/null 2>&1; then
+  _dispatch_write_failure_class model_unavailable
   echo "Error: kimi CLI not found on PATH (required for --to kimi). See https://moonshotai.github.io/kimi-code/" >&2
   exit 1
 fi
 if [[ "$ENGINE" == "claude" ]] && ! command -v claude >/dev/null 2>&1; then
+  _dispatch_write_failure_class model_unavailable
   echo "Error: claude CLI not found on PATH (required for --to claude)." >&2
+  exit 1
+fi
+if [[ "$ENGINE" == "codex" ]] && ! command -v codex >/dev/null 2>&1; then
+  _dispatch_write_failure_class insufficient_codex_version
+  echo "Error: codex CLI not found on PATH (required for --to codex)." >&2
+  exit 1
+fi
+if [[ "$ENGINE" == "codex" && -n "$MINIMUM_CODEX_VERSION" ]] && ! _codex_version_at_least "$MINIMUM_CODEX_VERSION"; then
+  _dispatch_write_failure_class insufficient_codex_version
+  echo "Error: resolved profile requires Codex >= $MINIMUM_CODEX_VERSION" >&2
   exit 1
 fi
 
@@ -1476,6 +1753,85 @@ _surface_codex_errors() {
   fi
 }
 
+_classify_dispatch_failure() {
+  local stderr_file="$1" exit_code="${2:-1}"
+  [[ "$exit_code" == "0" ]] && {
+    echo success
+    return 0
+  }
+  if [[ -f "$stderr_file" ]]; then
+    if grep -qiE '\b429\b|too many requests|rate.?limit' "$stderr_file"; then
+      echo rate_limited
+      return 0
+    fi
+    if grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then
+      echo account_access_absent
+      return 0
+    fi
+    if grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then
+      echo model_unavailable
+      return 0
+    fi
+    if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then
+      echo terminal_policy
+      return 0
+    fi
+    if grep -qiE '\b4[0-9]{2}\b|bad request|unauthorized|forbidden' "$stderr_file"; then
+      echo terminal_configuration
+      return 0
+    fi
+  fi
+  echo terminal_error
+}
+
+_record_role_routing_decision() {
+  local exit_code="$1" failure_class="$2" reason="$FALLBACK_REASON"
+  [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]] || return 0
+  command -v ic >/dev/null 2>&1 || return 0
+  [[ "$exit_code" == "0" ]] || reason="$failure_class"
+
+  local -a record_cmd=(
+    ic route record
+    "--agent=${NAME:-$ROLE}"
+    "--model=$MODEL"
+    --rule=dispatch-profile
+    "--role=$ROLE"
+    "--profile=$RESOLVED_PROFILE_REF"
+    "--session=${DISPATCH_SESSION_ID:-main-integrator}"
+  )
+  [[ -n "$reason" && "$reason" != "success" ]] && record_cmd+=("--fallback-reason=$reason")
+  [[ -n "$PRODUCER_IDENTITY" ]] && record_cmd+=("--producer-identity=$PRODUCER_IDENTITY")
+  [[ -n "$VALIDATOR_RELATIONSHIP" ]] && record_cmd+=("--validator-relationship=$VALIDATOR_RELATIONSHIP")
+
+  if [[ -n "$WORKDIR" ]]; then
+    if ! (cd "$WORKDIR" && "${record_cmd[@]}") >/dev/null 2>&1; then
+      echo "Warning: role routing decision could not be persisted for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
+      return 1
+    fi
+  else
+    if ! "${record_cmd[@]}" >/dev/null 2>&1; then
+      echo "Warning: role routing decision could not be persisted for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
+      return 1
+    fi
+  fi
+  return 0
+}
+
+_finalize_dispatch_result() {
+  local exit_code="$1" failure_class
+  failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
+  if [[ "$exit_code" == "0" ]]; then
+    : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
+  else
+    _dispatch_write_failure_class "$failure_class"
+  fi
+  if ! _record_role_routing_decision "$exit_code" "$failure_class"; then
+    _dispatch_write_failure_class terminal_recording
+    return 1
+  fi
+  return 0
+}
+
 if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # kimi -p and claude -p both print the response on stdout and exit 0 on
   # success. Neither emits the codex-style JSONL event stream, so the
@@ -1488,18 +1844,19 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # inherits the orchestrator's stdin.
   if [[ -n "$OUTPUT" ]]; then
     if [[ -n "$WORKDIR" ]]; then
-      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> >(tee "$STDERR_FILE" >&2) | tee "$OUTPUT"
+      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | tee "$OUTPUT"
     else
-      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> >(tee "$STDERR_FILE" >&2) | tee "$OUTPUT"
+      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | tee "$OUTPUT"
     fi
   else
     if [[ -n "$WORKDIR" ]]; then
-      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> >(tee "$STDERR_FILE" >&2)
+      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE"
     else
-      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> >(tee "$STDERR_FILE" >&2)
+      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE"
     fi
   fi
   KIMI_EXIT="${PIPESTATUS[0]}"
+  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
   set -e
 
@@ -1527,6 +1884,9 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
 
   _dispatch_sync_interband_from_legacy
 
+  if ! _finalize_dispatch_result "$KIMI_EXIT"; then
+    KIMI_EXIT=1
+  fi
   exit "$KIMI_EXIT"
 elif [[ "$HAS_GAWK" == true ]]; then
   # Add --json to capture JSONL stream, pipe through parser
@@ -1537,8 +1897,9 @@ elif [[ "$HAS_GAWK" == true ]]; then
   # set -e is disabled around the pipeline so a non-zero codex exit still lets
   # us run verdict override + cleanup before exiting with the captured code.
   set +e
-  "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2) | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+  "${CMD[@]}" 2> "$STDERR_FILE" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
   CODEX_EXIT="${PIPESTATUS[0]}"
+  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   set -e
 
   # Write summary from bash if awk didn't (fallback for short/failed runs)
@@ -1559,13 +1920,17 @@ elif [[ "$HAS_GAWK" == true ]]; then
   # Keep structured sideband in sync even when parser wrote only legacy state.
   _dispatch_sync_interband_from_legacy
 
+  if ! _finalize_dispatch_result "$CODEX_EXIT"; then
+    CODEX_EXIT=1
+  fi
   exit "$CODEX_EXIT"
 else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
   set +e
-  "${CMD[@]}" 2> >(tee "$STDERR_FILE" >&2)
+  "${CMD[@]}" 2> "$STDERR_FILE"
   CODEX_EXIT=$?
+  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   set -e
 
   _dispatch_sync_interband_from_legacy
@@ -1577,5 +1942,8 @@ else
   # Post-dispatch validation: scope check + secret scan
   _post_dispatch_validate "$WORKDIR"
 
+  if ! _finalize_dispatch_result "$CODEX_EXIT"; then
+    CODEX_EXIT=1
+  fi
   exit "$CODEX_EXIT"
 fi

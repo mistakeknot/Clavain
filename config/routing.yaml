@@ -105,26 +105,151 @@ subagents:
       model: sonnet
 
 dispatch:
-  # 2026-07-20 (Sylveste-ym0 run): gpt-5.3-codex* rejected by ChatGPT-account
-  # Codex (HTTP 400), and gpt-5.6-codex* lacks model metadata in codex
-  # v0.144.4 (exit 101 after fallback metadata). gpt-5.6-sol is the verified
-  # working model end-to-end through dispatch.sh; re-tier fast/deep when the
-  # codex models cache knows the 5.6-codex family.
+  # Roles are the authoritative dispatch interface. Tier names remain for
+  # existing consumers that need only a model string.
+  roles:
+    main-integrator: main-astra
+    scout: scout-sol
+    routine-execution: routine-sol
+    deep-execution: deep-astra
+    validation: validation-fable
+    release-preparation: release-sol
+    release-authority: release-authority-main
+    cross-lab-review: crosslab-fable
+
   tiers:
     fast:
+      role: routine-execution
+      backend: codex
       model: gpt-5.6-sol
+      reasoning_effort: high
+      service_tier: standard
       description: Scoped read-only tasks, exploration, verification, quick reviews
     fast-clavain:
+      role: scout
+      backend: codex
       model: gpt-5.6-sol
+      reasoning_effort: high
+      service_tier: standard
       description: Clavain interserve-mode default for read-only/administrative tasks
     deep:
+      role: deep-execution
+      backend: codex
       model: gpt-5.6-sol
+      reasoning_effort: xhigh
+      service_tier: standard
       description: Generative tasks, implementation, complex reasoning, debates
     deep-clavain:
+      role: deep-execution
+      backend: codex
       model: gpt-5.6-sol
+      reasoning_effort: xhigh
+      service_tier: standard
       description: Clavain interserve-mode high-complexity/research/flux-drive dispatch
 
-  # Fallback if a tier is unavailable (API returns model_not_found)
+    main-astra:
+      role: main-integrator
+      backend: codex
+      model: gpt-6-astra
+      reasoning_effort: xhigh
+      service_tier: standard
+      minimum_codex_version: 0.153.1
+      fallbacks: [main-sol]
+      description: Interactive orchestration and integration under the main session authority
+    main-sol:
+      role: main-integrator
+      backend: codex
+      model: gpt-5.6-sol
+      reasoning_effort: xhigh
+      service_tier: standard
+      description: Main-integrator fallback while Astra account access is unavailable
+    scout-sol:
+      role: scout
+      backend: codex
+      model: gpt-5.6-sol
+      reasoning_effort: high
+      service_tier: standard
+      description: Repository exploration and bounded read-only reconnaissance
+    routine-sol:
+      role: routine-execution
+      backend: codex
+      model: gpt-5.6-sol
+      reasoning_effort: high
+      service_tier: standard
+      description: High-volume routine implementation
+    deep-astra:
+      role: deep-execution
+      backend: codex
+      model: gpt-6-astra
+      reasoning_effort: high
+      service_tier: standard
+      minimum_codex_version: 0.153.1
+      fallbacks: [deep-sol]
+      description: Complex implementation and long-running execution
+    deep-sol:
+      role: deep-execution
+      backend: codex
+      model: gpt-5.6-sol
+      reasoning_effort: xhigh
+      service_tier: standard
+      description: Deep-execution fallback for explicit Astra unavailability
+    validation-fable:
+      role: validation
+      backend: claude
+      model: fable
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [validation-kimi, validation-sol]
+      description: Independent consequential-work validator for Codex-produced work
+    validation-kimi:
+      role: validation
+      backend: kimi
+      model: kimi-code/k3
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [validation-sol]
+      description: Cross-provider validation fallback
+    validation-sol:
+      role: validation
+      backend: codex
+      model: gpt-5.6-sol
+      reasoning_effort: high
+      service_tier: standard
+      description: Codex validation fallback when its resolved model differs from the producer
+    release-sol:
+      role: release-preparation
+      backend: codex
+      model: gpt-5.6-sol
+      reasoning_effort: high
+      service_tier: standard
+      description: Release packet and documentation preparation
+    release-authority-main:
+      role: release-authority
+      backend: main
+      model: gpt-6-astra
+      reasoning_effort: xhigh
+      service_tier: standard
+      minimum_codex_version: 0.153.1
+      fallbacks: [release-authority-sol]
+      description: Commit, push, and deploy authority retained by the main integrator
+    release-authority-sol:
+      role: release-authority
+      backend: main
+      model: gpt-5.6-sol
+      reasoning_effort: xhigh
+      service_tier: standard
+      description: Main-integrator release authority while Astra access is unavailable
+    crosslab-fable:
+      role: cross-lab-review
+      backend: claude
+      model: fable
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [validation-kimi, validation-sol]
+      description: Sealed first-pass review by a provider/model other than the producer
+
+  # Legacy aliases apply only when a requested tier is absent. Executable
+  # fallback order lives on each DispatchProfile above.
   fallback:
     fast: deep
     fast-clavain: deep-clavain

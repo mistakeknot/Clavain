@@ -1,53 +1,62 @@
 # Pattern F contracts (offload execution)
 
-These contracts apply when a plan is executed by a fresh-context executor subagent with a separate validator subagent: the offload shape of the routing doctrine in `commands/model-routing.md`, where Fable plans, Sonnet executes, and Opus validates against the plan's frozen criteria. They do not apply to the small-task lane of that doctrine (rule 4: a task under about thirty minutes skips the pipeline and one model runs it end-to-end). The design is in `docs/brainstorms/2026-09-03-main-thread-offload-pattern-f.md`.
+These contracts apply when a plan is executed by a fresh-context executor with a separate validator: the offload shape of the routing doctrine in `commands/model-routing.md`. Roles, rather than model names, are authoritative. Resolve them through `ic route dispatch --role=<role> --json`; the producer and validator must resolve to different models for consequential work. They do not apply to the small-task lane of that doctrine (rule 4: a task under about thirty minutes skips the pipeline and one model runs it end-to-end).
 
 ## Roles
 
-**Orchestrator** (frontier tier, Fable). Writes ONE execution-grade plan file, lints it, spawns the executor, spawns the validator after the executor reports, records both verdicts in the register, and reports. It never edits repo files itself and never runs the test suite itself.
+**Main integrator** (`main-integrator`). Writes one planning-contract file, lints it, dispatches the executor, dispatches the validator after the executor reports, records both verdicts, and verifies the actual checkout before acceptance. It receives a bounded packet: diff or commit, checks run, failures, and unresolved questions. Final commit, push, deploy, and consequential ship authority remain here unless the user explicitly grants narrower authority.
 
-**Executor** (Sonnet: `subagent_type: "general-purpose"`, `model: "sonnet"`). Applies the plan verbatim: checks the preconditions, applies every edit, runs the VERIFY block capturing each command's exit code directly, and commits with the plan's message file and pathspec only when every VERIFY line passes. It never expands scope, never runs `git add -A`, never pushes, and never commits over a defect: when the plan cannot be applied as written it stops and reports the exact defect.
+**Executor** (`routine-execution` or `deep-execution`). Under a `brief`, owns reconnaissance, implementation, and the coding/test loop within the stated scope, constraints, and authority. Under `exact`, applies the prescribed mechanics verbatim. It never expands authority or pushes/deploys implicitly. It reports only the bounded result packet.
 
-**Validator** (Opus: `subagent_type: "general-purpose"`, `model: "opus"`, spawned only after the executor reports). Re-runs the plan's VERIFY block at the executor's commit and judges ONLY against the plan's frozen criteria, then reports what the gauge did not check. It never restates the plan and never fixes anything.
+**Validator** (`validation`, or `cross-lab-review` for a sealed first pass). Must resolve to a different model than the producer. It replays the frozen acceptance criteria and verification against the resulting checkout, then reports the independent `BEYOND THE GAUGE` channel. It never restates the plan and never fixes anything.
 
-## Plan grammar (what the gauge linter reads)
+## Planning contracts
 
-The linter reads the edit pairs, the `Create` blocks, and the verify fences below and nothing else. It has no section awareness: it finds verify steps by a heuristic on the prose near a fence and on the fence's first commands, not by the heading, so the Preconditions fence (`test`, `git`) is read as a verify step too, and a precondition that forbids text an edit writes fails the gauge like any verify line. Pathspecs and the trailer are outside its reach because they are not fences. A new file's complete content enters the dry run exactly as an edit's replacement text does, so a verify that forbids text a `Create` block writes fails the gauge (GAUGE001) when the verify names the file or a directory above it (a bare `grep -r X .` scopes to nothing). Everything outside its reach is the orchestrator's to check by hand.
+Every contract declares `Contract: brief` or `Contract: exact`. The linter also accepts `--contract`; absent either declaration it treats legacy plans as `exact`.
+
+### `brief` (default for Astra and capable executors)
+
+A brief prescribes outcomes, not edits. It has seven non-empty headings: `Objective`, `Scope`, `Constraints`, `Authority`, `Acceptance Criteria`, `Verification`, and `Deliverables`. `Verification` contains a fenced shell replay; the pre-execution gauge syntax-checks it but does not run it before implementation exists. `Deliverables` names the bounded packet: diff or commit, checks run, failures, and unresolved questions. The executor owns the implementation and test loop.
+
+### `exact` (prescribed mechanics)
+
+Use exact for migrations, compatibility with a weak executor, or risk that requires prescribed mechanics. The linter reads the edit pairs, the `Create` blocks, and verify fences. It has no section awareness: it finds verify steps by heuristics on nearby prose and first commands. Pathspecs and the trailer remain outside its reach.
 
 - Each edit to an existing file: a line naming the file in backticks and ending with a colon (In relative/path:), then a line reading old_string: followed by a fenced block with the exact current text, then a line reading new_string: followed by a fenced block with the replacement. New files: a line reading Create relative/path with: (the path in backticks) followed by one fenced block holding the COMPLETE file content.
 - Each verify step: a heading `### Verify <task>` followed by ONE fenced `bash` block holding the commands (run from REPO PATH), then a prose line starting `Expected:` stating the observable result. Say "prints NOTHING" or "exit 1" ONLY when that is literally true (the linter treats those as zero-output claims and checks them against your own edits). For a command that must succeed, write `Expected: exit 0`.
 - Sections in order: `## Preconditions` (one fenced bash block, must all exit 0), `## Task N` blocks with edits and their `### Verify` steps, `## Commit` (message file path + pathspec list).
 
-The `## Commit` section names the pathspec list and the path of a message file the orchestrator writes with printf (never a heredoc inside a quoted argument); the message file's last line is exactly `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Every VERIFY line must be satisfiable by the edits above it.
+For an exact plan, the `## Commit` section names the pathspec list and the path of a message file. The contract must explicitly grant commit authority; it never implies push or deploy. Every VERIFY line must be satisfiable by the edits above it.
 
 ## Gauge precondition
 
 Before an executor is spawned, the plan must pass the gauge linter, run from the repo root:
 
 ```bash
-python3 scripts/plan-gauge-lint.py <plan> --repo-root <repo>
+python3 scripts/plan-gauge-lint.py <plan> --contract <brief|exact> --repo-root <repo>
 ```
 
-It must exit 0. The spawn gate `hooks/gauge-gate-executor-spawn.sh` (a PreToolUse hook on `Task|Agent`, registered in `hooks/hooks.json`) runs the linter on the plan named by the executor prompt's first line and blocks any executor spawn whose plan fails it, or whose plan file is missing. A gauge defect counts against the plan author, never the executor: a VERIFY line that cannot pass as written is the orchestrator's defect.
+It must exit 0. The spawn gate `hooks/gauge-gate-executor-spawn.sh` (a PreToolUse hook on `Task|Agent`, registered in `hooks/hooks.json`) runs the selected contract linter on the plan named by the executor prompt's first line and blocks any executor spawn whose plan fails it, or whose plan file is missing. A contract/gauge defect counts against the main integrator, never the executor.
 
 Every refusal is itself a verdict. Before it prints the block decision, the gate writes one register row through `scripts/pattern-f-verdict.sh` with `--role gate --kind gate --verdict FAIL`, `--commit none`, and the refusal reason (the linter's GAUGE lines) as the note, into `$INTERSPECT_DB`, else `$CLAUDE_PROJECT_DIR/.clavain/interspect/interspect.db`, else that path under the repo named by the prompt's `REPO:` line. A failed write changes only stderr, and the write is bounded to fifteen seconds so a slow or locked register cannot time the hook out: the gate never fails open in order to record.
 
 ## Executor prompt
 
-The executor is an Agent subagent (`subagent_type: "general-purpose"`, `model: "sonnet"`). Its prompt STARTS with the two marker lines below, both absolute paths; the spawn gate keys on them. The prompt is exactly:
+The prompt starts with these three marker lines; the spawn gate keys on them and selects the corresponding lint contract:
 
 ```
 PATTERN-F EXECUTOR PLAN: <plan path>
+PATTERN-F EXECUTOR CONTRACT: <brief|exact>
 REPO: <repo path>
-You are a Pattern F executor. Apply the plan at <plan path> to the repo at <repo path> verbatim. Do not expand scope. If the plan cannot be applied as written (a path is missing, a VERIFY line cannot pass as written, a precondition is false), stop, do not commit, and report the exact defect. Otherwise apply every edit, run the VERIFY block capturing each command's exit code directly (rc=$?, never through a pipe), and if all VERIFY lines pass commit with the plan's commit message file and pathspec (git commit -F <msg file> -- <paths>), never `git add -A`, never push. Report: the commit hash (or NO COMMIT and the defect), and the VERIFY output verbatim.
+You are the resolved <routine-execution|deep-execution> executor. Read the <brief|exact> contract at <plan path>. Stay within its scope, constraints, and authority. For a brief, own reconnaissance, implementation, and the test loop needed to satisfy its acceptance criteria. For exact, apply its prescribed mechanics verbatim. Never push or deploy unless Authority explicitly permits it. Return only a bounded packet: diff or commit, checks run with outcomes, failures, and unresolved questions.
 ```
 
 ## Validator prompt
 
-The validator is an Agent subagent (`subagent_type: "general-purpose"`, `model: "opus"`), spawned only after the executor reports. `<HASH>` is the executor's commit and `<REPORT>` is the executor's report pasted whole. The prompt is exactly:
+The validator is dispatched only after the executor reports, with the producer identity passed to routing. `<REF>` is the commit or working-tree reference and `<REPORT>` is the bounded packet. The prompt is:
 
 ```
-You are a Pattern F validator. Read the plan at <plan path> and the executor report below. In the repo at <repo path>, at commit <HASH>, re-run the plan's VERIFY block yourself and judge ONLY against the plan's frozen criteria: output line 1 `VERDICT: PASS` or `VERDICT: FAIL`, line 2 `CRITERION: <the failing VERIFY line quoted, or none>`. Then output a section headed `BEYOND THE GAUGE:` listing, as bullets, real defects or risks in the change that the VERIFY block did not check (empty list allowed, say `- none`). Never restate the plan; never fix anything. Executor report: <REPORT>
+You are the resolved validation executor, and your resolved model must differ from the producer. Read the contract at <plan path> and the executor packet below. In <repo path> at <REF>, replay its Verification and judge only against its frozen Acceptance Criteria: output line 1 `VERDICT: PASS` or `VERDICT: FAIL`, line 2 `CRITERION: <the failing criterion, or none>`. Then output `BEYOND THE GAUGE:` with bullets for real defects or risks the replay did not check (`- none` allowed). Never restate the contract; never fix anything. Executor packet: <REPORT>
 ```
 
 ### Named outputs

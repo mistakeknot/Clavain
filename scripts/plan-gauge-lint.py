@@ -54,7 +54,8 @@ WHAT IT CATCHES  (codes, and the pilot-1 defect each replays)
 
 USAGE
 
-    plan-gauge-lint.py PLAN.md [--repo-root DIR] [--extra-artifact PATH]...
+    plan-gauge-lint.py PLAN.md [--contract auto|brief|exact] [--repo-root DIR]
+                              [--extra-artifact PATH]...
     plan-gauge-lint.py --self-test        # replay all seven known defects
 
 --repo-root turns the heuristics into a real dry-run: files named by the plan
@@ -726,6 +727,111 @@ def check_stale_artifact(blocks: list[Block], files: dict[str, str]) -> list[Fin
 # Driver
 # --------------------------------------------------------------------------
 
+BRIEF_REQUIRED_SECTIONS = (
+    "objective",
+    "scope",
+    "constraints",
+    "authority",
+    "acceptance criteria",
+    "verification",
+    "deliverables",
+)
+HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.M)
+DECLARED_CONTRACT_RE = re.compile(r"^\s*Contract:\s*(brief|exact)\s*$", re.I | re.M)
+
+
+def resolve_contract(plan_text: str, requested: str) -> str:
+    """Resolve the planning contract without changing legacy exact plans."""
+    if requested != "auto":
+        return requested
+    declared = DECLARED_CONTRACT_RE.search(plan_text)
+    return declared.group(1).lower() if declared else "exact"
+
+
+def _brief_sections(plan_text: str) -> dict[str, tuple[str, int]]:
+    """Return normalized heading -> (body, heading line)."""
+    matches = list(HEADING_RE.finditer(plan_text))
+    sections: dict[str, tuple[str, int]] = {}
+    for index, match in enumerate(matches):
+        name = re.sub(r"\s+", " ", match.group(1).strip().lower())
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(plan_text)
+        line = plan_text.count("\n", 0, match.start()) + 1
+        sections[name] = (plan_text[start:end].strip(), line)
+    return sections
+
+
+def lint_brief(plan_text: str) -> tuple[list[Finding], list[str]]:
+    """Validate an outcome brief without demanding implementation mechanics.
+
+    A brief is checked before implementation exists, so its verification
+    commands are syntax-checked but deliberately not executed. The executor
+    owns the implementation and test loop; the validator replays these checks
+    against the resulting checkout.
+    """
+    sections = _brief_sections(plan_text)
+    findings: list[Finding] = []
+    for required in BRIEF_REQUIRED_SECTIONS:
+        body, line = sections.get(required, ("", 1))
+        if not body:
+            findings.append(Finding(
+                code="BRIEF001",
+                title=f"missing or empty {required} section",
+                line=line,
+                detail=(
+                    "A brief must state objective, scope, constraints, authority, "
+                    "acceptance criteria, verification, and deliverables."
+                ),
+            ))
+
+    verification, verify_line = sections.get("verification", ("", 1))
+    if verification:
+        shell_blocks = [
+            b for b in parse_blocks("## Verification\n" + verification)
+            if b.lang in SHELL_LANGS
+        ]
+        if not shell_blocks:
+            findings.append(Finding(
+                code="BRIEF002",
+                title="verification has no shell replay",
+                line=verify_line,
+                detail="Put the acceptance replay in a fenced bash/sh block.",
+            ))
+        else:
+            for block in shell_blocks:
+                check = subprocess.run(
+                    ["bash", "-n"], input=block.body, text=True,
+                    capture_output=True,
+                )
+                if check.returncode:
+                    findings.append(Finding(
+                        code="BRIEF003",
+                        title="verification shell does not parse",
+                        line=verify_line + block.line,
+                        detail="The brief's verification must be runnable after implementation.",
+                        evidence=check.stderr.strip(),
+                    ))
+
+    deliverables, deliverables_line = sections.get("deliverables", ("", 1))
+    if deliverables:
+        required_packet = {
+            "diff or commit": r"\b(diff|commit)\b",
+            "checks run": r"\b(check|test|verification)s?\b",
+            "failures": r"\bfail(?:ure|ures|ed)?\b",
+            "unresolved questions": r"\bunresolved\b",
+        }
+        missing = [label for label, pattern in required_packet.items()
+                   if not re.search(pattern, deliverables, re.I)]
+        if missing:
+            findings.append(Finding(
+                code="BRIEF004",
+                title="incomplete result packet",
+                line=deliverables_line,
+                detail="Deliverables must include: " + ", ".join(missing) + ".",
+            ))
+
+    return findings, ["contract=brief; verification syntax-checked, not executed"]
+
 def lint(plan_text: str, repo_root: Path | None = None,
          extra: list[Path] | None = None) -> tuple[list[Finding], list[str]]:
     blocks = parse_blocks(plan_text)
@@ -748,6 +854,14 @@ def lint(plan_text: str, repo_root: Path | None = None,
             seen.add(key)
             uniq.append(f)
     return uniq, notes
+
+
+def lint_contract(plan_text: str, contract: str, repo_root: Path | None = None,
+                  extra: list[Path] | None = None) -> tuple[list[Finding], list[str]]:
+    if contract == "brief":
+        return lint_brief(plan_text)
+    findings, notes = lint(plan_text, repo_root, extra)
+    return findings, ["contract=exact; virtual post-edit gauge replay"] + notes
 
 
 def _report(findings: list[Finding], notes: list[str], label: str, quiet: bool) -> None:
@@ -1093,6 +1207,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--extra-artifact", type=Path, action="append", default=[],
                     help="a file present at verify time but not produced by the plan "
                          "(e.g. a frozen gauge). Repeatable.")
+    ap.add_argument("--contract", choices=("auto", "brief", "exact"), default="auto",
+                    help="planning contract; auto reads `Contract: brief|exact` and "
+                         "otherwise preserves the legacy exact-plan gauge")
     ap.add_argument("--self-test", action="store_true",
                     help="replay the seven known gauge defects and exit")
     ap.add_argument("--json", action="store_true", help="machine-readable findings")
@@ -1109,10 +1226,13 @@ def main(argv: list[str]) -> int:
         print(f"no such plan: {path}", file=sys.stderr)
         return 2
 
-    findings, notes = lint(path.read_text(errors="replace"), args.repo_root, args.extra_artifact)
+    plan_text = path.read_text(errors="replace")
+    contract = resolve_contract(plan_text, args.contract)
+    findings, notes = lint_contract(plan_text, contract, args.repo_root, args.extra_artifact)
     if args.json:
         print(json.dumps({
             "plan": str(path),
+            "contract": contract,
             "notes": notes,
             "findings": [
                 {"code": f.code, "title": f.title, "line": f.line,
