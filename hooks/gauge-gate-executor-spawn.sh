@@ -11,6 +11,13 @@
 # cannot read the plan (exit 2 or any other non-zero). Prompts without the
 # first marker are not executor spawns and pass through silently, as do empty
 # prompts and non-JSON stdin. Allowing = print nothing, exit 0.
+#
+# Every refusal is also recorded as one evidence row (role gate, kind gate,
+# verdict FAIL, the refusal reason as the note) through
+# scripts/pattern-f-verdict.sh, in the register at $INTERSPECT_DB, else
+# $CLAUDE_PROJECT_DIR/.clavain/interspect/interspect.db, else the REPO's. A
+# failed write changes only stderr, never the decision: the spawn is still
+# blocked and stderr names the register that did not take the row.
 set -euo pipefail
 
 payload=$(cat) || true
@@ -29,7 +36,27 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root="${CLAUDE_PLUGIN_ROOT:-$script_dir/..}"
 linter="$root/scripts/plan-gauge-lint.py"
 
+record_refusal() {
+  local reason="$1" note sid db script
+  # The register keeps 100 characters of the note; put the informative part
+  # first by dropping the fixed prefix and shortening the plan path to its name.
+  note="${reason#pattern-f gauge gate: }"
+  note="${note//"$plan"/"${plan##*/}"}"
+  sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null) || sid=""
+  [[ -n "$sid" ]] || sid="unknown-session"
+  db="${INTERSPECT_DB:-${CLAUDE_PROJECT_DIR:-$repo}/.clavain/interspect/interspect.db}"
+  script="$root/scripts/pattern-f-verdict.sh"
+  if [[ -f "$script" ]]; then
+    bash "$script" --db "$db" --session "$sid" --plan "$plan" --commit none \
+      --role gate --kind gate --verdict FAIL --note "$note" >&2 \
+      || echo "pattern-f gauge gate: refusal NOT recorded in $db (rc $?)" >&2
+  else
+    echo "pattern-f gauge gate: refusal NOT recorded (no $script)" >&2
+  fi
+}
+
 block() {
+  record_refusal "$1"
   jq -nc --arg r "$1" '{decision:"block",reason:$r}'
   exit 0
 }

@@ -9,7 +9,11 @@
 #   event=pattern_f_verdict  source=pattern-f:<role>  source_kind=agent
 #   context={"path":"pattern-f","verdict_kind":K,"verdict":V,"role":R,
 #            "plan":<basename of --plan>,"commit":C,"criterion":<=100 chars,
-#            "note":<=100 chars,"goal":G,"nonce":N}
+#            "note":<=100 chars,"note_enc":""|"b64","goal":G,"nonce":N}
+#   note_enc is "b64" when the register's sanitizer rejected the plain context
+#   (it refuses text containing phrases such as "ignore previous" or
+#   "system:"); criterion and note are then stored base64-encoded and --list
+#   decodes them. A verdict is never silently blanked or dropped.
 #
 # Verdict kinds (--kind):
 #   replay      the plan's VERIFY block was re-run — by the executor right after
@@ -20,11 +24,15 @@
 #               channel ("BEYOND THE GAUGE"). Independent rows carry
 #               --verdict FAIL and the finding text in --note, one row per
 #               finding.
+#   gate        the PreToolUse gauge gate refused an executor spawn. --role gate,
+#               --commit none, --verdict FAIL, and --note carries the refusal
+#               reason (the linter's GAUGE lines). --kind gate pairs only with
+#               --role gate.
 #
 # Usage:
 #   pattern-f-verdict.sh --session ID --plan PATH --commit HASH|none \
-#       --role executor|validator --kind replay|independent --verdict PASS|FAIL \
-#       [--criterion TEXT] [--note TEXT] [--goal ID] [--db PATH]
+#       --role executor|validator|gate --kind replay|independent|gate \
+#       --verdict PASS|FAIL [--criterion TEXT] [--note TEXT] [--goal ID] [--db PATH]
 #   pattern-f-verdict.sh --list [--session ID] [--db PATH]
 #
 # Register resolution: --db, else $INTERSPECT_DB, else
@@ -32,7 +40,8 @@
 # of this script's directory. The register is never created here.
 #
 # Exit codes: 0 recorded (or listed); 2 usage error; 3 register missing or
-# interspect library not found; 4 the write was not visible on read-back.
+# interspect library not found; 4 the write was not visible on read-back;
+# 5 context rejected by the sanitizer even after encoding (nothing written).
 #
 # The context JSON is held under 480 characters: the library truncates the
 # context column to 500 characters, and a truncated JSON is unreadable.
@@ -41,7 +50,7 @@ set -euo pipefail
 usage() {
   cat >&2 <<'USAGE'
 usage: pattern-f-verdict.sh --session ID --plan PATH --commit HASH|none
-           --role executor|validator --kind replay|independent --verdict PASS|FAIL
+           --role executor|validator|gate --kind replay|independent|gate --verdict PASS|FAIL
            [--criterion TEXT] [--note TEXT] [--goal ID] [--db PATH]
        pattern-f-verdict.sh --list [--session ID] [--db PATH]
 USAGE
@@ -103,13 +112,16 @@ if [[ "$mode" == record ]]; then
   [[ -n "$plan" ]] || bad "--plan is required"
   [[ "$commit" == none || "$commit" =~ ^[0-9a-f]{7,40}$ ]] || bad "--commit must be a hex hash (7-40 chars) or none"
   case "$role" in
-    executor|validator) ;;
-    *) bad "--role must be executor or validator" ;;
+    executor|validator|gate) ;;
+    *) bad "--role must be executor, validator or gate" ;;
   esac
   case "$kind" in
-    replay|independent) ;;
-    *) bad "--kind must be replay or independent" ;;
+    replay|independent|gate) ;;
+    *) bad "--kind must be replay, independent or gate" ;;
   esac
+  if [[ "$role" == gate || "$kind" == gate ]] && [[ "$role" != "$kind" ]]; then
+    bad "--kind gate pairs with --role gate"
+  fi
   case "$verdict" in
     PASS|FAIL) ;;
     *) bad "--verdict must be PASS or FAIL" ;;
@@ -135,8 +147,14 @@ if [[ "$mode" == list ]]; then
   if [[ -n "$session" ]]; then
     where="$where and session_id='$(sql_quote "$session")'"
   fi
-  sqlite3 -noheader -separator $'\t' "$db" \
-    "select ts, session_id, json_extract(context,'\$.role'), json_extract(context,'\$.verdict_kind'), json_extract(context,'\$.verdict'), json_extract(context,'\$.plan'), json_extract(context,'\$.commit'), json_extract(context,'\$.note') from evidence where $where order by ts;"
+  # One TSV line per row, eight columns: ts, session, role, kind, verdict,
+  # plan, commit, note. Encoded notes are decoded; tabs and newlines inside
+  # any field become spaces so every row stays on one parseable line.
+  sqlite3 -json "$db" "select ts, session_id, context from evidence where $where order by ts;" \
+    | jq -r '.[] | (.context|fromjson) as $c
+             | [.ts, .session_id, $c.role, $c.verdict_kind, $c.verdict, $c.plan, $c.commit,
+                (if $c.note_enc == "b64" then ($c.note|@base64d) else $c.note end)]
+             | map((. // "") | tostring | gsub("[\t\r\n]"; " ")) | @tsv'
   exit 0
 fi
 
@@ -161,13 +179,16 @@ nonce="$(date +%s)-$$-$RANDOM"
 plan_base=$(basename "$plan")
 lim_c=100
 lim_n=100
+# enc is "" (plain) or "b64": when the register's sanitizer rejects the plain
+# context, criterion and note are base64-encoded and note_enc records that.
+enc=""
 build_ctx() {
   jq -nc \
     --arg k "$kind" --arg v "$verdict" --arg r "$role" \
     --arg p "${plan_base:0:80}" --arg c "$commit" \
     --arg cr "${criterion:0:$lim_c}" --arg n "${note:0:$lim_n}" \
-    --arg g "${goal:0:40}" --arg x "$nonce" \
-    '{path:"pattern-f",verdict_kind:$k,verdict:$v,role:$r,plan:$p,commit:$c,criterion:$cr,note:$n,goal:$g,nonce:$x}'
+    --arg g "${goal:0:40}" --arg x "$nonce" --arg enc "$enc" \
+    '{path:"pattern-f",verdict_kind:$k,verdict:$v,role:$r,plan:$p,commit:$c,criterion:(if $enc=="b64" then ($cr|@base64) else $cr end),note:(if $enc=="b64" then ($n|@base64) else $n end),note_enc:$enc,goal:$g,nonce:$x}'
 }
 ctx=$(build_ctx)
 while (( ${#ctx} > 480 )) && (( lim_n > 0 )); do
@@ -178,6 +199,24 @@ while (( ${#ctx} > 480 )) && (( lim_c > 0 )); do
   lim_c=$(( lim_c - 20 ))
   ctx=$(build_ctx)
 done
+
+# Pre-flight the sanitizer. _interspect_insert_evidence runs _interspect_sanitize
+# on the context and, when the sanitizer rejects it (rc 1, empty output), still
+# inserts context='' with rc 0: an orphan row and exit 4 here. Ask the sanitizer
+# first; on rejection encode criterion and note (note_enc=b64) and re-shrink, so
+# the verdict survives. Exit 5 only if even the encoded context is rejected.
+if ! _interspect_sanitize "$ctx" >/dev/null 2>&1; then
+  enc=b64
+  ctx=$(build_ctx)
+  while (( ${#ctx} > 480 )) && (( lim_n > 0 )); do
+    lim_n=$(( lim_n - 20 ))
+    ctx=$(build_ctx)
+  done
+  if ! _interspect_sanitize "$ctx" >/dev/null 2>&1; then
+    echo "pattern-f-verdict: context rejected by the register's sanitizer even after encoding; nothing written" >&2
+    exit 5
+  fi
+fi
 
 # ── Insert (rc captured, never silenced) ────────────────────────────────────
 insert_rc=0
