@@ -327,3 +327,44 @@ make_backlog_root() {
     run_helper "$root"
     [ "$(jq -r '.roadmap.status' <<<"$output")" = "stale" ]
 }
+
+# ------------------------------------------------------------------- worktrees
+#
+# A linked git worktree (git worktree add, bd worktree create) carries its own
+# .beads copy that nothing syncs. From inside one, the main checkout's beads
+# are "no such bead" and its ready list is whatever was copied at creation.
+# Observed 2026-09-04: two days of improvised blocks from a nested worktree.
+
+@test "worktree: a .beads inside a linked worktree resolves to the main checkout, once" {
+    command -v git >/dev/null || skip "git not installed"
+    local main
+    main="$(make_root main '[{"id":"m-1","title":"from main","status":"open","priority":1}]')"
+    git -C "$TEST_DIR" init -q main
+    git -C "$main" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+    git -C "$main" worktree add -q "$main/wt" -b wt
+    mkdir -p "$main/wt/.beads"
+    printf '[]' > "$main/wt/.beads/ready.json"
+    printf '%s' "$main/wt/.beads/stale-copy" > "$main/wt/.beads/dbpath"
+    unset CLAVAIN_NEXT_GOAL_ROOTS
+    pushd "$main/wt" >/dev/null
+    HOME="$TEST_DIR" run --separate-stderr bash "$SCRIPT_UNDER_TEST"
+    popd >/dev/null
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.roots | length' <<<"$output")" -eq 1 ]
+    [ "$(jq -r '.roots[0].root' <<<"$output")" = "$(cd "$main" && pwd -P)" ]
+    [ "$(jq -r '.candidates | length' <<<"$output")" -eq 1 ]
+    [ "$(jq -r '.candidates[0].id' <<<"$output")" = "m-1" ]
+}
+
+@test "worktree: the main checkout itself is unaffected" {
+    command -v git >/dev/null || skip "git not installed"
+    local main
+    main="$(make_root main '[{"id":"m-1","title":"from main","status":"open","priority":1}]')"
+    git -C "$TEST_DIR" init -q main
+    unset CLAVAIN_NEXT_GOAL_ROOTS
+    pushd "$main" >/dev/null
+    HOME="$TEST_DIR" run --separate-stderr bash "$SCRIPT_UNDER_TEST"
+    popd >/dev/null
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.roots[0].root' <<<"$output")" = "$(cd "$main" && pwd -P)" ]
+}

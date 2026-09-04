@@ -235,7 +235,7 @@ next_goal_verification_warning() {
             printf 'Next-goal verification: this turn emitted a Next-goal block, but scripts/next-goal-verify.sh never ran in this session, so no cited candidate was re-read at source. A bead that closed since you last saw it looks exactly like one that is still open. Re-run the shortlist through the verifier before standing behind the block.\n'
             ;;
         disqualified)
-            printf 'Next-goal verification: the verifier DISQUALIFIED %s, but a Next-goal block went out anyway. A closed, deferred, or nonexistent bead must not be proposed — and a path that already exists must not be proposed as something to build. Drop those candidates and re-derive.\n' \
+            printf 'Next-goal verification: the verifier DISQUALIFIED %s, but a Next-goal block went out anyway. A closed, deferred, or nonexistent bead must not be proposed; a path that already exists must not be proposed as something to build; and a pick named in the OUT clause of the goal that just closed reopens a decision the user made there. Drop those candidates and re-derive.\n' \
                 "${detail:-one or more candidates}"
             ;;
         unavailable)
