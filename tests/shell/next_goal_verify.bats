@@ -43,6 +43,65 @@ bead_json() {
         "$1" "${2:-}"
 }
 
+# Lineage fixtures. $1 = c2's status (open|closed); $2 = "labeled" or
+# "unlabeled": whether g2 has beads carrying ic_goal_id:g2, the second way a
+# goal joins a lineage. E1, E5, E9 are top-level epics; M1 sits under E1; c1
+# under M1 (a two-step walk); c2 under E9; c3 directly under E1; b21 and b22
+# are g2's closed work under E1. Answers `show <id>` per id and
+# `list --label <l>` per label, like the real bd.
+make_lineage_bd_stub() {
+    local c2_status="${1:-open}" g2_list='[]'
+    if [[ "${2:-labeled}" == "labeled" ]]; then
+        g2_list='[{"id":"b21","status":"closed","parent":"E1"},{"id":"b22","status":"closed","parent":"E1"}]'
+    fi
+    cat > "$STUB_DIR/bd" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == "show" ]]; then
+  case "\$2" in
+    E1)  echo '[{"id":"E1","title":"epic one","status":"open","issue_type":"epic","priority":1,"parent":null,"labels":[]}]' ;;
+    E5)  echo '[{"id":"E5","title":"epic five","status":"open","issue_type":"epic","priority":1,"parent":null,"labels":[]}]' ;;
+    E9)  echo '[{"id":"E9","title":"epic nine","status":"open","issue_type":"epic","priority":1,"parent":null,"labels":[]}]' ;;
+    M1)  echo '[{"id":"M1","title":"middle","status":"open","issue_type":"feature","priority":2,"parent":"E1","labels":[]}]' ;;
+    c1)  echo '[{"id":"c1","title":"cand one","status":"open","issue_type":"task","priority":2,"parent":"M1","labels":[]}]' ;;
+    c2)  echo '[{"id":"c2","title":"cand two","status":"${c2_status}","issue_type":"task","priority":2,"parent":"E9","labels":[]}]' ;;
+    c3)  echo '[{"id":"c3","title":"cand three","status":"open","issue_type":"task","priority":2,"parent":"E1","labels":[]}]' ;;
+    b21) echo '[{"id":"b21","title":"g2 work","status":"closed","issue_type":"task","priority":2,"parent":"E1","labels":["ic_goal_id:g2"]}]' ;;
+    b22) echo '[{"id":"b22","title":"g2 work","status":"closed","issue_type":"task","priority":2,"parent":"E1","labels":["ic_goal_id:g2"]}]' ;;
+    *)   echo '{"error":"no issues found matching the provided IDs","schema_version":1}' ;;
+  esac
+  exit 0
+fi
+if [[ "\$1" == "list" && "\$2" == "--label" ]]; then
+  case "\$3" in
+    ic_goal_id:g2) echo '${g2_list}' ;;
+    *)             echo '[]' ;;
+  esac
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$STUB_DIR/bd"
+}
+
+# $1 = g1's BeadID as a JSON literal ('"E1"' or 'null'). Goals, newest first:
+# g1, g2 (BeadID null, so it joins a lineage only through labeled beads), g3
+# (epic E5, a different lineage). g0 is still open and must be ignored.
+make_ic_stub() {
+    local g1_bead="${1:-\"E1\"}"
+    cat > "$STUB_DIR/ic" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == "goal" && "\$2" == "list" ]]; then
+  echo '[{"ID":"g0","Status":"open","ClosedAt":0,"BeadID":null,"SuccessorRef":"","Title":"still open"},
+         {"ID":"g3","Status":"closed","ClosedAt":1788000100,"BeadID":"E5","SuccessorRef":"","Title":"third"},
+         {"ID":"g1","Status":"closed","ClosedAt":1788000300,"BeadID":${g1_bead},"SuccessorRef":"g2","Title":"first"},
+         {"ID":"g2","Status":"closed","ClosedAt":1788000200,"BeadID":null,"SuccessorRef":"","Title":"second"}]'
+  exit 0
+fi
+exit 1
+EOF
+    chmod +x "$STUB_DIR/ic"
+}
+
 @test "an open bead is usable" {
     make_bd_stub "$(bead_json open)"
     run bash "$SCRIPT" x-1
@@ -143,7 +202,7 @@ bead_json() {
     make_bd_stub "$(bead_json closed)"
     run bash "$SCRIPT" x-1
     [ -f "$RECEIPTS/test-session.json" ]
-    [ "$(jq -r '.schema_version' "$RECEIPTS/test-session.json")" = "clavain.next-goal-verify/v1" ]
+    [ "$(jq -r '.schema_version' "$RECEIPTS/test-session.json")" = "clavain.next-goal-verify/v2" ]
     [ "$(jq -r '.ok' "$RECEIPTS/test-session.json")" = "false" ]
 }
 
@@ -169,4 +228,101 @@ EOF
     [ "$(jq -r '.beads[] | select(.id=="dead-1") | .verdict' <<<"$output")" = "disqualified" ]
     [ "$(jq -r '.beads[] | select(.id=="ghost-1") | .verdict' <<<"$output")" = "disqualified" ]
     [ "$(jq -r '.disqualified | length' <<<"$output")" = "2" ]
+}
+
+# ------------------------------------------------------------------- lineage
+#
+# The 2026-09-03 failure: three consecutive goals under one epic each named the
+# next as successor, and the fourth recommendation passed every check above.
+# The window here is g1 (BeadID E1), g2 (labeled beads under E1), g3 (E5).
+# c1's chain is c1 -> M1 -> E1, so it continues the g1/g2 lineage.
+
+@test "lineage: a recommendation that continues the streak is refused" {
+    make_lineage_bd_stub open labeled
+    make_ic_stub '"E1"'
+    run bash "$SCRIPT" --recommend c1
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "false" ]
+    [ "$(jq -r '.lineage.available' <<<"$output")" = "true" ]
+    [ "$(jq -r '.lineage.verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.beads[] | select(.id=="c1") | .verdict' <<<"$output")" = "disqualified" ]
+    reason="$(jq -r '.beads[] | select(.id=="c1") | .reason' <<<"$output")"
+    [[ "$reason" == *"g1"* && "$reason" == *"g2"* && "$reason" == *"E1"* ]]
+    [ "$(jq -r '.disqualified[0]' <<<"$output")" = "c1" ]
+    [ "$(jq -r '.lineage.candidates[] | select(.id=="c1") | .root_epic' <<<"$output")" = "E1" ]
+    [ "$(jq -r '.lineage.candidates[] | select(.id=="c1") | .streak | length' <<<"$output")" = "2" ]
+}
+
+@test "lineage: --beat naming an open out-of-lineage candidate allows it, as a warning" {
+    make_lineage_bd_stub open labeled
+    make_ic_stub '"E1"'
+    run bash "$SCRIPT" --recommend c1 --beat c2 c1 c2
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "true" ]
+    [ "$(jq -r '.lineage.verdict' <<<"$output")" = "warn" ]
+    [ "$(jq -r '.beads[] | select(.id=="c1") | .verdict' <<<"$output")" = "warn" ]
+    [[ "$(jq -r '.beads[] | select(.id=="c1") | .reason' <<<"$output")" == *"beat c2"* ]]
+    [ "$(jq -r '.beads[] | select(.id=="c2") | .verdict' <<<"$output")" = "ok" ]
+    [ "$(jq -r '.warnings[0]' <<<"$output")" = "c1" ]
+    [ "$(jq -r '.lineage.beat' <<<"$output")" = "c2" ]
+}
+
+@test "lineage: --beat naming an in-lineage candidate does not allow it" {
+    make_lineage_bd_stub open labeled
+    make_ic_stub '"E1"'
+    run bash "$SCRIPT" --recommend c1 --beat c3
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.lineage.verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.beads[] | select(.id=="c1") | .verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.lineage.candidates[] | select(.id=="c3") | .in_streak' <<<"$output")" = "true" ]
+}
+
+@test "lineage: --beat naming a closed candidate does not allow it" {
+    make_lineage_bd_stub closed labeled
+    make_ic_stub '"E1"'
+    run bash "$SCRIPT" --recommend c1 --beat c2
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.lineage.verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.beads[] | select(.id=="c1") | .verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.beads[] | select(.id=="c2") | .verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '.disqualified | length' <<<"$output")" = "2" ]
+}
+
+@test "lineage: a run whose every candidate continues the streak is refused as a whole" {
+    make_lineage_bd_stub open labeled
+    make_ic_stub '"E1"'
+    run bash "$SCRIPT" c1 c3
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "false" ]
+    [ "$(jq -r '.lineage.verdict' <<<"$output")" = "disqualified" ]
+    [ "$(jq -r '[.disqualified[] | select(contains("add one from next-goal-candidates.sh"))] | length' <<<"$output")" = "1" ]
+    [ "$(jq -r '.beads[] | select(.id=="c1") | .verdict' <<<"$output")" = "warn" ]
+    [ "$(jq -r '.beads[] | select(.id=="c3") | .verdict' <<<"$output")" = "warn" ]
+}
+
+@test "lineage: a goal whose lineage cannot be read never counts toward the streak" {
+    make_lineage_bd_stub open unlabeled
+    make_ic_stub null
+    run bash "$SCRIPT" --recommend c1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "true" ]
+    [ "$(jq -r '.lineage.available' <<<"$output")" = "true" ]
+    [ "$(jq -r '.lineage.window[0].id' <<<"$output")" = "g1" ]
+    [ "$(jq -r '.lineage.window[0].unknown' <<<"$output")" = "true" ]
+    [ "$(jq -r '.lineage.window[1].unknown' <<<"$output")" = "true" ]
+    [ "$(jq -r '.lineage.window[2].unknown' <<<"$output")" = "false" ]
+    [ "$(jq -r '.lineage.candidates[0].in_streak' <<<"$output")" = "false" ]
+    [ "$(jq -r '.lineage.verdict' <<<"$output")" = "ok" ]
+}
+
+@test "lineage: no ic anywhere reports lineage unavailable and leaves the verdict standing" {
+    make_lineage_bd_stub open labeled
+    # No ic stub. On a host with a real ic it runs in $WORK_DIR, which has no
+    # goal store, and answers with an error object, not an array, so no store
+    # answered. Either way lineage must say unavailable, never guess.
+    run bash "$SCRIPT" --recommend c1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.ok' <<<"$output")" = "true" ]
+    [ "$(jq -r '.lineage.available' <<<"$output")" = "false" ]
+    [ "$(jq -r '.schema_version' <<<"$output")" = "clavain.next-goal-verify/v2" ]
 }

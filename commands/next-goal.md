@@ -216,9 +216,11 @@ do
     [[ -f "$candidate" ]] && { VERIFY_HELPER="$candidate"; break; }
 done
 
-# Every bead ID the block will cite. Add --path for anything a candidate
-# proposes to CREATE (see below). Exits 3 if any candidate is disqualified.
-VERIFY_JSON=$(bash "$VERIFY_HELPER" solwend-abcd mk-1234 \
+# Every bead ID the block will cite, with --recommend naming the pick. Add
+# --path for anything a candidate proposes to CREATE, and --beat when the pick
+# continues the lineage of the goals just closed (both below). Exits 3 if any
+# candidate is disqualified.
+VERIFY_JSON=$(bash "$VERIFY_HELPER" --recommend solwend-abcd solwend-abcd mk-1234 \
                    --path apps/web/components/thing/ 2>/dev/null)
 ```
 
@@ -227,12 +229,32 @@ VERIFY_JSON=$(bash "$VERIFY_HELPER" solwend-abcd mk-1234 \
 | verdict | when | what to do |
 |---|---|---|
 | `ok` | open | usable |
-| `warn` | `in_progress` / `blocked` | usable only if the goal is to FINISH or UNBLOCK it — and the block must say which, and name what it waits on |
-| `disqualified` | `closed`, `deferred`, or no such bead | **drop it.** Do not cite it, not even with a caveat |
+| `warn` | `in_progress` / `blocked`, or in the lineage of the goals just closed | usable only if the goal is to FINISH or UNBLOCK it — and the block must say which, and name what it waits on. For lineage, see `--beat` below |
+| `disqualified` | `closed`, `deferred`, no such bead, or the `--recommend` pick continues the lineage without a `--beat` | **drop it.** Do not cite it, not even with a caveat |
 
 **Any candidate whose verb is build / create / add must assert the artifact's
 absence** with `--path`. A bead's status cannot catch this: an epic can be
 legitimately open while the thing you propose building is already on disk.
+
+### The pick must be chosen, not inherited: `--recommend` and `--beat`
+
+Run the verifier with `--recommend <the pick>`. It reads the last 4 closed
+goals from `ic goal list` in every reachable root and takes each one's
+lineage — the root epics of its own bead and of every bead labeled
+`ic_goal_id:<goal>`. A pick whose root epic sits in the lineage of 2 of those
+4 is **disqualified**; the refusal reads `continues the lineage of 2 of the
+last 4 closed goals (<goal ids>, epic <root>) — name the open out-of-lineage
+candidate it beat with --beat, or recommend that one`. When the pick really
+did beat an open candidate outside that lineage, pass `--beat <that
+candidate>` in the same run: the refusal becomes a warning and the override is
+on the receipt. `--beat` is refused when the named candidate is closed, in the
+same lineage, or missing, and a run with no `--recommend` whose every candidate
+is in the lineage is refused as a whole. The override is a claim, and the block
+must make it in prose too: name the candidate the pick beat and say why. Three
+consecutive goals (1b53da77, c60de386, c4cda02c) each recommended the next
+under one epic, and the fourth passed provenance, freshness, and shape before
+anything asked this. No `ic` on the host, or no goal store that answers, makes
+`.lineage.available` false and leaves the rest of the verdict standing.
 
 ### Why this exists, and why provenance did not already cover it
 

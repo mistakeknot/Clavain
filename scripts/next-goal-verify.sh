@@ -27,16 +27,41 @@
 # that memory predates the close. So the check has to be mechanical: it must
 # not depend on the judgement of the thing whose judgement is compromised.
 #
+# LINEAGE — why a live, open, correctly-cited bead can still be the wrong
+# recommendation.
+#
+# On 2026-09-03 three consecutive goals (1b53da77, c60de386, c4cda02c) each
+# recommended the next as its successor, all under one epic. The fourth
+# recommendation passed provenance, freshness, and shape, and was still the
+# wrong goal: nothing had asked whether it merely repeated the lineage of the
+# goals just closed. Every check above asks whether a cited bead is real and
+# open; the session with the most context is the one least able to notice that
+# it has stopped ranking and started inheriting.
+#
+# The rule, mechanical: read the last WINDOW closed goals (default 4, env
+# CLAVAIN_NEXT_GOAL_LINEAGE_WINDOW) from `ic goal list` in every reachable bead
+# root. A goal's lineage is the set of root epics of its own bead and of every
+# bead labeled ic_goal_id:<goal>. A recommendation (--recommend) whose root
+# epic is in the lineage of at least MIN of those goals (default 2, env
+# CLAVAIN_NEXT_GOAL_LINEAGE_MIN) is DISQUALIFIED — unless --beat names an open,
+# out-of-lineage candidate verified in the same run, in which case it is a
+# warning and the override is on record. A run without --recommend whose every
+# usable candidate is in the streak lineage is disqualified as a whole. A goal
+# whose lineage cannot be read never counts toward the streak. No `ic` anywhere,
+# or no store that answers, makes lineage UNAVAILABLE and says so; the rest of
+# the verdict stands.
+#
 # Usage:
-#   next-goal-verify.sh <bead-id> [<bead-id>...]
+#   next-goal-verify.sh [--recommend <id>] [--beat <id>] <bead-id> [<bead-id>...]
 #   next-goal-verify.sh --path apps/web/components/x/ <bead-id>     # see --path
+#   next-goal-verify.sh --recommend mk-12 --beat mk-40 mk-12 mk-40  # see LINEAGE
 #
 # Exit: 0 = every candidate usable (or verification unavailable — fail-open),
 #       3 = at least one candidate DISQUALIFIED. Always prints one JSON object.
 
 set -uo pipefail
 
-SCHEMA_VERSION="clavain.next-goal-verify/v1"
+SCHEMA_VERSION="clavain.next-goal-verify/v2"
 MAX_ROOTS="${CLAVAIN_NEXT_GOAL_MAX_ROOTS:-6}"
 BD_TIMEOUT="${CLAVAIN_NEXT_GOAL_BD_TIMEOUT:-20}"
 
@@ -45,13 +70,31 @@ RECEIPT_SESSION="${CLAUDE_SESSION_ID:-unknown}"
 
 IDS=()
 PATHS=()
+RECOMMEND=""
+BEAT=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --path) PATHS+=("${2:-}"); shift 2 || shift ;;
         --path=*) PATHS+=("${1#--path=}"); shift ;;
-        -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+        --recommend) RECOMMEND="${2:-}"; shift 2 || shift ;;
+        --recommend=*) RECOMMEND="${1#--recommend=}"; shift ;;
+        --beat) BEAT="${2:-}"; shift 2 || shift ;;
+        --beat=*) BEAT="${1#--beat=}"; shift ;;
+        -h|--help) sed -n '2,60p' "$0"; exit 0 ;;
         *) IDS+=("$1"); shift ;;
     esac
+done
+
+# The pick and the candidate it beat are verified like any other candidate: a
+# --recommend that was never read back at source would be the 2026-08-14
+# failure with a new flag on it.
+for extra in "$RECOMMEND" "$BEAT"; do
+    [[ -z "$extra" ]] && continue
+    present=0
+    for id in ${IDS[@]+"${IDS[@]}"}; do
+        [[ "$id" == "$extra" ]] && { present=1; break; }
+    done
+    [[ $present -eq 0 ]] && IDS+=("$extra")
 done
 
 emit_and_exit() {
@@ -79,7 +122,7 @@ unavailable() {
     # it got. Same reason the roadmap's `undated` is treated as stale here —
     # unknown is not healthy.
     local payload
-    payload="$(printf '{"schema_version":"%s","available":false,"ok":null,"reason":"%s","beads":[],"paths":[],"disqualified":[]}' \
+    payload="$(printf '{"schema_version":"%s","available":false,"ok":null,"reason":"%s","beads":[],"paths":[],"disqualified":[],"warnings":[],"lineage":{"available":false,"reason":"not evaluated: verification itself was unavailable"}}' \
         "$SCHEMA_VERSION" "$1")"
     emit_and_exit "$payload" 0
 }
@@ -167,7 +210,7 @@ for id in ${IDS[@]+"${IDS[@]}"}; do
     else
         entry="$(jq -c --arg root "$found_root" '
             .[0]
-            | {id, root: $root, status, issue_type, priority,
+            | {id, root: $root, status, issue_type, priority, parent: (.parent // null),
                title: (.title // ""), closed_at: (.closed_at // null)}
             | . + (
                 if   .status == "closed"
@@ -204,6 +247,190 @@ if [[ ${#IDS[@]} -gt 0 && $ANSWERED -eq 0 ]]; then
     unavailable "no bead root reachable, so a live candidate cannot be told from a closed one"
 fi
 
+# --------------------------------------------------------------------- lineage
+#
+# The third claim a block makes, and the one neither check above touches: that
+# the recommendation was CHOSEN rather than inherited. See LINEAGE in the
+# header. The window is read from `ic goal list` in every bead root, the same
+# way bd is asked, so the two never disagree about which stores exist.
+LINEAGE_WINDOW="${CLAVAIN_NEXT_GOAL_LINEAGE_WINDOW:-4}"
+LINEAGE_MIN="${CLAVAIN_NEXT_GOAL_LINEAGE_MIN:-2}"
+LINEAGE_JSON='{"available":false,"reason":"no bead candidates, so there is no recommendation to place","window":[],"streak":[]}'
+RUN_DISQ=""
+ROOT_EPIC=""
+declare -A ROOT_MEMO
+
+ic_goal_list() {
+    # $1 = root. Prints the raw JSON, or nothing. `ic` opens its store from
+    # $PWD, so this runs inside the root exactly as bd_show does.
+    if command -v timeout >/dev/null 2>&1; then
+        (cd "$1" 2>/dev/null && timeout "$BD_TIMEOUT" ic goal list --json 2>/dev/null)
+    else
+        (cd "$1" 2>/dev/null && ic goal list --json 2>/dev/null)
+    fi
+}
+
+bd_list_label() {
+    # $1 = root, $2 = label. Prints the raw JSON array, or nothing. --all,
+    # because a goal's lineage is mostly the beads it CLOSED.
+    if command -v timeout >/dev/null 2>&1; then
+        (cd "$1" 2>/dev/null && timeout "$BD_TIMEOUT" bd list --label "$2" --all --json 2>/dev/null)
+    else
+        (cd "$1" 2>/dev/null && bd list --label "$2" --all --json 2>/dev/null)
+    fi
+}
+
+root_epic() {
+    # $1 = root, $2 = id. Follows `parent` until null (depth cap 8) and sets
+    # ROOT_EPIC to the top-level bead's id, or "" when the chain cannot be
+    # read. It sets a variable instead of printing because a $(...) call would
+    # run in a subshell and throw the memo away on return; the memo is what
+    # keeps a ten-bead lineage from costing ten identical `bd show`s.
+    local root="$1" cur="$2" depth=0 raw parent result="?" p
+    local -a walked=()
+    ROOT_EPIC=""
+    while :; do
+        if [[ -n "${ROOT_MEMO[$cur]+x}" ]]; then result="${ROOT_MEMO[$cur]}"; break; fi
+        [[ $depth -ge 8 ]] && break
+        raw="$(bd_show "$root" "$cur")"
+        jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$raw" || break
+        walked+=("$cur")
+        parent="$(jq -r '.[0].parent // empty' <<<"$raw")"
+        if [[ -z "$parent" ]]; then result="$cur"; break; fi
+        cur="$parent"
+        depth=$((depth + 1))
+    done
+    for p in ${walked[@]+"${walked[@]}"}; do ROOT_MEMO[$p]="$result"; done
+    [[ "$result" == "?" ]] || ROOT_EPIC="$result"
+    return 0
+}
+
+root_epic_of() {
+    # $1 = root, $2 = id, $3 = its parent ("" when top-level). For a bead the
+    # caller already holds, so it is not fetched a second time. Sets ROOT_EPIC.
+    if [[ -z "$3" ]]; then ROOT_MEMO[$2]="$2"; ROOT_EPIC="$2"; return 0; fi
+    root_epic "$1" "$3"
+    ROOT_MEMO[$2]="${ROOT_EPIC:-?}"
+    return 0
+}
+
+if [[ ${#IDS[@]} -gt 0 ]]; then
+    if ! command -v ic >/dev/null 2>&1; then
+        LINEAGE_JSON='{"available":false,"reason":"ic not installed, so the lineage of the last closed goals cannot be read","window":[],"streak":[]}'
+    else
+        GOALS_ALL="[]"
+        GOALS_SEEN=0
+        for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
+            raw="$(ic_goal_list "$root")"
+            jq -e 'type == "array"' >/dev/null 2>&1 <<<"$raw" || continue
+            GOALS_SEEN=1
+            GOALS_ALL="$(jq -c --arg root "$root" --argjson g "$raw" \
+                '. + [$g[] | select(.Status == "closed")
+                      | {id: .ID, closed_at: (.ClosedAt // 0), bead_id: (.BeadID // null), _root: $root}]' <<<"$GOALS_ALL")"
+        done
+        if [[ $GOALS_SEEN -eq 0 ]]; then
+            LINEAGE_JSON='{"available":false,"reason":"no goal store answered in any reachable root, so the lineage of the last closed goals cannot be read","window":[],"streak":[]}'
+        else
+            WINDOW_JSON="$(jq -c --argjson w "$LINEAGE_WINDOW" 'sort_by(-(.closed_at)) | .[0:$w]' <<<"$GOALS_ALL")"
+
+            # Each goal's lineage: root epics of its own bead and of every bead
+            # labeled with it. Empty means UNKNOWN, and unknown never counts.
+            WINDOW_OUT="[]"
+            while IFS= read -r goal; do
+                gid="$(jq -r '.id' <<<"$goal")"
+                groot="$(jq -r '._root' <<<"$goal")"
+                gbead="$(jq -r '.bead_id // empty' <<<"$goal")"
+                groots="[]"
+                if [[ -n "$gbead" ]]; then
+                    root_epic "$groot" "$gbead"
+                    [[ -n "$ROOT_EPIC" ]] && groots="$(jq -c --arg r "$ROOT_EPIC" '. + [$r]' <<<"$groots")"
+                fi
+                labeled="$(bd_list_label "$groot" "ic_goal_id:$gid")"
+                if jq -e 'type == "array"' >/dev/null 2>&1 <<<"$labeled"; then
+                    while IFS=$'\t' read -r lid lparent; do
+                        [[ -z "$lid" ]] && continue
+                        root_epic_of "$groot" "$lid" "$lparent"
+                        [[ -n "$ROOT_EPIC" ]] && groots="$(jq -c --arg r "$ROOT_EPIC" '. + [$r]' <<<"$groots")"
+                    done < <(jq -r '.[] | [.id, (.parent // "")] | @tsv' <<<"$labeled")
+                fi
+                groots="$(jq -c 'unique' <<<"$groots")"
+                WINDOW_OUT="$(jq -c --argjson g "$goal" --argjson r "$groots" \
+                    '. + [{id: $g.id, closed_at: $g.closed_at, bead_id: $g.bead_id, root: $g._root,
+                           roots: $r, unknown: (($r | length) == 0)}]' <<<"$WINDOW_OUT")"
+            done < <(jq -c '.[]' <<<"$WINDOW_JSON")
+
+            # Each usable candidate: its root epic, and which window goals share it.
+            CAND_OUT="[]"
+            while IFS=$'\t' read -r cid croot cparent; do
+                [[ -z "$cid" ]] && continue
+                root_epic_of "$croot" "$cid" "$cparent"
+                streak="[]"
+                if [[ -n "$ROOT_EPIC" ]]; then
+                    streak="$(jq -c --arg r "$ROOT_EPIC" '[.[] | select(any(.roots[]; . == $r)) | .id]' <<<"$WINDOW_OUT")"
+                fi
+                CAND_OUT="$(jq -c --arg id "$cid" --arg r "$ROOT_EPIC" --argjson s "$streak" --argjson m "$LINEAGE_MIN" \
+                    '. + [{id: $id, root_epic: (if $r == "" then null else $r end), streak: $s,
+                           in_streak: (($s | length) >= $m)}]' <<<"$CAND_OUT")"
+            done < <(jq -r '.[] | select(.verdict == "ok" or .verdict == "warn")
+                             | [.id, .root, (.parent // "")] | @tsv' <<<"$BEADS_JSON")
+
+            # The decision. --beat is not a bypass: it names an OPEN candidate
+            # OUTSIDE the streak that was weighed and lost, verified in this same
+            # run, so an override cannot cite something closed, in the same
+            # lineage, or never looked at. Without --recommend, every in-streak
+            # candidate is a warning, and a run made only of them is refused.
+            DECISION="$(jq -cn \
+                --argjson beads "$BEADS_JSON" --argjson cands "$CAND_OUT" --argjson window "$WINDOW_OUT" \
+                --arg rec "$RECOMMEND" --arg beat "$BEAT" --argjson w "$LINEAGE_WINDOW" '
+                def cand($id): first($cands[] | select(.id == $id)) // null;
+                def bead($id): first($beads[] | select(.id == $id)) // null;
+                def ids($c): ($c.streak | join(", "));
+                (if $rec == "" then null else cand($rec) end) as $rc
+                | (if $beat == "" then null else cand($beat) end) as $bc
+                | (if $beat == "" then null else bead($beat) end) as $bb
+                | (if $rc != null and $rc.in_streak then
+                     (if $beat != "" and $beat != $rec and $bc != null and ($bc.in_streak | not) and $bb.verdict == "ok"
+                      then {verdict: "warn",
+                            reason: ("continues the lineage of " + ids($rc) + " (" + $rc.root_epic + "); allowed because it beat " + $beat + " (" + $bc.root_epic + ")")}
+                      else {verdict: "disqualified",
+                            reason: ("continues the lineage of " + ($rc.streak | length | tostring) + " of the last " + ($w | tostring)
+                                     + " closed goals (" + ids($rc) + ", epic " + $rc.root_epic + ") — name the open out-of-lineage candidate it beat with --beat, or recommend that one")}
+                      end)
+                   else null end) as $ro
+                | ([$cands[] | select(.in_streak)]) as $ins
+                | (if $rec == "" and ($cands | length) > 0 and ($ins | length) == ($cands | length)
+                   then ("<run>: every candidate shares the lineage of " + ([$ins[].streak[]] | unique | join(", "))
+                         + " (epic " + ([$ins[].root_epic] | unique | join(", ")) + "); add one from next-goal-candidates.sh outside it")
+                   else null end) as $run_disq
+                | {
+                    beads: [$beads[] | . as $b
+                      | (if $ro != null and $b.id == $rec then . + $ro
+                         elif (cand($b.id) // {in_streak: false}).in_streak and $b.id != $rec then
+                           . + {verdict: (if .verdict == "ok" then "warn" else .verdict end),
+                                reason: (.reason + "; continues the lineage of " + ids(cand($b.id)) + " (epic " + cand($b.id).root_epic + ")")}
+                         else . end)],
+                    run_disqualified: $run_disq,
+                    verdict: (if ($ro.verdict // "") == "disqualified" or $run_disq != null then "disqualified"
+                              elif ($ro.verdict // "") == "warn" or ($rec == "" and ($ins | length) > 0) then "warn"
+                              else "ok" end),
+                    reason: ($ro.reason // $run_disq
+                             // (if $rec != "" and $rc == null then ("--recommend " + $rec + " is not a usable candidate (see beads), so its lineage was not judged")
+                                 elif $rec != "" then ($rec + " (epic " + ($rc.root_epic // "unknown") + ") is outside the lineage of the last " + ($window | length | tostring) + " closed goals")
+                                 elif ($ins | length) > 0 then ("in-lineage candidates: " + ([$ins[].id] | join(", ")) + " — usable, but not as the recommendation without --beat")
+                                 else ("no usable candidate continues the lineage of the last " + ($window | length | tostring) + " closed goals") end))
+                  }')"
+            BEADS_JSON="$(jq -c '.beads' <<<"$DECISION")"
+            RUN_DISQ="$(jq -r '.run_disqualified // empty' <<<"$DECISION")"
+            LINEAGE_JSON="$(jq -cn --argjson d "$DECISION" --argjson window "$WINDOW_OUT" --argjson cands "$CAND_OUT" \
+                --argjson w "$LINEAGE_WINDOW" --argjson m "$LINEAGE_MIN" --arg rec "$RECOMMEND" --arg beat "$BEAT" \
+                '{available: true, window: $window, threshold: {window: $w, min: $m},
+                  recommend: (if $rec == "" then null else $rec end),
+                  beat: (if $beat == "" then null else $beat end),
+                  candidates: $cands, verdict: $d.verdict, reason: $d.reason}')"
+        fi
+    fi
+fi
+
 # ------------------------------------------------------------------ path checks
 #
 # The second half of the 2026-08-14 failure: the block proposed BUILDING things
@@ -227,9 +454,10 @@ for p in ${PATHS[@]+"${PATHS[@]}"}; do
 done
 PATHS_JSON="${PATHS_JSON:-[]}"
 
-DISQUALIFIED="$(jq -cn --argjson b "$BEADS_JSON" --argjson p "$PATHS_JSON" \
+DISQUALIFIED="$(jq -cn --argjson b "$BEADS_JSON" --argjson p "$PATHS_JSON" --arg run "$RUN_DISQ" \
     '[($b[] | select(.verdict == "disqualified") | .id),
-      ($p[] | select(.verdict == "disqualified") | .path)]')"
+      ($p[] | select(.verdict == "disqualified") | .path)]
+     + (if $run == "" then [] else [$run] end)')"
 
 # `ok: (($disq | length) == 0)` — the OUTER parentheses are load-bearing. jq 1.7
 # (Debian, and the CI runner) rejects `key: a == b` inside an object literal
@@ -247,10 +475,12 @@ PAYLOAD="$(jq -cn \
     --argjson beads "$BEADS_JSON" \
     --argjson paths "$PATHS_JSON" \
     --argjson disq "$DISQUALIFIED" \
+    --argjson lineage "$LINEAGE_JSON" \
     '{schema_version: $schema, available: true, verified_at: $stamp,
       roots_discovered: ($roots_seen == 1),
       beads: $beads, paths: $paths, disqualified: $disq,
       warnings: [$beads[] | select(.verdict == "warn") | .id],
+      lineage: $lineage,
       ok: (($disq | length) == 0)}')"
 
 if [[ "$(jq -r '.ok' <<<"$PAYLOAD")" == "true" ]]; then
