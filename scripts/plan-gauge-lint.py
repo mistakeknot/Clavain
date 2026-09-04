@@ -55,7 +55,7 @@ WHAT IT CATCHES  (codes, and the pilot-1 defect each replays)
 USAGE
 
     plan-gauge-lint.py PLAN.md [--repo-root DIR] [--extra-artifact PATH]...
-    plan-gauge-lint.py --self-test        # replay all six pilot-1 defects
+    plan-gauge-lint.py --self-test        # replay all seven known defects
 
 --repo-root turns the heuristics into a real dry-run: files named by the plan
 are read, the plan's edits are applied in order, and the verify commands run
@@ -109,7 +109,12 @@ OLD_MARKERS = (
 VERIFY_HINT = re.compile(r"\bverif|\bcheck\b|\bacceptance\b|\bgate\b", re.I)
 
 # A path we can attribute an edit or a grep to.
-PATH_RE = re.compile(r"[\w./-]*[\w-]+\.(?:rs|sh|toml|py|md|yaml|yml|json|ts|js)\b")
+PATH_RE = re.compile(r"[\w./-]*[\w-]+\.(?:rs|sh|toml|py|md|yaml|yml|json|ts|js|bats)\b")
+
+# New-file grammar from the Pattern F contract: a prose line reading
+#     Create `relative/path` with:
+# followed by ONE fenced block holding the complete content of the new file.
+CREATE_RE = re.compile(r"^\s*(?:[-*]\s+)?create\s+`?([^`\s]+)`?\s+with\s*:?\s*$", re.I)
 
 SHELL_LANGS = {"bash", "sh", "shell", "zsh", "console"}
 
@@ -119,7 +124,7 @@ class Block:
     lang: str
     body: str
     line: int          # 1-indexed line of the opening fence
-    kind: str          # "emit" | "old" | "verify" | "unknown"
+    kind: str          # "emit" | "old" | "verify" | "create" | "unknown"
     target: str | None  # inferred path this block belongs to
 
 
@@ -160,6 +165,11 @@ def parse_blocks(text: str) -> list[Block]:
     while i < len(lines):
         m = FENCE_RE.match(lines[i])
         if not m:
+            cm = CREATE_RE.match(lines[i])
+            if cm:
+                current_path = cm.group(1)
+                i += 1
+                continue
             pm = PATH_RE.search(lines[i])
             if pm and not lines[i].lstrip().startswith(("|", ">")):
                 current_path = pm.group(0)
@@ -195,6 +205,12 @@ def _preceding(lines: list[str], idx: int, n: int = 6) -> list[str]:
 
 def _classify(lines: list[str], idx: int, lang: str, body: str) -> tuple[str, str | None]:
     ctx = _preceding(lines, idx)
+    # The new-file grammar wins over every other marker: the fence directly
+    # under a Create line is the complete file, not an edit and not a verify.
+    for s in ctx[:2]:
+        cm = CREATE_RE.match(s)
+        if cm:
+            return "create", cm.group(1)
     target = None
     for s in ctx:
         pm = PATH_RE.search(s)
@@ -262,12 +278,16 @@ class Edit:
     old: str
     new: str
     line: int
+    create: bool = False   # from a Create block: new is the whole file, old is empty
 
 
 def collect_edits(blocks: list[Block]) -> list[Edit]:
     """Pair each `old` fence with the `emit` fence that follows it."""
     edits: list[Edit] = []
     for i, b in enumerate(blocks):
+        if b.kind == "create":
+            edits.append(Edit(target=b.target, old="", new=b.body, line=b.line, create=True))
+            continue
         if b.kind != "old":
             continue
         for nxt in blocks[i + 1: i + 3]:
@@ -305,6 +325,11 @@ def build_virtual_tree(edits: list[Edit], repo_root: Path | None,
     _resolve_bare_targets(edits, repo_root)
     for e in edits:
         if not e.target:
+            continue
+        if e.create:
+            files[e.target] = e.new if e.new.endswith("\n") else e.new + "\n"
+            if repo_root and (repo_root / e.target).is_file():
+                notes.append(f"{e.target}: Create target already exists in repo; the plan content replaces it in this dry run")
             continue
         if e.target not in files:
             if repo_root and (repo_root / e.target).is_file():
@@ -738,7 +763,7 @@ def _report(findings: list[Finding], notes: list[str], label: str, quiet: bool) 
 
 
 # --------------------------------------------------------------------------
-# Self-test: replay the six pilot-1 defects
+# Self-test: replay the seven known defects (six from pilot 1, one from pattern F)
 # --------------------------------------------------------------------------
 
 def _fixtures() -> list[dict]:
@@ -951,13 +976,36 @@ fi
 Expected: exits 0.
 """,
         },
+        {
+            "id": "PF-C",
+            "name": "pattern F - a new-file plan whose verify forbids text the created file contains",
+            "expect": "GAUGE001",
+            "files": {},
+            "plan": """
+## Task 1
+
+Create `scripts/hello.sh` with:
+```bash
+#!/usr/bin/env bash
+echo "TODO: replace me"
+```
+
+### Verify Task 1
+
+```bash
+grep -c "TODO" scripts/hello.sh
+```
+
+Expected: prints NOTHING (exit 1).
+""",
+        },
     ]
 
 
 def self_test(verbose: bool) -> int:
     fixtures = _fixtures()
     failures = 0
-    print("=== plan-gauge-lint --self-test: replaying the six pilot-1 gauge defects ===\n")
+    print("=== plan-gauge-lint --self-test: replaying the seven known gauge defects (six from pilot 1, one from pattern F) ===\n")
     rows = []
     for fx in fixtures:
         with tempfile.TemporaryDirectory() as td:
@@ -1043,7 +1091,7 @@ def main(argv: list[str]) -> int:
                     help="a file present at verify time but not produced by the plan "
                          "(e.g. a frozen gauge). Repeatable.")
     ap.add_argument("--self-test", action="store_true",
-                    help="replay the six known pilot-1 gauge defects and exit")
+                    help="replay the seven known gauge defects and exit")
     ap.add_argument("--json", action="store_true", help="machine-readable findings")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)

@@ -42,11 +42,15 @@ def test_script_exists_and_is_executable():
     assert SCRIPT.stat().st_mode & 0o111, "plan-gauge-lint.py must be executable"
 
 
-def test_self_test_replays_all_six_pilot_defects():
-    """--self-test must catch every known defect AND stay clean on the control."""
+def test_self_test_replays_all_seven_known_defects():
+    """--self-test must catch every known defect AND stay clean on the control.
+
+    Six defects came out of pilot 1; the seventh (PF-C) is the pattern F
+    new-file shape, a plan whose only edit is a Create block.
+    """
     r = run_lint("--self-test")
     assert r.returncode == 0, f"self-test failed:\n{r.stdout}\n{r.stderr}"
-    assert "caught 6/6 known defects" in r.stdout, r.stdout
+    assert "caught 7/7 known defects" in r.stdout, r.stdout
     assert "no false positives" in r.stdout, r.stdout
     assert "SELF-TEST PASSED" in r.stdout
 
@@ -323,3 +327,87 @@ def test_json_output_is_machine_readable(repo: Path):
     payload = json.loads(r.stdout)
     assert payload["findings"], payload
     assert all({"code", "title", "line", "detail"} <= set(f) for f in payload["findings"])
+
+
+CREATE_PLAN = """
+## Task 1
+
+Create `scripts/hello.sh` with:
+```bash
+#!/usr/bin/env bash
+echo "TODO: replace me"
+```
+
+### Verify Task 1
+
+```bash
+grep -c "TODO" scripts/hello.sh
+```
+
+Expected: %EXPECT%
+"""
+
+
+def test_create_block_enters_the_virtual_tree(repo: Path):
+    """GAUGE001 on a plan whose ONLY edit is a Create block.
+
+    Before the linter learned the new-file grammar the created file never
+    entered the virtual tree, so a verify that forbids text the file
+    contains was ungauged.
+    """
+    import json
+    plan = repo / "plan.md"
+    plan.write_text(CREATE_PLAN.replace("%EXPECT%", "prints NOTHING (exit 1)."))
+    r = run_lint(str(plan), "--repo-root", str(repo), "--json")
+    assert r.returncode == 1, r.stdout
+    payload = json.loads(r.stdout)
+    assert any(f["code"] == "GAUGE001" for f in payload["findings"]), payload
+
+
+def test_create_block_is_clean_when_verify_expects_the_text(repo: Path):
+    """The same new-file plan is clean when the verify expects the match."""
+    import json
+    plan = repo / "plan.md"
+    plan.write_text(CREATE_PLAN.replace("%EXPECT%", '`grep -c "TODO" scripts/hello.sh` -> `1`.'))
+    r = run_lint(str(plan), "--repo-root", str(repo), "--json")
+    assert r.returncode == 0, r.stdout
+    payload = json.loads(r.stdout)
+    assert payload["findings"] == [], payload
+
+
+def test_bats_path_is_attributed(repo: Path):
+    """An edit to a .bats file is attributed to its own path.
+
+    PATH_RE had no bats in its extension allowlist, so the edit inherited
+    whatever path the plan named last (or none), dropped out of the virtual
+    tree, and the self-match went unreported.
+    """
+    (repo / "tests" / "shell").mkdir(parents=True)
+    (repo / "tests" / "shell" / "x.bats").write_text("run true\n")
+    plan = repo / "plan.md"
+    plan.write_text("""
+## Task 1
+
+Edit `tests/shell/x.bats`.
+
+old_string:
+```bash
+run true
+```
+
+new_string:
+```bash
+run true # MARK
+```
+
+### Verify Task 1
+
+```bash
+grep -c MARK tests/shell/x.bats
+```
+
+Expected: prints NOTHING (exit 1).
+""")
+    r = run_lint(str(plan), "--repo-root", str(repo))
+    assert r.returncode == 1, r.stdout
+    assert "GAUGE001" in codes(r.stdout), r.stdout
