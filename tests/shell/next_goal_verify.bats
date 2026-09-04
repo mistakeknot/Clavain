@@ -424,3 +424,51 @@ OUT_TEXT='OUTCOME: a site. GATE 1 (mk): words. DONE WHEN: green. OUT: index dens
     [ "$status" -eq 0 ]
     [ "$(jq -r '.beads[0].root' <<<"$output")" = "$(cd "$main" && pwd -P)" ]
 }
+
+@test "out-clause: the pick's own OUT clause is not judged against the last goal's" {
+    # A successor goal normally restates what it inherits as excluded. Only
+    # what the pick proposes to DO is compared.
+    run bash "$SCRIPT" --text "constellation-nav — OUTCOME: nearest figures on every page. OUT: export currency, naming, any edit to data or vocab." --out-of "$OUT_TEXT"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.out_clause.verdict' <<<"$output")" = "ok" ]
+}
+
+@test "out-clause: the automatic source is this project's last closed goal, not another project's" {
+    make_bd_stub "$(bead_json open)"
+    cat > "$STUB_DIR/ic" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1 \$2" == "goal list" ]]; then cat <<'JSON'
+[{"ID":"g-else","Status":"closed","ClosedAt":900,"BeadID":null,"ProjectDir":"/elsewhere/other","ConditionText":"OUTCOME: other. OUT: nearest figures."},
+ {"ID":"g-here","Status":"closed","ClosedAt":100,"BeadID":null,"ProjectDir":"$WORK_DIR","ConditionText":"OUTCOME: here. OUT: export currency 646 to 694."},
+ {"ID":"g-open","Status":"open","ClosedAt":0,"BeadID":null,"ProjectDir":"$WORK_DIR","ConditionText":"OUT: everything."}]
+JSON
+exit 0
+fi
+exit 0
+EOF
+    chmod +x "$STUB_DIR/ic"
+    run bash "$SCRIPT" --recommend x-1 --text "nearest figures on every page" x-1
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.out_clause.sources | join(",")' <<<"$output")" = "goal g-here" ]
+    [ "$(jq -r '.out_clause.verdict' <<<"$output")" = "ok" ]
+    run bash "$SCRIPT" --recommend x-1 --text "export currency at canon 694" x-1
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.out_clause.matched[0].source' <<<"$output")" = "goal g-here" ]
+}
+
+@test "out-clause: a project name as ProjectDir still scopes to this project" {
+    make_bd_stub "$(bead_json open)"
+    local name; name="$(basename "$WORK_DIR")"
+    cat > "$STUB_DIR/ic" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1 \$2" == "goal list" ]]; then
+  printf '[{"ID":"g-name","Status":"closed","ClosedAt":5,"BeadID":null,"ProjectDir":"%s","ConditionText":"OUT: any harvest."}]\n' "$name"
+  exit 0
+fi
+exit 0
+EOF
+    chmod +x "$STUB_DIR/ic"
+    run bash "$SCRIPT" --recommend x-1 --text "harvest the next eight volumes" x-1
+    [ "$status" -eq 3 ]
+    [ "$(jq -r '.out_clause.matched[0].source' <<<"$output")" = "goal g-name" ]
+}

@@ -386,14 +386,25 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
             GOALS_ALL="$(jq -c --arg root "$root" --argjson g "$raw" \
                 '. + [$g[] | select(.Status == "closed")
                       | {id: .ID, closed_at: (.ClosedAt // 0), bead_id: (.BeadID // null), _root: $root,
-                         condition: (.ConditionText // "")}]' <<<"$GOALS_ALL")"
+                         condition: (.ConditionText // ""), project: (.ProjectDir // "")}]' <<<"$GOALS_ALL")"
         done
         if [[ $GOALS_SEEN -eq 0 ]]; then
             LINEAGE_JSON='{"available":false,"reason":"no goal store answered in any reachable root, so the lineage of the last closed goals cannot be read","window":[],"streak":[]}'
         else
             WINDOW_JSON="$(jq -c --argjson w "$LINEAGE_WINDOW" 'sort_by(-(.closed_at)) | .[0:$w]' <<<"$GOALS_ALL")"
-            LAST_GOAL_ID="$(jq -r '.[0].id // empty' <<<"$WINDOW_JSON")"
-            LAST_GOAL_CONDITION="$(jq -r '.[0].condition // empty' <<<"$WINDOW_JSON")"
+            # The automatic OUT source is THIS project's last closed goal. The
+            # store is shared across projects and the lineage window merges
+            # them on purpose; an OUT clause does not transfer that way — on
+            # 2026-09-04 a jawnomicon pick was judged against elf-revel's.
+            # "This project" is the nearest root; ProjectDir may be absolute,
+            # a subdirectory (a worktree), or just the project's name.
+            LAST_PROJECT_GOAL="$(jq -c --arg here "${ROOTS[0]:-}" '
+                [.[] | .project as $p
+                     | select($p != "" and $here != "" and
+                              ($p == $here or ($here | endswith("/" + $p)) or ($p | startswith($here + "/"))))]
+                | sort_by(-(.closed_at)) | .[0] // {}' <<<"$GOALS_ALL")"
+            LAST_GOAL_ID="$(jq -r '.id // empty' <<<"$LAST_PROJECT_GOAL")"
+            LAST_GOAL_CONDITION="$(jq -r '.condition // empty' <<<"$LAST_PROJECT_GOAL")"
 
             # Each goal's lineage: root epics of its own bead and of every bead
             # labeled with it. Empty means UNKNOWN, and unknown never counts.
@@ -540,8 +551,9 @@ OUT_JSON="$(jq -cn \
     def stop: ["any","the","a","an","to","of","or","and","in","on","for","with","by","from",
                "its","it","this","that","not","no","all","as","at","is","are","be","into","up"];
     def toks: norm | split(" ") | map(select(length > 0)) | map(select(. as $t | stop | index($t) | not));
-    # Words gate the match; numbers and version tags ride along free, so
-    # "export currency 646 to 694" still names "export currency at 694".
+    # Every word of the item must appear in the pick; numbers and version
+    # tags ride along free, so "export currency 646 to 694" still names
+    # "export-currency at canon 694".
     def words: toks | map(select(test("[0-9]") | not));
     # Shared-prefix similarity: families/family, harvest/harvesting match;
     # currency/current does not.
@@ -554,7 +566,10 @@ OUT_JSON="$(jq -cn \
                | map(select(length > 0))
                | map({item: ., words: words})
                | map(select((.words | length) >= 2 or ((.words | length) == 1 and (.words[0] | length) >= 6)));
-    (($text + " " + $title) | toks) as $cand
+    # The pick is judged on what it proposes to DO. Its own OUT clause usually
+    # restates the exclusions it inherits, and must not match them.
+    def own: split("OUT:")[0];
+    ((($text | own) + " " + $title) | toks) as $cand
     | [$sources[] | . as $s | (.text | items)[] | . + {source: $s.source}] as $all
     | [$all[] | select(all(.words[]; . as $w | any($cand[]; sim(.; $w))))] as $hits
     | (if $rec != "" then $rec elif $text != "" then "<text>" else null end) as $subject

@@ -283,9 +283,11 @@ that names an item of any OUT clause is **disqualified**; the receipt's
 genuinely lapsed (the blocker landed, the user lifted the hold), pass
 `--out-override "<why>"`: the refusal becomes a warning, the reason is on the
 receipt, and the block must say it in prose — name the OUT item and why it is
-now in. Matching is by words, not exact phrase: "family and kind naming pass"
-matches "families v31 naming", and "export at canon 694" matches "export
-currency 646 to 694".
+now in. Matching is by words, not exact phrase: every word of the OUT item must
+appear in the pick, by shared prefix, and numbers ride free — "family and
+kind naming pass" matches "families v31 naming", and "export-currency at
+canon 694" matches "export currency 646 to 694". The pick's own OUT clause
+is not judged, since a successor restates what it inherits.
 
 ### Worktrees read the main checkout's tracker
 
