@@ -12,7 +12,7 @@ These contracts apply when a plan is executed by a fresh-context executor subage
 
 ## Plan grammar (what the gauge linter reads)
 
-The linter reads the edit pairs and the verify fences below and nothing else: it ignores the Preconditions and Commit sections, pathspecs, the trailer, and new-file blocks (Sylveste-yibw.14), and it finds verify steps by a heuristic on the prose near a fence, not by the heading. Everything outside its reach is the orchestrator's to check by hand.
+The linter reads the edit pairs, the `Create` blocks, and the verify fences below and nothing else. It has no section awareness: the Preconditions and Commit sections, pathspecs, and the trailer are outside its reach only because they are not edit pairs, `Create` blocks, or verify fences, and it finds verify steps by a heuristic on the prose near a fence, not by the heading. A new file's complete content enters the dry run exactly as an edit's replacement text does, so a verify that forbids text a `Create` block writes fails the gauge (GAUGE001). Everything outside its reach is the orchestrator's to check by hand.
 
 - Each edit to an existing file: a line naming the file in backticks and ending with a colon (In relative/path:), then a line reading old_string: followed by a fenced block with the exact current text, then a line reading new_string: followed by a fenced block with the replacement. New files: a line reading Create relative/path with: (the path in backticks) followed by one fenced block holding the COMPLETE file content.
 - Each verify step: a heading `### Verify <task>` followed by ONE fenced `bash` block holding the commands (run from REPO PATH), then a prose line starting `Expected:` stating the observable result. Say "prints NOTHING" or "exit 1" ONLY when that is literally true (the linter treats those as zero-output claims and checks them against your own edits). For a command that must succeed, write `Expected: exit 0`.
@@ -29,6 +29,8 @@ python3 scripts/plan-gauge-lint.py <plan> --repo-root <repo>
 ```
 
 It must exit 0. The spawn gate `hooks/gauge-gate-executor-spawn.sh` (a PreToolUse hook on `Task|Agent`, registered in `hooks/hooks.json`) runs the linter on the plan named by the executor prompt's first line and blocks any executor spawn whose plan fails it, or whose plan file is missing. A gauge defect counts against the plan author, never the executor: a VERIFY line that cannot pass as written is the orchestrator's defect.
+
+Every refusal is itself a verdict. Before it prints the block decision, the gate writes one register row through `scripts/pattern-f-verdict.sh` with `--role gate --kind gate --verdict FAIL`, `--commit none`, and the refusal reason (the linter's GAUGE lines) as the note, into `$INTERSPECT_DB`, else `$CLAUDE_PROJECT_DIR/.clavain/interspect/interspect.db`, else that path under the repo named by the prompt's `REPO:` line. A failed write changes only stderr: the gate never fails open in order to record.
 
 ## Executor prompt
 
@@ -91,6 +93,8 @@ bash scripts/pattern-f-verdict.sh --list --session <id> --db <db>
 ```
 
 The script checks every write with a nonce read-back; when the write is not visible it exits non-zero (4) and says so. Report that loudly; do not retry more than once.
+
+A third kind, `gate`, is written only by the spawn gate (see Gauge precondition), never by the orchestrator. Notes and criteria are stored byte-for-byte: interspect's sanitizer refuses a context that contains any of six injection-like phrases, so when the plain context would be refused the script stores the note and the criterion base64-encoded and marks the row with `note_enc: "b64"`; `--list` decodes them. When even the encoded context is refused, the script exits 5 and writes nothing. `--list` prints one tab-separated line per row (ts, session, role, kind, verdict, plan, commit, note) with any tab or newline inside a note flattened to a space, so its output is safe to split.
 
 ## Orchestrator report
 
