@@ -33,7 +33,7 @@
     {
       "id": "documentation",
       "prompt": "Write a short operator note explaining the tenant collision in FIXTURE_DIR/cache.py and how to verify a future fix using cache-evidence.txt. Put the note in the response; no file or memory writes.",
-      "acceptance": "Read router and relevant documentation guidance; concrete trigger, impact and verification; honor response-only scope."
+      "acceptance": "Read router and apply its inline explanatory-writing guidance or a relevant documentation skill; concrete trigger, impact and verification; honor response-only scope without forcing a repository-documentation audit."
     },
     {
       "id": "review",

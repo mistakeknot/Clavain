@@ -176,6 +176,10 @@ do not run an installer as part of a probe. Use the same refresh setting in both
 variants. Launch the interactive TUI without an initial prompt, wait for plugin
 initialization, then submit the first prompt. Inspect the actual first-turn
 catalog and tool calls. An immediate startup prompt may race plugin loading.
+Compare rendered descriptions with the installed source metadata as well as
+recording warnings. In the x7va probes, the TUI sometimes showed no shortening
+warning while the actual first-turn descriptions still ended mid-sentence.
+Warning absence alone is not a catalog-completeness pass.
 
 Record session ID, CLI version/path, source SHAs and staged patch digest, CWD,
 model/effort, permission mode, plugin set, allowance, rendered catalog count and

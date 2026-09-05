@@ -44,7 +44,8 @@ In Claude Code, invoke the corresponding Skill tool or installed command.
 | Execute an existing plan | `clavain:executing-plans` | Domain skill, focused verification |
 | Implement a feature or fix | `intertest:test-driven-development` | `clavain:refactor-safely` for significant refactors |
 | Research a question | Available research skill matching its depth and sources | `alwe` for prior agent sessions; domain documentation skills |
-| Write or revise documentation | `interscribe:interscribe` | `clavain:engineering-docs` for a solved problem; artifact-format skill |
+| Write documentation | Guidance for the requested artifact and house style | `clavain:engineering-docs` for a solved problem; artifact-format skill |
+| Audit, refactor, or consolidate documentation | `interscribe:interscribe` | `interwatch:doc-watch` for drift |
 | Review code or a plan | `clavain:code-review-discipline` | `clavain:plan-reviewer`; installed Interflux engine for deeper review |
 | Prepare an authorized release | `intertest:verification-before-completion` | `clavain:landing-a-change`, release/domain procedures |
 | Choose next project work | `internext:next-work` | `interphase:beads-workflow` |
@@ -55,6 +56,13 @@ remains eligible for automatic selection**, including specialist and companion
 skills. Select by the actual task and scope. Prefer the existing plan over starting
 a fresh brainstorm. Read [routing-tables.md](references/routing-tables.md) when
 the task needs more domain or host-specific routing detail.
+
+For explanatory documentation requested in the response, use this writing guidance:
+name the trigger, affected behavior, supporting evidence, and verification steps.
+Distinguish a proposed fix from an installed or verified fix. Keep the note in the
+requested destination and scope; do not turn it into a repository-documentation
+audit. Load a specialist writing or artifact skill when its procedures help the
+requested document.
 
 ## Boundaries and missing companions
 
