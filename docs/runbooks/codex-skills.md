@@ -7,6 +7,10 @@ the initial catalog, not truncated `SKILL.md` instructions.
 Alignment: reduce redundant context while preserving useful routing and safety constraints.
 Conflict/Risk: over-curation can hide workflows; prefer reversible, user-selected changes.
 
+The [September 5 Mac OODARCS rollout](oodarcs-mac-2026-09-05.md) records the
+installed configuration, paired runtime acceptance, budget boundary, and remaining
+CI and companion limitations.
+
 ## What to measure
 
 From a Clavain checkout, with Node 18+ and Codex installed:
