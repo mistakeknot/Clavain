@@ -1,0 +1,459 @@
+{
+  "schema_version": 1,
+  "producer": "gpt-6-astra",
+  "validator": "claude-fable-5-1",
+  "routing_decisions": [
+    {
+      "id": 4,
+      "dispatch_id": "DD8AE303-2C80-4E4E-B7A9-0FDA34DF8BC5",
+      "session_id": "01a06b07-10d4-7801-b32b-862dac0596fe",
+      "bead_id": "Sylveste-8tx",
+      "project_dir": "/private/tmp/astra-publish.ub2P7R/intercore",
+      "agent": "validation",
+      "selected_model": "claude-fable-5-1",
+      "rule_matched": "dispatch-profile",
+      "floor_applied": false,
+      "context_json": {
+        "attempt_id": "D8A20817-EDC1-4B7B-A5CA-35338473E1F0",
+        "bead_id": "Sylveste-8tx",
+        "checkout": {
+          "after": "e99ad8f059bb97d6f0b25e1e01768e08adc3948f",
+          "before": "e99ad8f059bb97d6f0b25e1e01768e08adc3948f"
+        },
+        "dispatch_id": "DD8AE303-2C80-4E4E-B7A9-0FDA34DF8BC5",
+        "execution": {
+          "backend": "claude",
+          "codex_version": "",
+          "event_log": "",
+          "model": "claude-fable-5-1",
+          "reasoning_effort": "high",
+          "sandbox": "read-only",
+          "service_tier": "standard",
+          "session_id": "",
+          "transport": "exec"
+        },
+        "parent_session_id": "01a06b07-10d4-7801-b32b-862dac0596fe",
+        "producer_identity": "gpt-6-astra",
+        "profile": "validation-fable",
+        "resolved_profile": {
+          "profile": {
+            "backend": "claude",
+            "description": "Independent consequential-work validator for Codex-produced work",
+            "fallbacks": [
+              "validation-kimi",
+              "validation-sol"
+            ],
+            "model": "claude-fable-5-1",
+            "model_identity": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "role": "validation",
+            "service_tier": "standard"
+          },
+          "profile_ref": "validation-fable"
+        },
+        "resolved_route": {
+          "fallback_chain": [
+            {
+              "profile": {
+                "backend": "kimi",
+                "description": "Cross-provider validation fallback",
+                "fallbacks": [
+                  "validation-sol"
+                ],
+                "model": "kimi-code/k3",
+                "model_identity": "kimi-code/k3",
+                "reasoning_effort": "high",
+                "role": "validation",
+                "service_tier": "standard"
+              },
+              "profile_ref": "validation-kimi"
+            },
+            {
+              "profile": {
+                "backend": "codex",
+                "description": "Codex validation fallback when its resolved model differs from the producer",
+                "model": "gpt-5.6-sol",
+                "model_identity": "gpt-5.6-sol",
+                "reasoning_effort": "high",
+                "role": "validation",
+                "service_tier": "standard"
+              },
+              "profile_ref": "validation-sol"
+            }
+          ],
+          "producer_identity": "gpt-6-astra",
+          "producer_model": "gpt-6-astra",
+          "profile": {
+            "backend": "claude",
+            "description": "Independent consequential-work validator for Codex-produced work",
+            "fallbacks": [
+              "validation-kimi",
+              "validation-sol"
+            ],
+            "model": "claude-fable-5-1",
+            "model_identity": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "role": "validation",
+            "service_tier": "standard"
+          },
+          "profile_ref": "validation-fable",
+          "requested_role": "validation",
+          "validator_relationship": "different-model"
+        },
+        "result": {
+          "exit_code": 0,
+          "failure_class": "success",
+          "output_path": "/private/tmp/astra-publish.ub2P7R/review-final.md",
+          "verdict": "--- VERDICT ---\nSTATUS: pass\nFILES: 0 changed\nFINDINGS: 0 (P0: 0, P1: 0, P2: 0)\nSUMMARY: Agent reports clean completion.\n---"
+        },
+        "role": "validation",
+        "run_id": "",
+        "schema_version": 1,
+        "state": "completed",
+        "terminal": true,
+        "validator_relationship": "different-model"
+      },
+      "decided_at": 1788631705
+    },
+    {
+      "id": 3,
+      "dispatch_id": "DD8AE303-2C80-4E4E-B7A9-0FDA34DF8BC5",
+      "session_id": "01a06b07-10d4-7801-b32b-862dac0596fe",
+      "bead_id": "Sylveste-8tx",
+      "project_dir": "/private/tmp/astra-publish.ub2P7R/intercore",
+      "agent": "validation",
+      "selected_model": "claude-fable-5-1",
+      "rule_matched": "dispatch-profile",
+      "floor_applied": false,
+      "context_json": {
+        "attempt_id": "D8A20817-EDC1-4B7B-A5CA-35338473E1F0",
+        "bead_id": "Sylveste-8tx",
+        "checkout": {
+          "after": "e99ad8f059bb97d6f0b25e1e01768e08adc3948f",
+          "before": "e99ad8f059bb97d6f0b25e1e01768e08adc3948f"
+        },
+        "dispatch_id": "DD8AE303-2C80-4E4E-B7A9-0FDA34DF8BC5",
+        "execution": {
+          "backend": "claude",
+          "codex_version": "",
+          "event_log": "",
+          "model": "claude-fable-5-1",
+          "reasoning_effort": "high",
+          "sandbox": "read-only",
+          "service_tier": "standard",
+          "session_id": "",
+          "transport": "exec"
+        },
+        "parent_session_id": "01a06b07-10d4-7801-b32b-862dac0596fe",
+        "producer_identity": "gpt-6-astra",
+        "profile": "validation-fable",
+        "resolved_profile": {
+          "profile": {
+            "backend": "claude",
+            "description": "Independent consequential-work validator for Codex-produced work",
+            "fallbacks": [
+              "validation-kimi",
+              "validation-sol"
+            ],
+            "model": "claude-fable-5-1",
+            "model_identity": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "role": "validation",
+            "service_tier": "standard"
+          },
+          "profile_ref": "validation-fable"
+        },
+        "resolved_route": {
+          "fallback_chain": [
+            {
+              "profile": {
+                "backend": "kimi",
+                "description": "Cross-provider validation fallback",
+                "fallbacks": [
+                  "validation-sol"
+                ],
+                "model": "kimi-code/k3",
+                "model_identity": "kimi-code/k3",
+                "reasoning_effort": "high",
+                "role": "validation",
+                "service_tier": "standard"
+              },
+              "profile_ref": "validation-kimi"
+            },
+            {
+              "profile": {
+                "backend": "codex",
+                "description": "Codex validation fallback when its resolved model differs from the producer",
+                "model": "gpt-5.6-sol",
+                "model_identity": "gpt-5.6-sol",
+                "reasoning_effort": "high",
+                "role": "validation",
+                "service_tier": "standard"
+              },
+              "profile_ref": "validation-sol"
+            }
+          ],
+          "producer_identity": "gpt-6-astra",
+          "producer_model": "gpt-6-astra",
+          "profile": {
+            "backend": "claude",
+            "description": "Independent consequential-work validator for Codex-produced work",
+            "fallbacks": [
+              "validation-kimi",
+              "validation-sol"
+            ],
+            "model": "claude-fable-5-1",
+            "model_identity": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "role": "validation",
+            "service_tier": "standard"
+          },
+          "profile_ref": "validation-fable",
+          "requested_role": "validation",
+          "validator_relationship": "different-model"
+        },
+        "result": {
+          "exit_code": 0,
+          "failure_class": "",
+          "output_path": "/private/tmp/astra-publish.ub2P7R/review-final.md",
+          "verdict": ""
+        },
+        "role": "validation",
+        "run_id": "",
+        "schema_version": 1,
+        "state": "started",
+        "terminal": false,
+        "validator_relationship": "different-model"
+      },
+      "decided_at": 1788631313
+    },
+    {
+      "id": 2,
+      "dispatch_id": "F534C918-D8D7-4C0D-820C-9067E296FFCB",
+      "session_id": "01a06b07-10d4-7801-b32b-862dac0596fe",
+      "bead_id": "Sylveste-8tx",
+      "project_dir": "/private/tmp/astra-publish.ub2P7R/intercore",
+      "agent": "validation",
+      "selected_model": "claude-fable-5-1",
+      "rule_matched": "dispatch-profile",
+      "floor_applied": false,
+      "context_json": {
+        "attempt_id": "EF375FD0-8716-46D8-8C7B-6CFDA182904E",
+        "bead_id": "Sylveste-8tx",
+        "checkout": {
+          "after": "bc645304f0e3baa4460a06126ae07ec1aa7fc8a5",
+          "before": "bc645304f0e3baa4460a06126ae07ec1aa7fc8a5"
+        },
+        "dispatch_id": "F534C918-D8D7-4C0D-820C-9067E296FFCB",
+        "execution": {
+          "backend": "claude",
+          "codex_version": "",
+          "event_log": "",
+          "model": "claude-fable-5-1",
+          "reasoning_effort": "high",
+          "sandbox": "read-only",
+          "service_tier": "standard",
+          "session_id": "",
+          "transport": "exec"
+        },
+        "parent_session_id": "01a06b07-10d4-7801-b32b-862dac0596fe",
+        "producer_identity": "gpt-6-astra",
+        "profile": "validation-fable",
+        "resolved_profile": {
+          "profile": {
+            "backend": "claude",
+            "description": "Independent consequential-work validator for Codex-produced work",
+            "fallbacks": [
+              "validation-kimi",
+              "validation-sol"
+            ],
+            "model": "claude-fable-5-1",
+            "model_identity": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "role": "validation",
+            "service_tier": "standard"
+          },
+          "profile_ref": "validation-fable"
+        },
+        "resolved_route": {
+          "fallback_chain": [
+            {
+              "profile": {
+                "backend": "kimi",
+                "description": "Cross-provider validation fallback",
+                "fallbacks": [
+                  "validation-sol"
+                ],
+                "model": "kimi-code/k3",
+                "model_identity": "kimi-code/k3",
+                "reasoning_effort": "high",
+                "role": "validation",
+                "service_tier": "standard"
+              },
+              "profile_ref": "validation-kimi"
+            },
+            {
+              "profile": {
+                "backend": "codex",
+                "description": "Codex validation fallback when its resolved model differs from the producer",
+                "model": "gpt-5.6-sol",
+                "model_identity": "gpt-5.6-sol",
+                "reasoning_effort": "high",
+                "role": "validation",
+                "service_tier": "standard"
+              },
+              "profile_ref": "validation-sol"
+            }
+          ],
+          "producer_identity": "gpt-6-astra",
+          "producer_model": "gpt-6-astra",
+          "profile": {
+            "backend": "claude",
+            "description": "Independent consequential-work validator for Codex-produced work",
+            "fallbacks": [
+              "validation-kimi",
+              "validation-sol"
+            ],
+            "model": "claude-fable-5-1",
+            "model_identity": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "role": "validation",
+            "service_tier": "standard"
+          },
+          "profile_ref": "validation-fable",
+          "requested_role": "validation",
+          "validator_relationship": "different-model"
+        },
+        "result": {
+          "exit_code": 0,
+          "failure_class": "success",
+          "output_path": "/private/tmp/astra-publish.ub2P7R/review.md",
+          "verdict": "--- VERDICT ---\nSTATUS: warn\nFILES: 0 changed\nFINDINGS: 0 (P0: 0, P1: 0, P2: 0)\nSUMMARY: NEEDS_ATTENTION\n---"
+        },
+        "role": "validation",
+        "run_id": "",
+        "schema_version": 1,
+        "state": "completed",
+        "terminal": true,
+        "validator_relationship": "different-model"
+      },
+      "decided_at": 1788630952
+    },
+    {
+      "id": 1,
+      "dispatch_id": "F534C918-D8D7-4C0D-820C-9067E296FFCB",
+      "session_id": "01a06b07-10d4-7801-b32b-862dac0596fe",
+      "bead_id": "Sylveste-8tx",
+      "project_dir": "/private/tmp/astra-publish.ub2P7R/intercore",
+      "agent": "validation",
+      "selected_model": "claude-fable-5-1",
+      "rule_matched": "dispatch-profile",
+      "floor_applied": false,
+      "context_json": {
+        "attempt_id": "EF375FD0-8716-46D8-8C7B-6CFDA182904E",
+        "bead_id": "Sylveste-8tx",
+        "checkout": {
+          "after": "bc645304f0e3baa4460a06126ae07ec1aa7fc8a5",
+          "before": "bc645304f0e3baa4460a06126ae07ec1aa7fc8a5"
+        },
+        "dispatch_id": "F534C918-D8D7-4C0D-820C-9067E296FFCB",
+        "execution": {
+          "backend": "claude",
+          "codex_version": "",
+          "event_log": "",
+          "model": "claude-fable-5-1",
+          "reasoning_effort": "high",
+          "sandbox": "read-only",
+          "service_tier": "standard",
+          "session_id": "",
+          "transport": "exec"
+        },
+        "parent_session_id": "01a06b07-10d4-7801-b32b-862dac0596fe",
+        "producer_identity": "gpt-6-astra",
+        "profile": "validation-fable",
+        "resolved_profile": {
+          "profile": {
+            "backend": "claude",
+            "description": "Independent consequential-work validator for Codex-produced work",
+            "fallbacks": [
+              "validation-kimi",
+              "validation-sol"
+            ],
+            "model": "claude-fable-5-1",
+            "model_identity": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "role": "validation",
+            "service_tier": "standard"
+          },
+          "profile_ref": "validation-fable"
+        },
+        "resolved_route": {
+          "fallback_chain": [
+            {
+              "profile": {
+                "backend": "kimi",
+                "description": "Cross-provider validation fallback",
+                "fallbacks": [
+                  "validation-sol"
+                ],
+                "model": "kimi-code/k3",
+                "model_identity": "kimi-code/k3",
+                "reasoning_effort": "high",
+                "role": "validation",
+                "service_tier": "standard"
+              },
+              "profile_ref": "validation-kimi"
+            },
+            {
+              "profile": {
+                "backend": "codex",
+                "description": "Codex validation fallback when its resolved model differs from the producer",
+                "model": "gpt-5.6-sol",
+                "model_identity": "gpt-5.6-sol",
+                "reasoning_effort": "high",
+                "role": "validation",
+                "service_tier": "standard"
+              },
+              "profile_ref": "validation-sol"
+            }
+          ],
+          "producer_identity": "gpt-6-astra",
+          "producer_model": "gpt-6-astra",
+          "profile": {
+            "backend": "claude",
+            "description": "Independent consequential-work validator for Codex-produced work",
+            "fallbacks": [
+              "validation-kimi",
+              "validation-sol"
+            ],
+            "model": "claude-fable-5-1",
+            "model_identity": "claude-fable-5-1",
+            "reasoning_effort": "high",
+            "role": "validation",
+            "service_tier": "standard"
+          },
+          "profile_ref": "validation-fable",
+          "requested_role": "validation",
+          "validator_relationship": "different-model"
+        },
+        "result": {
+          "exit_code": 0,
+          "failure_class": "",
+          "output_path": "/private/tmp/astra-publish.ub2P7R/review.md",
+          "verdict": ""
+        },
+        "role": "validation",
+        "run_id": "",
+        "schema_version": 1,
+        "state": "started",
+        "terminal": false,
+        "validator_relationship": "different-model"
+      },
+      "decided_at": 1788630616
+    }
+  ],
+  "reports": {
+    "initial": "**Verification limits.** The permission mode denied `go build` and `go vet`, so this review is read-only source tracing. I did not compile or run tests. Import and symbol usage in both new test files checks out by inspection.\n\n## Acceptance replay\n\nEvery objective item traces to code, and the default path is unchanged.\n\n- **Flag plumbing.** `cmd/ic/publish.go:56` parses `--scoped` as a bare bool, `internal/publish/publish.go:63` carries it, and `internal/publish/engine.go:132` prints the scope banner.\n- **Retained work is all outside the new branches.** Validation and gates at `engine.go:262-449`, plugin push at line 445, canonical marketplace commit and push at lines 464-486, cache rebuild at 496, installed record at 508, canary at 593, hook bridge at 631 are unconditional.\n- **Skipped work is fully enclosed.** Peer sync and refresh (514, 519), stale prune (529), orphan clean (552), dangling-link prune (569), rig sync (637), and diagram regen (650) sit inside `if !e.opts.Scoped`. I found no other mutation path that touches unrelated caches or peer clones. The remaining scoped-path writers only touch the selected plugin's cache dir, its installed key, its canary record, and its approval marker.\n- **Gating not bypassed.** Dirty-worktree (268-288), approval (318-341), and release-artifact (347, 455) checks are untouched. Nothing in scoped mode short-circuits them.\n- **Probe authority.** `engine.go:607-611` passes the canonical root only when scoped, and `canary.go:217-226` reads it directly. With an empty root the probe reads the peer index map exactly as before, so `ProbeRelease` callers are unaffected.\n- **Test assertions do real work.** The probe assertion in `scoped_test.go` would fail under the old peer-index probe, since the preserved peer clone still says 1.0.0. The trace assertion catches the fake `claude` refresh and the diagram script. Each sentinel is genuinely eligible under the default path by my reading of `cache.go:119`, `cache.go:408-436`, `cache.go:615`, and `marketplace.go:321`.\n\n## Independent findings\n\nNo P0 or P1. All four P2s are small.\n\n- **P2, contract gap. The advertised recovery path for a scoped publish is unscoped.** `engine.go:615` prints \"rollback available: ic publish rollback\" on probe failure, and the new doc paragraph says scoped retains the canary. But `RollbackPlugin` at `canary.go:327-332` unconditionally calls `SyncCCMarketplace` and `RefreshCCMarketplace`. Scenario: scoped publish, probe trips, user runs the printed rollback. `SyncPeerMarketplaces` (`marketplace.go:405-423`) then commits to and pushes every peer clone, carrying any ahead user commits with it. The feature's own recovery path violates its preservation promise. Fix options: record scope in the canary and honor it in rollback, or state the caveat in the docs and the printed hint.\n- **P2, disclosure. Which checkout is \"canonical\" is location-dependent and never printed outside dry-run.** `FindMarketplace` (`marketplace.go:36-44`) falls back to the Claude Code checkout when the plugin lives outside the monorepo. Under `--scoped` from such a location that checkout becomes the pushed root and the monorepo clone becomes the stale peer. Non-dry-run output prints only \"Updating marketplace...\" at `engine.go:462` with no path. Since scoped mode makes drift expected, the banner at line 132 should name the root it treated as canonical.\n- **P2, doc overclaim.** `agents/cli-reference.md` new paragraph says the flag does not bypass \"protected-branch gates.\" No such gate exists anywhere in `internal/publish`. A reader will infer non-main branches are refused. Drop the phrase.\n- **P2, test coverage. No negative control for the sentinels.** `scoped_test.go` asserts seven sentinels are unchanged but never proves the same scaffold would change them under `Scoped: false`. The two prune sentinels additionally depend on `RunningExecutables` (`liveness.go:56`) returning a non-empty table. In a sandbox where `ps` fails both prunes report Blocked, and those sentinels pass vacuously even on the default path. A paired default-mode run asserting the sentinels do change would close this.\n- **P3.** `AGENTS.md:160` still lists the publish flag set without `--scoped`. The scoped test omits the `exec.LookPath(\"git\")` skip its siblings use. `TestPublishScopedFlagReachesEngine` mutates the package globals `flagDB` and `os.Stdout`, which is fine serially but breaks under parallel tests, and its nil-store fallback relies implicitly on `validateDBPath` rejecting a path outside CWD (`cmd/ic/main.go:330`).\n\n## Inherited, not introduced\n\nListed so they are not misattributed to this diff. The sync-only path skips the marketplace dirty check (`engine.go:263`). `RebuildCache` reuses an existing cache dir on retry (`cache.go:37`). `UpdateInstalled` re-serializes through a fixed struct and drops unknown fields (`installed.go:100`). `GitPush` on the canonical root pushes any ahead local commits there too (`git.go:99`), which the scoped contract only promises for peers. The peer-sync push of user commits is inherited at root; the introduced part is advertising it as the scoped recovery path.\n\nVERDICT: NEEDS_ATTENTION\n",
+    "final": "## Validation report: e99ad8f (scoped publish) vs bc64530\n\n**Method.** Bash was denied in this session, so I did not run tests, vet, or git. I verified the on-disk worktree (at e99ad8f) against the supplied diff by reading every changed Go file plus the helpers they depend on. All code and doc hunks match the diff. The main session's test claims are theirs, not mine.\n\n### Acceptance replay (the four prior P2s)\n\n- **Rollback honors bound scope.** `internal/publish/canary.go:290` reads the canary file before resolving any checkout. A scoped record uses its persisted root and never calls `FindMarketplace`, so the `from` argument is ignored. Missing or relative root fails closed at `canary.go:305`. A recorded but vanished root fails at `canary.go:315` because the marketplace file cannot be read, before any mutation. Unreadable or malformed canary JSON fails at `canary.go:291`. Peer sync and refresh are skipped for scoped rollbacks at `canary.go:344`. The test at `scoped_test.go:204` invokes rollback from the protected peer and asserts peer HEAD, peer JSON, and the command trace are untouched, while the canonical checkout and installed record move to the retained 0.9.0. All three refusal cases are covered at `scoped_test.go:225`.\n- **Canonical path printed.** `engine.go:142` prints the resolved root on every scoped publish, including dry runs. `canary.go:308` prints it on scoped rollback. The test asserts the symlink-resolved path appears in non-dry-run output.\n- **Protected-branch wording.** `agents/cli-reference.md:247` now says normal Git push protection applies and no branch policy is imposed. Accurate.\n- **Negative control.** `scoped_test.go:18` runs the identical scaffold with `Scoped: false` through the real engine and asserts the peer commit moves, orphan and stale dirs and the dangling link are deleted, the rig file changes, and both the fake `claude` and the diagram script ran. It skips explicitly when the process table is empty, which is the same guard the prune itself uses.\n\n**Default pipeline unchanged.** Every skipped block in `engine.go` is wrapped in `if !e.opts.Scoped` with the body byte-identical to the base. `ProbeRelease` delegates with an empty root, and the pointer condition at `canary.go:229` reduces to the old expression when the root is empty. The CLI flag is a plain bare-flag read.\n\n**Test isolation.** The scaffold sets HOME, PATH, and git identity through `t.Setenv`, so the peer clone under `~/.claude/plugins/marketplaces` lives in a temp home. The CLI dry-run test never touches HOME.\n\n### Beyond-the-gauge findings in the new code\n\nNone blocking. Three notes, none of which change the verdict:\n\n- **Duplicate probe line on read failure.** In scoped mode, when the canonical marketplace cannot be read, `canary.go:224` reports the error and `canary.go:229` then also reports \"points at , published X\" because the version is empty. Cosmetic, and the probe is non-fatal.\n- **Default rollback now fails on corrupt canary state.** Before, a malformed canary file was tolerated and only lost the prior-version hint. Now it blocks the legacy rollback path too, with no override flag. This is documented in the reference and is a defensible tradeoff, but an operator in a recovery situation has to hand-repair the JSON first.\n- **\"Canonical\" can be the Claude Code checkout.** For a plugin outside the monorepo, `FindMarketplace` falls back to the checkout under `~/.claude/plugins/marketplaces`. Scoped mode then commits and pushes into the very checkout the docs describe as a peer, and leaves the monorepo clone stale. The printed path discloses this, and the behavior matches the default pipeline's resolution, but the docs could say it in one sentence.\n\n### Inherited issues, noted separately\n\n- **Peer sync reads `IC_MARKETPLACE_CLONES` from the real environment.** Neither the pre-existing full-pipeline test nor the new negative control clears it. Today this is safe because a real clone will not list a plugin named \"demo\" and gets skipped, but a `t.Setenv` reset would make that explicit.\n- **Manifest regeneration can dirty monorepo files outside the plugin.** Only the plugin's dirty files are staged, so scoped mode does not fully prevent side effects in the monorepo tree. Not new to this commit.\n- **Rollback mutates local state before git.** Commit, rebase, and push failures are warnings after the marketplace and installed records already changed. Unchanged from the base.\n\nVERDICT: CLEAN\n"
+  }
+}

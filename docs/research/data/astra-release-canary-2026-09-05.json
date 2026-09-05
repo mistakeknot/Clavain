@@ -1,0 +1,364 @@
+{
+  "schema_version": 1,
+  "canary_id": "astra-mac-20260905",
+  "bead_id": "Sylveste-kbh5",
+  "current_state": "active_manual_enrollment",
+  "record_semantics": "start_snapshot is the immutable historical entry decision. current_policy supersedes its initial gauge rules. No task has been enrolled.",
+  "start_decision": {
+    "id": 540,
+    "task_store": "Sylveste/.clavain/intercore.db",
+    "rule": "astra-mac-canary-entry"
+  },
+  "start_snapshot": {
+    "schema_version": 1,
+    "canary_id": "astra-mac-20260905",
+    "bead_id": "Sylveste-kbh5",
+    "state": "canary_started",
+    "started_at": "2026-09-05T18:35:46Z",
+    "review_due_at": "2026-09-19T18:35:46.000Z",
+    "review_after_completed_tasks": 20,
+    "mode": "explicit-manual-enrollment",
+    "host_scope": "Mac Codex only",
+    "resolved_route": {
+      "requested_role": "main-integrator",
+      "profile_ref": "main-astra",
+      "profile": {
+        "model_identity": "gpt-6-astra",
+        "role": "main-integrator",
+        "backend": "codex",
+        "model": "gpt-6-astra",
+        "reasoning_effort": "xhigh",
+        "service_tier": "standard",
+        "minimum_codex_version": "0.153.1",
+        "fallbacks": [
+          "main-sol"
+        ],
+        "description": "Interactive orchestration and integration under the main session authority"
+      },
+      "fallback_chain": [
+        {
+          "profile_ref": "main-sol",
+          "profile": {
+            "model_identity": "gpt-5.6-sol",
+            "role": "main-integrator",
+            "backend": "codex",
+            "model": "gpt-5.6-sol",
+            "reasoning_effort": "xhigh",
+            "service_tier": "standard",
+            "description": "Main-integrator fallback while Astra account access is unavailable"
+          }
+        }
+      ]
+    },
+    "deep_profile": {
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "service_tier": "standard"
+    },
+    "consequential_validator": {
+      "model": "claude-fable-5-1",
+      "relationship": "different-model",
+      "sealed_first_pass": true
+    },
+    "ordinary_experimental_context_profile": false,
+    "experimental_profile_results_separate": true,
+    "baseline": {
+      "enrolled_tasks": 0,
+      "completed_tasks": 0,
+      "accepted_tasks": 0,
+      "failed_tasks": 0,
+      "abandoned_tasks": 0,
+      "plan_to_execution_success": null,
+      "escaped_high_severity_defects": null,
+      "main_context_per_request": null,
+      "cost_per_completed_task_usd": null
+    },
+    "task_metric_requirements": [
+      "acceptance and independent beyond-gauge review",
+      "input/output/cached/context tokens per request",
+      "wall time",
+      "retries and policy disposition",
+      "tool calls",
+      "main-integration turns",
+      "absolute complete-task cost or explicit unknown/bounds"
+    ],
+    "stop_on": [
+      "high-severity escape",
+      "same-model consequential validator",
+      "policy block retried or fallback attempted",
+      "missing durable decision/verdict evidence",
+      "plan-to-execution success below 0.909"
+    ],
+    "exclusions": [
+      "54 benchmark cells",
+      "transport probes",
+      "pre-enrollment work including this release",
+      "routine and bulk Sol routes",
+      "production Intercom",
+      "zklw traffic",
+      "interserve-fast and interserve-deep class promotion"
+    ],
+    "automatic_promotion": false,
+    "release_authority": "main-integrator under existing user authorization; mk retains doctrine and consequential ship authority",
+    "releases": {
+      "intercore": {
+        "commit": "314bfa8e1a62d25fbc46e2993074ee39db4d9f63",
+        "installed_clean": true
+      },
+      "clavain": {
+        "version": "0.6.308",
+        "commit": "7a123775ef218b79513daac7d7b43a2314968f08",
+        "binary_source": "fa70851b7d142ed4e30df678337f3149a6e4add6"
+      },
+      "interflux": {
+        "version": "0.2.88",
+        "commit": "bb1598f7218eaab75573204f48c539d0dd039094",
+        "prs": [
+          25,
+          26
+        ]
+      },
+      "interstat": {
+        "version": "0.3.5",
+        "commit": "6d7449e82022df8e4dfe8aa49e8d3853bd381216"
+      }
+    },
+    "evaluation": {
+      "commit": "c44a63813828e50cf8bedb4d7b311535e4b04d4c",
+      "codex_version": "0.153.3",
+      "accepted_cells": 54,
+      "estate_task_credit": 0
+    },
+    "release_verification": {
+      "publisher_probes": "passed for all three",
+      "selected_installed_manifest_versions": "match",
+      "claude_new_session_canaries": "pending; not substituted for actual session reload",
+      "codex_interflux_skills": 3,
+      "codex_interflux_wrappers": 22,
+      "unrelated_cache_entries_preserved": 200796,
+      "unrelated_cache_metadata_sha256": "e55d0b4e6943e76b5e91c1771ea565943a92f54480f8febe1e40560fcf1d4852",
+      "peer_head_preserved": "384df209d5deb1c8a2650a22ebfb5e2fad39cd2e",
+      "peer_status_sha256": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+      "peer_manifest_sha256": "97f1ff8d840fd1051b0e795b80128055f3feb5423ed33f145015f3aae0e6eb2c",
+      "unrelated_installed_sha256": "b24ef1723268a1cb72934f6b0f4bae6ca3bc5b0cae11d363f41196ca5d69f830",
+      "broad_clavain_ci": "10 documented baseline failures; not green",
+      "focused_role_and_collector_checks": "passed at released checkout",
+      "scoped_publish_review": {
+        "model": "claude-fable-5-1",
+        "producer": "gpt-6-astra",
+        "verdict": "CLEAN",
+        "task_store": "/private/tmp/astra-publish.ub2P7R/intercore/.clavain/intercore.db",
+        "terminal_decision_id": 4,
+        "dispatch_id": "DD8AE303-2C80-4E4E-B7A9-0FDA34DF8BC5",
+        "attempt_id": "D8A20817-EDC1-4B7B-A5CA-35338473E1F0",
+        "reviewed_commit": "e99ad8f059bb97d6f0b25e1e01768e08adc3948f",
+        "follow_up_commit": "314bfa8e1a62d25fbc46e2993074ee39db4d9f63"
+      }
+    },
+    "followups": {
+      "canary": "Sylveste-kbh5",
+      "mcp_schema_discrepancy": "Sylveste-8nov",
+      "worker_extreme_lifetime": "Sylveste-9niq",
+      "inherited_containment": "Sylveste-lca"
+    },
+    "start_decision": {
+      "id": 540,
+      "task_store": "Sylveste/.clavain/intercore.db",
+      "rule": "astra-mac-canary-entry"
+    }
+  },
+  "current_policy": {
+    "state": "active_manual_enrollment",
+    "hold_decision_id": 545,
+    "enrolled_tasks": 0,
+    "parent_adoption_bead": "Sylveste-ps30",
+    "closed_implementation_beads": [
+      {
+        "id": "Sylveste-8tx",
+        "closed_at": "2026-09-05T18:29:17Z"
+      },
+      {
+        "id": "Sylveste-2ay",
+        "closed_at": "2026-09-05T18:33:30Z"
+      },
+      {
+        "id": "Sylveste-jd3p",
+        "closed_at": "2026-09-05T18:31:41Z"
+      },
+      {
+        "id": "Sylveste-4bc8",
+        "closed_at": "2026-09-05T18:30:05Z"
+      },
+      {
+        "id": "Sylveste-8ia",
+        "closed_at": "2026-09-05T18:34:57Z"
+      },
+      {
+        "id": "Sylveste-vdcf",
+        "closed_at": "2026-09-05T18:31:00Z"
+      }
+    ],
+    "authorization": {
+      "session": "01a06b07-10d4-7801-b32b-862dac0596fe",
+      "basis": "user standing authorization to proceed; explicit normal gate confirmations",
+      "signer_host": "zklw",
+      "tracker_pr": 89,
+      "tracker_merge": "5f7fd20cc7f1d4e17b8728f10b2940fdf0c10ff6",
+      "key_or_policy_changed": false
+    },
+    "resolved_routes": {
+      "deep-execution": {
+        "requested_role": "deep-execution",
+        "profile_ref": "deep-astra",
+        "profile": {
+          "model_identity": "gpt-6-astra",
+          "role": "deep-execution",
+          "backend": "codex",
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "service_tier": "standard",
+          "minimum_codex_version": "0.153.1",
+          "fallbacks": [
+            "deep-sol"
+          ],
+          "description": "Complex implementation and long-running execution"
+        },
+        "fallback_chain": [
+          {
+            "profile_ref": "deep-sol",
+            "profile": {
+              "model_identity": "gpt-5.6-sol",
+              "role": "deep-execution",
+              "backend": "codex",
+              "model": "gpt-5.6-sol",
+              "reasoning_effort": "xhigh",
+              "service_tier": "standard",
+              "description": "Deep-execution fallback for explicit Astra unavailability"
+            }
+          }
+        ]
+      },
+      "validation": {
+        "producer_identity": "gpt-6-astra",
+        "producer_model": "gpt-6-astra",
+        "validator_relationship": "different-model",
+        "requested_role": "validation",
+        "profile_ref": "validation-fable",
+        "profile": {
+          "model_identity": "claude-fable-5-1",
+          "role": "validation",
+          "backend": "claude",
+          "model": "claude-fable-5-1",
+          "reasoning_effort": "high",
+          "service_tier": "standard",
+          "fallbacks": [
+            "validation-kimi",
+            "validation-sol"
+          ],
+          "description": "Independent consequential-work validator for Codex-produced work"
+        },
+        "fallback_chain": [
+          {
+            "profile_ref": "validation-kimi",
+            "profile": {
+              "model_identity": "kimi-code/k3",
+              "role": "validation",
+              "backend": "kimi",
+              "model": "kimi-code/k3",
+              "reasoning_effort": "high",
+              "service_tier": "standard",
+              "fallbacks": [
+                "validation-sol"
+              ],
+              "description": "Cross-provider validation fallback"
+            }
+          },
+          {
+            "profile_ref": "validation-sol",
+            "profile": {
+              "model_identity": "gpt-5.6-sol",
+              "role": "validation",
+              "backend": "codex",
+              "model": "gpt-5.6-sol",
+              "reasoning_effort": "high",
+              "service_tier": "standard",
+              "description": "Codex validation fallback when its resolved model differs from the producer"
+            }
+          }
+        ]
+      }
+    },
+    "review_evidence": {
+      "publisher": {
+        "path": "astra-scoped-publish-review-2026-09-05.json",
+        "sha256": "7805097dbaacca735bb2e3536af4f83e89bacfa07a8035dfb64b7330696383e2",
+        "includes": "all four original routing rows and both complete reports",
+        "reviewed_commit": "e99ad8f059bb97d6f0b25e1e01768e08adc3948f",
+        "installed_delta": "two documentation lines and one test-only environment reset; production code unchanged",
+        "final_delta_checks": "publisher and CLI tests passed; full Go CI and Secret Scan passed"
+      },
+      "canary_first_pass": {
+        "path": "astra-canary-first-pass-review-2026-09-05.md",
+        "sha256": "be9b502879ee56a58cb4db330280f56778a3fa177ab9afccc84c22a57d8c9140",
+        "verdict": "NEEDS_ATTENTION",
+        "disposition": "durable artifacts, complete profiles, closed-bead/authorization binding and explicit checkpoint/exposure/gauge policy added before first enrollment"
+      },
+      "canary_final": {
+        "path": "astra-canary-final-review-2026-09-05.md",
+        "sha256": "cdf4b2445e2c58b1e2b8bf1404c51da1366c5aec9c71947420882d300996a552",
+        "validator": "claude-fable-5-1",
+        "producer": "gpt-6-astra",
+        "terminal_decision_id": 546,
+        "dispatch_id": "CF08DB77-B92F-4B27-8626-7C5996DDFD3A",
+        "attempt_id": "C77D35F3-B7E3-4E74-B999-7F8810DED91A",
+        "report_verdict": "CLEAN",
+        "automated_sidecar": "warn: no recognized verdict line (bold prose)",
+        "integrator_disposition": "Accepted after reading the sealed raw verdict and checking the actual artifacts; unstarted tasks, terminal-ID reuse and clock clarifications applied",
+        "method": "text-only follow-up; filesystem, hashes, tests and remote state checked by main"
+      }
+    },
+    "binary_source_definition": "Git revision of clean source compiled before the version-bump release commit; Clavain embeds the Intercore revision separately",
+    "enrollment_id_scheme": "astra-mac-20260905:<repository>:<bead>; retries share enrollment ID and have unique attempt IDs",
+    "acceptance_ratio": {
+      "numerator": "accepted terminal tasks",
+      "denominator": "all terminal enrollments, including failed and abandoned tasks",
+      "abandonment": "started enrollment stopped without acceptance; non-success, never removed",
+      "pending": "disclosed separately, not treated as accepted",
+      "evaluation_point": "20 terminal enrollments or 14-day checkpoint",
+      "minimum_terminal_sample_for_promotion": 20,
+      "threshold": 0.909,
+      "contract_kind_recorded": true,
+      "contract_strata": [
+        "brief",
+        "exact"
+      ],
+      "legacy_metric_name": "plan-to-execution success; no equivalence to benchmark task distribution inferred"
+    },
+    "immediate_stop_conditions": [
+      "known high-severity escape in enrolled or un-enrolled Astra work on this Mac",
+      "policy block retry or fallback",
+      "same-model consequential validation",
+      "missing durable evidence"
+    ],
+    "exposure_caveat": "interactive base is already Astra/xhigh; un-enrolled exposure exists and earns no canary credit",
+    "checkpoint_independent_validation": true,
+    "installer_hold_until": "Sylveste-8nov resolved; no global Codex installer or codex-bootstrap on this host during hold",
+    "incomplete_hold_record": 543,
+    "activation": {
+      "decision_id": 547,
+      "task_store": "Sylveste/.clavain/intercore.db",
+      "enrollment_started_at": "2026-09-05T18:55:20Z",
+      "review_due_at": "2026-09-19T18:55:20.000Z",
+      "preparation_time_excluded": true,
+      "requires_evidence_packet_pushed_before_first_enrollment": true
+    },
+    "unstarted_enrollments": "Disclose pending or withdrawn with reason; no successes or terminal sample credit",
+    "terminal_ids": "Never reused or rewritten as a later success; same-task repair gets no fresh sample credit",
+    "documentation_verification": {
+      "url": "https://learn.chatgpt.com/docs/extend/mcp",
+      "verified_on": "2026-09-05",
+      "method": "main fetched official page with web tool; reviewer fetch was denied",
+      "observed_config_key": "[mcp_servers.<server-name>]"
+    }
+  }
+}

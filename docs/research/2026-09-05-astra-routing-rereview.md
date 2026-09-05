@@ -14,7 +14,8 @@ the actual commit changes its selector, configuration and behavioral tests.
 Its separate fixed-tier consumer finding was valid: Interflux `c9d261f` now
 requires producer-aware validation, captures reports outside the reviewer
 sandbox, and removes blind retry/backend substitution. Those Interflux commits
-remain local pending a protected-main PR exception.
+landed through protected-main PR 25; release PR 26 subsequently published them
+as Interflux 0.2.88 (`bb1598f`).
 
 The async lifecycle finding was resolved with explicit terminal collection,
 not a blocking dispatch. The second review identified dropped run/bead lineage,
@@ -77,7 +78,15 @@ and the [preceding run](https://github.com/mistakeknot/Clavain/actions/runs/3395
 All three common-CLI routes now pass 18/18 with repeated cells and different-model
 review. The completed tldr-swinton evidence is pushed at `c44a638`; the runbook
 links the exact producer commit and records the limits and scope dispositions.
-The estate canary remains unstarted at release gates. Local and canonical zklw
+The scoped releases are now installed: Clavain 0.6.308 (`7a12377`), Interstat
+0.3.5 (`6d7449e`), Interflux 0.2.88 (`bb1598f`), and clean Intercore `314bfa8`.
+Fresh selected-manifest, routing and async collector checks pass. Clavain's
+[release CI](https://github.com/mistakeknot/Clavain/actions/runs/33983525897)
+retains the same ten named baseline failures; Secret Scan passes. Independent
+Fable review of the scoped publisher was CLEAN, with main-run full Go tests,
+vet, race and actual publication-preservation checks. The narrow Mac canary
+is tracked separately as `Sylveste-kbh5`, starting from zero enrolled tasks;
+this is not completion of the adoption/promotion goal. Local and canonical zklw
 shadow-corpus paths are absent, so neither interserve class has new parity
 evidence or a changed route.
 

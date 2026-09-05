@@ -1,6 +1,6 @@
 # GPT-6 Astra rollout
 
-State as of 2026-09-05: **Astra access verified; repeated comparison complete; estate canary pending release gates**.
+State as of 2026-09-05: **Astra access verified; repeated comparison and scoped releases complete; narrow Mac canary started with zero enrolled tasks**.
 
 ## Activation evidence
 
@@ -11,7 +11,7 @@ State as of 2026-09-05: **Astra access verified; repeated comparison complete; e
 
 ## Rollout state
 
-Role routing is opt-in through `dispatch.sh --role`; existing tier consumers and direct Chat Completions clients are unchanged. This is the shadow stage: role resolutions and fallbacks can be inspected without switching default traffic.
+Role routing remains opt-in through `dispatch.sh --role`; existing tier consumers and direct Chat Completions clients are unchanged. The narrow canary covers explicitly enrolled work on this Mac only. It does not enroll zklw, production Intercom, routine/bulk traffic, or either interserve class.
 
 Promotion order:
 
@@ -20,7 +20,15 @@ Promotion order:
 3. `deep-execution`;
 4. selected downstream consumers.
 
-After the release gates clear, run a narrow canary for 20 completed tasks or 14 days. Protocol probes and benchmark cells are not counted as accepted estate tasks. Observe main-integrator context per turn against 100K and report absolute main-integrator cost per completed task; neither token share nor cost share is a promotion gate.
+Track the narrow canary in bead `Sylveste-kbh5`; the parent adoption bead remains open. Review at 20 completed tasks or 14 days, whichever comes first. Reaching that checkpoint is not automatic promotion, and an empty or insufficient sample cannot establish quality. Protocol probes, benchmark cells, and work begun before enrollment do not count. Observe main-integrator context per turn against 100K and report absolute main-integrator cost per completed task; neither token share nor cost share is a promotion gate.
+
+Measured scope is narrower than exposure: the user-selected interactive base
+already runs Astra/xhigh, including un-enrolled work. Such work earns no canary
+task credit, but a known high-severity escape there also halts enrollment. This
+canary does not claim to contain all Astra exposure or measure un-enrolled work.
+Do not run the global Codex installer or codex-bootstrap on this host until
+`Sylveste-8nov` resolves the MCP-schema discrepancy; record any other relevant
+tool/configuration change as a new evidence boundary before enrolling more work.
 
 The 0.153.2 Sol result remains historical evidence. The fresh three-route comparison uses the same frozen source/evaluator commit `adfb92239a9b6b021034a3981bbe0e6c4d6b0075` and CLI 0.153.3. It ignores user configuration and does not select the separate experimental Astra profile; resolved feature-flag state was not captured.
 
@@ -39,11 +47,89 @@ estimates because per-request context was not retained. A separate mixed-work
 main window averaged 145,285 input tokens across 59 model requests, above the
 100K observational target; full cost per benchmark task was not imputed.
 
-Release remains held: Interflux needs a protected-main PR exception; the
-supported plugin publisher also prunes unrelated caches and synchronizes an
-ahead user marketplace checkout; Bead closure requires the signer. No broad
-publisher cleanup, signature bypass, routine-route switch or estate-canary
-counting has occurred.
+The user authorized the protected-main PR path and scoped publication. Interflux
+PRs 25 and 26 are merged. `ic publish --scoped`, released and installed at
+Intercore `314bfa8`, published Clavain 0.6.308, Interstat 0.3.5 and Interflux
+0.2.88. Selected installed manifests match those versions, and each publisher
+post-release probe passed. The preservation receipt covers 200,796 unrelated
+cache metadata entries, unrelated installed records, and the ahead user
+marketplace checkout: all matched the pre-publication snapshot. No broad
+cleanup or peer checkout synchronization ran. Claude SessionStart canaries are
+separate and may remain pending until new sessions load; existing sessions were
+not restarted or counted as runtime acceptance.
+
+Codex's three current Interflux skill links and 22 generated command wrappers
+now use the released canonical checkout. The two obsolete skill links and
+replaced wrappers were backed up. The global companion installer was not run.
+Its remaining MCP-schema doctor discrepancy is tracked in `Sylveste-8nov`;
+working MCP configuration is unchanged. See the updated
+[instruction audit](astra-instruction-audit.md).
+
+The [release and canary receipt](../research/data/astra-release-canary-2026-09-05.json)
+binds the start decision, profiles, release commits and zero-task baseline.
+Intercore preparation decision 540 lives in the Sylveste task store. The receipt
+preserves that historical start and the pre-enrollment hold, then binds a new
+activation decision and 14-day deadline after review remediation. The active
+window starts at hold release, not during preparation. This is manual enrollment, not
+an unattended monitor or automatic traffic switch. The six completed
+implementation/evaluation Beads were closed through zklw's normal signed gates,
+with explicit confirmation under the user's standing authorization; no signer
+key or approval policy was changed.
+The publisher's sealed review rows and complete reports are exported in the
+hash-bound artifact named in the receipt, so its evidence does not depend on
+the original temporary store surviving. Fable reviewed `e99ad8f`; `314bfa8`
+adds two documentation lines disclosing canonical discovery and one test-only
+`IC_MARKETPLACE_CLONES` reset. Production code is unchanged. Publisher and CLI
+tests passed on that final delta; full Go CI and Secret Scan also passed.
+
+### Enrollment and acceptance
+
+Before each eligible task starts, record its bead, objective, acceptance criteria,
+contract kind (`brief` or `exact`), task-store location and unique enrollment ID
+under `Sylveste-kbh5`. Use `astra-mac-20260905:<repository>:<bead>` once per
+task; retries retain that enrollment ID and get separate attempt IDs. A terminal
+enrollment ID cannot be reused or rewritten as a later success. Link remedial
+work to the original result; do not give a repeat of the same task fresh sample
+credit. Only a materially distinct objective gets a new bead/enrollment. Dispatch
+bounded work with `--role deep-execution`; use `--via zaka` for long or
+clarification-prone work. The main-integrator consumes a bounded result packet
+(checkout diff/commit, checks, failures, unresolved questions) and verifies the
+actual checkout. A capable executor receives a `brief` by default, not a
+prewritten implementation.
+
+Consequential Astra output requires a sealed first-pass Fable/Claude review
+through `--role validation --producer-identity gpt-6-astra`, including acceptance
+replay and independent beyond-the-gauge findings. All validator fallbacks must
+still differ from the canonical producer. A completed dispatch is not an
+accepted task. Record final acceptance separately in the task's Intercore
+store, linked to exact producer and validator attempts and commit/check evidence.
+
+Record all enrolled attempts, failures and abandonments; count unique tasks,
+not retries or ledger rows. Here a completed task is any terminal enrollment:
+accepted, failed, or abandoned after starting. Started means the first dispatch
+was submitted. Enrolled but undispatched tasks must be disclosed at checkpoint
+as pending or withdrawn with a reason; they are not successes and cannot count
+toward the 20-terminal-task sample. Abandonment is stopping without
+acceptance and counts as non-success, never as removal from the denominator.
+The acceptance ratio is accepted tasks divided by all terminal enrollments;
+pending tasks are disclosed separately. "Plan-to-execution" is the legacy gate
+label; the measured outcome is satisfaction of the enrolled contract. Report
+`brief` and `exact` strata separately, without equating this sample with the
+benchmark's task/contract distribution. Keep per-request input/output/cached/context tokens,
+wall time, retries, tool calls and main-integration turns. Record absolute task
+cost only when the complete attribution is available; otherwise use explicit
+unknowns/bounds and explain the missing evidence. Apply long-context pricing
+per request, never to aggregate task tokens.
+
+Stop enrollment immediately for a high-severity escape, policy-block retry or
+fallback, same-model consequential validation, or missing durable evidence.
+Evaluate the 0.909 acceptance ratio at the checkpoint, not after each early
+task. With fewer than 20 terminal enrollments at the 14-day checkpoint, report
+insufficient evidence and hold promotion; do not infer quality from the ratio.
+The integrator prepares the checkpoint packet, then a sealed different-model
+validator reviews the aggregate evidence, denominator and scope before mk's
+promotion decision. Only mk can change doctrine or consequential shipping
+authority. Routine/bulk routes remain Sol.
 
 ## Routing and async evidence
 
