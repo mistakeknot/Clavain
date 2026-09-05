@@ -26,6 +26,7 @@ MODEL=""
 TIER=""
 ROLE=""
 ROLE_RESOLVED=false
+DISPATCH_RESULT_READY=false
 RESOLVED_PROFILE_REF=""
 RESOLVED_ROUTE_JSON=""
 RESOLVED_PROFILE_JSON=""
@@ -1828,6 +1829,9 @@ _surface_codex_errors() {
 
 _finalize_dispatch_result() {
   local exit_code="$1" failure_class
+  # Only a finished backend has a current extracted result. Pre-execution
+  # failures must never pick up an older sidecar at the requested path.
+  DISPATCH_RESULT_READY=true
   failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
   if [[ "$exit_code" == "0" ]]; then
     : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
@@ -1844,6 +1848,18 @@ _finalize_dispatch_result() {
 if ! _record_role_routing_decision 0 "" started; then
   _dispatch_write_failure_class terminal_recording
   exit 1
+fi
+
+# Role output paths are fresh attempt artifacts. Both the body and its sidecar
+# must be reset: clearing only the verdict would re-extract the previous body
+# if a successful process failed to write its requested output file.
+if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true && -n "$OUTPUT" ]]; then
+  if ! { : > "$OUTPUT" && : > "${OUTPUT}.verdict"; }; then
+    echo "Error: cannot prepare fresh role output at '$OUTPUT'" >&2
+    _dispatch_write_failure_class terminal_configuration
+    _record_role_routing_decision 1 terminal_configuration || true
+    exit 1
+  fi
 fi
 
 if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then

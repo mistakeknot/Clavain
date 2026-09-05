@@ -44,6 +44,12 @@ worker shutdown can still be collected when the exact durable completion event
 exists. A partial/unreadable event log fails closed; retry collection, not the
 model task. Inspect stale collection locks before removing them.
 
+Synchronous role dispatch resets its generated report body and verdict sidecar
+after recording the new start. A process exiting zero without a fresh report
+produces a warning, never a pass inherited from a previous attempt. Nonterminal
+records have no verdict. Inspect the verdict and actual checkout before
+acceptance; `completed` describes execution, not integrator approval.
+
 Synchronous execution retains bounded 429 retries and explicit-unavailability
 fallback. App Server startup failures can use that policy, but once a turn is
 submitted, **no automatic replay or model fallback occurs**: steering may already

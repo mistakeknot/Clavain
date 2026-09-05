@@ -46,6 +46,25 @@ The broad suite is not described as green. These failures are outside this
 change; targeted routing and installed async checks supply the release evidence
 for this boundary. No promotion is inferred from them.
 
+## Attempt-output freshness follow-up
+
+A live review retry exposed a prior verdict attached to a new `started` record
+when its output filename was reused. The regression test reproduced that case,
+and independent Fable review identified its terminal analogue: a successful
+process writing no new report could inherit the old report and pass verdict.
+Both cases are now covered. Opt-in synchronous role dispatch prepares a fresh
+report body and sidecar after the started audit record succeeds. Only a finished
+backend with a newly extracted result may attach a sidecar to its terminal
+record. An unwriteable output target is a terminal configuration failure with
+no inherited verdict; App Server verdicts remain event-log-only.
+
+The final independent Fable review was clean. Main ran the real-Intercore
+integration fixture, role unit suite, async collector suite and all 42 targeted
+Zaka/error/preflight shell tests successfully. The integration fixture also
+checks a fresh completed pass and an unwriteable report target; rapid records
+are ordered by their actual SQLite IDs instead of relying on timestamp ties.
+The broad-suite baseline above remains unchanged, not silently relabeled green.
+
 ## Remaining rollout work
 
 All three common-CLI first-pass routes pass 6/6; two tie repeats per route and

@@ -33,7 +33,11 @@ _prepare_role_audit() {
 _role_audit_context() {
   local state="$1" exit_code="$2" failure_class="$3" version="" verdict="" head_after=""
   [[ "$ENGINE" != codex ]] || version="$(codex --version 2>/dev/null || true)"
-  [[ ! -f "${OUTPUT:-}.verdict" ]] || verdict="$(head -c 4096 "${OUTPUT}.verdict")"
+  # A reused output path may still contain a previous attempt's sidecar.
+  # Pending states have no verdict; App Server verdicts come from collection.
+  if [[ "$state" == completed || "$state" == failed ]] && [[ "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka && -n "${OUTPUT:-}" && -f "${OUTPUT}.verdict" ]]; then
+    verdict="$(head -c 4096 "${OUTPUT}.verdict")"
+  fi
   head_after="$(git -C "${WORKDIR:-.}" rev-parse HEAD 2>/dev/null || true)"
   jq -cn --argjson route "${RESOLVED_ROUTE_JSON:-null}" --argjson profile "${RESOLVED_PROFILE_JSON:-null}" \
     --arg dispatch_id "$DISPATCH_ID" --arg attempt_id "$ATTEMPT_ID" --arg state "$state" \
