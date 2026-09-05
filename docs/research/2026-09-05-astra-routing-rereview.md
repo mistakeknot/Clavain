@@ -65,12 +65,21 @@ checks a fresh completed pass and an unwriteable report target; rapid records
 are ordered by their actual SQLite IDs instead of relying on timestamp ties.
 The broad-suite baseline above remains unchanged, not silently relabeled green.
 
+Fresh remote CI for `1c12041` remains red with the same ten shell failures as
+`1a67a32`: the nine authorization/installer fixtures above plus a Linux test
+invoking the macOS-only `md5` command. The routing-specific failure occurs before
+its comparison assertion. Secret Scan passes. See
+[current Plugin Tests](https://github.com/mistakeknot/Clavain/actions/runs/33957643814)
+and the [preceding run](https://github.com/mistakeknot/Clavain/actions/runs/33955407888).
+
 ## Remaining rollout work
 
-All three common-CLI first-pass routes pass 6/6; two tie repeats per route and
-independent Astra-patch review remain underway. The estate canary is not yet
-qualified or counted. Local and canonical zklw shadow-corpus paths are absent,
-so neither interserve class has new parity evidence or a changed route.
+All three common-CLI routes now pass 18/18 with repeated cells and different-model
+review. The completed tldr-swinton evidence is pushed at `c44a638`; the runbook
+links the exact producer commit and records the limits and scope dispositions.
+The estate canary remains unstarted at release gates. Local and canonical zklw
+shadow-corpus paths are absent, so neither interserve class has new parity
+evidence or a changed route.
 
 Low-priority worker hardening remains worth testing separately: forced startup
 termination across process groups and cleanup after the Codex child has already

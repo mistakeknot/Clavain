@@ -1,6 +1,6 @@
 # GPT-6 Astra rollout
 
-State as of 2026-09-05: **Astra access verified; comparative evaluation and estate canary still pending**.
+State as of 2026-09-05: **Astra access verified; repeated comparison complete; estate canary pending release gates**.
 
 ## Activation evidence
 
@@ -20,9 +20,30 @@ Promotion order:
 3. `deep-execution`;
 4. selected downstream consumers.
 
-After the comparison passes, run a narrow canary for 20 completed tasks or 14 days. Protocol probes and benchmark cells are not counted as accepted estate tasks. Observe main-integrator context per turn against 100K and report absolute main-integrator cost per completed task; neither token share nor cost share is a promotion gate.
+After the release gates clear, run a narrow canary for 20 completed tasks or 14 days. Protocol probes and benchmark cells are not counted as accepted estate tasks. Observe main-integrator context per turn against 100K and report absolute main-integrator cost per completed task; neither token share nor cost share is a promotion gate.
 
-The 0.153.2 Sol result remains historical evidence. The fresh three-route comparison uses the same frozen source/evaluator commit `adfb92239a9b6b021034a3981bbe0e6c4d6b0075` and CLI 0.153.3. It ignores user configuration for all cells, keeping experimental context management out of this treatment. See the tldr-swinton evaluation report for cell results and repeats.
+The 0.153.2 Sol result remains historical evidence. The fresh three-route comparison uses the same frozen source/evaluator commit `adfb92239a9b6b021034a3981bbe0e6c4d6b0075` and CLI 0.153.3. It ignores user configuration and does not select the separate experimental Astra profile; resolved feature-flag state was not captured.
+
+All three routes passed 18/18 cells (first pass plus two tie repeats). Fable
+reviewed all 36 Astra cells, and the main Astra integrator reviewed all 18 Sol
+cells. No introduced P0/P1 was found. A directory-pattern scope concern was
+accepted after native Git replay; the inherited containment gap remains tracked
+as tldr-swinton bead `Sylveste-lca`. The
+[completed report and durable receipt](https://github.com/mistakeknot/tldr-swinton/blob/c44a63813828e50cf8bedb4d7b311535e4b04d4c/docs/research/2026-09-05-astra-common-cli-results.md)
+were pushed before this consumer update. Task-store decision 24 records the main
+integrator's disposition with zero estate tasks and no release approval.
+
+The observed aggregate task-time reduction was 57.1% for Astra/high versus Sol,
+not a fleet latency guarantee. Executor costs are bounded Standard-equivalent
+estimates because per-request context was not retained. A separate mixed-work
+main window averaged 145,285 input tokens across 59 model requests, above the
+100K observational target; full cost per benchmark task was not imputed.
+
+Release remains held: Interflux needs a protected-main PR exception; the
+supported plugin publisher also prunes unrelated caches and synchronizes an
+ahead user marketplace checkout; Bead closure requires the signer. No broad
+publisher cleanup, signature bypass, routine-route switch or estate-canary
+counting has occurred.
 
 ## Routing and async evidence
 
