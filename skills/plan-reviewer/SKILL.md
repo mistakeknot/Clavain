@@ -1,6 +1,6 @@
 ---
 name: plan-reviewer
-description: Use when a major project step has been completed and needs to be reviewed against the original plan and coding standards.
+description: Review a completed project step against its implementation plan and coding standards.
 ---
 
 # Plan Reviewer

@@ -28,6 +28,10 @@ teardown() {
 }
 
 _write_stub_clavain_source() {
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$SOURCE_DIR/scripts/codex-session-refresh.sh"
+    chmod +x "$SOURCE_DIR/scripts/codex-session-refresh.sh"
+    mkdir -p "$SOURCE_DIR/config"
+    cp -f "$BATS_TEST_DIRNAME/../../config/codex-instructions.md" "$SOURCE_DIR/config/codex-instructions.md"
     cat > "$SOURCE_DIR/README.md" <<'EOF'
 # Stub Clavain
 EOF
@@ -118,6 +122,27 @@ EOF
     [ "$(echo "$output" | jq -r '.checks.clavain_cli_link_exists')" = "true" ]
     [ "$(echo "$output" | jq -r '.checks.clavain_cli_link_match')" = "true" ]
     [ "$(echo "$output" | jq -r '.checks.clavain_cli_target')" = "$(cd "$SOURCE_DIR" && pwd -P)/bin/clavain-cli" ]
+}
+
+@test "install refuses a missing instruction template before changing consumer links" {
+    rm -f "$SOURCE_DIR/config/codex-instructions.md"
+    run "$SCRIPT_UNDER_TEST" install --source "$SOURCE_DIR" --codex-home "$CODEX_HOME"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Missing instruction template"* ]]
+    [ ! -e "$AGENTS_SKILLS_DIR/clavain" ]
+    [ ! -e "$LOCAL_BIN_DIR/clavain-cli" ]
+    [ ! -e "$CODEX_HOME/config.toml" ]
+}
+
+@test "broad install backs up instruction contents and retains the symlink" {
+    local target="$TEST_DIR/operator.md"
+    printf 'original operator instructions\n' > "$target"
+    ln -s "$target" "$CODEX_HOME/AGENTS.md"
+    run "$SCRIPT_UNDER_TEST" install --source "$SOURCE_DIR" --codex-home "$CODEX_HOME"
+    [ "$status" -eq 0 ]
+    [ -L "$CODEX_HOME/AGENTS.md" ]
+    run python3 -c 'import pathlib,sys; files=list(pathlib.Path(sys.argv[1]).rglob("operator.md")); assert len(files)==1; assert not files[0].is_symlink(); assert files[0].read_text()=="original operator instructions\n"' "$CODEX_HOME/.clavain-backups"
+    [ "$status" -eq 0 ]
 }
 
 @test "uninstall removes managed ~/.local/bin/clavain-cli link" {

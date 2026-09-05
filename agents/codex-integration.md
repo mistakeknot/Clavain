@@ -3,9 +3,19 @@
 ## Runbooks
 
 - Codex sync operations: `docs/runbooks/codex-sync.md`
+- Skill catalog budget, duplicate discovery, and reversible curation: `docs/runbooks/codex-skills.md`
 - Optional automated Codex refresh job: `scripts/codex-auto-refresh.sh` (cron/systemd/launchd examples in `docs/runbooks/codex-sync.md`)
 - GitHub web PR agent commands (`/clavain:claude-review`, `/clavain:codex-review`, `/clavain:dual-review`) are documented in `docs/runbooks/codex-sync.md`
 - GitHub issue command `/clavain:upstream-sync` (for `upstream-sync` issues) is documented in `docs/runbooks/codex-sync.md`
+
+## OODARCS instructions
+
+`config/codex-instructions.md` owns the global operating block; `using-clavain`
+loads the proportional OODARCS router for substantive Codex work in any directory.
+Use `scripts/install-codex.sh sync-instructions --source <checkout> [--dry-run]`
+for an instruction-only update. Keep broad install/update and automatic refresh
+unused while `Sylveste-8nov` remains open. Follow the skill runbook for review,
+producer-first rollout, companion compatibility, and real first-turn evidence.
 
 ## Worktree Coordination
 

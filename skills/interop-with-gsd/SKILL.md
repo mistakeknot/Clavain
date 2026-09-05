@@ -1,6 +1,6 @@
 ---
 name: interop-with-gsd
-description: Use when the user mentions /gsd:* commands or the GSD (Get Stuff Done) framework. Informational unless gsd-plugin is installed.
+description: "Recognize /gsd:* requests and map the GSD framework to Clavain. Informational unless gsd-plugin is installed."
 disable-model-invocation: true
 ---
 

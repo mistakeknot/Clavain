@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-04T01:50:47Z",
+  "generated": "2026-09-05T22:26:39Z",
   "counts": {
     "skills": 26,
     "agents": 6,
@@ -16,7 +16,7 @@
     },
     {
       "name": "code-review-discipline",
-      "description": "Use when requesting or receiving code review \u2014 dispatch reviewers, handle feedback rigorously, avoid performative agreement."
+      "description": "Request and assess code review; verify findings and preserve required review gates."
     },
     {
       "name": "codex-delegate",
@@ -32,7 +32,7 @@
     },
     {
       "name": "engineering-docs",
-      "description": "Use when capturing a solved problem as categorized documentation with YAML frontmatter for fast lookup"
+      "description": "Document a solved problem as a searchable solution with YAML frontmatter."
     },
     {
       "name": "executing-plans",
@@ -40,39 +40,39 @@
     },
     {
       "name": "file-todos",
-      "description": "Manage the file-based todo system in todos/ \u2014 create, status, dependencies, triage, and code-review integration."
+      "description": "Manage an existing todos/ file tracker with status, dependencies, and review triage."
     },
     {
       "name": "galiana",
-      "description": "Show discipline analytics \u2014 defect escape rate, override rate, cost metrics, and agent scorecard"
+      "description": "Inspect engineering discipline metrics, defect escapes, overrides, cost, and agent scorecards."
     },
     {
       "name": "interop-with-gsd",
-      "description": "Use when the user mentions /gsd:* commands or the GSD (Get Stuff Done) framework. Informational unless gsd-plugin is installed."
+      "description": "Recognize /gsd:* requests and map the GSD framework to Clavain. Informational unless gsd-plugin is installed."
     },
     {
       "name": "interop-with-superpowers",
-      "description": "Use when the user mentions /superpowers:* commands or the superpowers rig (obra/superpowers). Informational unless it is installed."
+      "description": "Recognize /superpowers:* requests and map the superpowers rig to Clavain. Informational unless installed."
     },
     {
       "name": "interserve-engine",
-      "description": "Internal engine for /clavain:interserve \u2014 dispatches tasks to Codex CLI agents with debate triggers and Oracle escalation."
+      "description": "Internal engine for /clavain:interserve: dispatch bounded coding tasks with debate and review gates."
     },
     {
       "name": "landing-a-change",
-      "description": "Use when implementation is complete and tests pass \u2014 verify, document, and land on trunk."
+      "description": "Land verified work on trunk after tests and required review; preserve release authority."
     },
     {
       "name": "lane",
-      "description": "Manage thematic work lanes \u2014 discover, create, tag beads, show velocity and starvation scores"
+      "description": "Manage thematic Beads work lanes, tags, velocity, and starvation."
     },
     {
       "name": "plan-reviewer",
-      "description": "Use when a major project step has been completed and needs to be reviewed against the original plan and coding standards."
+      "description": "Review a completed project step against its implementation plan and coding standards."
     },
     {
       "name": "pr-comment-resolver",
-      "description": "Use when PR review comments need to be resolved with code changes \u2014 implements the requested changes and reports clearly on each resolution."
+      "description": "Resolve PR review comments with verified code changes and per-comment outcomes."
     },
     {
       "name": "project-onboard",
@@ -100,11 +100,11 @@
     },
     {
       "name": "upstream-sync-engine",
-      "description": "Invoked from /clavain:upstream-sync \u2014 checks beads/oracle/superpowers/compound for updates, generates upgrade checklist. Internal."
+      "description": "Internal engine for /clavain:upstream-sync: inspect upstream changes and produce an upgrade checklist."
     },
     {
       "name": "using-clavain",
-      "description": "How to find and use Clavain skills, agents, and commands. Load at the start of a Clavain workflow."
+      "description": "Route substantive coding, research, planning, documentation, and review through Sylveste OODARCS. Skip trivial requests."
     },
     {
       "name": "using-tmux-for-interactive-commands",
@@ -112,7 +112,7 @@
     },
     {
       "name": "writing-plans",
-      "description": "Use when you have a spec or requirements for a multi-step task, before touching code"
+      "description": "Plan multi-step implementation from a spec or requirements before editing code."
     }
   ],
   "agents": [

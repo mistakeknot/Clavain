@@ -1,6 +1,6 @@
 ---
 name: interserve-engine
-description: Internal engine for /clavain:interserve — dispatches tasks to Codex CLI agents with debate triggers and Oracle escalation.
+description: "Internal engine for /clavain:interserve: dispatch bounded coding tasks with debate and review gates."
 version: 0.5.0
 user-invocable: false
 ---

@@ -5,15 +5,18 @@
 - One directory per skill: `skills/<kebab-case-name>/SKILL.md`
 - YAML frontmatter: `name` (must match directory name) and `description` (third-person, with trigger phrases)
 - Body written in imperative form ("Do X", not "You should do X")
-- Keep SKILL.md lean (1,500-2,000 words) — move detailed content to sub-files
+- Keep SKILL.md as short as the task permits; a word limit is not a target. Move conditional procedures and large examples to linked references.
 - Sub-resources go in the skill directory: `examples/`, `references/`, helper `.md` files
 - Description should contain specific trigger phrases so Claude matches the skill to user intent
+- Descriptions are discovery metadata, not mini-manuals. Front-load the capability and task boundary; keep implementation mechanics in the body. Preserve discriminating keywords rather than truncating to a fixed character count.
+- Codex budgets the available-skills catalog separately from loaded skill bodies. Use [the Codex skill audit](../docs/runbooks/codex-skills.md) to measure installed duplicates and namespace contributions; shortening bodies alone does not fix a catalog warning.
+- Do not assume Claude-specific invocation flags control Codex. Codex supports `agents/openai.yaml` invocation policy. Preserve automatic discovery unless the user requests explicit-only behavior; approvals belong immediately before the authorized mutation, not in a hidden skill.
 
 Example frontmatter:
 ```yaml
 ---
 name: refactor-safely
-description: Use when performing significant refactoring — guides a disciplined process that leverages duplication detection, characterization tests, staged execution, and continuous simplicity review
+description: Refactor significant existing code while preserving behavior with characterization tests and staged verification.
 ---
 ```
 

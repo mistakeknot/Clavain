@@ -1,6 +1,6 @@
 ---
 name: interop-with-superpowers
-description: Use when the user mentions /superpowers:* commands or the superpowers rig (obra/superpowers). Informational unless it is installed.
+description: "Recognize /superpowers:* requests and map the superpowers rig to Clavain. Informational unless installed."
 disable-model-invocation: true
 ---
 

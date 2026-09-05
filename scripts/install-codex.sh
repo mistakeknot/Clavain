@@ -38,6 +38,7 @@ REPO_URL="${CLAVAIN_REPO_URL:-$REPO_URL_DEFAULT}"
 INSTALL_PROMPTS=1
 REMOVE_CLONE=0
 DOCTOR_JSON=0
+DRY_RUN=0
 
 AGENTS_SKILLS_DIR="${AGENTS_SKILLS_DIR:-$HOME/.agents/skills}"
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
@@ -63,11 +64,13 @@ usage() {
 Usage:
   install-codex.sh install [options]
   install-codex.sh update [options]
+  install-codex.sh sync-instructions --source <checkout> [--dry-run]
   install-codex.sh doctor [--json]
   install-codex.sh uninstall [--remove-clone]
 
 Options:
   --source <path>      Use an existing Clavain checkout as source.
+  --dry-run            Preview sync-instructions without writing any files.
   --clone-dir <path>   Clone/update target (default: ~/.codex/clavain)
   --repo-url <url>     Repo URL for clone/update.
   --no-prompts         Skip generating prompt wrappers in ~/.codex/prompts.
@@ -79,7 +82,18 @@ USAGE
 }
 
 while [[ $# -gt 0 ]]; do
+  if [[ "$ACTION" == "sync-instructions" ]]; then
+    case "$1" in
+      --source|--codex-home|--dry-run|-h|--help) ;;
+      *) echo "Unsupported sync-instructions option: $1" >&2; exit 1 ;;
+    esac
+  fi
   case "$1" in
+    --dry-run)
+      [[ "$ACTION" == "sync-instructions" ]] || { echo "--dry-run requires sync-instructions" >&2; exit 1; }
+      DRY_RUN=1
+      shift
+      ;;
     --source)
       SOURCE_DIR="$2"
       SOURCE_EXPLICIT=1
@@ -447,29 +461,11 @@ remove_block_from_file() {
   return 0
 }
 
-build_agents_block() {
-  cat <<'BLOCK'
-<!-- BEGIN CLAVAIN CODEX TOOL MAP -->
-## Clavain Codex Tool Mapping
-
-This block is managed automatically by `install-codex.sh`.
-
-Tool mapping:
-- `Read`: use shell reads (`cat`, `sed`) or `rg`
-- `Write`: shell redirection or `apply_patch`
-- `Edit`/`MultiEdit`: `apply_patch`
-- `Bash`: shell command execution
-- `Grep`: `rg`
-- `Glob`: `rg --files` or `find`
-- `Task`/`Subagent`: run in main thread; parallelize independent tool calls
-- `TodoWrite`/`TodoRead`: file-based todos in `todos/`
-- `Skill`: open referenced `SKILL.md`
-- `AskUserQuestion`: use `request_user_input` if available; otherwise ask in chat with numbered options and pause for response
-
-Bootstrap:
-- Run `~/.codex/clavain/.codex/clavain-codex bootstrap` for a Codex-native quickstart.
-<!-- END CLAVAIN CODEX TOOL MAP -->
-BLOCK
+sync_instructions() {
+  # Never call ensure_clone or the broad installer from this action.
+  [[ "$SOURCE_EXPLICIT" -eq 1 ]] || { echo "sync-instructions requires --source <checkout>" >&2; exit 1; }
+  resolve_source_dir
+  install_managed_agents_block
 }
 
 render_mcp_block() {
@@ -829,13 +825,20 @@ remove_prompts() {
 }
 
 install_managed_agents_block() {
-  local block
-  block="$(build_agents_block)"
-  if update_file_with_block "$CODEX_AGENTS_FILE" "$AGENTS_BLOCK_START" "$AGENTS_BLOCK_END" "$block"; then
-    echo "Updated managed AGENTS block: $CODEX_AGENTS_FILE"
-  else
-    echo "Managed AGENTS block already up to date: $CODEX_AGENTS_FILE"
+  # Keep the array nonempty: Bash 3.2 treats an empty array as unset under -u.
+  local args=(--file "$CODEX_AGENTS_FILE" --block "$SOURCE_DIR/config/codex-instructions.md")
+  [[ "$DRY_RUN" -eq 0 ]] || args+=(--dry-run)
+  if [[ "$ACTION" != "sync-instructions" && -f "$CODEX_AGENTS_FILE" ]]; then
+    local preview
+    preview="$(python3 "$SCRIPT_DIR/sync-codex-instructions.py" "${args[@]}" --dry-run)" || return 1
+    if [[ -n "$preview" ]]; then
+      # Back up the contents, rather than a symlink that would follow the update.
+      local target
+      target="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$CODEX_AGENTS_FILE")" || return 1
+      backup_copy_file "$target"
+    fi
   fi
+  python3 "$SCRIPT_DIR/sync-codex-instructions.py" "${args[@]}"
 }
 
 sync_mcp_servers() {
@@ -1088,9 +1091,18 @@ cleanup_legacy_mcp_server_tables() {
 }
 
 install_all() {
+  command -v python3 >/dev/null 2>&1 || { echo "Instruction sync requires python3" >&2; exit 1; }
   resolve_source_dir
   if [[ "$SOURCE_EXPLICIT" -eq 0 ]]; then
     ensure_clone
+  fi
+  [[ -r "$SOURCE_DIR/config/codex-instructions.md" ]] || {
+    echo "Missing instruction template: $SOURCE_DIR/config/codex-instructions.md" >&2
+    exit 1
+  }
+  if [[ -d "$CODEX_HOME" ]]; then
+    python3 "$SCRIPT_DIR/sync-codex-instructions.py" --file "$CODEX_AGENTS_FILE" \
+      --block "$SOURCE_DIR/config/codex-instructions.md" --dry-run >/dev/null || exit 1
   fi
 
   local skills_target="$SOURCE_DIR/skills"
@@ -1563,6 +1575,9 @@ uninstall_all() {
 }
 
 case "$ACTION" in
+  sync-instructions)
+    sync_instructions
+    ;;
   install)
     install_all
     ;;

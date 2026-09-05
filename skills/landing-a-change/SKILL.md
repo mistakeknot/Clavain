@@ -1,6 +1,6 @@
 ---
 name: landing-a-change
-description: Use when implementation is complete and tests pass — verify, document, and land on trunk.
+description: Land verified work on trunk after tests and required review; preserve release authority.
 ---
 
 <!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same verify → review → document → commit → confirm process. -->
