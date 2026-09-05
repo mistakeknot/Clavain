@@ -105,6 +105,12 @@ subagents:
       model: sonnet
 
 dispatch:
+  # Canonical endpoints, not UI aliases, define producer/validator separation.
+  model_aliases:
+    fable: claude-fable-5-1
+    gpt-5.6: gpt-5.6-sol
+    k3: kimi-code/k3
+    kimi/k3: kimi-code/k3
   # Roles are the authoritative dispatch interface. Tier names remain for
   # existing consumers that need only a model string.
   roles:

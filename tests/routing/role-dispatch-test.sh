@@ -22,7 +22,7 @@ cat > "$TMP_ROOT/bin/ic" <<'FAKE_IC'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_IC_LOG"
 if [[ "$*" == *"route dispatch"* ]]; then
-  cat <<'JSON'
+  cat <<'JSON' | jq --arg args "$*" 'if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end'
 {
   "requested_role": "deep-execution",
   "profile_ref": "deep-astra",
@@ -52,6 +52,11 @@ JSON
 fi
 if [[ "$*" == *"route record"* && "${FAKE_IC_RECORD_FAIL:-0}" == "1" ]]; then
   exit 1
+fi
+if [[ "$*" == *"route record"* ]]; then
+  for arg in "$@"; do
+    case "$arg" in --context=*) printf '%s\n' "${arg#--context=}" >> "$FAKE_IC_CONTEXT_LOG" ;; esac
+  done
 fi
 FAKE_IC
 
@@ -104,6 +109,7 @@ chmod +x "$TMP_ROOT/bin/ic" "$TMP_ROOT/bin/codex"
 
 export PATH="$TMP_ROOT/bin:$PATH"
 export FAKE_IC_LOG="$TMP_ROOT/ic.log"
+export FAKE_IC_CONTEXT_LOG="$TMP_ROOT/contexts.jsonl"
 export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 export CLAVAIN_429_BACKOFF_SECONDS=0
@@ -185,5 +191,13 @@ set -e
 contains "$(cat "$FAKE_IC_LOG")" "route record"
 contains "$(cat "$FAKE_IC_LOG")" "--role=deep-execution"
 contains "$(cat "$FAKE_IC_LOG")" "--profile=deep-sol"
+contains "$(cat "$FAKE_IC_LOG")" "--producer-identity=codex/gpt-6-astra"
+[[ -s "$FAKE_IC_CONTEXT_LOG" ]] || fail "missing immutable routing contexts"
+jq -s -e 'all(.[]; .schema_version == 1 and (.dispatch_id | length > 0) and (.attempt_id | length > 0) and .resolved_profile.profile.model != null and .resolved_route.profile != null and .execution.service_tier == "standard")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "incomplete routing snapshot"
+jq -s -e 'any(.[]; .state == "started") and any(.[]; .state == "completed") and any(.[]; .state == "failed" and .result.failure_class == "terminal_policy")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "missing dispatch lifecycle evidence"
+
+: > "$FAKE_CODEX_LOG"
+FAKE_IC_RECORD_FAIL=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 && fail "dispatch accepted failed preflight audit"
+[[ ! -s "$FAKE_CODEX_LOG" ]] || fail "model executed before durable start record"
 
 echo "PASS: role-aware dispatch profiles and fallback policy"

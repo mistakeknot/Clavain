@@ -27,6 +27,11 @@ TIER=""
 ROLE=""
 ROLE_RESOLVED=false
 RESOLVED_PROFILE_REF=""
+RESOLVED_ROUTE_JSON=""
+RESOLVED_PROFILE_JSON=""
+DISPATCH_ID="${CLAVAIN_DISPATCH_ID:-}"
+ATTEMPT_ID=""
+CHECKOUT_BEFORE=""
 REASONING_EFFORT=""
 SERVICE_TIER=""
 MINIMUM_CODEX_VERSION=""
@@ -49,7 +54,8 @@ PHASE=""
 CONTEXT_GATEWAY_MODE="${CLAVAIN_CONTEXT_GATEWAY_MODE:-auto}"
 DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
-DISPATCH_SESSION_ID="${CLAUDE_SESSION_ID:-}"
+DISPATCH_SESSION_ID="${DISPATCH_SESSION_ID:-${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
+source "${DISPATCH_SCRIPT_DIR}/lib-dispatch-audit.sh"
 
 # Source routing library (shared with model-routing command)
 # shellcheck source=lib-routing.sh
@@ -334,7 +340,7 @@ done
 ROLE_PASSTHROUGH=()
 for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
   case "${ORIGINAL_ARGS[$i]}" in
-    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--fallback-reason|--producer-identity|--validator-relationship)
+    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--fallback-reason|--producer-identity|--validator-relationship)
       i=$((i + 1))
       ;;
     --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*)
@@ -405,11 +411,6 @@ _codex_version_at_least() {
   }'
 }
 
-_producer_is_model() {
-  local identity="$1" model="$2"
-  [[ "$identity" == "$model" || "$identity" == */"$model" || "$identity" == *:"$model" ]]
-}
-
 _dispatch_role_profile() {
   local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
   local fallback_reason="" rc=1 candidate_count=0
@@ -428,10 +429,18 @@ _dispatch_role_profile() {
     echo "Error: jq is required for --role dispatch" >&2
     return 1
   }
-  resolved="$(ic --json route dispatch --role="$role")" || {
+  local -a route_cmd=(ic --json route dispatch --role="$role")
+  [[ -z "$PRODUCER_IDENTITY" ]] || route_cmd+=(--producer-identity="$PRODUCER_IDENTITY")
+  # Resolve against the control-plane checkout, not the task repository (which
+  # can live outside Sylveste and need not carry its own routing.yaml).
+  resolved="$(cd "$DISPATCH_SCRIPT_DIR/.." && "${route_cmd[@]}")" || {
     echo "Error: Intercore could not resolve dispatch role '$role'" >&2
     return 1
   }
+  fallback_reason="$(jq -r '.fallback_reason // empty' <<< "$resolved")"
+  VALIDATOR_RELATIONSHIP="$(jq -r '.validator_relationship // empty' <<< "$resolved")"
+  DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
+  export CLAVAIN_DISPATCH_ID="$DISPATCH_ID"
   candidates="$(jq -c '[{profile_ref:.profile_ref,profile:.profile}] + (.fallback_chain // []) | .[]' <<< "$resolved")" || {
     echo "Error: invalid dispatch profile JSON for role '$role'" >&2
     return 1
@@ -455,11 +464,6 @@ _dispatch_role_profile() {
       echo "Error: role '$role' is reserved for the main integrator and cannot be delegated" >&2
       return 1
     fi
-    if [[ -n "$PRODUCER_IDENTITY" ]] && _producer_is_model "$PRODUCER_IDENTITY" "$model"; then
-      fallback_reason="producer_model_conflict"
-      echo "dispatch: profile '$profile_ref' resolves to producer model '$model'; trying a different-model fallback" >&2
-      continue
-    fi
     if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
       fallback_reason="insufficient_codex_version"
       echo "dispatch: profile '$profile_ref' requires Codex >= $minimum; trying its declared fallback" >&2
@@ -471,6 +475,8 @@ _dispatch_role_profile() {
       --role-resolved
       --role "$role"
       --resolved-profile-ref "$profile_ref"
+      --resolved-route-json "$resolved"
+      --resolved-profile-json "$candidate"
       --to "$backend"
       --model "$model"
     )
@@ -573,10 +579,12 @@ while [[ $# -gt 0 ]]; do
       ROLE_RESOLVED=true
       shift
       ;;
-    --resolved-profile-ref|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship)
+    --resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship)
       require_arg "$1" "${2:-}"
       case "$1" in
         --resolved-profile-ref) RESOLVED_PROFILE_REF="$2" ;;
+        --resolved-route-json) RESOLVED_ROUTE_JSON="$2" ;;
+        --resolved-profile-json) RESOLVED_PROFILE_JSON="$2" ;;
         --reasoning-effort) REASONING_EFFORT="$2" ;;
         --service-tier) SERVICE_TIER="$2" ;;
         --minimum-codex-version) MINIMUM_CODEX_VERSION="$2" ;;
@@ -699,10 +707,9 @@ if [[ "$ENGINE" == "claude-code" && "$VIA" != "zaka" ]]; then
   echo "Error: --to claude-code requires --via zaka (claude-code dispatch runs as a steerable zaka session)" >&2
   exit 1
 fi
-# claude is the one-shot headless engine (claude -p) — the inverse constraint.
+# The routing backend is transport-independent; Zaka names its adapter claude-code.
 if [[ "$ENGINE" == "claude" && "$VIA" == "zaka" ]]; then
-  echo "Error: --to claude is the one-shot headless engine — for a steerable zaka session use --to claude-code" >&2
-  exit 1
+  ENGINE="claude-code"
 fi
 
 # Detect whether Clavain-specific tier remapping should be used. This is opt-in via:
@@ -1085,10 +1092,8 @@ if [[ -n "${MYCROFT_TIER:-}" ]]; then
 fi
 
 # ─── Zaka steerable-session mode (--via zaka) ───────────────────────────────
-# Instead of a one-shot headless exec, spawn the agent in a tmux session via
-# zaka and steer it with the assembled prompt. The session stays alive for
-# interactive steering; dispatch prints the session name and returns
-# immediately — no state files, verdicts, or JSONL parsing (that's the point).
+# Codex uses the persistent App Server transport (structured questions/steering).
+# Other agents retain their tmux transport. Submission is never a completion verdict.
 if [[ "$VIA" == "zaka" ]]; then
   # Engine → zaka adapter (identity mapping). Default to claude-code when
   # --to was not given — it's zaka's most capable adapter (resume support,
@@ -1101,7 +1106,7 @@ if [[ "$VIA" == "zaka" ]]; then
   fi
 
   # Options that don't translate to an interactive zaka session — warn and drop.
-  if [[ "$SANDBOX_SET" == true ]]; then
+  if [[ "$SANDBOX_SET" == true && "$ZAKA_AGENT" != codex ]]; then
     echo "Warning: -s/--sandbox is codex-only — ignored for --via zaka (zaka spawns the agent's own TUI)" >&2
   fi
   if [[ ${#IMAGES[@]} -gt 0 ]]; then
@@ -1113,11 +1118,25 @@ if [[ "$VIA" == "zaka" ]]; then
   if [[ -n "$NAME" ]]; then
     echo "Warning: --name is not supported for --via zaka — zaka steer infers the adapter from the generated zaka-<agent>-<millis> session name" >&2
   fi
-  if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+  if [[ ${#EXTRA_ARGS[@]} -gt 0 && "$ZAKA_AGENT" != codex ]]; then
     echo "Warning: codex passthrough flags are not supported for --via zaka — ignoring: ${EXTRA_ARGS[*]}" >&2
   fi
 
   ZAKA_SPAWN=(zaka spawn --agent "$ZAKA_AGENT")
+  if [[ "$ZAKA_AGENT" == codex ]]; then
+    [[ -n "$MODEL" ]] || { echo 'Error: Codex App Server requires an explicit --model or --role' >&2; exit 1; }
+    ZAKA_APPROVAL=on-request
+    for ((z=0; z<${#EXTRA_ARGS[@]}; z++)); do
+      case "${EXTRA_ARGS[$z]}" in
+        -a|--ask-for-approval) z=$((z + 1)); ZAKA_APPROVAL="${EXTRA_ARGS[$z]}" ;;
+        *) echo "Error: unsupported Codex App Server passthrough: ${EXTRA_ARGS[$z]}" >&2; exit 1 ;;
+      esac
+    done
+    [[ ${#IMAGES[@]} == 0 ]] || { echo 'Error: images are unsupported by this App Server dispatch interface' >&2; exit 1; }
+    _prepare_role_audit
+    ZAKA_METADATA="$(_role_audit_context started 0 '')"
+    ZAKA_SPAWN+=(--transport app-server --sandbox "$SANDBOX" --approval-policy "$ZAKA_APPROVAL" --metadata-json "$ZAKA_METADATA")
+  fi
   if [[ -n "$WORKDIR" ]]; then
     ZAKA_SPAWN+=(--workdir "$WORKDIR")
   fi
@@ -1156,13 +1175,32 @@ if [[ "$VIA" == "zaka" ]]; then
     echo "Error: zaka CLI not found on PATH (required for --via zaka). See /Users/sma/projects/Sylveste/os/Zaka" >&2
     exit 1
   fi
-  if ! command -v tmux >/dev/null 2>&1; then
+  if [[ "$ZAKA_AGENT" != codex ]] && ! command -v tmux >/dev/null 2>&1; then
     echo "Error: tmux not found on PATH (required for --via zaka — zaka spawns agents in tmux sessions)" >&2
     exit 1
   fi
 
-  # Spawn prints the generated session name (zaka-<agent>-<millis>) on stdout
-  ZAKA_SESSION="$("${ZAKA_SPAWN[@]}")"
+  if [[ "$ZAKA_AGENT" == codex ]] && ! zaka spawn --help 2>&1 | grep -q -- '-transport'; then
+    echo 'Error: installed Zaka lacks App Server transport; rebuild/install Zaka before dispatch' >&2
+    _dispatch_write_failure_class terminal_configuration
+    exit 1
+  fi
+  if ! _record_role_routing_decision 0 '' started; then
+    _dispatch_write_failure_class terminal_recording
+    exit 1
+  fi
+  ZAKA_STDERR="$(mktemp "${TMPDIR:-/tmp}/clavain-zaka-error.XXXXXX")"
+  if ZAKA_SESSION="$("${ZAKA_SPAWN[@]}" 2> "$ZAKA_STDERR")"; then
+    :
+  else
+    zaka_rc=$?
+    cat "$ZAKA_STDERR" >&2
+    zaka_failure="$(_classify_dispatch_failure "$ZAKA_STDERR" "$zaka_rc")"
+    _dispatch_write_failure_class "$zaka_failure"
+    _record_role_routing_decision "$zaka_rc" "$zaka_failure" || true
+    rm -f "$ZAKA_STDERR"
+    exit "$zaka_rc"
+  fi
   if [[ -z "$ZAKA_SESSION" ]]; then
     echo "Error: zaka spawn did not return a session name" >&2
     exit 1
@@ -1172,18 +1210,53 @@ if [[ "$VIA" == "zaka" ]]; then
   echo "════════════════════════════════════════════════════════════"
   echo "Zaka session: $ZAKA_SESSION"
   echo "  steer:  zaka steer $ZAKA_SESSION \"<follow-up prompt>\""
-  echo "  watch:  tmux attach -t $ZAKA_SESSION   (detach: Ctrl-b d)"
+  if [[ "$ZAKA_AGENT" == codex ]]; then
+    echo "  status: zaka status $ZAKA_SESSION --json"
+    echo "  questions: zaka questions $ZAKA_SESSION --json"
+  else
+    echo "  watch:  tmux attach -t $ZAKA_SESSION   (detach: Ctrl-b d)"
+  fi
   echo "  kill:   zaka kill $ZAKA_SESSION"
   echo "════════════════════════════════════════════════════════════"
   echo ""
 
   # Give the agent TUI a moment to boot before typing the prompt into it
-  sleep "${CLAVAIN_ZAKA_BOOT_DELAY:-5}"
+  [[ "$ZAKA_AGENT" == codex ]] || sleep "${CLAVAIN_ZAKA_BOOT_DELAY:-5}"
 
-  zaka steer "$ZAKA_SESSION" "$PROMPT"
+  if zaka steer "$ZAKA_SESSION" "$PROMPT" 2> "$ZAKA_STDERR"; then
+    :
+  else
+    zaka_rc=$?
+    cat "$ZAKA_STDERR" >&2
+    zaka_failure="$(_classify_dispatch_failure "$ZAKA_STDERR" "$zaka_rc")"
+    _dispatch_write_failure_class "$zaka_failure"
+    _record_role_routing_decision "$zaka_rc" "$zaka_failure" || true
+    zaka kill "$ZAKA_SESSION" >/dev/null 2>&1 || true
+    rm -f "$ZAKA_STDERR"
+    exit "$zaka_rc"
+  fi
+  rm -f "$ZAKA_STDERR"
+  if [[ "$ZAKA_AGENT" == codex ]]; then
+    if ! ZAKA_EVENT_LOG="$(zaka status "$ZAKA_SESSION" --json | jq -er '.event_log | select(type == "string" and length > 0)')"; then
+      zaka kill "$ZAKA_SESSION" >/dev/null 2>&1 || true
+      _dispatch_write_failure_class terminal_recording
+      _record_role_routing_decision 1 terminal_recording || true
+      echo 'Error: cannot capture async evidence; session stopped' >&2
+      exit 1
+    fi
+  fi
+  if ! _record_role_routing_decision 0 '' submitted; then
+    zaka kill "$ZAKA_SESSION" >/dev/null 2>&1 || true
+    _dispatch_write_failure_class terminal_recording
+    exit 1
+  fi
 
   echo ""
   echo "Dispatched (not waiting — session is interactive). Steer or kill with the commands above."
+  if [[ "$ZAKA_AGENT" == codex && -n "$ROLE" ]]; then
+    echo "Before acceptance, collect the terminal result: bash $DISPATCH_SCRIPT_DIR/collect-zaka.sh $ZAKA_SESSION"
+    echo "Collection exits 3 while pending. Submitted turns are never automatically replayed or switched to another model."
+  fi
   exit 0
 fi
 
@@ -1753,73 +1826,6 @@ _surface_codex_errors() {
   fi
 }
 
-_classify_dispatch_failure() {
-  local stderr_file="$1" exit_code="${2:-1}"
-  [[ "$exit_code" == "0" ]] && {
-    echo success
-    return 0
-  }
-  if [[ -f "$stderr_file" ]]; then
-    # A request can report earlier transport failures before its final policy
-    # denial. Denials dominate the entire attempt: never retry or change model
-    # merely because the log also mentions account access or rate limiting.
-    if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then
-      echo terminal_policy
-      return 0
-    fi
-    if grep -qiE '\b429\b|too many requests|rate.?limit' "$stderr_file"; then
-      echo rate_limited
-      return 0
-    fi
-    if grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then
-      echo account_access_absent
-      return 0
-    fi
-    if grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then
-      echo model_unavailable
-      return 0
-    fi
-    if grep -qiE '\b4[0-9]{2}\b|bad request|unauthorized|forbidden' "$stderr_file"; then
-      echo terminal_configuration
-      return 0
-    fi
-  fi
-  echo terminal_error
-}
-
-_record_role_routing_decision() {
-  local exit_code="$1" failure_class="$2" reason="$FALLBACK_REASON"
-  [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]] || return 0
-  command -v ic >/dev/null 2>&1 || return 0
-  [[ "$exit_code" == "0" ]] || reason="$failure_class"
-
-  local -a record_cmd=(
-    ic route record
-    "--agent=${NAME:-$ROLE}"
-    "--model=$MODEL"
-    --rule=dispatch-profile
-    "--role=$ROLE"
-    "--profile=$RESOLVED_PROFILE_REF"
-    "--session=${DISPATCH_SESSION_ID:-main-integrator}"
-  )
-  [[ -n "$reason" && "$reason" != "success" ]] && record_cmd+=("--fallback-reason=$reason")
-  [[ -n "$PRODUCER_IDENTITY" ]] && record_cmd+=("--producer-identity=$PRODUCER_IDENTITY")
-  [[ -n "$VALIDATOR_RELATIONSHIP" ]] && record_cmd+=("--validator-relationship=$VALIDATOR_RELATIONSHIP")
-
-  if [[ -n "$WORKDIR" ]]; then
-    if ! (cd "$WORKDIR" && "${record_cmd[@]}") >/dev/null 2>&1; then
-      echo "Warning: role routing decision could not be persisted for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
-      return 1
-    fi
-  else
-    if ! "${record_cmd[@]}" >/dev/null 2>&1; then
-      echo "Warning: role routing decision could not be persisted for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
-      return 1
-    fi
-  fi
-  return 0
-}
-
 _finalize_dispatch_result() {
   local exit_code="$1" failure_class
   failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
@@ -1834,6 +1840,11 @@ _finalize_dispatch_result() {
   fi
   return 0
 }
+
+if ! _record_role_routing_decision 0 "" started; then
+  _dispatch_write_failure_class terminal_recording
+  exit 1
+fi
 
 if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # kimi -p and claude -p both print the response on stdout and exit 0 on

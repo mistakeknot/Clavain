@@ -26,9 +26,28 @@ teardown() {
 }
 
 @test "zaka: --to codex maps to codex adapter" {
-    run bash "$DISPATCH_SCRIPT" --via zaka --to codex --dry-run "test prompt"
+    run bash "$DISPATCH_SCRIPT" --via zaka --to codex --model gpt-6-astra -s read-only --dry-run "test prompt"
     [ "$status" -eq 0 ]
     [[ "$output" == *"zaka spawn --agent codex"* ]]
+    [[ "$output" == *"--transport app-server"* ]]
+    [[ "$output" == *"--sandbox read-only"* ]]
+    [[ "$output" == *"--approval-policy on-request"* ]]
+    [[ "$output" != *"ignored"* ]]
+}
+
+@test "zaka: Codex requires an explicit model and rejects unsupported overrides" {
+    run bash "$DISPATCH_SCRIPT" --via zaka --to codex --dry-run "test prompt"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"explicit --model"* ]]
+    run bash "$DISPATCH_SCRIPT" --via zaka --to codex --model gpt-6-astra -c sandbox_mode=danger-full-access --dry-run "test prompt"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"unsupported"* ]]
+}
+
+@test "zaka: routing backend claude maps to claude-code adapter" {
+    run bash "$DISPATCH_SCRIPT" --via zaka --to claude --dry-run "test prompt"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"--agent claude-code"* ]]
 }
 
 @test "zaka: --to kimi maps to kimi adapter" {
@@ -104,4 +123,24 @@ teardown() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"codex exec -s workspace-write"* ]]
     [[ "$output" != *"zaka spawn"* ]]
+}
+
+@test "zaka: failed status capture kills the untracked App Server session" {
+    mkdir -p "$TMPDIR_T/bin"
+    export ZAKA_TEST_CALLS="$TMPDIR_T/calls"
+    cat > "$TMPDIR_T/bin/zaka" <<'FAKE'
+#!/usr/bin/env bash
+echo "$*" >> "$ZAKA_TEST_CALLS"
+case "$1" in
+  spawn)
+    if [[ "$*" == *--help* ]]; then echo '-transport'; else echo as-123456789012345678901234; fi ;;
+  steer) echo '{}' ;;
+  status) echo 'status unavailable' >&2; exit 1 ;;
+  kill) exit 0 ;;
+esac
+FAKE
+    chmod +x "$TMPDIR_T/bin/zaka"
+    run env PATH="$TMPDIR_T/bin:$PATH" bash "$DISPATCH_SCRIPT" --via zaka --to codex --model gpt-6-astra -C "$TMPDIR_T" "test prompt"
+    [ "$status" -ne 0 ]
+    grep -q '^kill as-' "$ZAKA_TEST_CALLS"
 }
