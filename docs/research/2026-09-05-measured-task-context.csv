@@ -1,0 +1,7 @@
+objective,arm,requests,input_total_tokens,input_uncached_tokens,input_cached_tokens,input_cache_write_tokens,output_total_tokens,reasoning_output_subset_tokens,native_duration_seconds,native_tool_calls,compaction_requests,native_request_coverage,attribution_coverage
+Installer,retained,7,708090,267514,440576,0,8926,1636,310.983,5,1,complete,incomplete
+Installer,fresh,13,1027953,93425,934528,0,10757,4169,408.418,12,0,complete,incomplete
+Companions,retained,11,1964817,62993,1901824,0,8029,4053,359.470,10,0,complete,incomplete
+Companions,fresh,17,1459493,112933,1346560,0,9190,3546,372.766,16,0,complete,incomplete
+Attribution,retained,13,1974736,176848,1797888,0,7492,3734,342.815,12,0,complete,incomplete
+Attribution,fresh,28,3972808,214984,3757824,0,19106,10598,760.886,27,0,complete,incomplete
