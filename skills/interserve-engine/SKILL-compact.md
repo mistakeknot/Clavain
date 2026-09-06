@@ -2,6 +2,29 @@
 
 Dispatch tasks to Codex CLI agents. Claude orchestrates — planning, dispatching, verifying, committing.
 
+## Enrolled measured work
+
+For enrolled work, this replaces cached discovery and tier examples below:
+
+```bash
+CLAVAIN_ROOT="${CLAVAIN_SOURCE_DIR:-$HOME/projects/Sylveste/os/Clavain}"
+python3 "$CLAVAIN_ROOT/scripts/task-delivery.py" \
+  --db "${CLAVAIN_TASK_INTERCORE_DB:?set the authoritative Intercore database}" \
+  dispatch --enrollment-id "${CLAVAIN_TASK_ENROLLMENT_ID:?enroll before dispatch}" \
+  --role deep-execution -- --prompt-file "$TASK_FILE" -C "$PROJECT_DIR" -o "$OUTPUT"
+```
+
+Choose `scout`, `routine-execution`, `deep-execution`, or `validation` explicitly.
+Validation supplies `--producer-identity`; the canonical resolver records the
+effective validator relationship. Do not select the first cached
+dispatcher or use `--tier` for enrolled work. Bind actual native session/thread/
+turn and usage evidence; retain unavailable identities as incomplete. Count
+failed attempts, validation, repairs and handoff work. Never automatically retry
+policy blocks or indeterminate outcomes. Execution verdicts cannot grant
+independent acceptance: record it separately through Intercore decisions. Count
+shared coordinator requests once under `cohort_shared`; human active minutes
+require an explicit estimate.
+
 ## Prerequisites
 
 Codex CLI installed (`command -v codex`). If unavailable, fall back to `clavain:subagent-driven-development`.

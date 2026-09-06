@@ -11,6 +11,32 @@ user-invocable: false
 
 Claude acts as orchestrator — planning, dispatching, verifying, committing. Works for single tasks (megaprompt) and multi-task parallel execution (delegation).
 
+## Enrolled measured work
+
+For tasks with an authoritative enrollment, the following invocation replaces
+cached-dispatcher discovery and the legacy tier/class examples in this skill:
+
+```bash
+CLAVAIN_ROOT="${CLAVAIN_SOURCE_DIR:-$HOME/projects/Sylveste/os/Clavain}"
+python3 "$CLAVAIN_ROOT/scripts/task-delivery.py" \
+  --db "${CLAVAIN_TASK_INTERCORE_DB:?set the authoritative Intercore database}" \
+  dispatch --enrollment-id "${CLAVAIN_TASK_ENROLLMENT_ID:?enroll before dispatch}" \
+  --role deep-execution -- --prompt-file "$TASK_FILE" -C "$PROJECT_DIR" -o "$OUTPUT"
+```
+
+Select the explicit role: `scout`, `routine-execution`, `deep-execution`, or
+`validation`. Independent validation supplies `--producer-identity`; the canonical
+resolver records the effective validator relationship. The helper resolves the dispatcher
+beside its canonical source; do not select the first cached copy or pass `--tier`
+for enrolled work. It records the enrollment hash and dispatch request before
+execution. Bind actual native session, thread, turn and usage evidence afterward;
+retain missing identities and coverage gaps. Include failed attempts, validation,
+repairs and handoff work. Policy blocks and indeterminate outcomes prohibit
+automatic retry. Record independent acceptance separately through Intercore;
+execution output or a passing sidecar cannot grant it. Shared coordinator work
+is `cohort_shared` once, without guessed task allocations. Human active minutes
+require an explicit estimate.
+
 ## When to Use / Not Use
 
 **Use:** Well-scoped implementation (bug fixes, features, tests, refactoring) with clear files + success criteria.
@@ -36,7 +62,7 @@ See `references/cli-reference.md` for full flag reference.
 
 ## Executor class (Sylveste-d3m phase 1 — shadow wiring)
 
-Every interserve dispatch goes through `--to auto --class <class>` so executor routing sees it:
+Unenrolled legacy interserve dispatch goes through `--to auto --class <class>` so executor routing sees it:
 
 - `interserve-fast` — read-only, administrative, exploration, verification, quick reviews (the tasks you would send with `--tier fast`)
 - `interserve-deep` — implementation, complex reasoning, debates, generative work (`--tier deep`)

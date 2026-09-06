@@ -7,6 +7,33 @@ description: Delegate well-scoped implementation, exploration, search, test-gene
 
 Take well-scoped tasks, dispatch them to Codex CLI via dispatch.sh, and return results.
 
+## Enrolled measured work
+
+For an enrolled task, use the canonical checkout and an explicit role through
+the enrollment helper. This takes precedence over the cached dispatcher and
+tier examples below. Do not choose the first cached dispatcher or use `--tier`
+for enrolled work.
+
+```bash
+CLAVAIN_ROOT="${CLAVAIN_SOURCE_DIR:-$HOME/projects/Sylveste/os/Clavain}"
+python3 "$CLAVAIN_ROOT/scripts/task-delivery.py" \
+  --db "${CLAVAIN_TASK_INTERCORE_DB:?set the authoritative Intercore database}" \
+  dispatch --enrollment-id "${CLAVAIN_TASK_ENROLLMENT_ID:?enroll before dispatch}" \
+  --role deep-execution -- --prompt-file "$TASK_FILE" -C "$PROJECT_DIR" -o "$OUTPUT"
+```
+
+Choose `scout` for exploration, `routine-execution` for bounded routine work,
+`deep-execution` for demanding implementation, and `validation` for independent
+assessment. Validation supplies `--producer-identity`; the canonical resolver
+records the effective validator relationship. The helper retains the enrollment
+hash and dispatch identity; record actual provider session/thread/turn bindings
+and evidence afterward, leaving unavailable identities explicitly incomplete.
+Count failed attempts, validation, repairs and handoff preparation. Never retry
+policy blocks or indeterminate worker outcomes automatically. Execution results
+do not grant independent acceptance; the helper records acceptance separately
+through Intercore decisions. Shared coordinator usage belongs once to
+`cohort_shared`; human active minutes require an explicit estimate.
+
 ## Tier Selection
 
 | Category | Tier | Sandbox |
