@@ -61,7 +61,7 @@ if [[ "$1 $2" == "policy doctor" ]]; then
 	exit 0
 fi
 if [[ "$1 $2" == "policy check" ]]; then
-  printf '{"schema":1,"mode":"auto","policy_hash":"h","policy_match":"m"}\n'
+  printf '{"schema":2,"mode":"auto","policy_hash":"h","policy_match":"m","delegation":{"level":5,"declared":true,"capped":false}}\n'
   exit 0
 fi
 if [[ "$1 $2" == "policy record-signed" ]]; then

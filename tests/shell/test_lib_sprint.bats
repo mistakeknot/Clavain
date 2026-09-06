@@ -18,6 +18,7 @@ setup() {
 
     # Reset double-source guards so we can re-source in each test
     unset _SPRINT_LOADED _GATES_LOADED _PHASE_LOADED _DISCOVERY_LOADED _LIB_LOADED
+    unset _SPRINT_TEST_IC_AVAILABLE
 
     # Clean up lock dirs from previous tests
     rm -rf /tmp/sprint-lock-* /tmp/sprint-claim-lock-* /tmp/sprint-advance-lock-* 2>/dev/null || true
@@ -47,14 +48,18 @@ teardown() {
 _source_sprint_lib() {
     unset _SPRINT_LOADED _GATES_LOADED _PHASE_LOADED _DISCOVERY_LOADED _LIB_LOADED
     source "$HOOKS_DIR/lib-sprint.sh"
+    # lib-intercore.sh initializes INTERCORE_BIN while loading. Bind the test
+    # double afterward so mocked cases never fall through to an ambient ic DB.
+    if [[ "${_SPRINT_TEST_IC_AVAILABLE:-}" == 1 ]]; then
+        export INTERCORE_BIN="/usr/bin/true"
+    fi
 }
 
 # Helper: set up standard intercore mocks that make ic "available"
 # Override individual functions in tests as needed AFTER calling this + _source_sprint_lib
 _mock_intercore_available() {
-    # Make intercore_available return 0 (available)
-    INTERCORE_BIN="/usr/bin/true"
-    export INTERCORE_BIN
+    # Request the available test double after the library finishes loading.
+    _SPRINT_TEST_IC_AVAILABLE=1
 }
 
 # ═══════════════════════════════════════════════════════════════════

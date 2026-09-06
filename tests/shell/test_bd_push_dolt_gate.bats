@@ -17,6 +17,7 @@ setup() {
   export SIGNER_ROLE=signer
   export SIGNER_DOCTOR_RC=0
   export POLICY_MODE=auto
+  export POLICY_SCHEMA=2
   export POLICY_RC=0
   export RECORD_SIGNED_RC=0
   export PATH="$BIN_DIR:$PATH"
@@ -36,7 +37,7 @@ if [[ "$1 $2" == "policy doctor" ]]; then
   exit 0
 fi
 if [[ "$1 $2" == "policy check" ]]; then
-  printf '{"schema":1,"mode":"%s","policy_hash":"hash-test","policy_match":"bd-push-dolt#0"}\n' "$POLICY_MODE"
+  printf '{"schema":%s,"mode":"%s","policy_hash":"hash-test","policy_match":"bd-push-dolt#0","delegation":{"level":5,"declared":true,"capped":false}}\n' "$POLICY_SCHEMA" "$POLICY_MODE"
   exit "$POLICY_RC"
 fi
 if [[ "$1 $2" == "policy record-signed" ]]; then
@@ -90,6 +91,15 @@ EOF
   [ "$(wc -l <"$CALL_LOG" | tr -d ' ')" -eq 1 ]
   grep -Fq 'clavain-cli:policy doctor ' "$CALL_LOG"
   [[ "$output" == *"signer preflight failed"* ]]
+}
+
+@test "obsolete policy response blocks before signing or Dolt push" {
+  export POLICY_SCHEMA=1
+  run bash "$TEST_ROOT/scripts/gates/bd-push-dolt.sh" "$DB_DIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"requires >= 2"* ]]
+  ! grep -q 'policy record-signed' "$CALL_LOG"
+  ! grep -q '^dolt:' "$CALL_LOG"
 }
 
 @test "blocked policy stops before signed recording or Dolt push" {
