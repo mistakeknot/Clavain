@@ -62,9 +62,9 @@ _role_audit_context() {
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
       run_id:$run,bead_id:$bead,
-      execution:{backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
+      execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
         codex_version:$version,sandbox:$sandbox,transport:$transport,session_id:$session,event_log:$events}
-        + (if $observation | type == "object" then $observation else {} end),
+        + (if $observation | type == "object" then $observation else {} end)),
       checkout:{before:$before,after:$after},
       terminal:($state == "completed" or $state == "failed"),
       result:{exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict}}

@@ -17,6 +17,9 @@ jobs:
   structural-and-shell:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: os/Clavain
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
@@ -24,6 +27,15 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@v4
+        with:
+          path: os/Clavain
+
+      - name: Check out the verified task profiler dependency
+        uses: actions/checkout@v4
+        with:
+          repository: mistakeknot/interstat
+          ref: ede848c682f0e7e8a3787169b944d8f73229e6dc
+          path: interverse/interstat
 
       - uses: actions/setup-python@v5
         with:

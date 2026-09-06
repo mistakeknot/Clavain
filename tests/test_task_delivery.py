@@ -231,6 +231,29 @@ def test_role_audit_preserves_task_envelope_and_explicit_store(tmp_path, real_ic
     assert payload["task_envelope"] == dict(enrollment_id="e", manifest_sha256="a" * 64, cohort_id="c")
 
 
+@pytest.mark.parametrize("observation", [None, {"executable": "/observed/claude", "configuration_coverage": "partial"}])
+def test_role_audit_merges_observation_with_compatible_jq_grammar(tmp_path, observation):
+    jq = os.environ.get("TASK_DELIVERY_TEST_JQ") or shutil.which("jq")
+    if not jq:
+        pytest.skip("jq unavailable")
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    (tools / "jq").symlink_to(Path(jq).resolve())
+    env = os.environ | dict(PATH=f"{tools}:{os.environ['PATH']}", WORKDIR=str(tmp_path), ENGINE="claude",
+        MODEL="claude-fable-5-1", DISPATCH_ID="dispatch", ATTEMPT_ID="attempt", DISPATCH_SESSION_ID="parent",
+        OUTPUT="", REASONING_EFFORT="", SERVICE_TIER="standard", SANDBOX="read-only", CHECKOUT_BEFORE="",
+        DISPATCH_EXECUTION_OBSERVATION=json.dumps(observation))
+    result = subprocess.run(["bash", "-c", 'source "$1"; _role_audit_context completed 0 success',
+        "bash", str(SCRIPT.parent / "lib-dispatch-audit.sh")], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["execution"]["backend"] == "claude"
+    assert payload["execution"]["model"] == "claude-fable-5-1"
+    assert payload["terminal"] is True and payload["result"]["failure_class"] == "success"
+    for key, value in (observation or {}).items():
+        assert payload["execution"][key] == value
+
+
 def test_wrapper_rejects_compact_model_and_resolved_profile_overrides():
     for flags in [["-mgpt-other"], ["--resolved-profile-json", "{}"], ["-c", "model=other"], ["-cmodel=other"]]:
         with pytest.raises(ValueError, match="role"):
