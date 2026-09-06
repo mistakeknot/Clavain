@@ -49,6 +49,9 @@ jobs:
       - name: Tier 1 — Structural tests (pytest)
         run: cd tests && uv run pytest structural/ -v --tb=short
 
+      - name: Task attribution and fixed worker regressions
+        run: cd tests && uv run pytest test_task_delivery.py test_flere_worker.py -v --tb=short
+
       - name: Tier 2 — Shell tests (bats)
         run: bats tests/shell/ --recursive --tap
 
