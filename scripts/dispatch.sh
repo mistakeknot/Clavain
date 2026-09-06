@@ -47,6 +47,7 @@ DRY_RUN=false
 KIMI_UNSAFE=false
 CLAUDE_UNSAFE=false
 TASK_CLASS=""
+FLERE_TIMEOUT=120
 PROMPT_FILE=""
 TEMPLATE_FILE=""
 IMAGES=()
@@ -153,7 +154,7 @@ Usage:
   dispatch.sh [OPTIONS] --prompt-file <file>
 
 Options:
-  --to, --engine <codex|kimi|claude|auto>   Dispatch backend (default: codex)
+  --to, --engine <codex|kimi|claude|flere|auto>   Dispatch backend (default: codex)
                                   codex — codex exec (full sandbox/JSONL/statusline support)
                                   claude — claude -p one-shot (review seat: reads + runs
                                           commands, file mutation disallowed unless
@@ -162,6 +163,10 @@ Options:
                                           model family. -s/--sandbox, -i/--image and codex
                                           passthrough flags are ignored with a warning)
                                   auto  — ordered executor failover by task class
+                                  flere — explicit admitted read-only worker; requires
+                                          CLAVAIN_FLERE_BIN, CLAVAIN_FLERE_PROFILE,
+                                          provider/model and Intercore attempt identity
+  --timeout <SECONDS>            Positive Flere worker deadline (default: 120)
   --via zaka                    Spawn a steerable tmux session via zaka instead of a
                                   one-shot headless exec. The engine maps to a zaka
                                   adapter (codex→codex, kimi→kimi, claude-code→claude-code);
@@ -526,9 +531,9 @@ while [[ $# -gt 0 ]]; do
       ENGINE="$2"
       ENGINE_SET=true
       case "$ENGINE" in
-        codex|kimi|claude|claude-code|auto) ;;
+        codex|kimi|claude|claude-code|flere|auto) ;;
         *)
-          echo "Error: $1 must be 'codex', 'kimi', or 'claude' (or 'claude-code'/'auto'; got '$ENGINE')" >&2
+          echo "Error: $1 must be codex, kimi, claude, flere, claude-code or auto (got '$ENGINE')" >&2
           exit 1
           ;;
       esac
@@ -570,6 +575,12 @@ while [[ $# -gt 0 ]]; do
     --tier)
       require_arg "$1" "${2:-}"
       TIER="$2"
+      shift 2
+      ;;
+    --timeout)
+      require_arg "$1" "${2:-}"
+      [[ "$2" =~ ^[1-9][0-9]*$ ]] || { echo "Error: --timeout requires positive seconds" >&2; exit 1; }
+      FLERE_TIMEOUT="$2"
       shift 2
       ;;
     --role)
@@ -707,6 +718,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$ENGINE" == "flere" ]]; then
+  if [[ -n "$VIA" || -n "$TIER" || -n "$ROLE" || -n "$REASONING_EFFORT" || -n "$SERVICE_TIER" || ${#IMAGES[@]} -gt 0 || ${#EXTRA_ARGS[@]} -gt 0 || "$KIMI_UNSAFE" == true || "$CLAUDE_UNSAFE" == true ]]; then
+    echo "Error: Flere fixed worker rejects routing inference, alternate transports, images and passthrough flags" >&2
+    exit 1
+  fi
+  if [[ "$SANDBOX_SET" == true && "$SANDBOX" != "read-only" ]]; then
+    echo "Error: Flere fixed worker requires the read-only application tool policy" >&2
+    exit 1
+  fi
+  SANDBOX="read-only"
+  [[ -n "$MODEL" && "$MODEL" == */* && -n "$OUTPUT" && -n "${CLAVAIN_FLERE_BIN:-}" && -n "${CLAVAIN_FLERE_PROFILE:-}" ]] || { echo "Error: Flere requires explicit provider/model, output, CLAVAIN_FLERE_BIN and CLAVAIN_FLERE_PROFILE" >&2; exit 1; }
+fi
 
 # claude-code is only a valid engine in zaka mode (it has no one-shot exec form here)
 if [[ "$ENGINE" == "claude-code" && "$VIA" != "zaka" ]]; then
@@ -1318,6 +1342,15 @@ if [[ "$ENGINE" == "auto" ]]; then
     fi
   fi
   exit "$rc"
+fi
+
+# The fixed worker supervises its own RPC lifecycle and writes its terminal
+# receipt last. Codex text/idle heuristics cannot establish Flere completion.
+if [[ "$ENGINE" == "flere" ]]; then
+  FLERE_ARGS=(--executable "$CLAVAIN_FLERE_BIN" --profile "$CLAVAIN_FLERE_PROFILE" --model "$MODEL" --project "${WORKDIR:-$PWD}" --output "$OUTPUT" --timeout "$FLERE_TIMEOUT")
+  [[ -z "${CLAVAIN_FLERE_ENTRYPOINT:-}" ]] || FLERE_ARGS+=(--entrypoint "$CLAVAIN_FLERE_ENTRYPOINT")
+  [[ "$DRY_RUN" != true ]] || FLERE_ARGS+=(--dry-run)
+  exec python3 "${DISPATCH_SCRIPT_DIR}/flere-worker.py" "${FLERE_ARGS[@]}" <<< "$PROMPT"
 fi
 
 # Build backend command

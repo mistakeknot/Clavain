@@ -77,7 +77,7 @@ teardown() {
 @test "zaka: invalid --to value still exits 1 with original message" {
     run bash "$DISPATCH_SCRIPT" --to bogus "test prompt"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"must be 'codex', 'kimi', or 'claude'"* ]]
+    [[ "$output" == *"must be codex, kimi, claude, flere, claude-code or auto"* ]]
 }
 
 @test "zaka: -C becomes --workdir" {
