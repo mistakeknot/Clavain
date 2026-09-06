@@ -472,6 +472,8 @@ render_mcp_block() {
   local manifest="$1"
   local output_file="$2"
 
+  python3 "$SCRIPT_DIR/sync-codex-mcp.py" --validate-manifest "$manifest" || return 1
+
   {
     echo "$MCP_BLOCK_START"
     echo "# Managed by Clavain install-codex.sh"
@@ -479,15 +481,17 @@ render_mcp_block() {
   } > "$output_file"
 
   if ! command -v jq >/dev/null 2>&1; then
-    {
-      echo "# jq not found; unable to sync MCP servers"
-      echo "$MCP_BLOCK_END"
-    } >> "$output_file"
-    return 0
+    echo "MCP sync requires jq; configuration unchanged" >&2
+    return 1
   fi
 
+  jq -e 'type == "object" and ((.mcpServers // {}) | type == "object")' "$manifest" >/dev/null 2>&1 || {
+    echo "Invalid plugin MCP manifest; configuration unchanged" >&2
+    return 1
+  }
+
   local server_count
-  server_count="$(jq -r '(.mcpServers // {}) | length' "$manifest" 2>/dev/null || echo 0)"
+  server_count="$(jq -r '(.mcpServers // {}) | length' "$manifest")"
   if [[ "$server_count" == "0" ]]; then
     {
       echo "# No MCP servers declared in plugin manifest"
@@ -501,12 +505,16 @@ render_mcp_block() {
     [[ -n "$server_name" ]] || continue
 
     local server_json
-    server_json="$(jq -c --arg n "$server_name" '.mcpServers[$n]' "$manifest")"
+    server_json="$(jq -c --arg n "$server_name" --arg root "$SOURCE_DIR" '
+      .mcpServers[$n] | walk(
+        if type == "string" then split("${CLAUDE_PLUGIN_ROOT}") | join($root)
+        else . end)
+    ' "$manifest")"
 
     local table_key
     table_key="$(toml_key "$server_name")"
 
-    echo "[mcp.servers.$table_key]" >> "$output_file"
+    echo "[mcp_servers.$table_key]" >> "$output_file"
 
     local command_val url_val args_line headers_line
     command_val="$(jq -r '.command // empty' <<<"$server_json")"
@@ -548,7 +556,7 @@ render_mcp_block() {
     env_count="$(jq -r 'if (((.env // null) | type) == "object") then ((.env // {}) | length) else 0 end' <<<"$server_json")"
     if [[ "$env_count" != "0" ]]; then
       echo "" >> "$output_file"
-      echo "[mcp.servers.$table_key.env]" >> "$output_file"
+      echo "[mcp_servers.$table_key.env]" >> "$output_file"
       while IFS= read -r kv; do
         [[ -n "$kv" ]] || continue
         local k v
@@ -842,27 +850,26 @@ install_managed_agents_block() {
 }
 
 sync_mcp_servers() {
+  # Unlike legacy-path removal, MCP updates do not duplicate the full config
+  # into backups: it may contain credentials. The helper validates old/new
+  # semantics, preserves unmanaged bytes and permissions, guards concurrent
+  # edits, then atomically replaces the target. Rejected updates leave it intact.
   local manifest="$SOURCE_DIR/.claude-plugin/plugin.json"
   if [[ ! -f "$manifest" ]]; then
-    echo "WARN: plugin manifest missing, skipping MCP sync: $manifest" >&2
-    return 0
+    echo "Plugin manifest missing; MCP configuration unchanged: $manifest" >&2
+    return 1
   fi
-
-  cleanup_legacy_mcp_server_tables "$CODEX_CONFIG_FILE"
 
   local block_file
   block_file="$(mktemp)"
-  render_mcp_block "$manifest" "$block_file"
-
-  local block
-  block="$(cat "$block_file")"
-  rm -f "$block_file"
-
-  if update_file_with_block "$CODEX_CONFIG_FILE" "$MCP_BLOCK_START" "$MCP_BLOCK_END" "$block"; then
-    echo "Updated managed MCP config block: $CODEX_CONFIG_FILE"
-  else
-    echo "Managed MCP config block already up to date: $CODEX_CONFIG_FILE"
+  if ! render_mcp_block "$manifest" "$block_file"; then
+    rm -f "$block_file"
+    return 1
   fi
+  local result=0
+  python3 "$SCRIPT_DIR/sync-codex-mcp.py" --file "$CODEX_CONFIG_FILE" --block "$block_file" "$@" || result=$?
+  rm -f "$block_file"
+  return "$result"
 }
 
 codex_remontoire_hook_command() {
@@ -901,6 +908,7 @@ validate_codex_hooks_file() {
 }
 
 sync_codex_remontoire_hook() {
+  local preview_only="${1:-}"
   command -v jq >/dev/null 2>&1 || {
     echo "jq is required to merge Codex hooks safely." >&2
     exit 1
@@ -988,6 +996,11 @@ sync_codex_remontoire_hook() {
   ' "$source_file" > "$candidate"
   rm -f "$source_file"
 
+  if [[ "$preview_only" == "--dry-run" ]]; then
+    rm -f "$candidate"
+    return 0
+  fi
+
   if [[ -f "$CODEX_HOOKS_FILE" ]] && cmp -s "$CODEX_HOOKS_FILE" "$candidate"; then
     rm -f "$candidate"
     echo "Managed Codex hooks already up to date: $CODEX_HOOKS_FILE"
@@ -1015,7 +1028,10 @@ remove_codex_remontoire_hook() {
       . as $group
       | .hooks = [
           ($group.hooks // [])[]
-          | select(((.command // "") | contains("remontoire-attention.sh")) | not)
+          | select(
+              (((.command // "") | contains("remontoire-attention.sh"))
+               or ((.command // "") | contains("codex-session-refresh.sh")))
+              | not)
         ];
     .hooks.SessionStart = [
       (.hooks.SessionStart // [])[]
@@ -1042,54 +1058,6 @@ remove_codex_remontoire_hook() {
   echo "Removed managed Codex hooks: $CODEX_HOOKS_FILE"
 }
 
-cleanup_legacy_mcp_server_tables() {
-  local config_file="$1"
-  [[ -f "$config_file" ]] || return 0
-
-  if ! grep -qE '^\[mcp_servers\.' "$config_file"; then
-    return 0
-  fi
-
-  local candidate
-  candidate="$(mktemp)"
-
-  awk '
-    BEGIN { in_legacy = 0; removed = 0 }
-    /^\[mcp_servers\./ {
-      in_legacy = 1
-      removed = 1
-      next
-    }
-    in_legacy == 1 {
-      if ($0 ~ /^\[/ || $0 == "'"$MCP_BLOCK_START"'" || $0 == "'"$MCP_BLOCK_END"'") {
-        in_legacy = 0
-      } else {
-        next
-      }
-    }
-    { print }
-    END {
-      if (removed == 0) exit 2
-    }
-  ' "$config_file" > "$candidate" || {
-    local status=$?
-    rm -f "$candidate"
-    if [[ "$status" -eq 2 ]]; then
-      return 0
-    fi
-    return "$status"
-  }
-
-  if cmp -s "$config_file" "$candidate"; then
-    rm -f "$candidate"
-    return 0
-  fi
-
-  backup_copy_file "$config_file"
-  mv "$candidate" "$config_file"
-  echo "Removed legacy [mcp_servers.*] tables from $config_file"
-}
-
 install_all() {
   command -v python3 >/dev/null 2>&1 || { echo "Instruction sync requires python3" >&2; exit 1; }
   resolve_source_dir
@@ -1104,6 +1072,9 @@ install_all() {
     python3 "$SCRIPT_DIR/sync-codex-instructions.py" --file "$CODEX_AGENTS_FILE" \
       --block "$SOURCE_DIR/config/codex-instructions.md" --dry-run >/dev/null || exit 1
   fi
+  # Validate the full TOML and proposed managed update before any consumer writes.
+  sync_mcp_servers --dry-run || exit 1
+  sync_codex_remontoire_hook --dry-run || exit 1
 
   local skills_target="$SOURCE_DIR/skills"
   local cli_target="$SOURCE_DIR/bin/clavain-cli"
@@ -1171,6 +1142,7 @@ doctor() {
   local codex_hooks_file_ok="false"
   local remontoire_hook_present="false"
   local remontoire_hook_match="false"
+  local session_refresh_hook_match="false"
   local context_gateway_user_prompt_hook_present="false"
   local context_gateway_user_prompt_hook_match="false"
   local context_gateway_tldrs_executable="false"
@@ -1339,17 +1311,11 @@ doctor() {
     status=1
   fi
 
-  if [[ -f "$CODEX_CONFIG_FILE" ]] \
-    && grep -Fq "$MCP_BLOCK_START" "$CODEX_CONFIG_FILE" \
-    && grep -Fq "$MCP_BLOCK_END" "$CODEX_CONFIG_FILE"; then
+  local mcp_check_error
+  if mcp_check_error="$(sync_mcp_servers --check 2>&1)"; then
     mcp_block_ok="true"
-    if grep -qE '^\[mcp_servers\.' "$CODEX_CONFIG_FILE"; then
-      issues+=("managed MCP block uses legacy [mcp_servers.*] tables; rerun install to rewrite as [mcp.servers.*]")
-      status=1
-      mcp_block_ok="false"
-    fi
   else
-    issues+=("managed MCP block missing or malformed: $CODEX_CONFIG_FILE")
+    issues+=("managed MCP config invalid: $mcp_check_error")
     status=1
   fi
 
@@ -1383,6 +1349,24 @@ doctor() {
       remontoire_hook_match="true"
     else
       issues+=("managed Remontoire SessionStart hook differs from source or is duplicated: $CODEX_HOOKS_FILE")
+      status=1
+    fi
+
+    local expected_refresh_command refresh_hook_count matching_refresh_count
+    expected_refresh_command="$(codex_session_refresh_hook_command)"
+    refresh_hook_count="$(jq -r '
+      [.hooks.SessionStart[]?.hooks[]?
+       | select((.command // "") | contains("codex-session-refresh.sh"))] | length
+    ' "$CODEX_HOOKS_FILE")"
+    matching_refresh_count="$(jq -r --arg command "$expected_refresh_command" '
+      [.hooks.SessionStart[]?.hooks[]?
+       | select(.type == "command" and .command == $command
+           and ((.timeout | type) == "number") and (.timeout > 0 and .timeout <= 90))] | length
+    ' "$CODEX_HOOKS_FILE")"
+    if [[ "$refresh_hook_count" -eq 1 && "$matching_refresh_count" -eq 1 ]]; then
+      session_refresh_hook_match="true"
+    else
+      issues+=("managed session refresh hook missing, different from source, or duplicated: $CODEX_HOOKS_FILE")
       status=1
     fi
 
@@ -1493,6 +1477,7 @@ doctor() {
     printf '    "codex_hooks_file_present":%s,\n' "$codex_hooks_file_ok"
     printf '    "remontoire_session_start_hook_present":%s,\n' "$remontoire_hook_present"
     printf '    "remontoire_session_start_hook_match":%s,\n' "$remontoire_hook_match"
+    printf '    "session_refresh_hook_match":%s,\n' "$session_refresh_hook_match"
     printf '    "context_gateway_user_prompt_hook_present":%s,\n' "$context_gateway_user_prompt_hook_present"
     printf '    "context_gateway_user_prompt_hook_match":%s,\n' "$context_gateway_user_prompt_hook_match"
     printf '    "context_gateway_tldrs_executable":%s,\n' "$context_gateway_tldrs_executable"
@@ -1556,6 +1541,9 @@ doctor() {
 uninstall_all() {
   resolve_source_dir
 
+  # Reject malformed TOML before removing any of this install's consumer links.
+  python3 "$SCRIPT_DIR/sync-codex-mcp.py" --file "$CODEX_CONFIG_FILE" --remove --dry-run || return 1
+
   local cli_target="$SOURCE_DIR/bin/clavain-cli"
 
   rm -f "$AGENTS_SKILLS_DIR/clavain"
@@ -1563,7 +1551,7 @@ uninstall_all() {
   remove_legacy_codex_skills_path || true
   remove_prompts
   remove_block_from_file "$CODEX_AGENTS_FILE" "$AGENTS_BLOCK_START" "$AGENTS_BLOCK_END" || true
-  remove_block_from_file "$CODEX_CONFIG_FILE" "$MCP_BLOCK_START" "$MCP_BLOCK_END" || true
+  python3 "$SCRIPT_DIR/sync-codex-mcp.py" --file "$CODEX_CONFIG_FILE" --remove
   remove_codex_remontoire_hook || true
 
   if [[ "$REMOVE_CLONE" -eq 1 ]]; then
