@@ -16,7 +16,8 @@ while (( $# )); do
   fi
   shift
 done
-echo 'VERDICT: CLEAN'
+echo '{"type":"turn.completed","usage":{"input_tokens":7,"output_tokens":3}}'
+exit "${FAKE_CODEX_EXIT:-0}"
 CODEX
 chmod +x "$TMP_ROOT/bin/codex"
 export PATH="$TMP_ROOT/bin:$PATH" CLAVAIN_CONTEXT_GATEWAY_MODE=off
@@ -49,3 +50,12 @@ fable="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role validation --producer
 astra="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --via zaka --role validation --producer-identity codex/gpt-6-astra -C "$TMP_ROOT/work" fixture 2>&1)"
 [[ "$astra" == *'--agent claude-code'* && "$astra" == *'--model claude-fable-5-1'* ]]
 echo 'PASS: real Intercore identity, dispatch and immutable SQLite audit integration'
+
+# Budget-bound production dispatch works with stock macOS awk and records raw
+# usage; failures retain the actual model exit rather than tee's status.
+CLAVAIN_REQUIRE_USAGE=1 CLAVAIN_REVIEW_EVENTS="$TMP_ROOT/usage.jsonl" bash "$ROOT/scripts/dispatch.sh" --role routine-execution -C "$TMP_ROOT/work" -o "$TMP_ROOT/budget.md" 'usage fixture' >/dev/null
+jq -e 'select(.type == "turn.completed") | .usage.input_tokens == 7' "$TMP_ROOT/usage.jsonl" >/dev/null
+if FAKE_CODEX_EXIT=7 CLAVAIN_REQUIRE_USAGE=1 CLAVAIN_REVIEW_EVENTS="$TMP_ROOT/failed-usage.jsonl" bash "$ROOT/scripts/dispatch.sh" --role routine-execution -C "$TMP_ROOT/work" -o "$TMP_ROOT/failed.md" 'failure fixture' >/dev/null 2>&1; then
+  echo 'FAIL: model failure lost in usage pipeline' >&2; exit 1
+fi
+echo 'PASS: production budget dispatch records usage and preserves model failure without GNU awk'

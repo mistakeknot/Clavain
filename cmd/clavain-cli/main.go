@@ -17,6 +17,8 @@ func main() {
 
 	var err error
 	switch cmd {
+	case "review":
+		err = cmdReview(args)
 	// Sprint CRUD
 	case "sprint-init":
 		err = cmdSprintInit(args)

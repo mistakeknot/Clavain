@@ -465,6 +465,11 @@ _dispatch_role_profile() {
       echo "Error: role '$role' is reserved for the main integrator and cannot be delegated" >&2
       return 1
     fi
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$backend" != codex ]]; then
+      fallback_reason="usage_reporting_unavailable"
+      echo "dispatch: '$profile_ref' cannot report usage for this approved token budget; trying its declared fallback" >&2
+      continue
+    fi
     if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
       fallback_reason="insufficient_codex_version"
       echo "dispatch: profile '$profile_ref' requires Codex >= $minimum; trying its declared fallback" >&2
@@ -1927,8 +1932,13 @@ elif [[ "$HAS_GAWK" == true ]]; then
   # set -e is disabled around the pipeline so a non-zero codex exit still lets
   # us run verdict override + cleanup before exiting with the captured code.
   set +e
-  "${CMD[@]}" 2> "$STDERR_FILE" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
-  CODEX_EXIT="${PIPESTATUS[0]}"
+  if [[ -n "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+    "${CMD[@]}" 2> "$STDERR_FILE" | tee -a "$CLAVAIN_REVIEW_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+    CODEX_EXIT="${PIPESTATUS[0]}"
+  else
+    "${CMD[@]}" 2> "$STDERR_FILE" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+    CODEX_EXIT="${PIPESTATUS[0]}"
+  fi
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   set -e
 
@@ -1958,8 +1968,20 @@ else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
   set +e
-  "${CMD[@]}" 2> "$STDERR_FILE"
-  CODEX_EXIT=$?
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+    if [[ -z "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+      echo "Error: budget-bound dispatch requires an event destination" >&2
+      exit 1
+    fi
+    # The Go supervisor parses raw JSONL independently of optional GNU awk.
+    # Stock macOS awk must not prevent budget-governed execution.
+    CMD+=(--json)
+    "${CMD[@]}" 2> "$STDERR_FILE" | tee -a "$CLAVAIN_REVIEW_EVENTS"
+    CODEX_EXIT="${PIPESTATUS[0]}"
+  else
+    "${CMD[@]}" 2> "$STDERR_FILE"
+    CODEX_EXIT=$?
+  fi
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   set -e
 
