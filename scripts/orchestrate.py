@@ -23,6 +23,7 @@ seat, register rows, merge, with nothing dispatched by hand.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -2059,7 +2060,9 @@ def load_pf_run(path: str | Path) -> PFRun:
 
 
 def _pf_named_line(text: str, name: str) -> str | None:
-    m = re.search(rf"^{name}:[ \t]*(.*)$", text, re.M)
+    """`NAME: value`, tolerating a leading bullet or indent (kimi prefixes
+    its lines with `• `)."""
+    m = re.search(rf"^[ \t•*-]*{name}:[ \t]*(.*)$", text, re.M)
     return m.group(1).strip() if m else None
 
 
@@ -2101,15 +2104,30 @@ def _pf_model(stderr: str, fallback: str | None) -> str | None:
     return m.group(1) if m else fallback
 
 
-def _pf_resolve_model(cmd: list[str], cwd: str) -> str | None:
-    """Ask dispatch.sh --dry-run which model the role resolves to: the
-    printed command names it (-m for codex, --model for claude)."""
+def _pf_dry_run_text(cmd: list[str], cwd: str) -> str:
+    """dispatch.sh --dry-run output: the command the role resolves to."""
     try:
         p = subprocess.run(cmd + ["--dry-run"], cwd=cwd, capture_output=True, text=True, timeout=120)
     except (subprocess.SubprocessError, OSError):
-        return None
-    m = _PF_CMD_MODEL.search((p.stdout or "") + "\n" + (p.stderr or ""))
+        return ""
+    return (p.stdout or "") + "\n" + (p.stderr or "")
+
+
+def _pf_resolve_model(cmd: list[str], cwd: str, text: str | None = None) -> str | None:
+    """Which model the role resolves to: the dry-run command names it
+    (-m for codex, --model for claude)."""
+    if text is None:
+        text = _pf_dry_run_text(cmd, cwd)
+    m = _PF_CMD_MODEL.search(text)
     return m.group(1) if m else None
+
+
+def _pf_tree_snapshot(wt: str) -> str:
+    """What a seat may not change: the status of every path (untracked
+    included) and a digest of the diff against HEAD."""
+    status = _git(wt, "status", "--porcelain", "--untracked-files=all")
+    digest = hashlib.sha256(_git(wt, "diff", "HEAD").encode(errors="replace")).hexdigest()
+    return status + "\n" + digest
 
 
 def _pf_now() -> str:
@@ -2356,10 +2374,17 @@ def pf_validate(
         "bash", dispatch_sh, "--role", "validation", "--producer-identity", producer,
         "--plan", item.plan, "-C", wt, "--prompt-file", prompt_path, "-o", output,
     ]
-    resolved = _pf_resolve_model(cmd, wt)
+    dry = _pf_dry_run_text(cmd, wt)
+    resolved = _pf_resolve_model(cmd, wt, dry)
+    if "codex exec" in dry:
+        # A codex seat needs workspace-write to run tests at all; the tree
+        # snapshot below turns any write it makes into an UNRUN.
+        cmd += ["-s", "workspace-write"]
+    snap_before = _pf_tree_snapshot(wt)
     started = _pf_now()
     rc, timed_out, out, err = run_in_group(cmd, timeout=run.timeout, cwd=wt)
     finished = _pf_now()
+    snap_after = _pf_tree_snapshot(wt)
     _write_text(
         os.path.join(item_dir, "validator.dispatch.log"),
         out + ("\n--- stderr ---\n" + err if err else ""),
@@ -2383,6 +2408,9 @@ def pf_validate(
     receipt_ok = rec == nonce
     if timed_out:
         return PFValidation("UNRUN", crit, f"validator timed out after {run.timeout}s; process group killed", receipt_ok, [], model)
+    if snap_after != snap_before:
+        changed = " ".join(l.strip() for l in snap_after.split("\n")[:-1] if l.strip())[:200]
+        return PFValidation("UNRUN", crit, f"validator mutated the worktree: {changed or 'diff against HEAD changed'}", receipt_ok, [], model)
     if status == "error":
         return PFValidation("UNRUN", crit, _pf_sidecar_summary(output + ".verdict") or "dispatch reported an error verdict", receipt_ok, [], model)
     if v not in ("PASS", "FAIL", "UNRUN"):

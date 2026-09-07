@@ -76,7 +76,7 @@ while [[ $# -gt 0 ]]; do
 done
 printf '%s\n' "${args[*]}" >> "$PF_DISPATCH_LOG"
 if [[ $dry == 1 ]]; then
-  if [[ $role == validation ]]; then echo "claude --model stub-validator x"; else echo "codex exec -m stub-executor x"; fi
+  if [[ $role == validation && -z "${PF_STUB_CODEX_SEAT:-}" ]]; then echo "claude --model stub-validator x"; else echo "codex exec -m stub-${role} x"; fi
   exit 0
 fi
 [[ -f "$C/.clavain/intercore.db" ]] || { echo "no intercore store in $C" >&2; exit 97; }
@@ -92,8 +92,9 @@ case "$role" in
       printf -- '--- VERDICT ---\nSTATUS: error\nSUMMARY: validation seat mutated the checkout: src/app.py\n---\n' > "$out.verdict"
       : > "$out"; exit 1
     fi
-    printf 'VERDICT: %s\nCRITERION: %s\nRECEIPT: %s\nBEYOND THE GAUGE:\n%s\n' \
-      "${PF_STUB_VERDICT:-PASS}" "${PF_STUB_CRITERION:-none}" "${PF_STUB_RECEIPT:-$rec}" "${PF_STUB_BEYOND:-- none}" > "$out"
+    [[ -n "${PF_STUB_TOUCH:-}" ]] && echo "seat wrote here" >> "$C/src/other.py"
+    printf '%sVERDICT: %s\n%sCRITERION: %s\n%sRECEIPT: %s\n%sBEYOND THE GAUGE:\n%s\n' \
+      "${PF_STUB_BULLET:-}" "${PF_STUB_VERDICT:-PASS}" "${PF_STUB_BULLET:-}" "${PF_STUB_CRITERION:-none}" "${PF_STUB_BULLET:-}" "${PF_STUB_RECEIPT:-$rec}" "${PF_STUB_BULLET:-}" "${PF_STUB_BEYOND:-- none}" > "$out"
     printf -- '--- VERDICT ---\nSTATUS: warn\nSUMMARY: stub\n---\n' > "$out.verdict"
     ;;
   routine-execution)
@@ -124,7 +125,8 @@ def stubs(tmp_path: Path, monkeypatch) -> dict:
     monkeypatch.setenv("CLAVAIN_DISPATCH_SH", str(t / "dispatch.sh"))
     monkeypatch.setenv("PF_DISPATCH_LOG", str(dispatch_log))
     for k in ("PF_STUB_SLEEP", "PF_STUB_MUTATE", "PF_STUB_VERDICT", "PF_STUB_CRITERION",
-              "PF_STUB_RECEIPT", "PF_STUB_BEYOND", "PF_STUB_EXEC_VERDICT", "PF_VERDICT_FAIL"):
+              "PF_STUB_RECEIPT", "PF_STUB_BEYOND", "PF_STUB_EXEC_VERDICT", "PF_VERDICT_FAIL",
+              "PF_STUB_CODEX_SEAT", "PF_STUB_TOUCH", "PF_STUB_BULLET"):
         monkeypatch.delenv(k, raising=False)
     register = tmp_path / "register.db"
     register.write_text("")
@@ -347,3 +349,32 @@ def test_run_file_validation(orc, repo, tmp_path, stubs):
         orc.load_pf_run(str(bad))
     msg = str(ei.value)
     assert "session is required" in msg and "plan not found" in msg and "branch-safe" in msg
+
+
+def test_codex_seat_gets_workspace_write_and_a_bulleted_verdict_still_parses(orc, repo, tmp_path, stubs, monkeypatch):
+    monkeypatch.setenv("PF_STUB_CODEX_SEAT", "1")
+    monkeypatch.setenv("PF_STUB_BULLET", "• ")
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.status == "merged" and r.validator_verdict == "PASS" and r.receipt_ok is True
+    assert r.validator_model == "stub-validation"
+    lines = [l for l in stubs["dispatch_log"].read_text().splitlines() if "--role validation" in l and "--dry-run" not in l]
+    assert lines and "-s workspace-write" in lines[0]
+
+
+def test_claude_seat_never_gets_the_codex_sandbox_flag(orc, repo, tmp_path, stubs):
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))
+    lines = [l for l in stubs["dispatch_log"].read_text().splitlines() if "--role validation" in l and "--dry-run" not in l]
+    assert lines and "-s workspace-write" not in lines[0]
+
+
+def test_seat_that_writes_to_the_worktree_is_unrun(orc, repo, tmp_path, stubs, monkeypatch):
+    monkeypatch.setenv("PF_STUB_TOUCH", "1")
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.status == "validator_unrun" and not r.merged
+    assert "mutated the worktree" in stubs["register_log"].read_text().splitlines()[1]

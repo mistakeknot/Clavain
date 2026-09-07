@@ -205,7 +205,10 @@ dispatch:
       model: fable
       reasoning_effort: high
       service_tier: standard
-      fallbacks: [validation-kimi, validation-sol]
+      # sol before kimi: the kimi seat runs with a toolless agent file and can only
+      # answer UNRUN for a plan whose Verification must run (goal 60771535, run 120d9aa1);
+      # the codex seat executes and still differs from a fable producer.
+      fallbacks: [validation-sol, validation-kimi]
       description: Independent consequential-work validator for Codex-produced work
     validation-kimi:
       role: validation
