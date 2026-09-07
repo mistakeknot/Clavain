@@ -1505,6 +1505,16 @@ else
   if [[ -n "$WORKDIR" ]]; then
     CMD+=(-C "$WORKDIR")
   fi
+  # uv's sync step builds a network client, and under the codex sandbox that
+  # panics ("Tokio executor failed", exit 101) even with the cache writable,
+  # so a validation seat replaying `uv run pytest` failed a green suite (runs
+  # 70691474 and 8565586e, goal a7f02287). A validator replays in a tree the
+  # executor or the tool already synced, so it runs uv without syncing;
+  # measured: UV_NO_SYNC=1 alone turns the panic into 5 passed. Executors
+  # keep syncing. CLAVAIN_CODEX_UV_NO_SYNC=0 turns this off.
+  if [[ "${ROLE:-}" == "validation" && "${CLAVAIN_CODEX_UV_NO_SYNC:-1}" != "0" ]]; then
+    export UV_NO_SYNC=1
+  fi
 
   if [[ -n "$OUTPUT" ]]; then
     CMD+=(-o "$OUTPUT")
@@ -1573,6 +1583,7 @@ if [[ "$DRY_RUN" == true ]]; then
     if [[ -n "$OUTPUT" ]]; then printf ' > %q' "$OUTPUT"; fi
     echo ""
   else
+    if [[ -n "${UV_NO_SYNC:-}" ]]; then echo "# Env: UV_NO_SYNC=$UV_NO_SYNC (validation seat replays without syncing)" >&2; fi
     DISPLAY_CMD=(codex exec -s "$SANDBOX")
     if [[ -n "${CODEX_WRITABLE_ROOTS_TOML:-}" ]]; then
       DISPLAY_CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
