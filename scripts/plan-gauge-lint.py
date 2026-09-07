@@ -63,6 +63,11 @@ are read, the plan's edits are applied in order, and the verify commands run
 against that virtual post-edit tree. Without it the linter still works, using
 only the plan's emitted blocks as the corpus, but it sees less.
 
+With ``--apply``, an exact contract is gauged first, then its preconditions,
+edits, creates, and Verify fences run against ``--repo-root``. Exit 3 is a
+pre-edit refusal, 4 an edit mismatch, and 5 a verify mismatch; exits 0, 1, and
+2 retain their meanings below.
+
 Exit 0 = no blocking findings. Exit 1 = at least one. Exit 2 = usage/parse error.
 """
 
@@ -880,6 +885,380 @@ def _report(findings: list[Finding], notes: list[str], label: str, quiet: bool) 
 
 
 # --------------------------------------------------------------------------
+# Exact-contract application
+# --------------------------------------------------------------------------
+
+@dataclass
+class ApplyStep:
+    kind: str
+    line: int
+    target: str | None = None
+    heading: str | None = None
+    status: str = "ok"
+    rc: int | None = None
+    detail: str = ""
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "line": self.line,
+            "target": self.target,
+            "heading": self.heading,
+            "status": self.status,
+            "rc": self.rc,
+            "detail": self.detail,
+        }
+
+
+@dataclass
+class ApplyResult:
+    ok: bool
+    steps: list[ApplyStep] = field(default_factory=list)
+    messages: list[str] = field(default_factory=list)
+    written: list[str] = field(default_factory=list)
+
+    def as_dict(self, repo_root: Path) -> dict[str, object]:
+        return {
+            "ok": self.ok,
+            "repo_root": str(repo_root),
+            "steps": [step.as_dict() for step in self.steps],
+        }
+
+
+@dataclass
+class ApplyExpectation:
+    raw: str
+    exit_code: int | None = None
+    zero_output: bool = False
+
+
+def _block_headings(plan_text: str, blocks: list[Block]) -> dict[int, list[tuple[int, str]]]:
+    """Return the active Markdown heading stack for each fenced block."""
+    wanted = {block.line for block in blocks}
+    contexts: dict[int, list[tuple[int, str]]] = {}
+    stack: list[tuple[int, str]] = []
+    lines = plan_text.splitlines()
+    i = 0
+    while i < len(lines):
+        fence = FENCE_RE.match(lines[i])
+        if fence:
+            line = i + 1
+            if line in wanted:
+                contexts[line] = list(stack)
+            marker = fence.group(2)
+            i += 1
+            while i < len(lines):
+                closing = FENCE_RE.match(lines[i])
+                if (closing and closing.group(2)[0] == marker[0]
+                        and len(closing.group(2)) >= len(marker)
+                        and not closing.group(3)):
+                    break
+                i += 1
+            i += 1
+            continue
+        heading = HEADING_RE.match(lines[i])
+        if heading:
+            level = len(lines[i]) - len(lines[i].lstrip("#"))
+            text = re.sub(r"\s+#+\s*$", "", heading.group(1).strip())
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            stack.append((level, text))
+        i += 1
+    return contexts
+
+
+def _under_preconditions(headings: list[tuple[int, str]]) -> str | None:
+    for level, text in reversed(headings):
+        if level == 2 and text.casefold() == "preconditions":
+            return text
+    return None
+
+
+def _verify_heading(headings: list[tuple[int, str]]) -> str | None:
+    for _, text in reversed(headings):
+        if text.casefold().startswith("verify"):
+            return text
+    return None
+
+
+def _apply_expectation(plan_text: str, block: Block) -> ApplyExpectation:
+    """Read the first Expected: line within ten lines after a shell fence."""
+    lines = plan_text.splitlines()
+    start = block.line + block.body.count("\n") + 2
+    raw = "exit 0"
+    for line in lines[start:start + 10]:
+        match = re.match(r"^\s*Expected:\s*(.*)$", line, re.I)
+        if match:
+            raw = match.group(1).strip() or "exit 0"
+            break
+    exit_match = re.search(r"\bexit\s+(-?\d+)\b", raw, re.I)
+    if exit_match:
+        return ApplyExpectation(raw=raw, exit_code=int(exit_match.group(1)))
+    zero_output = bool(re.search(r"prints?\s+NOTHING|\bno output\b", raw, re.I))
+    return ApplyExpectation(raw=raw, zero_output=zero_output)
+
+
+def _run_fence(block: Block, repo_root: Path, timeout: float) -> tuple[int, str, str, str]:
+    """Run one shell fence through bash with the contract's strict options."""
+    try:
+        result = subprocess.run(
+            ["bash", "-e", "-o", "pipefail"],
+            input=block.body,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return result.returncode, result.stdout, result.stderr, ""
+    except subprocess.TimeoutExpired as exc:
+        stdout = (
+            exc.stdout.decode(errors="replace")
+            if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        )
+        stderr = (
+            exc.stderr.decode(errors="replace")
+            if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        )
+        return 124, stdout, stderr, f"timed out after {timeout:g} seconds"
+
+
+def _resolved_target(repo_root: Path, target: str | None) -> tuple[Path | None, str | None]:
+    if not target:
+        return None, None
+    root = repo_root.resolve()
+    path = (root / target).resolve()
+    try:
+        relative = path.relative_to(root).as_posix()
+    except ValueError:
+        return None, None
+    return path, relative
+
+
+def _dirty_targets(repo_root: Path, edits: list[Edit]) -> tuple[list[str], str | None]:
+    """Return dirty existing targets, or a note when there is no git work tree."""
+    inside = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        return [], "repo root is not inside a git work tree; dirty-target check skipped"
+
+    targets: list[str] = []
+    for edit in edits:
+        path, relative = _resolved_target(repo_root, edit.target)
+        if path is not None and relative is not None and path.exists() and relative not in targets:
+            targets.append(relative)
+    if not targets:
+        return [], None
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--", *targets],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if status.returncode != 0:
+        return targets, f"git status failed: {status.stderr.strip() or 'unknown error'}"
+    dirty: list[str] = []
+    for line in status.stdout.splitlines():
+        named = line[3:].split(" -> ")[-1]
+        if named and named not in dirty:
+            dirty.append(named)
+    return dirty, None
+
+
+def _failure_tail(stdout: str, stderr: str) -> list[str]:
+    lines: list[str] = []
+    if stdout:
+        lines.append("stdout (last 20 lines):")
+        lines.extend(stdout.splitlines()[-20:])
+    if stderr:
+        lines.append("stderr (last 20 lines):")
+        lines.extend(stderr.splitlines()[-20:])
+    return lines
+
+
+def _append_revert(result: ApplyResult) -> None:
+    files = " ".join(result.written)
+    written_message = f"apply: files already written: {files or '(none)'}"
+    revert_message = f"apply: revert: git checkout -- {files}".rstrip()
+    result.messages.append(written_message)
+    result.messages.append(revert_message)
+    if result.steps and result.steps[-1].status == "failed":
+        result.steps[-1].detail += f"\n{written_message}\n{revert_message}"
+
+
+def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, ApplyResult, str | None]:
+    """Apply an already-clean exact contract and replay its execution fences."""
+    blocks = parse_blocks(plan_text)
+    headings = _block_headings(plan_text, blocks)
+    edits = collect_edits(blocks)
+    _resolve_bare_targets(edits, repo_root)
+
+    dirty, git_note = _dirty_targets(repo_root, edits)
+    if dirty:
+        result = ApplyResult(ok=False)
+        dirty_note = "apply: dirty target(s): " + " ".join(dirty)
+        result.messages.append(dirty_note)
+        return 3, result, dirty_note
+    if git_note and git_note.startswith("git status failed:"):
+        result = ApplyResult(ok=False)
+        result.messages.append(f"apply: refused before edits: {git_note}")
+        return 3, result, git_note
+
+    result = ApplyResult(ok=False)
+    if git_note:
+        result.messages.append(f"apply: note: {git_note}")
+
+    # Preconditions are a single pre-edit phase even though the rest of the
+    # contract is replayed in document order.
+    preconditions: list[tuple[Block, str]] = []
+    for block in blocks:
+        heading = _under_preconditions(headings.get(block.line, []))
+        if block.lang in SHELL_LANGS and heading:
+            preconditions.append((block, heading))
+    for block, heading in preconditions:
+        rc, stdout, stderr, run_detail = _run_fence(block, repo_root, timeout)
+        detail = run_detail or ("passed" if rc == 0 else "Preconditions command failed")
+        step = ApplyStep(
+            kind="precondition", line=block.line, heading=heading,
+            status="ok" if rc == 0 else "failed", rc=rc, detail=detail,
+        )
+        result.steps.append(step)
+        if rc != 0:
+            message = (
+                f"apply: precondition {heading} (plan line {block.line}): FAILED rc={rc}"
+            )
+            tail = _failure_tail(stdout, stderr)
+            step.detail = "\n".join([message, *tail, *([run_detail] if run_detail else [])])
+            result.messages.append(message)
+            result.messages.extend(tail)
+            if run_detail:
+                result.messages.append(run_detail)
+            return 3, result, git_note
+        result.messages.append(f"apply: precondition {heading} (plan line {block.line}): ok")
+
+    items: list[tuple[int, str, object, str | None]] = []
+    for edit in edits:
+        items.append((edit.line, "create" if edit.create else "edit", edit, None))
+    for block in blocks:
+        verify_heading = _verify_heading(headings.get(block.line, []))
+        if block.lang in SHELL_LANGS and block.kind == "verify" and verify_heading:
+            items.append((block.line, "verify", block, verify_heading))
+
+    for _, kind, item, heading in sorted(items, key=lambda entry: entry[0]):
+        if kind in ("edit", "create"):
+            edit = item
+            assert isinstance(edit, Edit)
+            path, target = _resolved_target(repo_root, edit.target)
+            display = target or edit.target or "<unresolved>"
+            if path is None or target is None:
+                message = (
+                    f"apply: {kind} {display} (plan line {edit.line}): "
+                    "target cannot be resolved"
+                )
+                step = ApplyStep(kind=kind, line=edit.line, target=display,
+                                 status="failed", detail=message)
+                result.steps.append(step)
+                result.messages.append(message)
+                _append_revert(result)
+                return 4, result, git_note
+            if edit.create:
+                if path.exists():
+                    message = (
+                        f"apply: create {target} (plan line {edit.line}): target already exists"
+                    )
+                    result.steps.append(ApplyStep(
+                        kind="create", line=edit.line, target=target,
+                        status="failed", detail=message,
+                    ))
+                    result.messages.append(message)
+                    _append_revert(result)
+                    return 4, result, git_note
+                path.parent.mkdir(parents=True, exist_ok=True)
+                content = edit.new if edit.new.endswith("\n") else edit.new + "\n"
+                path.write_text(content)
+                if target not in result.written:
+                    result.written.append(target)
+                result.steps.append(ApplyStep(
+                    kind="create", line=edit.line, target=target, detail="created",
+                ))
+                result.messages.append(f"apply: create {target} (plan line {edit.line}): ok")
+                continue
+
+            if not path.is_file():
+                message = (
+                    f"apply: edit {target} (plan line {edit.line}): target cannot be resolved"
+                )
+                result.steps.append(ApplyStep(
+                    kind="edit", line=edit.line, target=target,
+                    status="failed", detail=message,
+                ))
+                result.messages.append(message)
+                _append_revert(result)
+                return 4, result, git_note
+            current = path.read_text(errors="replace")
+            count = current.count(edit.old)
+            if count != 1:
+                mismatch = "old_string not found" if count == 0 else f"old_string found {count} times"
+                message = f"apply: edit {target} (plan line {edit.line}): {mismatch}"
+                result.steps.append(ApplyStep(
+                    kind="edit", line=edit.line, target=target,
+                    status="failed", detail=message,
+                ))
+                result.messages.append(message)
+                _append_revert(result)
+                return 4, result, git_note
+            path.write_text(current.replace(edit.old, edit.new, 1))
+            if target not in result.written:
+                result.written.append(target)
+            result.steps.append(ApplyStep(
+                kind="edit", line=edit.line, target=target, detail="applied",
+            ))
+            result.messages.append(f"apply: edit {target} (plan line {edit.line}): ok")
+            continue
+
+        block = item
+        assert isinstance(block, Block)
+        assert heading is not None
+        expectation = _apply_expectation(plan_text, block)
+        rc, stdout, stderr, run_detail = _run_fence(block, repo_root, timeout)
+        if expectation.exit_code is not None:
+            matched = rc == expectation.exit_code
+        elif expectation.zero_output:
+            matched = stdout == ""
+        else:
+            matched = rc == 0
+        detail = run_detail or "matched " + expectation.raw
+        if not matched:
+            message = (
+                f"apply: verify {heading} (plan line {block.line}): "
+                f"FAILED rc={rc}, expected {expectation.raw}"
+            )
+            tail = _failure_tail(stdout, stderr)
+            detail = "\n".join([message, *tail, *([run_detail] if run_detail else [])])
+            result.steps.append(ApplyStep(
+                kind="verify", line=block.line, heading=heading,
+                status="failed", rc=rc, detail=detail,
+            ))
+            result.messages.append(message)
+            result.messages.extend(tail)
+            if run_detail:
+                result.messages.append(run_detail)
+            _append_revert(result)
+            return 5, result, git_note
+        result.steps.append(ApplyStep(
+            kind="verify", line=block.line, heading=heading,
+            status="ok", rc=rc, detail=detail,
+        ))
+        result.messages.append(f"apply: verify {heading} (plan line {block.line}): ok")
+
+    result.ok = True
+    return 0, result, git_note
+
+
+# --------------------------------------------------------------------------
 # Self-test: replay the seven known defects (six from pilot 1, one from pattern F)
 # --------------------------------------------------------------------------
 
@@ -1212,12 +1591,23 @@ def main(argv: list[str]) -> int:
                          "otherwise preserves the legacy exact-plan gauge")
     ap.add_argument("--self-test", action="store_true",
                     help="replay the seven known gauge defects and exit")
+    ap.add_argument("--apply", action="store_true",
+                    help="apply an exact contract and replay its execution fences")
+    ap.add_argument("--timeout", type=float, default=600,
+                    help="seconds allowed for each --apply shell fence (default: 600)")
     ap.add_argument("--json", action="store_true", help="machine-readable findings")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
     if args.self_test:
         return self_test(args.verbose)
+
+    if args.apply and args.repo_root is None:
+        ap.error("--apply requires --repo-root")
+    if args.apply and not args.repo_root.is_dir():
+        ap.error("--repo-root must name an existing directory")
+    if args.apply and args.timeout <= 0:
+        ap.error("--timeout must be greater than zero")
 
     if not args.plan:
         ap.error("a plan path is required (or --self-test)")
@@ -1228,9 +1618,30 @@ def main(argv: list[str]) -> int:
 
     plan_text = path.read_text(errors="replace")
     contract = resolve_contract(plan_text, args.contract)
+    if args.apply and contract == "brief":
+        notes = ["apply: brief contracts go to a model, not the tool"]
+        result = ApplyResult(ok=False)
+        if args.json:
+            print(json.dumps({
+                "plan": str(path),
+                "contract": contract,
+                "notes": notes,
+                "findings": [],
+                "apply": result.as_dict(args.repo_root),
+            }, indent=2))
+        else:
+            print(notes[0])
+        return 3
+
     findings, notes = lint_contract(plan_text, contract, args.repo_root, args.extra_artifact)
+    apply_result: ApplyResult | None = None
+    apply_rc = 1 if findings else 0
+    if args.apply and not findings:
+        apply_rc, apply_result, git_note = apply_exact(plan_text, args.repo_root, args.timeout)
+        if git_note and git_note not in notes:
+            notes.append(git_note)
     if args.json:
-        print(json.dumps({
+        receipt = {
             "plan": str(path),
             "contract": contract,
             "notes": notes,
@@ -1239,10 +1650,17 @@ def main(argv: list[str]) -> int:
                  "detail": f.detail, "evidence": f.evidence}
                 for f in findings
             ],
-        }, indent=2))
+        }
+        if args.apply:
+            receipt["apply"] = (apply_result or ApplyResult(ok=False)).as_dict(args.repo_root)
+        print(json.dumps(receipt, indent=2))
     else:
-        _report(findings, notes, str(path), quiet=False)
-    return 1 if findings else 0
+        if findings or not args.apply:
+            _report(findings, notes, str(path), quiet=False)
+        elif apply_result:
+            for message in apply_result.messages:
+                print(message)
+    return apply_rc
 
 
 if __name__ == "__main__":
