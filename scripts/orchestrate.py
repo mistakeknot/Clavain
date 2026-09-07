@@ -919,6 +919,15 @@ def _dispatch_via_tmux(
         time.sleep(2)
 
 
+def _clear_dispatch_artifacts(output_path: str, verdict_path: str) -> None:
+    """Remove outputs whose contents belong to an earlier dispatch."""
+    for path in (output_path, verdict_path, f"{verdict_path}.pre-error"):
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+
 def dispatch_task(
     task: Task,
     manifest: Manifest,
@@ -948,6 +957,8 @@ def dispatch_task(
     output_path = os.path.join(task_dir, f"{stem}output.md")
     verdict_path = f"{output_path}.verdict"
     log_path = os.path.join(task_dir, f"{stem}dispatch.log")
+
+    _clear_dispatch_artifacts(output_path, verdict_path)
 
     prompt = prompt_text or build_prompt(task, plan_path, dep_outputs, manifest.tasks)
     with open(prompt_path, "w") as f:
@@ -1009,13 +1020,21 @@ def dispatch_task(
     # or missing sidecar is NOT proof of failure — check what actually
     # happened on disk before cascading skips (task-9 false negative).
     note: str | None = None
-    verdict_status = _read_verdict_status(verdict_path)
+    fresh_output = os.path.exists(output_path)
+    fresh_verdict = (
+        os.path.exists(verdict_path)
+        and os.path.getmtime(verdict_path) >= start
+    )
+    verdict_status = _read_verdict_status(verdict_path) if fresh_verdict else None
     if verdict_status:
         status = verdict_status
         if timed_out:
             note = "timed out after verdict was written"
     elif timed_out or (returncode is not None and returncode != 0):
-        cause = "timeout (no output movement)" if timed_out else f"dispatch exit {returncode}"
+        if timed_out and not fresh_output:
+            cause = "timed out, no fresh output"
+        else:
+            cause = "timeout (no output movement)" if timed_out else f"dispatch exit {returncode}"
         if _outcome_check(task, project_dir, since=start):
             status = "warn"
             note = (f"{cause}, but outcome-check passed (declared files present "
@@ -1051,8 +1070,8 @@ def dispatch_task(
     return TaskResult(
         task_id=task.id,
         status=status,
-        output_path=output_path if os.path.exists(output_path) else None,
-        verdict_path=verdict_path if os.path.exists(verdict_path) else None,
+        output_path=output_path if fresh_output else None,
+        verdict_path=verdict_path if fresh_verdict else None,
         error=note,
         duration_s=duration,
     )
