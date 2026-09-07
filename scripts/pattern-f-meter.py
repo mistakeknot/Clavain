@@ -141,6 +141,26 @@ def codex_sessions_mentioning(fragments: list[str], since: dt.datetime) -> list[
     return sorted(set(found))
 
 
+def claude_seat_sessions(fragments: list[str], since: dt.datetime) -> list[str]:
+    """Session ids of claude transcripts whose project directory (the seat's
+    cwd, slugified) carries a fragment and that were written at or after the
+    window start. profile.py --session matches the file name, so the seat
+    must be named by its id, not by its directory."""
+    root = os.path.expanduser("~/.claude/projects")
+    ids: list[str] = []
+    for d in glob.glob(os.path.join(root, "*")):
+        if not any(frag in os.path.basename(d) for frag in fragments):
+            continue
+        for f in glob.glob(os.path.join(d, "*.jsonl")):
+            try:
+                if dt.datetime.fromtimestamp(os.path.getmtime(f), dt.timezone.utc) < since:
+                    continue
+            except OSError:
+                continue
+            ids.append(os.path.basename(f)[:-6])
+    return sorted(set(ids))
+
+
 def total_cost(report: dict) -> float:
     return sum(float(r["cost"]) for r in report.get("rows", []) if r.get("cost") is not None)
 
@@ -150,7 +170,7 @@ def main() -> int:
     ap.add_argument("target", help="run dir or meter.json")
     ap.add_argument("--interstat", help="interstat checkout (scripts/profile.py under it)")
     ap.add_argument("--seat-path-fragment", action="append", default=[],
-                    help="claude seat transcripts: path fragment (default orchestrate-runs-<run>)")
+                    help="claude seats: fragment of the transcript's project directory (default orchestrate-runs-<run>)")
     ap.add_argument("--seat-content-fragment", action="append", default=[],
                     help="codex seat sessions: content fragment (default orchestrate-runs/<run>)")
     ap.add_argument("--json", action="store_true")
@@ -169,7 +189,8 @@ def main() -> int:
 
     everything = profile(profile_py, since, until, None)
     main_only = profile(profile_py, since, until, session)
-    claude_seats = {frag: total_cost(profile(profile_py, since, until, frag)) for frag in path_frags}
+    claude_ids = claude_seat_sessions(path_frags, parse_ts(since))
+    claude_seats = {sid: total_cost(profile(profile_py, since, until, sid)) for sid in claude_ids}
     codex_ids = codex_sessions_mentioning(content_frags, parse_ts(since))
     codex_seats = {sid: total_cost(profile(profile_py, since, until, sid)) for sid in codex_ids}
 
