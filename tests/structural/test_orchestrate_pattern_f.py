@@ -672,3 +672,30 @@ def test_a_failed_reserve_leaves_no_partial_reservation(orc, repo, stubs, tmp_pa
     assert packet["items"][0]["status"] == "error"
     assert "ic coordination reserve failed" in packet["items"][0]["notes"]
     assert not list(stubs["store"].glob("*.lock")), "a partial reservation outlived the failure"
+
+
+def test_an_environment_failure_in_the_validator_is_unrun(orc, repo, stubs, tmp_path, monkeypatch, capsys):
+    """mk's ruling on Sylveste-ypvl: a runner that crashed before the test ran is UNRUN, never FAIL."""
+    monkeypatch.setenv("PF_STUB_VERDICT", "FAIL")
+    monkeypatch.setenv("PF_STUB_CRITERION", "Verify Task 1: Expected exit 0; uv exited 101 after a Tokio executor failed panic")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"})], stubs["register"])
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    item = packet["items"][0]
+    assert item["status"] == "validator_unrun", item
+    assert item["validator_verdict"] == "UNRUN"
+    assert "environment failure" in (item["notes"] or "")
+    rows = stubs["register_log"].read_text()
+    assert "--role validator --kind replay --verdict UNRUN" in rows
+    assert Path(item["worktree"]).is_dir()
+
+
+def test_a_plain_validator_fail_stays_a_fail(orc, repo, stubs, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PF_STUB_VERDICT", "FAIL")
+    monkeypatch.setenv("PF_STUB_CRITERION", "Acceptance criterion 2: the helper returns 3, got 4")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"})], stubs["register"])
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    assert packet["items"][0]["status"] == "validator_fail"

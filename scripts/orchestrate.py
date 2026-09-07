@@ -2144,6 +2144,27 @@ def _pf_beyond_the_gauge(text: str) -> list[str]:
     return findings
 
 
+_PF_ENV_FAILURES = (
+    ("Tokio executor failed", "the test runner crashed before running the tests"),
+    ("panicked", "the test runner crashed before running the tests"),
+    ("exit 101", "the test runner crashed before running the tests"),
+    ("Operation not permitted", "a path the seat needed was denied by its sandbox"),
+    ("No virtual environment found", "no virtual environment in the worktree"),
+    ("command not found", "a program the Verification names is missing"),
+)
+
+
+def _pf_environment_failure(report: str) -> str | None:
+    """An environment failure named in the seat's own report (its CRITERION or
+    BEYOND THE GAUGE lines): the runner never ran the tests, so the verdict is
+    UNRUN, never FAIL (mk's ruling on Sylveste-ypvl, 2026-09-07)."""
+    low = report.lower()
+    for needle, why in _PF_ENV_FAILURES:
+        if needle.lower() in low:
+            return f"{why} ({needle!r} in the seat's report)"
+    return None
+
+
 def _pf_sidecar_summary(verdict_path: str) -> str | None:
     if not os.path.exists(verdict_path):
         return None
@@ -2451,9 +2472,7 @@ def pf_validator_prompt(
         "`## Preconditions` fence describes the tree before the apply and is not replayed) with "
         "the Bash tool, every command, from the repo root, and judge only against its frozen "
         "Acceptance Criteria (a brief) or its `Expected:` lines (an exact plan): output line 1 "
-        "`VERDICT: PASS`, `VERDICT: FAIL`, or `VERDICT: UNRUN` (UNRUN whenever any Verification "
-        "command could not be executed: a denied tool call, a missing program, an unreadable "
-        "path; never guess the outcome of a command you did not run), line 2 `CRITERION: <the "
+        "`VERDICT: PASS`, `VERDICT: FAIL`, or `VERDICT: UNRUN` (UNRUN whenever any Verification command could not be executed: a denied tool call, a missing program, an unreadable path, or a runner that crashed or was denied before the test ran, such as a panic, exit 101 or a denied cache path; an environment failure is UNRUN, never FAIL; never guess the outcome of a command you did not run), line 2 `CRITERION: <the "
         "failing criterion, or for UNRUN the command that could not run, or none>`, line 3 "
         "`RECEIPT: <the verbatim output of the receipt command named below, or none>`. Then "
         "output `BEYOND THE GAUGE:` with bullets for real defects or risks the replay did not "
@@ -2623,6 +2642,10 @@ def pf_validate(
         return PFValidation("UNRUN", crit, _pf_sidecar_summary(output + ".verdict") or "dispatch reported an error verdict", receipt_ok, [], model)
     if v not in ("PASS", "FAIL", "UNRUN"):
         return PFValidation("UNRUN", crit, f"no VERDICT line from the seat (dispatch rc={rc}, sidecar {status or 'missing'})", receipt_ok, findings, model)
+    if v == "FAIL":
+        env = _pf_environment_failure(text)
+        if env:
+            return PFValidation("UNRUN", crit, f"environment failure, not a code failure: {env}", receipt_ok, findings, model)
     if v in ("PASS", "FAIL") and not receipt_ok:
         return PFValidation(
             "UNRUN", crit,
@@ -2786,6 +2809,8 @@ def _pf_item_steps(
     val = pf_validate(run, item, contract, wt, commit, packet, producer, item_dir, dispatch_sh, meter)
     res.validator_model = val.model
     res.validator_verdict, res.validator_criterion, res.receipt_ok = val.verdict, val.criterion, val.receipt_ok
+    if val.note and val.verdict != "PASS":
+        res.note = val.note  # the packet says why a seat did not rule, not only the register
     pf_register(
         run, verdict_sh, res, commit=commit, role="validator", kind="replay",
         verdict=val.verdict, criterion=(val.criterion if val.verdict != "PASS" else None), note=val.note,
