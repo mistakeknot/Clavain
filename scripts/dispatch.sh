@@ -161,6 +161,7 @@ Options:
                                   claude — claude -p one-shot (review seat: reads + runs
                                           commands, file mutation disallowed unless
                                           --claude-unsafe; tier: fast→sonnet, deep→opus)
+                                          claude seats run with --setting-sources project,local; set CLAVAIN_CLAUDE_KEEP_USER_SETTINGS=1 to keep user settings for direct --to claude
                                   kimi  — kimi -p (second-opinion backend; different
                                           model family. -s/--sandbox, -i/--image and codex
                                           passthrough flags are ignored with a warning)
@@ -1465,6 +1466,11 @@ elif [[ "$ENGINE" == "claude" ]]; then
     PLAN_DIR="$(cd "$(dirname "$PLAN_FILE")" && pwd)"
     CMD+=(--add-dir "$PLAN_DIR")
   fi
+  # Role seats always exclude the operator's user-scope settings. A direct
+  # operator dispatch may opt back into the historical inherited behavior.
+  if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]] || [[ "${CLAVAIN_CLAUDE_KEEP_USER_SETTINGS:-}" != "1" ]]; then
+    CMD+=(--setting-sources "project,local")
+  fi
   # The prompt goes via stdin, never argv: review prompts routinely exceed
   # ARG_MAX (macOS ~1MB incl. env), and `claude -p` with a too-long argv dies
   # with "Argument list too long" / exit 126 before the model ever runs
@@ -1558,9 +1564,9 @@ if [[ "$DRY_RUN" == true ]]; then
     if [[ -n "$OUTPUT" ]]; then printf '> %q' "$OUTPUT"; fi
     echo ""
   elif [[ "$ENGINE" == "claude" ]]; then
-    # CMD's last element is the prompt — display everything before it,
-    # then the truncated preview in its place.
-    DISPLAY_CMD=("${CMD[@]:0:${#CMD[@]}-1}")
+    # Claude receives the prompt on stdin, so display the complete command
+    # (including its trailing -p) followed by the prompt preview as input.
+    DISPLAY_CMD=("${CMD[@]}")
     if [[ -n "$WORKDIR" ]]; then printf 'cd %q && ' "$WORKDIR"; fi
     printf '%q ' "${DISPLAY_CMD[@]}"
     printf '%q' "$PROMPT_PREVIEW"
