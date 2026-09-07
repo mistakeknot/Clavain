@@ -15,7 +15,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -275,13 +274,11 @@ func stopReviewWorker(r reviewReceipt, dir string) error {
 	if r.WorkerPID > 1 {
 		command, err := exec.Command("ps", "-p", strconv.Itoa(r.WorkerPID), "-o", "command=").Output()
 		if err == nil && strings.Contains(string(command), filepath.Join(dir, "launch.sh")) {
-			group, err := syscall.Getpgid(r.WorkerPID)
-			if err == nil && group == r.WorkerPID {
-				if err = syscall.Kill(-group, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
-					return err
-				}
-				groupStopped = true
+			stopped, err := stopReviewWorkerGroup(r.WorkerPID)
+			if err != nil {
+				return err
 			}
+			groupStopped = stopped
 		}
 	}
 	_, err := reviewRun(r.Project, "ic", "dispatch", "kill", r.DispatchID)
@@ -302,12 +299,9 @@ func runReviewCheck(project string, command []string, log *os.File) error {
 	check := exec.CommandContext(ctx, command[0], command[1:]...)
 	check.Dir = project
 	check.Stdout, check.Stderr = log, log
-	check.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	check.SysProcAttr = reviewCheckAttr()
 	check.Cancel = func() error {
-		if check.Process == nil {
-			return os.ErrProcessDone
-		}
-		return syscall.Kill(-check.Process.Pid, syscall.SIGKILL)
+		return killReviewCheckGroup(check)
 	}
 	check.WaitDelay = 5 * time.Second
 	return check.Run()
@@ -317,7 +311,7 @@ func workReview(path string) error {
 	dir := filepath.Dir(path)
 	lock, err := reviewLock(filepath.Join(dir, "worker.lock"), true)
 	if err != nil {
-		if errors.Is(err, syscall.EWOULDBLOCK) {
+		if reviewLockBusy(err) {
 			return nil
 		}
 		return err
@@ -349,7 +343,7 @@ func workReview(path string) error {
 	projectHash := sha256.Sum256([]byte(r.Project))
 	projectLock, err := reviewLock(filepath.Join(filepath.Dir(dir), fmt.Sprintf("project-%x.lock", projectHash[:16])), true)
 	if err != nil {
-		if errors.Is(err, syscall.EWOULDBLOCK) {
+		if reviewLockBusy(err) {
 			return nil
 		}
 		return err

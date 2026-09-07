@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -202,11 +201,7 @@ func reviewLock(path string, nonblock bool) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	flags := syscall.LOCK_EX
-	if nonblock {
-		flags |= syscall.LOCK_NB
-	}
-	if err = syscall.Flock(int(f.Fd()), flags); err != nil {
+	if err = reviewFlock(f, nonblock); err != nil {
 		f.Close()
 		return nil, err
 	}
@@ -417,7 +412,7 @@ func cmdReview(args []string) error {
 		}
 		cmd := exec.Command(exe, "review", "work", path)
 		cmd.Dir = s.Project
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		cmd.SysProcAttr = reviewSupervisorAttr()
 		log, err := os.OpenFile(filepath.Join(filepath.Dir(path), "supervisor.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return err
