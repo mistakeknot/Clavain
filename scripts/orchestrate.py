@@ -13,6 +13,11 @@ Usage:
     python3 orchestrate.py <manifest.exec.yaml> [--plan <plan.md>] [--project-dir <dir>]
     python3 orchestrate.py --validate <manifest.exec.yaml>
     python3 orchestrate.py --dry-run <manifest.exec.yaml>
+    python3 orchestrate.py --pattern-f <run.pf.yaml> [--dry-run]
+
+--pattern-f drives the offload loop of pattern-f-contracts.md from a run
+file (see the Pattern F section below): gauge, worktree, executor, validation
+seat, register rows, merge, with nothing dispatched by hand.
 """
 
 from __future__ import annotations
@@ -21,14 +26,16 @@ import argparse
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import textwrap
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 from uuid import uuid4
@@ -715,16 +722,16 @@ def dispatch_review(
 
     dirty_before = _git(project_dir, "status", "--porcelain")
     try:
-        p = subprocess.run(
-            cmd, capture_output=True, text=True,
-            timeout=manifest.timeout_per_task,
-        )
+        _rc, timed_out, out, err = run_in_group(cmd, timeout=manifest.timeout_per_task)
         with open(os.path.join(task_dir, f"review-{round_num}.log"), "w") as f:
-            f.write(_as_text(p.stdout))
-            if p.stderr:
-                f.write("\n--- stderr ---\n" + _as_text(p.stderr))
-    except subprocess.TimeoutExpired:
-        return False, f"(reviewer timed out after {manifest.timeout_per_task}s — treated as not approved)"
+            f.write(out)
+            if err:
+                f.write("\n--- stderr ---\n" + err)
+        if timed_out:
+            return False, (
+                f"(reviewer timed out after {manifest.timeout_per_task}s; its process "
+                "group was killed — treated as not approved)"
+            )
     except Exception as e:  # noqa: BLE001 — any dispatch failure is a non-approval
         return False, f"(reviewer dispatch failed: {type(e).__name__}: {e})"
 
@@ -975,20 +982,17 @@ def dispatch_task(
                 stem=stem,
             )
         else:
-            result = subprocess.run(
-                cmd, env=env, capture_output=True, text=True,
-                timeout=manifest.timeout_per_task,
+            # Own process group: a timeout kills the group, not just
+            # dispatch.sh, so its codex/claude grandchild dies too (mk-kj2m).
+            returncode, timed_out, out, err = run_in_group(
+                cmd, env=env, timeout=manifest.timeout_per_task,
             )
-            returncode = result.returncode
             with open(log_path, "w") as f:
-                f.write(_as_text(result.stdout))
-                if result.stderr:
-                    f.write("\n--- stderr ---\n" + _as_text(result.stderr))
-    except subprocess.TimeoutExpired as e:
-        timed_out = True
-        with open(log_path, "w") as f:
-            f.write(_as_text(e.stdout))
-            f.write("\n--- stderr (partial, timeout) ---\n" + _as_text(e.stderr))
+                f.write(out)
+                if timed_out:
+                    f.write("\n--- stderr (partial, timeout; process group killed) ---\n" + err)
+                elif err:
+                    f.write("\n--- stderr ---\n" + err)
     except Exception as e:
         with open(log_path, "a") as f:
             f.write(f"\n--- dispatch exception ---\n{type(e).__name__}: {e}\n")
@@ -1773,11 +1777,848 @@ def _print_summary(
 # CLI
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Process-group dispatch (mk-kj2m)
+#
+# subprocess.run(timeout=...) kills only the direct child. dispatch.sh is a
+# wrapper, and on uncrancher run 57651f7d its codex grandchild survived the
+# kill and committed twelve minutes after its deadline. Every dispatch now
+# leads its own session (a fresh process group); a timeout kills the group,
+# TERM then KILL, so nothing the dispatch spawned outlives it.
+# ---------------------------------------------------------------------------
+
+GROUP_KILL_GRACE_S = float(os.environ.get("ORC_GROUP_KILL_GRACE", "5"))
+
+
+def _kill_process_group(proc: subprocess.Popen, grace: float = GROUP_KILL_GRACE_S) -> None:
+    """TERM the group led by ``proc`` (started with a new session, so the
+    pgid is its pid), wait ``grace`` seconds for the leader, then KILL the
+    group. Grandchildren stay in the group after the leader is reaped, so
+    the KILL reaches them too."""
+    pgid = proc.pid
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    deadline = time.monotonic() + grace
+    while proc.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    if proc.poll() is None:
+        proc.kill()
+
+
+def run_in_group(
+    cmd: list[str],
+    *,
+    timeout: float,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+) -> tuple[int | None, bool, str, str]:
+    """Run ``cmd`` as the leader of a fresh session and process group. On
+    timeout the whole group is killed, so a dispatch.sh child cannot leave
+    its codex or claude grandchild running past the deadline (mk-kj2m).
+    Returns ``(returncode, timed_out, stdout, stderr)``."""
+    proc = subprocess.Popen(
+        cmd, cwd=cwd, env=env, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        out, err = proc.communicate(timeout=timeout)
+        return proc.returncode, False, out or "", err or ""
+    except subprocess.TimeoutExpired:
+        _kill_process_group(proc)
+        try:
+            out, err = proc.communicate(timeout=GROUP_KILL_GRACE_S)
+        except subprocess.TimeoutExpired:
+            out, err = "", ""
+        return proc.returncode, True, out or "", err or ""
+
+
+# ---------------------------------------------------------------------------
+# Pattern F mode (goal 60771535): --pattern-f <run.pf.yaml>
+#
+# The offload loop in skills/executing-plans/references/pattern-f-contracts.md
+# was driven by hand on every goal before this one: gauge, dispatch, wait,
+# validate, register, merge, each a main-thread turn. This mode drives it
+# from a run file. Per item, in order:
+#
+#   gauge     plan-gauge-lint.py on the plan; a finding writes a gate row and
+#             stops the item before any executor exists
+#   worktree  a fresh git worktree on its own branch, with `ic init` run in
+#             it so dispatch.sh --role can record its routing decision
+#   execute   exact -> plan-gauge-lint.py --apply in the worktree, then one
+#             commit by the orchestrator (no model is spawned)
+#             brief -> dispatch.sh --role <executor role>; the executor commits
+#   validate  dispatch.sh --role validation --plan <plan> with the producer
+#             identity; the orchestrator writes a receipt nonce to disk AFTER
+#             the prompt is fixed and records UNRUN unless the seat echoes it
+#   register  pattern-f-verdict.sh with --db explicit: one row per verdict,
+#             one independent row per BEYOND THE GAUGE finding; read back
+#   merge     a validator PASS merges the branch into the repo and removes
+#             the worktree; anything else keeps the worktree for the controller
+#
+# Every dispatch runs through run_in_group with the run's timeout. The last
+# line of stdout is the closing packet, JSON on one line.
+# ---------------------------------------------------------------------------
+
+_PF_CONTRACT_LINE = re.compile(r"^\s*\**\s*contract\s*\**\s*:\s*\**\s*(brief|exact)\b", re.I)
+_PF_GAUGE_CODE = re.compile(r"\b(?:GAUGE|BRIEF)\d{3}\b")
+_PF_MODEL_LINE = re.compile(r"model[:=]\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
+_PF_CMD_MODEL = re.compile(r"(?:^|\s)(?:-m|--model)\s+([A-Za-z0-9][A-Za-z0-9._-]*)")
+PF_MAX_INDEPENDENT_ROWS = 12
+
+
+@dataclass
+class PFItem:
+    id: str
+    plan: str
+    executor_role: str = "routine-execution"
+    producer: str | None = None
+
+
+@dataclass
+class PFRun:
+    session: str
+    register: str
+    repo: str
+    items: list[PFItem]
+    goal: str | None = None
+    timeout: int = 2400
+    producer: str | None = None
+    trailers: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PFItemResult:
+    id: str
+    plan: str
+    contract: str | None = None
+    status: str = "pending"
+    gauge_rc: int | None = None
+    worktree: str | None = None
+    branch: str | None = None
+    executor_model: str | None = None
+    executor_commit: str | None = None
+    executor_verdict: str | None = None
+    executor_criterion: str | None = None
+    validator_model: str | None = None
+    validator_verdict: str | None = None
+    validator_criterion: str | None = None
+    receipt_ok: bool | None = None
+    independent_findings: int = 0
+    merged: bool = False
+    merge_commit: str | None = None
+    register_rows: int = 0
+    register_errors: int = 0
+    note: str | None = None
+    beyond_gauge: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PFExecution:
+    commit: str | None
+    verdict: str
+    criterion: str | None
+    model: str | None
+    note: str | None = None
+
+
+@dataclass
+class PFValidation:
+    verdict: str
+    criterion: str | None
+    note: str | None
+    receipt_ok: bool
+    findings: list[str]
+    model: str | None
+
+
+def _pf_tool(env_key: str, name: str) -> str:
+    override = os.environ.get(env_key)
+    if override:
+        return override
+    return str(Path(__file__).resolve().parent / name)
+
+
+def _pf_tools() -> dict[str, str | None]:
+    return {
+        "dispatch": _find_dispatch_sh(),
+        "gauge": _pf_tool("CLAVAIN_GAUGE_LINT", "plan-gauge-lint.py"),
+        "verdict": _pf_tool("CLAVAIN_VERDICT_SH", "pattern-f-verdict.sh"),
+        "ic": os.environ.get("CLAVAIN_IC_BIN") or shutil.which("ic"),
+    }
+
+
+def pf_contract(plan_path: str) -> str | None:
+    with open(plan_path, errors="replace") as f:
+        for line in f:
+            m = _PF_CONTRACT_LINE.match(line)
+            if m:
+                return m.group(1).lower()
+    return None
+
+
+def _pf_plan_title(plan_path: str) -> str:
+    with open(plan_path, errors="replace") as f:
+        for line in f:
+            if line.startswith("# "):
+                return line[2:].strip()
+    return os.path.basename(plan_path)
+
+
+def load_pf_run(path: str | Path) -> PFRun:
+    _require_yaml()
+    run_path = Path(path).resolve()
+    with open(run_path) as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise ValueError("run file must be a mapping")
+
+    def _abs(p: str) -> str:
+        return p if os.path.isabs(p) else str((run_path.parent / p).resolve())
+
+    errors: list[str] = []
+    session = str(data.get("session") or "").strip()
+    register = str(data.get("register") or "").strip()
+    repo = str(data.get("repo") or "").strip()
+    if not session:
+        errors.append("session is required (the register session id shared by every row)")
+    if not register:
+        errors.append("register is required (--db is always explicit)")
+    else:
+        register = _abs(register)
+        if not os.path.isfile(register):
+            errors.append(f"register not found: {register}")
+    if not repo:
+        errors.append("repo is required")
+    else:
+        repo = _abs(repo)
+        if not os.path.exists(os.path.join(repo, ".git")):
+            errors.append(f"repo is not a git checkout: {repo}")
+    items: list[PFItem] = []
+    for raw in data.get("items") or []:
+        if not isinstance(raw, dict):
+            errors.append(f"item is not a mapping: {raw!r}")
+            continue
+        iid = str(raw.get("id") or "").strip()
+        plan = str(raw.get("plan") or "").strip()
+        if not iid or not plan:
+            errors.append(f"every item needs id and plan: {raw!r}")
+            continue
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", iid):
+            errors.append(f"item id must be a branch-safe token: {iid!r}")
+        plan = _abs(plan)
+        if not os.path.isfile(plan):
+            errors.append(f"item {iid}: plan not found: {plan}")
+        items.append(PFItem(
+            id=iid, plan=plan,
+            executor_role=str(raw.get("executor_role") or data.get("executor_role") or "routine-execution"),
+            producer=(str(raw["producer"]) if raw.get("producer") else None),
+        ))
+    ids = [i.id for i in items]
+    if len(ids) != len(set(ids)):
+        errors.append("item ids must be unique")
+    if not items:
+        errors.append("items is empty")
+    timeout = data.get("timeout", 2400)
+    if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
+        errors.append("timeout must be a positive integer (seconds per dispatch)")
+    if errors:
+        raise ValueError("invalid run file:\n  " + "\n  ".join(errors))
+    return PFRun(
+        session=session, register=register, repo=repo, items=items,
+        goal=(str(data["goal"]) if data.get("goal") else None),
+        timeout=int(timeout),
+        producer=(str(data["producer"]) if data.get("producer") else None),
+        trailers=[str(t) for t in (data.get("trailers") or [])],
+    )
+
+
+def _pf_named_line(text: str, name: str) -> str | None:
+    m = re.search(rf"^{name}:[ \t]*(.*)$", text, re.M)
+    return m.group(1).strip() if m else None
+
+
+def _pf_beyond_the_gauge(text: str) -> list[str]:
+    """Bullets under BEYOND THE GAUGE:, minus `- none`."""
+    m = re.search(r"^BEYOND THE GAUGE:[ \t]*$", text, re.M)
+    if not m:
+        return []
+    findings: list[str] = []
+    for line in text[m.end():].splitlines():
+        s = line.strip()
+        if not s:
+            if findings:
+                break
+            continue
+        if s[:2] in ("- ", "* "):
+            body = s[2:].strip()
+            if body.lower().rstrip(".") != "none":
+                findings.append(body)
+        elif findings and line[:1] in (" ", "\t"):
+            findings[-1] += " " + s
+        else:
+            break
+    return findings
+
+
+def _pf_sidecar_summary(verdict_path: str) -> str | None:
+    if not os.path.exists(verdict_path):
+        return None
+    with open(verdict_path, errors="replace") as f:
+        for line in f:
+            if line.startswith("SUMMARY:"):
+                return line.split(":", 1)[1].strip()
+    return None
+
+
+def _pf_model(stderr: str, fallback: str | None) -> str | None:
+    m = _PF_MODEL_LINE.search(stderr or "")
+    return m.group(1) if m else fallback
+
+
+def _pf_resolve_model(cmd: list[str], cwd: str) -> str | None:
+    """Ask dispatch.sh --dry-run which model the role resolves to: the
+    printed command names it (-m for codex, --model for claude)."""
+    try:
+        p = subprocess.run(cmd + ["--dry-run"], cwd=cwd, capture_output=True, text=True, timeout=120)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    m = _PF_CMD_MODEL.search((p.stdout or "") + "\n" + (p.stderr or ""))
+    return m.group(1) if m else None
+
+
+def _pf_now() -> str:
+    """UTC, second precision, Z suffix: what interstat's profile.py parses."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _pf_tail(path: str, n: int = 60) -> str:
+    if not os.path.exists(path):
+        return "(no output)"
+    with open(path, errors="replace") as f:
+        lines = f.read().splitlines()
+    return "\n".join(lines[-n:]) if lines else "(empty output)"
+
+
+def pf_gauge(plan: str, contract: str, repo: str, gauge_lint: str) -> tuple[int, str]:
+    p = subprocess.run(
+        [sys.executable, gauge_lint, plan, "--contract", contract, "--repo-root", repo],
+        capture_output=True, text=True, timeout=300,
+    )
+    return p.returncode, (p.stdout or "") + (p.stderr or "")
+
+
+def pf_register(
+    run: PFRun, verdict_sh: str, res: PFItemResult, *,
+    commit: str | None, role: str, kind: str, verdict: str,
+    criterion: str | None = None, note: str | None = None,
+) -> bool:
+    """One register row through pattern-f-verdict.sh, --db explicit. The
+    script's nonce read-back is the check; a failed write is retried once,
+    then reported loudly. It never stops the run."""
+    cmd = [
+        "bash", verdict_sh, "--session", run.session, "--plan", res.plan,
+        "--commit", commit or "none", "--role", role, "--kind", kind,
+        "--verdict", verdict, "--db", run.register,
+    ]
+    if criterion:
+        cmd += ["--criterion", criterion[:100]]
+    if note:
+        cmd += ["--note", note[:300]]
+    if run.goal:
+        cmd += ["--goal", run.goal]
+    rc, detail = 1, ""
+    for _attempt in range(2):
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        rc = p.returncode
+        detail = ((p.stdout or "") + (p.stderr or "")).strip()
+        if rc == 0:
+            break
+    if rc == 0:
+        res.register_rows += 1
+        print(f"  [pf] {res.id}: register {role} {kind} {verdict} commit={commit or 'none'}", flush=True)
+        return True
+    res.register_errors += 1
+    print(
+        f"  [pf] {res.id}: REGISTER WRITE FAILED rc={rc} ({role} {kind} {verdict}): {detail[-300:]}",
+        file=sys.stderr, flush=True,
+    )
+    return False
+
+
+def pf_worktree_add(
+    run: PFRun, item: PFItem, run_dir: str, run_id: str, ic_bin: str | None,
+) -> tuple[str, str]:
+    wt = os.path.join(run_dir, "wt", item.id)
+    branch = f"pf/{run_id}/{item.id}"
+    os.makedirs(os.path.dirname(wt), exist_ok=True)
+    p = subprocess.run(
+        ["git", "-C", run.repo, "worktree", "add", "-q", "-b", branch, wt, "HEAD"],
+        capture_output=True, text=True,
+    )
+    if p.returncode != 0:
+        raise RuntimeError(f"git worktree add failed: {(p.stderr or p.stdout).strip()[-300:]}")
+    if not ic_bin:
+        raise RuntimeError(
+            "ic not found (set CLAVAIN_IC_BIN or put ic on PATH); dispatch.sh --role "
+            "needs an Intercore store in the worktree"
+        )
+    p = subprocess.run([ic_bin, "init"], cwd=wt, capture_output=True, text=True, timeout=120)
+    if p.returncode != 0:
+        raise RuntimeError(f"ic init failed in {wt}: {(p.stderr or p.stdout).strip()[-300:]}")
+    if not os.path.isdir(os.path.join(wt, ".clavain")):
+        raise RuntimeError(f"ic init left no .clavain store in {wt}")
+    return wt, branch
+
+
+def pf_executor_prompt(item: PFItem, contract: str, wt: str, branch: str, item_dir: str) -> str:
+    return (
+        f"PATTERN-F EXECUTOR PLAN: {item.plan}\n"
+        f"PATTERN-F EXECUTOR CONTRACT: {contract}\n"
+        f"REPO: {wt}\n"
+        f"You are the resolved {item.executor_role} executor. Read the {contract} contract at "
+        f"{item.plan}. Stay within its scope, constraints, and authority. For a brief, own "
+        "reconnaissance, implementation, and the test loop needed to satisfy its acceptance "
+        "criteria. For exact, apply its prescribed mechanics verbatim. Never push or deploy "
+        f"unless Authority explicitly permits it. Your working copy is {wt}, a dedicated git "
+        f"worktree on branch {branch}: commit your finished work there, on that branch (a "
+        f"commit message file may be written under {item_dir}); never push, and never touch "
+        "any other checkout. Return only a bounded packet: diff or commit, checks run with "
+        "outcomes, failures, and unresolved questions. End the packet with one line "
+        "`VERDICT: PASS` when every acceptance criterion holds and every check you ran passed, "
+        "otherwise `VERDICT: FAIL` followed by `CRITERION: <the criterion or check that failed>`.\n"
+    )
+
+
+def pf_validator_prompt(
+    plan: str, contract: str, wt: str, ref: str, packet: str, receipt_path: str,
+) -> str:
+    return (
+        "You are the resolved validation executor, and your resolved model must differ from "
+        f"the producer. Read the contract at {plan} and the executor packet below. In {wt} at "
+        f"{ref}, run its Verification (a brief) or every `### Verify` fence (an exact plan; its "
+        "`## Preconditions` fence describes the tree before the apply and is not replayed) with "
+        "the Bash tool, every command, from the repo root, and judge only against its frozen "
+        "Acceptance Criteria (a brief) or its `Expected:` lines (an exact plan): output line 1 "
+        "`VERDICT: PASS`, `VERDICT: FAIL`, or `VERDICT: UNRUN` (UNRUN whenever any Verification "
+        "command could not be executed: a denied tool call, a missing program, an unreadable "
+        "path; never guess the outcome of a command you did not run), line 2 `CRITERION: <the "
+        "failing criterion, or for UNRUN the command that could not run, or none>`, line 3 "
+        "`RECEIPT: <the verbatim output of the receipt command named below, or none>`. Then "
+        "output `BEYOND THE GAUGE:` with bullets for real defects or risks the replay did not "
+        "check (`- none` allowed). Never restate the contract; never fix anything; never edit a "
+        f"file. Contract kind: {contract}. Receipt command: cat {receipt_path}. "
+        f"Executor packet:\n{packet}\n"
+    )
+
+
+def _pf_commit(wt: str, message: str, msg_path: str) -> str | None:
+    if not _git(wt, "status", "--porcelain").strip():
+        return None
+    _write_text(msg_path, message)
+    subprocess.run(["git", "-C", wt, "add", "-A"], check=True, capture_output=True)
+    p = subprocess.run(
+        ["git", "-C", wt, "commit", "-q", "-F", msg_path], capture_output=True, text=True,
+    )
+    if p.returncode != 0:
+        raise RuntimeError(f"git commit failed: {(p.stderr or p.stdout).strip()[-300:]}")
+    return _git_head(wt)
+
+
+def pf_execute_exact(
+    run: PFRun, item: PFItem, wt: str, item_dir: str, gauge_lint: str,
+) -> tuple[str | None, dict | None, str]:
+    """Apply an exact plan with the tool and commit the result in the
+    worktree. Returns (commit, apply receipt, detail); no model runs."""
+    cmd = [
+        sys.executable, gauge_lint, "--apply", item.plan, "--repo-root", wt,
+        "--json", "--timeout", str(run.timeout),
+    ]
+    rc, timed_out, out, err = run_in_group(cmd, timeout=run.timeout + 60, cwd=wt)
+    _write_text(os.path.join(item_dir, "apply.log"), out + ("\n--- stderr ---\n" + err if err else ""))
+    receipt: dict | None = None
+    try:
+        receipt = json.loads(out) if out.strip() else None
+    except json.JSONDecodeError:
+        receipt = None
+    if timed_out:
+        return None, receipt, f"apply timed out after {run.timeout}s; process group killed"
+    apply = (receipt or {}).get("apply") or {}
+    if rc != 0 or not apply.get("ok"):
+        failed = [s for s in apply.get("steps", []) if s.get("status") == "failed"]
+        if failed:
+            s = failed[0]
+            detail = (
+                f"apply: {s.get('kind')} {s.get('target') or s.get('heading') or ''} "
+                f"(plan line {s.get('line')}): {s.get('detail')}"
+            )
+        else:
+            detail = f"apply exited {rc}: {(err or out).strip()[-200:]}"
+        return None, receipt, detail
+    message = (
+        f"pf({item.id}): {_pf_plan_title(item.plan)}\n\n"
+        f"Applied by plan-gauge-lint.py --apply from {os.path.basename(item.plan)}; "
+        "verify fences replayed by the tool.\n"
+        + ("\n" + "\n".join(run.trailers) + "\n" if run.trailers else "")
+    )
+    try:
+        commit = _pf_commit(wt, message, os.path.join(item_dir, "commit-message.txt"))
+    except RuntimeError as e:
+        return None, receipt, str(e)
+    if commit is None:
+        return None, receipt, "apply reported ok but the worktree is unchanged"
+    return commit, receipt, "applied"
+
+
+def pf_execute_brief(
+    run: PFRun, item: PFItem, wt: str, branch: str, item_dir: str,
+    dispatch_sh: str, meter: list[dict],
+) -> PFExecution:
+    prompt_path = os.path.join(item_dir, "executor.prompt.md")
+    output = os.path.join(item_dir, "executor.md")
+    _write_text(prompt_path, pf_executor_prompt(item, "brief", wt, branch, item_dir))
+    base = _git_head(wt)
+    cmd = [
+        "bash", dispatch_sh, "--role", item.executor_role, "-C", wt,
+        "--prompt-file", prompt_path, "-o", output, "-s", "workspace-write",
+    ]
+    resolved = _pf_resolve_model(cmd, wt)
+    started = _pf_now()
+    rc, timed_out, out, err = run_in_group(cmd, timeout=run.timeout, cwd=wt)
+    finished = _pf_now()
+    _write_text(
+        os.path.join(item_dir, "executor.dispatch.log"),
+        out + ("\n--- stderr ---\n" + err if err else ""),
+    )
+    model = resolved or _pf_model(err, item.producer or run.producer)
+    meter.append({
+        "item": item.id, "role": item.executor_role, "model": model,
+        "started": started, "finished": finished, "rc": rc, "timed_out": timed_out,
+        "output": output,
+    })
+    head = _git_head(wt)
+    commit = head if head != base else None
+    text = _pf_tail(output, 400)
+    verdict_line = _pf_named_line(text, "VERDICT") or ""
+    status = _read_verdict_status(output + ".verdict")
+    note = None
+    dirty = _git(wt, "status", "--porcelain").strip()
+    if dirty:
+        note = "worktree dirty after the executor: " + " ".join(dirty.split("\n")[:8])
+    if timed_out:
+        return PFExecution(commit, "FAIL", f"executor timed out after {run.timeout}s; process group killed", model, note)
+    if commit is None:
+        return PFExecution(None, "FAIL", "executor made no commit in its worktree", model, note)
+    if verdict_line.upper().startswith("PASS") or (not verdict_line and status == "pass"):
+        return PFExecution(commit, "PASS", None, model, note)
+    criterion = _pf_named_line(text, "CRITERION") or f"executor verdict: {verdict_line or status or 'none'}"
+    return PFExecution(commit, "FAIL", criterion, model, note)
+
+
+def pf_validate(
+    run: PFRun, item: PFItem, contract: str, wt: str, commit: str, packet: str,
+    producer: str, item_dir: str, dispatch_sh: str, meter: list[dict],
+) -> PFValidation:
+    receipt_path = os.path.join(item_dir, "receipt")
+    prompt_path = os.path.join(item_dir, "validator.prompt.md")
+    output = os.path.join(item_dir, "validator.md")
+    _write_text(prompt_path, pf_validator_prompt(item.plan, contract, wt, commit, packet, receipt_path))
+    # The nonce is written only after the prompt is fixed on disk, so the
+    # prompt cannot carry it: the seat has to run the receipt command.
+    nonce = "receipt-" + secrets.token_hex(5)
+    _write_text(receipt_path, nonce + "\n")
+    cmd = [
+        "bash", dispatch_sh, "--role", "validation", "--producer-identity", producer,
+        "--plan", item.plan, "-C", wt, "--prompt-file", prompt_path, "-o", output,
+    ]
+    resolved = _pf_resolve_model(cmd, wt)
+    started = _pf_now()
+    rc, timed_out, out, err = run_in_group(cmd, timeout=run.timeout, cwd=wt)
+    finished = _pf_now()
+    _write_text(
+        os.path.join(item_dir, "validator.dispatch.log"),
+        out + ("\n--- stderr ---\n" + err if err else ""),
+    )
+    model = resolved or _pf_model(err, None)
+    meter.append({
+        "item": item.id, "role": "validation", "model": model,
+        "started": started, "finished": finished, "rc": rc, "timed_out": timed_out,
+        "output": output,
+    })
+    text = ""
+    if os.path.exists(output):
+        with open(output, errors="replace") as f:
+            text = f.read()
+    verdict_words = (_pf_named_line(text, "VERDICT") or "").split()
+    v = verdict_words[0].upper() if verdict_words else ""
+    crit = _pf_named_line(text, "CRITERION")
+    rec = _pf_named_line(text, "RECEIPT")
+    findings = _pf_beyond_the_gauge(text)
+    status = _read_verdict_status(output + ".verdict")
+    receipt_ok = rec == nonce
+    if timed_out:
+        return PFValidation("UNRUN", crit, f"validator timed out after {run.timeout}s; process group killed", receipt_ok, [], model)
+    if status == "error":
+        return PFValidation("UNRUN", crit, _pf_sidecar_summary(output + ".verdict") or "dispatch reported an error verdict", receipt_ok, [], model)
+    if v not in ("PASS", "FAIL", "UNRUN"):
+        return PFValidation("UNRUN", crit, f"no VERDICT line from the seat (dispatch rc={rc}, sidecar {status or 'missing'})", receipt_ok, findings, model)
+    if v in ("PASS", "FAIL") and not receipt_ok:
+        return PFValidation(
+            "UNRUN", crit,
+            f"receipt mismatch: wrote {nonce}, seat echoed {rec or 'none'}; nothing shows the block was run",
+            False, findings, model,
+        )
+    return PFValidation(v, crit, (crit if v == "UNRUN" else None), receipt_ok, findings, model)
+
+
+def pf_merge(run: PFRun, branch: str, wt: str) -> tuple[bool, str | None, str]:
+    p = subprocess.run(
+        ["git", "-C", run.repo, "merge", "--ff-only", "-q", branch],
+        capture_output=True, text=True,
+    )
+    if p.returncode != 0:
+        p = subprocess.run(
+            ["git", "-C", run.repo, "merge", "--no-ff", "-q",
+             "-m", f"Merge {branch} (orchestrate.py --pattern-f)", branch],
+            capture_output=True, text=True,
+        )
+        if p.returncode != 0:
+            subprocess.run(["git", "-C", run.repo, "merge", "--abort"], capture_output=True)
+            return False, None, f"merge failed: {(p.stderr or p.stdout).strip()[-300:]}"
+    head = _git_head(run.repo)
+    subprocess.run(["git", "-C", run.repo, "worktree", "remove", "--force", wt], capture_output=True)
+    subprocess.run(["git", "-C", run.repo, "branch", "-D", branch], capture_output=True)
+    return True, head, "merged"
+
+
+def pf_run_item(
+    run: PFRun, item: PFItem, run_dir: str, run_id: str,
+    tools: dict[str, str | None], meter: list[dict],
+) -> PFItemResult:
+    res = PFItemResult(id=item.id, plan=item.plan)
+    item_dir = os.path.join(run_dir, item.id)
+    os.makedirs(item_dir, exist_ok=True)
+    contract = pf_contract(item.plan)
+    res.contract = contract
+    print(f"\n[pf] item {item.id}: {os.path.basename(item.plan)} ({contract or 'no contract'})", flush=True)
+    if contract is None:
+        res.status = "no_contract"
+        res.note = "plan has no `Contract: brief|exact` line"
+        return res
+    verdict_sh = tools["verdict"] or ""
+    dispatch_sh = tools["dispatch"] or ""
+    gauge_lint = tools["gauge"] or ""
+
+    # 1. gauge: a finding is a verdict (gate row) and no executor exists yet.
+    rc, report = pf_gauge(item.plan, contract, run.repo, gauge_lint)
+    res.gauge_rc = rc
+    _write_text(os.path.join(item_dir, "gauge.txt"), report)
+    if rc != 0:
+        codes = [l.strip() for l in report.splitlines() if _PF_GAUGE_CODE.search(l)]
+        note = "; ".join(codes) if codes else report.strip()[-300:]
+        pf_register(run, verdict_sh, res, commit=None, role="gate", kind="gate", verdict="FAIL", note=note)
+        res.status = "gauge_failed"
+        res.note = note[:300]
+        print(f"  [pf] {item.id}: gauge rc={rc}; no executor spawned", flush=True)
+        return res
+    print(f"  [pf] {item.id}: gauge clean", flush=True)
+
+    # 2. worktree with an Intercore store.
+    try:
+        wt, branch = pf_worktree_add(run, item, run_dir, run_id, tools["ic"])
+    except (RuntimeError, subprocess.SubprocessError) as e:
+        res.status = "worktree_failed"
+        res.note = str(e)[:300]
+        print(f"  [pf] {item.id}: {res.note}", flush=True)
+        return res
+    res.worktree, res.branch = wt, branch
+    print(f"  [pf] {item.id}: worktree {wt} on {branch}", flush=True)
+
+    # 3. execute: the tool for exact, a role-resolved model for a brief.
+    if contract == "exact":
+        commit, receipt, detail = pf_execute_exact(run, item, wt, item_dir, gauge_lint)
+        res.executor_model = "plan-gauge-lint.py --apply"
+        producer = item.producer or run.producer
+        verdict = "PASS" if commit else "FAIL"
+        criterion = None if commit else detail
+        packet = (
+            "Applied by: plan-gauge-lint.py --apply (receipt JSON follows)\n"
+            + json.dumps(receipt)[:6000]
+            + f"\nResult: {detail}\nCommit: {commit or 'none'}"
+        )
+        exec_note = "applied by plan-gauge-lint.py --apply; fences replayed by the tool"
+    else:
+        ex = pf_execute_brief(run, item, wt, branch, item_dir, dispatch_sh, meter)
+        commit, verdict, criterion, producer = ex.commit, ex.verdict, ex.criterion, ex.model
+        res.executor_model = ex.model
+        if ex.note:
+            res.note = ex.note
+        packet = _pf_tail(os.path.join(item_dir, "executor.md"), 60)
+        exec_note = None
+    res.executor_commit, res.executor_verdict, res.executor_criterion = commit, verdict, criterion
+    pf_register(
+        run, verdict_sh, res, commit=commit, role="executor", kind="replay",
+        verdict=verdict, criterion=criterion, note=exec_note,
+    )
+    print(
+        f"  [pf] {item.id}: executor {verdict} commit={commit or 'none'}"
+        + (f" ({criterion})" if criterion else ""), flush=True,
+    )
+    if verdict != "PASS" or not commit:
+        res.status = "executor_failed"
+        return res
+
+    # 4. validate through the seat, with the receipt nonce.
+    if not producer:
+        res.status = "no_producer_identity"
+        res.note = "cannot dispatch the validation seat without a producer identity (set producer on the item or the run)"
+        print(f"  [pf] {item.id}: {res.note}", flush=True)
+        return res
+    val = pf_validate(run, item, contract, wt, commit, packet, producer, item_dir, dispatch_sh, meter)
+    res.validator_model = val.model
+    res.validator_verdict, res.validator_criterion, res.receipt_ok = val.verdict, val.criterion, val.receipt_ok
+    pf_register(
+        run, verdict_sh, res, commit=commit, role="validator", kind="replay",
+        verdict=val.verdict, criterion=(val.criterion if val.verdict != "PASS" else None), note=val.note,
+    )
+    for finding in val.findings[:PF_MAX_INDEPENDENT_ROWS]:
+        pf_register(
+            run, verdict_sh, res, commit=commit, role="validator", kind="independent",
+            verdict="FAIL", note=finding,
+        )
+    res.independent_findings = len(val.findings)
+    res.beyond_gauge = list(val.findings)
+    print(
+        f"  [pf] {item.id}: validator {val.verdict}" + (f" ({val.note})" if val.note else "")
+        + f"; {len(val.findings)} beyond-the-gauge finding(s)", flush=True,
+    )
+    if val.verdict != "PASS":
+        res.status = f"validator_{val.verdict.lower()}"
+        return res
+
+    # 5. merge back; the worktree is removed only on success.
+    ok, head, detail = pf_merge(run, branch, wt)
+    res.merged, res.merge_commit = ok, head
+    res.status = "merged" if ok else "merge_failed"
+    if not ok:
+        res.note = detail
+    print(f"  [pf] {item.id}: {detail}" + (f" -> {head}" if head else ""), flush=True)
+    return res
+
+
+def _pf_item_packet(r: PFItemResult) -> dict:
+    """asdict plus the key names pattern-f-contracts.md § Orchestrator report uses."""
+    d = asdict(r)
+    d.update({
+        "pilot": r.id, "plan_path": r.plan, "lint_rc": r.gauge_rc,
+        "executor_strikes": 1 if r.executor_verdict == "FAIL" else 0,
+        "validator_strikes": 1 if r.validator_verdict == "FAIL" else 0,
+        "register_rc": 0 if r.register_errors == 0 else 4,
+        "notes": r.note or "",
+    })
+    return d
+
+
+def _pf_readback(run: PFRun, verdict_sh: str) -> int | None:
+    p = subprocess.run(
+        ["bash", verdict_sh, "--list", "--session", run.session, "--db", run.register],
+        capture_output=True, text=True, timeout=120,
+    )
+    if p.returncode != 0:
+        print(
+            f"  [pf] register read-back failed rc={p.returncode}: {(p.stderr or p.stdout).strip()[-200:]}",
+            file=sys.stderr, flush=True,
+        )
+        return None
+    return len([l for l in (p.stdout or "").splitlines() if l.strip()])
+
+
+def orchestrate_pattern_f(run_path: str, dry_run: bool = False) -> list[PFItemResult]:
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
+    except (AttributeError, OSError):
+        pass
+    run = load_pf_run(run_path)
+    tools = _pf_tools()
+    missing = [k for k in ("dispatch", "gauge", "verdict") if not tools[k] or not os.path.exists(tools[k] or "")]
+    if dry_run:
+        print(
+            f"Pattern F dry run: {len(run.items)} item(s), repo {run.repo}, register {run.register}, "
+            f"session {run.session}, timeout {run.timeout}s per dispatch"
+        )
+        for item in run.items:
+            c = pf_contract(item.plan) or "NO CONTRACT"
+            how = "plan-gauge-lint.py --apply (no model)" if c == "exact" else f"dispatch.sh --role {item.executor_role}"
+            print(
+                f"  {item.id}: {c:<5} {os.path.basename(item.plan)} -> gauge, worktree + ic init, {how}, "
+                "dispatch.sh --role validation --plan (receipt nonce), register rows, merge"
+            )
+        print(f"  tools: {json.dumps(tools)}")
+        if missing:
+            print(f"  MISSING: {', '.join(missing)}")
+        return []
+    if missing:
+        print(f"ERROR: tool(s) not found: {', '.join(missing)}", file=sys.stderr)
+        sys.exit(1)
+    run_id = uuid4().hex[:8]
+    run_dir = os.path.join(run.repo, ".clavain", "orchestrate-runs", run_id)
+    os.makedirs(run_dir, exist_ok=True)
+    shutil.copyfile(run_path, os.path.join(run_dir, "run.yaml"))
+    journal = os.path.join(run_dir, "journal.jsonl")
+    meter: list[dict] = []
+    started = _pf_now()
+    print(f"Pattern F run {run_id}: {len(run.items)} item(s), repo {run.repo}, run dir {run_dir}", flush=True)
+    _journal_append(journal, {"ts": started, "event": "run_started", "run": run_id, "session": run.session, "goal": run.goal})
+    results: list[PFItemResult] = []
+    for item in run.items:
+        res = pf_run_item(run, item, run_dir, run_id, tools, meter)
+        results.append(res)
+        _journal_append(journal, {"ts": _pf_now(), "event": "item", **asdict(res)})
+    finished = _pf_now()
+    meter_path = os.path.join(run_dir, "meter.json")
+    with open(meter_path, "w") as f:
+        json.dump({
+            "run": run_id, "session": run.session, "goal": run.goal,
+            "started": started, "finished": finished, "dispatches": meter,
+        }, f, indent=2)
+    readback = _pf_readback(run, tools["verdict"] or "")
+    _journal_append(journal, {"ts": finished, "event": "run_finished", "run": run_id, "register_readback": readback})
+    counts: dict[str, int] = {}
+    for r in results:
+        counts[r.status] = counts.get(r.status, 0) + 1
+    print(
+        f"\nPattern F run {run_id} finished: "
+        + ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+        + f"; register rows read back for the session: {readback}", flush=True,
+    )
+    packet = {
+        "run": run_id, "goal": run.goal, "session": run.session, "register": run.register,
+        "repo": run.repo, "started": started, "finished": finished, "run_dir": run_dir,
+        "meter": meter_path, "register_readback": readback,
+        "items": [_pf_item_packet(r) for r in results],
+    }
+    print(json.dumps(packet, separators=(",", ":")), flush=True)
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="DAG-based Codex agent dispatch orchestrator",
     )
-    parser.add_argument("manifest", help="Path to .exec.yaml manifest")
+    parser.add_argument("manifest", nargs="?", help="Path to .exec.yaml manifest (omit with --pattern-f)")
+    parser.add_argument(
+        "--pattern-f", metavar="RUN_YAML",
+        help="Drive a Pattern F run from a run file (session, register, repo, items "
+             "with plans): gauge, worktree + ic init, exact plans through "
+             "plan-gauge-lint.py --apply, briefs through dispatch.sh --role, the "
+             "validation seat with a receipt nonce, register rows, merge",
+    )
     parser.add_argument("--plan", help="Path to companion markdown plan")
     parser.add_argument("--project-dir", help="Project directory (default: cwd)")
     parser.add_argument("--validate", action="store_true", help="Validate manifest and exit")
@@ -1814,6 +2655,12 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if args.pattern_f:
+        orchestrate_pattern_f(args.pattern_f, dry_run=args.dry_run)
+        return
+    if not args.manifest:
+        parser.error("manifest is required unless --pattern-f is given")
 
     if args.validate:
         manifest = load_manifest(args.manifest)
