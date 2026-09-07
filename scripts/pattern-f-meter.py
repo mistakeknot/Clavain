@@ -3,23 +3,29 @@
 
 An orchestrate.py --pattern-f run writes <run dir>/meter.json: the register
 session id, the run window, and one entry per dispatch (item, role, model,
-window). This script asks interstat's profile.py for that window twice, once
-for everything that ran in it on this machine and once restricted to the
-orchestrating session, and prints absolute dollars per lane, the main-thread
-share of the run's cost beside them, and the orchestrating session's turn
-count inside the window (distinct assistant message ids in its transcript,
-and how many of those carried tool calls).
+window). This script prices the run through interstat's profile.py in three
+explicit slices of that window: the orchestrating session (--session <id>),
+the claude seats (transcripts whose project path carries the run's worktree,
+orchestrate-runs-<run>), and the codex seats (session files that name the
+run's worktree, orchestrate-runs/<run>). Seats are never derived by
+subtraction: other sessions run on this machine at the same time, so the
+window total is printed only as context. It also prints the orchestrating
+session's turn count inside the window (distinct assistant message ids in
+its transcript, and how many of those carried tool calls).
 
-Shares are never reported alone: the doctrine gates on absolutes
-(commands/model-routing.md). The window total covers every transcript active
-on this machine in the window, so the caveat line says how many files were
-scanned; the main-thread figure is the session alone.
+Shares are reported beside the dollars, never alone: the doctrine gates on
+absolutes (commands/model-routing.md).
 
 Usage:
   pattern-f-meter.py <run dir | meter.json> [--interstat DIR] [--json]
+      [--seat-path-fragment F ...] [--seat-content-fragment F ...]
 
-profile.py is taken from --interstat, then $INTERSTAT_DIR, then the newest
-interstat in the plugin cache, then ~/projects/Sylveste/interverse/interstat.
+The fragment options override the run-id defaults, so a hand-driven goal can
+be metered the same way from a synthetic meter.json (for example
+--seat-path-fragment Sylveste-os-Clavain --seat-content-fragment
+Sylveste/os/Clavain). profile.py is taken from --interstat, then
+$INTERSTAT_DIR, then the newest interstat in the plugin cache, then
+~/projects/Sylveste/interverse/interstat.
 """
 from __future__ import annotations
 
@@ -28,6 +34,7 @@ import datetime as dt
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -111,10 +118,41 @@ def turns(session: str, since: dt.datetime, until: dt.datetime) -> dict:
     return {"transcripts": paths, "turns": len(ids), "tool_turns": len(tool_ids)}
 
 
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def codex_sessions_mentioning(fragments: list[str], since: dt.datetime) -> list[str]:
+    """Codex session ids whose rollout file (modified at or after the window
+    start) names one of the fragments: the run's worktree path shows up in
+    the session_meta record at the top of the file."""
+    root = os.path.expanduser("~/.codex/sessions")
+    found: list[str] = []
+    for path in glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True):
+        try:
+            if dt.datetime.fromtimestamp(os.path.getmtime(path), dt.timezone.utc) < since:
+                continue
+            with open(path, errors="replace") as f:
+                head = f.read(200_000)
+        except OSError:
+            continue
+        if any(frag in head for frag in fragments):
+            m = _UUID.search(os.path.basename(path))
+            found.append(m.group(0) if m else os.path.basename(path)[:-6])
+    return sorted(set(found))
+
+
+def total_cost(report: dict) -> float:
+    return sum(float(r["cost"]) for r in report.get("rows", []) if r.get("cost") is not None)
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="main-thread dollars, share and turns for a Pattern F run")
+    ap = argparse.ArgumentParser(description="main-thread dollars, seat dollars, share and turns for a Pattern F run")
     ap.add_argument("target", help="run dir or meter.json")
     ap.add_argument("--interstat", help="interstat checkout (scripts/profile.py under it)")
+    ap.add_argument("--seat-path-fragment", action="append", default=[],
+                    help="claude seat transcripts: path fragment (default orchestrate-runs-<run>)")
+    ap.add_argument("--seat-content-fragment", action="append", default=[],
+                    help="codex seat sessions: content fragment (default orchestrate-runs/<run>)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
     meter_path = args.target if args.target.endswith(".json") else os.path.join(args.target, "meter.json")
@@ -125,29 +163,38 @@ def main() -> int:
         print("pattern-f-meter: interstat profile.py not found", file=sys.stderr)
         return 2
     since, until, session = meter["started"], meter["finished"], meter["session"]
+    run_id = str(meter.get("run") or "")
+    path_frags = args.seat_path_fragment or [f"orchestrate-runs-{run_id}"]
+    content_frags = args.seat_content_fragment or [f"orchestrate-runs/{run_id}"]
+
     everything = profile(profile_py, since, until, None)
     main_only = profile(profile_py, since, until, session)
-    all_lanes, all_unpriced = lane_costs(everything)
-    main_lanes, main_unpriced = lane_costs(main_only)
-    total = sum(all_lanes.values())
-    main_cost = sum(main_lanes.values())
-    seats = max(total - main_cost, 0.0)
-    share = (main_cost / total) if total else None
+    claude_seats = {frag: total_cost(profile(profile_py, since, until, frag)) for frag in path_frags}
+    codex_ids = codex_sessions_mentioning(content_frags, parse_ts(since))
+    codex_seats = {sid: total_cost(profile(profile_py, since, until, sid)) for sid in codex_ids}
+
+    main_cost = total_cost(main_only)
+    seats = sum(claude_seats.values()) + sum(codex_seats.values())
+    run_total = main_cost + seats
+    share = (main_cost / run_total) if run_total else None
+    machine_total = total_cost(everything)
+    _lanes, all_unpriced = lane_costs(everything)
+    _lanes_main, main_unpriced = lane_costs(main_only)
     t = turns(session, parse_ts(since), parse_ts(until))
     result = {
-        "run": meter.get("run"), "goal": meter.get("goal"), "session": session,
+        "run": run_id, "goal": meter.get("goal"), "session": session,
         "window": {"since": since, "until": until},
         "profile_py": profile_py,
         "main_thread_usd": round(main_cost, 2),
         "seats_usd": round(seats, 2),
-        "window_total_usd": round(total, 2),
-        "main_thread_share": (round(share, 3) if share is not None else None),
-        "lanes_in_window": {k: round(v, 2) for k, v in sorted(all_lanes.items())},
+        "claude_seats_usd": {k: round(v, 2) for k, v in claude_seats.items()},
+        "codex_seats_usd": {k: round(v, 2) for k, v in codex_seats.items()},
+        "run_total_usd": round(run_total, 2),
+        "main_thread_share_of_run": (round(share, 3) if share is not None else None),
+        "machine_window_usd": round(machine_total, 2),
+        "main_thread_share_of_machine_window": (round(main_cost / machine_total, 3) if machine_total else None),
         "unpriced_msgs": {"window": all_unpriced, "main": main_unpriced},
-        "files_scanned": {
-            "window": (everything.get("summary") or {}).get("files_scanned"),
-            "main": (main_only.get("summary") or {}).get("files_scanned"),
-        },
+        "files_scanned": (everything.get("summary") or {}).get("files_scanned"),
         "orchestrator_turns": t["turns"],
         "orchestrator_tool_turns": t["tool_turns"],
         "transcripts": t["transcripts"],
@@ -156,23 +203,23 @@ def main() -> int:
     if args.json:
         print(json.dumps(result, indent=2))
         return 0
-    print(f"# Pattern F meter: run {result['run']} (goal {result['goal']}), session {session}")
+    print(f"# Pattern F meter: run {run_id} (goal {result['goal']}), session {session}")
     print(f"window: {since} .. {until}")
     print(
-        f"main thread ${result['main_thread_usd']} | seats and everything else in the window "
-        f"${result['seats_usd']} | window total ${result['window_total_usd']} | "
-        f"main-thread share {result['main_thread_share']}"
+        f"main thread ${result['main_thread_usd']} | seats ${result['seats_usd']} "
+        f"(claude {result['claude_seats_usd']}, codex {result['codex_seats_usd']}) | "
+        f"run total ${result['run_total_usd']} | main-thread share of the run {result['main_thread_share_of_run']}"
     )
     print(f"orchestrating session turns in the window: {t['turns']} (with tool calls: {t['tool_turns']})")
-    print("lanes in window: " + ", ".join(f"{k} ${v}" for k, v in result["lanes_in_window"].items()))
     for d in result["dispatches"]:
         print(
             f"  dispatch {d.get('item')} {d.get('role')} model={d.get('model')} "
             f"{d.get('started')} .. {d.get('finished')} rc={d.get('rc')} timed_out={d.get('timed_out')}"
         )
     print(
-        "caveat: the window total covers every transcript active on this machine in the window "
-        f"(files scanned: {result['files_scanned']['window']}); unpriced messages: {all_unpriced}"
+        f"context: everything on this machine in the window ${result['machine_window_usd']} "
+        f"(main thread {result['main_thread_share_of_machine_window']} of it; files scanned "
+        f"{result['files_scanned']}; unpriced messages {all_unpriced})"
     )
     return 0
 
