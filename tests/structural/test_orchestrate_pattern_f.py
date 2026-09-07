@@ -76,7 +76,11 @@ while [[ $# -gt 0 ]]; do
 done
 printf '%s\n' "${args[*]}" >> "$PF_DISPATCH_LOG"
 if [[ $dry == 1 ]]; then
-  if [[ $role == validation && -z "${PF_STUB_CODEX_SEAT:-}" ]]; then echo "claude --model stub-validator x"; else echo "codex exec -m stub-${role} x"; fi
+  if [[ $role == validation ]]; then
+    if [[ -z "${PF_STUB_CODEX_SEAT:-}" ]]; then echo "claude --model stub-validator x"; else echo "codex exec -m stub-validation x"; fi
+  else
+    echo "codex exec -m stub-executor x"
+  fi
   exit 0
 fi
 [[ -f "$C/.clavain/intercore.db" ]] || { echo "no intercore store in $C" >&2; exit 97; }
