@@ -672,6 +672,24 @@ def _review_engine_for(tier: str) -> str:
     return "claude" if tier == "deep" else "codex"
 
 
+def _review_dirty_snapshot(project_dir: str, task: Task, manifest: Manifest) -> str:
+    """git status --porcelain minus the paths sibling tasks declare. With
+    max_parallel > 1 siblings commit into the same tree while a review runs,
+    and a snapshot that includes their files invalidates clean reviews on
+    every round (mk-b7e0). A declared directory covers everything under it."""
+    siblings = {
+        f for t in manifest.tasks.values() if t.id != task.id for f in t.files
+    }
+    dirs = tuple(s.rstrip("/") + "/" for s in siblings)
+    kept: list[str] = []
+    for line in _git(project_dir, "status", "--porcelain").splitlines():
+        path = line[3:].split(" -> ")[-1].strip()
+        if path in siblings or path.startswith(dirs):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
 def dispatch_review(
     task: Task,
     tier: str,
@@ -721,7 +739,7 @@ def dispatch_review(
         # forbids edits and the dirty-tree check below catches violations.
         cmd += ["-s", "workspace-write"]
 
-    dirty_before = _git(project_dir, "status", "--porcelain")
+    dirty_before = _review_dirty_snapshot(project_dir, task, manifest)
     try:
         _rc, timed_out, out, err = run_in_group(cmd, timeout=manifest.timeout_per_task)
         with open(os.path.join(task_dir, f"review-{round_num}.log"), "w") as f:
@@ -743,7 +761,7 @@ def dispatch_review(
 
     approved = _read_verdict_status(f"{output_path}.verdict") == "pass"
 
-    dirty_after = _git(project_dir, "status", "--porcelain")
+    dirty_after = _review_dirty_snapshot(project_dir, task, manifest)
     if dirty_after != dirty_before:
         approved = False
         review_text += (
