@@ -916,6 +916,7 @@ class ApplyResult:
     steps: list[ApplyStep] = field(default_factory=list)
     messages: list[str] = field(default_factory=list)
     written: list[str] = field(default_factory=list)
+    created: list[str] = field(default_factory=list)
 
     def as_dict(self, repo_root: Path) -> dict[str, object]:
         return {
@@ -1082,11 +1083,20 @@ def _failure_tail(stdout: str, stderr: str) -> list[str]:
 def _append_revert(result: ApplyResult) -> None:
     files = " ".join(result.written)
     written_message = f"apply: files already written: {files or '(none)'}"
-    revert_message = f"apply: revert: git checkout -- {files}".rstrip()
+    # A created file is untracked: `git checkout --` on it exits 1 with a pathspec
+    # error and reverts nothing, so the edited and the created files get their
+    # own commands (the validation seat found this in c03442c).
+    edited = [f for f in result.written if f not in result.created]
+    parts = []
+    if edited:
+        parts.append("git checkout -- " + " ".join(edited))
+    if result.created:
+        parts.append("rm -f " + " ".join(result.created))
+    revert_lines = [f"apply: revert: {part}" for part in parts] or ["apply: revert: nothing written"]
     result.messages.append(written_message)
-    result.messages.append(revert_message)
+    result.messages.extend(revert_lines)
     if result.steps and result.steps[-1].status == "failed":
-        result.steps[-1].detail += f"\n{written_message}\n{revert_message}"
+        result.steps[-1].detail += "\n" + "\n".join([written_message, *revert_lines])
 
 
 def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, ApplyResult, str | None]:
@@ -1142,9 +1152,14 @@ def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, A
     items: list[tuple[int, str, object, str | None]] = []
     for edit in edits:
         items.append((edit.line, "create" if edit.create else "edit", edit, None))
+    # The heading is authoritative: every shell fence under a Verify heading
+    # runs, whatever the prose-heuristic classifier called it, except a fence
+    # that is one half of an edit pair or a Create block. (The validation seat
+    # found a fence five prose lines below its heading dropped without a word.)
+    edit_lines = {edit.line for edit in edits} | {block.line for block in blocks if block.kind == "old"}
     for block in blocks:
         verify_heading = _verify_heading(headings.get(block.line, []))
-        if block.lang in SHELL_LANGS and block.kind == "verify" and verify_heading:
+        if block.lang in SHELL_LANGS and verify_heading and block.line not in edit_lines and block.kind != "create":
             items.append((block.line, "verify", block, verify_heading))
 
     for _, kind, item, heading in sorted(items, key=lambda entry: entry[0]):
@@ -1181,6 +1196,8 @@ def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, A
                 path.write_text(content)
                 if target not in result.written:
                     result.written.append(target)
+                if target not in result.created:
+                    result.created.append(target)
                 result.steps.append(ApplyStep(
                     kind="create", line=edit.line, target=target, detail="created",
                 ))
@@ -1224,7 +1241,10 @@ def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, A
         assert heading is not None
         expectation = _apply_expectation(plan_text, block)
         rc, stdout, stderr, run_detail = _run_fence(block, repo_root, timeout)
-        if expectation.exit_code is not None:
+        if run_detail:
+            # A fence that did not finish matched nothing, whatever it expected.
+            matched = False
+        elif expectation.exit_code is not None:
             matched = rc == expectation.exit_code
         elif expectation.zero_output:
             matched = stdout == ""
