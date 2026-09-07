@@ -102,7 +102,10 @@ case "$role" in
     printf -- '--- VERDICT ---\nSTATUS: warn\nSUMMARY: stub\n---\n' > "$out.verdict"
     ;;
   routine-execution)
-    echo "from executor" >> "$C/src/app.py"
+    [[ -n "${PF_STUB_EXEC_SLEEP:-}" ]] && sleep "$PF_STUB_EXEC_SLEEP"
+    # PF_STUB_EXEC_FILE_<item id> names the file this item's executor edits (default src/app.py)
+    var="PF_STUB_EXEC_FILE_$(basename "$C")"
+    echo "from executor $(basename "$C")" >> "$C/${!var:-src/app.py}"
     git -C "$C" add -A && git -C "$C" commit -q -m "executor work"
     printf 'Did the thing.\nVERDICT: %s\nCRITERION: %s\n' "${PF_STUB_EXEC_VERDICT:-PASS}" "${PF_STUB_EXEC_CRITERION:-none}" > "$out"
     printf -- '--- VERDICT ---\nSTATUS: pass\nSUMMARY: stub\n---\n' > "$out.verdict"
@@ -111,13 +114,81 @@ esac
 '''
 
 
+STUB_IC = r"""
+store="${PF_IC_STORE:?}"; mkdir -p "$store"
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in --db) shift 2;; --db=*|--json) shift;; *) args+=("$1"); shift;; esac
+done
+set -- "${args[@]}"
+if [[ "${1:-}" == init ]]; then mkdir -p .clavain && : > .clavain/intercore.db; exit 0; fi
+[[ "${1:-}" == coordination ]] || { echo "stub ic: unknown $1" >&2; exit 3; }
+sub="$2"; shift 2
+owner=""; scope=""; pattern=""; id=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --owner=*) owner="${1#--owner=}"; shift;; --scope=*) scope="${1#--scope=}"; shift;; --pattern=*) pattern="${1#--pattern=}"; shift;;
+    --owner) owner="$2"; shift 2;; --scope) scope="$2"; shift 2;; --pattern) pattern="$2"; shift 2;;
+    --ttl|--reason|--run|--type|--exclusive) shift 2;; --*) shift;; *) id="$1"; shift;;
+  esac
+done
+overlap() { [[ "$1" == "$2" || "$1" == '**' || "$2" == '**' ]]; }
+# check-then-create is one step, as it is in the real store
+i=0; until mkdir "$store/.mutex" 2>/dev/null; do sleep 0.02; i=$((i+1)); [[ $i -gt 500 ]] && break; done
+trap 'rmdir "$store/.mutex" 2>/dev/null' EXIT
+case "$sub" in
+  reserve)
+    if [[ -n "${PF_STUB_IC_FAIL_PATTERN:-}" && "$pattern" == "$PF_STUB_IC_FAIL_PATTERN" ]]; then
+      echo "stub ic: store exploded" >&2; exit 2
+    fi
+    for f in "$store"/*.lock; do
+      [[ -e "$f" ]] || continue
+      IFS=$'\t' read -r o s p < "$f"
+      [[ "$s" == "$scope" && "$o" != "$owner" ]] || continue
+      if overlap "$p" "$pattern"; then
+        printf '{"conflict":{"blocker_id":"%s","blocker_owner":"%s","blocker_pattern":"%s"}}\n' "$(basename "$f" .lock)" "$o" "$p"
+        exit 1
+      fi
+    done
+    id="l$RANDOM$RANDOM$RANDOM"
+    printf '%s\t%s\t%s\n' "$owner" "$scope" "$pattern" > "$store/$id.lock"
+    printf '%s reserve %s %s cwd=%s\n' "$(date +%s)" "$owner" "$pattern" "$PWD" >> "$store/log"
+    printf '{"lock":{"id":"%s","owner":"%s","scope":"%s","pattern":"%s"}}\n' "$id" "$owner" "$scope" "$pattern"
+    ;;
+  release)
+    n=0
+    for f in "$store"/*.lock; do
+      [[ -e "$f" ]] || continue
+      IFS=$'\t' read -r o s p < "$f"
+      if { [[ -n "$id" && "$(basename "$f" .lock)" == "$id" ]]; } || { [[ -z "$id" && "$o" == "$owner" && "$s" == "$scope" ]]; }; then
+        rm -f "$f"; n=$((n+1))
+      fi
+    done
+    printf '%s release %s\n' "$(date +%s)" "$owner" >> "$store/log"
+    printf '{"released":%d}\n' "$n"
+    ;;
+  list)
+    echo "["; first=1
+    for f in "$store"/*.lock; do
+      [[ -e "$f" ]] || continue
+      IFS=$'\t' read -r o s p < "$f"
+      [[ $first == 1 ]] || echo ","; first=0
+      printf '{"id":"%s","owner":"%s","scope":"%s","pattern":"%s"}' "$(basename "$f" .lock)" "$o" "$s" "$p"
+    done
+    echo "]"
+    ;;
+  *) echo "stub ic: unknown coordination $sub" >&2; exit 3;;
+esac
+"""
+
+
 @pytest.fixture()
 def stubs(tmp_path: Path, monkeypatch) -> dict:
     t = tmp_path / "tools"
     t.mkdir()
     register_log = tmp_path / "register.log"
     dispatch_log = tmp_path / "dispatch.log"
-    _sh(t / "ic", "mkdir -p .clavain && : > .clavain/intercore.db\n")
+    _sh(t / "ic", STUB_IC)
     _sh(t / "verdict.sh", f'''
         if [[ "${{1:-}}" == "--list" ]]; then cat "{register_log}" 2>/dev/null || true; exit 0; fi
         if [[ -n "${{PF_VERDICT_FAIL:-}}" ]]; then echo "pattern-f-verdict: write not visible" >&2; exit 4; fi
@@ -128,25 +199,30 @@ def stubs(tmp_path: Path, monkeypatch) -> dict:
     monkeypatch.setenv("CLAVAIN_VERDICT_SH", str(t / "verdict.sh"))
     monkeypatch.setenv("CLAVAIN_DISPATCH_SH", str(t / "dispatch.sh"))
     monkeypatch.setenv("PF_DISPATCH_LOG", str(dispatch_log))
+    store = tmp_path / "icstore"
+    monkeypatch.setenv("PF_IC_STORE", str(store))
+    monkeypatch.setenv("ORC_PF_RESERVE_POLL", "0.2")
     for k in ("PF_STUB_SLEEP", "PF_STUB_MUTATE", "PF_STUB_VERDICT", "PF_STUB_CRITERION",
               "PF_STUB_RECEIPT", "PF_STUB_BEYOND", "PF_STUB_EXEC_VERDICT", "PF_VERDICT_FAIL",
-              "PF_STUB_CODEX_SEAT", "PF_STUB_TOUCH", "PF_STUB_BULLET"):
+              "PF_STUB_CODEX_SEAT", "PF_STUB_TOUCH", "PF_STUB_BULLET", "PF_STUB_EXEC_SLEEP",
+              "PF_STUB_IC_FAIL_PATTERN"):
         monkeypatch.delenv(k, raising=False)
     register = tmp_path / "register.db"
     register.write_text("")
-    return {"register_log": register_log, "dispatch_log": dispatch_log, "register": register}
+    return {"register_log": register_log, "dispatch_log": dispatch_log, "register": register, "store": store}
 
 
 def _run_file(tmp_path: Path, repo: Path, items: list[tuple[str, Path, dict]],
-              register: Path, timeout: int = 30) -> Path:
+              register: Path, timeout: int = 30, run_extra: dict | None = None) -> Path:
     body = ""
     for iid, plan, extra in items:
         body += f"  - id: {iid}\n    plan: {plan}\n"
         for k, v in extra.items():
             body += f"    {k}: {v}\n"
+    head = "".join(f"{k}: {v}\n" for k, v in (run_extra or {}).items())
     text = (
         f"version: 1\nsession: sess-test\ngoal: g1\nregister: {register}\nrepo: {repo}\n"
-        f"timeout: {timeout}\nproducer: author-model\ntrailers:\n  - 'Test-Trailer: yes'\nitems:\n{body}"
+        f"timeout: {timeout}\nproducer: author-model\n{head}trailers:\n  - 'Test-Trailer: yes'\nitems:\n{body}"
     )
     p = tmp_path / "run.pf.yaml"
     p.write_text(text)
@@ -260,7 +336,8 @@ def test_brief_goes_to_the_role_executor_and_findings_become_rows(orc, repo, tmp
     rows = stubs["register_log"].read_text().splitlines()
     assert len(rows) == 4
     assert "--role validator --kind independent --verdict FAIL" in rows[2]
-    assert "--note the executor also touched src/other.py" in rows[2]
+    assert "the executor also touched src/other.py" in rows[2]
+    assert "--note pf " in rows[2], "rows carry the run and item ids"
     assert r.independent_findings == 2 and r.beyond_gauge[1] == "no test covers the new branch"
 
 
@@ -382,3 +459,216 @@ def test_seat_that_writes_to_the_worktree_is_unrun(orc, repo, tmp_path, stubs, m
     r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
     assert r.status == "validator_unrun" and not r.merged
     assert "mutated the worktree" in stubs["register_log"].read_text().splitlines()[1]
+
+
+# ---------------------------------------------------------------------------
+# goal a7f02287: max_parallel over reservations, one merge lock
+# ---------------------------------------------------------------------------
+
+def _executors(packet: dict) -> dict:
+    with open(packet["meter"]) as f:
+        meter = json.load(f)
+    return meter, {d["item"]: d for d in meter["dispatches"] if d["role"] == "routine-execution"}
+
+
+def _brief(tmp_path: Path, name: str = "brief.md") -> Path:
+    p = tmp_path / name
+    p.write_text(BRIEF)
+    return p
+
+
+def test_two_items_declaring_the_same_path_never_overlap(orc, repo, stubs, tmp_path, monkeypatch, capsys):
+    """GATE fixture: both items declare src/app.py; the second waits for the
+    first's release, and neither executor runs while the other holds it."""
+    monkeypatch.setenv("PF_STUB_EXEC_SLEEP", "1.5")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"}), ("b", plan, {"files": "[src/app.py]"})],
+                   stubs["register"], run_extra={"max_parallel": 2})
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    by = {i["id"]: i for i in packet["items"]}
+    assert by["a"]["status"] == "merged" and by["b"]["status"] == "merged", by
+    assert packet["max_parallel"] == 2
+    meter, ex = _executors(packet)
+    first, second = sorted(ex.values(), key=lambda d: d["started"])
+    assert second["started"] >= first["finished"], (first, second)
+    waited = [i for i in packet["items"] if i["wait_s"] >= 1.0]
+    assert len(waited) == 1 and waited[0]["blocked_by"].startswith("pf/"), packet["items"]
+    assert not list(stubs["store"].glob("*.lock")), "reservations were not released"
+    text = (repo / "src" / "app.py").read_text()
+    assert "from executor a" in text and "from executor b" in text
+
+
+def test_disjoint_items_run_at_once_and_both_merge(orc, repo, stubs, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PF_STUB_EXEC_SLEEP", "1.5")
+    monkeypatch.setenv("PF_STUB_EXEC_FILE_b", "src/other.py")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"}), ("b", plan, {"files": "[src/other.py]"})],
+                   stubs["register"], run_extra={"max_parallel": 2})
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    assert [i["status"] for i in packet["items"]] == ["merged", "merged"], packet["items"]
+    meter, ex = _executors(packet)
+    first, second = sorted(ex.values(), key=lambda d: d["started"])
+    assert second["started"] < first["finished"], "executors did not overlap"
+    assert all(i["wait_s"] < 1.0 for i in packet["items"])
+    log = _git(repo, "log", "--oneline", "main")
+    assert log.count("executor work") == 2
+    assert "Merge pf/" in log, "the second merge should be a merge commit in completion order"
+    assert packet["wall_s"] < 6
+
+
+def test_a_sibling_reservation_parks_the_item_without_a_worktree(orc, repo, stubs, tmp_path, capsys):
+    stubs["store"].mkdir(exist_ok=True)
+    (stubs["store"] / "sib.lock").write_text(f"sibling-session\t{repo.name}\tsrc/app.py\n")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"}), ("b", plan, {"files": "[src/other.py]"})],
+                   stubs["register"], timeout=2, run_extra={"max_parallel": 2})
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    by = {i["id"]: i for i in packet["items"]}
+    assert by["a"]["status"] == "reservation_timeout", by["a"]
+    assert by["a"]["blocked_by"].startswith("sibling-session on src/app.py")
+    assert by["a"]["worktree"] is None and by["a"]["wait_s"] >= 1.5
+    assert by["b"]["status"] == "merged"
+    locks = [p.read_text().split("\t")[0] for p in stubs["store"].glob("*.lock")]
+    assert locks == ["sibling-session"], locks
+
+
+def test_a_merge_conflict_parks_the_second_item_and_keeps_its_worktree(orc, repo, stubs, tmp_path, monkeypatch, capsys):
+    """Item a mis-declares src/other.py while both stub executors write
+    different lines to src/app.py at once (nothing to reserve against): the
+    first merge lands, the second conflicts and is parked with its worktree
+    and branch intact."""
+    monkeypatch.setenv("PF_STUB_EXEC_SLEEP", "1")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/other.py]"}), ("b", plan, {"files": "[src/app.py]"})],
+                   stubs["register"], run_extra={"max_parallel": 2})
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    statuses = sorted(i["status"] for i in packet["items"])
+    assert statuses == ["merge_conflict", "merged"], packet["items"]
+    parked = next(i for i in packet["items"] if i["status"] == "merge_conflict")
+    assert parked["merge_outcome"] == "conflict" and "src/app.py" in parked["notes"]
+    assert Path(parked["worktree"]).is_dir()
+    assert parked["branch"] in _git(repo, "branch", "--list", "pf/*")
+    assert _git(repo, "log", "--oneline", "main").count("executor work") == 1
+    assert not list(stubs["store"].glob("*.lock"))
+
+
+def test_an_undeclared_item_reserves_the_whole_tree(orc, repo, stubs, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PF_STUB_EXEC_SLEEP", "1.5")
+    monkeypatch.setenv("PF_STUB_EXEC_FILE_b", "src/other.py")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {}), ("b", plan, {"files": "[src/other.py]"})],
+                   stubs["register"], run_extra={"max_parallel": 2})
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    by = {i["id"]: i for i in packet["items"]}
+    assert by["a"]["files"] == ["**"]
+    assert by["a"]["status"] == "merged" and by["b"]["status"] == "merged"
+    waited = [i for i in packet["items"] if i["wait_s"] >= 1.0]
+    assert len(waited) == 1 and waited[0]["blocked_by"].startswith("pf/"), packet["items"]
+    _meter, ex = _executors(packet)
+    first, second = sorted(ex.values(), key=lambda d: d["started"])
+    assert second["started"] >= first["finished"], "an executor ran while the other held its reservation"
+
+
+def test_a_parked_item_releases_its_reservations(orc, repo, stubs, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PF_STUB_EXEC_VERDICT", "FAIL")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"})], stubs["register"])
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    assert packet["items"][0]["status"] == "executor_failed"
+    assert packet["items"][0]["reservations"] == 1
+    assert not list(stubs["store"].glob("*.lock"))
+    log = (stubs["store"] / "log").read_text()
+    assert "reserve pf/" in log and "release pf/" in log
+
+
+def test_register_rows_carry_the_run_and_item_ids(orc, repo, stubs, tmp_path, capsys):
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"})], stubs["register"])
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    rows = stubs["register_log"].read_text().splitlines()
+    assert rows and all(f"--note pf {packet['run']}/a" in r for r in rows), rows
+
+
+def test_max_parallel_and_files_are_validated(orc, repo, stubs, tmp_path):
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {})], stubs["register"], run_extra={"max_parallel": 0})
+    with pytest.raises(ValueError, match="max_parallel"):
+        orc.load_pf_run(str(rf))
+    rf = _run_file(tmp_path, repo, [("a", plan, {})], stubs["register"], run_extra={"max_parallel": "two"})
+    with pytest.raises(ValueError, match="max_parallel"):
+        orc.load_pf_run(str(rf))
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "src/app.py"})], stubs["register"])
+    with pytest.raises(ValueError, match="files must be a list"):
+        orc.load_pf_run(str(rf))
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[/etc/passwd]"})], stubs["register"])
+    with pytest.raises(ValueError, match="relative"):
+        orc.load_pf_run(str(rf))
+    run = orc.load_pf_run(str(_run_file(tmp_path, repo, [("a", plan, {})], stubs["register"])))
+    assert run.max_parallel == 1
+
+
+def test_dry_run_prints_the_declared_files_and_parallelism(orc, repo, stubs, tmp_path, capsys):
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py, src/other.py]"}), ("b", plan, {})],
+                   stubs["register"], run_extra={"max_parallel": 3})
+    orc.orchestrate_pattern_f(str(rf), dry_run=True)
+    out = capsys.readouterr().out
+    assert "max_parallel 3" in out and f"reservation scope {repo.name}" in out
+    assert "files=src/app.py src/other.py" in out and "files=**" in out
+
+
+def test_declared_files_come_from_the_plan_when_not_given(orc, tmp_path):
+    p = tmp_path / "exact.md"
+    p.write_text("# Plan\n\nContract: exact\n\n## Commit\n\nPathspec: `scripts/a.py tests/b_test.py`.\n")
+    assert orc._pf_declared_files(orc.PFItem(id="x", plan=str(p))) == ["scripts/a.py", "tests/b_test.py"]
+    p.write_text("## Authority\nCommit with `git commit -F <message file> -- scripts/d.sh tests/shell/d.bats`; no push.\n")
+    assert orc._pf_declared_files(orc.PFItem(id="x", plan=str(p))) == ["scripts/d.sh", "tests/shell/d.bats"]
+    p.write_text("Touch `src/app.py` and `docs/x.md`, never `/abs/p.py`.\n")
+    assert orc._pf_declared_files(orc.PFItem(id="x", plan=str(p))) == ["src/app.py", "docs/x.md"]
+    assert orc._pf_declared_files(orc.PFItem(id="x", plan=str(p), files=["a.py", "a.py"])) == ["a.py"]
+
+
+def test_reservation_db_runs_ic_from_the_store_root(orc, repo, stubs, tmp_path, capsys):
+    root = tmp_path / "shared-root"
+    (root / ".clavain").mkdir(parents=True)
+    db = root / ".clavain" / "intercore.db"
+    db.write_text("")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"})], stubs["register"],
+                   run_extra={"reservation_db": str(db), "reservation_scope": "shared"})
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    assert packet["items"][0]["status"] == "merged"
+    log = (stubs["store"] / "log").read_text()
+    assert f"cwd={root}" in log, log
+
+
+def test_long_paths_are_reserved_as_their_parent_directory(orc, tmp_path):
+    long = "tests/structural/test_orchestrate_fresh_output_size_and_more.py"
+    assert len(long) > orc.PF_MAX_PATTERN_TOKENS
+    assert orc._pf_reservable(long) == "tests/structural/**"
+    assert orc._pf_reservable("scripts/orchestrate.py") == "scripts/orchestrate.py"
+    assert orc._pf_reservable("x" * 60) == "**"
+    p = tmp_path / "exact.md"
+    p.write_text("## Commit\n\nMessage file: written by the orchestrator. Pathspec: `scripts/a.py tests/b.py`.\n")
+    assert orc._pf_declared_files(orc.PFItem(id="x", plan=str(p))) == ["scripts/a.py", "tests/b.py"]
+
+
+def test_a_failed_reserve_leaves_no_partial_reservation(orc, repo, stubs, tmp_path, monkeypatch, capsys):
+    """Seen live on run 91621bac: the first path reserved, the second was
+    refused by ic, and the first stayed held until its TTL."""
+    monkeypatch.setenv("PF_STUB_IC_FAIL_PATTERN", "src/other.py")
+    plan = _brief(tmp_path)
+    rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py, src/other.py]"})], stubs["register"])
+    orc.orchestrate_pattern_f(str(rf))
+    packet = _packet(capsys)
+    assert packet["items"][0]["status"] == "error"
+    assert "ic coordination reserve failed" in packet["items"][0]["notes"]
+    assert not list(stubs["store"].glob("*.lock")), "a partial reservation outlived the failure"

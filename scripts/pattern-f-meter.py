@@ -173,6 +173,8 @@ def main() -> int:
                     help="claude seats: fragment of the transcript's project directory (default orchestrate-runs-<run>)")
     ap.add_argument("--seat-content-fragment", action="append", default=[],
                     help="codex seat sessions: content fragment (default orchestrate-runs/<run>)")
+    ap.add_argument("--compare", action="append", default=[],
+                    help="another run dir or meter.json to set beside this one (the same items run sequentially or in parallel)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
     meter_path = args.target if args.target.endswith(".json") else os.path.join(args.target, "meter.json")
@@ -205,6 +207,8 @@ def main() -> int:
     result = {
         "run": run_id, "goal": meter.get("goal"), "session": session,
         "window": {"since": since, "until": until},
+        "wall_s": meter.get("wall_s"), "max_parallel": meter.get("max_parallel", 1),
+        "items": meter.get("items", []),
         "profile_py": profile_py,
         "main_thread_usd": round(main_cost, 2),
         "seats_usd": round(seats, 2),
@@ -221,6 +225,9 @@ def main() -> int:
         "transcripts": t["transcripts"],
         "dispatches": meter.get("dispatches", []),
     }
+    comparisons = [_measure(_meter_path(c), profile_py) for c in args.compare]
+    if comparisons:
+        result["compare"] = comparisons
     if args.json:
         print(json.dumps(result, indent=2))
         return 0
@@ -232,6 +239,13 @@ def main() -> int:
         f"run total ${result['run_total_usd']} | main-thread share of the run {result['main_thread_share_of_run']}"
     )
     print(f"orchestrating session turns in the window: {t['turns']} (with tool calls: {t['tool_turns']})")
+    if result["wall_s"] is not None:
+        print(f"wall time {result['wall_s']}s at max_parallel {result['max_parallel']}")
+    for it in result["items"]:
+        print(
+            f"  item {it.get('id')}: {it.get('status')}; waited {it.get('wait_s')}s, ran {it.get('run_s')}s, "
+            f"merge {it.get('merge_outcome')}" + (f", blocked by {it['blocked_by']}" if it.get("blocked_by") else "")
+        )
     for d in result["dispatches"]:
         print(
             f"  dispatch {d.get('item')} {d.get('role')} model={d.get('model')} "
@@ -242,7 +256,44 @@ def main() -> int:
         f"(main thread {result['main_thread_share_of_machine_window']} of it; files scanned "
         f"{result['files_scanned']}; unpriced messages {all_unpriced})"
     )
+    if comparisons:
+        print("\n| run | max_parallel | wall s | merged | main $ | seats $ | share | turns |")
+        print("|---|---|---|---|---|---|---|---|")
+        for row in [result, *comparisons]:
+            merged = sum(1 for it in row.get("items", []) if it.get("status") == "merged")
+            print(
+                f"| {row['run']} | {row.get('max_parallel')} | {row.get('wall_s')} | {merged}/{len(row.get('items', []))} "
+                f"| {row['main_thread_usd']} | {row['seats_usd']} | {row['main_thread_share_of_run']} | {row['orchestrator_turns']} |"
+            )
     return 0
+
+
+def _meter_path(target: str) -> str:
+    return target if target.endswith(".json") else os.path.join(target, "meter.json")
+
+
+def _measure(meter_path: str, profile_py: str) -> dict:
+    """The same numbers for another run, for --compare."""
+    with open(meter_path) as f:
+        meter = json.load(f)
+    since, until, session = meter["started"], meter["finished"], meter["session"]
+    run_id = str(meter.get("run") or "")
+    main_only = profile(profile_py, since, until, session)
+    claude_ids = claude_seat_sessions([f"orchestrate-runs-{run_id}"], parse_ts(since))
+    codex_ids = codex_sessions_mentioning([f"orchestrate-runs/{run_id}"], parse_ts(since))
+    seats = sum(total_cost(profile(profile_py, since, until, sid)) for sid in [*claude_ids, *codex_ids])
+    main_cost = total_cost(main_only)
+    run_total = main_cost + seats
+    t = turns(session, parse_ts(since), parse_ts(until))
+    return {
+        "run": run_id, "window": {"since": since, "until": until},
+        "wall_s": meter.get("wall_s"), "max_parallel": meter.get("max_parallel", 1),
+        "items": meter.get("items", []),
+        "main_thread_usd": round(main_cost, 2), "seats_usd": round(seats, 2),
+        "run_total_usd": round(run_total, 2),
+        "main_thread_share_of_run": (round(main_cost / run_total, 3) if run_total else None),
+        "orchestrator_turns": t["turns"], "orchestrator_tool_turns": t["tool_turns"],
+    }
 
 
 if __name__ == "__main__":

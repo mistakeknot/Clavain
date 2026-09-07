@@ -32,6 +32,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import threading
 import sys
 import textwrap
 import time
@@ -1917,6 +1918,7 @@ class PFItem:
     plan: str
     executor_role: str = "routine-execution"
     producer: str | None = None
+    files: list[str] = field(default_factory=list)  # declared paths; empty = derive from the plan
 
 
 @dataclass
@@ -1929,6 +1931,9 @@ class PFRun:
     timeout: int = 2400
     producer: str | None = None
     trailers: list[str] = field(default_factory=list)
+    max_parallel: int = 1
+    reservation_db: str | None = None  # ic --db; default: ic's own resolution from repo
+    reservation_scope: str | None = None  # default: basename of repo (interlock's INTERMUTE_PROJECT)
 
 
 @dataclass
@@ -1955,6 +1960,15 @@ class PFItemResult:
     register_errors: int = 0
     note: str | None = None
     beyond_gauge: list[str] = field(default_factory=list)
+    run: str = ""
+    files: list[str] = field(default_factory=list)
+    reservations: int = 0
+    blocked_by: str | None = None
+    wait_s: float = 0.0
+    run_s: float = 0.0
+    started: str | None = None
+    finished: str | None = None
+    merge_outcome: str = "not_attempted"  # merged | conflict | failed | not_attempted
 
 
 @dataclass
@@ -2053,10 +2067,18 @@ def load_pf_run(path: str | Path) -> PFRun:
         plan = _abs(plan)
         if not os.path.isfile(plan):
             errors.append(f"item {iid}: plan not found: {plan}")
+        files_raw = raw.get("files") or []
+        if not isinstance(files_raw, list) or any(not isinstance(x, str) or not x.strip() for x in files_raw):
+            errors.append(f"item {iid}: files must be a list of relative paths")
+            files_raw = []
+        files = [x.strip() for x in files_raw]
+        if any(os.path.isabs(x) or x.startswith("..") for x in files):
+            errors.append(f"item {iid}: files must be relative to the repo")
         items.append(PFItem(
             id=iid, plan=plan,
             executor_role=str(raw.get("executor_role") or data.get("executor_role") or "routine-execution"),
             producer=(str(raw["producer"]) if raw.get("producer") else None),
+            files=files,
         ))
     ids = [i.id for i in items]
     if len(ids) != len(set(ids)):
@@ -2066,6 +2088,15 @@ def load_pf_run(path: str | Path) -> PFRun:
     timeout = data.get("timeout", 2400)
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
         errors.append("timeout must be a positive integer (seconds per dispatch)")
+    max_parallel = data.get("max_parallel", 1)
+    if not isinstance(max_parallel, int) or isinstance(max_parallel, bool) or max_parallel < 1:
+        errors.append("max_parallel must be a positive integer (items dispatched at once)")
+        max_parallel = 1
+    reservation_db = str(data["reservation_db"]).strip() if data.get("reservation_db") else None
+    if reservation_db:
+        reservation_db = _abs(reservation_db)
+        if not os.path.isfile(reservation_db):
+            errors.append(f"reservation_db not found: {reservation_db}")
     if errors:
         raise ValueError("invalid run file:\n  " + "\n  ".join(errors))
     return PFRun(
@@ -2074,6 +2105,9 @@ def load_pf_run(path: str | Path) -> PFRun:
         timeout=int(timeout),
         producer=(str(data["producer"]) if data.get("producer") else None),
         trailers=[str(t) for t in (data.get("trailers") or [])],
+        max_parallel=int(max_parallel),
+        reservation_db=reservation_db,
+        reservation_scope=(str(data["reservation_scope"]).strip() if data.get("reservation_scope") else None),
     )
 
 
@@ -2161,6 +2195,159 @@ def _pf_tail(path: str, n: int = 60) -> str:
     return "\n".join(lines[-n:]) if lines else "(empty output)"
 
 
+_PF_PATHSPEC_LINE = re.compile(r"\bPathspec:\s*(.+?)\s*$", re.I | re.M)
+PF_MAX_PATTERN_TOKENS = 50  # intercore's glob validator refuses longer patterns
+
+
+def _pf_reservable(path: str) -> str:
+    """The pattern reserved for a declared path. intercore counts one token
+    per character and refuses more than 50, so a long path is broadened to
+    its nearest short-enough parent directory with `/**`: over-reserving is
+    safe, under-reserving is not."""
+    pattern = path
+    while len(pattern) > PF_MAX_PATTERN_TOKENS:
+        parent = os.path.dirname(pattern.rstrip("/").removesuffix("/**").rstrip("/"))
+        if not parent:
+            return "**"
+        pattern = parent + "/**"
+    return pattern
+_PF_COMMIT_PATHSPEC = re.compile(r"git\s+commit\b[^\n]*?\s--\s+([^\n`]+)")
+_PF_PATH_TOKEN = re.compile(r"`((?:[\w.\-]+/)*[\w.\-]+\.[A-Za-z0-9]{1,8})`")
+_PF_PATH_OK = re.compile(r"[\w.\-/]+")
+
+
+def _pf_path_tokens(chunk: str) -> list[str]:
+    out: list[str] = []
+    for tok in chunk.split():
+        tok = tok.strip("`'\" .;,")
+        if not tok or tok.startswith(("-", "<", "/")) or not _PF_PATH_OK.fullmatch(tok):
+            continue
+        if "/" not in tok and "." not in tok:
+            continue
+        out.append(tok)
+    return list(dict.fromkeys(out))
+
+
+def _pf_declared_files(item: PFItem) -> list[str]:
+    """The paths an item reserves before its worktree is cut. `files:` on the
+    item wins; else the plan's commit pathspec (a `Pathspec:` line in an exact
+    plan, `git commit ... -- <paths>` in a brief's Authority); else every
+    backticked relative path in the plan, which over-reserves rather than
+    under-reserves; else `**`, the whole tree, so an undeclared item runs
+    alone. The dry run prints the derived list so an operator can override
+    it with `files:`."""
+    if item.files:
+        return list(dict.fromkeys(item.files))
+    with open(item.plan, errors="replace") as f:
+        text = f.read()
+    for rx in (_PF_PATHSPEC_LINE, _PF_COMMIT_PATHSPEC):
+        m = rx.search(text)
+        if m:
+            toks = _pf_path_tokens(m.group(1))
+            if toks:
+                return toks
+    toks = [t for t in _PF_PATH_TOKEN.findall(text) if not t.startswith("/")]
+    return list(dict.fromkeys(toks)) or ["**"]
+
+
+def _pf_scope(run: PFRun) -> str:
+    return run.reservation_scope or os.path.basename(os.path.normpath(run.repo))
+
+
+def _pf_owner(run_id: str, item_id: str) -> str:
+    return f"pf/{run_id}/{item_id}"
+
+
+def _pf_jget(obj, *names):
+    if not isinstance(obj, dict):
+        return None
+    low = {str(k).lower(): v for k, v in obj.items()}
+    for n in names:
+        if n.lower() in low:
+            return low[n.lower()]
+    return None
+
+
+def _pf_ic_json(run: PFRun, ic_bin: str, args: list[str]) -> tuple[int, object, str]:
+    """ic [--db X] coordination <args> --json, run in the repo so ic resolves
+    the same store interlock's hooks use there."""
+    cmd = [ic_bin]
+    cwd = run.repo
+    if run.reservation_db:
+        # ic refuses a --db outside its working directory, so run it from the
+        # store's root (<root>/.clavain/intercore.db -> <root>).
+        cwd = os.path.dirname(os.path.dirname(os.path.abspath(run.reservation_db)))
+        cmd += [f"--db={run.reservation_db}"]
+    cmd += ["coordination", *args, "--json"]
+    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=120)
+    data: object = None
+    try:
+        data = json.loads((p.stdout or "").strip() or "null")
+    except json.JSONDecodeError:
+        data = None
+    return p.returncode, data, ((p.stderr or "") + (p.stdout or "")).strip()[-300:]
+
+
+def pf_release(run: PFRun, ic_bin: str, owner: str) -> int:
+    rc, data, err = _pf_ic_json(run, ic_bin, ["release", f"--owner={owner}", f"--scope={_pf_scope(run)}"])
+    if rc != 0:
+        print(f"  [pf] {owner}: reservation release failed rc={rc}: {err}", file=sys.stderr, flush=True)
+        return -1
+    try:
+        return int(_pf_jget(data, "released") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def pf_reserve(
+    run: PFRun, item: PFItem, files: list[str], run_id: str, ic_bin: str, res: PFItemResult,
+) -> list[str] | None:
+    """Reserve every declared path for the item, exclusively, through ic
+    coordination (the store interlock's hooks reserve in). A conflict with any
+    other owner releases the partial set and waits; None after the run's
+    timeout. Nothing is reserved while the item waits."""
+    scope = _pf_scope(run)
+    owner = _pf_owner(run_id, item.id)
+    ttl = run.timeout * 2 + 600
+    poll = float(os.environ.get("ORC_PF_RESERVE_POLL", "2"))
+    deadline = time.monotonic() + run.timeout
+    last_blocker = None
+    while True:
+        ids: list[str] = []
+        blocker = None
+        for path in files:
+            pattern = _pf_reservable(path)
+            if pattern != path and last_blocker is None and not ids:
+                print(f"  [pf] {item.id}: reserving {pattern} for {path} (path longer than {PF_MAX_PATTERN_TOKENS} tokens)", flush=True)
+            # intercore's flag parser takes --flag=value, never --flag value.
+            rc, data, err = _pf_ic_json(run, ic_bin, [
+                "reserve", f"--owner={owner}", f"--scope={scope}", f"--pattern={pattern}",
+                f"--ttl={ttl}", f"--reason=pattern-f {run_id} {item.id}", f"--run={run_id}",
+            ])
+            if rc == 0:
+                ids.append(str(_pf_jget(_pf_jget(data, "lock"), "id") or ""))
+            elif rc == 1:
+                c = _pf_jget(data, "conflict") or {}
+                who = _pf_jget(c, "blocker_owner", "blockerowner", "owner") or "unknown"
+                what = _pf_jget(c, "blocker_pattern", "blockerpattern", "pattern") or pattern
+                blocker = f"{who} on {what}"
+                break
+            else:
+                # A partial set must not outlive the failure.
+                pf_release(run, ic_bin, owner)
+                raise RuntimeError(f"ic coordination reserve failed rc={rc}: {err}")
+        if blocker is None:
+            return ids
+        pf_release(run, ic_bin, owner)
+        res.blocked_by = blocker
+        if blocker != last_blocker:
+            print(f"  [pf] {item.id}: waiting, {blocker} is reserved", flush=True)
+            last_blocker = blocker
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(poll)
+
+
 def pf_gauge(plan: str, contract: str, repo: str, gauge_lint: str) -> tuple[int, str]:
     p = subprocess.run(
         [sys.executable, gauge_lint, plan, "--contract", contract, "--repo-root", repo],
@@ -2184,8 +2371,8 @@ def pf_register(
     ]
     if criterion:
         cmd += ["--criterion", criterion[:100]]
-    if note:
-        cmd += ["--note", note[:300]]
+    tag = f"pf {res.run}/{res.id}" if res.run else f"pf {res.id}"
+    cmd += ["--note", (f"{tag}: {note}" if note else tag)[:300]]
     if run.goal:
         cmd += ["--goal", run.goal]
     rc, detail = 1, ""
@@ -2454,7 +2641,10 @@ def pf_merge(run: PFRun, branch: str, wt: str) -> tuple[bool, str | None, str]:
             capture_output=True, text=True,
         )
         if p.returncode != 0:
+            conflicted = _git(run.repo, "diff", "--name-only", "--diff-filter=U").split()
             subprocess.run(["git", "-C", run.repo, "merge", "--abort"], capture_output=True)
+            if conflicted:
+                return False, None, "merge conflict: " + " ".join(conflicted)[:280]
             return False, None, f"merge failed: {(p.stderr or p.stdout).strip()[-300:]}"
     head = _git_head(run.repo)
     subprocess.run(["git", "-C", run.repo, "worktree", "remove", "--force", wt], capture_output=True)
@@ -2465,8 +2655,34 @@ def pf_merge(run: PFRun, branch: str, wt: str) -> tuple[bool, str | None, str]:
 def pf_run_item(
     run: PFRun, item: PFItem, run_dir: str, run_id: str,
     tools: dict[str, str | None], meter: list[dict],
+    merge_lock: "threading.Lock | None" = None,
 ) -> PFItemResult:
-    res = PFItemResult(id=item.id, plan=item.plan)
+    """One item end to end. Whatever happens inside, the item's reservations
+    are released and its wait and run times recorded."""
+    res = PFItemResult(id=item.id, plan=item.plan, run=run_id)
+    res.started = _pf_now()
+    t0 = time.monotonic()
+    try:
+        _pf_item_steps(run, item, run_dir, run_id, tools, meter, res, merge_lock)
+    except Exception as e:  # noqa: BLE001 - the run must outlive one item
+        res.status = "error"
+        res.note = f"{type(e).__name__}: {e}"[:300]
+        print(f"  [pf] {item.id}: {res.note}", file=sys.stderr, flush=True)
+    finally:
+        # Release by owner whatever happened: a partial set from a failed
+        # reserve, or a full set from any later exit, never outlives the item.
+        if res.gauge_rc == 0 and tools.get("ic"):
+            pf_release(run, tools["ic"] or "", _pf_owner(run_id, item.id))
+        res.finished = _pf_now()
+        res.run_s = round(max(0.0, time.monotonic() - t0 - res.wait_s), 1)
+    return res
+
+
+def _pf_item_steps(
+    run: PFRun, item: PFItem, run_dir: str, run_id: str,
+    tools: dict[str, str | None], meter: list[dict], res: PFItemResult,
+    merge_lock: "threading.Lock | None",
+) -> None:
     item_dir = os.path.join(run_dir, item.id)
     os.makedirs(item_dir, exist_ok=True)
     contract = pf_contract(item.plan)
@@ -2475,7 +2691,7 @@ def pf_run_item(
     if contract is None:
         res.status = "no_contract"
         res.note = "plan has no `Contract: brief|exact` line"
-        return res
+        return
     verdict_sh = tools["verdict"] or ""
     dispatch_sh = tools["dispatch"] or ""
     gauge_lint = tools["gauge"] or ""
@@ -2491,17 +2707,36 @@ def pf_run_item(
         res.status = "gauge_failed"
         res.note = note[:300]
         print(f"  [pf] {item.id}: gauge rc={rc}; no executor spawned", flush=True)
-        return res
+        return
     print(f"  [pf] {item.id}: gauge clean", flush=True)
 
-    # 2. worktree with an Intercore store.
+    # 2. reserve the declared paths, then a worktree with an Intercore store.
+    files = _pf_declared_files(item)
+    res.files = files
+    if not tools.get("ic"):
+        res.status = "worktree_failed"
+        res.note = "ic not found (set CLAVAIN_IC_BIN or put ic on PATH); reservations and the worktree store need it"
+        return
+    w0 = time.monotonic()
+    ids = pf_reserve(run, item, files, run_id, tools["ic"] or "", res)
+    res.wait_s = round(time.monotonic() - w0, 1)
+    if ids is None:
+        res.status = "reservation_timeout"
+        res.note = f"waited {res.wait_s:g}s for {res.blocked_by}; no worktree cut"
+        print(f"  [pf] {item.id}: {res.note}", flush=True)
+        return
+    res.reservations = len(ids)
+    print(f"  [pf] {item.id}: reserved {len(ids)} path(s) in scope {_pf_scope(run)} after {res.wait_s:g}s: {' '.join(files)}", flush=True)
+    # The main checkout takes one git operation at a time: a worktree add
+    # racing a sibling's merge fights over the same index lock.
     try:
-        wt, branch = pf_worktree_add(run, item, run_dir, run_id, tools["ic"])
+        with (merge_lock or threading.Lock()):
+            wt, branch = pf_worktree_add(run, item, run_dir, run_id, tools["ic"])
     except (RuntimeError, subprocess.SubprocessError) as e:
         res.status = "worktree_failed"
         res.note = str(e)[:300]
         print(f"  [pf] {item.id}: {res.note}", flush=True)
-        return res
+        return
     res.worktree, res.branch = wt, branch
     print(f"  [pf] {item.id}: worktree {wt} on {branch}", flush=True)
 
@@ -2537,14 +2772,14 @@ def pf_run_item(
     )
     if verdict != "PASS" or not commit:
         res.status = "executor_failed"
-        return res
+        return
 
     # 4. validate through the seat, with the receipt nonce.
     if not producer:
         res.status = "no_producer_identity"
         res.note = "cannot dispatch the validation seat without a producer identity (set producer on the item or the run)"
         print(f"  [pf] {item.id}: {res.note}", flush=True)
-        return res
+        return
     val = pf_validate(run, item, contract, wt, commit, packet, producer, item_dir, dispatch_sh, meter)
     res.validator_model = val.model
     res.validator_verdict, res.validator_criterion, res.receipt_ok = val.verdict, val.criterion, val.receipt_ok
@@ -2565,16 +2800,24 @@ def pf_run_item(
     )
     if val.verdict != "PASS":
         res.status = f"validator_{val.verdict.lower()}"
-        return res
+        return
 
-    # 5. merge back; the worktree is removed only on success.
-    ok, head, detail = pf_merge(run, branch, wt)
+    # 5. merge back under the run's one lock on the main checkout, in
+    # completion order; the worktree is removed only on success and a
+    # conflict parks the item.
+    with (merge_lock or threading.Lock()):
+        ok, head, detail = pf_merge(run, branch, wt)
     res.merged, res.merge_commit = ok, head
-    res.status = "merged" if ok else "merge_failed"
-    if not ok:
+    if ok:
+        res.status, res.merge_outcome = "merged", "merged"
+    elif detail.startswith("merge conflict"):
+        res.status, res.merge_outcome = "merge_conflict", "conflict"
+        res.note = detail
+    else:
+        res.status, res.merge_outcome = "merge_failed", "failed"
         res.note = detail
     print(f"  [pf] {item.id}: {detail}" + (f" -> {head}" if head else ""), flush=True)
-    return res
+    return
 
 
 def _pf_item_packet(r: PFItemResult) -> dict:
@@ -2615,15 +2858,17 @@ def orchestrate_pattern_f(run_path: str, dry_run: bool = False) -> list[PFItemRe
     if dry_run:
         print(
             f"Pattern F dry run: {len(run.items)} item(s), repo {run.repo}, register {run.register}, "
-            f"session {run.session}, timeout {run.timeout}s per dispatch"
+            f"session {run.session}, timeout {run.timeout}s per dispatch, max_parallel {run.max_parallel}, "
+            f"reservation scope {_pf_scope(run)}"
         )
         for item in run.items:
             c = pf_contract(item.plan) or "NO CONTRACT"
             how = "plan-gauge-lint.py --apply (no model)" if c == "exact" else f"dispatch.sh --role {item.executor_role}"
             print(
-                f"  {item.id}: {c:<5} {os.path.basename(item.plan)} -> gauge, worktree + ic init, {how}, "
-                "dispatch.sh --role validation --plan (receipt nonce), register rows, merge"
+                f"  {item.id}: {c:<5} {os.path.basename(item.plan)} -> gauge, reserve, worktree + ic init, {how}, "
+                "dispatch.sh --role validation --plan (receipt nonce), register rows, merge, release"
             )
+            print(f"    files={' '.join(_pf_declared_files(item))}")
         print(f"  tools: {json.dumps(tools)}")
         if missing:
             print(f"  MISSING: {', '.join(missing)}")
@@ -2641,16 +2886,36 @@ def orchestrate_pattern_f(run_path: str, dry_run: bool = False) -> list[PFItemRe
     print(f"Pattern F run {run_id}: {len(run.items)} item(s), repo {run.repo}, run dir {run_dir}", flush=True)
     _journal_append(journal, {"ts": started, "event": "run_started", "run": run_id, "session": run.session, "goal": run.goal})
     results: list[PFItemResult] = []
-    for item in run.items:
-        res = pf_run_item(run, item, run_dir, run_id, tools, meter)
-        results.append(res)
-        _journal_append(journal, {"ts": _pf_now(), "event": "item", **asdict(res)})
+    merge_lock = threading.Lock()
+    journal_lock = threading.Lock()
+    wall0 = time.monotonic()
+
+    def _one(item: PFItem) -> PFItemResult:
+        res = pf_run_item(run, item, run_dir, run_id, tools, meter, merge_lock)
+        with journal_lock:
+            _journal_append(journal, {"ts": _pf_now(), "event": "item", **asdict(res)})
+        return res
+
+    order = {item.id: i for i, item in enumerate(run.items)}
+    workers = max(1, min(run.max_parallel, len(run.items)))
+    print(f"[pf] dispatching {len(run.items)} item(s), up to {workers} at once", flush=True)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_one, item) for item in run.items]
+        for fut in as_completed(futures):
+            results.append(fut.result())
+    results.sort(key=lambda r: order.get(r.id, 0))
     finished = _pf_now()
+    wall_s = round(time.monotonic() - wall0, 1)
     meter_path = os.path.join(run_dir, "meter.json")
     with open(meter_path, "w") as f:
         json.dump({
             "run": run_id, "session": run.session, "goal": run.goal,
-            "started": started, "finished": finished, "dispatches": meter,
+            "started": started, "finished": finished, "wall_s": wall_s,
+            "max_parallel": run.max_parallel, "dispatches": meter,
+            "items": [{
+                "id": r.id, "status": r.status, "wait_s": r.wait_s, "run_s": r.run_s,
+                "merge_outcome": r.merge_outcome, "files": r.files, "blocked_by": r.blocked_by,
+            } for r in results],
         }, f, indent=2)
     readback = _pf_readback(run, tools["verdict"] or "")
     _journal_append(journal, {"ts": finished, "event": "run_finished", "run": run_id, "register_readback": readback})
@@ -2658,13 +2923,16 @@ def orchestrate_pattern_f(run_path: str, dry_run: bool = False) -> list[PFItemRe
     for r in results:
         counts[r.status] = counts.get(r.status, 0) + 1
     print(
-        f"\nPattern F run {run_id} finished: "
+        f"\nPattern F run {run_id} finished in {wall_s:g}s (max_parallel {run.max_parallel}): "
         + ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
         + f"; register rows read back for the session: {readback}", flush=True,
     )
+    for r in results:
+        print(f"  {r.id}: {r.status}; waited {r.wait_s:g}s, ran {r.run_s:g}s, merge {r.merge_outcome}", flush=True)
     packet = {
         "run": run_id, "goal": run.goal, "session": run.session, "register": run.register,
         "repo": run.repo, "started": started, "finished": finished, "run_dir": run_dir,
+        "wall_s": wall_s, "max_parallel": run.max_parallel,
         "meter": meter_path, "register_readback": readback,
         "items": [_pf_item_packet(r) for r in results],
     }
