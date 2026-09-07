@@ -1040,7 +1040,10 @@ def dispatch_task(
     # or missing sidecar is NOT proof of failure — check what actually
     # happened on disk before cascading skips (task-9 false negative).
     note: str | None = None
-    fresh_output = os.path.exists(output_path)
+    # A file that exists but is empty is not output: dispatch.sh pre-creates
+    # output.md through tee on the claude and kimi engines, so an existence
+    # check reads a silent timeout as output movement (mk-9hqr).
+    fresh_output = os.path.exists(output_path) and os.path.getsize(output_path) > 0
     fresh_verdict = (
         os.path.exists(verdict_path)
         and os.path.getmtime(verdict_path) >= start
