@@ -57,6 +57,16 @@ Skip anything that exists. Execute in order:
 
 ## Phase 4: Observability
 
+For active mistakeknot/gensysven repos, inspect `zklw-ci status --repo OWNER/REPO
+--json` on zklw and claim the existing migration task in campaign `mk-ag2s`.
+New code projects need reproducible Q5/manifest-based checks and `zklw-ci onboard
+--repo OWNER/REPO --json` registration. Registration is a review proposal, not
+verified CI. Complete reviewed registry and fresh-guest verification before
+claiming readiness. Use independently scheduled zklw automation; no Linux Actions
+or Actions-controlled runners. Preserve macOS/Windows jobs, destinations, signing
+and publication gates. Documentation-only projects get an explicit disposition;
+unavailable service/authentication remains a prerequisite failure.
+
 1. Create `.interwatch/watchables.yaml` from template (AGENTS.md 14d, roadmap 30d, philosophy 90d)
 2. Create `.interwatch/project.yaml` from template (project name from Q1, scan_dirs from Q6)
 3. Register in intertree (skip silently if unavailable)

@@ -131,6 +131,18 @@ Personas live in `docs/canon/` because they are durable canonical knowledge that
 
 ## Phase 4: Observability
 
+**Independent automation:** For active mistakeknot/gensysven repositories,
+inspect `zklw-ci status --repo OWNER/REPO --json` on zklw and claim the existing
+repository migration task from campaign `mk-ag2s` before changing CI. For new
+code projects, derive reproducible baseline checks from Q5 and manifests;
+register using `zklw-ci onboard --repo OWNER/REPO --json`. Onboard creates a
+review proposal, not execution authority: complete the registry review and
+fresh-guest verification before reporting CI ready. Do not create Linux GitHub
+Actions workflows or Actions-controlled self-hosted runners. Keep required
+macOS/Windows jobs, production destinations, signing and publication gates.
+Document a no-applicable-automation disposition for documentation-only projects.
+Missing fleet service or authentication is an explicit prerequisite failure.
+
 **4a: Interwatch** — if `.interwatch/` missing, create from templates. Always generate `.interwatch/project.yaml` with `{{PROJECT_NAME}}` and `{{ROADMAP_SCAN_DIRS}}` (Q6 or empty). Merge without overwriting if file already exists.
 
 **4b: Intertree** — register in intertree hierarchy if interkasten MCP tools available; skip silently if not.
