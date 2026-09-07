@@ -7,10 +7,10 @@ description: Execute plan in batches with review checkpoints
 
 <BEHAVIORAL-RULES>
 1. **Execute tasks in order.** No skipping, reordering, or parallelizing unless plan explicitly marks tasks independent.
-2. **Write output to files, read from files.** Every task producing code/artifacts MUST write to disk.
+2. **Write artifacts to disk.** Later tasks and the validator read files, not chat.
 3. **Stop at checkpoints for user approval.** Batch review checkpoints are mandatory — never auto-approve.
 4. **Halt on failure.** Stop immediately on failure; report what failed, what succeeded, and options. No silent retry or skip.
-5. **Local agents by default.** Use Task tool for dispatch. External agents (Codex, interserve) require explicit user opt-in.
+5. **Executors resolve through the role table.** Offload spawns take their backend and model from `ic route dispatch --role`; naming a backend or model by hand is an override the plan declares.
 6. **Never enter plan mode autonomously.** The plan already exists. Stop and ask if scope changes mid-execution.
 </BEHAVIORAL-RULES>
 

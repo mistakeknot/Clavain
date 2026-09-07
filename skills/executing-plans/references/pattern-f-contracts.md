@@ -22,7 +22,7 @@ A brief prescribes outcomes, not edits. It has seven non-empty headings: `Object
 
 ### `exact` (prescribed mechanics)
 
-Use exact for migrations, compatibility with a weak executor, or risk that requires prescribed mechanics. The linter reads the edit pairs, the `Create` blocks, and verify fences. It has no section awareness: it finds verify steps by heuristics on nearby prose and first commands. Pathspecs and the trailer remain outside its reach.
+Use exact for migrations, compatibility with a weak executor, or risk that requires prescribed mechanics. The linter reads the edit pairs, the `Create` blocks, and verify fences. It has no section awareness: it finds verify steps by heuristics on nearby prose and first commands. Pathspecs and the trailer remain outside its reach. An exact plan is a deterministic edit script: its application and its verify replay belong to a tool, and the model's turn is the independent channel. The linter's `--apply` applies it and replays its verify fences; the executor model has no turn.
 
 - Each edit to an existing file: a line naming the file in backticks and ending with a colon (In relative/path:), then a line reading old_string: followed by a fenced block with the exact current text, then a line reading new_string: followed by a fenced block with the replacement. New files: a line reading Create relative/path with: (the path in backticks) followed by one fenced block holding the COMPLETE file content.
 - Each verify step: a heading `### Verify <task>` followed by ONE fenced `bash` block holding the commands (run from REPO PATH), then a prose line starting `Expected:` stating the observable result. Say "prints NOTHING" or "exit 1" ONLY when that is literally true (the linter treats those as zero-output claims and checks them against your own edits). For a command that must succeed, write `Expected: exit 0`.
@@ -70,7 +70,7 @@ The validator's report has three named outputs, in this order:
 3. `RECEIPT: <value or none>` (line 3): the verbatim output of the receipt command the orchestrator named in the prompt, which prints a value the orchestrator wrote to disk after the prompt was fixed (for example `cat <plan>.receipt`). The orchestrator compares it with what it wrote; a PASS or FAIL whose receipt does not match is recorded as UNRUN, because nothing shows the block was run.
 4. `BEYOND THE GAUGE:`: the second channel. A bullet list of real defects or risks in the change that the VERIFY block did not check; `- none` is allowed and means the validator looked and found nothing.
 
-The replay (lines 1 and 2) is expected to add no information when the executor already ran the same block and reported it honestly; it exists so the verdict rests on a second run rather than on the executor's word. The second channel is where the validator earns its cost: in goal 1b53da77, five of five replays passed and all six defects found came from the second channel.
+The replay (lines 1 and 2) is expected to add no information when the executor already ran the same block and reported it honestly; it exists so the verdict rests on a second run rather than on the executor's word, and for an exact contract that second run can be a script. The second channel is where the validator earns its cost: across goals 1b53da77, c60de386, and c4cda02c every replay passed (18 of 18) and every defect found came from the second channel.
 
 ## Two strikes
 

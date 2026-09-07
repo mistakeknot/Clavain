@@ -40,7 +40,7 @@ If an external tool has an "adopt" verdict, default to integration over reimplem
 5. No matches: proceed without mention
 6. Fallback if both unavailable: spawn `Task(subagent_type="interflux:learnings-researcher", model="haiku")`
 
-Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model.
+Every offload spawn names its role: execution through `routine-execution` or `deep-execution`, validation through `validation` (a different model from the producer), resolved by `ic route dispatch --role` (routing doctrine, commands/model-routing.md § Role dispatch). A fixed model is an override the plan declares. Frontier-in-the-loop work stays in the session.
 
 ## Bite-Sized Task Granularity
 

@@ -69,7 +69,7 @@ Default: first 3 tasks per batch. Per task: mark in_progress → follow steps ex
 
 After each task (any mode): parse `<verify>...</verify>` block for `run:`/`expect:` pairs.
 - `expect: exit 0` — must exit 0; `expect: contains "string"` — output must include string
-- Pass → log "Verify passed for Task N"; failure → treat as Rule 1 auto-fix (3-attempt limit, then log and continue)
+- Pass → log "Verify passed for Task N"; failure → treat as Rule 1 auto-fix (two strikes, then stop and escalate per the routing doctrine)
 - No verify block → skip silently
 
 **Vetting signal write** — when all per-task verifications pass for a plan that is part of a tracked bead, persist vetting state so the auto-proceed authz gate can evaluate at ship time (see `docs/canon/policy-merge.md`):
@@ -124,9 +124,7 @@ Track all deviations for batch report.
 
 **Scope:** Only auto-fix issues caused by the current task's changes. Pre-existing warnings/failures in unrelated files → log to `deferred-items.md`, do NOT fix.
 
-**Fix attempt limit:** 3 attempts per task. After 3, document in "Deferred Issues" and continue.
-
-**Analysis paralysis guard:** 5+ consecutive Read/Grep/Glob without Edit/Write/Bash → STOP. State why in one sentence, then write code or report "blocked" with specific missing info.
+**Fix attempt limit:** two strikes per task, then stop and escalate (routing doctrine, two-strikes rule); document what was tried in "Deferred Issues".
 
 ## Stop Conditions
 
