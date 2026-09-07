@@ -1479,6 +1479,22 @@ else
   # Build codex exec command
   CMD=(codex exec)
   CMD+=(-s "$SANDBOX")
+  # Tool caches outside the workspace (uv's, by default) are denied under
+  # workspace-write, so a seat replaying `uv run pytest` cannot run it and a
+  # validator has to answer UNRUN (run d9dd99e0, goal a7f02287). Grant the
+  # roots named by CLAVAIN_CODEX_WRITABLE_ROOTS (colon-separated; default the
+  # user's uv cache; set it empty to grant nothing) when they exist.
+  CODEX_WRITABLE_ROOTS_TOML=""
+  if [[ "$SANDBOX" == "workspace-write" ]]; then
+    IFS=':' read -r -a _roots <<< "${CLAVAIN_CODEX_WRITABLE_ROOTS-$HOME/.cache/uv}"
+    for _r in "${_roots[@]}"; do
+      [[ -n "$_r" && -d "$_r" ]] || continue
+      CODEX_WRITABLE_ROOTS_TOML+="${CODEX_WRITABLE_ROOTS_TOML:+,}\"${_r}\""
+    done
+    if [[ -n "$CODEX_WRITABLE_ROOTS_TOML" ]]; then
+      CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
+    fi
+  fi
 
   if [[ -n "$WORKDIR" ]]; then
     CMD+=(-C "$WORKDIR")
@@ -1552,6 +1568,9 @@ if [[ "$DRY_RUN" == true ]]; then
     echo ""
   else
     DISPLAY_CMD=(codex exec -s "$SANDBOX")
+    if [[ -n "${CODEX_WRITABLE_ROOTS_TOML:-}" ]]; then
+      DISPLAY_CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
+    fi
     if [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
     if [[ -n "$OUTPUT" ]]; then DISPLAY_CMD+=(-o "$OUTPUT"); fi
     if [[ -n "$MODEL" ]]; then DISPLAY_CMD+=(-m "$MODEL"); fi
