@@ -181,7 +181,7 @@ Source: transcript profile of this Mac, 2026-08-04..09-03 (87K assistant message
 
 **Pilots (5 executor runs: 3 pilots + 2 fix-forwards).** Sonnet executors applied every execution-grade plan verbatim — 5/5 code-correct, zero drift. Two runs were blocked by a defect in the plan's own VERIFY block (a grep count the plan's text could not produce; a table-state assertion unreachable because of pruned files and a concurrent old-parser writer). That is pilot-1's finding again: the gauge, never the code. Opus validators passed all five on criteria and found six real defects the gauges did not check; two became fix-forward pilots (1b, 3b). Q-A had the wrong premise (melange consensus, both runtimes): the validator's *replay* of the verify block added no information — 5/5 PASS, as the design predicted — while its second channel, "what the gauge did not check", surfaced six defects. The doctrine should name that channel as a validator output (melange f-008, f-013) rather than credit "the validator".
 
-**Goal-window profile (session aa2bb078 from 18:06:55Z).**
+**Goal-window profile (session aa2bb078 from 18:06:55Z).** *(Superseded 2026-09-06: these numbers priced every cache write at the 5m rate; the corrected re-measurement is at the end of this section.)*
 
 | lane | msgs | output | ctx/turn | $ equiv |
 |---|---|---|---|---|
@@ -205,13 +205,16 @@ Source: transcript profile of this Mac, 2026-08-04..09-03 (87K assistant message
 **Pattern F integration owner:** mk (doctrine); integration surface is `/work`, `/execute-plan`, and `writing-plans` in Clavain. Spawn inheritance is closed at the settings level (`CLAUDE_CODE_SUBAGENT_MODEL=sonnet`; running sessions need a restart to pick it up).
 
 
+**Re-measured 2026-09-06 (goal 7be37994; corrected meter, interstat fb398b6).** The main lane's cache writes are 1h writes and bill at 2x input, not the 5m 1.25x the profiler used; subagent lanes write at 5m, so they do not move. Same window, mint to close (40 main messages, not the 38 of the earlier snapshot): main $20.70 → **$27.07**, subagent lanes (executors, validators, and the melange review together) $38.61 unchanged, whole $59.31 → **$65.68** (+10.7%). Main-thread share of API-equivalent cost, review included, 35% → **41%**; execution-only, scaling the table's $19 main by the same 1.31 against its $10 of executors and validators, 65% → about **71%**. Context per main turn 364K → 366K (the old profiler counted API-error lines as turns). Conclusions unchanged: the share metric still fails to move with the thing that changed, and the main thread was under-billed by a third, which makes the fresh-session argument below stronger, not weaker. Manifest and JSON: `interstat/docs/research/2026-09-06-one-meter-historical-manifest.md`.
+
+
 ## Measured 2026-09-03 — Pattern F hardening, fresh session per pilot (goal c60de386)
 
 Source: four pilots, each orchestrated by its own headless `claude -p --model fable` session with a short brief and the Pattern F contract block, Sonnet executor, Opus validator, every verdict written to the interspect evidence register by `scripts/pattern-f-verdict.sh`. Charter and journal: `Sylveste/docs/goals/2026-09-03-pattern-f-hardening-{charter,condition,journal}.md`. Contract: `skills/executing-plans/references/pattern-f-contracts.md`.
 
 **What shipped.** interstat 0.3.3 released (the estate's SessionEnd parser now prices the Claude 5 family and counts streamed messages once). `scripts/pattern-f-verdict.sh` writes one evidence row per verdict with `verdict_kind` replay or independent and reads its own row back, exiting non-zero when the row is not visible (5f49c43). `hooks/gauge-gate-executor-spawn.sh`, a PreToolUse hook on `Task|Agent`, runs `plan-gauge-lint.py` on the plan named by an executor prompt's first line and blocks the spawn when the linter refuses (102d0d0; refusal demonstrated on a real payload). The executor and validator contracts are checked in with `BEYOND THE GAUGE:` as a named validator output and the register write as the last step (d0f6c51, corrected in pilot D).
 
-**Fresh-session profile (execution lanes only, `profile.py --session`).**
+**Fresh-session profile (execution lanes only, `profile.py --session`).** *(Superseded 2026-09-06: these numbers priced every cache write at the 5m rate; the corrected re-measurement is at the end of this section.)*
 
 | pilot | orchestrator turns | ctx/turn | main $ | executor + validator $ | main cost share | main token share | whole run $ |
 |---|---|---|---|---|---|---|---|
@@ -232,6 +235,18 @@ The fresh session did what offload alone could not: orchestrator context fell fr
 **Confounds.** Pilot A's first attempt hit the account's Fable weekly cap at turn 8 (the bucket was at 96% before the goal); it resumed in the same session id after mk switched accounts. Pilot B's hook shipped without `set -euo pipefail` on the orchestrating session's own instruction, which pilot C's executor found as a red structural test and pilot D fixed.
 
 
+**Re-measured 2026-09-06 (goal 7be37994; corrected meter, interstat fb398b6).** Whole pilot sessions, 1h cache writes at 2x:
+
+| pilot | main $ (5m → corrected) | executor + validator $ | main cost share | whole run $ |
+|---|---|---|---|---|
+| A verdict register | 4.39 → **5.66** | 1.01 | 81% → **85%** | 5.40 → **6.67** |
+| B gauge gate | 3.24 → **3.91** | 1.09 | 75% → **78%** | 4.33 → **5.00** |
+| C contracts | 3.49 → **4.17** | 1.95 | 64% → **68%** | 5.44 → **6.12** |
+| D fix-forward | 2.88 → **3.47** | 1.69 | 63% → **67%** | 4.57 → **5.16** |
+
+Orchestrator cost per pilot is $3.5 to $5.7, not $3 to $4; whole pilots $5 to $6.7. Context per turn is unchanged (68 to 82K). Conclusions unchanged: the shares still barely move and only the absolute columns track the intent; the fresh-session orchestrator is still a fifth of the 344K session's per-pilot cost.
+
+
 ## Measured 2026-09-03 — Pattern F live: the gate bound in an ordinary session (goal c4cda02c)
 
 Source: three fresh-session code pilots (E gate-refusal rows + sanitizer-safe notes, F `Create` grammar, H fix-forward from E and F's validators), then clavain 0.6.304 published and one live pilot (G) that invoked `/execute-plan` on a plan carrying a seeded gauge defect. Charter and journal: `Sylveste/docs/goals/2026-09-03-pattern-f-live-{charter,condition,journal}.md`.
@@ -240,7 +255,7 @@ Source: three fresh-session code pilots (E gate-refusal rows + sanitizer-safe no
 
 **The live result.** In session c0eedb2a, started after the publish with no instruction to lint, the first executor spawn was blocked by the PreToolUse gate with `GAUGE001 line 54: verify expects no output, but the plan's own emitted text matches`, and the gate itself wrote the first register row before the orchestrator did anything. The orchestrator changed one `Expected:` line, re-spawned once, the executor committed (be532a5), the validator passed and registered eight independent findings. Nothing was done by hand.
 
-**Profile, absolute (execution lanes only, `profile.py --session`).**
+**Profile, absolute (execution lanes only, `profile.py --session`).** *(Superseded 2026-09-06: these numbers priced every cache write at the 5m rate; the corrected re-measurement is at the end of this section.)*
 
 | pilot | orchestrator msgs | ctx/msg | orchestrator $ | executor + validator $ | cost share | token share | whole run $ |
 |---|---|---|---|---|---|---|---|
@@ -254,3 +269,15 @@ Against c60de386's 71–82K per turn and about $3 per pilot: the code pilots ran
 **Pass rate.** Executor runs this goal: 5 spawns, 4 commits, 1 refusal by the live gate on the seeded defect (counts against the orchestrating session, as designed). Every commit on strike 1, every validator PASS on strike 1, code-correct 4/4. Independent findings registered: 5 + 7 + 6 + 8 = 26 rows; the orchestrating session confirmed the four gate-relevant ones by direct test and fixed them (H, and the rule-4 follow-up). Replays 8 of 8 PASS, no information, again.
 
 **Confounds.** Both code pilots were launched from the sandboxed Bash tool with nohup and disown; when the tool call ended, the sandbox sent SIGTERM to the wrapper subshell, which wrote a 143 exit marker while the `claude` process itself survived. The orchestrating session read the marker as a death, resumed both sessions, and two instances of each ran the same pilot concurrently for about ten minutes, clobbering each other's plan files (one validator replayed the other instance's plan; both plans carried the same VERIFY block). The duplicates cost about $11 and one false finding ("the pilot driver pushes on each done marker": that push was the repo's autosync hook). Launch outside the sandbox and wait on the `claude` pid, never on a wrapper's marker. The gate row carries no `--goal` (the hook has no goal to pass), so per-goal register queries must join it by session.
+
+
+**Re-measured 2026-09-06 (goal 7be37994; corrected meter, interstat fb398b6).** Whole pilot sessions, 1h cache writes at 2x:
+
+| pilot | main $ (5m → corrected) | executor + validator $ | main cost share | whole run $ |
+|---|---|---|---|---|
+| E gate rows + sanitizer (two instances) | 11.67 → **13.56** | 1.65 | 88% → **89%** | 13.32 → **15.21** |
+| F Create grammar (two instances) | 8.99 → **10.48** | 2.07 | 81% → **83%** | 11.06 → **12.55** |
+| H fix-forward | 4.93 → **5.94** | 2.49 | 66% → **70%** | 7.42 → **8.43** |
+| G live `/execute-plan` | 1.54 → **1.95** | 1.75 | 47% → **53%** | 3.29 → **3.70** |
+
+One conclusion changes: G was not under 50% of cost. At the corrected rate the live pilot's orchestrator is 53% of its run, so no Pattern F run to date has put the main thread below half of cost; the scale-invariance point stands on its own (G's share is lowest because its orchestrator did least), and the absolute reading (56K per message, about $2 of orchestrator per live pilot) is the one to carry. Goal ff7fd1a1's pilot L, journaled but not tabled here, moves the same way: main $6.49 → $7.69, share 74% → 77%, whole $8.79 → $9.99.
