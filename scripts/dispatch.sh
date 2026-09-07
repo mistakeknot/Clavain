@@ -50,6 +50,8 @@ TASK_CLASS=""
 FLERE_TIMEOUT=120
 PROMPT_FILE=""
 TEMPLATE_FILE=""
+PLAN_FILE=""
+SEAT_SNAPSHOT_BEFORE=""
 IMAGES=()
 EXTRA_ARGS=()
 PHASE=""
@@ -189,6 +191,9 @@ Options:
                                   minimum Codex version, and ordered fallbacks through
                                   `ic route dispatch --role=<NAME> --json`
   --producer-identity <ID>      Producer backend/model identity for validator audit records
+  --plan <FILE>                 The contract the seat must read. It must exist before any
+                                  model runs; for --to claude its directory is added as a
+                                  readable root (--add-dir) so a plan outside -C is readable
   --validator-relationship <R> Validator relationship recorded with the routing decision
   --phase <NAME>                Sprint phase context (stored for future phase-aware dispatch)
   --class <NAME>                Task class for --to auto executor routing
@@ -644,6 +649,15 @@ while [[ $# -gt 0 ]]; do
       PROMPT_FILE="$2"
       shift 2
       ;;
+    --plan)
+      require_arg "$1" "${2:-}"
+      PLAN_FILE="$2"
+      shift 2
+      ;;
+    --plan=*)
+      PLAN_FILE="${1#--plan=}"
+      shift
+      ;;
     --template)
       require_arg "$1" "${2:-}"
       TEMPLATE_FILE="$2"
@@ -805,6 +819,14 @@ fi
 
 # Resolve prompt: positional arg, --prompt-file, or error
 PROMPT="${1:-}"
+# A seat that cannot read its plan has nothing to replay: fail before any
+# backend runs (Sylveste-soj7).
+if [[ -n "$PLAN_FILE" && ! -r "$PLAN_FILE" ]]; then
+  _dispatch_write_failure_class terminal_configuration
+  echo "Error: --plan not found or unreadable: $PLAN_FILE" >&2
+  exit 1
+fi
+
 if [[ -n "$PROMPT_FILE" ]]; then
   if [[ -n "$PROMPT" ]]; then
     echo "Error: Cannot use both --prompt-file and a positional prompt argument" >&2
@@ -1426,8 +1448,22 @@ elif [[ "$ENGINE" == "claude" ]]; then
   # commands (tests, git diff) without prompting, but cannot mutate files.
   # --claude-unsafe lifts the mutation ban for executor-seat dispatches.
   CMD+=(--permission-mode "${CLAVAIN_CLAUDE_PERMISSION_MODE:-dontAsk}")
+  # dontAsk denies every tool that is not allowed up front, so without an
+  # explicit allowance the seat cannot run one command and its "replay" is a
+  # hand trace (Sylveste-soj7). Bash is allowed; the file-mutating tools stay
+  # disallowed and the checkout is snapshotted around the run (see
+  # _seat_snapshot): a run that changes it is an error verdict, not a ruling.
   if [[ "$CLAUDE_UNSAFE" != true ]]; then
+    CMD+=(--allowedTools "Bash")
     CMD+=(--disallowedTools "Edit,Write,NotebookEdit")
+  else
+    CMD+=(--allowedTools "Bash,Edit,Write,NotebookEdit")
+  fi
+  # The plan named by --plan usually lives outside -C (a scratchpad); without
+  # --add-dir the seat cannot read it under dontAsk and has nothing to replay.
+  if [[ -n "$PLAN_FILE" ]]; then
+    PLAN_DIR="$(cd "$(dirname "$PLAN_FILE")" && pwd)"
+    CMD+=(--add-dir "$PLAN_DIR")
   fi
   # The prompt goes via stdin, never argv: review prompts routinely exceed
   # ARG_MAX (macOS ~1MB incl. env), and `claude -p` with a too-long argv dies
@@ -1648,6 +1684,17 @@ _jsonl_parser() {
 
 # Post-dispatch validation: check modified files scope and scan for secrets.
 # Runs after Codex completes. Warnings only — does not block the dispatch exit.
+# One line per tracked change or untracked file, then a digest of the diff
+# against HEAD; empty when the directory is not a git work tree. Two equal
+# snapshots mean the seat wrote nothing the repo can see (ignored paths such
+# as __pycache__ and .venv stay invisible, as they should).
+_seat_snapshot() {
+  local dir="${1:-.}"
+  git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  git -C "$dir" status --porcelain --untracked-files=all 2>/dev/null
+  git -C "$dir" diff HEAD 2>/dev/null | shasum 2>/dev/null | cut -c1-16
+}
+
 _post_dispatch_validate() {
     local workdir="${1:-.}"
     [[ -d "$workdir/.git" ]] || return 0
@@ -1715,7 +1762,19 @@ _extract_verdict() {
     # nothing grounded.
     local status="warn"
     local summary="No structured verdict found."
-    if [[ "$verdict_line" == *"NEEDS_ATTENTION"* ]]; then
+    # The validation seat speaks PASS/FAIL/UNRUN (pattern-f-contracts.md).
+    # UNRUN is a refusal to rule, surfaced as warn so nothing reads it as
+    # approval; PASS is the only value that becomes STATUS: pass.
+    if [[ "$verdict_line" == "VERDICT: PASS"* ]]; then
+        status="pass"
+        summary="Validator replay PASS."
+    elif [[ "$verdict_line" == "VERDICT: FAIL"* ]]; then
+        status="warn"
+        summary="Validator replay FAIL: $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || echo "criterion not stated")"
+    elif [[ "$verdict_line" == "VERDICT: UNRUN"* ]]; then
+        status="warn"
+        summary="Validator could not run Verification (UNRUN); no ruling. $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || true)"
+    elif [[ "$verdict_line" == *"NEEDS_ATTENTION"* ]]; then
         status="warn"
         summary="${verdict_line#VERDICT: }"
     elif [[ "$verdict_line" == *"CLEAN"* ]]; then
@@ -1906,6 +1965,9 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # statusline parser is skipped and the state file stays at "starting"
   # until completion; summary/verdict sidecars are still produced. WORKDIR
   # is applied via cd and OUTPUT by teeing stdout (no -C/-o flags).
+  if [[ "$ENGINE" == "claude" && "$CLAUDE_UNSAFE" != true ]]; then
+    SEAT_SNAPSHOT_BEFORE="$(_seat_snapshot "${WORKDIR:-.}")"
+  fi
   set +e
   # kimi carries its prompt in argv; claude reads it from PROMPT_STDIN_FILE
   # (see the claude CMD build). /dev/null for kimi so neither engine ever
@@ -1927,6 +1989,14 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
   set -e
+  SEAT_MUTATED=""
+  if [[ "$ENGINE" == "claude" && "$CLAUDE_UNSAFE" != true ]]; then
+    SEAT_SNAPSHOT_AFTER="$(_seat_snapshot "${WORKDIR:-.}")"
+    if [[ "$SEAT_SNAPSHOT_AFTER" != "$SEAT_SNAPSHOT_BEFORE" ]]; then
+      SEAT_MUTATED="$(comm -13 <(printf "%s\n" "$SEAT_SNAPSHOT_BEFORE" | sort) <(printf "%s\n" "$SEAT_SNAPSHOT_AFTER" | sort) | awk 'NF>1 {print $NF}' | tr "\n" " ")"
+      [[ -n "$SEAT_MUTATED" ]] || SEAT_MUTATED="(content of an already-modified file)"
+    fi
+  fi
 
   # Summary sidecar (no turn/token stats — kimi -p doesn't expose them)
   if [[ -n "$SUMMARY_FILE" ]]; then
@@ -1939,10 +2009,18 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # Extract verdict sidecar from output
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
 
+  # A read-only seat that changed the checkout has not validated it. Override
+  # the verdict and fail the dispatch; the files stay for the operator to see.
+  if [[ -n "$SEAT_MUTATED" ]]; then
+    [[ -n "$OUTPUT" ]] && _write_error_verdict "$OUTPUT" "error" "validation seat mutated the checkout: $SEAT_MUTATED"
+    echo "Warning: dispatch: validation seat mutated the checkout: $SEAT_MUTATED — verdict overridden" >&2
+    [[ "$KIMI_EXIT" != "0" ]] || KIMI_EXIT=1
+  fi
+
   # Surface a failed run in the verdict sidecar. The codex error heuristics
   # (HTTP status lines, zero-turn state) don't apply to kimi -p / claude -p,
   # which exit non-zero on failure.
-  if [[ "$KIMI_EXIT" != "0" && -n "$OUTPUT" ]]; then
+  if [[ "$KIMI_EXIT" != "0" && -n "$OUTPUT" && -z "$SEAT_MUTATED" ]]; then
     _write_error_verdict "$OUTPUT" "error" "$ENGINE -p exited $KIMI_EXIT (see stderr above)"
     echo "Warning: dispatch surfaced $ENGINE error — verdict overridden: $ENGINE -p exited $KIMI_EXIT" >&2
   fi
