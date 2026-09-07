@@ -14,6 +14,8 @@ These contracts apply when a plan is executed by a fresh-context executor with a
 
 Every contract declares `Contract: brief` or `Contract: exact`. The linter also accepts `--contract`; absent either declaration it treats legacy plans as `exact`.
 
+Which goes where: a `brief` goes to a model (the executor resolved through `routine-execution` or `deep-execution`), because it prescribes outcomes and someone has to find the mechanics. An `exact` contract goes to the tool: `python3 scripts/plan-gauge-lint.py --apply <plan> --repo-root <repo>` applies its edit pairs and Create blocks in document order, runs its `## Preconditions` and `### Verify` fences from the repo root with `bash -e -o pipefail`, compares each fence with its `Expected:` line (`exit N`; `prints NOTHING`; otherwise exit 0), and exits non-zero at the first mismatch (1 a gauge defect, nothing applied; 3 refused before any edit: brief contract, dirty targets, failed preconditions; 4 an edit did not anchor; 5 a verify fence missed). It never commits: the main integrator commits with the plan's `## Commit` pathspec and message file. An exact plan therefore needs no executor model, and the validator replays its Verify fences the way it replays a brief's Verification.
+
 ### `brief` (default for Astra and capable executors)
 
 A brief prescribes outcomes, not edits. It has seven non-empty headings: `Objective`, `Scope`, `Constraints`, `Authority`, `Acceptance Criteria`, `Verification`, and `Deliverables`. `Verification` contains a fenced shell replay; the pre-execution gauge syntax-checks it but does not run it before implementation exists. `Deliverables` names the bounded packet: diff or commit, checks run, failures, and unresolved questions. The executor owns the implementation and test loop.
@@ -36,7 +38,7 @@ Before an executor is spawned, the plan must pass the gauge linter, run from the
 python3 scripts/plan-gauge-lint.py <plan> --contract <brief|exact> --repo-root <repo>
 ```
 
-It must exit 0. The spawn gate `hooks/gauge-gate-executor-spawn.sh` (a PreToolUse hook on `Task|Agent`, registered in `hooks/hooks.json`) runs the selected contract linter on the plan named by the executor prompt's first line and blocks any executor spawn whose plan fails it, or whose plan file is missing. A contract/gauge defect counts against the main integrator, never the executor.
+It must exit 0. For an exact plan the same script with `--apply` then applies the plan and replays its fences (see Planning contracts); the gauge runs first either way. The spawn gate `hooks/gauge-gate-executor-spawn.sh` (a PreToolUse hook on `Task|Agent`, registered in `hooks/hooks.json`) runs the selected contract linter on the plan named by the executor prompt's first line and blocks any executor spawn whose plan fails it, or whose plan file is missing. A contract/gauge defect counts against the main integrator, never the executor.
 
 Every refusal is itself a verdict. Before it prints the block decision, the gate writes one register row through `scripts/pattern-f-verdict.sh` with `--role gate --kind gate --verdict FAIL`, `--commit none`, and the refusal reason (the linter's GAUGE lines) as the note, into `$INTERSPECT_DB`, else `$CLAUDE_PROJECT_DIR/.clavain/interspect/interspect.db`, else that path under the repo named by the prompt's `REPO:` line. A failed write changes only stderr, and the write is bounded to fifteen seconds so a slow or locked register cannot time the hook out: the gate never fails open in order to record.
 
@@ -53,25 +55,26 @@ You are the resolved <routine-execution|deep-execution> executor. Read the <brie
 
 ## Validator prompt
 
-The validator is dispatched only after the executor reports, with the producer identity passed to routing. `<REF>` is the commit or working-tree reference and `<REPORT>` is the bounded packet. The prompt is:
+The validator is dispatched only after the executor reports, with the producer identity passed to routing and the plan named to the seat: `bash scripts/dispatch.sh --role validation --producer-identity <producer model> --plan <plan path> -C <repo path> --prompt-file <prompt> -o <report>`. The claude seat runs with Bash allowed and Edit, Write and NotebookEdit disallowed, the plan's directory added as a readable root, and the checkout snapshotted before and after the run: a run that changes the checkout is an error verdict and a failed dispatch, never a ruling. `<REF>` is the commit or working-tree reference and `<REPORT>` is the bounded packet. The prompt is:
 
 ```
-You are the resolved validation executor, and your resolved model must differ from the producer. Read the contract at <plan path> and the executor packet below. In <repo path> at <REF>, replay its Verification and judge only against its frozen Acceptance Criteria: output line 1 `VERDICT: PASS` or `VERDICT: FAIL`, line 2 `CRITERION: <the failing criterion, or none>`. Then output `BEYOND THE GAUGE:` with bullets for real defects or risks the replay did not check (`- none` allowed). Never restate the contract; never fix anything. Executor packet: <REPORT>
+You are the resolved validation executor, and your resolved model must differ from the producer. Read the contract at <plan path> and the executor packet below. In <repo path> at <REF>, run its Verification with the Bash tool, every command, from the repo root, and judge only against its frozen Acceptance Criteria: output line 1 `VERDICT: PASS`, `VERDICT: FAIL`, or `VERDICT: UNRUN` (UNRUN whenever any Verification command could not be executed: a denied tool call, a missing program, an unreadable path; never guess the outcome of a command you did not run), line 2 `CRITERION: <the failing criterion, or none>`, line 3 `RECEIPT: <the verbatim output of the receipt command named below, or none>`. Then output `BEYOND THE GAUGE:` with bullets for real defects or risks the replay did not check (`- none` allowed). Never restate the contract; never fix anything; never edit a file. Receipt command: <RECEIPT COMMAND>. Executor packet: <REPORT>
 ```
 
 ### Named outputs
 
 The validator's report has three named outputs, in this order:
 
-1. `VERDICT: PASS|FAIL` (line 1): the result of replaying the plan's VERIFY block at the executor's commit.
-2. `CRITERION: <failing VERIFY line or none>` (line 2): the failing VERIFY line quoted verbatim when the verdict is FAIL, otherwise `none`.
-3. `BEYOND THE GAUGE:`: the second channel. A bullet list of real defects or risks in the change that the VERIFY block did not check; `- none` is allowed and means the validator looked and found nothing.
+1. `VERDICT: PASS|FAIL|UNRUN` (line 1): the result of running the plan's VERIFY block at the executor's commit. `UNRUN` means the seat could not execute some command of it and refuses to rule; it is never a pass and it is recorded as its own verdict value.
+2. `CRITERION: <failing VERIFY line or none>` (line 2): the failing VERIFY line quoted verbatim when the verdict is FAIL, the command that could not run when it is UNRUN, otherwise `none`.
+3. `RECEIPT: <value or none>` (line 3): the verbatim output of the receipt command the orchestrator named in the prompt, which prints a value the orchestrator wrote to disk after the prompt was fixed (for example `cat <plan>.receipt`). The orchestrator compares it with what it wrote; a PASS or FAIL whose receipt does not match is recorded as UNRUN, because nothing shows the block was run.
+4. `BEYOND THE GAUGE:`: the second channel. A bullet list of real defects or risks in the change that the VERIFY block did not check; `- none` is allowed and means the validator looked and found nothing.
 
 The replay (lines 1 and 2) is expected to add no information when the executor already ran the same block and reported it honestly; it exists so the verdict rests on a second run rather than on the executor's word. The second channel is where the validator earns its cost: in goal 1b53da77, five of five replays passed and all six defects found came from the second channel.
 
 ## Two strikes
 
-When the executor reports a defect, the orchestrator fixes the plan (never the repo) and re-spawns once; when the validator rejects, the same. When the executor fails a plan twice, or the validator rejects twice, the item goes back to the orchestrator, which either fixes the plan or takes the item frontier-in-the-loop and says so in its report. Never loop cheap retries.
+When the executor reports a defect, the orchestrator fixes the plan (never the repo) and re-spawns once; when the validator rejects, the same. An UNRUN is neither strike: it says the seat could not run, so the orchestrator fixes the seat or the environment and dispatches again, and the UNRUN row stays in the register. When the executor fails a plan twice, or the validator rejects twice, the item goes back to the orchestrator, which either fixes the plan or takes the item frontier-in-the-loop and says so in its report. Never loop cheap retries.
 
 ## Verdict register (mandatory)
 
@@ -86,7 +89,7 @@ bash scripts/pattern-f-verdict.sh --session <id> --plan <plan path> --commit <ha
 One row for the validator's replay (kind `replay`):
 
 ```bash
-bash scripts/pattern-f-verdict.sh --session <id> --plan <plan path> --commit <hash> --role validator --kind replay --verdict PASS|FAIL [--criterion "<failing VERIFY line>"] --goal <goal id> --db <db>
+bash scripts/pattern-f-verdict.sh --session <id> --plan <plan path> --commit <hash> --role validator --kind replay --verdict PASS|FAIL|UNRUN [--criterion "<failing VERIFY line>"] [--note "<what did not run>"] --goal <goal id> --db <db>
 ```
 
 One row per BEYOND THE GAUGE bullet that names a concrete defect (kind `independent`; independent rows carry `--verdict FAIL` and the finding in `--note`):
