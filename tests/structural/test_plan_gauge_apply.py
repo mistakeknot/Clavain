@@ -17,6 +17,7 @@ partially edited and the output says how to revert.
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -220,3 +221,69 @@ def test_apply_prints_nothing_fails_when_output_appears(repo: Path):
     r = run("--apply", "--repo-root", str(repo), str(write(repo, plan)))
     assert r.returncode == 1, r.stdout + r.stderr
     assert unchanged(repo)
+
+
+def test_apply_runs_verify_fence_from_a_file_with_stdin_at_eof(repo: Path):
+    plan = (
+        HEAD + PRE_OK + TASK1
+        + '### Verify Task 1\n\n```bash\nset +e\nread -r line; echo "after"\nset -e\n```\n\n'
+        + "Expected: exit 0\n\n" + COMMIT
+    )
+    r = run("--apply", "--repo-root", str(repo), "--json", str(write(repo, plan)))
+    assert r.returncode == 0, r.stdout + r.stderr
+    doc = json.loads(r.stdout)
+    verify = [step for step in doc["apply"]["steps"] if step["kind"] == "verify"][-1]
+    assert "after" in verify["detail"]
+
+
+def test_apply_timeout_kills_the_verify_fence_process_group(repo: Path):
+    plan = (
+        HEAD
+        + "### Verify Task 1\n\n```bash\ntrap '' HUP\n"
+        + "( sleep 3; touch survived ) & sleep 30\n```\n\n"
+        + "Expected: exit 0\n\n" + COMMIT
+    )
+    r = run(
+        "--apply", "--repo-root", str(repo), "--timeout", "1",
+        str(write(repo, plan)),
+    )
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "timed out after 1 seconds" in r.stdout + r.stderr
+    time.sleep(2)
+    assert not (repo / "survived").exists()
+
+
+def test_apply_edit_preserves_crlf_line_endings(repo: Path):
+    target = repo / "src" / "app.py"
+    target.write_bytes(APP.replace("\n", "\r\n").encode())
+    git(repo, "add", "src/app.py")
+    git(repo, "commit", "-q", "-m", "crlf baseline")
+
+    r = run("--apply", "--repo-root", str(repo), str(write(repo, GOOD)))
+    assert r.returncode == 0, r.stdout + r.stderr
+    result = target.read_bytes()
+    assert b'return "hello"' in result
+    assert result.splitlines(keepends=True)
+    assert all(line.endswith(b"\r\n") for line in result.splitlines(keepends=True))
+
+
+def test_apply_refuses_invalid_utf8_before_writing_any_target(repo: Path):
+    invalid = repo / "src" / "invalid.py"
+    invalid_bytes = b"VALUE = \xff\n"
+    invalid.write_bytes(invalid_bytes)
+    git(repo, "add", "src/invalid.py")
+    git(repo, "commit", "-q", "-m", "invalid utf8 baseline")
+    plan = (
+        HEAD + PRE_OK + TASK1
+        + "## Task 2\n\nIn `src/invalid.py`:\n\n"
+        + "old_string:\n```python\nVALUE = �\n```\n\n"
+        + "new_string:\n```python\nVALUE = fixed\n```\n\n"
+        + COMMIT
+    )
+
+    r = run("--apply", "--repo-root", str(repo), "--json", str(write(repo, plan)))
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "src/invalid.py" in r.stdout + r.stderr
+    assert (repo / "src" / "app.py").read_text() == APP
+    assert not (repo / "src" / "new_module.py").exists()
+    assert invalid.read_bytes() == invalid_bytes

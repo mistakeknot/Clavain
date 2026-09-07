@@ -77,6 +77,7 @@ import argparse
 import json
 import os
 import re
+import signal
 import shlex
 import subprocess
 import sys
@@ -1001,26 +1002,67 @@ def _apply_expectation(plan_text: str, block: Block) -> ApplyExpectation:
 
 def _run_fence(block: Block, repo_root: Path, timeout: float) -> tuple[int, str, str, str]:
     """Run one shell fence through bash with the contract's strict options."""
+    script_path: str | None = None
     try:
-        result = subprocess.run(
-            ["bash", "-e", "-o", "pipefail"],
-            input=block.body,
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="\n", suffix=".sh", delete=False,
+        ) as script:
+            script.write(block.body)
+            script_path = script.name
+        process = subprocess.Popen(
+            ["bash", "-e", "-o", "pipefail", script_path],
             cwd=repo_root,
-            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
+            start_new_session=True,
         )
-        return result.returncode, result.stdout, result.stderr, ""
-    except subprocess.TimeoutExpired as exc:
-        stdout = (
-            exc.stdout.decode(errors="replace")
-            if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-        )
-        stderr = (
-            exc.stderr.decode(errors="replace")
-            if isinstance(exc.stderr, bytes) else (exc.stderr or "")
-        )
-        return 124, stdout, stderr, f"timed out after {timeout:g} seconds"
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+            return process.returncode, stdout, stderr, ""
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+            try:
+                stdout, stderr = process.communicate(timeout=0.2)
+            except subprocess.TimeoutExpired:
+                stdout = stderr = None
+            # Sweep the group even when bash has already exited and closed its
+            # pipes: a detached or output-redirected child may still be alive.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+            if stdout is None or stderr is None:
+                stdout, stderr = process.communicate()
+            return 124, stdout, stderr, f"timed out after {timeout:g} seconds"
+    finally:
+        if script_path is not None:
+            try:
+                os.unlink(script_path)
+            except FileNotFoundError:
+                pass
+
+
+UTF8_BOM = b"\xef\xbb\xbf"
+
+
+def _decode_edit_bytes(content: bytes) -> tuple[bytes, str, str]:
+    """Decode an edit target strictly and normalise its text to LF for matching."""
+    bom = UTF8_BOM if content.startswith(UTF8_BOM) else b""
+    payload = content[len(bom):]
+    text = payload.decode("utf-8")
+    line_ending = "\r\n" if b"\r\n" in payload else "\n"
+    normalised = text.replace("\r\n", "\n").replace("\r", "\n")
+    return bom, normalised, line_ending
+
+
+def _encode_edit_bytes(bom: bytes, text: str, line_ending: str) -> bytes:
+    """Encode edited LF-normalised text with the target's original convention."""
+    return bom + text.replace("\n", line_ending).encode("utf-8")
 
 
 def _resolved_target(repo_root: Path, target: str | None) -> tuple[Path | None, str | None]:
@@ -1121,6 +1163,27 @@ def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, A
     if git_note:
         result.messages.append(f"apply: note: {git_note}")
 
+    # Decode every existing edit target before running anything or writing any
+    # file. A later refusal must not leave an earlier edit partially applied.
+    checked_targets: set[str] = set()
+    for edit in edits:
+        if edit.create:
+            continue
+        path, target = _resolved_target(repo_root, edit.target)
+        if path is None or target is None or not path.is_file() or target in checked_targets:
+            continue
+        checked_targets.add(target)
+        try:
+            _decode_edit_bytes(path.read_bytes())
+        except UnicodeDecodeError:
+            message = f"apply: refused before edits: {target} is not valid UTF-8"
+            result.steps.append(ApplyStep(
+                kind="edit", line=edit.line, target=target,
+                status="failed", detail=message,
+            ))
+            result.messages.append(message)
+            return 3, result, git_note
+
     # Preconditions are a single pre-edit phase even though the rest of the
     # contract is replayed in document order.
     preconditions: list[tuple[Block, str]] = []
@@ -1215,7 +1278,17 @@ def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, A
                 result.messages.append(message)
                 _append_revert(result)
                 return 4, result, git_note
-            current = path.read_text(errors="replace")
+            try:
+                bom, current, line_ending = _decode_edit_bytes(path.read_bytes())
+            except UnicodeDecodeError:
+                message = f"apply: edit {target} (plan line {edit.line}): target is not valid UTF-8"
+                result.steps.append(ApplyStep(
+                    kind="edit", line=edit.line, target=target,
+                    status="failed", detail=message,
+                ))
+                result.messages.append(message)
+                _append_revert(result)
+                return 4, result, git_note
             count = current.count(edit.old)
             if count != 1:
                 mismatch = "old_string not found" if count == 0 else f"old_string found {count} times"
@@ -1227,7 +1300,8 @@ def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, A
                 result.messages.append(message)
                 _append_revert(result)
                 return 4, result, git_note
-            path.write_text(current.replace(edit.old, edit.new, 1))
+            updated = current.replace(edit.old, edit.new, 1)
+            path.write_bytes(_encode_edit_bytes(bom, updated, line_ending))
             if target not in result.written:
                 result.written.append(target)
             result.steps.append(ApplyStep(
@@ -1251,6 +1325,8 @@ def apply_exact(plan_text: str, repo_root: Path, timeout: float) -> tuple[int, A
         else:
             matched = rc == 0
         detail = run_detail or "matched " + expectation.raw
+        if not run_detail and stdout:
+            detail += "\nstdout (last 20 lines):\n" + "\n".join(stdout.splitlines()[-20:])
         if not matched:
             message = (
                 f"apply: verify {heading} (plan line {block.line}): "
