@@ -22,7 +22,7 @@ cat > "$TMP_ROOT/bin/ic" <<'FAKE_IC'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_IC_LOG"
 if [[ "$*" == *"route dispatch"* ]]; then
-  cat <<'JSON' | jq --arg args "$*" 'if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end'
+  cat <<'JSON' | jq --arg args "$*" --arg policy "$FAKE_ROUTING_POLICY" --arg hash "$FAKE_POLICY_HASH" '.policy_source=$policy | .policy_hash=$hash | if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end'
 {
   "requested_role": "deep-execution",
   "profile_ref": "deep-astra",
@@ -108,6 +108,9 @@ FAKE_CODEX
 chmod +x "$TMP_ROOT/bin/ic" "$TMP_ROOT/bin/codex"
 
 export PATH="$TMP_ROOT/bin:$PATH"
+export FAKE_ROUTING_POLICY="$ROOT/config/routing.yaml"
+FAKE_POLICY_HASH="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$FAKE_ROUTING_POLICY")"
+export FAKE_POLICY_HASH
 export FAKE_IC_LOG="$TMP_ROOT/ic.log"
 export FAKE_IC_CONTEXT_LOG="$TMP_ROOT/contexts.jsonl"
 export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"

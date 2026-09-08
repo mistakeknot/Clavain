@@ -1134,6 +1134,42 @@ if [[ "$ENGINE" != "auto" || "$VIA" == "zaka" ]]; then
   _apply_context_gateway
 fi
 
+# Governed children must receive the same contract even when user-scope
+# instructions are intentionally excluded (Claude review seats do this).
+# Add it after context compaction, with the immutable resolved decision.
+if [[ "$ROLE_RESOLVED" == true ]]; then
+  case "$ENGINE" in
+    codex|claude|claude-code|kimi)
+      contract_host="${ENGINE/claude-code/claude}"
+      contract_policy="$(jq -r '.policy_source // empty' <<< "$RESOLVED_ROUTE_JSON")"
+      contract_policy="${contract_policy:-${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}}"
+      contract_hash="$(jq -r '.policy_hash // empty' <<< "$RESOLVED_ROUTE_JSON")"
+      if [[ ! "$contract_hash" =~ ^[0-9a-f]{64}$ && "$DRY_RUN" != true ]]; then
+        echo 'Error: governed execution requires an immutable policy hash from Intercore' >&2
+        exit 1
+      fi
+      reasoning_contract="$(python3 "$DISPATCH_SCRIPT_DIR/sync-agent-instructions.py" \
+        --source "$DISPATCH_SCRIPT_DIR/.." --host "$contract_host" --policy "$contract_policy" \
+        --expected-policy-hash "$contract_hash" --render)" || {
+          echo 'Error: cannot deliver the selected reasoning contract to the governed child' >&2
+          exit 1
+        }
+      PROMPT="$reasoning_contract
+
+This dispatch was resolved under the following decision. Preserve its
+policy, classification, profile, review and handoff requirements:
+$RESOLVED_ROUTE_JSON
+
+Task:
+$PROMPT"
+      ;;
+    *)
+      echo "Error: governed reasoning contract delivery is unsupported for backend '$ENGINE'" >&2
+      exit 1
+      ;;
+  esac
+fi
+
 # ─── Compound Autonomy Guard (rsj.1.8) ──────────────────────────────────────
 # If Mycroft is dispatching, check compound autonomy score before proceeding.
 if [[ -n "${MYCROFT_TIER:-}" ]]; then

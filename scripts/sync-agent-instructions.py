@@ -11,20 +11,31 @@ import sys
 import tempfile
 
 
-def render(source, host):
+def render(source, host, portable_policy=False, policy_source=None, expected_policy_hash=None):
     source = source.resolve(strict=True)
     hosts = json.loads((source/'config/host-adapters.json').read_text())
     adapter = hosts[host]
-    policy = source/'config/routing.yaml'
+    policy = Path(policy_source).resolve(strict=True) if policy_source else source/'config/routing.yaml'
     policy_hash = hashlib.sha256(policy.read_bytes()).hexdigest()
+    if expected_policy_hash and policy_hash != expected_policy_hash:
+        raise ValueError('Reasoning policy changed after resolution; reclassify before dispatch')
     version = json.loads((source/'.claude-plugin/plugin.json').read_text()).get('version', 'unversioned')
     body = (source/'config/agent-instructions.md').read_text()
     host_text = (source/adapter['adapter']).read_text() if 'adapter' in adapter else adapter['instruction']
-    content_hash = hashlib.sha256((body+host_text).encode()).hexdigest()
-    receipt = f'Host: {host}; package: {version}; policy SHA256: {policy_hash}; contract SHA256: {content_hash}.'
-    body = body.replace('{{INSTALLATION_RECEIPT}}', receipt).replace('{{POLICY_PATH}}', shlex.quote(str(policy))).replace('{{HOST_ADAPTER}}', host_text.strip())
+    selection = 'portable-managed-installation' if portable_policy else 'explicit-installation'
+    policy_arg = ('"${CLAVAIN_ROUTING_POLICY:-$HOME/.agents/skills/clavain/../config/routing.yaml}"'
+                  if portable_policy else shlex.quote(str(policy)))
+    # Keep existing explicit-install hashes stable, but distinguish portable
+    # selection and its executable expression in portable contract receipts.
+    hash_input = body+host_text
+    if portable_policy:
+        hash_input += '\0'+selection+'\0'+policy_arg
+    content_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+    receipt = f'Host: {host}; package: {version}; policy selection: {selection}; policy SHA256: {policy_hash}; contract SHA256: {content_hash}.'
+    body = body.replace('{{INSTALLATION_RECEIPT}}', receipt).replace('{{POLICY_PATH}}', policy_arg).replace('{{HOST_ADAPTER}}', host_text.strip())
     metadata = dict(host=host, source=str(source), version=version, policy_hash=policy_hash,
-                    contract_hash=content_hash, surface=adapter['surface'], routing='instructional',
+                    contract_hash=content_hash, policy_selection=selection,
+                    surface=adapter['surface'], routing='instructional',
                     governed_dispatch=adapter['dispatch'], behaviorally_verified=False,
                     parent_model_changed=False)
     return body, metadata
@@ -38,8 +49,14 @@ def main():
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--check', action='store_true')
     p.add_argument('--render', action='store_true')
+    p.add_argument('--portable-policy', action='store_true',
+                   help='Resolve the policy through each machine\'s managed skill link, with CLAVAIN_ROUTING_POLICY override')
+    p.add_argument('--policy', type=Path, help='Explicit policy used by a governed dispatch receipt')
+    p.add_argument('--expected-policy-hash', help='Reject policy drift from an immutable dispatch decision')
     args = p.parse_args()
-    body, metadata = render(args.source, args.host)
+    if args.policy and args.portable_policy:
+        p.error('--policy and --portable-policy are mutually exclusive')
+    body, metadata = render(args.source, args.host, args.portable_policy, args.policy, args.expected_policy_hash)
     if args.render:
         print(body, end='')
         return 0

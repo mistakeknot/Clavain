@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-09-08",
+  "task": "Sylveste-drqs",
+  "scope": "Fresh-session comprehension of the supplied contract; not native instruction discovery or governed delegation.",
+  "prompt": {
+    "path": "reasoning-routing-probe.md",
+    "sha256": "71a29074b33ff4f122d1dfad95732921d6f74c813d27127dcb6508a4ef71361d",
+    "authorization": "User explicitly approved this prepared payload before execution; its proposal header is retained verbatim."
+  },
+  "policy_sha256": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+  "semantic_acceptance": {
+    "planning_requires_frontier": true,
+    "review_requires_other_frontier": true,
+    "operational_timeout_counts_as_capability_strike": false,
+    "parent_model_changes_from_config": false,
+    "allowed_reviewer_canonical_model": "claude-fable-5-1"
+  },
+  "runs": [
+    {
+      "host": "claude",
+      "cli_version": "2.1.263",
+      "requested_model": "claude-fable-5-1",
+      "requested_effort": "high",
+      "observed_effort": null,
+      "effort_evidence": "CLI accepted --effort high; provider response does not echo effort.",
+      "model_evidence": "Successful JSON result modelUsage includes claude-fable-5-1; a separate ancillary Haiku usage entry is also reported.",
+      "usage_by_model": {
+        "claude-haiku-4-5-20251001": {
+          "inputTokens": 2234,
+          "outputTokens": 14,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0,
+          "thinkingTokens": 0,
+          "canonicalModel": "claude-haiku-4-5",
+          "provider": "firstParty"
+        },
+        "claude-fable-5-1": {
+          "inputTokens": 2,
+          "outputTokens": 1134,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 20669,
+          "thinkingTokens": 816,
+          "canonicalModel": "claude-fable-5-1",
+          "provider": "firstParty"
+        }
+      },
+      "response": {
+        "planning_requires_frontier": true,
+        "review_requires_other_frontier": true,
+        "allowed_reviewer_model": "claude-fable-5-1",
+        "operational_timeout_counts_as_capability_strike": false,
+        "parent_model_changes_from_config": false,
+        "handoff_requirement": "Hand off only with explicit decisions, constraints, verification steps, and escalation conditions, keeping frontier involvement while the replay experiments still change the plan.",
+        "decision_context": {
+          "reasons": [
+            "foundational-invariants",
+            "difficult-verification"
+          ],
+          "rationale": "New shared agent dispatch admission capability alters foundational invariants and depends on replay experiments as acceptance; author gpt-6-astra requires the other frontier (Fable) for review with --producer-identity from the author receipt; timeouts are operational, not capability strikes; config changes do not alter the running parent model."
+        }
+      },
+      "semantic_pass": true,
+      "strict_json_format_pass": false,
+      "format_note": "Returned a Markdown JSON fence and an extra decision_context field.",
+      "raw_result_sha256": "c2e716c8d3092386131f5a7576e8eddaba4134d61807bbc81a8ca7c4ed5cacd5"
+    },
+    {
+      "host": "codex",
+      "cli_version": "0.153.4",
+      "session_id": "01a082bc-9d56-7eb0-8836-1d8929b5cc62",
+      "requested_model": "gpt-6-astra",
+      "requested_effort": "high",
+      "runtime_model": "gpt-6-astra",
+      "runtime_effort": "high",
+      "model_effort_evidence": "Persisted Codex turn_context; not an independent provider attestation.",
+      "usage": {
+        "input_tokens": 28013,
+        "cached_input_tokens": 12160,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 185,
+        "reasoning_output_tokens": 85
+      },
+      "response": {
+        "planning_requires_frontier": true,
+        "review_requires_other_frontier": true,
+        "allowed_reviewer_model": "Fable",
+        "operational_timeout_counts_as_capability_strike": false,
+        "parent_model_changes_from_config": false,
+        "handoff_requirement": "Retain frontier involvement while replay experiments change the plan, and hand off only with explicit decisions, constraints, verification including replay acceptance criteria, and escalation conditions."
+      },
+      "semantic_pass": true,
+      "strict_json_format_pass": true,
+      "operational_notes": [
+        "Model catalog refresh timed out; requested Astra execution still completed.",
+        "Skill descriptions shortened to fit context budget."
+      ],
+      "raw_events_sha256": "ed9a1857890328440be729a2bece66d42d7abf2ca0a4dd837bc53fd8a0c32d8e"
+    }
+  ],
+  "limitations": [
+    "Initial two runs supplied the contract; subsequent native-discovery runs did not.",
+    "These comprehension probes are separate from the live governed dispatch recorded in reasoning-routing-dispatch-receipt.json.",
+    "Gemini, Kimi, OpenCode and editor model behavior remains unverified; their installed instructions are instructional.",
+    "Hermes native discovery/hooks/tool registration were verified without a model call.",
+    "Fable effort is requested and accepted by the CLI, not independently echoed by the provider."
+  ],
+  "native_instruction_discovery": {
+    "prompt_path": "reasoning-routing-native-probe.md",
+    "prompt_sha256": "d6331b555797b4d62c18dd1be109ceaf4555b703feca65ef02a8c9cb4e0d3062",
+    "contract_supplied_in_prompt": false,
+    "runs": [
+      {
+        "host": "claude",
+        "setting_sources": [],
+        "instruction_discovery_pass": false,
+        "response": {
+          "policy_sha256": null,
+          "policy_selection": null,
+          "planning_requires_frontier": null,
+          "review_requires_other_frontier": null,
+          "allowed_reviewer_model": null,
+          "operational_timeout_counts_as_capability_strike": null,
+          "parent_model_changes_from_config": null,
+          "handoff_requirement": null,
+          "note": "No Clavain installation receipt, dispatch admission policy, or frontier-model review rules are present in the instructions loaded for this session, so every field is null rather than fabricated."
+        },
+        "interpretation": "Negative control: excluding every settings source also excluded the user contract.",
+        "usage_by_model": {
+          "claude-haiku-4-5-20251001": {
+            "inputTokens": 1050,
+            "outputTokens": 13,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0,
+            "thinkingTokens": 0
+          },
+          "claude-fable-5-1": {
+            "inputTokens": 2,
+            "outputTokens": 462,
+            "cacheReadInputTokens": 17564,
+            "cacheCreationInputTokens": 1343,
+            "thinkingTokens": 267
+          }
+        },
+        "raw_result_sha256": "a3477047bf27f0ad3b173af740a1ff994fc23fd7f3b9bce1b36ce6b44fba7249"
+      },
+      {
+        "host": "claude",
+        "setting_sources": [
+          "user"
+        ],
+        "instruction_discovery_pass": true,
+        "response": {
+          "policy_sha256": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+          "policy_selection": "portable-managed-installation",
+          "planning_requires_frontier": true,
+          "review_requires_other_frontier": true,
+          "allowed_reviewer_model": "claude-fable-5-1",
+          "operational_timeout_counts_as_capability_strike": false,
+          "parent_model_changes_from_config": false,
+          "handoff_requirement": "Hand off only with explicit decisions, constraints, verification, and escalation conditions, keeping frontier involvement while the replay experiments still change the plan and preserving those experiments as acceptance evidence."
+        },
+        "requested_model": "claude-fable-5-1",
+        "requested_effort": "high",
+        "observed_effort": null,
+        "model_evidence": "Successful modelUsage entry for claude-fable-5-1.",
+        "usage_by_model": {
+          "claude-fable-5-1": {
+            "inputTokens": 2,
+            "outputTokens": 606,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 137282,
+            "thinkingTokens": 350
+          }
+        },
+        "raw_result_sha256": "7a37ad56fd39b20ad26a57ea59c6c8d5605cbf07fdaccc6051e4400fe6733196"
+      },
+      {
+        "host": "codex",
+        "ignore_user_config": true,
+        "instruction_discovery_pass": true,
+        "response": {
+          "policy_sha256": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+          "policy_selection": "portable-managed-installation",
+          "planning_requires_frontier": true,
+          "review_requires_other_frontier": true,
+          "allowed_reviewer_model": "Fable",
+          "operational_timeout_counts_as_capability_strike": false,
+          "parent_model_changes_from_config": false,
+          "handoff_requirement": "Hand off only with explicit decisions, constraints, verification including replay experiments, and escalation conditions, retaining frontier involvement while investigation or experiments change the plan."
+        },
+        "runtime_model": "gpt-6-astra",
+        "runtime_effort": "high",
+        "session_id": "01a082c4-d2bc-7b62-a026-a91c9ee7d1bf",
+        "usage": {
+          "input_tokens": 27531,
+          "cached_input_tokens": 12160,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 301,
+          "reasoning_output_tokens": 147
+        },
+        "raw_events_sha256": "dfb54dca706116f95776f05594d7b6e3f20ebdc95d087e48cecd03c4990eecb0"
+      }
+    ]
+  },
+  "local_instruction_rollout": [
+    {
+      "host": "codex",
+      "current": true,
+      "policy_hash": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+      "contract_hash": "d23177689d589d497ae1cccb75f59bd086ca4f15691ffa7817f544452746f175",
+      "policy_selection": "portable-managed-installation",
+      "routing": "instructional",
+      "parent_model_changed": false,
+      "local_content_preserved": true,
+      "mode_preserved": true,
+      "idempotent": true
+    },
+    {
+      "host": "claude",
+      "current": true,
+      "policy_hash": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+      "contract_hash": "1291b8c366daaafbb10408b54c38fd61647f8b1c37d5019b122ff734f1df2796",
+      "policy_selection": "portable-managed-installation",
+      "routing": "instructional",
+      "parent_model_changed": false,
+      "local_content_preserved": true,
+      "mode_preserved": true,
+      "idempotent": true
+    },
+    {
+      "host": "kimi",
+      "current": true,
+      "policy_hash": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+      "contract_hash": "223f113b9fbf5810fd55ba7e9d0a581cf74ad1fbe658eb42d52e03cd02dc1a47",
+      "policy_selection": "portable-managed-installation",
+      "routing": "instructional",
+      "parent_model_changed": false,
+      "local_content_preserved": true,
+      "mode_preserved": true,
+      "idempotent": true
+    },
+    {
+      "host": "gemini",
+      "current": true,
+      "policy_hash": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+      "contract_hash": "f68b7660c589a612fc47b054650e4a7e236779c5041f11105b02ff8c10b2999d",
+      "policy_selection": "portable-managed-installation",
+      "routing": "instructional",
+      "parent_model_changed": false,
+      "local_content_preserved": true,
+      "mode_preserved": true,
+      "idempotent": true
+    },
+    {
+      "host": "opencode",
+      "current": true,
+      "policy_hash": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+      "contract_hash": "c3d50933936f81766fa9fe4ca2f9db9985562869044d0182c32a5a4aaaf6d7da",
+      "policy_selection": "portable-managed-installation",
+      "routing": "instructional",
+      "parent_model_changed": false,
+      "local_content_preserved": true,
+      "mode_preserved": true,
+      "idempotent": true
+    },
+    {
+      "host": "hermes",
+      "current": true,
+      "policy_hash": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+      "contract_hash": "b3d474f12250c7c427a09fa0ec8fab1f964c3115cc7487bfa683b822ae35a068",
+      "policy_selection": "portable-managed-installation",
+      "routing": "instructional",
+      "parent_model_changed": false,
+      "local_content_preserved": true,
+      "mode_preserved": true,
+      "idempotent": true
+    },
+    {
+      "host": "cursor",
+      "current": true,
+      "policy_hash": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+      "contract_hash": "bff60fe08cdfdd6e18e0922b3b725157b8f45c78fc6e4d5161259c86bb3f3a7b",
+      "policy_selection": "portable-managed-installation",
+      "routing": "instructional",
+      "parent_model_changed": false,
+      "local_content_preserved": true,
+      "mode_preserved": true,
+      "idempotent": true
+    },
+    {
+      "host": "vscode",
+      "current": true,
+      "policy_hash": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+      "contract_hash": "7b47cf2760229a059d6ddc40e031d9bd61c4a1af57d7d7d738227bb29f6d4924",
+      "policy_selection": "portable-managed-installation",
+      "routing": "instructional",
+      "parent_model_changed": false,
+      "local_content_preserved": true,
+      "mode_preserved": true,
+      "idempotent": true
+    }
+  ],
+  "local_instruction_rollout_notes": "Unmanaged routing warnings in Claude and Kimi were inspected: both matched unrelated Git sync-model prose, not model-routing overrides.",
+  "hermes_native_discovery": {
+    "host": "hermes",
+    "selected_profile": "default",
+    "native_discovery_verified": true,
+    "delegation_blocked": true,
+    "tool_registered": true,
+    "config_preserved": true,
+    "parent_model_changed": false,
+    "model_execution_verified": false
+  },
+  "governed_dispatch_receipt": "reasoning-routing-dispatch-receipt.json"
+}

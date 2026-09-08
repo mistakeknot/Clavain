@@ -101,13 +101,37 @@ python3 scripts/sync-agent-instructions.py --source /selected/Clavain \
 
 Use the declared native surface: Claude `CLAUDE.md` plus session-start, Codex and
 Kimi `AGENTS.md`, Gemini `GEMINI.md`, OpenCode `AGENTS.md`, Cursor an always-applied
-`.mdc` rule, VS Code `.github/copilot-instructions.md`. Select each profile's file
+`.mdc` rule, VS Code `.github/copilot-instructions.md` or a user
+`prompts/*.instructions.md` file with `applyTo: "**"`. Select each profile's file
 explicitly. Dotfiles consume the rendered block, never own a fork of the policy.
 For Cursor, retain the native `alwaysApply: true` frontmatter outside the block.
 The check reports potential unmanaged model overrides without copying local text.
 
-Hermes: link `adapters/hermes` into the selected profile's plugins directory and
-enable `clavain` through the host's supported plugin selection. The native plugin
+For instruction files shared between machines through dotfiles, add
+`--portable-policy` to sync and check. This keeps machine paths out of shared
+content and selects `CLAVAIN_ROUTING_POLICY` when set, otherwise the installation
+linked by `~/.agents/skills/clavain`. Each machine must have that managed link and
+an Intercore version that resolves symlinks before parent-directory traversal.
+Missing selections fail closed. The receipt identifies this selection mode;
+rerender after installation changes to refresh the recorded policy hash. Keep
+the default explicit selection for standalone installations without a managed link.
+
+Hermes: use the selected Hermes virtualenv's Python (with PyYAML) to run:
+
+```bash
+python scripts/sync-hermes-adapter.py --source /selected/Clavain \
+  --home /selected/hermes-profile --dry-run
+python scripts/sync-hermes-adapter.py --source /selected/Clavain \
+  --home /selected/hermes-profile
+python scripts/sync-hermes-adapter.py --source /selected/Clavain \
+  --home /selected/hermes-profile --check
+```
+
+This links `adapters/hermes` into that profile and enables only `clavain` using
+the native plugin allowlist. It preserves config bytes outside the plugin section,
+unrelated plugin settings, symlinks and file modes. Unsupported YAML structures
+and unmanaged adapter targets fail explicitly. It runs no migrations or model
+calls. The native plugin
 uses `pre_llm_call`, `pre_tool_call`, `on_session_start`, and `subagent_stop`;
 `clavain_dispatch` carries role/context/producer to the shared wrapper. Native
 `delegate_task` is blocked to prevent silent inheritance. Session and child
@@ -115,6 +139,13 @@ observation remain in Hermes telemetry. No profile personalities or credentials
 are rewritten. The installed Hermes hook API was inspected; hook registration
 alone does not prove behavioral enforcement. Older hosts that ignore blocking
 directives are unsupported. See the [Hermes plugin hook contract](https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks).
+
+Governed dispatch supplies the shared contract and resolved decision to the child
+after context compaction. It verifies the policy hash again before execution and
+rejects drift. This is needed for Claude review seats, which intentionally exclude
+user settings: that also excludes the global instruction file, as described in
+the [Claude Code settings-source contract](https://code.claude.com/docs/en/agent-sdk/claude-code-features).
+Resolving a role does not itself establish kernel spawn or budget admission.
 
 Instruction sync reports `instructional`, wrapper calls produce
 `dispatch-enforced` receipts, and only a fresh-session probe can establish
