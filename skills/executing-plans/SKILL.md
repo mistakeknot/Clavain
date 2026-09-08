@@ -13,6 +13,21 @@ Load plan, review critically, execute tasks in batches, report for review betwee
 
 **Pattern F (offload) runs:** when this plan is executed by a fresh-context executor subagent with a separate validator, follow `references/pattern-f-contracts.md` in this skill directory for the executor and validator prompts, the gauge precondition, and the verdict register write.
 
+## Reasoning allocation
+
+Before substantive planning or execution, read the selected Clavain installation's
+`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
+and an accountable decision context. Substantial uncertainty, foundational
+invariants, broad consequences, difficult verification, and demonstrated
+capability failure require frontier involvement. Domain names are examples.
+Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
+capabilities require frontier planning. Keep frontier involvement while evidence
+changes the plan. Hand off with decisions, constraints, verification, and escalation
+conditions explicit; retain empirical acceptance. Foundational/consequential plan
+review requires the other frontier model. Operational failures are not capability
+strikes. Preserve stricter gates; unsupported host routing must be reported.
+
+
 ## Step 1: Load and Review Plan
 
 1. Read plan file
@@ -59,7 +74,7 @@ Default: first 3 tasks per batch. Per task: mark in_progress → follow steps ex
 3. **Dry-run:** `python3 "$ORCHESTRATE" --dry-run "$MANIFEST"` — present wave breakdown (parallelism, cross-stage deps, tasks missing files)
 4. **Ask for approval** (AskUserQuestion): Approve | Edit mode | Skip to manual
 5. **Execute:** `python3 "$ORCHESTRATE" "$MANIFEST" --plan "$PLAN_PATH" --project-dir "$(pwd)"` with `timeout: 600000`
-   - **Review pipeline is ON by default** (goal 7d610151): per task, the orchestrator runs the plan's `<verify>` blocks as machine gates, then dispatches an INDEPENDENT reviewer on the task-scoped git diff (never the executor's self-report), then loops fix→re-review up to 2 rounds. Reviewer engine is tier-routed: `fast` → codex, `deep` → claude (opus, via dispatch.sh `--to claude`). Force one with `ORC_REVIEW_ENGINE=codex|claude`; adjust rounds with `ORC_MAX_FIX_ROUNDS`; the sealed `<plan>.criteria.md` sidecar is handed to reviewers automatically when present. `--no-review` restores self-report gating.
+   - **Review pipeline is ON by default** (goal 7d610151): per task, the orchestrator runs the plan's `<verify>` blocks as machine gates, then dispatches an INDEPENDENT reviewer on the task-scoped git diff (never the executor's self-report), then loops fix→re-review up to 2 rounds. Governed review resolves the validation role and executor identity; legacy tier-only runs remain ungoverned. Preserve independent review; adjust rounds with `ORC_MAX_FIX_ROUNDS`; the sealed `<plan>.criteria.md` sidecar is handed to reviewers automatically when present. `--no-review` restores self-report gating.
 6. **Read summary:** `pass` → reviewed and approved (with review on); `warn` → read output, assess; `fail`/`error` → offer retry/manual/skip; `skipped` → report dep failure
    - **`escalated`** → review/verify still failing after the fix-round budget (two strikes). Read the task's `review-*.md` + `verify-*.txt` artifacts, rule on the findings yourself (controller judgment — this is the doctrine's escalation seat), then re-run or fix via 2B.
    - **`question`** → the executor asked instead of guessing (`VERDICT: QUESTION …` — the question is in the summary line). Answer it, fold the answer into the plan or task prompt, re-run.

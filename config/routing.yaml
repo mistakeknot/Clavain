@@ -104,16 +104,35 @@ subagents:
     done:
       model: sonnet
 
+reasoning:
+  frontier_models: [gpt-6-astra, claude-fable-5-1]
+  frontier_reasons: [unresolved-success-criteria, foundational-invariants, broad-consequences, difficult-verification, capability-failure]
+  dual_review_reasons: [foundational-invariants, broad-consequences]
+  strikes: 2
+  profiles:
+    ci-campaign-pilot:
+      scope: mk-ag2s
+      roles:
+        main-integrator: pilot-opus
+        routine-execution: pilot-sonnet
+        validation: validation-sol
+
 dispatch:
   # Canonical endpoints, not UI aliases, define producer/validator separation.
   model_aliases:
     fable: claude-fable-5-1
+    opus: claude-opus-4-6
+    sonnet: claude-sonnet-4-6
     gpt-5.6: gpt-5.6-sol
     k3: kimi-code/k3
     kimi/k3: kimi-code/k3
   # Roles are the authoritative dispatch interface. Tier names remain for
   # existing consumers that need only a model string.
   roles:
+    planning: routine-sol
+    frontier-planning: planning-astra
+    plan-review: review-fable
+    escalation: planning-astra
     main-integrator: main-astra
     scout: scout-sol
     routine-execution: routine-sol
@@ -124,6 +143,33 @@ dispatch:
     cross-lab-review: crosslab-fable
 
   tiers:
+    planning-astra:
+      role: frontier-planning
+      backend: codex
+      model: gpt-6-astra
+      reasoning_effort: xhigh
+      service_tier: standard
+      minimum_codex_version: 0.153.1
+      fallbacks: [review-fable]
+    review-fable:
+      role: plan-review
+      backend: claude
+      model: fable
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [planning-astra]
+    pilot-opus:
+      role: main-integrator
+      backend: main
+      model: opus
+      reasoning_effort: high
+      service_tier: standard
+    pilot-sonnet:
+      role: routine-execution
+      backend: claude
+      model: sonnet
+      reasoning_effort: high
+      service_tier: standard
     fast:
       role: routine-execution
       backend: codex

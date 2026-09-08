@@ -10,6 +10,21 @@ description: Set up a Sylveste project, new or existing — introspect, create r
 One-command project setup. Idempotent — skips what already exists.
 **Announce at start:** "I'm using the project-onboard skill to set up this project."
 
+## Reasoning allocation
+
+Before substantive planning or execution, read the selected Clavain installation's
+`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
+and an accountable decision context. Substantial uncertainty, foundational
+invariants, broad consequences, difficult verification, and demonstrated
+capability failure require frontier involvement. Domain names are examples.
+Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
+capabilities require frontier planning. Keep frontier involvement while evidence
+changes the plan. Hand off with decisions, constraints, verification, and escalation
+conditions explicit; retain empirical acceptance. Foundational/consequential plan
+review requires the other frontier model. Operational failures are not capability
+strikes. Preserve stricter gates; unsupported host routing must be reported.
+
+
 ## Invocation
 
 - Bare: `/clavain:project-onboard`

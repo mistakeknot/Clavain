@@ -11,7 +11,11 @@ START = b'<!-- BEGIN CLAVAIN CODEX TOOL MAP -->'
 END = b'<!-- END CLAVAIN CODEX TOOL MAP -->'
 
 
-def replace_block(old, block):
+def replace_block(old, block, legacy_kimi=False):
+    if legacy_kimi and (b'<!-- BEGIN CLAVAIN KIMI TOOL MAP -->' in old or b'<!-- END CLAVAIN KIMI TOOL MAP -->' in old):
+        if START in old or END in old:
+            raise ValueError('Both legacy and shared managed blocks exist; inspect before migration')
+        old = old.replace(b'<!-- BEGIN CLAVAIN KIMI TOOL MAP -->', START).replace(b'<!-- END CLAVAIN KIMI TOOL MAP -->', END)
     if block.count(START) != 1 or block.count(END) != 1 or not block.startswith(START) or not block.endswith(END):
         raise ValueError('Invalid source instruction block')
     starts, ends = old.count(START), old.count(END)
@@ -27,6 +31,7 @@ def main():
     parser.add_argument('--file', type=Path, required=True)
     parser.add_argument('--block', type=Path, required=True)
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--legacy-kimi', action='store_true')
     args = parser.parse_args()
     # Resolve before replacing, so dotfiles symlinks remain symlinks. Refuse a
     # dangling link rather than guessing where a missing installation belongs.
@@ -37,7 +42,7 @@ def main():
         raise ValueError('Instruction target directory must already exist')
     old = target.read_bytes() if target.exists() else b''
     block = args.block.read_bytes().rstrip(b'\r\n')
-    new = replace_block(old, block)
+    new = replace_block(old, block, args.legacy_kimi)
     if new == old:
         if not args.dry_run:
             print(f'Managed instructions already up to date: {args.file}')

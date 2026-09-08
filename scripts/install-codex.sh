@@ -834,11 +834,11 @@ remove_prompts() {
 
 install_managed_agents_block() {
   # Keep the array nonempty: Bash 3.2 treats an empty array as unset under -u.
-  local args=(--file "$CODEX_AGENTS_FILE" --block "$SOURCE_DIR/config/codex-instructions.md")
+  local args=(--file "$CODEX_AGENTS_FILE" --source "$SOURCE_DIR" --host codex)
   [[ "$DRY_RUN" -eq 0 ]] || args+=(--dry-run)
   if [[ "$ACTION" != "sync-instructions" && -f "$CODEX_AGENTS_FILE" ]]; then
     local preview
-    preview="$(python3 "$SCRIPT_DIR/sync-codex-instructions.py" "${args[@]}" --dry-run)" || return 1
+    preview="$(python3 "$SCRIPT_DIR/sync-agent-instructions.py" "${args[@]}" --dry-run)" || return 1
     if [[ -n "$preview" ]]; then
       # Back up the contents, rather than a symlink that would follow the update.
       local target
@@ -846,7 +846,7 @@ install_managed_agents_block() {
       backup_copy_file "$target"
     fi
   fi
-  python3 "$SCRIPT_DIR/sync-codex-instructions.py" "${args[@]}"
+  python3 "$SCRIPT_DIR/sync-agent-instructions.py" "${args[@]}"
 }
 
 sync_mcp_servers() {
@@ -1064,13 +1064,13 @@ install_all() {
   if [[ "$SOURCE_EXPLICIT" -eq 0 ]]; then
     ensure_clone
   fi
-  [[ -r "$SOURCE_DIR/config/codex-instructions.md" ]] || {
-    echo "Missing instruction template: $SOURCE_DIR/config/codex-instructions.md" >&2
+  [[ -r "$SOURCE_DIR/config/agent-instructions.md" ]] || {
+    echo "Missing instruction template: $SOURCE_DIR/config/agent-instructions.md" >&2
     exit 1
   }
   if [[ -d "$CODEX_HOME" ]]; then
-    python3 "$SCRIPT_DIR/sync-codex-instructions.py" --file "$CODEX_AGENTS_FILE" \
-      --block "$SOURCE_DIR/config/codex-instructions.md" --dry-run >/dev/null || exit 1
+    python3 "$SCRIPT_DIR/sync-agent-instructions.py" --file "$CODEX_AGENTS_FILE" \
+      --source "$SOURCE_DIR" --host codex --dry-run >/dev/null || exit 1
   fi
   # Validate the full TOML and proposed managed update before any consumer writes.
   sync_mcp_servers --dry-run || exit 1

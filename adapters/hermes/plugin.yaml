@@ -1,0 +1,10 @@
+name: clavain
+version: 1.0.0
+description: Portable reasoning contract and governed delegation through Clavain
+provides_tools:
+  - clavain_dispatch
+provides_hooks:
+  - pre_llm_call
+  - pre_tool_call
+  - on_session_start
+  - subagent_stop

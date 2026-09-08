@@ -69,9 +69,17 @@ bash "${CLAUDE_PLUGIN_ROOT:-.}/scripts/routing-mode.sh" quality
 - `fd-safety` and `fd-correctness` always resolve to ≥sonnet regardless of mode (enforced by `agent-roles.yaml`)
 - Mode toggles go through `scripts/routing-mode.sh`, which skips the doctrine phases; tested in `tests/shell/routing_mode.bats`.
 
-## Capability-routing doctrine (legacy Claude-pool overlay)
+## Portable reasoning policy
 
-This section retains the measured Claude-pool economics behind older phase routing. The role-dispatch table above governs new cross-provider execution; concrete model names below describe the historical Claude-only overlay.
+The authoritative policy is [reasoning-routing.md](../docs/canon/reasoning-routing.md)
+and `config/routing.yaml`. Use planning, plan-review, execution, validation and
+escalation roles with decision context and explicit policy source. No historical
+model table below overrides frontier requirements or independence. The CI pilot
+mix applies only to `ci-campaign-pilot` with scope `mk-ag2s`.
+
+## Capability-routing doctrine (historical Claude-pool evidence)
+
+This section retains historical Claude-pool observations; its model assignments and retry rules are superseded by the portable reasoning policy. The role-dispatch table above governs new cross-provider execution; concrete model names below describe the historical Claude-only overlay.
 
 | Role | Tier | Why |
 |------|------|-----|

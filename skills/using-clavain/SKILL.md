@@ -30,6 +30,21 @@ skill procedures; preserve review, verification, approval, release, and model
 routing boundaries. Existing **OODARC** telemetry identifiers and execution phases
 remain unchanged. See Sylveste `PHILOSOPHY.md`, the OODARCS lens, for the doctrine.
 
+## Reasoning allocation
+
+Before substantive planning or execution, read the selected Clavain installation's
+`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
+and an accountable decision context. Substantial uncertainty, foundational
+invariants, broad consequences, difficult verification, and demonstrated
+capability failure require frontier involvement. Domain names are examples.
+Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
+capabilities require frontier planning. Keep frontier involvement while evidence
+changes the plan. Hand off with decisions, constraints, verification, and escalation
+conditions explicit; retain empirical acceptance. Foundational/consequential plan
+review requires the other frontier model. Operational failures are not capability
+strikes. Preserve stricter gates; unsupported host routing must be reported.
+
+
 ## Quick Router — 26 skills, 6 agents, and 57 commands
 
 In Codex, read the selected skill's full `SKILL.md` using its path in the current

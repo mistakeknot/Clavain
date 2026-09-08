@@ -1,0 +1,10 @@
+{
+  "codex": {"surface": "AGENTS.md", "adapter": "config/codex-instructions.md", "dispatch": "scripts/dispatch.sh"},
+  "claude": {"surface": "CLAUDE.md and session-start", "instruction": "Use installed skills and Task only where the resolved backend/model/effort is supported. Otherwise use packaged role dispatch. Never silently inherit the parent model.", "dispatch": "scripts/dispatch.sh"},
+  "hermes": {"surface": "AGENTS.md and native plugin", "instruction": "Enable the packaged adapters/hermes plugin for native session, tool, and delegation hooks. Use clavain_dispatch for governed delegation; preserve profile personalities and credentials.", "dispatch": "adapters/hermes"},
+  "gemini": {"surface": "GEMINI.md", "instruction": "Use the host's supported file and shell tools. Native model switching and delegation enforcement are unsupported; use Clavain role dispatch for governed work.", "dispatch": "scripts/dispatch.sh"},
+  "kimi": {"surface": "AGENTS.md", "instruction": "Use Kimi's installed skills and shell tools. Native custom subagent routing is unsupported; use Clavain role dispatch and retain its model/effort receipt.", "dispatch": "scripts/dispatch.sh"},
+  "opencode": {"surface": "AGENTS.md", "instruction": "Use supported OpenCode tools. Native agent inheritance does not enforce this contract; use Clavain role dispatch for governed delegation.", "dispatch": "scripts/dispatch.sh"},
+  "cursor": {"surface": ".cursor/rules/clavain.mdc", "instruction": "Apply this rule in every substantive task. Editor model selection remains user controlled. Native routing enforcement is unsupported; invoke packaged role dispatch from the terminal.", "dispatch": "scripts/dispatch.sh"},
+  "vscode": {"surface": ".github/copilot-instructions.md", "instruction": "Apply these instructions to agent work. Model selection remains host controlled. Native routing enforcement is unsupported; invoke packaged role dispatch from the terminal.", "dispatch": "scripts/dispatch.sh"}
+}

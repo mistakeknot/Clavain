@@ -84,7 +84,9 @@ _record_role_routing_decision() {
   context="$(_role_audit_context "$state" "$exit_code" "$failure_class")" || return 1
   local -a record_cmd=(ic route record "--agent=${NAME:-$ROLE}" "--model=$MODEL"
     --rule=dispatch-profile "--role=$ROLE" "--profile=$RESOLVED_PROFILE_REF"
-    "--dispatch=$DISPATCH_ID" "--context=$context")
+    "--dispatch=$DISPATCH_ID" "--context=$context"
+    "--policy-hash=$(jq -r '.policy_hash // empty' <<< "${RESOLVED_ROUTE_JSON:-null}")"
+    "--excluded=$(jq -c '.excluded // []' <<< "${RESOLVED_ROUTE_JSON:-null}")")
   [[ -z "$DISPATCH_SESSION_ID" ]] || record_cmd+=("--session=$DISPATCH_SESSION_ID")
   [[ -z "${CLAVAIN_RUN_ID:-}" ]] || record_cmd+=("--run=$CLAVAIN_RUN_ID")
   [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || record_cmd+=("--bead=$CLAVAIN_BEAD_ID")

@@ -2,6 +2,21 @@
 
 Load plan, review critically, execute in batches, report between batches.
 
+## Reasoning allocation
+
+Before substantive planning or execution, read the selected Clavain installation's
+`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
+and an accountable decision context. Substantial uncertainty, foundational
+invariants, broad consequences, difficult verification, and demonstrated
+capability failure require frontier involvement. Domain names are examples.
+Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
+capabilities require frontier planning. Keep frontier involvement while evidence
+changes the plan. Hand off with decisions, constraints, verification, and escalation
+conditions explicit; retain empirical acceptance. Foundational/consequential plan
+review requires the other frontier model. Operational failures are not capability
+strikes. Preserve stricter gates; unsupported host routing must be reported.
+
+
 ## Process
 
 ### Step 1: Load and Review
@@ -16,7 +31,7 @@ Read plan. Raise concerns with user before starting. If no concerns, create Todo
 
 **INTERSERVE →** Classify tasks (independent → Codex parallel, sequential → ordered, exploratory → Claude subagent). Group into batches (max 5). Use `clavain:interserve` to dispatch. Read `.verdict` sidecar first. Between batches: report and wait for feedback.
 
-**ORCHESTRATED →** If `.exec.yaml` manifest exists alongside plan, use `orchestrate.py --dry-run` first. Present wave breakdown (total waves, parallelism, stage grouping) and get approval before dispatching. Takes priority over other modes. Review pipeline is ON by default: plan `<verify>` blocks run as machine gates, an independent reviewer (fast→codex, deep→claude/opus) reads the task diff — never the self-report — and failures loop through ≤2 fix rounds before parking as `escalated`; `question` parks an executor that asked instead of guessing. Both parked states need controller judgment before re-run. `--no-review` restores legacy self-report gating. Interrupted or partially failed run → `--resume <run_id>` (dir name under `.clavain/orchestrate-runs/`): journaled-complete tasks skip, the rest re-dispatch; stranded push guards from a killed run are swept on the next invocation.
+**ORCHESTRATED →** If `.exec.yaml` manifest exists alongside plan, use `orchestrate.py --dry-run` first. Present wave breakdown (total waves, parallelism, stage grouping) and get approval before dispatching. Takes priority over other modes. Review pipeline is ON by default: plan `<verify>` blocks run as machine gates, an independent reviewer resolved through the validation role for governed runs reads the task diff — never the self-report — and failures loop through ≤2 fix rounds before parking as `escalated`; `question` parks an executor that asked instead of guessing. Both parked states need controller judgment before re-run. `--no-review` restores legacy self-report gating. Interrupted or partially failed run → `--resume <run_id>` (dir name under `.clavain/orchestrate-runs/`): journaled-complete tasks skip, the rest re-dispatch; stranded push guards from a killed run are swept on the next invocation.
 
 **DIRECT →** Execute first 3 tasks per batch. Per task: mark in_progress → follow plan steps exactly → run verifications → mark completed.
 

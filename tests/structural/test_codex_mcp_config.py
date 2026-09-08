@@ -154,7 +154,8 @@ def fixture_source(tmp_path):
     for directory in ["scripts", "skills", "commands", "config", "bin", "hooks", ".claude-plugin"]:
         (source / directory).mkdir(parents=True)
     (source / "README.md").write_text("fixture\n")
-    shutil.copyfile(ROOT / "config/codex-instructions.md", source / "config/codex-instructions.md")
+    for relative in ("config/codex-instructions.md", "config/agent-instructions.md", "config/routing.yaml", "config/host-adapters.json", "scripts/sync-codex-instructions.py"):
+        shutil.copyfile(ROOT / relative, source / relative)
     (source / "bin/clavain-cli").write_text("#!/bin/sh\nexit 0\n")
     (source / "bin/clavain-cli").chmod(0o755)
     for script in ["scripts/remontoire-attention.sh", "scripts/codex-session-refresh.sh", "hooks/context-gateway.sh"]:

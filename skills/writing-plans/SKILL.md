@@ -19,6 +19,21 @@ pointing at the brainstorm), read it FIRST — it is the design's spine
 **Save plan to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
 **Save manifest to:** `docs/plans/YYYY-MM-DD-<feature-name>.exec.yaml`
 
+## Reasoning allocation
+
+Before substantive planning or execution, read the selected Clavain installation's
+`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
+and an accountable decision context. Substantial uncertainty, foundational
+invariants, broad consequences, difficult verification, and demonstrated
+capability failure require frontier involvement. Domain names are examples.
+Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
+capabilities require frontier planning. Keep frontier involvement while evidence
+changes the plan. Hand off with decisions, constraints, verification, and escalation
+conditions explicit; retain empirical acceptance. Foundational/consequential plan
+review requires the other frontier model. Operational failures are not capability
+strikes. Preserve stricter gates; unsupported host routing must be reported.
+
+
 ## Step 0: Prior Art & Institutional Learnings
 
 **Prior art check (REQUIRED):**
@@ -219,7 +234,7 @@ When all tasks are fully independent, use `mode: all-parallel` and a single stag
 - Exact commands with expected output
 - Reference relevant skills with @ syntax
 - DRY, YAGNI, TDD, frequent commits
-- Write for a weaker executor and validator: no "use your judgment" steps; `<verify>` blocks and Must-Haves must be checkable without frontier-model reasoning (see `/model-routing` § Capability-routing doctrine)
+- Write explicit handoff and acceptance criteria. If verification still needs frontier reasoning, keep frontier involvement and record why; do not manufacture a cheap gauge to justify handoff.
 
 ## Execution Handoff
 

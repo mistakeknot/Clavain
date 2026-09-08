@@ -191,6 +191,9 @@ Options:
   --role <NAME>                 Resolve backend, model, reasoning effort, service tier,
                                   minimum Codex version, and ordered fallbacks through
                                   `ic route dispatch --role=<NAME> --json`
+  --policy <PATH>              Select routing.yaml independently of task directory
+  --context-file <PATH>        Structured reasoning decision context
+  --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
   --producer-identity <ID>      Producer backend/model identity for validator audit records
   --plan <FILE>                 The contract the seat must read. It must exist before any
                                   model runs; for --to claude its directory is added as a
@@ -428,7 +431,7 @@ _dispatch_role_profile() {
   local fallback_reason="" rc=1 candidate_count=0
   local -a resolved_args
 
-  if [[ "$role" == "validation" || "$role" == "cross-lab-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
+  if [[ "$role" == "validation" || "$role" == "cross-lab-review" || "$role" == "plan-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
     echo "Error: role '$role' requires --producer-identity so producer and validator models can be separated" >&2
     return 1
   fi
@@ -441,11 +444,14 @@ _dispatch_role_profile() {
     echo "Error: jq is required for --role dispatch" >&2
     return 1
   }
-  local -a route_cmd=(ic --json route dispatch --role="$role")
+  local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+  local -a route_cmd=(ic --json route dispatch --role="$role" --policy="$policy_source")
+  [[ -z "${CLAVAIN_DECISION_CONTEXT:-}" ]] || route_cmd+=(--context-file="$CLAVAIN_DECISION_CONTEXT")
+  [[ -z "${CLAVAIN_POLICY_PROFILE:-}" ]] || route_cmd+=(--policy-profile="$CLAVAIN_POLICY_PROFILE")
   [[ -z "$PRODUCER_IDENTITY" ]] || route_cmd+=(--producer-identity="$PRODUCER_IDENTITY")
   # Resolve against the control-plane checkout, not the task repository (which
   # can live outside Sylveste and need not carry its own routing.yaml).
-  resolved="$(cd "$DISPATCH_SCRIPT_DIR/.." && "${route_cmd[@]}")" || {
+  resolved="$("${route_cmd[@]}")" || {
     echo "Error: Intercore could not resolve dispatch role '$role'" >&2
     return 1
   }
@@ -589,6 +595,18 @@ while [[ $# -gt 0 ]]; do
       FLERE_TIMEOUT="$2"
       shift 2
       ;;
+    --policy|--context-file|--policy-profile)
+      require_arg "$@"
+      case "$1" in
+        --policy) export CLAVAIN_ROUTING_POLICY="$2" ;;
+        --context-file) export CLAVAIN_DECISION_CONTEXT="$2" ;;
+        --policy-profile) export CLAVAIN_POLICY_PROFILE="$2" ;;
+      esac
+      shift 2
+      ;;
+    --policy=*) export CLAVAIN_ROUTING_POLICY="${1#*=}"; shift ;;
+    --context-file=*) export CLAVAIN_DECISION_CONTEXT="${1#*=}"; shift ;;
+    --policy-profile=*) export CLAVAIN_POLICY_PROFILE="${1#*=}"; shift ;;
     --role)
       require_arg "$1" "${2:-}"
       ROLE="$2"
@@ -767,6 +785,11 @@ if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/clodex-toggle.flag" ]]; } || {
       CLAVAIN_INTERSERVE_MODE=true
       ;;
   esac
+fi
+
+if [[ "$ENGINE" == kimi && -n "$ROLE" && -n "$REASONING_EFFORT" ]]; then
+  echo "Error: Kimi adapter cannot enforce reasoning effort; governed role unsupported" >&2
+  exit 1
 fi
 
 # A role is a complete Intercore-owned execution contract. The outer invocation
@@ -1199,6 +1222,12 @@ if [[ "$VIA" == "zaka" ]]; then
   if [[ "$ZAKA_AGENT" == "codex" && -n "$REASONING_EFFORT" ]]; then
     ZAKA_SPAWN+=(--agent-arg=-c --agent-arg="model_reasoning_effort=$REASONING_EFFORT")
   fi
+  if [[ "$ZAKA_AGENT" == "claude-code" && -n "$REASONING_EFFORT" ]]; then
+    case "$REASONING_EFFORT" in low|medium|high|max) ZAKA_SPAWN+=(--agent-arg=--effort --agent-arg="$REASONING_EFFORT") ;; *) echo "Error: unsupported Claude effort" >&2; exit 1 ;; esac
+  fi
+  if [[ "$ZAKA_AGENT" != codex && -n "$SERVICE_TIER" && "$SERVICE_TIER" != standard ]]; then
+    echo "Error: service tier unsupported by this host adapter" >&2; exit 1
+  fi
   if [[ "$ZAKA_AGENT" == "codex" && -n "$SERVICE_TIER" ]]; then
     codex_service_tier="$SERVICE_TIER"
     [[ "$codex_service_tier" == "standard" ]] && codex_service_tier="default"
@@ -1441,7 +1470,18 @@ elif [[ "$ENGINE" == "claude" ]]; then
     echo "Warning: codex passthrough flags are not supported for --to claude — ignoring: ${EXTRA_ARGS[*]}" >&2
   fi
 
+  # Execution roles may edit within the authorized task. Review roles retain
+  # the existing mutation prohibition; an explicit read-only sandbox wins.
+  if [[ "$ROLE_RESOLVED" == true && "$SANDBOX" != read-only ]]; then
+    case "$ROLE" in routine-execution|deep-execution|escalation) CLAUDE_UNSAFE=true ;; esac
+  fi
   CMD=(claude)
+  if [[ -n "$REASONING_EFFORT" ]]; then
+    case "$REASONING_EFFORT" in low|medium|high|max) CMD+=(--effort "$REASONING_EFFORT") ;; *) echo "Error: Claude does not support reasoning effort '$REASONING_EFFORT'" >&2; exit 1 ;; esac
+  fi
+  if [[ -n "$SERVICE_TIER" && "$SERVICE_TIER" != standard ]]; then
+    echo "Error: Claude service tier '$SERVICE_TIER' is unsupported by this adapter" >&2; exit 1
+  fi
   if [[ -n "$MODEL" ]]; then
     CMD+=(--model "$MODEL")
   fi

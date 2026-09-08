@@ -24,6 +24,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 ACTION="${1:-install}"
 shift || true
 
+# Narrow path: no skills, hooks, MCP, provider or personality replacement.
+if [[ "$ACTION" == sync-instructions ]]; then
+  exec python3 "$SCRIPT_DIR/sync-agent-instructions.py" --host kimi --file "${KIMI_AGENTS_FILE:-${KIMI_CODE_HOME:-$HOME/.kimi-code}/AGENTS.md}" "$@"
+fi
+
 SOURCE_DIR=""
 DOCTOR_JSON=0
 
@@ -37,8 +42,8 @@ BACKUP_ROOT="${CLAVAIN_KIMI_BACKUP_ROOT:-$KIMI_CODE_HOME/.clavain-backups}"
 
 HOOKS_BLOCK_START="# BEGIN CLAVAIN KIMI HOOKS"
 HOOKS_BLOCK_END="# END CLAVAIN KIMI HOOKS"
-AGENTS_BLOCK_START="<!-- BEGIN CLAVAIN KIMI TOOL MAP -->"
-AGENTS_BLOCK_END="<!-- END CLAVAIN KIMI TOOL MAP -->"
+AGENTS_BLOCK_START="<!-- BEGIN CLAVAIN CODEX TOOL MAP -->"
+AGENTS_BLOCK_END="<!-- END CLAVAIN CODEX TOOL MAP -->"
 
 KIMI_HOOK_BRIDGE="${KIMI_HOOK_BRIDGE:-$REPO_ROOT/scripts/kimi-hook-bridge.sh}"
 MANIFEST_GENERATOR="${MANIFEST_GENERATOR:-$REPO_ROOT/scripts/gen-kimi-manifests.py}"
@@ -579,13 +584,7 @@ install_managed_hooks_block() {
 }
 
 install_managed_agents_block() {
-  local block
-  block="$(build_agents_block)"
-  if update_file_with_block "$KIMI_AGENTS_FILE" "$AGENTS_BLOCK_START" "$AGENTS_BLOCK_END" "$block"; then
-    echo "Updated managed AGENTS block: $KIMI_AGENTS_FILE"
-  else
-    echo "Managed AGENTS block already up to date: $KIMI_AGENTS_FILE"
-  fi
+  python3 "$SCRIPT_DIR/sync-agent-instructions.py" --source "$SOURCE_DIR" --host kimi --file "$KIMI_AGENTS_FILE"
 }
 
 install_all() {
@@ -893,6 +892,7 @@ uninstall_all() {
   remove_kimi_mcp || true
   remove_block_from_file "$KIMI_CONFIG_FILE" "$HOOKS_BLOCK_START" "$HOOKS_BLOCK_END" || true
   remove_block_from_file "$KIMI_AGENTS_FILE" "$AGENTS_BLOCK_START" "$AGENTS_BLOCK_END" || true
+  remove_block_from_file "$KIMI_AGENTS_FILE" "<!-- BEGIN CLAVAIN KIMI TOOL MAP -->" "<!-- END CLAVAIN KIMI TOOL MAP -->" || true
 
   echo "Uninstall complete. Backups preserved under: $BACKUP_ROOT"
 }

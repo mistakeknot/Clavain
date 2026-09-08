@@ -186,7 +186,13 @@ if [[ -n "$criteria_path" && -f "$criteria_path" ]]; then
 fi
 ```
 
-When the seal is intact, dispatch ONE validator subagent (Task tool, model **opus** — the validator tier; do not downgrade) with this prompt, substituting the criteria file content:
+When the seal is intact, resolve and dispatch ONE `validation` role with the
+actual executor identity and the plan's decision context. Use the selected
+Clavain policy and packaged `dispatch.sh --role validation --producer-identity
+"$EXECUTOR_MODEL"`. Preserve the returned backend/model/effort and all stricter
+review gates. Missing independent access blocks validation. Set `VALIDATOR_MODEL`
+and `VALIDATOR_POLICY_HASH` from the actual completed dispatch receipt. Use this
+prompt, substituting the criteria file content:
 
 > You are a plan-conformance validator. Judge the working tree ONLY against these acceptance criteria — no other opinions, no scope expansion. For each numbered criterion: if it carries a fenced `check` block, run that command and let its exit code decide; otherwise verify the stated outcome directly (read files, run greps). Return a markdown table: `criterion | pass/fail | evidence (one line)`, then a final line `CONFORMANCE: PASS` (all pass) or `CONFORMANCE: FAIL` (any fail).
 
@@ -200,8 +206,8 @@ clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "criteria-results" "$results_path" 2
 conf_status="CLEAN"; conf_findings=0
 grep -q 'CONFORMANCE: FAIL' "$results_path" && { conf_status="NEEDS_ATTENTION"; conf_findings=$(grep -c '| *fail' "$results_path" || echo 1); }
 mkdir -p .clavain/verdicts
-jq -n --arg s "$conf_status" --argjson f "$conf_findings" --arg d "$results_path" \
-  '{type:"plan-conformance", status:$s, model:"opus", tokens_spent:0, files_changed:0, findings_count:$f, summary:("plan conformance: " + $s), detail_path:$d, timestamp:(now|todate), session_id:(env.CLAUDE_SESSION_ID // "unknown")}' \
+jq -n --arg s "$conf_status" --argjson f "$conf_findings" --arg d "$results_path" --arg vm "$VALIDATOR_MODEL" --arg ph "$VALIDATOR_POLICY_HASH" \
+  '{type:"plan-conformance", status:$s, model:$vm, policy_hash:$ph, tokens_spent:null, files_changed:0, findings_count:$f, summary:("plan conformance: " + $s), detail_path:$d, timestamp:(now|todate), session_id:(env.CLAUDE_SESSION_ID // "unknown")}' \
   > .clavain/verdicts/plan-conformance.json
 ```
 
@@ -225,7 +231,7 @@ if [[ -f "$_il" ]]; then
     [[ -n "$_chain" ]] && _esc=$(printf '%s' "$_chain" | jq -r '.escalations // 0' 2>/dev/null || echo 0)
   fi
   _src=$(_interspect_classify_session_source "$CLAVAIN_BEAD_ID" 2>/dev/null) || _src="normal"
-  _ctx=$(jq -nc --arg a "$_author" --arg e "$_executor" --arg v "opus" \
+  _ctx=$(jq -nc --arg a "$_author" --arg e "$_executor" --arg v "$VALIDATOR_MODEL" \
     --argjson ct "${_crit_total:-0}" --argjson cf "${_crit_failed:-0}" --argjson esc "${_esc:-0}" \
     --arg src "$_src" --arg bead "$CLAVAIN_BEAD_ID" --arg cp "${criteria_path:-}" \
     '{author_model:$a, executor_model:$e, validator_model:$v, criteria_total:$ct, criteria_failed:$cf, pass:($cf==0 and $ct>0), escalation_count:$esc, session_source:$src, bead:$bead, criteria_path:$cp}')
@@ -233,7 +239,7 @@ if [[ -f "$_il" ]]; then
 fi
 ```
 
-Note: `$results_path` and `$criteria_path` are in scope from Phase 2b. `validator_model` is `"opus"` because Phase 2b pins the validator tier (f-036: the axis is recorded even though it is currently constant — the drift check needs it the day it varies).
+The results and criteria paths are in scope from Phase 2b. Validator identity and policy hash come from the completed dispatch receipt; unresolved identity or unrun verification cannot produce a passing calibration outcome.
 
 ## Phase 3: Gate Decision
 
