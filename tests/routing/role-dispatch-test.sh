@@ -22,7 +22,7 @@ cat > "$TMP_ROOT/bin/ic" <<'FAKE_IC'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_IC_LOG"
 if [[ "$*" == *"route dispatch"* ]]; then
-  cat <<'JSON' | jq --arg args "$*" --arg policy "$FAKE_ROUTING_POLICY" --arg hash "$FAKE_POLICY_HASH" '.policy_source=$policy | .policy_hash=$hash | if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end'
+  cat <<'JSON' | jq --arg args "$*" --arg policy "$FAKE_ROUTING_POLICY" --arg hash "$FAKE_POLICY_HASH" '.policy_source=$policy | .policy_hash=$hash | if env.FAKE_ROUTE_KIMI_FIRST == "1" then .profile_ref="unsupported-kimi" | .profile.backend="kimi" | .profile.model="kimi-code/k3" else . end | if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end'
 {
   "requested_role": "deep-execution",
   "profile_ref": "deep-astra",
@@ -202,5 +202,12 @@ jq -s -e 'any(.[]; .state == "started") and any(.[]; .state == "completed") and 
 : > "$FAKE_CODEX_LOG"
 FAKE_IC_RECORD_FAIL=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 && fail "dispatch accepted failed preflight audit"
 [[ ! -s "$FAKE_CODEX_LOG" ]] || fail "model executed before durable start record"
+
+: > "$FAKE_CODEX_LOG"
+unsupported_adapter_out="$(FAKE_ROUTE_KIMI_FIRST=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" 2>&1)" \
+  || fail "unsupported adapter stopped a declared eligible fallback"
+contains "$unsupported_adapter_out" 'unsupported_adapter'
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-5.6-sol" ]] || fail "unsupported Kimi effort did not reach declared Sol fallback"
+contains "$(cat "$FAKE_IC_LOG")" '--fallback-reason=unsupported_adapter'
 
 echo "PASS: role-aware dispatch profiles and fallback policy"

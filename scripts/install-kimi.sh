@@ -26,7 +26,7 @@ shift || true
 
 # Narrow path: no skills, hooks, MCP, provider or personality replacement.
 if [[ "$ACTION" == sync-instructions ]]; then
-  exec python3 "$SCRIPT_DIR/sync-agent-instructions.py" --host kimi --file "${KIMI_AGENTS_FILE:-${KIMI_CODE_HOME:-$HOME/.kimi-code}/AGENTS.md}" "$@"
+  exec python3 "$SCRIPT_DIR/sync-agent-instructions.py" --source "$SCRIPT_DIR/.." --host kimi --file "${KIMI_AGENTS_FILE:-${KIMI_CODE_HOME:-$HOME/.kimi-code}/AGENTS.md}" "$@"
 fi
 
 SOURCE_DIR=""

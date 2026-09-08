@@ -517,7 +517,7 @@ _dispatch_role_profile() {
       rc=$?
     fi
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      model_unavailable|account_access_absent|insufficient_codex_version)
+      model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
@@ -788,6 +788,7 @@ if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/clodex-toggle.flag" ]]; } || {
 fi
 
 if [[ "$ENGINE" == kimi && -n "$ROLE" && -n "$REASONING_EFFORT" ]]; then
+  _dispatch_write_failure_class unsupported_adapter
   echo "Error: Kimi adapter cannot enforce reasoning effort; governed role unsupported" >&2
   exit 1
 fi

@@ -147,6 +147,12 @@ user settings: that also excludes the global instruction file, as described in
 the [Claude Code settings-source contract](https://code.claude.com/docs/en/agent-sdk/claude-code-features).
 Resolving a role does not itself establish kernel spawn or budget admission.
 
+The wrapper's `--role` entry point tries the eligible ordered fallbacks when an
+adapter reports a recognized availability or unsupported-adapter failure. Kernel spawn
+admits one resolved candidate and records its outcome; it does not repeat the
+wrapper's availability loop. A caller must resolve another eligible candidate
+after an operational failure. Such failures do not consume capability strikes.
+
 Instruction sync reports `instructional`, wrapper calls produce
 `dispatch-enforced` receipts, and only a fresh-session probe can establish
 behavioral verification. Changing settings does not switch a running parent
@@ -159,7 +165,9 @@ Use existing `routing_decisions.policy_hash` and `context_json` for decisions,
 exclusions, profile, failure class and per-attempt results. The dispatch audit
 and existing Interstat/Interspect outcome pipeline retain actual execution,
 accepted outcomes, defects, retries and attributable usage. QA must record the
-validator model from its receipt, never a hard-coded constant. Unknown usage or
+validator model and policy hash from its receipt, never hard-coded constants.
+Missing or blank identity/hash makes conformance unknown and acceptance false.
+Unknown usage or
 unrun empirical acceptance stays unknown. Calibration may change eligible choices
 but cannot relax frontier requirements, reviewer independence, quality floors,
 or authority gates.

@@ -1,0 +1,96 @@
+{
+  "date": "2026-09-08",
+  "policy_sha256": "f39be8adfc2f14271b3f5f83a1a6ba9bf875a1c200494e9f0dfc0651d37f9ceb",
+  "scenario": "reasoning-routing-native-probe.md",
+  "scenario_sha256": "d6331b555797b4d62c18dd1be109ceaf4555b703feca65ef02a8c9cb4e0d3062",
+  "purpose": "Native instruction discovery; these are not kernel dispatch admission probes.",
+  "hosts": {
+    "kimi": {
+      "result": "semantic-pass",
+      "session_id": "session_dd51b9d6-2697-499f-9e19-467f42739fa6",
+      "answer": {
+        "policy_sha256": "f39be8adfc2f14271b3f5f83a1a6ba9bf875a1c200494e9f0dfc0651d37f9ceb",
+        "policy_selection": "portable-managed-installation",
+        "planning_requires_frontier": true,
+        "review_requires_other_frontier": true,
+        "allowed_reviewer_model": "fable",
+        "operational_timeout_counts_as_capability_strike": false,
+        "parent_model_changes_from_config": false,
+        "handoff_requirement": "Hand off only with explicit decisions, constraints, verification, and escalation conditions."
+      },
+      "runtime_model": "kimi-code/k3",
+      "runtime_effort": "high",
+      "effort_evidence": "native request record, inherited profile setting; wrapper cannot yet enforce effort",
+      "usage": {
+        "inputOther": 33835,
+        "output": 843,
+        "inputCacheRead": 0,
+        "inputCacheCreation": 0
+      },
+      "raw_sha256": "550c88a06ecfb66a2a3d2f0d792ccb234064e3abb52bf058796788ae786603db"
+    },
+    "opencode": {
+      "result": "semantic-pass",
+      "strict_json": false,
+      "session_id": "ses_f7d12e694ffedNLFI9oRZUMeRB",
+      "answer": {
+        "policy_sha256": "f39be8adfc2f14271b3f5f83a1a6ba9bf875a1c200494e9f0dfc0651d37f9ceb",
+        "policy_selection": "portable-managed-installation",
+        "planning_requires_frontier": true,
+        "review_requires_other_frontier": true,
+        "allowed_reviewer_model": "Fable",
+        "operational_timeout_counts_as_capability_strike": false,
+        "parent_model_changes_from_config": false,
+        "handoff_requirement": "Hand off only with explicit decisions, constraints, verification, and escalation conditions."
+      },
+      "runtime_model": "zai-org/GLM-5.3-Flash",
+      "provider": "togetherai",
+      "runtime_effort": null,
+      "usage": null,
+      "usage_note": "Runtime reported zero counters for a nonempty reply; unknown, not free or zero usage.",
+      "raw_sha256": "b35cd38a7feb1b70db04971860a5ce4d4b0b57d1a06e729d6c507ac45043a0bd"
+    },
+    "hermes": {
+      "result": "semantic-pass",
+      "answer": {
+        "policy_sha256": "f39be8adfc2f14271b3f5f83a1a6ba9bf875a1c200494e9f0dfc0651d37f9ceb",
+        "policy_selection": "portable-managed-installation",
+        "planning_requires_frontier": true,
+        "review_requires_other_frontier": true,
+        "allowed_reviewer_model": "fable",
+        "operational_timeout_counts_as_capability_strike": false,
+        "parent_model_changes_from_config": false,
+        "handoff_requirement": "Hand off with explicit decisions, constraints, verification, escalation conditions, and the actual Astra author receipt as producer identity for Fable review."
+      },
+      "usage_receipt": {
+        "estimated_cost_usd": 0.0,
+        "cost_status": "included",
+        "cost_source": "none",
+        "input_tokens": 6482,
+        "output_tokens": 208,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "reasoning_tokens": 71,
+        "total_tokens": 6690,
+        "api_calls": 1,
+        "model": "gpt-5.6-sol",
+        "provider": "openai-codex",
+        "session_id": "20260908_143141_f5420e",
+        "completed": true,
+        "failed": false,
+        "service_tier": null
+      },
+      "requested_effort": "high",
+      "provider_effort_echo": null,
+      "toolset": "search",
+      "raw_sha256": "c3c8ddea197ecedf473c8f1e591f64f1a7102e264261951384b75855720827a1"
+    },
+    "gemini": {
+      "result": "blocked-before-model",
+      "failure_class": "account_access_absent",
+      "provider_reason": "UNSUPPORTED_CLIENT / IneligibleTierError",
+      "note": "Installed client rejected by account; credentials and providers were not changed.",
+      "raw_stderr_sha256": "4f8bb9fcfbd17b3f9271fb31483caabf727d6c37c3019d87062e79b1e4d285a9"
+    }
+  }
+}

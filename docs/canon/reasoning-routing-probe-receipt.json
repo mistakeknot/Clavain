@@ -312,5 +312,11 @@
     "parent_model_changed": false,
     "model_execution_verified": false
   },
-  "governed_dispatch_receipt": "reasoning-routing-dispatch-receipt.json"
+  "governed_dispatch_receipt": "reasoning-routing-dispatch-receipt.json",
+  "subsequent_installation_refresh": {
+    "source_commit": "5fb851a518c140f77a83b3b2219883866fcd7e58",
+    "policy_sha256": "f39be8adfc2f14271b3f5f83a1a6ba9bf875a1c200494e9f0dfc0651d37f9ceb",
+    "all_eight_instruction_blocks_current": true,
+    "note": "Concurrent validation-seat update preserved; only managed instruction receipt hashes refreshed. Model probe results above remain tied to their original policy hash."
+  }
 }

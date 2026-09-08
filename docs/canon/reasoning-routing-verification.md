@@ -27,13 +27,22 @@ to `mk-ag2s`; the global default retains Astra and Fable.
   isolated profile through native plugin discovery. The actual default profile
   also passed discovery, contract injection, governed tool registration and the
   delegation block. Neither probe made model calls.
-- The installed local `ic` was updated through Intercore commit `3810d1b`; invoking
+- The installed local `ic` was updated through Intercore commit `2463614`; invoking
   `ic --json route dispatch --role=planning` from `/private/tmp` resolved the
   selected Clavain installation. The previous binary is retained in
   `/private/tmp/reasoning-ic-before` for rollback.
 - The additional symlink-parent regression failed before the fix, then passed.
   Routing and CLI package tests passed with required process-inspection access.
   An independent reviewer verified the path fix and portable renderer.
+- Final Intercore `go test ./...` passed after adding successful direct and
+  scheduled governed admission tests. Those tests exposed an empty-fallback
+  serialization mismatch; admission now compares the serialized contract while
+  preserving the distinction between absent and explicitly empty model access.
+  Forged effort remains rejected. CLI fixtures explicitly select their policy,
+  so a user's installed model assignments cannot contaminate the test.
+- Follow-up tests passed: two Clavain Python tests (five subtests), one dotfiles
+  Python test (three subtests), and all three routing shell scripts. These cover
+  missing validator receipts, unsupported-adapter fallback and installer defaults.
 
 Intercore regression tests cover frontier requirements, explicit policy errors,
 review alias separation, missing access, active investigation and handoff,
@@ -68,10 +77,36 @@ short-task exceptions were removed. Hermes's default profile now links and enabl
 the packaged adapter; every preexisting config byte was preserved. Provider
 credentials, personalities and running parent models were unchanged.
 
-Gemini, Kimi, OpenCode and editor model behavior remains unverified; their installed
-surfaces are instructional. Hermes native hooks are verified, but a Hermes model
-session has not been probed. Alternate-profile and standalone behavior has fixture
-coverage rather than fresh model receipts. These limits remain explicit.
+After these probes, concurrent commit `5fb851a` changed ordinary validation-seat
+assignments. The drift check detected it. That update was preserved and only the
+managed instruction receipt hashes were refreshed; all eight blocks check current.
+The current resolver still selects Fable for foundational review and excludes the
+Astra author. Earlier model receipts retain their original policy hash rather
+than claiming verification of the concurrent change. The committed standalone
+`3305c17` package also passed its routing-contract checks outside a Git checkout.
+
+Fresh native Kimi, OpenCode and Hermes sessions subsequently retrieved the new
+hash and passed the same scenario. Their runtime receipts identify K3/high,
+GLM-5.3-Flash (effort unknown), and Sol (high requested), respectively. Kimi's
+effort comes from its existing profile; governed wrapper effort selection remains
+unsupported. OpenCode returned zero usage counters despite a nonempty answer,
+so attributable usage stays unknown. Gemini failed before inference with
+`IneligibleTierError` / `UNSUPPORTED_CLIENT`; its account rejected the installed
+client. See the [additional host receipt](reasoning-routing-additional-host-receipt.json).
+Editor model behavior, alternate-profile model behavior and remote installations
+remain unverified. Standalone behavior has fixture coverage. Native instruction
+discovery does not establish kernel admission or delegated-model enforcement.
+
+## Independent implementation review
+
+Fable independently reviewed eight named commits authored by Astra and returned
+**PASS with no correctness blockers**. It ran no tests. All six nonblocking
+findings were addressed through fixes or an explicit kernel single-candidate
+scope statement. The positive scheduler test found a real serialization bug,
+which was fixed and reviewed again without weakening admission checks. The
+[review receipt](reasoning-routing-review-receipt.json) retains scope, actual
+model usage, exact prompt/result hashes, findings and dispositions. Its verdict
+does not cover the concurrent validation-seat change in `5fb851a`.
 
 ## Outstanding delivery gates
 
