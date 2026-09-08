@@ -21,7 +21,7 @@ Execution authority is explicit. Resolve the complete profile with `ic route dis
 | `scout` | GPT-5.6 Sol high | Read-only exploration |
 | `routine-execution` | GPT-5.6 Sol high | High-volume coding |
 | `deep-execution` | GPT-6 Astra high, Standard | Sol xhigh only for explicit model/account/version unavailability |
-| `validation` | Claude/Fable | Must differ from the producer; ordered Kimi/Sol fallbacks |
+| `validation` | Claude Opus 5 high | Must differ from the producer; Sonnet 5, then Sol, then Kimi fallbacks. Fable left routine validation on 2026-09-08 (mk ruling); it stays on `plan-review` and `escalation` |
 | `release-preparation` | GPT-5.6 Sol high | Returns a compact release packet |
 | `release-authority` | main integrator | Never delegated implicitly |
 | `cross-lab-review` | provider/model unlike producer | Sealed first-pass findings |

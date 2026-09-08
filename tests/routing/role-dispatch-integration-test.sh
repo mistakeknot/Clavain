@@ -46,9 +46,9 @@ fi
 latest="$(cd "$TMP_ROOT/work" && ic --json route list --limit=20 | jq 'sort_by(.id) | reverse | .[:2]')"
 jq -e '[.[] | .context_json | fromjson | select(.state == "failed")] | length == 1 and all(.[]; .result.verdict == "" and .result.failure_class == "terminal_configuration")' <<< "$latest" >/dev/null
 fable="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role validation --producer-identity 'anthropic/claude-fable-5-1[1m]' -C "$TMP_ROOT/work" fixture 2>&1)"
-[[ "$fable" == *'gpt-5.6-sol'* && "$fable" != *'--model fable'* ]]
+[[ "$fable" == *'claude-opus-5'* && "$fable" != *'--model fable'* ]]
 astra="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --via zaka --role validation --producer-identity codex/gpt-6-astra -C "$TMP_ROOT/work" fixture 2>&1)"
-[[ "$astra" == *'--agent claude-code'* && "$astra" == *'--model claude-fable-5-1'* ]]
+[[ "$astra" == *'--agent claude-code'* && "$astra" == *'--model claude-opus-5'* ]]
 echo 'PASS: real Intercore identity, dispatch and immutable SQLite audit integration'
 
 # Budget-bound production dispatch works with stock macOS awk and records raw

@@ -121,8 +121,8 @@ dispatch:
   # Canonical endpoints, not UI aliases, define producer/validator separation.
   model_aliases:
     fable: claude-fable-5-1
-    opus: claude-opus-4-6
-    sonnet: claude-sonnet-4-6
+    opus: claude-opus-5
+    sonnet: claude-sonnet-5
     gpt-5.6: gpt-5.6-sol
     k3: kimi-code/k3
     kimi/k3: kimi-code/k3
@@ -137,7 +137,10 @@ dispatch:
     scout: scout-sol
     routine-execution: routine-sol
     deep-execution: deep-astra
-    validation: validation-fable
+    # mk ruling 2026-09-08: Fable leaves routine validation (plan-review and
+    # escalation keep it); Opus 5 validates, Sonnet 5 is the fallback. The
+    # producer is normally gpt-5.6-sol, so any Claude model keeps independence.
+    validation: validation-opus
     release-preparation: release-sol
     release-authority: release-authority-main
     cross-lab-review: crosslab-fable
@@ -245,6 +248,25 @@ dispatch:
       reasoning_effort: xhigh
       service_tier: standard
       description: Deep-execution fallback for explicit Astra unavailability
+    validation-opus:
+      role: validation
+      backend: claude
+      model: claude-opus-5
+      reasoning_effort: high
+      service_tier: standard
+      # sonnet before sol before kimi: the kimi seat runs with a toolless agent
+      # file and can only answer UNRUN for a plan whose Verification must run
+      # (goal 60771535, run 120d9aa1).
+      fallbacks: [validation-sonnet, validation-sol, validation-kimi]
+      description: Independent validator for Codex-produced work (mk ruling 2026-09-08)
+    validation-sonnet:
+      role: validation
+      backend: claude
+      model: claude-sonnet-5
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [validation-sol, validation-kimi]
+      description: Validation fallback when Opus 5 is unavailable or is the producer
     validation-fable:
       role: validation
       backend: claude
@@ -255,7 +277,7 @@ dispatch:
       # answer UNRUN for a plan whose Verification must run (goal 60771535, run 120d9aa1);
       # the codex seat executes and still differs from a fable producer.
       fallbacks: [validation-sol, validation-kimi]
-      description: Independent consequential-work validator for Codex-produced work
+      description: Frontier validator, no longer the validation primary (explicit --tier only since 2026-09-08)
     validation-kimi:
       role: validation
       backend: kimi
