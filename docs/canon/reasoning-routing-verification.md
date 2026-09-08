@@ -108,17 +108,26 @@ which was fixed and reviewed again without weakening admission checks. The
 model usage, exact prompt/result hashes, findings and dispositions. Its verdict
 does not cover the concurrent validation-seat change in `5fb851a`.
 
-## Outstanding delivery gates
+## Delivery and remaining gates
 
-The fleet service was reachable and immutable repository IDs were checked.
-Sylveste, Clavain, Intercore, Interflux and dotfiles remain pending CI migration;
-their existing `mk-ag2s` tasks were claimed, without duplicate tasks or trigger
-changes. Required GitHub checks blocked the Sylveste philosophy and Interflux
-consumer pushes (`Generator and parity checkers` and `audit`, respectively).
-These status gates were preserved. Corrected requests using full 40-character
-commit SHAs passed the existing sudo rule but both were rejected by the fleet
-service: `reviewed manual execution registration required`. The earlier sudo
-failure came from abbreviated SHAs, not missing operator authority. No check was
-fabricated, bypassed or disabled. Final source push status is recorded in the
-task tracker and session handoff. Remote installation and remaining host model
-verification are not implied by the local rollout.
+The two blocked pushes are resolved. Sylveste `affe02be` and Interflux `60b93c6`
+include the prepared changes and source-repository check recipes. Both are on
+`main`. Their required checks were registered with the independent zklw fleet;
+jobs **8/10** and **9/11**, respectively, passed in four distinct fresh guests.
+Protected receipts were authenticated against source bundles, recipe and policy
+hashes, image identity and logs. Existing GitHub checks also passed on those
+exact revisions without changing their required application binding.
+
+The fleet now accepts explicitly reviewed manual candidates through root-owned
+commit-to-CI-tag mappings; arbitrary or moved tags do not confer authority.
+The admission extension passed independent Fable review and 182 ops tests.
+Manual, main-push and PR-merge triggers are registered for these two check recipes.
+See the [authenticated canary evidence](https://github.com/mistakeknot/ops/blob/main/ci/fleet/evidence/2026-09-08-reasoning-checks-canary.json).
+
+Full CI migration remains outstanding under the existing `mk-ag2s` tasks.
+The required checks are still bound to GitHub Actions app `15368`; the fleet's
+user-status publisher cannot satisfy that binding. Publication stays disabled
+until a dedicated publisher app has a verified canary and can replace that
+specific source. Former triggers and other workflow classes remain unchanged.
+No check was fabricated, bypassed or disabled. Remaining host model verification
+and remote installation are not implied by these execution receipts.
