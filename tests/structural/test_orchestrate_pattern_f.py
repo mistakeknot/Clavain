@@ -520,7 +520,8 @@ def test_disjoint_items_run_at_once_and_both_merge(orc, repo, stubs, tmp_path, m
 
 def test_a_sibling_reservation_parks_the_item_without_a_worktree(orc, repo, stubs, tmp_path, capsys):
     stubs["store"].mkdir(exist_ok=True)
-    (stubs["store"] / "sib.lock").write_text(f"sibling-session\t{repo.name}\tsrc/app.py\n")
+    # the hook scopes by the checkout's absolute path; so does the orchestrator by default
+    (stubs["store"] / "sib.lock").write_text(f"sibling-session\t{repo.resolve()}\tsrc/app.py\n")
     plan = _brief(tmp_path)
     rf = _run_file(tmp_path, repo, [("a", plan, {"files": "[src/app.py]"}), ("b", plan, {"files": "[src/other.py]"})],
                    stubs["register"], timeout=2, run_extra={"max_parallel": 2})
@@ -620,7 +621,7 @@ def test_dry_run_prints_the_declared_files_and_parallelism(orc, repo, stubs, tmp
                    stubs["register"], run_extra={"max_parallel": 3})
     orc.orchestrate_pattern_f(str(rf), dry_run=True)
     out = capsys.readouterr().out
-    assert "max_parallel 3" in out and f"reservation scope {repo.name}" in out
+    assert "max_parallel 3" in out and f"reservation scope {repo}" in out
     assert "files=src/app.py src/other.py" in out and "files=**" in out
 
 
@@ -699,3 +700,11 @@ def test_a_plain_validator_fail_stays_a_fail(orc, repo, stubs, tmp_path, monkeyp
     orc.orchestrate_pattern_f(str(rf))
     packet = _packet(capsys)
     assert packet["items"][0]["status"] == "validator_fail"
+
+
+def test_the_default_reservation_scope_is_the_checkout_path(orc, repo, stubs, tmp_path):
+    """The pre-edit hook scopes by the checkout's absolute path; a name-only
+    scope never met the hook's rows (found 2026-09-07 in the ic store)."""
+    plan = _brief(tmp_path)
+    run = orc.load_pf_run(str(_run_file(tmp_path, repo, [("a", plan, {})], stubs["register"])))
+    assert orc._pf_scope(run) == str(repo.resolve())

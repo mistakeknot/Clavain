@@ -1936,7 +1936,7 @@ class PFRun:
     trailers: list[str] = field(default_factory=list)
     max_parallel: int = 1
     reservation_db: str | None = None  # ic --db; default: ic's own resolution from repo
-    reservation_scope: str | None = None  # default: basename of repo (interlock's INTERMUTE_PROJECT)
+    reservation_scope: str | None = None  # default: the repo's absolute path, the hook's scope
 
 
 @dataclass
@@ -2275,7 +2275,10 @@ def _pf_declared_files(item: PFItem) -> list[str]:
 
 
 def _pf_scope(run: PFRun) -> str:
-    return run.reservation_scope or os.path.basename(os.path.normpath(run.repo))
+    """interlock's pre-edit hook reserves under the checkout's absolute path,
+    so that is the default scope: the orchestrator and the hooks then contend
+    in one key, not two (a directory-name scope never met the hook's rows)."""
+    return run.reservation_scope or os.path.abspath(run.repo)
 
 
 def _pf_owner(run_id: str, item_id: str) -> str:
