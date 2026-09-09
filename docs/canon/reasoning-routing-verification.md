@@ -124,10 +124,16 @@ The admission extension passed independent Fable review and 182 ops tests.
 Manual, main-push and PR-merge triggers are registered for these two check recipes.
 See the [authenticated canary evidence](https://github.com/mistakeknot/ops/blob/main/ci/fleet/evidence/2026-09-08-reasoning-checks-canary.json).
 
-Full CI migration remains outstanding under the existing `mk-ag2s` tasks.
-The required checks are still bound to GitHub Actions app `15368`; the fleet's
-user-status publisher cannot satisfy that binding. Publication stays disabled
-until a dedicated publisher app has a verified canary and can replace that
-specific source. Former triggers and other workflow classes remain unchanged.
-No check was fabricated, bypassed or disabled. Remaining host model verification
-and remote installation are not implied by these execution receipts.
+The two required check classes completed their independent zklw cutover on
+2026-09-09. Dedicated App `4881945` published successful results from two fresh
+guests per exact revision under its new policy. Two isolated PRs proved that
+merge-only App checks satisfy the protected gate; completed results replayed
+unchanged after the PRs closed without merging. Four automatic push and PR runs
+also passed and published. The required checks now bind specifically to this
+App. Only the former generator/parity and routing-audit workflows are disabled;
+all other protection fields and workflow states are preserved. See the
+[authenticated publication and cutover evidence](https://github.com/mistakeknot/ops/blob/main/ci/fleet/evidence/2026-09-09-app-publication-canary.json).
+
+Full CI migration remains outstanding under `mk-ag2s.209` and `mk-ag2s.78` for
+other workflow classes. Remaining host model verification and remote
+installation are not implied by these execution receipts.
