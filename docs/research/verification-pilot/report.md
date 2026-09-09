@@ -44,7 +44,7 @@ live cross-host synchronization.
 
 ## Independent review
 
-Five external Claude reviews completed. They drove reproduced fixes for index
+Six external Claude reviews completed. They drove reproduced fixes for index
 refresh invalidation, shell-function shadowing, artifact namespace collisions,
 complete report-name validation, nested XML outcomes, journal evidence binding,
 error attribution, missing test dependencies, schema resolution and CI artifact
@@ -59,6 +59,24 @@ same configured Claude reviewer then returned VERDICT: CLEAN. It checked both
 payload hashes, all four regressions and a matching-SHA pass-through case. No
 alternate provider or indirect transfer was used.
 
+The first committed zklw candidate, `c977155687cba152ba9a4b28bc7012efdec728d9`,
+passed 232 tests in guest 26 but failed one in guest 27. Both protected receipt
+and artifact sets authenticate correctly. The failure exposed a fresh JUnit
+report rejected because filesystem timestamps can lag the process wall clock.
+The working fix compares report mtime with the newly created log's prelaunch
+inode timestamp on the same filesystem. Two regressions cover fresh and stale
+reports while the wall clock is ahead; the fresh case failed before this fix.
+All 234 focused tests and the 33 Beads tests plus three shell suites now pass
+with source-stable receipts in `clock-fix-verified-results.json`.
+
+The new two-file payload in `clock-review-payload/` matches the reviewed source.
+Automatic approval review initially rejected its transfer; the user approved
+that exact payload and prompt. The same Claude reviewer returned CLEAN after
+reading both files and probing timestamp ordering. `qa-clock.md` retains the
+review and its non-blocking observations. The new commit needs two fresh
+successful guests; guest 26 cannot satisfy that new commit's gate. The fleet
+evidence linked below records those results without changing the tested commit.
+
 ## Efficiency observations
 
 | Final local sample | Retained command output | Summary |
@@ -72,7 +90,7 @@ small Clavain sample was 253 characters versus its prior formatter's 173, about
 46% larger; Beads was 463 versus 495, about 6% smaller. The old comparison
 reconstructs formatting from the same commands, not a second timed execution.
 
-Verification invokes no models and caches no results. Five QA reviews completed;
+Verification invokes no models and caches no results. Six QA reviews completed;
 an earlier sandboxed attempt failed login, and rejected transfers did not run.
 Production verification turns, accepted-task repairs, subscription allowance
 and attributable API usage remain unknown. No subscription or delivery-speed

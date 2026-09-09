@@ -262,6 +262,23 @@ def test_stale_report_rejected(runner, repo, tmp_path):
     assert execute(runner, repo, tmp_path, contract).failure_kind == "test-report"
 
 
+@pytest.mark.parametrize("stale", [False, True])
+def test_report_freshness_uses_filesystem_clock(runner, repo, tmp_path, monkeypatch, stale):
+    # Linux filesystem timestamps can lag CLOCK_REALTIME even for a fresh write.
+    import shlex
+    wall_time = time.time_ns
+    monkeypatch.setattr(runner.time, "time_ns", lambda: wall_time() + 2_000_000_000)
+    xml = '<testsuites><testsuite tests="1" failures="0" errors="0" skipped="0"><testcase name="ok"/></testsuite></testsuites>'
+    command = 'printf %s ' + shlex.quote(xml) + ' > "$VERIFY_EVIDENCE_DIR/junit.xml"'
+    if stale:
+        command += '; touch -t 200001010000 "$VERIFY_EVIDENCE_DIR/junit.xml"'
+    contract = spec(command)
+    contract["checks"][0]["test_count"] = {"parser": "pytest-junit", "report": "junit.xml"}
+    result = execute(runner, repo, tmp_path, contract)
+    assert result.machine_eligible is (not stale)
+    assert result.failure_kind == ("test-report" if stale else None)
+
+
 def test_reused_report_rejected_before_second_command(runner, repo, tmp_path):
     contract = spec('echo stale > "$VERIFY_EVIDENCE_DIR/junit.xml"')
     contract["checks"].append({"id": "second", "run": "touch should-not-run", "expect": "exit 0",

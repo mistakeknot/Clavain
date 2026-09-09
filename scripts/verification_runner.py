@@ -375,6 +375,9 @@ def _run(argv, cwd, env, evidence, name, timeout, output_limit, cancel):
     fd = evidence.create(name)
     try:
         with os.fdopen(fd, "wb") as log, selectors.DefaultSelector() as selector:
+            # Compare report freshness within this filesystem's clock domain.
+            # Kernel inode timestamps can lag time.time_ns() on a fresh write.
+            result["filesystem_started_ns"] = os.fstat(log.fileno()).st_mtime_ns
             try:
                 proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
@@ -450,13 +453,13 @@ def _contains(evidence, name, needle):
         os.close(fd)
 
 
-def _junit(evidence, name, config, started_ns):
+def _junit(evidence, name, config, filesystem_started_ns):
     """Strict pytest xunit2 shape: one suite, counts agree with testcase outcomes."""
     try:
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=evidence.fd)
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_mtime_ns < started_ns:
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_mtime_ns < filesystem_started_ns:
                 raise ValueError("stale or non-regular report")
             data = stream.read(OUTPUT_LIMIT + 1)
             if len(data) > OUTPUT_LIMIT or b"<!DOCTYPE" in data or b"<!ENTITY" in data:
@@ -568,7 +571,7 @@ def verify(raw, project_dir, evidence_dir, *, run_id=None, task_id="verification
             execution["passed"] = (execution["exit_status"] == value if kind == "exit" else
                                    execution["exit_status"] == 0 and _contains(evidence, execution["log"], value))
             if count_config:
-                execution["test_count"] = _junit(evidence, report_name, count_config, execution["started_ns"])
+                execution["test_count"] = _junit(evidence, report_name, count_config, execution["filesystem_started_ns"])
                 execution["passed"] &= execution["test_count"]["passed"]
         optional_empty = not spec["checks"] and not spec.get("required", True)
         if any(not c["passed"] for c in checks):
