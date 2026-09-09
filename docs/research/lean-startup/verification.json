@@ -73,5 +73,41 @@
     "interstat": "registration disabled; mk-ag2s.124 remains open",
     "intertest": "registration disabled; mk-ag2s.128 remains open",
     "dotfiles": "registration disabled; mk-ag2s.32 remains with current owner"
+  },
+  "source_delivery": {
+    "Clavain": {
+      "commit": "2dec21492b6ebad89e079fcd1e1f3211af54407c",
+      "main_pushed": true
+    },
+    "interstat": {
+      "commit": "2dd2bac412288b7aead853a1e43abf9c40496ee5",
+      "main_pushed": true
+    },
+    "intertest": {
+      "commit": "2c785cf09368c8f959ad9deb274d56600b70686a",
+      "main_pushed": true
+    },
+    "intercore": {
+      "commit": "39f7599083c76ce32f46527c84fd58b43d1143de",
+      "main_pushed": true
+    },
+    "dotfiles": {
+      "commit": "67792a9a1bd738a618af7322ab1220f69d62b0a9",
+      "main_pushed": true
+    },
+    "Sylveste": {
+      "commit": "e2082e9ea6ee157090ff054342e58f11a9567268",
+      "main_pushed": false,
+      "remote_source_ref": "refs/tags/ci/e2082e9ea6ee157090ff054342e58f11a9567268",
+      "required_check": "Generator and parity checkers",
+      "required_publisher_app_id": 4881945,
+      "zklw_job": 39,
+      "result": "broker prerequisite: source is no longer current",
+      "campaign_task": "mk-ag2s.209"
+    }
+  },
+  "narrow_sync": {
+    "codex_operations_reference": "local symlink verified; macOS/server installer declarations added; broad installers not run",
+    "managed_candidate_contract": "not applied pending native pilot/rollout"
   }
 }
