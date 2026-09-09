@@ -8,12 +8,14 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   AUDIT_SCRIPT="$REPO_ROOT/scripts/runtime-evidence-audit.sh"
   TEST_ROOT="$(mktemp -d)"
+  export CLAVAIN_STARTUP_STATE_DIR="$TEST_ROOT/startup-state"
   BIN_DIR="$TEST_ROOT/bin"
   FIXTURE_DIR="$TEST_ROOT/fixtures"
   STATE_DIR="$FIXTURE_DIR/state"
   mkdir -p "$BIN_DIR" "$STATE_DIR"
 
   export AUDIT_CALL_LOG="$TEST_ROOT/calls.log"
+  : > "$AUDIT_CALL_LOG"
   export AUDIT_BEADS_JSON="$FIXTURE_DIR/beads.json"
   export AUDIT_FIXTURE_DIR="$FIXTURE_DIR"
   export PATH="$BIN_DIR:$PATH"
@@ -280,7 +282,7 @@ _write_summary_states() {
   [ "$(grep -c '^clavain-cli:' "$AUDIT_CALL_LOG" || true)" -eq 0 ]
 }
 
-@test "session start surfaces findings once per six-hour window" {
+@test "session start leaves runtime audit to explicit refresh" {
   local hook_project audit_stub cache_dir first second
   hook_project="$TEST_ROOT/hook-project"
   audit_stub="$TEST_ROOT/audit-stub.sh"
@@ -309,9 +311,9 @@ EOF
     CLAVAIN_RUNTIME_AUDIT_CACHE_DIR="$cache_dir" \
     bash "$HOOKS_DIR/session-start.sh")"
 
-  jq -e '.hookSpecificOutput.additionalContext | contains("bead-hook") and contains("runtime-evidence collect")' <<<"$first" >/dev/null
+  jq -e '.hookSpecificOutput.additionalContext | contains("unknown")' <<<"$first" >/dev/null
   [ "$(jq -r '.hookSpecificOutput.additionalContext | contains("bead-hook")' <<<"$second")" = "false" ]
-  [ "$(grep -c '^audit$' "$AUDIT_CALL_LOG")" -eq 1 ]
+  [ "$(grep -c '^audit$' "$AUDIT_CALL_LOG" || true)" -eq 0 ]
 }
 
 @test "session start is quiet for clean and unsupported audits" {
@@ -342,7 +344,7 @@ EOF
   done
 }
 
-@test "session audit cadence is scoped per repository" {
+@test "session startup does not run audits for either repository" {
   local first_project second_project audit_stub cache_dir
   first_project="$TEST_ROOT/first-project"
   second_project="$TEST_ROOT/second-project"
@@ -369,9 +371,7 @@ EOF
     CLAVAIN_RUNTIME_AUDIT_CACHE_DIR="$cache_dir" \
     bash "$HOOKS_DIR/session-start.sh" >/dev/null
 
-  [ "$(grep -c '^audit:' "$AUDIT_CALL_LOG")" -eq 2 ]
-  grep -Fxq "audit:$first_project" "$AUDIT_CALL_LOG"
-  grep -Fxq "audit:$second_project" "$AUDIT_CALL_LOG"
+  [ "$(grep -c '^audit:' "$AUDIT_CALL_LOG" || true)" -eq 0 ]
 }
 
 @test "session start does not enter an existing runtime audit lock" {

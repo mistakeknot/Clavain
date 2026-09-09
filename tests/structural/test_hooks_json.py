@@ -109,7 +109,7 @@ def test_user_prompt_submit_has_one_bounded_context_gateway(hooks_json):
 def test_session_start_interserve_injection(project_root):
     """session-start.sh contains the interserve behavioral contract injection."""
     session_start = project_root / "hooks" / "session-start.sh"
-    content = session_start.read_text()
+    content = session_start.read_text() + (project_root / "scripts" / "startup.py").read_text()
     assert "INTERSERVE MODE" in content, (
         "session-start.sh should contain 'INTERSERVE MODE' for behavioral contract injection"
     )

@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "task_id": "sylveste-z55b",
+  "evidence_kind": "source implementation; not native acceptance",
+  "routing_policy_sha256": "f39be8adfc2f14271b3f5f83a1a6ba9bf875a1c200494e9f0dfc0651d37f9ceb",
+  "checks": {
+    "clavain_structural": "1147 passed, 1 skipped; followed by 29 focused startup tests after conservative doctor freshness fix",
+    "shell": "24 passed",
+    "interstat": "196 passed",
+    "host_contracts": "passed across eight adapter surfaces",
+    "codex_discovery": {
+      "enabled": 102,
+      "unique": 102,
+      "duplicates": 0
+    }
+  },
+  "direct_renderer_probe": {
+    "serialized_bytes": 3162,
+    "context_bytes": 2927,
+    "duration_ms": 25.169,
+    "active_task_retained": true,
+    "cache": "fresh",
+    "instruction_contract": "stale; current installed instruction block not synchronized to candidate"
+  },
+  "source_bytes_only": {
+    "global_codex": 18130,
+    "intercore_guidance": 4116,
+    "writing_plans": 1912,
+    "executing_plans": 2626,
+    "tdd": 1795
+  },
+  "baseline": {
+    "selected_version": "0.6.315",
+    "source_sha": "0e163b35b63231c31026b0a2e45ce9251f258efa",
+    "source_metadata_repaired": true,
+    "bundled_contents_edited": false,
+    "known_artifact_drift": [
+      "docs/vision.md"
+    ],
+    "installed_startup": "old renderer, including sibling cleanup; candidate not installed"
+  },
+  "independent_review": {
+    "model": "claude-fable-5-1",
+    "effort": "high",
+    "verdict": "CLEAN for source commit only",
+    "review_sha256": "1baedb9fb77931b1a1e690b6828e53a394b490faa747ef74efb768cf5603ba05",
+    "post_review_delta": "Doctor now requires a ledger observation after latest refresh; added failing-first regression, 29 startup tests pass.",
+    "native_identity": {
+      "session_id": "bac8394c-004f-40eb-b4da-b2fb0a7979ac",
+      "models": [
+        "claude-fable-5-1"
+      ],
+      "native_transcript_sha256": "4d6a31e3a98a0349c261a091890c19317382af81918146ead6a5aafb9767885c"
+    },
+    "dispatch_sidecar": "warn: parser did not recognize the Markdown VERDICT line; raw review explicitly approves source commit, with nonblocking findings retained"
+  },
+  "outstanding": {
+    "native_pilot": "automatic approval review requires explicit internal-payload transmission authorization; zero subject sessions launched",
+    "rollout": "not performed",
+    "instruction_sync": "candidate managed block not synchronized to live profiles",
+    "ledger_retention": "bounded doctor reader/explicit rotation needed before scale rollout",
+    "minor_followups": [
+      "blank-line export tolerance",
+      "private ownership checks on snapshot reads",
+      "higher priority for mode/error notices"
+    ]
+  },
+  "efficiency_result": "unknown; no allowance savings claim",
+  "ci_prerequisites": {
+    "Sylveste": "checks registered; other classes remain with mk-ag2s.209 owner",
+    "Clavain": "manual verification pilot only; mk-ag2s.25 remains open",
+    "intercore": "registration disabled; mk-ag2s.67 remains open; documentation-only change here",
+    "interstat": "registration disabled; mk-ag2s.124 remains open",
+    "intertest": "registration disabled; mk-ag2s.128 remains open",
+    "dotfiles": "registration disabled; mk-ag2s.32 remains with current owner"
+  }
+}

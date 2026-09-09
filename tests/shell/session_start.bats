@@ -1,7 +1,9 @@
 #!/usr/bin/env bats
 # Tests for hooks/session-start.sh
+bats_require_minimum_version 1.5.0
 
 setup() {
+    export CLAVAIN_STARTUP_STATE_DIR="$(mktemp -d)"
     load test_helper
     stub_network
     # Also stub pgrep and command lookups used by session-start
@@ -92,7 +94,7 @@ ENDJSON
     [[ "$context" == *"review architecture"* ]]
 }
 
-@test "session-start: consumes manifest after reading" {
+@test "session-start: preserves manifest after reading" {
     local tmpdir
     tmpdir=$(mktemp -d)
     mkdir -p "$tmpdir/.clavain/scratch"
@@ -103,8 +105,8 @@ ENDJSON
         export -f curl pgrep
         cd '$tmpdir' && bash '$HOOKS_DIR/session-start.sh'
     " >/dev/null 2>&1
-    # Manifest should be deleted after reading
-    [[ ! -f "$tmpdir/.clavain/scratch/inflight-agents.json" ]]
+    # Startup must preserve the manifest for other sessions
+    [[ -f "$tmpdir/.clavain/scratch/inflight-agents.json" ]]
     rm -rf "$tmpdir"
 }
 
@@ -234,4 +236,8 @@ ENDJSON
     assert_success
     context=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
     [[ "$context" == *"HANDOFF.md found"* ]]
+}
+
+teardown() {
+    rm -rf "$CLAVAIN_STARTUP_STATE_DIR"
 }

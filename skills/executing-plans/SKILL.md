@@ -3,150 +3,44 @@ name: executing-plans
 description: Execute a written implementation plan in a separate session with review checkpoints.
 ---
 
-<!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same batch execution and interserve dispatch protocol. -->
-
 # Executing Plans
 
-Load plan, review critically, execute tasks in batches, report for review between batches. Batch execution with checkpoints for architect review.
+Announce this skill, read the supplied plan, and check current files and repository
+instructions. Treat the plan as intent; resolve material contradictions before
+dependent work. Preserve unrelated changes. Use the existing project tracker.
 
-**Announce at start:** "I'm using the executing-plans skill to implement this plan."
+Follow `docs/canon/reasoning-routing.md` from the selected installation. Record
+reasons and rationale, resolve the execution role, and preserve frontier planning
+and independent review requirements. Hand off only with decisions, constraints,
+verification and escalation conditions. Missing authentication is an operational
+blocker, not permission to change the required reviewer or destination.
 
-**Pattern F (offload) runs:** when this plan is executed by a fresh-context executor subagent with a separate validator, follow `references/pattern-f-contracts.md` in this skill directory for the executor and validator prompts, the gauge precondition, and the verdict register write.
+Execute sequentially by default. If a companion `.exec.yaml` exists or the project
+has `.claude/clodex-toggle.flag`, read
+[execution-modes.md](references/execution-modes.md) for that mode before dispatch.
+Use only authorized delegation and available host capabilities. Pattern F runs
+also require [pattern-f-contracts.md](references/pattern-f-contracts.md).
 
-## Reasoning allocation
+For each logical task: mark progress, implement the specified behavior, run the
+meaningful checks, inspect their results and preserve review evidence. Use
+`intertest:test-driven-development` for behavior changes. Report material findings
+between batches and continue authorized work without ceremonial approval requests.
 
-Before substantive planning or execution, read the selected Clavain installation's
-`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
-and an accountable decision context. Substantial uncertainty, foundational
-invariants, broad consequences, difficult verification, and demonstrated
-capability failure require frontier involvement. Domain names are examples.
-Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
-capabilities require frontier planning. Keep frontier involvement while evidence
-changes the plan. Hand off with decisions, constraints, verification, and escalation
-conditions explicit; retain empirical acceptance. Foundational/consequential plan
-review requires the other frontier model. Operational failures are not capability
-strikes. Preserve stricter gates; unsupported host routing must be reported.
+Verification blocks require a zero process exit as well as the declared
+expectation. Reject unknown expectation syntax; output text never overrides a
+nonzero exit. Missing tools, malformed inputs or unavailable services are
+UNVERIFIABLE. Do not turn unavailable evidence into a pass or a capability failure.
 
+Validate all required outcomes and consumer connections after implementation.
+Source presence is not invoked behavior. Retain fresh host, play, device or
+production evidence where the plan requires it. Incomplete must-haves remain
+open; do not mark a task accepted from structural checks alone.
 
-## Step 1: Load and Review Plan
+Fix bugs and blockers introduced by this work within scope. Two demonstrated
+capability failures require policy escalation; a disproven premise requires
+immediate escalation. Ask when a new architectural decision changes authorized
+scope, or required information/authority is missing. Continue unaffected work.
 
-1. Read plan file
-2. Review critically — raise questions/concerns with human partner before starting
-3. If no concerns: create TodoWrite and proceed
-
-## Step 2: Check Execution Mode
-
-Check for `.exec.yaml` manifest (replace plan's `.md` extension). If found → Step 2C (priority).
-
-Check interserve flag: `[ -f "$(pwd)/.claude/clodex-toggle.flag" ] && echo INTERSERVE_ACTIVE || echo DIRECT_MODE`
-
-Fallback chain:
-- Manifest exists → **2C: Orchestrated**
-- Flag exists, no manifest → **2A: Codex Dispatch**
-- Neither → **2B: Direct**
-
-## Step 2A: Codex Dispatch (interserve mode)
-
-Dispatch tasks to Codex agents for parallelization.
-
-1. **Classify tasks:** Independent (parallel → Codex) | Sequential (ordered dispatch) | Exploratory (Claude subagent)
-2. **Batch:** Independent tasks in same batch run in parallel; max 5 agents/batch
-3. **Per batch** via `clavain:interserve`:
-   - Write prompt files to `/tmp/codex-task-<name>.md` (goal, files, build/test commands, verdict suffix)
-   - Dispatch independent tasks in parallel Bash calls; wait for completion
-   - Read `.verdict` file first (7 lines) — STATUS `pass` → trust and move on; `warn`/`fail` → read full output
-   - No `.verdict` → fall back to full output
-4. **Between batches:** Report pass/fail/issues; wait for feedback
-5. **On failure:** Offer retry with tighter prompt, fall back to 2B, or skip
-
-## Step 2B: Direct Execution (default)
-
-Default: first 3 tasks per batch. Per task: mark in_progress → follow steps exactly → run verifications → mark completed.
-
-## Step 2C: Orchestrated Execution (manifest exists)
-
-1. **Locate orchestrator:**
-   ```bash
-   ORCHESTRATE=$(find ~/.claude/plugins/cache -path '*/clavain/*/scripts/orchestrate.py' 2>/dev/null | head -1)
-   [ -z "$ORCHESTRATE" ] && ORCHESTRATE=$(find ~/projects -name orchestrate.py -path '*/clavain/scripts/*' 2>/dev/null | head -1)
-   ```
-2. **Validate:** `python3 "$ORCHESTRATE" --validate "$MANIFEST"` — on failure, report errors, fall back to 2A/2B
-3. **Dry-run:** `python3 "$ORCHESTRATE" --dry-run "$MANIFEST"` — present wave breakdown (parallelism, cross-stage deps, tasks missing files)
-4. **Ask for approval** (AskUserQuestion): Approve | Edit mode | Skip to manual
-5. **Execute:** `python3 "$ORCHESTRATE" "$MANIFEST" --plan "$PLAN_PATH" --project-dir "$(pwd)"` with `timeout: 600000`
-   - **Review pipeline is ON by default** (goal 7d610151): per task, the orchestrator runs the plan's `<verify>` blocks as machine gates, then dispatches an INDEPENDENT reviewer on the task-scoped git diff (never the executor's self-report), then loops fix→re-review up to 2 rounds. Governed review resolves the validation role and executor identity; legacy tier-only runs remain ungoverned. Preserve independent review; adjust rounds with `ORC_MAX_FIX_ROUNDS`; the sealed `<plan>.criteria.md` sidecar is handed to reviewers automatically when present. `--no-review` restores self-report gating.
-6. **Read summary:** `pass` → reviewed and approved (with review on); `warn` → read output, assess; `fail`/`error` → offer retry/manual/skip; `skipped` → report dep failure
-   - **`escalated`** → review/verify still failing after the fix-round budget (two strikes). Read the task's `review-*.md` + `verify-*.txt` artifacts, rule on the findings yourself (controller judgment — this is the doctrine's escalation seat), then re-run or fix via 2B.
-   - **`question`** → the executor asked instead of guessing (`VERDICT: QUESTION …` — the question is in the summary line). Answer it, fold the answer into the plan or task prompt, re-run.
-7. **On partial failure or a killed run:** re-run with `--resume <run_id>` (the run id is the directory name under `.clavain/orchestrate-runs/` — its `journal.jsonl` records which tasks finished; complete tasks are skipped with dependency edges satisfied, everything else re-dispatches into the same run dir) | execute failed tasks via 2B | skip. A killed run's stranded push guard is swept automatically on the next invocation.
-
-## Step 2D: Post-Task Verification
-
-After each task (any mode): parse `<verify>...</verify>` block for `run:`/`expect:` pairs.
-- `expect: exit 0` — must exit 0; `expect: contains "string"` — output must include string
-- Pass → log "Verify passed for Task N"; failure → treat as Rule 1 auto-fix (two strikes, then stop and escalate per the routing doctrine)
-- No verify block → skip silently
-
-**Vetting signal write** — when all per-task verifications pass for a plan that is part of a tracked bead, persist vetting state so the auto-proceed authz gate can evaluate at ship time (see `docs/canon/policy-merge.md`):
-```bash
-if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
-  bd set-state "$CLAVAIN_BEAD_ID" vetted_at="$(date +%s)"            --reason "executing-plans task verified" 2>/dev/null || true
-  bd set-state "$CLAVAIN_BEAD_ID" vetted_sha="$(git rev-parse HEAD)" --reason "executing-plans task verified" 2>/dev/null || true
-  bd set-state "$CLAVAIN_BEAD_ID" tests_passed="true"                --reason "executing-plans task verified" 2>/dev/null || true
-  bd set-state "$CLAVAIN_BEAD_ID" sprint_or_work_flow="true"         --reason "executing-plans task verified" 2>/dev/null || true
-fi
-```
-
-## Step 3: Report
-
-Per batch: what was implemented | verify results (pass/fail) | deviations (Rules 1-3) | deferred items | "Ready for feedback."
-
-## Step 4: Continue
-
-Apply feedback → next batch → repeat until complete.
-
-## Step 4B: Must-Have Validation
-
-After all tasks, check for `## Must-Haves` in plan header:
-- **Truths:** verify observable (run commands/URLs, check code paths)
-- **Artifacts:** verify file exists with listed exports (grep/read)
-- **Key Links:** verify connection in source (grep import + function call)
-
-Report results:
-```
-Must-Have Validation:
-  Truths: 3/3 verified
-  Artifacts: 2/2 exist with exports
-  Key Links: 1/2 — Registration endpoint missing validate_email call
-```
-
-Failures are advisory — user decides. No `Must-Haves` section → skip silently.
-
-## Step 5: Complete Development
-
-Announce: "I'm using the landing-a-change skill to complete this work." → **clavain:landing-a-change** (required).
-
-## Deviation Rules
-
-Track all deviations for batch report.
-
-- **Rule 1 — Auto-fix bugs:** Wrong queries, type errors, logic errors → fix inline, verify, continue. No permission.
-- **Rule 2 — Auto-add critical functionality:** Missing error handling, no input validation, no auth on protected routes, missing DB indexes → add, verify, continue. No permission.
-- **Rule 3 — Auto-fix blockers:** Missing dependency, broken imports, build config errors → fix, verify, continue. No permission.
-- **Rule 4 — Ask about architectural changes:** New DB table, switching libraries, breaking API changes, new service layer → STOP, report finding + proposed change + alternatives. User decision required.
-
-**Priority:** Rule 4 → STOP | Rules 1-3 → fix automatically | Unsure → treat as Rule 4.
-
-**Scope:** Only auto-fix issues caused by the current task's changes. Pre-existing warnings/failures in unrelated files → log to `deferred-items.md`, do NOT fix.
-
-**Fix attempt limit:** two strikes per task, then stop and escalate (routing doctrine, two-strikes rule); document what was tried in "Deferred Issues".
-
-## Stop Conditions
-
-Stop immediately and ask when: mid-batch blocker | critical plan gaps | unclear instruction | repeated verification failure. Never start on main/master without explicit user consent.
-
-## Integration
-
-- **clavain:writing-plans** — creates the plan this skill executes
-- **clavain:landing-a-change** — required after all tasks complete
-- **clavain:interserve** — Codex dispatch (interserve mode)
+Use `clavain:landing-a-change` after verification and required independent review.
+Commit and push when already authorized; publication retains its own authority.
+Close only tasks whose required implementation and acceptance evidence exists.

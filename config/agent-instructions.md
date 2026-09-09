@@ -3,70 +3,57 @@
 
 Managed by the selected Clavain installation. {{INSTALLATION_RECEIPT}}
 
-Use Sylveste for substantive coding, research, planning, documentation, and review,
-inside repositories and outside Git roots. At the first substantive task, read
-the installed `clavain:using-clavain` SKILL.md (normally
-`~/.agents/skills/clavain/using-clavain/SKILL.md`), then automatically select the
-relevant workflow and domain skills from the current catalog. Users need not name
-skills. Load full bodies and conditional references only when relevant. On resume,
-reuse loaded guidance and refresh it when the task, evidence, or installation changes.
+For substantive work, read the selected `clavain:using-clavain` skill once and
+select relevant skills from the current catalog. All unique specialist skills
+remain eligible. Load bodies and references only when needed; reuse valid context
+on resume and refresh changed or missing evidence. Trivial requests stay lightweight.
 
-Apply **Observe → Orient → Decide → Act → Reflect → Compound → Synthesize**:
-- Observe actual files, sources, tool results, and outcomes.
-- Orient against the user's goal, constraints, prior evidence, and uncertainty.
-- Decide the next proportionate action and its verification.
-- Act within the existing scope and authority; carry authorized work to completion.
-- Reflect on what the outcome taught us, especially surprises or failures.
-- Compound a useful improvement in an authorized artifact: code, tests, requested
-  documentation, or the project's tracker. Respect separate memory-write permission.
-- Synthesize that learning with existing evidence and goals; reconcile contradictions,
-  update conclusions and the next priorities within scope, and state material changes.
+Apply Observe → Orient → Decide → Act → Reflect → Compound → Synthesize: inspect
+actual evidence, align with intent and constraints, choose a proportionate action
+and verification, finish authorized work, and reconcile what the result teaches.
+Compound only in authorized artifacts; memory writes need explicit permission.
+Do not force seven headings, invent lessons or start unrelated follow-up work.
 
-Scale the loop to the task. Trivial requests need no skill ceremony. Do not force
-seven response headings, invent lessons, write memory automatically, or start
-unrelated follow-up work. If no durable improvement is warranted or authorized,
-keep the learning in the response or current working understanding.
+User intent and runtime restrictions govern procedures. Continue authorized work
+without repeated confirmation, while preserving independent review, fresh
+verification, release and publication authority. A push does not authorize
+publication. Missing companions do not authorize installation. Continue unaffected
+work and ask only for missing information or authority. Unavailable evidence is
+unknown; completion and acceptance require the specified current evidence.
 
-User intent and runtime policy govern skill procedures. Preserve approval,
-verification, review, release, and model-routing boundaries. A blocked external
-review remains a gate; changing models or destinations is not an escape. Missing
-companions do not authorize installation: continue supported work, state the gap,
-and ask only if it blocks a required outcome. Completion claims require current evidence.
-
-Reasoning allocation: record the accountable judgment in a JSON decision context.
-Use reasons `unresolved-success-criteria`, `foundational-invariants`,
-`broad-consequences`, `difficult-verification`, or `capability-failure`, with a
-short rationale. Domain names are examples, not automatic elevation. Substantial
-new capabilities in games, agent systems, AI/ML, graph databases, and product
-strategy require frontier planning. Keep frontier involvement while investigation
-or experiments change the plan. Hand off only with explicit decisions,
-constraints, verification, and escalation conditions. Preserve playtests,
-experiments, user evidence, and production canaries as acceptance where applicable.
+Read the selected `docs/canon/reasoning-routing.md` for substantive planning or
+execution. Record an accountable JSON decision context with reasons and a short
+rationale: `unresolved-success-criteria`, `foundational-invariants`,
+`broad-consequences`, `difficult-verification`, or `capability-failure`. Domain names
+alone do not elevate a task. Substantial new game, agent-system, AI/ML, graph or
+product-strategy capabilities require frontier planning. Keep frontier involvement
+while investigation changes the plan. Handoff requires explicit decisions,
+constraints, verification and escalation conditions. Retain real playtests,
+experiments, user evidence and production canaries where applicable.
 
 Resolve `planning`, `plan-review`, `routine-execution`, `deep-execution`,
-`validation`, or `escalation` using the selected policy:
+`validation`, or `escalation` with:
 `ic --json route dispatch --policy={{POLICY_PATH}} --role=<role> --context-file=<json>`.
-For execution use the packaged `scripts/dispatch.sh --role <role>` with
-`CLAVAIN_ROUTING_POLICY` set to that policy and `CLAVAIN_DECISION_CONTEXT` set to
-the context file. `CLAVAIN_POLICY_PROFILE` selects an alternate policy profile;
-the `ci-campaign-pilot` profile requires context scope `mk-ag2s` and is confined
-to that campaign. The general policy keeps Astra and Fable available.
+Execute through packaged `scripts/dispatch.sh --role <role>` with that
+`CLAVAIN_ROUTING_POLICY` and the `CLAVAIN_DECISION_CONTEXT` file.
+`CLAVAIN_POLICY_PROFILE=ci-campaign-pilot` requires `scope: mk-ag2s` and applies only
+to that campaign. Keep the general Astra/Fable policy unchanged.
 
-Ordinarily use one frontier author. Foundational or especially consequential
-plans require the other frontier model for review. Review roles require
-`--producer-identity` from the actual author/executor receipt. Never downgrade
-required frontier access or evade stricter review gates through a fallback.
-Capability and premise failures count toward escalation; a disproven premise
-requires immediate escalation. Authentication, rate limits, permissions, and
-infrastructure failures remain operational problems. Preserve policy hash,
-classification, exclusions, selected profile, actual model/effort, retries,
-accepted outcomes, defects, and attributable usage in routing and calibration
-evidence. Calibration cannot lower required quality or expand authority.
+Ordinarily use one frontier author. Foundational or especially consequential plans
+require the other frontier reviewer; review roles take `--producer-identity` from
+the actual producer receipt. Never downgrade required frontier access, waive
+stricter gates, or evade a blocked review by changing model or destination.
+Two capability failures require escalation; a disproven premise requires immediate
+escalation. Authentication, limits, permissions and infrastructure are operational
+failures. Preserve policy hash, classifications, exclusions, profile, actual
+model/effort, retries, usage, outcomes and defects in existing attribution evidence.
+Calibration cannot lower quality requirements or expand authority.
 
-Instructions alone are instructional routing. Use governed dispatch for enforced
-model/effort selection and retain a fresh-session receipt before claiming
-behavioral verification. Changing configuration does not change an already-running
-parent model. Report unsupported host capabilities explicitly.
+Instructions and configuration prove instructional routing only. Governed dispatch
+provides enforced model/effort receipts; fresh host sessions establish observed
+behavior. Configuration does not change a running parent's model. Report unsupported
+host capabilities and missing identity/usage fields explicitly. Never cache a
+passing result as a substitute for required fresh verification.
 
 {{HOST_ADAPTER}}
 <!-- END CLAVAIN CODEX TOOL MAP -->

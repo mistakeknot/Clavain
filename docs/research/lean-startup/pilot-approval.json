@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "status": "not_run_approval_required",
+  "subjects": 24,
+  "hosts": [
+    "Codex/Astra",
+    "Claude/Fable"
+  ],
+  "conditions": [
+    "repaired baseline",
+    "candidate"
+  ],
+  "scenarios": [
+    "small edit",
+    "substantive bug fix",
+    "existing plan",
+    "explicit skill",
+    "compaction/resume",
+    "permission-bound action"
+  ],
+  "provider_destinations": [
+    "OpenAI through existing Codex authentication",
+    "Anthropic through existing Claude authentication"
+  ],
+  "payload": [
+    "fixed baseline and candidate Clavain instruction and skill sources",
+    "global Codex guidance from dotfiles for both conditions",
+    "disposable task fixtures and their source files",
+    "native tool interactions and test outputs required for each fixture"
+  ],
+  "excluded_from_payload": [
+    "credential values",
+    "unrelated worktrees",
+    "private messages",
+    "unrelated account files"
+  ],
+  "authorization_needed": "Automatic approval review requires explicit user authorization to transmit these internal instruction and source payloads for the native comparison.",
+  "independent_acceptance": null,
+  "efficiency_result": "unknown"
+}
