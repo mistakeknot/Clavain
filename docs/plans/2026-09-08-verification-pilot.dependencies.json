@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "pilot_task": "Sylveste-5ewg",
+  "related_tasks": [
+    "Sylveste-uo7b",
+    "sylveste-xoki.2"
+  ],
+  "repository": {
+    "name": "mistakeknot/Clavain",
+    "id": 1151593132
+  },
+  "ci": {
+    "campaign": "mk-ag2s",
+    "task": "mk-ag2s.25",
+    "observed_enabled": false,
+    "owner": "codex-verification-pilot",
+    "scope": "Bounded verification check recipe; other workflow classes remain in mk-ag2s.25",
+    "observed_enabled_note": "Initial preflight observation; current rollout disposition is recorded in mk-ag2s.25 and the fleet evidence."
+  },
+  "implementation": {
+    "python_minimum": "3.12",
+    "shell": "/bin/bash",
+    "external_packages": [],
+    "existing_contract": "scripts/_verification.py",
+    "adapter_ownership": "User explicitly authorized takeover from routing worker on 2026-09-08; integrated",
+    "policy_files": "outside pilot edit scope",
+    "final_review": "Explicit two-file transfer approved; configured Claude review returned CLEAN with matching payload hashes and four passing regressions"
+  },
+  "pilot_dependency": {
+    "path": "/Users/sma/projects/Sylveste-beads-transport",
+    "revision": "affe02be3755254a7c7204bd33df945ba430bc09",
+    "checks": [
+      "tests/test_beads_jsonl_dolt_sync.py",
+      "tests/test_beads_import_merged.sh",
+      "tests/test_beads_transport_lib.sh",
+      "tests/test_beads_transport_hooks.sh"
+    ],
+    "coverage": "isolated transport fixtures; no production tracker import, no live host synchronization claim"
+  },
+  "acceptance": [
+    "fresh runner and pipeline regression checks",
+    "installed adapter invocation",
+    "Mac Clavain and isolated Beads pilot",
+    "independent QA",
+    "required zklw checks and applicable canaries"
+  ],
+  "evidence_directory": "/Users/sma/projects/.verification-pilot-2026-09-09-5_5n_py5"
+}

@@ -18,6 +18,10 @@ stages:
     tasks:
       - id: task-1
         title: "Scaffold core types and interfaces"
+        verification:
+          checks:
+            - run: go test ./pkg/...
+              expect: exit 0
         files:
           - pkg/types.go
           - pkg/interfaces.go
@@ -26,6 +30,10 @@ stages:
     tasks:
       - id: task-2
         title: "Implement REST API handlers"
+        verification:
+          checks:
+            - run: go test ./pkg/api/...
+              expect: exit 0
         files:
           - pkg/api/handler.go
           - pkg/api/routes.go
@@ -33,6 +41,10 @@ stages:
 
       - id: task-3
         title: "Implement CLI commands"
+        verification:
+          checks:
+            - run: go test ./cmd/cli/...
+              expect: exit 0
         files:
           - cmd/cli/main.go
           - cmd/cli/commands.go
@@ -40,6 +52,10 @@ stages:
 
       - id: task-4
         title: "Integration tests"
+        verification:
+          checks:
+            - run: go test ./tests/...
+              expect: exit 0
         files:
           - tests/integration_test.go
         depends: [task-2, task-3]  # fan-in: waits for both

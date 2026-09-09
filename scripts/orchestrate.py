@@ -36,11 +36,16 @@ import threading
 import sys
 import textwrap
 import time
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 from uuid import uuid4
+
+from verification_runner import (
+    VerificationError, parse_verify_blocks, validate_spec, verify as verify_contract,
+)
 
 try:
     import yaml
@@ -61,6 +66,7 @@ class Task:
     depends: list[str] = field(default_factory=list)
     tier: str | None = None
     prompt_hint: str | None = None
+    verification: dict | None = None
 
 
 @dataclass
@@ -73,6 +79,11 @@ class TaskResult:
     duration_s: float = 0.0
     # Review/fix rounds consumed by the pipeline (0 = passed first review).
     rounds: int = 0
+    verification_state: str | None = None
+    verification_failure: str | None = None
+    verification_receipt: str | None = None
+    verification_receipt_sha256: str | None = None
+    machine_eligible: bool = False
 
 
 @dataclass
@@ -100,7 +111,18 @@ def load_manifest(path: str | Path) -> Manifest:
     """Parse a .exec.yaml manifest into a Manifest object."""
     _require_yaml()
     with open(path) as f:
-        raw = yaml.safe_load(f)
+        class UniqueLoader(yaml.SafeLoader):
+            pass
+        def mapping(loader, node, deep=False):
+            result = {}
+            for key_node, value_node in node.value:
+                key = loader.construct_object(key_node, deep=deep)
+                if key in result:
+                    raise VerificationError(f"duplicate manifest key: {key}")
+                result[key] = loader.construct_object(value_node, deep=deep)
+            return result
+        UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
+        raw = yaml.load(f, Loader=UniqueLoader)
 
     if not isinstance(raw, dict):
         print(f"ERROR: Manifest must be a YAML mapping, got {type(raw).__name__}", file=sys.stderr)
@@ -119,6 +141,7 @@ def load_manifest(path: str | Path) -> Manifest:
                 depends=t.get("depends", []),
                 tier=t.get("tier"),
                 prompt_hint=t.get("prompt_hint"),
+                verification=t.get("verification"),
             )
             if task.id in tasks:
                 print(f"ERROR: Duplicate task ID '{task.id}'", file=sys.stderr)
@@ -441,8 +464,6 @@ MAX_FIX_ROUNDS = int(os.environ.get("ORC_MAX_FIX_ROUNDS", "2"))
 REVIEW_DIFF_MAX_LINES = 600
 
 _TASK_HEADING = re.compile(r"^#{2,3}\s+Task\s+(\d+)\s*[:.]", re.MULTILINE)
-_VERIFY_BLOCK = re.compile(r"<verify>\n(.*?)</verify>", re.DOTALL)
-_VERIFY_ENTRY = re.compile(r"-\s+run:\s+`([^`]+)`\s*\n\s+expect:\s+(.+)")
 
 
 @dataclass
@@ -450,6 +471,7 @@ class PlanTask:
     """One plan task's spec text and machine gates, as the reviewer sees it."""
     section: str
     verify: list[dict[str, str]] = field(default_factory=list)
+    verification_error: str | None = None
 
 
 def parse_plan_tasks(plan_path: str | None) -> dict[int, PlanTask]:
@@ -464,15 +486,23 @@ def parse_plan_tasks(plan_path: str | None) -> dict[int, PlanTask]:
     with open(plan_path, errors="replace") as f:
         text = f.read()
     matches = list(_TASK_HEADING.finditer(text))
+    # A verify block with no task mapping must not silently disappear.
+    prefix = text[:matches[0].start()] if matches else text
+    if re.search(r"</?verify\b", prefix, re.I):
+        raise VerificationError("verify block has no task heading")
     out: dict[int, PlanTask] = {}
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         section = text[m.start():end]
-        verify: list[dict[str, str]] = []
-        for vb in _VERIFY_BLOCK.finditer(section):
-            for ve in _VERIFY_ENTRY.finditer(vb.group(1)):
-                verify.append({"run": ve.group(1), "expect": ve.group(2).strip()})
-        out[int(m.group(1))] = PlanTask(section=section, verify=verify)
+        try:
+            verify = parse_verify_blocks(section)
+            error = None
+        except VerificationError as exc:
+            verify, error = [], str(exc)
+        number = int(m.group(1))
+        if number in out:
+            raise VerificationError(f"duplicate plan task number: {number}")
+        out[number] = PlanTask(section=section, verify=verify, verification_error=error)
     return out
 
 
@@ -481,44 +511,34 @@ def _task_plan_num(task_id: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _verification_evidence_dir() -> str:
+    configured = os.environ.get("CLAVAIN_VERIFICATION_EVIDENCE_DIR")
+    if configured:
+        return configured
+    # A private OS temporary root, never the orchestrator's in-source run_dir.
+    return tempfile.mkdtemp(prefix="clavain-verification-", dir=str(Path(tempfile.gettempdir()).resolve()))
+
+
 def run_verify_entries(
     entries: list[dict[str, str]], project_dir: str, timeout: int = 600,
 ) -> tuple[bool, str]:
-    """Execute a task's <verify> entries. Returns (all_passed, report).
+    """Legacy tuple facade. The pipeline consumes structured results below."""
+    result = verify_contract({"required": True, "checks": entries, "timeout": timeout},
+                             project_dir, _verification_evidence_dir())
+    return result.machine_eligible, result.summary
 
-    ``expect: exit N`` checks the return code; ``expect: contains "s"``
-    checks combined stdout+stderr; anything else falls back to exit 0.
-    """
-    if not entries:
-        return True, "(no verify entries for this task)"
-    ok = True
-    lines: list[str] = []
-    for e in entries:
-        cmd, expect = e["run"], e["expect"]
-        combined = ""
-        try:
-            p = subprocess.run(
-                cmd, shell=True, cwd=project_dir,
-                capture_output=True, text=True, timeout=timeout,
-            )
-            combined = (p.stdout or "") + (p.stderr or "")
-            if expect.startswith("exit "):
-                passed = p.returncode == int(expect.split()[1])
-            elif expect.startswith("contains"):
-                m = re.search(r'contains\s+"([^"]*)"', expect)
-                passed = bool(m) and m.group(1) in combined
-            else:
-                passed = p.returncode == 0
-        except subprocess.TimeoutExpired:
-            passed = False
-            combined = f"(timed out after {timeout}s)"
-        ok = ok and passed
-        line = f"{'PASS' if passed else 'FAIL'}: `{cmd}` (expect {expect})"
-        if not passed:
-            tail = "\n".join(combined.strip().splitlines()[-15:])
-            line += f"\n{tail}"
-        lines.append(line)
-    return ok, "\n".join(lines)
+
+def _task_verification(task: Task, info: PlanTask | None) -> dict:
+    if info and info.verification_error:
+        raise VerificationError(info.verification_error)
+    config = dict(task.verification) if task.verification is not None else {}
+    # Manifest checks and plan gates are both required; neither overrides the other.
+    checks = config.get("checks", [])
+    if not isinstance(checks, list):
+        raise VerificationError("verification checks must be a list")
+    config["checks"] = list(checks) + (info.verify if info else [])
+    validate_spec(config)
+    return config
 
 
 def _git(project_dir: str, *args: str) -> str:
@@ -796,6 +816,13 @@ def run_task_pipeline(
     Falls back to plain dispatch_task semantics with --no-review.
     """
     task_dir = os.path.join(run_dir, task.id)
+    num = _task_plan_num(task.id)
+    plan_info = plan_tasks.get(num) if num is not None else None
+    try:
+        verification = _task_verification(task, plan_info)
+    except (TypeError, ValueError) as exc:
+        return TaskResult(task_id=task.id, status="error", error=f"UNVERIFIABLE: {exc}",
+                          verification_state="UNVERIFIABLE", verification_failure="contract")
     head0 = _git_head(project_dir)
 
     result = dispatch_task(
@@ -813,15 +840,33 @@ def run_task_pipeline(
     num = _task_plan_num(task.id)
     plan_info = plan_tasks.get(num) if num is not None else None
     section = plan_info.section if plan_info else ""
-    verify_entries = plan_info.verify if plan_info else []
     tier = task.tier or manifest.tier
 
     rounds = 0
     while True:
-        vok, vreport = run_verify_entries(verify_entries, project_dir)
-        _write_text(os.path.join(task_dir, f"verify-{rounds}.txt"), vreport)
+        verification_result = verify_contract(
+            verification, project_dir, _verification_evidence_dir(),
+            run_id=run_id, task_id=task.id, attempt=rounds,
+        )
+        vreport = verification_result.summary
+        result.verification_state = verification_result.step.state.value
+        result.verification_failure = verification_result.failure_kind
+        result.verification_receipt = verification_result.receipt_path
+        result.verification_receipt_sha256 = verification_result.step.extra.get("receipt_sha256")
+        result.machine_eligible = verification_result.machine_eligible
+        try:
+            _write_text(os.path.join(task_dir, f"verify-{rounds}.txt"), vreport)
+        except OSError as exc:
+            result.status, result.error = "error", f"verification summary unavailable: {exc}"
+            result.machine_eligible = False
+            return result
+        if not verification_result.review_allowed and not verification_result.repairable:
+            result.status = "error"
+            result.rounds = rounds
+            result.error = vreport
+            return result
 
-        if vok:
+        if verification_result.review_allowed:
             approved, review_text = dispatch_review(
                 task, tier, section, criteria_path, project_dir, head0,
                 vreport, result, dispatch_sh, run_dir, rounds + 1, manifest,
@@ -1230,6 +1275,11 @@ def _journal_task_entry(run_dir: str, project_dir: str, res: TaskResult) -> dict
         "output": res.output_path,
         "verdict": res.verdict_path,
         "review_verdict": str(reviews[-1]) if reviews else None,
+        "verification_state": res.verification_state,
+        "verification_failure": res.verification_failure,
+        "verification_receipt": res.verification_receipt,
+        "verification_receipt_sha256": res.verification_receipt_sha256,
+        "machine_eligible": res.machine_eligible,
         "head": _git_head(project_dir),
         "ts": _now_iso(),
     }
@@ -1457,7 +1507,18 @@ def orchestrate(
 
     # Review-pipeline inputs: the plan's per-task sections + <verify> blocks,
     # and the sealed criteria sidecar when one sits next to the plan.
-    plan_tasks = parse_plan_tasks(plan_path)
+    try:
+        plan_tasks = parse_plan_tasks(plan_path)
+        for task in manifest.tasks.values():
+            number = _task_plan_num(task.id)
+            try:
+                _task_verification(task, plan_tasks.get(number))
+            except (TypeError, ValueError) as exc:
+                raise VerificationError(f"{task.id}: {exc}") from exc
+    except (TypeError, ValueError) as exc:
+        return {tid: TaskResult(task_id=tid, status="error", error=f"UNVERIFIABLE: {exc}",
+                                verification_state="UNVERIFIABLE", verification_failure="contract")
+                for tid in manifest.tasks}
     criteria_path: str | None = None
     if plan_path and plan_path.endswith(".md"):
         candidate = plan_path[:-3] + ".criteria.md"
@@ -1784,6 +1845,10 @@ def _print_summary(
             result = completed[tid]
             extra = f" — {result.error}" if result.error else ""
             print(f"    {tid}: {title}{extra}")
+            print(f"      verification={result.verification_state or 'not-run'} "
+                  f"machine_eligible={str(result.machine_eligible).lower()}")
+            if result.verification_receipt:
+                print(f"      receipt={result.verification_receipt} sha256={result.verification_receipt_sha256}")
 
     total = len(completed)
     counts = count_verdicts(completed)
@@ -3027,9 +3092,19 @@ def main() -> None:
         parser.error("manifest is required unless --pattern-f is given")
 
     if args.validate:
-        manifest = load_manifest(args.manifest)
-        graph = build_graph(manifest)
-        errors = validate_graph(graph, manifest)
+        errors = []
+        try:
+            manifest = load_manifest(args.manifest)
+            graph = build_graph(manifest)
+            errors = validate_graph(graph, manifest)
+            plan_tasks = parse_plan_tasks(args.plan)
+            for task in manifest.tasks.values():
+                try:
+                    _task_verification(task, plan_tasks.get(_task_plan_num(task.id)))
+                except (TypeError, ValueError) as exc:
+                    errors.append(f"{task.id}: UNVERIFIABLE: {exc}")
+        except (TypeError, ValueError, yaml.YAMLError) as exc:
+            errors.append(f"UNVERIFIABLE: {exc}")
         if errors:
             print(f"Manifest INVALID: {len(errors)} error(s)")
             for e in errors:

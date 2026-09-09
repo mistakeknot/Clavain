@@ -80,12 +80,13 @@ class TestParsePlanTasks:
 
 
 class TestRunVerifyEntries:
-    def test_empty_passes(self, orc, tmp_path):
+    def test_empty_is_unverifiable(self, orc, tmp_path):
         ok, report = orc.run_verify_entries([], str(tmp_path))
-        assert ok
-        assert "no verify entries" in report
+        assert not ok
+        assert "required verification has no checks" in report
 
     def test_exit_and_contains(self, orc, tmp_path):
+        _git_repo(tmp_path)
         ok, report = orc.run_verify_entries(
             [
                 {"run": "true", "expect": "exit 0"},
@@ -97,6 +98,7 @@ class TestRunVerifyEntries:
         assert report.count("PASS") == 2
 
     def test_failure_carries_output_tail(self, orc, tmp_path):
+        _git_repo(tmp_path)
         ok, report = orc.run_verify_entries(
             [{"run": "echo broke && false", "expect": "exit 0"}], str(tmp_path)
         )
@@ -105,6 +107,7 @@ class TestRunVerifyEntries:
         assert "broke" in report  # the fix agent needs the evidence
 
     def test_contains_miss_fails(self, orc, tmp_path):
+        _git_repo(tmp_path)
         ok, _ = orc.run_verify_entries(
             [{"run": "echo other", "expect": 'contains "weasel"'}], str(tmp_path)
         )
@@ -189,6 +192,14 @@ stages:
     tasks:
 {tasks_yaml}"""
     )
+    # These fixtures test dispatch/review behavior independently of machine gates.
+    import yaml
+    data = yaml.safe_load(path.read_text())
+    for stage in data["stages"]:
+        for task in stage["tasks"]:
+            task.setdefault("verification", {"required": False, "checks": []})
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+
     return path
 
 

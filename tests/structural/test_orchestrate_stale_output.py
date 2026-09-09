@@ -44,7 +44,8 @@ def _write_stub(path: Path, body: str) -> Path:
 def _dispatch_inputs(orc, tmp_path: Path, timeout: int = 1):
     project = tmp_path / "project"
     project.mkdir()
-    task = orc.Task(id="task-1", title="stale output", stage="test", files=[])
+    task = orc.Task(id="task-1", title="stale output", stage="test", files=[],
+                    verification={"required": False, "checks": []})
     manifest = orc.Manifest(
         version=1,
         mode="dependency-driven",
