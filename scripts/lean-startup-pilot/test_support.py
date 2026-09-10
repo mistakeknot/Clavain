@@ -10,6 +10,64 @@ import compaction
 import delivery
 
 
+def test_copied_runner_uses_the_already_verified_native_adapter(tmp_path):
+    import types
+    copied = tmp_path / 'runner.py'
+    shutil.copyfile(Path(__file__).with_name('runner.py'), copied)
+    spec=importlib.util.spec_from_file_location('relocated_runner',copied)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    calls=[]
+    adapter=types.SimpleNamespace(bounded=lambda *args: (calls.append(args) or {'exit_code':0}, []),
+                                  LauncherInterrupted=type('Interrupted',(BaseException,),{}))
+    assert module.bounded([], 'prompt', tmp_path, tmp_path, {}, 'resume', adapter)=={'exit_code':0}
+    assert calls[0][-1]==180
+
+
+def test_later_stages_preserve_bound_decision_and_all_readiness_files(tmp_path):
+    import hashlib,types
+    scripts=Path(__file__).resolve().parents[1]
+    sys.path.insert(0,str(scripts))
+    import readiness,runner
+    folder=tmp_path/'readiness';folder.mkdir()
+    value=dict(reasons=[],rationale='Settled fixture — preserve → boundaries.')
+    (folder/'decision.json').write_text(json.dumps(value))
+    (folder/'execution.stdout').write_text('x'*20000)
+    (tmp_path/'initial.stdout').write_text('derived')
+    transcript=tmp_path/'native.jsonl'
+    rows=[dict(type='session_meta',payload=dict(id='subject',source='exec',thread_source='user')),
+          dict(type='turn_context',payload=dict(turn_id='turn',model='gpt-6-astra',effort='high',approval_policy='never',sandbox_policy={'type':'read-only'})),
+          dict(type='response_item',payload=dict(type='message',role='assistant',phase='final_answer',id='message',content=[dict(type='output_text',text=json.dumps(value))]))]
+    transcript.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    digest=readiness.bind_decision('codex',transcript,'subject',value)['decision_sha256']
+    native=types.SimpleNamespace(readiness=readiness)
+    reference=runner.decision_reference(tmp_path,dict(binding={'decision_sha256':digest}),native)
+    assert reference['path']==str(folder/'decision.json')
+    frozen=runner.readiness_evidence(tmp_path,native)
+    assert frozen['readiness/decision.json']==reference['sha256']
+    assert 'initial.stdout' in frozen
+    runner.verify_readiness_evidence(tmp_path,native,frozen)
+    (folder/'execution.stdout').write_text('changed')
+    with pytest.raises(ValueError,match='readiness evidence changed'):
+        runner.verify_readiness_evidence(tmp_path,native,frozen)
+    (folder/'execution.stdout').write_text('x'*20000)
+    (tmp_path/'initial.stdout').write_text('replaced derived stream')
+    with pytest.raises(ValueError,match='readiness evidence changed'):
+        runner.verify_readiness_evidence(tmp_path,native,frozen)
+    (folder/'decision.json').write_text(json.dumps(dict(value,rationale='Replaced judgment')))
+    with pytest.raises(ValueError,match='bound decision changed'):
+        runner.decision_reference(tmp_path,dict(binding={'decision_sha256':digest}),native)
+
+
+def test_stage_stream_parser_keeps_all_native_labels_and_session_events(tmp_path):
+    import runner
+    stream=tmp_path/'stage.stdout'
+    rows=[{'type':'system','subtype':'init','session_id':'other'},
+          {'type':'assistant','message':{'model':'unexpected'}},
+          {'type':'result','session_id':'other'}]
+    stream.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+    assert runner.stream_events(stream)==rows
+
+
 def test_compaction_requires_native_completion_on_exact_session():
     assert not compaction.codex_completed({'id':3,'result':{}},'session')
     event={'method':'item/completed','params':{'threadId':'session','item':{'type':'contextCompaction'}}}
@@ -100,6 +158,9 @@ for line in sys.stdin:
     binary.chmod(0o700)
     result=compaction.codex(str(binary),'native-fixture',tmp_path,tmp_path,os.environ.copy())
     assert result['compaction_completed'],result
+    import runner
+    assert (tmp_path/'compaction.stdout').is_file()
+    assert any(compaction.codex_completed(event,'native-fixture') for event in runner.stream_events(tmp_path/'compaction.stdout'))
 
 
 def test_remote_claude_binding_uses_copied_native_session_not_print_stream(tmp_path, monkeypatch):

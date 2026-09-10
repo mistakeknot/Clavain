@@ -9,6 +9,9 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+import readiness
 import tarfile
 
 import delivery
@@ -30,7 +33,14 @@ def main():
         parser.add_argument('--'+flag,type=Path,required=True)
     for flag in ('clavain-sha','intertest-sha','parent-session-id','cohort-id'):
         parser.add_argument('--'+flag,required=True)
+    parser.add_argument('--claude-model',choices=['claude-fable-5-1','claude-opus-5'],default='claude-fable-5-1')
+    parser.add_argument('--fallback-record',type=Path)
     args=parser.parse_args()
+    fallback = None
+    if args.claude_model != 'claude-fable-5-1':
+        if not args.fallback_record: raise ValueError('explicit fallback authorization and capacity evidence required')
+        fallback=json.loads(args.fallback_record.read_text())
+        readiness.validate_fallback(fallback)
     args.base=args.base.resolve()
     if not args.db.is_file(): raise ValueError('existing authoritative Intercore DB required')
     if args.base.exists(): raise ValueError('new cohort directory required')
@@ -50,12 +60,15 @@ def main():
     manifest=dict(schema_version=1,cohort_id=args.cohort_id,cohort_kind='correctness',subject_limit=12,
         pins={'candidate':pins},snapshots=snapshots,
         order=[dict(host=host,scenario=scenario,condition='candidate') for host in ('codex','claude') for scenario in runner.SCENARIOS],
-        model_effort={'codex':['gpt-6-astra','high'],'claude':['claude-fable-5-1','high']},
+        model_effort={'codex':['gpt-6-astra','high'],'claude':[args.claude_model,'high']},launch_mode='native-two-phase',
         original_comparison=str(args.frozen_evidence),original_manifest_sha256=delivery.digest(args.frozen_evidence/'manifest.json'),
         efficiency='inconclusive; correctness-only cohort',requires_completed_native_compaction=True)
     harness=args.base/'sources/candidate/clavain/scripts/lean-startup-pilot'
     names=('runner.py','delivery.py','compaction.py','transport.py')
     manifest['harness_sha256']={name:delivery.digest(harness/name) for name in names}
+    manifest['readiness_sha256']={name:delivery.digest(harness.parent/name) for name in ('readiness.py','native-readiness.py')}
+    if fallback is not None:
+        manifest['model_fallback']={'claude':fallback}
     delivery.write(args.base/'manifest.json',manifest)
     delivery.write(args.base/'delivery-config.json',dict(script=str(args.delivery_script.resolve()),
         script_sha256=delivery.digest(args.delivery_script),db=str(args.db.resolve()),parent_session_id=args.parent_session_id))

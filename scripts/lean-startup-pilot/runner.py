@@ -14,6 +14,7 @@ import sys
 import tarfile
 import time
 import uuid
+import importlib.util
 import delivery
 import compaction
 
@@ -101,20 +102,42 @@ def configure(base, case, host):
         run([sys.executable,str(sources/'clavain/scripts/startup.py'),'refresh','--project',str(fixture),'--host',host],env=env,cwd=fixture)
     return folder,fixture,profile,sources,env
 
-def bounded(cmd, prompt, folder, fixture, env, stage):
-    started = time.monotonic()
-    with (folder/(stage+'.stdout')).open('wb') as out, (folder/(stage+'.stderr')).open('wb') as err:
-        child = subprocess.Popen(cmd,cwd=fixture,env=env,stdin=subprocess.PIPE,stdout=out,stderr=err,start_new_session=True)
-        try:
-            child.communicate(prompt.encode(), timeout=180)
-            status = 'exited'
-        except subprocess.TimeoutExpired:
-            os.killpg(child.pid,signal.SIGTERM)
-            try: child.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                os.killpg(child.pid,signal.SIGKILL); child.wait()
-            status = 'timeout'
-    return {'exit_code':child.returncode,'status':status,'duration_seconds':round(time.monotonic()-started,3)}
+def bounded(cmd, prompt, folder, fixture, env, stage, native):
+    previous = signal.getsignal(signal.SIGTERM)
+    def interrupted(signum, frame):
+        raise native.LauncherInterrupted('native cohort stage interrupted')
+    signal.signal(signal.SIGTERM, interrupted)
+    try:
+        result, _ = native.bounded(cmd, prompt, folder, fixture, env, stage, 180)
+        return result
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def readiness_evidence(folder, native):
+    paths=list((folder/'readiness').iterdir())
+    paths.extend(p for p in (folder/'initial.stdout',folder/'initial.stderr') if p.exists())
+    return {str(p.relative_to(folder)):hashlib.sha256(native.readiness.read_regular(
+                p,128*1024**2 if p.parent==folder else 64*1024**2)).hexdigest() for p in paths}
+
+
+def verify_readiness_evidence(folder, native, expected):
+    if readiness_evidence(folder, native) != expected:
+        raise ValueError('readiness evidence changed during later native stage')
+
+
+def decision_reference(folder, launched, native):
+    path=folder/'readiness/decision.json'
+    raw=native.readiness.read_regular(path,16384)
+    value=native.readiness.validate_decision(raw.decode())
+    canonical=json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
+    if hashlib.sha256(canonical).hexdigest()!=launched['binding']['decision_sha256']:
+        raise ValueError('bound decision changed before later native stage')
+    return dict(path=str(path),sha256=hashlib.sha256(raw).hexdigest())
+
+
+def stream_events(path):
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 def check_fixture(fixture, scenario, env):
     if scenario in ('small-edit','resume'):
@@ -160,6 +183,12 @@ def _case_run(base, number, phase='all'):
     global PINS
     PINS = manifest['pins']
     host = case['host']
+    if manifest.get('launch_mode') != 'native-two-phase':
+        raise ValueError('a separately enrolled native-two-phase cohort is required; stopped cohorts cannot be rerun')
+    for helper in (delivery,compaction):
+        path=Path(helper.__file__)
+        if hashlib.sha256(path.read_bytes()).hexdigest()!=manifest.get('harness_sha256',{}).get(path.name):
+            raise ValueError('imported cohort helper differs from pinned candidate: '+path.name)
     folder=base/'cases'/'-'.join([host,case['scenario'],case['condition']])
     if phase=='execute':
         fixture=folder/'fixture';profile=folder/'profile';sources=base/'sources'/case['condition']
@@ -173,7 +202,7 @@ def _case_run(base, number, phase='all'):
         cmd = ['/Users/sma/.local/bin/codex','exec','--skip-git-repo-check','--json','-m','gpt-6-astra','-c','model_reasoning_effort="high"','-s','workspace-write']
     else:
         sid = str(uuid.uuid4())
-        cmd = ['/home/mk/.local/bin/claude','--model','claude-fable-5-1','--effort','high','--setting-sources','project,local','--strict-mcp-config','--plugin-dir',str(sources/'clavain'),'--plugin-dir',str(sources/'intertest'),'--permission-mode','dontAsk','--allowedTools','Bash,Read,Edit,Write,Skill,Glob,Grep','--disallowedTools','Agent,WebFetch,WebSearch','--max-turns','20','--session-id',sid,'--output-format','stream-json','--verbose','-p']
+        cmd = ['/home/mk/.local/bin/claude','--model',manifest['model_effort']['claude'][0],'--effort','high','--setting-sources','project,local','--strict-mcp-config','--plugin-dir',str(sources/'clavain'),'--plugin-dir',str(sources/'intertest'),'--permission-mode','dontAsk','--allowedTools','Bash,Read,Edit,Write,Skill,Glob,Grep','--disallowedTools','Agent,WebFetch,WebSearch','--max-turns','20','--session-id',sid,'--output-format','stream-json','--verbose','-p']
         for plugin in sorted((base/'catalog').glob('*/.claude-plugin/plugin.json')):
             cmd.extend(['--plugin-dir',str(plugin.parent.parent)])
     if phase=='execute':
@@ -197,47 +226,72 @@ def _case_run(base, number, phase='all'):
         dump(folder/'binary.json',binary_receipt)
         print(json.dumps({'prepared':str(folder),'subjects_launched':0}));return
     if phase=='all': delivery.before_launch(base,number,folder,profile,sources,cmd)
-    result = dict(case=case,stages=[bounded(cmd,prompt,folder,fixture,env,'initial')],independent_acceptance=None)
+    scripts = sources/'clavain/scripts'
+    for name in ('readiness.py','native-readiness.py'):
+        if delivery.digest(scripts/name) != manifest.get('readiness_sha256',{}).get(name):
+            raise ValueError('native readiness launcher differs from pinned cohort')
+    sys.path.insert(0,str(scripts))
+    spec=importlib.util.spec_from_file_location('native_readiness',scripts/'native-readiness.py')
+    native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+    request=dict(host=host,command=cmd,project=str(fixture),source=str(sources/'clavain'),prompt=prompt,
+                 expected_model=manifest['model_effort'][host][0],fallback=manifest.get('model_fallback',{}).get(host),
+                 execution_timeout_seconds=180)
+    launched=native.execute_request(request,folder/'readiness',env)
+    decision=decision_reference(folder,launched,native)
+    env['CLAVAIN_DECISION_CONTEXT']=decision['path']
+    # Preserve original streams below readiness/. This derived stream keeps
+    # existing review/collection consumers readable without rewriting identities.
+    for suffix in ('stdout','stderr'):
+        with (folder/('initial.'+suffix)).open('xb') as stream:
+            stream.write(b''.join((folder/'readiness'/(stage+'.'+suffix)).read_bytes()
+                                 for stage in ('preparation','execution')))
+    retained_readiness=readiness_evidence(folder,native)
+    if retained_readiness['readiness/decision.json']!=decision['sha256']:
+        raise ValueError('decision changed while freezing later-stage evidence')
+    stages=[launched['preparation_stage'],launched['execution_stage']]
+    result = dict(case=case,stages=stages,independent_acceptance=None,readiness=launched,
+                  decision_context=decision,retained_readiness_sha256=retained_readiness,
+                  initial_output_derivation='Unmodified preparation then execution stream bytes; originals in readiness/.')
     result['binary']=binary_receipt
     result['runner_sha256']=runner_sha256
-    events=[]
-    for line in (folder/'initial.stdout').read_text().splitlines():
-        try: events.append(json.loads(line))
-        except ValueError: pass
-    if host == 'codex':
-        sid = next((e['thread_id'] for e in events if e.get('type')=='thread.started'),None)
+    events=stream_events(folder/'initial.stdout')
+    sid = launched['native_session_id']
     result['native_session_id']=sid
-    if case['scenario']=='resume' and sid and result['stages'][0]['exit_code']==0:
+    if case['scenario']=='resume' and sid and all(stage.get('exit_code')==0 for stage in result['stages'][:2]):
         followup='Resume the active task from HANDOFF.md: fix the README heading spelling now. Preserve the reserved file and verify the completed edit.'
         if host == 'codex':
             second = ['/Users/sma/.local/bin/codex','exec','resume',sid,'--skip-git-repo-check','--json','-m','gpt-6-astra','-c','model_reasoning_effort="high"']
         else:
+            if cmd[cmd.index('--session-id')+1]!=sid:
+                raise ValueError('Claude request and bound session identity differ')
             second = list(cmd); second[second.index('--session-id')]='--resume'
         readiness='State the active ownership, blockers, required skills and completion boundaries to preserve. Do not edit yet.'
-        result['stages'].append(bounded(second,readiness,folder,fixture,env,'precompact'))
+        result['stages'].append(bounded(second,readiness,folder,fixture,env,'precompact',native))
+        verify_readiness_evidence(folder,native,retained_readiness)
+        events.extend(stream_events(folder/'precompact.stdout'))
         if host == 'codex':
             compact=compaction.codex(cmd[0],sid,folder,fixture,env)
         else:
-            compact=bounded(second,'/compact Preserve task ownership, blockers, required skill loads, and completion boundaries.',folder,fixture,env,'compaction')
-            compact_events=[]
-            for line in (folder/'compaction.stdout').read_text().splitlines():
-                try: compact_events.append(json.loads(line))
-                except ValueError: pass
+            compact=bounded(second,'/compact Preserve task ownership, blockers, required skill loads, and completion boundaries.',folder,fixture,env,'compaction',native)
+            compact_events=stream_events(folder/'compaction.stdout')
             compact['compaction_completed']=compaction.claude_completed(compact_events,sid)
+        verify_readiness_evidence(folder,native,retained_readiness)
+        events.extend(stream_events(folder/'compaction.stdout'))
         result['stages'].append(compact)
         result['compaction_completed']=compact.get('compaction_completed') is True
         if result['compaction_completed']:
-            result['stages'].append(bounded(second,followup,folder,fixture,env,'resume'))
+            result['stages'].append(bounded(second,followup,folder,fixture,env,'resume',native))
+            verify_readiness_evidence(folder,native,retained_readiness)
         else:
             (folder/'resume.stdout').write_text('')
-        for line in (folder/'resume.stdout').read_text().splitlines():
-            try: events.append(json.loads(line))
-            except ValueError: pass
+        events.extend(stream_events(folder/'resume.stdout'))
     result['fixture_check']=check_fixture(fixture,case['scenario'],env)
+    verify_readiness_evidence(folder,native,retained_readiness)
     result['files']={str(p.relative_to(fixture)):hashlib.sha256(p.read_bytes()).hexdigest() for p in fixture.rglob('*') if p.is_file() and not p.is_symlink()}
     result['scratch_files']={str(p.relative_to(folder/'scratch')):hashlib.sha256(p.read_bytes()).hexdigest() for p in (folder/'scratch').rglob('*') if p.is_file() and not p.is_symlink()}
     result['native_usage_events']=[e for e in events if e.get('type') in ('turn.completed','result')]
-    result['observed_models']=sorted({str(e['message']['model']) for e in events if isinstance(e.get('message'),dict) and e['message'].get('model')})
+    result['observed_model_labels']=sorted({str(e['message']['model']) for e in events if isinstance(e.get('message'),dict) and e['message'].get('model')})
+    result['observed_models']=[model for model in result['observed_model_labels'] if model!='<synthetic>']
     if host == 'claude':
         result['native_rollouts']=[{'path':str(p),'sha256':delivery.digest(p)}
             for p in (profile/'.claude/projects').rglob(sid+'.jsonl')]

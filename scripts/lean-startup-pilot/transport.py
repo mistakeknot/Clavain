@@ -50,7 +50,7 @@ required=names if mode=='prepared' else (['result.json','initial.stdout','initia
 for name in required:
  if not (root/name).is_file():raise ValueError('required evidence missing: '+name)
 if mode!='prepared':
- for name in ['fixture','private-state','profile/.claude/projects','profile/.codex/sessions']:
+ for name in ['fixture','private-state','profile/.claude/projects','profile/.codex/sessions','readiness']:
   paths.extend((root/name).rglob('*'))
 for p in paths:
  if p.is_symlink():
