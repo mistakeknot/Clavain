@@ -5,11 +5,111 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import fcntl
+import hashlib
+import time
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/startup.py'
+
+
+def test_archive_ledger_preserves_bytes_and_hash(tmp_path):
+    project = tmp_path/'project'; project.mkdir()
+    state = tmp_path/'state'
+    assert invoke(project, state, extra=('--telemetry',)).returncode == 0
+    before = (state/'hook-health.jsonl').read_bytes()
+    result = invoke(project, state, 'refresh', extra=('--archive-ledger',))
+    assert result.returncode == 0, result.stdout + result.stderr
+    receipt = json.loads(result.stdout)['ledger_archive']
+    archived = state/receipt['path']
+    assert archived.read_bytes() == before
+    assert receipt['sha256'] == hashlib.sha256(before).hexdigest()
+    assert receipt['size_bytes'] == len(before)
+    assert not (state/'hook-health.jsonl').exists()
+    assert invoke(project, state, extra=('--telemetry',)).returncode == 0
+    assert archived.read_bytes() == before
+    assert len((state/'hook-health.jsonl').read_text().splitlines()) == 1
+    assert invoke(project, state, 'refresh', extra=('--archive-ledger',)).returncode == 0
+    assert archived.read_bytes() == before
+
+
+def test_archive_is_explicit_and_empty_state_is_safe(tmp_path):
+    project = tmp_path/'project'; project.mkdir(); state = tmp_path/'state'
+    assert invoke(project, state, extra=('--archive-ledger',)).returncode != 0
+    result = invoke(project, state, 'refresh', extra=('--archive-ledger',))
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)['ledger_archive']['status'] == 'absent'
+
+
+def test_archive_detects_unlocked_legacy_append(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from contextlib import contextmanager
+    spec=importlib.util.spec_from_file_location('archive_startup',SCRIPT)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    path=tmp_path/'hook-health.jsonl';path.write_bytes(b'original\n');path.chmod(0o600)
+    @contextmanager
+    def lock(*args,**kwargs):yield tmp_path
+    monkeypatch.setattr(module,'ledger_lock',lock)
+    fsync=module.os.fsync
+    def append(fd):
+        with path.open('ab') as stream:stream.write(b'legacy writer\n')
+        fsync(fd)
+    monkeypatch.setattr(module.os,'fsync',append)
+    with pytest.raises(ValueError,match='changed during archival'):
+        module.archive_ledger(SimpleNamespace())
+    assert path.read_bytes()==b'original\nlegacy writer\n'
+    assert not list(tmp_path.glob('hook-health-archive-*'))
+
+
+def test_lock_contention_does_not_block_startup(tmp_path):
+    project = tmp_path/'project'; project.mkdir(); state = tmp_path/'state'; state.mkdir(mode=0o700)
+    lock = state/'hook-health.lock'
+    lock.touch(mode=0o600)
+    with lock.open('rb') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        start = time.monotonic()
+        result = invoke(project, state, extra=('--telemetry',))
+        assert time.monotonic()-start < 2
+    assert result.returncode == 0
+    assert 'telemetry unavailable' in result.stdout
+    assert len(result.stdout.encode()) <= 10000
+    assert not (state/'hook-health.jsonl').exists()
+
+
+@pytest.mark.parametrize('name', ['hook-health.lock', 'hook-health.jsonl'])
+def test_archive_refuses_links(tmp_path, name):
+    project = tmp_path/'project'; project.mkdir(); state = tmp_path/'state'; state.mkdir(mode=0o700)
+    victim = tmp_path/'victim'; victim.write_text('untouched'); victim.chmod(0o600)
+    (state/name).symlink_to(victim)
+    result = invoke(project, state, 'refresh', extra=('--archive-ledger',))
+    assert result.returncode != 0
+    assert victim.read_text() == 'untouched'
+
+
+def test_archival_preserves_concurrent_successful_appends(tmp_path):
+    project = tmp_path/'project'; project.mkdir(); state = tmp_path/'state'
+    processes = []
+    for index in range(16):
+        processes.append(subprocess.Popen([sys.executable, str(SCRIPT), 'render', '--project', str(project),
+            '--state-dir', str(state), '--telemetry'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+        processes[-1].stdin.write(json.dumps({'session_id':str(index)})); processes[-1].stdin.close(); processes[-1].stdin = None
+        if index % 4 == 0:
+            result = invoke(project, state, 'refresh', extra=('--archive-ledger',))
+            assert result.returncode == 0, result.stdout + result.stderr
+    successful = set()
+    for index, process in enumerate(processes):
+        out, err = process.communicate(timeout=10)
+        assert process.returncode == 0, err
+        if 'telemetry unavailable' not in out:
+            successful.add(str(index))
+    rows = []
+    for path in [*state.glob('hook-health-archive-*.jsonl'), state/'hook-health.jsonl']:
+        if path.exists(): rows.extend(json.loads(line) for line in path.read_text().splitlines())
+    assert successful
+    assert {row['session_id'] for row in rows} == successful
+    assert len(rows) == len(successful)
 
 
 def invoke(project, state, operation='render', payload=None, extra=()):

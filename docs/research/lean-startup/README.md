@@ -27,6 +27,8 @@ Run maintenance explicitly from the selected installation:
 ```sh
 python3 scripts/startup.py doctor --source-repo /path/to/Clavain
 python3 scripts/startup.py refresh --project /path/to/project
+# Explicit archival retains all active ledger bytes and their SHA256:
+python3 scripts/startup.py refresh --project /path/to/project --archive-ledger
 # Optional, potentially slow evidence reconciliation (20-second timeout):
 python3 scripts/startup.py refresh --project /path/to/project \
   --runtime-audit scripts/runtime-evidence-audit.sh
@@ -39,6 +41,18 @@ warnings until refreshed. `doctor` checks selection, hook targets and source-ver
 agreement, reports current snapshot status and hook errors since the latest
 refresh, and retains the historical ledger. A clean doctor is not host acceptance.
 Version-matched provenance does not establish full artifact equivalence.
+
+Archival moves the active ledger atomically to a unique hash-named file in the
+same private state directory and returns its path, hash and byte count. Archives
+are never deleted automatically. Telemetry and archival share a private lock;
+telemetry waits at most 100 milliseconds for it and reports unknown coverage on
+failure. Maintenance waits up to ten seconds for the lock, then hashes and
+archives the ledger. New appends open the active path after acquiring the lock,
+so successfully appended records remain in either the active ledger or an archive.
+Finish sessions using older, unlocked telemetry before archival. Maintenance
+rejects observed size or modification drift, preserving the active ledger for
+retry; an older process holding an open descriptor does not participate in the
+new lock protocol.
 
 Use existing explicit tools for other maintenance: `check-install-updates.sh
 --refresh`, the relevant installer's narrow instruction-sync operation, and

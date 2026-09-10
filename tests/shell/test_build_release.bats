@@ -1,5 +1,11 @@
 #!/usr/bin/env bats
 
+@test "verified package publication cannot invoke a local rebuild" {
+    run env CLAVAIN_RELEASE_NO_BUILD=1 bash "$BATS_TEST_DIRNAME/../../scripts/build-release.sh"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"local rebuild forbidden"* ]]
+}
+
 setup() {
     REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
     FIXTURE_ROOT="$BATS_TEST_TMPDIR/release-fixture"

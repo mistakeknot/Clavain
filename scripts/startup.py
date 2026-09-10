@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Read-only startup rendering; explicit refresh and installation/ledger diagnosis."""
 import argparse
+import contextlib
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -14,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 SCHEMA = 1
 INVENTORY_VERSION = 1
@@ -188,6 +191,8 @@ def refresh(args, current):
             'installation':installation(args.source, args.installed_manifest, args.source_repo),
             'dependencies':{name:shutil.which(name) is not None for name in ('python3','ic','bd')},
             'acceptance':'unknown; requires fresh independent evidence'}
+    if args.archive_ledger:
+        data['ledger_archive'] = archive_ledger(args)
     if args.runtime_audit:
         started = time.monotonic()
         try:
@@ -340,17 +345,77 @@ def finish_context(sections, freshness, instruction_status):
     return output, dropped, instruction_status
 
 
-def telemetry(args, record):
+def private_regular(fd):
+    info = os.fstat(fd)
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) & 0o077 or info.st_nlink != 1):
+        raise ValueError('ledger and lock must be private regular files with one link')
+
+
+@contextlib.contextmanager
+def ledger_lock(args, timeout=0.1):
     directory = private_dir(args)
-    path = directory/'hook-health.jsonl'
-    fd = os.open(path, os.O_WRONLY|os.O_APPEND|os.O_CREAT|os.O_NOFOLLOW, 0o600)
+    fd = os.open(directory/'hook-health.lock', os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_NONBLOCK, 0o600)
     try:
-        st = os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) & 0o077:
-            raise ValueError('ledger must be private regular file')
-        os.write(fd, (packed(record)+'\n').encode())
+        private_regular(fd)
+        deadline = time.monotonic()+timeout
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('private ledger lock busy')
+                time.sleep(min(0.01, max(0, deadline-time.monotonic())))
+        yield directory
     finally:
         os.close(fd)
+
+
+def archive_ledger(args):
+    """Explicit maintenance only. The hash-bearing name survives interrupted refresh."""
+    with ledger_lock(args, timeout=10) as directory:
+        path = directory/'hook-health.jsonl'
+        try:
+            fd = os.open(path, os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        except FileNotFoundError:
+            return {'status':'absent'}
+        with os.fdopen(fd, 'rb') as stream:
+            private_regular(stream.fileno())
+            info = os.fstat(stream.fileno())
+            sha = hashlib.sha256(); observed = 0
+            while chunk := stream.read(1024*1024):
+                sha.update(chunk); observed += len(chunk)
+            os.fsync(stream.fileno())
+            after = os.fstat(stream.fileno())
+            if (observed != info.st_size or after.st_size != observed
+                    or after.st_mtime_ns != info.st_mtime_ns
+                    or path.stat().st_ino != info.st_ino):
+                raise ValueError('ledger changed during archival; preserve it and finish legacy writers before retrying')
+            name = 'hook-health-archive-'+sha.hexdigest()+'-'+uuid.uuid4().hex+'.jsonl'
+            os.rename(path, directory/name)
+        directory_fd = os.open(directory, os.O_RDONLY|os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        return {'status':'archived','path':str(directory/name),'sha256':sha.hexdigest(),'size_bytes':observed}
+
+
+def telemetry(args, record):
+    # Open the active inode only after acquiring the archival lock. A maintenance
+    # collision may lose telemetry coverage, never delay or fail host startup.
+    with ledger_lock(args) as directory:
+        fd = os.open(directory/'hook-health.jsonl', os.O_WRONLY|os.O_APPEND|os.O_CREAT|os.O_NOFOLLOW|os.O_NONBLOCK, 0o600)
+        try:
+            private_regular(fd)
+            before = os.fstat(fd).st_size
+            row = (packed(record)+'\n').encode()
+            if os.write(fd, row) != len(row):
+                os.ftruncate(fd, before)
+                raise OSError('incomplete telemetry append')
+        finally:
+            os.close(fd)
 
 
 def render(args, current, payload, started):
@@ -416,9 +481,12 @@ def main():
     parser.add_argument('--installed-manifest',type=Path,default=Path.home()/'.claude/plugins/installed_plugins.json')
     parser.add_argument('--instruction-file',type=Path)
     parser.add_argument('--telemetry',action='store_true')
+    parser.add_argument('--archive-ledger',action='store_true',help='Refresh only: retain the active ledger in a private hash-named archive')
     parser.add_argument('--runtime-audit',type=Path,help='Explicit refresh-only runtime audit script')
     parser.add_argument('--source-repo',type=Path,help='Doctor/refresh: verify recorded source version against this repository')
     args = parser.parse_args()
+    if args.archive_ledger and args.operation != 'refresh':
+        parser.error('--archive-ledger requires refresh')
     if args.instruction_file is None:
         if args.host not in ('claude', 'codex'):
             parser.error('--instruction-file is required for this host; select its actual native surface')
