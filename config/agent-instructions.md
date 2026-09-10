@@ -10,8 +10,10 @@ on resume and refresh changed or missing evidence. Trivial requests stay lightwe
 Changing code behavior or executing an implementation plan is substantive even
 for a one-line edit. Before that work, read `clavain:using-clavain` and the workflow
 skills it selects; a skill listed in the catalog or these instructions is not
-loaded until its body has been read. The routing and decision-context requirements
-below apply to the same work.
+loaded until its body has been read. Before substantive planning or edits, also
+read the selected `docs/canon/reasoning-routing.md` and record an accountable JSON
+decision context. Routine work still requires both. When no listed frontier
+trigger applies, record `reasons: []` with a short rationale; do not invent one.
 
 Apply Observe → Orient → Decide → Act → Reflect → Compound → Synthesize: inspect
 actual evidence, align with intent and constraints, choose a proportionate action
@@ -25,6 +27,9 @@ verification, release and publication authority. A push does not authorize
 publication. Missing companions do not authorize installation. Continue unaffected
 work and ask only for missing information or authority. Unavailable evidence is
 unknown; completion and acceptance require the specified current evidence.
+Restrictions on dispatch do not remove authorized local guidance reads or decision
+recording. Report routing requirements that cannot be performed within the task's
+authority and keep their gates outstanding.
 
 Read the selected `docs/canon/reasoning-routing.md` for substantive planning or
 execution. Record an accountable JSON decision context with reasons and a short

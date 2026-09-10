@@ -3,6 +3,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+# Routine classification still has a record; an empty reasons list is valid and
+# must not invent a frontier trigger. This resolves locally without a model call.
+printf '%s\n' '{"reasons":[],"rationale":"settled one-function behavior correction"}' > "$work/routine.json"
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=routine-execution \
+  --context-file="$work/routine.json" > "$work/routine-resolution.json"
+jq -e '.classification_reasons == [] and .frontier_required == false and .decision_context.reasons == []' \
+  "$work/routine-resolution.json" >/dev/null
 printf '%s\n' '{"reasons":["foundational-invariants"],"rationale":"shared admission policy"}' > "$work/context.json"
 out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --producer-identity gpt-6-astra --context-file "$work/context.json" -C "$work" fixture 2>&1)"
 [[ "$out" == *'claude-fable-5-1'* && "$out" == *'--effort high'* ]] || { echo 'FAIL: Claude effort not propagated'; exit 1; }

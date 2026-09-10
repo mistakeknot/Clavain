@@ -22,6 +22,12 @@ test corrections in another cohort. Completion of compaction requires the native
 boundary, not a command acknowledgment. This harness does not publish or install
 packages and makes no efficiency claim.
 
+The coordinator pins native subject models and effort for host acceptance. These
+direct native launches do not establish governed dispatch. Independent reviews
+use governed dispatch separately. Subjects may resolve policy locally and record
+task metadata, but may not launch another model or alter the prescribed settings.
+Dispatch restrictions do not excuse missing guidance reads or decision records.
+
 Run `python3 -m pytest -q scripts/lean-startup-pilot/test_support.py` from Clavain
 for helper tests. The enrollment test creates only a temporary test database;
 production cohort preparation requires an explicitly supplied existing database.

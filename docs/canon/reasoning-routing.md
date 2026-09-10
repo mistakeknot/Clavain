@@ -19,6 +19,10 @@ task importance from keywords or domain names. Record any of:
 | `difficult-verification` | An ML experiment, emergent behavior, or production canary decides correctness |
 | `capability-failure` | Execution or review demonstrates that the current model cannot solve the problem |
 
+Routine substantive work still requires this read and a JSON decision context.
+When none of the listed frontier triggers applies, record `reasons: []` with a
+short rationale. An empty reasons array does not waive recording or existing gates.
+
 Substantial new capabilities in games, agent systems, AI/ML, graph databases,
 and product strategy require frontier planning. A label alone does not elevate a
 routine change with settled constraints. Use one frontier author ordinarily.

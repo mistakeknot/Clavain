@@ -52,6 +52,13 @@ catalog. Names below are capability hints; resolve the installed name and path.
 Do not run Claude slash commands in a terminal or assume they are Codex tools.
 In Claude Code, invoke the corresponding Skill tool or installed command.
 
+Routes compose across task phases. Fixing a bug requires
+`intertest:systematic-debugging` for reproduction and diagnosis, then
+`intertest:test-driven-development` for implementation, including its required
+verification skill load. Executing an existing plan also requires
+`clavain:executing-plans`; retain that plan and its acceptance criteria. Load each
+required body before applying its workflow.
+
 | Task | Primary skill | Add when relevant |
 |------|---------------|-------------------|
 | Diagnose a bug or failing check | `intertest:systematic-debugging` | `clavain:bug-reproduction-validator` |
