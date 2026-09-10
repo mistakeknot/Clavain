@@ -7,6 +7,11 @@ For substantive work, read the selected `clavain:using-clavain` skill once and
 select relevant skills from the current catalog. All unique specialist skills
 remain eligible. Load bodies and references only when needed; reuse valid context
 on resume and refresh changed or missing evidence. Trivial requests stay lightweight.
+Changing code behavior or executing an implementation plan is substantive even
+for a one-line edit. Before that work, read `clavain:using-clavain` and the workflow
+skills it selects; a skill listed in the catalog or these instructions is not
+loaded until its body has been read. The routing and decision-context requirements
+below apply to the same work.
 
 Apply Observe → Orient → Decide → Act → Reflect → Compound → Synthesize: inspect
 actual evidence, align with intent and constraints, choose a proportionate action
