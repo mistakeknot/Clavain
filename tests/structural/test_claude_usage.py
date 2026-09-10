@@ -121,6 +121,31 @@ def test_delta_null_input_and_cache_fields_are_not_usage(tmp_path):
     assert "STATUS: pass" in Path(str(output) + ".verdict").read_text()
 
 
+def test_thinking_breakdown_is_not_added_to_output_or_auxiliary_usage(tmp_path):
+    stream = events()
+    stream[-1]["usage"]["output_tokens_details"] = {"thinking_tokens": 6}
+    stream[-1]["modelUsage"][MODEL]["thinkingTokens"] = 6
+    stream[-1]["modelUsage"]["claude-haiku-4-5-20251001"] = dict(
+        inputTokens=4, outputTokens=2, thinkingTokens=0)
+    proc, _, records = dispatch(tmp_path, stream)
+    assert proc.returncode == 0, proc.stderr
+    assert records[-1]["complete"] and records[-1]["budget_tokens"] == 75
+    assert records[-1]["output_tokens"] == 11
+
+
+@pytest.mark.parametrize("thinking", [-1, 10, True, 1.5, None])
+@pytest.mark.parametrize("location", ["model", "main"])
+def test_invalid_thinking_breakdown_blocks_success(tmp_path, thinking, location):
+    stream = events()
+    if location == "model":
+        stream[-1]["modelUsage"][MODEL]["thinkingTokens"] = thinking
+    else:
+        stream[-1]["usage"]["output_tokens_details"] = {"thinking_tokens": thinking}
+    proc, _, records = dispatch(tmp_path, stream)
+    assert proc.returncode != 0
+    assert records[-1]["terminal"] and not records[-1]["complete"]
+
+
 @pytest.mark.parametrize("change", ["missing_result", "bad_json", "mismatch", "zeroed", "unknown_tokens"])
 def test_incomplete_or_inconsistent_usage_never_passes(tmp_path, change):
     stream = events()

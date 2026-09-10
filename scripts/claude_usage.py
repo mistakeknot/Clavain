@@ -31,7 +31,7 @@ def counts(value, *, model=False, output_required=True):
     keys = CAMEL if model else FIELDS
     for key, number in value.items():
         if (key.endswith("_tokens") or key.endswith("Tokens")) and key not in keys:
-            if key not in ("maxOutputTokens",) and isinstance(number, (int, float)):
+            if key not in (("maxOutputTokens", "thinkingTokens") if model else ()) and isinstance(number, (int, float)):
                 raise ValueError("unknown token field: " + key)
     result = {}
     for key, canonical in zip(keys, FIELDS):
@@ -42,6 +42,19 @@ def counts(value, *, model=False, output_required=True):
         if type(number) is not int or number < 0 or number > (1 << 53):
             raise ValueError("invalid token field: " + key)
         result[canonical] = number
+    # SDK 0.3.257 added thinkingTokens as a subset of outputTokens, not an
+    # additional billable category. Validate the breakdown without counting it
+    # twice. Older streams may omit it entirely.
+    details = {"thinking_tokens": value["thinkingTokens"]} if model and "thinkingTokens" in value else {}
+    if not model and "output_tokens_details" in value:
+        details = value["output_tokens_details"]
+        if not isinstance(details, dict):
+            raise ValueError("invalid output token details")
+    for key, number in details.items():
+        if key != "thinking_tokens":
+            raise ValueError("unknown output token detail: " + key)
+        if type(number) is not int or number < 0 or number > result["output_tokens"]:
+            raise ValueError("invalid thinking token subset")
     return result
 
 
