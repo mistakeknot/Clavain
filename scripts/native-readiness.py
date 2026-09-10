@@ -596,6 +596,10 @@ def execute_request(request, folder, env=None):
             + ("First invoke clavain:using-clavain through the native Skill tool to verify the selected installation. " if host == "claude" else "")
             + "Your own decision is recorded at "
             + str(folder / "decision.json") + ". Use it as CLAVAIN_DECISION_CONTEXT; do not replace its judgment. "
+            "Before substantive implementation, attempt modern local role resolution with the selected policy and this decision context. "
+            "Local role resolution is not another model launch. If that attempt is unsupported or fails, "
+            "retain the failed resolution as an open compatibility gate and report it; do not silently omit it or substitute legacy routing. "
+            "The resolution result does not authorize delegation or change this session's model; report any mismatch under existing authority. "
             "Complete the original task under existing permissions and required skill, verification and approval boundaries.\n"
             + request["prompt"])
         save(folder / "resume-request.json", {"command": resume, "prompt": followup, "session_id": session})
