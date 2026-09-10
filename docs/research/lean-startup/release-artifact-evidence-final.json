@@ -1,0 +1,169 @@
+{
+  "admission_source": "a3dcaebcbd934fa1a66be844815a3dc67111ad68",
+  "automation": "independent-zklw",
+  "builds": [
+    {
+      "artifacts": {
+        "clavain-cli-go-darwin-arm64": {
+          "sha256": "567b42034d3260114ded5ba2d78e116d6ee5ad5a18ceec02708b7926978fcb17",
+          "size_bytes": 18006114
+        },
+        "clavain-cli-go-linux-amd64": {
+          "sha256": "bed5b8118d1f74c681b603585c01fe3b81abf2431aba4291ac388fddc609c7c0",
+          "size_bytes": 18668459
+        },
+        "clavain-cli-go-windows-amd64": {
+          "sha256": "a716ce793d66ca6fa45d8f952b6eee84a1efb4ffae9ed0089f9b62d4ad05d42c",
+          "size_bytes": 19091968
+        },
+        "release-manifest.json": {
+          "sha256": "cccdc5514ca52d9d6e9c51d34e14ea75bc8a90802c04000da1190684f4159977",
+          "size_bytes": 838
+        }
+      },
+      "dependency_bundle_sha256": "0fdad9f500cd56eebf474694935ca80e816a0a004fdb030496597da41a9bd3f2",
+      "exit_code": 0,
+      "guest_id": "bc53a1f8-a942-4416-9926-0e45022465fb",
+      "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+      "job_id": 63,
+      "packaging": {
+        "dependency": {
+          "full_name": "mistakeknot/intercore",
+          "id": 1160997330,
+          "sha": "39f7599083c76ce32f46527c84fd58b43d1143de"
+        },
+        "go_archive_sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+        "go_version": "go1.26.4",
+        "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+        "recipe_path": "scripts/ci-package.sh",
+        "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+        "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1"
+      },
+      "receipt_sha256": "bda541799a5d190af7849c95f2eb23b8741a56b713ac2f30efbc39aa36e43170",
+      "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+      "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1",
+      "repo_id": 1151593132,
+      "source_bundle_sha256": "073d5f4987ef7af26b6fc96b4ffa825eacfd067521a08a896ff164e349d3d727",
+      "source_sha": "2371f1f99b98cbc242b9bf802611c89e5dcba423"
+    },
+    {
+      "artifacts": {
+        "clavain-cli-go-darwin-arm64": {
+          "sha256": "567b42034d3260114ded5ba2d78e116d6ee5ad5a18ceec02708b7926978fcb17",
+          "size_bytes": 18006114
+        },
+        "clavain-cli-go-linux-amd64": {
+          "sha256": "bed5b8118d1f74c681b603585c01fe3b81abf2431aba4291ac388fddc609c7c0",
+          "size_bytes": 18668459
+        },
+        "clavain-cli-go-windows-amd64": {
+          "sha256": "a716ce793d66ca6fa45d8f952b6eee84a1efb4ffae9ed0089f9b62d4ad05d42c",
+          "size_bytes": 19091968
+        },
+        "release-manifest.json": {
+          "sha256": "cccdc5514ca52d9d6e9c51d34e14ea75bc8a90802c04000da1190684f4159977",
+          "size_bytes": 838
+        }
+      },
+      "dependency_bundle_sha256": "0fdad9f500cd56eebf474694935ca80e816a0a004fdb030496597da41a9bd3f2",
+      "exit_code": 0,
+      "guest_id": "8e8d1d67-9cb9-463c-821c-602deedc1d13",
+      "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+      "job_id": 64,
+      "packaging": {
+        "dependency": {
+          "full_name": "mistakeknot/intercore",
+          "id": 1160997330,
+          "sha": "39f7599083c76ce32f46527c84fd58b43d1143de"
+        },
+        "go_archive_sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+        "go_version": "go1.26.4",
+        "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+        "recipe_path": "scripts/ci-package.sh",
+        "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+        "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1"
+      },
+      "receipt_sha256": "0548eceb69aed880f7acc2783a387c3fad2d5e1a9c1935bd3cd287b251d68021",
+      "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+      "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1",
+      "repo_id": 1151593132,
+      "source_bundle_sha256": "770c6d527e6c84109d4922f9b5470e87846e17ad0367c472df06cd482a6e3f2f",
+      "source_sha": "2371f1f99b98cbc242b9bf802611c89e5dcba423"
+    }
+  ],
+  "efficiency": "inconclusive; original stopped comparison preserved",
+  "installed_acceptance": "pending",
+  "ops_source": "0522079c53552e403a788f48633c712368ecd073",
+  "prior_evidence": "release-artifact-evidence.json retained unchanged",
+  "publication_dry_run": "Publishing clavain: 0.6.315 \u2192 0.6.316\n  Scoped publish: selected plugin, canonical marketplace, cache, installed record and hook bridges only.\n  Canonical marketplace: /Users/sma/projects/Sylveste/core/marketplace\n  Skipping peer marketplace sync/refresh, global cache cleanup, rig sync and diagram generation.\n  Plugin root:  /Users/sma/projects/.lean-rollout-20260909/source/os/Clavain\n  Marketplace:  /Users/sma/projects/Sylveste/core/marketplace\n  Version files: plugin.json, agent-rig.json\nDry run \u2014 no changes made.\n",
+  "reproducibility": {
+    "artifacts": {
+      "clavain-cli-go-darwin-arm64": {
+        "sha256": "567b42034d3260114ded5ba2d78e116d6ee5ad5a18ceec02708b7926978fcb17",
+        "size_bytes": 18006114
+      },
+      "clavain-cli-go-linux-amd64": {
+        "sha256": "bed5b8118d1f74c681b603585c01fe3b81abf2431aba4291ac388fddc609c7c0",
+        "size_bytes": 18668459
+      },
+      "clavain-cli-go-windows-amd64": {
+        "sha256": "a716ce793d66ca6fa45d8f952b6eee84a1efb4ffae9ed0089f9b62d4ad05d42c",
+        "size_bytes": 19091968
+      },
+      "release-manifest.json": {
+        "sha256": "cccdc5514ca52d9d6e9c51d34e14ea75bc8a90802c04000da1190684f4159977",
+        "size_bytes": 838
+      }
+    },
+    "bundle_bytes_identical": false,
+    "bundle_equivalence": [
+      {
+        "bundle_sha256": "073d5f4987ef7af26b6fc96b4ffa825eacfd067521a08a896ff164e349d3d727",
+        "fsck": "",
+        "heads": "2371f1f99b98cbc242b9bf802611c89e5dcba423 refs/heads/ci-source\n",
+        "job_id": 63,
+        "reachable_inventory_sha256": "b4ab9b2237fd92147d739669bfc7627f872df23a746b30b81373f163b59c5603",
+        "reachable_objects": 13442,
+        "tree": "adf92060f80c523db782d08078512aec5110d77b",
+        "verification": "The bundle contains this ref:\n2371f1f99b98cbc242b9bf802611c89e5dcba423 refs/heads/ci-source\nThe bundle records a complete history.\nThe bundle uses this hash algorithm: sha1\n"
+      },
+      {
+        "bundle_sha256": "770c6d527e6c84109d4922f9b5470e87846e17ad0367c472df06cd482a6e3f2f",
+        "fsck": "",
+        "heads": "2371f1f99b98cbc242b9bf802611c89e5dcba423 refs/heads/ci-source\n",
+        "job_id": 64,
+        "reachable_inventory_sha256": "b4ab9b2237fd92147d739669bfc7627f872df23a746b30b81373f163b59c5603",
+        "reachable_objects": 13442,
+        "tree": "adf92060f80c523db782d08078512aec5110d77b",
+        "verification": "The bundle contains this ref:\n2371f1f99b98cbc242b9bf802611c89e5dcba423 refs/heads/ci-source\nThe bundle records a complete history.\nThe bundle uses this hash algorithm: sha1\n"
+      }
+    ],
+    "guest_ids": [
+      "bc53a1f8-a942-4416-9926-0e45022465fb",
+      "8e8d1d67-9cb9-463c-821c-602deedc1d13"
+    ],
+    "matching": true,
+    "semantic_inputs_identical": true,
+    "source_content": [
+      {
+        "job_id": 63,
+        "size_bytes": 70256640,
+        "source_archive_sha256": "937993cb5dd67c42510ed399727d51ea03fe6abafe0d30e6642b357cc3239fe0"
+      },
+      {
+        "job_id": 64,
+        "size_bytes": 70256640,
+        "source_archive_sha256": "937993cb5dd67c42510ed399727d51ea03fe6abafe0d30e6642b357cc3239fe0"
+      }
+    ],
+    "source_sha": "2371f1f99b98cbc242b9bf802611c89e5dcba423"
+  },
+  "schema_version": 1,
+  "verifier": {
+    "artifact_count": 3,
+    "intercore_revision": "39f7599083c76ce32f46527c84fd58b43d1143de",
+    "schema_version": 1,
+    "source_revision": "2371f1f99b98cbc242b9bf802611c89e5dcba423",
+    "verified": true
+  }
+}
