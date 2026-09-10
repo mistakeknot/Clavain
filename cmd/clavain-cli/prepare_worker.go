@@ -22,6 +22,23 @@ func prepareCompact(raw []byte) []byte {
 	return b.Bytes()
 }
 
+func prepareSourceContext(r prepareReceipt) []byte {
+	changes := map[string]map[string]string{}
+	for path, file := range r.Ratification.Files {
+		changes[path] = map[string]string{"before": file.Old, "after": file.New}
+	}
+	data, _ := json.MarshalIndent(map[string]any{
+		"accepted_request": r.Request,
+		"current_sources":  r.Sources,
+		"ratification": map[string]any{
+			"id": r.Ratification.ID, "commit": r.Ratification.Commit,
+			"parent": r.Ratification.Parent, "changed_sources": changes,
+		},
+		"source_binding_semantics": "The accepted request preserves pre-ratification source hashes and guidance base revisions. current_sources binds the files after the displayed guidance was committed. ratification.changed_sources explains those expected hash transitions; any further drift remains blocking.",
+	}, "", "  ")
+	return data
+}
+
 type prepareSpec struct {
 	Change       string      `json:"change"`
 	Scope        []string    `json:"scope"`
@@ -308,7 +325,7 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		if err = checkPrepareSources(r.Request.Project, r.Sources); err != nil {
 			return err
 		}
-		source, _ := json.MarshalIndent(r.Request, "", "  ")
+		source := prepareSourceContext(*r)
 		prompt := "Prepare a technical implementation plan reflecting ALL accepted guidance verbatim. Read authoritative project files and challenge contradictions explicitly. You may only read source files. Do not implement, commit, ratify, invoke execution workflows, call agents or start background processes. Return ONLY a JSON object with plan (Markdown string) and specification (null if no runnable implementation specification can be established). A specification has change, scope, tracker, dependencies, build {command,checks,binary}, budget_tokens (proposed implementation allowance, never approval), experience, checklist. Include dependencies, verification, experience examples and retest criteria. Preserve exact rulings, corrections and coverage gaps.\n\n" + string(source)
 		if p.Role == "plan-review" {
 			bundle, _ := json.MarshalIndent(a.Bundle, "", "  ")

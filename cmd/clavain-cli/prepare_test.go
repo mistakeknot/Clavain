@@ -119,6 +119,27 @@ func TestPrepareSubmissionBindsRatificationAndBudget(t *testing.T) {
 	if r.Sources["GUIDANCE.md"] == s.Sources["GUIDANCE.md"] {
 		t.Fatal("ratified source binding not replaced")
 	}
+	var context struct {
+		Request      prepareRequest    `json:"accepted_request"`
+		Sources      map[string]string `json:"current_sources"`
+		Ratification struct {
+			Commit  string `json:"commit"`
+			Changes map[string]struct {
+				Before string `json:"before"`
+				After  string `json:"after"`
+			} `json:"changed_sources"`
+		} `json:"ratification"`
+	}
+	if err := json.Unmarshal(prepareSourceContext(r), &context); err != nil {
+		t.Fatal(err)
+	}
+	if context.Request.Sources["GUIDANCE.md"] != s.Sources["GUIDANCE.md"] || context.Sources["GUIDANCE.md"] != r.Sources["GUIDANCE.md"] || context.Ratification.Commit != r.Ratification.Commit {
+		t.Fatal("planning/review context lacks original and ratified source provenance")
+	}
+	change := context.Ratification.Changes["GUIDANCE.md"]
+	if change.Before != s.Sources["GUIDANCE.md"] || change.After != r.Sources["GUIDANCE.md"] {
+		t.Fatal("prompt does not explain the ratified guidance hash transition")
+	}
 	data, _ := os.ReadFile(path)
 	var receipt prepareReceipt
 	if json.Unmarshal(data, &receipt) != nil {
