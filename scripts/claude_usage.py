@@ -131,22 +131,42 @@ class Meter:
         elif kind == "result":
             if not self.initialized or not self.steps:
                 raise ValueError("result lacks observed main-loop identity/steps")
-            main = counts(event.get("usage"))
-            if any(main[k] < self.total[k] for k in FIELDS):
-                raise ValueError("result below observed main-loop usage")
+            observed = {k: sum(step[k] for step in self.steps.values()) for k in FIELDS}
             models = event.get("modelUsage")
+            model_error = None
             if not isinstance(models, dict) or not models:
-                raise ValueError("result lacks whole-invocation modelUsage")
+                model_error = ValueError("result lacks whole-invocation modelUsage")
+                models = {}
             totals = dict.fromkeys(FIELDS, 0)
             routed = dict.fromkeys(FIELDS, 0)
             for model, usage in models.items():
-                identity = self.identity(model)
-                c = counts(usage, model=True)
+                try:
+                    identity = self.identity(model)
+                    c = counts(usage, model=True)
+                except ValueError as error:
+                    model_error = error
+                    continue
                 self.models[model] = {"model_identity": identity, **c}
                 for k in FIELDS:
                     totals[k] += c[k]
                     if identity == self.requested_identity:
                         routed[k] += c[k]
+            # Error/cancellation results can omit the interrupted main request
+            # while reporting auxiliary models. Keep both independent lower
+            # bounds even when final reconciliation must still fail closed.
+            self.total = {k: max(self.total[k], totals[k] - routed[k] +
+                                max(observed[k], routed[k])) for k in FIELDS}
+            main_error = None
+            try:
+                main = counts(event.get("usage"))
+                self.total = {k: max(self.total[k], totals[k] - routed[k] + main[k])
+                              for k in FIELDS}
+            except ValueError as error:
+                main_error = error
+            if model_error is not None or main_error is not None:
+                raise model_error or main_error
+            if any(main[k] < observed[k] for k in FIELDS):
+                raise ValueError("result below observed main-loop usage")
             if any(routed[k] < main[k] for k in FIELDS):
                 raise ValueError("per-model totals below bound main-loop usage")
             if type(event.get("is_error")) is not bool:

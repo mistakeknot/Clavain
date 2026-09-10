@@ -146,6 +146,39 @@ def test_invalid_thinking_breakdown_blocks_success(tmp_path, thinking, location)
     assert records[-1]["terminal"] and not records[-1]["complete"]
 
 
+def test_failed_final_retains_observed_main_and_auxiliary_lower_bound(tmp_path):
+    stream = events()
+    stream[-1].update(subtype="error_during_execution", is_error=True,
+                      usage=dict(input_tokens=0, output_tokens=0),
+                      modelUsage={"claude-haiku-4-5-20251001": dict(
+                          inputTokens=4, outputTokens=2, thinkingTokens=0)})
+    proc, _, records = dispatch(tmp_path, stream)
+    assert proc.returncode != 0
+    final = records[-1]
+    assert final["terminal"] and not final["complete"]
+    assert final["budget_tokens"] == 73  # 67 observed main + 6 auxiliary
+    assert final["output_tokens"] == 9
+
+
+def test_invalid_model_retains_other_valid_model_usage(tmp_path):
+    stream = events()
+    stream[-1]["modelUsage"][MODEL]["thinkingTokens"] = -1
+    stream[-1]["modelUsage"]["claude-haiku-4-5-20251001"] = dict(inputTokens=4, outputTokens=2)
+    proc, _, records = dispatch(tmp_path, stream)
+    assert proc.returncode != 0
+    assert records[-1]["budget_tokens"] == 75  # valid main result + valid auxiliary
+    assert not records[-1]["complete"]
+
+
+def test_missing_model_totals_retain_valid_main_result(tmp_path):
+    stream = events()
+    del stream[-1]["modelUsage"]
+    proc, _, records = dispatch(tmp_path, stream)
+    assert proc.returncode != 0
+    assert records[-1]["budget_tokens"] == 69
+    assert not records[-1]["complete"]
+
+
 @pytest.mark.parametrize("change", ["missing_result", "bad_json", "mismatch", "zeroed", "unknown_tokens"])
 def test_incomplete_or_inconsistent_usage_never_passes(tmp_path, change):
     stream = events()
