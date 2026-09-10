@@ -1,24 +1,24 @@
 {
   "schema_version": 1,
-  "source_revision": "909ce7c9b62fdd3844bcb9cd78d7cf4830f0279d",
-  "intercore_revision": "2463614602d1bd2db2089edd9041420e4ca821d9",
+  "source_revision": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+  "intercore_revision": "39f7599083c76ce32f46527c84fd58b43d1143de",
   "go_version": "go1.26.4",
   "artifacts": {
     "darwin-arm64": {
       "path": "bin/clavain-cli-go-darwin-arm64",
-      "sha256": "6bf5978ebddafaca2e166e7ba0eae94665748c0f5e92e9f5eb2e735fc00888ce",
+      "sha256": "59a771ceb178f309af1f018b73baa4f9c9b2d3540ade3be6a1661aee42de8986",
       "goos": "darwin",
       "goarch": "arm64"
     },
     "linux-amd64": {
       "path": "bin/clavain-cli-go-linux-amd64",
-      "sha256": "d1177d4960c6c91067fe0998c2d51365527a116ab884e5906711170613e5eea3",
+      "sha256": "6ae6fb116140671c2d85865b253121da2e2b50f513b4623ca2f0772ab0f166fb",
       "goos": "linux",
       "goarch": "amd64"
     },
     "windows-amd64": {
       "path": "bin/clavain-cli-go-windows-amd64",
-      "sha256": "be25ee120b771c5b7046ceae034ca9bcb09624dae88d4bdb70ce2697b2d15e38",
+      "sha256": "c3131c3a7782d73f0995b59ec1bb7037ca98a68d2d0067e40fe428ff7a53667b",
       "goos": "windows",
       "goarch": "amd64"
     }
