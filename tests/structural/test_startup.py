@@ -262,3 +262,74 @@ def test_doctor_requires_observation_after_refresh(tmp_path):
     (state/'hook-health.jsonl').write_text(json.dumps(row)+'\n')
     r=invoke(project,state,'doctor')
     assert json.loads(r.stdout)['ledger_status']=='unknown'
+
+
+def test_doctor_reads_recent_events_from_large_private_ledger(tmp_path):
+    project=tmp_path/'project';project.mkdir();state=tmp_path/'state'
+    assert invoke(project,state,'refresh').returncode==0
+    assert invoke(project,state,payload={'session_id':'recent'},extra=('--telemetry',)).returncode==0
+    ledger=state/'hook-health.jsonl';recent=ledger.read_bytes()
+    ledger.write_bytes((json.dumps({'padding':'x'*512})+'\n').encode()*35000 + recent)
+    assert ledger.stat().st_size>16*1024*1024
+    result=json.loads(invoke(project,state,'doctor').stdout)
+    assert result['ledger_status']=='observed'
+
+
+@pytest.mark.parametrize('kind',['public-directory','public-snapshot','symlink-snapshot'])
+def test_untrusted_snapshot_reads_remain_unknown_without_writes(tmp_path,kind):
+    project=tmp_path/'project';project.mkdir();state=tmp_path/'state'
+    assert invoke(project,state,'refresh').returncode==0
+    snapshot=next(state.glob('snapshot-*'))
+    if kind=='public-directory': state.chmod(0o755)
+    elif kind=='public-snapshot': snapshot.chmod(0o644)
+    else:
+        target=tmp_path/'other-snapshot';snapshot.rename(target);snapshot.symlink_to(target)
+    before=tree(tmp_path)
+    result=invoke(project,state)
+    assert 'Startup snapshot: unknown' in result.stdout
+    assert tree(tmp_path)==before
+
+
+def test_blank_export_lines_preserve_active_task_and_owner(tmp_path):
+    project=tmp_path/'project';project.mkdir();(project/'.beads').mkdir()
+    (project/'.beads/issues.jsonl').write_text('\n  \n'+json.dumps({'id':'active-7','status':'blocked','assignee':'owner-7','notes':'needs review'})+'\n\n')
+    result=invoke(project,tmp_path/'state')
+    assert 'active-7' in result.stdout and 'owner-7' in result.stdout
+    assert 'Task export unknown' not in result.stdout
+
+
+def test_mode_and_state_errors_precede_verbose_diagnostics():
+    spec=importlib.util.spec_from_file_location('startup_priority_test',SCRIPT)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    sections=[('task','x'*9580),('mode','INTERSERVE MODE: ON'),
+              ('ownership-error','ownership unknown; inspect live'),('task-error','tracker unavailable'),
+              ('runtime-blocker','independent acceptance missing')]
+    output,dropped,_=module.finish_context(sections,'unknown','current')
+    assert all(name not in dropped for name in ('mode','ownership-error','task-error','runtime-blocker'))
+
+
+def test_ledger_tail_uses_observed_size_during_concurrent_append(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    spec=importlib.util.spec_from_file_location('startup_tail_test',SCRIPT)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    project=tmp_path/'project';project.mkdir();state=tmp_path/'state';state.mkdir(mode=0o700)
+    ledger=state/'hook-health.jsonl';ledger.write_bytes(b'prefix-line-1234567890\nold\n');ledger.chmod(0o600)
+    original=os.fstat
+    def append_after_stat(fd):
+        info=original(fd)
+        with ledger.open('ab') as stream: stream.write(b'new\n')
+        return info
+    monkeypatch.setattr(module,'MAX_READ',16)
+    monkeypatch.setattr(module.os,'fstat',append_after_stat)
+    assert module.read_private(SimpleNamespace(project=project,state_dir=state),ledger,tail=True)==[b'old']
+
+
+def test_doctor_requires_current_host_and_source_identity(tmp_path):
+    project=tmp_path/'project';project.mkdir();state=tmp_path/'state'
+    assert invoke(project,state,'refresh').returncode==0
+    assert invoke(project,state,extra=('--telemetry',)).returncode==0
+    ledger=state/'hook-health.jsonl';row=json.loads(ledger.read_text())
+    row['context_identity']['host']='different-host'
+    ledger.write_text(json.dumps(row)+'\n')
+    result=json.loads(invoke(project,state,'doctor').stdout)
+    assert result['ledger_status']=='unknown'

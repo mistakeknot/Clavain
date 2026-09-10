@@ -124,7 +124,9 @@ def snapshot_path(args):
 
 def snapshot_status(args, current):
     try:
-        snapshot = obj(snapshot_path(args))
+        snapshot = json.loads(read_private(args, snapshot_path(args)))
+        if not isinstance(snapshot, dict):
+            return 'unknown', None
         if snapshot.get('schema_version') != SCHEMA or not isinstance(snapshot.get('identity'), dict):
             return 'unknown', None
         created = snapshot['created_at']
@@ -138,7 +140,7 @@ def snapshot_status(args, current):
         return 'unknown', None
 
 
-def private_dir(args):
+def private_dir(args, create=True):
     if args.state_dir.is_symlink():
         raise ValueError('symlinked state directory refused')
     path = args.state_dir.resolve()
@@ -148,10 +150,36 @@ def private_dir(args):
     # Reject a cache inside any worktree, including a different project.
     if any((p/'.git').exists() for p in [path, *path.parents]):
         raise ValueError('state writes inside worktree refused')
-    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if create:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.stat().st_uid != os.getuid() or stat.S_IMODE(path.stat().st_mode) & 0o077:
         raise ValueError('state directory must be private and owned by current user')
     return path
+
+
+def read_private(args, path, tail=False):
+    """Check private state without creating it; bound ledger reads from the end."""
+    directory = private_dir(args, create=False)
+    if path.parent.resolve() != directory:
+        raise ValueError('state file outside private directory')
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
+            raise ValueError('state must be a private regular file')
+        start = max(0, info.st_size-MAX_READ) if tail else 0
+        stream.seek(start)
+        # A tail is a snapshot through the observed EOF; concurrent appends belong
+        # to the next doctor call and must not create a spurious budget error.
+        value = stream.read(info.st_size-start if tail else MAX_READ+1)
+        if len(value) > MAX_READ:
+            raise ValueError('input exceeds read budget')
+        if tail:
+            # Ignore only the partial first row when the byte window starts mid-file.
+            if start:
+                value = value.partition(b'\n')[2]
+            return value.splitlines()[-100:]
+        return value
 
 
 def refresh(args, current):
@@ -196,6 +224,8 @@ def task_sections(args, payload):
         try:
             active = []
             for line in read(path).splitlines():
+                if not line.strip():
+                    continue
                 row = json.loads(line)
                 if not isinstance(row, dict):
                     raise ValueError('invalid task row')
@@ -294,7 +324,8 @@ def finish_context(sections, freshness, instruction_status):
     """Derive the status from the actual final selection, including error paths."""
     priority = {'telemetry': 0, 'boundaries': 1, 'status': 2, 'contract': 3,
                 'state-summary': 4, 'session-identity': 5, 'active-task': 6,
-                'routing': 7, 'ownership': 8, 'task': 9, 'runtime-blocker': 10}
+                'mode': 7, 'ownership-error': 7, 'task-error': 7, 'runtime-blocker': 7,
+                'routing': 8, 'ownership': 9, 'task': 10}
     ordered = sorted(sections, key=lambda section: priority.get(section[0], 11))
     def with_status(status):
         text = f'Startup snapshot: {freshness}. Instruction contract: {status}. Run scripts/startup.py refresh or doctor explicitly for diagnostics.'
@@ -412,9 +443,9 @@ def main():
                     'behaviorally_verified':False}
             try:
                 rows = []
-                for line in read(args.state_dir/'hook-health.jsonl').splitlines()[-100:]:
+                for line in read_private(args, args.state_dir/'hook-health.jsonl', tail=True):
                     row = json.loads(line)
-                    if row.get('context_identity', {}).get('project_scope') == str(args.project.resolve()):
+                    if row.get('context_identity') == current:
                         rows.append(row)
                 # Current health is judged after the most recent refresh; old failures remain in the ledger.
                 since = snapshot.get('created_at', 0) if snapshot else 0
@@ -423,8 +454,11 @@ def main():
                     if row.get('status') != 'ok' or row.get('serialized_bytes',LIMIT+1)>LIMIT or row.get('duration_ms',1001)>1000:
                         data['recent_hook_issues'].append(row)
                 data['ledger_status'] = 'observed' if rows else 'unknown'
-            except (OSError,ValueError,TypeError,AttributeError):
+                if not rows:
+                    data['ledger_reason'] = 'No current host/source/configuration event after latest refresh.'
+            except (OSError,ValueError,TypeError,AttributeError) as error:
                 data['ledger_status'] = 'unknown'
+                data['ledger_reason'] = type(error).__name__+': private ledger unavailable or invalid.'
         print(json.dumps(data,indent=2))
         return int(args.operation == 'doctor' and (data['installation']['status'] != 'ok' or data['cache_freshness'] != 'fresh' or data['recent_hook_issues'] or data.get('ledger_status') == 'unknown'))
     except (OSError,ValueError,RuntimeError,KeyError,TypeError) as error:
