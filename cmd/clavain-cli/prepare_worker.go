@@ -179,8 +179,8 @@ func submitPrepare(base string, s prepareRequest) (r prepareReceipt, path string
 	if err = validatePrepare(s); err != nil {
 		return
 	}
-	if s.BudgetTokens <= 0 || s.Proposal.Outcome == "" || len(s.Proposal.Scope) == 0 || len(s.Sources) == 0 {
-		return r, "", errors.New("explicit positive preparation budget, outcome, scope and source bindings required")
+	if s.Proposal.Outcome == "" || len(s.Proposal.Scope) == 0 || len(s.Sources) == 0 {
+		return r, "", errors.New("preparation outcome, scope and source bindings required")
 	}
 	dir, ratifyPath := preparePaths(base, s)
 	data, e := os.ReadFile(ratifyPath)
@@ -303,7 +303,11 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		return err
 	}
 	remaining := r.Request.BudgetTokens - (prepareUsage(*r) - p.UsageTokens)
-	if remaining <= 0 && stopReason == "" {
+	uncapped := r.Request.uncapped()
+	if uncapped {
+		remaining = 0
+	}
+	if !uncapped && remaining <= 0 && stopReason == "" {
 		return errors.New("approved preparation budget exhausted")
 	}
 	if !p.Intent {
@@ -381,7 +385,11 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		if err = persist(); err != nil {
 			return err
 		}
-		data, err := prepareRunner(*r)(r.Request.Project, "ic", "--json", "dispatch", "spawn", "--type="+backend, "--project="+r.Request.Project, "--run-id="+r.RunID, "--scope-id="+r.RunID, "--max-active-per-run=1", "--max-agents-per-run=6", "--budget-enforce", "--prompt-file="+promptPath, "--output="+filepath.Join(dir, "response.md"), "--name=autarch-prepare", "--dispatch-sh="+wrapperPath)
+		args := []string{"--json", "dispatch", "spawn", "--type=" + backend, "--project=" + r.Request.Project, "--run-id=" + r.RunID, "--scope-id=" + r.RunID, "--max-active-per-run=1", "--max-agents-per-run=6", "--prompt-file=" + promptPath, "--output=" + filepath.Join(dir, "response.md"), "--name=autarch-prepare", "--dispatch-sh=" + wrapperPath}
+		if !uncapped {
+			args = append(args, "--budget-enforce")
+		}
+		data, err := prepareRunner(*r)(r.Request.Project, "ic", args...)
 		if err != nil {
 			return fmt.Errorf("model launch uncertain; no replacement authorized: %w; kernel response: %s", err, strings.TrimSpace(string(data)))
 		}
@@ -419,7 +427,7 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		if stopReason == "" && time.Now().After(p.StartedAt.Add(15*time.Minute)) {
 			cancellationReason = "15-minute preparation watchdog expired"
 		}
-		if stopReason == "" && p.UsageTokens >= remaining {
+		if !uncapped && stopReason == "" && p.UsageTokens >= remaining {
 			cancellationReason = "approved preparation budget exhausted"
 		}
 		data, err := prepareRunner(*r)(r.Request.Project, "ic", "--json", "dispatch", "poll", p.DispatchID)
@@ -453,12 +461,15 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		}
 		// A completed phase discovered after restart is consumed even when the
 		// supervisor was absent longer than the watchdog; no live worker remains.
-		if stopReason == "" && d.Status == "completed" && p.UsageTokens < remaining {
+		if stopReason == "" && d.Status == "completed" && (uncapped || p.UsageTokens < remaining) {
 			cancellationReason = ""
 		}
 		rr := reviewReceipt{Project: r.Request.Project, DispatchID: p.DispatchID, Request: reviewSubmission{Proposal: reviewProposal{BudgetTokens: remaining}}}
 		err = settleReviewUsage(&rr, dir, prepareRunner(*r))
 		p.UsageTokens, p.UsageComplete, p.Overshoot = rr.UsageTokens, rr.UsageComplete, rr.BudgetOvershoot
+		if uncapped {
+			p.Overshoot = 0 // No token limit exists; usage is still fully retained.
+		}
 		if err != nil {
 			p.AccountingError = err.Error()
 			_ = persist()
@@ -474,7 +485,7 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		if cancellationReason != "" {
 			return errors.New(cancellationReason)
 		}
-		if !p.UsageComplete || p.UsageTokens >= remaining {
+		if !p.UsageComplete || (!uncapped && p.UsageTokens >= remaining) {
 			return errors.New("complete accounting and remaining approved preparation budget required")
 		}
 		exit, e := os.ReadFile(filepath.Join(dir, "exit-code"))
@@ -670,7 +681,11 @@ func workPrepare(path string) error {
 			}
 			r.RunID = runs[0].ID
 		} else {
-			data, e = prepareRunner(r)(r.Request.Project, "ic", "--json", "run", "create", "--project="+r.Request.Project, "--goal="+r.Request.Proposal.Outcome, "--scope-id="+scope, "--token-budget="+fmt.Sprint(r.Request.BudgetTokens), "--budget-enforce", "--max-agents=6", "--max-dispatches=6")
+			args := []string{"--json", "run", "create", "--project=" + r.Request.Project, "--goal=" + r.Request.Proposal.Outcome, "--scope-id=" + scope, "--max-agents=6", "--max-dispatches=6"}
+			if !r.Request.uncapped() {
+				args = append(args, "--token-budget="+fmt.Sprint(r.Request.BudgetTokens), "--budget-enforce")
+			}
+			data, e = prepareRunner(r)(r.Request.Project, "ic", args...)
 			if e != nil {
 				return blocked(e)
 			}

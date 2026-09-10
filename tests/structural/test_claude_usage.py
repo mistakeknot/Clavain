@@ -216,6 +216,18 @@ def test_cache_tokens_exhaust_budget(tmp_path):
     assert not records[-1]["complete"]
 
 
+@pytest.mark.parametrize("complete", [True, False])
+def test_uncapped_claude_retains_usage_and_completeness_gate(tmp_path, complete):
+    stream = events() if complete else events()[:-1]
+    proc, output, records = dispatch(tmp_path, stream, budget=0)
+    assert (proc.returncode == 0) == complete
+    assert records[-1]["terminal"]
+    assert records[-1]["complete"] == complete
+    assert records[-1]["budget_tokens"] > 60
+    assert records[-1]["status"] != "budget_exhausted"
+    assert ("STATUS: pass" in Path(str(output) + ".verdict").read_text()) == complete
+
+
 def test_zaka_rejected_before_any_model_call(tmp_path):
     proc, _, _ = dispatch(tmp_path, events(), via="zaka")
     assert proc.returncode != 0

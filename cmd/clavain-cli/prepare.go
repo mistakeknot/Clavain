@@ -22,6 +22,7 @@ type prepareRequest struct {
 	Actor        string            `json:"actor"`
 	Transcriber  string            `json:"transcriber"`
 	BudgetTokens int               `json:"budget_tokens"`
+	BudgetMode   *string           `json:"budget_mode,omitempty"`
 	Sources      map[string]string `json:"sources"`
 	CoverageGaps []string          `json:"coverage_gaps"`
 	Proposal     reviewProposal    `json:"proposal"`
@@ -60,6 +61,22 @@ func validatePrepare(s prepareRequest) error {
 	if s.Version != 1 || s.Key != fmt.Sprintf("%s:%d", p.ID, p.Revision) || p.ID == "" || p.Revision < 1 || p.Status != "accepted" || p.AcceptedAt == nil || p.AcceptedAt.IsZero() || strings.TrimSpace(s.Actor) == "" || strings.TrimSpace(s.Transcriber) == "" {
 		return errors.New("attributed accepted synthesis revision and retry key required")
 	}
+	mode := "capped"
+	if s.BudgetMode != nil {
+		mode = *s.BudgetMode
+	}
+	switch mode {
+	case "capped":
+		if s.BudgetTokens <= 0 {
+			return errors.New("capped preparation requires a positive token budget")
+		}
+	case "uncapped":
+		if s.BudgetTokens != 0 {
+			return errors.New("uncapped preparation requires budget_tokens: 0")
+		}
+	default:
+		return errors.New("unknown preparation budget mode")
+	}
 	project, err := canonicalReviewDir(s.Project)
 	if err != nil {
 		return err
@@ -83,6 +100,10 @@ func validatePrepare(s prepareRequest) error {
 		}
 	}
 	return nil
+}
+
+func (s prepareRequest) uncapped() bool {
+	return s.BudgetMode != nil && *s.BudgetMode == "uncapped"
 }
 func prepareFileHash(project, path string) (string, []byte, error) {
 	if !reviewRelative(path) {

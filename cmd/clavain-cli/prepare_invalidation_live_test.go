@@ -13,12 +13,21 @@ import (
 // A real kernel-owned process survives the simulated supervisor loss. These
 // deterministic seats never call a model or establish human acceptance.
 func TestLivePreparationInvalidationDrainsExistingWorker(t *testing.T) {
+	for _, mode := range []string{"capped", "uncapped"} {
+		t.Run(mode, func(t *testing.T) { testLivePreparationInvalidationDrainsExistingWorker(t, mode) })
+	}
+}
+
+func testLivePreparationInvalidationDrainsExistingWorker(t *testing.T, mode string) {
 	if os.Getenv("CLAVAIN_LIVE_REVIEW") != "1" || runtime.GOOS != "darwin" {
 		t.Skip("explicit isolated kernel fixture")
 	}
 	for _, kind := range []string{"policy", "source", "watchdog", "truncated", "pinned-kernel", "live-policy", "live-source"} {
 		t.Run(kind, func(t *testing.T) {
 			base, s := ratifyFixture(t)
+			if mode == "uncapped" {
+				s = requestBudgetMode(t, s, `"uncapped"`, 0)
+			}
 			policyData, err := os.ReadFile("../../config/routing.yaml")
 			if err != nil {
 				t.Fatal(err)
@@ -49,7 +58,11 @@ func TestLivePreparationInvalidationDrainsExistingWorker(t *testing.T) {
 				t.Fatal(err)
 			}
 			run := prepareRunner(r)
-			data, err := run(s.Project, "ic", "--json", "run", "create", "--project="+s.Project, "--goal=deterministic invalidation fixture", "--token-budget=1000", "--budget-enforce", "--max-agents=6", "--max-dispatches=6")
+			args := []string{"--json", "run", "create", "--project=" + s.Project, "--goal=deterministic invalidation fixture", "--max-agents=6", "--max-dispatches=6"}
+			if mode == "capped" {
+				args = append(args, "--token-budget=1000", "--budget-enforce")
+			}
+			data, err := run(s.Project, "ic", args...)
 			var created struct {
 				ID string `json:"id"`
 			}
@@ -63,7 +76,11 @@ func TestLivePreparationInvalidationDrainsExistingWorker(t *testing.T) {
 			os.WriteFile(prompt, []byte("Synthetic sleeping seat; no model call.\n"), 0600)
 			wrapper := filepath.Join(dir, "launch.sh")
 			os.WriteFile(wrapper, []byte("#!/bin/bash\ntrap 'exit 143' TERM INT\nsleep 120 &\nwait $!\n"), 0700)
-			data, err = run(s.Project, "ic", "--json", "dispatch", "spawn", "--type=codex", "--project="+s.Project, "--run-id="+r.RunID, "--scope-id="+r.RunID, "--max-active-per-run=1", "--max-agents-per-run=6", "--budget-enforce", "--prompt-file="+prompt, "--output="+filepath.Join(dir, "response.md"), "--name=invalidation-fixture", "--dispatch-sh="+wrapper)
+			args = []string{"--json", "dispatch", "spawn", "--type=codex", "--project=" + s.Project, "--run-id=" + r.RunID, "--scope-id=" + r.RunID, "--max-active-per-run=1", "--max-agents-per-run=6", "--prompt-file=" + prompt, "--output=" + filepath.Join(dir, "response.md"), "--name=invalidation-fixture", "--dispatch-sh=" + wrapper}
+			if mode == "capped" {
+				args = append(args, "--budget-enforce")
+			}
+			data, err = run(s.Project, "ic", args...)
 			var spawned struct {
 				ID  string `json:"id"`
 				PID int    `json:"pid"`
@@ -138,6 +155,9 @@ func TestLivePreparationInvalidationDrainsExistingWorker(t *testing.T) {
 			}
 			if p.UsageComplete != (kind != "truncated") {
 				t.Fatalf("invalid completeness: %+v", p)
+			}
+			if p.Overshoot != 0 {
+				t.Fatal("unexpected token-limit overshoot", p.Overshoot)
 			}
 			data, err = run(s.Project, "ic", "--json", "dispatch", "poll", spawned.ID)
 			var terminal struct {
