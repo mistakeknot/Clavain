@@ -63,6 +63,20 @@ overlay; the `ci-campaign-pilot` overlay requires `scope: mk-ag2s`. Its Opus
 coordinator / Sonnet execution / Sol review mix is confined to that campaign.
 Default complex planning, review, and execution retain Astra and Fable.
 
+The user's 2026-09-10 ruling requires Opus 5 as Fable's capacity fallback,
+including independent plan review. Record the observed capacity failure, then
+freeze a separate policy snapshot that adds `claude-opus-5` to eligible models
+and selects `review-opus` for the affected review role. Bind its hash, producer
+identity and capacity evidence before starting. The default policy retains its
+frontier eligibility and fallback chains; it must still select Astra to review
+Fable's work. Scope a capacity snapshot to reviews of the bound producer from
+another lab; reviews of Claude-authored work keep the default independent route.
+Opus's capacity profile has no fallback, so it cannot review its own work.
+Preserve the packaged default policy. Never rewrite a failed attempt or infer
+zero usage from a quota error.
+A started dispatch with incomplete accounting still stops its dependent work;
+the fallback is a separately authorized attempt with its own receipt.
+
 ## Handoff and escalation
 
 Keep frontier involvement while investigation or experiments change the plan.

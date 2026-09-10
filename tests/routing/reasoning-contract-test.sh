@@ -13,6 +13,39 @@ jq -e '.classification_reasons == [] and .frontier_required == false and .decisi
 printf '%s\n' '{"reasons":["foundational-invariants"],"rationale":"shared admission policy"}' > "$work/context.json"
 out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --producer-identity gpt-6-astra --context-file "$work/context.json" -C "$work" fixture 2>&1)"
 [[ "$out" == *'claude-fable-5-1'* && "$out" == *'--effort high'* ]] || { echo 'FAIL: Claude effort not propagated'; exit 1; }
+# Default producer exclusions must retain Astra and the cross-lab route.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
+  --producer-identity=claude-fable-5-1 --context-file="$work/context.json" > "$work/fable-producer.json"
+jq -e '.profile.model == "gpt-6-astra"' "$work/fable-producer.json" >/dev/null
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
+  --producer-identity=claude-fable-5-1 --context-file="$work/routine.json" > "$work/crosslab.json"
+jq -e '.profile.backend != "claude"' "$work/crosslab.json" >/dev/null
+# A separately frozen capacity snapshot is explicit, never a default downgrade.
+python3 - "$ROOT/config/routing.yaml" "$work/capacity.yaml" <<'PYFIXTURE'
+from pathlib import Path
+import sys
+text = Path(sys.argv[1]).read_text()
+text = text.replace('frontier_models: [gpt-6-astra, claude-fable-5-1]',
+                    'frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]')
+text = text.replace('    plan-review: review-fable\n', '    plan-review: review-opus\n')
+Path(sys.argv[2]).write_text(text)
+PYFIXTURE
+ic --json route dispatch --policy="$work/capacity.yaml" --role=plan-review \
+  --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/capacity-route.json"
+jq -e '.profile.model == "claude-opus-5" and .frontier_required and .validator_relationship == "different-model"' "$work/capacity-route.json" >/dev/null
+if ic --json route dispatch --policy="$work/capacity.yaml" --role=plan-review \
+  --producer-identity=claude-opus-5 --context-file="$work/context.json" > "$work/producer-route.json" 2>&1; then
+  echo 'FAIL: Opus producer admitted as its own capacity substitute'; exit 1
+fi
+grep -q 'no model distinct from producer "claude-opus-5"' "$work/producer-route.json"
+jq '.available_models = ["claude-opus-5"]' "$work/context.json" > "$work/opus-only.json"
+for policy in "$ROOT/config/routing.yaml" "$work/capacity.yaml"; do
+  if ic --json route dispatch --policy="$policy" --role=planning \
+    --context-file="$work/opus-only.json" > "$work/planning.json" 2>&1; then
+    echo 'FAIL: capacity review substitution changed frontier planning'; exit 1
+  fi
+  grep -q 'no eligible model satisfies reasoning contract' "$work/planning.json"
+done
 for host in codex claude hermes gemini kimi opencode cursor vscode; do
   python3 "$ROOT/scripts/sync-agent-instructions.py" --source "$ROOT" --host "$host" --file "$work/$host.md" >/dev/null
   (cd "$work" && ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=planning --context-file="$work/context.json") > "$work/$host.json"

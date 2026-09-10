@@ -161,6 +161,13 @@ dispatch:
       reasoning_effort: high
       service_tier: standard
       fallbacks: [planning-astra]
+    review-opus:
+      role: plan-review
+      backend: claude
+      model: claude-opus-5
+      reasoning_effort: high
+      service_tier: standard
+      description: Explicit capacity-policy substitute for Fable; unavailable in default frontier routes
     pilot-opus:
       role: main-integrator
       backend: main
