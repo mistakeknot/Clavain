@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "task_id": "sylveste-z55b",
-  "evidence_kind": "source implementation; not native acceptance",
+  "evidence_kind": "reviewed source, stopped native comparison, independent CI receipts; no installed rollout",
   "routing_policy_sha256": "f39be8adfc2f14271b3f5f83a1a6ba9bf875a1c200494e9f0dfc0651d37f9ceb",
   "checks": {
-    "clavain_structural": "1147 passed, 1 skipped; followed by 29 focused startup tests after conservative doctor freshness fix",
+    "clavain_structural": "1156 passed, 1 skipped; 37 focused startup tests passed at e36d9ad",
     "shell": "24 passed",
     "interstat": "196 passed",
     "host_contracts": "passed across eight adapter surfaces",
@@ -12,7 +12,8 @@
       "enabled": 102,
       "unique": 102,
       "duplicates": 0
-    }
+    },
+    "intertest": "11 structural tests passed for the reviewed explicit-load correction"
   },
   "direct_renderer_probe": {
     "serialized_bytes": 3162,
@@ -37,14 +38,16 @@
     "known_artifact_drift": [
       "docs/vision.md"
     ],
-    "installed_startup": "old renderer, including sibling cleanup; candidate not installed"
+    "installed_startup": "old renderer, including sibling cleanup; candidate not installed",
+    "current_hook_bytes": 34329,
+    "current_hook_sha256": "511c80e412d9ab658bde0c270ce1dfda5776dcd1c4dd07f8bf216a6862324931"
   },
   "independent_review": {
     "model": "claude-fable-5-1",
     "effort": "high",
     "verdict": "CLEAN for source commit only",
     "review_sha256": "1baedb9fb77931b1a1e690b6828e53a394b490faa747ef74efb768cf5603ba05",
-    "post_review_delta": "Doctor now requires a ledger observation after latest refresh; added failing-first regression, 29 startup tests pass.",
+    "post_review_delta": "Follow-up source e36d9ad independently reviewed CLEAN; see followup-review.md. Final TDD entry-load correction 71fbe81 independently reviewed CLEAN after the comparison and first Fable correction probe failed.",
     "native_identity": {
       "session_id": "bac8394c-004f-40eb-b4da-b2fb0a7979ac",
       "models": [
@@ -55,20 +58,21 @@
     "dispatch_sidecar": "warn: parser did not recognize the Markdown VERDICT line; raw review explicitly approves source commit, with nonblocking findings retained"
   },
   "outstanding": {
-    "native_pilot": "automatic approval review requires explicit internal-payload transmission authorization; zero subject sessions launched",
-    "rollout": "not performed",
-    "instruction_sync": "candidate managed block not synchronized to live profiles",
-    "ledger_retention": "bounded doctor reader/explicit rotation needed before scale rollout",
-    "minor_followups": [
-      "blank-line export tolerance",
-      "private ownership checks on snapshot reads",
-      "higher priority for mode/error notices"
+    "native_pilot": "Stopped after 20 subjects: 19 ACCEPT, subject 19 NEEDS_FIX; four planned subjects unrun. See pilot-results.json.",
+    "rollout": "Not performed: scoped 0.6.316 preflight blocked by release-manifest Intercore revision mismatch. Existing fleet packaging capability remains a prerequisite under mk-ag2s.25.",
+    "instruction_sync": "Candidate managed block not synchronized to live profiles; native tests used isolated source selections.",
+    "ledger_retention": "Doctor reads a bounded tail; explicit on-disk archival/rotation remains follow-up before scale.",
+    "comparison_limitations": [
+      "Instrumentation changed after three subjects.",
+      "Resume exercised; actual compaction untested.",
+      "Fable resume and permission-bound pairs unrun after stop.",
+      "Other supported models untested."
     ]
   },
-  "efficiency_result": "unknown; no allowance savings claim",
+  "efficiency_result": "inconclusive; no subscription allowance or causal latency savings claim",
   "ci_prerequisites": {
     "Sylveste": "checks registered; other classes remain with mk-ag2s.209 owner",
-    "Clavain": "manual verification pilot only; mk-ag2s.25 remains open",
+    "Clavain": "Manual verification pilot job 44 passed e36d9ad; does not establish independent startup CI or packaging. mk-ag2s.25 stays open. Mistyped job 43 cancelled before execution.",
     "intercore": "registration disabled; mk-ag2s.67 remains open; documentation-only change here",
     "interstat": "registration disabled; mk-ag2s.124 remains open",
     "intertest": "registration disabled; mk-ag2s.128 remains open",
@@ -76,7 +80,7 @@
   },
   "source_delivery": {
     "Clavain": {
-      "commit": "2dec21492b6ebad89e079fcd1e1f3211af54407c",
+      "commit": "e36d9ad63a747059ecbee79bc91bc9109f8a8ef0",
       "main_pushed": true
     },
     "interstat": {
@@ -84,7 +88,7 @@
       "main_pushed": true
     },
     "intertest": {
-      "commit": "2c785cf09368c8f959ad9deb274d56600b70686a",
+      "commit": "71fbe8167f3a6e72c310bc12c39c68db203836d4",
       "main_pushed": true
     },
     "intercore": {
@@ -97,17 +101,31 @@
     },
     "Sylveste": {
       "commit": "e2082e9ea6ee157090ff054342e58f11a9567268",
-      "main_pushed": false,
+      "main_pushed": true,
       "remote_source_ref": "refs/tags/ci/e2082e9ea6ee157090ff054342e58f11a9567268",
       "required_check": "Generator and parity checkers",
       "required_publisher_app_id": 4881945,
-      "zklw_job": 39,
-      "result": "broker prerequisite: source is no longer current",
-      "campaign_task": "mk-ag2s.209"
+      "result": "two successful fresh guests at exact source; required App 4881945 check successful; main push verified",
+      "campaign_task": "mk-ag2s.209",
+      "zklw_jobs": [
+        40,
+        41
+      ]
     }
   },
   "narrow_sync": {
     "codex_operations_reference": "local symlink verified; macOS/server installer declarations added; broad installers not run",
     "managed_candidate_contract": "not applied pending native pilot/rollout"
+  },
+  "targeted_correction_probes": {
+    "count": 4,
+    "first_revision": {
+      "Astra": "ACCEPT",
+      "Fable": "NEEDS_FIX"
+    },
+    "final_revision": "71fbe8167f3a6e72c310bc12c39c68db203836d4",
+    "final_Astra": "ACCEPT",
+    "final_Fable": "ACCEPT",
+    "original_comparison_reopened": false
   }
 }

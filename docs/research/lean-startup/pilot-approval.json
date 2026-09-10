@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "not_run_approval_required",
+  "status": "stopped_on_acceptance_regression",
   "subjects": 24,
   "hosts": [
     "Codex/Astra",
@@ -34,7 +34,30 @@
     "private messages",
     "unrelated account files"
   ],
-  "authorization_needed": "Automatic approval review requires explicit user authorization to transmit these internal instruction and source payloads for the native comparison.",
-  "independent_acceptance": null,
-  "efficiency_result": "unknown"
+  "independent_acceptance": {
+    "accepted": 19,
+    "needs_fix": [
+      19
+    ],
+    "unrun": [
+      20,
+      21,
+      22,
+      23
+    ]
+  },
+  "efficiency_result": "inconclusive",
+  "authorization": {
+    "user_message": "yes, please do not ask in the future",
+    "scope": "The listed 24-session internal payload and provider comparison; continuing authorization for the same scope.",
+    "date": "2026-09-09"
+  },
+  "completed_subjects": 20,
+  "correction_probes": {
+    "additional": 4,
+    "final_Astra": "ACCEPT",
+    "final_Fable": "ACCEPT",
+    "total_behavioral_subjects": 24,
+    "original_comparison_reopened": false
+  }
 }

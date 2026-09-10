@@ -104,9 +104,11 @@ replace a requested host or downgrade a model to fill the matrix. Prompt bytes a
 API-equivalent cost do not establish subscription allowance savings. Correctness
 can be reported separately without an efficiency claim.
 
-The requested native pilot is currently blocked by automatic approval review;
-[the payload manifest](pilot-approval.json) describes the provider transmission
-requiring explicit user authorization. No subject session has run.
+The user authorized the listed provider payload. The native comparison stopped
+at subject 19 after independent review found a missed verification-skill load:
+20 subjects ran, 19 were accepted, and four planned subjects remain unrun.
+[The report](pilot-report.md) preserves the failure and separates correction probes
+from the stopped comparison. Efficiency is inconclusive.
 
 Rollout requires independent frontier review and fresh native host evidence.
 Roll back by selecting the prior verified package/instruction block, preserving
