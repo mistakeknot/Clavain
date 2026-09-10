@@ -74,6 +74,7 @@ git add app.sh AGENTS.md
 git commit -m 'apply fixture accepted scope'
 printf '{"type":"turn.completed","usage":{"input_tokens":20,"output_tokens":5}}\n' >> "$CLAVAIN_REVIEW_EVENTS"
 printf 'fixture worker completed\n' > "$output"
+printf 'Tokens: 1 in / 0 out\n' > "$output.summary"
 printf '%s\n' '--- VERDICT ---' 'STATUS: pass' 'SUMMARY: fixture checks' '---' > "$output.verdict"
 `, 0700)
 	t.Setenv("CLAVAIN_DIR", clavain)
@@ -108,6 +109,15 @@ printf '%s\n' '--- VERDICT ---' 'STATUS: pass' 'SUMMARY: fixture checks' '---' >
 	}
 	if dispatch["status"] != "completed" {
 		t.Fatal(dispatch)
+	}
+	var budget struct {
+		Used int `json:"used"`
+	}
+	if err = json.Unmarshal([]byte(run("ic", "--json", "run", "budget", result.RunID)), &budget); err != nil {
+		t.Fatal(err)
+	}
+	if budget.Used != 25 || result.UsageTokens != 25 || !result.UsageComplete {
+		t.Fatalf("kernel collection overwrote final usage: budget=%+v receipt=%+v", budget, result)
 	}
 	if again, _, err := submitReview(receipts, s, reviewRun); err != nil || again.DispatchID != result.DispatchID {
 		t.Fatal("retry changed actual kernel dispatch")

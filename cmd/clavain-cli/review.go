@@ -57,6 +57,11 @@ type reviewSubmission struct {
 	Proposal reviewProposal `json:"proposal"`
 }
 type reviewReceipt struct {
+	UsageTokens      int              `json:"usage_tokens,omitempty"`
+	BudgetOvershoot  int              `json:"budget_overshoot,omitempty"`
+	UsageComplete    bool             `json:"usage_complete"`
+	PendingStatus    string           `json:"pending_status,omitempty"`
+	PendingReason    string           `json:"pending_reason,omitempty"`
 	Request          reviewSubmission `json:"request"`
 	Hash             string           `json:"hash"`
 	ID               string           `json:"id"`
@@ -405,7 +410,7 @@ func cmdReview(args []string) error {
 	}
 	// A detached supervisor owns execution. Repeated status polls can restart a
 	// queued/deferred supervisor; its lifetime lock prevents duplicate launches.
-	if r.Status == "queued" || r.Status == "deferred" || r.Status == "running" || (r.Status == "blocked" && r.DispatchID == "") {
+	if r.Status == "queued" || r.Status == "deferred" || r.Status == "running" || r.Status == "kernel_report_pending" || (r.Status == "blocked" && r.DispatchID == "") {
 		exe, err := os.Executable()
 		if err != nil {
 			return err

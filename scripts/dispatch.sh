@@ -397,7 +397,7 @@ _run_candidate_with_policy() {
       CLAVAIN_LAST_FAILURE_CLASS=""
       return 0
     fi
-    if [[ "$failure_class" == "rate_limited" && "$attempt" -lt "$retries" ]]; then
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == "rate_limited" && "$attempt" -lt "$retries" ]]; then
       attempt=$((attempt + 1))
       echo "dispatch: HTTP 429; retrying the same resolved model ($attempt/$retries)" >&2
       if [[ "$backoff" -gt 0 ]]; then
@@ -482,7 +482,7 @@ _dispatch_role_profile() {
       echo "Error: role '$role' is reserved for the main integrator and cannot be delegated" >&2
       return 1
     fi
-    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$backend" != codex ]]; then
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$backend" != codex && "$backend" != claude ]]; then
       fallback_reason="usage_reporting_unavailable"
       echo "dispatch: '$profile_ref' cannot report usage for this approved token budget; trying its declared fallback" >&2
       continue
@@ -516,6 +516,9 @@ _dispatch_role_profile() {
     else
       rc=$?
     fi
+    # A started budgeted candidate may have spent tokens, even on an access or
+    # transport failure. Only its supervisor can admit another invocation.
+    [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
       model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
@@ -751,6 +754,18 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+  if [[ -n "$VIA" || ( "$ENGINE" != codex && "$ENGINE" != claude ) ]]; then
+    _dispatch_write_failure_class unsupported_adapter
+    echo "Error: usage-required dispatch needs the Codex JSON or Claude accounting adapter; alternate transports are unsupported" >&2
+    exit 1
+  fi
+  if [[ -z "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+    echo "Error: usage-required dispatch requires an event destination" >&2
+    exit 1
+  fi
+fi
 
 if [[ "$ENGINE" == "flere" ]]; then
   if [[ -n "$VIA" || -n "$TIER" || -n "$ROLE" || -n "$REASONING_EFFORT" || -n "$SERVICE_TIER" || ${#IMAGES[@]} -gt 0 || ${#EXTRA_ARGS[@]} -gt 0 || "$KIMI_UNSAFE" == true || "$CLAUDE_UNSAFE" == true ]]; then
@@ -1533,9 +1548,14 @@ elif [[ "$ENGINE" == "claude" ]]; then
   # _seat_snapshot): a run that changes it is an error verdict, not a ruling.
   if [[ "$CLAUDE_UNSAFE" != true ]]; then
     CMD+=(--allowedTools "Bash")
-    CMD+=(--disallowedTools "Edit,Write,NotebookEdit")
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+      CMD+=(--disallowedTools "Edit,Write,NotebookEdit,Agent,Task,Skill")
+    else
+      CMD+=(--disallowedTools "Edit,Write,NotebookEdit")
+    fi
   else
     CMD+=(--allowedTools "Bash,Edit,Write,NotebookEdit")
+    [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || CMD+=(--disallowedTools "Agent,Task,Skill")
   fi
   # The plan named by --plan usually lives outside -C (a scratchpad); without
   # --add-dir the seat cannot read it under dontAsk and has nothing to replay.
@@ -1556,6 +1576,13 @@ elif [[ "$ENGINE" == "claude" ]]; then
   PROMPT_STDIN_FILE=$(mktemp "${TMPDIR:-/tmp}/dispatch-claude-prompt.XXXXXX")
   printf '%s' "$PROMPT" > "$PROMPT_STDIN_FILE"
   CMD+=(-p)
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+    DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
+    CMD=(python3 "$DISPATCH_SCRIPT_DIR/claude_usage.py"
+      --events "$CLAVAIN_REVIEW_EVENTS" --dispatch "$DISPATCH_ID" --model "$MODEL"
+      --policy "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+      --budget "${CLAVAIN_TOKEN_BUDGET:-0}" -- "${CMD[@]}")
+  fi
   # WORKDIR via cd and OUTPUT via tee at execution time, same as kimi
   # (claude -p prints the response on stdout; no -C/-o flags used).
 else
@@ -2042,7 +2069,11 @@ _finalize_dispatch_result() {
   # Only a finished backend has a current extracted result. Pre-execution
   # failures must never pick up an older sidecar at the requested path.
   DISPATCH_RESULT_READY=true
-  failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$exit_code" != 0 ]]; then
+    failure_class=terminal_accounting
+  else
+    failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
+  fi
   if [[ "$exit_code" == "0" ]]; then
     : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
   else

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -198,29 +197,6 @@ func verifyReviewGuidance(r reviewReceipt) error {
 	}
 	return nil
 }
-func reviewUsage(path string) (int, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-	scan := bufio.NewScanner(f)
-	scan.Buffer(make([]byte, 4096), 8<<20)
-	total := 0
-	for scan.Scan() {
-		var event struct {
-			Type  string `json:"type"`
-			Usage struct {
-				Input  int `json:"input_tokens"`
-				Output int `json:"output_tokens"`
-			} `json:"usage"`
-		}
-		if json.Unmarshal(scan.Bytes(), &event) == nil && event.Type == "turn.completed" {
-			total += event.Usage.Input + event.Usage.Output
-		}
-	}
-	return total, scan.Err()
-}
 func updateReviewRoute(r *reviewReceipt) {
 	data, err := reviewRun(r.Project, "ic", "--json", "route", "list", "--dispatch="+r.DispatchID, "--limit=1")
 	if err != nil {
@@ -329,13 +305,13 @@ func workReview(path string) error {
 		return err
 	}
 	fail := func(status string, err error) error {
-		r.Status = status
-		r.Reason = err.Error()
-		r.UpdatedAt = time.Now().UTC()
-		if writeErr := reviewWrite(path, r); writeErr != nil {
+		if writeErr := finishReviewReceipt(&r, path, status, err.Error(), reviewRun); writeErr != nil {
 			return writeErr
 		}
 		return err
+	}
+	if r.Status == "kernel_report_pending" {
+		return finishReviewReceipt(&r, path, r.PendingStatus, r.PendingReason, reviewRun)
 	}
 	if r.Status == "ready_for_retest" || r.Status == "failed" || (r.Status == "blocked" && r.DispatchID != "") {
 		return nil
@@ -465,7 +441,7 @@ func workReview(path string) error {
 		wrapper := "#!/usr/bin/env bash\nset -euo pipefail\ncd " + shellReviewQuote(r.Project) + "\n"
 		wrapper += "for ((i=0;i<100;i++)); do [[ -s " + shellReviewQuote(idPath) + " ]] && break; sleep 0.1; done\n[[ -s " + shellReviewQuote(idPath) + " ]] || exit 1\n"
 		wrapper += "export CLAVAIN_DISPATCH_ID=\"$(cat " + shellReviewQuote(idPath) + ")\"\n"
-		for key, value := range map[string]string{"CLAVAIN_RUN_ID": r.RunID, "CLAVAIN_BEAD_ID": r.WorkID, "CLAVAIN_REQUIRE_USAGE": "1", "CLAVAIN_REVIEW_EVENTS": filepath.Join(dir, "usage.jsonl")} {
+		for key, value := range map[string]string{"CLAVAIN_RUN_ID": r.RunID, "CLAVAIN_BEAD_ID": r.WorkID, "CLAVAIN_REQUIRE_USAGE": "1", "CLAVAIN_TOKEN_BUDGET": fmt.Sprint(r.Request.Proposal.BudgetTokens), "CLAVAIN_REVIEW_EVENTS": filepath.Join(dir, "usage.jsonl")} {
 			wrapper += "export " + key + "=" + shellReviewQuote(value) + "\n"
 		}
 		wrapper += "trap 'trap \"\" TERM; kill -TERM -- -$$ 2>/dev/null; exit 143' TERM INT\n"
@@ -528,15 +504,19 @@ func workReview(path string) error {
 	}
 	watchdog := r.StartedAt.Add(time.Hour)
 	for {
-		used, usageErr := reviewUsage(filepath.Join(dir, "usage.jsonl"))
-		if usageErr == nil && used != lastUsage {
-			if _, err = reviewRun(r.Project, "ic", "dispatch", "tokens", r.DispatchID, "--in="+fmt.Sprint(used), "--out=0"); err != nil {
+		evidence, usageErr := readReviewUsage(filepath.Join(dir, "usage.jsonl"), r.DispatchID, false)
+		used := evidence.Tokens
+		if usageErr != nil {
+			fmt.Fprintln(log, "Usage evidence pending:", usageErr)
+		}
+		if used != lastUsage {
+			if _, err = reviewRun(r.Project, "ic", "dispatch", "tokens", r.DispatchID, "--in="+fmt.Sprint(used), "--out=0", "--cache=0"); err != nil {
 				fmt.Fprintln(log, "Usage report pending:", err)
 			} else {
 				lastUsage = used
 			}
 		}
-		if used > r.Request.Proposal.BudgetTokens {
+		if used >= r.Request.Proposal.BudgetTokens {
 			if stopErr := stopReviewWorker(r, dir); stopErr == nil {
 				return fail("blocked", fmt.Errorf("approved budget reached: %d reported tokens; active model turns can exceed the limit", used))
 			} else {
@@ -587,8 +567,15 @@ func workReview(path string) error {
 		}
 		time.Sleep(time.Second)
 	}
-	if lastUsage <= 0 {
-		return fail("blocked", errors.New("worker returned without usage evidence"))
+	// Re-read after collection; never reuse the last mid-run sample as proof.
+	if err = settleReviewUsage(&r, dir, reviewRun); err != nil {
+		return fail("blocked", err)
+	}
+	if !r.UsageComplete {
+		return fail("blocked", errors.New("worker returned without complete usage evidence"))
+	}
+	if r.UsageTokens >= r.Request.Proposal.BudgetTokens {
+		return fail("blocked", errors.New("approved token budget exhausted before verification"))
 	}
 	if err = verifyReviewGuidance(r); err != nil {
 		return fail("blocked", err)
@@ -637,8 +624,5 @@ func workReview(path string) error {
 	}
 	r.Build = strings.TrimSpace(string(head)) + ":sha256:" + hex.EncodeToString(sum[:])
 	r.Binary = binary
-	r.Status = "ready_for_retest"
-	r.Reason = "Approved checks passed and executable hashed; your build-specific retest is still required"
-	r.UpdatedAt = time.Now().UTC()
-	return reviewWrite(path, r)
+	return finishReviewReceipt(&r, path, "ready_for_retest", "Approved checks passed and executable hashed; your build-specific retest is still required", reviewRun)
 }
