@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import signal
 import subprocess
 import sys
@@ -259,7 +260,11 @@ def preparation_command(host, command, folder, mcp_servers=()):
                       "features.image_generation=false"]:
             cmd += ["-c", value]
         for name in mcp_servers:
-            cmd += ["-c", "mcp_servers." + json.dumps(name) + ".enabled=false"]
+            # Codex splits override keys on dots; TOML quoting is for values,
+            # not key segments. Quoted names create incomplete server entries.
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+                raise ValueError("MCP server name cannot be safely overridden")
+            cmd += ["-c", "mcp_servers." + name + ".enabled=false"]
         return cmd
     cmd = without(command, {"--tools", "--allowedTools", "--allowed-tools", "--disallowedTools",
                            "--disallowed-tools", "--permission-mode", "--json-schema"})

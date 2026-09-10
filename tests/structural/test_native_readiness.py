@@ -1,6 +1,9 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -31,8 +34,31 @@ def test_codex_preparation_uses_current_agent_control_and_disables_each_connecto
                                            tmp_path, mcp_servers=["example"])
     assert prepared[prepared.index("-s") + 1] == "read-only"
     assert "agents.enabled=false" in prepared
-    assert 'mcp_servers."example".enabled=false' in prepared
+    assert 'mcp_servers.example.enabled=false' in prepared
     assert 'approval_policy="never"' in prepared
+
+
+@pytest.mark.parametrize("name", ["nested.server", 'quoted"server', "", "server=name", "space name"])
+def test_codex_preparation_rejects_ambiguous_connector_keys(tmp_path, name):
+    with pytest.raises(ValueError, match="MCP server name"):
+        native.preparation_command("codex", ["/host/codex", "exec"], tmp_path, mcp_servers=[name])
+
+
+@pytest.mark.skipif(shutil.which("codex") is None, reason="native Codex CLI unavailable")
+def test_native_codex_parses_connector_disable_override(tmp_path):
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "config.toml").write_text('[mcp_servers.example-server]\ncommand = "false"\n')
+    binary = shutil.which("codex")
+    prepared = native.preparation_command("codex", [binary, "exec"], tmp_path,
+                                         mcp_servers=["example-server"])
+    overrides = [arg for i, arg in enumerate(prepared) if i and prepared[i - 1] == "-c"]
+    command = [binary, *[part for value in overrides for part in ("-c", value)], "mcp", "list", "--json"]
+    result = subprocess.run(command, env=dict(os.environ, CODEX_HOME=str(config)),
+                            cwd=tmp_path, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    servers = json.loads(result.stdout)
+    assert [(server["name"], server["enabled"]) for server in servers] == [("example-server", False)]
 
 
 @pytest.mark.parametrize("unsafe", ["--dangerously-skip-permissions", "--yolo", "--resume", "--plugin-url"])
