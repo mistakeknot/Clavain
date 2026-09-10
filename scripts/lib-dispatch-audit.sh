@@ -93,7 +93,7 @@ _record_role_routing_decision() {
   [[ -z "$reason" || "$reason" == success ]] || record_cmd+=("--fallback-reason=$reason")
   [[ -z "$PRODUCER_IDENTITY" ]] || record_cmd+=("--producer-identity=$PRODUCER_IDENTITY")
   [[ -z "$VALIDATOR_RELATIONSHIP" ]] || record_cmd+=("--validator-relationship=$VALIDATOR_RELATIONSHIP")
-  local audit_workdir="${WORKDIR:-.}"
+  local audit_workdir="${WORKDIR:-.}" task_db="${CLAVAIN_INTERCORE_DB:-}" project_dir
   if [[ -n "${CLAVAIN_TASK_ENROLLMENT_ID:-}" ]]; then
     if [[ -z "${CLAVAIN_TASK_MANIFEST_SHA256:-}" || -z "${CLAVAIN_TASK_COHORT_ID:-}" || -z "${CLAVAIN_TASK_INTERCORE_DB:-}" ]]; then
       echo "Error: enrolled dispatch requires complete task envelope and explicit Intercore database" >&2
@@ -101,9 +101,15 @@ _record_role_routing_decision() {
     fi
     # ic requires an explicit DB path under its cwd. Preserve the actual project
     # identity while invoking from the authoritative database's parent directory.
-    local task_db="$CLAVAIN_TASK_INTERCORE_DB" project_dir
+    if [[ -n "$task_db" && "$task_db" != "$CLAVAIN_TASK_INTERCORE_DB" ]]; then
+      echo "Error: preparation and task Intercore database bindings differ" >&2
+      return 1
+    fi
+    task_db="$CLAVAIN_TASK_INTERCORE_DB"
+  fi
+  if [[ -n "$task_db" ]]; then
     if [[ "$task_db" != /* || ! -f "$task_db" ]]; then
-      echo "Error: enrolled dispatch requires an absolute path to an existing Intercore database" >&2
+      echo "Error: dispatch requires an absolute path to its existing Intercore database" >&2
       return 1
     fi
     if ! project_dir="$(cd "${WORKDIR:-.}" && pwd -P)"; then

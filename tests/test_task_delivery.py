@@ -188,7 +188,8 @@ def test_real_ic_record_and_export_round_trip(tmp_path):
 
 
 @pytest.mark.parametrize("real_ic", [False, True])
-def test_role_audit_preserves_task_envelope_and_explicit_store(tmp_path, real_ic):
+@pytest.mark.parametrize("enrolled", [False, True])
+def test_role_audit_preserves_task_envelope_and_explicit_store(tmp_path, real_ic, enrolled):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     recorder = fake_bin / "ic"
@@ -211,6 +212,10 @@ def test_role_audit_preserves_task_envelope_and_explicit_store(tmp_path, real_ic
         ROLE="deep-execution", ROLE_RESOLVED="true", ENGINE="flere", MODEL="m", DISPATCH_ID="d", ATTEMPT_ID="a",
         RESOLVED_PROFILE_REF="p", DISPATCH_SESSION_ID="parent", OUTPUT="", REASONING_EFFORT="high", SERVICE_TIER="standard",
         SANDBOX="read-only")
+    if not enrolled:
+        for key in ("CLAVAIN_TASK_INTERCORE_DB", "CLAVAIN_TASK_ENROLLMENT_ID", "CLAVAIN_TASK_MANIFEST_SHA256", "CLAVAIN_TASK_COHORT_ID"):
+            env.pop(key, None)
+        env["CLAVAIN_INTERCORE_DB"] = str(database)
     if real_ic:
         env["PATH"] = os.environ["PATH"]
     result = subprocess.run(["bash", "-c", 'source "$1"; _record_role_routing_decision 0 success completed',
@@ -228,7 +233,10 @@ def test_role_audit_preserves_task_envelope_and_explicit_store(tmp_path, real_ic
         assert f"--db={database}" in args
         assert f"--project={project}" in args
         payload = json.loads(next(a[len("--context="):] for a in args if a.startswith("--context=")))
-    assert payload["task_envelope"] == dict(enrollment_id="e", manifest_sha256="a" * 64, cohort_id="c")
+    if enrolled:
+        assert payload["task_envelope"] == dict(enrollment_id="e", manifest_sha256="a" * 64, cohort_id="c")
+    else:
+        assert "task_envelope" not in payload
 
 
 @pytest.mark.parametrize("observation", [None, {"executable": "/observed/claude", "configuration_coverage": "partial"}])

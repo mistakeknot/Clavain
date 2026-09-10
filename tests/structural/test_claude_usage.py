@@ -110,6 +110,17 @@ def test_budgeted_claude_deduplicates_and_reconciles_cache_and_output(tmp_path):
     assert "STATUS: pass" in Path(str(output) + ".verdict").read_text()
 
 
+def test_delta_null_input_and_cache_fields_are_not_usage(tmp_path):
+    stream = events()
+    stream[4]["event"]["usage"].update(input_tokens=None, cache_read_input_tokens=None,
+                                     cache_creation_input_tokens=None)
+    proc, output, records = dispatch(tmp_path, stream)
+    assert proc.returncode == 0, proc.stderr
+    assert records[-1]["complete"] and records[-1]["budget_tokens"] == 69
+    assert any(row["budget_tokens"] == 67 for row in records)
+    assert "STATUS: pass" in Path(str(output) + ".verdict").read_text()
+
+
 @pytest.mark.parametrize("change", ["missing_result", "bad_json", "mismatch", "zeroed", "unknown_tokens"])
 def test_incomplete_or_inconsistent_usage_never_passes(tmp_path, change):
     stream = events()

@@ -105,7 +105,11 @@ class Meter:
                 usage = partial.get("usage")
                 if not isinstance(usage, dict) or "output_tokens" not in usage:
                     raise ValueError("message delta lacks output usage")
-                value = counts({"input_tokens": 0, **usage})["output_tokens"]
+                # Delta input/cache fields may be null. They are not new input
+                # evidence; only the cumulative output field is consumed here.
+                delta = {k: v for k, v in usage.items()
+                         if k not in FIELDS or k == "output_tokens"}
+                value = counts({"input_tokens": 0, **delta})["output_tokens"]
                 old = self.steps[self.current]["output_tokens"]
                 if value < old:
                     raise ValueError("message output regressed")
