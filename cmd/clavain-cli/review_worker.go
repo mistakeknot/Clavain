@@ -244,6 +244,10 @@ func reviewDispatches(r reviewReceipt) ([]struct {
 // process group whose live command still contains this exact private wrapper.
 // Never trust a retained PID after it has been reused by an unrelated process.
 func stopReviewWorker(r reviewReceipt, dir string) error {
+	return stopReviewWorkerWithRunner(r, dir, reviewRun)
+}
+
+func stopReviewWorkerWithRunner(r reviewReceipt, dir string, run reviewRunner) error {
 	// Resolve and stop the actual group BEFORE asking the kernel to kill its
 	// leader. Otherwise a successful kernel kill can orphan the model child.
 	groupStopped := false
@@ -257,7 +261,7 @@ func stopReviewWorker(r reviewReceipt, dir string) error {
 			groupStopped = stopped
 		}
 	}
-	_, err := reviewRun(r.Project, "ic", "dispatch", "kill", r.DispatchID)
+	_, err := run(r.Project, "ic", "dispatch", "kill", r.DispatchID)
 	if groupStopped {
 		return nil
 	}

@@ -288,7 +288,7 @@ func prepareRoute(r prepareReceipt, role, producer, contextPath string) (map[str
 	}
 	return route, nil
 }
-func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path, producer string) error {
+func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path, producer, stopReason string) error {
 	dir := filepath.Join(filepath.Dir(path), fmt.Sprintf("attempt-%d", a.Number), p.Role)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
@@ -303,10 +303,13 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		return err
 	}
 	remaining := r.Request.BudgetTokens - (prepareUsage(*r) - p.UsageTokens)
-	if remaining <= 0 {
+	if remaining <= 0 && stopReason == "" {
 		return errors.New("approved preparation budget exhausted")
 	}
 	if !p.Intent {
+		if stopReason != "" {
+			return errors.New(stopReason)
+		}
 		route, err := prepareRoute(*r, p.Role, producer, contextPath)
 		if err != nil {
 			return err
@@ -403,14 +406,20 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 	if p.DispatchID == "" {
 		return errors.New("launch intent has no dispatch identity; Clavain reconciliation required")
 	}
-	cancellationReason := ""
+	cancellationReason := stopReason
 	for {
+		if stopReason == "" {
+			if err := checkPrepareValidity(*r); err != nil {
+				stopReason = err.Error()
+				cancellationReason = stopReason
+			}
+		}
 		usage, _ := readReviewUsage(filepath.Join(dir, "usage.jsonl"), p.DispatchID, false)
 		p.UsageTokens = usage.Tokens
-		if time.Now().After(p.StartedAt.Add(15 * time.Minute)) {
+		if stopReason == "" && time.Now().After(p.StartedAt.Add(15*time.Minute)) {
 			cancellationReason = "15-minute preparation watchdog expired"
 		}
-		if p.UsageTokens >= remaining {
+		if stopReason == "" && p.UsageTokens >= remaining {
 			cancellationReason = "approved preparation budget exhausted"
 		}
 		data, err := prepareRunner(*r)(r.Request.Project, "ic", "--json", "dispatch", "poll", p.DispatchID)
@@ -432,7 +441,7 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		if d.Status == "running" || d.Status == "spawned" {
 			if cancellationReason != "" {
 				rr := reviewReceipt{Project: r.Request.Project, DispatchID: p.DispatchID, WorkerPID: p.PID}
-				if err := stopReviewWorker(rr, dir); err != nil {
+				if err := stopReviewWorkerWithRunner(rr, dir, prepareRunner(*r)); err != nil {
 					p.AccountingError = err.Error()
 					_ = persist()
 					return err
@@ -444,7 +453,7 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 		}
 		// A completed phase discovered after restart is consumed even when the
 		// supervisor was absent longer than the watchdog; no live worker remains.
-		if d.Status == "completed" && p.UsageTokens < remaining {
+		if stopReason == "" && d.Status == "completed" && p.UsageTokens < remaining {
 			cancellationReason = ""
 		}
 		rr := reviewReceipt{Project: r.Request.Project, DispatchID: p.DispatchID, Request: reviewSubmission{Proposal: reviewProposal{BudgetTokens: remaining}}}
@@ -557,6 +566,38 @@ func runPreparePhase(r *prepareReceipt, a *prepareAttempt, p *preparePhase, path
 	return persist()
 }
 
+func checkPrepareValidity(r prepareReceipt) error {
+	policy, err := os.ReadFile(r.PolicySource)
+	if err != nil {
+		return err
+	}
+	if prepareHash(policy) != r.PolicyHash {
+		return errors.New("routing policy changed")
+	}
+	return checkPrepareSources(r.Request.Project, r.Sources)
+}
+
+// Invalid inputs revoke further work, but cannot revoke the obligation to stop
+// and account for a worker that was already launched before a supervisor crash.
+func drainInvalidatedPrepare(r *prepareReceipt, path string, cause error) error {
+	for i := range r.Attempts {
+		a := &r.Attempts[i]
+		for _, p := range []*preparePhase{&a.Planner, &a.Reviewer} {
+			if !p.Intent || p.Complete {
+				continue
+			}
+			producer := ""
+			if p.Role == "plan-review" {
+				producer = a.Planner.Model
+			}
+			if err := runPreparePhase(r, a, p, path, producer, cause.Error()); err != nil && err.Error() != cause.Error() {
+				return fmt.Errorf("%v; worker reconciliation: %w", cause, err)
+			}
+		}
+	}
+	return cause
+}
+
 func workPrepare(path string) error {
 	dir := filepath.Dir(path)
 	lock, err := reviewLock(filepath.Join(dir, "worker.lock"), true)
@@ -604,15 +645,8 @@ func workPrepare(path string) error {
 			return err
 		}
 	}
-	policy, err := os.ReadFile(r.PolicySource)
-	if err != nil {
-		return blocked(err)
-	}
-	if prepareHash(policy) != r.PolicyHash {
-		return blocked(errors.New("routing policy changed"))
-	}
-	if err = checkPrepareSources(r.Request.Project, r.Sources); err != nil {
-		return save("needs_changes", err.Error())
+	if err = checkPrepareValidity(r); err != nil {
+		return blocked(drainInvalidatedPrepare(&r, path, err))
 	}
 	if r.RunID == "" {
 		scope := "autarch-prepare:" + prepareHash([]byte(r.Request.Project+"\n"+r.Request.Key))
@@ -666,7 +700,7 @@ func workPrepare(path string) error {
 		if err = save("planning", ""); err != nil {
 			return err
 		}
-		if err = runPreparePhase(&r, a, &a.Planner, path, ""); err != nil {
+		if err = runPreparePhase(&r, a, &a.Planner, path, "", ""); err != nil {
 			return blocked(err)
 		}
 		attemptDir := filepath.Join(dir, fmt.Sprintf("attempt-%d", a.Number))
@@ -701,7 +735,7 @@ func workPrepare(path string) error {
 		if err = save("reviewing", ""); err != nil {
 			return err
 		}
-		if err = runPreparePhase(&r, a, &a.Reviewer, path, a.Planner.Model); err != nil {
+		if err = runPreparePhase(&r, a, &a.Reviewer, path, a.Planner.Model, ""); err != nil {
 			return blocked(err)
 		}
 		raw, e := os.ReadFile(filepath.Join(attemptDir, "plan-review", "response.md"))
@@ -751,7 +785,7 @@ func workPrepare(path string) error {
 		if prepareHash(canonical) != a.BundleDigest {
 			return blocked(errors.New("reviewed bundle digest mismatch"))
 		}
-		if err = checkPrepareSources(r.Request.Project, r.Sources); err != nil {
+		if err = checkPrepareValidity(r); err != nil {
 			return save("needs_changes", err.Error())
 		}
 		r.BundleDigest = prepareHash([]byte(a.BundleDigest + "\n" + a.Reviewer.Digest + "\n" + prepareHash(prepareCompact(a.Reviewer.Route))))
