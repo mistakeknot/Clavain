@@ -23,8 +23,10 @@ def render(source, host, portable_policy=False, policy_source=None, expected_pol
     body = (source/'config/agent-instructions.md').read_text()
     host_text = (source/adapter['adapter']).read_text() if 'adapter' in adapter else adapter['instruction']
     selection = 'portable-managed-installation' if portable_policy else 'explicit-installation'
-    policy_arg = ('"${CLAVAIN_ROUTING_POLICY:-$HOME/.agents/skills/clavain/../config/routing.yaml}"'
-                  if portable_policy else shlex.quote(str(policy)))
+    portable_arg = ('"${CLAVAIN_ROUTING_POLICY:-${CLAVAIN_SELECTED_ROOT:?set from native Clavain skill location}/config/routing.yaml}"'
+                    if host == 'claude' else
+                    '"${CLAVAIN_ROUTING_POLICY:-$HOME/.agents/skills/clavain/../config/routing.yaml}"')
+    policy_arg = portable_arg if portable_policy else shlex.quote(str(policy))
     # Keep existing explicit-install hashes stable, but distinguish portable
     # selection and its executable expression in portable contract receipts.
     hash_input = body+host_text

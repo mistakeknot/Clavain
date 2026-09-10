@@ -173,7 +173,7 @@ def _case_run(base, number, phase='all'):
         cmd = ['/Users/sma/.local/bin/codex','exec','--skip-git-repo-check','--json','-m','gpt-6-astra','-c','model_reasoning_effort="high"','-s','workspace-write']
     else:
         sid = str(uuid.uuid4())
-        cmd = ['/home/mk/.local/bin/claude','--model','claude-fable-5-1','--effort','high','--setting-sources','project,local','--strict-mcp-config','--plugin-dir',str(sources/'clavain'),'--plugin-dir',str(sources/'intertest'),'--permission-mode','dontAsk','--allowedTools','Bash,Read,Edit,Write,Skill,Glob,Grep','--disallowedTools','Agent,WebFetch,WebSearch','--max-turns','10','--session-id',sid,'--output-format','stream-json','--verbose','-p']
+        cmd = ['/home/mk/.local/bin/claude','--model','claude-fable-5-1','--effort','high','--setting-sources','project,local','--strict-mcp-config','--plugin-dir',str(sources/'clavain'),'--plugin-dir',str(sources/'intertest'),'--permission-mode','dontAsk','--allowedTools','Bash,Read,Edit,Write,Skill,Glob,Grep','--disallowedTools','Agent,WebFetch,WebSearch','--max-turns','20','--session-id',sid,'--output-format','stream-json','--verbose','-p']
         for plugin in sorted((base/'catalog').glob('*/.claude-plugin/plugin.json')):
             cmd.extend(['--plugin-dir',str(plugin.parent.parent)])
     if phase=='execute':

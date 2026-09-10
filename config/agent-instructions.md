@@ -3,6 +3,8 @@
 
 Managed by the selected Clavain installation. {{INSTALLATION_RECEIPT}}
 
+{{HOST_ADAPTER}}
+
 For substantive work, read the selected `clavain:using-clavain` skill once and
 select relevant skills from the current catalog. All unique specialist skills
 remain eligible. Load bodies and references only when needed; reuse valid context
@@ -30,6 +32,8 @@ unknown; completion and acceptance require the specified current evidence.
 Restrictions on dispatch do not remove authorized local guidance reads or decision
 recording. Report routing requirements that cannot be performed within the task's
 authority and keep their gates outstanding.
+Unsupported `--role` resolution is not satisfied by legacy `--type` or `--tier`
+output; retain the failed resolution as an open gate.
 
 Read the selected `docs/canon/reasoning-routing.md` for substantive planning or
 execution. Record an accountable JSON decision context with reasons and a short
@@ -65,5 +69,4 @@ behavior. Configuration does not change a running parent's model. Report unsuppo
 host capabilities and missing identity/usage fields explicitly. Never cache a
 passing result as a substitute for required fresh verification.
 
-{{HOST_ADAPTER}}
 <!-- END CLAVAIN CODEX TOOL MAP -->

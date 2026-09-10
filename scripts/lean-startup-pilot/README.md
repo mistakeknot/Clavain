@@ -28,6 +28,13 @@ use governed dispatch separately. Subjects may resolve policy locally and record
 task metadata, but may not launch another model or alter the prescribed settings.
 Dispatch restrictions do not excuse missing guidance reads or decision records.
 
+New correction cohorts allow twenty Claude turns per stage, retaining the
+180-second stage deadline and fixed model/effort. The earlier ten-turn run ended
+before implementation after source-discovery detours. The larger finite allowance
+is a harness correction, not evidence of improved efficiency or of a minimum
+turn requirement. Native terminal errors and timeouts remain incomplete even if
+fixture checks pass. Existing prepared requests and stopped cohorts stay unchanged.
+
 Run `python3 -m pytest -q scripts/lean-startup-pilot/test_support.py` from Clavain
 for helper tests. The enrollment test creates only a temporary test database;
 production cohort preparation requires an explicitly supplied existing database.
