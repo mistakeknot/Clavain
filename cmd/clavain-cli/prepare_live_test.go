@@ -115,5 +115,19 @@ out.with_suffix(out.suffix+'.verdict').write_text('--- VERDICT ---\nSTATUS: pass
 	if budget.Used != 50 {
 		t.Fatal("phase usage did not reconcile", string(data))
 	}
+	// Simulate a crash after reviewer completion but before the reviewed save.
+	// reviewWrite indents embedded route JSON; this must not alter its digest.
+	expected := r.BundleDigest
+	r.Status, r.BundleDigest = "reviewing", ""
+	if err = reviewWrite(path, r); err != nil {
+		t.Fatal(err)
+	}
+	if err = workPrepare(path); err != nil {
+		t.Fatal(err)
+	}
+	recovered, _, err := readPrepare(base, s)
+	if err != nil || recovered.BundleDigest != expected || prepareUsage(recovered) != 50 {
+		t.Fatal("review-complete restart changed bundle or spend", err, recovered.BundleDigest, expected)
+	}
 	t.Log("fixture preparation", r.RunID, r.Attempts[0].Planner.DispatchID, r.Attempts[0].Reviewer.DispatchID)
 }

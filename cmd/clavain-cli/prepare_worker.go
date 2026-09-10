@@ -737,7 +737,7 @@ func workPrepare(path string) error {
 		if err = checkPrepareSources(r.Request.Project, r.Sources); err != nil {
 			return save("needs_changes", err.Error())
 		}
-		r.BundleDigest = prepareHash([]byte(a.BundleDigest + "\n" + a.Reviewer.Digest + "\n" + prepareHash(a.Reviewer.Route)))
+		r.BundleDigest = prepareHash([]byte(a.BundleDigest + "\n" + a.Reviewer.Digest + "\n" + prepareHash(prepareCompact(a.Reviewer.Route))))
 		return save("reviewed", "One outcome has an independently reviewed plan. Implementation requires separate human approval.")
 	}
 }
