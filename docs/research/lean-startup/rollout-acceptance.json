@@ -844,6 +844,7 @@
     "Original missing evidence, stopped cohorts, failed installed attempts and transport reconciliation remain retained.",
     "Interspect Interlab consumer idempotency fails identically on the untouched baseline; sylveste-7aj8.9 stays open.",
     "Broader independent-CI migrations remain open; no broad trigger cutover or server merge-protection claim.",
-    "sylveste-4jmp remains the separate next quality sweep; a new paired efficiency experiment requires reliable attribution."
+    "sylveste-4jmp remains the separate next quality sweep; a new paired efficiency experiment requires reliable attribution.",
+    "Final Claude smoke retained Interstat arithmetic errors and auxiliary Haiku preparation usage; collector health and full accounting remain open under sylveste-7aj8.9."
   ]
 }

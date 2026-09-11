@@ -5,6 +5,8 @@ six scenarios on each host, including actual native compaction and resume.
 Two additional fresh installed-host sessions passed independent acceptance
 after publication. The canonical acceptance records are 1133 (Claude) and
 1135 (Codex). See [the evidence report](rollout-acceptance.json).
+`sylveste-z55b` is closed through the existing zklw signer; its
+[authorization signature verifies](rollout-close.json).
 
 Published selections are Clavain 0.6.317, Intertest 0.1.4, Interstat 0.3.7 and
 Interspect 0.1.26. The three Clavain binaries and manifest come from matching
@@ -33,6 +35,9 @@ the existing project-local database behavior. The focused Python suite passed
 44 tests. Fifteen of sixteen shell suites passed; the Interlab idempotency
 failure also reproduces on the untouched baseline and remains tracked under
 `sylveste-7aj8.9`.
+The final Claude smoke also retains Interstat arithmetic errors and auxiliary
+Haiku preparation usage. Installed acceptance does not imply complete collector
+health or usage attribution.
 
 All stopped cohorts, failed installed attempts, missing attribution and resume
 reconciliation remain preserved. The original comparison's 6,734 sealed files
