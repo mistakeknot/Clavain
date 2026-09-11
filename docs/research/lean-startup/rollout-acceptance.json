@@ -1,0 +1,849 @@
+{
+  "schema_version": 1,
+  "task": "sylveste-z55b",
+  "acceptance": "passed",
+  "scope": "Explicitly prompted native two-phase launch; final source correctness and scoped installed-host acceptance.",
+  "packages": {
+    "clavain": {
+      "version": "0.6.317",
+      "gitCommitSha": "6514303f02130ee9b315df17549ff11a799f76c1",
+      "installPath": "/Users/sma/.claude/plugins/cache/interagency-marketplace/clavain/0.6.317"
+    },
+    "intertest": {
+      "version": "0.1.4",
+      "gitCommitSha": "093277285e5d139218e0e8efff9bf4a6dc2b979b",
+      "installPath": "/Users/sma/.claude/plugins/cache/interagency-marketplace/intertest/0.1.4"
+    },
+    "interstat": {
+      "version": "0.3.7",
+      "gitCommitSha": "60382134141e3829a47a46a687f3e9f1bd34944f",
+      "installPath": "/Users/sma/.claude/plugins/cache/interagency-marketplace/interstat/0.3.7"
+    },
+    "interspect": {
+      "version": "0.1.26",
+      "gitCommitSha": "0531b2b8d993983b037408579cc1d5b11acdda9e",
+      "installPath": "/Users/sma/.claude/plugins/cache/interagency-marketplace/interspect/0.1.26"
+    }
+  },
+  "release_artifacts": {
+    "admission_source": "c9d64bd",
+    "automation": "independent-zklw",
+    "builds": [
+      {
+        "artifacts": {
+          "clavain-cli-go-darwin-arm64": {
+            "sha256": "a9567483e5d9fe93d8036e6ecdea8f4198cbd9533a30e6d92db38254b8927504",
+            "size_bytes": 18006114
+          },
+          "clavain-cli-go-linux-amd64": {
+            "sha256": "3fff91494889d71d2dbcf93c4f9a7415ab9b9863153ecd9c778b8432485ac5aa",
+            "size_bytes": 18673539
+          },
+          "clavain-cli-go-windows-amd64": {
+            "sha256": "948c1a552cf2e2b4451fc157520c381790da1cbceec8ac76592f2be3dfe2c9d3",
+            "size_bytes": 19095040
+          },
+          "release-manifest.json": {
+            "sha256": "ce444954fdec6388afd496cc4c7446da7019c2eeb2efc55366934b9c896901fd",
+            "size_bytes": 838
+          }
+        },
+        "dependency_bundle_sha256": "0fdad9f500cd56eebf474694935ca80e816a0a004fdb030496597da41a9bd3f2",
+        "exit_code": 0,
+        "guest_id": "a9698b67-61dd-48eb-a8d3-4ffbe8e732ca",
+        "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+        "job_id": 66,
+        "packaging": {
+          "dependency": {
+            "full_name": "mistakeknot/intercore",
+            "id": 1160997330,
+            "sha": "39f7599083c76ce32f46527c84fd58b43d1143de"
+          },
+          "go_archive_sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+          "go_version": "go1.26.4",
+          "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+          "recipe_path": "scripts/ci-package.sh",
+          "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+          "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1"
+        },
+        "receipt_sha256": "e137de6f0a61dbfe83650c762dfd9fde8c08350a12617d6f00182c2f3395e3e4",
+        "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+        "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1",
+        "repo_id": 1151593132,
+        "source_bundle_sha256": "3e93fd98ed40b74c6332d62b3508f76186d3dea8a72f8d482370bb32eeca12e1",
+        "source_sha": "5cd07e958be4c983e4e5c339525077aaa102461e"
+      },
+      {
+        "artifacts": {
+          "clavain-cli-go-darwin-arm64": {
+            "sha256": "a9567483e5d9fe93d8036e6ecdea8f4198cbd9533a30e6d92db38254b8927504",
+            "size_bytes": 18006114
+          },
+          "clavain-cli-go-linux-amd64": {
+            "sha256": "3fff91494889d71d2dbcf93c4f9a7415ab9b9863153ecd9c778b8432485ac5aa",
+            "size_bytes": 18673539
+          },
+          "clavain-cli-go-windows-amd64": {
+            "sha256": "948c1a552cf2e2b4451fc157520c381790da1cbceec8ac76592f2be3dfe2c9d3",
+            "size_bytes": 19095040
+          },
+          "release-manifest.json": {
+            "sha256": "ce444954fdec6388afd496cc4c7446da7019c2eeb2efc55366934b9c896901fd",
+            "size_bytes": 838
+          }
+        },
+        "dependency_bundle_sha256": "0fdad9f500cd56eebf474694935ca80e816a0a004fdb030496597da41a9bd3f2",
+        "exit_code": 0,
+        "guest_id": "2acab87a-7d74-4445-b383-9becc80129b4",
+        "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+        "job_id": 67,
+        "packaging": {
+          "dependency": {
+            "full_name": "mistakeknot/intercore",
+            "id": 1160997330,
+            "sha": "39f7599083c76ce32f46527c84fd58b43d1143de"
+          },
+          "go_archive_sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+          "go_version": "go1.26.4",
+          "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+          "recipe_path": "scripts/ci-package.sh",
+          "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+          "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1"
+        },
+        "receipt_sha256": "9bc4b5f8abb9874b0d1e93b56d82c80f2b4fd8fe59315b32b1a45717df207818",
+        "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+        "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1",
+        "repo_id": 1151593132,
+        "source_bundle_sha256": "649e7c2054a5a899112206263e4593b4c757bff739ee70805a0cbe8e374a562f",
+        "source_sha": "5cd07e958be4c983e4e5c339525077aaa102461e"
+      }
+    ],
+    "efficiency": "inconclusive; original comparison preserved",
+    "installed_acceptance": "pending",
+    "publication_dry_run": "Publishing clavain: 0.6.315 \u2192 0.6.316\n  Scoped publish: selected plugin, canonical marketplace, cache, installed record and hook bridges only.\n  Canonical marketplace: /Users/sma/projects/Sylveste/core/marketplace\n  Skipping peer marketplace sync/refresh, global cache cleanup, rig sync and diagram generation.\n  Plugin root:  /Users/sma/projects/.lean-rollout-20260909/source/os/Clavain\n  Marketplace:  /Users/sma/projects/Sylveste/core/marketplace\n  Version files: plugin.json, agent-rig.json\nDry run \u2014 no changes made.\n",
+    "reproducibility": {
+      "artifacts": {
+        "clavain-cli-go-darwin-arm64": {
+          "sha256": "a9567483e5d9fe93d8036e6ecdea8f4198cbd9533a30e6d92db38254b8927504",
+          "size_bytes": 18006114
+        },
+        "clavain-cli-go-linux-amd64": {
+          "sha256": "3fff91494889d71d2dbcf93c4f9a7415ab9b9863153ecd9c778b8432485ac5aa",
+          "size_bytes": 18673539
+        },
+        "clavain-cli-go-windows-amd64": {
+          "sha256": "948c1a552cf2e2b4451fc157520c381790da1cbceec8ac76592f2be3dfe2c9d3",
+          "size_bytes": 19095040
+        },
+        "release-manifest.json": {
+          "sha256": "ce444954fdec6388afd496cc4c7446da7019c2eeb2efc55366934b9c896901fd",
+          "size_bytes": 838
+        }
+      },
+      "bundle_bytes_identical": false,
+      "bundle_equivalence": [
+        {
+          "bundle_sha256": "3e93fd98ed40b74c6332d62b3508f76186d3dea8a72f8d482370bb32eeca12e1",
+          "fsck": "",
+          "heads": "5cd07e958be4c983e4e5c339525077aaa102461e refs/heads/ci-source\n",
+          "job_id": 66,
+          "reachable_inventory_sha256": "6a54e04f70f8d4e638340b3538fe99ba177a094c1e0010674f51b960b559e6da",
+          "reachable_objects": 13464,
+          "source_archive_bytes": 70266880,
+          "source_archive_sha256": "d4478366770bc46e2e927534440c4a6f150a62b4606bdc2691bfdcfef475b6b5",
+          "tree": "085520a45522685b4cfa8322d4598d3a276957d7",
+          "verification": "The bundle contains this ref:\n5cd07e958be4c983e4e5c339525077aaa102461e refs/heads/ci-source\nThe bundle records a complete history.\nThe bundle uses this hash algorithm: sha1\n"
+        },
+        {
+          "bundle_sha256": "649e7c2054a5a899112206263e4593b4c757bff739ee70805a0cbe8e374a562f",
+          "fsck": "",
+          "heads": "5cd07e958be4c983e4e5c339525077aaa102461e refs/heads/ci-source\n",
+          "job_id": 67,
+          "reachable_inventory_sha256": "6a54e04f70f8d4e638340b3538fe99ba177a094c1e0010674f51b960b559e6da",
+          "reachable_objects": 13464,
+          "source_archive_bytes": 70266880,
+          "source_archive_sha256": "d4478366770bc46e2e927534440c4a6f150a62b4606bdc2691bfdcfef475b6b5",
+          "tree": "085520a45522685b4cfa8322d4598d3a276957d7",
+          "verification": "The bundle contains this ref:\n5cd07e958be4c983e4e5c339525077aaa102461e refs/heads/ci-source\nThe bundle records a complete history.\nThe bundle uses this hash algorithm: sha1\n"
+        }
+      ],
+      "guest_ids": [
+        "a9698b67-61dd-48eb-a8d3-4ffbe8e732ca",
+        "2acab87a-7d74-4445-b383-9becc80129b4"
+      ],
+      "matching": true,
+      "semantic_inputs_identical": true,
+      "source_sha": "5cd07e958be4c983e4e5c339525077aaa102461e"
+    },
+    "schema_version": 1,
+    "supersedes": "release-artifact-evidence-final.json; all prior receipts retained unchanged",
+    "verifier": {
+      "artifact_count": 3,
+      "intercore_revision": "39f7599083c76ce32f46527c84fd58b43d1143de",
+      "schema_version": 1,
+      "source_revision": "5cd07e958be4c983e4e5c339525077aaa102461e",
+      "verified": true
+    }
+  },
+  "final_release_verifier": {
+    "schema_version": 1,
+    "verified": true,
+    "source_revision": "5cd07e958be4c983e4e5c339525077aaa102461e",
+    "intercore_revision": "39f7599083c76ce32f46527c84fd58b43d1143de",
+    "artifact_count": 3
+  },
+  "correctness_cohort": {
+    "cohort": "lean-startup-correctness-20260910-v9",
+    "manifest_sha256": "d0bfb93b7a6b6e05624284b23e3e5006f2bedfaa80d400a31ee340cc0eac7c87",
+    "accepted": 12,
+    "subjects": [
+      {
+        "number": 0,
+        "case": {
+          "condition": "candidate",
+          "host": "codex",
+          "scenario": "explicit-skill"
+        },
+        "native_session_id": "01a08dc2-0bf2-72c2-bd39-59dbff5bcff2",
+        "acceptance": {
+          "agent": "b2832914-a7e2-4070-877c-66bdde136766",
+          "id": 1042,
+          "model": "claude-opus-5",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 1,
+        "case": {
+          "condition": "candidate",
+          "host": "codex",
+          "scenario": "bug-fix"
+        },
+        "native_session_id": "01a08dc5-b1df-7061-b412-0bdc4f3a29e7",
+        "acceptance": {
+          "agent": "4f4d7140-a413-4bf8-b684-b1ba3381016d",
+          "id": 1048,
+          "model": "claude-opus-5",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 2,
+        "case": {
+          "condition": "candidate",
+          "host": "codex",
+          "scenario": "existing-plan"
+        },
+        "native_session_id": "01a08dc9-4f8d-7c60-b57d-efc550b22198",
+        "acceptance": {
+          "agent": "f4ef7797-0126-49d4-838d-9d70d738405b",
+          "id": 1054,
+          "model": "claude-opus-5",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 3,
+        "case": {
+          "condition": "candidate",
+          "host": "codex",
+          "scenario": "resume"
+        },
+        "native_session_id": "01a08dcc-8ec9-7a73-bcf7-638eee1e4e8c",
+        "acceptance": {
+          "agent": "cbafe5bf-f742-49cc-8d02-eb4c57fdeda0",
+          "id": 1060,
+          "model": "claude-opus-5",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 4,
+        "case": {
+          "condition": "candidate",
+          "host": "codex",
+          "scenario": "permission-bound"
+        },
+        "native_session_id": "01a08dd2-3424-7d03-ae0e-d05421ecd885",
+        "acceptance": {
+          "agent": "ba1ee0d2-c5f4-42cf-8f1b-64e7899a983a",
+          "id": 1066,
+          "model": "claude-opus-5",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 5,
+        "case": {
+          "condition": "candidate",
+          "host": "codex",
+          "scenario": "small-edit"
+        },
+        "native_session_id": "01a08dd5-db22-7210-844d-67df6b180978",
+        "acceptance": {
+          "agent": "809274ec-d146-4d4b-8eaa-0b7508341167",
+          "id": 1072,
+          "model": "claude-opus-5",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 6,
+        "case": {
+          "condition": "candidate",
+          "host": "claude",
+          "scenario": "explicit-skill"
+        },
+        "native_session_id": "8a504796-f3ad-43e2-b2a1-62f81d1d2a94",
+        "acceptance": {
+          "agent": "01a08dd9-f9a4-7ec0-a17c-fa6df8bbedd8",
+          "id": 1078,
+          "model": "gpt-6-astra",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 7,
+        "case": {
+          "condition": "candidate",
+          "host": "claude",
+          "scenario": "bug-fix"
+        },
+        "native_session_id": "0a65dfba-629d-4da8-acc1-b7582a60c488",
+        "acceptance": {
+          "agent": "01a08ddc-8801-7930-b02e-6e4c3477be3f",
+          "id": 1084,
+          "model": "gpt-6-astra",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 8,
+        "case": {
+          "condition": "candidate",
+          "host": "claude",
+          "scenario": "existing-plan"
+        },
+        "native_session_id": "5eb67217-bdc5-465e-b13e-3371cc00212b",
+        "acceptance": {
+          "agent": "01a08ddf-6553-7353-a1c2-7f3a0c968144",
+          "id": 1090,
+          "model": "gpt-6-astra",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 9,
+        "case": {
+          "condition": "candidate",
+          "host": "claude",
+          "scenario": "resume"
+        },
+        "native_session_id": "e316b2eb-c33b-4b8b-bccc-8e8b2e67cdf1",
+        "acceptance": {
+          "agent": "01a08de2-a74f-7df0-bfd3-09b50c9c0a5a",
+          "id": 1096,
+          "model": "gpt-6-astra",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 10,
+        "case": {
+          "condition": "candidate",
+          "host": "claude",
+          "scenario": "permission-bound"
+        },
+        "native_session_id": "d0761126-c0c2-499b-ab7d-0199fa81e44a",
+        "acceptance": {
+          "agent": "01a08de5-071f-7862-8f35-6d4e57ab9e0f",
+          "id": 1102,
+          "model": "gpt-6-astra",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      },
+      {
+        "number": 11,
+        "case": {
+          "condition": "candidate",
+          "host": "claude",
+          "scenario": "small-edit"
+        },
+        "native_session_id": "41c51908-608a-4fa2-8309-ca882d2a09d0",
+        "acceptance": {
+          "agent": "01a08de7-933b-7863-821d-f0f3094108a1",
+          "id": 1108,
+          "model": "gpt-6-astra",
+          "rule": "measured-delivery-acceptance"
+        },
+        "transport_reconciliation": null
+      }
+    ],
+    "seal_sha256": "41f8b748b8705992dcab7c4262e8ffbf659281f957232ac3da80828236e55455",
+    "files": 4785,
+    "efficiency": "inconclusive; original comparison unchanged"
+  },
+  "installed_smokes": [
+    {
+      "host": "codex",
+      "native_session_id": "01a08ea3-4cc7-7ff3-891e-b4850f701006",
+      "acceptance_decision_id": 1135,
+      "reviewer_identity": "b9dcb12e-c487-4e7f-89d0-a622c3ac48d9",
+      "reviewer_model": "claude-opus-5",
+      "fixture_passed": true,
+      "scoped_installation_preserved": true,
+      "preparation_snapshot_preserved": true,
+      "native_prefix": {
+        "preparation_bytes": 230941,
+        "preparation_sha256": "e1f07eb5640d12d1cd37483f6e7d6f3abae315460a01e9cb49642a6c8bdbc6fa",
+        "execution_prefix_sha256": "e1f07eb5640d12d1cd37483f6e7d6f3abae315460a01e9cb49642a6c8bdbc6fa",
+        "execution_bytes": 433968,
+        "execution_sha256": "5c3a50e784ca6d00592e45c2afbb1da0bd402ea83bbf3f1254c47d8834c19393",
+        "prefix_matches": true
+      },
+      "snapshots": {
+        "snapshot-32d9cc289b16dbd089448631.json": {
+          "sha256": "3b3d44a67cdb73180da759aece22f93d5ce072b1a9e2bc5efb78c8bea1279585",
+          "created_at": 1789099460.594962
+        }
+      },
+      "startup_events": [],
+      "managed_instructions": [
+        {
+          "path": "/Users/sma/.codex/AGENTS.md",
+          "sha256": "c5bdd86763f3b9ac09877e062233dc95152991e7b42e09b1f7fca8c38b35967a",
+          "managed_sha256": "79c6f5227ecaea476615694a822db474748112ecb8846065c9fa15fd2e65739a",
+          "managed_bytes": 5513,
+          "file_bytes": 20928,
+          "unmanaged_sha256": "dfe4e5de5abf9e07c2b0f626b9364cd892d83a4e8bda2f84d3c636b3629baa97"
+        },
+        {
+          "path": "/Users/sma/.claude/CLAUDE.md",
+          "sha256": "b1b85672b6b8e464e9e13280ad6d3601dae04d9a77075871db4de31997e8569c",
+          "managed_sha256": "34dc322b6b15f44032c96567b4458caf7691169491059686571562db224be6c4",
+          "managed_bytes": 5807,
+          "file_bytes": 15495,
+          "unmanaged_sha256": "8a22eeee5f705648abd09092785bf99c82c75a225a004951f31b9589353604cb"
+        }
+      ],
+      "evidence_path": "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/codex",
+      "evidence_report_sha256": "f44befe6427823d71e53a1bb851f5d87303318a3f280e51b5626becab661210d",
+      "reviewer_verdict_sha256": "7ad96acf80e52cc7fe8823981e923a3560150788d82de500d8f41f0a143f225e"
+    },
+    {
+      "host": "claude",
+      "native_session_id": "51dbbbb1-80be-443e-bb14-aaceb4e96a34",
+      "acceptance_decision_id": 1133,
+      "reviewer_identity": "01a08ea5-cde3-7c21-a5bb-5a2fd22e92fb",
+      "reviewer_model": "gpt-6-astra",
+      "fixture_passed": true,
+      "scoped_installation_preserved": true,
+      "preparation_snapshot_preserved": true,
+      "native_prefix": {
+        "preparation_bytes": 167451,
+        "preparation_sha256": "1e87a3a5a8abeff3fb1dd8172c321ec2e1e7d9c64ce8d8281a3c2ee66bfa7485",
+        "execution_prefix_sha256": "1e87a3a5a8abeff3fb1dd8172c321ec2e1e7d9c64ce8d8281a3c2ee66bfa7485",
+        "execution_bytes": 502890,
+        "execution_sha256": "4a84b398d63cb04d3aa583d510fcfde40356a1b7f9b10db996b8a67a4b6b80bb",
+        "prefix_matches": true
+      },
+      "snapshots": {
+        "snapshot-186a461409fd1f0b485f8a14.json": {
+          "sha256": "b2a339b479736c8ef447671e9a78c1764d2ad9750a78f3b43473abfb8014211e",
+          "created_at": 1789099238.119054
+        }
+      },
+      "startup_events": [
+        {
+          "schema_version": 1,
+          "event": "hook_health",
+          "hook": "clavain/SessionStart",
+          "timestamp": 1789099240.078049,
+          "host": "claude",
+          "host_version": null,
+          "session_id": "51dbbbb1-80be-443e-bb14-aaceb4e96a34",
+          "run_id": null,
+          "task_id": null,
+          "model": null,
+          "effort": null,
+          "identity_source": "hook_payload; unavailable fields are null",
+          "instruction_hash": "05163098dbd9b9e5dde4fa1714404f51e446e18d482b289ef6e76cce39cde908",
+          "instruction_status": "current",
+          "context_identity": {
+            "project_scope": "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude/fixture",
+            "source": "/Users/sma/.claude/plugins/cache/interagency-marketplace/clavain/0.6.317",
+            "host": "claude",
+            "selected_manifest_sha256": "2be3119246ca40bf96df47a3cddec2f4a9401861cd0f4944dde4a7c83ea0b744",
+            "instruction_surface_sha256": "b1b85672b6b8e464e9e13280ad6d3601dae04d9a77075871db4de31997e8569c",
+            "host_settings_sha256": "f2148513e31fcaa99225bf7f27fd46a8210a24eb20c18e166eaa55e432b31b48",
+            "inventory_version": 1,
+            "hashes": {
+              ".claude-plugin/plugin.json": "1734e590769026505b14606eb6db0882475135cd1538f6692ab42f6c55f038fb",
+              "hooks/hooks.json": "b42b13979d7266e33d193857caa5416512b4498c94e2969b9a6df2d65b8b3ee6",
+              "hooks/session-start.sh": "8c3384880ff6d3971b540237e77f1fcca48ac82135ce8f183d440782b7a86309",
+              "scripts/startup.py": "9131b1a4c1b3e8c1cae9d970a73ae31f93112435455299bbfb4ec45cf0fe48de",
+              "scripts/sync-agent-instructions.py": "6851309f81e73d0a6398a7e10e24a49287e17981cf48196b39df7e6eb6993f61",
+              "config/routing.yaml": "8148151129e30324c18147dec516223b5e672c82dd8cd0c99bd529bd3cc98fea",
+              "config/agent-instructions.md": "70bcda738b51ca412bb12146d450b88a1887fe74b45417adc6c16b83ba9255a2",
+              "config/host-adapters.json": "cb7c0cc1c4e91ab393bc604e41972df670fcb95707b79312cfb7ff344058ded3",
+              "config/codex-instructions.md": "d9b014cd174cf482e750f6cd4ff9de28c55abfceeb667e9dd91a2edd9ac23489",
+              "hooks/lib-spec.sh": "aafef7011a74838642d4771003d7ddc5ab7cfc0749485879ef0859e521ebda3e",
+              "hooks/auto-publish.sh": "5aa945f6e52e9c2159e411a9025f2861debb7124c781636defa5d51bafd5ccee",
+              "hooks/auto-stop-actions.sh": "f464e6067c944c1d1265b755b5f938138c5c093728e191e2255161a7f1763d40",
+              "hooks/lib-recovery.sh": "27f030614f4f33327f74fd8582446c40e536ef23088a2ec715317d80890e86de",
+              "hooks/peer-telemetry.sh": "1131721be79ef16ee14c8d5659f6eda9787936e3c902b4e3f326544d78813247",
+              "hooks/lib-truncate.sh": "f17d0fe666652f925eca2906ecd732e5fa781d1c6fafe202031f4e25f661a40b",
+              "hooks/lib-shadow-tracker.sh": "5531882c51e679475d297c579cd014d6bebdfd960351c94e44fa50e4d6379eef",
+              "hooks/lib-sprint.sh": "a18d43de735de8a48f6577f9f248a5a0fce0312b67c131d07f129038949aea4d",
+              "hooks/lib-intercore.sh": "5ae9b557042a003bae4104a4b39dda9908b2782fae6c77d478b719cfd3eb1462",
+              "hooks/lib-headless.sh": "46222e2391968ada6648f7646df77dd597e3b1adce1595a1b0743eb7591866ba",
+              "hooks/sprint-scan.sh": "af34741fb470258e57969e9f73a64cad9d074d0f162091923a0e1d90f48f06f6",
+              "hooks/session-end-handoff.sh": "f9038b69b13d748263eac355bb2f786b3546c0618b7f660b9551a69761656efe",
+              "hooks/lib-gates.sh": "daf7afa0025d81734d699997839e457567da49eb53a706b4ff2407900a8276ee",
+              "hooks/context-gateway.sh": "952446881c755a75ac8d02097d829780c50fa58fccdf404ce1e61b197b162207",
+              "hooks/session-handoff.sh": "4d846041860680e55b3935e4f06428a19a629eb62c8350af9c6b490b8fb56566",
+              "hooks/temple-invariant.sh": "1718e9c225f68d824c679ee98447b0fdf79ee81bc919acd146c3a7709a60f3ce",
+              "hooks/guard-plugin-cache.sh": "f691a3bc5f796067ce5badf76274194be24e7e4c0f5037fdd95157be9556e9e2",
+              "hooks/interserve-audit.sh": "6cc62c870a502f3289f7a2be54a5d28c57352fd5f36973c685cf624479cc6fe4",
+              "hooks/gauge-gate-executor-spawn.sh": "a42028b92d8ed96288c2f70c69b7c3bb73f80f573e9e20823ac45f0c49e1c229",
+              "hooks/lib-goal-audit.sh": "9151c34e1b0acbd26a18e0967f532825fd336dbb91747840558a20ca8d398198",
+              "hooks/lib-signals.sh": "fe01de3782538907269bed3d2924b59785fc12939f09fff7b66a25f845118594",
+              "hooks/lib-dispatch.sh": "7f355692b70b3b77c5a9870573ed8db10c2d214e5d54f518eea9d8079d5937a4",
+              "hooks/lib-next-goal-provenance.sh": "b22af2cf9ffc410a58641ed334a7215aadd035589dbd7a3d4d17a414c5d960d8",
+              "hooks/lib-log.sh": "74d881fdf6db749c6a6a34a45e2d554840c52bba3d7177c65db8f48ab3f47a6c",
+              "hooks/validate-plugin-edit.sh": "f29d326c68084a328970c7ee1d39823167d7857788eb0319711fd95e0a2a28a6",
+              "hooks/lib-verdict.sh": "c4497fcba508caaa572ec24c6d2cd433f47a97a10a596daa893bcf9c981008c8",
+              "hooks/dotfiles-sync.sh": "20addca4fbd6f14b51c90b4a0bb41742c048ce11d502768d8495eb14736a94b4",
+              "hooks/lib.sh": "ebdbd9f86a9de5ebfb491c22f8fdc1307c0040cf5ecaa1ec2089f8a59e72bb81",
+              "hooks/catalog-reminder.sh": "5f3a32c31677d8da51ae3af37812d9c48f2e044ef7f5b05f95f94ffddf3eebe3",
+              "hooks/lib-discovery.sh": "cdf7b6464a8122b4068fa993c60337e8bbbb77de6419e426fb50494c810220b0",
+              "hooks/gate-calibration-session-end.sh": "b840d2963e0a14c5c805dea902e449735a7e1b9018f0296e037e65a00b4f42da",
+              "hooks/bead-agent-bind.sh": "f581dfe8ef689cc857fae84ce89d506d7ba3868f54433fdf664c52de5c2f9671",
+              "hooks/peer-routing-telemetry.sh": "cfe7359812adce26ca140b5b484113461e4e99ebe6cff2a20f2069bafc241851",
+              "hooks/agents-md-refresh.sh": "baa1ed6a1998e08c46385ecde2663880dd96dfe3d131f3da0f394ca570ac3378",
+              "hooks/lib-loop-breaker.sh": "f058a41152ca9812470e13f02a7ce8ef86cad98bba0d599a0d4c8e2059089df0",
+              "hooks/auto-push.sh": "8595d6ba2e0f3f11d34ccbef19d81bacc499b687d2f6dbee25a396b996ef64fe",
+              "hooks/release-canary-check.sh": "042f5c1d95f9b80fc23a0865209b0b305cc643d9f65e1aadb67ddf273c405faf"
+            },
+            "skills": {
+              "skills/bug-reproduction-validator/SKILL.md": "0ecd2df14bbe9eea3defdfd0b8910adc3e0bf987463dc1386a13d932a34e6ff8",
+              "skills/code-review-discipline/SKILL.md": "b5ac7769f932bbdd2283eadc376e0349df94a10cd995e5faba4f90fd93131d96",
+              "skills/codex-delegate/SKILL.md": "ebadf0630b40fe2237b3ae1ae13a64a4c7f1d8e7b175e9080189789a0b55ac23",
+              "skills/data-migration-expert/SKILL.md": "dee23cc0b1481f68a12270247e484e9903a8f439747d2af41c9e494aba5d5c2d",
+              "skills/dispatching-parallel-agents/SKILL.md": "7299a93503a91f91402f0189ab8de28c11971c7fc776c6bb9c9eb1c6985f8c72",
+              "skills/engineering-docs/SKILL.md": "8b9865834ae76bccdb24178dea7631c33e499a668a7939184d3b1d14023e2567",
+              "skills/executing-plans/SKILL.md": "09ef4c69b0eee08f042bd5d49de77d0ae6f777ce3219e35c97f477d122062e9b",
+              "skills/file-todos/SKILL.md": "b335bd3dfe52779ac5c19ace0b5da0de6483235bca48dec6f56530b3e1297ce3",
+              "skills/galiana/SKILL.md": "2d3c354443a260dfb11579a1f0f3bb0f6e2d9d40f88ca54ef577a6ed6c36fda7",
+              "skills/interop-with-gsd/SKILL.md": "993f9310b4e3c7fe04003e78ba1939d86641707e1dbbf0be6d8688b66653fbee",
+              "skills/interop-with-superpowers/SKILL.md": "4bd96455fcb8b3689d0840d6f5131b8e7ed18358a4267f164b20e4ffa87da3a8",
+              "skills/interserve-engine/SKILL.md": "cd0123231c575f1634bafb20ae4b40a648da8d05e30996d36badf5ca63402769",
+              "skills/landing-a-change/SKILL.md": "f393c6f9a05b7efefa38c1230e3879549f9eb048c8cc897d8c8cbcefdaa3c72e",
+              "skills/lane/SKILL.md": "609c0aed4402c46344f6f1581a947606c2bdf9436dc86d7ea17332b5f42f5384",
+              "skills/plan-reviewer/SKILL.md": "8dd8d2214aa3e279e179ef8d953d3def81d6ee505b069525eed38f7158cf12c8",
+              "skills/pr-comment-resolver/SKILL.md": "45c6124d3e0490cebb351bd170f09c736bbc2146f88c10912bd5cf77a79b88b0",
+              "skills/project-onboard/SKILL.md": "d783b23d0c7df9e49152cf6b49beecca78fedcc63f8ba5f1a1e6691cade16832",
+              "skills/refactor-safely/SKILL.md": "e980158f68815c0682a690c659dca38cde2efe6b763301c4c1bd36333c834952",
+              "skills/remontoire/SKILL.md": "bb30f7d38d4a5b5a929cbc91cb409be9bc847d2ea2e8e07a12bfe5f8a19bcf2f",
+              "skills/ship/SKILL.md": "1c8961fdcfa534b37f95e8f325813aceb5d5ab0f29a9bdaedc11cb62f753ee12",
+              "skills/subagent-driven-development/SKILL.md": "9821540d9fe1f53dda71f8d4e0cbafa5842c66831931453080b6756448673257",
+              "skills/ui-polish/SKILL.md": "106eccd015405b5fe0954c6af4e300f1a09b735331453a494439591a19b9142f",
+              "skills/upstream-sync-engine/SKILL.md": "9865c2c49047c2f058ec1e58bfaab567f26f622ab7fb2987e9ed35aa7c9a9f20",
+              "skills/using-clavain/SKILL.md": "cb57f9ccba60ce114898f75ed9b3e1f6059bbbbd933a3fe4626864053cd82344",
+              "skills/using-tmux-for-interactive-commands/SKILL.md": "0c975d3e8e0da7639a2f85dfc9b61ce0e3c8adacb1df39ebb165f80586c9651d",
+              "skills/writing-plans/SKILL.md": "128696383648bc3ec296a93e1b68a5d23d7de95d0ebbd3bf7f34b86146e89b9a"
+            },
+            "project_instruction_candidates": {
+              "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude/fixture/AGENTS.md": "5141446549e50360a6ffb7e6b47060c07ef38bd62c5c538b999715e8ec447acf",
+              "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude/fixture/CLAUDE.md": "5141446549e50360a6ffb7e6b47060c07ef38bd62c5c538b999715e8ec447acf",
+              "/Users/sma/projects/AGENTS.md": "8cba3937adaa3238b2097e12360ddb1c6685bf4b5c1363fc41a3f248cd1b5bac",
+              "/Users/sma/projects/CLAUDE.md": "c6137c3cc4664b157371fb8298b976059455cc3838b31d4b406418769514b24d"
+            }
+          },
+          "cache_freshness": "fresh",
+          "duration_ms": 56.569,
+          "exit_status": 0,
+          "status": "ok",
+          "mutation_category": "private-telemetry-only",
+          "serialized_bytes": 1119,
+          "injected_bytes": 1030,
+          "dropped_sections": [],
+          "independent_acceptance": null
+        },
+        {
+          "schema_version": 1,
+          "event": "hook_health",
+          "hook": "clavain/SessionStart",
+          "timestamp": 1789099274.0641642,
+          "host": "claude",
+          "host_version": null,
+          "session_id": "51dbbbb1-80be-443e-bb14-aaceb4e96a34",
+          "run_id": null,
+          "task_id": null,
+          "model": null,
+          "effort": null,
+          "identity_source": "hook_payload; unavailable fields are null",
+          "instruction_hash": "05163098dbd9b9e5dde4fa1714404f51e446e18d482b289ef6e76cce39cde908",
+          "instruction_status": "current",
+          "context_identity": {
+            "project_scope": "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude/fixture",
+            "source": "/Users/sma/.claude/plugins/cache/interagency-marketplace/clavain/0.6.317",
+            "host": "claude",
+            "selected_manifest_sha256": "2be3119246ca40bf96df47a3cddec2f4a9401861cd0f4944dde4a7c83ea0b744",
+            "instruction_surface_sha256": "b1b85672b6b8e464e9e13280ad6d3601dae04d9a77075871db4de31997e8569c",
+            "host_settings_sha256": "f2148513e31fcaa99225bf7f27fd46a8210a24eb20c18e166eaa55e432b31b48",
+            "inventory_version": 1,
+            "hashes": {
+              ".claude-plugin/plugin.json": "1734e590769026505b14606eb6db0882475135cd1538f6692ab42f6c55f038fb",
+              "hooks/hooks.json": "b42b13979d7266e33d193857caa5416512b4498c94e2969b9a6df2d65b8b3ee6",
+              "hooks/session-start.sh": "8c3384880ff6d3971b540237e77f1fcca48ac82135ce8f183d440782b7a86309",
+              "scripts/startup.py": "9131b1a4c1b3e8c1cae9d970a73ae31f93112435455299bbfb4ec45cf0fe48de",
+              "scripts/sync-agent-instructions.py": "6851309f81e73d0a6398a7e10e24a49287e17981cf48196b39df7e6eb6993f61",
+              "config/routing.yaml": "8148151129e30324c18147dec516223b5e672c82dd8cd0c99bd529bd3cc98fea",
+              "config/agent-instructions.md": "70bcda738b51ca412bb12146d450b88a1887fe74b45417adc6c16b83ba9255a2",
+              "config/host-adapters.json": "cb7c0cc1c4e91ab393bc604e41972df670fcb95707b79312cfb7ff344058ded3",
+              "config/codex-instructions.md": "d9b014cd174cf482e750f6cd4ff9de28c55abfceeb667e9dd91a2edd9ac23489",
+              "hooks/lib-spec.sh": "aafef7011a74838642d4771003d7ddc5ab7cfc0749485879ef0859e521ebda3e",
+              "hooks/auto-publish.sh": "5aa945f6e52e9c2159e411a9025f2861debb7124c781636defa5d51bafd5ccee",
+              "hooks/auto-stop-actions.sh": "f464e6067c944c1d1265b755b5f938138c5c093728e191e2255161a7f1763d40",
+              "hooks/lib-recovery.sh": "27f030614f4f33327f74fd8582446c40e536ef23088a2ec715317d80890e86de",
+              "hooks/peer-telemetry.sh": "1131721be79ef16ee14c8d5659f6eda9787936e3c902b4e3f326544d78813247",
+              "hooks/lib-truncate.sh": "f17d0fe666652f925eca2906ecd732e5fa781d1c6fafe202031f4e25f661a40b",
+              "hooks/lib-shadow-tracker.sh": "5531882c51e679475d297c579cd014d6bebdfd960351c94e44fa50e4d6379eef",
+              "hooks/lib-sprint.sh": "a18d43de735de8a48f6577f9f248a5a0fce0312b67c131d07f129038949aea4d",
+              "hooks/lib-intercore.sh": "5ae9b557042a003bae4104a4b39dda9908b2782fae6c77d478b719cfd3eb1462",
+              "hooks/lib-headless.sh": "46222e2391968ada6648f7646df77dd597e3b1adce1595a1b0743eb7591866ba",
+              "hooks/sprint-scan.sh": "af34741fb470258e57969e9f73a64cad9d074d0f162091923a0e1d90f48f06f6",
+              "hooks/session-end-handoff.sh": "f9038b69b13d748263eac355bb2f786b3546c0618b7f660b9551a69761656efe",
+              "hooks/lib-gates.sh": "daf7afa0025d81734d699997839e457567da49eb53a706b4ff2407900a8276ee",
+              "hooks/context-gateway.sh": "952446881c755a75ac8d02097d829780c50fa58fccdf404ce1e61b197b162207",
+              "hooks/session-handoff.sh": "4d846041860680e55b3935e4f06428a19a629eb62c8350af9c6b490b8fb56566",
+              "hooks/temple-invariant.sh": "1718e9c225f68d824c679ee98447b0fdf79ee81bc919acd146c3a7709a60f3ce",
+              "hooks/guard-plugin-cache.sh": "f691a3bc5f796067ce5badf76274194be24e7e4c0f5037fdd95157be9556e9e2",
+              "hooks/interserve-audit.sh": "6cc62c870a502f3289f7a2be54a5d28c57352fd5f36973c685cf624479cc6fe4",
+              "hooks/gauge-gate-executor-spawn.sh": "a42028b92d8ed96288c2f70c69b7c3bb73f80f573e9e20823ac45f0c49e1c229",
+              "hooks/lib-goal-audit.sh": "9151c34e1b0acbd26a18e0967f532825fd336dbb91747840558a20ca8d398198",
+              "hooks/lib-signals.sh": "fe01de3782538907269bed3d2924b59785fc12939f09fff7b66a25f845118594",
+              "hooks/lib-dispatch.sh": "7f355692b70b3b77c5a9870573ed8db10c2d214e5d54f518eea9d8079d5937a4",
+              "hooks/lib-next-goal-provenance.sh": "b22af2cf9ffc410a58641ed334a7215aadd035589dbd7a3d4d17a414c5d960d8",
+              "hooks/lib-log.sh": "74d881fdf6db749c6a6a34a45e2d554840c52bba3d7177c65db8f48ab3f47a6c",
+              "hooks/validate-plugin-edit.sh": "f29d326c68084a328970c7ee1d39823167d7857788eb0319711fd95e0a2a28a6",
+              "hooks/lib-verdict.sh": "c4497fcba508caaa572ec24c6d2cd433f47a97a10a596daa893bcf9c981008c8",
+              "hooks/dotfiles-sync.sh": "20addca4fbd6f14b51c90b4a0bb41742c048ce11d502768d8495eb14736a94b4",
+              "hooks/lib.sh": "ebdbd9f86a9de5ebfb491c22f8fdc1307c0040cf5ecaa1ec2089f8a59e72bb81",
+              "hooks/catalog-reminder.sh": "5f3a32c31677d8da51ae3af37812d9c48f2e044ef7f5b05f95f94ffddf3eebe3",
+              "hooks/lib-discovery.sh": "cdf7b6464a8122b4068fa993c60337e8bbbb77de6419e426fb50494c810220b0",
+              "hooks/gate-calibration-session-end.sh": "b840d2963e0a14c5c805dea902e449735a7e1b9018f0296e037e65a00b4f42da",
+              "hooks/bead-agent-bind.sh": "f581dfe8ef689cc857fae84ce89d506d7ba3868f54433fdf664c52de5c2f9671",
+              "hooks/peer-routing-telemetry.sh": "cfe7359812adce26ca140b5b484113461e4e99ebe6cff2a20f2069bafc241851",
+              "hooks/agents-md-refresh.sh": "baa1ed6a1998e08c46385ecde2663880dd96dfe3d131f3da0f394ca570ac3378",
+              "hooks/lib-loop-breaker.sh": "f058a41152ca9812470e13f02a7ce8ef86cad98bba0d599a0d4c8e2059089df0",
+              "hooks/auto-push.sh": "8595d6ba2e0f3f11d34ccbef19d81bacc499b687d2f6dbee25a396b996ef64fe",
+              "hooks/release-canary-check.sh": "042f5c1d95f9b80fc23a0865209b0b305cc643d9f65e1aadb67ddf273c405faf"
+            },
+            "skills": {
+              "skills/bug-reproduction-validator/SKILL.md": "0ecd2df14bbe9eea3defdfd0b8910adc3e0bf987463dc1386a13d932a34e6ff8",
+              "skills/code-review-discipline/SKILL.md": "b5ac7769f932bbdd2283eadc376e0349df94a10cd995e5faba4f90fd93131d96",
+              "skills/codex-delegate/SKILL.md": "ebadf0630b40fe2237b3ae1ae13a64a4c7f1d8e7b175e9080189789a0b55ac23",
+              "skills/data-migration-expert/SKILL.md": "dee23cc0b1481f68a12270247e484e9903a8f439747d2af41c9e494aba5d5c2d",
+              "skills/dispatching-parallel-agents/SKILL.md": "7299a93503a91f91402f0189ab8de28c11971c7fc776c6bb9c9eb1c6985f8c72",
+              "skills/engineering-docs/SKILL.md": "8b9865834ae76bccdb24178dea7631c33e499a668a7939184d3b1d14023e2567",
+              "skills/executing-plans/SKILL.md": "09ef4c69b0eee08f042bd5d49de77d0ae6f777ce3219e35c97f477d122062e9b",
+              "skills/file-todos/SKILL.md": "b335bd3dfe52779ac5c19ace0b5da0de6483235bca48dec6f56530b3e1297ce3",
+              "skills/galiana/SKILL.md": "2d3c354443a260dfb11579a1f0f3bb0f6e2d9d40f88ca54ef577a6ed6c36fda7",
+              "skills/interop-with-gsd/SKILL.md": "993f9310b4e3c7fe04003e78ba1939d86641707e1dbbf0be6d8688b66653fbee",
+              "skills/interop-with-superpowers/SKILL.md": "4bd96455fcb8b3689d0840d6f5131b8e7ed18358a4267f164b20e4ffa87da3a8",
+              "skills/interserve-engine/SKILL.md": "cd0123231c575f1634bafb20ae4b40a648da8d05e30996d36badf5ca63402769",
+              "skills/landing-a-change/SKILL.md": "f393c6f9a05b7efefa38c1230e3879549f9eb048c8cc897d8c8cbcefdaa3c72e",
+              "skills/lane/SKILL.md": "609c0aed4402c46344f6f1581a947606c2bdf9436dc86d7ea17332b5f42f5384",
+              "skills/plan-reviewer/SKILL.md": "8dd8d2214aa3e279e179ef8d953d3def81d6ee505b069525eed38f7158cf12c8",
+              "skills/pr-comment-resolver/SKILL.md": "45c6124d3e0490cebb351bd170f09c736bbc2146f88c10912bd5cf77a79b88b0",
+              "skills/project-onboard/SKILL.md": "d783b23d0c7df9e49152cf6b49beecca78fedcc63f8ba5f1a1e6691cade16832",
+              "skills/refactor-safely/SKILL.md": "e980158f68815c0682a690c659dca38cde2efe6b763301c4c1bd36333c834952",
+              "skills/remontoire/SKILL.md": "bb30f7d38d4a5b5a929cbc91cb409be9bc847d2ea2e8e07a12bfe5f8a19bcf2f",
+              "skills/ship/SKILL.md": "1c8961fdcfa534b37f95e8f325813aceb5d5ab0f29a9bdaedc11cb62f753ee12",
+              "skills/subagent-driven-development/SKILL.md": "9821540d9fe1f53dda71f8d4e0cbafa5842c66831931453080b6756448673257",
+              "skills/ui-polish/SKILL.md": "106eccd015405b5fe0954c6af4e300f1a09b735331453a494439591a19b9142f",
+              "skills/upstream-sync-engine/SKILL.md": "9865c2c49047c2f058ec1e58bfaab567f26f622ab7fb2987e9ed35aa7c9a9f20",
+              "skills/using-clavain/SKILL.md": "cb57f9ccba60ce114898f75ed9b3e1f6059bbbbd933a3fe4626864053cd82344",
+              "skills/using-tmux-for-interactive-commands/SKILL.md": "0c975d3e8e0da7639a2f85dfc9b61ce0e3c8adacb1df39ebb165f80586c9651d",
+              "skills/writing-plans/SKILL.md": "128696383648bc3ec296a93e1b68a5d23d7de95d0ebbd3bf7f34b86146e89b9a"
+            },
+            "project_instruction_candidates": {
+              "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude/fixture/AGENTS.md": "5141446549e50360a6ffb7e6b47060c07ef38bd62c5c538b999715e8ec447acf",
+              "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude/fixture/CLAUDE.md": "5141446549e50360a6ffb7e6b47060c07ef38bd62c5c538b999715e8ec447acf",
+              "/Users/sma/projects/AGENTS.md": "8cba3937adaa3238b2097e12360ddb1c6685bf4b5c1363fc41a3f248cd1b5bac",
+              "/Users/sma/projects/CLAUDE.md": "c6137c3cc4664b157371fb8298b976059455cc3838b31d4b406418769514b24d"
+            }
+          },
+          "cache_freshness": "fresh",
+          "duration_ms": 35.01,
+          "exit_status": 0,
+          "status": "ok",
+          "mutation_category": "private-telemetry-only",
+          "serialized_bytes": 1119,
+          "injected_bytes": 1030,
+          "dropped_sections": [],
+          "independent_acceptance": null
+        }
+      ],
+      "managed_instructions": [
+        {
+          "path": "/Users/sma/.codex/AGENTS.md",
+          "sha256": "c5bdd86763f3b9ac09877e062233dc95152991e7b42e09b1f7fca8c38b35967a",
+          "managed_sha256": "79c6f5227ecaea476615694a822db474748112ecb8846065c9fa15fd2e65739a",
+          "managed_bytes": 5513,
+          "file_bytes": 20928,
+          "unmanaged_sha256": "dfe4e5de5abf9e07c2b0f626b9364cd892d83a4e8bda2f84d3c636b3629baa97"
+        },
+        {
+          "path": "/Users/sma/.claude/CLAUDE.md",
+          "sha256": "b1b85672b6b8e464e9e13280ad6d3601dae04d9a77075871db4de31997e8569c",
+          "managed_sha256": "34dc322b6b15f44032c96567b4458caf7691169491059686571562db224be6c4",
+          "managed_bytes": 5807,
+          "file_bytes": 15495,
+          "unmanaged_sha256": "8a22eeee5f705648abd09092785bf99c82c75a225a004951f31b9589353604cb"
+        }
+      ],
+      "evidence_path": "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude",
+      "evidence_report_sha256": "5723f4bb80b4ab9bd49a99bc49bd0144dd66d747debccd41cd90794d2153dc1e",
+      "reviewer_verdict_sha256": "cc410ef92357e2e9042c5ca1a566bcbb60d00c1f6be774df40ae239c92159b87",
+      "interspect": {
+        "path": "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude/private-interspect/interspect.db",
+        "sha256": "dffaf6cdcb4c6b3653d951e384ca20838938175d4181c45e076847c2875a81bc",
+        "session": {
+          "session_id": "51dbbbb1-80be-443e-bb14-aaceb4e96a34",
+          "start_ts": "2026-09-11T04:00:40Z",
+          "end_ts": "2026-09-11T04:01:10Z",
+          "project": "fixture"
+        },
+        "private_override": "/Users/sma/projects/.lean-rollout-20260909/installed-two-phase-smokes-v4/claude/private-interspect/interspect.db",
+        "repository_database_absent": true
+      }
+    }
+  ],
+  "source_ci": [
+    {
+      "receipt": "85-2.json",
+      "sha256": "8d1933fbc69271b820dd950f466ea0665aaf84022bf48a09884c5ad487f16f06",
+      "guest_id": "1438b341-8515-4a49-ba54-84f7be75da12",
+      "source_sha": "dacce267769ad2ffa51b63e8205fb3eae796ffa2"
+    },
+    {
+      "receipt": "86-1.json",
+      "sha256": "4b834054f098eb035422d1fba8f07aded78cc39d73ec1a1a3e654d19c8302c65",
+      "guest_id": "d412e880-2012-43b6-a407-6247112af2e9",
+      "source_sha": "dacce267769ad2ffa51b63e8205fb3eae796ffa2"
+    }
+  ],
+  "skills": {
+    "enabled": 102,
+    "disabled": 14,
+    "unique": 102,
+    "duplicates": [],
+    "errors": [],
+    "catalog_names_preserved": true,
+    "affected": [
+      {
+        "name": "intertest:verification-before-completion",
+        "path": "/Users/sma/.claude/plugins/cache/interagency-marketplace/intertest/0.1.4/skills/verification-before-completion/SKILL.md",
+        "description_characters": 212,
+        "metadata_characters": 371
+      },
+      {
+        "name": "clavain:using-clavain",
+        "path": "/Users/sma/.claude/plugins/cache/interagency-marketplace/clavain/0.6.317/skills/using-clavain/SKILL.md",
+        "description_characters": 120,
+        "metadata_characters": 243
+      },
+      {
+        "name": "intertest:test-driven-development",
+        "path": "/Users/sma/.claude/plugins/cache/interagency-marketplace/intertest/0.1.4/skills/test-driven-development/SKILL.md",
+        "description_characters": 89,
+        "metadata_characters": 234
+      },
+      {
+        "name": "intertest:systematic-debugging",
+        "path": "/Users/sma/.claude/plugins/cache/interagency-marketplace/intertest/0.1.4/skills/systematic-debugging/SKILL.md",
+        "description_characters": 91,
+        "metadata_characters": 230
+      }
+    ]
+  },
+  "managed_instruction_commit": "a73cf6598ba5a308d4bb70128b3b0b6eeed97fea",
+  "default_interspect_probe": {
+    "kind": "synthetic installed-hook default-path probe, not native host acceptance",
+    "selected_version": "0.1.26",
+    "selected_source": "0531b2b8d993983b037408579cc1d5b11acdda9e",
+    "hook": "/Users/sma/.claude/plugins/cache/interagency-marketplace/interspect/0.1.26/hooks/interspect-session.sh",
+    "hook_sha256": "0892fdc75128f79408bce85370e80c80795c84d9ccb5cd00d150bb26b58a885f",
+    "exit": 0,
+    "default_project_database_created": true,
+    "session_id": "synthetic-default-hook-probe-00fb53ca-9ce3-4b14-9449-d405e5e649b1",
+    "private_override_unset": true
+  },
+  "original_comparison": {
+    "checked_files": 6734,
+    "unchanged": true,
+    "manifest_sha256": "6b72de7538d8ecbb5dd768dc6b4cb836feadb4edb697a1fabf638d43fb8aff10",
+    "observed_at": 1789099298.977708,
+    "efficiency": "inconclusive; comparison remains stopped"
+  },
+  "interspect_validation": {
+    "python_tests_passed": 44,
+    "shell_suites_passed": 15,
+    "shell_suites_total": 16,
+    "independent_review": {
+      "native_path": "/Users/sma/.claude/projects/-Users-sma-projects--lean-rollout-20260909-two-phase-implementation-interspect-private-review-v3/4a56a92b-852c-4d9f-9dd3-e39b9e9bf4c7.jsonl",
+      "sha256": "6d0ee4819237ffd1a88a15032869e1fcf405160a413166c9290ddaed1c2051f4",
+      "session_ids": [
+        "4a56a92b-852c-4d9f-9dd3-e39b9e9bf4c7"
+      ],
+      "models": [
+        "claude-opus-5"
+      ],
+      "post_review_hardening": "Reject control characters as recommended; strengthen calibration guard test; assert installed DB mode/project and canonical path; latest tests in interspect-private-v4-tests.log"
+    },
+    "baseline_failure": {
+      "source": "2eb6485dbc801491f2d24a3ab098310df1498e76",
+      "exit": 2,
+      "baseline_unmodified": true
+    },
+    "scope": "Focused private-state regression, installed default-path probe and final native installed acceptance. Clavain/Intertest behavior and cohort pins remain unchanged."
+  },
+  "efficiency": "inconclusive; original stopped comparison unchanged",
+  "rollback": {
+    "private_root": "/Users/sma/projects/.lean-rollout-20260909",
+    "records": [
+      "installation-rollback.json",
+      "installation-rollback-before-mcp-fix.json",
+      "installation-rollback-before-interspect.json"
+    ],
+    "scope": "Restore only prior selected packages, affected skill links and managed instruction blocks. Retain evidence and unrelated state."
+  },
+  "retained_limitations": [
+    "Ordinary one-phase session compliance and wider supported-model compatibility are not established.",
+    "Sessions pin Astra/high and the authorized Opus5/high quota fallback. Local role selection is distinct from actual model execution.",
+    "The selected-cache routing policy is an explicit environment override; portable fallback has structural tests, not this native acceptance.",
+    "Codex retains its existing attention/context hooks. Clavain startup.py is not a native Codex hook; no missing hook identity is invented.",
+    "Claude acceptance explicitly uses INTERSPECT_PRIVATE_DB. Default project-local storage is separately probed and unchanged with the option unset.",
+    "Private Interspect mode preserves collection and skips automatic project calibration. It is not a general sandbox for configured hooks.",
+    "Configuration attribution is whitelisted and partial; native Codex compaction model/usage attribution remains incomplete.",
+    "The zklw modern local role attempt remains unavailable where recorded; failed attempts do not establish governed dispatch.",
+    "Original missing evidence, stopped cohorts, failed installed attempts and transport reconciliation remain retained.",
+    "Interspect Interlab consumer idempotency fails identically on the untouched baseline; sylveste-7aj8.9 stays open.",
+    "Broader independent-CI migrations remain open; no broad trigger cutover or server merge-protection claim.",
+    "sylveste-4jmp remains the separate next quality sweep; a new paired efficiency experiment requires reliable attribution."
+  ]
+}
