@@ -16,6 +16,8 @@ import time
 
 
 TERMINATION_GRACE_SECONDS = 2.0
+POST_ESCALATION_DRAIN_SECONDS = 0.05
+POST_ESCALATION_DRAIN_BYTES = 1024 * 1024
 
 
 def _write_private(path: Path, value: dict[str, object]) -> None:
@@ -135,6 +137,45 @@ def run(args: argparse.Namespace) -> int:
                     except ProcessLookupError:
                         pass
                     termination_pending = False
+                    if stdout_open:
+                        # A descendant may have escaped the owned process group
+                        # with setsid() while retaining our stdout pipe. After
+                        # escalation, retain a bounded tail, then close the
+                        # unresolved pipe so cancellation stays bounded.
+                        drain_deadline = time.monotonic() + POST_ESCALATION_DRAIN_SECONDS
+                        drained = 0
+                        while drained < POST_ESCALATION_DRAIN_BYTES and time.monotonic() < drain_deadline:
+                            try:
+                                chunk = os.read(stdout_fd, 65536)
+                            except BlockingIOError:
+                                break
+                            except OSError as error:
+                                capture_error.append(str(error))
+                                break
+                            if not chunk:
+                                selector.unregister(stdout_fd)
+                                process.stdout.close()
+                                stdout_open = False
+                                break
+                            drained += len(chunk)
+                            try:
+                                events_handle.write(chunk)
+                            except OSError as error:
+                                capture_error.append(str(error))
+                                capture_forced_termination = True
+                                break
+                            if review_handle is not None:
+                                try:
+                                    review_handle.write(chunk)
+                                except OSError as error:
+                                    capture_error.append(str(error))
+                                    review_handle.close()
+                                    review_handle = None
+                        if stdout_open:
+                            capture_error.append("event pipe remained open after cancellation escalation")
+                            selector.unregister(stdout_fd)
+                            process.stdout.close()
+                            stdout_open = False
             selector.close()
             selector = None
             returncode = process.wait()

@@ -96,6 +96,14 @@ case "${FIXTURE_MODE:-success}" in
     printf 'backend complete\nVERDICT: CLEAN\n' > "$output"
     exec python3 -c 'import os,time; pid=os.fork(); pid and os._exit(0); time.sleep(2.3); print("{\"type\":\"turn.started\"}", flush=True)'
     ;;
+  escaped_descendant)
+    printf '{"type":"thread.started","thread_id":"thread-escaped"}\n'
+    printf 'backend complete\nVERDICT: CLEAN\n' > "$output"
+    exec python3 -c 'import os,signal,time; pid=os.fork(); pid and os._exit(0); os.setsid(); open(os.environ["FIXTURE_ESCAPED_PID_FILE"],"w").write(str(os.getpid())); signal.signal(signal.SIGTERM,signal.SIG_IGN); signal.signal(signal.SIGPIPE,signal.SIG_IGN); deadline=time.monotonic()+30
+while time.monotonic()<deadline:
+ try: os.write(1,b"{\"type\":\"turn.started\"}\n"*256); time.sleep(.005)
+ except BrokenPipeError: time.sleep(30)'
+    ;;
   *)
     printf '{"type":"thread.started","thread_id":"thread-123"}\n'
     printf '{"type":"turn.started"}\n'
@@ -112,6 +120,9 @@ SH
 teardown() {
     if [[ -f "$T/fixture.pid" ]]; then
         kill "$(cat "$T/fixture.pid")" 2>/dev/null || true
+    fi
+    if [[ -f "$T/fixture.escaped.pid" ]]; then
+        kill -KILL "$(cat "$T/fixture.escaped.pid")" 2>/dev/null || true
     fi
     rm -rf "$T"
 }
@@ -471,4 +482,23 @@ SH
     dir="$(artifact_dir)"
     grep -q 'turn.started' "$dir/stdout.events.jsonl"
     python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 0 and r["dispatcher_code"] == 0 and r["unusable"] is False' "$T/report.json"
+}
+
+@test "cancellation closes an event pipe held by an escaped descendant" {
+    export FIXTURE_MODE=escaped_descendant
+    export FIXTURE_ESCAPED_PID_FILE="$T/fixture.escaped.pid"
+    started="$(date +%s)"
+    bash "$DISPATCH" --report compact -C "$T/repo" -o "$T/out/last.md" "fixture" >"$T/report.json" 2>"$T/dispatch.stderr" &
+    wrapper_pid=$!
+    while [[ ! -s "$FIXTURE_ESCAPED_PID_FILE" ]]; do sleep 0.01; done
+    escaped_pid="$(cat "$FIXTURE_ESCAPED_PID_FILE")"
+    kill -TERM "$wrapper_pid"
+    rc=0
+    wait "$wrapper_pid" || rc=$?
+    [ "$rc" -eq 143 ]
+    [ $(( $(date +%s) - started )) -lt 8 ]
+    kill -0 "$escaped_pid" 2>/dev/null
+    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 0 and r["dispatcher_code"] == 143 and r["unusable"] is True' "$T/report.json"
+    dir="$(artifact_dir)"
+    python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["capture_status"] == "failed" and "event pipe remained open after cancellation escalation" in p["capture_errors"]' "$dir/process.json"
 }

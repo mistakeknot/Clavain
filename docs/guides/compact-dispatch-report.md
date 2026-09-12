@@ -36,6 +36,9 @@ two seconds before escalating termination. It records the reaped backend's
 actual exit separately from the dispatcher's cancellation code. An unavailable
 process status remains unknown. Normal completion drains the event stream to
 EOF without imposing this cancellation deadline.
+If a descendant escapes that process group and retains the event pipe, the
+supervisor limits its final drain to 50 ms or 1 MiB, closes the pipe, and marks
+capture incomplete. It cannot establish that an escaped descendant stopped.
 Malformed or contradictory native events make native coverage incomplete and
 counter values explicitly unknown; a parent session ID is never substituted
 for a native `thread.started` ID. Missing, inconsistent, or nonregular required
