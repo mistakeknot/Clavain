@@ -2,6 +2,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -113,3 +114,11 @@ def test_binding_cli_rejects_unknown_grammar(tmp_path, args):
         "--db", str(tmp_path / "db"), "bind-usage", *args], capture_output=True, text=True)
     assert result.returncode == 2
     assert "unrecognized arguments" in result.stderr or "required" in result.stderr
+
+
+def test_nested_dispatch_drops_parent_collection_controls(monkeypatch):
+    monkeypatch.setattr(os, "environ", {"CLAVAIN_USAGE_OUTPUT_DIR": "/parent/private/evidence",
+        "CLAVAIN_REVIEW_EVENTS": "/parent/private/events"})
+    env = subject().dispatch_environment()
+    assert "CLAVAIN_USAGE_OUTPUT_DIR" not in env
+    assert "CLAVAIN_REVIEW_EVENTS" not in env

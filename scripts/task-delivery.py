@@ -50,7 +50,8 @@ DISPATCH_ENV_KEYS = frozenset({
     "CLAVAIN_CLAUDE_PERMISSION_MODE", "CLAVAIN_429_MAX_RETRIES", "CLAVAIN_429_BACKOFF_SECONDS",
 })
 TASK_ENV_KEYS = frozenset({"CLAVAIN_TASK_ENROLLMENT_ID", "CLAVAIN_TASK_COHORT_ID", "CLAVAIN_TASK_MANIFEST_SHA256",
-                         "CLAVAIN_TASK_INTERCORE_DB", "CLAVAIN_DISPATCH_ID", "CLAVAIN_BEAD_ID"})
+                         "CLAVAIN_TASK_INTERCORE_DB", "CLAVAIN_DISPATCH_ID", "CLAVAIN_BEAD_ID",
+                         "CLAVAIN_USAGE_OUTPUT_DIR", "CLAVAIN_REVIEW_EVENTS"})
 # Host metadata describes the caller; it neither selects nor configures a child.
 # Drop these exact names rather than forwarding them or widening prefix exceptions.
 DROPPED_HOST_ENV_KEYS = frozenset({"CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PROJECT_DIR"})
@@ -670,9 +671,11 @@ def main():
                 else:
                     receipt["usage_collection"] = {"status": "unavailable", "exit_code": result.returncode}
                 env["CLAVAIN_USAGE_OUTPUT_DIR"] = str(directory)
-                env["CLAVAIN_REVIEW_EVENTS"] = str(directory / "execution.events.jsonl")
-                if "--json" not in command:
-                    command.append("--json")
+                event_path = directory / "execution.events.jsonl"
+                os.close(os.open(event_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600))
+                env["CLAVAIN_REVIEW_EVENTS"] = str(event_path)
+                # The dispatcher requests JSONL before invoking Codex. Appending
+                # a wrapper flag after its positional prompt would be discarded.
             core.record("dispatch-request", receipt)
             # The dispatcher uses the same kernel store for its lifecycle rows.
             env["CLAVAIN_TASK_INTERCORE_DB"] = str(Path(args.db).resolve())
