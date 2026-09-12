@@ -53,18 +53,20 @@ _role_audit_context() {
     --arg service "$SERVICE_TIER" --arg version "$version" --arg sandbox "$SANDBOX" \
     --arg transport "${VIA:-exec}" --arg parent "$DISPATCH_SESSION_ID" \
     --arg run "${CLAVAIN_RUN_ID:-}" --arg bead "${CLAVAIN_BEAD_ID:-}" \
-    --arg session "${ZAKA_SESSION:-}" --arg events "${ZAKA_EVENT_LOG:-}" \
+    --arg session "${ZAKA_SESSION:-}" --arg events "${ZAKA_EVENT_LOG:-${COMPACT_EVENTS:-${CLAVAIN_REVIEW_EVENTS:-}}}" \
     --arg before "$CHECKOUT_BEFORE" --arg after "$head_after" \
     --arg output "$OUTPUT" --arg verdict "$verdict" --arg failure "$failure_class" \
     --arg enrollment "${CLAVAIN_TASK_ENROLLMENT_ID:-}" --arg manifest "${CLAVAIN_TASK_MANIFEST_SHA256:-}" \
     --arg cohort "${CLAVAIN_TASK_COHORT_ID:-}" \
     --argjson exit_code "$exit_code" --argjson observation "${DISPATCH_EXECUTION_OBSERVATION:-null}" \
+    --argjson usage_collection "${DISPATCH_USAGE_COLLECTION:-null}" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
       run_id:$run,bead_id:$bead,
       execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
         codex_version:$version,sandbox:$sandbox,transport:$transport,session_id:$session,event_log:$events}
-        + (if $observation | type == "object" then $observation else {} end)),
+        + (if $observation | type == "object" then $observation else {} end)
+        + (if $usage_collection | type == "object" then {usage_collection:$usage_collection} else {} end)),
       checkout:{before:$before,after:$after},
       terminal:($state == "completed" or $state == "failed"),
       result:{exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict}}
@@ -81,6 +83,20 @@ _record_role_routing_decision() {
   fi
   [[ "$exit_code" == 0 ]] || reason="$failure_class"
   _prepare_role_audit || return 1
+  if [[ -n "${CLAVAIN_USAGE_OUTPUT_DIR:-}" && "$ENGINE" == codex && "${VIA:-exec}" == exec &&
+        ( "$state" == completed || "$state" == failed ) && "${DISPATCH_USAGE_ATTEMPT:-}" != "$ATTEMPT_ID" ]]; then
+    local collector_dir collector_events
+    collector_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || return 1
+    collector_events="${COMPACT_EVENTS:-${CLAVAIN_REVIEW_EVENTS:-}}"
+    # Runs after native completion, never in a trap or host startup path. No
+    # delayed reconciliation here. Collection failure is observational only.
+    if ! DISPATCH_USAGE_COLLECTION="$(python3 "$collector_dir/usage_collector.py" --phase completion \
+        --output-dir "$CLAVAIN_USAGE_OUTPUT_DIR/completion-$ATTEMPT_ID" --events "$collector_events" 2>/dev/null)"; then
+      DISPATCH_USAGE_COLLECTION='{"status":"unavailable"}'
+      echo "Warning: optional completion usage collection unavailable" >&2
+    fi
+    DISPATCH_USAGE_ATTEMPT="$ATTEMPT_ID"
+  fi
   context="$(_role_audit_context "$state" "$exit_code" "$failure_class")" || return 1
   local -a record_cmd=(ic route record "--agent=${NAME:-$ROLE}" "--model=$MODEL"
     --rule=dispatch-profile "--role=$ROLE" "--profile=$RESOLVED_PROFILE_REF"

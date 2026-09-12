@@ -17,8 +17,10 @@ native reviewer binding. Execution adapters never create acceptance records.
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -456,6 +458,111 @@ def prepare_dispatch(records, enrollment_id, role, arguments):
     return ["bash", str(dispatcher), "--role", role, *arguments], env, receipt
 
 
+def usage_module():
+    spec = importlib.util.spec_from_file_location("clavain_usage_collector", CANONICAL_ROOT / "scripts/usage_collector.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def bind_usage_record(records, observations, value):
+    """Verify existing associations, then prepare an observation successor only."""
+    fields = {"id", "observation_id", "enrollment_id", "dispatch_request_id", "execution_id", "attempt_id", "evidence_refs"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("bind-usage requires exactly its declared fields")
+    required(value, "id", "observation_id", "enrollment_id", "attempt_id")
+    if value["id"] == value["observation_id"]:
+        raise ValueError("usage binding requires a new observation ID")
+    if type(value["dispatch_request_id"]) is not int or type(value["execution_id"]) is not int:
+        raise ValueError("usage binding requires integer decision IDs")
+    original = next((o for o in observations if o.get("id") == value["observation_id"]), None)
+    if original is None:
+        raise ValueError("usage binding requires an immutable observation")
+    enrollment = enrolled(records).get(value["enrollment_id"])
+    request = next((r for r in records if r["id"] == value["dispatch_request_id"] and
+                    r.get("rule_matched") == PREFIX + "dispatch-request"), None)
+    execution = next((r for r in records if r["id"] == value["execution_id"] and
+                      r.get("rule_matched") == "dispatch-profile"), None)
+    if not enrollment or not request or not execution or not enrollment["id"] < request["id"] < execution["id"]:
+        raise ValueError("usage binding requires prospective enrollment, request and execution in order")
+    parent, requested, executed = context(enrollment), context(request), context(execution)
+    envelope = executed.get("task_envelope", {})
+    for field in ("enrollment_id", "cohort_id", "manifest_sha256"):
+        if not parent.get(field) or requested.get(field) != parent[field] or envelope.get(field) != parent[field]:
+            raise ValueError("usage association differs from enrollment")
+    if (not requested.get("dispatch_id") or executed.get("dispatch_id") != requested["dispatch_id"] or
+            executed.get("attempt_id") != value["attempt_id"] or
+            executed.get("state") not in {"started", "running", "completed", "failed", "cancelled", "abandoned"}):
+        raise ValueError("usage association differs from actual execution attempt")
+    valid_time(original.get("captured_at"))
+    valid_time(parent.get("enrolled_at"))
+    if dt.datetime.fromisoformat(original["captured_at"].replace("Z", "+00:00")) < dt.datetime.fromisoformat(parent["enrolled_at"].replace("Z", "+00:00")):
+        raise ValueError("usage observation predates prospective enrollment")
+    refs = value["evidence_refs"]
+    if not isinstance(refs, list) or not refs or len(refs) > 16:
+        raise ValueError("usage binding requires bounded evidence references")
+    collector = usage_module()
+    event_log = executed.get("execution", {}).get("event_log")
+    output = executed.get("result", {}).get("output_path")
+    verified = {}
+    for ref in refs:
+        if not isinstance(ref, dict) or set(ref) != {"path", "sha256"}:
+            raise ValueError("invalid usage evidence reference")
+        valid_hash(ref, "sha256")
+        if not isinstance(ref["path"], str) or not Path(ref["path"]).is_absolute():
+            raise ValueError("absolute usage evidence path required")
+        try:
+            raw = collector.read_regular(ref["path"], 64 * 1024 * 1024)
+        except (OSError, ValueError) as exc:
+            raise ValueError("usage evidence unavailable or nonregular") from exc
+        if hashlib.sha256(raw).hexdigest() != ref["sha256"]:
+            raise ValueError("usage evidence hash mismatch")
+        verified[str(Path(ref["path"]).absolute())] = ref
+    original_input = copy.deepcopy(original)
+    original_input.pop("canonical_sha256", None)
+    original_input.pop("inserted_at", None)
+    collection = executed.get("execution", {}).get("usage_collection")
+    phase = "completion"
+    if not isinstance(collection, dict) or collection.get("path") not in verified:
+        collection = requested.get("usage_collection")
+        phase = "boundary"
+    if not isinstance(collection, dict) or collection.get("path") not in verified or collection.get("sha256") != verified[collection["path"]]["sha256"]:
+        raise ValueError("usage binding requires the collection manifest linked by its immutable receipt")
+    manifest = collector.strict_json(collector.read_regular(collection["path"]))
+    if manifest.get("phase") != phase:
+        raise ValueError("usage collection phase differs from receipt")
+    matching = False
+    for ref in manifest.get("observation_artifacts", []):
+        if not isinstance(ref, dict) or set(ref) != {"path", "sha256"} or Path(ref["path"]).name != ref["path"]:
+            raise ValueError("invalid collected observation artifact")
+        raw = collector.read_regular(Path(collection["path"]).parent / ref["path"])
+        if hashlib.sha256(raw).hexdigest() != ref["sha256"]:
+            raise ValueError("collected observation artifact hash mismatch")
+        matching |= collector.strict_json(raw) == original_input
+    if not matching:
+        raise ValueError("observation absent from the verified collection")
+    native_id = original.get("identity", {}).get("native_thread_id")
+    if phase == "boundary" and native_id is not None:
+        raise ValueError("boundary collection cannot establish a native execution identity")
+    if native_id is not None:
+        if not event_log or str(Path(event_log).absolute()) not in verified:
+            raise ValueError("native usage identity requires the recorded execution event log")
+        if collector.native_identity(Path(event_log)).get("thread_id") != native_id:
+            raise ValueError("native usage identity differs from execution evidence")
+    result = copy.deepcopy(original)
+    # Store-returned metadata is not part of the strict observation input.
+    result.pop("canonical_sha256", None)
+    result.pop("inserted_at", None)
+    association = dict(enrollment_id=value["enrollment_id"], task_id=parent.get("bead_id"),
+        dispatch_request_id=str(request["id"]), execution_id=str(execution["id"]) if phase == "completion" else None,
+        attempt_id=value["attempt_id"] if phase == "completion" else None)
+    previous = result.get("execution_refs") or {}
+    if any(previous.get(key) is not None and previous[key] != item for key, item in association.items()):
+        raise ValueError("usage successor cannot change existing execution allocation")
+    result.update(id=value["id"], supersedes=original["id"], execution_refs=previous | association)
+    return result
+
+
 class Intercore:
     def __init__(self, executable, db):
         self.command = [executable, f"--db={Path(db).resolve()}", "--json"]
@@ -506,7 +613,7 @@ def emit(value, output=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
     parser.add_argument("--db", required=True, help="explicit authoritative Intercore database")
     parser.add_argument("--ic", default="ic", help="Intercore executable")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -517,6 +624,8 @@ def main():
     record = commands.add_parser("record")
     record.add_argument("--kind", choices=sorted(KINDS), required=True)
     record.add_argument("--record", required=True, help="JSON receipt; never a task database")
+    usage = commands.add_parser("bind-usage", help="append a usage successor using existing execution evidence", allow_abbrev=False)
+    usage.add_argument("--record", required=True)
     for name in ("export", "report"):
         command = commands.add_parser(name)
         command.add_argument("--cohort", required=True)
@@ -524,6 +633,7 @@ def main():
         if name == "report":
             command.add_argument("--profiler", default=str(INTERSTAT_PROFILE))
     dispatch = commands.add_parser("dispatch")
+    dispatch.add_argument("--usage-output-dir", type=Path, help="opt-in fresh private usage evidence directory")
     dispatch.add_argument("--enrollment-id", required=True)
     dispatch.add_argument("--role", required=True, choices=sorted(ROLES))
     dispatch.add_argument("arguments", nargs=argparse.REMAINDER)
@@ -536,9 +646,33 @@ def main():
         if args.command == "record":
             value = json.loads(Path(args.record).read_text())
             emit(core.record(args.kind, value))
+        elif args.command == "bind-usage":
+            collector = usage_module()
+            value = collector.strict_json(collector.read_regular(args.record, 1024 * 1024))
+            observations = core.invoke("usage", "list")
+            successor = bind_usage_record(core.records(), observations, value)
+            # Deliberately bypass Intercore.record: that helper writes routing decisions.
+            with tempfile.TemporaryDirectory(prefix="usage-binding-", dir=core.directory) as directory:
+                path = Path(directory) / "observation.json"
+                collector.write_private(path, successor)
+                emit(core.invoke("usage", "observe", "--record", str(path)))
         elif args.command == "dispatch":
             extra = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
             command, env, receipt = prepare_dispatch(core.records(), args.enrollment_id, args.role, extra)
+            if args.usage_output_dir is not None:
+                directory = args.usage_output_dir.absolute()
+                directory.mkdir(mode=0o700, parents=False, exist_ok=False)
+                # Collection is optional evidence: failures never change dispatch routing or outcome.
+                result = subprocess.run([sys.executable, str(CANONICAL_ROOT / "scripts/usage_collector.py"),
+                    "--phase", "boundary", "--output-dir", str(directory / "boundary")], capture_output=True, text=True)
+                if result.returncode == 0:
+                    receipt["usage_collection"] = json.loads(result.stdout)
+                else:
+                    receipt["usage_collection"] = {"status": "unavailable", "exit_code": result.returncode}
+                env["CLAVAIN_USAGE_OUTPUT_DIR"] = str(directory)
+                env["CLAVAIN_REVIEW_EVENTS"] = str(directory / "execution.events.jsonl")
+                if "--json" not in command:
+                    command.append("--json")
             core.record("dispatch-request", receipt)
             # The dispatcher uses the same kernel store for its lifecycle rows.
             env["CLAVAIN_TASK_INTERCORE_DB"] = str(Path(args.db).resolve())
