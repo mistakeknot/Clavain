@@ -22,6 +22,7 @@ SANDBOX="workspace-write"
 SANDBOX_SET=false
 WORKDIR=""
 OUTPUT=""
+REPORT="full"
 MODEL=""
 TIER=""
 ROLE=""
@@ -181,6 +182,9 @@ Options:
                                   with a warning. Requires zaka and tmux on PATH.
   -C, --cd <DIR>                Working directory (required for --inject-docs)
   -o, --output-last-message <FILE>  Output file ({name} replaced by --name value)
+  --report <full|compact>       Presentation mode (default: full). Compact is
+                                  Codex exec only, requires -o, emits bounded JSON,
+                                  and retains full evidence beside the output.
   -s, --sandbox <MODE>          Sandbox: read-only | workspace-write | danger-full-access
   -m, --model <MODEL>           Override model (default: from ~/.codex/config.toml,
                                   or ~/.kimi-code/config.toml default_model for --to kimi)
@@ -576,6 +580,23 @@ while [[ $# -gt 0 ]]; do
       OUTPUT="$2"
       shift 2
       ;;
+    --report)
+      require_arg "$1" "${2:-}"
+      REPORT="$2"
+      case "$REPORT" in
+        full|compact) ;;
+        *) echo "Error: --report must be 'full' or 'compact' (got '$REPORT')" >&2; exit 1 ;;
+      esac
+      shift 2
+      ;;
+    --report=*)
+      REPORT="${1#*=}"
+      case "$REPORT" in
+        full|compact) ;;
+        *) echo "Error: --report must be 'full' or 'compact' (got '$REPORT')" >&2; exit 1 ;;
+      esac
+      shift
+      ;;
     -s|--sandbox)
       require_arg "$1" "${2:-}"
       SANDBOX="$2"
@@ -754,6 +775,20 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Compact presentation is deliberately narrow. Reject incompatible adapters
+# before context preparation, role recording, or backend launch.
+if [[ "$REPORT" == compact ]]; then
+  if [[ "$ENGINE" != codex || -n "$VIA" ]]; then
+    _dispatch_write_failure_class unsupported_adapter
+    echo "Error: compact reporting supports only Codex exec (no alternate backend or --via transport)" >&2
+    exit 1
+  fi
+  if [[ -z "$OUTPUT" ]]; then
+    echo "Error: compact reporting requires -o/--output-last-message" >&2
+    exit 1
+  fi
+fi
 
 if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
   if [[ -n "$VIA" || ( "$ENGINE" != codex && "$ENGINE" != claude ) ]]; then
@@ -955,6 +990,15 @@ fi
 # Apply --name substitution to output path
 if [[ -n "$NAME" && -n "$OUTPUT" ]]; then
   OUTPUT="${OUTPUT//\{name\}/$NAME}"
+fi
+
+if [[ "$REPORT" == compact ]]; then
+  for compact_path in "$OUTPUT" "${OUTPUT}.summary" "${OUTPUT}.verdict" "${OUTPUT}.verdict.pre-error"; do
+    if [[ -L "$compact_path" || ( -e "$compact_path" && ! -f "$compact_path" ) ]]; then
+      echo "Error: compact output and sidecars must be absent or regular non-symlink files: $compact_path" >&2
+      exit 1
+    fi
+  done
 fi
 
 # Warn if {name} still present in output path (--name not provided)
@@ -1737,6 +1781,20 @@ if [[ "$ENGINE" == "codex" && -n "$MINIMUM_CODEX_VERSION" ]] && ! _codex_version
   exit 1
 fi
 
+COMPACT_ARTIFACT_DIR=""
+if [[ "$REPORT" == compact ]]; then
+  COMPACT_OUTPUT_PARENT="$(cd "$(dirname "$OUTPUT")" 2>/dev/null && pwd -P)" || {
+    echo "Error: compact output parent does not exist: $(dirname "$OUTPUT")" >&2
+    exit 1
+  }
+  umask 077
+  COMPACT_ARTIFACT_DIR="$(mktemp -d "$COMPACT_OUTPUT_PARENT/.clavain-dispatch-compact.XXXXXX")" || {
+    echo "Error: cannot create compact artifact directory beneath output parent" >&2
+    exit 1
+  }
+  chmod 700 "$COMPACT_ARTIFACT_DIR"
+fi
+
 # Write dispatch state file for statusline visibility
 STATE_FILE="/tmp/clavain-dispatch-$$.json"
 if _load_interband_lib && type interband_path >/dev/null 2>&1; then
@@ -2046,9 +2104,15 @@ VERDICT
 }
 
 # Cleanup: register stderr capture file with existing trap.
-STDERR_FILE="${STATE_FILE}.stderr"
+if [[ "$REPORT" == compact ]]; then
+  STDERR_FILE="$COMPACT_ARTIFACT_DIR/stderr.log"
+  : > "$STDERR_FILE"
+  chmod 600 "$STDERR_FILE"
+else
+  STDERR_FILE="${STATE_FILE}.stderr"
+fi
 _dispatch_cleanup_stderr() {
-  rm -f "$STDERR_FILE" 2>/dev/null || true
+  [[ "$REPORT" == compact ]] || rm -f "$STDERR_FILE" 2>/dev/null || true
 }
 trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT INT TERM
 
@@ -2065,25 +2129,94 @@ _surface_codex_errors() {
 }
 
 _finalize_dispatch_result() {
-  local exit_code="$1" failure_class
+  local exit_code="$1" requested_class="${2:-}" failure_class
   # Only a finished backend has a current extracted result. Pre-execution
   # failures must never pick up an older sidecar at the requested path.
   DISPATCH_RESULT_READY=true
-  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$exit_code" != 0 ]]; then
+  if [[ -n "$requested_class" ]]; then
+    failure_class="$requested_class"
+  elif [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$exit_code" != 0 ]]; then
     failure_class=terminal_accounting
   else
     failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
   fi
+  DISPATCH_FAILURE_CLASS="$failure_class"
   if [[ "$exit_code" == "0" ]]; then
     : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
   else
     _dispatch_write_failure_class "$failure_class"
   fi
   if ! _record_role_routing_decision "$exit_code" "$failure_class"; then
+    DISPATCH_FAILURE_CLASS=terminal_recording
     _dispatch_write_failure_class terminal_recording
     return 1
   fi
   return 0
+}
+
+_compact_forward_signal() {
+  local signal="$1"
+  case "$signal" in
+    INT) COMPACT_SIGNAL_CODE=130 ;;
+    TERM) COMPACT_SIGNAL_CODE=143 ;;
+  esac
+  if [[ -n "${COMPACT_BACKEND_PID:-}" ]] && kill -0 "$COMPACT_BACKEND_PID" 2>/dev/null; then
+    kill -s "$signal" "$COMPACT_BACKEND_PID" 2>/dev/null || true
+  fi
+}
+
+_compact_render() {
+  local backend_code="$1" dispatcher_code="$2" classification="$3" force_unusable="${4:-false}" force_reason="${5:-presentation_diagnostic_failed}"
+  local configured_renderer="${CLAVAIN_DISPATCH_REPORT_BIN:-$DISPATCH_SCRIPT_DIR/dispatch_report.py}"
+  local canonical_renderer="$DISPATCH_SCRIPT_DIR/dispatch_report.py"
+  local report_tmp="$COMPACT_ARTIFACT_DIR/.report.tmp" renderer_rc fallback_rc
+  local -a common_args=(render --artifacts-dir "$COMPACT_ARTIFACT_DIR"
+    --backend-code "$backend_code" --dispatcher-code "$dispatcher_code"
+    --classification "$classification"
+    --artifact "stdout_events=$COMPACT_ARTIFACT_DIR/stdout.events.jsonl"
+    --artifact "stderr=$STDERR_FILE"
+    --artifact "last_message=$OUTPUT"
+    --artifact "summary=$SUMMARY_FILE"
+    --artifact "verdict=${OUTPUT}.verdict")
+  [[ ! -f "${OUTPUT}.verdict.pre-error" ]] || common_args+=(--artifact "verdict_pre_error=${OUTPUT}.verdict.pre-error")
+  if [[ -n "$RESOLVED_ROUTE_JSON" ]]; then
+    printf '%s\n' "$RESOLVED_ROUTE_JSON" > "$COMPACT_ARTIFACT_DIR/resolved-route.json"
+    chmod 600 "$COMPACT_ARTIFACT_DIR/resolved-route.json"
+    common_args+=(--artifact "resolved_route=$COMPACT_ARTIFACT_DIR/resolved-route.json")
+  fi
+  if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]]; then
+    local receipt_state=completed receipt_json=""
+    [[ "$backend_code" == 0 ]] || receipt_state=failed
+    receipt_json="$(_role_audit_context "$receipt_state" "$dispatcher_code" "$classification" 2>/dev/null)" || receipt_json=""
+    if [[ -n "$receipt_json" ]]; then
+      printf '%s\n' "$receipt_json" > "$COMPACT_ARTIFACT_DIR/receipt.json"
+      chmod 600 "$COMPACT_ARTIFACT_DIR/receipt.json"
+      common_args+=(--artifact "receipt=$COMPACT_ARTIFACT_DIR/receipt.json")
+    fi
+  fi
+  [[ "$force_unusable" != true ]] || common_args+=(--force-unusable --diagnostic "$force_reason")
+
+  python3 "$configured_renderer" "${common_args[@]}" > "$report_tmp"
+  renderer_rc=$?
+  if [[ "$renderer_rc" == 0 || ( "$configured_renderer" == "$canonical_renderer" && "$renderer_rc" == 2 ) ]]; then
+    cat "$report_tmp"
+    rm -f "$report_tmp"
+    return "$renderer_rc"
+  fi
+
+  # A broken configured renderer is presentation failure, not permission to
+  # discard the full evidence. The packaged renderer seals an unusable recovery
+  # report from those retained bytes.
+  python3 "$canonical_renderer" "${common_args[@]}" --force-unusable --diagnostic renderer_failed > "$report_tmp"
+  fallback_rc=$?
+  if [[ -s "$report_tmp" ]]; then
+    cat "$report_tmp"
+  else
+    printf '%s\n' '{"schema":"clavain.dispatch.compact.v1","backend_process_code":null,"dispatcher_code":1,"classification":"presentation_failure","unusable":true,"native_coverage":{"status":"incomplete","reason":"renderer_unavailable","valid_events":null},"digests":{"last_message":{"status":"unavailable","sha256":null},"outcome":{"status":"unavailable","sha256":null},"receipt":{"status":"unavailable","sha256":null},"resolved_route":{"status":"unavailable","sha256":null},"stderr":{"status":"unavailable","sha256":null},"stdout_events":{"status":"unavailable","sha256":null},"summary":{"status":"unavailable","sha256":null},"verdict":{"status":"unavailable","sha256":null},"verdict_pre_error":{"status":"unavailable","sha256":null}},"manifest_sha256":null,"recovery":"full artifacts in output parent","omissions":["diagnostics","counters","native","artifacts"]}'
+  fi
+  rm -f "$report_tmp"
+  [[ "$fallback_rc" == 0 ]] && return 2
+  return "$fallback_rc"
 }
 
 if ! _record_role_routing_decision 0 "" started; then
@@ -2178,6 +2311,102 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
     KIMI_EXIT=1
   fi
   exit "$KIMI_EXIT"
+elif [[ "$REPORT" == compact ]]; then
+  # Compact mode always requests native JSONL. A FIFO keeps the backend as an
+  # owned child so INT/TERM can be forwarded and reaped, while tee preserves
+  # every event byte before any parser sees it. CLAVAIN_REVIEW_EVENTS remains
+  # an independent full-stream consumer.
+  CMD+=(--json)
+  COMPACT_EVENTS="$COMPACT_ARTIFACT_DIR/stdout.events.jsonl"
+  COMPACT_FIFO="$COMPACT_ARTIFACT_DIR/.events.pipe"
+  mkfifo "$COMPACT_FIFO"
+  COMPACT_SIGNAL_CODE=""
+  COMPACT_BACKEND_PID=""
+  COMPACT_CONSUMER_PID=""
+  trap '_compact_forward_signal INT' INT
+  trap '_compact_forward_signal TERM' TERM
+
+  set +e
+  if [[ -n "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+    tee -a "$COMPACT_EVENTS" "$CLAVAIN_REVIEW_EVENTS" < "$COMPACT_FIFO" > /dev/null &
+  else
+    tee "$COMPACT_EVENTS" < "$COMPACT_FIFO" > /dev/null &
+  fi
+  COMPACT_CONSUMER_PID=$!
+  "${CMD[@]}" > "$COMPACT_FIFO" 2> "$STDERR_FILE" &
+  COMPACT_BACKEND_PID=$!
+  wait "$COMPACT_BACKEND_PID"
+  CODEX_EXIT=$?
+  DISPATCH_RESULT_CODE="$CODEX_EXIT"
+  [[ -z "$COMPACT_SIGNAL_CODE" ]] || DISPATCH_RESULT_CODE="$COMPACT_SIGNAL_CODE"
+  wait "$COMPACT_CONSUMER_PID"
+  COMPACT_CAPTURE_EXIT=$?
+  rm -f "$COMPACT_FIFO"
+  set -e
+  chmod 600 "$COMPACT_EVENTS" "$STDERR_FILE" 2>/dev/null || true
+  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+
+  COMPACT_PATH_FAILURE=false
+  for compact_path in "$OUTPUT" "${OUTPUT}.summary" "${OUTPUT}.verdict" "${OUTPUT}.verdict.pre-error"; do
+    if [[ -L "$compact_path" || ( -e "$compact_path" && ! -f "$compact_path" ) ]]; then
+      COMPACT_PATH_FAILURE=true
+    fi
+  done
+
+  # Parsing happens only from the preserved event artifact. A parser failure
+  # cannot alter or consume the evidence bytes.
+  if [[ "$HAS_GAWK" == true && "$COMPACT_PATH_FAILURE" != true ]]; then
+    set +e
+    _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE" < "$COMPACT_EVENTS"
+    COMPACT_PARSER_EXIT=$?
+    set -e
+  else
+    COMPACT_PARSER_EXIT=0
+  fi
+  if [[ -n "$SUMMARY_FILE" && ! -f "$SUMMARY_FILE" && "$COMPACT_PATH_FAILURE" != true ]]; then
+    ELAPSED=$(( $(date +%s) - STARTED_TS ))
+    MINS=$(( ELAPSED / 60 ))
+    SECS=$(( ELAPSED % 60 ))
+    printf 'Dispatch: %s\nDuration: %dm %ds\n' "${NAME:-$ENGINE}" "$MINS" "$SECS" > "$SUMMARY_FILE"
+  fi
+
+  if [[ "$COMPACT_PATH_FAILURE" != true ]]; then
+    [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
+    _surface_codex_errors "$CODEX_EXIT"
+  fi
+  _post_dispatch_validate "$WORKDIR"
+  _dispatch_sync_interband_from_legacy
+
+  COMPACT_FORCE_UNUSABLE=false
+  COMPACT_DIAGNOSTIC_CLASS=""
+  COMPACT_FORCE_REASON=""
+  if [[ "$COMPACT_CAPTURE_EXIT" != 0 || "$COMPACT_PARSER_EXIT" != 0 || "$COMPACT_PATH_FAILURE" == true ]]; then
+    COMPACT_FORCE_UNUSABLE=true
+    if [[ "$COMPACT_CAPTURE_EXIT" != 0 ]]; then
+      COMPACT_FORCE_REASON=event_capture_failed
+    elif [[ "$COMPACT_PARSER_EXIT" != 0 ]]; then
+      COMPACT_FORCE_REASON=native_parser_failed
+    else
+      COMPACT_FORCE_REASON=artifact_path_invalid
+    fi
+    if [[ "$DISPATCH_RESULT_CODE" == 0 ]]; then
+      DISPATCH_RESULT_CODE=1
+      COMPACT_DIAGNOSTIC_CLASS=presentation_failure
+      [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || COMPACT_DIAGNOSTIC_CLASS=terminal_accounting
+    fi
+  fi
+  DISPATCHER_EXIT="$DISPATCH_RESULT_CODE"
+  if ! _finalize_dispatch_result "$DISPATCH_RESULT_CODE" "$COMPACT_DIAGNOSTIC_CLASS"; then
+    [[ "$DISPATCH_RESULT_CODE" != 0 ]] || DISPATCHER_EXIT=1
+  fi
+  set +e
+  _compact_render "$CODEX_EXIT" "$DISPATCHER_EXIT" "${DISPATCH_FAILURE_CLASS:-terminal_error}" "$COMPACT_FORCE_UNUSABLE" "$COMPACT_FORCE_REASON"
+  COMPACT_RENDER_EXIT=$?
+  set -e
+  if [[ "$COMPACT_RENDER_EXIT" != 0 && "$DISPATCHER_EXIT" == 0 ]]; then
+    DISPATCHER_EXIT=1
+  fi
+  exit "$DISPATCHER_EXIT"
 elif [[ "$HAS_GAWK" == true ]]; then
   # Add --json to capture JSONL stream, pipe through parser
   CMD+=(--json)

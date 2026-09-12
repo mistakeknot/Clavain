@@ -7,6 +7,7 @@
 - Optional automated Codex refresh job: `scripts/codex-auto-refresh.sh` (cron/systemd/launchd examples in `docs/runbooks/codex-sync.md`)
 - GitHub web PR agent commands (`/clavain:claude-review`, `/clavain:codex-review`, `/clavain:dual-review`) are documented in `docs/runbooks/codex-sync.md`
 - GitHub issue command `/clavain:upstream-sync` (for `upstream-sync` issues) is documented in `docs/runbooks/codex-sync.md`
+- Opt-in bounded Codex dispatch output and sealed-artifact replay: `docs/guides/compact-dispatch-report.md`
 
 ## OODARCS instructions
 
