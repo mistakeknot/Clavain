@@ -649,7 +649,7 @@ def main():
         elif args.command == "bind-usage":
             collector = usage_module()
             value = collector.strict_json(collector.read_regular(args.record, 1024 * 1024))
-            observations = core.invoke("usage", "list")
+            observations = core.invoke("usage", "list", "--observation", value["observation_id"])
             successor = bind_usage_record(core.records(), observations, value)
             # Deliberately bypass Intercore.record: that helper writes routing decisions.
             with tempfile.TemporaryDirectory(prefix="usage-binding-", dir=core.directory) as directory:
