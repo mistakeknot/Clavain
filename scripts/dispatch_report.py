@@ -35,6 +35,7 @@ REQUIRED_ARTIFACTS = (
 ARTIFACT_FILES = {
     "last_message": "last-message.txt",
     "outcome": "outcome.json",
+    "process": "process.json",
     "receipt": "receipt.json",
     "resolved_route": "resolved-route.json",
     "stderr": "stderr.log",
@@ -502,7 +503,11 @@ def parser() -> argparse.ArgumentParser:
     subparsers = root.add_subparsers(dest="command", required=True)
     render_parser = subparsers.add_parser("render", help="copy artifacts, seal a manifest, and render JSON")
     render_parser.add_argument("--artifacts-dir", type=Path, required=True)
-    render_parser.add_argument("--backend-code", type=int, required=True)
+    render_parser.add_argument(
+        "--backend-code",
+        type=lambda value: None if value == "unknown" else int(value),
+        required=True,
+    )
     render_parser.add_argument("--dispatcher-code", type=int, required=True)
     render_parser.add_argument("--classification", required=True)
     render_parser.add_argument("--artifact", action="append", default=[])

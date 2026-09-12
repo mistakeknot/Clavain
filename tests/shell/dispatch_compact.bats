@@ -69,6 +69,33 @@ case "${FIXTURE_MODE:-success}" in
     printf '{"type":"turn.started"}\n'
     while :; do :; done
     ;;
+  ignore_then_zero)
+    trap '' TERM INT
+    printf '{"type":"thread.started","thread_id":"thread-ignore-zero"}\n'
+    sleep 0.4
+    printf 'completed after cancellation\nVERDICT: CLEAN\n' > "$output"
+    ;;
+  ignore_forever)
+    trap '' TERM INT
+    printf '{"type":"thread.started","thread_id":"thread-ignore-forever"}\n'
+    sh -c 'trap "" TERM INT; printf "%s\n" "$$" > "$FIXTURE_DESCENDANT_PID_FILE"; while :; do sleep 1; done' &
+    while :; do sleep 1; done
+    ;;
+  stdin_echo)
+    IFS= read -r input
+    printf '{"type":"thread.started","thread_id":"thread-stdin"}\n'
+    printf 'stdin:%s\nVERDICT: CLEAN\n' "$input" > "$output"
+    ;;
+  inherited_stdout)
+    printf '{"type":"thread.started","thread_id":"thread-held-pipe"}\n'
+    sleep 20 &
+    printf 'backend complete\nVERDICT: CLEAN\n' > "$output"
+    ;;
+  delayed_descendant)
+    printf '{"type":"thread.started","thread_id":"thread-delayed"}\n'
+    printf 'backend complete\nVERDICT: CLEAN\n' > "$output"
+    exec python3 -c 'import os,time; pid=os.fork(); pid and os._exit(0); time.sleep(2.3); print("{\"type\":\"turn.started\"}", flush=True)'
+    ;;
   *)
     printf '{"type":"thread.started","thread_id":"thread-123"}\n'
     printf '{"type":"turn.started"}\n'
@@ -327,13 +354,121 @@ PY
     [ -s "$FIXTURE_PID_FILE" ]
     backend_pid="$(cat "$FIXTURE_PID_FILE")"
     kill -TERM "$wrapper_pid"
-    set +e
-    wait "$wrapper_pid"
-    rc=$?
-    set -e
+    rc=0
+    wait "$wrapper_pid" || rc=$?
     [ "$rc" -eq 143 ]
     ! kill -0 "$backend_pid" 2>/dev/null
     dir="$(artifact_dir)"
     grep -q 'thread-cancel' "$dir/stdout.events.jsonl"
     python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 143 and r["dispatcher_code"] == 143' "$T/report.json"
+}
+
+@test "compact cancellation retains backend zero after ignored TERM completion" {
+    export FIXTURE_MODE=ignore_then_zero
+    bash "$DISPATCH" --report compact -C "$T/repo" -o "$T/out/last.md" "fixture" >"$T/report.json" 2>"$T/dispatch.stderr" &
+    wrapper_pid=$!
+    while [[ ! -s "$FIXTURE_PID_FILE" ]]; do sleep 0.01; done
+    kill -TERM "$wrapper_pid"
+    set +e
+    wait "$wrapper_pid"
+    rc=$?
+    set -e
+    [ "$rc" -eq 143 ]
+    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 0 and r["dispatcher_code"] == 143' "$T/report.json"
+    grep -q 'completed after cancellation' "$T/out/last.md"
+}
+
+@test "compact cancellation kills an unresponsive process group within a bound" {
+    export FIXTURE_MODE=ignore_forever
+    export FIXTURE_DESCENDANT_PID_FILE="$T/fixture.descendant.pid"
+    started="$(date +%s)"
+    bash "$DISPATCH" --report compact -C "$T/repo" -o "$T/out/last.md" "fixture" >"$T/report.json" 2>"$T/dispatch.stderr" &
+    wrapper_pid=$!
+    while [[ ! -s "$FIXTURE_DESCENDANT_PID_FILE" ]]; do sleep 0.01; done
+    backend_pid="$(cat "$FIXTURE_PID_FILE")"
+    descendant_pid="$(cat "$FIXTURE_DESCENDANT_PID_FILE")"
+    kill -TERM "$wrapper_pid"
+    kill -TERM "$wrapper_pid" 2>/dev/null || true
+    rc=0
+    wait "$wrapper_pid" || rc=$?
+    [ "$rc" -eq 143 ]
+    [ $(( $(date +%s) - started )) -lt 8 ]
+    ! kill -0 "$backend_pid" 2>/dev/null
+    i=0
+    while kill -0 "$descendant_pid" 2>/dev/null && [[ $i -lt 100 ]]; do sleep 0.01; i=$((i + 1)); done
+    ! kill -0 "$descendant_pid" 2>/dev/null
+    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 137 and r["dispatcher_code"] == 143' "$T/report.json"
+    dir="$(artifact_dir)"
+    python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["termination_escalated"] is True' "$dir/process.json"
+    replay_rc=0
+    python3 "$BATS_TEST_DIRNAME/../../scripts/dispatch_report.py" replay --artifacts-dir "$dir" > "$T/replayed.json" || replay_rc=$?
+    [ "$replay_rc" -eq 2 ]
+    cmp "$T/report.json" "$T/replayed.json"
+}
+
+@test "no-gawk usage observation captures native JSON events" {
+    cat > "$T/bin/awk" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "--version" ]]; then
+  echo 'awk version 20200816'
+  exit 0
+fi
+exec /usr/bin/awk "$@"
+SH
+    chmod +x "$T/bin/awk"
+    export CLAVAIN_USAGE_OUTPUT_DIR="$T/usage"
+    export CLAVAIN_REVIEW_EVENTS="$T/observed.events.jsonl"
+    bash "$DISPATCH" -C "$T/repo" -o "$T/out/full.md" "fixture" >"$T/full.stdout" 2>"$T/full.stderr"
+    grep -q 'thread-123' "$T/observed.events.jsonl"
+    grep -q 'thread-123' "$T/full.stdout"
+}
+
+@test "compact preserves backend stdin bytes like full mode" {
+    export FIXTURE_MODE=stdin_echo
+    printf 'input from caller\n' | bash "$DISPATCH" -C "$T/repo" -o "$T/out/full.md" "fixture" >"$T/full.stdout" 2>"$T/full.stderr"
+    printf 'input from caller\n' | bash "$DISPATCH" --report compact -C "$T/repo" -o "$T/out/compact.md" "fixture" >"$T/report.json" 2>"$T/compact.stderr"
+    cmp "$T/out/full.md" "$T/out/compact.md"
+    grep -q '^stdin:input from caller$' "$T/out/compact.md"
+}
+
+@test "nonregular review event FIFO cannot block backend launch" {
+    mkfifo "$T/review.events.fifo"
+    export CLAVAIN_REVIEW_EVENTS="$T/review.events.fifo"
+    bash "$DISPATCH" --report compact -C "$T/repo" -o "$T/out/last.md" "fixture" >"$T/report.json" 2>"$T/dispatch.stderr" &
+    wrapper_pid=$!
+    i=0
+    while kill -0 "$wrapper_pid" 2>/dev/null && [[ $i -lt 500 ]]; do sleep 0.01; i=$((i + 1)); done
+    ! kill -0 "$wrapper_pid" 2>/dev/null
+    rc=0
+    wait "$wrapper_pid" || rc=$?
+    [ "$rc" -eq 1 ]
+    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 0 and r["dispatcher_code"] == 1 and r["native"]["thread_id"] == "thread-123"' "$T/report.json"
+}
+
+@test "cancelled descendant-held event pipe is bounded and cleaned up" {
+    export FIXTURE_MODE=inherited_stdout
+    started="$(date +%s)"
+    bash "$DISPATCH" --report compact -C "$T/repo" -o "$T/out/last.md" "fixture" >"$T/report.json" 2>"$T/dispatch.stderr" &
+    wrapper_pid=$!
+    while [[ ! -s "$FIXTURE_PID_FILE" ]]; do sleep 0.01; done
+    sleep 0.1
+    kill -TERM "$wrapper_pid"
+    rc=0
+    wait "$wrapper_pid" || rc=$?
+    [ "$rc" -eq 143 ]
+    [ $(( $(date +%s) - started )) -lt 8 ]
+    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 0 and r["dispatcher_code"] == 143' "$T/report.json"
+    dir="$(artifact_dir)"
+    python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["capture_status"] == "complete"' "$dir/process.json"
+}
+
+@test "normal descendant output after the cancellation grace is preserved" {
+    export FIXTURE_MODE=delayed_descendant
+    started="$(date +%s)"
+    run_dispatch
+    [ "$DISPATCH_STATUS" -eq 0 ]
+    [ $(( $(date +%s) - started )) -ge 2 ]
+    dir="$(artifact_dir)"
+    grep -q 'turn.started' "$dir/stdout.events.jsonl"
+    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 0 and r["dispatcher_code"] == 0 and r["unusable"] is False' "$T/report.json"
 }

@@ -25,12 +25,17 @@ its trailing newline.
 For every compact attempt, dispatch creates a fresh mode-0700 directory named
 `.clavain-dispatch-compact.*` beneath the output file's parent. Mode-0600 files
 retain the raw JSONL stdout stream, stderr, last message, summary, verdict,
-outcome metadata, and any available resolved-route or receipt evidence. The
+outcome metadata, `process.json`, and any available resolved-route or receipt evidence. The
 manifest lists logical artifact names in sorted order with status, final size,
 and SHA-256. Its own SHA-256 is carried by the report rather than written into
 the manifest.
 
 The report distinguishes the backend process code from the dispatcher code.
+On cancellation, the supervisor signals the native process group and allows
+two seconds before escalating termination. It records the reaped backend's
+actual exit separately from the dispatcher's cancellation code. An unavailable
+process status remains unknown. Normal completion drains the event stream to
+EOF without imposing this cancellation deadline.
 Malformed or contradictory native events make native coverage incomplete and
 counter values explicitly unknown; a parent session ID is never substituted
 for a native `thread.started` ID. Missing, inconsistent, or nonregular required

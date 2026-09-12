@@ -1,3 +1,4 @@
+import argparse
 import hashlib
 import importlib.util
 import json
@@ -5,7 +6,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -136,6 +139,89 @@ class DispatchReportTest(unittest.TestCase):
         self.assertEqual(report["recovery"], "full artifacts in output parent")
         self.assertEqual(report["digests"]["summary"]["status"], "missing")
         self.assertEqual(report["digests"]["verdict"]["status"], "nonregular")
+
+    def test_unknown_backend_status_and_process_evidence_are_preserved(self):
+        process = self.root / "process.data"
+        process.write_text(
+            '{"backend_process_code":null,"wrapper_signal_code":143,"capture_status":"complete"}\n',
+            encoding="utf-8",
+        )
+        result = self.render(
+            "--backend-code",
+            "unknown",
+            "--dispatcher-code",
+            "143",
+            "--classification",
+            "terminal_error",
+            "--artifact",
+            f"process={process}",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        report = json.loads(result.stdout)
+        self.assertIsNone(report["backend_process_code"])
+        self.assertEqual(report["dispatcher_code"], 143)
+        self.assertEqual(report["digests"]["process"]["status"], "available")
+        replay = subprocess.run(
+            [sys.executable, str(SCRIPT), "replay", "--artifacts-dir", str(self.artifacts)],
+            check=False,
+            capture_output=True,
+        )
+        self.assertEqual(replay.returncode, 0, replay.stderr.decode())
+        self.assertEqual(replay.stdout, result.stdout)
+
+    def test_primary_event_write_failure_terminates_and_reaps_backend(self):
+        process_script = ROOT / "scripts" / "dispatch_process.py"
+        spec = importlib.util.spec_from_file_location("dispatch_process", process_script)
+        process_module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(process_module)
+        events = self.root / "events.jsonl"
+        events.touch()
+        stderr = self.root / "process.stderr"
+        status = self.root / "process.json"
+        pid_file = self.root / "backend.pid"
+
+        class FailingSink:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def write(self, _data):
+                raise OSError("fixture event sink failure")
+
+        original_open = Path.open
+
+        def selective_open(path, *args, **kwargs):
+            if path == events:
+                return FailingSink()
+            return original_open(path, *args, **kwargs)
+
+        command = [
+            sys.executable,
+            "-c",
+            (
+                "import os,signal,time\n"
+                "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+                "pid=os.fork()\n"
+                "if pid:\n"
+                " print('parent-event',flush=True);time.sleep(.1);os._exit(0)\n"
+                f"open({str(pid_file)!r},'w').write(str(os.getpid()))\n"
+                "print('child-event',flush=True);time.sleep(30)\n"
+            ),
+        ]
+        args = argparse.Namespace(events=events, stderr=stderr, status=status, review_events=None, command=command)
+        started = time.monotonic()
+        with mock.patch.object(Path, "open", selective_open):
+            result = process_module.run(args)
+        self.assertEqual(result, 1)
+        self.assertLess(time.monotonic() - started, 6)
+        evidence = json.loads(status.read_text())
+        self.assertEqual(evidence["backend_process_code"], 0)
+        self.assertEqual(evidence["capture_status"], "failed")
+        with self.assertRaises(ProcessLookupError):
+            os.kill(int(pid_file.read_text()), 0)
 
     def test_optional_fields_degrade_whole_without_utf8_truncation(self):
         module = load_module()

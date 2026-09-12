@@ -2174,6 +2174,7 @@ _compact_render() {
     --backend-code "$backend_code" --dispatcher-code "$dispatcher_code"
     --classification "$classification"
     --artifact "stdout_events=$COMPACT_ARTIFACT_DIR/stdout.events.jsonl"
+    --artifact "process=$COMPACT_ARTIFACT_DIR/process.json"
     --artifact "stderr=$STDERR_FILE"
     --artifact "last_message=$OUTPUT"
     --artifact "summary=$SUMMARY_FILE"
@@ -2186,7 +2187,7 @@ _compact_render() {
   fi
   if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]]; then
     local receipt_state=completed receipt_json=""
-    [[ "$backend_code" == 0 ]] || receipt_state=failed
+    [[ "$backend_code" == 0 && "$dispatcher_code" == 0 ]] || receipt_state=failed
     receipt_json="$(_role_audit_context "$receipt_state" "$dispatcher_code" "$classification" 2>/dev/null)" || receipt_json=""
     if [[ -n "$receipt_json" ]]; then
       printf '%s\n' "$receipt_json" > "$COMPACT_ARTIFACT_DIR/receipt.json"
@@ -2312,38 +2313,43 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   fi
   exit "$KIMI_EXIT"
 elif [[ "$REPORT" == compact ]]; then
-  # Compact mode always requests native JSONL. A FIFO keeps the backend as an
-  # owned child so INT/TERM can be forwarded and reaped, while tee preserves
-  # every event byte before any parser sees it. CLAVAIN_REVIEW_EVENTS remains
-  # an independent full-stream consumer.
+  # Compact mode always requests native JSONL. The supervisor owns a fresh
+  # backend process group, captures complete evidence, and retains the actual
+  # child status independently from an interrupted shell wait.
   CMD+=(--json)
   COMPACT_EVENTS="$COMPACT_ARTIFACT_DIR/stdout.events.jsonl"
-  COMPACT_FIFO="$COMPACT_ARTIFACT_DIR/.events.pipe"
-  mkfifo "$COMPACT_FIFO"
+  COMPACT_PROCESS="$COMPACT_ARTIFACT_DIR/process.json"
   COMPACT_SIGNAL_CODE=""
   COMPACT_BACKEND_PID=""
-  COMPACT_CONSUMER_PID=""
   trap '_compact_forward_signal INT' INT
   trap '_compact_forward_signal TERM' TERM
 
   set +e
+  COMPACT_SUPERVISOR=(python3 "$DISPATCH_SCRIPT_DIR/dispatch_process.py"
+    --events "$COMPACT_EVENTS" --stderr "$STDERR_FILE" --status "$COMPACT_PROCESS")
   if [[ -n "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
-    tee -a "$COMPACT_EVENTS" "$CLAVAIN_REVIEW_EVENTS" < "$COMPACT_FIFO" > /dev/null &
-  else
-    tee "$COMPACT_EVENTS" < "$COMPACT_FIFO" > /dev/null &
+    COMPACT_SUPERVISOR+=(--review-events "$CLAVAIN_REVIEW_EVENTS")
   fi
-  COMPACT_CONSUMER_PID=$!
-  "${CMD[@]}" > "$COMPACT_FIFO" 2> "$STDERR_FILE" &
+  COMPACT_SUPERVISOR+=(-- "${CMD[@]}")
+  "${COMPACT_SUPERVISOR[@]}" <&0 &
   COMPACT_BACKEND_PID=$!
   wait "$COMPACT_BACKEND_PID"
-  CODEX_EXIT=$?
-  DISPATCH_RESULT_CODE="$CODEX_EXIT"
+  COMPACT_SUPERVISOR_EXIT=$?
+  while kill -0 "$COMPACT_BACKEND_PID" 2>/dev/null; do
+    wait "$COMPACT_BACKEND_PID"
+    COMPACT_SUPERVISOR_EXIT=$?
+  done
+  CODEX_EXIT="unknown"
+  COMPACT_CAPTURE_EXIT=1
+  if [[ -f "$COMPACT_PROCESS" ]]; then
+    CODEX_EXIT="$(python3 -c 'import json,sys; value=json.load(open(sys.argv[1])).get("backend_process_code"); print("unknown" if value is None else value)' "$COMPACT_PROCESS" 2>/dev/null || echo unknown)"
+    [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("capture_status", "failed"))' "$COMPACT_PROCESS" 2>/dev/null)" == complete ]]
+    COMPACT_CAPTURE_EXIT=$?
+  fi
+  DISPATCH_RESULT_CODE="$COMPACT_SUPERVISOR_EXIT"
   [[ -z "$COMPACT_SIGNAL_CODE" ]] || DISPATCH_RESULT_CODE="$COMPACT_SIGNAL_CODE"
-  wait "$COMPACT_CONSUMER_PID"
-  COMPACT_CAPTURE_EXIT=$?
-  rm -f "$COMPACT_FIFO"
   set -e
-  chmod 600 "$COMPACT_EVENTS" "$STDERR_FILE" 2>/dev/null || true
+  chmod 600 "$COMPACT_EVENTS" "$STDERR_FILE" "$COMPACT_PROCESS" 2>/dev/null || true
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
 
   COMPACT_PATH_FAILURE=false
@@ -2372,7 +2378,7 @@ elif [[ "$REPORT" == compact ]]; then
 
   if [[ "$COMPACT_PATH_FAILURE" != true ]]; then
     [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
-    _surface_codex_errors "$CODEX_EXIT"
+    _surface_codex_errors "${CODEX_EXIT/unknown/1}"
   fi
   _post_dispatch_validate "$WORKDIR"
   _dispatch_sync_interband_from_legacy
@@ -2452,9 +2458,9 @@ else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
   set +e
-  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 || -n "${CLAVAIN_USAGE_OUTPUT_DIR:-}" ]]; then
     if [[ -z "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
-      echo "Error: budget-bound dispatch requires an event destination" >&2
+      echo "Error: usage-observed dispatch requires an event destination" >&2
       exit 1
     fi
     # The Go supervisor parses raw JSONL independently of optional GNU awk.
