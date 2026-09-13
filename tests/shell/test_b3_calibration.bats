@@ -80,6 +80,47 @@ _insert_dispatch() {
 # _interspect_db_path fallback resolution
 # ═══════════════════════════════════════════════════════════════════
 
+@test "reader: modern calibration requires explicit propagation eligibility" {
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    for eligibility in false null '"true"'; do
+        printf '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":%s}}}' "$eligibility" > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+        result=$(_routing_read_calibration fd-quality) || true
+        [[ -z "$result" ]]
+    done
+}
+
+@test "reader: schema v3 skill section does not discard eligible agents" {
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    printf '%s' '{"schema_version":3,"skills":{},"agents":{"fd-quality":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    result=$(_routing_read_calibration fd-quality) || true
+    [[ "$result" == haiku ]]
+}
+
+@test "reader: invalid numeric types cannot authorize calibration" {
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    printf '%s' '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"haiku","confidence":"high","evidence_sessions":"many","propagation_eligible":true}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    result=$(_routing_read_calibration fd-quality) || true
+    [[ -z "$result" ]]
+}
+
+@test "reader: modern phase eligibility is independent and falls back globally" {
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    printf '%s' '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"opus","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true,"phases":{"plan":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":false}}}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    result=$(_routing_read_calibration fd-quality plan) || true
+    [[ "$result" == opus ]]
+}
+
+@test "reader: phase aliases are symmetric and exact entries win" {
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    printf '%s' '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"sonnet","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true,"phases":{"ship":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true},"quality-gates":{"recommended_model":"opus","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true},"plan":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true},"build":{"recommended_model":"opus","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true}}}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    [[ "$(_routing_read_calibration fd-quality quality-gates)" == opus ]]
+    [[ "$(_routing_read_calibration fd-quality quality_gates)" == haiku ]]
+    [[ "$(_routing_read_calibration fd-quality shipping)" == haiku ]]
+    [[ "$(_routing_read_calibration fd-quality planning)" == haiku ]]
+    [[ "$(_routing_read_calibration fd-quality implementation)" == opus ]]
+    [[ "$(_routing_read_calibration fd-quality implement)" == opus ]]
+}
+
 @test "db_path: CLAUDE_PROJECT_DIR takes priority over git root" {
     export CLAUDE_PROJECT_DIR="$TEST_DIR/custom-project"
     mkdir -p "$CLAUDE_PROJECT_DIR/.clavain/interspect"
@@ -335,6 +376,7 @@ JSON
             "recommended_model": "haiku",
             "confidence": 0.85,
             "evidence_sessions": 5,
+            "propagation_eligible": true,
             "weighted_hit_rate": 0.1
         }
     }
@@ -640,6 +682,76 @@ JSON
     [[ $(jq -r '.evidence' <<< "$line") == *"fd-game-design"* ]]
 }
 
+@test "audit: shadow record uses the supported durable CLI contract" {
+    _setup_shadow_audit "haiku" "sonnet"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    ic() {
+        [[ "$1 $2" == 'route record' ]] || return 1
+        shift 2
+        printf '%s\n' "$@" > "$TEST_DIR/record-args"
+    }
+    routing_resolve_model --agent fd-game-design >/dev/null 2>&1
+    [[ -f "$TEST_DIR/record-args" ]]
+    ! grep -E '^--[^=]+$' "$TEST_DIR/record-args"
+    grep -E '^--model=' "$TEST_DIR/record-args"
+    grep -E '^--agent=' "$TEST_DIR/record-args"
+    grep -E '^--rule=' "$TEST_DIR/record-args"
+    ! grep -E '^--selected-model(=|$)' "$TEST_DIR/record-args"
+    ! grep -E '^--meta(=|$)' "$TEST_DIR/record-args"
+    grep -E '^--context=' "$TEST_DIR/record-args"
+    grep -Fx -- '--run=test-run' "$TEST_DIR/record-args"
+    grep -Fx -- "--project=$TEST_DIR" "$TEST_DIR/record-args"
+}
+
+@test "audit: recorder stdout cannot contaminate the resolved model" {
+    _setup_shadow_audit "haiku" "sonnet"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    ic() { printf '%s\n' 'Routing decision recorded: id=1 agent=fd-game-design model=sonnet rule=B3'; }
+    result=$(routing_resolve_model --agent fd-game-design 2>/dev/null)
+    [[ "$result" == sonnet ]]
+}
+
+@test "audit: failed durable shadow recording is explicitly unverifiable" {
+    _setup_shadow_audit "haiku" "sonnet"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    ic() { return 2; }
+    run routing_resolve_model --agent fd-game-design
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"UNVERIFIABLE"* ]]
+    [[ "$output" == *"sonnet"* ]]
+    [[ "$(jq -s '[.[] | select(.name == "calibration-record" and .state == "UNVERIFIABLE")] | length' "$TEST_DIR/.clavain/interspect/microrouter-shadow.jsonl")" -eq 1 ]]
+}
+
+@test "audit: real ic writes one durable isolated routing decision" {
+    _setup_shadow_audit "haiku" "sonnet"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    unset CLAVAIN_INTERCORE_DB INTERCORE_DB
+    export REAL_IC_BIN="${INTERCORE_IC_BIN:-$(command -v ic)}"
+    [[ -x "$REAL_IC_BIN" ]]
+    ic() { "$REAL_IC_BIN" --db=.clavain/intercore.db "$@"; }
+    "$REAL_IC_BIN" --db=.clavain/intercore.db init >/dev/null
+
+    result=$(routing_resolve_model --phase quality-gates --agent fd-game-design 2>"$TEST_DIR/stderr")
+    [[ "$result" == sonnet ]]
+    [[ ! -s "$TEST_DIR/stderr" || "$(<"$TEST_DIR/stderr")" == *"interspect-shadow"* ]]
+
+    local row
+    row=$(sqlite3 -json "$TEST_DIR/.clavain/intercore.db" "SELECT agent, selected_model, rule_matched, phase, project_dir, policy_hash, context_json FROM routing_decisions;")
+    [[ "$(jq 'length' <<< "$row")" -eq 1 ]]
+    [[ "$(jq -r '.[0].agent' <<< "$row")" == fd-game-design ]]
+    [[ "$(jq -r '.[0].selected_model' <<< "$row")" == sonnet ]]
+    [[ "$(jq -r '.[0].rule_matched' <<< "$row")" == B3 ]]
+    [[ "$(jq -r '.[0].phase' <<< "$row")" == quality-gates ]]
+    [[ "$(jq -r '.[0].project_dir' <<< "$row")" == "$TEST_DIR" ]]
+    [[ "$(jq -r '.[0].context_json | fromjson | .calibrated_model' <<< "$row")" == haiku ]]
+    local calibration_hash routing_hash
+    calibration_hash=$(shasum -a 256 "$TEST_DIR/.clavain/interspect/routing-calibration.json" | awk '{print $1}')
+    routing_hash=$(shasum -a 256 "$TEST_DIR/config/routing.yaml" | awk '{print $1}')
+    [[ "$(jq -r '.[0].context_json | fromjson | .calibration_sha256' <<< "$row")" == "$calibration_hash" ]]
+    [[ "$(jq -r '.[0].context_json | fromjson | .routing_sha256' <<< "$row")" == "$routing_hash" ]]
+    [[ "$(jq -r '.[0].policy_hash' <<< "$row")" == "$routing_hash" ]]
+}
+
 @test "audit: shadow override (calibrated != base) emits override VerificationStep" {
     _setup_shadow_audit "haiku" "sonnet"  # calibrated differs from base → override
     source "$SCRIPTS_DIR/lib-routing.sh"
@@ -656,6 +768,37 @@ JSON
     [[ $(jq -r '.decision_type' <<< "$line") == "override" ]]
     [[ $(jq -r '.evidence' <<< "$line") == *"base=sonnet"* ]]
     [[ $(jq -r '.evidence' <<< "$line") == *"calibrated=haiku"* ]]
+}
+
+@test "reader: unsupported phase model falls back to a valid global recommendation" {
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    printf '%s' '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"opus","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true,"phases":{"ship":{"recommended_model":"unsupported","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true}}}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    result=$(_routing_read_calibration fd-quality ship) || true
+    [[ "$result" == opus ]]
+}
+
+@test "audit: replacement between selection and recording cannot change evidence hashes" {
+    _setup_shadow_audit "haiku" "sonnet"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    local old_cal old_policy
+    old_cal=$(shasum -a 256 "$TEST_DIR/.clavain/interspect/routing-calibration.json" | awk '{print $1}')
+    old_policy=$(shasum -a 256 "$TEST_DIR/config/routing.yaml" | awk '{print $1}')
+    eval "$(declare -f _routing_record_calibration_shadow | sed '1s/_routing_record_calibration_shadow/_record_before_mutation/')"
+    _routing_record_calibration_shadow() {
+        printf '%s\n' '{"schema_version":3,"agents":{}}' > "$TEST_DIR/.clavain/interspect/replacement.json"
+        mv -f "$TEST_DIR/.clavain/interspect/replacement.json" "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+        printf '%s\n' 'subagents:' '  defaults:' '    model: opus' > "$TEST_DIR/config/replacement.yaml"
+        mv -f "$TEST_DIR/config/replacement.yaml" "$TEST_DIR/config/routing.yaml"
+        _record_before_mutation "$@"
+    }
+    ic() { printf '%s\n' "$@" > "$TEST_DIR/record-args"; }
+    result=$(routing_resolve_model --agent fd-game-design 2>/dev/null)
+    [[ "$result" == sonnet ]]
+    local context
+    context=$(sed -n 's/^--context=//p' "$TEST_DIR/record-args")
+    [[ "$(jq -r .calibration_sha256 <<< "$context")" == "$old_cal" ]]
+    [[ "$(jq -r .routing_sha256 <<< "$context")" == "$old_policy" ]]
+    grep -Fx -- "--policy-hash=$old_policy" "$TEST_DIR/record-args"
 }
 
 @test "audit: FLUX_RUN_UUID flows into emitted records" {
