@@ -115,12 +115,37 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def context(record):
+def decode_context(record):
     value = record.get("context_json")
     value = json.loads(value) if isinstance(value, str) else value
     if not isinstance(value, dict):
         raise ValueError(f"decision {record.get('id')} has malformed context")
     return value
+
+
+def context(record):
+    value = decode_context(record)
+    reject_fixture(value)
+    return value
+
+
+def reject_fixture(value):
+    """Every measured consumer shares this boundary, including legacy nested rows."""
+    if isinstance(value, dict):
+        if value.get("fixture_only") is True or value.get("eligible") is False:
+            raise ValueError("fixture native evidence is ineligible for measured delivery")
+        # Native v1 rows predate fixture markers. The closed production gate
+        # means neither those rows nor an unmarked native reservation/envelope
+        # can be reclassified as an ordinary measured exec attempt.
+        requested = value.get("operation_request")
+        if any(key in value for key in ("native_operation","native_admission","native_send_intent")) or (
+                isinstance(requested,dict) and requested.get("operation") in {"compact","resume"}):
+            raise ValueError("legacy or fixture native evidence is ineligible for measured delivery")
+        for item in value.values():
+            reject_fixture(item)
+    elif isinstance(value, list):
+        for item in value:
+            reject_fixture(item)
 
 
 def enrolled(records):
@@ -207,6 +232,7 @@ def require_reviewer_native_evidence(enrollment, reviewer, bindings):
 
 
 def validate_record(kind, value, records, *, verify_native=True):
+    reject_fixture(value)
     if kind not in KINDS or not isinstance(value, dict):
         raise ValueError("unknown record kind or non-object receipt")
     canonical(value)
@@ -409,11 +435,12 @@ def export_manifest(records, cohort):
     for record in sorted(records, key=lambda r: r["id"]):
         if record.get("rule_matched") != "dispatch-profile":
             continue
-        value = context(record)
+        value = decode_context(record)
         dispatch_id = value.get("dispatch_id") or record.get("dispatch_id")
         request = dispatches.get(dispatch_id)
         if request is None:
             continue
+        reject_fixture(value)
         used.add(record["id"])
         task = tasks[request["enrollment_id"]]
         if "task_envelope" in value:

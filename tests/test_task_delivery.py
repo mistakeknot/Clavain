@@ -20,6 +20,80 @@ def subject():
     return module
 
 
+@pytest.mark.parametrize("nested", [False, True, "legacy-unmarked"])
+def test_real_manifest_consumer_refuses_fixture_dispatch_rows(nested):
+    m = subject(); parent = enrollment()
+    request = dict(enrollment_id="e", cohort_id="c", manifest_sha256="a"*64,
+                   dispatch_id="d", role="deep-execution", dispatcher_sha256="b"*64)
+    records = [decision("enrollment", parent, 1), decision("dispatch-request", request, 2)]
+    audit = {"dispatch_id":"d", "attempt_id":"a", "state":"completed", "execution": {}}
+    marker = {"fixture_only":True, "eligible":False}
+    if nested == "legacy-unmarked": audit["execution"]["native_operation"] = {"schema_version":1,"operation":"compact","status":"completed"}
+    elif nested: audit["execution"]["native_operation"] = marker
+    else: audit.update(marker)
+    records.append(dict(id=3, rule_matched="dispatch-profile", context_json=json.dumps(audit)))
+    with pytest.raises(ValueError, match="fixture"):
+        m.export_manifest(records, "c")
+
+
+@pytest.mark.parametrize("unrelated_context", [
+    pytest.param({"fixture_only": True, "eligible": False}, id="top-level-fixture"),
+    pytest.param({"execution": {"native_operation": {"fixture_only": True, "eligible": False}}},
+                 id="nested-native-fixture"),
+    pytest.param({"execution": {"native_operation": {
+        "schema_version": 1, "operation": "compact", "status": "completed",
+    }}}, id="legacy-native"),
+])
+def test_unrelated_fixture_dispatch_does_not_change_ordinary_manifest(unrelated_context):
+    module = subject()
+    request = dict(enrollment_id="e", cohort_id="c", manifest_sha256="a" * 64,
+                   dispatch_id="ordinary", role="deep-execution", dispatcher_sha256="b" * 64)
+    terminal = dict(dispatch_id="ordinary", attempt_id="ordinary-attempt", state="completed",
+                    terminal=True, execution=dict(backend="codex", model="gpt-5.6-sol"),
+                    result=dict(failure_class="success"))
+    ordinary_records = [
+        decision("enrollment", enrollment(), 1),
+        decision("dispatch-request", request, 2),
+        dict(id=3, rule_matched="dispatch-profile", context_json=json.dumps(terminal)),
+    ]
+    baseline = module.canonical(module.export_manifest(ordinary_records, "c")).encode()
+
+    unrelated = dict(dispatch_id="unrelated", attempt_id="unrelated-attempt", state="completed")
+    unrelated.update(copy.deepcopy(unrelated_context))
+    unrelated_record = dict(id=4, rule_matched="dispatch-profile", context_json=json.dumps(unrelated))
+    assert module.canonical(module.export_manifest(ordinary_records + [unrelated_record], "c")).encode() == baseline
+
+    selected_request = request | {"dispatch_id": "unrelated"}
+    selected_records = ordinary_records + [
+        decision("dispatch-request", selected_request, 4),
+        unrelated_record | {"id": 5},
+    ]
+    with pytest.raises(ValueError, match="fixture"):
+        module.export_manifest(selected_records, "c")
+
+
+def test_unrelated_dispatch_with_malformed_context_remains_rejected():
+    records = [
+        decision("enrollment", enrollment(), 1),
+        dict(id=2, rule_matched="dispatch-profile", context_json="[]"),
+    ]
+    with pytest.raises(ValueError, match="decision 2 has malformed context"):
+        subject().export_manifest(records, "c")
+
+
+@pytest.mark.parametrize('field',['top','native_admission','native_send_intent','native_operation'])
+def test_usage_consumer_rejects_each_fixture_lifecycle_path(tmp_path,field):
+    spec=importlib.util.spec_from_file_location('usage_fixture',Path(__file__).with_name('test_usage_binding.py'))
+    fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixtures)
+    rows,observation,request=fixtures.fixtures(tmp_path)
+    # First establish a valid ordinary binding through the real consumer.
+    assert subject().bind_usage_record(rows,[observation],request)['id']=='bound-u'
+    target=rows[-1]['context_json']
+    if field!='top': target=target['execution'].setdefault(field,{})
+    target.update(fixture_only=True,eligible=False)
+    with pytest.raises(ValueError,match='fixture'):subject().bind_usage_record(rows,[observation],request)
+
+
 def enrollment():
     return dict(schema_version=1, cohort_id="c", cohort_kind="internal-tooling", enrollment_id="e",
                 bead_id="b", objective="Implement accounting", enrolled_at="2026-09-05T12:00:00Z",
