@@ -18,7 +18,7 @@ readonly GAWK_ARCHIVE_SHA256=694db764812a6236423d4ff40ceb7b6c4c441301b72ad502bb5
 readonly GO_URL=https://go.dev/dl/go1.26.4.linux-amd64.tar.gz
 readonly GO_ARCHIVE_SHA256=1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f
 readonly IMAGE_SHA256=698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6
-readonly USAGE_MANIFEST_SHA256=c1c0554d99b968fd549276702b7910452a3177bc9fb792a072b853bf199f5c6d
+readonly USAGE_MANIFEST_SHA256=c6ff1aa63dbdf72325a5404fd3a8e31c60f58a71acedb9ca9b4902396a72f401
 
 unverifiable() {
   echo "UNVERIFIABLE: $*" >&2
@@ -132,14 +132,8 @@ cd "$BUILD_ROOT/os/Clavain"
 printf '%s  %s\n' "$USAGE_MANIFEST_SHA256" tests/usage-pilot.json | sha256sum --check - \
   || unverifiable "usage verification contract differs from pinned recipe"
 
-# FINAL PINNING GATE: tests/test_dispatch_control.py and
-# tests/shell/dispatch_resume.bats do not exist in this reviewed preparation.
-# After their author/reviewer-approved implementation lands, add them to the
-# manifest and regenerate the exact Python/Bats counts and identity hashes.
-# Registration and both fresh-guest runs must use that newly reviewed pin.
-if [[ -e tests/test_dispatch_control.py || -e tests/shell/dispatch_resume.bats ]]; then
-  unverifiable "native operation tests are present; usage identities require reviewed final repinning"
-fi
+# The manifest freezes native operation and GNU awk coverage together with the
+# legacy pilot. Registration binds this recipe only after final source review.
 
 python3 - "$evidence_root/bootstrap-provenance.json" <<'PY'
 import hashlib
