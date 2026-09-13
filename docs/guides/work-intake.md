@@ -122,9 +122,34 @@ release/handoff, native dependency work, wrapper qualification, bypass rejection
 and four-combination canary evidence. Source review and independent zklw checks
 remain landing gates; this preview contributes no enforcement coverage.
 
-Future admission fixtures and state-machine verification remain outstanding.
-The diagnostic tests do not prove ownership transitions, draining, generation
-fencing, release/handoff, heartbeat, or rollback behavior.
+The ownership reference model lives only in `work_ownership*_test.go`; it is
+excluded from installed binaries. Its replay exercises simulated acquisition,
+restart reconciliation, draining, generation fencing and release with fake
+tracker and session authorities. A simulated activation grants no implementation
+authority. These experiments do not qualify real Beads release serialization,
+authority confinement, native host gates, or production ownership.
+
+Run `bash scripts/check-work-ownership.sh` from the checkout with its pinned
+Intercore sibling available. It runs the full CLI Go suite, explicit ownership
+and routing-incident replay, ownership race checks, vet and build. Both routing
+briefs retain their original hashes and separate requirements. The replay uses
+the September 13 task snapshot: adaptive routing's recorded assignee is retained;
+the in-progress portfolio task's absent assignee stays absent. It does not infer
+a verified binding from either task status or assignee.
+
+A Beads leaf has no nonclosed Beads task children. Execution delegates inherit
+one binding and are tracked separately from that task hierarchy; they do not
+create independent implementation owners. Independent owners require distinct
+Beads children. The fixture's execution-tree snapshot must include every known
+delegate before release, and draining remains closed to new delegates even
+through authority uncertainty. The snapshot method revalidates the fake
+authorities and journals a transition to unknown when verification fails.
+
+`scripts/ci-work-ownership.sh` is a proposed additive manual zklw recipe. It first
+runs the unchanged verification pilot, then these Go checks in a fresh source
+layout. It does not change the packaging contract. Admission and two successful
+fresh-guest executions at the same exact commit remain with the existing
+`mk-ag2s.25` owner; source presence is not CI qualification or installation.
 
 The child environment contains only process essentials; inherited Beads, Dolt,
 and XDG selectors are excluded. Environment-only authentication is unsupported.
