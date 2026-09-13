@@ -6,6 +6,10 @@ command -v ic >/dev/null
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/work"
+export CLAVAIN_INTERCORE_DB="$TMP_ROOT/work/.clavain/intercore.db"
+export REAL_IC_FOR_TEST="$(command -v ic)"
+ic() { "$REAL_IC_FOR_TEST" --db="$CLAVAIN_INTERCORE_DB" "$@"; }
+export -f ic
 cat > "$TMP_ROOT/bin/codex" <<'CODEX'
 #!/usr/bin/env bash
 if [[ "${1:-}" == --version ]]; then echo 'codex-cli 0.153.3'; exit 0; fi
@@ -59,3 +63,11 @@ if FAKE_CODEX_EXIT=7 CLAVAIN_REQUIRE_USAGE=1 CLAVAIN_REVIEW_EVENTS="$TMP_ROOT/fa
   echo 'FAIL: model failure lost in usage pipeline' >&2; exit 1
 fi
 echo 'PASS: production budget dispatch records usage and preserves model failure without GNU awk'
+
+# Private fixture controls never change the ordinary dispatcher lifecycle.
+DISPATCH_NATIVE_FIXTURE=true DISPATCH_NATIVE_IC=/nonexistent-fixture-ic \
+  bash "$ROOT/scripts/dispatch.sh" --role routine-execution -C "$TMP_ROOT/work" \
+  -o "$TMP_ROOT/ordinary.md" 'ordinary fixture-env isolation' >/dev/null
+latest="$(cd "$TMP_ROOT/work" && ic --json route list --limit=2)"
+jq -e '[.[] | .context_json | fromjson] | length == 2 and all(.[]; (.fixture_only // false) == false and (.execution.native_operation // null) == null) and ([.[].state] | sort == ["completed","started"])' <<< "$latest" >/dev/null
+echo 'PASS: ordinary dispatch ignores inherited private fixture controls'

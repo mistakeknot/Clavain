@@ -11,6 +11,10 @@
 
 set -euo pipefail
 
+# Private fixture controls belong only to the sourced fixture library. They
+# cannot alter the public dispatcher's enrollment or terminal audit lifecycle.
+unset DISPATCH_NATIVE_FIXTURE DISPATCH_NATIVE_IC
+
 # Size threshold for --inject-docs warning (bytes)
 INJECT_DOCS_WARN_THRESHOLD=20000
 
