@@ -149,6 +149,10 @@ func main() {
 	case "tool-surface":
 		err = cmdToolSurface(args)
 
+	// Read-only work intake diagnostics (no admission or mutation authority).
+	case "work":
+		err = cmdWork(args)
+
 	// CXDB
 	case "cxdb-start":
 		err = cmdCXDBStart(args)
@@ -373,6 +377,11 @@ Compose:
 
 Tool Composition:
   tool-surface        [--json]                             Output tool composition context (domains, groups, hints)
+
+Work Intake (read-only diagnostic preview):
+  work discover       --registry=FILE --authority=IDENTITY [--text=TEXT] [--plan=FILE] [--json]
+  work status         --registry=FILE --authority=IDENTITY --task=TRACKER_UUID:BEAD_ID [--json]
+  work explain        --registry=FILE --authority=IDENTITY --task=TRACKER_UUID:BEAD_ID [--json]
 
 CXDB:
   cxdb-start          Start CXDB server (creates data dir, registers types)

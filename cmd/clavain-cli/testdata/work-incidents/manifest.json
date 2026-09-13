@@ -1,0 +1,18 @@
+{
+  "fixtures": [
+    {
+      "fixture": "adaptive-planning-brief.md",
+      "source": "/tmp/adaptive-routing-20260912/planning-brief.md",
+      "sha256": "bfc0241fadb90e697910bcb2f08df2f2038f40406fe942b2e00f6c980ca7ede0"
+    },
+    {
+      "fixture": "portfolio-review-brief.md",
+      "source": "/Users/sma/projects/docs/portfolio-routing/review-prompt.md",
+      "sha256": "929fe63534d9bf0419542f633c3007030678d978ec72309c9d063b9a03b6ed8e"
+    }
+  ],
+  "disposition": "shared initiative with separable scope",
+  "rationale": "Both concern governed routing and shared admission. Portfolio preparation retains eleven-project enrollment, bounded lanes and accounting; adaptive routing retains hashed overlays, calibration, event joins and promotion. Different titles must surface related evidence without merging tasks or granting another implementation owner.",
+  "selection": "The corrected mk-rzpe review request is an independent routing-session brief; calibration-implementation-request.md is a downstream grez handoff and would duplicate that incident.",
+  "limits": "Discovery replay only. No ownership state machine or host enforcement is demonstrated. The portfolio preparation remains unverified and is not treated as complete."
+}
