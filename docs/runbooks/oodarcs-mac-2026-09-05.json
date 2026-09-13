@@ -1,0 +1,1666 @@
+{
+  "purpose": "Astra-canary instruction/catalog boundary; diagnostic only; zero task-completion credit",
+  "model": "gpt-6-astra",
+  "effort": "xhigh",
+  "service_tier": "default",
+  "cli": {
+    "binary": "/Users/sma/.codex/packages/standalone/releases/0.153.3-aarch64-apple-darwin/bin/codex",
+    "sha256": "0e1f892695844ad0798dab8895955846450a9e7663476ebf24615814dd377216",
+    "version": "codex-cli 0.153.3"
+  },
+  "baseline": {
+    "clavain_commit": "e53ca59cbf36491e7d27526511c2cb827ae25955",
+    "budget": null,
+    "variants": [
+      "baseline-outside-v2",
+      "baseline-inside-v2"
+    ]
+  },
+  "candidate": {
+    "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df",
+    "dotfiles_commit": "f9da1c2bc6b53fd38073d13557e89c352b705fa6",
+    "philosophy_commit": "e8f0c3644aaecc565c1b3efcff0b11a1fcbb9b54",
+    "budget": 8500,
+    "variants": [
+      "candidate-accepted-outside",
+      "candidate-accepted-inside"
+    ]
+  },
+  "permission_mode": {
+    "sandbox": "read-only",
+    "approval": "never"
+  },
+  "automatic_refresh": "CLAVAIN_SESSION_REFRESH=0 in baseline and candidate",
+  "budget_sweep": {
+    "results": [
+      {
+        "budget": null,
+        "label": "sweep",
+        "passed": false,
+        "sessions": [
+          {
+            "session_id": "01a073be-3d5c-7d11-8793-7512d122f337",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 77,
+            "catalog": 112,
+            "first_input": 29637,
+            "rendered_characters": 21001
+          },
+          {
+            "session_id": "01a073be-6612-7180-b26f-be7a45934ba7",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 77,
+            "catalog": 112,
+            "first_input": 29637,
+            "rendered_characters": 21001
+          },
+          {
+            "session_id": "01a073be-3d84-7ce0-9a9d-31d2380a7843",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 77,
+            "catalog": 112,
+            "first_input": 29395,
+            "rendered_characters": 21001
+          },
+          {
+            "session_id": "01a073be-65e4-74d2-9048-c8a4986b99c0",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 77,
+            "catalog": 112,
+            "first_input": 29395,
+            "rendered_characters": 21001
+          }
+        ]
+      },
+      {
+        "budget": 5500,
+        "label": "sweep",
+        "passed": false,
+        "sessions": [
+          {
+            "session_id": "01a073be-9bad-73b0-b6b0-8b26f4db5b2f",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 77,
+            "catalog": 112,
+            "first_input": 29684,
+            "rendered_characters": 21240
+          },
+          {
+            "session_id": "01a073be-c65e-7891-a2d3-8b80be69e6f5",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 77,
+            "catalog": 112,
+            "first_input": 29684,
+            "rendered_characters": 21240
+          },
+          {
+            "session_id": "01a073be-9bae-7eb0-9aeb-6d5ac8b6669c",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 77,
+            "catalog": 112,
+            "first_input": 29442,
+            "rendered_characters": 21240
+          },
+          {
+            "session_id": "01a073be-c611-73e3-b4ca-a82b1a627f3b",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 77,
+            "catalog": 112,
+            "first_input": 29442,
+            "rendered_characters": 21240
+          }
+        ]
+      },
+      {
+        "budget": 6000,
+        "label": "sweep",
+        "passed": false,
+        "sessions": [
+          {
+            "session_id": "01a073bf-0309-7021-bf2d-97818dbb43ac",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 64,
+            "catalog": 112,
+            "first_input": 30072,
+            "rendered_characters": 23222
+          },
+          {
+            "session_id": "01a073bf-3432-7792-a94b-bf8087458c1b",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 64,
+            "catalog": 112,
+            "first_input": 30072,
+            "rendered_characters": 23222
+          },
+          {
+            "session_id": "01a073bf-02ad-7a50-a36f-332438c8bd75",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 64,
+            "catalog": 112,
+            "first_input": 29830,
+            "rendered_characters": 23222
+          },
+          {
+            "session_id": "01a073bf-33ee-77b1-acd8-ef093340e1bb",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 64,
+            "catalog": 112,
+            "first_input": 29830,
+            "rendered_characters": 23222
+          }
+        ]
+      },
+      {
+        "budget": 6500,
+        "label": "sweep",
+        "passed": false,
+        "sessions": [
+          {
+            "session_id": "01a073bf-690f-7e81-81d4-38a4563929f7",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 45,
+            "catalog": 112,
+            "first_input": 30483,
+            "rendered_characters": 25182
+          },
+          {
+            "session_id": "01a073bf-9217-78e3-b2d4-038f40c504e4",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 45,
+            "catalog": 112,
+            "first_input": 30483,
+            "rendered_characters": 25182
+          },
+          {
+            "session_id": "01a073bf-6903-70a3-8b0a-12dc431c5b2b",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 45,
+            "catalog": 112,
+            "first_input": 30241,
+            "rendered_characters": 25182
+          },
+          {
+            "session_id": "01a073bf-9276-7c03-951a-a2bdf7527497",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 45,
+            "catalog": 112,
+            "first_input": 30241,
+            "rendered_characters": 25182
+          }
+        ]
+      },
+      {
+        "budget": 7000,
+        "label": "sweep",
+        "passed": false,
+        "sessions": [
+          {
+            "session_id": "01a073bf-c720-7f02-9235-dc6e5769fcde",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 35,
+            "catalog": 112,
+            "first_input": 30888,
+            "rendered_characters": 27159
+          },
+          {
+            "session_id": "01a073bf-f03d-71d0-b8c5-684cc8d9176d",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 35,
+            "catalog": 112,
+            "first_input": 30888,
+            "rendered_characters": 27159
+          },
+          {
+            "session_id": "01a073bf-c723-7a41-8510-e021d8b8f22b",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 35,
+            "catalog": 112,
+            "first_input": 30646,
+            "rendered_characters": 27159
+          },
+          {
+            "session_id": "01a073bf-f076-7473-bd23-1f9cd95a11f4",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 35,
+            "catalog": 112,
+            "first_input": 30646,
+            "rendered_characters": 27159
+          }
+        ]
+      },
+      {
+        "budget": 7500,
+        "label": "sweep",
+        "passed": false,
+        "sessions": [
+          {
+            "session_id": "01a073c0-20dd-7fb1-b327-761d919005df",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 23,
+            "catalog": 112,
+            "first_input": 31286,
+            "rendered_characters": 29137
+          },
+          {
+            "session_id": "01a073c0-4dfe-7460-9b24-9412c8228c52",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 23,
+            "catalog": 112,
+            "first_input": 31286,
+            "rendered_characters": 29137
+          },
+          {
+            "session_id": "01a073c0-20cf-78c2-8e70-b74e98be4616",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 23,
+            "catalog": 112,
+            "first_input": 31044,
+            "rendered_characters": 29137
+          },
+          {
+            "session_id": "01a073c0-4985-72f1-875e-0e431d5be878",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 23,
+            "catalog": 112,
+            "first_input": 31044,
+            "rendered_characters": 29137
+          }
+        ]
+      },
+      {
+        "budget": 8000,
+        "label": "sweep",
+        "passed": false,
+        "sessions": [
+          {
+            "session_id": "01a073c0-8384-7ce0-b9c5-baeb24c8ecf7",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 9,
+            "catalog": 112,
+            "first_input": 31660,
+            "rendered_characters": 31115
+          },
+          {
+            "session_id": "01a073c0-ab4d-77e2-a78e-4e96b8fa8aac",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 9,
+            "catalog": 112,
+            "first_input": 31660,
+            "rendered_characters": 31115
+          },
+          {
+            "session_id": "01a073c0-83b2-7b82-8102-01dbb336fd70",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 9,
+            "catalog": 112,
+            "first_input": 31418,
+            "rendered_characters": 31115
+          },
+          {
+            "session_id": "01a073c0-ab49-7e53-85a4-ed5949e25a1c",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 9,
+            "catalog": 112,
+            "first_input": 31418,
+            "rendered_characters": 31115
+          }
+        ]
+      },
+      {
+        "budget": 8500,
+        "label": "sweep",
+        "passed": true,
+        "sessions": [
+          {
+            "session_id": "01a073c0-dbdc-7a72-8a14-c636cc5b2a7f",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 0,
+            "catalog": 112,
+            "first_input": 31820,
+            "rendered_characters": 31981
+          },
+          {
+            "session_id": "01a073c1-09ab-7892-9738-fd3c4b00a9ab",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 0,
+            "catalog": 112,
+            "first_input": 31820,
+            "rendered_characters": 31981
+          },
+          {
+            "session_id": "01a073c0-dbd7-7cb2-b66b-60df8a57f5ef",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 0,
+            "catalog": 112,
+            "first_input": 31578,
+            "rendered_characters": 31981
+          },
+          {
+            "session_id": "01a073c1-0546-7e61-a4cc-c2d21f60e6f5",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 0,
+            "catalog": 112,
+            "first_input": 31578,
+            "rendered_characters": 31981
+          }
+        ]
+      },
+      {
+        "budget": 8500,
+        "label": "confirm",
+        "passed": true,
+        "sessions": [
+          {
+            "session_id": "01a073c1-398f-7002-ac79-bdf456efb02c",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 0,
+            "catalog": 112,
+            "first_input": 31820,
+            "rendered_characters": 31981
+          },
+          {
+            "session_id": "01a073c1-62fe-70e1-a218-cb54954a05ad",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 0,
+            "catalog": 112,
+            "first_input": 31820,
+            "rendered_characters": 31981
+          },
+          {
+            "session_id": "01a073c1-398f-7720-b1a3-b7b45fc27e28",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 0,
+            "catalog": 112,
+            "first_input": 31578,
+            "rendered_characters": 31981
+          },
+          {
+            "session_id": "01a073c1-632d-76f1-8b26-4a39d9e60c1c",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 0,
+            "catalog": 112,
+            "first_input": 31578,
+            "rendered_characters": 31981
+          }
+        ]
+      },
+      {
+        "budget": 8000,
+        "label": "lower-repeat",
+        "passed": false,
+        "sessions": [
+          {
+            "session_id": "01a073c1-9c37-7272-b2b6-658d0f52fb95",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 9,
+            "catalog": 112,
+            "first_input": 31660,
+            "rendered_characters": 31115
+          },
+          {
+            "session_id": "01a073c1-c4ef-7c91-98ba-0886a785299c",
+            "cwd": "/Users/sma/projects",
+            "warning": false,
+            "description_differences": 9,
+            "catalog": 112,
+            "first_input": 31660,
+            "rendered_characters": 31115
+          },
+          {
+            "session_id": "01a073c1-9c1c-7c82-aaad-798fdb7362df",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 9,
+            "catalog": 112,
+            "first_input": 31418,
+            "rendered_characters": 31115
+          },
+          {
+            "session_id": "01a073c1-c945-7032-9300-2b5462738af1",
+            "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+            "warning": false,
+            "description_differences": 9,
+            "catalog": 112,
+            "first_input": 31418,
+            "rendered_characters": 31115
+          }
+        ]
+      }
+    ],
+    "complete": true,
+    "passing_setting_found": true,
+    "lowest_repeated_passing_budget": 8500
+  },
+  "installation": {
+    "setting": "skills.max_context_tokens",
+    "value": 8500,
+    "added_text": "[skills]\nmax_context_tokens = 8500\n\n",
+    "before_sha256": "41d70a2cd0bc2b579a6ec5aade7c6a31564519cf113f3f1c7e601ebcd635a031",
+    "after_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+    "all_other_configuration_unchanged": true
+  },
+  "ci": {
+    "baseline": [
+      "dispatch section is untouched by either mode",
+      "schema 38 records a signed authorization before Dolt push",
+      "blocked policy stops before signed recording or Dolt push",
+      "authorization fallback uses the authz policy namespace",
+      "signed authorization failure blocks before close",
+      "install creates managed ~/.local/bin/clavain-cli link and doctor validates it",
+      "uninstall removes managed ~/.local/bin/clavain-cli link",
+      "install merges bounded SessionStart and UserPromptSubmit hooks and doctor validates them",
+      "install and source-explicit update preserve unrelated Codex hooks",
+      "uninstall removes only the managed Codex hook"
+    ],
+    "candidate": [
+      "dispatch section is untouched by either mode",
+      "schema 38 records a signed authorization before Dolt push",
+      "blocked policy stops before signed recording or Dolt push",
+      "authorization fallback uses the authz policy namespace",
+      "signed authorization failure blocks before close"
+    ],
+    "new_failures": [],
+    "baseline_run": "https://github.com/mistakeknot/Clavain/actions/runs/33985569636",
+    "candidate_run": "https://github.com/mistakeknot/Clavain/actions/runs/33996493036",
+    "final_router_failures": [
+      "dispatch section is untouched by either mode",
+      "schema 38 records a signed authorization before Dolt push",
+      "blocked policy stops before signed recording or Dolt push",
+      "authorization fallback uses the authz policy namespace",
+      "signed authorization failure blocks before close"
+    ],
+    "final_router_run": "https://github.com/mistakeknot/Clavain/actions/runs/33997586920"
+  },
+  "selected_companion_links": [
+    {
+      "link": "/Users/sma/.agents/skills/autoresearch",
+      "before": "/Users/sma/.codex/interlab/skills/autoresearch",
+      "after": "/Users/sma/projects/Sylveste/interverse/interlab/skills/autoresearch",
+      "skill_sha256": "84571daf29843f423098e65f98e5b6dfe4146369a33de2e4379d25cfe3881b2f"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/beads-workflow",
+      "before": "/Users/sma/.codex/interphase/skills/beads-workflow",
+      "after": "/Users/sma/projects/Sylveste/interverse/interphase/skills/beads-workflow",
+      "skill_sha256": "6a2ae723ea8d9a791cd512bf5d177a6416d9a80b4d090aedc36dad7b5e4a19f9"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/coordination-protocol",
+      "before": "/Users/sma/.codex/interlock/skills/coordination-protocol",
+      "after": "/Users/sma/projects/Sylveste/interverse/interlock/skills/coordination-protocol",
+      "skill_sha256": "01efdd034e329c0af729d16bcaf038eee94c5117c1af3cf676bb2729fb4a0889"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/create-plugin",
+      "before": "/Users/sma/.codex/interplug/skills/plugin",
+      "after": "/Users/sma/projects/Sylveste/interverse/interplug/skills/plugin",
+      "skill_sha256": "ec992e259b597b2111c12455060fc995ec9bf4419355e22121ff382b41751e7f"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/cuj-verification",
+      "before": "/Users/sma/.codex/interhelm/skills/cuj-verification",
+      "after": "/Users/sma/projects/Sylveste/interverse/interhelm/skills/cuj-verification",
+      "skill_sha256": "436e96f8e2089ff1a08d417285e8a636585754fc84310fea56758f700e6eecad"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/deep-research",
+      "before": "/Users/sma/.codex/interdeep/skills/deep-research",
+      "after": "/Users/sma/projects/Sylveste/interverse/interdeep/skills/deep-research",
+      "skill_sha256": "9f1a8b8a70d7d7f4026d05711f3b47cb3b277ce43958ebcd0ff5b551e3947179"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/distinctive-design",
+      "before": "/Users/sma/.codex/interform/skills/distinctive-design",
+      "after": "/Users/sma/projects/Sylveste/interverse/interform/skills/distinctive-design",
+      "skill_sha256": "e9ae18e99d86477d40d31d5ca73822f9d7d15555cc3acfa4459d20e608744dd7"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/intermap",
+      "before": "/Users/sma/.codex/intermap/skills",
+      "after": "/Users/sma/projects/Sylveste/interverse/intermap/skills",
+      "skill_sha256": "e4e096f745c3eddf823912ce1a38adf5283beb92702a7df8023fc3dc7dce51c8"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/intertrace",
+      "before": "/Users/sma/.codex/intertrace/skills/intertrace",
+      "after": "/Users/sma/projects/Sylveste/interverse/intertrace/skills/intertrace",
+      "skill_sha256": "480a55842fa2497c9306d4c2d0fb9ae7d5446b2c608a2f811c84bb7ceabbfb01"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/mcp-cli",
+      "before": "/Users/sma/.codex/interdev/skills/mcp-cli",
+      "after": "/Users/sma/projects/Sylveste/interverse/interdev/skills/mcp-cli",
+      "skill_sha256": "12a4eeeb133a75fde6d38997be1b33df7adbea32d9f0e31c960354376693ebc3"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/memory-synthesis",
+      "before": "/Users/sma/.codex/intermem/skills/synthesize",
+      "after": "/Users/sma/projects/Sylveste/interverse/intermem/skills/synthesize",
+      "skill_sha256": "846597b761fbab3bd325ed5e96b8a651f1662f62230afe0e6c146a7db2ce815e"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/memory-tidy",
+      "before": "/Users/sma/.codex/intermem/skills/tidy",
+      "after": "/Users/sma/projects/Sylveste/interverse/intermem/skills/tidy",
+      "skill_sha256": "6a5d699b2cd91e542376fc2a6dbbb00d76629e5e153f26d696056ae94630578e"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/pressure",
+      "before": "/Users/sma/.codex/interpulse/skills/pressure",
+      "after": "/Users/sma/projects/Sylveste/interverse/interpulse/skills/pressure",
+      "skill_sha256": "65290b283bd0d576fb597d36ba442741917f734ac387038e945b50a76b607311"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/quality",
+      "before": "/Users/sma/.codex/intercheck/skills/quality",
+      "after": "/Users/sma/projects/Sylveste/interverse/intercheck/skills/quality",
+      "skill_sha256": "6d57d0a01d599d2d342dee55017fae7f444c5d62f1731beb5a147527a940a58a"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/smoke-test-design",
+      "before": "/Users/sma/.codex/interhelm/skills/smoke-test-design",
+      "after": "/Users/sma/projects/Sylveste/interverse/interhelm/skills/smoke-test-design",
+      "skill_sha256": "e43dd0407bcd70aa905d277ed93c16cac4f66e4b33f14d1cbdb42c9def92630c"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/systematic-debugging",
+      "before": "/Users/sma/.codex/intertest/skills/systematic-debugging",
+      "after": "/Users/sma/projects/Sylveste/interverse/intertest/skills/systematic-debugging",
+      "skill_sha256": "5644b7ddb08b4cc8d861e41c1e6796c06e7641f4ba1814a19fbff45d365349c7"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/test-driven-development",
+      "before": "/Users/sma/.codex/intertest/skills/test-driven-development",
+      "after": "/Users/sma/projects/Sylveste/interverse/intertest/skills/test-driven-development",
+      "skill_sha256": "7dee67b4af6bdccc7a914ca34533184d64592d0f5b23aeae631538168db14994"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/tool-time",
+      "before": "/Users/sma/.codex/tool-time/skills/tool-time-codex",
+      "after": "/Users/sma/projects/Sylveste/interverse/tool-time/skills/tool-time-codex",
+      "skill_sha256": "43fb85463a57a87050506440d7633f1c5743627226102d0fc0320bf1312f90b1"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/tree",
+      "before": "/Users/sma/.codex/intertree/skills/tree",
+      "after": "/Users/sma/projects/Sylveste/interverse/intertree/skills/tree",
+      "skill_sha256": "2187ab4ec1f8ef3653c2b1787c8b561bb9f865fcab07f7fc108ee05f4452612d"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/validate",
+      "before": "/Users/sma/.codex/interplug/skills/validate",
+      "after": "/Users/sma/projects/Sylveste/interverse/interplug/skills/validate",
+      "skill_sha256": "0bfbd7525ad41a05305118e2ee433598d56293793a0f983bbdeac96136b7617a"
+    },
+    {
+      "link": "/Users/sma/.agents/skills/verification-before-completion",
+      "before": "/Users/sma/.codex/intertest/skills/verification-before-completion",
+      "after": "/Users/sma/projects/Sylveste/interverse/intertest/skills/verification-before-completion",
+      "skill_sha256": "51edfbc635fbfa9c7d38ec88a9e4cc70d5cd39bac3ec72e2c6907ce587e5ce02"
+    }
+  ],
+  "review": {
+    "initial": "NEEDS_ATTENTION",
+    "followup": "CLEAN",
+    "documentation_correction": "CLEAN",
+    "model": "claude-fable-5-1",
+    "mode": "static review; reviewer could not replay commands",
+    "source_tests": {
+      "structural_pass": 913,
+      "structural_skip": 1,
+      "node_audit_pass": 18,
+      "instruction_sync_pass": 10,
+      "installer_bats_pass": 7
+    }
+  },
+  "acceptance_pending": false,
+  "matrix": [
+    {
+      "case": "documentation",
+      "cwd_class": "outside",
+      "baseline": {
+        "session_id": "01a07399-efb3-72a2-a336-b2ac9fbd843c",
+        "turn_id": "01a0739a-0914-7322-99ac-dc54d09299a9",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29394,
+        "total_token_usage": {
+          "input_tokens": 124997,
+          "cached_input_tokens": 120576,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 929,
+          "reasoning_output_tokens": 196,
+          "total_tokens": 125926
+        },
+        "model_tool_calls": 3,
+        "tool_names": [
+          "exec",
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/systematic-debugging/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "0cf5eba7f9c338c6520e35536aace74c960056188baa573818423d6fdda9fea1",
+          "6eb1677251b00a26a5fb330394d1b339d693c03aeadd73522e38d5874a562afa",
+          "119a8fdc31ee8430f89c705e374589616cc9a6b15d80086a8a828ae5ddf39f10"
+        ],
+        "seconds": 51.747,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d2-7900-7353-afb9-2504543e191f",
+        "turn_id": "01a073d2-911c-72e2-810d-70ede31835b3",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31862,
+        "total_token_usage": {
+          "input_tokens": 107651,
+          "cached_input_tokens": 100736,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 795,
+          "reasoning_output_tokens": 120,
+          "total_tokens": 108446
+        },
+        "model_tool_calls": 2,
+        "tool_names": [
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "d363f94a2a9a40fc37d5053879911d606d2148e7f8e3e4b9b6da39f1d885d377",
+          "0f37df3ef1d1a08ea74212c3b16f6afd467fd05fefc4d33f2b2115ff64b62687"
+        ],
+        "seconds": 48.336,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "missing-companion-1",
+      "cwd_class": "outside",
+      "baseline": {
+        "session_id": "01a0739a-d5fd-7220-aa8c-059bfa539588",
+        "turn_id": "01a0739a-ef58-7030-aa71-1d7761e1c3a0",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29402,
+        "total_token_usage": {
+          "input_tokens": 58936,
+          "cached_input_tokens": 41856,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 449,
+          "reasoning_output_tokens": 226,
+          "total_tokens": 59385
+        },
+        "model_tool_calls": 1,
+        "tool_names": [
+          "exec"
+        ],
+        "skill_reads": [],
+        "tool_arguments_sha256": [
+          "8019b001f54a8427ff9182274cb3ded0f582ea28be004979579bcb9df0061111"
+        ],
+        "seconds": 19.714,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d3-52e9-7040-9b82-98c0a314c89d",
+        "turn_id": "01a073d3-6c27-7601-9ab5-1911ce602765",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31870,
+        "total_token_usage": {
+          "input_tokens": 65169,
+          "cached_input_tokens": 63360,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 776,
+          "reasoning_output_tokens": 515,
+          "total_tokens": 65945
+        },
+        "model_tool_calls": 1,
+        "tool_names": [
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "0785ea970e0be737fb612caf3a7431a6e050880ccd6c537e245a8f8ed4dafc8c"
+        ],
+        "seconds": 27.27,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "planning",
+      "cwd_class": "outside",
+      "baseline": {
+        "session_id": "01a07397-f4b8-7fa0-a5b6-12afd60ab62b",
+        "turn_id": "01a07398-0e13-7ac3-8388-a13218c16b0e",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29397,
+        "total_token_usage": {
+          "input_tokens": 179607,
+          "cached_input_tokens": 161664,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2238,
+          "reasoning_output_tokens": 574,
+          "total_tokens": 181845
+        },
+        "model_tool_calls": 4,
+        "tool_names": [
+          "exec",
+          "exec",
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/writing-plans/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "ffff76a9fef3754256aa6c41fd355c2f3b839c49205c032e310b03d92db32616",
+          "7a5730082e2644d877bf8f74e8432a16a09cc79c5ba829d86fa4c499fb748cc9",
+          "dd3f770b6a15f026fac3fe36ae3324cbd53e3a4cad3d945f79f9270360c5d28e",
+          "a711f30ca457098b021ea10d0f795680095b79a2b4d1b6505f7428d2000bea6f"
+        ],
+        "seconds": 95.483,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d0-3e47-7682-9451-9042a7b29a7d",
+        "turn_id": "01a073d0-57d0-7a13-9930-7609137856fa",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31865,
+        "total_token_usage": {
+          "input_tokens": 184576,
+          "cached_input_tokens": 156672,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2180,
+          "reasoning_output_tokens": 671,
+          "total_tokens": 186756
+        },
+        "model_tool_calls": 4,
+        "tool_names": [
+          "exec",
+          "exec",
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md",
+          "/Users/sma/.agents/skills/clavain/writing-plans/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "154bab718a5b363d721456091af1c0cf3dce37e49cf374709d5d7ee0a68cf1a1",
+          "e7c1d2dfc846c4990ec07070f504dc48fd9d8564be6b1a8006d8e96854d6c1fe",
+          "e0ea5e6c1f28391a51da0650cef60341056ec1157dbdd97f9ec21c323b8bc7f3",
+          "becee97ae02712e7176fdbfd73503e2b4da1caba67d0e23113f7d9ee5aa5d285"
+        ],
+        "seconds": 94.528,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "research",
+      "cwd_class": "outside",
+      "baseline": {
+        "session_id": "01a07399-866d-75e0-9120-115dfda4ca93",
+        "turn_id": "01a07399-9f92-74a1-b6d9-5657ccfa7a8d",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29402,
+        "total_token_usage": {
+          "input_tokens": 58990,
+          "cached_input_tokens": 41856,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 446,
+          "reasoning_output_tokens": 192,
+          "total_tokens": 59436
+        },
+        "model_tool_calls": 1,
+        "tool_names": [
+          "exec"
+        ],
+        "skill_reads": [],
+        "tool_arguments_sha256": [
+          "af40b399a1d7338f8c009041c1d57322a0fe46a3606aab4959cefd3f34950085"
+        ],
+        "seconds": 19.46,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d1-cd14-7840-86d7-bf09c04e2510",
+        "turn_id": "01a073d1-e64d-7a91-95d0-1974c4c21235",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31870,
+        "total_token_usage": {
+          "input_tokens": 65156,
+          "cached_input_tokens": 44416,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 790,
+          "reasoning_output_tokens": 357,
+          "total_tokens": 65946
+        },
+        "model_tool_calls": 1,
+        "tool_names": [
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "02378ef7221956d1f6118da29ba70a6269b14f8f49f2724c012861090caa5a61"
+        ],
+        "seconds": 36.259,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "restricted-review-1",
+      "cwd_class": "outside",
+      "baseline": {
+        "session_id": "01a0739b-3f9c-7801-90dd-dc0727269b36",
+        "turn_id": "01a0739b-5913-70c2-8e7b-9b8495701eaa",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29401,
+        "total_token_usage": {
+          "input_tokens": 58971,
+          "cached_input_tokens": 58368,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 665,
+          "reasoning_output_tokens": 480,
+          "total_tokens": 59636
+        },
+        "model_tool_calls": 1,
+        "tool_names": [
+          "exec"
+        ],
+        "skill_reads": [],
+        "tool_arguments_sha256": [
+          "a08d81a65f1cef75f0246aea7ac05ee278ce01079087a1a4e0cd2ccbf0d028ec"
+        ],
+        "seconds": 30.057,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d3-dce1-73d0-8b18-603bcd489aaa",
+        "turn_id": "01a073d3-f67c-79e1-ae0d-6756a32039ea",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31869,
+        "total_token_usage": {
+          "input_tokens": 102625,
+          "cached_input_tokens": 97280,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 806,
+          "reasoning_output_tokens": 336,
+          "total_tokens": 103431
+        },
+        "model_tool_calls": 2,
+        "tool_names": [
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/code-review-discipline/SKILL.md",
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md",
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "2639e27fd433baf6c06e5669599b1fe0b9daa78d07b54a0e2b20a95e68f73413",
+          "38106460f5b25f16d4e2e321212aa70ab5a1a8168ab6c9834f188447a6601782"
+        ],
+        "seconds": 33.355,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "trivial-1",
+      "cwd_class": "outside",
+      "baseline": {
+        "session_id": "01a07397-a45f-7082-9b39-1a3903304a55",
+        "turn_id": "01a07397-bf22-7881-8bb9-b9a8aafc6df7",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29352,
+        "total_token_usage": {
+          "input_tokens": 29352,
+          "cached_input_tokens": 12672,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 6,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 29358
+        },
+        "model_tool_calls": 0,
+        "tool_names": [],
+        "skill_reads": [],
+        "tool_arguments_sha256": [],
+        "seconds": 2.217,
+        "router_contract_acceptance": "not applicable to trivial/resumed turn"
+      },
+      "candidate": {
+        "session_id": "01a073cf-e42f-7cd2-8c14-bebc751e2de1",
+        "turn_id": "01a073cf-feed-70c1-8339-c140da86b66f",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31820,
+        "total_token_usage": {
+          "input_tokens": 31820,
+          "cached_input_tokens": 23808,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 5,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 31825
+        },
+        "model_tool_calls": 0,
+        "tool_names": [],
+        "skill_reads": [],
+        "tool_arguments_sha256": [],
+        "seconds": 4.963,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "trivial-2",
+      "cwd_class": "outside",
+      "baseline": {
+        "session_id": "01a07397-cd41-7162-a186-42a45a0e241a",
+        "turn_id": "01a07397-e6c4-7c30-8821-5454146b41f9",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29352,
+        "total_token_usage": {
+          "input_tokens": 29352,
+          "cached_input_tokens": 12672,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 5,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 29357
+        },
+        "model_tool_calls": 0,
+        "tool_names": [],
+        "skill_reads": [],
+        "tool_arguments_sha256": [],
+        "seconds": 2.498,
+        "router_contract_acceptance": "not applicable to trivial/resumed turn"
+      },
+      "candidate": {
+        "session_id": "01a073d0-1614-7753-8f56-c3f7e5ca67e5",
+        "turn_id": "01a073d0-2f63-7790-a253-511c4d32be18",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31820,
+        "total_token_usage": {
+          "input_tokens": 31820,
+          "cached_input_tokens": 12672,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 5,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 31825
+        },
+        "model_tool_calls": 0,
+        "tool_names": [],
+        "skill_reads": [],
+        "tool_arguments_sha256": [],
+        "seconds": 2.868,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "contradiction-resume-1",
+      "cwd_class": "inside",
+      "baseline": {
+        "session_id": "01a07399-83e1-7db3-a6e6-024851dc7e19",
+        "turn_id": "01a0739a-17ff-74e3-be0d-1140c3f38d3b",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 30897,
+        "total_token_usage": {
+          "input_tokens": 30897,
+          "cached_input_tokens": 30336,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 236,
+          "reasoning_output_tokens": 113,
+          "total_tokens": 31133
+        },
+        "model_tool_calls": 0,
+        "tool_names": [],
+        "skill_reads": [],
+        "tool_arguments_sha256": [],
+        "seconds": 12.494,
+        "router_contract_acceptance": "not applicable to trivial/resumed turn"
+      },
+      "candidate": {
+        "session_id": "01a073d2-57f7-79b1-9ae9-c185d5b923a8",
+        "turn_id": "01a073d3-06cb-7e73-95aa-50275320d3c7",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 39221,
+        "total_token_usage": {
+          "input_tokens": 39221,
+          "cached_input_tokens": 38784,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 235,
+          "reasoning_output_tokens": 58,
+          "total_tokens": 39456
+        },
+        "model_tool_calls": 0,
+        "tool_names": [],
+        "skill_reads": [],
+        "tool_arguments_sha256": [],
+        "seconds": 15.814,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "contradiction-resume-2",
+      "cwd_class": "inside",
+      "baseline": {
+        "session_id": "01a0739a-4b5c-76c2-b1d8-aae8a9e5ee81",
+        "turn_id": "01a0739a-e0da-7271-904e-a93e7581f5f2",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 30903,
+        "total_token_usage": {
+          "input_tokens": 30903,
+          "cached_input_tokens": 30336,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 257,
+          "reasoning_output_tokens": 102,
+          "total_tokens": 31160
+        },
+        "model_tool_calls": 0,
+        "tool_names": [],
+        "skill_reads": [],
+        "tool_arguments_sha256": [],
+        "seconds": 10.572,
+        "router_contract_acceptance": "not applicable to trivial/resumed turn"
+      },
+      "candidate": {
+        "session_id": "01a073d3-4a16-7ff2-9c4f-dedc3fa7afbb",
+        "turn_id": "01a073d3-eec4-7e82-b528-9b3e96c09479",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 34687,
+        "total_token_usage": {
+          "input_tokens": 34687,
+          "cached_input_tokens": 34304,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 220,
+          "reasoning_output_tokens": 71,
+          "total_tokens": 34907
+        },
+        "model_tool_calls": 0,
+        "tool_names": [],
+        "skill_reads": [],
+        "tool_arguments_sha256": [],
+        "seconds": 10.831,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "debug",
+      "cwd_class": "inside",
+      "baseline": {
+        "session_id": "01a07397-b353-7da2-97f1-a7bd657c53c0",
+        "turn_id": "01a07397-cdc5-7292-832c-a2a5e7b172d8",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29671,
+        "total_token_usage": {
+          "input_tokens": 129316,
+          "cached_input_tokens": 107520,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1421,
+          "reasoning_output_tokens": 237,
+          "total_tokens": 130737
+        },
+        "model_tool_calls": 3,
+        "tool_names": [
+          "exec",
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/systematic-debugging/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "2ed75c020a45983ca7b6c39c6bf80252111548f52c28e236329a0c72c26a7339",
+          "0f22147cabc70877f0760d918f3df9087c1906fb7ebaeaecb39999e316d58a71",
+          "bb1cc7ade0565cd16b6e2ea4af8f8cf22412f961c52cee38941fd6355ac0f1aa"
+        ],
+        "seconds": 56.112,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073cf-ebd5-7372-bff0-fa005c2b6533",
+        "turn_id": "01a073d0-068e-78a3-9457-c169541e45d8",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 32139,
+        "total_token_usage": {
+          "input_tokens": 143672,
+          "cached_input_tokens": 136704,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1954,
+          "reasoning_output_tokens": 584,
+          "total_tokens": 145626
+        },
+        "model_tool_calls": 3,
+        "tool_names": [
+          "exec",
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md",
+          "/Users/sma/.agents/skills/systematic-debugging/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "6e4653fcd53c9661041a4b5a4f4ac3765b7cfcbfd6ec643d94fff7a41ec19f4b",
+          "b6902d6971f7c5e96a8862678e113e84775a57a3de5d73bf11cd005e6d3ce564",
+          "76251358c9a44d640d4f165e44749c7edacf2a487ad0c92138f1589c458726a4"
+        ],
+        "seconds": 78.335,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "missing-companion-2",
+      "cwd_class": "inside",
+      "baseline": {
+        "session_id": "01a0739b-0c3e-7be0-a798-7e81eb2b275e",
+        "turn_id": "01a0739b-258f-76b3-928c-8c1e29f3278f",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29160,
+        "total_token_usage": {
+          "input_tokens": 59681,
+          "cached_input_tokens": 57856,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 614,
+          "reasoning_output_tokens": 294,
+          "total_tokens": 60295
+        },
+        "model_tool_calls": 1,
+        "tool_names": [
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "f7665ef5dbb0ec4b06ab603d9f56b36c8d1d68d3061faaa27996c0d3c76d5d90"
+        ],
+        "seconds": 26.266,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d4-1fa3-7b62-b4d5-c4daa0faaadc",
+        "turn_id": "01a073d4-3954-7902-9934-4c10ab67bfc5",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31628,
+        "total_token_usage": {
+          "input_tokens": 107677,
+          "cached_input_tokens": 81280,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 713,
+          "reasoning_output_tokens": 259,
+          "total_tokens": 108390
+        },
+        "model_tool_calls": 2,
+        "tool_names": [
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md",
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "99f2a32d425b6eb67cd88550de0c6f4b210756d96953302f3514c2b2e4a4807b",
+          "2a426e668d6f4a971e0db2de7565b5382097cbcca3baf6945b4c2a97e555a61e"
+        ],
+        "seconds": 30.198,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "release-preparation-1",
+      "cwd_class": "inside",
+      "baseline": {
+        "session_id": "01a07399-83e1-7db3-a6e6-024851dc7e19",
+        "turn_id": "01a07399-9cd3-79c1-b7db-3a3e53bffce3",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29158,
+        "total_token_usage": {
+          "input_tokens": 30897,
+          "cached_input_tokens": 30336,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 236,
+          "reasoning_output_tokens": 113,
+          "total_tokens": 31133
+        },
+        "model_tool_calls": 1,
+        "tool_names": [
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "f714362c3948486ab02b91b4d4c44c8338ab952229147face3354429243e8537"
+        ],
+        "seconds": 21.564,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d2-57f7-79b1-9ae9-c185d5b923a8",
+        "turn_id": "01a073d2-7192-78b3-9de4-0e843b81588c",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31626,
+        "total_token_usage": {
+          "input_tokens": 106942,
+          "cached_input_tokens": 80384,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 657,
+          "reasoning_output_tokens": 152,
+          "total_tokens": 107599
+        },
+        "model_tool_calls": 2,
+        "tool_names": [
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/code-review-discipline/SKILL.md",
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md",
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "276fcc7157e081310fcd945443a46978f9b17235e9a69535b6058197bb840b6e",
+          "65a3ff5f2a7c96ad2232bd846e4b2022fb9e7e1f4d53af1202a54a09d44e633d"
+        ],
+        "seconds": 27.896,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "release-preparation-2",
+      "cwd_class": "inside",
+      "baseline": {
+        "session_id": "01a0739a-4b5c-76c2-b1d8-aae8a9e5ee81",
+        "turn_id": "01a0739a-6499-7110-a3a6-2a9fdc09ee73",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29158,
+        "total_token_usage": {
+          "input_tokens": 30903,
+          "cached_input_tokens": 30336,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 257,
+          "reasoning_output_tokens": 102,
+          "total_tokens": 31160
+        },
+        "model_tool_calls": 1,
+        "tool_names": [
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "661889d3b433bdb58b012c9b28da62504eab3d84f92f38d6a2fecbbe311ab360"
+        ],
+        "seconds": 21.223,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d3-4a16-7ff2-9c4f-dedc3fa7afbb",
+        "turn_id": "01a073d3-6252-7aa2-ac4a-b79e2ccbea47",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31626,
+        "total_token_usage": {
+          "input_tokens": 99121,
+          "cached_input_tokens": 77056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 585,
+          "reasoning_output_tokens": 195,
+          "total_tokens": 99706
+        },
+        "model_tool_calls": 2,
+        "tool_names": [
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md",
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "02e51fb8c1b71f4d022a5fb5b5575c3d29d362088537b7df98ec8e1f1c451ab8",
+          "333799bd7ccfdca85726870ad23804171489faa66277a13cc38e8dcf7ad6b446"
+        ],
+        "seconds": 26.159,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "restricted-review-2",
+      "cwd_class": "inside",
+      "baseline": {
+        "session_id": "01a0739b-8e7c-7d11-8b1c-acd47f1546b9",
+        "turn_id": "01a0739b-a81a-7e60-aec5-9a4a697ea7ef",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29159,
+        "total_token_usage": {
+          "input_tokens": 94843,
+          "cached_input_tokens": 82560,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 738,
+          "reasoning_output_tokens": 341,
+          "total_tokens": 95581
+        },
+        "model_tool_calls": 2,
+        "tool_names": [
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "3f4de3f529c28541b906602856b1845bb8af2a326fc4c92920ae142e66052144",
+          "bc05320b48c210db787c7dd08f5004dbfb084f27cc601b605943b1e80bc021b3"
+        ],
+        "seconds": 34.325,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d4-b286-7cb1-8e7f-0b895616d7d1",
+        "turn_id": "01a073d4-cbaf-7202-87d1-461ebfcf7139",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31627,
+        "total_token_usage": {
+          "input_tokens": 106916,
+          "cached_input_tokens": 92032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 902,
+          "reasoning_output_tokens": 486,
+          "total_tokens": 107818
+        },
+        "model_tool_calls": 2,
+        "tool_names": [
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md",
+          "/Users/sma/.agents/skills/verification-before-completion/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "3e8e8f63caa4874161fe16ae429b515d4bc271e908c55c401f94aac411d67718",
+          "2a426e668d6f4a971e0db2de7565b5382097cbcca3baf6945b4c2a97e555a61e"
+        ],
+        "seconds": 34.732,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    },
+    {
+      "case": "review",
+      "cwd_class": "inside",
+      "baseline": {
+        "session_id": "01a07398-acd5-7cc3-8286-5316f3b9a6d7",
+        "turn_id": "01a07398-c5ee-7be3-ad35-fffb37f2d477",
+        "catalog_count": 112,
+        "warning_observed": true,
+        "first_model_input_tokens": 29147,
+        "total_token_usage": {
+          "input_tokens": 155693,
+          "cached_input_tokens": 135168,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1134,
+          "reasoning_output_tokens": 129,
+          "total_tokens": 156827
+        },
+        "model_tool_calls": 4,
+        "tool_names": [
+          "exec",
+          "exec",
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/code-review-discipline/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "1d16ee26dc621574c88899dc2f1d89f1e7231de7cc3193b634970cfffa62c768",
+          "a5d20479b014949e685baa29350fb2d87566c9c29a5efa399058b70fc1909ace",
+          "4bda594a832cf2b2431233953b352c78ec6b3e357f89813d93829d8496a8bdde",
+          "a5fd3183f57055bb74f094318a206c2cfdcf6cc9c72c5cf6cdd9837ea10e2ed8"
+        ],
+        "seconds": 48.125,
+        "router_contract_acceptance": "no router read"
+      },
+      "candidate": {
+        "session_id": "01a073d1-3c7a-7450-b3bc-abe87c4cf592",
+        "turn_id": "01a073d1-55d6-7423-af29-e82681985d2a",
+        "catalog_count": 112,
+        "warning_observed": false,
+        "first_model_input_tokens": 31615,
+        "total_token_usage": {
+          "input_tokens": 172740,
+          "cached_input_tokens": 148864,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1185,
+          "reasoning_output_tokens": 117,
+          "total_tokens": 173925
+        },
+        "model_tool_calls": 4,
+        "tool_names": [
+          "exec",
+          "exec",
+          "exec",
+          "exec"
+        ],
+        "skill_reads": [
+          "/Users/sma/.agents/skills/clavain/code-review-discipline/SKILL.md",
+          "/Users/sma/.agents/skills/clavain/using-clavain/SKILL.md"
+        ],
+        "tool_arguments_sha256": [
+          "bd438e616ac3d6ca36af3e65fb032fee631f83299cc974c2bfcf9a795cc75580",
+          "691aae330e215d2696c2742f7f31b332fe95af69301feea432b94f45248a9e62",
+          "c12f978df32827e047d3b71cce766e9148da6cd0e6138d7dffbf923e2be3c6cc",
+          "8197c5384d30260856d9d75381916b21ceea2d9b56b4057bb83959d0a03b5c24"
+        ],
+        "seconds": 64.377,
+        "configuration_evidence": {
+          "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+          "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+          "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+          "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+        }
+      },
+      "candidate_acceptance": "pass"
+    }
+  ],
+  "metrics": {
+    "baseline": {
+      "median_fresh_first_model_input_tokens": 29352,
+      "model_tool_calls": 22,
+      "summed_case_duration_seconds": 451.857
+    },
+    "candidate": {
+      "median_fresh_first_model_input_tokens": 31820,
+      "model_tool_calls": 25,
+      "summed_case_duration_seconds": 535.921
+    },
+    "router_reads": {
+      "baseline": 0,
+      "candidate": 11,
+      "fresh_substantive_cases": 11
+    }
+  },
+  "limitations": [
+    "Five broader Clavain CI failures also occur in the baseline; no new failures.",
+    "Twelve divergent companions and eight supporting-script audits remain in Sylveste-7wn0; one pre-existing disabled link retained.",
+    "Synthetic fixtures demonstrate scoped behavior, not general task-performance improvement or Astra promotion.",
+    "Baseline and candidate both produced evidence-backed substantive outcomes.",
+    "Clavain using-clavain body corrected after an overbroad documentation route; all final matrix cases rerun on 10fda1d.",
+    "Warning-only budget pilot and early prompt/turn collection pilots are invalid for acceptance."
+  ],
+  "verification": {
+    "same_final_instruction_router_config_hashes_all_15_cases": true,
+    "all_other_config_bytes_preserved": true,
+    "fixture_files_unchanged": true,
+    "manual_outcome_review": "All final responses inspected for evidence, proposed-versus-verified framing, boundaries, and requested scope."
+  },
+  "documentation_confirmation": {
+    "session_id": "01a073d7-2a60-7392-a2a0-f4187b66a356",
+    "cwd": "/Users/sma/projects/Sylveste/os/Clavain",
+    "acceptance": "pass",
+    "model_tool_calls": 2,
+    "configuration_evidence": {
+      "global_instructions_sha256": "c2265e8eac99e5bd6fdd484009c0c157c3644468b08a65389ca5627d07ed6392",
+      "router_sha256": "ff06ecd1eba9ed3dee8b8f54249d3b0cbf3839e2683f97a7c88f093abc2cbb6d",
+      "config_sha256": "18e0d03e21213a82d2851b07c77d48719add72a873c22f511317e37aa4d69122",
+      "clavain_commit": "10fda1d9ddca2cb5cabbb00d2c5b2a4afd6343df"
+    }
+  },
+  "schema_version": 1
+}

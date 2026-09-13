@@ -35,6 +35,7 @@ declare -gA _ROUTING_DISPATCH_TIER=()     # [tier]=model
 declare -gA _ROUTING_DISPATCH_DESC=()     # [tier]=description
 declare -gA _ROUTING_DISPATCH_FALLBACK=() # [tier]=fallback_tier
 declare -g _ROUTING_CONFIG_PATH=""
+declare -g _ROUTING_CONFIG_SHA256=""
 declare -g _ROUTING_CACHE_POPULATED=""
 
 # --- B2: Complexity cache ---
@@ -291,6 +292,16 @@ _routing_load_cache() {
     _ROUTING_CACHE_POPULATED=1
     return 0  # No config — all resolvers return empty
   }
+
+  # Parse and hash the same bytes. Re-reading the path at audit time could
+  # attribute a cached decision to a concurrently replaced policy.
+  local routing_bytes
+  routing_bytes=$(_routing_read_text "$_ROUTING_CONFIG_PATH") || {
+    _ROUTING_CACHE_POPULATED=1
+    return 0
+  }
+  routing_bytes="${routing_bytes%.}"
+  _ROUTING_CONFIG_SHA256=$(_routing_sha256_text "$routing_bytes") || _ROUTING_CONFIG_SHA256=""
 
   # State machine for line-by-line YAML parsing (max 3 levels)
   local section=""        # subagents | dispatch | complexity
@@ -582,7 +593,7 @@ _routing_load_cache() {
         continue
       fi
     fi
-  done < "$_ROUTING_CONFIG_PATH"
+  done < <(printf '%s' "$routing_bytes")
 
   # Env override for calibration mode
   if [[ -n "${INTERSPECT_ROUTING_MODE:-}" ]]; then
@@ -748,21 +759,53 @@ routing_adjust_expansion_tier() {
 
 # --- B3: Read interspect routing calibration (not cached — read fresh each call) ---
 # Returns calibrated model for an agent, or empty string if no recommendation.
-# Validates: file exists, valid JSON, schema_version=1, model name is valid.
+# Schema 0 exists only for in-memory compiled callers; files accept schema 1
+# (legacy, no eligibility field) and modern schemas 2/3 (explicit eligibility).
+_routing_calibration_path() {
+  local root=""
+  if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
+    root="$CLAUDE_PROJECT_DIR"
+  else
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || root=""
+  fi
+  [[ -n "$root" ]] && echo "${root}/.clavain/interspect/routing-calibration.json"
+}
+
+# Print the requested phase first, followed by equivalent aliases. The data is
+# embedded into the Go binary and ships beside this script in source installs,
+# so the two readers cannot drift to different alias maps.
+_routing_calibration_phase_keys() {
+  local phase="${1:-}"
+  [[ -z "$phase" ]] && return 0
+
+  echo "$phase"
+  local aliases="${_ROUTING_LIB_DIR}/../cmd/clavain-cli/calibration-phase-aliases.txt"
+  [[ -f "$aliases" ]] || return 0
+
+  awk -v requested="$phase" '
+    {
+      found = 0
+      for (i = 1; i <= NF; i++) if ($i == requested) found = 1
+      if (found) for (i = 1; i <= NF; i++) if ($i != requested) print $i
+    }
+  ' "$aliases"
+}
+
 _routing_read_calibration() {
-  local agent="$1"
+  local agent="$1" phase="${2:-}" output_mode="${3:-model}"
   [[ -z "$agent" ]] && return 0
 
   # Find calibration file
-  local cal_path=""
-  local root
-  if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
-    cal_path="${CLAUDE_PROJECT_DIR}/.clavain/interspect/routing-calibration.json"
-  else
-    root=$(git rev-parse --show-toplevel 2>/dev/null) || root=""
-    [[ -n "$root" ]] && cal_path="${root}/.clavain/interspect/routing-calibration.json"
-  fi
+  local cal_path="" phase_keys='[]'
+  cal_path=$(_routing_calibration_path) || cal_path=""
   [[ -z "$cal_path" || ! -f "$cal_path" ]] && return 0
+  local calibration_bytes
+  calibration_bytes=$(_routing_read_text "$cal_path") || return 0
+  calibration_bytes="${calibration_bytes%.}"
+
+  if [[ -n "$phase" ]]; then
+    phase_keys=$(_routing_calibration_phase_keys "$phase" | jq -Rsc 'split("\n") | map(select(length > 0))') || phase_keys='[]'
+  fi
 
   # Strip namespace prefix for lookup (same as safety floor)
   local lookup_key="$agent"
@@ -770,17 +813,98 @@ _routing_read_calibration() {
     lookup_key="${lookup_key##*:}"
   fi
 
-  # Read and validate with jq (single pass)
+  # Read and validate the calibration artifact with jq.
   local result
-  result=$(jq -r --arg agent "$lookup_key" '
-    select(.schema_version == 1 or .schema_version == 2) |
+  result=$(jq -rs --arg agent "$lookup_key" --argjson phase_keys "$phase_keys" '
+    select(length == 1) | .[0] |
+    .schema_version as $schema |
+    select($schema == 1 or $schema == 2 or $schema == 3) |
+    def usable:
+      (.confidence | type) == "number" and
+      .confidence >= 0.7 and .confidence <= 1 and
+      (.evidence_sessions | type) == "number" and
+      .evidence_sessions == (.evidence_sessions | floor) and
+      .evidence_sessions >= 3 and
+      (.recommended_model == "haiku" or .recommended_model == "sonnet" or .recommended_model == "opus") and
+      ($schema == 1 or .propagation_eligible == true);
     .agents[$agent] // empty |
-    select(.confidence >= 0.7 and .evidence_sessions >= 3) |
+    . as $agent_entry |
+    ([
+      $phase_keys[] as $key |
+      $agent_entry.phases[$key] // empty |
+      select(usable)
+    ][0] // ($agent_entry | select(usable))) |
     .recommended_model // empty |
     select(. == "haiku" or . == "sonnet" or . == "opus")
-  ' "$cal_path" 2>/dev/null) || result=""
+  ' <<< "$calibration_bytes" 2>/dev/null) || result=""
 
-  [[ -n "$result" ]] && echo "$result"
+  [[ -n "$result" ]] || return 0
+  if [[ "$output_mode" == evidence ]]; then
+    local digest
+    digest=$(_routing_sha256_text "$calibration_bytes") || digest=""
+    jq -cn --arg model "$result" --arg sha256 "$digest" '{model:$model,sha256:$sha256}'
+  else
+    echo "$result"
+  fi
+}
+
+# Preserve trailing newlines through command substitution with a sentinel.
+# JSON/YAML are text formats; reject a NUL rather than silently dropping it.
+_routing_read_text() {
+  local fd contents
+  exec {fd}< "$1" || return 1
+  if IFS= read -r -d '' contents <&"$fd"; then
+    exec {fd}<&-
+    return 1
+  fi
+  exec {fd}<&-
+  printf '%s.' "$contents"
+}
+
+_routing_sha256_text() (
+  set -o pipefail
+  local digest
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest=$(printf '%s' "$1" | sha256sum) || return 1
+  elif command -v shasum >/dev/null 2>&1; then
+    digest=$(printf '%s' "$1" | shasum -a 256) || return 1
+  else
+    return 1
+  fi
+  digest="${digest%% *}"
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+  printf '%s\n' "$digest"
+)
+
+# Record the static decision and the shadow-only calibrated candidate. Failure
+# is observable but never changes the model returned by routing_resolve_model.
+_routing_record_calibration_shadow() {
+  local agent="$1" static_model="$2" calibrated_model="$3" phase="${4:-}"
+  command -v ic >/dev/null 2>&1 || return 127
+
+  local cal_hash="${5:-}" routing_hash="$_ROUTING_CONFIG_SHA256" context
+  [[ "$cal_hash" =~ ^[0-9a-f]{64}$ && "$routing_hash" =~ ^[0-9a-f]{64}$ ]] || return 1
+  context=$(jq -cn \
+    --arg calibrated_model "$calibrated_model" \
+    --arg calibration_sha256 "$cal_hash" \
+    --arg routing_sha256 "$routing_hash" \
+    '{calibrated_model:$calibrated_model,calibration_sha256:$calibration_sha256,routing_sha256:$routing_sha256}') || return 1
+
+  local args=(
+    route record
+    "--rule=B3"
+    "--agent=$agent"
+    "--model=$static_model"
+    "--context=$context"
+    "--policy-hash=$routing_hash"
+  )
+  [[ -n "${CLAVAIN_RUN_ID:-}" ]] && args+=("--run=$CLAVAIN_RUN_ID")
+  [[ -n "${CLAUDE_SESSION_ID:-}" ]] && args+=("--session=$CLAUDE_SESSION_ID")
+  [[ -n "${CLAVAIN_DISPATCH_ID:-}" ]] && args+=("--dispatch=$CLAVAIN_DISPATCH_ID")
+  [[ -n "$phase" ]] && args+=("--phase=$phase")
+  [[ -n "${CLAUDE_PROJECT_DIR:-}" ]] && args+=("--project=$CLAUDE_PROJECT_DIR")
+
+  ic "${args[@]}" >/dev/null 2>&1
 }
 
 # --- Internal: read interspect routing overrides ---
@@ -1046,8 +1170,14 @@ routing_resolve_model() {
   # Read fresh each call (not cached). Shadow mode logs, enforce mode applies.
   # CRITICAL: assigns to $result and falls through to safety floor — no early return.
   if [[ -z "$result" && -n "$agent" && -n "${_ROUTING_CAL_MODE:-}" && "${_ROUTING_CAL_MODE}" != "off" ]]; then
-    local cal_model
-    cal_model=$(_routing_read_calibration "$agent") || cal_model=""
+    local cal_model cal_evidence cal_hash=""
+    if [[ "${_ROUTING_CAL_MODE}" == enforce ]]; then
+      cal_model=$(_routing_read_calibration "$agent" "$phase") || cal_model=""
+    else
+      cal_evidence=$(_routing_read_calibration "$agent" "$phase" evidence) || cal_evidence=""
+      cal_model=$(jq -r '.model // empty' <<< "$cal_evidence") || cal_model=""
+      cal_hash=$(jq -r '.sha256 // empty' <<< "$cal_evidence") || cal_hash=""
+    fi
     if [[ -n "$cal_model" ]]; then
       if [[ "${_ROUTING_CAL_MODE}" == "enforce" ]]; then
         result="$cal_model"
@@ -1068,7 +1198,13 @@ routing_resolve_model() {
         local agent_short="${agent##*:}"
         if [[ "$cal_model" != "$base_for_shadow" ]]; then
           echo "[interspect-shadow] $agent_short: base=$base_for_shadow, calibrated=$cal_model" >&2
-          command -v ic >/dev/null 2>&1 && ic route record --rule "B3" --agent "$agent_short" --selected-model "$base_for_shadow" --meta "calibrated=$cal_model" 2>/dev/null || true
+          if ! _routing_record_calibration_shadow "$agent_short" "$base_for_shadow" "$cal_model" "$phase" "$cal_hash"; then
+            echo "[interspect-shadow] UNVERIFIABLE: durable B3 routing decision was not recorded for $agent_short" >&2
+            _routing_emit_verification \
+              "calibration-record" "UNVERIFIABLE" \
+              "durable B3 routing decision unavailable for $agent_short" \
+              "override" || true
+          fi
           _routing_emit_verification \
             "calibration-override" "VERIFIED" \
             "B3 calibration would override base=$base_for_shadow with calibrated=$cal_model for $agent_short" \

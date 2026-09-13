@@ -57,8 +57,8 @@ phase_cat() {    # $1 = phase, $2 = category → value
 }
 
 @test "dispatch section is untouched by either mode" {
-    before="$(awk '/^dispatch:/,0' "$ROUTING_FILE" | md5)"
+    awk '/^dispatch:/,0' "$ROUTING_FILE" > "$TMP/dispatch-before.yaml"
     bash "$SCRIPT" quality >/dev/null; bash "$SCRIPT" economy >/dev/null
-    after="$(awk '/^dispatch:/,0' "$ROUTING_FILE" | md5)"
-    [ "$before" = "$after" ]
+    awk '/^dispatch:/,0' "$ROUTING_FILE" > "$TMP/dispatch-after.yaml"
+    cmp "$TMP/dispatch-before.yaml" "$TMP/dispatch-after.yaml"
 }

@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "automation": "independent-zklw",
+  "ops_source": "0522079c53552e403a788f48633c712368ecd073",
+  "builds": [
+    {
+      "job_id": 57,
+      "receipt_sha256": "2a6e1dc07903dabdbcf9ba7ca023a212eea1a466824527758d1a707ab5eb549a",
+      "guest_id": "7b5a24fe-89c4-488a-b28d-3c92e5930ab2",
+      "repo_id": 1151593132,
+      "source_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+      "source_bundle_sha256": "9605aeb2e0178794e6683939ef1a1fd1f021128390c86ef34a2e2185ca9dda79",
+      "dependency_bundle_sha256": "0fdad9f500cd56eebf474694935ca80e816a0a004fdb030496597da41a9bd3f2",
+      "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+      "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1",
+      "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+      "packaging": {
+        "dependency": {
+          "full_name": "mistakeknot/intercore",
+          "id": 1160997330,
+          "sha": "39f7599083c76ce32f46527c84fd58b43d1143de"
+        },
+        "go_archive_sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+        "go_version": "go1.26.4",
+        "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+        "recipe_path": "scripts/ci-package.sh",
+        "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+        "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1"
+      },
+      "artifacts": {
+        "clavain-cli-go-darwin-arm64": {
+          "sha256": "59a771ceb178f309af1f018b73baa4f9c9b2d3540ade3be6a1661aee42de8986",
+          "size_bytes": 18005954
+        },
+        "clavain-cli-go-linux-amd64": {
+          "sha256": "6ae6fb116140671c2d85865b253121da2e2b50f513b4623ca2f0772ab0f166fb",
+          "size_bytes": 18663393
+        },
+        "clavain-cli-go-windows-amd64": {
+          "sha256": "c3131c3a7782d73f0995b59ec1bb7037ca98a68d2d0067e40fe428ff7a53667b",
+          "size_bytes": 19084800
+        },
+        "release-manifest.json": {
+          "sha256": "53f3471a1f502d03ad17ea093c09a4721dc67967cc127a860502ee0e64d17b82",
+          "size_bytes": 838
+        }
+      },
+      "exit_code": 0
+    },
+    {
+      "job_id": 58,
+      "receipt_sha256": "7f1272a39122b7b894b2a9b071f57cbd88b2ca1d4700734e886b8a80143991d8",
+      "guest_id": "d7fdd8be-4dde-4e53-9976-b270642a2cd9",
+      "repo_id": 1151593132,
+      "source_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+      "source_bundle_sha256": "9605aeb2e0178794e6683939ef1a1fd1f021128390c86ef34a2e2185ca9dda79",
+      "dependency_bundle_sha256": "0fdad9f500cd56eebf474694935ca80e816a0a004fdb030496597da41a9bd3f2",
+      "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+      "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1",
+      "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+      "packaging": {
+        "dependency": {
+          "full_name": "mistakeknot/intercore",
+          "id": 1160997330,
+          "sha": "39f7599083c76ce32f46527c84fd58b43d1143de"
+        },
+        "go_archive_sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+        "go_version": "go1.26.4",
+        "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+        "recipe_path": "scripts/ci-package.sh",
+        "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+        "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1"
+      },
+      "artifacts": {
+        "clavain-cli-go-darwin-arm64": {
+          "sha256": "59a771ceb178f309af1f018b73baa4f9c9b2d3540ade3be6a1661aee42de8986",
+          "size_bytes": 18005954
+        },
+        "clavain-cli-go-linux-amd64": {
+          "sha256": "6ae6fb116140671c2d85865b253121da2e2b50f513b4623ca2f0772ab0f166fb",
+          "size_bytes": 18663393
+        },
+        "clavain-cli-go-windows-amd64": {
+          "sha256": "c3131c3a7782d73f0995b59ec1bb7037ca98a68d2d0067e40fe428ff7a53667b",
+          "size_bytes": 19084800
+        },
+        "release-manifest.json": {
+          "sha256": "53f3471a1f502d03ad17ea093c09a4721dc67967cc127a860502ee0e64d17b82",
+          "size_bytes": 838
+        }
+      },
+      "exit_code": 0
+    }
+  ],
+  "matching_artifacts": true,
+  "protected_receipts_retained": true,
+  "verifier": {
+    "schema_version": 1,
+    "verified": true,
+    "source_revision": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+    "intercore_revision": "39f7599083c76ce32f46527c84fd58b43d1143de",
+    "artifact_count": 3
+  },
+  "publication_dry_run": "scoped patch 0.6.315 to 0.6.316 passed with CLAVAIN_RELEASE_NO_BUILD=1",
+  "installed_acceptance": "pending",
+  "efficiency": "inconclusive; original stopped comparison preserved"
+}

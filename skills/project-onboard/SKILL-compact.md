@@ -4,6 +4,21 @@ One-command project setup. Repo Setup → Handoff Ingest → Introspect → Inte
 
 Safe to re-run (idempotent). Works for both new and existing projects.
 
+## Reasoning allocation
+
+Before substantive planning or execution, read the selected Clavain installation's
+`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
+and an accountable decision context. Substantial uncertainty, foundational
+invariants, broad consequences, difficult verification, and demonstrated
+capability failure require frontier involvement. Domain names are examples.
+Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
+capabilities require frontier planning. Keep frontier involvement while evidence
+changes the plan. Hand off with decisions, constraints, verification, and escalation
+conditions explicit; retain empirical acceptance. Foundational/consequential plan
+review requires the other frontier model. Operational failures are not capability
+strikes. Preserve stricter gates; unsupported host routing must be reported.
+
+
 ## Invocation
 
 - Bare: `/clavain:project-onboard`
@@ -56,6 +71,16 @@ Skip anything that exists. Execute in order:
 9. Generate `docs/canon/personas.md` from `templates/personas.md.tmpl` (Q7+Q8)
 
 ## Phase 4: Observability
+
+For active mistakeknot/gensysven repos, inspect `zklw-ci status --repo OWNER/REPO
+--json` on zklw and claim the existing migration task in campaign `mk-ag2s`.
+New code projects need reproducible Q5/manifest-based checks and `zklw-ci onboard
+--repo OWNER/REPO --json` registration. Registration is a review proposal, not
+verified CI. Complete reviewed registry and fresh-guest verification before
+claiming readiness. Use independently scheduled zklw automation; no Linux Actions
+or Actions-controlled runners. Preserve macOS/Windows jobs, destinations, signing
+and publication gates. Documentation-only projects get an explicit disposition;
+unavailable service/authentication remains a prerequisite failure.
 
 1. Create `.interwatch/watchables.yaml` from template (AGENTS.md 14d, roadmap 30d, philosophy 90d)
 2. Create `.interwatch/project.yaml` from template (project name from Q1, scan_dirs from Q6)

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "private_evidence_root": "/Users/sma/projects/.evidence/lean-startup-20260909",
+  "manifest": "SHA256SUMS.json",
+  "manifest_sha256": "6b72de7538d8ecbb5dd768dc6b4cb836feadb4edb697a1fabf638d43fb8aff10",
+  "sealed_files": 6734,
+  "scope": "Stopped comparison, four separate correction probes, native transcripts, source snapshots, review receipts, collector output and report snapshot. This seal file is outside the sealed tree.",
+  "authentication_files_included": false,
+  "acceptance_basis": "Native other-frontier review, separately recorded from missing Intercore-backed acceptance.",
+  "installed_rollout": false
+}

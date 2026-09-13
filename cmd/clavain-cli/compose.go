@@ -1,8 +1,10 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -115,6 +117,9 @@ type AgentCalibration struct {
 	Reason              string                      `json:"reason"`
 	Phases              map[string]AgentCalibration `json:"phases,omitempty"`
 }
+
+//go:embed calibration-phase-aliases.txt
+var calibrationPhaseAliases string
 
 // ─── Routing Overrides Types ───────────────────────────────────────
 
@@ -319,7 +324,7 @@ func loadInterspectCalibration() *InterspectCalibration {
 		fmt.Fprintf(os.Stderr, "compose: warning: corrupt %s: %v\n", path, err)
 		return nil
 	}
-	if cal.SchemaVersion != 1 && cal.SchemaVersion != 2 {
+	if cal.SchemaVersion != 1 && cal.SchemaVersion != 2 && cal.SchemaVersion != 3 {
 		fmt.Fprintf(os.Stderr, "compose: warning: unsupported schema version %d in %s\n", cal.SchemaVersion, path)
 		return nil
 	}
@@ -830,7 +835,7 @@ func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration
 func resolveModelForStage(stage string, agent matchedAgent, role AgentRole, cal *InterspectCalibration, ct *CalibratedThresholds) (string, string) {
 	var model, source string
 
-	// Interspect calibration — evidence-driven. Schema v2 can carry
+	// Interspect calibration — evidence-driven. Modern schemas can carry
 	// phase-specific recommendations; prefer those for the compose stage and
 	// fall back to the global agent recommendation when no phase has enough
 	// evidence/confidence.
@@ -842,12 +847,16 @@ func resolveModelForStage(stage string, agent matchedAgent, role AgentRole, cal 
 					threshold = at.ConfidenceThreshold
 				}
 			}
-			if pc, ok := phaseCalibration(c, stage); ok && calibrationUsable(pc, threshold) {
+			modern := cal.SchemaVersion >= 2
+			if modern && threshold < 0.7 {
+				threshold = 0.7
+			}
+			if pc, ok := phaseCalibration(c, stage, threshold, modern); ok {
 				if m := pc.RecommendedModel; m == "haiku" || m == "sonnet" || m == "opus" {
 					model, source = m, "interspect_calibration"
 				}
 			}
-			if model == "" && calibrationUsable(c, threshold) {
+			if model == "" && calibrationUsable(c, threshold, modern) {
 				if m := c.RecommendedModel; m == "haiku" || m == "sonnet" || m == "opus" {
 					model, source = m, "interspect_calibration"
 				}
@@ -880,16 +889,23 @@ func resolveModelForStage(stage string, agent matchedAgent, role AgentRole, cal 
 	return model, source
 }
 
-func calibrationUsable(c AgentCalibration, threshold float64) bool {
-	return c.Confidence >= threshold && c.EvidenceSessions >= 3
+func calibrationUsable(c AgentCalibration, threshold float64, modern bool) bool {
+	if c.RecommendedModel != "haiku" && c.RecommendedModel != "sonnet" && c.RecommendedModel != "opus" {
+		return false
+	}
+	if math.IsNaN(c.Confidence) || math.IsInf(c.Confidence, 0) ||
+		c.Confidence < 0 || c.Confidence > 1 || c.Confidence < threshold || c.EvidenceSessions < 3 {
+		return false
+	}
+	return !modern || c.PropagationEligible
 }
 
-func phaseCalibration(c AgentCalibration, stage string) (AgentCalibration, bool) {
+func phaseCalibration(c AgentCalibration, stage string, threshold float64, modern bool) (AgentCalibration, bool) {
 	if len(c.Phases) == 0 || stage == "" {
 		return AgentCalibration{}, false
 	}
 	for _, key := range phaseCalibrationKeys(stage) {
-		if pc, ok := c.Phases[key]; ok {
+		if pc, ok := c.Phases[key]; ok && calibrationUsable(pc, threshold, modern) {
 			return pc, true
 		}
 	}
@@ -898,13 +914,24 @@ func phaseCalibration(c AgentCalibration, stage string) (AgentCalibration, bool)
 
 func phaseCalibrationKeys(stage string) []string {
 	keys := []string{stage}
-	switch stage {
-	case "ship":
-		keys = append(keys, "shipping", "quality-gates", "quality_gates")
-	case "plan":
-		keys = append(keys, "planning")
-	case "build":
-		keys = append(keys, "implementation", "implement")
+	for _, line := range strings.Split(calibrationPhaseAliases, "\n") {
+		group := strings.Fields(line)
+		matched := false
+		for _, candidate := range group {
+			if candidate == stage {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		for _, candidate := range group {
+			if candidate != stage {
+				keys = append(keys, candidate)
+			}
+		}
+		break
 	}
 	return keys
 }

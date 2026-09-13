@@ -26,7 +26,13 @@ MODEL=""
 TIER=""
 ROLE=""
 ROLE_RESOLVED=false
+DISPATCH_RESULT_READY=false
 RESOLVED_PROFILE_REF=""
+RESOLVED_ROUTE_JSON=""
+RESOLVED_PROFILE_JSON=""
+DISPATCH_ID="${CLAVAIN_DISPATCH_ID:-}"
+ATTEMPT_ID=""
+CHECKOUT_BEFORE=""
 REASONING_EFFORT=""
 SERVICE_TIER=""
 MINIMUM_CODEX_VERSION=""
@@ -41,15 +47,19 @@ DRY_RUN=false
 KIMI_UNSAFE=false
 CLAUDE_UNSAFE=false
 TASK_CLASS=""
+FLERE_TIMEOUT=120
 PROMPT_FILE=""
 TEMPLATE_FILE=""
+PLAN_FILE=""
+SEAT_SNAPSHOT_BEFORE=""
 IMAGES=()
 EXTRA_ARGS=()
 PHASE=""
 CONTEXT_GATEWAY_MODE="${CLAVAIN_CONTEXT_GATEWAY_MODE:-auto}"
 DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
-DISPATCH_SESSION_ID="${CLAUDE_SESSION_ID:-}"
+DISPATCH_SESSION_ID="${DISPATCH_SESSION_ID:-${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
+source "${DISPATCH_SCRIPT_DIR}/lib-dispatch-audit.sh"
 
 # Source routing library (shared with model-routing command)
 # shellcheck source=lib-routing.sh
@@ -146,15 +156,20 @@ Usage:
   dispatch.sh [OPTIONS] --prompt-file <file>
 
 Options:
-  --to, --engine <codex|kimi|claude|auto>   Dispatch backend (default: codex)
+  --to, --engine <codex|kimi|claude|flere|auto>   Dispatch backend (default: codex)
                                   codex — codex exec (full sandbox/JSONL/statusline support)
                                   claude — claude -p one-shot (review seat: reads + runs
                                           commands, file mutation disallowed unless
                                           --claude-unsafe; tier: fast→sonnet, deep→opus)
+                                          claude seats run with --setting-sources project,local; set CLAVAIN_CLAUDE_KEEP_USER_SETTINGS=1 to keep user settings for direct --to claude
                                   kimi  — kimi -p (second-opinion backend; different
                                           model family. -s/--sandbox, -i/--image and codex
                                           passthrough flags are ignored with a warning)
                                   auto  — ordered executor failover by task class
+                                  flere — explicit admitted read-only worker; requires
+                                          CLAVAIN_FLERE_BIN, CLAVAIN_FLERE_PROFILE,
+                                          provider/model and Intercore attempt identity
+  --timeout <SECONDS>            Positive Flere worker deadline (default: 120)
   --via zaka                    Spawn a steerable tmux session via zaka instead of a
                                   one-shot headless exec. The engine maps to a zaka
                                   adapter (codex→codex, kimi→kimi, claude-code→claude-code);
@@ -176,7 +191,13 @@ Options:
   --role <NAME>                 Resolve backend, model, reasoning effort, service tier,
                                   minimum Codex version, and ordered fallbacks through
                                   `ic route dispatch --role=<NAME> --json`
+  --policy <PATH>              Select routing.yaml independently of task directory
+  --context-file <PATH>        Structured reasoning decision context
+  --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
   --producer-identity <ID>      Producer backend/model identity for validator audit records
+  --plan <FILE>                 The contract the seat must read. It must exist before any
+                                  model runs; for --to claude its directory is added as a
+                                  readable root (--add-dir) so a plan outside -C is readable
   --validator-relationship <R> Validator relationship recorded with the routing decision
   --phase <NAME>                Sprint phase context (stored for future phase-aware dispatch)
   --class <NAME>                Task class for --to auto executor routing
@@ -334,7 +355,7 @@ done
 ROLE_PASSTHROUGH=()
 for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
   case "${ORIGINAL_ARGS[$i]}" in
-    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--fallback-reason|--producer-identity|--validator-relationship)
+    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--fallback-reason|--producer-identity|--validator-relationship)
       i=$((i + 1))
       ;;
     --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*)
@@ -376,7 +397,7 @@ _run_candidate_with_policy() {
       CLAVAIN_LAST_FAILURE_CLASS=""
       return 0
     fi
-    if [[ "$failure_class" == "rate_limited" && "$attempt" -lt "$retries" ]]; then
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == "rate_limited" && "$attempt" -lt "$retries" ]]; then
       attempt=$((attempt + 1))
       echo "dispatch: HTTP 429; retrying the same resolved model ($attempt/$retries)" >&2
       if [[ "$backoff" -gt 0 ]]; then
@@ -405,17 +426,12 @@ _codex_version_at_least() {
   }'
 }
 
-_producer_is_model() {
-  local identity="$1" model="$2"
-  [[ "$identity" == "$model" || "$identity" == */"$model" || "$identity" == *:"$model" ]]
-}
-
 _dispatch_role_profile() {
   local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
   local fallback_reason="" rc=1 candidate_count=0
   local -a resolved_args
 
-  if [[ "$role" == "validation" || "$role" == "cross-lab-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
+  if [[ "$role" == "validation" || "$role" == "cross-lab-review" || "$role" == "plan-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
     echo "Error: role '$role' requires --producer-identity so producer and validator models can be separated" >&2
     return 1
   fi
@@ -428,10 +444,21 @@ _dispatch_role_profile() {
     echo "Error: jq is required for --role dispatch" >&2
     return 1
   }
-  resolved="$(ic --json route dispatch --role="$role")" || {
+  local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+  local -a route_cmd=(ic --json route dispatch --role="$role" --policy="$policy_source")
+  [[ -z "${CLAVAIN_DECISION_CONTEXT:-}" ]] || route_cmd+=(--context-file="$CLAVAIN_DECISION_CONTEXT")
+  [[ -z "${CLAVAIN_POLICY_PROFILE:-}" ]] || route_cmd+=(--policy-profile="$CLAVAIN_POLICY_PROFILE")
+  [[ -z "$PRODUCER_IDENTITY" ]] || route_cmd+=(--producer-identity="$PRODUCER_IDENTITY")
+  # Resolve against the control-plane checkout, not the task repository (which
+  # can live outside Sylveste and need not carry its own routing.yaml).
+  resolved="$("${route_cmd[@]}")" || {
     echo "Error: Intercore could not resolve dispatch role '$role'" >&2
     return 1
   }
+  fallback_reason="$(jq -r '.fallback_reason // empty' <<< "$resolved")"
+  VALIDATOR_RELATIONSHIP="$(jq -r '.validator_relationship // empty' <<< "$resolved")"
+  DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
+  export CLAVAIN_DISPATCH_ID="$DISPATCH_ID"
   candidates="$(jq -c '[{profile_ref:.profile_ref,profile:.profile}] + (.fallback_chain // []) | .[]' <<< "$resolved")" || {
     echo "Error: invalid dispatch profile JSON for role '$role'" >&2
     return 1
@@ -455,9 +482,9 @@ _dispatch_role_profile() {
       echo "Error: role '$role' is reserved for the main integrator and cannot be delegated" >&2
       return 1
     fi
-    if [[ -n "$PRODUCER_IDENTITY" ]] && _producer_is_model "$PRODUCER_IDENTITY" "$model"; then
-      fallback_reason="producer_model_conflict"
-      echo "dispatch: profile '$profile_ref' resolves to producer model '$model'; trying a different-model fallback" >&2
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$backend" != codex && "$backend" != claude ]]; then
+      fallback_reason="usage_reporting_unavailable"
+      echo "dispatch: '$profile_ref' cannot report usage for this approved token budget; trying its declared fallback" >&2
       continue
     fi
     if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
@@ -471,6 +498,8 @@ _dispatch_role_profile() {
       --role-resolved
       --role "$role"
       --resolved-profile-ref "$profile_ref"
+      --resolved-route-json "$resolved"
+      --resolved-profile-json "$candidate"
       --to "$backend"
       --model "$model"
     )
@@ -487,8 +516,11 @@ _dispatch_role_profile() {
     else
       rc=$?
     fi
+    # A started budgeted candidate may have spent tokens, even on an access or
+    # transport failure. Only its supervisor can admit another invocation.
+    [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      model_unavailable|account_access_absent|insufficient_codex_version)
+      model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
@@ -514,9 +546,9 @@ while [[ $# -gt 0 ]]; do
       ENGINE="$2"
       ENGINE_SET=true
       case "$ENGINE" in
-        codex|kimi|claude|claude-code|auto) ;;
+        codex|kimi|claude|claude-code|flere|auto) ;;
         *)
-          echo "Error: $1 must be 'codex', 'kimi', or 'claude' (or 'claude-code'/'auto'; got '$ENGINE')" >&2
+          echo "Error: $1 must be codex, kimi, claude, flere, claude-code or auto (got '$ENGINE')" >&2
           exit 1
           ;;
       esac
@@ -560,6 +592,24 @@ while [[ $# -gt 0 ]]; do
       TIER="$2"
       shift 2
       ;;
+    --timeout)
+      require_arg "$1" "${2:-}"
+      [[ "$2" =~ ^[1-9][0-9]*$ ]] || { echo "Error: --timeout requires positive seconds" >&2; exit 1; }
+      FLERE_TIMEOUT="$2"
+      shift 2
+      ;;
+    --policy|--context-file|--policy-profile)
+      require_arg "$@"
+      case "$1" in
+        --policy) export CLAVAIN_ROUTING_POLICY="$2" ;;
+        --context-file) export CLAVAIN_DECISION_CONTEXT="$2" ;;
+        --policy-profile) export CLAVAIN_POLICY_PROFILE="$2" ;;
+      esac
+      shift 2
+      ;;
+    --policy=*) export CLAVAIN_ROUTING_POLICY="${1#*=}"; shift ;;
+    --context-file=*) export CLAVAIN_DECISION_CONTEXT="${1#*=}"; shift ;;
+    --policy-profile=*) export CLAVAIN_POLICY_PROFILE="${1#*=}"; shift ;;
     --role)
       require_arg "$1" "${2:-}"
       ROLE="$2"
@@ -573,10 +623,12 @@ while [[ $# -gt 0 ]]; do
       ROLE_RESOLVED=true
       shift
       ;;
-    --resolved-profile-ref|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship)
+    --resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship)
       require_arg "$1" "${2:-}"
       case "$1" in
         --resolved-profile-ref) RESOLVED_PROFILE_REF="$2" ;;
+        --resolved-route-json) RESOLVED_ROUTE_JSON="$2" ;;
+        --resolved-profile-json) RESOLVED_PROFILE_JSON="$2" ;;
         --reasoning-effort) REASONING_EFFORT="$2" ;;
         --service-tier) SERVICE_TIER="$2" ;;
         --minimum-codex-version) MINIMUM_CODEX_VERSION="$2" ;;
@@ -618,6 +670,15 @@ while [[ $# -gt 0 ]]; do
       require_arg "$1" "${2:-}"
       PROMPT_FILE="$2"
       shift 2
+      ;;
+    --plan)
+      require_arg "$1" "${2:-}"
+      PLAN_FILE="$2"
+      shift 2
+      ;;
+    --plan=*)
+      PLAN_FILE="${1#--plan=}"
+      shift
       ;;
     --template)
       require_arg "$1" "${2:-}"
@@ -694,15 +755,39 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+  if [[ -n "$VIA" || ( "$ENGINE" != codex && "$ENGINE" != claude ) ]]; then
+    _dispatch_write_failure_class unsupported_adapter
+    echo "Error: usage-required dispatch needs the Codex JSON or Claude accounting adapter; alternate transports are unsupported" >&2
+    exit 1
+  fi
+  if [[ -z "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+    echo "Error: usage-required dispatch requires an event destination" >&2
+    exit 1
+  fi
+fi
+
+if [[ "$ENGINE" == "flere" ]]; then
+  if [[ -n "$VIA" || -n "$TIER" || -n "$ROLE" || -n "$REASONING_EFFORT" || -n "$SERVICE_TIER" || ${#IMAGES[@]} -gt 0 || ${#EXTRA_ARGS[@]} -gt 0 || "$KIMI_UNSAFE" == true || "$CLAUDE_UNSAFE" == true ]]; then
+    echo "Error: Flere fixed worker rejects routing inference, alternate transports, images and passthrough flags" >&2
+    exit 1
+  fi
+  if [[ "$SANDBOX_SET" == true && "$SANDBOX" != "read-only" ]]; then
+    echo "Error: Flere fixed worker requires the read-only application tool policy" >&2
+    exit 1
+  fi
+  SANDBOX="read-only"
+  [[ -n "$MODEL" && "$MODEL" == */* && -n "$OUTPUT" && -n "${CLAVAIN_FLERE_BIN:-}" && -n "${CLAVAIN_FLERE_PROFILE:-}" ]] || { echo "Error: Flere requires explicit provider/model, output, CLAVAIN_FLERE_BIN and CLAVAIN_FLERE_PROFILE" >&2; exit 1; }
+fi
+
 # claude-code is only a valid engine in zaka mode (it has no one-shot exec form here)
 if [[ "$ENGINE" == "claude-code" && "$VIA" != "zaka" ]]; then
   echo "Error: --to claude-code requires --via zaka (claude-code dispatch runs as a steerable zaka session)" >&2
   exit 1
 fi
-# claude is the one-shot headless engine (claude -p) — the inverse constraint.
+# The routing backend is transport-independent; Zaka names its adapter claude-code.
 if [[ "$ENGINE" == "claude" && "$VIA" == "zaka" ]]; then
-  echo "Error: --to claude is the one-shot headless engine — for a steerable zaka session use --to claude-code" >&2
-  exit 1
+  ENGINE="claude-code"
 fi
 
 # Detect whether Clavain-specific tier remapping should be used. This is opt-in via:
@@ -715,6 +800,12 @@ if { [[ -n "${WORKDIR}" && -f "${WORKDIR}/.claude/clodex-toggle.flag" ]]; } || {
       CLAVAIN_INTERSERVE_MODE=true
       ;;
   esac
+fi
+
+if [[ "$ENGINE" == kimi && -n "$ROLE" && -n "$REASONING_EFFORT" ]]; then
+  _dispatch_write_failure_class unsupported_adapter
+  echo "Error: Kimi adapter cannot enforce reasoning effort; governed role unsupported" >&2
+  exit 1
 fi
 
 # A role is a complete Intercore-owned execution contract. The outer invocation
@@ -768,6 +859,14 @@ fi
 
 # Resolve prompt: positional arg, --prompt-file, or error
 PROMPT="${1:-}"
+# A seat that cannot read its plan has nothing to replay: fail before any
+# backend runs (Sylveste-soj7).
+if [[ -n "$PLAN_FILE" && ! -r "$PLAN_FILE" ]]; then
+  _dispatch_write_failure_class terminal_configuration
+  echo "Error: --plan not found or unreadable: $PLAN_FILE" >&2
+  exit 1
+fi
+
 if [[ -n "$PROMPT_FILE" ]]; then
   if [[ -n "$PROMPT" ]]; then
     echo "Error: Cannot use both --prompt-file and a positional prompt argument" >&2
@@ -1051,6 +1150,42 @@ if [[ "$ENGINE" != "auto" || "$VIA" == "zaka" ]]; then
   _apply_context_gateway
 fi
 
+# Governed children must receive the same contract even when user-scope
+# instructions are intentionally excluded (Claude review seats do this).
+# Add it after context compaction, with the immutable resolved decision.
+if [[ "$ROLE_RESOLVED" == true ]]; then
+  case "$ENGINE" in
+    codex|claude|claude-code|kimi)
+      contract_host="${ENGINE/claude-code/claude}"
+      contract_policy="$(jq -r '.policy_source // empty' <<< "$RESOLVED_ROUTE_JSON")"
+      contract_policy="${contract_policy:-${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}}"
+      contract_hash="$(jq -r '.policy_hash // empty' <<< "$RESOLVED_ROUTE_JSON")"
+      if [[ ! "$contract_hash" =~ ^[0-9a-f]{64}$ && "$DRY_RUN" != true ]]; then
+        echo 'Error: governed execution requires an immutable policy hash from Intercore' >&2
+        exit 1
+      fi
+      reasoning_contract="$(python3 "$DISPATCH_SCRIPT_DIR/sync-agent-instructions.py" \
+        --source "$DISPATCH_SCRIPT_DIR/.." --host "$contract_host" --policy "$contract_policy" \
+        --expected-policy-hash "$contract_hash" --render)" || {
+          echo 'Error: cannot deliver the selected reasoning contract to the governed child' >&2
+          exit 1
+        }
+      PROMPT="$reasoning_contract
+
+This dispatch was resolved under the following decision. Preserve its
+policy, classification, profile, review and handoff requirements:
+$RESOLVED_ROUTE_JSON
+
+Task:
+$PROMPT"
+      ;;
+    *)
+      echo "Error: governed reasoning contract delivery is unsupported for backend '$ENGINE'" >&2
+      exit 1
+      ;;
+  esac
+fi
+
 # ─── Compound Autonomy Guard (rsj.1.8) ──────────────────────────────────────
 # If Mycroft is dispatching, check compound autonomy score before proceeding.
 if [[ -n "${MYCROFT_TIER:-}" ]]; then
@@ -1085,10 +1220,8 @@ if [[ -n "${MYCROFT_TIER:-}" ]]; then
 fi
 
 # ─── Zaka steerable-session mode (--via zaka) ───────────────────────────────
-# Instead of a one-shot headless exec, spawn the agent in a tmux session via
-# zaka and steer it with the assembled prompt. The session stays alive for
-# interactive steering; dispatch prints the session name and returns
-# immediately — no state files, verdicts, or JSONL parsing (that's the point).
+# Codex uses the persistent App Server transport (structured questions/steering).
+# Other agents retain their tmux transport. Submission is never a completion verdict.
 if [[ "$VIA" == "zaka" ]]; then
   # Engine → zaka adapter (identity mapping). Default to claude-code when
   # --to was not given — it's zaka's most capable adapter (resume support,
@@ -1101,7 +1234,7 @@ if [[ "$VIA" == "zaka" ]]; then
   fi
 
   # Options that don't translate to an interactive zaka session — warn and drop.
-  if [[ "$SANDBOX_SET" == true ]]; then
+  if [[ "$SANDBOX_SET" == true && "$ZAKA_AGENT" != codex ]]; then
     echo "Warning: -s/--sandbox is codex-only — ignored for --via zaka (zaka spawns the agent's own TUI)" >&2
   fi
   if [[ ${#IMAGES[@]} -gt 0 ]]; then
@@ -1113,11 +1246,25 @@ if [[ "$VIA" == "zaka" ]]; then
   if [[ -n "$NAME" ]]; then
     echo "Warning: --name is not supported for --via zaka — zaka steer infers the adapter from the generated zaka-<agent>-<millis> session name" >&2
   fi
-  if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+  if [[ ${#EXTRA_ARGS[@]} -gt 0 && "$ZAKA_AGENT" != codex ]]; then
     echo "Warning: codex passthrough flags are not supported for --via zaka — ignoring: ${EXTRA_ARGS[*]}" >&2
   fi
 
   ZAKA_SPAWN=(zaka spawn --agent "$ZAKA_AGENT")
+  if [[ "$ZAKA_AGENT" == codex ]]; then
+    [[ -n "$MODEL" ]] || { echo 'Error: Codex App Server requires an explicit --model or --role' >&2; exit 1; }
+    ZAKA_APPROVAL=on-request
+    for ((z=0; z<${#EXTRA_ARGS[@]}; z++)); do
+      case "${EXTRA_ARGS[$z]}" in
+        -a|--ask-for-approval) z=$((z + 1)); ZAKA_APPROVAL="${EXTRA_ARGS[$z]}" ;;
+        *) echo "Error: unsupported Codex App Server passthrough: ${EXTRA_ARGS[$z]}" >&2; exit 1 ;;
+      esac
+    done
+    [[ ${#IMAGES[@]} == 0 ]] || { echo 'Error: images are unsupported by this App Server dispatch interface' >&2; exit 1; }
+    _prepare_role_audit
+    ZAKA_METADATA="$(_role_audit_context started 0 '')"
+    ZAKA_SPAWN+=(--transport app-server --sandbox "$SANDBOX" --approval-policy "$ZAKA_APPROVAL" --metadata-json "$ZAKA_METADATA")
+  fi
   if [[ -n "$WORKDIR" ]]; then
     ZAKA_SPAWN+=(--workdir "$WORKDIR")
   fi
@@ -1126,6 +1273,12 @@ if [[ "$VIA" == "zaka" ]]; then
   fi
   if [[ "$ZAKA_AGENT" == "codex" && -n "$REASONING_EFFORT" ]]; then
     ZAKA_SPAWN+=(--agent-arg=-c --agent-arg="model_reasoning_effort=$REASONING_EFFORT")
+  fi
+  if [[ "$ZAKA_AGENT" == "claude-code" && -n "$REASONING_EFFORT" ]]; then
+    case "$REASONING_EFFORT" in low|medium|high|max) ZAKA_SPAWN+=(--agent-arg=--effort --agent-arg="$REASONING_EFFORT") ;; *) echo "Error: unsupported Claude effort" >&2; exit 1 ;; esac
+  fi
+  if [[ "$ZAKA_AGENT" != codex && -n "$SERVICE_TIER" && "$SERVICE_TIER" != standard ]]; then
+    echo "Error: service tier unsupported by this host adapter" >&2; exit 1
   fi
   if [[ "$ZAKA_AGENT" == "codex" && -n "$SERVICE_TIER" ]]; then
     codex_service_tier="$SERVICE_TIER"
@@ -1156,13 +1309,32 @@ if [[ "$VIA" == "zaka" ]]; then
     echo "Error: zaka CLI not found on PATH (required for --via zaka). See /Users/sma/projects/Sylveste/os/Zaka" >&2
     exit 1
   fi
-  if ! command -v tmux >/dev/null 2>&1; then
+  if [[ "$ZAKA_AGENT" != codex ]] && ! command -v tmux >/dev/null 2>&1; then
     echo "Error: tmux not found on PATH (required for --via zaka — zaka spawns agents in tmux sessions)" >&2
     exit 1
   fi
 
-  # Spawn prints the generated session name (zaka-<agent>-<millis>) on stdout
-  ZAKA_SESSION="$("${ZAKA_SPAWN[@]}")"
+  if [[ "$ZAKA_AGENT" == codex ]] && ! zaka spawn --help 2>&1 | grep -q -- '-transport'; then
+    echo 'Error: installed Zaka lacks App Server transport; rebuild/install Zaka before dispatch' >&2
+    _dispatch_write_failure_class terminal_configuration
+    exit 1
+  fi
+  if ! _record_role_routing_decision 0 '' started; then
+    _dispatch_write_failure_class terminal_recording
+    exit 1
+  fi
+  ZAKA_STDERR="$(mktemp "${TMPDIR:-/tmp}/clavain-zaka-error.XXXXXX")"
+  if ZAKA_SESSION="$("${ZAKA_SPAWN[@]}" 2> "$ZAKA_STDERR")"; then
+    :
+  else
+    zaka_rc=$?
+    cat "$ZAKA_STDERR" >&2
+    zaka_failure="$(_classify_dispatch_failure "$ZAKA_STDERR" "$zaka_rc")"
+    _dispatch_write_failure_class "$zaka_failure"
+    _record_role_routing_decision "$zaka_rc" "$zaka_failure" || true
+    rm -f "$ZAKA_STDERR"
+    exit "$zaka_rc"
+  fi
   if [[ -z "$ZAKA_SESSION" ]]; then
     echo "Error: zaka spawn did not return a session name" >&2
     exit 1
@@ -1172,18 +1344,53 @@ if [[ "$VIA" == "zaka" ]]; then
   echo "════════════════════════════════════════════════════════════"
   echo "Zaka session: $ZAKA_SESSION"
   echo "  steer:  zaka steer $ZAKA_SESSION \"<follow-up prompt>\""
-  echo "  watch:  tmux attach -t $ZAKA_SESSION   (detach: Ctrl-b d)"
+  if [[ "$ZAKA_AGENT" == codex ]]; then
+    echo "  status: zaka status $ZAKA_SESSION --json"
+    echo "  questions: zaka questions $ZAKA_SESSION --json"
+  else
+    echo "  watch:  tmux attach -t $ZAKA_SESSION   (detach: Ctrl-b d)"
+  fi
   echo "  kill:   zaka kill $ZAKA_SESSION"
   echo "════════════════════════════════════════════════════════════"
   echo ""
 
   # Give the agent TUI a moment to boot before typing the prompt into it
-  sleep "${CLAVAIN_ZAKA_BOOT_DELAY:-5}"
+  [[ "$ZAKA_AGENT" == codex ]] || sleep "${CLAVAIN_ZAKA_BOOT_DELAY:-5}"
 
-  zaka steer "$ZAKA_SESSION" "$PROMPT"
+  if zaka steer "$ZAKA_SESSION" "$PROMPT" 2> "$ZAKA_STDERR"; then
+    :
+  else
+    zaka_rc=$?
+    cat "$ZAKA_STDERR" >&2
+    zaka_failure="$(_classify_dispatch_failure "$ZAKA_STDERR" "$zaka_rc")"
+    _dispatch_write_failure_class "$zaka_failure"
+    _record_role_routing_decision "$zaka_rc" "$zaka_failure" || true
+    zaka kill "$ZAKA_SESSION" >/dev/null 2>&1 || true
+    rm -f "$ZAKA_STDERR"
+    exit "$zaka_rc"
+  fi
+  rm -f "$ZAKA_STDERR"
+  if [[ "$ZAKA_AGENT" == codex ]]; then
+    if ! ZAKA_EVENT_LOG="$(zaka status "$ZAKA_SESSION" --json | jq -er '.event_log | select(type == "string" and length > 0)')"; then
+      zaka kill "$ZAKA_SESSION" >/dev/null 2>&1 || true
+      _dispatch_write_failure_class terminal_recording
+      _record_role_routing_decision 1 terminal_recording || true
+      echo 'Error: cannot capture async evidence; session stopped' >&2
+      exit 1
+    fi
+  fi
+  if ! _record_role_routing_decision 0 '' submitted; then
+    zaka kill "$ZAKA_SESSION" >/dev/null 2>&1 || true
+    _dispatch_write_failure_class terminal_recording
+    exit 1
+  fi
 
   echo ""
   echo "Dispatched (not waiting — session is interactive). Steer or kill with the commands above."
+  if [[ "$ZAKA_AGENT" == codex && -n "$ROLE" ]]; then
+    echo "Before acceptance, collect the terminal result: bash $DISPATCH_SCRIPT_DIR/collect-zaka.sh $ZAKA_SESSION"
+    echo "Collection exits 3 while pending. Submitted turns are never automatically replayed or switched to another model."
+  fi
   exit 0
 fi
 
@@ -1239,6 +1446,15 @@ if [[ "$ENGINE" == "auto" ]]; then
     fi
   fi
   exit "$rc"
+fi
+
+# The fixed worker supervises its own RPC lifecycle and writes its terminal
+# receipt last. Codex text/idle heuristics cannot establish Flere completion.
+if [[ "$ENGINE" == "flere" ]]; then
+  FLERE_ARGS=(--executable "$CLAVAIN_FLERE_BIN" --profile "$CLAVAIN_FLERE_PROFILE" --model "$MODEL" --project "${WORKDIR:-$PWD}" --output "$OUTPUT" --timeout "$FLERE_TIMEOUT")
+  [[ -z "${CLAVAIN_FLERE_ENTRYPOINT:-}" ]] || FLERE_ARGS+=(--entrypoint "$CLAVAIN_FLERE_ENTRYPOINT")
+  [[ "$DRY_RUN" != true ]] || FLERE_ARGS+=(--dry-run)
+  exec python3 "${DISPATCH_SCRIPT_DIR}/flere-worker.py" "${FLERE_ARGS[@]}" <<< "$PROMPT"
 fi
 
 # Build backend command
@@ -1306,7 +1522,18 @@ elif [[ "$ENGINE" == "claude" ]]; then
     echo "Warning: codex passthrough flags are not supported for --to claude — ignoring: ${EXTRA_ARGS[*]}" >&2
   fi
 
+  # Execution roles may edit within the authorized task. Review roles retain
+  # the existing mutation prohibition; an explicit read-only sandbox wins.
+  if [[ "$ROLE_RESOLVED" == true && "$SANDBOX" != read-only ]]; then
+    case "$ROLE" in routine-execution|deep-execution|escalation) CLAUDE_UNSAFE=true ;; esac
+  fi
   CMD=(claude)
+  if [[ -n "$REASONING_EFFORT" ]]; then
+    case "$REASONING_EFFORT" in low|medium|high|max) CMD+=(--effort "$REASONING_EFFORT") ;; *) echo "Error: Claude does not support reasoning effort '$REASONING_EFFORT'" >&2; exit 1 ;; esac
+  fi
+  if [[ -n "$SERVICE_TIER" && "$SERVICE_TIER" != standard ]]; then
+    echo "Error: Claude service tier '$SERVICE_TIER' is unsupported by this adapter" >&2; exit 1
+  fi
   if [[ -n "$MODEL" ]]; then
     CMD+=(--model "$MODEL")
   fi
@@ -1314,8 +1541,32 @@ elif [[ "$ENGINE" == "claude" ]]; then
   # commands (tests, git diff) without prompting, but cannot mutate files.
   # --claude-unsafe lifts the mutation ban for executor-seat dispatches.
   CMD+=(--permission-mode "${CLAVAIN_CLAUDE_PERMISSION_MODE:-dontAsk}")
+  # dontAsk denies every tool that is not allowed up front, so without an
+  # explicit allowance the seat cannot run one command and its "replay" is a
+  # hand trace (Sylveste-soj7). Bash is allowed; the file-mutating tools stay
+  # disallowed and the checkout is snapshotted around the run (see
+  # _seat_snapshot): a run that changes it is an error verdict, not a ruling.
   if [[ "$CLAUDE_UNSAFE" != true ]]; then
-    CMD+=(--disallowedTools "Edit,Write,NotebookEdit")
+    CMD+=(--allowedTools "Bash")
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+      CMD+=(--disallowedTools "Edit,Write,NotebookEdit,Agent,Task,Skill")
+    else
+      CMD+=(--disallowedTools "Edit,Write,NotebookEdit")
+    fi
+  else
+    CMD+=(--allowedTools "Bash,Edit,Write,NotebookEdit")
+    [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || CMD+=(--disallowedTools "Agent,Task,Skill")
+  fi
+  # The plan named by --plan usually lives outside -C (a scratchpad); without
+  # --add-dir the seat cannot read it under dontAsk and has nothing to replay.
+  if [[ -n "$PLAN_FILE" ]]; then
+    PLAN_DIR="$(cd "$(dirname "$PLAN_FILE")" && pwd)"
+    CMD+=(--add-dir "$PLAN_DIR")
+  fi
+  # Role seats always exclude the operator's user-scope settings. A direct
+  # operator dispatch may opt back into the historical inherited behavior.
+  if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]] || [[ "${CLAVAIN_CLAUDE_KEEP_USER_SETTINGS:-}" != "1" ]]; then
+    CMD+=(--setting-sources "project,local")
   fi
   # The prompt goes via stdin, never argv: review prompts routinely exceed
   # ARG_MAX (macOS ~1MB incl. env), and `claude -p` with a too-long argv dies
@@ -1325,15 +1576,48 @@ elif [[ "$ENGINE" == "claude" ]]; then
   PROMPT_STDIN_FILE=$(mktemp "${TMPDIR:-/tmp}/dispatch-claude-prompt.XXXXXX")
   printf '%s' "$PROMPT" > "$PROMPT_STDIN_FILE"
   CMD+=(-p)
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+    DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
+    CMD=(python3 "$DISPATCH_SCRIPT_DIR/claude_usage.py"
+      --events "$CLAVAIN_REVIEW_EVENTS" --dispatch "$DISPATCH_ID" --model "$MODEL"
+      --policy "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+      --budget "${CLAVAIN_TOKEN_BUDGET:-0}" -- "${CMD[@]}")
+  fi
   # WORKDIR via cd and OUTPUT via tee at execution time, same as kimi
   # (claude -p prints the response on stdout; no -C/-o flags used).
 else
   # Build codex exec command
   CMD=(codex exec)
   CMD+=(-s "$SANDBOX")
+  # Tool caches outside the workspace (uv's, by default) are denied under
+  # workspace-write, so a seat replaying `uv run pytest` cannot run it and a
+  # validator has to answer UNRUN (run d9dd99e0, goal a7f02287). Grant the
+  # roots named by CLAVAIN_CODEX_WRITABLE_ROOTS (colon-separated; default the
+  # user's uv cache; set it empty to grant nothing) when they exist.
+  CODEX_WRITABLE_ROOTS_TOML=""
+  if [[ "$SANDBOX" == "workspace-write" ]]; then
+    IFS=':' read -r -a _roots <<< "${CLAVAIN_CODEX_WRITABLE_ROOTS-$HOME/.cache/uv}"
+    for _r in "${_roots[@]}"; do
+      [[ -n "$_r" && -d "$_r" ]] || continue
+      CODEX_WRITABLE_ROOTS_TOML+="${CODEX_WRITABLE_ROOTS_TOML:+,}\"${_r}\""
+    done
+    if [[ -n "$CODEX_WRITABLE_ROOTS_TOML" ]]; then
+      CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
+    fi
+  fi
 
   if [[ -n "$WORKDIR" ]]; then
     CMD+=(-C "$WORKDIR")
+  fi
+  # uv's sync step builds a network client, and under the codex sandbox that
+  # panics ("Tokio executor failed", exit 101) even with the cache writable,
+  # so a validation seat replaying `uv run pytest` failed a green suite (runs
+  # 70691474 and 8565586e, goal a7f02287). A validator replays in a tree the
+  # executor or the tool already synced, so it runs uv without syncing;
+  # measured: UV_NO_SYNC=1 alone turns the panic into 5 passed. Executors
+  # keep syncing. CLAVAIN_CODEX_UV_NO_SYNC=0 turns this off.
+  if [[ "${ROLE:-}" == "validation" && "${CLAVAIN_CODEX_UV_NO_SYNC:-1}" != "0" ]]; then
+    export UV_NO_SYNC=1
   fi
 
   if [[ -n "$OUTPUT" ]]; then
@@ -1394,16 +1678,20 @@ if [[ "$DRY_RUN" == true ]]; then
     if [[ -n "$OUTPUT" ]]; then printf '> %q' "$OUTPUT"; fi
     echo ""
   elif [[ "$ENGINE" == "claude" ]]; then
-    # CMD's last element is the prompt — display everything before it,
-    # then the truncated preview in its place.
-    DISPLAY_CMD=("${CMD[@]:0:${#CMD[@]}-1}")
+    # Claude receives the prompt on stdin, so display the complete command
+    # (including its trailing -p) followed by the prompt preview as input.
+    DISPLAY_CMD=("${CMD[@]}")
     if [[ -n "$WORKDIR" ]]; then printf 'cd %q && ' "$WORKDIR"; fi
     printf '%q ' "${DISPLAY_CMD[@]}"
     printf '%q' "$PROMPT_PREVIEW"
     if [[ -n "$OUTPUT" ]]; then printf ' > %q' "$OUTPUT"; fi
     echo ""
   else
+    if [[ -n "${UV_NO_SYNC:-}" ]]; then echo "# Env: UV_NO_SYNC=$UV_NO_SYNC (validation seat replays without syncing)" >&2; fi
     DISPLAY_CMD=(codex exec -s "$SANDBOX")
+    if [[ -n "${CODEX_WRITABLE_ROOTS_TOML:-}" ]]; then
+      DISPLAY_CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
+    fi
     if [[ -n "$WORKDIR" ]]; then DISPLAY_CMD+=(-C "$WORKDIR"); fi
     if [[ -n "$OUTPUT" ]]; then DISPLAY_CMD+=(-o "$OUTPUT"); fi
     if [[ -n "$MODEL" ]]; then DISPLAY_CMD+=(-m "$MODEL"); fi
@@ -1536,6 +1824,17 @@ _jsonl_parser() {
 
 # Post-dispatch validation: check modified files scope and scan for secrets.
 # Runs after Codex completes. Warnings only — does not block the dispatch exit.
+# One line per tracked change or untracked file, then a digest of the diff
+# against HEAD; empty when the directory is not a git work tree. Two equal
+# snapshots mean the seat wrote nothing the repo can see (ignored paths such
+# as __pycache__ and .venv stay invisible, as they should).
+_seat_snapshot() {
+  local dir="${1:-.}"
+  git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  git -C "$dir" status --porcelain --untracked-files=all 2>/dev/null
+  git -C "$dir" diff HEAD 2>/dev/null | shasum 2>/dev/null | cut -c1-16
+}
+
 _post_dispatch_validate() {
     local workdir="${1:-.}"
     [[ -d "$workdir/.git" ]] || return 0
@@ -1603,7 +1902,19 @@ _extract_verdict() {
     # nothing grounded.
     local status="warn"
     local summary="No structured verdict found."
-    if [[ "$verdict_line" == *"NEEDS_ATTENTION"* ]]; then
+    # The validation seat speaks PASS/FAIL/UNRUN (pattern-f-contracts.md).
+    # UNRUN is a refusal to rule, surfaced as warn so nothing reads it as
+    # approval; PASS is the only value that becomes STATUS: pass.
+    if [[ "$verdict_line" == "VERDICT: PASS"* ]]; then
+        status="pass"
+        summary="Validator replay PASS."
+    elif [[ "$verdict_line" == "VERDICT: FAIL"* ]]; then
+        status="warn"
+        summary="Validator replay FAIL: $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || echo "criterion not stated")"
+    elif [[ "$verdict_line" == "VERDICT: UNRUN"* ]]; then
+        status="warn"
+        summary="Validator could not run Verification (UNRUN); no ruling. $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || true)"
+    elif [[ "$verdict_line" == *"NEEDS_ATTENTION"* ]]; then
         status="warn"
         summary="${verdict_line#VERDICT: }"
     elif [[ "$verdict_line" == *"CLEAN"* ]]; then
@@ -1753,73 +2064,16 @@ _surface_codex_errors() {
   fi
 }
 
-_classify_dispatch_failure() {
-  local stderr_file="$1" exit_code="${2:-1}"
-  [[ "$exit_code" == "0" ]] && {
-    echo success
-    return 0
-  }
-  if [[ -f "$stderr_file" ]]; then
-    if grep -qiE '\b429\b|too many requests|rate.?limit' "$stderr_file"; then
-      echo rate_limited
-      return 0
-    fi
-    if grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then
-      echo account_access_absent
-      return 0
-    fi
-    if grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then
-      echo model_unavailable
-      return 0
-    fi
-    if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then
-      echo terminal_policy
-      return 0
-    fi
-    if grep -qiE '\b4[0-9]{2}\b|bad request|unauthorized|forbidden' "$stderr_file"; then
-      echo terminal_configuration
-      return 0
-    fi
-  fi
-  echo terminal_error
-}
-
-_record_role_routing_decision() {
-  local exit_code="$1" failure_class="$2" reason="$FALLBACK_REASON"
-  [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]] || return 0
-  command -v ic >/dev/null 2>&1 || return 0
-  [[ "$exit_code" == "0" ]] || reason="$failure_class"
-
-  local -a record_cmd=(
-    ic route record
-    "--agent=${NAME:-$ROLE}"
-    "--model=$MODEL"
-    --rule=dispatch-profile
-    "--role=$ROLE"
-    "--profile=$RESOLVED_PROFILE_REF"
-    "--session=${DISPATCH_SESSION_ID:-main-integrator}"
-  )
-  [[ -n "$reason" && "$reason" != "success" ]] && record_cmd+=("--fallback-reason=$reason")
-  [[ -n "$PRODUCER_IDENTITY" ]] && record_cmd+=("--producer-identity=$PRODUCER_IDENTITY")
-  [[ -n "$VALIDATOR_RELATIONSHIP" ]] && record_cmd+=("--validator-relationship=$VALIDATOR_RELATIONSHIP")
-
-  if [[ -n "$WORKDIR" ]]; then
-    if ! (cd "$WORKDIR" && "${record_cmd[@]}") >/dev/null 2>&1; then
-      echo "Warning: role routing decision could not be persisted for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
-      return 1
-    fi
-  else
-    if ! "${record_cmd[@]}" >/dev/null 2>&1; then
-      echo "Warning: role routing decision could not be persisted for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
-      return 1
-    fi
-  fi
-  return 0
-}
-
 _finalize_dispatch_result() {
   local exit_code="$1" failure_class
-  failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
+  # Only a finished backend has a current extracted result. Pre-execution
+  # failures must never pick up an older sidecar at the requested path.
+  DISPATCH_RESULT_READY=true
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$exit_code" != 0 ]]; then
+    failure_class=terminal_accounting
+  else
+    failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
+  fi
   if [[ "$exit_code" == "0" ]]; then
     : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
   else
@@ -1832,12 +2086,32 @@ _finalize_dispatch_result() {
   return 0
 }
 
+if ! _record_role_routing_decision 0 "" started; then
+  _dispatch_write_failure_class terminal_recording
+  exit 1
+fi
+
+# Role output paths are fresh attempt artifacts. Both the body and its sidecar
+# must be reset: clearing only the verdict would re-extract the previous body
+# if a successful process failed to write its requested output file.
+if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true && -n "$OUTPUT" ]]; then
+  if ! { : > "$OUTPUT" && : > "${OUTPUT}.verdict"; }; then
+    echo "Error: cannot prepare fresh role output at '$OUTPUT'" >&2
+    _dispatch_write_failure_class terminal_configuration
+    _record_role_routing_decision 1 terminal_configuration || true
+    exit 1
+  fi
+fi
+
 if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # kimi -p and claude -p both print the response on stdout and exit 0 on
   # success. Neither emits the codex-style JSONL event stream, so the
   # statusline parser is skipped and the state file stays at "starting"
   # until completion; summary/verdict sidecars are still produced. WORKDIR
   # is applied via cd and OUTPUT by teeing stdout (no -C/-o flags).
+  if [[ "$ENGINE" == "claude" && "$CLAUDE_UNSAFE" != true ]]; then
+    SEAT_SNAPSHOT_BEFORE="$(_seat_snapshot "${WORKDIR:-.}")"
+  fi
   set +e
   # kimi carries its prompt in argv; claude reads it from PROMPT_STDIN_FILE
   # (see the claude CMD build). /dev/null for kimi so neither engine ever
@@ -1859,6 +2133,14 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   [[ -n "${PROMPT_STDIN_FILE:-}" ]] && rm -f "$PROMPT_STDIN_FILE"
   set -e
+  SEAT_MUTATED=""
+  if [[ "$ENGINE" == "claude" && "$CLAUDE_UNSAFE" != true ]]; then
+    SEAT_SNAPSHOT_AFTER="$(_seat_snapshot "${WORKDIR:-.}")"
+    if [[ "$SEAT_SNAPSHOT_AFTER" != "$SEAT_SNAPSHOT_BEFORE" ]]; then
+      SEAT_MUTATED="$(comm -13 <(printf "%s\n" "$SEAT_SNAPSHOT_BEFORE" | sort) <(printf "%s\n" "$SEAT_SNAPSHOT_AFTER" | sort) | awk 'NF>1 {print $NF}' | tr "\n" " ")"
+      [[ -n "$SEAT_MUTATED" ]] || SEAT_MUTATED="(content of an already-modified file)"
+    fi
+  fi
 
   # Summary sidecar (no turn/token stats — kimi -p doesn't expose them)
   if [[ -n "$SUMMARY_FILE" ]]; then
@@ -1871,10 +2153,18 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # Extract verdict sidecar from output
   [[ -n "$OUTPUT" ]] && _extract_verdict "$OUTPUT"
 
+  # A read-only seat that changed the checkout has not validated it. Override
+  # the verdict and fail the dispatch; the files stay for the operator to see.
+  if [[ -n "$SEAT_MUTATED" ]]; then
+    [[ -n "$OUTPUT" ]] && _write_error_verdict "$OUTPUT" "error" "validation seat mutated the checkout: $SEAT_MUTATED"
+    echo "Warning: dispatch: validation seat mutated the checkout: $SEAT_MUTATED — verdict overridden" >&2
+    [[ "$KIMI_EXIT" != "0" ]] || KIMI_EXIT=1
+  fi
+
   # Surface a failed run in the verdict sidecar. The codex error heuristics
   # (HTTP status lines, zero-turn state) don't apply to kimi -p / claude -p,
   # which exit non-zero on failure.
-  if [[ "$KIMI_EXIT" != "0" && -n "$OUTPUT" ]]; then
+  if [[ "$KIMI_EXIT" != "0" && -n "$OUTPUT" && -z "$SEAT_MUTATED" ]]; then
     _write_error_verdict "$OUTPUT" "error" "$ENGINE -p exited $KIMI_EXIT (see stderr above)"
     echo "Warning: dispatch surfaced $ENGINE error — verdict overridden: $ENGINE -p exited $KIMI_EXIT" >&2
   fi
@@ -1897,8 +2187,13 @@ elif [[ "$HAS_GAWK" == true ]]; then
   # set -e is disabled around the pipeline so a non-zero codex exit still lets
   # us run verdict override + cleanup before exiting with the captured code.
   set +e
-  "${CMD[@]}" 2> "$STDERR_FILE" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
-  CODEX_EXIT="${PIPESTATUS[0]}"
+  if [[ -n "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+    "${CMD[@]}" 2> "$STDERR_FILE" | tee -a "$CLAVAIN_REVIEW_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+    CODEX_EXIT="${PIPESTATUS[0]}"
+  else
+    "${CMD[@]}" 2> "$STDERR_FILE" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+    CODEX_EXIT="${PIPESTATUS[0]}"
+  fi
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   set -e
 
@@ -1928,8 +2223,20 @@ else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
   set +e
-  "${CMD[@]}" 2> "$STDERR_FILE"
-  CODEX_EXIT=$?
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
+    if [[ -z "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+      echo "Error: budget-bound dispatch requires an event destination" >&2
+      exit 1
+    fi
+    # The Go supervisor parses raw JSONL independently of optional GNU awk.
+    # Stock macOS awk must not prevent budget-governed execution.
+    CMD+=(--json)
+    "${CMD[@]}" 2> "$STDERR_FILE" | tee -a "$CLAVAIN_REVIEW_EVENTS"
+    CODEX_EXIT="${PIPESTATUS[0]}"
+  else
+    "${CMD[@]}" 2> "$STDERR_FILE"
+    CODEX_EXIT=$?
+  fi
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   set -e
 

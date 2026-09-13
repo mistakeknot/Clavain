@@ -1,0 +1,62 @@
+{
+  "date": "2026-09-08",
+  "reviewer_model": "claude-fable-5-1",
+  "author_model": "gpt-6-astra",
+  "requested_effort": "high",
+  "provider_effort_echo": null,
+  "session_id": "79174dfa-b4fd-4aeb-8121-2586ff9e9e1e",
+  "verdict": "PASS",
+  "reviewed_commits": [
+    "4c26c237c30a8a7c9434e1445364652119f1e207",
+    "3810d1b4daccd9a8bec66a1c9ea7c1263ca8f009",
+    "bc5e2f51aba518e90f73ce07f4f39ea1fef3b736",
+    "3305c17ead060bc1c6ead6506934208bf3c7657a",
+    "d2af5f81cc0c228f5e1afd478f0d8cfc2eafbf1f",
+    "a0e1587ee8174231fe1cd662d07d432af3d16661",
+    "618b00d8c695ec0a8496276dc47739c74db8807e",
+    "bf70f3d69fed97b3a3527abb660b41f3a09ac80c"
+  ],
+  "prompt_sha256": "8caff2cb6c77b05b216e63578bc9dba387bb3054298bf8681bf07f15b580544c",
+  "result_sha256": "272fefe0c2da7c813b21e68d4857c1241a99ac5bb77ffa8a41def8a2b4559514",
+  "reviewer_ran_tests": false,
+  "usage_deduplication": "session plus provider message id",
+  "usage": {
+    "input_tokens": 354,
+    "output_tokens": 49827,
+    "cache_read_input_tokens": 1501262,
+    "cache_creation_input_tokens": 224829,
+    "unique_provider_messages": 12
+  },
+  "nonblocking_findings": [
+    {
+      "finding": "Kimi unsupported effort stopped fallback",
+      "disposition": "Record fallback-eligible unsupported_adapter; regression passed."
+    },
+    {
+      "finding": "Calibration accepted missing validator identity",
+      "disposition": "Missing or blank model/hash produces UNKNOWN and pass false; actual jq snippets tested."
+    },
+    {
+      "finding": "No positive governed admission round trip",
+      "disposition": "Added direct/scheduled tests, which exposed explicit empty fallback serialization mismatch. Fixed serialized contract comparison and preserved empty model access."
+    },
+    {
+      "finding": "Kernel admits only one candidate",
+      "disposition": "Documented single-candidate scope separately from wrapper availability loop."
+    },
+    {
+      "finding": "Kimi narrow sync lacked default source",
+      "disposition": "Default to selected script installation; explicit override preserved and tested."
+    },
+    {
+      "finding": "Shared dotfiles sync lacked portable default",
+      "disposition": "Portable by default; intentional explicit policy override tested."
+    }
+  ],
+  "followup_review": {
+    "reviewer": "review_contract",
+    "verdict": "no blockers",
+    "scope": "Uncommitted serialization, QA, installer and fallback fixes; confirmed admission remains strict."
+  },
+  "concurrent_policy_change": "5fb851a was outside reviewed commits; managed blocks refreshed and subsequent host probes bound to new hash."
+}

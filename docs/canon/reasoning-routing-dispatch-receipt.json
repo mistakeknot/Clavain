@@ -1,0 +1,75 @@
+{
+  "host": "claude",
+  "transport": "Clavain role dispatch",
+  "routing": "dispatch-enforced",
+  "policy_sha256": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+  "classification_reasons": [
+    "foundational-invariants",
+    "difficult-verification"
+  ],
+  "producer_model": "gpt-6-astra",
+  "resolved_model": "claude-fable-5-1",
+  "requested_effort": "high",
+  "observed_effort": null,
+  "review_requirement": "other-frontier",
+  "dispatch_id": "309F61B6-20D4-41BE-9CBB-9A8DBE93C3E8",
+  "attempt_id": "3ECE4ED9-82A1-48C4-8189-020CA9AF8088",
+  "actual_session_model_usage": [
+    {
+      "session_id": "17763d79-a849-4dc6-9fa1-d57d36240385",
+      "message_id": "msg_011Cere7uCqEMQ8kmtnjhjNP",
+      "model": "claude-fable-5-1",
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 12783,
+        "cache_read_input_tokens": 9539,
+        "output_tokens": 598,
+        "output_tokens_details": {
+          "thinking_tokens": 343
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 12783,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 598,
+            "cache_read_input_tokens": 9539,
+            "cache_creation_input_tokens": 12783,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 12783
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      }
+    }
+  ],
+  "response": {
+    "policy_sha256": "5c3d9d99773c3212b553962123ec1484e24ca480b13e20d4c4463c2ed55bf653",
+    "policy_selection": "explicit-installation",
+    "planning_requires_frontier": true,
+    "review_requires_other_frontier": true,
+    "allowed_reviewer_model": "claude-fable-5-1",
+    "operational_timeout_counts_as_capability_strike": false,
+    "parent_model_changes_from_config": false,
+    "handoff_requirement": "Hand off only with explicit decisions, constraints, verification steps, and escalation conditions, keeping the replay experiments as the acceptance criteria and keeping frontier involvement while they can still change the plan."
+  },
+  "semantic_pass": true,
+  "native_user_settings_excluded": true,
+  "limitations": [
+    "This is a routing probe, not a review of implementation correctness.",
+    "Provider does not independently echo effort."
+  ],
+  "task": "Sylveste-drqs",
+  "usage_deduplication": "One row per session and provider message ID; repeated content-block events are not separate usage."
+}

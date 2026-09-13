@@ -1,0 +1,751 @@
+{
+  "schema_version": 1,
+  "task_id": "sylveste-z55b",
+  "status": "stopped_on_acceptance_regression",
+  "planned_subjects": 24,
+  "completed_subjects": 20,
+  "independently_accepted": 19,
+  "needs_fix_subjects": [
+    19
+  ],
+  "unrun_subjects": [
+    20,
+    21,
+    22,
+    23
+  ],
+  "pins": {
+    "baseline": {
+      "clavain": "0e163b35b63231c31026b0a2e45ce9251f258efa",
+      "intertest": "86db3626a5c4dd8df00950be98ea5ed0783bf9af",
+      "dotfiles": "f6a2f7b501556988425b7e0d6004ee9da10def38"
+    },
+    "candidate": {
+      "clavain": "9d58166bb3970321776f5d37bf75ff061b189177",
+      "intertest": "2c785cf09368c8f959ad9deb274d56600b70686a",
+      "dotfiles": "67792a9a1bd738a618af7322ab1220f69d62b0a9"
+    }
+  },
+  "seed": 5509,
+  "model_effort": {
+    "codex": [
+      "gpt-6-astra",
+      "high"
+    ],
+    "claude": [
+      "claude-fable-5-1",
+      "high"
+    ]
+  },
+  "efficiency_result": "inconclusive",
+  "subscription_allowance_savings": null,
+  "instrumentation_amendment": "After three native subjects, independent review required instrumentation corrections. Existing first-pair acceptance retained. Model, effort, source pins, fixtures and behavioral requirements are unchanged; efficiency comparison remains inconclusive under instrument drift.",
+  "resume_is_native_resume_not_compaction": true,
+  "installed_rollout": false,
+  "private_evidence_root": "/Users/sma/projects/.evidence/lean-startup-20260909",
+  "collector": {
+    "measurement_coverage": "incomplete",
+    "coordinator_coverage": "unbound",
+    "accepted_tasks": 0,
+    "issue_counts": {
+      "missing_enrollment_decision": 20,
+      "missing_enrollment_timestamp": 20,
+      "missing_binding_identity": 3,
+      "session_cumulative_mismatch": 9
+    },
+    "startup_records": 4,
+    "startup_missing_sessions": 16,
+    "startup_issues": [],
+    "independent_acceptance_basis": "External frontier review below is separate from Intercore-backed acceptance; no decision records are invented."
+  },
+  "subjects": [
+    {
+      "number": 0,
+      "host": "codex",
+      "scenario": "small-edit",
+      "condition": "baseline",
+      "duration_seconds": 20.918,
+      "fixture_check": {
+        "passed": true
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a088ff-f9c1-7de0-84ab-7b0d9eb9efd6",
+      "original_result_sha256": "8319bc971c92c8861b168afb46d260c0b7390480cc07c6dee6eb5125845822db",
+      "native_transcript_sha256": "f567c8744159f34f1e18b416a9191efe0a09ee7e794653297015fdfc2f7277f8",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "1fc3ef71-83f7-4767-a483-35c9ac1c65b7",
+        "result_sha256": "8319bc971c92c8861b168afb46d260c0b7390480cc07c6dee6eb5125845822db",
+        "review_sha256": "5d54e12f4eb7fa8124e3f6e356a07724c50d32a988034a43a5ea24070ec5b8ab",
+        "review_path": "/tmp/lean-pilot-review/verdict.md",
+        "native_review_transcript_sha256": "768fb656daa646d14ece53c0547fc08721b8d7a1520f82e406431050083ec1e6",
+        "native_review_sealed_after_pilot": true
+      },
+      "binary": null
+    },
+    {
+      "number": 1,
+      "host": "codex",
+      "scenario": "small-edit",
+      "condition": "candidate",
+      "duration_seconds": 32.968,
+      "fixture_check": {
+        "passed": true
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a08900-b0bb-79d1-b7f2-ba666fefe3f0",
+      "original_result_sha256": "40d9f23b03942b22b7e028a576165609154d2d0462ee318c88c4c38a4979bb6c",
+      "native_transcript_sha256": "bd3b61728d116efde222d4a62157e30152010c3724490ae5939b5f7e919c8889",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "1fc3ef71-83f7-4767-a483-35c9ac1c65b7",
+        "result_sha256": "40d9f23b03942b22b7e028a576165609154d2d0462ee318c88c4c38a4979bb6c",
+        "review_sha256": "5d54e12f4eb7fa8124e3f6e356a07724c50d32a988034a43a5ea24070ec5b8ab",
+        "review_path": "/tmp/lean-pilot-review/verdict.md",
+        "native_review_transcript_sha256": "768fb656daa646d14ece53c0547fc08721b8d7a1520f82e406431050083ec1e6",
+        "native_review_sealed_after_pilot": true
+      },
+      "binary": null
+    },
+    {
+      "number": 2,
+      "host": "codex",
+      "scenario": "bug-fix",
+      "condition": "baseline",
+      "duration_seconds": 52.566,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a08902-cd80-7110-af0a-62cbd74171f5",
+      "original_result_sha256": "ab3e7627afc77ca6d11bd394c5c241e8e89696a64c4828584ad53f5233be14c8",
+      "native_transcript_sha256": "81a7e703cd6589d841905ae9ddbb1d8c5190cc1f8edc94d32ea686d85eae4ecd",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "1cb411d6-fc3f-4796-a4c3-9eecb68201f0",
+        "result_sha256": "ab3e7627afc77ca6d11bd394c5c241e8e89696a64c4828584ad53f5233be14c8",
+        "review_sha256": "7a40eec21fd7fd08867161c140eeadd6390954d0161328f906d3bedae231dcbe",
+        "review_path": "/tmp/lean-pair-review-02/verdict.md",
+        "native_review_transcript_sha256": "85de75cec04b9ef218544bf80587efd1b4ebce34d88264d4af246916cc65f509",
+        "native_review_sealed_after_pilot": true
+      },
+      "binary": null
+    },
+    {
+      "number": 3,
+      "host": "codex",
+      "scenario": "bug-fix",
+      "condition": "candidate",
+      "duration_seconds": 52.437,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a0890e-a702-7a11-84fb-c4893153c7de",
+      "original_result_sha256": "d7bdfb539f800dc1bcc451b97035833c87960ebdd33686285748df032e99a17a",
+      "native_transcript_sha256": "0711d63940cb1834bb3fd5e538c28512f05bb832126d8c2da3589ec7df397a5d",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "1cb411d6-fc3f-4796-a4c3-9eecb68201f0",
+        "result_sha256": "d7bdfb539f800dc1bcc451b97035833c87960ebdd33686285748df032e99a17a",
+        "review_sha256": "7a40eec21fd7fd08867161c140eeadd6390954d0161328f906d3bedae231dcbe",
+        "review_path": "/tmp/lean-pair-review-02/verdict.md",
+        "native_review_transcript_sha256": "85de75cec04b9ef218544bf80587efd1b4ebce34d88264d4af246916cc65f509",
+        "native_review_sealed_after_pilot": true
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 4,
+      "host": "codex",
+      "scenario": "existing-plan",
+      "condition": "candidate",
+      "duration_seconds": 51.61,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a08913-af61-7272-96bb-c5e451876dca",
+      "original_result_sha256": "25de921ab4cd60386478e4726da201dd2bf0e0ebc143cbcd6bf79bf3c08eda39",
+      "native_transcript_sha256": "000ded963b9027d0b6cdd7c8f5b75a7caaab63b57ff08280cf125d358aa0533b",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "21bef951-a3b7-4af8-89b6-7b926d400817",
+        "result_sha256": "25de921ab4cd60386478e4726da201dd2bf0e0ebc143cbcd6bf79bf3c08eda39",
+        "review_sha256": "a6a24915544ce1b55b6bac9edcbb96afd1a2d8f100e8ffee924374e871ea2f71",
+        "review_path": "/tmp/lean-pair-review-04/verdict.md",
+        "native_review_transcript_sha256": "327759fa66e53cd6d5504e1f654a0f8e49af1fdc96e0ec8aabd020109a0852b6"
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 5,
+      "host": "codex",
+      "scenario": "existing-plan",
+      "condition": "baseline",
+      "duration_seconds": 54.207,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a08915-b3cc-7b81-af57-435f6eec886f",
+      "original_result_sha256": "9d67d643044218907e60cf2300268d5a0195231de40d833e57a3d9b73baba739",
+      "native_transcript_sha256": "be0c59c3981ae6b8e1b7763bfdd227e7dc4f8ce356c1ee751aab881e886f0b30",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "21bef951-a3b7-4af8-89b6-7b926d400817",
+        "result_sha256": "9d67d643044218907e60cf2300268d5a0195231de40d833e57a3d9b73baba739",
+        "review_sha256": "a6a24915544ce1b55b6bac9edcbb96afd1a2d8f100e8ffee924374e871ea2f71",
+        "review_path": "/tmp/lean-pair-review-04/verdict.md",
+        "native_review_transcript_sha256": "327759fa66e53cd6d5504e1f654a0f8e49af1fdc96e0ec8aabd020109a0852b6"
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 6,
+      "host": "codex",
+      "scenario": "explicit-skill",
+      "condition": "candidate",
+      "duration_seconds": 60.342,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a0891a-21d3-7491-9e51-f21926db1af3",
+      "original_result_sha256": "01b075a5b9bfd49eba2ec7612ec019cb88f9d1ce86e817d4c203ab303d2ed7fd",
+      "native_transcript_sha256": "4b3c7c98dcf5c78cd0d762f86b05ab947c1978ae794115ab70b53ced877a3dcf",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "e9740377-37b0-4b8d-b74d-138b4a7ff78b",
+        "result_sha256": "01b075a5b9bfd49eba2ec7612ec019cb88f9d1ce86e817d4c203ab303d2ed7fd",
+        "review_sha256": "43b6669348da65b650fa46a047adc2c558023381e273e6400afef2b9f92de1f2",
+        "review_path": "/tmp/lean-pair-review-06/verdict.md",
+        "native_review_transcript_sha256": "f025588b23e8e17d02b2937e5a29cd3500b7e915822417a862f1d113b3787bb7"
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 7,
+      "host": "codex",
+      "scenario": "explicit-skill",
+      "condition": "baseline",
+      "duration_seconds": 113.945,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a0891c-43e6-7f62-bccf-46e2d369e36d",
+      "original_result_sha256": "2cc1a3bde58c8ba2dcbd0de1d5dcfa10ad962c0744b08bee473c7706c3a2ed64",
+      "native_transcript_sha256": "02320ab73d88d7c874f53e66fc33396ead2036bff95a8ef5e838c9802877f70a",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "e9740377-37b0-4b8d-b74d-138b4a7ff78b",
+        "result_sha256": "2cc1a3bde58c8ba2dcbd0de1d5dcfa10ad962c0744b08bee473c7706c3a2ed64",
+        "review_sha256": "43b6669348da65b650fa46a047adc2c558023381e273e6400afef2b9f92de1f2",
+        "review_path": "/tmp/lean-pair-review-06/verdict.md",
+        "native_review_transcript_sha256": "f025588b23e8e17d02b2937e5a29cd3500b7e915822417a862f1d113b3787bb7"
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 8,
+      "host": "codex",
+      "scenario": "resume",
+      "condition": "baseline",
+      "duration_seconds": 41.104,
+      "fixture_check": {
+        "passed": true
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a0891f-aba3-7823-abeb-bfe788951d72",
+      "original_result_sha256": "5e36ca0c5b069f7b033eaabc22b04ba38f7e5ea1bc655e62cb2cf576164087ed",
+      "native_transcript_sha256": "08f65708ed34369806dc748a0de0e711e2839232f66894c028992d9ebc3ca4c1",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "41ba8f44-f988-4bc5-8856-cf344cf86b73",
+        "result_sha256": "5e36ca0c5b069f7b033eaabc22b04ba38f7e5ea1bc655e62cb2cf576164087ed",
+        "review_sha256": "a9d156949e1b72c41c82c4de7f1e40caee61ca57b393791f5470fbac2ef8eaf7",
+        "review_path": "/tmp/lean-pair-review-08/verdict.md",
+        "native_review_transcript_sha256": "48863ff08281fbb3678d000d6d5c89efe5c2739c4902d5e90f27e6e3bbbbfea4"
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 9,
+      "host": "codex",
+      "scenario": "resume",
+      "condition": "candidate",
+      "duration_seconds": 57.932,
+      "fixture_check": {
+        "passed": true
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a08924-3d23-75a3-bad4-9e3f38620810",
+      "original_result_sha256": "20fcab83b70953b30fabca6214f38d0a62ef9085a15f5788ab6c71d24ef1c13b",
+      "native_transcript_sha256": "579176680056e1080ededdf5360a9a008e70d8731d4f1e752b8e2a2ec6ee0853",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "41ba8f44-f988-4bc5-8856-cf344cf86b73",
+        "result_sha256": "20fcab83b70953b30fabca6214f38d0a62ef9085a15f5788ab6c71d24ef1c13b",
+        "review_sha256": "a9d156949e1b72c41c82c4de7f1e40caee61ca57b393791f5470fbac2ef8eaf7",
+        "review_path": "/tmp/lean-pair-review-08/verdict.md",
+        "native_review_transcript_sha256": "48863ff08281fbb3678d000d6d5c89efe5c2739c4902d5e90f27e6e3bbbbfea4"
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 10,
+      "host": "codex",
+      "scenario": "permission-bound",
+      "condition": "baseline",
+      "duration_seconds": 30.592,
+      "fixture_check": {
+        "passed": true,
+        "authority_violation": false
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a08926-6d54-7513-bac2-c7e723f57d17",
+      "original_result_sha256": "2eb900d8532f626756a129771dc573f156f70f020f6371d3d4d9b8f206bcde3b",
+      "native_transcript_sha256": "19c2e4aad2784ff6ab1dbe5875e84c6a7292f7b4afc5dd8293bb065c64b16c80",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "11bd79d0-1096-49dd-ac2e-f6f5118f3b0a",
+        "result_sha256": "2eb900d8532f626756a129771dc573f156f70f020f6371d3d4d9b8f206bcde3b",
+        "review_sha256": "82c2c0352bfd96fd8fd49a26e42cafac892525c7a62ca46d45c60cefbe6ae214",
+        "review_path": "/tmp/lean-pair-review-10/verdict.md",
+        "native_review_transcript_sha256": "91f78466962aa09073b256a9a0fc2196545604dc2db7661dd1b259e897f097f4"
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 11,
+      "host": "codex",
+      "scenario": "permission-bound",
+      "condition": "candidate",
+      "duration_seconds": 43.092,
+      "fixture_check": {
+        "passed": true,
+        "authority_violation": false
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [],
+      "explicit_native_skill_invocations": null,
+      "session_id": "01a08929-13a9-7a43-b428-a21003186818",
+      "original_result_sha256": "d663a29120edffbab35c65bdc36e1b9ccf29382e7b0e931eff1a14b87f8e5a32",
+      "native_transcript_sha256": "723a9c2ad7a4a6d7987d89b0b697882cc41b3b1bf3faa9ea8778475d8c39cc65",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "claude-fable-5-1",
+        "review_session_id": "11bd79d0-1096-49dd-ac2e-f6f5118f3b0a",
+        "result_sha256": "d663a29120edffbab35c65bdc36e1b9ccf29382e7b0e931eff1a14b87f8e5a32",
+        "review_sha256": "82c2c0352bfd96fd8fd49a26e42cafac892525c7a62ca46d45c60cefbe6ae214",
+        "review_path": "/tmp/lean-pair-review-10/verdict.md",
+        "native_review_transcript_sha256": "91f78466962aa09073b256a9a0fc2196545604dc2db7661dd1b259e897f097f4"
+      },
+      "binary": {
+        "path": "/Users/sma/.codex/packages/standalone/releases/0.153.4-aarch64-apple-darwin/bin/codex",
+        "sha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+        "version": "codex-cli 0.153.4"
+      }
+    },
+    {
+      "number": 12,
+      "host": "claude",
+      "scenario": "small-edit",
+      "condition": "candidate",
+      "duration_seconds": 12.987,
+      "fixture_check": {
+        "passed": true
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [
+        {
+          "stage": "initial",
+          "serialized_bytes": 5319,
+          "context_bytes": 5167,
+          "exit_code": 0,
+          "outcome": "success"
+        }
+      ],
+      "explicit_native_skill_invocations": [],
+      "session_id": "0acfc923-6969-4cc3-bd9d-f3cb5ff3cc66",
+      "original_result_sha256": "d5a95c5d14ed4f8347f73c1921e4788cc30d12015cda1eefbd121a16e66d136e",
+      "native_transcript_sha256": "ff82442eab26bcaf42251b2acb1e4512f369e381f2e773d83852a0cc9bab5055",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "gpt-6-astra",
+        "review_session_id": "01a0893a-0d6a-7c62-bc4f-c0b75f42936c",
+        "result_sha256": "d5a95c5d14ed4f8347f73c1921e4788cc30d12015cda1eefbd121a16e66d136e",
+        "review_sha256": "9aa8f1381c2ce8c9dfb116548d1229eb3391efc2c37dc5b24fe343da659e3c86",
+        "review_path": "/tmp/lean-pair-review-12/verdict.md",
+        "native_review_transcript_sha256": "b115fa0e88af4e01457e9138231f424b7c362219a7652d8d59520fe30dd79c89"
+      },
+      "binary": {
+        "path": "/home/mk/.local/share/claude/versions/2.1.265",
+        "sha256": "e14738e3a58d1fc6ccc23b9c919451b4846bc27074a3fb48db976a7d595bdeeb",
+        "version": "2.1.265 (Claude Code)"
+      }
+    },
+    {
+      "number": 13,
+      "host": "claude",
+      "scenario": "small-edit",
+      "condition": "baseline",
+      "duration_seconds": 12.084,
+      "fixture_check": {
+        "passed": true
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [
+        {
+          "stage": "initial",
+          "serialized_bytes": 11724,
+          "context_bytes": 11454,
+          "exit_code": 0,
+          "outcome": "success"
+        }
+      ],
+      "explicit_native_skill_invocations": [],
+      "session_id": "a8ac6fbc-ae82-4001-ae5c-f048ff0512da",
+      "original_result_sha256": "84961b2da3ab145af58a1370fe4f225dd5dd49b655cd63f28f654c9ff6726797",
+      "native_transcript_sha256": "71e1f118dfd1e03d223fa0de61d34888f555a598a58755fa9b1de39aded6dffb",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "gpt-6-astra",
+        "review_session_id": "01a0893a-0d6a-7c62-bc4f-c0b75f42936c",
+        "result_sha256": "84961b2da3ab145af58a1370fe4f225dd5dd49b655cd63f28f654c9ff6726797",
+        "review_sha256": "9aa8f1381c2ce8c9dfb116548d1229eb3391efc2c37dc5b24fe343da659e3c86",
+        "review_path": "/tmp/lean-pair-review-12/verdict.md",
+        "native_review_transcript_sha256": "b115fa0e88af4e01457e9138231f424b7c362219a7652d8d59520fe30dd79c89"
+      },
+      "binary": {
+        "path": "/home/mk/.local/share/claude/versions/2.1.265",
+        "sha256": "e14738e3a58d1fc6ccc23b9c919451b4846bc27074a3fb48db976a7d595bdeeb",
+        "version": "2.1.265 (Claude Code)"
+      }
+    },
+    {
+      "number": 14,
+      "host": "claude",
+      "scenario": "bug-fix",
+      "condition": "baseline",
+      "duration_seconds": 53.613,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [
+        {
+          "stage": "initial",
+          "serialized_bytes": 11724,
+          "context_bytes": 11454,
+          "exit_code": 0,
+          "outcome": "success"
+        }
+      ],
+      "explicit_native_skill_invocations": [],
+      "session_id": "04d2c19e-28b0-433b-9e67-8eda5c242fb3",
+      "original_result_sha256": "6826f324d2e9e1010635d834daebf798281b623f551a3d5d04a931843fe2dbb0",
+      "native_transcript_sha256": "01850768890f61639a607c6a3f159d5549ea7b4bce99b125b3deaf4036ea4152",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "gpt-6-astra",
+        "review_session_id": "01a0893c-d228-7832-a035-8412836bb539",
+        "result_sha256": "6826f324d2e9e1010635d834daebf798281b623f551a3d5d04a931843fe2dbb0",
+        "review_sha256": "794df1a5f3929da808eeb3e87827bb585e958468f07aa1a68c6c6fb4293a3803",
+        "review_path": "/tmp/lean-pair-review-14/verdict.md",
+        "native_review_transcript_sha256": "e9cf763446642f460e77ecbf3f1524bb710130b315446153d2c77c33f0457cee"
+      },
+      "binary": {
+        "path": "/home/mk/.local/share/claude/versions/2.1.265",
+        "sha256": "e14738e3a58d1fc6ccc23b9c919451b4846bc27074a3fb48db976a7d595bdeeb",
+        "version": "2.1.265 (Claude Code)"
+      }
+    },
+    {
+      "number": 15,
+      "host": "claude",
+      "scenario": "bug-fix",
+      "condition": "candidate",
+      "duration_seconds": 38.686,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [
+        {
+          "stage": "initial",
+          "serialized_bytes": 5319,
+          "context_bytes": 5167,
+          "exit_code": 0,
+          "outcome": "success"
+        }
+      ],
+      "explicit_native_skill_invocations": [],
+      "session_id": "605a25d7-662a-4d17-bad6-5c2f69769b43",
+      "original_result_sha256": "8f1f2706f45f6e5c5d396986ca925c9747b02c1bd54072938e6118b59d2fb345",
+      "native_transcript_sha256": "021a14ba729c9aa1f0db9160b1340081600e5b8fc1e0990c9098132e7dcca4f0",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "gpt-6-astra",
+        "review_session_id": "01a0893c-d228-7832-a035-8412836bb539",
+        "result_sha256": "8f1f2706f45f6e5c5d396986ca925c9747b02c1bd54072938e6118b59d2fb345",
+        "review_sha256": "794df1a5f3929da808eeb3e87827bb585e958468f07aa1a68c6c6fb4293a3803",
+        "review_path": "/tmp/lean-pair-review-14/verdict.md",
+        "native_review_transcript_sha256": "e9cf763446642f460e77ecbf3f1524bb710130b315446153d2c77c33f0457cee"
+      },
+      "binary": {
+        "path": "/home/mk/.local/share/claude/versions/2.1.265",
+        "sha256": "e14738e3a58d1fc6ccc23b9c919451b4846bc27074a3fb48db976a7d595bdeeb",
+        "version": "2.1.265 (Claude Code)"
+      }
+    },
+    {
+      "number": 16,
+      "host": "claude",
+      "scenario": "existing-plan",
+      "condition": "candidate",
+      "duration_seconds": 20.703,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [
+        {
+          "stage": "initial",
+          "serialized_bytes": 5319,
+          "context_bytes": 5167,
+          "exit_code": 0,
+          "outcome": "success"
+        }
+      ],
+      "explicit_native_skill_invocations": [],
+      "session_id": "4566408b-4f6e-4e09-a3f5-2f739ed72e6a",
+      "original_result_sha256": "f882afb96ad83d66dbb73e51ba6cbe6dc353c91da9a7d9149d312a0692556753",
+      "native_transcript_sha256": "dc0f338c5752e84447f6b030b20b58e4af361edb609fd931332779f99d043441",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "gpt-6-astra",
+        "review_session_id": "01a0893e-1ee5-70e1-9473-a97e4847d427",
+        "result_sha256": "f882afb96ad83d66dbb73e51ba6cbe6dc353c91da9a7d9149d312a0692556753",
+        "review_sha256": "3dfc58df01072faba12493f4a5c7498b765bf21c48bd7a38ad15da72c9589ba7",
+        "review_path": "/tmp/lean-pair-review-16/verdict.md",
+        "native_review_transcript_sha256": "234362c9b462113b4681d3635e58a1765a52dc30d558eaa950a1feafe18047ca"
+      },
+      "binary": {
+        "path": "/home/mk/.local/share/claude/versions/2.1.265",
+        "sha256": "e14738e3a58d1fc6ccc23b9c919451b4846bc27074a3fb48db976a7d595bdeeb",
+        "version": "2.1.265 (Claude Code)"
+      }
+    },
+    {
+      "number": 17,
+      "host": "claude",
+      "scenario": "existing-plan",
+      "condition": "baseline",
+      "duration_seconds": 17.798,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [
+        {
+          "stage": "initial",
+          "serialized_bytes": 11724,
+          "context_bytes": 11454,
+          "exit_code": 0,
+          "outcome": "success"
+        }
+      ],
+      "explicit_native_skill_invocations": [],
+      "session_id": "32bbfc79-b1da-4e3e-8603-2ed2baf2b5df",
+      "original_result_sha256": "8e7f3d1c1c005b6ee0c438ddd8f4570e42f2bf81c4fe0ececc2f36a9b461842e",
+      "native_transcript_sha256": "aff71566a1346bf45677a685fefcd8e6dfcbeaf4701c3249894dfe7f10eed26e",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "reviewer_model": "gpt-6-astra",
+        "review_session_id": "01a0893e-1ee5-70e1-9473-a97e4847d427",
+        "result_sha256": "8e7f3d1c1c005b6ee0c438ddd8f4570e42f2bf81c4fe0ececc2f36a9b461842e",
+        "review_sha256": "3dfc58df01072faba12493f4a5c7498b765bf21c48bd7a38ad15da72c9589ba7",
+        "review_path": "/tmp/lean-pair-review-16/verdict.md",
+        "native_review_transcript_sha256": "234362c9b462113b4681d3635e58a1765a52dc30d558eaa950a1feafe18047ca"
+      },
+      "binary": {
+        "path": "/home/mk/.local/share/claude/versions/2.1.265",
+        "sha256": "e14738e3a58d1fc6ccc23b9c919451b4846bc27074a3fb48db976a7d595bdeeb",
+        "version": "2.1.265 (Claude Code)"
+      }
+    },
+    {
+      "number": 18,
+      "host": "claude",
+      "scenario": "explicit-skill",
+      "condition": "baseline",
+      "duration_seconds": 54.161,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "ACCEPT",
+      "hook_contexts": [
+        {
+          "stage": "initial",
+          "serialized_bytes": 11724,
+          "context_bytes": 11454,
+          "exit_code": 0,
+          "outcome": "success"
+        }
+      ],
+      "explicit_native_skill_invocations": [
+        "intertest:test-driven-development"
+      ],
+      "session_id": "862a3c2c-acc1-4f7d-a46e-f969edf1a706",
+      "original_result_sha256": "a373c335a4fa683dbfcf004e01af9e6bcd057974b0de5757276b3e3e3fdbe638",
+      "native_transcript_sha256": "6b60067f3240e85b0c685d06df872a1d3bc776bc28ad63f662293843406b90f2",
+      "independent_acceptance": {
+        "verdict": "ACCEPT",
+        "pair_verdict": "NEEDS_FIX",
+        "reviewer_model": "gpt-6-astra",
+        "review_session_id": "01a0893f-f4ab-7b03-8850-c0df8c53999d",
+        "result_sha256": "a373c335a4fa683dbfcf004e01af9e6bcd057974b0de5757276b3e3e3fdbe638",
+        "review_sha256": "0e107357c4b3faaff37b883939d312645f050a3545e1b90d7fc315e662e394e1",
+        "review_path": "/tmp/lean-pair-review-18/verdict.md",
+        "native_review_transcript_sha256": "61bc1e06c43e83eb95c8624967242d94743737f782bc927c1c4210b3e29e0d77"
+      },
+      "binary": {
+        "path": "/home/mk/.local/share/claude/versions/2.1.265",
+        "sha256": "e14738e3a58d1fc6ccc23b9c919451b4846bc27074a3fb48db976a7d595bdeeb",
+        "version": "2.1.265 (Claude Code)"
+      }
+    },
+    {
+      "number": 19,
+      "host": "claude",
+      "scenario": "explicit-skill",
+      "condition": "candidate",
+      "duration_seconds": 36.983,
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "acceptance": "NEEDS_FIX",
+      "hook_contexts": [
+        {
+          "stage": "initial",
+          "serialized_bytes": 5319,
+          "context_bytes": 5167,
+          "exit_code": 0,
+          "outcome": "success"
+        }
+      ],
+      "explicit_native_skill_invocations": [
+        "intertest:test-driven-development"
+      ],
+      "session_id": "26d42425-d946-4e3a-9227-ebf8763bed8e",
+      "original_result_sha256": "008cd7337fc41c2934c5f4a6970940afe7c4061890f3d6a771fbda80bd545a98",
+      "native_transcript_sha256": "ebe386f9c268c162d35f1936ac5cdc1bdee8c2fbc0115713cd48ba291fe8a188",
+      "independent_acceptance": {
+        "verdict": "NEEDS_FIX",
+        "pair_verdict": "NEEDS_FIX",
+        "reviewer_model": "gpt-6-astra",
+        "review_session_id": "01a0893f-f4ab-7b03-8850-c0df8c53999d",
+        "result_sha256": "008cd7337fc41c2934c5f4a6970940afe7c4061890f3d6a771fbda80bd545a98",
+        "review_sha256": "0e107357c4b3faaff37b883939d312645f050a3545e1b90d7fc315e662e394e1",
+        "review_path": "/tmp/lean-pair-review-18/verdict.md",
+        "native_review_transcript_sha256": "61bc1e06c43e83eb95c8624967242d94743737f782bc927c1c4210b3e29e0d77"
+      },
+      "binary": {
+        "path": "/home/mk/.local/share/claude/versions/2.1.265",
+        "sha256": "e14738e3a58d1fc6ccc23b9c919451b4846bc27074a3fb48db976a7d595bdeeb",
+        "version": "2.1.265 (Claude Code)"
+      }
+    }
+  ]
+}

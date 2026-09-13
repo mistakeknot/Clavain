@@ -71,6 +71,14 @@ stages:
     tasks:
 {tasks_yaml}"""
     )
+    # These fixtures test dispatch/review behavior independently of machine gates.
+    import yaml
+    data = yaml.safe_load(path.read_text())
+    for stage in data["stages"]:
+        for task in stage["tasks"]:
+            task.setdefault("verification", {"required": False, "checks": []})
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+
     return path
 
 

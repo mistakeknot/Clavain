@@ -1,0 +1,160 @@
+{
+  "admission_source": "c9d64bd",
+  "automation": "independent-zklw",
+  "builds": [
+    {
+      "artifacts": {
+        "clavain-cli-go-darwin-arm64": {
+          "sha256": "a9567483e5d9fe93d8036e6ecdea8f4198cbd9533a30e6d92db38254b8927504",
+          "size_bytes": 18006114
+        },
+        "clavain-cli-go-linux-amd64": {
+          "sha256": "3fff91494889d71d2dbcf93c4f9a7415ab9b9863153ecd9c778b8432485ac5aa",
+          "size_bytes": 18673539
+        },
+        "clavain-cli-go-windows-amd64": {
+          "sha256": "948c1a552cf2e2b4451fc157520c381790da1cbceec8ac76592f2be3dfe2c9d3",
+          "size_bytes": 19095040
+        },
+        "release-manifest.json": {
+          "sha256": "ce444954fdec6388afd496cc4c7446da7019c2eeb2efc55366934b9c896901fd",
+          "size_bytes": 838
+        }
+      },
+      "dependency_bundle_sha256": "0fdad9f500cd56eebf474694935ca80e816a0a004fdb030496597da41a9bd3f2",
+      "exit_code": 0,
+      "guest_id": "a9698b67-61dd-48eb-a8d3-4ffbe8e732ca",
+      "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+      "job_id": 66,
+      "packaging": {
+        "dependency": {
+          "full_name": "mistakeknot/intercore",
+          "id": 1160997330,
+          "sha": "39f7599083c76ce32f46527c84fd58b43d1143de"
+        },
+        "go_archive_sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+        "go_version": "go1.26.4",
+        "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+        "recipe_path": "scripts/ci-package.sh",
+        "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+        "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1"
+      },
+      "receipt_sha256": "e137de6f0a61dbfe83650c762dfd9fde8c08350a12617d6f00182c2f3395e3e4",
+      "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+      "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1",
+      "repo_id": 1151593132,
+      "source_bundle_sha256": "3e93fd98ed40b74c6332d62b3508f76186d3dea8a72f8d482370bb32eeca12e1",
+      "source_sha": "5cd07e958be4c983e4e5c339525077aaa102461e"
+    },
+    {
+      "artifacts": {
+        "clavain-cli-go-darwin-arm64": {
+          "sha256": "a9567483e5d9fe93d8036e6ecdea8f4198cbd9533a30e6d92db38254b8927504",
+          "size_bytes": 18006114
+        },
+        "clavain-cli-go-linux-amd64": {
+          "sha256": "3fff91494889d71d2dbcf93c4f9a7415ab9b9863153ecd9c778b8432485ac5aa",
+          "size_bytes": 18673539
+        },
+        "clavain-cli-go-windows-amd64": {
+          "sha256": "948c1a552cf2e2b4451fc157520c381790da1cbceec8ac76592f2be3dfe2c9d3",
+          "size_bytes": 19095040
+        },
+        "release-manifest.json": {
+          "sha256": "ce444954fdec6388afd496cc4c7446da7019c2eeb2efc55366934b9c896901fd",
+          "size_bytes": 838
+        }
+      },
+      "dependency_bundle_sha256": "0fdad9f500cd56eebf474694935ca80e816a0a004fdb030496597da41a9bd3f2",
+      "exit_code": 0,
+      "guest_id": "2acab87a-7d74-4445-b383-9becc80129b4",
+      "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+      "job_id": 67,
+      "packaging": {
+        "dependency": {
+          "full_name": "mistakeknot/intercore",
+          "id": 1160997330,
+          "sha": "39f7599083c76ce32f46527c84fd58b43d1143de"
+        },
+        "go_archive_sha256": "1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f",
+        "go_version": "go1.26.4",
+        "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+        "recipe_path": "scripts/ci-package.sh",
+        "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+        "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1"
+      },
+      "receipt_sha256": "9bc4b5f8abb9874b0d1e93b56d82c80f2b4fd8fe59315b32b1a45717df207818",
+      "recipe_sha": "eed1463c2541242e05ca3ea8c0150f122a9248f8",
+      "recipe_sha256": "862a9fbfec60a30aaeadc9cce1c3a2914c4caa2b3b21b1458ff6bd3e37de5bc1",
+      "repo_id": 1151593132,
+      "source_bundle_sha256": "649e7c2054a5a899112206263e4593b4c757bff739ee70805a0cbe8e374a562f",
+      "source_sha": "5cd07e958be4c983e4e5c339525077aaa102461e"
+    }
+  ],
+  "efficiency": "inconclusive; original comparison preserved",
+  "installed_acceptance": "pending",
+  "publication_dry_run": "Publishing clavain: 0.6.315 \u2192 0.6.316\n  Scoped publish: selected plugin, canonical marketplace, cache, installed record and hook bridges only.\n  Canonical marketplace: /Users/sma/projects/Sylveste/core/marketplace\n  Skipping peer marketplace sync/refresh, global cache cleanup, rig sync and diagram generation.\n  Plugin root:  /Users/sma/projects/.lean-rollout-20260909/source/os/Clavain\n  Marketplace:  /Users/sma/projects/Sylveste/core/marketplace\n  Version files: plugin.json, agent-rig.json\nDry run \u2014 no changes made.\n",
+  "reproducibility": {
+    "artifacts": {
+      "clavain-cli-go-darwin-arm64": {
+        "sha256": "a9567483e5d9fe93d8036e6ecdea8f4198cbd9533a30e6d92db38254b8927504",
+        "size_bytes": 18006114
+      },
+      "clavain-cli-go-linux-amd64": {
+        "sha256": "3fff91494889d71d2dbcf93c4f9a7415ab9b9863153ecd9c778b8432485ac5aa",
+        "size_bytes": 18673539
+      },
+      "clavain-cli-go-windows-amd64": {
+        "sha256": "948c1a552cf2e2b4451fc157520c381790da1cbceec8ac76592f2be3dfe2c9d3",
+        "size_bytes": 19095040
+      },
+      "release-manifest.json": {
+        "sha256": "ce444954fdec6388afd496cc4c7446da7019c2eeb2efc55366934b9c896901fd",
+        "size_bytes": 838
+      }
+    },
+    "bundle_bytes_identical": false,
+    "bundle_equivalence": [
+      {
+        "bundle_sha256": "3e93fd98ed40b74c6332d62b3508f76186d3dea8a72f8d482370bb32eeca12e1",
+        "fsck": "",
+        "heads": "5cd07e958be4c983e4e5c339525077aaa102461e refs/heads/ci-source\n",
+        "job_id": 66,
+        "reachable_inventory_sha256": "6a54e04f70f8d4e638340b3538fe99ba177a094c1e0010674f51b960b559e6da",
+        "reachable_objects": 13464,
+        "source_archive_bytes": 70266880,
+        "source_archive_sha256": "d4478366770bc46e2e927534440c4a6f150a62b4606bdc2691bfdcfef475b6b5",
+        "tree": "085520a45522685b4cfa8322d4598d3a276957d7",
+        "verification": "The bundle contains this ref:\n5cd07e958be4c983e4e5c339525077aaa102461e refs/heads/ci-source\nThe bundle records a complete history.\nThe bundle uses this hash algorithm: sha1\n"
+      },
+      {
+        "bundle_sha256": "649e7c2054a5a899112206263e4593b4c757bff739ee70805a0cbe8e374a562f",
+        "fsck": "",
+        "heads": "5cd07e958be4c983e4e5c339525077aaa102461e refs/heads/ci-source\n",
+        "job_id": 67,
+        "reachable_inventory_sha256": "6a54e04f70f8d4e638340b3538fe99ba177a094c1e0010674f51b960b559e6da",
+        "reachable_objects": 13464,
+        "source_archive_bytes": 70266880,
+        "source_archive_sha256": "d4478366770bc46e2e927534440c4a6f150a62b4606bdc2691bfdcfef475b6b5",
+        "tree": "085520a45522685b4cfa8322d4598d3a276957d7",
+        "verification": "The bundle contains this ref:\n5cd07e958be4c983e4e5c339525077aaa102461e refs/heads/ci-source\nThe bundle records a complete history.\nThe bundle uses this hash algorithm: sha1\n"
+      }
+    ],
+    "guest_ids": [
+      "a9698b67-61dd-48eb-a8d3-4ffbe8e732ca",
+      "2acab87a-7d74-4445-b383-9becc80129b4"
+    ],
+    "matching": true,
+    "semantic_inputs_identical": true,
+    "source_sha": "5cd07e958be4c983e4e5c339525077aaa102461e"
+  },
+  "schema_version": 1,
+  "supersedes": "release-artifact-evidence-final.json; all prior receipts retained unchanged",
+  "verifier": {
+    "artifact_count": 3,
+    "intercore_revision": "39f7599083c76ce32f46527c84fd58b43d1143de",
+    "schema_version": 1,
+    "source_revision": "5cd07e958be4c983e4e5c339525077aaa102461e",
+    "verified": true
+  }
+}

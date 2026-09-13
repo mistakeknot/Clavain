@@ -273,6 +273,11 @@ func pollEligible(state *daemonState, cfg daemonConfig) ([]bdReadyEntry, error) 
 
 	var eligible []bdReadyEntry
 	for _, b := range beads {
+		// Accepted reviews have a durable supervisor, scoped approval and budget.
+		// The generic daemon must not race that supervisor or widen its scope.
+		if hasLabel(b.Labels, "autarch-review-managed") {
+			continue
+		}
 		// Skip already-active
 		if state.isActive(b.ID) {
 			continue
@@ -364,7 +369,7 @@ func sanitizeTitle(s string) string {
 	return strings.TrimSpace(cleaned)
 }
 
-// spawnAgent claims a bead and starts a Claude Code subprocess.
+// spawnAgent claims a bead and uses the governed execution-role dispatcher.
 func spawnAgent(state *daemonState, cfg daemonConfig, bead bdReadyEntry, logDir string) error {
 	// Claim the bead
 	_, err := runBD("update", bead.ID, "--claim")
@@ -377,16 +382,19 @@ func spawnAgent(state *daemonState, cfg daemonConfig, bead bdReadyEntry, logDir 
 	_, _ = runBD("set-state", bead.ID, fmt.Sprintf("claimed_by=%s", daemonID))
 	_, _ = runBD("set-state", bead.ID, fmt.Sprintf("claimed_at=%d", time.Now().Unix()))
 
-	// Build Claude command
-	claudePath, err := exec.LookPath("claude")
+	script, err := reviewDispatchScript()
 	if err != nil {
 		releaseClaim(bead.ID)
-		return fmt.Errorf("claude binary not found: %w", err)
+		return err
 	}
 
-	prompt := fmt.Sprintf("/clavain:route %s", bead.ID)
-	cmd := exec.Command(claudePath, "--dangerously-skip-permissions", "--verbose", "-p", prompt)
-	cmd.Dir = cfg.ProjectDir
+	prompt := fmt.Sprintf("Read project guidance and Beads work %s in this project. Execute its approved scope through Clavain's workflow and required checks. Preserve blockers and human approval gates.", bead.ID)
+	promptPath := filepath.Join(logDir, bead.ID+".prompt.md")
+	if err := os.WriteFile(promptPath, []byte(prompt), 0600); err != nil {
+		releaseClaim(bead.ID)
+		return err
+	}
+	cmd := governedReviewCommand(script, cfg.ProjectDir, promptPath, filepath.Join(logDir, bead.ID+".response.md"), bead.ID, "routine-execution")
 
 	// Clear env vars that prevent nested Claude Code sessions.
 	// The daemon spawns independent sessions, not nested ones.
@@ -399,6 +407,7 @@ func spawnAgent(state *daemonState, cfg daemonConfig, bead bdReadyEntry, logDir 
 		}
 	}
 	cmd.Env = cleanEnv
+	cmd.Env = append(cmd.Env, "CLAVAIN_BEAD_ID="+bead.ID)
 
 	// Set up log file
 	logFile := filepath.Join(logDir, fmt.Sprintf("%s.log", bead.ID))

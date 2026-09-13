@@ -10,6 +10,21 @@ description: Set up a Sylveste project, new or existing — introspect, create r
 One-command project setup. Idempotent — skips what already exists.
 **Announce at start:** "I'm using the project-onboard skill to set up this project."
 
+## Reasoning allocation
+
+Before substantive planning or execution, read the selected Clavain installation's
+`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
+and an accountable decision context. Substantial uncertainty, foundational
+invariants, broad consequences, difficult verification, and demonstrated
+capability failure require frontier involvement. Domain names are examples.
+Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
+capabilities require frontier planning. Keep frontier involvement while evidence
+changes the plan. Hand off with decisions, constraints, verification, and escalation
+conditions explicit; retain empirical acceptance. Foundational/consequential plan
+review requires the other frontier model. Operational failures are not capability
+strikes. Preserve stricter gates; unsupported host routing must be reported.
+
+
 ## Invocation
 
 - Bare: `/clavain:project-onboard`
@@ -130,6 +145,18 @@ done
 Personas live in `docs/canon/` because they are durable canonical knowledge that the PRD, vision, and CUJ docs all read from.
 
 ## Phase 4: Observability
+
+**Independent automation:** For active mistakeknot/gensysven repositories,
+inspect `zklw-ci status --repo OWNER/REPO --json` on zklw and claim the existing
+repository migration task from campaign `mk-ag2s` before changing CI. For new
+code projects, derive reproducible baseline checks from Q5 and manifests;
+register using `zklw-ci onboard --repo OWNER/REPO --json`. Onboard creates a
+review proposal, not execution authority: complete the registry review and
+fresh-guest verification before reporting CI ready. Do not create Linux GitHub
+Actions workflows or Actions-controlled self-hosted runners. Keep required
+macOS/Windows jobs, production destinations, signing and publication gates.
+Document a no-applicable-automation disposition for documentation-only projects.
+Missing fleet service or authentication is an explicit prerequisite failure.
 
 **4a: Interwatch** — if `.interwatch/` missing, create from templates. Always generate `.interwatch/project.yaml` with `{{PROJECT_NAME}}` and `{{ROADMAP_SCAN_DIRS}}` (Q6 or empty). Merge without overwriting if file already exists.
 

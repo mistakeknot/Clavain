@@ -57,12 +57,28 @@ the linter still works after any change to it. `--json` for machine consumption.
 
 Launch three review agents in parallel using the Task tool to review the provided plan:
 
-Every spawn names a model — execution `model: sonnet`, validation `model: opus`, frontier-in-the-loop `model: inherit` (routing doctrine, commands/model-routing.md). Unpinned spawns inherit the session model. These reviewers are review-category: `model: sonnet`.
+Resolve the plan-review role using the plan's decision context and actual author
+identity before dispatch. Use the selected installation's policy explicitly:
 
-1. **plan-reviewer** — Use the Task tool with `subagent_type: "clavain:review:plan-reviewer"`, `model: "sonnet"` to review the plan against implementation standards and completeness.
+```bash
+ic --json route dispatch --policy="$CLAVAIN_ROUTING_POLICY" --role=plan-review \
+  --producer-identity="$PLAN_AUTHOR_MODEL" --context-file="$CLAVAIN_DECISION_CONTEXT"
+```
 
-2. **fd-architecture** — Use the Task tool with `subagent_type: "interflux:review:fd-architecture"`, `model: "sonnet"` to evaluate architectural decisions, component boundaries, and design patterns.
+The verdict reviewer must satisfy the returned review requirement. Foundational
+or especially consequential plans need the other frontier model. Use packaged
+`dispatch.sh --role plan-review --producer-identity "$PLAN_AUTHOR_MODEL"`; pass
+the context through `CLAVAIN_DECISION_CONTEXT`. Task is suitable only when the
+host can apply the resolved model AND effort. Never use `inherit` or silently
+fall back below the required frontier tier. Existing melange and gauge gates
+still apply. The routine trio supplies lens findings; it does not replace the
+required independent verdict:
 
-3. **fd-quality** — Use the Task tool with `subagent_type: "interflux:review:fd-quality"`, `model: "sonnet"` to check for over-engineering, unnecessary complexity, and YAGNI violations.
+1. **plan-reviewer** — review implementation standards and completeness.
+2. **fd-architecture** — evaluate boundaries and design decisions.
+3. **fd-quality** — check unnecessary complexity and over-engineering.
+
+Resolve lens models through the existing review category and safety floors;
+record actual model receipts rather than pinning a command-level model.
 
 All three agents should receive the plan content and run concurrently (use a single message with multiple Task tool calls). After all agents complete, synthesize their findings into a unified review with prioritized issues.

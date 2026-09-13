@@ -34,8 +34,8 @@ All work tracking goes through beads (`bd create`). Never create TODO files with
 - Namespace: `clavain:` (not superpowers, not compound-engineering)
 - General-purpose only — no Rails, Ruby gems, Every.to, Figma, Xcode, browser-automation
 - 7 core review agents live in interflux companion (fd-architecture, fd-safety, fd-correctness, fd-quality, fd-user-product, fd-performance, fd-game-design)
-- SessionStart hook injects `using-clavain` skill content via `additionalContext` JSON
+- SessionStart renders bounded read-only context via `scripts/startup.py`; workflow bodies load on demand
 - 3-layer routing: Stage → Domain → Concern
 - Trunk-based development — no branches/worktrees skills
 - `docs-sp-reference/` is historical archive from source plugins — don't modify
-- **Always publish after pushing** — see `AGENTS.md` "Release workflow" and root `agents/plugin-publishing.md`.
+- Complete authorized commits and pushes after verification and review. Publishing requires its existing publication authority and release gates; see root `agents/session-protocol.md` and `agents/plugin-publishing.md`.

@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "purpose": "Targeted correction probes, separate from stopped paired comparison",
+  "original_comparison_unchanged": true,
+  "probes": [
+    {
+      "version": "v2",
+      "host": "codex",
+      "pins": {
+        "clavain": "e36d9ad63a747059ecbee79bc91bc9109f8a8ef0",
+        "intertest": "e3c917596ca740cd2d8327e1c03d240ad16b8613",
+        "dotfiles": "67792a9a1bd738a618af7322ab1220f69d62b0a9"
+      },
+      "session_id": "01a08946-313c-78b2-b89c-29d3fcf58d57",
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "stages": [
+        {
+          "exit_code": 0,
+          "status": "exited",
+          "duration_seconds": 48.347
+        }
+      ],
+      "result_sha256": "14b320515da6e67216d852d351d5938b6ddbde8c68c0fc808795c9fc37a38731",
+      "independent_acceptance": {
+        "session_id": "6f40cb75-b672-4ee3-a884-bb44d6ef615b",
+        "models": [
+          "claude-fable-5-1"
+        ],
+        "efforts": null,
+        "transcript_sha256": "13bb635152426c1af01090765fec6c1d6b638771e2655bc51ffb28ac48ec9828",
+        "verdict": "ACCEPT",
+        "verdict_sha256": "73585f550cecef0582d0fde194233cee60a496566e0dca78f9b07e3b47f199a4"
+      },
+      "review_path": "/Users/sma/projects/.evidence/lean-startup-20260909/corrections/v2/reviews/codex/verdict.md"
+    },
+    {
+      "version": "v2",
+      "host": "claude",
+      "pins": {
+        "clavain": "e36d9ad63a747059ecbee79bc91bc9109f8a8ef0",
+        "intertest": "e3c917596ca740cd2d8327e1c03d240ad16b8613",
+        "dotfiles": "67792a9a1bd738a618af7322ab1220f69d62b0a9"
+      },
+      "session_id": "7b11dba3-4cc0-43b7-8d63-f618b26e5521",
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "stages": [
+        {
+          "exit_code": 0,
+          "status": "exited",
+          "duration_seconds": 36.685
+        }
+      ],
+      "result_sha256": "555104a6698b63187c40e78c36ec6c61a8b7d4872f0a3728abcf4f4bff314cf7",
+      "independent_acceptance": {
+        "session_id": "01a08948-7e72-71a0-b173-8131b1e6ea7c",
+        "models": [
+          "gpt-6-astra"
+        ],
+        "efforts": [
+          "xhigh"
+        ],
+        "transcript_sha256": "3b2f2cd19e884c772eb33102500ac3d98a85eb78773475f734265db1dc96a990",
+        "verdict": "NEEDS_FIX",
+        "verdict_sha256": "0ea607501c957e15137ff2b9b920aa4c02630139753e10fc17c312902d7f25c9"
+      },
+      "review_path": "/Users/sma/projects/.evidence/lean-startup-20260909/corrections/v2/reviews/claude/verdict.md"
+    },
+    {
+      "version": "v3",
+      "host": "codex",
+      "pins": {
+        "clavain": "e36d9ad63a747059ecbee79bc91bc9109f8a8ef0",
+        "intertest": "71fbe8167f3a6e72c310bc12c39c68db203836d4",
+        "dotfiles": "67792a9a1bd738a618af7322ab1220f69d62b0a9"
+      },
+      "session_id": "01a0894e-5437-74a2-a313-b8213f9ab144",
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "stages": [
+        {
+          "exit_code": 0,
+          "status": "exited",
+          "duration_seconds": 59.041
+        }
+      ],
+      "result_sha256": "ad51740fdeab8a9e3a69cae9c5f7c23751e3dce95e3a5189b99b0fd252b84b4f",
+      "independent_acceptance": {
+        "session_id": "8799533b-956b-4083-9318-7d589d199cdd",
+        "models": [
+          "claude-fable-5-1"
+        ],
+        "efforts": null,
+        "transcript_sha256": "c969475f52d2959bf1b6ea63ef372d63a8c3234879a77bac9001703dbf82bee9",
+        "verdict": "ACCEPT",
+        "verdict_sha256": "10a644d6396ee4d8234acc96f2542e7ed1badf4045252749c3c7671422c1daa9"
+      },
+      "review_path": "/Users/sma/projects/.evidence/lean-startup-20260909/corrections/v3/reviews/codex/verdict.md"
+    },
+    {
+      "version": "v3",
+      "host": "claude",
+      "pins": {
+        "clavain": "e36d9ad63a747059ecbee79bc91bc9109f8a8ef0",
+        "intertest": "71fbe8167f3a6e72c310bc12c39c68db203836d4",
+        "dotfiles": "67792a9a1bd738a618af7322ab1220f69d62b0a9"
+      },
+      "session_id": "075d82ad-aa8f-4b94-aa15-f9aebd7aed5e",
+      "fixture_check": {
+        "passed": true,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      "stages": [
+        {
+          "exit_code": 0,
+          "status": "exited",
+          "duration_seconds": 31.825
+        }
+      ],
+      "result_sha256": "572601ef7e6e80d83e37f7346605a81235c707b4af2535b975bee24c6e6dfadb",
+      "independent_acceptance": {
+        "session_id": "01a08950-7cb9-7c20-805a-73102c6a3255",
+        "models": [
+          "gpt-6-astra"
+        ],
+        "efforts": [
+          "xhigh"
+        ],
+        "transcript_sha256": "c5eee336c93a481b04f1a26c89b64d3f731cb01b5140048ed7169b9ad0b6d1b2",
+        "verdict": "ACCEPT",
+        "verdict_sha256": "bba5fb981c3600fbb2b9cdb2ec6063792e2fb52ea3dacb36a731ebf9f420d86d"
+      },
+      "review_path": "/Users/sma/projects/.evidence/lean-startup-20260909/corrections/v3/reviews/claude/verdict.md"
+    }
+  ],
+  "original_completed_subjects": 20,
+  "additional_correction_probes": 4,
+  "total_behavioral_subjects": 24,
+  "preflights_excluded": 2,
+  "efficiency_result": "inconclusive",
+  "installed_rollout": false
+}

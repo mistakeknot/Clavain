@@ -321,12 +321,13 @@ func TestResolveModelUsesPhaseSpecificCalibration(t *testing.T) {
 	role := AgentRole{ModelTier: "sonnet"}
 	cal := &InterspectCalibration{SchemaVersion: 2, Agents: map[string]AgentCalibration{
 		"fd-quality": {
-			RecommendedModel: "sonnet",
-			Confidence:       0.85,
-			EvidenceSessions: 6,
+			RecommendedModel:    "sonnet",
+			Confidence:          0.85,
+			EvidenceSessions:    6,
+			PropagationEligible: true,
 			Phases: map[string]AgentCalibration{
-				"plan": {RecommendedModel: "haiku", Confidence: 0.7, EvidenceSessions: 3},
-				"ship": {RecommendedModel: "sonnet", Confidence: 0.7, EvidenceSessions: 3},
+				"plan": {RecommendedModel: "haiku", Confidence: 0.7, EvidenceSessions: 3, PropagationEligible: true},
+				"ship": {RecommendedModel: "sonnet", Confidence: 0.7, EvidenceSessions: 3, PropagationEligible: true},
 			},
 		},
 	}}

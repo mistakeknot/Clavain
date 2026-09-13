@@ -4,6 +4,12 @@
 # These binaries are checked into git and ship with the published plugin.
 set -euo pipefail
 
+# Scoped publication of accepted zklw artifacts must never rebuild on this host.
+if [[ ${CLAVAIN_RELEASE_NO_BUILD:-0} == 1 ]]; then
+    echo 'build-release: local rebuild forbidden for verified packaged release' >&2
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SRC_DIR="$REPO_ROOT/cmd/clavain-cli"

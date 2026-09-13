@@ -31,10 +31,15 @@
 #               reason (the linter's GAUGE lines). --kind gate pairs only with
 #               --role gate.
 #
+# Verdict values (--verdict): PASS and FAIL for every kind; UNRUN only with
+#   --kind replay, meaning the plan's Verification could not be executed by
+#   that seat (a denied command, a missing program, an unreadable plan). An
+#   UNRUN row is a refusal to rule, never a pass; --note says what did not run.
+#
 # Usage:
 #   pattern-f-verdict.sh --session ID --plan PATH --commit HASH|none \
 #       --role executor|validator|gate --kind replay|independent|gate \
-#       --verdict PASS|FAIL [--criterion TEXT] [--note TEXT] [--goal ID] [--db PATH]
+#       --verdict PASS|FAIL|UNRUN [--criterion TEXT] [--note TEXT] [--goal ID] [--db PATH]
 #   pattern-f-verdict.sh --list [--session ID] [--db PATH]
 #
 # Register resolution: --db, else $INTERSPECT_DB, else
@@ -53,7 +58,7 @@ set -euo pipefail
 usage() {
   cat >&2 <<'USAGE'
 usage: pattern-f-verdict.sh --session ID --plan PATH --commit HASH|none
-           --role executor|validator|gate --kind replay|independent|gate --verdict PASS|FAIL
+           --role executor|validator|gate --kind replay|independent|gate --verdict PASS|FAIL|UNRUN
            [--criterion TEXT] [--note TEXT] [--goal ID] [--db PATH]
        pattern-f-verdict.sh --list [--session ID] [--db PATH]
 USAGE
@@ -127,7 +132,10 @@ if [[ "$mode" == record ]]; then
   fi
   case "$verdict" in
     PASS|FAIL) ;;
-    *) bad "--verdict must be PASS or FAIL" ;;
+    UNRUN)
+      [[ "$kind" == replay ]] || bad "--verdict UNRUN pairs only with --kind replay"
+      ;;
+    *) bad "--verdict must be PASS, FAIL or UNRUN" ;;
   esac
 fi
 

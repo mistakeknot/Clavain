@@ -72,6 +72,14 @@ stages:
 {tasks_yaml}
 """
     )
+    # These fixtures test dispatch/review behavior independently of machine gates.
+    import yaml
+    data = yaml.safe_load(path.read_text())
+    for stage in data["stages"]:
+        for task in stage["tasks"]:
+            task.setdefault("verification", {"required": False, "checks": []})
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+
     return path
 
 
@@ -114,6 +122,9 @@ def test_progress_lines_emitted_per_task(orc, tmp_path, monkeypatch, capsys):
     """(b) Each task completion prints a flushed progress line."""
     project = tmp_path / "proj"
     project.mkdir()
+    _git(project, "init", "-q")
+    _git(project, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+         "commit", "--allow-empty", "-qm", "fixture")
     stub = _write_stub(
         tmp_path / "stub.sh",
         'echo done > "$OUT"; printf "STATUS: pass\\n" > "$OUT.verdict"; exit 0',

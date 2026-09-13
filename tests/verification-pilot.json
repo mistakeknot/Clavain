@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "prerequisites": {
+    "paths": ["scripts/orchestrate.py", "tests/structural"],
+    "executables": [
+      {"name": "python3", "version_args": ["--version"], "version_contains": "Python 3."},
+      {"name": "git", "version_args": ["--version"], "version_contains": "git version"},
+      {"name": "./scripts/verification-toolchain.py", "version_args": ["--version"], "version_contains": "PyYAML"}
+    ]
+  },
+  "checks": [{
+    "id": "verification-pilot",
+    "run": "python3 -m pytest tests/structural/test_verification.py tests/structural/test_verification_runner.py tests/structural/test_verification_pipeline.py tests/structural/test_orchestrate*.py -q -o junit_family=xunit2 --junitxml=\"$VERIFY_EVIDENCE_DIR/pilot.xml\"",
+    "expect": "exit 0",
+    "test_count": {"parser": "pytest-junit", "report": "pilot.xml", "min_executed": 200, "max_skipped": 0}
+  }]
+}

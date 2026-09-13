@@ -9,7 +9,7 @@
 1. Read this file (AGENTS.md) — you're doing it now.
 2. Run `bd ready` to see available work.
 3. Before editing, check the relevant module's local AGENTS.md if one exists.
-4. When done: `bd close <id>`, commit, `bd sync`, push.
+4. Verify and commit authorized work; close completed beads after the required push and gates.
 
 ## Directory Layout
 
@@ -18,6 +18,17 @@
 ## Build & Test
 
 {{BUILD_TEST_COMMANDS}}
+
+## Independent CI and Automation
+
+For active mistakeknot/gensysven repositories, builds, tests, scans, schedules,
+AI jobs, packaging, releases and deployment orchestration run independently on
+zklw. GitHub hosts source and results. Inspect `zklw-ci status --repo OWNER/REPO
+--json` on zklw and claim the repository migration task in campaign `mk-ag2s`.
+Register new code projects with reproducible baseline checks through `zklw-ci
+onboard`; finish registry review and fresh-guest verification before claiming
+CI ready. Do not add Linux Actions jobs or Actions-controlled runners. Preserve
+platform-specific execution, production destinations and publication approvals.
 
 ## Coding Conventions
 
@@ -32,7 +43,7 @@ bd ready                              # Show available work
 bd create --title="..." --type=task   # Create new issue
 bd update <id> --status=in_progress   # Claim work
 bd close <id>                         # Mark complete
-bd sync                               # Sync with git remote
+bd dolt push                          # Only when a Dolt remote is configured and sync is authorized
 ```
 
 ## Key Dependencies

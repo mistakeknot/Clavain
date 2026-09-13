@@ -1,69 +1,100 @@
 ---
 name: using-clavain
-description: How to find and use Clavain skills, agents, and commands. Load at the start of a Clavain workflow.
+description: Route substantive coding, research, planning, documentation, and review through Sylveste OODARCS. Skip trivial requests.
 ---
 
-**Proactive skill invocation is required.** When a skill matches the current task — even partially — invoke it before responding.
+# Sylveste OODARCS
 
-## The OODARC Loop (how to work, every turn)
+Use **Observe → Orient → Decide → Act → Reflect → Compound → Synthesize** for
+substantive work. Load this router once at the first substantive task; reuse it
+on subsequent turns and resumed sessions unless the task or installation changes.
+Select applicable workflow and domain skills automatically. Users need not know
+their names. Trivial requests can be answered directly.
 
-Clavain operates on **OODARC** — Observe · Orient · Decide · Act · Reflect · Compound — at nested timescales (per-turn, per-sprint, cross-session). Run it explicitly each turn:
+1. **Observe** actual files, tool results, sources, and outcomes.
+2. **Orient** against the goal, constraints, existing evidence, and uncertainty.
+3. **Decide** the next proportionate action and the evidence needed to judge it.
+4. **Act** within the user's scope and authority; finish authorized work.
+5. **Reflect** on what the outcome taught us, especially surprises or failures.
+6. **Compound** a useful improvement in an authorized artifact: code, a test,
+   requested documentation, or the project's tracker. Memory writes require
+   their own authorization. If no durable improvement is warranted or authorized,
+   retain the learning in the response or current working understanding.
+7. **Synthesize** that learning with existing evidence and goals. Reconcile
+   contradictions, revise conclusions or next priorities within scope, and state
+   material changes. Do not silently start unrelated follow-up work.
 
-1. **Observe** — read the actual tool results, file state, and test output. Don't act on assumptions about what happened.
-2. **Orient** — situate against the goal and recent evidence. What changed? What's anomalous? At sprint scale, `ic situation snapshot --run=<id>` is the canonical one-shot Observe→Orient call — one query for runs, dispatches, queue, budget, and recent events, instead of polling each separately.
-3. **Decide** — choose the next action; prefer the known fast path, deliberate when novel or high-stakes.
-4. **Act** — invoke the tool / make the edit / advance the phase.
-5. **Reflect** — did the outcome match expectation? On a *significant* outcome (error, recovery, surprise, novel situation) pause and debrief before continuing; on routine ones, continue and let evidence accumulate.
-6. **Compound** — persist the lesson so it changes future behavior (a fix, a calibration, a solution doc, a bead). Reflect without Compound is just journaling.
+Apply the loop at task, sprint, and session scale without compulsory headings,
+invented lessons, or a forced full lifecycle. User intent and runtime policy govern
+skill procedures; preserve review, verification, approval, release, and model
+routing boundaries. Existing **OODARC** telemetry identifiers and execution phases
+remain unchanged. See Sylveste `PHILOSOPHY.md`, the OODARCS lens, for the doctrine.
 
-The compounding half (Reflect + Compound) is what makes the system get smarter across sessions — it is not optional. See `PHILOSOPHY.md` § The OODARC Lens.
+## Reasoning allocation
 
-# Quick Router — 26 skills, 6 agents, and 57 commands
+Before substantive planning or execution, read the selected Clavain installation's
+`docs/canon/reasoning-routing.md`. Resolve roles with its `config/routing.yaml`
+and an accountable decision context. Substantial uncertainty, foundational
+invariants, broad consequences, difficult verification, and demonstrated
+capability failure require frontier involvement. Domain names are examples.
+Substantial new game, agent-system, AI/ML, graph-database, and product-strategy
+capabilities require frontier planning. Keep frontier involvement while evidence
+changes the plan. Hand off with decisions, constraints, verification, and escalation
+conditions explicit; retain empirical acceptance. Foundational/consequential plan
+review requires the other frontier model. Operational failures are not capability
+strikes. Preserve stricter gates; unsupported host routing must be reported.
 
-Most commands are **user-invocable only** (`disable-model-invocation: true`), so their
-descriptions aren't in context and you can't reach for them yourself. They all still work when
-the user types them — surface the right one by name from this table or `/clavain:clavain-help`.
-The rows below marked ⌨ are user-typed; everything else you can invoke directly.
 
-| You want to... | Run this |
-|----------------|----------|
-| Build a feature end-to-end | `/clavain:route` |
-| Force full lifecycle | `/clavain:sprint` |
-| Review code, docs, or plans | `/interflux:flux-drive` |
-| Quick review from git diff | `/clavain:quality-gates` |
-| Cross-AI second opinion | `/interpeer:interpeer` |
-| Plan an implementation | `/clavain:write-plan` → `/clavain:work` |
-| Fix a bug | ⌨ `/clavain:repro-first-debugging` |
-| Fix build/test failure | ⌨ `/clavain:fixbuild` |
-| Test-drive a change | ⌨ `/clavain:tdd` |
-| Refactor safely | ⌨ `/clavain:refactor` |
-| Review a plan | ⌨ `/clavain:plan-review` |
-| Review a doc | ⌨ `/clavain:review-doc` |
-| Triage open PRs | ⌨ `/clavain:pr-triage` |
-| Land a finished change | ⌨ `/clavain:land` |
-| Scope-lock for parallel sessions | ⌨ `/clavain:freeze` / `/clavain:unfreeze` |
-| Resolve review findings | `/clavain:resolve` |
-| Set up a new project | `/clavain:project-onboard` |
-| Check project health | ⌨ `/clavain:clavain-doctor` or `/clavain:sprint-status` |
-| Operate the portfolio agency | `/clavain:remontoire status` |
-| One-shot situation snapshot (Observe) | `ic situation snapshot --run=<id>` |
-| Generate roadmap/PRD | `/interpath:roadmap` or `/interpath:prd` |
-| Check doc freshness | `/interwatch:watch` |
-| Run scenario tests | `clavain-cli scenario-run <pattern>` |
-| Check quality gate | `clavain-cli scenario-score <run-id> --summary` |
-| Check scenario policy | `clavain-cli scenario-policy-check <agent> <action> --path=<p>` |
-| See all commands | `/clavain:clavain-help` |
+## Quick Router — 26 skills, 6 agents, and 57 commands
 
-## Auto-Route Rule
+In Codex, read the selected skill's full `SKILL.md` using its path in the current
+catalog. Names below are capability hints; resolve the installed name and path.
+Do not run Claude slash commands in a terminal or assume they are Codex tools.
+In Claude Code, invoke the corresponding Skill tool or installed command.
 
-**Invoke `/clavain:route` when:** bead ID mentioned, request is a feature/bugfix/implementation, user says "what's next" and picks work.
+Routes compose across task phases. Fixing a bug requires
+`intertest:systematic-debugging` for reproduction and diagnosis, then
+`intertest:test-driven-development` for implementation, including its required
+verification skill load. Executing an existing plan also requires
+`clavain:executing-plans`; retain that plan and its acceptance criteria. Load each
+required body before applying its workflow.
 
-**Do NOT auto-route when:** request is informational, is a review/publish/commit/status check (use specific skill), or already mid-execution inside a routed workflow.
+| Task | Primary skill | Add when relevant |
+|------|---------------|-------------------|
+| Diagnose a bug or failing check | `intertest:systematic-debugging` | `clavain:bug-reproduction-validator` |
+| Plan implementation | `clavain:writing-plans` | `clavain:plan-reviewer` |
+| Execute an existing plan | `clavain:executing-plans` | Domain skill, focused verification |
+| Implement a feature or fix | `intertest:test-driven-development` | `clavain:refactor-safely` for significant refactors |
+| Research a question | Available research skill matching its depth and sources | `alwe` for prior agent sessions; domain documentation skills |
+| Write documentation | Guidance for the requested artifact and house style | `clavain:engineering-docs` for a solved problem; artifact-format skill |
+| Audit, refactor, or consolidate documentation | `interscribe:interscribe` | `interwatch:doc-watch` for drift |
+| Review code or a plan | `clavain:code-review-discipline` | `clavain:plan-reviewer`; installed Interflux engine for deeper review |
+| Prepare an authorized release | `intertest:verification-before-completion` | `clavain:landing-a-change`, release/domain procedures |
+| Choose next project work | `internext:next-work` | `interphase:beads-workflow` |
+| Operate the portfolio agency | `clavain:remontoire` | Load only for portfolio operations |
 
-## Routing Heuristic
+These are common routes, not an allowlist. **Every installed unique capability
+remains eligible for automatic selection**, including specialist and companion
+skills. Select by the actual task and scope. Prefer the existing plan over starting
+a fresh brainstorm. Read [routing-tables.md](references/routing-tables.md) when
+the task needs more domain or host-specific routing detail.
 
-1. Detect stage: "build" → Execute, "fix bug" → Debug, "review" → Review, "plan" → Plan
-2. Detect domain from context (file types, topic, recent conversation)
-3. Invoke the primary skill first — don't skip
+For explanatory documentation requested in the response, use this writing guidance:
+name the trigger, affected behavior, supporting evidence, and verification steps.
+Distinguish a proposed fix from an installed or verified fix. Keep the note in the
+requested destination and scope; do not turn it into a repository-documentation
+audit. Load a specialist writing or artifact skill when its procedures help the
+requested document.
 
-Full routing tables: `using-clavain/references/routing-tables.md`
+## Boundaries and missing companions
+
+Load detailed procedures and supporting resources only when relevant. A missing
+companion is not permission to install plugins, change MCP settings, or fetch
+repositories. Continue with supported tools and disclose a material capability
+gap; ask only when it blocks a required outcome. Preserve a blocked external
+review as a gate; switching providers or destinations is not a fallback for policy.
+
+Delegate only when authorized and supported by the active host; otherwise execute
+in the main thread and batch independent tool calls. Use the project's actual
+tracker; do not create a second task system. Outside a project, maintain lightweight
+in-session state. Verify current results before reporting completion.

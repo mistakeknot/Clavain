@@ -1,6 +1,6 @@
 ---
 name: engineering-docs
-description: Use when capturing a solved problem as categorized documentation with YAML frontmatter for fast lookup
+description: Document a solved problem as a searchable solution with YAML frontmatter.
 allowed-tools:
   - Read # Parse conversation context
   - Write # Create resolution docs

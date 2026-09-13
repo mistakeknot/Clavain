@@ -22,7 +22,7 @@ cat > "$TMP_ROOT/bin/ic" <<'FAKE_IC'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_IC_LOG"
 if [[ "$*" == *"route dispatch"* ]]; then
-  cat <<'JSON'
+  cat <<'JSON' | jq --arg args "$*" --arg policy "$FAKE_ROUTING_POLICY" --arg hash "$FAKE_POLICY_HASH" '.policy_source=$policy | .policy_hash=$hash | if env.FAKE_ROUTE_KIMI_FIRST == "1" then .profile_ref="unsupported-kimi" | .profile.backend="kimi" | .profile.model="kimi-code/k3" else . end | if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end'
 {
   "requested_role": "deep-execution",
   "profile_ref": "deep-astra",
@@ -53,6 +53,11 @@ fi
 if [[ "$*" == *"route record"* && "${FAKE_IC_RECORD_FAIL:-0}" == "1" ]]; then
   exit 1
 fi
+if [[ "$*" == *"route record"* ]]; then
+  for arg in "$@"; do
+    case "$arg" in --context=*) printf '%s\n' "${arg#--context=}" >> "$FAKE_IC_CONTEXT_LOG" ;; esac
+  done
+fi
 FAKE_IC
 
 cat > "$TMP_ROOT/bin/codex" <<'FAKE_CODEX'
@@ -80,6 +85,19 @@ case "${FAKE_CODEX_MODE:-success}" in
     echo 'stream error: unexpected status 403 Forbidden: misalignment policy blocked request' >&2
     exit 1
     ;;
+  policy_account)
+    echo 'HTTP 403 Forbidden: misalignment policy blocked account access' >&2
+    exit 1
+    ;;
+  policy_after_rate)
+    echo 'HTTP 429 Too Many Requests' >&2
+    echo 'HTTP 403 Forbidden: misalignment policy blocked request' >&2
+    exit 1
+    ;;
+  policy_model)
+    echo 'HTTP 403 Forbidden: policy denied; model unavailable' >&2
+    exit 1
+    ;;
   rate429)
     echo 'stream error: unexpected status 429 Too Many Requests: rate limited' >&2
     exit 1
@@ -90,7 +108,11 @@ FAKE_CODEX
 chmod +x "$TMP_ROOT/bin/ic" "$TMP_ROOT/bin/codex"
 
 export PATH="$TMP_ROOT/bin:$PATH"
+export FAKE_ROUTING_POLICY="$ROOT/config/routing.yaml"
+FAKE_POLICY_HASH="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$FAKE_ROUTING_POLICY")"
+export FAKE_POLICY_HASH
 export FAKE_IC_LOG="$TMP_ROOT/ic.log"
+export FAKE_IC_CONTEXT_LOG="$TMP_ROOT/contexts.jsonl"
 export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 export CLAVAIN_429_BACKOFF_SECONDS=0
@@ -127,6 +149,16 @@ set -e
 [[ "$policy_rc" != "0" ]] || fail "policy 403 unexpectedly succeeded"
 [[ "$(wc -l < "$FAKE_CODEX_LOG" | tr -d ' ')" == "1" ]] || fail "policy 403 triggered fallback"
 
+for policy_mode in policy_account policy_after_rate policy_model; do
+  : > "$FAKE_CODEX_LOG"
+  set +e
+  FAKE_CODEX_MODE="$policy_mode" bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1
+  policy_rc=$?
+  set -e
+  [[ "$policy_rc" != "0" ]] || fail "$policy_mode unexpectedly succeeded"
+  [[ "$(wc -l < "$FAKE_CODEX_LOG" | tr -d ' ')" == "1" ]] || fail "$policy_mode triggered retry or fallback"
+done
+
 : > "$FAKE_CODEX_LOG"
 set +e
 FAKE_CODEX_MODE=rate429 CLAVAIN_429_MAX_RETRIES=2 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1
@@ -162,5 +194,20 @@ set -e
 contains "$(cat "$FAKE_IC_LOG")" "route record"
 contains "$(cat "$FAKE_IC_LOG")" "--role=deep-execution"
 contains "$(cat "$FAKE_IC_LOG")" "--profile=deep-sol"
+contains "$(cat "$FAKE_IC_LOG")" "--producer-identity=codex/gpt-6-astra"
+[[ -s "$FAKE_IC_CONTEXT_LOG" ]] || fail "missing immutable routing contexts"
+jq -s -e 'all(.[]; .schema_version == 1 and (.dispatch_id | length > 0) and (.attempt_id | length > 0) and .resolved_profile.profile.model != null and .resolved_route.profile != null and .execution.service_tier == "standard")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "incomplete routing snapshot"
+jq -s -e 'any(.[]; .state == "started") and any(.[]; .state == "completed") and any(.[]; .state == "failed" and .result.failure_class == "terminal_policy")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "missing dispatch lifecycle evidence"
+
+: > "$FAKE_CODEX_LOG"
+FAKE_IC_RECORD_FAIL=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 && fail "dispatch accepted failed preflight audit"
+[[ ! -s "$FAKE_CODEX_LOG" ]] || fail "model executed before durable start record"
+
+: > "$FAKE_CODEX_LOG"
+unsupported_adapter_out="$(FAKE_ROUTE_KIMI_FIRST=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" 2>&1)" \
+  || fail "unsupported adapter stopped a declared eligible fallback"
+contains "$unsupported_adapter_out" 'unsupported_adapter'
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-5.6-sol" ]] || fail "unsupported Kimi effort did not reach declared Sol fallback"
+contains "$(cat "$FAKE_IC_LOG")" '--fallback-reason=unsupported_adapter'
 
 echo "PASS: role-aware dispatch profiles and fallback policy"

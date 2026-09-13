@@ -1,6 +1,6 @@
 ---
 name: pr-comment-resolver
-description: Use when PR review comments need to be resolved with code changes — implements the requested changes and reports clearly on each resolution.
+description: Resolve PR review comments with verified code changes and per-comment outcomes.
 ---
 
 # PR Comment Resolver

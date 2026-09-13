@@ -1,0 +1,20 @@
+{
+  "task": "sylveste-z55b",
+  "status": "closed",
+  "assignee_preserved": "codex-lean-startup",
+  "closed_at": "2026-09-11T05:10:06Z",
+  "signer": "zklw",
+  "signer_fingerprint": "3d1c3001d533c5a9",
+  "authorization_id": "455141a0bbcfc1ace45b8d32f70d6c36",
+  "signature_verified": true,
+  "authorization_mode": "confirmed under existing user authorization; normal managed wrapper",
+  "key_or_policy_changed": false,
+  "canonical_tracker": "Mac Sylveste tracker through task-only SSH transport",
+  "installed_acceptance_decisions": [
+    1133,
+    1135
+  ],
+  "installed_evidence_seal_sha256": "5aca859015ebdd407f47093e6c006724f9da9e9bf20e93653fc76b9171a21c3f",
+  "sealed_files_verified": 155,
+  "report_commit": "02ddd769481d2dd807413eef4b29db09b1fd4eb5"
+}

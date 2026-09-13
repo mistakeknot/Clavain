@@ -1,6 +1,6 @@
 ---
 name: file-todos
-description: Manage the file-based todo system in todos/ — create, status, dependencies, triage, and code-review integration.
+description: Manage an existing todos/ file tracker with status, dependencies, and review triage.
 disable-model-invocation: true
 ---
 

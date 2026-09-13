@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-06T00:46:23.442890+00:00",
+  "goal_session": "01a0742a-d51e-7993-9db6-5a00b8595151",
+  "plan_sha256": "c7deda66dd4c779b04776d6dbcbb578287706c0c2b025333e6bccd6f74d54f1a",
+  "beads": [
+    "Sylveste-yibw",
+    "Sylveste-kbh5",
+    "Sylveste-fuwn",
+    "Sylveste-nmiu",
+    "Sylveste-8nov",
+    "Sylveste-7wn0"
+  ],
+  "owners": {
+    "attribution": [
+      "interstat profiler/tests",
+      "Clavain new enrollment helper/tests",
+      "Clavain enrolled-work instructions"
+    ],
+    "autarch": [
+      "Autarch-feedback-pilot after ownership handoff",
+      "Clavain review integration",
+      "lattice projection"
+    ],
+    "governed": [
+      "Intercore admission/contracts",
+      "Flere worker/RPC",
+      "Clavain scripts/dispatch.sh and Flere adapter"
+    ],
+    "integrator": [
+      "Clavain installer/tests",
+      "20 companion producers",
+      "plan and dependency manifest",
+      "integration review commits pushes installations"
+    ]
+  },
+  "dependencies": {
+    "clavain_execution": [
+      "intercore",
+      "flere"
+    ],
+    "clavain_attribution": [
+      "interstat"
+    ],
+    "autarch_package": [
+      "clavain_execution",
+      "clavain_review",
+      "lattice"
+    ],
+    "mac_companions": [
+      "reviewed_pushed_companion_producers"
+    ],
+    "consumer_install": [
+      "producer_push",
+      "independent_review"
+    ]
+  },
+  "freeze_config_during_pairs": true,
+  "cohort": "internal-tooling",
+  "acceptance_authority": "independent decisions; adapters provide evidence only"
+}
