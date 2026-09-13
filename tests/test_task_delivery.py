@@ -568,6 +568,7 @@ def test_allowlist_retains_auth_and_identity_without_inheriting_arbitrary_config
 @pytest.mark.parametrize("key,value", [("CLAUDE_CODE_ENTRYPOINT", "cli"), ("CLAUDE_PROJECT_DIR", "/synthetic/host-project")])
 def test_claude_host_metadata_is_dropped_without_blocking_enrolled_dispatch(monkeypatch, key, value):
     monkeypatch.setenv(key, value)
+    monkeypatch.setenv("CODEX_VERSION", "synthetic-codex-version")
     command, env, receipt = subject().prepare_dispatch([decision("enrollment", enrollment())], "e", "validation", ["prompt"])
     assert command[3] == "validation"
     assert key not in env
@@ -576,11 +577,32 @@ def test_claude_host_metadata_is_dropped_without_blocking_enrolled_dispatch(monk
         assert value not in json.dumps(receipt)
 
 
+def test_codex_version_host_metadata_is_dropped_without_becoming_dispatch_evidence(monkeypatch):
+    version = "synthetic-codex-version"
+    monkeypatch.setenv("CODEX_VERSION", version)
+    command, env, receipt = subject().prepare_dispatch(
+        [decision("enrollment", enrollment())], "e", "validation", ["prompt"])
+    assert command[3] == "validation"
+    assert "CODEX_VERSION" not in env
+    assert "CODEX_VERSION" not in json.dumps(receipt)
+    assert version not in json.dumps(receipt)
+    assert receipt.get("model") is None
+    assert receipt["producer_model"] == "gpt-6-astra"
+
+
 def test_dropping_known_host_metadata_keeps_unknown_reserved_selectors_rejected(monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/synthetic/host-project")
     monkeypatch.setenv("CLAUDE_UNRECOGNIZED_CONFIG_SELECTOR", "synthetic-private-value")
     with pytest.raises(ValueError, match="CLAUDE_UNRECOGNIZED_CONFIG_SELECTOR") as error:
+        subject().prepare_dispatch([decision("enrollment", enrollment())], "e", "validation", ["prompt"])
+    assert "synthetic-private-value" not in str(error.value)
+
+
+def test_dropping_codex_version_keeps_unknown_codex_selectors_rejected(monkeypatch):
+    monkeypatch.setenv("CODEX_VERSION", "synthetic-codex-version")
+    monkeypatch.setenv("CODEX_UNRECOGNIZED_CONFIG_SELECTOR", "synthetic-private-value")
+    with pytest.raises(ValueError, match="CODEX_UNRECOGNIZED_CONFIG_SELECTOR") as error:
         subject().prepare_dispatch([decision("enrollment", enrollment())], "e", "validation", ["prompt"])
     assert "synthetic-private-value" not in str(error.value)
 

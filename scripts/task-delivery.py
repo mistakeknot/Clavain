@@ -54,7 +54,7 @@ TASK_ENV_KEYS = frozenset({"CLAVAIN_TASK_ENROLLMENT_ID", "CLAVAIN_TASK_COHORT_ID
                          "CLAVAIN_USAGE_OUTPUT_DIR", "CLAVAIN_REVIEW_EVENTS"})
 # Host metadata describes the caller; it neither selects nor configures a child.
 # Drop these exact names rather than forwarding them or widening prefix exceptions.
-DROPPED_HOST_ENV_KEYS = frozenset({"CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PROJECT_DIR"})
+DROPPED_HOST_ENV_KEYS = frozenset({"CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PROJECT_DIR", "CODEX_VERSION"})
 NATIVE_FIXTURE_PREDICATES = frozenset({
     "model_provider_effort_tier", "cwd_and_writable_roots",
     "approval_reviewer_sandbox_network", "instructions_config_and_skills",
