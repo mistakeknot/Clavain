@@ -23,6 +23,14 @@ SANDBOX_SET=false
 WORKDIR=""
 OUTPUT=""
 REPORT="full"
+OPERATION="exec"
+RESUME_FROM=""
+DISPATCH_BINDING_JSON=""
+DISPATCH_BINDING_SHA256=""
+DISPATCH_EXECUTABLE=""
+BOUND_NATIVE_THREAD_ID=""
+BOUND_PROMPT_PREFIX=""
+BOUND_RESUME_REQUEST="null"
 MODEL=""
 TIER=""
 ROLE=""
@@ -185,6 +193,11 @@ Options:
   --report <full|compact>       Presentation mode (default: full). Compact is
                                   Codex exec only, requires -o, emits bounded JSON,
                                   and retains full evidence beside the output.
+  --operation <exec|resume|compact>
+                                  Native operation (default: exec). Resume and
+                                  compact require --resume-from and a governed role.
+  --resume-from <FILE>          Authoritative seed binding for resume/compact;
+                                  never accepts a thread name, path, --last, or ID.
   -s, --sandbox <MODE>          Sandbox: read-only | workspace-write | danger-full-access
   -m, --model <MODEL>           Override model (default: from ~/.codex/config.toml,
                                   or ~/.kimi-code/config.toml default_model for --to kimi)
@@ -597,6 +610,26 @@ while [[ $# -gt 0 ]]; do
       esac
       shift
       ;;
+    --operation)
+      require_arg "$1" "${2:-}"
+      OPERATION="$2"
+      case "$OPERATION" in exec|resume|compact) ;; *) echo "Error: --operation must be exec, resume, or compact" >&2; exit 1 ;; esac
+      shift 2
+      ;;
+    --operation=*)
+      OPERATION="${1#*=}"
+      case "$OPERATION" in exec|resume|compact) ;; *) echo "Error: --operation must be exec, resume, or compact" >&2; exit 1 ;; esac
+      shift
+      ;;
+    --resume-from)
+      require_arg "$1" "${2:-}"
+      RESUME_FROM="$2"
+      shift 2
+      ;;
+    --resume-from=*)
+      RESUME_FROM="${1#*=}"
+      shift
+      ;;
     -s|--sandbox)
       require_arg "$1" "${2:-}"
       SANDBOX="$2"
@@ -776,6 +809,45 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Native control is deliberately narrower than legacy exec. Reject every
+# selector, passthrough, alternate transport, and backend before role
+# resolution or any inference-capable process can start.
+if [[ "$OPERATION" == exec && -n "$RESUME_FROM" ]]; then
+  echo "Error: --resume-from is valid only for native resume/compact operations" >&2
+  exit 1
+fi
+if [[ "$OPERATION" != exec ]]; then
+  if [[ -z "$RESUME_FROM" ]]; then
+    echo "Error: native operation '$OPERATION' requires --resume-from FILE" >&2
+    exit 1
+  fi
+  if [[ "$ENGINE" != codex || -n "$VIA" ]]; then
+    _dispatch_write_failure_class unsupported_adapter
+    echo "Error: native operation '$OPERATION' supports only governed Codex without --via" >&2
+    exit 1
+  fi
+  if [[ -z "$ROLE" ]]; then
+    echo "Error: native operation '$OPERATION' requires --role governed admission" >&2
+    exit 1
+  fi
+  if [[ ${#EXTRA_ARGS[@]} -gt 0 || ${#IMAGES[@]} -gt 0 || -n "$NAME" || -n "$TIER" || "$SANDBOX_SET" == true || "$KIMI_UNSAFE" == true || "$CLAUDE_UNSAFE" == true ]]; then
+    echo "Error: native operation '$OPERATION' rejects selectors, images, names, tiers, unsafe modes, and arbitrary passthrough flags" >&2
+    exit 1
+  fi
+  if [[ -z "$OUTPUT" ]]; then
+    echo "Error: native operation '$OPERATION' requires a fresh -o/--output-last-message artifact" >&2
+    exit 1
+  fi
+  if [[ "$OPERATION" == compact && "$REPORT" == compact ]]; then
+    echo "Error: native operation 'compact' rejects --report compact; control evidence is not presentation" >&2
+    exit 1
+  fi
+  if [[ "$OPERATION" == compact && $# -gt 0 ]]; then
+    echo "Error: native operation 'compact' rejects positional prompts" >&2
+    exit 1
+  fi
+fi
+
 # Compact presentation is deliberately narrow. Reject incompatible adapters
 # before context preparation, role recording, or backend launch.
 if [[ "$REPORT" == compact ]]; then
@@ -887,6 +959,40 @@ if [[ -n "$TIER" ]]; then
   fi
 fi
 
+# A native operation reaches this point only in the recursively resolved role
+# invocation. Re-read the authoritative Intercore log and every immutable pin;
+# the binding file alone never establishes admission.
+if [[ "$OPERATION" != exec ]]; then
+  if [[ "$ROLE_RESOLVED" != true || -z "${CLAVAIN_TASK_INTERCORE_DB:-}" || -z "${CLAVAIN_TASK_ENROLLMENT_ID:-}" || -z "${CLAVAIN_TASK_COHORT_ID:-}" || -z "${CLAVAIN_TASK_MANIFEST_SHA256:-}" ]]; then
+    echo "Error: native operation '$OPERATION' requires resolved role and complete authoritative task envelope" >&2
+    exit 1
+  fi
+  native_workdir="$(cd "${WORKDIR:-.}" && pwd -P)" || {
+    echo "Error: native operation cannot resolve its working directory" >&2
+    exit 1
+  }
+  native_expected="$(jq -cn --arg role "$ROLE" --arg model "$MODEL" --arg effort "$REASONING_EFFORT" \
+    --arg service "$SERVICE_TIER" --arg cwd "$native_workdir" --arg sandbox "$SANDBOX" \
+    --arg enrollment "$CLAVAIN_TASK_ENROLLMENT_ID" --arg cohort "$CLAVAIN_TASK_COHORT_ID" \
+    --arg manifest "$CLAVAIN_TASK_MANIFEST_SHA256" \
+    '{role:$role,model:$model,reasoning_effort:$effort,service_tier:$service,cwd:$cwd,sandbox:$sandbox,enrollment_id:$enrollment,cohort_id:$cohort,manifest_sha256:$manifest}')"
+  if ! DISPATCH_BINDING_JSON="$(python3 "$DISPATCH_SCRIPT_DIR/dispatch_control.py" validate-binding \
+      --binding "$RESUME_FROM" --operation "$OPERATION" --expected "$native_expected")"; then
+    _dispatch_write_failure_class terminal_configuration
+    echo "Error: native operation binding failed authoritative validation" >&2
+    exit 1
+  fi
+  if [[ "$(jq -r '.authoritative_database' <<< "$DISPATCH_BINDING_JSON")" != "$CLAVAIN_TASK_INTERCORE_DB" ]]; then
+    echo "Error: native operation binding selects a different authoritative database" >&2
+    exit 1
+  fi
+  DISPATCH_BINDING_SHA256="$(jq -r '.binding_sha256' <<< "$DISPATCH_BINDING_JSON")"
+  DISPATCH_EXECUTABLE="$(jq -r '.executable' <<< "$DISPATCH_BINDING_JSON")"
+  BOUND_NATIVE_THREAD_ID="$(jq -r '.native_thread_id' <<< "$DISPATCH_BINDING_JSON")"
+  BOUND_PROMPT_PREFIX="$(jq -r '.prompt_prefix' <<< "$DISPATCH_BINDING_JSON")"
+  BOUND_RESUME_REQUEST="$(jq -c '.configuration.request' <<< "$DISPATCH_BINDING_JSON")"
+fi
+
 # Log phase context (stored for future B2 phase-aware dispatch)
 if [[ -n "$PHASE" ]]; then
   echo "Phase context: $PHASE" >&2
@@ -918,12 +1024,18 @@ if [[ -n "$PROMPT_FILE" ]]; then
   fi
 fi
 
-if [[ -z "$PROMPT" ]]; then
+if [[ -z "$PROMPT" && "$OPERATION" != compact ]]; then
   echo "Error: No prompt provided" >&2
   echo "Usage: dispatch.sh -C <dir> -o <output> [OPTIONS] \"prompt\"" >&2
   echo "       dispatch.sh --prompt-file <file> [OPTIONS]" >&2
   echo "       dispatch.sh --help for all options" >&2
   exit 1
+fi
+
+if [[ "$OPERATION" == resume ]]; then
+  PROMPT="$BOUND_PROMPT_PREFIX
+
+$PROMPT"
 fi
 
 # Template assembly: parse task description sections, substitute into template
@@ -1190,7 +1302,7 @@ _apply_context_gateway() {
   return "$gateway_status"
 }
 
-if [[ "$ENGINE" != "auto" || "$VIA" == "zaka" ]]; then
+if [[ "$OPERATION" != compact && ( "$ENGINE" != "auto" || "$VIA" == "zaka" ) ]]; then
   _apply_context_gateway
 fi
 
@@ -1222,6 +1334,10 @@ $RESOLVED_ROUTE_JSON
 
 Task:
 $PROMPT"
+      if [[ "$OPERATION" == compact && "$BOUND_PROMPT_PREFIX" != *"$reasoning_contract"* ]]; then
+        echo 'Error: compact binding does not pin the current governed reasoning contract' >&2
+        exit 1
+      fi
       ;;
     *)
       echo "Error: governed reasoning contract delivery is unsupported for backend '$ENGINE'" >&2
@@ -1502,7 +1618,9 @@ if [[ "$ENGINE" == "flere" ]]; then
 fi
 
 # Build backend command
-if [[ "$ENGINE" == "kimi" ]]; then
+if [[ "$OPERATION" == compact ]]; then
+  CMD=(python3 "$DISPATCH_SCRIPT_DIR/dispatch_control.py" compact --binding "$RESUME_FROM" --output "$OUTPUT")
+elif [[ "$ENGINE" == "kimi" ]]; then
   # Kimi non-interactive mode: kimi -p "<prompt>".
   # Codex-only options don't translate — warn and drop them.
   if [[ "$SANDBOX_SET" == true ]]; then
@@ -1631,7 +1749,11 @@ elif [[ "$ENGINE" == "claude" ]]; then
   # (claude -p prints the response on stdout; no -C/-o flags used).
 else
   # Build codex exec command
-  CMD=(codex exec)
+  if [[ "$OPERATION" == resume ]]; then
+    CMD=("$DISPATCH_EXECUTABLE" exec)
+  else
+    CMD=(codex exec)
+  fi
   CMD+=(-s "$SANDBOX")
   # Tool caches outside the workspace (uv's, by default) are denied under
   # workspace-write, so a seat replaying `uv run pytest` cannot run it and a
@@ -1640,11 +1762,15 @@ else
   # user's uv cache; set it empty to grant nothing) when they exist.
   CODEX_WRITABLE_ROOTS_TOML=""
   if [[ "$SANDBOX" == "workspace-write" ]]; then
-    IFS=':' read -r -a _roots <<< "${CLAVAIN_CODEX_WRITABLE_ROOTS-$HOME/.cache/uv}"
-    for _r in "${_roots[@]}"; do
-      [[ -n "$_r" && -d "$_r" ]] || continue
-      CODEX_WRITABLE_ROOTS_TOML+="${CODEX_WRITABLE_ROOTS_TOML:+,}\"${_r}\""
-    done
+    if [[ "$OPERATION" == resume ]]; then
+      CODEX_WRITABLE_ROOTS_TOML="$(jq -r '[.runtimeWorkspaceRoots[]] | map(@json) | join(",")' <<< "$BOUND_RESUME_REQUEST")"
+    else
+      IFS=':' read -r -a _roots <<< "${CLAVAIN_CODEX_WRITABLE_ROOTS-$HOME/.cache/uv}"
+      for _r in "${_roots[@]}"; do
+        [[ -n "$_r" && -d "$_r" ]] || continue
+        CODEX_WRITABLE_ROOTS_TOML+="${CODEX_WRITABLE_ROOTS_TOML:+,}\"${_r}\""
+      done
+    fi
     if [[ -n "$CODEX_WRITABLE_ROOTS_TOML" ]]; then
       CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
     fi
@@ -1681,6 +1807,20 @@ else
     CMD+=(-c "service_tier=$codex_service_tier")
   fi
 
+  if [[ "$OPERATION" == resume ]]; then
+    native_approval="$(jq -r '.approvalPolicy' <<< "$BOUND_RESUME_REQUEST")"
+    native_reviewer="$(jq -r '.approvalsReviewer' <<< "$BOUND_RESUME_REQUEST")"
+    native_provider="$(jq -r '.modelProvider' <<< "$BOUND_RESUME_REQUEST")"
+    CMD+=(-a "$native_approval")
+    CMD+=(-c "approvals_reviewer=$(jq -rn --arg value "$native_reviewer" '$value|@json')")
+    CMD+=(-c "model_provider=$(jq -rn --arg value "$native_provider" '$value|@json')")
+    while IFS= read -r native_override; do
+      [[ -z "$native_override" ]] || CMD+=(-c "$native_override")
+    done < <(jq -r '.config | to_entries | sort_by(.key) | .[] |
+      select(.key != "model_reasoning_effort" and .key != "service_tier" and .key != "approvals_reviewer" and .key != "model_provider") |
+      .key + "=" + (if (.value|type) == "string" then (.value|@json) else (.value|tostring) end)' <<< "$BOUND_RESUME_REQUEST")
+  fi
+
   for img in "${IMAGES[@]+"${IMAGES[@]}"}"; do
     CMD+=(-i "$img")
   done
@@ -1689,7 +1829,13 @@ else
     CMD+=("${EXTRA_ARGS[@]}")
   fi
 
-  CMD+=("$PROMPT")
+  if [[ "$OPERATION" == resume ]]; then
+    # All parent authority/configuration flags precede the native resume
+    # subcommand and its exact bound UUID. No caller selector reaches argv.
+    CMD+=(resume "$BOUND_NATIVE_THREAD_ID" "$PROMPT")
+  else
+    CMD+=("$PROMPT")
+  fi
 fi
 
 # Dry run: print command and exit
@@ -1704,7 +1850,10 @@ if [[ "$DRY_RUN" == true ]]; then
     PROMPT_PREVIEW+="... (${#PROMPT} bytes total)"
   fi
   # Reconstruct display command
-  if [[ "$ENGINE" == "kimi" ]]; then
+  if [[ "$OPERATION" == compact ]]; then
+    printf '%q ' "${CMD[@]}"
+    echo ""
+  elif [[ "$ENGINE" == "kimi" ]]; then
     DISPLAY_CMD=(env KIMI_BD_PRIME_SKIP=1)
     if [[ "$KIMI_UNSAFE" != true ]]; then
       DISPLAY_CMD+=(KIMI_CODE_EXPERIMENTAL_FLAG=1 kimi --agent-file "$KIMI_AGENT")
@@ -1732,7 +1881,16 @@ if [[ "$DRY_RUN" == true ]]; then
     echo ""
   else
     if [[ -n "${UV_NO_SYNC:-}" ]]; then echo "# Env: UV_NO_SYNC=$UV_NO_SYNC (validation seat replays without syncing)" >&2; fi
-    DISPLAY_CMD=(codex exec -s "$SANDBOX")
+    if [[ "$OPERATION" == resume ]]; then
+      DISPLAY_CMD=("${CMD[@]}")
+      DISPLAY_CMD[$((${#DISPLAY_CMD[@]} - 1))]="$PROMPT_PREVIEW"
+      printf '%q ' "${DISPLAY_CMD[@]}"
+      echo ""
+      DISPLAY_CMD=()
+    else
+      DISPLAY_CMD=(codex exec -s "$SANDBOX")
+    fi
+    if [[ "$OPERATION" == resume ]]; then :; else
     if [[ -n "${CODEX_WRITABLE_ROOTS_TOML:-}" ]]; then
       DISPLAY_CMD+=(-c "sandbox_workspace_write.writable_roots=[${CODEX_WRITABLE_ROOTS_TOML}]")
     fi
@@ -1749,6 +1907,7 @@ if [[ "$DRY_RUN" == true ]]; then
     if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then DISPLAY_CMD+=("${EXTRA_ARGS[@]}"); fi
     printf '%q ' "${DISPLAY_CMD[@]}"
     echo ""
+    fi
   fi
   echo ""
   if [[ -n "$TEMPLATE_FILE" ]]; then
@@ -1770,7 +1929,7 @@ if [[ "$ENGINE" == "claude" ]] && ! command -v claude >/dev/null 2>&1; then
   echo "Error: claude CLI not found on PATH (required for --to claude)." >&2
   exit 1
 fi
-if [[ "$ENGINE" == "codex" ]] && ! command -v codex >/dev/null 2>&1; then
+if [[ "$ENGINE" == "codex" && "$OPERATION" == exec ]] && ! command -v codex >/dev/null 2>&1; then
   _dispatch_write_failure_class insufficient_codex_version
   echo "Error: codex CLI not found on PATH (required for --to codex)." >&2
   exit 1
@@ -1793,6 +1952,26 @@ if [[ "$REPORT" == compact ]]; then
     exit 1
   }
   chmod 700 "$COMPACT_ARTIFACT_DIR"
+fi
+
+NATIVE_OPERATION_ARTIFACT_DIR=""
+DISPATCH_CONTROL_RESULT=""
+if [[ "$OPERATION" == resume ]]; then
+  native_output_parent="$(cd "$(dirname "$OUTPUT")" 2>/dev/null && pwd -P)" || {
+    echo "Error: native resume output parent does not exist: $(dirname "$OUTPUT")" >&2
+    exit 1
+  }
+  umask 077
+  NATIVE_OPERATION_ARTIFACT_DIR="$(mktemp -d "$native_output_parent/.clavain-dispatch-resume.XXXXXX")" || {
+    echo "Error: cannot create native resume artifact directory" >&2
+    exit 1
+  }
+  chmod 700 "$NATIVE_OPERATION_ARTIFACT_DIR"
+  if [[ -z "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
+    CLAVAIN_REVIEW_EVENTS="$NATIVE_OPERATION_ARTIFACT_DIR/events.jsonl"
+    : > "$CLAVAIN_REVIEW_EVENTS"
+    chmod 600 "$CLAVAIN_REVIEW_EVENTS"
+  fi
 fi
 
 # Write dispatch state file for statusline visibility
@@ -2154,6 +2333,33 @@ _finalize_dispatch_result() {
   return 0
 }
 
+_validate_native_resume_result() {
+  local events="$1"
+  [[ "$OPERATION" == resume ]] || return 0
+  if [[ -z "$events" || ! -f "$events" ]] || ! python3 "$DISPATCH_SCRIPT_DIR/dispatch_control.py" \
+      validate-resume-events --binding "$RESUME_FROM" --events "$events" >/dev/null; then
+    echo "Error: resumed process did not prove the exact bound native UUID" >&2
+    return 1
+  fi
+  return 0
+}
+
+_seal_native_resume_result() {
+  local events="$1" process_code="$2" sealed
+  [[ "$OPERATION" == resume ]] || return 0
+  sealed="$(python3 "$DISPATCH_SCRIPT_DIR/dispatch_control.py" seal-resume \
+    --binding "$RESUME_FROM" --events "$events" --output "$OUTPUT" \
+    --artifact-dir "$NATIVE_OPERATION_ARTIFACT_DIR" --process-code "$process_code")" || {
+      echo "Error: could not seal native resume artifacts" >&2
+      return 1
+    }
+  DISPATCH_CONTROL_RESULT="$(jq -r '.operation_result // empty' <<< "$sealed")"
+  [[ -n "$DISPATCH_CONTROL_RESULT" && -f "$DISPATCH_CONTROL_RESULT" ]] || {
+    echo "Error: native resume operation result is missing" >&2
+    return 1
+  }
+}
+
 _compact_forward_signal() {
   local signal="$1"
   case "$signal" in
@@ -2179,6 +2385,11 @@ _compact_render() {
     --artifact "last_message=$OUTPUT"
     --artifact "summary=$SUMMARY_FILE"
     --artifact "verdict=${OUTPUT}.verdict")
+  if [[ "$OPERATION" == resume && -n "$DISPATCH_CONTROL_RESULT" && -f "$DISPATCH_CONTROL_RESULT" ]]; then
+    common_args+=(--artifact "native_operation_result=$DISPATCH_CONTROL_RESULT")
+    [[ ! -f "$NATIVE_OPERATION_ARTIFACT_DIR/manifest.json" ]] || \
+      common_args+=(--artifact "native_operation_manifest=$NATIVE_OPERATION_ARTIFACT_DIR/manifest.json")
+  fi
   [[ ! -f "${OUTPUT}.verdict.pre-error" ]] || common_args+=(--artifact "verdict_pre_error=${OUTPUT}.verdict.pre-error")
   if [[ -n "$RESOLVED_ROUTE_JSON" ]]; then
     printf '%s\n' "$RESOLVED_ROUTE_JSON" > "$COMPACT_ARTIFACT_DIR/resolved-route.json"
@@ -2223,6 +2434,32 @@ _compact_render() {
 if ! _record_role_routing_decision 0 "" started; then
   _dispatch_write_failure_class terminal_recording
   exit 1
+fi
+
+if [[ "$OPERATION" == compact ]]; then
+  if [[ -L "$OUTPUT" || -e "$OUTPUT" ]]; then
+    echo "Error: compact control output must be a fresh absent path: $OUTPUT" >&2
+    _dispatch_write_failure_class terminal_configuration
+    _record_role_routing_decision 1 terminal_configuration || true
+    exit 1
+  fi
+  DISPATCH_CONTROL_RESULT="$OUTPUT"
+  set +e
+  "${CMD[@]}" 2> "$STDERR_FILE"
+  CONTROL_EXIT=$?
+  set -e
+  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  CONTROL_CLASS=""
+  if [[ "$CONTROL_EXIT" != 0 ]]; then
+    CONTROL_CLASS=terminal_accounting
+    if [[ -f "$OUTPUT" ]] && [[ "$(jq -r '.failure // empty' "$OUTPUT" 2>/dev/null)" == *configuration* ]]; then
+      CONTROL_CLASS=terminal_configuration
+    fi
+  fi
+  if ! _finalize_dispatch_result "$CONTROL_EXIT" "$CONTROL_CLASS"; then
+    CONTROL_EXIT=1
+  fi
+  exit "$CONTROL_EXIT"
 fi
 
 # Role output paths are fresh attempt artifacts. Both the body and its sidecar
@@ -2386,6 +2623,18 @@ elif [[ "$REPORT" == compact ]]; then
   COMPACT_FORCE_UNUSABLE=false
   COMPACT_DIAGNOSTIC_CLASS=""
   COMPACT_FORCE_REASON=""
+  if ! _validate_native_resume_result "$COMPACT_EVENTS"; then
+    [[ "$DISPATCH_RESULT_CODE" != 0 ]] || DISPATCH_RESULT_CODE=1
+    COMPACT_DIAGNOSTIC_CLASS=terminal_configuration
+    COMPACT_FORCE_UNUSABLE=true
+    COMPACT_FORCE_REASON=native_resume_identity_failed
+  elif ! _seal_native_resume_result "$COMPACT_EVENTS" "${CODEX_EXIT/unknown/1}"; then
+    [[ "$DISPATCH_RESULT_CODE" != 0 ]] || DISPATCH_RESULT_CODE=1
+    COMPACT_DIAGNOSTIC_CLASS=terminal_recording
+    COMPACT_FORCE_UNUSABLE=true
+    COMPACT_FORCE_REASON=native_resume_seal_failed
+  fi
+
   if [[ "$COMPACT_CAPTURE_EXIT" != 0 || "$COMPACT_PARSER_EXIT" != 0 || "$COMPACT_PATH_FAILURE" == true ]]; then
     COMPACT_FORCE_UNUSABLE=true
     if [[ "$COMPACT_CAPTURE_EXIT" != 0 ]]; then
@@ -2450,6 +2699,14 @@ elif [[ "$HAS_GAWK" == true ]]; then
   # Keep structured sideband in sync even when parser wrote only legacy state.
   _dispatch_sync_interband_from_legacy
 
+  if ! _validate_native_resume_result "${CLAVAIN_REVIEW_EVENTS:-}"; then
+    [[ "$CODEX_EXIT" != 0 ]] || CODEX_EXIT=1
+    _write_error_verdict "$OUTPUT" error "resumed native UUID was not verified"
+  elif ! _seal_native_resume_result "${CLAVAIN_REVIEW_EVENTS:-}" "$CODEX_EXIT"; then
+    [[ "$CODEX_EXIT" != 0 ]] || CODEX_EXIT=1
+    _write_error_verdict "$OUTPUT" error "native resume artifacts could not be sealed"
+  fi
+
   if ! _finalize_dispatch_result "$CODEX_EXIT"; then
     CODEX_EXIT=1
   fi
@@ -2458,7 +2715,7 @@ else
   # Fallback: no gawk, run without JSONL parsing (no live statusline updates)
   echo "Note: gawk not found — running without live statusline updates" >&2
   set +e
-  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 || -n "${CLAVAIN_USAGE_OUTPUT_DIR:-}" ]]; then
+  if [[ "$OPERATION" == resume || "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 || -n "${CLAVAIN_USAGE_OUTPUT_DIR:-}" ]]; then
     if [[ -z "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
       echo "Error: usage-observed dispatch requires an event destination" >&2
       exit 1
@@ -2483,6 +2740,14 @@ else
 
   # Post-dispatch validation: scope check + secret scan
   _post_dispatch_validate "$WORKDIR"
+
+  if ! _validate_native_resume_result "${CLAVAIN_REVIEW_EVENTS:-}"; then
+    [[ "$CODEX_EXIT" != 0 ]] || CODEX_EXIT=1
+    _write_error_verdict "$OUTPUT" error "resumed native UUID was not verified"
+  elif ! _seal_native_resume_result "${CLAVAIN_REVIEW_EVENTS:-}" "$CODEX_EXIT"; then
+    [[ "$CODEX_EXIT" != 0 ]] || CODEX_EXIT=1
+    _write_error_verdict "$OUTPUT" error "native resume artifacts could not be sealed"
+  fi
 
   if ! _finalize_dispatch_result "$CODEX_EXIT"; then
     CODEX_EXIT=1
