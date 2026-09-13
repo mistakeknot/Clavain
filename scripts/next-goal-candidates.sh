@@ -111,6 +111,29 @@ command -v jq >/dev/null 2>&1 || die_json '"jq not installed"'
 
 # ---------------------------------------------------------------- root discovery
 
+# A linked git worktree (git worktree add, bd worktree create) carries its own
+# .beads copy that nothing syncs: beads created from the main checkout read as
+# "no such bead" there, and its ready list is whatever was copied at creation.
+# Resolve a root found inside one to the checkout the tracker actually lives
+# in. Observed 2026-09-04: a session in a nested jawnomicon worktree saw zero
+# ready beads and improvised every Next-goal block for two days.
+tracker_home() {
+    local dir="$1" gitdir common main
+    command -v git >/dev/null 2>&1 || { printf '%s\n' "$dir"; return 0; }
+    gitdir="$(git -C "$dir" rev-parse --git-dir 2>/dev/null)" || { printf '%s\n' "$dir"; return 0; }
+    common="$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null)" || { printf '%s\n' "$dir"; return 0; }
+    [[ "$gitdir" = /* ]] || gitdir="$dir/$gitdir"
+    [[ "$common" = /* ]] || common="$dir/$common"
+    gitdir="$(cd "$gitdir" 2>/dev/null && pwd -P)"
+    common="$(cd "$common" 2>/dev/null && pwd -P)"
+    if [[ -n "$gitdir" && -n "$common" && "$gitdir" != "$common" ]]; then
+        main="$(dirname "$common")"
+        [[ -d "$main/.beads" ]] && { printf '%s\n' "$main"; return 0; }
+    fi
+    # Resolved, like the worktree branch above, so one tracker has one name.
+    printf '%s\n' "$(cd "$dir" 2>/dev/null && pwd -P || printf '%s' "$dir")"
+}
+
 discover_roots() {
     if [[ -n "${CLAVAIN_NEXT_GOAL_ROOTS:-}" ]]; then
         printf '%s\n' "${CLAVAIN_NEXT_GOAL_ROOTS}" | tr ':' '\n'
@@ -122,7 +145,7 @@ discover_roots() {
     # sees no tracker at all.
     local dir="$PWD" depth=0
     while [[ -n "$dir" && "$dir" != "/" && $depth -lt 12 ]]; do
-        [[ -d "$dir/.beads" ]] && printf '%s\n' "$dir"
+        [[ -d "$dir/.beads" ]] && tracker_home "$dir"
         dir="$(dirname "$dir")"
         depth=$((depth + 1))
     done

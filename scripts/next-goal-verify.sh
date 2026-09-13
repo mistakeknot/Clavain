@@ -51,17 +51,45 @@
 # or no store that answers, makes lineage UNAVAILABLE and says so; the rest of
 # the verdict stands.
 #
+# OUT CLAUSE — why a live, open, out-of-lineage pick can still be the wrong
+# recommendation.
+#
+# On 2026-09-04 the goal jawnomicon ia-preview closed with the clause
+# "OUT: index density, export currency 646 to 694, families v31 naming, ...".
+# The Next-goal block that closed it recommended "export currency 646 to 694".
+# The exclusion was the user's decision, made in the goal they had just
+# ratified, and the block silently reopened it three minutes after it landed.
+# Nothing above can see this: the pick was free text (no bead to read back),
+# and no check compares a recommendation against what the last goal excluded.
+#
+# --text carries the /goal text the block is about to emit; --out-of names
+# where the just-closed goal's condition lives (a bead whose description holds
+# it, a file, or the literal text) and may repeat. When the goal store answers,
+# the most recently closed goal's ConditionText is read automatically as well.
+# A recommendation that matches an item of any OUT clause is DISQUALIFIED —
+# unless --out-override gives the reason it is now in, which downgrades the
+# refusal to a warning and puts the reason on the receipt. The block must make
+# that case in prose too.
+#
+# WORKTREES — a linked git worktree (git worktree add, bd worktree create)
+# carries its own .beads copy that nothing syncs, so beads created from the
+# main checkout read as "no such bead" there. Roots found inside a linked
+# worktree resolve to the checkout the tracker actually lives in.
+#
 # Usage:
-#   next-goal-verify.sh [--recommend <id>] [--beat <id>] <bead-id> [<bead-id>...]
+#   next-goal-verify.sh [--recommend <id>] [--beat <id>] [--text <goal text>]
+#                       [--out-of <bead|file|text>]... [--out-override <reason>]
+#                       <bead-id> [<bead-id>...]
 #   next-goal-verify.sh --path apps/web/components/x/ <bead-id>     # see --path
 #   next-goal-verify.sh --recommend mk-12 --beat mk-40 mk-12 mk-40  # see LINEAGE
+#   next-goal-verify.sh --recommend mk-12 --text "/goal ..." --out-of mk-9 mk-12  # see OUT CLAUSE
 #
 # Exit: 0 = every candidate usable (or verification unavailable — fail-open),
 #       3 = at least one candidate DISQUALIFIED. Always prints one JSON object.
 
 set -uo pipefail
 
-SCHEMA_VERSION="clavain.next-goal-verify/v2"
+SCHEMA_VERSION="clavain.next-goal-verify/v3"
 MAX_ROOTS="${CLAVAIN_NEXT_GOAL_MAX_ROOTS:-6}"
 BD_TIMEOUT="${CLAVAIN_NEXT_GOAL_BD_TIMEOUT:-20}"
 
@@ -72,6 +100,9 @@ IDS=()
 PATHS=()
 RECOMMEND=""
 BEAT=""
+TEXT=""
+OUT_OF=()
+OUT_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --path) PATHS+=("${2:-}"); shift 2 || shift ;;
@@ -80,6 +111,12 @@ while [[ $# -gt 0 ]]; do
         --recommend=*) RECOMMEND="${1#--recommend=}"; shift ;;
         --beat) BEAT="${2:-}"; shift 2 || shift ;;
         --beat=*) BEAT="${1#--beat=}"; shift ;;
+        --text) TEXT="${2:-}"; shift 2 || shift ;;
+        --text=*) TEXT="${1#--text=}"; shift ;;
+        --out-of) OUT_OF+=("${2:-}"); shift 2 || shift ;;
+        --out-of=*) OUT_OF+=("${1#--out-of=}"); shift ;;
+        --out-override) OUT_OVERRIDE="${2:-}"; shift 2 || shift ;;
+        --out-override=*) OUT_OVERRIDE="${1#--out-override=}"; shift ;;
         -h|--help) sed -n '2,60p' "$0"; exit 0 ;;
         *) IDS+=("$1"); shift ;;
     esac
@@ -128,7 +165,7 @@ unavailable() {
 }
 
 command -v jq >/dev/null 2>&1 || unavailable "jq not installed"
-[[ ${#IDS[@]} -gt 0 || ${#PATHS[@]} -gt 0 ]] || unavailable "nothing to verify"
+[[ ${#IDS[@]} -gt 0 || ${#PATHS[@]} -gt 0 || -n "$TEXT" ]] || unavailable "nothing to verify"
 
 # bd is required only for BEAD IDs. A --path run asks the filesystem whether an
 # artifact exists and never touches a tracker, so demanding bd for it made the
@@ -146,6 +183,26 @@ fi
 # then add the workspace tracker, which is not an ancestor of every checkout.
 # Two different resolution schemes for the same ID space would be a way for the
 # gate to disagree with the thing it is gating.
+# A linked git worktree carries its own .beads copy that nothing syncs. Resolve
+# a root found inside one to the checkout the tracker actually lives in, so
+# the beads the session created from the main checkout can be read back.
+tracker_home() {
+    local dir="$1" gitdir common main
+    command -v git >/dev/null 2>&1 || { printf '%s\n' "$dir"; return 0; }
+    gitdir="$(git -C "$dir" rev-parse --git-dir 2>/dev/null)" || { printf '%s\n' "$dir"; return 0; }
+    common="$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null)" || { printf '%s\n' "$dir"; return 0; }
+    [[ "$gitdir" = /* ]] || gitdir="$dir/$gitdir"
+    [[ "$common" = /* ]] || common="$dir/$common"
+    gitdir="$(cd "$gitdir" 2>/dev/null && pwd -P)"
+    common="$(cd "$common" 2>/dev/null && pwd -P)"
+    if [[ -n "$gitdir" && -n "$common" && "$gitdir" != "$common" ]]; then
+        main="$(dirname "$common")"
+        [[ -d "$main/.beads" ]] && { printf '%s\n' "$main"; return 0; }
+    fi
+    # Resolved, like the worktree branch above, so one tracker has one name.
+    printf '%s\n' "$(cd "$dir" 2>/dev/null && pwd -P || printf '%s' "$dir")"
+}
+
 discover_roots() {
     if [[ -n "${CLAVAIN_NEXT_GOAL_ROOTS:-}" ]]; then
         printf '%s\n' "${CLAVAIN_NEXT_GOAL_ROOTS}" | tr ':' '\n'
@@ -153,7 +210,7 @@ discover_roots() {
     fi
     local dir="$PWD" depth=0
     while [[ -n "$dir" && "$dir" != "/" && $depth -lt 12 ]]; do
-        [[ -d "$dir/.beads" ]] && printf '%s\n' "$dir"
+        [[ -d "$dir/.beads" ]] && tracker_home "$dir"
         dir="$(dirname "$dir")"
         depth=$((depth + 1))
     done
@@ -256,6 +313,8 @@ fi
 LINEAGE_WINDOW="${CLAVAIN_NEXT_GOAL_LINEAGE_WINDOW:-4}"
 LINEAGE_MIN="${CLAVAIN_NEXT_GOAL_LINEAGE_MIN:-2}"
 LINEAGE_JSON='{"available":false,"reason":"no bead candidates, so there is no recommendation to place","window":[],"streak":[]}'
+LAST_GOAL_ID=""
+LAST_GOAL_CONDITION=""
 RUN_DISQ=""
 ROOT_EPIC=""
 declare -A ROOT_MEMO
@@ -326,12 +385,26 @@ if [[ ${#IDS[@]} -gt 0 ]]; then
             GOALS_SEEN=1
             GOALS_ALL="$(jq -c --arg root "$root" --argjson g "$raw" \
                 '. + [$g[] | select(.Status == "closed")
-                      | {id: .ID, closed_at: (.ClosedAt // 0), bead_id: (.BeadID // null), _root: $root}]' <<<"$GOALS_ALL")"
+                      | {id: .ID, closed_at: (.ClosedAt // 0), bead_id: (.BeadID // null), _root: $root,
+                         condition: (.ConditionText // ""), project: (.ProjectDir // "")}]' <<<"$GOALS_ALL")"
         done
         if [[ $GOALS_SEEN -eq 0 ]]; then
             LINEAGE_JSON='{"available":false,"reason":"no goal store answered in any reachable root, so the lineage of the last closed goals cannot be read","window":[],"streak":[]}'
         else
             WINDOW_JSON="$(jq -c --argjson w "$LINEAGE_WINDOW" 'sort_by(-(.closed_at)) | .[0:$w]' <<<"$GOALS_ALL")"
+            # The automatic OUT source is THIS project's last closed goal. The
+            # store is shared across projects and the lineage window merges
+            # them on purpose; an OUT clause does not transfer that way — on
+            # 2026-09-04 a jawnomicon pick was judged against elf-revel's.
+            # "This project" is the nearest root; ProjectDir may be absolute,
+            # a subdirectory (a worktree), or just the project's name.
+            LAST_PROJECT_GOAL="$(jq -c --arg here "${ROOTS[0]:-}" '
+                [.[] | .project as $p
+                     | select($p != "" and $here != "" and
+                              ($p == $here or ($here | endswith("/" + $p)) or ($p | startswith($here + "/"))))]
+                | sort_by(-(.closed_at)) | .[0] // {}' <<<"$GOALS_ALL")"
+            LAST_GOAL_ID="$(jq -r '.id // empty' <<<"$LAST_PROJECT_GOAL")"
+            LAST_GOAL_CONDITION="$(jq -r '.condition // empty' <<<"$LAST_PROJECT_GOAL")"
 
             # Each goal's lineage: root epics of its own bead and of every bead
             # labeled with it. Empty means UNKNOWN, and unknown never counts.
@@ -438,6 +511,101 @@ fi
 # have been open and the components still present. So a candidate whose verb is
 # "create"/"build"/"add" has to assert the artifact's absence, and asserting is
 # a command, not a belief.
+# ---------------------------------------------------------------- OUT clause
+
+# Every source the just-closed goal's condition can come from, in the order
+# the user gave them, then the goal store's most recently closed goal.
+OUT_SOURCES="[]"
+for src in ${OUT_OF[@]+"${OUT_OF[@]}"}; do
+    [[ -z "$src" ]] && continue
+    label="text"; body="$src"
+    if [[ "$src" =~ ^[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9.]+$ ]] && command -v bd >/dev/null 2>&1; then
+        for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
+            raw="$(bd_show "$root" "$src")"
+            if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$raw"; then
+                label="bead $src"; body="$(jq -r '.[0].description // ""' <<<"$raw")"; break
+            fi
+        done
+    fi
+    if [[ "$label" == "text" && -f "$src" ]]; then
+        label="file $src"; body="$(cat "$src" 2>/dev/null)"
+    fi
+    OUT_SOURCES="$(jq -c --arg l "$label" --arg b "$body" '. + [{source: $l, text: $b}]' <<<"$OUT_SOURCES")"
+done
+if [[ -n "$LAST_GOAL_ID" && -n "$LAST_GOAL_CONDITION" ]]; then
+    OUT_SOURCES="$(jq -c --arg l "goal $LAST_GOAL_ID" --arg b "$LAST_GOAL_CONDITION" '. + [{source: $l, text: $b}]' <<<"$OUT_SOURCES")"
+fi
+
+# The recommendation as the reader will see it: the /goal text plus the
+# recommended bead's title. Not its description — a bead filed as a follow-up
+# often explains that it is OUT of the goal that spawned it, and would match.
+REC_TITLE=""
+if [[ -n "$RECOMMEND" ]]; then
+    REC_TITLE="$(jq -r --arg id "$RECOMMEND" 'first(.[] | select(.id == $id)) | .title // ""' <<<"$BEADS_JSON")"
+fi
+
+OUT_JSON="$(jq -cn \
+    --argjson sources "$OUT_SOURCES" --arg text "$TEXT" --arg title "$REC_TITLE" \
+    --arg rec "$RECOMMEND" --arg override "$OUT_OVERRIDE" '
+    def norm: ascii_downcase | gsub("[^a-z0-9]+"; " ") | gsub("^ +| +$"; "");
+    def stop: ["any","the","a","an","to","of","or","and","in","on","for","with","by","from",
+               "its","it","this","that","not","no","all","as","at","is","are","be","into","up"];
+    def toks: norm | split(" ") | map(select(length > 0)) | map(select(. as $t | stop | index($t) | not));
+    # Every word of the item must appear in the pick; numbers and version
+    # tags ride along free, so "export currency 646 to 694" still names
+    # "export-currency at canon 694".
+    def words: toks | map(select(test("[0-9]") | not));
+    # Shared-prefix similarity: families/family, harvest/harvesting match;
+    # currency/current does not.
+    def cp($a; $b): [range(0; ([($a | length), ($b | length)] | min))] | map(select($a[:. + 1] == $b[:. + 1])) | length;
+    def sim($a; $b): ($a == $b) or (cp($a; $b) as $c | $c >= 4 and $c >= (([($a | length), ($b | length)] | min) - 2));
+    # The clause after the first "OUT:" up to the end of that paragraph.
+    # jq splits "" into [], so the no-clause path must not index null.
+    def clause: (split("OUT:") | if length > 1 then .[1:] | join("OUT:") else "" end) | (split("\n\n")[0] // "");
+    def items: clause | split(",") | map(split(";")[]) | map(gsub("^\\s+|\\s+$"; ""))
+               | map(select(length > 0))
+               | map({item: ., words: words})
+               | map(select((.words | length) >= 2 or ((.words | length) == 1 and (.words[0] | length) >= 6)));
+    # The pick is judged on what it proposes to DO. Its own OUT clause usually
+    # restates the exclusions it inherits, and must not match them.
+    def own: split("OUT:")[0];
+    ((($text | own) + " " + $title) | toks) as $cand
+    | [$sources[] | . as $s | (.text | items)[] | . + {source: $s.source}] as $all
+    | [$all[] | select(all(.words[]; . as $w | any($cand[]; sim(.; $w))))] as $hits
+    | (if $rec != "" then $rec elif $text != "" then "<text>" else null end) as $subject
+    | if ($sources | length) == 0 then
+        {available: false, reason: "no OUT source: pass --out-of <bead|file|text>, or no goal store answered", subject: $subject,
+         sources: [], items: 0, matched: [], verdict: null}
+      elif ($all | length) == 0 then
+        {available: true, reason: ("no OUT clause found in " + ([$sources[].source] | join(", "))), subject: $subject,
+         sources: [$sources[].source], items: 0, matched: [], verdict: "ok"}
+      elif $cand == [] then
+        {available: false, reason: "nothing to judge: pass --text with the /goal text and/or --recommend <bead>", subject: $subject,
+         sources: [$sources[].source], items: ($all | length), matched: [], verdict: null}
+      elif ($hits | length) == 0 then
+        {available: true, reason: ("outside the OUT clause of " + ([$sources[].source] | unique | join(", "))), subject: $subject,
+         sources: [$sources[].source], items: ($all | length), matched: [], verdict: "ok"}
+      elif $override != "" then
+        {available: true, verdict: "warn", subject: $subject,
+         sources: [$sources[].source], items: ($all | length), matched: [$hits[] | {item, source}], override: $override,
+         reason: ("named in the OUT clause of " + ($hits[0].source) + " (\"" + $hits[0].item + "\"); allowed on record because: " + $override)}
+      else
+        {available: true, verdict: "disqualified", subject: $subject,
+         sources: [$sources[].source], items: ($all | length), matched: [$hits[] | {item, source}],
+         reason: ("named in the OUT clause of " + ($hits[0].source) + " (\"" + $hits[0].item + "\") — the user excluded it there; re-proposing it reopens that decision. Say why it is now in with --out-override, or recommend something else")}
+      end')"
+
+if [[ "$(jq -r '.verdict // empty' <<<"$OUT_JSON")" == "disqualified" ]]; then
+    OUT_REASON="$(jq -r '.reason' <<<"$OUT_JSON")"
+    if [[ -n "$RECOMMEND" ]]; then
+        BEADS_JSON="$(jq -c --arg id "$RECOMMEND" --arg r "$OUT_REASON" \
+            'map(if .id == $id then . + {verdict: "disqualified", reason: $r} else . end)' <<<"$BEADS_JSON")"
+    fi
+    OUT_DISQ="$(jq -r '(.subject // "<text>") + " (" + (.matched[0].source) + " OUT: \"" + (.matched[0].item) + "\")"' <<<"$OUT_JSON")"
+else
+    OUT_DISQ=""
+fi
+
 for p in ${PATHS[@]+"${PATHS[@]}"}; do
     if [[ -e "$p" ]]; then
         detail="exists"
@@ -454,10 +622,11 @@ for p in ${PATHS[@]+"${PATHS[@]}"}; do
 done
 PATHS_JSON="${PATHS_JSON:-[]}"
 
-DISQUALIFIED="$(jq -cn --argjson b "$BEADS_JSON" --argjson p "$PATHS_JSON" --arg run "$RUN_DISQ" \
+DISQUALIFIED="$(jq -cn --argjson b "$BEADS_JSON" --argjson p "$PATHS_JSON" --arg run "$RUN_DISQ" --arg out "$OUT_DISQ" \
     '[($b[] | select(.verdict == "disqualified") | .id),
       ($p[] | select(.verdict == "disqualified") | .path)]
-     + (if $run == "" then [] else [$run] end)')"
+     + (if $run == "" then [] else [$run] end)
+     + (if $out == "" then [] else [$out] end) | unique')"
 
 # `ok: (($disq | length) == 0)` — the OUTER parentheses are load-bearing. jq 1.7
 # (Debian, and the CI runner) rejects `key: a == b` inside an object literal
@@ -476,11 +645,14 @@ PAYLOAD="$(jq -cn \
     --argjson paths "$PATHS_JSON" \
     --argjson disq "$DISQUALIFIED" \
     --argjson lineage "$LINEAGE_JSON" \
+    --argjson out "$OUT_JSON" \
     '{schema_version: $schema, available: true, verified_at: $stamp,
       roots_discovered: ($roots_seen == 1),
       beads: $beads, paths: $paths, disqualified: $disq,
-      warnings: [$beads[] | select(.verdict == "warn") | .id],
+      warnings: ([$beads[] | select(.verdict == "warn") | .id]
+                 + (if $out.verdict == "warn" then [($out.subject // "<text>")] else [] end)),
       lineage: $lineage,
+      out_clause: $out,
       ok: (($disq | length) == 0)}')"
 
 if [[ "$(jq -r '.ok' <<<"$PAYLOAD")" == "true" ]]; then
