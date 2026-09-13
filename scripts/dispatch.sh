@@ -2008,9 +2008,17 @@ fi
 # Uses simple gawk regex matching — no JSON library needed for top-level fields.
 # Assumes Codex JSONL uses unescaped enum strings for "type" field (safe per Codex schema).
 _jsonl_parser() {
-  local state_file="$1" name="$2" workdir="$3" started="$4" summary_file="$5"
-  awk -v sf="$state_file" -v name="$name" -v wd="$workdir" -v st="$started" -v smf="$summary_file" '
+  local state_file="$1" name="$2" workdir="$3" started="$4" summary_file="$5" live_updates="${6:-1}"
+  awk -v sf="$state_file" -v name="$name" -v wd="$workdir" -v st="$started" -v smf="$summary_file" -v live="$live_updates" '
     BEGIN { turns=0; cmds=0; msgs=0; in_tok=0; out_tok=0; activity="starting" }
+
+    function write_state( tmp) {
+      tmp = sf ".tmp"
+      printf "{\"name\":\"%s\",\"workdir\":\"%s\",\"started\":%d,\"activity\":\"%s\",\"turns\":%d,\"commands\":%d,\"messages\":%d}\n", \
+        name, wd, st, activity, turns, cmds, msgs > tmp
+      close(tmp)
+      return system("mv " tmp " " sf)
+    }
 
     # Skip non-JSON lines (stderr noise from Codex)
     !/^\{/ { next }
@@ -2038,15 +2046,13 @@ _jsonl_parser() {
         activity = "thinking"
       }
 
-      # Atomic state file update: write to temp, then rename
-      tmp = sf ".tmp"
-      printf "{\"name\":\"%s\",\"workdir\":\"%s\",\"started\":%d,\"activity\":\"%s\",\"turns\":%d,\"commands\":%d,\"messages\":%d}\n", \
-        name, wd, st, activity, turns, cmds, msgs > tmp
-      close(tmp)
-      system("mv " tmp " " sf)
+      if (live) write_state()
     }
 
     END {
+      # Compact mode replays retained events after the backend has finished.
+      # Publish once: per-event subprocesses can otherwise delay cancellation.
+      if (!live && write_state() != 0) exit 1
       if (smf != "") {
         elapsed = systime() - st
         mins = int(elapsed / 60)
@@ -2600,7 +2606,7 @@ elif [[ "$REPORT" == compact ]]; then
   # cannot alter or consume the evidence bytes.
   if [[ "$HAS_GAWK" == true && "$COMPACT_PATH_FAILURE" != true ]]; then
     set +e
-    _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE" < "$COMPACT_EVENTS"
+    _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE" 0 < "$COMPACT_EVENTS"
     COMPACT_PARSER_EXIT=$?
     set -e
   else

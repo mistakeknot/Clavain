@@ -104,6 +104,10 @@ while time.monotonic()<deadline:
  try: os.write(1,b"{\"type\":\"turn.started\"}\n"*256); time.sleep(.005)
  except BrokenPipeError: time.sleep(30)'
     ;;
+  event_burst)
+    python3 -c 'print("{\"type\":\"thread.started\",\"thread_id\":\"thread-burst\"}"); print("{\"type\":\"turn.started\"}\n" * 100, end="")'
+    printf 'burst complete\nVERDICT: CLEAN\n' > "$output"
+    ;;
   *)
     printf '{"type":"thread.started","thread_id":"thread-123"}\n'
     printf '{"type":"turn.started"}\n'
@@ -501,4 +505,51 @@ SH
     python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 0 and r["dispatcher_code"] == 143 and r["unusable"] is True' "$T/report.json"
     dir="$(artifact_dir)"
     python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["capture_status"] == "failed" and "event pipe remained open after cancellation escalation" in p["capture_errors"]' "$dir/process.json"
+}
+
+@test "compact GNU awk diagnostics batch state publication for an event burst" {
+    command -v gawk >/dev/null 2>&1 || skip "GNU awk is not installed"
+    export FIXTURE_MOVES="$T/moves"
+    cat > "$T/bin/awk" <<'SH'
+#!/usr/bin/env bash
+exec gawk "$@"
+SH
+    cat > "$T/bin/mv" <<'SH'
+#!/usr/bin/env bash
+printf 'move\n' >> "$FIXTURE_MOVES"
+exec /bin/mv "$@"
+SH
+    chmod +x "$T/bin/awk" "$T/bin/mv"
+    mkdir "$T/baseline"
+    bash "$DISPATCH" --report compact -C "$T/repo" -o "$T/baseline/last.md" "fixture" > "$T/baseline.json" 2> "$T/baseline.stderr"
+    baseline_moves="$(wc -l < "$FIXTURE_MOVES" | tr -d ' ')"
+    [ "$baseline_moves" -ge 1 ]
+    : > "$FIXTURE_MOVES"
+    export FIXTURE_MODE=event_burst
+    run_dispatch
+    [ "$DISPATCH_STATUS" -eq 0 ]
+    [ "$(wc -l < "$FIXTURE_MOVES" | tr -d ' ')" -eq "$baseline_moves" ]
+    grep -q 'Turns: 100' "$T/out/last.md.summary"
+    dir="$(artifact_dir)"
+    [ "$(wc -l < "$dir/stdout.events.jsonl" | tr -d ' ')" -eq 101 ]
+}
+
+@test "compact diagnostic publication failure retains the backend outcome" {
+    command -v gawk >/dev/null 2>&1 || skip "GNU awk is not installed"
+    cat > "$T/bin/awk" <<'SH'
+#!/usr/bin/env bash
+exec gawk "$@"
+SH
+    # Fail only the diagnostic parser move, not the initial shell state write.
+    cat > "$T/bin/mv" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1" == /tmp/clavain-dispatch-*.json.tmp ]]; then exit 7; fi
+exec /bin/mv "$@"
+SH
+    chmod +x "$T/bin/awk" "$T/bin/mv"
+    run_dispatch
+    [ "$DISPATCH_STATUS" -eq 1 ]
+    python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["backend_process_code"] == 0 and r["dispatcher_code"] == 1 and r["unusable"] is True; assert "native_parser_failed" in r["diagnostics"]' "$T/report.json"
+    dir="$(artifact_dir)"
+    grep -q 'thread-123' "$dir/stdout.events.jsonl"
 }
