@@ -17,7 +17,7 @@ setup() {
 
 teardown() {
   rm -rf "$T"
-  if [[ -n "${FIXTURE_IN_CHECKOUT:-}" && "$FIXTURE_IN_CHECKOUT" == */task-evidence/native-correction/bats.* ]]; then
+  if [[ -n "${FIXTURE_IN_CHECKOUT:-}" && "$FIXTURE_IN_CHECKOUT" == */.native-fixture.* ]]; then
     rm -rf "$FIXTURE_IN_CHECKOUT"
   fi
 }
@@ -186,7 +186,7 @@ SH
 
 @test "fixture library uses real audit rows and durable election after stale lock recovery" {
   repo="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
-  FIXTURE_IN_CHECKOUT="$(mktemp -d "$repo/task-evidence/native-correction/bats.XXXXXX")"
+  FIXTURE_IN_CHECKOUT="$(mktemp -d "$repo/.native-fixture.XXXXXX")"
   db="$FIXTURE_IN_CHECKOUT/intercore.db"
   ic init --db="$db"
   lib="$repo/scripts/lib-dispatch-native.sh"
