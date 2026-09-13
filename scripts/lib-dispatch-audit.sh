@@ -47,8 +47,7 @@ _prepare_role_audit() {
         configuration_coverage:"exact-bound-native-operation",
         source_path:$binding.source.path,
         source_sha256:$binding.source.sha256,
-        native_schema_manifest:{path:$binding.native_schema.manifest_path,sha256:$binding.native_schema.manifest_sha256},
-        native_capability_evidence:{path:$binding.capability_evidence.path,sha256:$binding.capability_evidence.sha256,status:"verified"}
+        native_schema_manifest:{path:$binding.native_schema.manifest_path,sha256:$binding.native_schema.manifest_sha256}
       }')" || return 1
   fi
 }
@@ -105,6 +104,8 @@ _role_audit_context() {
     --argjson exit_code "$exit_code" --argjson observation "${DISPATCH_EXECUTION_OBSERVATION:-null}" \
     --argjson operation_request "$operation_request" \
     --argjson native_operation "$native_operation" \
+    --argjson native_admission "${DISPATCH_NATIVE_ADMISSION_JSON:-null}" \
+    --argjson native_send_intent "${DISPATCH_NATIVE_SEND_INTENT_JSON:-null}" \
     --argjson usage_collection "${DISPATCH_USAGE_COLLECTION:-null}" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
@@ -113,6 +114,8 @@ _role_audit_context() {
         codex_version:$version,sandbox:$sandbox,transport:$transport,session_id:$session,event_log:$events}
         + (if $observation | type == "object" then $observation else {} end)
         + (if $operation_request | type == "object" then {operation_request:$operation_request} else {} end)
+        + (if $native_admission | type == "object" then {native_admission:$native_admission} else {} end)
+        + (if $native_send_intent | type == "object" then {native_send_intent:$native_send_intent} else {} end)
         + (if $native_operation | type == "object" then {native_operation:$native_operation} else {} end)
         + (if $usage_collection | type == "object" then {usage_collection:$usage_collection} else {} end)),
       checkout:{before:$before,after:$after},

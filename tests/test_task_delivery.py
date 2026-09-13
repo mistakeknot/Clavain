@@ -555,3 +555,57 @@ def test_profiler_receipt_identifies_exact_invoked_bytes(tmp_path, mutation):
         report, code = module.invoke_profiler(profiler, manifest)
         assert code == 0
         assert report["profiler"] == dict(path=str(profiler), sha256=module.sha256(profiler), canonical=False)
+
+
+@pytest.mark.parametrize("field", [
+    "native_capability_evidence", "capability_evidence", "native_eligible",
+    "native_activation", "native_budget",
+])
+def test_old_source_reproducer_generic_binding_cannot_mint_native_eligibility(field):
+    value = binding() | {field: {"status": "verified"}}
+    with pytest.raises(ValueError, match="native.*activation|activation.*native"):
+        subject().validate_record("binding", value, [decision("enrollment", enrollment())])
+
+
+def test_old_source_reproducer_audit_does_not_invent_verified_capability(tmp_path):
+    audit = SCRIPT.parent / "lib-dispatch-audit.sh"
+    bound = {
+        "executable_pin": {"path": "/fixture/codex", "sha256": "a" * 64},
+        "configuration": {"sha256": "b" * 64},
+        "source": {"path": "/fixture/source", "sha256": "c" * 64},
+        "native_schema": {"manifest_path": "/fixture/schema", "manifest_sha256": "d" * 64},
+        "capability_evidence": {"path": "/fixture/capability", "sha256": "e" * 64},
+    }
+    env = os.environ | {
+        "DISPATCH_BINDING_JSON": json.dumps(bound),
+        "ATTEMPT_ID": "attempt",
+        "WORKDIR": str(tmp_path),
+        "ENGINE": "codex",
+    }
+    result = subprocess.run(
+        ["bash", "-c", 'source "$1"; _prepare_role_audit; printf "%s" "$DISPATCH_EXECUTION_OBSERVATION"', "bash", str(audit)],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    observed = json.loads(result.stdout)
+    capability = observed.get("native_capability_evidence")
+    assert capability is None or capability.get("status") != "verified"
+
+
+def test_fixture_native_predicates_are_closed_and_permanently_ineligible():
+    module = subject()
+    value = {
+        "schema_version": 2, "fixture_only": True, "eligible": False,
+        "evaluator_sha256": "a" * 64, "specification_sha256": "b" * 64,
+        "artifact_manifest_sha256": "c" * 64,
+        "checks": {name: True for name in module.NATIVE_FIXTURE_PREDICATES},
+        "observations": [{"kind": "fixture", "status": "observed"}],
+    }
+    assert module.validate_native_fixture_evaluation(value)["eligible"] is False
+    with pytest.raises(ValueError, match="ineligible"):
+        module.validate_native_fixture_evaluation(value | {"eligible": True})
+    incomplete = copy.deepcopy(value); incomplete["checks"].pop(next(iter(incomplete["checks"])))
+    with pytest.raises(ValueError, match="incomplete"):
+        module.validate_native_fixture_evaluation(incomplete)

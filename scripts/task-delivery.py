@@ -55,6 +55,11 @@ TASK_ENV_KEYS = frozenset({"CLAVAIN_TASK_ENROLLMENT_ID", "CLAVAIN_TASK_COHORT_ID
 # Host metadata describes the caller; it neither selects nor configures a child.
 # Drop these exact names rather than forwarding them or widening prefix exceptions.
 DROPPED_HOST_ENV_KEYS = frozenset({"CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PROJECT_DIR"})
+NATIVE_FIXTURE_PREDICATES = frozenset({
+    "model_provider_effort_tier", "cwd_and_writable_roots",
+    "approval_reviewer_sandbox_network", "instructions_config_and_skills",
+    "exclude_turns_suppresses_history", "accounting_protocol_cleanup",
+})
 
 
 def dispatch_environment():
@@ -152,6 +157,26 @@ def valid_time(value):
         raise ValueError("enrolled_at must include timezone")
 
 
+def validate_native_fixture_evaluation(value):
+    """Validate test observations without creating an activation/evaluator path."""
+    fields = {"schema_version", "fixture_only", "eligible", "evaluator_sha256",
+              "specification_sha256", "artifact_manifest_sha256", "checks", "observations"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("fixture native evaluation must use the closed schema")
+    if value["schema_version"] != 2 or value["fixture_only"] is not True or value["eligible"] is not False:
+        raise ValueError("fixture native evaluation is permanently ineligible")
+    for field in ("evaluator_sha256", "specification_sha256", "artifact_manifest_sha256"):
+        valid_hash(value, field)
+    checks = value["checks"]
+    if not isinstance(checks, dict) or set(checks) != NATIVE_FIXTURE_PREDICATES:
+        raise ValueError("fixture native evaluation has incomplete predicates")
+    if any(item not in {True, False, None} or type(item) not in {bool, type(None)} for item in checks.values()):
+        raise ValueError("fixture native predicates must be explicit booleans or unknown")
+    if not isinstance(value["observations"], list) or any(not isinstance(item, dict) for item in value["observations"]):
+        raise ValueError("fixture native observations must be structured")
+    return copy.deepcopy(value)
+
+
 def invoke_profiler(profiler, manifest):
     path = Path(profiler).resolve()
     identity = dict(path=str(path), sha256=sha256(path), canonical=path == INTERSTAT_PROFILE.resolve())
@@ -221,6 +246,12 @@ def validate_record(kind, value, records, *, verify_native=True):
         if kind in {"binding", "dispatch-request"} and value.get("manifest_sha256", parent["manifest_sha256"]) != parent["manifest_sha256"]:
             raise ValueError("binding manifest differs from enrollment")
     if kind == "binding":
+        activation_fields = {
+            "native_capability_evidence", "capability_evidence", "native_eligible",
+            "native_activation", "native_budget",
+        }
+        if activation_fields & set(value):
+            raise ValueError("generic binding cannot carry native activation evidence")
         if value.get("allocation") not in (None, "cohort_shared", value.get("enrollment_id")):
             raise ValueError("binding allocation differs from enrollment")
         required(value, "provider", "role", "model")

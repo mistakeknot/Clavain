@@ -17,6 +17,7 @@ import re
 import selectors
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import time
@@ -30,6 +31,9 @@ OPERATION_TIMEOUT = 120.0
 APPROVED_MANIFEST_SHA256 = "d3368f6ae469d8f0a1018daf701d1a4a1d07d0c075478491ed838a3ab3589997"
 APPROVED_MANIFEST_FILES = 426
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", re.I)
+HANDOFF_MAGIC = b"NCF2"
+HANDOFF_HEADER = struct.Struct(">4sQ32s")
+INT64_MAX = (1 << 63) - 1
 
 
 class ControlError(ValueError):
@@ -67,16 +71,237 @@ def strict_json(raw):
         raise ValueError("malformed JSON") from exc
 
 
-def read_regular(path, limit=MAX_BINDING):
+def read_regular(path, limit=MAX_BINDING, *, reject_hardlinks=False):
     path = Path(path)
-    info = path.lstat()
-    if not stat.S_ISREG(info.st_mode) or path.is_symlink() or info.st_size > limit:
-        raise ValueError(f"nonregular or oversized evidence: {path}")
-    with path.open("rb") as handle:
-        raw = handle.read(limit + 1)
-    if len(raw) > limit:
-        raise ValueError(f"oversized evidence: {path}")
-    return raw
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise ValueError(f"nonregular or unsafe alias evidence: {path}") from exc
+    try:
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_size > limit or
+                before.st_uid != os.getuid() or reject_hardlinks and before.st_nlink != 1):
+            reason = "unsafe hardlink or alias" if reject_hardlinks and before.st_nlink != 1 else "nonregular or oversized evidence"
+            raise ValueError(f"{reason}: {path}")
+        chunks = []
+        remaining = limit + 1
+        while remaining:
+            chunk = os.read(descriptor, min(65536, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(descriptor)
+        if len(raw) > limit:
+            raise ValueError(f"oversized evidence: {path}")
+        if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
+                after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+            raise ValueError(f"evidence changed while open: {path}")
+        return raw
+    finally:
+        os.close(descriptor)
+
+
+def _write_all(descriptor, payload, deadline=None):
+    view = memoryview(payload)
+    while view:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise ValueError("bounded write deadline exceeded")
+        count = os.write(descriptor, view)
+        if count <= 0:
+            raise ValueError("short write")
+        view = view[count:]
+
+
+def capture_binding_snapshot(path, private_directory):
+    """Capture exactly the bytes validated by the fixture supervisor."""
+    directory = Path(private_directory)
+    info = directory.lstat()
+    if directory.is_symlink() or not stat.S_ISDIR(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o700:
+        raise ValueError("binding snapshot directory must be a private 0700 directory")
+    raw = read_regular(path, MAX_BINDING, reject_hardlinks=True)
+    strict_json(raw)
+    snapshot = directory / "binding.snapshot.json"
+    descriptor = os.open(snapshot, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                         getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0), 0o600)
+    try:
+        _write_all(descriptor, raw)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    directory_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    return {"path": str(snapshot.resolve()), "sha256": hashlib.sha256(raw).hexdigest(),
+            "bytes": raw, "fixture_only": True, "eligible": False}
+
+
+def write_framed_handoff(descriptor, value, *, deadline_seconds=HANDSHAKE_TIMEOUT):
+    payload = canonical(value).encode()
+    if len(payload) > MAX_FRAME:
+        raise ValueError("oversized handoff")
+    frame = HANDOFF_HEADER.pack(HANDOFF_MAGIC, len(payload), hashlib.sha256(payload).digest()) + payload
+    try:
+        _write_all(descriptor, frame, time.monotonic() + deadline_seconds)
+    finally:
+        os.close(descriptor)
+
+
+def _read_exact(descriptor, count, deadline):
+    chunks = []
+    remaining = count
+    while remaining:
+        if time.monotonic() >= deadline:
+            raise ValueError("handoff read deadline exceeded")
+        chunk = os.read(descriptor, remaining)
+        if not chunk:
+            raise ValueError("truncated or consumed handoff")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def read_framed_handoff(descriptor, *, deadline_seconds=HANDSHAKE_TIMEOUT):
+    deadline = time.monotonic() + deadline_seconds
+    header = _read_exact(descriptor, HANDOFF_HEADER.size, deadline)
+    magic, size, expected = HANDOFF_HEADER.unpack(header)
+    if magic != HANDOFF_MAGIC or size > MAX_FRAME:
+        raise ValueError("invalid or oversized handoff")
+    payload = _read_exact(descriptor, size, deadline)
+    if hashlib.sha256(payload).digest() != expected:
+        raise ValueError("handoff digest mismatch")
+    if os.read(descriptor, 1):
+        raise ValueError("handoff has trailing bytes")
+    value = strict_json(payload)
+    if not isinstance(value, dict):
+        raise ValueError("handoff must be an object")
+    return value
+
+
+def _terminate_group(process, deadline):
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        while process.poll() is None and time.monotonic() < min(deadline, time.monotonic() + 1.0):
+            time.sleep(0.02)
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    remaining = max(0.0, deadline - time.monotonic())
+    try:
+        process.wait(timeout=remaining)
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("owned fixture process group was not reaped") from exc
+
+
+def run_fixture_handoff(descriptor, result_path):
+    """Consume one private packet and supervise one fixture transport group."""
+    packet = read_framed_handoff(descriptor)
+    fields = {"schema_version", "fixture_only", "eligible", "reservation_decision_id",
+              "operation_key", "parent_pid", "fixture_root", "argv", "executable_sha256",
+              "timeout_seconds"}
+    exact_object(packet, fields, "fixture handoff")
+    if packet["schema_version"] != 2 or packet["fixture_only"] is not True or packet["eligible"] is not False:
+        raise ValueError("fixture handoff is not permanently ineligible")
+    if type(packet["reservation_decision_id"]) is not int or packet["reservation_decision_id"] <= 0:
+        raise ValueError("fixture handoff has invalid reservation")
+    require_hash(packet["operation_key"], "native operation key")
+    if packet["parent_pid"] != os.getppid():
+        raise ValueError("fixture handoff parent identity mismatch")
+    try:
+        os.kill(packet["parent_pid"], 0)
+    except PermissionError:
+        pass
+    except OSError as exc:
+        raise ValueError("fixture handoff parent is not live") from exc
+    root = Path(packet["fixture_root"]).resolve(strict=True)
+    argv = packet["argv"]
+    if not isinstance(argv, list) or not argv or not all(isinstance(item, str) and "\x00" not in item for item in argv):
+        raise ValueError("fixture handoff argv is malformed")
+    executable = Path(argv[0]).resolve(strict=True)
+    try:
+        executable.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("fixture transport must remain inside its fixture root") from exc
+    require_hash(packet["executable_sha256"], "fixture executable")
+    if hashlib.sha256(read_regular(executable, 16 * 1024 * 1024)).hexdigest() != packet["executable_sha256"]:
+        raise ValueError("fixture executable changed before launch")
+    timeout = packet["timeout_seconds"]
+    if type(timeout) not in {int, float} or isinstance(timeout, bool) or not 0 < timeout <= OPERATION_TIMEOUT:
+        raise ValueError("fixture process timeout is invalid")
+    process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+    deadline = time.monotonic() + timeout
+    termination_reason = None
+    while process.poll() is None:
+        if os.getppid() != packet["parent_pid"]:
+            termination_reason = "dispatcher-parent-died"
+            break
+        if time.monotonic() >= deadline:
+            termination_reason = "operation-timeout"
+            break
+        time.sleep(0.02)
+    if termination_reason is not None:
+        _terminate_group(process, time.monotonic() + 2.0)
+    else:
+        process.wait()
+    result = {"schema_version": 2, "fixture_only": True, "eligible": False,
+              "reservation_decision_id": packet["reservation_decision_id"],
+              "operation_key": packet["operation_key"],
+              "process": {"exit_code": process.returncode, "reaped": process.poll() is not None,
+                          "termination_reason": termination_reason}}
+    write_private(result_path, result)
+    return result
+
+
+def _toml_value(value):
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if type(value) is int:
+        return str(value)
+    raise ValueError("unsupported native configuration value")
+
+
+def build_native_resume_argv(admitted, output):
+    """Build the sole fixture-tested CLI resume grammar; prompt is stdin data."""
+    request = admitted.get("configuration", {}).get("request")
+    if not isinstance(request, dict):
+        raise ValueError("missing admitted resume configuration")
+    executable = admitted.get("executable")
+    thread_id = admitted.get("native_thread_id")
+    if not isinstance(executable, str) or not UUID.fullmatch(str(thread_id)):
+        raise ValueError("missing pinned native executable or UUID")
+    output = Path(output)
+    if not output.is_absolute():
+        raise ValueError("native output must be absolute")
+    argv = [executable, "exec", "-s", request["sandbox"], "-C", request["cwd"]]
+    roots = request.get("runtimeWorkspaceRoots", [])
+    if roots:
+        argv += ["-c", "sandbox_workspace_write.writable_roots=[" + ",".join(_toml_value(v) for v in roots) + "]"]
+    settings = {
+        "approval_policy": request["approvalPolicy"],
+        "approvals_reviewer": request["approvalsReviewer"],
+        "model_provider": request["modelProvider"],
+        "model_reasoning_effort": request["config"]["model_reasoning_effort"],
+        "service_tier": request["serviceTier"],
+    }
+    for key, value in settings.items():
+        argv += ["-c", f"{key}={_toml_value(value)}"]
+    for key, value in sorted(request.get("config", {}).items()):
+        if key not in settings:
+            argv += ["-c", f"{key}={_toml_value(value)}"]
+    argv += ["resume", "--json", "-m", request["model"], "-o", str(output), thread_id.lower(), "-"]
+    return argv
 
 
 def sha256(path, limit=MAX_TRANSCRIPT):
@@ -127,9 +352,157 @@ def load_records(database, executable="ic"):
     if result.returncode:
         raise ValueError(f"authoritative Intercore read failed ({result.returncode})")
     rows = strict_json(result.stdout.encode())
-    if not isinstance(rows, list) or len(rows) >= 1_000_000:
+    if not isinstance(rows, list) or len(rows) in {1000, 1_000_000} or len(rows) >= 1_000_000:
         raise ValueError("authoritative decision export malformed or truncated")
+    ids = [row.get("id") for row in rows if isinstance(row, dict)]
+    if len(ids) != len(rows) or any(type(ident) is not int for ident in ids) or len(ids) != len(set(ids)):
+        raise ValueError("authoritative decision export has malformed or duplicate IDs")
     return rows
+
+
+def native_operation_key(native_thread_id, operation, provider="codex"):
+    """Identify the remote resource; caller-selected provenance is excluded."""
+    if provider != "codex" or operation not in {"compact", "resume"}:
+        raise ValueError("unsupported native operation key")
+    if not isinstance(native_thread_id, str) or not UUID.fullmatch(native_thread_id):
+        raise ValueError("invalid native UUID")
+    key = {
+        "schema": "native-operation-key-v2",
+        "provider": provider,
+        "native_thread_id": native_thread_id.lower(),
+        "operation": operation,
+    }
+    return hashlib.sha256(canonical(key).encode()).hexdigest()
+
+
+def _native_record_resource(record):
+    """Return a legacy/v2 native resource tuple, conservatively."""
+    if not isinstance(record, dict):
+        raise ValueError("authoritative decision export contains a non-object row")
+    value = context(record)
+    execution = value.get("execution")
+    if not isinstance(execution, dict):
+        return None
+    candidates = []
+    for field in ("native_admission", "operation_request", "native_send_intent", "native_operation"):
+        candidate = execution.get(field)
+        if isinstance(candidate, dict):
+            candidates.append(candidate)
+    resources = set()
+    for candidate in candidates:
+        operation = candidate.get("operation")
+        thread_id = candidate.get("seed_thread_id", candidate.get("native_thread_id"))
+        if operation in {"compact", "resume"} and isinstance(thread_id, str) and UUID.fullmatch(thread_id):
+            resources.add(("codex", thread_id.lower(), operation))
+        elif candidate.get("operation_key") is not None:
+            require_hash(candidate.get("operation_key"), "native operation key")
+            resources.add(("operation-key", candidate["operation_key"], operation))
+    if len(resources) > 1:
+        raise ValueError("authoritative native record has ambiguous resource mapping")
+    return next(iter(resources), None)
+
+
+def assert_native_resource_available(records, native_thread_id, operation, binding_sha256=None):
+    target = ("codex", native_thread_id.lower(), operation)
+    target_key = native_operation_key(native_thread_id, operation)
+    for row in records:
+        resource = _native_record_resource(row)
+        if resource == target or resource == ("operation-key", target_key, operation):
+            raise ValueError("native remote resource already admitted or consumed")
+        execution = context(row).get("execution", {}) if isinstance(row, dict) else {}
+        for field in ("operation_request", "native_operation"):
+            legacy = execution.get(field, {}) if isinstance(execution, dict) else {}
+            if (isinstance(legacy, dict) and legacy.get("operation") == operation and
+                    binding_sha256 is not None and legacy.get("binding_sha256") == binding_sha256):
+                raise ValueError("legacy native binding was already admitted or consumed")
+
+
+def elect_native_reservation(records, operation_key, reservation_decision_id):
+    """Elect the lowest committed reservation; locks are never authority."""
+    require_hash(operation_key, "native operation key")
+    if type(reservation_decision_id) is not int:
+        raise ValueError("reservation decision ID must be an integer")
+    ids = []
+    seen = set()
+    for row in records:
+        if not isinstance(row, dict) or type(row.get("id")) is not int or row["id"] in seen:
+            raise ValueError("authoritative decision export has malformed or duplicate IDs")
+        seen.add(row["id"])
+        execution = context(row).get("execution", {})
+        admission = execution.get("native_admission", {}) if isinstance(execution, dict) else {}
+        if isinstance(admission, dict) and admission.get("operation_key") == operation_key:
+            if admission.get("fixture_only") is not True or admission.get("eligible") is not False:
+                raise ValueError("fixture reservation lacks ineligible provenance")
+            ids.append(row["id"])
+    if reservation_decision_id not in ids:
+        raise ValueError("reservation is absent from authoritative history")
+    if reservation_decision_id != min(ids):
+        raise ValueError("native reservation lost committed-record election")
+    return reservation_decision_id
+
+
+def evaluate_native_budget(records, scope_id, scope_limit_tokens, reservation_decision_id):
+    """Evaluate the durable ordered reservation prefix without refunding unknown spend."""
+    if not isinstance(scope_id, str) or not scope_id:
+        raise ValueError("native budget scope is missing")
+    if type(scope_limit_tokens) is not int or not 0 < scope_limit_tokens <= INT64_MAX:
+        raise ValueError("native budget limit must be a positive int64")
+    if type(reservation_decision_id) is not int:
+        raise ValueError("native budget reservation ID must be an integer")
+    admissions = {}
+    terminals = {}
+    send_intents = set()
+    seen = set()
+    for row in records:
+        if not isinstance(row, dict) or type(row.get("id")) is not int or row["id"] in seen:
+            raise ValueError("authoritative decision export has malformed or duplicate IDs")
+        seen.add(row["id"])
+        execution = context(row).get("execution", {})
+        if not isinstance(execution, dict):
+            continue
+        admission = execution.get("native_admission")
+        if isinstance(admission, dict):
+            budget = admission.get("native_budget")
+            if isinstance(budget, dict) and budget.get("scope_id") == scope_id and row["id"] <= reservation_decision_id:
+                allocation = budget.get("allocation_tokens")
+                if type(allocation) is not int or not 0 < allocation <= INT64_MAX:
+                    raise ValueError("native budget allocation must be a positive int64")
+                admissions[row["id"]] = allocation
+        intent = execution.get("native_send_intent")
+        if isinstance(intent, dict) and type(intent.get("admission_decision_id")) is int:
+            send_intents.add(intent["admission_decision_id"])
+        terminal = execution.get("native_operation")
+        if isinstance(terminal, dict) and type(terminal.get("admission_decision_id")) is int:
+            terminals[terminal["admission_decision_id"]] = terminal
+    if reservation_decision_id not in admissions:
+        raise ValueError("native budget reservation is absent")
+    debit = 0
+    details = []
+    for ident, allocation in sorted(admissions.items()):
+        terminal = terminals.get(ident)
+        if terminal is None:
+            if ident in send_intents:
+                raise ValueError("native budget blocked by unknown possible spending")
+            charged = allocation
+            status = "reserved"
+        elif terminal.get("native_launched") is False and terminal.get("remote_completion") == "not-started":
+            charged = 0
+            status = "not-launched"
+        elif terminal.get("accounting_status") == "complete":
+            usage = validate_usage(terminal.get("native_usage"))
+            charged = usage["last"]["inputTokens"] + usage["last"]["outputTokens"]
+            status = "accounted"
+        else:
+            raise ValueError("native budget blocked by unknown possible spending")
+        debit += charged
+        if debit > INT64_MAX:
+            raise ValueError("native budget debit overflows int64")
+        details.append({"admission_decision_id": ident, "debit_tokens": charged, "status": status})
+    if debit > scope_limit_tokens:
+        raise ValueError("native budget ordered reservation prefix exceeds scope limit")
+    return {"scope_id": scope_id, "scope_limit_tokens": scope_limit_tokens,
+            "reserved_tokens": debit, "remaining_tokens": scope_limit_tokens - debit,
+            "reservations": details}
 
 
 def decision(records, ident, rule, label):
@@ -303,6 +676,14 @@ def validate_binding(path, operation, *, records=None, ic="ic",
                         "dispatch-profile", "seed execution")
     native_binding = decision(records, value["authority"]["seed_native_binding_decision_id"],
                               "measured-delivery-binding", "seed native binding")
+    ordered_ids = [
+        value["authority"]["enrollment_decision_id"],
+        value["authority"]["dispatch_request_decision_id"],
+        value["authority"]["seed_execution_decision_id"],
+        value["authority"]["seed_native_binding_decision_id"],
+    ]
+    if ordered_ids != sorted(ordered_ids) or len(set(ordered_ids)) != len(ordered_ids):
+        raise ValueError("native evidence is not prospectively ordered")
     if not _same_envelope(enrollment, value["enrollment"]) or not _same_envelope(requested, value["enrollment"]):
         raise ValueError("authoritative enrollment or cohort/manifest differs from binding")
     if enrollment.get("implementation_dispatched") is not False or enrollment.get("arm_id") != value["arm_id"]:
@@ -380,10 +761,7 @@ def validate_binding(path, operation, *, records=None, ic="ic",
         if capability.get(key) != pinned:
             raise ValueError("capability evidence pin mismatch")
 
-    for row in records:
-        native = context(row).get("execution", {}).get("native_operation", {}) if isinstance(row, dict) else {}
-        if native.get("operation") == operation and native.get("binding_sha256") == binding_hash:
-            raise ValueError("native operation binding was already admitted")
+    assert_native_resource_available(records, value["seed"]["native_thread_id"], operation, binding_hash)
 
     if operation == "compact":
         if value["compaction"] is not None:
@@ -428,7 +806,8 @@ def validate_binding(path, operation, *, records=None, ic="ic",
             "prompt_prefix": prompt_prefix, "seed_attempt_id": value["seed"]["attempt_id"],
             "authoritative_database": value["authority"]["database"],
             "source": value["source"], "policy": value["policy"], "executable_pin": value["executable"],
-            "native_schema": value["native_schema"], "capability_evidence": value["capability_evidence"]}
+            "native_schema": value["native_schema"], "capability_evidence": value["capability_evidence"],
+            "fixture_only": True, "eligible": False}
 
 
 def sanitize_rate_limits(value):
@@ -464,15 +843,21 @@ def validate_usage(value):
         clean = {}
         for key in required | {"cacheWriteInputTokens"}:
             number = row.get(key, 0)
-            if type(number) is not int or number < 0:
+            if type(number) is not int or number < 0 or number > INT64_MAX:
                 raise ControlError("malformed-native-usage")
             clean[key] = number
-        if clean["cachedInputTokens"] > clean["inputTokens"]:
+        if (clean["cachedInputTokens"] > clean["inputTokens"] or
+                clean["cacheWriteInputTokens"] > clean["inputTokens"] or
+                clean["reasoningOutputTokens"] > clean["outputTokens"] or
+                clean["totalTokens"] != clean["inputTokens"] + clean["outputTokens"]):
             raise ControlError("malformed-native-usage")
         result[group] = clean
     window = value.get("modelContextWindow")
     if window is not None and (type(window) is not int or window < 0):
         raise ControlError("malformed-native-usage")
+    for key in required | {"cacheWriteInputTokens"}:
+        if result["last"][key] > result["total"][key]:
+            raise ControlError("malformed-native-usage")
     result["modelContextWindow"] = window
     return result
 
@@ -485,7 +870,7 @@ class AppServerControl:
 
     def __init__(self, executable, *, handshake_timeout=HANDSHAKE_TIMEOUT,
                  operation_timeout=OPERATION_TIMEOUT, max_frame=MAX_FRAME,
-                 transcript_limit=MAX_TRANSCRIPT):
+                 transcript_limit=MAX_TRANSCRIPT, original_parent_pid=None):
         self.executable = executable
         self.handshake_timeout = handshake_timeout
         self.operation_timeout = operation_timeout
@@ -500,6 +885,18 @@ class AppServerControl:
         self.stderr_bytes = 0; self.request_id = 0; self.calls = []
         self.compaction_sent = False; self.cancel_signal = None
         self.configuration_verified = False
+        self.original_parent_pid = os.getppid() if original_parent_pid is None else original_parent_pid
+
+    def _parent_alive(self):
+        if os.getppid() != self.original_parent_pid:
+            return False
+        try:
+            os.kill(self.original_parent_pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
 
     def cancel(self, signum, _frame=None):
         self.cancel_signal = signum
@@ -520,6 +917,9 @@ class AppServerControl:
         while True:
             if self.cancel_signal is not None:
                 raise Cancelled(self.cancel_signal)
+            if not self._parent_alive():
+                self._terminate()
+                raise ControlError("dispatcher-parent-died")
             newline = self.buffer.find(b"\n")
             if newline >= 0:
                 raw = bytes(self.buffer[:newline]); del self.buffer[:newline + 1]
@@ -529,9 +929,11 @@ class AppServerControl:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise ControlError("timeout")
-            ready = self.selector.select(remaining)
+            ready = self.selector.select(min(remaining, 0.1))
             if not ready:
-                raise ControlError("timeout")
+                if time.monotonic() >= deadline:
+                    raise ControlError("timeout")
+                continue
             for key, _ in ready:
                 chunk = os.read(key.fileobj.fileno(), 65536)
                 if not chunk:
@@ -587,7 +989,7 @@ class AppServerControl:
             raise ControlError("malformed-notification")
         return "notification", (method, params)
 
-    def request(self, method, params, timeout):
+    def request(self, method, params, timeout, notification_handler=None):
         if method not in self.METHODS or method == "initialized":
             raise ControlError("client-method-not-allowlisted")
         self.request_id += 1; ident = self.request_id
@@ -597,7 +999,9 @@ class AppServerControl:
             kind, value = self._receive(deadline, ident)
             if kind == "response":
                 return value
-            raise ControlError("unexpected-notification")
+            if notification_handler is None:
+                raise ControlError("unexpected-notification")
+            notification_handler(*value)
 
     def initialize(self):
         self.request("initialize", {"clientInfo": {"name": "clavain_dispatch_control", "version": "1"}}, self.handshake_timeout)
@@ -624,6 +1028,92 @@ class AppServerControl:
             raise ControlError("lifecycle-identity")
         return turn
 
+    def _compact_notification(self, method, params, state, thread_id, effective_config):
+        if state["done"]:
+            raise ControlError("lifecycle-after-terminal")
+        if method == "model/rerouted":
+            self.configuration_verified = False
+            raise ControlError("model-rerouted")
+        if method == "configWarning":
+            self.configuration_verified = False
+            raise ControlError("config-warning")
+        if method == "turn/started":
+            if state["phase"] != 0:
+                raise ControlError("lifecycle-order")
+            turn = self._turn(params, thread_id)
+            if turn.get("status") != "inProgress":
+                raise ControlError("lifecycle-status")
+            state["turn_id"] = turn["id"]; state["phase"] = 1
+            self._record({"kind": method, "thread_id": thread_id, "turn_id": state["turn_id"]})
+        elif method in {"item/started", "item/completed"}:
+            expected_phase = 1 if method == "item/started" else 2
+            if (state["phase"] != expected_phase or params.get("threadId") != thread_id or
+                    params.get("turnId") != state["turn_id"]):
+                raise ControlError("lifecycle-order")
+            lifecycle_item = params.get("item")
+            if (not isinstance(lifecycle_item, dict) or lifecycle_item.get("type") != "contextCompaction" or
+                    not isinstance(lifecycle_item.get("id"), str)):
+                raise ControlError("lifecycle-item-mismatch")
+            if state["item_id"] is None:
+                state["item_id"] = lifecycle_item["id"]
+            if lifecycle_item["id"] != state["item_id"]:
+                raise ControlError("lifecycle-item-mismatch")
+            state["phase"] += 1
+            self._record({"kind": method, "thread_id": thread_id, "turn_id": state["turn_id"],
+                          "item_id": state["item_id"]})
+        elif method == "thread/tokenUsage/updated":
+            if state["phase"] < 1 or params.get("threadId") != thread_id or params.get("turnId") != state["turn_id"]:
+                raise ControlError("native-usage-identity")
+            observed = validate_usage(params.get("tokenUsage"))
+            if state["usage"] is not None and canonical(state["usage"]) == canonical(observed):
+                raise ControlError("duplicate-native-usage")
+            state["usage"] = observed
+            self._record({"kind": method, "thread_id": thread_id, "turn_id": state["turn_id"], "usage": observed})
+        elif method == "account/rateLimits/updated":
+            clean = sanitize_rate_limits(params.get("rateLimits"))
+            state["observations"].append({"kind": "rate_limits", "attribution": "unattributed", "rate_limits": clean})
+            self._record({"kind": method, "status": "sanitized"})
+        elif method == "thread/settings/updated":
+            if params.get("threadId") != thread_id or not isinstance(params.get("threadSettings"), dict):
+                raise ControlError("settings-identity")
+            settings = params["threadSettings"]
+            mapping = {"model": "model", "modelProvider": "modelProvider", "effort": "reasoningEffort",
+                       "serviceTier": "serviceTier", "cwd": "cwd", "approvalPolicy": "approvalPolicy",
+                       "approvalsReviewer": "approvalsReviewer", "sandboxPolicy": "sandbox",
+                       "activePermissionProfile": "activePermissionProfile"}
+            for source, target in mapping.items():
+                if source not in settings or settings[source] != effective_config[target]:
+                    self.configuration_verified = False
+                    raise ControlError("effective-settings-diff")
+            self._record({"kind": method, "thread_id": thread_id, "status": "matching"})
+        elif method == "thread/status/changed":
+            status_value = params.get("status")
+            if (params.get("threadId") != thread_id or not isinstance(status_value, dict) or
+                    status_value.get("type") not in {"active", "idle"} or
+                    (status_value.get("type") == "active" and status_value.get("activeFlags") != [])):
+                raise ControlError("status-identity")
+            state["statuses"].append(status_value)
+            self._record({"kind": method, "thread_id": thread_id, "status": status_value})
+        elif method == "thread/compacted":
+            if state["phase"] != 3 or params.get("threadId") != thread_id or params.get("turnId") != state["turn_id"]:
+                raise ControlError("deprecated-compacted-mismatch")
+            state["deprecated"] = True
+            self._record({"kind": method, "thread_id": thread_id, "turn_id": state["turn_id"]})
+        elif method == "turn/completed":
+            if state["phase"] != 3:
+                raise ControlError("lifecycle-order")
+            turn = self._turn(params, thread_id)
+            if turn["id"] != state["turn_id"] or turn.get("status") != "completed":
+                raise ControlError("terminal-turn-failed")
+            items = turn.get("items")
+            if (not isinstance(items, list) or len(items) != 1 or not isinstance(items[0], dict) or
+                    items[0].get("id") != state["item_id"] or items[0].get("type") != "contextCompaction"):
+                raise ControlError("terminal-item-mismatch")
+            state["phase"] = 4; state["done"] = True
+            self._record({"kind": method, "thread_id": thread_id, "turn_id": state["turn_id"]})
+        else:
+            raise ControlError("unknown-notification")
+
     def compact(self, thread_id, request_config, effective_config):
         if not UUID.fullmatch(thread_id):
             raise ControlError("invalid-seed-uuid")
@@ -637,96 +1127,30 @@ class AppServerControl:
         resumed = self.request("thread/resume", params, self.handshake_timeout)
         actual = self._validate_effective(resumed, thread_id, effective_config)
         self.configuration_verified = True
-        acknowledgment = self.request("thread/compact/start", {"threadId": thread_id}, self.handshake_timeout)
+        state = {"turn_id": None, "item_id": None, "phase": 0, "usage": None,
+                 "observations": [], "statuses": [], "deprecated": False, "done": False}
+        consume = lambda method, params: self._compact_notification(method, params, state, thread_id, effective_config)
         self.compaction_sent = True
+        acknowledgment = self.request("thread/compact/start", {"threadId": thread_id}, self.handshake_timeout,
+                                      notification_handler=consume)
         if acknowledgment != {}:
             raise ControlError("malformed-compaction-ack")
         deadline = time.monotonic() + self.operation_timeout
-        turn_id = None; item_id = None; phase = 0; usage = None
-        observations = []; statuses = []; deprecated = False
-        while True:
+        while not state["done"]:
             kind, item = self._receive(deadline)
             if kind != "notification":
                 raise ControlError("unexpected-jsonrpc-response")
-            method, params = item
-            if method == "model/rerouted":
-                self.configuration_verified = False
-                raise ControlError("model-rerouted")
-            if method == "configWarning":
-                self.configuration_verified = False
-                raise ControlError("config-warning")
-            if method == "turn/started":
-                if phase != 0:
-                    raise ControlError("lifecycle-order")
-                turn = self._turn(params, thread_id); turn_id = turn["id"]; phase = 1
-                self._record({"kind": method, "thread_id": thread_id, "turn_id": turn_id})
-            elif method in {"item/started", "item/completed"}:
-                expected_phase = 1 if method == "item/started" else 2
-                if phase != expected_phase or params.get("threadId") != thread_id or params.get("turnId") != turn_id:
-                    raise ControlError("lifecycle-order")
-                lifecycle_item = params.get("item")
-                if not isinstance(lifecycle_item, dict) or lifecycle_item.get("type") != "contextCompaction" or not isinstance(lifecycle_item.get("id"), str):
-                    raise ControlError("lifecycle-item-mismatch")
-                if item_id is None:
-                    item_id = lifecycle_item["id"]
-                if lifecycle_item["id"] != item_id:
-                    raise ControlError("lifecycle-item-mismatch")
-                phase += 1
-                self._record({"kind": method, "thread_id": thread_id, "turn_id": turn_id, "item_id": item_id})
-            elif method == "thread/tokenUsage/updated":
-                if phase < 1 or params.get("threadId") != thread_id or params.get("turnId") != turn_id:
-                    raise ControlError("native-usage-identity")
-                usage = validate_usage(params.get("tokenUsage"))
-                self._record({"kind": method, "thread_id": thread_id, "turn_id": turn_id, "usage": usage})
-            elif method == "account/rateLimits/updated":
-                clean = sanitize_rate_limits(params.get("rateLimits"))
-                observations.append({"kind": "rate_limits", "attribution": "unattributed", "rate_limits": clean})
-                self._record({"kind": method, "status": "sanitized"})
-            elif method == "thread/settings/updated":
-                if params.get("threadId") != thread_id or not isinstance(params.get("threadSettings"), dict):
-                    raise ControlError("settings-identity")
-                settings = params["threadSettings"]
-                mapping = {"model": "model", "modelProvider": "modelProvider", "effort": "reasoningEffort",
-                           "serviceTier": "serviceTier", "cwd": "cwd", "approvalPolicy": "approvalPolicy",
-                           "approvalsReviewer": "approvalsReviewer", "sandboxPolicy": "sandbox",
-                           "activePermissionProfile": "activePermissionProfile"}
-                for source, target in mapping.items():
-                    if source not in settings or settings[source] != effective_config[target]:
-                        self.configuration_verified = False
-                        raise ControlError("effective-settings-diff")
-                self._record({"kind": method, "thread_id": thread_id, "status": "matching"})
-            elif method == "thread/status/changed":
-                status = params.get("status")
-                if (params.get("threadId") != thread_id or not isinstance(status, dict) or
-                        status.get("type") not in {"active", "idle"} or
-                        (status.get("type") == "active" and not isinstance(status.get("activeFlags"), list))):
-                    raise ControlError("status-identity")
-                statuses.append(status); self._record({"kind": method, "thread_id": thread_id, "status": status})
-            elif method == "thread/compacted":
-                if phase != 3 or params.get("threadId") != thread_id or params.get("turnId") != turn_id:
-                    raise ControlError("deprecated-compacted-mismatch")
-                deprecated = True; self._record({"kind": method, "thread_id": thread_id, "turn_id": turn_id})
-            elif method == "turn/completed":
-                if phase != 3:
-                    raise ControlError("lifecycle-order")
-                turn = self._turn(params, thread_id)
-                if turn["id"] != turn_id or turn.get("status") not in {"completed", "succeeded"}:
-                    raise ControlError("terminal-turn-failed")
-                items = turn.get("items")
-                if not isinstance(items, list) or not any(isinstance(v, dict) and v.get("id") == item_id and v.get("type") == "contextCompaction" for v in items):
-                    raise ControlError("terminal-item-mismatch")
-                if usage is None:
-                    raise ControlError("missing-native-usage", remote_completion="completed")
-                phase = 4; self._record({"kind": method, "thread_id": thread_id, "turn_id": turn_id})
-                return {"schema_version": 1, "operation": "compact", "status": "completed",
-                        "configuration_status": "verified", "accounting_status": "complete",
-                        "remote_completion": "completed", "seed_thread_id": thread_id,
-                        "turn_id": turn_id, "item_id": item_id, "effective_configuration": actual,
-                        "native_usage": usage, "account_observations": observations,
-                        "thread_statuses": statuses, "deprecated_compacted_observed": deprecated,
-                        "calls": list(self.calls), "sanitized_transcript": list(self.transcript)}
-            else:
-                raise ControlError("unknown-notification")
+            consume(*item)
+        if state["usage"] is None:
+            raise ControlError("missing-native-usage", remote_completion="completed")
+        return {"schema_version": 1, "operation": "compact", "status": "completed",
+                "fixture_only": True, "eligible": False,
+                "configuration_status": "verified", "accounting_status": "complete",
+                "remote_completion": "completed", "seed_thread_id": thread_id,
+                "turn_id": state["turn_id"], "item_id": state["item_id"], "effective_configuration": actual,
+                "native_usage": state["usage"], "account_observations": state["observations"],
+                "thread_statuses": state["statuses"], "deprecated_compacted_observed": state["deprecated"],
+                "calls": list(self.calls), "sanitized_transcript": list(self.transcript)}
 
     def _terminate(self):
         if self.process.poll() is None:
@@ -775,6 +1199,8 @@ def seal_resume(binding, events, output, artifact_dir, process_code):
     result = {
         "schema_version": 1,
         "operation": "resume",
+        "fixture_only": True,
+        "eligible": False,
         "status": "completed" if process_code == 0 else "failed",
         "remote_completion": "completed" if process_code == 0 else "unknown",
         "control_result_is_approval": False,
@@ -798,7 +1224,8 @@ def seal_resume(binding, events, output, artifact_dir, process_code):
         else:
             artifacts.append({"logical_name": logical_name, "path": str(candidate),
                               "size": None, "sha256": None, "status": "unavailable"})
-    manifest = {"schema_version": 1, "operation": "resume", "artifacts": artifacts}
+    manifest = {"schema_version": 1, "operation": "resume", "fixture_only": True,
+                "eligible": False, "artifacts": artifacts}
     manifest_path = artifact_dir / "manifest.json"
     write_private(manifest_path, manifest)
     return {"operation_result": str(result_path), "manifest": str(manifest_path),
@@ -835,6 +1262,8 @@ def main():
     seal.add_argument("--process-code", required=True, type=int)
     args = parser.parse_args()
     try:
+        if args.command == "compact":
+            parser.exit(2, "dispatch-control: native-trusted-launcher-unavailable\n")
         if args.command == "validate-binding":
             result = validate_binding(args.binding, args.operation, ic=args.ic, expected=strict_json(args.expected.encode()))
             print(canonical(result)); return 0

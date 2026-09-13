@@ -15,7 +15,12 @@ setup() {
   export CLAVAIN_CODEX_WRITABLE_ROOTS=""
 }
 
-teardown() { rm -rf "$T"; }
+teardown() {
+  rm -rf "$T"
+  if [[ -n "${FIXTURE_IN_CHECKOUT:-}" && "$FIXTURE_IN_CHECKOUT" == */task-evidence/native-correction/bats.* ]]; then
+    rm -rf "$FIXTURE_IN_CHECKOUT"
+  fi
+}
 
 make_native_binding() {
   export REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
@@ -90,10 +95,33 @@ SH
 @test "native operations require an authoritative binding before inference" {
   run bash "$DISPATCH" --operation resume -C "$T/repo" -o "$T/out/x" "prompt"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"--resume-from"* ]]
+  [[ "$output" == *"native-trusted-launcher-unavailable"* ]]
   run bash "$DISPATCH" --operation compact -C "$T/repo" -o "$T/out/x"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"--resume-from"* ]]
+  [[ "$output" == *"native-trusted-launcher-unavailable"* ]]
+}
+
+@test "production gate precedes binding adapters role resolution and database effects" {
+  cat > "$T/bin/python3" <<'SH'
+#!/usr/bin/env bash
+touch "$T/out/python-called"
+exit 99
+SH
+  chmod +x "$T/bin/python3"
+  run bash "$DISPATCH" --operation resume --resume-from "$T/does-not-exist.json" \
+    --role routine-execution -C "$T/repo" -o "$T/out/x" "prompt"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"native-trusted-launcher-unavailable"* ]]
+  [ ! -e "$T/out/python-called" ]
+  [ ! -e "$T/repo/.clavain/intercore.db" ]
+}
+
+@test "direct native control transport is unavailable" {
+  control="$BATS_TEST_DIRNAME/../../scripts/dispatch_control.py"
+  run python3 "$control" compact --binding "$T/missing.json" --output "$T/out/result.json"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"native-trusted-launcher-unavailable"* ]]
+  [ ! -e "$T/out/result.json" ]
 }
 
 @test "native operations reject arbitrary selectors flags transports and backends before inference" {
@@ -108,7 +136,7 @@ SH
     "--operation compact --resume-from $T/binding.json --report compact"; do
     run bash -c "bash '$DISPATCH' $args"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"native operation"* || "$output" == *"blocked by dispatch.sh safety policy"* ]]
+    [[ "$output" == *"native-trusted-launcher-unavailable"* || "$output" == *"blocked by dispatch.sh safety policy"* ]]
   done
   [ ! -e "$T/out/launched" ]
 }
@@ -129,7 +157,7 @@ SH
   ! grep -q '^resume$' "$T/argv"
 }
 
-@test "resume dry-run uses the pinned executable and places parent flags before the exact UUID" {
+@test "resume dry-run is also closed by the production native gate" {
   make_native_binding
   route="$(cat "$T/route.json")"
   profile='{"profile":{"role":"routine-execution"}}'
@@ -140,17 +168,8 @@ SH
     --resolved-route-json "$route" --resolved-profile-json "$profile" \
     --to codex --model gpt-fixture --reasoning-effort high --service-tier standard \
     -C "$T/repo" -o "$T/out/resume.md" "resume prompt"
-  [ "$status" -eq 0 ]
-  python3 - "$output" <<'PY'
-import sys
-s=sys.argv[1]; fields=[' exec ',' -s workspace-write ',' -C ',' -o ',' -m gpt-fixture ',' -c model_reasoning_effort=high ',
- ' -c service_tier=default ',' -a never ','approvals_reviewer=\\\"user\\\"','model_provider=\\\"openai\\\"',
- ' resume ','018f47bb-4e58-7abc-8def-0123456789ab']
-positions=[]
-for field in fields:
- p=s.find(field); assert p >= 0, (field,s); positions.append(p)
-assert positions == sorted(positions), positions
-PY
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"native-trusted-launcher-unavailable"* ]]
 }
 
 @test "native admission records a request without claiming a replayed operation" {
@@ -163,4 +182,44 @@ PY
   [ "$status" -eq 0 ]
   jq -e '.execution.operation_request.operation == "compact"' <<< "$output"
   jq -e '.execution | has("native_operation") | not' <<< "$output"
+}
+
+@test "fixture library uses real audit rows and durable election after stale lock recovery" {
+  repo="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
+  FIXTURE_IN_CHECKOUT="$(mktemp -d "$repo/task-evidence/native-correction/bats.XXXXXX")"
+  db="$FIXTURE_IN_CHECKOUT/intercore.db"
+  ic init --db="$db"
+  lib="$repo/scripts/lib-dispatch-native.sh"
+  key="$(python3 - "$repo/scripts/dispatch_control.py" <<'PY'
+import importlib.util,sys
+s=importlib.util.spec_from_file_location('c',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+print(m.native_operation_key('018f47bb-4e58-7abc-8def-0123456789ab','compact'))
+PY
+)"
+  run env NATIVE_FIXTURE_ROOT="$repo" bash -c '
+    source "$1"
+    OPERATION=compact ENGINE=codex VIA=exec WORKDIR="$2" OUTPUT="" MODEL=fixture SANDBOX=workspace-write
+    DISPATCH_ID=fixture-dispatch ATTEMPT_ID=fixture-attempt ROLE="" ROLE_RESOLVED=false
+    RESUME_FROM="" DISPATCH_BINDING_SHA256="" BOUND_NATIVE_THREAD_ID=018f47bb-4e58-7abc-8def-0123456789ab
+    phase="$(jq -cn --arg key "$4" --arg thread "$BOUND_NATIVE_THREAD_ID" \
+      "{schema_version:2,operation:\"compact\",operation_key:\$key,seed_thread_id:\$thread}")"
+    first="$(native_fixture_append_audit "$3" started "$phase" ic)"
+    native_fixture_elect "$3" "$4" "$first" ic >/dev/null
+    ATTEMPT_ID=fixture-contender
+    second="$(native_fixture_append_audit "$3" started "$phase" ic)"
+    ! native_fixture_elect "$3" "$4" "$second" ic >/dev/null 2>&1
+    printf "%s %s\n" "$first" "$second"
+  ' bash "$lib" "$repo" "$db" "$key"
+  [ "$status" -eq 0 ]
+  [ "$(wc -w <<< "$output")" -eq 2 ]
+
+  run ic --db="$db" lock acquire native-resource "$key" --timeout=1s --owner=999999:fixture-host
+  [ "$status" -eq 0 ]
+  python3 - "$key" <<'PY'
+import json,pathlib,sys
+p=pathlib.Path('/tmp/intercore/locks/native-resource')/sys.argv[1]/'owner.json'
+v=json.loads(p.read_text());v['created']=0;p.write_text(json.dumps(v))
+PY
+  run env NATIVE_FIXTURE_ROOT="$repo" bash -c 'source "$1"; native_fixture_lock_acquire "$2" native-resource "$3" ic && native_fixture_lock_release "$2" native-resource "$3" ic' bash "$lib" "$db" "$key"
+  [ "$status" -eq 0 ]
 }

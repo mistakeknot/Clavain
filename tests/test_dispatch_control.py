@@ -261,7 +261,7 @@ for line in sys.stdin:
   if scenario=="settingsdiff": result["cwd"]="/wrong"
   emit({"id":r["id"],"result":result})
  elif method=="thread/compact/start":
-  emit({"id":r["id"],"result":{}})
+  if scenario!="preack": emit({"id":r["id"],"result":{}})
   if scenario=="timeout": time.sleep(30)
   elif scenario=="malformed": print("not-json",flush=True)
   elif scenario=="oversized": print("{"+"雪"*400000+"}",flush=True)
@@ -290,6 +290,7 @@ for line in sys.stdin:
     if scenario=="settingseventdiff": settings["model"]="rerouted-model"
     events.insert(-1,{"method":"thread/settings/updated","params":{"threadId":thread,"threadSettings":settings}})
    for event in events: emit(event)
+   if scenario=="preack": emit({"id":r["id"],"result":{}})
 ''')
     path.chmod(0o700)
     return path
@@ -331,6 +332,7 @@ def test_compaction_accepts_only_complete_matching_lifecycle_and_usage(tmp_path,
     assert result["account_observations"][0]["rate_limits"][0]["used_percent"] == 12
     assert "DO_NOT_SAVE" not in json.dumps(result)
     assert run_control(tmp_path / "settings", monkeypatch, "settingsok")["configuration_status"] == "verified"
+    assert run_control(tmp_path / "preack", monkeypatch, "preack")["status"] == "completed"
 
 
 def test_native_usage_follows_pinned_optional_context_window_semantics():
@@ -408,3 +410,191 @@ def test_resume_seal_is_private_fresh_and_links_exact_evidence(tmp_path):
         "binding", "events", "last_message", "operation_result"}
     with pytest.raises(FileExistsError):
         m.seal_resume(binding_path, binding["seed"]["events"]["path"], output, artifacts, 0)
+
+
+def test_old_source_reproducer_reformatted_binding_cannot_reopen_native_uuid(tmp_path):
+    """Replay is a remote-resource fact, not a byte-formatting fact."""
+    m, path, binding, records, manifest = make_binding(tmp_path)
+    original_digest = digest(path)
+    records.append({
+        "id": 9,
+        "rule_matched": "dispatch-profile",
+        "context_json": {
+            "execution": {
+                "native_operation": {
+                    "operation": "compact",
+                    "seed_thread_id": binding["seed"]["native_thread_id"],
+                    "binding_sha256": original_digest,
+                    "status": "failed",
+                    "remote_completion": "unknown",
+                }
+            }
+        },
+    })
+    path.write_text(json.dumps(binding, indent=2) + "\n")
+    assert digest(path) != original_digest
+    with pytest.raises(ValueError, match="consumed|already admitted"):
+        validate_fixture(m, path, records, manifest)
+
+
+def test_old_source_reproducer_started_request_consumes_native_uuid(tmp_path):
+    m, path, binding, records, manifest = make_binding(tmp_path)
+    records.append({
+        "id": 9,
+        "rule_matched": "dispatch-profile",
+        "context_json": {
+            "state": "started",
+            "execution": {
+                "operation_request": {
+                    "operation": "compact",
+                    "seed_thread_id": binding["seed"]["native_thread_id"],
+                    "binding_sha256": "f" * 64,
+                }
+            },
+        },
+    })
+    with pytest.raises(ValueError, match="consumed|already admitted"):
+        validate_fixture(m, path, records, manifest)
+
+
+def test_old_source_reproducer_retrospective_enrollment_is_not_prospective(tmp_path):
+    m, path, binding, records, manifest = make_binding(tmp_path)
+    records[0]["id"] = 30
+    records[1]["id"] = 31
+    binding["authority"]["enrollment_decision_id"] = 30
+    binding["authority"]["dispatch_request_decision_id"] = 31
+    path.write_text(json.dumps(binding) + "\n")
+    with pytest.raises(ValueError, match="prospective|order"):
+        validate_fixture(m, path, records, manifest)
+
+
+def test_native_operation_key_is_remote_resource_identity():
+    m = subject()
+    thread = "018F47BB-4E58-7ABC-8DEF-0123456789AB"
+    key = m.native_operation_key(thread, "compact")
+    assert key == m.native_operation_key(thread.lower(), "compact")
+    assert key != m.native_operation_key(thread, "resume")
+    with pytest.raises(ValueError):
+        m.native_operation_key("not-a-uuid", "compact")
+
+
+def test_binding_snapshot_hashes_the_opened_buffer_and_rejects_aliases(tmp_path):
+    m = subject()
+    source = tmp_path / "binding.json"
+    source.write_bytes(b'{"fixture":"one"}\n')
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    captured = m.capture_binding_snapshot(source, private)
+    snapshot = Path(captured["path"])
+    assert snapshot.read_bytes() == b'{"fixture":"one"}\n'
+    assert captured["sha256"] == digest(snapshot)
+    assert snapshot.stat().st_mode & 0o777 == 0o600
+    alias = tmp_path / "alias.json"
+    alias.symlink_to(source)
+    with pytest.raises(ValueError, match="nonregular|alias"):
+        m.capture_binding_snapshot(alias, private)
+    hardlink = tmp_path / "hardlink.json"
+    os.link(source, hardlink)
+    with pytest.raises(ValueError, match="hardlink|alias"):
+        m.capture_binding_snapshot(source, private)
+
+
+def test_framed_handoff_is_bounded_digest_checked_one_use():
+    m = subject()
+    packet = {"reservation_decision_id": 7, "payload": "snowman ☃"}
+    read_fd, write_fd = os.pipe()
+    m.write_framed_handoff(write_fd, packet)
+    assert m.read_framed_handoff(read_fd) == packet
+    with pytest.raises(ValueError, match="truncated|consumed"):
+        m.read_framed_handoff(read_fd)
+    os.close(read_fd)
+
+
+def test_resume_argv_uses_one_pinned_grammar_and_stdin_prompt(tmp_path):
+    m = subject()
+    request, _ = control_config(tmp_path)
+    request["config"].update({"approvals_reviewer": "user", "model_provider": "openai"})
+    admitted = {
+        "executable": "/fixture/codex", "native_thread_id": "018f47bb-4e58-7abc-8def-0123456789ab",
+        "configuration": {"request": request},
+    }
+    argv = m.build_native_resume_argv(admitted, tmp_path / "last-message")
+    assert argv[:2] == ["/fixture/codex", "exec"]
+    assert argv[-8:] == ["resume", "--json", "-m", "gpt-fixture", "-o", str(tmp_path / "last-message"),
+                         "018f47bb-4e58-7abc-8def-0123456789ab"] + ["-"]
+    assert "approval_policy=\"never\"" in argv
+    assert "resume prompt" not in argv
+
+
+def test_resume_argv_parses_with_pinned_cli_help_only(tmp_path):
+    m = subject()
+    executable = Path("/Users/sma/.codex/packages/standalone/releases/0.154.0-aarch64-apple-darwin/bin/codex")
+    if not executable.is_file():
+        pytest.skip("pinned Codex CLI is unavailable")
+    request, _ = control_config(tmp_path)
+    request["config"].update({"approvals_reviewer": "user", "model_provider": "openai"})
+    admitted = {"executable": str(executable), "native_thread_id": "018f47bb-4e58-7abc-8def-0123456789ab",
+                "configuration": {"request": request}}
+    argv = m.build_native_resume_argv(admitted, tmp_path / "last-message")
+    parsed = subprocess.run(argv[:-1] + ["--help"], text=True, capture_output=True, timeout=10)
+    assert parsed.returncode == 0, parsed.stderr
+
+
+def test_usage_rejects_bool_overflow_and_impossible_subsets():
+    m = subject()
+    row = {"inputTokens": 8, "cachedInputTokens": 2, "outputTokens": 3,
+           "reasoningOutputTokens": 1, "totalTokens": 11}
+    assert m.validate_usage({"last": row, "total": row})["last"] == row | {"cacheWriteInputTokens": 0}
+    for changed in (
+        row | {"inputTokens": True},
+        row | {"inputTokens": 2 ** 63},
+        row | {"reasoningOutputTokens": 4},
+        row | {"totalTokens": 99},
+    ):
+        with pytest.raises(Exception, match="malformed-native-usage"):
+            m.validate_usage({"last": changed, "total": row})
+
+
+def test_native_budget_reserves_ordered_prefix_and_blocks_unknown_spending():
+    m = subject()
+    key_a = m.native_operation_key("018f47bb-4e58-7abc-8def-0123456789ab", "compact")
+    key_b = m.native_operation_key("019f47bb-4e58-7abc-8def-0123456789ab", "compact")
+    def row(ident, key, allocation):
+        return {"id": ident, "rule_matched": "dispatch-profile", "context_json": {
+            "execution": {"native_admission": {"fixture_only": True, "eligible": False,
+                "operation_key": key, "native_budget": {"scope_id": "scope", "allocation_tokens": allocation}}}}}
+    records = [row(10, key_a, 6), row(11, key_b, 6)]
+    with pytest.raises(ValueError, match="budget"):
+        m.evaluate_native_budget(records, "scope", 10, 11)
+    records.append({"id": 12, "rule_matched": "dispatch-profile", "context_json": {
+        "execution": {"native_operation": {"admission_decision_id": 10, "native_launched": False,
+            "remote_completion": "not-started", "accounting_status": "missing"}}}})
+    assert m.evaluate_native_budget(records, "scope", 10, 11)["reserved_tokens"] == 6
+    records.insert(-1, {"id": 9, "rule_matched": "dispatch-profile", "context_json": {
+        "execution": {"native_send_intent": {"admission_decision_id": 10}}}})
+    records[-1]["context_json"]["execution"]["native_operation"]["native_launched"] = True
+    records[-1]["context_json"]["execution"]["native_operation"]["remote_completion"] = "unknown"
+    with pytest.raises(ValueError, match="unknown.*spending"):
+        m.evaluate_native_budget(records, "scope", 20, 11)
+
+
+def test_fixture_handoff_supervises_one_owned_group_and_marks_result_ineligible(tmp_path):
+    m = subject()
+    transport = tmp_path / "fake-native"
+    transport.write_text("#!/bin/sh\nexit 0\n")
+    transport.chmod(0o700)
+    result_path = tmp_path / "result.json"
+    packet = {
+        "schema_version": 2, "fixture_only": True, "eligible": False,
+        "reservation_decision_id": 7, "operation_key": "a" * 64,
+        "parent_pid": os.getppid(), "fixture_root": str(tmp_path),
+        "argv": [str(transport)], "executable_sha256": digest(transport),
+        "timeout_seconds": 1,
+    }
+    read_fd, write_fd = os.pipe()
+    m.write_framed_handoff(write_fd, packet)
+    result = m.run_fixture_handoff(read_fd, result_path)
+    os.close(read_fd)
+    assert result == json.loads(result_path.read_text())
+    assert result["fixture_only"] is True and result["eligible"] is False
+    assert result["process"] == {"exit_code": 0, "reaped": True, "termination_reason": None}

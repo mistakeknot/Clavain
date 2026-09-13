@@ -809,6 +809,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# No trusted production launcher exists for native continuation.  Keep this
+# unconditional and immediately after parsing: no binding read, role resolution,
+# advisory lock, authoritative-store access, or audit append may precede it.
+if [[ "$OPERATION" == resume || "$OPERATION" == compact ]]; then
+  echo "Error: native-trusted-launcher-unavailable" >&2
+  exit 1
+fi
+
 # Native control is deliberately narrower than legacy exec. Reject every
 # selector, passthrough, alternate transport, and backend before role
 # resolution or any inference-capable process can start.
