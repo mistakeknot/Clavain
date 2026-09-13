@@ -1,0 +1,74 @@
+{
+  "required": true,
+  "timeout": 900,
+  "prerequisites": {
+    "paths": [
+      "scripts/ci-usage-evidence.py",
+      "scripts/ci-verification.sh",
+      "scripts/dispatch.sh",
+      "scripts/task-delivery.py",
+      "scripts/verification-toolchain.py",
+      "scripts/verification_runner.py",
+      "tests/routing/role-dispatch-test.sh",
+      "tests/routing/role-dispatch-integration-test.sh",
+      "tests/test_ci_usage_evidence.py",
+      "tests/test_usage_collector.py",
+      "tests/test_usage_binding.py",
+      "tests/test_usage_audit.py",
+      "tests/test_dispatch_report.py",
+      "tests/test_task_delivery.py",
+      "tests/verification-pilot.json",
+      "tests/structural",
+      "tests/shell"
+    ],
+    "repositories": [
+      {
+        "path": "../../core/intercore",
+        "revision": "9bc85a3bbf81c135a2784677676dac2487ddd02a"
+      }
+    ],
+    "executables": [
+      {"name": "python3", "version_args": ["--version"], "version_contains": "Python 3."},
+      {"name": "git", "version_args": ["--version"], "version_contains": "git version"},
+      {"name": "ic", "version_args": ["version"], "version_contains": "ic 0.3.5"},
+      {"name": "jq", "version_args": ["--version"], "version_contains": "jq-"},
+      {"name": "bats", "version_args": ["--version"], "version_contains": "Bats 1.12.0"},
+      {"name": "gawk", "version_args": ["--version"], "version_contains": "GNU Awk 5.3.1"},
+      {"name": "awk", "version_args": ["--version"], "version_contains": "GNU Awk 5.3.1"}
+    ]
+  },
+  "checks": [
+    {
+      "id": "usage-evidence-parser-tests",
+      "run": "python3 -m pytest tests/test_ci_usage_evidence.py -q -o junit_family=xunit2 --junitxml=\"$VERIFY_EVIDENCE_DIR/usage-evidence-parser.xml\"",
+      "expect": "exit 0",
+      "test_count": {"parser": "pytest-junit", "report": "usage-evidence-parser.xml", "min_executed": 26, "max_skipped": 0}
+    },
+    {
+      "id": "usage-python",
+      "run": "python3 -m pytest tests/test_usage_collector.py tests/test_usage_binding.py tests/test_usage_audit.py tests/test_dispatch_report.py tests/test_task_delivery.py -q -o junit_family=xunit2 --junitxml=\"$VERIFY_EVIDENCE_DIR/usage.xml\"",
+      "expect": "exit 0",
+      "test_count": {"parser": "pytest-junit", "report": "usage.xml", "min_executed": 119, "max_skipped": 0}
+    },
+    {
+      "id": "role-dispatch-fixture",
+      "run": "bash tests/routing/role-dispatch-test.sh",
+      "expect": "exit 0"
+    },
+    {
+      "id": "role-dispatch-real-intercore",
+      "run": "bash tests/routing/role-dispatch-integration-test.sh",
+      "expect": "exit 0"
+    },
+    {
+      "id": "dispatch-bats",
+      "run": "bats --formatter tap tests/shell/dispatch_*.bats > \"$VERIFY_EVIDENCE_DIR/dispatch.tap\"",
+      "expect": "exit 0"
+    },
+    {
+      "id": "exact-usage-evidence",
+      "run": "python3 scripts/ci-usage-evidence.py --junit \"$VERIFY_EVIDENCE_DIR/usage.xml\" --pytest-count 119 --pytest-identities-sha256 9d3cfaabea1dda6d7343cea4f4be66786c47a54c09c2afd5f8e91fd24cdbbdb6 --tap \"$VERIFY_EVIDENCE_DIR/dispatch.tap\" --bats-count 116 --bats-identities-sha256 a06139a78f3b00ae22e485f8d38a69ebee9d4d943a6458bf716c6211bf81dd8d --legacy-root \"$LEGACY_VERIFY_TMPDIR\" --legacy-marker \"$LEGACY_VERIFY_MARKER\" --legacy-log \"$LEGACY_VERIFY_LOG\" --legacy-count 234 --legacy-identities-sha256 eab4c083295cf338335018236957c9ae51aa4b81957d5f3f8c6671eeb70126d7 --output \"$VERIFY_EVIDENCE_DIR/usage-evidence.json\"",
+      "expect": "exit 0"
+    }
+  ]
+}
