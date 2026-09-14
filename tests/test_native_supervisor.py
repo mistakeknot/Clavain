@@ -2491,6 +2491,89 @@ def test_linux_stat_parser_handles_parenthesized_names_on_every_platform(supervi
     assert result.returncode == 0
 
 
+def _linux_stat_record(*, pid=4321, pgrp=4321, session=4321, start=998877):
+    # Fields 4 through 22 use the kernel's documented /proc/<pid>/stat order.
+    return (
+        f"{pid} (kernel worker) S 0 {pgrp} {session} 0 -1 4194560 "
+        f"0 0 0 0 0 0 0 0 20 0 1 0 {start} 0 0"
+    )
+
+
+@pytest.mark.parametrize(
+    ("pid", "pgrp", "session", "start"),
+    [
+        (2, 0, 0, 37),  # Captured /proc/2 identity fields on the Linux 6.8 host.
+        (4321, 4321, 4321, 0),  # start_time is an unsigned clock-tick value.
+    ],
+)
+def test_linux_stat_parser_accepts_kernel_zero_identity_fields(
+    supervisor_build, pid, pgrp, session, start
+):
+    result = subprocess.run(
+        [
+            str(supervisor_build.binary),
+            "--test-parse-linux-stat",
+            str(pid),
+            "S",
+            str(pgrp),
+            str(session),
+            str(start),
+        ],
+        input=_linux_stat_record(
+            pid=pid, pgrp=pgrp, session=session, start=start
+        ).encode(),
+        timeout=5,
+    )
+    assert result.returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("pgrp", "session", "start"),
+    [(-1, 4321, 998877), (4321, -1, 998877), (4321, 4321, -1)],
+)
+def test_linux_stat_parser_rejects_negative_identity_fields(
+    supervisor_build, pgrp, session, start
+):
+    expected_start = (1 << 64) - 1 if start < 0 else start
+    result = subprocess.run(
+        [
+            str(supervisor_build.binary),
+            "--test-parse-linux-stat",
+            "4321",
+            "S",
+            str(pgrp),
+            str(session),
+            str(expected_start),
+        ],
+        input=_linux_stat_record(pgrp=pgrp, session=session, start=start).encode(),
+        timeout=5,
+    )
+    assert result.returncode == 2
+
+
+@pytest.mark.parametrize(
+    ("record_pid", "pgrp", "session", "start", "expected"),
+    [
+        (4321, 4321, 4321, 998877, 0),
+        (4322, 4321, 4321, 998877, 2),
+        (4321, 0, 4321, 998877, 2),
+        (4321, 4321, 0, 998877, 2),
+        (4321, 4321, 4321, 0, 2),
+    ],
+)
+def test_linux_owned_identity_requires_matching_pid_and_positive_fields(
+    supervisor_build, record_pid, pgrp, session, start, expected
+):
+    result = subprocess.run(
+        [str(supervisor_build.binary), "--test-parse-linux-owned-stat", "4321"],
+        input=_linux_stat_record(
+            pid=record_pid, pgrp=pgrp, session=session, start=start
+        ).encode(),
+        timeout=5,
+    )
+    assert result.returncode == expected
+
+
 def test_linux_stat_parser_rejects_malformed_or_mismatched_identity(supervisor_build):
     result = subprocess.run(
         [

@@ -1175,11 +1175,14 @@ static bool parse_linux_stat_line(const char *line, struct linux_stat_record *re
     record->pid = pid;
     record->state = close_paren[2];
     const char *cursor = close_paren + 4;
-    long pgrp = 0, session = 0;
+    long pgrp = -1, session = -1;
     unsigned long long start_identity = 0;
     for (int field = 4; field <= 22; ++field) {
         while (*cursor == ' ') ++cursor;
         if (*cursor == '\0' || *cursor == '\n') return false;
+        if ((field == 5 || field == 6 || field == 22) &&
+            (*cursor < '0' || *cursor > '9'))
+            return false;
         errno = 0;
         char *token_end = NULL;
         if (field == 22) {
@@ -1194,11 +1197,18 @@ static bool parse_linux_stat_line(const char *line, struct linux_stat_record *re
             return false;
         cursor = token_end;
     }
-    if (pgrp <= 0 || session <= 0 || start_identity == 0) return false;
+    if (pgrp < 0 || session < 0) return false;
     record->pgrp = pgrp;
     record->session = session;
     record->start_identity = start_identity;
     return true;
+}
+
+static bool linux_stat_has_owned_identity(const struct linux_stat_record *record,
+                                          pid_t expected_pid) {
+    return record != NULL && expected_pid > 0 && record->pid == expected_pid &&
+           record->pgrp > 0 && record->session > 0 &&
+           record->start_identity > 0;
 }
 
 static bool process_start_identity(pid_t pid, char *buffer, size_t capacity) {
@@ -1225,7 +1235,9 @@ static bool process_start_identity(pid_t pid, char *buffer, size_t capacity) {
     if (count <= 0 || (size_t)count >= sizeof(line) - 1) return false;
     line[count] = '\0';
     struct linux_stat_record record;
-    if (!parse_linux_stat_line(line, &record) || record.pid != pid) return false;
+    if (!parse_linux_stat_line(line, &record) ||
+        !linux_stat_has_owned_identity(&record, pid))
+        return false;
     size = snprintf(buffer, capacity, "%llu", record.start_identity);
     return size > 0 && (size_t)size < capacity;
 #else
@@ -1256,7 +1268,8 @@ static bool process_is_stopped(pid_t pid) {
     if (count <= 0 || (size_t)count >= sizeof(line) - 1U) return false;
     line[count] = '\0';
     struct linux_stat_record record;
-    return parse_linux_stat_line(line, &record) && record.pid == pid &&
+    return parse_linux_stat_line(line, &record) &&
+           linux_stat_has_owned_identity(&record, pid) &&
            (record.state == 'T' || record.state == 't');
 #else
     (void)pid;
@@ -1326,7 +1339,9 @@ static bool linux_process_has_live_task(pid_t pid, pid_t pgid, pid_t sid,
         }
         line[count] = '\0';
         struct linux_stat_record record;
-        if (!parse_linux_stat_line(line, &record) || record.pgrp != pgid ||
+        if (!parse_linux_stat_line(line, &record) ||
+            !linux_stat_has_owned_identity(&record, (pid_t)tid) ||
+            record.pgrp != pgid ||
             record.session != sid) {
             complete = false;
             break;
@@ -1413,12 +1428,14 @@ static struct census_snapshot census_group(pid_t pgid, pid_t sid,
         }
         line[count] = '\0';
         struct linux_stat_record record;
-        if (!parse_linux_stat_line(line, &record)) {
+        if (!parse_linux_stat_line(line, &record) || record.pid != candidate) {
             snapshot.complete = false;
             continue;
         }
         if (record.pgrp != pgid) continue;
-        if (snapshot.count == 1024U || record.session != sid) {
+        if (snapshot.count == 1024U ||
+            !linux_stat_has_owned_identity(&record, (pid_t)candidate) ||
+            record.session != sid) {
             snapshot.complete = false;
             break;
         }
@@ -3997,6 +4014,18 @@ int main(int argc, char *argv[]) {
         return record.pid == pid && record.state == argv[3][0] &&
                record.pgrp == pgrp && record.session == sid &&
                record.start_identity == identity ? 0 : 2;
+    }
+    if (argc == 3 && strcmp(argv[1], "--test-parse-linux-owned-stat") == 0) {
+        char buffer[4096];
+        ssize_t count = read(STDIN_FILENO, buffer, sizeof(buffer) - 1);
+        if (count <= 0 || (size_t)count >= sizeof(buffer) - 1) return 2;
+        buffer[count] = '\0';
+        struct linux_stat_record record;
+        long pid;
+        if (!parse_linux_stat_line(buffer, &record) ||
+            !parse_long(argv[2], &pid) || pid <= 0)
+            return 2;
+        return linux_stat_has_owned_identity(&record, (pid_t)pid) ? 0 : 2;
     }
     if (argc == 7 && strcmp(argv[1], "--test-observe") == 0) {
         long generation, pgid, sid, leader;

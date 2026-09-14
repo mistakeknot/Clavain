@@ -631,7 +631,9 @@ static int probe_owner_loss(void) {
     if (child == 0) {
         close(ready[0]); close(gate[1]);
         if (setpgid(0, 0) || !write_all(ready[1], "R", 1)) _exit(123);
-        char value; (void)read(gate[0], &value, 1); _exit(0);
+        char value;
+        ssize_t count = read(gate[0], &value, 1);
+        _exit(count == 0 ? 0 : 123);
     }
     if (child < 0) return 123;
     close(ready[1]); close(gate[0]);
@@ -687,7 +689,9 @@ static int probe_orphan_writer(int terminal_fd, int resume_fd) {
         close(control[1]); close(bytes[0]);
         (void)write_line(ready[1], "%ld\n", (long)writer);
         close(ready[1]);
-        char value; (void)read(gate[0], &value, 1); _exit(0);
+        char value;
+        ssize_t count = read(gate[0], &value, 1);
+        _exit(count == 0 ? 0 : 123);
     }
     if (owner < 0) return 123;
     close(control[1]); close(bytes[0]); close(gate[0]); close(ready[1]);
