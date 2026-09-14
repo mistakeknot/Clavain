@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "calibrated_at": "2026-03-03",
   "min_sessions": 3,
   "agents": {
@@ -9,6 +9,7 @@
       "hit_rate": 0.25,
       "evidence_sessions": 5,
       "confidence": 0.85,
+      "propagation_eligible": true,
       "reason": "low hit rate"
     },
     "fd-quality": {
@@ -17,6 +18,7 @@
       "hit_rate": 0.80,
       "evidence_sessions": 4,
       "confidence": 0.75,
+      "propagation_eligible": true,
       "reason": "high hit rate"
     }
   }

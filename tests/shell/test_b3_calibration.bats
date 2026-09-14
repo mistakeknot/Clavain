@@ -121,6 +121,112 @@ _insert_dispatch() {
     [[ "$(_routing_read_calibration fd-quality implement)" == opus ]]
 }
 
+@test "reader: shared strict calibration golden cases match shell selection" {
+    local cases="$BATS_TEST_DIRNAME/../fixtures/routing-calibration-consumer-cases.json"
+    mkdir -p "$TEST_DIR/config"
+    while IFS= read -r row; do
+        local name mode phase body expected result
+        name=$(jq -r '.name' <<< "$row")
+        mode=$(jq -r '.mode' <<< "$row")
+        phase=$(jq -r '.phase // ""' <<< "$row")
+        body=$(jq -r '.body' <<< "$row")
+        expected=$(jq -r '.expected_model' <<< "$row")
+        printf '%s' "$body" > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+        printf 'subagents:\n  defaults:\n    model: sonnet\ncalibration:\n  mode: %s\n' "$mode" > "$TEST_DIR/config/routing.yaml"
+        result=$(env CLAVAIN_ROUTING_CONFIG="$TEST_DIR/config/routing.yaml" \
+            CLAUDE_PROJECT_DIR="$TEST_DIR" CLAVAIN_RUN_ID=test-run \
+            INTERSPECT_ROUTING_MODE="$mode" SCRIPTS_DIR="$SCRIPTS_DIR" \
+            bash -c 'source "$SCRIPTS_DIR/lib-routing.sh"; routing_resolve_model --agent fd-quality --phase "$1"' _ "$phase" 2>/dev/null)
+        [[ "$result" == "$expected" ]] || {
+            echo "$name: got $result, want $expected" >&2
+            return 1
+        }
+    done < <(jq -c '.[]' "$cases")
+}
+
+@test "reader: shared calibration golden cases match the Intercore candidate" {
+    local candidate="${INTERCORE_CALIBRATION_CANDIDATE:-/tmp/adaptive-routing-20260912/ic-calibration-candidate}"
+    [[ -x "$candidate" ]] || skip "Intercore calibration candidate not available"
+    local cases="$BATS_TEST_DIRNAME/../fixtures/routing-calibration-consumer-cases.json"
+    while IFS= read -r row; do
+        local name mode phase body expected artifact result got
+        name=$(jq -r '.name' <<< "$row")
+        mode=$(jq -r '.mode' <<< "$row")
+        phase=$(jq -r '.phase // ""' <<< "$row")
+        body=$(jq -r '.body' <<< "$row")
+        expected=$(jq -r '.expected_model' <<< "$row")
+        artifact="$TEST_DIR/${name}.json"
+        printf '%s' "$body" > "$artifact"
+        local args=(--json route model --agent=fd-quality --calibration="$artifact")
+        [[ -n "$phase" ]] && args+=(--phase="$phase")
+        run env INTERSPECT_ROUTING_MODE="$mode" CLAVAIN_ROUTING_CONFIG="$SCRIPTS_DIR/../config/routing.yaml" \
+            "$candidate" "${args[@]}"
+        [[ "$status" -eq 0 ]] || {
+            echo "$name: candidate exited $status: $output" >&2
+            return 1
+        }
+        got=$(jq -r '.model' <<< "$output")
+        [[ "$got" == "$expected" ]] || {
+            echo "$name: candidate got $got, want $expected" >&2
+            return 1
+        }
+    done < <(jq -c '.[]' "$cases")
+}
+
+@test "resolve_model: production fast path cannot bypass an enforce calibration artifact" {
+    unset CLAVAIN_ROUTING_CONFIG CLAVAIN_RUN_ID _ROUTING_LOADED
+    export CLAUDE_PROJECT_DIR="$TEST_DIR"
+    export INTERSPECT_ROUTING_MODE=enforce
+    printf '%s' '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    ic() {
+        printf '%s\n' "$*" >> "$TEST_DIR/ic-calls"
+        echo opus
+    }
+
+    result=$(routing_resolve_model --agent fd-quality)
+
+    [[ "$result" == haiku ]]
+    [[ ! -e "$TEST_DIR/ic-calls" ]]
+}
+
+@test "resolve_model: invalid calibration mode is visibly static" {
+    _setup_routing_cal
+    export INTERSPECT_ROUTING_MODE=invalid
+    printf '%s' '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    export CLAVAIN_RUN_ID=test-run
+
+    run routing_resolve_model --agent fd-quality
+
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"invalid calibration mode"* ]]
+    [[ "$output" == *"sonnet"* ]]
+}
+
+@test "resolve_model: off mode ignores an otherwise eligible artifact" {
+    _setup_routing_cal
+    export INTERSPECT_ROUTING_MODE=off
+    printf '%s' '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    export CLAVAIN_RUN_ID=test-run
+
+    result=$(routing_resolve_model --agent fd-quality)
+
+    [[ "$result" == sonnet ]]
+}
+
+@test "resolve_model: missing strict helper is visibly static" {
+    _setup_routing_cal
+    printf '%s' '{"schema_version":2,"agents":{"fd-quality":{"recommended_model":"haiku","confidence":0.9,"evidence_sessions":30,"propagation_eligible":true}}}' > "$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    export CLAVAIN_RUN_ID=test-run
+    _ROUTING_CALIBRATION_HELPER="$TEST_DIR/missing-helper.py"
+
+    run routing_resolve_model --agent fd-quality
+
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *"UNVERIFIABLE"* ]]
+    [[ "$output" == *"sonnet"* ]]
+}
+
 @test "db_path: CLAUDE_PROJECT_DIR takes priority over git root" {
     export CLAUDE_PROJECT_DIR="$TEST_DIR/custom-project"
     mkdir -p "$CLAUDE_PROJECT_DIR/.clavain/interspect"
@@ -346,7 +452,7 @@ YAML
     [[ -z "$result" ]]
 }
 
-@test "read_calibration: valid file returns recommendation" {
+@test "read_calibration: schema v1 file is diagnostic only" {
     _setup_routing_cal
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
@@ -362,7 +468,10 @@ YAML
 }
 JSON
     result=$(_routing_read_calibration "fd-game-design")
-    [[ "$result" == "haiku" ]]
+    [[ -z "$result" ]]
+    evidence=$(_routing_read_calibration "fd-game-design" "" evidence)
+    [[ "$(jq -r '.model' <<< "$evidence")" == haiku ]]
+    [[ "$(jq -r '.authoritative' <<< "$evidence")" == false ]]
 }
 
 @test "read_calibration: schema v2 file returns recommendation" {
@@ -391,12 +500,13 @@ JSON
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-safety": {
             "recommended_model": "sonnet",
             "confidence": 0.85,
-            "evidence_sessions": 5
+            "evidence_sessions": 5,
+            "propagation_eligible": true
         }
     }
 }
@@ -437,12 +547,13 @@ JSON
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-safety": {
             "recommended_model": "gpt-4-turbo",
             "confidence": 0.85,
-            "evidence_sessions": 5
+            "evidence_sessions": 5,
+            "propagation_eligible": true
         }
     }
 }
@@ -456,12 +567,13 @@ JSON
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-safety": {
             "recommended_model": "haiku",
             "confidence": 0.5,
-            "evidence_sessions": 5
+            "evidence_sessions": 5,
+            "propagation_eligible": true
         }
     }
 }
@@ -475,12 +587,13 @@ JSON
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-safety": {
             "recommended_model": "haiku",
             "confidence": 0.85,
-            "evidence_sessions": 2
+            "evidence_sessions": 2,
+            "propagation_eligible": true
         }
     }
 }
@@ -498,12 +611,13 @@ JSON
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-game-design": {
             "recommended_model": "haiku",
             "confidence": 0.85,
-            "evidence_sessions": 5
+            "evidence_sessions": 5,
+            "propagation_eligible": true
         }
     }
 }
@@ -527,12 +641,13 @@ YAML
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-safety": {
             "recommended_model": "haiku",
             "confidence": 0.85,
-            "evidence_sessions": 5
+            "evidence_sessions": 5,
+            "propagation_eligible": true
         }
     }
 }
@@ -561,12 +676,13 @@ YAML
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-game-design": {
             "recommended_model": "haiku",
             "confidence": 0.85,
-            "evidence_sessions": 5
+            "evidence_sessions": 5,
+            "propagation_eligible": true
         }
     }
 }
@@ -605,12 +721,13 @@ YAML
     mkdir -p "$TEST_DIR/.clavain/interspect"
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << 'JSON'
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-game-design": {
             "recommended_model": "haiku",
             "confidence": 0.85,
-            "evidence_sessions": 5
+            "evidence_sessions": 5,
+            "propagation_eligible": true
         }
     }
 }
@@ -648,12 +765,13 @@ calibration:
 YAML
     cat > "$TEST_DIR/.clavain/interspect/routing-calibration.json" << JSON
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "agents": {
         "fd-game-design": {
             "recommended_model": "$recommended",
             "confidence": 0.85,
-            "evidence_sessions": 5
+            "evidence_sessions": 5,
+            "propagation_eligible": true
         }
     }
 }
@@ -835,4 +953,17 @@ JSON
     run routing_resolve_model --agent fd-game-design
     [[ "$status" -eq 0 ]]  # routing must NOT fail just because audit failed
     [[ "$output" == *"verification-emit-fail"* ]]
+}
+
+@test "audit: schema 1 shadow is diagnostic without claiming an override" {
+    _setup_shadow_audit "haiku" "sonnet"
+    local cal="$TEST_DIR/.clavain/interspect/routing-calibration.json"
+    jq '.schema_version = 1' "$cal" > "$cal.next"
+    mv -f "$cal.next" "$cal"
+    source "$SCRIPTS_DIR/lib-routing.sh"
+    run routing_resolve_model --agent fd-game-design
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"diagnostic only"* ]]
+    [[ "$output" != *"would override"* ]]
+    [[ ! -s "$TEST_DIR/.clavain/interspect/microrouter-shadow.jsonl" ]]
 }

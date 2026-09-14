@@ -104,6 +104,10 @@ type InterspectCalibration struct {
 	MinNonBootstrapSessions int                         `json:"min_non_bootstrap_sessions,omitempty"`
 	SourceWeights           map[string]float64          `json:"source_weights,omitempty"`
 	Agents                  map[string]AgentCalibration `json:"agents"`
+	exactAgents             map[string]exactAgentCalibration
+	fileBacked              bool
+	mode                    string
+	modeSet                 bool
 }
 
 type AgentCalibration struct {
@@ -139,7 +143,12 @@ type RoutingOverride struct {
 // B2 complexity routing is intentionally scoped here to model selection; shell
 // dispatch-tier routing remains owned by scripts/lib-routing.sh.
 type RoutingConfig struct {
-	Complexity ComplexityRoutingConfig `json:"complexity" yaml:"complexity"`
+	Complexity  ComplexityRoutingConfig  `json:"complexity" yaml:"complexity"`
+	Calibration CalibrationRoutingConfig `json:"calibration" yaml:"calibration"`
+}
+
+type CalibrationRoutingConfig struct {
+	Mode string `json:"mode" yaml:"mode"`
 }
 
 type ComplexityRoutingConfig struct {
@@ -319,16 +328,12 @@ func loadInterspectCalibration() *InterspectCalibration {
 	if err != nil {
 		return nil // File missing — expected
 	}
-	var cal InterspectCalibration
-	if err := json.Unmarshal(data, &cal); err != nil {
+	cal, err := parseInterspectCalibration(data)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "compose: warning: corrupt %s: %v\n", path, err)
 		return nil
 	}
-	if cal.SchemaVersion != 1 && cal.SchemaVersion != 2 && cal.SchemaVersion != 3 {
-		fmt.Fprintf(os.Stderr, "compose: warning: unsupported schema version %d in %s\n", cal.SchemaVersion, path)
-		return nil
-	}
-	return &cal
+	return cal
 }
 
 func loadRoutingOverrides() *RoutingOverrides {
@@ -607,7 +612,10 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 			plan.Warnings = append(plan.Warnings, fmt.Sprintf("unmatched_role:%s", role.Role))
 			continue
 		}
-		model, source := resolveModelForStage(stage, agent, role, cal, ct)
+		model, source, diagnostic := resolveModelForStageDetailed(stage, agent, role, cal, ct)
+		if diagnostic != "" {
+			plan.Warnings = append(plan.Warnings, diagnostic)
+		}
 		plan.Agents = append(plan.Agents, PlanAgent{
 			AgentID:         agent.id,
 			SubagentType:    agent.agent.Runtime.SubagentType,
@@ -625,7 +633,10 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 		if !found {
 			continue // Optional roles are silently skipped
 		}
-		model, source := resolveModelForStage(stage, agent, role, cal, ct)
+		model, source, diagnostic := resolveModelForStageDetailed(stage, agent, role, cal, ct)
+		if diagnostic != "" {
+			plan.Warnings = append(plan.Warnings, diagnostic)
+		}
 		plan.Agents = append(plan.Agents, PlanAgent{
 			AgentID:         agent.id,
 			SubagentType:    agent.agent.Runtime.SubagentType,
@@ -671,7 +682,7 @@ func composePlan(stage, sprintID string, budget int64, stageSpec StageSpec, flee
 }
 
 func composePlanWithRouting(stage, sprintID string, budget int64, complexityTier string, stageSpec StageSpec, fleet *FleetRegistry, cal *InterspectCalibration, overrides *RoutingOverrides, ct *CalibratedThresholds, routing *RoutingConfig) ComposePlan {
-	plan := composePlan(stage, sprintID, budget, stageSpec, fleet, cal, overrides, ct)
+	plan := composePlan(stage, sprintID, budget, stageSpec, fleet, calibrationForRouting(cal, routing), overrides, ct)
 	applyB2ComplexityRouting(&plan, normalizeComplexityTier(complexityTier), fleet, routing)
 	return plan
 }
@@ -719,6 +730,9 @@ func applyB2ComplexityRouting(plan *ComposePlan, tier string, fleet *FleetRegist
 }
 
 func applySafetyFloor(agentID, model, source string) (string, string) {
+	if i := strings.LastIndex(agentID, ":"); i >= 0 {
+		agentID = agentID[i+1:]
+	}
 	if floor, ok := safetyFloorAgents[agentID]; ok {
 		if pkgphase.ModelTier(model) < pkgphase.ModelTier(floor) || pkgphase.ModelTier(model) == 0 {
 			return floor, "safety_floor"
@@ -833,63 +847,72 @@ func resolveModel(agent matchedAgent, role AgentRole, cal *InterspectCalibration
 }
 
 func resolveModelForStage(stage string, agent matchedAgent, role AgentRole, cal *InterspectCalibration, ct *CalibratedThresholds) (string, string) {
-	var model, source string
+	model, source, _ := resolveModelForStageDetailed(stage, agent, role, cal, ct)
+	return model, source
+}
+
+func resolveModelForStageDetailed(stage string, agent matchedAgent, role AgentRole, cal *InterspectCalibration, ct *CalibratedThresholds) (string, string, string) {
+	var model, source, diagnostic string
+
+	// Resolve the static selection first. Calibration may replace it only in a
+	// valid enforce mode; shadow and diagnostic-only schemas retain this source.
+	if agent.agent.Models.Preferred != "" {
+		model, source = agent.agent.Models.Preferred, "fleet_preferred"
+	} else if role.ModelTier != "" {
+		model, source = role.ModelTier, "routing_fallback"
+	} else {
+		model, source = "sonnet", "routing_fallback"
+	}
 
 	// Interspect calibration — evidence-driven. Modern schemas can carry
 	// phase-specific recommendations; prefer those for the compose stage and
 	// fall back to the global agent recommendation when no phase has enough
 	// evidence/confidence.
 	if cal != nil {
-		if c, ok := cal.Agents[agent.id]; ok {
+		calibrationAgentID := agent.id
+		if _, ok := cal.Agents[calibrationAgentID]; !ok && strings.Contains(calibrationAgentID, ":") {
+			calibrationAgentID = calibrationAgentID[strings.LastIndex(calibrationAgentID, ":")+1:]
+		}
+		if c, ok := cal.Agents[calibrationAgentID]; ok {
 			threshold := 0.7
 			if ct != nil {
 				if at, ok := ct.Agents[agent.id]; ok {
 					threshold = at.ConfidenceThreshold
 				}
 			}
-			modern := cal.SchemaVersion >= 2
-			if modern && threshold < 0.7 {
+			if cal.SchemaVersion >= 2 && threshold < 0.7 {
 				threshold = 0.7
 			}
-			if pc, ok := phaseCalibration(c, stage, threshold, modern); ok {
-				if m := pc.RecommendedModel; m == "haiku" || m == "sonnet" || m == "opus" {
-					model, source = m, "interspect_calibration"
-				}
+			candidate, eligible := "", false
+			if len(cal.exactAgents) > 0 {
+				candidate, eligible = exactCalibrationCandidate(cal, agent.id, stage, threshold)
+			} else if pc, ok := phaseCalibration(c, stage, threshold, cal.SchemaVersion); ok {
+				candidate, eligible = pc.RecommendedModel, true
 			}
-			if model == "" && calibrationUsable(c, threshold, modern) {
-				if m := c.RecommendedModel; m == "haiku" || m == "sonnet" || m == "opus" {
-					model, source = m, "interspect_calibration"
-				}
+			if !eligible && len(cal.exactAgents) == 0 && calibrationUsable(c, threshold, cal.SchemaVersion) {
+				candidate, eligible = c.RecommendedModel, true
+			}
+			mode := effectiveCalibrationMode(cal)
+			switch {
+			case mode != "off" && mode != "shadow" && mode != "enforce":
+				diagnostic = "invalid_calibration_mode:" + mode
+			case cal.SchemaVersion == 1 && eligible && mode != "off":
+				diagnostic = fmt.Sprintf("calibration_diagnostic:schema1:%s:%s->%s", agent.id, model, candidate)
+			case mode == "shadow" && eligible:
+				diagnostic = fmt.Sprintf("calibration_shadow:%s:%s->%s", agent.id, model, candidate)
+			case mode == "enforce" && eligible && (cal.SchemaVersion == 0 || cal.SchemaVersion == 2 || cal.SchemaVersion == 3):
+				model, source = candidate, "interspect_calibration"
 			}
 		}
-	}
-
-	// Fleet preferred model
-	if model == "" && agent.agent.Models.Preferred != "" {
-		model, source = agent.agent.Models.Preferred, "fleet_preferred"
-	}
-
-	// Role-declared model tier
-	if model == "" && role.ModelTier != "" {
-		model, source = role.ModelTier, "routing_fallback"
-	}
-
-	// Ultimate fallback
-	if model == "" {
-		model, source = "sonnet", "routing_fallback"
 	}
 
 	// Safety floor clamp — unconditional final step
-	if floor, ok := safetyFloorAgents[agent.id]; ok {
-		if pkgphase.ModelTier(model) < pkgphase.ModelTier(floor) || pkgphase.ModelTier(model) == 0 {
-			model, source = floor, "safety_floor"
-		}
-	}
+	model, source = applySafetyFloor(agent.id, model, source)
 
-	return model, source
+	return model, source, diagnostic
 }
 
-func calibrationUsable(c AgentCalibration, threshold float64, modern bool) bool {
+func calibrationUsable(c AgentCalibration, threshold float64, schema int) bool {
 	if c.RecommendedModel != "haiku" && c.RecommendedModel != "sonnet" && c.RecommendedModel != "opus" {
 		return false
 	}
@@ -897,19 +920,51 @@ func calibrationUsable(c AgentCalibration, threshold float64, modern bool) bool 
 		c.Confidence < 0 || c.Confidence > 1 || c.Confidence < threshold || c.EvidenceSessions < 3 {
 		return false
 	}
-	return !modern || c.PropagationEligible
+	return schema == 0 || schema == 1 || ((schema == 2 || schema == 3) && c.PropagationEligible)
 }
 
-func phaseCalibration(c AgentCalibration, stage string, threshold float64, modern bool) (AgentCalibration, bool) {
+func phaseCalibration(c AgentCalibration, stage string, threshold float64, schema int) (AgentCalibration, bool) {
 	if len(c.Phases) == 0 || stage == "" {
 		return AgentCalibration{}, false
 	}
 	for _, key := range phaseCalibrationKeys(stage) {
-		if pc, ok := c.Phases[key]; ok && calibrationUsable(pc, threshold, modern) {
+		if pc, ok := c.Phases[key]; ok && calibrationUsable(pc, threshold, schema) {
 			return pc, true
 		}
 	}
 	return AgentCalibration{}, false
+}
+
+func calibrationForRouting(cal *InterspectCalibration, routing *RoutingConfig) *InterspectCalibration {
+	if cal == nil {
+		return nil
+	}
+	copy := *cal
+	if mode, ok := os.LookupEnv("INTERSPECT_ROUTING_MODE"); ok {
+		copy.mode, copy.modeSet = mode, true
+	} else if routing != nil {
+		copy.mode = routing.Calibration.Mode
+		if copy.mode == "" {
+			copy.mode = "off"
+		}
+		copy.modeSet = true
+	} else if cal.fileBacked {
+		copy.mode, copy.modeSet = "off", true
+	}
+	return &copy
+}
+
+func effectiveCalibrationMode(cal *InterspectCalibration) string {
+	if cal.modeSet {
+		return cal.mode
+	}
+	if cal.fileBacked {
+		if mode, ok := os.LookupEnv("INTERSPECT_ROUTING_MODE"); ok {
+			return mode
+		}
+		return "off"
+	}
+	return "enforce"
 }
 
 func phaseCalibrationKeys(stage string) []string {

@@ -1,0 +1,95 @@
+[
+  {
+    "name": "schema2_exact_boundary",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2.0,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.7,\"evidence_sessions\":3.0,\"propagation_eligible\":true}}}",
+    "expected_model": "haiku"
+  },
+  {
+    "name": "schema3_additive_siblings",
+    "mode": "enforce",
+    "body": "{\"schema_version\":3,\"skills\":{\"review\":{\"confidence\":0.8}},\"agents\":{\"fd-quality\":{\"recommended_model\":\"opus\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true,\"additive_note\":{\"kept\":true}}}}",
+    "expected_model": "opus"
+  },
+  {
+    "name": "schema1_diagnostic_only",
+    "mode": "enforce",
+    "body": "{\"schema_version\":1,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":30}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "explicitly_ineligible",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":false}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "confidence_below_exact_boundary",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.69999999999999999,\"evidence_sessions\":30,\"propagation_eligible\":true}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "sessions_below_exact_boundary",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":2.9999999999999999,\"propagation_eligible\":true}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "fractional_schema",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2.5,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "duplicate_key",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2,\"schema_version\":3,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "trailing_json",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true}}} {}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "numeric_overflow",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":1e400,\"evidence_sessions\":30,\"propagation_eligible\":true}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "numeric_underflow",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":1e-4000,\"evidence_sessions\":30,\"propagation_eligible\":true}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "known_field_wrong_type_elsewhere",
+    "mode": "enforce",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true},\"fd-other\":{\"recommended_model\":\"sonnet\",\"confidence\":\"high\",\"evidence_sessions\":30,\"propagation_eligible\":true}}}",
+    "expected_model": "sonnet"
+  },
+  {
+    "name": "ineligible_phase_uses_global",
+    "mode": "enforce",
+    "phase": "plan",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"opus\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true,\"phases\":{\"plan\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":false}}}}}",
+    "expected_model": "opus"
+  },
+  {
+    "name": "unsupported_phase_uses_global",
+    "mode": "enforce",
+    "phase": "ship",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"opus\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true,\"phases\":{\"ship\":{\"recommended_model\":\"unsupported\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true}}}}}",
+    "expected_model": "opus"
+  },
+  {
+    "name": "phase_alias_fallback",
+    "mode": "enforce",
+    "phase": "shipping",
+    "body": "{\"schema_version\":2,\"agents\":{\"fd-quality\":{\"recommended_model\":\"sonnet\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true,\"phases\":{\"ship\":{\"recommended_model\":\"haiku\",\"confidence\":0.9,\"evidence_sessions\":30,\"propagation_eligible\":true}}}}}",
+    "expected_model": "haiku"
+  }
+]
