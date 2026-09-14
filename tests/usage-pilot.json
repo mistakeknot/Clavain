@@ -33,7 +33,7 @@
     "executables": [
       {"name": "python3", "version_args": ["--version"], "version_contains": "Python 3."},
       {"name": "git", "version_args": ["--version"], "version_contains": "git version"},
-      {"name": "ic", "version_args": ["version"], "version_contains": "ic 0.3.5"},
+      {"name": "ic", "version_args": ["--db=.native-ci-identity/intercore.db", "version"], "version_contains": "ic 0.3.5"},
       {"name": "jq", "version_args": ["--version"], "version_contains": "jq-"},
       {"name": "bats", "version_args": ["--version"], "version_contains": "Bats 1.12.0"},
       {"name": "gawk", "version_args": ["--version"], "version_contains": "GNU Awk 5.3.1"},

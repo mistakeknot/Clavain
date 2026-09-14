@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -125,11 +126,22 @@ for line in sys.stdin:
 
 def test_transport_timeout_and_malformed_response_are_distinct(tmp_path):
     m = subject()
+    ready = tmp_path / "malformed-output-ready"
     for body, expected in (("import time; time.sleep(30)\n", "timeout"),
-                           ("print('not-json',flush=True)\nimport time; time.sleep(30)\n", "malformed-response")):
+                           ("print('not-json',flush=True)\nfrom pathlib import Path\n"
+                            + f"Path({str(ready)!r}).touch()\n"
+                            + "import time; time.sleep(30)\n", "malformed-response")):
         executable = fake_server(tmp_path, body)
         server = m.AppServer(executable, timeout=0.15)
         try:
+            if expected == "malformed-response":
+                # Test parsing after bytes exist, rather than racing interpreter
+                # startup against the independently tested response timeout.
+                deadline = time.monotonic() + 1
+                while not ready.exists():
+                    assert server.process.poll() is None
+                    assert time.monotonic() < deadline
+                    time.sleep(0.005)
             with pytest.raises(m.RPCError) as error:
                 server.initialize()
             assert error.value.status == expected

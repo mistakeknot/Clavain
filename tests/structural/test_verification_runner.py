@@ -138,7 +138,7 @@ def test_receipt_private_complete_hashed_and_compact(runner, repo, tmp_path):
 @pytest.mark.parametrize("command,config,kind", [
     ('sleep 10 & wait', {"timeout": .15}, "timeout"),
     (f'{sys.executable} -c \'print("x"*100000)\'', {"output_limit": 1024}, "output-limit"),
-])
+], ids=["timeout", "output-limit"])
 def test_operational_limits(runner, repo, tmp_path, command, config, kind):
     start = time.monotonic()
     result = execute(runner, repo, tmp_path, spec(command, **config))

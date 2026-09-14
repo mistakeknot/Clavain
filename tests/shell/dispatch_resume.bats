@@ -23,73 +23,11 @@ teardown() {
 }
 
 make_native_binding() {
-  export REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
-  export TASK_ROOT="$(cd "$REPO_ROOT/.." && pwd -P)"
-  export RECORDS="$T/records.json"
+  # The production gate must reject without reading these deliberately invalid
+  # inputs. Full schema and executed argv coverage lives in the composed fixture.
   export AUTH_DB="$T/intercore.db"
-  : > "$AUTH_DB"
-  python3 - "$T" "$REPO_ROOT" "$TASK_ROOT" <<'PY'
-import hashlib,json,pathlib,sys
-t,repo,task=map(pathlib.Path,sys.argv[1:])
-def h(p):return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
-def canon(v):return json.dumps(v,sort_keys=True,separators=(",",":"))
-manifest=task/'native-schema-manifest.json'; meta=json.loads(manifest.read_text()); exe=pathlib.Path(meta['codex_executable'])
-source=t/'source.json'; source.write_text('source-v1\n'); policy=repo/'config/routing.yaml'
-events=t/'events.jsonl'; thread='018f47bb-4e58-7abc-8def-0123456789ab'; events.write_text(json.dumps({'type':'thread.started','thread_id':thread})+'\n')
-request={'model':'gpt-fixture','modelProvider':'openai','cwd':str(t/'repo'),'runtimeWorkspaceRoots':[str(t/'repo')],
- 'approvalPolicy':'never','approvalsReviewer':'user','sandbox':'workspace-write','serviceTier':'default',
- 'baseInstructions':'governed base','developerInstructions':'scoped skill body','config':{'model_reasoning_effort':'high'},'excludeTurns':True}
-effective={'model':'gpt-fixture','modelProvider':'openai','reasoningEffort':'high','serviceTier':'default','cwd':str(t/'repo'),
- 'runtimeWorkspaceRoots':[str(t/'repo')],'approvalPolicy':'never','approvalsReviewer':'user','sandbox':{'type':'workspaceWrite','networkAccess':False},
- 'activePermissionProfile':None,'instructionSources':[]}
-config={'request':request,'effective':effective};config['sha256']=hashlib.sha256(canon(config).encode()).hexdigest()
-cap={'schema_version':1,'status':'verified','native_thread_id':thread,'source_sha256':h(source),'policy_sha256':h(policy),
- 'executable_sha256':h(exe),'configuration_sha256':config['sha256'],'native_schema_manifest_sha256':h(manifest),
- 'verified':{'model_provider_effort_tier':True,'cwd_and_writable_roots':True,'approval_reviewer_sandbox_network':True,
- 'instructions_config_and_skills':True,'exclude_turns_suppresses_history':True}}
-capfile=t/'capability.json';capfile.write_text(json.dumps(cap)+'\n')
-enrollment={'enrollment_id':'enroll-a','cohort_id':'cohort-a','manifest_sha256':'a'*64}
-route={'policy_source':str(policy),'policy_hash':h(policy)}
-execution={'schema_version':1,'dispatch_id':'dispatch-seed','attempt_id':'attempt-seed','state':'completed','resolved_route':route,
- 'resolved_profile':{'profile':{'role':'routine-execution'}},'execution':{'backend':'codex','model':'gpt-fixture','reasoning_effort':'high',
- 'service_tier':'standard','event_log':str(events),'arm_id':'arm-a'},'task_envelope':enrollment,'result':{'exit_code':0}}
-receipt=t/'receipt.json';receipt.write_text(json.dumps(execution)+'\n')
-native={**enrollment,'arm_id':'arm-a','dispatch_id':'dispatch-seed','attempt_id':'attempt-seed','role':'routine-execution','provider':'codex',
- 'model':'gpt-fixture','session_id':thread,'thread_id':thread,'native_thread_id':thread,'source_path':str(source),'source_sha256':h(source),
- 'policy_path':str(policy),'policy_sha256':h(policy),'executable':str(exe),'executable_sha256':h(exe),'configuration_sha256':config['sha256'],
- 'evidence_path':str(events),'native_schema_manifest':{'path':str(manifest),'sha256':h(manifest)},
- 'native_capability_evidence':{'path':str(capfile),'sha256':h(capfile),'status':'verified'}}
-compact_native={'operation':'compact','seed_thread_id':thread,'status':'completed','configuration_status':'verified','accounting_status':'complete',
- 'native_usage':{'last':{'inputTokens':1},'total':{'inputTokens':2}}}
-compact_execution=json.loads(json.dumps(execution));compact_execution.update(dispatch_id='dispatch-compact',attempt_id='attempt-compact')
-compact_execution['execution']['native_operation']=compact_native
-compact_receipt=t/'compact.receipt.json';compact_receipt.write_text(json.dumps(compact_execution)+'\n')
-compact_result=t/'compact.result.json';compact_result.write_text(json.dumps(compact_native)+'\n')
-records=[{'id':1,'rule_matched':'measured-delivery-enrollment','context_json':{**enrollment,'arm_id':'arm-a','implementation_dispatched':False,'enrolled_at':'2026-09-12T00:00:00Z'}},
- {'id':2,'rule_matched':'measured-delivery-dispatch-request','context_json':{**enrollment,'dispatch_id':'dispatch-seed','role':'routine-execution'}},
- {'id':3,'rule_matched':'dispatch-profile','context_json':execution},{'id':4,'rule_matched':'measured-delivery-binding','context_json':native},
- {'id':5,'rule_matched':'measured-delivery-dispatch-request','context_json':{**enrollment,'dispatch_id':'dispatch-compact','role':'routine-execution'}},
- {'id':6,'rule_matched':'dispatch-profile','context_json':compact_execution}]
-(t/'records.json').write_text(json.dumps(records))
-binding={'schema_version':1,'arm_id':'arm-a','authority':{'database':str(t/'intercore.db'),'enrollment_decision_id':1,
- 'dispatch_request_decision_id':2,'seed_execution_decision_id':3,'seed_native_binding_decision_id':4,
- 'compaction_dispatch_request_decision_id':5,'compaction_execution_decision_id':6},'enrollment':enrollment,
- 'seed':{'dispatch_id':'dispatch-seed','attempt_id':'attempt-seed','role':'routine-execution','native_thread_id':thread,
- 'receipt':{'path':str(receipt),'sha256':h(receipt)},'events':{'path':str(events),'sha256':h(events)}},
- 'source':{'path':str(source),'sha256':h(source)},'policy':{'path':str(policy),'sha256':h(policy)},
- 'executable':{'path':str(exe),'sha256':h(exe)},'native_schema':{'manifest_path':str(manifest),'manifest_sha256':h(manifest)},
- 'configuration':config,'capability_evidence':{'path':str(capfile),'sha256':h(capfile)},
- 'compaction':{'dispatch_id':'dispatch-compact','attempt_id':'attempt-compact','status':'completed','accounting_status':'complete',
- 'configuration_status':'verified','receipt':{'path':str(compact_receipt),'sha256':h(compact_receipt)},
- 'operation_result':{'path':str(compact_result),'sha256':h(compact_result)}}}
-(t/'binding.json').write_text(json.dumps(binding)+'\n')
-(t/'route.json').write_text(json.dumps({'policy_source':str(policy),'policy_hash':h(policy)}))
-PY
-  cat > "$T/bin/ic" <<'SH'
-#!/usr/bin/env bash
-if [[ " $* " == *" route list "* ]]; then cat "$RECORDS"; else printf '{}\n'; fi
-SH
-  chmod +x "$T/bin/ic"
+  printf '{}\n' > "$T/binding.json"
+  printf '{}\n' > "$T/route.json"
 }
 
 @test "native operations require an authoritative binding before inference" {
@@ -188,19 +126,20 @@ SH
   repo="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   FIXTURE_IN_CHECKOUT="$(mktemp -d "$repo/.native-fixture.XXXXXX")"
   db="$FIXTURE_IN_CHECKOUT/intercore.db"
-  ic init --db="$db"
+  (cd "$FIXTURE_IN_CHECKOUT" && ic init --db="$db")
+  thread="$(python3 -c 'import uuid; print(uuid.uuid4())')"
   lib="$repo/scripts/lib-dispatch-native.sh"
-  key="$(python3 - "$repo/scripts/dispatch_control.py" <<'PY'
+  key="$(python3 - "$repo/scripts/dispatch_control.py" "$thread" <<'PY'
 import importlib.util,sys
 s=importlib.util.spec_from_file_location('c',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
-print(m.native_operation_key('018f47bb-4e58-7abc-8def-0123456789ab','compact'))
+print(m.native_operation_key(sys.argv[2],'compact'))
 PY
 )"
   run env NATIVE_FIXTURE_ROOT="$repo" bash -c '
     source "$1"
-    OPERATION=compact ENGINE=codex VIA=exec WORKDIR="$2" OUTPUT="" MODEL=fixture SANDBOX=workspace-write
+    OPERATION=compact ENGINE=flere VIA=exec WORKDIR="$2" OUTPUT="" MODEL=fixture SANDBOX=workspace-write
     DISPATCH_ID=fixture-dispatch ATTEMPT_ID=fixture-attempt ROLE="" ROLE_RESOLVED=false
-    RESUME_FROM="" DISPATCH_BINDING_SHA256="" BOUND_NATIVE_THREAD_ID=018f47bb-4e58-7abc-8def-0123456789ab
+    RESUME_FROM="" DISPATCH_BINDING_SHA256="" BOUND_NATIVE_THREAD_ID="$5"
     phase="$(jq -cn --arg key "$4" --arg thread "$BOUND_NATIVE_THREAD_ID" \
       "{schema_version:2,operation:\"compact\",operation_key:\$key,seed_thread_id:\$thread}")"
     first="$(native_fixture_append_audit "$3" started "$phase" ic)"
@@ -209,11 +148,12 @@ PY
     second="$(native_fixture_append_audit "$3" started "$phase" ic)"
     ! native_fixture_elect "$3" "$4" "$second" ic >/dev/null 2>&1
     printf "%s %s\n" "$first" "$second"
-  ' bash "$lib" "$repo" "$db" "$key"
+  ' bash "$lib" "$repo" "$db" "$key" "$thread"
   [ "$status" -eq 0 ]
   [ "$(wc -w <<< "$output")" -eq 2 ]
+  second="$(awk '{print $2}' <<< "$output")"
 
-  run ic --db="$db" lock acquire native-resource "$key" --timeout=1s --owner=999999:fixture-host
+  run bash -c 'cd "$1"; ic --db="$2" lock acquire native-resource "$3" --timeout=1s --owner=999999:fixture-host' bash "$FIXTURE_IN_CHECKOUT" "$db" "$key"
   [ "$status" -eq 0 ]
   python3 - "$key" <<'PY'
 import json,pathlib,sys
@@ -222,4 +162,6 @@ v=json.loads(p.read_text());v['created']=0;p.write_text(json.dumps(v))
 PY
   run env NATIVE_FIXTURE_ROOT="$repo" bash -c 'source "$1"; native_fixture_lock_acquire "$2" native-resource "$3" ic && native_fixture_lock_release "$2" native-resource "$3" ic' bash "$lib" "$db" "$key"
   [ "$status" -eq 0 ]
+  run env NATIVE_FIXTURE_ROOT="$repo" bash -c 'source "$1"; native_fixture_elect "$2" "$3" "$4" ic' bash "$lib" "$db" "$key" "$second"
+  [ "$status" -ne 0 ]
 }

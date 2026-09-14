@@ -17,6 +17,9 @@ readonly GAWK_URL=https://ftp.gnu.org/gnu/gawk/gawk-5.3.1.tar.xz
 readonly GAWK_ARCHIVE_SHA256=694db764812a6236423d4ff40ceb7b6c4c441301b72ad502bb5c27e00cd56f78
 readonly GO_URL=https://go.dev/dl/go1.26.4.linux-amd64.tar.gz
 readonly GO_ARCHIVE_SHA256=1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f
+readonly NATIVE_CODEX_URL=https://github.com/openai/codex/releases/download/rust-v0.154.0/codex-x86_64-unknown-linux-musl.tar.gz
+readonly NATIVE_CODEX_ARCHIVE_SHA256=d7e18b2597ae8f242f5f31ee9e90deef48dbc9edd634d9868fb6435d08c07f02
+readonly NATIVE_CODEX_ARCHIVE_SIZE=98981886
 readonly IMAGE_SHA256=698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6
 readonly USAGE_MANIFEST_SHA256=c6ff1aa63dbdf72325a5404fd3a8e31c60f58a71acedb9ca9b4902396a72f401
 
@@ -73,6 +76,44 @@ export PATH="$tools_root/bin:$tools_root/go/bin:/usr/local/bin:/usr/bin:/bin:/us
 export GOTOOLCHAIN=local
 [[ $(go version) == 'go version go1.26.4 linux/amd64' ]] || unverifiable "unexpected Go toolchain"
 
+# Actual pinned parser/schema generator only; never put it on the generic
+# codex PATH where a fixture might accidentally launch inference.
+download "$NATIVE_CODEX_URL" "$tools_root/downloads/native-codex.tar.gz" "$NATIVE_CODEX_ARCHIVE_SHA256"
+[[ $(wc -c < "$tools_root/downloads/native-codex.tar.gz") -eq "$NATIVE_CODEX_ARCHIVE_SIZE" ]] || unverifiable "native Codex archive size mismatch"
+[[ $(tar -tzf "$tools_root/downloads/native-codex.tar.gz") == codex-x86_64-unknown-linux-musl ]] || unverifiable "native Codex archive inventory mismatch"
+tar -xzf "$tools_root/downloads/native-codex.tar.gz" -C "$tools_root"
+export NATIVE_TEST_CODEX="$tools_root/codex-x86_64-unknown-linux-musl"
+export NATIVE_TEST_CODEX_SHA256="$(sha256sum "$NATIVE_TEST_CODEX" | cut -d ' ' -f 1)"
+
+# Native fixture schema validation uses only these six declared wheel packages.
+# Verify bytes from uv.lock, then unpack into the private job dependency root.
+# No global installation or dependency resolver/network fallback is involved.
+python3 - "$SOURCE_ROOT/tests/uv.lock" "$tools_root/python" <<'PY'
+import hashlib, io, pathlib, sys, tomllib, urllib.request, zipfile
+from packaging.tags import sys_tags
+from packaging.utils import parse_wheel_filename
+pins=tomllib.loads(pathlib.Path(sys.argv[1]).read_text())
+destination=pathlib.Path(sys.argv[2]); destination.mkdir(mode=0o700)
+tags=set(sys_tags())
+names={'jsonschema','attrs','jsonschema-specifications','referencing','rpds-py','typing-extensions'}
+selected=[p for p in pins['package'] if p['name'] in names]
+assert len(selected)==len(names)
+for package in selected:
+    wheels=[w for w in package['wheels'] if parse_wheel_filename(w['url'].rsplit('/',1)[-1])[3] & tags]
+    assert wheels, 'no declared compatible schema-validation wheel: '+package['name']
+    wheel=wheels[0]; assert wheel['url'].startswith('https://files.pythonhosted.org/packages/')
+    with urllib.request.urlopen(wheel['url'], timeout=60) as response: raw=response.read(4*1024*1024)
+    assert 'sha256:'+hashlib.sha256(raw).hexdigest()==wheel['hash']
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        for item in archive.infolist():
+            relative=pathlib.PurePosixPath(item.filename)
+            assert not relative.is_absolute() and '..' not in relative.parts
+            assert item.file_size<16*1024*1024 and (item.external_attr>>16)&0o170000 != 0o120000
+        archive.extractall(destination)
+PY
+export PYTHONPATH="$tools_root/python"
+python3 -c 'import importlib.metadata,jsonschema; assert importlib.metadata.version("jsonschema") == "4.26.0"'
+
 download "$GAWK_URL" "$tools_root/downloads/gawk.tar.xz" "$GAWK_ARCHIVE_SHA256"
 tar -xJf "$tools_root/downloads/gawk.tar.xz" -C "$tools_root/src"
 (
@@ -124,11 +165,16 @@ git -C "$BUILD_ROOT/core/intercore" cat-file -e "$INTERCORE_SHA^{commit}"
   cd "$BUILD_ROOT/core/intercore"
   go build -trimpath -buildvcs=true -o "$tools_root/bin/ic" ./cmd/ic
 )
-ic_version=$(ic version)
+# Even identity probes receive a DB below their physical cwd.
+mkdir -m 700 "$runtime_root/identity"
+(cd "$runtime_root/identity" && ic --db="$runtime_root/identity/intercore.db" init)
+ic_version=$(cd "$runtime_root/identity" && ic --db="$runtime_root/identity/intercore.db" version)
 [[ "$ic_version" == *'ic 0.3.5'* && "$ic_version" == *"commit: ${INTERCORE_SHA:0:12}"* && "$ic_version" != *dirty* ]] \
   || unverifiable "built Intercore identity does not match reviewed source"
 
 cd "$BUILD_ROOT/os/Clavain"
+mkdir -m 700 .native-ci-identity
+ic --db="$PWD/.native-ci-identity/intercore.db" init
 printf '%s  %s\n' "$USAGE_MANIFEST_SHA256" tests/usage-pilot.json | sha256sum --check - \
   || unverifiable "usage verification contract differs from pinned recipe"
 
@@ -158,8 +204,10 @@ for name in ("bash", "bats", "curl", "gawk", "awk", "gcc", "git", "go", "ic", "j
 root = Path("/workspace/build/core/intercore")
 data = {
     "schema": 1,
-    "image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
+    "expected_image_sha256": "698d1b22ad393190d3d4d2339439fd6bb2ecdb3f6651320049351f4283c156b6",
     "source_sha": os.environ["CI_SOURCE_SHA"],
+    "native_schema_generator": {"path": os.environ["NATIVE_TEST_CODEX"], "sha256": os.environ["NATIVE_TEST_CODEX_SHA256"],
+        "archive_sha256": "d7e18b2597ae8f242f5f31ee9e90deef48dbc9edd634d9868fb6435d08c07f02", "archive_size": 98981886},
     "intercore": {
         "repository_url": subprocess.check_output(["git", "-C", str(root), "remote", "get-url", "origin"], text=True).strip(),
         "commit": subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip(),
@@ -198,6 +246,7 @@ legacy_status=0
 env -i \
   HOME="$legacy_runtime_root/home" TMPDIR="$legacy_runtime_root/tmp" LANG=C LC_ALL=C TZ=UTC \
   PATH="$PATH" GOTOOLCHAIN=local PYTHONDONTWRITEBYTECODE=1 \
+  PYTHONPATH="$PYTHONPATH" NATIVE_TEST_CODEX="$NATIVE_TEST_CODEX" NATIVE_TEST_CODEX_SHA256="$NATIVE_TEST_CODEX_SHA256" \
   CI_SOURCE_SHA="$CI_SOURCE_SHA" \
   bash scripts/ci-verification.sh \
     > "$evidence_root/legacy-verification.stdout" \
@@ -222,6 +271,7 @@ status=0
 env -i \
   HOME="$runtime_root/home" TMPDIR="$runtime_root/tmp" LANG=C LC_ALL=C TZ=UTC \
   PATH="$PATH" GOTOOLCHAIN=local PYTHONDONTWRITEBYTECODE=1 \
+  PYTHONPATH="$PYTHONPATH" NATIVE_TEST_CODEX="$NATIVE_TEST_CODEX" NATIVE_TEST_CODEX_SHA256="$NATIVE_TEST_CODEX_SHA256" \
   CI_SOURCE_SHA="$CI_SOURCE_SHA" \
   LEGACY_VERIFY_TMPDIR="$legacy_runtime_root/tmp" \
   LEGACY_VERIFY_MARKER="$legacy_marker" \

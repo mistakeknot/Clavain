@@ -28,7 +28,7 @@ _prepare_role_audit() {
     ATTEMPT_ID="$(_dispatch_audit_id)"
     CHECKOUT_BEFORE="$(git -C "${WORKDIR:-.}" rev-parse HEAD 2>/dev/null || true)"
   fi
-  if [[ -n "${CLAVAIN_TASK_ENROLLMENT_ID:-}" && "${DISPATCH_OBSERVATION_ATTEMPT_ID:-}" != "$ATTEMPT_ID" ]]; then
+  if [[ "${DISPATCH_NATIVE_FIXTURE:-false}" != true && -n "${CLAVAIN_TASK_ENROLLMENT_ID:-}" && "${DISPATCH_OBSERVATION_ATTEMPT_ID:-}" != "$ATTEMPT_ID" ]]; then
     local helper_dir
     helper_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || return 1
     DISPATCH_EXECUTION_OBSERVATION="$(python3 "$helper_dir/task-delivery.py" \
@@ -76,7 +76,11 @@ _role_audit_context() {
     if [[ "$state" == completed || "$state" == failed ]]; then
       native_operation="$operation_request"
     fi
-    if [[ "$state" == completed || "$state" == failed ]] && [[ -n "${DISPATCH_CONTROL_RESULT:-}" && -f "$DISPATCH_CONTROL_RESULT" ]]; then
+    if [[ "$state" == completed || "$state" == failed ]] && [[ "${DISPATCH_NATIVE_FIXTURE:-false}" == true ]]; then
+      local helper
+      helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/dispatch_control.py"
+      native_operation="$(python3 -c 'import importlib.util,sys; s=importlib.util.spec_from_file_location("c",sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); e=m.strict_json(m.read_regular(sys.argv[2])); r=m.read_operation_envelope(e); assert r["binding_sha256"]==sys.argv[3] and r["seed_thread_id"]==sys.argv[4] and r["dispatch_id"]==sys.argv[5] and r["attempt_id"]==sys.argv[6]; assert r["process"]["exit_code"]==int(sys.argv[7]) and ((sys.argv[8]=="completed") == (r["status"]=="completed")); assert r["resolved_route_sha256"]==m.hashlib.sha256(m.canonical(m.strict_json(sys.argv[9])).encode()).hexdigest() and r["database_identity"]["path"]==sys.argv[10]; print(m.canonical(e))' "$helper" "$DISPATCH_CONTROL_RESULT" "$DISPATCH_BINDING_SHA256" "$BOUND_NATIVE_THREAD_ID" "$DISPATCH_ID" "$ATTEMPT_ID" "$exit_code" "$state" "$RESOLVED_ROUTE_JSON" "$CLAVAIN_INTERCORE_DB")" || return 1
+    elif [[ "$state" == completed || "$state" == failed ]] && [[ -n "${DISPATCH_CONTROL_RESULT:-}" && -f "$DISPATCH_CONTROL_RESULT" ]]; then
       native_operation="$(jq -c --arg binding "${RESUME_FROM:-}" --arg binding_sha256 "${DISPATCH_BINDING_SHA256:-}" \
         --arg result_path "$DISPATCH_CONTROL_RESULT" \
         '. + {binding_path:$binding,binding_sha256:$binding_sha256,operation_result_path:$result_path}' \
@@ -106,6 +110,7 @@ _role_audit_context() {
     --argjson native_operation "$native_operation" \
     --argjson native_admission "${DISPATCH_NATIVE_ADMISSION_JSON:-null}" \
     --argjson native_send_intent "${DISPATCH_NATIVE_SEND_INTENT_JSON:-null}" \
+    --argjson fixture "${DISPATCH_NATIVE_FIXTURE:-false}" \
     --argjson usage_collection "${DISPATCH_USAGE_COLLECTION:-null}" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
@@ -121,13 +126,16 @@ _role_audit_context() {
       checkout:{before:$before,after:$after},
       terminal:($state == "completed" or $state == "failed"),
       result:{exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict}}
-      + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)'
+      + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)
+      + (if $fixture then {fixture_only:true,eligible:false} else {} end)'
 }
 
 _record_role_routing_decision() {
   local exit_code="$1" failure_class="$2" state="${3:-}" reason="$FALLBACK_REASON" context
   [[ -n "$ROLE" && "$ROLE_RESOLVED" == true ]] || return 0
-  command -v ic >/dev/null 2>&1 || return 1
+  local audit_ic=ic
+  [[ "${DISPATCH_NATIVE_FIXTURE:-false}" != true ]] || audit_ic="${DISPATCH_NATIVE_IC:-ic}"
+  command -v "$audit_ic" >/dev/null 2>&1 || return 1
   if [[ -z "$state" ]]; then
     state=completed
     [[ "$exit_code" == 0 ]] || state=failed
@@ -149,7 +157,7 @@ _record_role_routing_decision() {
     DISPATCH_USAGE_ATTEMPT="$ATTEMPT_ID"
   fi
   context="$(_role_audit_context "$state" "$exit_code" "$failure_class")" || return 1
-  local -a record_cmd=(ic route record "--agent=${NAME:-$ROLE}" "--model=$MODEL"
+  local -a record_cmd=("$audit_ic" route record "--agent=${NAME:-$ROLE}" "--model=$MODEL"
     --rule=dispatch-profile "--role=$ROLE" "--profile=$RESOLVED_PROFILE_REF"
     "--dispatch=$DISPATCH_ID" "--context=$context"
     "--policy-hash=$(jq -r '.policy_hash // empty' <<< "${RESOLVED_ROUTE_JSON:-null}")"
@@ -185,6 +193,12 @@ _record_role_routing_decision() {
     fi
     record_cmd+=("--db=$task_db" "--project=$project_dir")
     audit_workdir="$(dirname "$task_db")"
+  fi
+  if [[ "${DISPATCH_NATIVE_FIXTURE:-false}" == true ]]; then
+    # Same real writer, including route-record enrichment; fixture orchestrator
+    # retains the committed ID and reads back the full authoritative context.
+    (cd "$audit_workdir" && "${record_cmd[@]}" --json)
+    return $?
   fi
   if ! (cd "$audit_workdir" && "${record_cmd[@]}") >/dev/null 2>&1; then
     echo "Error: cannot persist $state routing decision for '$ROLE/$RESOLVED_PROFILE_REF'" >&2
