@@ -2,9 +2,9 @@
 
 [![Tests](https://github.com/mistakeknot/Clavain/actions/workflows/test.yml/badge.svg)](https://github.com/mistakeknot/Clavain/actions/workflows/test.yml)
 
-Clavain is a product development interharness optimized for human/machine comparative advantage — the OS layer of [Sylveste](https://github.com/mistakeknot/Sylveste), an autonomous software development agency platform. It codifies product and engineering discipline into composable workflows for building software from brainstorm to ship, and runs on Claude Code, Codex, and Kimi Code, using cross-model second opinions where their different failure modes help. Through knowledge compounding, doc freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
+Clavain is a product development agent rig optimized for human/machine comparative advantage — the OS layer of [Sylveste](https://github.com/mistakeknot/Sylveste), an autonomous software development agency platform. It codifies product and engineering discipline into composable workflows for building software from brainstorm to ship, and runs on Claude Code, Codex, Hermes, and Kimi Code, using cross-model second opinions where their different failure modes help. Through knowledge compounding, context freshness monitoring, domain-aware agent generation, and session evidence capture, Clavain gets better at building your project the more you use it.
 
-With 26 skills, 6 agents, and 57 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code at this directory and ask it to review the plugin against how you like to work. It's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
+With 26 skills, 6 agents, and 57 commands, there is a lot here (and it is constantly changing). Before installing, point Claude Code/Codex/your favorite agent at this directory and ask it to review the plugin against how you like to work. If you're on Claude Code, it's especially helpful to [run `/insights` first](https://x.com/trq212/status/2019173731042750509) so Claude Code can evaluate Clavain against your actual historical usage patterns.
 
 ## Install
 
