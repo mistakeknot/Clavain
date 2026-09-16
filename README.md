@@ -69,7 +69,7 @@ Single-file bootstrap target: `.codex/INSTALL.md`
 
 Clavain serves three concentric circles, inner circle first:
 
-1. **Personal rig.** Optimized relentlessly for one product-minded engineer's workflow. The primary goal is to make a single person as effective as a full team without losing the fun parts of building.
+1. **My personal rig.** Optimized relentlessly for my workflow and projects. The primary goal is to make a single person as effective as a full team without losing the parts of building I find fun and important.
 2. **Reference implementation.** Shows what's possible with disciplined multi-agent engineering and sets conventions for plugin structure, skill design, and agent orchestration.
 3. **Research artifact.** Demonstrates what disciplined human-AI collaboration looks like in practice by solving real problems under real constraints and publishing the results.
 
