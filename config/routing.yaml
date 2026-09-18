@@ -105,7 +105,15 @@ subagents:
       model: sonnet
 
 reasoning:
-  frontier_models: [gpt-6-astra, claude-fable-5-1]
+  # gpt-6-astra and claude-fable-5-1 are the two frontier authors. claude-opus-5
+  # is eligible ONLY as a declared capacity substitute (mk ruling 2026-09-10,
+  # widened to the default policy by mk-9yyt): it appears last in every chain it
+  # belongs to, so it is never selected while a frontier primary is reachable,
+  # and the structural producer_model_conflict check still applies to it. Listing
+  # it here is the eligibility half of the two-gate contract; the selection half
+  # is the ordered `fallbacks:` on each tier below. Both are required — a chain
+  # entry that is not frontier-eligible is dropped with reason `frontier_required`.
+  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]
   frontier_reasons: [unresolved-success-criteria, foundational-invariants, broad-consequences, difficult-verification, capability-failure]
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
@@ -153,21 +161,59 @@ dispatch:
       reasoning_effort: xhigh
       service_tier: standard
       minimum_codex_version: 0.153.1
-      fallbacks: [review-fable]
+      # planning-fable, not review-fable (mk-9yyt). Chains are walked transitively:
+      # while the authoring head pointed at a plan-review profile, every seat added
+      # to the review lane also became reachable from planning, and a frontier-
+      # planning receipt reported `role: plan-review`. Same model and same effort
+      # as before — only the profile object differs — and the two lanes are now
+      # independent, so the review-side capacity seat cannot silently change who
+      # authors a plan. Whether frontier AUTHORING should also gain an Opus
+      # capacity seat is a separate ruling; today it still fails closed, which
+      # tests/routing/reasoning-contract-test.sh asserts.
+      fallbacks: [planning-fable]
+    planning-fable:
+      role: frontier-planning
+      backend: claude
+      model: fable
+      reasoning_effort: high
+      service_tier: standard
+      description: Frontier authoring fallback when Astra is unavailable
     review-fable:
       role: plan-review
       backend: claude
       model: fable
       reasoning_effort: high
       service_tier: standard
-      fallbacks: [planning-astra]
+      # review-opus is the third seat (mk-9yyt). Without it a Fable-authored plan
+      # had exactly ONE eligible reviewer: review-fable is removed structurally by
+      # producer_model_conflict and the Astra seat became the primary with an EMPTY
+      # fallback_chain, so an Astra outage stopped the gate dead. Cross-lab review
+      # is still preferred — Astra is first and Opus is reached only when both
+      # frontier primaries are excluded, by producer conflict or by an observed
+      # capacity failure.
+      fallbacks: [review-astra, review-opus]
+    review-astra:
+      role: plan-review
+      backend: codex
+      model: gpt-6-astra
+      reasoning_effort: xhigh
+      service_tier: standard
+      minimum_codex_version: 0.153.1
+      # The review lane's own Astra seat: same model and effort planning-astra
+      # supplied here before mk-9yyt, without re-entering the authoring chain.
+      description: Cross-lab reviewer for Claude-authored plans
     review-opus:
       role: plan-review
       backend: claude
       model: claude-opus-5
       reasoning_effort: high
       service_tier: standard
-      description: Explicit capacity-policy substitute for Fable; unavailable in default frontier routes
+      # No fallbacks: Opus must not end up reviewing its own work, and this seat is
+      # the terminus of the review capacity chain, not a general frontier peer.
+      # Same-lab review (Anthropic reviewing Anthropic) is the declared degradation,
+      # never the default — see docs/canon/reasoning-routing.md § Capacity failure
+      # and fallback.
+      description: Declared capacity substitute for plan review when no cross-lab reviewer is reachable
     pilot-opus:
       role: main-integrator
       backend: main
@@ -231,14 +277,36 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      fallbacks: [scout-sonnet]
       description: Repository exploration and bounded read-only reconnaissance
+    scout-sonnet:
+      role: scout
+      backend: claude
+      model: claude-sonnet-5
+      reasoning_effort: high
+      service_tier: standard
+      # Not kimi: the Kimi seat runs a toolless agent file (goal 60771535, run
+      # 120d9aa1) and scouting is exactly the work that needs repository tools.
+      description: Capacity fallback for scout when the Codex lane is out of usage
     routine-sol:
       role: routine-execution
       backend: codex
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      fallbacks: [routine-sonnet]
       description: High-volume routine implementation
+    routine-sonnet:
+      role: routine-execution
+      backend: claude
+      model: claude-sonnet-5
+      reasoning_effort: high
+      service_tier: standard
+      # Same seat the ci-campaign-pilot profile already declares for this role
+      # (pilot-sonnet), so the substitute is not a new quality claim. Non-frontier
+      # role: no floor is crossed. An elevated context redirects routine-execution
+      # to deep-execution before this chain is reached.
+      description: Capacity fallback for routine execution when the Codex lane is out of usage
     deep-astra:
       role: deep-execution
       backend: codex
@@ -254,7 +322,20 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: xhigh
       service_tier: standard
+      # deep-astra reaches deep-opus transitively through this list. Sol stays
+      # ahead of Opus: when only Astra is out, the cheaper Codex seat is correct.
+      fallbacks: [deep-opus]
       description: Deep-execution fallback for explicit Astra unavailability
+    deep-opus:
+      role: deep-execution
+      backend: claude
+      model: claude-opus-5
+      reasoning_effort: high
+      service_tier: standard
+      # Frontier-eligible, so it survives the frontier_required filter that removes
+      # deep-sol from an elevated context. Before mk-9yyt an elevated deep-execution
+      # had gpt-6-astra as its ONLY eligible seat and an empty chain.
+      description: Capacity fallback for deep execution when the Codex lane is out of usage
     validation-opus:
       role: validation
       backend: claude
@@ -306,7 +387,17 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      fallbacks: [release-sonnet]
       description: Release packet and documentation preparation
+    release-sonnet:
+      role: release-preparation
+      backend: claude
+      model: claude-sonnet-5
+      reasoning_effort: high
+      service_tier: standard
+      # Preparation only. release-authority is a separate role and is unchanged:
+      # commit/push/deploy authority stays with the main integrator.
+      description: Capacity fallback for release preparation when the Codex lane is out of usage
     release-authority-main:
       role: release-authority
       backend: main

@@ -63,17 +63,97 @@ overlay; the `ci-campaign-pilot` overlay requires `scope: mk-ag2s`. Its Opus
 coordinator / Sonnet execution / Sol review mix is confined to that campaign.
 Default complex planning, review, and execution retain Astra and Fable.
 
-The user's 2026-09-10 ruling requires Opus 5 as Fable's capacity fallback,
-including independent plan review. Record the observed capacity failure, then
-freeze a separate policy snapshot that adds `claude-opus-5` to eligible models
-and selects `review-opus` for the affected review role. Bind its hash, producer
-identity and capacity evidence before starting. The default policy retains its
-frontier eligibility and fallback chains; it must still select Astra to review
-Fable's work. Scope a capacity snapshot to reviews of the bound producer from
-another lab; reviews of Claude-authored work keep the default independent route.
-Opus's capacity profile has no fallback, so it cannot review its own work.
-Preserve the packaged default policy. Never rewrite a failed attempt or infer
-zero usage from a quota error.
+## Capacity failure and fallback
+
+Capacity exhaustion is an operational failure. It consumes no capability strike,
+and it must neither silently downgrade the work nor silently stall it. The remedy
+is a declared, ordered fallback that is visible in the receipt.
+
+The user's 2026-09-10 ruling makes Opus 5 the capacity substitute for a frontier
+seat, including independent plan review. As of mk-9yyt that substitution lives in
+the packaged default policy rather than in a per-caller snapshot: `claude-opus-5`
+is listed in `reasoning.frontier_models`, and `review-opus`, `deep-opus`,
+`routine-sonnet`, `scout-sonnet` and `release-sonnet` are the last entries of the
+chains that reach them. `plan-review`, `deep-execution`, `routine-execution`,
+`scout` and `release-preparation` therefore each have a reachable destination
+outside the Codex lane. Ordering carries the preference: a substitute is selected
+only after the seats ahead of it are excluded, so the default routes are unchanged
+while the primaries are up.
+
+Three roles deliberately have no capacity substitute. `main-integrator` and
+`release-authority` belong to the running main session; resolving them elsewhere
+would not change the running parent model and substituting release authority is an
+authority change rather than a fallback. Frontier authoring — `planning`,
+`frontier-planning`, `escalation` — keeps Astra with Fable as its only fallback and
+fails closed when both are out, because a review-side substitute must not silently
+change who authors a plan. The review and authoring lanes are separate profile
+chains (`review-fable`/`review-astra`/`review-opus` against
+`planning-astra`/`planning-fable`) so that adding a seat to one cannot reach the
+other. Extending the substitute to frontier authoring is an open ruling, not an
+oversight.
+
+**Scope correction (mk-9yyt).** The earlier wording — *scope a capacity snapshot
+to reviews of the bound producer from another lab; reviews of Claude-authored work
+keep the default independent route* — excluded the exact failure it existed to
+remedy. Routing-table v2 puts the `strategized` and `planned` phases on Fable, so
+most plans are Claude-authored; "keep the default independent route" sent those
+reviews back to Astra, the seat that was down, and `plan-review` resolved with an
+empty `fallback_chain`. The rule is corrected to read: **a capacity substitute is
+scoped by the seat that failed, not by the producer's lab.** Cross-lab review
+remains preferred and is still ordered first; same-lab review by a distinct
+frontier model is the declared degradation when no cross-lab seat is reachable.
+The preference is a preference, not a gate — a stalled review gate is the worse
+outcome, and the receipt records which seats were excluded and why.
+
+Reviewer separation is not part of that degradation. It is enforced structurally,
+below the policy layer: a candidate whose canonical identity matches the producer
+is removed with reason `producer_model_conflict`, primary and fallbacks alike, and
+no policy edit can express "the author reviews itself". A capacity fallback must
+therefore always resolve to a model distinct from the bound producer. Graceful
+degradation never becomes collapsed independence. `review-opus` carries no
+fallbacks of its own, so Opus cannot review Opus.
+
+Selecting a substitute takes **two gates, not one**: `reasoning.frontier_models`
+supplies eligibility and `dispatch.roles.<role>` plus the tier's ordered
+`fallbacks` supply selection. Setting only the second returns
+`role "plan-review": no eligible model satisfies reasoning contract`.
+
+### Recording an observed capacity failure
+
+Do not edit the packaged policy for an outage, and do not infer a capacity failure
+from a prior report. Probe the seat, keep the actual error, and record what was
+observed:
+
+1. Write the evidence to `.clavain/capacity/<date>-<seat>-<failure>.md`: the probe
+   command and its verbatim output, the time of the probe, and the reset time if
+   the provider gave one. Usage after a quota error is **unknown**, never zero, and
+   a failed attempt is retained rather than rewritten.
+2. Add `available_models` to the decision context with the models actually
+   observed available. The field is authoritative when present: omission of the
+   field means unprobed, an empty array means none, and any model absent from a
+   present array is excluded. Unavailable seats then leave the chain with reason
+   `model_unavailable` and the resolver walks to the next declared candidate.
+3. Re-resolve and keep the receipt. The exclusions, the selected profile and the
+   policy hash are the audit trail; no snapshot is needed for any chain that
+   already reaches a distinct eligible seat.
+
+```bash
+scripts/capacity-fallback.sh --seat gpt-6-astra \
+  --context .clavain/decisions/<plan>.json \
+  --evidence .clavain/capacity/<date>-astra-usage-limit.md \
+  --role plan-review --producer-identity claude-fable-5-1
+```
+
+The helper merges `available_models` into a copy of the decision context, refuses
+to proceed without capacity evidence, re-resolves each named role, and fails when
+a resolution would land on the producer. It changes no policy file.
+
+A frozen policy snapshot remains the last resort, for the case where even the
+widened chain reaches nothing eligible. Build it as the packaged default plus the
+smallest possible addition, so the entire scope of the exception is visible in one
+`diff`; bind its SHA256, the producer identity and the capacity evidence before
+starting; and preserve the packaged default unmodified.
+
 A started dispatch with incomplete accounting still stops its dependent work;
 the fallback is a separately authorized attempt with its own receipt.
 

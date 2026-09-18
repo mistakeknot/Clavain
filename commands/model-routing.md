@@ -17,16 +17,21 @@ Execution authority is explicit. Resolve the complete profile with `ic route dis
 
 | Role | Primary route | Policy |
 |------|---------------|--------|
-| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-5.6 Sol xhigh until Astra account access succeeds |
-| `scout` | GPT-5.6 Sol high | Read-only exploration |
-| `routine-execution` | GPT-5.6 Sol high | High-volume coding |
-| `deep-execution` | GPT-6 Astra high, Standard | Sol xhigh only for explicit model/account/version unavailability |
+| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-5.6 Sol xhigh until Astra account access succeeds. No Claude capacity seat: this is the running session's own orchestration |
+| `scout` | GPT-5.6 Sol high | Read-only exploration; Sonnet 5 high is the capacity seat when the Codex lane is out |
+| `routine-execution` | GPT-5.6 Sol high | High-volume coding; Sonnet 5 high is the capacity seat when the Codex lane is out |
+| `deep-execution` | GPT-6 Astra high, Standard | Sol xhigh only for explicit model/account/version unavailability, then Opus 5 high. A frontier-classified task skips Sol — it is not frontier-eligible — and degrades straight to Opus |
+| `plan-review` | Fable high | Cross-lab first: Astra xhigh when Fable is the producer. Opus 5 high is the last resort and the only same-lab route; `producer_model_conflict` still removes any candidate equal to the producer |
 | `validation` | Claude Opus 5 high | Must differ from the producer; Sonnet 5, then Sol, then Kimi fallbacks. Fable left routine validation on 2026-09-08 (mk ruling); it stays on `plan-review` and `escalation` |
-| `release-preparation` | GPT-5.6 Sol high | Returns a compact release packet |
-| `release-authority` | main integrator | Never delegated implicitly |
+| `release-preparation` | GPT-5.6 Sol high | Returns a compact release packet; Sonnet 5 high is the capacity seat when the Codex lane is out |
+| `release-authority` | main integrator | Never delegated implicitly. No capacity seat: substituting release authority is an authority change, not a fallback |
 | `cross-lab-review` | provider/model unlike producer | Sealed first-pass findings |
 
+Frontier authoring (`planning`, `frontier-planning`, `escalation`) stays on Astra with Fable as its only fallback and **fails closed** when both are out. That is deliberate: a review substitute must not silently change who authors a plan.
+
 HTTP 429 retries are bounded and remain on the same resolved model. Misalignment-policy 403s and all other configuration 4xx responses are terminal and never trigger model/backend fallback. Bounded work uses headless execution; clarification-prone or long work uses `--via zaka` for steering.
+
+Capacity exhaustion is operational, not a capability strike. Record the probe under `.clavain/capacity/`, then re-resolve with the observed availability rather than editing the policy — `scripts/capacity-fallback.sh --seat <model> --context <decision.json> --evidence <note.md> --role <role>`. See `docs/canon/reasoning-routing.md` § Capacity failure and fallback.
 
 Pattern F uses `brief` by default for Astra and other capable executors: objective, scope, constraints, authority, acceptance criteria, verification, and deliverables. Use `exact` only when migrations, weaker-executor compatibility, or risk require prescribed mechanics. The executor owns implementation and test loops; the validator reports acceptance replay plus `BEYOND THE GAUGE`. Final acceptance always checks the actual checkout.
 
