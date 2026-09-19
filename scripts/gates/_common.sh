@@ -359,6 +359,16 @@ gate_record_signed() {
   if [[ -n "$bead" ]]; then
     args+=( --bead="$bead" )
   fi
+  # The vetted SHA the decision was made against. `policy record-signed` has
+  # always accepted --vetted-sha (authz_sign.go), and bead-close.sh passes it to
+  # `policy check`, but this builder never forwarded it — so every signed row
+  # recorded an empty vetted_sha while the evaluator had a real one. The audit
+  # trail is the estate's record of WHAT AUTHORITY WAS USED; without this field
+  # it cannot evidence that a close was vetted, and 20 of 20 empty rows read as
+  # a fail-open that was not one (Sylveste-ymp2 stage B, 2026-09-19).
+  if [[ -n "${CLAVAIN_VETTED_SHA:-}" ]]; then
+    args+=( --vetted-sha="$CLAVAIN_VETTED_SHA" )
+  fi
   # Whether the ceiling changed this decision is the one delegation fact the
   # recorder cannot re-derive later: it depends on what the policy would have
   # said, which only the check that already ran knows. Everything else about
