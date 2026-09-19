@@ -167,10 +167,17 @@ dispatch:
       # planning receipt reported `role: plan-review`. Same model and same effort
       # as before — only the profile object differs — and the two lanes are now
       # independent, so the review-side capacity seat cannot silently change who
-      # authors a plan. Whether frontier AUTHORING should also gain an Opus
-      # capacity seat is a separate ruling; today it still fails closed, which
-      # tests/routing/reasoning-contract-test.sh asserts.
-      fallbacks: [planning-fable]
+      # authors a plan.
+      #
+      # planning-opus is the third authoring seat (mk ruling 2026-09-18). It was
+      # deliberately absent when the lanes were split: authoring failed closed
+      # when both frontier labs were out. mk ruled that asymmetric — Opus is
+      # already in frontier_models and already authorised to independently review
+      # a frontier-authored plan, which is the harder job, so refusing to let it
+      # author in an emergency was arbitrary. It stays LAST: a substitute is
+      # reached only once both frontier primaries are excluded, so a healthy
+      # estate still authors on Astra, then Fable.
+      fallbacks: [planning-fable, planning-opus]
     planning-fable:
       role: frontier-planning
       backend: claude
@@ -178,6 +185,13 @@ dispatch:
       reasoning_effort: high
       service_tier: standard
       description: Frontier authoring fallback when Astra is unavailable
+    planning-opus:
+      role: frontier-planning
+      backend: claude
+      model: claude-opus-5
+      reasoning_effort: high
+      service_tier: standard
+      description: Declared capacity substitute for frontier authoring when neither frontier lab is reachable (mk ruling 2026-09-18)
     review-fable:
       role: plan-review
       backend: claude

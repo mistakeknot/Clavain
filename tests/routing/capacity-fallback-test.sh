@@ -200,4 +200,37 @@ fi
 [[ "$out" == *"no eligible model satisfies reasoning contract"* ]] \
   || fail "unexpected refusal for a selection-only substitute: $out"
 
+# ---------------------------------------------------------------------------
+# 7. FRONTIER AUTHORING has its own capacity seat (mk ruling 2026-09-18) and it is
+#    LAST. Authoring previously failed closed when both frontier labs were out.
+#    Two properties, and the second is the one worth guarding: a reachable Astra
+#    must still author every plan, so the substitute can never become preferred.
+# ---------------------------------------------------------------------------
+receipt="$(resolve "$POLICY" planning "$WORK/c-front.json")" \
+  || fail "frontier authoring refused while Astra is reachable: $receipt"
+echo "$receipt" | jq -e '.profile.model_identity == "gpt-6-astra"' >/dev/null \
+  || fail "frontier authoring no longer prefers Astra while it is reachable: $receipt"
+
+ctx "$WORK/frontier.json" '["claude-opus-5"]' "$WORK/c-opus-only.json"
+receipt="$(resolve "$POLICY" planning "$WORK/c-opus-only.json")" \
+  || fail "frontier authoring has no seat when neither frontier lab is reachable: $receipt"
+echo "$receipt" | jq -e '
+  .profile_ref == "planning-opus"
+  and .profile.role == "frontier-planning"
+  and .frontier_required
+' >/dev/null || fail "frontier authoring capacity route is wrong: $receipt"
+
+# Mutation check: dropping the seat must restore the old fail-closed behaviour,
+# so a silent revert of the ruling cannot pass this suite.
+python3 - "$POLICY" "$WORK/no-authoring-seat.yaml" <<'PYMUT'
+import sys
+t = open(sys.argv[1]).read()
+t = t.replace("      fallbacks: [planning-fable, planning-opus]\n",
+              "      fallbacks: [planning-fable]\n")
+open(sys.argv[2], "w").write(t)
+PYMUT
+if out="$(resolve "$WORK/no-authoring-seat.yaml" planning "$WORK/c-opus-only.json")"; then
+  fail "authoring-seat mutation still resolved; the test does not detect a revert: $out"
+fi
+
 echo "PASS: capacity fallbacks reach a distinct, frontier-appropriate seat and never the producer"

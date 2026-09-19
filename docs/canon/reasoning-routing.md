@@ -80,17 +80,27 @@ outside the Codex lane. Ordering carries the preference: a substitute is selecte
 only after the seats ahead of it are excluded, so the default routes are unchanged
 while the primaries are up.
 
-Three roles deliberately have no capacity substitute. `main-integrator` and
+Two roles deliberately have no capacity substitute. `main-integrator` and
 `release-authority` belong to the running main session; resolving them elsewhere
 would not change the running parent model and substituting release authority is an
-authority change rather than a fallback. Frontier authoring — `planning`,
-`frontier-planning`, `escalation` — keeps Astra with Fable as its only fallback and
-fails closed when both are out, because a review-side substitute must not silently
-change who authors a plan. The review and authoring lanes are separate profile
-chains (`review-fable`/`review-astra`/`review-opus` against
-`planning-astra`/`planning-fable`) so that adding a seat to one cannot reach the
-other. Extending the substitute to frontier authoring is an open ruling, not an
-oversight.
+authority change rather than a fallback.
+
+Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
+`planning-astra`, then `planning-fable`, then `planning-opus` (mk ruling
+2026-09-18). It previously failed closed when both frontier labs were out. mk
+ruled that asymmetric: `claude-opus-5` is already in `reasoning.frontier_models`
+and is already authorised to independently review a frontier-authored plan, which
+is the harder job, so refusing to let it author in an emergency was arbitrary.
+The substitute stays last, so a reachable Astra still authors every plan.
+
+The review and authoring lanes remain separate profile chains
+(`review-fable`/`review-astra`/`review-opus` against
+`planning-astra`/`planning-fable`/`planning-opus`) so that adding a seat to one
+cannot reach the other. That separation, not a refusal, is what keeps a
+review-side substitute from silently changing who authors a plan;
+`tests/routing/reasoning-contract-test.sh` asserts an authoring receipt is
+unchanged by edits to the review lane, and that Astra is still preferred while
+reachable.
 
 **Scope correction (mk-9yyt).** The earlier wording — *scope a capacity snapshot
 to reviews of the bound producer from another lab; reviews of Claude-authored work
