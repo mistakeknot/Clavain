@@ -49,9 +49,26 @@ REVIEW_DEPTH=2
 export CLAVAIN_REVIEW_TOKENS="$REVIEW_TOKENS"
 export CLAVAIN_REVIEW_FILE_COUNT="$CHANGED_FILES"
 export CLAVAIN_REVIEW_DEPTH="$REVIEW_DEPTH"
+
+# Ship-class eligibility, decided HERE and PRINTED. The shortcut below skips
+# Phases 2-3, which is where fd-safety is enforced as a mandatory reviewer, so
+# the decision has to be made before the shortcut is considered rather than
+# inside the guard it skips. Printed, not exported: each fence runs in its own
+# shell and an exported variable does not survive to the next one.
+SHIP_CLASS_LIB="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}/scripts/lib-ship-class.sh"
+if [[ -r "$SHIP_CLASS_LIB" ]]; then
+    # shellcheck source=scripts/lib-ship-class.sh
+    source "$SHIP_CLASS_LIB"
+    { git diff --name-only HEAD; git diff --cached --name-only; } | review_path_decision
+else
+    echo "REVIEW_PATH=full"
+    echo "REVIEW_PATH_REASON=cannot resolve lib-ship-class.sh at ${SHIP_CLASS_LIB} — failing closed rather than shortcutting an unclassified diff"
+fi
 ```
 
-**Small change shortcut:** If `DIFF_LINES < 20` and `CHANGED_FILES == 1`, resolve `fd-quality` through B2 in shadow mode, then run only that single fd-quality agent directly (Task tool, `subagent_type: "interflux:review:fd-quality"`, `model: "${FD_QUALITY_MODEL}"`). Include the diff in the prompt. Skip Phases 2-3. After agent returns, jump to Phase 4.
+**Small change shortcut:** If `DIFF_LINES < 20` and `CHANGED_FILES == 1` **and the block above printed `REVIEW_PATH=shortcut-eligible`**, resolve `fd-quality` through B2 in shadow mode, then run only that single fd-quality agent directly (Task tool, `subagent_type: "interflux:review:fd-quality"`, `model: "${FD_QUALITY_MODEL}"`). Include the diff in the prompt. Skip Phases 2-3. After agent returns, jump to Phase 4.
+
+**`REVIEW_PATH=full` overrides the size test.** A ship-class diff takes the full path however small it is — one line touching one hook script still runs Phases 2-3, because `fd-safety` is a mandatory reviewer for those surfaces and the shortcut is the one route that skips it. Do not shortcut on the grounds that the change looks trivial; that is the case the rule exists for.
 
 ```bash
 ROUTING_LIB="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}/scripts/lib-routing.sh"
@@ -145,7 +162,17 @@ fi
 # synthesis gate (Phase 3b) still decides pass/fail on the findings; this guard
 # only enforces that the mandatory reviewer actually ran. Mirrors the synthesis
 # freshness guard above. Override: CLAVAIN_SKIP_SECURITY='reason'.
-SHIP_CLASS_RE='(^|/)plugin\.json$|(^|/)mcp-[^/]*\.(json|ya?ml)$|(^|/)mcp-server\.|(^|/)hooks/[^/]*\.(sh|py|ts|js)$|(^|/)hooks\.json$|(^|/)(interlock|authorization|capability)[^/]*\.(json|ya?ml)$|(^|/)\.clavain/keys/|shell-exec'
+# One definition, shared with the Phase 1 eligibility decision above. A second
+# inline copy is how the two answers drift apart.
+SHIP_CLASS_LIB="${CLAVAIN_SOURCE_DIR:-${CLAVAIN_DIR:-${CLAUDE_PLUGIN_ROOT:-}}}/scripts/lib-ship-class.sh"
+if [[ -r "$SHIP_CLASS_LIB" ]]; then
+    # shellcheck source=scripts/lib-ship-class.sh
+    source "$SHIP_CLASS_LIB"
+    SHIP_CLASS_RE="$CLAVAIN_SHIP_CLASS_RE"
+else
+    echo "quality-gates: cannot resolve lib-ship-class.sh at ${SHIP_CLASS_LIB}; cannot classify the diff. Gate FAILS CLOSED." >&2
+    exit 1
+fi
 changed_files=$(grep -E '^\+\+\+ b/' "$DIFF_PATH" 2>/dev/null | sed 's|^+++ b/||')
 if printf '%s\n' "$changed_files" | grep -Eq "$SHIP_CLASS_RE"; then
     if [[ -n "${CLAVAIN_SKIP_SECURITY:-}" ]]; then
