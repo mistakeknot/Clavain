@@ -11,8 +11,21 @@ import (
 func formatGoalPaste(goalID, condition string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Goal minted: %s\n", goalID)
-	fmt.Fprintf(&b, "Ready to paste:\n\n  /goal %s\n", condition)
+	fmt.Fprintf(&b, "Ready to paste:\n\n  %s\n", withGoalPrefix(condition))
 	return b.String()
+}
+
+// withGoalPrefix adds the /goal command prefix unless the condition already
+// carries it. docs/guide-goal-shape.md's canonical form opens with
+// "/goal <Project> — <outcome>", and goal-form Step 4 writes conditions in
+// that form, so prepending unconditionally emitted "/goal /goal Clavain — ..."
+// — not a command anyone can paste.
+func withGoalPrefix(condition string) string {
+	rest, found := strings.CutPrefix(condition, "/goal")
+	if found && (rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n') {
+		return condition
+	}
+	return "/goal " + condition
 }
 
 // cmdGoalMint lints, mints the intercore Goal entity, optionally binds a
@@ -63,8 +76,17 @@ func cmdGoalMint(args []string) error {
 		return fmt.Errorf("goal-mint: ic goal create: %w", err)
 	}
 	if beadID := flags["bead"]; beadID != "" && bdAvailable() {
-		if _, err := runBD("state", beadID, "ic_goal_id", res.ID); err != nil {
-			fmt.Fprintf(os.Stderr, "goal-mint: bead bind failed (non-fatal): %v\n", err)
+		// `bd state <bead> <dim>` READS one dimension and takes exactly two
+		// arguments; passing a third made every bind fail with "accepts 2
+		// arg(s), received 3", reported as non-fatal, so goals minted unbound
+		// and silently. The writer is `bd set-state <bead> <key>=<value>`.
+		bindArgs := []string{"set-state", beadID, "ic_goal_id=" + res.ID,
+			"--reason", "goal " + res.ID + " minted for this bead"}
+		if _, err := runBD(bindArgs...); err != nil {
+			fmt.Fprintf(os.Stderr,
+				"goal-mint: bead bind failed (non-fatal): %v\n"+
+					"  bind it by hand with: bd %s\n",
+				err, strings.Join(bindArgs, " "))
 		}
 	}
 
