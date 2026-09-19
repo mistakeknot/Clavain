@@ -39,13 +39,30 @@ if ic --json route dispatch --policy="$work/capacity.yaml" --role=plan-review \
 fi
 grep -q 'no model distinct from producer "claude-opus-5"' "$work/producer-route.json"
 jq '.available_models = ["claude-opus-5"]' "$work/context.json" > "$work/opus-only.json"
+# Frontier authoring has its own declared Opus seat as of mk's 2026-09-18 ruling,
+# so with only Opus reachable `planning` resolves rather than refusing. What this
+# guard still protects is the ORIGINAL intent: the authoring lane must reach that
+# seat through its OWN chain, never by leaking across from the review lane. The
+# capacity fixture above rewrites only `plan-review`, so if editing the review
+# lane can change an authoring receipt, the lanes have been re-coupled.
 for policy in "$ROOT/config/routing.yaml" "$work/capacity.yaml"; do
-  if ic --json route dispatch --policy="$policy" --role=planning \
-    --context-file="$work/opus-only.json" > "$work/planning.json" 2>&1; then
-    echo 'FAIL: capacity review substitution changed frontier planning'; exit 1
-  fi
-  grep -q 'no eligible model satisfies reasoning contract' "$work/planning.json"
+  ic --json route dispatch --policy="$policy" --role=planning \
+    --context-file="$work/opus-only.json" > "$work/planning.json"
+  jq -e '.profile_ref == "planning-opus" and .profile.role == "frontier-planning" and .frontier_required' \
+    "$work/planning.json" >/dev/null \
+    || { echo 'FAIL: frontier authoring did not reach its own declared capacity seat'; exit 1; }
 done
+# The review-lane fixture must not have moved the authoring receipt at all.
+if ! cmp -s <(jq -S '.profile' "$work/planning.json") \
+            <(ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=planning \
+                --context-file="$work/opus-only.json" | jq -S '.profile'); then
+  echo 'FAIL: capacity review substitution changed frontier planning'; exit 1
+fi
+# A healthy estate still authors on Astra: the substitute is last, not preferred.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=planning \
+  --context-file="$work/context.json" > "$work/planning-healthy.json"
+jq -e '.profile.model_identity == "gpt-6-astra"' "$work/planning-healthy.json" >/dev/null \
+  || { echo 'FAIL: frontier authoring no longer prefers Astra while it is reachable'; exit 1; }
 for host in codex claude hermes gemini kimi opencode cursor vscode; do
   python3 "$ROOT/scripts/sync-agent-instructions.py" --source "$ROOT" --host "$host" --file "$work/$host.md" >/dev/null
   (cd "$work" && ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=planning --context-file="$work/context.json") > "$work/$host.json"

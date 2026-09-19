@@ -27,7 +27,7 @@ Execution authority is explicit. Resolve the complete profile with `ic route dis
 | `release-authority` | main integrator | Never delegated implicitly. No capacity seat: substituting release authority is an authority change, not a fallback |
 | `cross-lab-review` | provider/model unlike producer | Sealed first-pass findings |
 
-Frontier authoring (`planning`, `frontier-planning`, `escalation`) stays on Astra with Fable as its only fallback and **fails closed** when both are out. That is deliberate: a review substitute must not silently change who authors a plan.
+Frontier authoring (`planning`, `frontier-planning`, `escalation`) runs Astra xhigh, then Fable high, then Opus 5 high (mk ruling 2026-09-18 — Opus already reviews frontier plans, which is the harder job, so refusing to let it author in an emergency was arbitrary). The substitute is last, so a reachable Astra still authors every plan. What keeps a review substitute from changing authoring is that the two lanes are separate profile chains, asserted by `tests/routing/reasoning-contract-test.sh` — not a refusal to resolve.
 
 HTTP 429 retries are bounded and remain on the same resolved model. Misalignment-policy 403s and all other configuration 4xx responses are terminal and never trigger model/backend fallback. Bounded work uses headless execution; clarification-prone or long work uses `--via zaka` for steering.
 
