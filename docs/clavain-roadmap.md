@@ -26,7 +26,7 @@ For companion plugin roadmaps (interflux, interphase, interspect, etc.), see eac
 ## Next (P2) — Planned
 
 ### Sprint system
-- **Sylveste-oac8** Clavain prompt token optimization — phase 2 *(in_progress)*
+- ~~**Sylveste-oac8** Clavain prompt token optimization — phase 2~~ — **stale line, corrected 2026-09-19**. The `oac8` ID is not in the beads DB under any status — the same defect as `lcxa` two lines below, and both date to the 2026-03-19 generation. The phase-2 work shipped across `sylveste-49kl`, `sylveste-1y3r`, `sylveste-zppj`, `Sylveste-q310` and `sylveste-a4oj.10.1`: skill_listing trims plus the CI byte-budget gate at [`scripts/check-skill-listing-budget.sh`](../../../scripts/check-skill-listing-budget.sh). Live successors are goal `572414e3` (session-opening reclaim) and the P1 measurement beads `Sylveste-c53i`, `Sylveste-vvcp`, `Sylveste-opw7` from [docs/research/2026-09-14-frontier-harness-delta.md](../../../docs/research/2026-09-14-frontier-harness-delta.md).
 - **Sylveste-ss15** F3: Progress tracker rollout to remaining 6 commands
 - **Sylveste-7uko** F2: Wire artifact bus into all 10 sprint commands *(blocked)*
 - ~~**Sylveste-lcxa** F4: Graduated autonomy tier system for sprint~~ — **shipped 2026-07-30** as `Sylveste-haqr`. The `lcxa` ID never existed in the beads DB; this line was stale. Runs now derive `auto_advance` from a declared delegation level in kernel state (`ic config set autonomy.delegation_level`), defined in [docs/canon/autonomy.md](../../../docs/canon/autonomy.md).
