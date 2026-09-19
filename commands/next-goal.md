@@ -52,6 +52,7 @@ LOCAL_READY_JSON="[]"
 TRACKER_REACHABLE="false"
 LOOKUP_FAILURES="[]"
 ROADMAP_JSON='{"status":"missing"}'
+SERVING_JSON='{"status":"missing"}'
 if [[ -n "$CANDIDATES_HELPER" ]]; then
     CANDIDATES_JSON=$(bash "$CANDIDATES_HELPER" "$SCOPE" 2>/dev/null) || CANDIDATES_JSON=""
 fi
@@ -60,6 +61,10 @@ if [[ -n "$CANDIDATES_JSON" ]] && jq -e . >/dev/null 2>&1 <<<"$CANDIDATES_JSON";
     TRACKER_REACHABLE=$(jq -r '.tracker_reachable'    <<<"$CANDIDATES_JSON")
     LOOKUP_FAILURES=$(jq -c '.lookup_failures // []'  <<<"$CANDIDATES_JSON")
     ROADMAP_JSON=$(jq -c '.roadmap // {status:"missing"}' <<<"$CANDIDATES_JSON")
+    # What the project is FOR. Resolved by the same helper, from the repo rather
+    # than from any tracker, and {"status":"missing"} on the many repos that
+    # carry none of its three documents.
+    SERVING_JSON=$(jq -c '.serving // {status:"missing"}' <<<"$CANDIDATES_JSON")
 fi
 
 # Remontoire owns canonical promotion discovery. Its helper is read-only and
@@ -126,6 +131,87 @@ goal-complete hook enriches from bd ready + open epics across trackers" while
 the across-trackers part shipped as advice in this paragraph.
 
 ## Step 2: Rank by leverage
+
+### The serving axis — ranked first, above `dependent_count`
+
+`SERVING_JSON` carries what the project is FOR, which the tracker does not know.
+Every other signal in this step ranks work against the backlog's own shape. This
+one ranks it against who is waiting for it.
+
+**When `.serving.status == "missing"`, skip this subsection entirely and rank
+exactly as the rest of Step 2 says.** Say nothing about it in the emitted block.
+Most of the fleet has no charter and no serving map; absence here is the common
+case, not a defect to report. A repo with no serving documents must produce the
+same Next-goal block it produced before this axis existed. Do not stop, do not
+ask for a charter to be written, do not note the gap as a finding. A signal that
+fails closed on a missing file gets switched off, and then it is not carrying
+anything at all.
+
+When `.serving.status == "present"`, read it BEFORE ranking, and state what it
+says before the candidate list. The order is load-bearing: a serving position
+discovered after the shortlist is drawn only ever gets used to justify the
+shortlist.
+
+**What is in it:**
+
+- `.serving.charter.headline` — what the project is for, in its own words.
+  Quoted by the helper, not summarised. Read `.serving.charter.path` in full if
+  the ranking turns on it.
+- `.serving.non_goals.constraints` — standing constraints, by heading.
+- `.serving.map.blocked[]` — the live answer. One entry per `status: deferred`
+  artifact version, carrying `blocked_by`, the ledger's own `reason` for the
+  deferral, and `is_consumer` to tell an external repo from one of this
+  project's own surfaces.
+- `.serving.map.unserved_streak` — trailing deferrals per surface.
+  `{"uncrancher": 2}` means the last two releases shipped that consumer nothing
+  it could use.
+- `.serving.map.schema` — `recognized` means the three keys were found.
+  `unrecognized` or `unparsed` means a file was there and did not answer; rank
+  without it rather than guessing at its shape.
+
+**The rank rule.** A candidate that names a blocked consumer sorts above one
+that cannot. In descending order:
+
+1. Unblocks a row in `.serving.map.blocked` — names its `blocked_by`, or moves
+   the artifact that row says is not moving.
+2. Reaches a registered consumer or surface at all, with no blocked row.
+3. Everything else.
+
+Inside a tier, fall through to `dependent_count`, `priority`, `issue_type` and
+session proximity exactly as before. The serving axis re-orders the tiers; it
+does not replace what orders candidates within one.
+
+A streak beats a single row. One deferral is a decision someone made on purpose
+and usually reads as healthy. `unserved_streak` at 2 or more is a consumer that
+has gone unserved across consecutive releases, and a candidate that ends a
+streak outranks one that unblocks a fresh single row.
+
+**State the position before the list.** When any row is blocked, the block opens
+with a line or two naming what the serving map says — which consumer, on what,
+for how many releases — and only then ranks. Quote the ledger's `reason` rather
+than paraphrasing; it is the project's own writing, and the paraphrase is where
+the fact goes missing.
+
+It is worth being concrete about what this catches, because the failure is
+quiet. On 2026-09-19 jawnomicon's map carried four deferred rows over two
+registered consumers, both at `unserved_streak: 2`, every one `blocked_by:
+jawnomicon-ilgq`, and their reasons said canon was byte-identical across v34,
+v35 and v36 and that neither consumer renders the archetype tier. Three releases
+had shipped nothing any consumer could use. A block that ranked `dependent_count`
+first had no way to see that and did not mention it.
+
+**Non-goals bind the shortlist, not only the drafting.** A candidate that
+crosses a line in `.serving.non_goals` is dropped and named as dropped, with the
+constraint it crosses — the same treatment `deferred_ids` gets below, for the
+same reason: the decision was already made, and re-proposing it silently
+re-opens it. If the constraint now looks wrong, that is a question for the user,
+never a tiebreak for this block. jawnomicon's first non-goal is the worked
+example and reads straight off this axis — it caps measuring an interpretive
+claim on there being a registered consumer that renders the thing measured, so
+`.serving.map` is what says whether a measurement candidate is admissible at
+all.
+
+### The tracker signals
 
 For each candidate in `READY_JSON`, leverage signals available directly from
 the `bd ready --json` schema:
@@ -433,8 +519,14 @@ block. Five consecutive goals shipped unlinted from this path because the
 requirement read as advice; the shape rules it now checks (ventriloquism,
 plan detail, pre-ruled calls) are exactly the defects that got through.
 
-The /goal text follows `docs/guide-goal-shape.md`. The rule that bites most
-often here: you are drafting for the user to paste, so a ruling written in
+The /goal text follows `docs/guide-goal-shape.md`, including its `WHO'S
+WAITING` line — the consumer whose capability changes when this lands, or
+`nobody` written out. When the serving axis above answered, that line names the
+consumer and the `blocked_by` it waits on and needs no further thought. When
+`.serving.status` was `missing`, answer it from the session anyway; `nobody` is
+a complete answer and an absent line is not. The lint does not check it.
+
+The rule that bites most often here: you are drafting for the user to paste, so a ruling written in
 their voice arrives pre-approved as canon. State open calls as questions and
 keep your recommendation in the prose above the block, where it reads as your
 recommendation.

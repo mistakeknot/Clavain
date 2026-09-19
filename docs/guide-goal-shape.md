@@ -28,6 +28,10 @@ OUTCOME: what is true when this is done, and what is true now that
 makes it worth doing. Two or three sentences. Numbers if you have
 them.
 
+WHO'S WAITING: the consumer that can do something new once this
+lands, and what they cannot do until it does. "nobody" is a
+permitted answer and has to be written down, never left off.
+
 GATE n — <what kind>: a question, left open, with who decides it.
 "Bring me options" / "recommend one" is the instruction; the answer
 is not in the goal.
@@ -39,7 +43,7 @@ a command, an exit code, a bead close, an artifact state. Bound it:
 OUT: what is explicitly not in scope, with the ruling it follows from.
 ```
 
-## Four rules
+## Five rules
 
 **1. State the outcome, not the mechanism.** The frontier tier writes goals;
 plans carry exact paths, signatures, and machine-checkable steps for a weaker
@@ -72,6 +76,50 @@ a bird" is the user stating an outcome and reads well. "mine to decide", "do I
 reverse that?" is the deliberative form and is exactly right. What is caught
 is first person attached to a decision being made *inside the goal text*.
 
+**5. Name who is waiting, even when nobody is.** `WHO'S WAITING` is the only
+line in the form that is about the world outside the repo. The other four
+describe the work. This one says whose capability changes when the work lands,
+and it is the question the rest of the form cannot ask.
+
+Measured in jawnomicon on 2026-09-19: canon was byte-identical across exports
+v34, v35 and v36 — three releases whose whole difference was an overlay that,
+in the publish ledger's own words, "the game has no surface for". Two
+registered consumers had deferred both of the last two exports on exactly that
+ground. Nothing in the goal path surfaced it, because nothing read the file
+that said so. Ranking on `dependent_count` could not have: a bead that unblocks
+four other beads scores well whether or not any of the five reaches a consumer.
+
+So the answer is allowed to be `nobody`, and it still has to be typed. A goal
+nobody is waiting on is frequently the right one — refactors, migrations,
+paying down a gate someone will trip over later. What is not right is not
+knowing, and an omitted line reads identically to a line whose answer was
+`nobody`. Writing it makes the unwaited-on goal visible AS one, to the drafter
+first and the user second.
+
+*`ic goal lint-condition` does not check this line.* It enforces the mechanical
+half — predicates, ventriloquism, plan detail — and gained no rule here, so a
+goal missing `WHO'S WAITING` still exits 0. The line is enforced by the reader,
+and by `/clavain:next-goal` Step 2, where a candidate with no answer cannot
+sort on the serving axis and loses to one that has it. Do not read a clean lint
+as evidence the line is there.
+
+### Where the answer comes from
+
+Three files answer it without guesswork, and `/clavain:next-goal` already reads
+all three into `.serving` before it ranks:
+
+| file | what it settles |
+|---|---|
+| `docs/charter.md` | what the project is for, and who consumes its output |
+| `docs/non-goals.md` | standing constraints the goal is expected to stay behind |
+| the serving map | which consumer is blocked, on what, and for how many releases |
+
+The serving map is `docs/serving-map.yaml` by convention; jawnomicon's is
+`data/exports/publish-log.yaml`. Most projects have none of the three, and that
+is not a blocker — answer from what you know and say which it was. `WHO'S
+WAITING: nobody — no consumer registry in this repo` is a complete answer. What
+it must not become is silence.
+
 ## What stays allowed
 
 The lint's ventriloquism rule is an error, so its precision is load-bearing —
@@ -93,6 +141,10 @@ ic goal lint-condition --text="<the goal text>"
 
 Exit 0 with no output means clean. Fix errors; read warnings and fix them
 unless you can say why the goal legitimately needs the mechanism named.
+
+Then check `WHO'S WAITING` by eye. The lint has no rule for it, so a goal
+missing the line passes this command — which is precisely the gap rule 5
+exists in, rather than alongside.
 
 ## Prose
 
