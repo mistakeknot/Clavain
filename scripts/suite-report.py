@@ -206,13 +206,23 @@ def compare_baseline(r: Result, baseline: dict) -> tuple[list[str], list[str]]:
             continue  # already reported as a new reason
         errors.append(f"newly skipped case: {ident!r} ({reason})")
 
+    # A reviewed decrease is recorded as an ACCEPTED DELTA, not by editing the
+    # historical run's record. The baseline stays a faithful account of the run
+    # it names; acceptance is a separate, cited statement about what we now
+    # expect. Without this the improvement warning fires forever, and a warning
+    # that fires every run cannot signal a change.
+    accepted = baseline.get("accepted_improvements", {}) or {}
     for reason, count in base_reasons.items():
         observed = r.skip_reasons.get(reason, 0)
-        if observed < count:
-            warnings.append(
-                f"coverage improved for {reason!r}: {count} -> {observed}; "
-                "baseline not rewritten automatically"
-            )
+        if observed >= count:
+            continue
+        spec = accepted.get(reason)
+        if isinstance(spec, dict) and spec.get("count") == observed:
+            continue
+        warnings.append(
+            f"coverage improved for {reason!r}: {count} -> {observed}; "
+            "baseline not rewritten automatically"
+        )
     return errors, warnings
 
 

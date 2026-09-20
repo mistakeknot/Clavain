@@ -305,5 +305,18 @@
     "write_overlay creates file and commits": "lib-interspect.sh not found (install interspect companion plugin)",
     "write_overlay enforces 500-token budget": "lib-interspect.sh not found (install interspect companion plugin)",
     "write_overlay rejects duplicate overlay ID": "lib-interspect.sh not found (install interspect companion plugin)"
+  },
+  "accepted_improvements": {
+    "ic not available (standalone CI)": {
+      "count": 0,
+      "why": "All ten of these skips came from tests/shell/test_lib_sprint.bats, whose cases reach intercore through _mock_intercore_available and function mocks and so never touch a real binary. Measured with the guards removed and ic hidden from PATH: 1..43, 43 ok, zero skips, exit 0. The guards were vestigial and the assertions are recovered, so zero is the new expectation for this reason.",
+      "accepted_in_run": "35499967436",
+      "accepted_on": "2026-09-20",
+      "observed_at_acceptance": {
+        "passed": 600,
+        "failed": 0,
+        "skipped": 282
+      }
+    }
   }
 }
