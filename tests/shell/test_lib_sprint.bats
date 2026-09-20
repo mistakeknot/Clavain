@@ -596,7 +596,12 @@ MOCKEOF
 # ─── 18b. lock acquisition denied ────────────────────────────────
 
 @test "sprint_claim registers no agent when the lock is denied" {
-    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
+    # Deliberately NO `command -v ic || skip` guard, unlike its five siblings.
+    # This case mocks intercore_lock/unlock and uses the _SPRINT_TEST_IC_AVAILABLE
+    # double, so it needs no real binary -- and a new test that skips on the
+    # hosted lane is a coverage reduction the skip baseline correctly refuses
+    # (Sylveste-psey). The siblings' guards are left alone; they are older and
+    # out of this task's scope.
     bd() {
         case "$1" in
             state)
