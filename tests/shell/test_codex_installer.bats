@@ -31,7 +31,20 @@ _write_stub_clavain_source() {
     printf '#!/usr/bin/env bash\nexit 0\n' > "$SOURCE_DIR/scripts/codex-session-refresh.sh"
     chmod +x "$SOURCE_DIR/scripts/codex-session-refresh.sh"
     mkdir -p "$SOURCE_DIR/config"
-    cp -f "$BATS_TEST_DIRNAME/../../config/codex-instructions.md" "$SOURCE_DIR/config/codex-instructions.md"
+    # The installer renders real instructions from the SUPPLIED source tree, so
+    # the fixture must carry every input that rendering reads -- not just the
+    # first one whose absence happens to be reported (Sylveste-psey).
+    # scripts/install-codex.sh:1067 requires config/agent-instructions.md, and
+    # scripts/sync-agent-instructions.py:67 resolves its helper as
+    # args.source/'scripts/sync-codex-instructions.py' -- from the source
+    # directory under test, never from its own location. Copying one file at a
+    # time only moves the failure to the next input.
+    local repo_root="$BATS_TEST_DIRNAME/../.." fixture_file
+    for fixture_file in agent-instructions.md host-adapters.json routing.yaml codex-instructions.md; do
+        cp -f "$repo_root/config/$fixture_file" "$SOURCE_DIR/config/$fixture_file"
+    done
+    cp -f "$repo_root/scripts/sync-codex-instructions.py" \
+        "$SOURCE_DIR/scripts/sync-codex-instructions.py"
     cat > "$SOURCE_DIR/README.md" <<'EOF'
 # Stub Clavain
 EOF
@@ -125,7 +138,13 @@ EOF
 }
 
 @test "install refuses a missing instruction template before changing consumer links" {
-    rm -f "$SOURCE_DIR/config/codex-instructions.md"
+    # Remove the template the installer actually guards on
+    # (scripts/install-codex.sh:1067), and prove it was there first. This test
+    # used to remove codex-instructions.md, which is a different file, and so it
+    # passed only because the fixture had never supplied agent-instructions.md
+    # at all -- a vacuous negative control sitting next to six real failures.
+    [ -f "$SOURCE_DIR/config/agent-instructions.md" ]
+    rm -f "$SOURCE_DIR/config/agent-instructions.md"
     run "$SCRIPT_UNDER_TEST" install --source "$SOURCE_DIR" --codex-home "$CODEX_HOME"
     [ "$status" -ne 0 ]
     [[ "$output" == *"Missing instruction template"* ]]
