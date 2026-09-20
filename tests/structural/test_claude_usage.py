@@ -95,6 +95,7 @@ sys.exit(int(os.environ['PROVIDER_EXIT']))
     return proc, output, records
 
 
+@pytest.mark.requires_ic
 def test_budgeted_claude_deduplicates_and_reconciles_cache_and_output(tmp_path):
     proc, output, records = dispatch(tmp_path, events())
     assert proc.returncode == 0, proc.stderr
@@ -110,6 +111,7 @@ def test_budgeted_claude_deduplicates_and_reconciles_cache_and_output(tmp_path):
     assert "STATUS: pass" in Path(str(output) + ".verdict").read_text()
 
 
+@pytest.mark.requires_ic
 def test_delta_null_input_and_cache_fields_are_not_usage(tmp_path):
     stream = events()
     stream[4]["event"]["usage"].update(input_tokens=None, cache_read_input_tokens=None,
@@ -121,6 +123,7 @@ def test_delta_null_input_and_cache_fields_are_not_usage(tmp_path):
     assert "STATUS: pass" in Path(str(output) + ".verdict").read_text()
 
 
+@pytest.mark.requires_ic
 def test_thinking_breakdown_is_not_added_to_output_or_auxiliary_usage(tmp_path):
     stream = events()
     stream[-1]["usage"]["output_tokens_details"] = {"thinking_tokens": 6}
@@ -135,6 +138,7 @@ def test_thinking_breakdown_is_not_added_to_output_or_auxiliary_usage(tmp_path):
 
 @pytest.mark.parametrize("thinking", [-1, 10, True, 1.5, None])
 @pytest.mark.parametrize("location", ["model", "main"])
+@pytest.mark.requires_ic
 def test_invalid_thinking_breakdown_blocks_success(tmp_path, thinking, location):
     stream = events()
     if location == "model":
@@ -146,6 +150,7 @@ def test_invalid_thinking_breakdown_blocks_success(tmp_path, thinking, location)
     assert records[-1]["terminal"] and not records[-1]["complete"]
 
 
+@pytest.mark.requires_ic
 def test_failed_final_retains_observed_main_and_auxiliary_lower_bound(tmp_path):
     stream = events()
     stream[-1].update(subtype="error_during_execution", is_error=True,
@@ -160,6 +165,7 @@ def test_failed_final_retains_observed_main_and_auxiliary_lower_bound(tmp_path):
     assert final["output_tokens"] == 9
 
 
+@pytest.mark.requires_ic
 def test_invalid_model_retains_other_valid_model_usage(tmp_path):
     stream = events()
     stream[-1]["modelUsage"][MODEL]["thinkingTokens"] = -1
@@ -170,6 +176,7 @@ def test_invalid_model_retains_other_valid_model_usage(tmp_path):
     assert not records[-1]["complete"]
 
 
+@pytest.mark.requires_ic
 def test_missing_model_totals_retain_valid_main_result(tmp_path):
     stream = events()
     del stream[-1]["modelUsage"]
@@ -180,6 +187,7 @@ def test_missing_model_totals_retain_valid_main_result(tmp_path):
 
 
 @pytest.mark.parametrize("change", ["missing_result", "bad_json", "mismatch", "zeroed", "unknown_tokens"])
+@pytest.mark.requires_ic
 def test_incomplete_or_inconsistent_usage_never_passes(tmp_path, change):
     stream = events()
     if change == "missing_result":
@@ -199,6 +207,7 @@ def test_incomplete_or_inconsistent_usage_never_passes(tmp_path, change):
     assert "STATUS: error" in Path(str(output) + ".verdict").read_text()
 
 
+@pytest.mark.requires_ic
 def test_nonzero_backend_preserved_with_complete_accounting(tmp_path):
     proc, output, records = dispatch(tmp_path, events(), exit_code=7, stderr="rate limit 429")
     assert proc.returncode == 7
@@ -208,6 +217,7 @@ def test_nonzero_backend_preserved_with_complete_accounting(tmp_path):
     assert (tmp_path / "calls").read_text() == "called\n"
 
 
+@pytest.mark.requires_ic
 def test_cache_tokens_exhaust_budget(tmp_path):
     proc, output, records = dispatch(tmp_path, events(), budget=60)
     assert proc.returncode != 0
@@ -217,6 +227,7 @@ def test_cache_tokens_exhaust_budget(tmp_path):
 
 
 @pytest.mark.parametrize("complete", [True, False])
+@pytest.mark.requires_ic
 def test_uncapped_claude_retains_usage_and_completeness_gate(tmp_path, complete):
     stream = events() if complete else events()[:-1]
     proc, output, records = dispatch(tmp_path, stream, budget=0)
@@ -235,6 +246,7 @@ def test_zaka_rejected_before_any_model_call(tmp_path):
     assert "usage" in proc.stderr.lower()
 
 
+@pytest.mark.requires_ic
 def test_group_cancellation_retains_usage_and_error_verdict_after_wrapper_exit(tmp_path):
     proc, output, records = dispatch(tmp_path, events()[:2], cancel=True)
     assert proc.returncode != 0
@@ -245,6 +257,7 @@ def test_group_cancellation_retains_usage_and_error_verdict_after_wrapper_exit(t
 
 
 @pytest.mark.parametrize("complete", [True, False])
+@pytest.mark.requires_ic
 def test_governed_rate_limit_after_spend_never_retries(tmp_path, complete):
     proc, output, records = dispatch(tmp_path, events() if complete else events()[:-1],
                                     exit_code=7, stderr="rate limit 429", governed=True)
