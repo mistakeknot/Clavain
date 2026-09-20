@@ -12,16 +12,23 @@
 setup() {
     load test_helper
 
-    # Build ic binary once per test file (cached in /tmp)
-    IC_BIN="/tmp/ic-seam-$$"
+    # Build ic once per test FILE, into the file-scoped temp dir bats owns and
+    # removes (Sylveste-we1q). This used to build /tmp/ic-seam-$$, RE-USE it
+    # without rebuilding when it already existed, and then put /tmp itself first
+    # on PATH for every case in this file -- so anything dropped at a predictable
+    # /tmp path would be executed, and a planted /tmp/ic would shadow the binary
+    # the harness deliberately selected.
+    IC_BIN_DIR="$BATS_FILE_TMPDIR/bin"
+    IC_BIN="$IC_BIN_DIR/ic"
     IC_SRC_DIR="$BATS_TEST_DIRNAME/../../../../core/intercore"
     if [[ ! -d "$IC_SRC_DIR" ]]; then
         skip "intercore source not available (standalone checkout)"
     fi
+    mkdir -p "$IC_BIN_DIR"
     if [[ ! -x "$IC_BIN" ]]; then
-        cd "$IC_SRC_DIR" && go build -o "$IC_BIN" ./cmd/ic
+        ( cd "$IC_SRC_DIR" && go build -o "$IC_BIN" ./cmd/ic )
     fi
-    export PATH="${IC_BIN%/*}:$PATH"
+    export PATH="$IC_BIN_DIR:$PATH"
 
     # Create isolated project directory with .clavain/intercore.db
     TEST_PROJECT="$(mktemp -d)"

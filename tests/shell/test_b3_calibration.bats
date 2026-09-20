@@ -145,8 +145,17 @@ _insert_dispatch() {
 }
 
 @test "reader: shared calibration golden cases match the Intercore candidate" {
-    local candidate="${INTERCORE_CALIBRATION_CANDIDATE:-/tmp/adaptive-routing-20260912/ic-calibration-candidate}"
-    [[ -x "$candidate" ]] || skip "Intercore calibration candidate not available"
+    # Explicit opt-in only (Sylveste-we1q). This used to default to a dated path
+    # under world-writable /tmp and execute whatever was there -- under a daily
+    # timer that is a predictable target. Unset means the case is visibly omitted;
+    # an explicit path that is not a regular executable file is an error, never a
+    # silent fallback to something else.
+    local candidate="${INTERCORE_CALIBRATION_CANDIDATE:-}"
+    [[ -n "$candidate" ]] || skip "Intercore calibration candidate not available"
+    [[ -f "$candidate" && -x "$candidate" ]] || {
+        echo "INTERCORE_CALIBRATION_CANDIDATE=$candidate is not an executable regular file" >&2
+        return 1
+    }
     local cases="$BATS_TEST_DIRNAME/../fixtures/routing-calibration-consumer-cases.json"
     while IFS= read -r row; do
         local name mode phase body expected artifact result got

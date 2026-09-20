@@ -20,12 +20,17 @@ setup() {
     unset _SPRINT_LOADED _GATES_LOADED _PHASE_LOADED _DISCOVERY_LOADED _LIB_LOADED
     unset _SPRINT_TEST_IC_AVAILABLE
 
-    # Clean up lock dirs from previous tests
-    rm -rf /tmp/sprint-lock-* /tmp/sprint-claim-lock-* /tmp/sprint-advance-lock-* 2>/dev/null || true
-    rm -rf /tmp/intercore/locks/sprint-claim 2>/dev/null || true
-
-    # Clean up discovery caches
-    rm -f /tmp/clavain-discovery-brief-*.cache 2>/dev/null || true
+    # NO global /tmp cleanup here, deliberately (Sylveste-we1q).
+    # /tmp/intercore/locks/sprint-claim is the PRODUCTION mutual-exclusion
+    # namespace -- hooks/lib-sprint.sh:849, cmd/clavain-cli/claim.go:71,
+    # hooks/lib-intercore.sh:359 and Intercore's internal/lock/lock.go:16
+    # (DefaultBaseDir, no environment override exists). Removing it in setup and
+    # teardown of all 42 cases meant 84 deletions per suite run, so a scheduled
+    # run on a host where sessions live could let two of them claim one bead.
+    # Every sprint_claim case below mocks intercore_lock AND intercore_unlock,
+    # so the real lock is never taken and this cleanup prepared nothing.
+    # The retired /tmp/sprint-*-lock-* globs matched no production code at all,
+    # and the discovery-brief cache is likewise not this suite's state.
 
     # BD_CALL_LOG tracks calls to mock bd for verification
     BD_CALL_LOG="$TEST_PROJECT/bd_calls.log"
@@ -37,10 +42,8 @@ setup() {
 }
 
 teardown() {
+    # Only the directory this case created. See the note in setup().
     rm -rf "$TEST_PROJECT" 2>/dev/null || true
-    rm -rf /tmp/sprint-lock-* /tmp/sprint-claim-lock-* /tmp/sprint-advance-lock-* 2>/dev/null || true
-    rm -rf /tmp/intercore/locks/sprint-claim 2>/dev/null || true
-    rm -f /tmp/clavain-discovery-brief-*.cache 2>/dev/null || true
     unset -f bd 2>/dev/null || true
 }
 
@@ -54,6 +57,27 @@ _source_sprint_lib() {
         export INTERCORE_BIN="/usr/bin/true"
     fi
 }
+
+# Assert the production lock contract every sprint_claim path must honour
+# (Sylveste-we1q). The mocks log rather than silently returning 0, so these
+# tests now prove the lock is taken with the right name/scope/timeout and
+# released exactly once -- which is what makes deleting the old global
+# /tmp cleanup safe rather than merely convenient.
+_assert_lock_contract() {
+    local sprint_id="$1" expect_unlock="${2:-1}"
+    local locks unlocks
+    locks=$(grep -c "^lock sprint-claim ${sprint_id} 500ms$" "$IC_CALL_LOG" || true)
+    unlocks=$(grep -c "^unlock sprint-claim ${sprint_id}$" "$IC_CALL_LOG" || true)
+    [[ "$locks" -eq 1 ]] || {
+        echo "expected exactly 1 lock of sprint-claim/${sprint_id} at 500ms, got ${locks}" >&2
+        cat "$IC_CALL_LOG" >&2; return 1
+    }
+    [[ "$unlocks" -eq "$expect_unlock" ]] || {
+        echo "expected ${expect_unlock} unlock(s) of sprint-claim/${sprint_id}, got ${unlocks}" >&2
+        cat "$IC_CALL_LOG" >&2; return 1
+    }
+}
+
 
 # Helper: set up standard intercore mocks that make ic "available"
 # Override individual functions in tests as needed AFTER calling this + _source_sprint_lib
@@ -427,11 +451,12 @@ MOCKEOF
     # Mock: no active agents
     intercore_run_agent_list() { echo '[]'; }
     intercore_run_agent_add() { echo "agent-001"; return 0; }
-    intercore_lock() { return 0; }
-    intercore_unlock() { return 0; }
+    intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 0; }
+    intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
 
     run sprint_claim "iv-test1" "session-abc"
     assert_success
+    _assert_lock_contract iv-test1
 }
 
 # ─── 15. sprint_claim blocks second claimer ──────────────────────
@@ -458,12 +483,13 @@ MOCKEOF
     intercore_run_agent_list() {
         echo "[{\"id\":\"agent-001\",\"name\":\"session-first\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":\"$IC_NOW_TS\"}]"
     }
-    intercore_lock() { return 0; }
-    intercore_unlock() { return 0; }
+    intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 0; }
+    intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
     export IC_NOW_TS="$now_ts"
 
     run sprint_claim "iv-test1" "session-second"
     assert_failure
+    _assert_lock_contract iv-test1
 }
 
 # ─── 16. sprint_claim allows takeover after 60 min expiry ────────
@@ -493,12 +519,13 @@ MOCKEOF
     }
     intercore_run_agent_update() { return 0; }
     intercore_run_agent_add() { echo "agent-new"; return 0; }
-    intercore_lock() { return 0; }
-    intercore_unlock() { return 0; }
+    intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 0; }
+    intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
     export IC_EXPIRED_TS="$expired_ts"
 
     run sprint_claim "iv-test1" "session-new"
     assert_success
+    _assert_lock_contract iv-test1
 }
 
 # ─── 17. sprint_claim blocks at 59 minutes (not yet expired) ────
@@ -524,12 +551,13 @@ MOCKEOF
     intercore_run_agent_list() {
         echo "[{\"id\":\"agent-001\",\"name\":\"session-active\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":\"$IC_RECENT_TS\"}]"
     }
-    intercore_lock() { return 0; }
-    intercore_unlock() { return 0; }
+    intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 0; }
+    intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
     export IC_RECENT_TS="$recent_ts"
 
     run sprint_claim "iv-test1" "session-wannabe"
     assert_failure
+    _assert_lock_contract iv-test1
 }
 
 # ─── 18. sprint_claim re-claim by same session succeeds ──────────
@@ -556,12 +584,45 @@ MOCKEOF
     intercore_run_agent_list() {
         echo "[{\"id\":\"agent-001\",\"name\":\"session-abc\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":\"$IC_NOW_TS\"}]"
     }
-    intercore_lock() { return 0; }
-    intercore_unlock() { return 0; }
+    intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 0; }
+    intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
     export IC_NOW_TS="$now_ts"
 
     run sprint_claim "iv-test1" "session-abc"
     assert_success
+    _assert_lock_contract iv-test1
+}
+
+# ─── 18b. lock acquisition denied ────────────────────────────────
+
+@test "sprint_claim registers no agent when the lock is denied" {
+    command -v ic >/dev/null 2>&1 || skip "ic not available (standalone CI)"
+    bd() {
+        case "$1" in
+            state)
+                case "$3" in
+                    ic_run_id) echo "run-001" ;;
+                esac
+                ;;
+        esac
+    }
+    export -f bd
+
+    _mock_intercore_available
+    _source_sprint_lib
+
+    intercore_run_agent_list() { echo '[]'; }
+    intercore_run_agent_add() { echo "agent-denied" >> "$IC_CALL_LOG"; return 0; }
+    intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 1; }
+    intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
+
+    run sprint_claim "iv-test1" "session-denied"
+    assert_failure
+
+    # No agent registered, and nothing released that was never acquired.
+    run grep -c "^agent-denied$" "$IC_CALL_LOG"
+    [[ "$output" == "0" ]]
+    _assert_lock_contract iv-test1 0
 }
 
 # ─── 19. sprint_release marks active agents completed ────────────
