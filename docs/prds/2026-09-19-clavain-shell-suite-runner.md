@@ -35,15 +35,19 @@ Two in-tree epics matched two keywords each; both are `orthogonal`, and one of t
 
 ## Features
 
-### F1: Repair the eight real cross-platform bats failures
+### F1: Repair the six real bats failures, and stop the suite from being run where it cannot be honest
 
-**What:** Fix the six `test_codex_installer` failures and the two `test_runtime_evidence_canary` failures, both of which reproduce on zklw's Linux checkout and are therefore not environment artefacts.
+**What:** Fix the six `test_codex_installer` failures, which reproduce on zklw's Linux checkout and have one cause. The two `test_runtime_evidence_canary` failures are **not** a regression — corrected after the first draft of this PRD — and are handled by F3 instead.
+
+`scripts/runtime-evidence-canary.sh:245` refuses to run when the Clavain checkout has tracked changes. Both machines happened to be dirty at measurement time for different reasons (Mac ` M .gitignore`, zklw ` M kimi.plugin.json`), which is why the two failures looked cross-platform and real. Proven otherwise: an isolated clone at `512a5b7` with `core/intercore` symlinked alongside runs both tests to `ok`, exit 0.
+
+That correction is load-bearing rather than cosmetic. A scheduled check pointed at a live working checkout reports two permanent failures whenever anything is uncommitted — a standing red baseline, which is the exact condition this bead exists to remove. F3 must therefore decide where the suite physically runs.
 
 **Acceptance criteria:**
 - [ ] `bats tests/shell/test_codex_installer.bats` exits 0 on both Clavain and zklw
-- [ ] `bats tests/shell/test_runtime_evidence_canary.bats` exits 0 on both Clavain and zklw
 - [ ] The installer fix is in the fixture's contract with `install-codex.sh:1067`, not a relaxation of the production requirement added by `bc5e2f5`
 - [ ] Each fix is demonstrated red-before-green at the pre-fix commit
+- [ ] `bats tests/shell/test_runtime_evidence_canary.bats` exits 0 against a clean tree, with no change to the guard
 
 ### F2: Restore the Actions gate so Tier 2 is reached again
 
@@ -60,6 +64,7 @@ Two in-tree epics matched two keywords each; both are `orthogonal`, and one of t
 **What:** Add `clavain-shell` and `clavain-structural` checks to `rig-health-check.sh`, modelled on `intercore-tests`, gated on a designated-host marker, so the suite and the 28 relocated tests both run daily on zklw where every dependency exists.
 
 **Acceptance criteria:**
+- [ ] The suite runs against a clean tree, so the dirty-tree guard at `runtime-evidence-canary.sh:245` cannot make the check permanently red; the mechanism is named and the behaviour when source moves ahead of that tree is stated
 - [ ] Both checks appear in `ALL_CHECKS` so the watchdog can name them when a run does not reach them
 - [ ] On an undesignated host the checks write `skip`; on the designated host with `bats`, `yq` or `gawk` missing they write `fail` — proven by forcing each path against an override, not by reading the code
 - [ ] `clavain-structural` runs the 28 `ic`-dependent tests and fails if `ic` is absent on the designated host
@@ -84,6 +89,8 @@ Installing `yq` and `gawk` on the Mac. F4 makes the shortfall visible; closing i
 Retiring `.github/workflows/test.yml`. The fleet drift report already flags it as `linux-actions-present`; that retirement belongs to the campaign, not here.
 
 The two Mac-only `test_b3_calibration` failures. They pass on zklw at the same code, so they do not block the designated-host lane. Recorded, not repaired.
+
+Cleaning the tracked-dirty files on either machine. ` M .gitignore` here and ` M kimi.plugin.json` on zklw belong to other sessions; F3 works around the guard rather than reaching into someone else's working tree.
 
 ## Dependencies
 
