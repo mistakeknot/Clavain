@@ -78,7 +78,7 @@ P1-1 adds an explicit snapshot build and a 19-case execution gate. P1-2 makes al
 
 The selected zklw `ic` path was `/home/mk/.local/bin/ic`, SHA256 `bc15e5c0c8bc0d5546adde6e1475f2ae79adca8d393e63e1dd8f99e72c68c892`. `ic --version` is unsupported; use `ic version`. Version output was not successfully refreshed in this revision. The existing `ic-provenance` failure says the deployed binary is behind the source. Record the real binary independently of cloned source; do not label it built from that SHA. The timer was enabled/active with a next elapse at 2026-09-20 09:16:10 UTC; this is inventory, not a new timer-run proof.
 
-**Hosted baseline:** Fable measured run **34150176247**, commit **0ac49e82**, plan **830**, with **274 skips across 10 exact reasons**; thus 556 real passes when all remaining cases pass. Revision 2 retrieved the run log but the large output was truncated; subsequent histogram retrieval failed due to network restrictions. The 274/10 histogram remains attributed to the independent review, not claimed as independently re-counted here. Task 3 must retain the full historical TAP and verify this histogram before implementation of the policy; disagreement returns to review rather than silently resetting the baseline.
+**Hosted baseline:** Fable measured run **34150176247**, commit **0ac49e82**, plan **830**, with **274 skips across 10 exact reasons**; thus 556 real passes when all remaining cases pass. Revision 2 retrieved the run log but the large output was truncated; subsequent histogram retrieval failed due to network restrictions. The 274/10 histogram remains attributed to the independent review, not claimed as independently re-counted here. Task 3 must retain the full historical TAP and verify this histogram before implementation of the policy; disagreement returns to review rather than silently resetting the baseline. **Re-review confirmed the histogram from the full log and then showed the number was already stale**: the 37-skip line is exactly the 37 cases `test_b3_calibration.bats` held at `0ac49e82`, that file now has 55, and `.github/workflows/test.yml` checks out only `mistakeknot/interstat`, never interspect. A hosted run at HEAD therefore shows at least 292 skips with 19 new identities and no lost coverage. Criterion 4 was resealed to an identity-based allowed set for this reason. A static count of `@test` blocks at HEAD gives 876, not the 872 measured on the Mac; never hard-code either.
 
 | Count | Historical Actions skip reason |
 |---:|---|
@@ -167,7 +167,7 @@ Task 0 removes the calibration test's ambient `/tmp` fallback. An unset explicit
 
 The designated zklw floor allows **zero yq skips and zero gawk skips**. A count above six, an expired allowance, a reason above its allowance, or any new reason yields at least `warn`, even if the suite exits 0. Missing mandatory tools fail at preflight. Unknown/malformed results or nonzero suite exits fail. Structural allows zero skips and zero deselections on the designated host. Exceeding that floor prevents arming/acceptance. Do not silently raise six if the first clean run disproves the hypothesis.
 
-Actions instead compares against the historical **274 skips / 10 reasons**. Always show counts, histogram, baseline and delta; emit a coverage-change warning only when count, reason histogram or skipped case identities differ, including improvements. Store the exact historical skipped case identities as well as counts so equal-count substitutions remain visible. Unchanged known omissions get an ordinary coverage summary, not a perpetual warning. Any new reason or increased per-reason omission blocks acceptance; a decrease may be accepted with an explained coverage delta but does not silently rewrite the baseline. Criterion 4 caps skips at 274 and forbids new omissions, even if the workflow conclusion is success. This acknowledges hosted partial coverage while zklw owns the fuller lane.
+Actions instead compares against the historical **274 skips / 10 reasons**. Always show counts, histogram, baseline and delta; emit a coverage-change warning only when count, reason histogram or skipped case identities differ, including improvements. Store the exact historical skipped case identities as well as counts so equal-count substitutions remain visible. Unchanged known omissions get an ordinary coverage summary, not a perpetual warning. Any new reason or increased per-reason omission blocks acceptance; a decrease may be accepted with an explained coverage delta but does not silently rewrite the baseline. Criterion 4 defines the allowed set by identity rather than by a count, and forbids new omissions even if the workflow conclusion is success. The historical 274 is a baseline to diff against, never a ceiling to assert: `test_b3_calibration.bats` grew 37→55 cases after that run and its `setup()` skips the whole file on a hosted runner, so any commit containing Tasks 0–3 exceeds 274 without losing a single real assertion. This acknowledges hosted partial coverage while zklw owns the fuller lane.
 
 Record the supplied Mac observation as historical evidence, not a permanent pass count: 872 TAP cases, 862 `ok` lines including 57 skips, 10 `not ok`, exit 1, 521s. Exclusive counts are therefore **805 passed, 10 failed, 57 skipped**. Its skip histogram is 41 yq, 10 gawk, five interphase, one calibration candidate. New tests will increase the TAP plan; never hard-code 872 as the future suite length.
 
@@ -181,7 +181,7 @@ Commands below are for implementation, not claims of work performed while writin
 
 **Depends on:** the revision-2 seal and clean independent re-review. Blocks Task 4/5 arming and every full shell baseline, including exploratory runs.
 
-**Files:** Modify `Clavain/tests/shell/test_lib_sprint.bats` and `Clavain/tests/shell/test_b3_calibration.bats`; create `Clavain/tests/structural/test_shell_suite_safety.py`. Read the lock call sites in `hooks/lib-sprint.sh`, `hooks/lib-intercore.sh`, `cmd/clavain-cli/claim.go`, and sibling Intercore's `internal/lock/lock.go`; do not change production locking or the Intercore repository.
+**Files:** Modify `Clavain/tests/shell/test_lib_sprint.bats`, `Clavain/tests/shell/test_b3_calibration.bats` and `Clavain/tests/shell/test_seam_integration.bats`; create `Clavain/tests/structural/test_shell_suite_safety.py`. Read the lock call sites in `hooks/lib-sprint.sh`, `hooks/lib-intercore.sh`, `cmd/clavain-cli/claim.go`, and sibling Intercore's `internal/lock/lock.go`; do not change production locking or the Intercore repository.
 
 **Test first, safely:** add a regression which rejects setup/teardown removal of the shared lock namespace, the retired global sprint/cache globs, and the implicit dated candidate path. Its red-before result is a source/isolated-fixture check; NEVER reproduce the old deletion on a live host. Instrument the claim mocks to log lock name, scope and timeout into `IC_CALL_LOG`, assert `sprint-claim`, the test bead and `500ms`, and assert the expected unlock on success/active-session/TTL branches. Add an acquisition-denied case proving no agent is added when the mock returns failure. Keep all existing 42 case identities and their assertions. Check setup/teardown with guarded removal commands that log and refuse any path outside the case's owned temporary directory; this supplements, not replaces, executing the repaired tests.
 
@@ -189,9 +189,13 @@ Commands below are for implementation, not claims of work performed while writin
 
 Change candidate selection to explicit opt-in only: unset/empty `INTERCORE_CALIBRATION_CANDIDATE` visibly skips that one case with the existing reason. An explicit non-executable/non-regular path fails with its diagnostic, with no fallback. Keep the golden-case comparisons intact when a valid explicit candidate is supplied. The new regression exercises unset, invalid and explicit private candidate selection; a synthetic candidate can prove selection only, not golden-case correctness. Static assertions forbid the old ambient default. The scheduled harness clears inherited candidate selection. This security correction does not fix or waive the two Mac-only calibration failures.
 
+**Third shared-`/tmp` site, found in re-review.** `test_seam_integration.bats:16-24` sets `IC_BIN="/tmp/ic-seam-$$"`, **executes it without rebuilding if it already exists**, and then `export PATH="${IC_BIN%/*}:$PATH"` — putting `/tmp` first on PATH for all 18 of its cases. That is an ambient executable at a predictable path, and it also defeats this plan's own rule that the selected binaries are the ones children execute, because a planted `/tmp/ic` would win. Build into `BATS_FILE_TMPDIR` or a `mktemp -d` directory instead, prepend only that directory, and add this file to the static regression above. Criterion 13's subject already covers it, so no further reseal is needed.
+
 ```bash
+: "${CLAVAIN_SNAPSHOT:?snapshot path unset; refusing to run in the live checkout}"
 cd "$CLAVAIN_SNAPSHOT/tests"
 uv run pytest structural/test_shell_suite_safety.py -v
+: "${CLAVAIN_SNAPSHOT:?snapshot path unset; refusing to run in the live checkout}"
 cd "$CLAVAIN_SNAPSHOT"
 bats tests/shell/test_lib_sprint.bats --tap > "$ARTIFACTS/sprint-safety.tap" 2>&1
 sprint_rc=$?
@@ -208,6 +212,8 @@ Then, **only with the repaired committed suite**, hold a uniquely named `psey-sa
 - run: `cd "$CLAVAIN_SNAPSHOT" && bats tests/shell/test_lib_sprint.bats --tap`
   expect: exit 0
 </verify>
+
+**Every executed block in this plan and its criteria must refuse an unset snapshot path.** `verification_runner.py:563` runs each check under `/bin/bash -e -o pipefail -c` **without `-u`**, and `cd ""` returns 0 and stays put in bash 3.2, `sh` and zsh — so an unset `CLAVAIN_SNAPSHOT` silently runs the block in the live developer checkout. The body blocks below carry an explicit `: "${CLAVAIN_SNAPSHOT:?}"` guard. The sealed criteria preamble already requires the same behaviour ("unset paths fail setup instead of falling back to the live checkout"); execution must apply the guard literally when running criteria 1 and 13, whose illustrative blocks predate this finding.
 
 ### Task 1: Repair the complete installer fixture contract (F1)
 
@@ -242,6 +248,7 @@ cp -f "$repo_root/scripts/sync-codex-instructions.py" \
 Keep the fixture's stub manifest/MCP contents and real renderer. Do not bypass rendering, mock successful installation, or remove the installer's guard.
 
 ```bash
+: "${CLAVAIN_SNAPSHOT:?snapshot path unset; refusing to run in the live checkout}"
 cd "$CLAVAIN_SNAPSHOT"
 bats tests/shell/test_codex_installer.bats
 ```
@@ -249,6 +256,7 @@ bats tests/shell/test_codex_installer.bats
 Expected: every installer case passes on both machines, including removal of the now-present shared template. Then, from a clean committed Clavain clone with clean Intercore at `../../core/intercore`:
 
 ```bash
+: "${CLAVAIN_SNAPSHOT:?snapshot path unset; refusing to run in the live checkout}"
 cd "$CLAVAIN_SNAPSHOT"
 bats tests/shell/test_runtime_evidence_canary.bats
 ```
@@ -271,6 +279,7 @@ Expected: exit 0; both substantive source/installed canaries execute rather than
 **Test first:** Add subprocess collection tests covering present `ic`, genuinely absent `ic`, explicit `--require-ic` with absent `ic`, and a present executable that exits nonzero. Use a filtered temporary PATH with symlinks to required non-ic tools and invoke the already-resolved Python interpreter directly; assert `shutil.which('ic') is None` inside the child for the absent case. Do not use an `ic` stub to claim the 29 real tests pass. Collect the real accounting file and assert exactly 28 expanded node IDs bear `requires_ic`, and the Zaka rejection case does not. Test terminal explanation and the deselection hook, including a mixed run where unrelated tests remain selected.
 
 ```bash
+: "${CLAVAIN_SNAPSHOT:?snapshot path unset; refusing to run in the live checkout}"
 cd "$CLAVAIN_SNAPSHOT/tests"
 uv run pytest structural/test_ic_selection.py -v
 ```
@@ -280,6 +289,7 @@ Expected before implementation: failures for missing marker/selection/reporting 
 **Implementation:** Register `requires_ic` in pytest configuration; decorate the dependent test functions explicitly, including their parameterized cases. Do not mark the module or the Zaka test. Add `--require-ic` to the existing structural conftest. In collection, discover `ic` with `shutil.which`. If absent in default mode, remove only marked items, call `config.hook.pytest_deselected(items=held_back)`, and retain the count for `pytest_terminal_summary`, which prints `28 tests deselected: requires_ic; ic executable not found on PATH; covered by zklw clavain-structural`. With `--require-ic`, absence raises a pytest usage/collection error instead. A present but broken ic stays selected and fails normally. Existing test assertions and production metering stay unchanged.
 
 ```bash
+: "${CLAVAIN_SNAPSHOT:?snapshot path unset; refusing to run in the live checkout}"
 cd "$CLAVAIN_SNAPSHOT/tests"
 uv run pytest structural/test_claude_usage.py -v --require-ic
 uv run pytest structural/ -v --tb=short --require-ic
@@ -303,6 +313,7 @@ Expected with real ic: 29/29 accounting cases pass, no deselection; then the ful
 **Test first:** Exercise the summarizer CLI with complete TAP, mixed pass/fail/skip, the 41/10/5/1 skip histogram, a nonzero exit despite all `ok` lines, bailout, duplicate/missing test numbers, truncated or empty TAP, and `1..0`. Verify `ok ... # skip ...` is excluded from passed. For JUnit, test failures/errors/skips, malformed/empty XML, no accounting file, and 28 versus 29 accounting cases. The required module check must reject skipped/failed cases and verify the unmarked Zaka case plus the 28 others. Test case identities, not an unrelated set of 29 tests. Add a bats test where an explicit invalid helper directory fails despite available fallback helpers, and a valid explicit directory loads both libraries. Create tiny temporary helper libraries exporting distinct sentinels for this loader test, so it also runs on the Mac without installing packages; actual assertion-library compatibility is established by the real zklw suite. Ordinary autodetection remains optional.
 
 ```bash
+: "${CLAVAIN_SNAPSHOT:?snapshot path unset; refusing to run in the live checkout}"
 cd "$CLAVAIN_SNAPSHOT/tests"
 uv run pytest structural/test_suite_report.py -v
 cd ..
@@ -319,9 +330,9 @@ python3 scripts/suite-report.py --format tap|junit --input PATH
   [--shell-skip-policy | --actions-skip-baseline PATH] [--require-claude-usage]
 ```
 
-Write JSON fields `status`, `summary`, `complete`, `planned`, `observed`, `passed`, `failed`, `skipped`, `skip_reasons`, `failures`, `exit_code`, and policy/baseline/delta information; print the same human summary to stdout. On failure, begin the summary with the first failed case name, then `passed: P   failed: F   skipped: S`, so the real reader's 120-character headline limit retains the actionable name. Detail begins with failed cases/diagnostics, then counts and identity. Unknown counts say `unavailable`, not zero. `passed + failed + skipped == observed`; errors count as failed. Incomplete output records observed counts as partial and fails. Return 0 for pass, 3 for warn, 1 for fail; input/usage errors also must not appear successful. TAP parsing recognizes bats' actual top-level TAP grammar and directives, preserves diagnostics and failed case names, and validates the plan against records. For JUnit aggregate leaf test cases, not both suite totals and their children. `--require-claude-usage` enforces the Task 2 accounting-module invariant. `--shell-skip-policy` enforces the six-case policy, real follow-up ID and expiry. `--actions-skip-baseline` compares exact historical counts/reasons/identities, warns on a delta in either direction, and fails on more than 274 skips or new/increased omissions. Absent a named policy, the numeric threshold still reports all reasons. Unexpected reporter failure fails the caller.
+Write JSON fields `status`, `summary`, `complete`, `planned`, `observed`, `passed`, `failed`, `skipped`, `skip_reasons`, `failures`, `exit_code`, and policy/baseline/delta information; print the same human summary to stdout. On failure, begin the summary with the first failed case name, then `passed: P   failed: F   skipped: S`, so the real reader's 120-character headline limit retains the actionable name. Detail begins with failed cases/diagnostics, then counts and identity. Unknown counts say `unavailable`, not zero. `passed + failed + skipped == observed`; errors count as failed. Incomplete output records observed counts as partial and fails. Return 0 for pass, 3 for warn, 1 for fail; input/usage errors also must not appear successful. TAP parsing recognizes bats' actual top-level TAP grammar and directives, preserves diagnostics and failed case names, and validates the plan against records. For JUnit aggregate leaf test cases, not both suite totals and their children. `--require-claude-usage` enforces the Task 2 accounting-module invariant. `--shell-skip-policy` enforces the six-case policy, real follow-up ID and expiry. `--actions-skip-baseline` compares exact historical counts/reasons/identities, warns on a delta in either direction, and fails on any new/increased omission. It carries the allowed-set policy by identity; there is no numeric skip ceiling for the hosted lane, because a growing test file can raise the count without reducing coverage. Absent a named policy, the numeric threshold still reports all reasons. Unexpected reporter failure fails the caller.
 
-Before implementing the hosted policy, re-count the full log for run 34150176247 and bind the baseline file to its SHA. Add tests for unchanged 274/10 (no coverage warning), increased and decreased counts, a new reason at the same total, a changed skipped identity, an expired interphase allowance, and the first failing test name surviving the real reader headline cap. A changed baseline needs explicit review; no latest-run auto-learning of skips.
+Before implementing the hosted policy, re-count the full log for run 34150176247 and bind the baseline file to its SHA. Add tests for an unchanged allowed set (no coverage warning), a file whose case count grows under an already-allowed reason (no warning — this is the `test_b3_calibration.bats` case), increased and decreased counts, a new reason at the same total, a changed skipped identity, an expired interphase allowance, and the first failing test name surviving the real reader headline cap. A changed baseline needs explicit review; no latest-run auto-learning of skips.
 
 Change the existing Tier 2 `run` body in place; retain its command and directly captured return code:
 
@@ -334,7 +345,7 @@ bats tests/shell/ --recursive --tap > "$tap_file" 2>&1 || suite_rc=$?
 cat "$tap_file"
 report_rc=0
 python3 scripts/suite-report.py --format tap --input "$tap_file" \
-  --exit-code "$suite_rc" --max-skipped 274 \
+  --exit-code "$suite_rc" \
   --actions-skip-baseline tests/fixtures/shell-skip-baselines.json \
   --output-json "$summary_file" || report_rc=$?
 if [ "$report_rc" -eq 3 ]; then
@@ -496,7 +507,7 @@ gh run view "$ACTIONS_RUN_ID" --repo mistakeknot/Clavain --json headSha,jobs
 gh run view "$ACTIONS_RUN_ID" --repo mistakeknot/Clavain --log
 ```
 
-Expected: `headSha` includes Tasks 0–3; Tier 1 finishes with its reported no-ic deselection; `Tier 2 — Shell tests (bats)` starts and concludes success; direct bats exit is 0; complete TAP has at most 274 skips and no new/increased reason or case omissions relative to the verified historical baseline; summary shows counts and any delta; entire job completes below 900 seconds. A job blocked at the intervening Task attribution step does not meet acceptance and is an escalation, not permission to remove that step.
+Expected: `headSha` includes Tasks 0–3; Tier 1 finishes with its reported no-ic deselection; `Tier 2 — Shell tests (bats)` starts and concludes success; direct bats exit is 0; complete TAP has no new/increased reason or case omissions relative to the verified historical baseline extended by the `test_b3_calibration.bats` allowance; summary shows counts and any delta; entire job completes below 900 seconds. A job blocked at the intervening Task attribution step does not meet acceptance and is an escalation, not permission to remove that step.
 
 Complete the committed assertion and shortened timeout matrix through the checks-only systemd path using `RIG_CLAVAIN_DIR` and isolated output; retain named failure, timeout/nonzero status, no-survivor proof and unchanged source status. Already completed matrix legs need not be repeated absent a relevant change. Restore all task-owned scheduler configuration, remove the temporary LaunchAgent, and confirm the next normal scheduled result. Preserve drill evidence. Commit the runbook evidence update only after facts exist: `docs: record Clavain scheduled suite verification`.
 
@@ -532,7 +543,7 @@ The numbered criteria below are the revision-2 acceptance contract to extract an
    # exit 0 for both; second reports 29 passed, zero skipped/deselected
    ```
 
-4. **F2 — the existing Actions lane actually reaches and completes Tier 2 within its coverage ceiling.** Retain the main-branch run ID/head SHA containing Tasks 0–3, successful Tier 1/Tier 2 conclusions, direct bats exit 0, complete TAP, exclusive counts/histogram and whole-job elapsed time below 900 seconds. **At most 274 shell cases may skip**, with no new skipped case identities, new reasons or increased per-reason counts against the retained historical run-34150176247 baseline (830 cases, 274 skips, 10 reasons). The historical baseline must first be verified from its full log; decreases remain visible with explanations. Reporter regression output proves unchanged baseline emits no coverage-change warning and any count/reason/identity change is surfaced. Workflow diff adds no action, checkout, dependency-installation step or trigger. A green badge alone is insufficient.
+4. **F2 — the existing Actions lane actually reaches and completes Tier 2 within its coverage ceiling.** Retain the main-branch run ID/head SHA containing Tasks 0–3, successful Tier 1/Tier 2 conclusions, direct bats exit 0, complete TAP, exclusive counts/histogram and whole-job elapsed time below 900 seconds. **The allowed skip set is defined by identity, not by a count.** It is the retained historical run-34150176247 baseline identities (830 cases, 274 skips, 10 reasons), plus the cases of `tests/shell/test_b3_calibration.bats` under its existing `lib-interspect.sh not found` reason — that file's `setup()` skips every case because the workflow checks out no interspect sibling, and the file grew from 37 cases at `0ac49e82` to 55 at HEAD, so the historical 274 is unmeetable at any commit containing Tasks 0–3. No other new skipped case identity, no new reason, and no other per-reason increase. The historical baseline must first be verified from its full log; decreases remain visible with explanations. The first Tier-2-reaching run must reproduce the derived count, or the question returns to review rather than the baseline being silently reset. Reporter regression output proves unchanged baseline emits no coverage-change warning and any count/reason/identity change is surfaced. Workflow diff adds no action, checkout, dependency-installation step or trigger. A green badge alone is insufficient.
 
 5. **F3 — committed-source isolation, build and identity work.** Dirty live sources produce clean detached snapshots without developer tree/index changes, including dirty Intercore. A fresh clone initially has no `bin/clavain-cli-go`; preparation output records a successful source build, executable hash and compose probe, and TAP shows all 7 compose plus 12 tool-surface cases passing without skips. Only that exact ignored build artifact is allowed inside the snapshot. Source metadata shows each SHA, commit date, local-main comparison and last-fetched origin/main comparison. Off-main, behind/diverged or unknown comparisons surface a warning. The installed ic's actual path, `ic version` output and SHA256 appear separately from source identities and canary-built binaries. Binary hash change during a run fails identity verification. A committed source advance is captured next run; advancement mid-run warns while retaining the captured suite outcome. Failed preparation never reuses an old tree. Retain real scheduled baseline/build records and controlled source/tool-drift transcripts, not just fixture output.
 
@@ -609,7 +620,7 @@ Accountable handoff context (embedded here to honor the one-file planning reques
   "available_models": null,
   "investigation_active": false,
   "handoff": {
-    "decisions": ["delete vestigial shared lock cleanup", "explicit candidate opt-in only", "whole structural suite", "fresh independent clones with clavain-cli-go build", "server-only designation", "15-minute existing Actions ceiling with 274-skip historical baseline", "six-skip zklw hypothesis with expiring interphase allowance", "early bounded checks in existing rig-health"],
+    "decisions": ["delete vestigial shared lock cleanup", "explicit candidate opt-in only", "whole structural suite", "fresh independent clones with clavain-cli-go build", "server-only designation", "15-minute existing Actions ceiling with an identity-based hosted skip baseline", "six-skip zklw hypothesis with expiring interphase allowance", "early bounded checks in existing rig-health"],
     "constraints": ["revision 2 re-sealed once then one clean independent re-review before implementation", "F1 and Sylveste-we1q before F3 arming", "two repositories only", "no fleet change", "no new Linux Actions dependency", "Bash 3.2", "no weakened assertions or hidden skips"],
     "verification": ["safe red-before-green and live held-lock preservation", "installer on both hosts", "real no-ic execution", "main-branch Actions Tier 2 and coverage delta", "fresh-clone 19-case binary cohort", "actual scheduled fault matrix", "healthy and actual-timeout full-run ALL_CHECKS freshness", "per-check production and unattended timer proof", "real mixed-red reader stdout"],
     "escalation": ["baseline premise disproved", "unexpected failures or coverage omissions", "timing or source isolation cannot meet contract", "review or operational blocker", "two capability failures"]
