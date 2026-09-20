@@ -68,6 +68,11 @@ def clean_bin(tmp_path):
     return bin_dir
 
 
+# These two observe the cohort BEFORE deselection, so they need `ic` on this
+# host for the same reason the cohort does. Without the marker they fail on a
+# hosted runner -- which would have put Tier 1 back in the red for a new reason,
+# one step removed from the original defect.
+@pytest.mark.requires_ic
 def test_the_accounting_file_still_has_the_expected_cohort():
     """Anti-vacuity. Every assertion below is relative to this cohort, so if the
     file is renamed or its parametrization changes, fail here and say so."""
@@ -78,6 +83,7 @@ def test_the_accounting_file_still_has_the_expected_cohort():
     assert any(IC_FREE_CASE in i for i in ids), f"{IC_FREE_CASE} is missing"
 
 
+@pytest.mark.requires_ic
 def test_exactly_the_dependent_cases_carry_the_marker():
     """The marker must cover the 28 that need ic and must not cover the one that
     does not -- marking the module would take the ic-free case down with it."""
