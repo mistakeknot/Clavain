@@ -1259,10 +1259,11 @@ sprint_escalate_strategic_contradiction() {
     local lane_name="$2"
     local reason="$3"
     [[ -z "$sprint_id" || -z "$lane_name" || -z "$reason" ]] && return 1
+    sprint_require_ic || return 1
 
     # Pause the lane via metadata
     local current_meta
-    current_meta=$(ic lane status "$lane_name" --json 2>/dev/null | jq -r '.metadata // "{}"' 2>/dev/null) || current_meta="{}"
+    current_meta=$("$INTERCORE_BIN" lane status "$lane_name" --json 2>/dev/null | jq -r '.metadata // "{}"' 2>/dev/null) || current_meta="{}"
     local updated_meta
     updated_meta=$(echo "$current_meta" | jq \
         --arg reason "$reason" \
@@ -1272,7 +1273,7 @@ sprint_escalate_strategic_contradiction() {
         2>/dev/null) || return 1
 
     # Write paused state — ic lane update with metadata
-    ic lane update "$lane_name" --metadata="$updated_meta" 2>/dev/null || {
+    "$INTERCORE_BIN" lane update "$lane_name" --metadata="$updated_meta" 2>/dev/null || {
         # Fallback: store pause state via bd set-state on the lane's beads
         bd set-state "$sprint_id" "lane_paused=true" 2>/dev/null || true
         bd set-state "$sprint_id" "lane_pause_reason=$reason" 2>/dev/null || true

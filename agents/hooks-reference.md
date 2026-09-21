@@ -40,3 +40,21 @@ Sourced by hook scripts, not registered as hooks themselves:
 | `lib-verdict.sh` | Verdict file write/read utilities for structured agent handoffs |
 | `lib-gates.sh` | Phase gate shim — delegates to interphase when installed, no-op stub otherwise |
 | `lib-discovery.sh` | Plugin discovery shim — delegates to interphase when installed, no-op stub otherwise |
+
+### Remote shared-state authority
+
+When shared state has moved to another host, the host-local marker
+`~/.config/clavain/remote-shared-state` suppresses shared-state access through the hook libraries and
+automatic Stop/SessionEnd handoff actions that depend on that state. Its presence
+is authoritative, including an empty file or broken symlink. Keep it outside the
+plugin cache so plugin updates preserve the posture. It does not configure a
+remote transport or move a database.
+
+Install and verify this behavior before fencing a former local database. Retain
+the marker until local authority is explicitly restored. Ordinary user-directed
+coding remains available; task claims and shared-state writes belong on the
+authority host. Dispatch counters distinguish a confirmed absent value from a
+database error: only absence starts at zero; unavailable or corrupt state blocks
+automatic dispatch.
+
+Dispatch limits count reserved claim attempts, including failed or raced claims; empty scans do not consume capacity, and a counter write must succeed before a claim is attempted. Local filesystem locks and local plugin publication bookkeeping remain independent of the shared database. Keep the host-local marker out of dotfiles synchronization to the authority host.

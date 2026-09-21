@@ -27,6 +27,7 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 # Check if Stop handoff already fired — if so, nothing to do.
 # shellcheck source=hooks/lib-intercore.sh
 source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
+if [[ -e "$HOME/.config/clavain/remote-shared-state" || -L "$HOME/.config/clavain/remote-shared-state" ]]; then exit 0; fi
 if intercore_available 2>/dev/null; then
     # IC sentinel was claimed by session-handoff.sh — check if it exists
     if ! intercore_sentinel_check_or_legacy "handoff" "$SESSION_ID" 0 2>/dev/null; then
