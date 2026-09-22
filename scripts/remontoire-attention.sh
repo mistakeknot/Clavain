@@ -141,6 +141,12 @@ if [[ "$format" == "json" ]]; then
 fi
 
 [[ -n "$context" ]] || exit 0
+source "$script_dir/lib-bb.sh"
+if _clavain_in_bb; then
+  if ! printf '%s' "$projection" | python3 "$script_dir/bb-notice.py"; then
+    exit 0
+  fi
+fi
 jq -cn --arg context "$context" '{
   hookSpecificOutput: {
     hookEventName: "SessionStart",

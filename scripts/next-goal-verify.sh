@@ -94,7 +94,8 @@ MAX_ROOTS="${CLAVAIN_NEXT_GOAL_MAX_ROOTS:-6}"
 BD_TIMEOUT="${CLAVAIN_NEXT_GOAL_BD_TIMEOUT:-20}"
 
 RECEIPT_DIR="${CLAVAIN_VERIFY_DIR:-$HOME/.cache/clavain/next-goal-verify}"
-RECEIPT_SESSION="${CLAUDE_SESSION_ID:-unknown}"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-bb.sh"
+RECEIPT_SESSION="$(_clavain_session_id)"
 
 IDS=()
 PATHS=()

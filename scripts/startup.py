@@ -418,6 +418,11 @@ def telemetry(args, record):
             os.close(fd)
 
 
+def bb_sections(sections):
+    """Remove explanations only; contract, ownership and blockers are unchanged."""
+    return [(name, text) for name, text in sections if name not in ('diagnostics', 'routing')]
+
+
 def render(args, current, payload, started):
     freshness, snapshot = snapshot_status(args, current)
     body, meta, instruction_status = contract(args)
@@ -446,6 +451,11 @@ def render(args, current, payload, started):
                                   clip(finding.get('bead_id'))+' '+clip(finding.get('message'))+' '+clip(finding.get('action'))))
     sections.extend(drift_sections(args))
     sections.append(('diagnostics','Setup, repair, service startup, inventory refresh and cache maintenance are explicit operations. No passing-result caching or capability pruning.'))
+    bb_spec = importlib.util.spec_from_file_location('bb_host', args.source/'scripts/bb-host.py')
+    bb_module = importlib.util.module_from_spec(bb_spec)
+    bb_spec.loader.exec_module(bb_module)
+    if bb_module.bb_host():
+        sections = bb_sections(sections)
     output, dropped, instruction_status = finish_context(sections, freshness, instruction_status)
     record = {'schema_version':SCHEMA,'event':'hook_health','hook':'clavain/SessionStart',
               'timestamp':time.time(),'host':args.host,'host_version':payload.get('host_version'),

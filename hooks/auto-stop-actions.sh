@@ -158,10 +158,15 @@ fi
 # lookup allows 25s per bead root. Re-querying trackers from inside the hook
 # would reintroduce exactly that failure.
 PROVENANCE_WARNING=""
+PROVENANCE_SESSION_ID="$SESSION_ID"
+if [[ -z "${CLAUDE_SESSION_ID:-}" && -n "${BB_THREAD_ID:-}" ]]; then
+    source "${SCRIPT_DIR}/../scripts/lib-bb.sh"
+    if _clavain_in_bb; then PROVENANCE_SESSION_ID="$BB_THREAD_ID"; fi
+fi
 if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
     source "${SCRIPT_DIR}/lib-next-goal-provenance.sh" 2>/dev/null || true
     if declare -F next_goal_provenance_warning >/dev/null 2>&1; then
-        PROVENANCE_WARNING="$(next_goal_provenance_warning "$SESSION_ID" "$RECENT" 2>/dev/null || true)"
+        PROVENANCE_WARNING="$(next_goal_provenance_warning "$PROVENANCE_SESSION_ID" "$RECENT" 2>/dev/null || true)"
     fi
     # The verification audit — "is what you cited still true" — runs only when
     # provenance came back clean. Not to spare the noise: when no lookup ran at
@@ -170,7 +175,7 @@ if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
     # verification receipt as a side effect. Same subsumption argument the
     # provenance tier makes against goal-cadence, one level in.
     if [[ -z "$PROVENANCE_WARNING" ]] && declare -F next_goal_verification_warning >/dev/null 2>&1; then
-        PROVENANCE_WARNING="$(next_goal_verification_warning "$SESSION_ID" "$RECENT" 2>/dev/null || true)"
+        PROVENANCE_WARNING="$(next_goal_verification_warning "$PROVENANCE_SESSION_ID" "$RECENT" 2>/dev/null || true)"
     fi
 fi
 

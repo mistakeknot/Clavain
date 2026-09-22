@@ -71,7 +71,8 @@ SCOPE="${1:-}"
 # construction, which is exactly the state that needs flagging.
 PROVENANCE_SCHEMA="clavain.next-goal-provenance/v1"
 PROVENANCE_DIR="${CLAVAIN_PROVENANCE_DIR:-$HOME/.cache/clavain/next-goal-provenance}"
-PROVENANCE_SESSION="${CLAUDE_SESSION_ID:-unknown}"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-bb.sh"
+PROVENANCE_SESSION="$(_clavain_session_id)"
 
 record_provenance() {
     # $1 = tracker_reachable (true|false), $2 = compact JSON object of extras
