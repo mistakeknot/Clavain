@@ -68,6 +68,10 @@ def stop_export_archive(row):
     thread=row['bb_thread_id']
     if thread=='unknown':
         candidates=bb('thread','list')
+        if isinstance(candidates,dict):
+            candidates=candidates.get('threads')
+        if not isinstance(candidates,list) or not all(isinstance(t,dict) for t in candidates):
+            raise SeatError('Unrecognized BB thread list response; retain spawn intent')
         matches=[t for t in candidates if t.get('title')=='Clavain seat '+row['attempt_id']
                  and t.get('parentThreadId')==row['parent_thread_id']]
         if len(matches)!=1 or not str(matches[0].get('id','')).startswith('thr_'):
@@ -109,11 +113,17 @@ def stop_export_archive(row):
 def reconcile(directory,parent):
     for path in directory.glob('*.json'):
         row=json.loads(path.read_text())
-        if row.get('parent_thread_id')!=parent or row.get('cleanup')=='archived':
+        if row.get('parent_thread_id')!=parent or row.get('cleanup') in ('archived','not-started'):
             continue
         with path.with_suffix('.lock').open('a') as lock:
             try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
             except BlockingIOError: continue  # a live supervisor owns it
+            if row.get('state')=='intent' and row.get('schema_version')==2:
+                # No spawn was attempted. Intercore may have failed after the
+                # local write; retire this safely without looking for a child.
+                row.update(state='terminal',outcome='not-started',cleanup='not-started')
+                persist(path,row)
+                continue
             stop_export_archive(row)
             row.update(state='terminal',outcome='interrupted')
             persist(path,row)
@@ -168,7 +178,7 @@ def supervise(args):
     journal=directory/(key+'.json')
     if journal.exists(): raise SeatError('Attempt already exists; never spawn it twice')
     output=Path(args.output).resolve();output.parent.mkdir(parents=True,exist_ok=True)
-    row={'schema_version':1,'transport':'bb','role':args.role,'attempt_id':args.attempt_id,
+    row={'schema_version':2,'transport':'bb','role':args.role,'attempt_id':args.attempt_id,
          'dispatch_id':args.dispatch_id,'bead_id':os.environ.get('CLAVAIN_BEAD_ID',''),
          'run_id':os.environ.get('CLAVAIN_RUN_ID',''),'parent_thread_id':parent,
          'bb_thread_id':'unknown','turn_id':'unknown','request_id':'unknown','after_seq':0,
@@ -183,10 +193,21 @@ def supervise(args):
         cancelled=True
     previous={s:signal.signal(s,cancel) for s in (signal.SIGTERM,signal.SIGINT)}
     answer=''
+    spawn_started=False
     with journal.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         persist(journal,row)
         try:
+            row['state']='spawning'
+            try:
+                persist(journal,row)
+            except (SeatError,OSError,ValueError,subprocess.SubprocessError):
+                # The remote call has not happened, so a failed state write is
+                # known not to have started a child. Preserve that distinction.
+                row['state']='intent'
+                atomic(journal,row)
+                raise
+            spawn_started=True
             spawned=bb('thread','spawn','--project',project,'--parent-thread',parent,
                        '--lifecycle-owner-thread',parent,'--new-environment','worktree',
                        '--base-branch',row['source_commit'],'--provider',provider,'--model',args.model,
@@ -240,7 +261,11 @@ def supervise(args):
             row.update(outcome='indeterminate',error=str(error))
         finally:
             for sig,handler in previous.items(): signal.signal(sig,handler)
-            try: stop_export_archive(row)
+            try:
+                if spawn_started:
+                    stop_export_archive(row)
+                else:
+                    row.update(state='terminal',cleanup='not-started')
             except (SeatError,OSError,ValueError,KeyError,TypeError,AttributeError,subprocess.SubprocessError) as error:
                 row['cleanup_error']=str(error)
             complete=(row['outcome']=='completed' and row['cleanup']=='archived' and

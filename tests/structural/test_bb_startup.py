@@ -19,10 +19,9 @@ def test_session_identity_fallback(tmp_path):
 def test_compaction_preserves_protected_sections():
     spec=importlib.util.spec_from_file_location('startup',ROOT/'scripts/startup.py')
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    sections=[('contract','CONTRACT'),('ownership-error','OWNER UNKNOWN'),('runtime-blocker','BLOCKER'),('diagnostics','long boilerplate')]
+    sections=[('contract','CONTRACT'),('ownership-error','OWNER UNKNOWN'),('runtime-blocker','BLOCKER'),('routing','Use clavain:using-clavain'),('diagnostics','long boilerplate')]
     result=module.bb_sections(sections)
-    assert result[:3] == sections[:3]
-    assert len(result) == 3
+    assert result == sections[:4]
 
 
 def test_notice_dedup_key_includes_thread_stage_evidence(tmp_path):

@@ -1937,12 +1937,19 @@ _extract_verdict() {
 
     local verdict_file="${output_file}.verdict"
 
-    # Try to extract existing verdict block (last 7 lines)
-    local last_lines
-    last_lines=$(tail -7 "$output_file" 2>/dev/null) || return 0
+    # The final verdict can precede transport warnings and need not have seven
+    # lines or a closing delimiter. Keep the last block's fields only.
+    local verdict_block
+    verdict_block=$(awk '
+        /^--- VERDICT ---\r?$/ { block="--- VERDICT ---"; active=1; next }
+        active && /^---\r?$/ { block=block "\n---"; active=0; next }
+        active && /^[A-Z][A-Z_ ]*: / { sub(/\r$/, ""); block=block "\n" $0; next }
+        active { active=0 }
+        END { if (block != "") print block }
+    ' "$output_file") || return 0
 
-    if echo "$last_lines" | head -1 | grep -q "^--- VERDICT ---$"; then
-        echo "$last_lines" > "$verdict_file"
+    if [[ -n "$verdict_block" ]] && grep -q '^STATUS: ' <<< "$verdict_block"; then
+        printf '%s\n' "$verdict_block" > "$verdict_file"
         return 0
     fi
 

@@ -79,6 +79,24 @@ def test_denial_dominates_quota(tmp_path):
     assert (tmp_path/"failure").read_text().strip() == "terminal_policy"
 
 
+def test_recovered_codex_error_is_not_terminal(tmp_path):
+    events = [{"type":"error", "message":"Transient stream error; reconnecting"},
+              {"type":"turn.completed", "usage":{"input_tokens":10,"output_tokens":2}}]
+    assert run_dispatch(tmp_path, events) == 0
+
+
+def test_error_after_success_remains_terminal(tmp_path):
+    events = [{"type":"turn.completed"}, {"type":"error", "message":"Stream failed"}]
+    assert run_dispatch(tmp_path, events) != 0
+
+
+def test_success_does_not_erase_failed_turn(tmp_path):
+    events = [{"type":"turn.failed", "error":{"code":"permission_denied"}},
+              {"type":"turn.completed"}]
+    assert run_dispatch(tmp_path, events) != 0
+    assert (tmp_path/"failure").read_text().strip() == 'terminal_policy'
+
+
 def test_budget_error_remains_terminal_accounting(tmp_path):
     assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}], budget=True) != 0
     assert (tmp_path/"failure").read_text().strip() == "terminal_accounting"

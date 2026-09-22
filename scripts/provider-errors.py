@@ -11,6 +11,7 @@ CONFIG = {"invalid_request_error", "authentication_error", "unauthorized", "401"
 
 def classify(events):
     failures = set()
+    transient_errors = set()
     for event in events:
         if not isinstance(event, dict):
             continue
@@ -19,6 +20,13 @@ def classify(events):
         if not isinstance(event, dict):
             continue
         kind = event.get("type")
+        if kind == 'turn.completed':
+            # Codex can recover from stream errors within a turn. Only its
+            # standalone error envelopes are provisional; a failed turn or
+            # explicit task failure remains terminal even across later turns.
+            transient_errors.clear()
+            continue
+        target = transient_errors if kind == 'error' else failures
         error = None
         if kind in ("task_complete", "turn.failed", "error"):
             error = event.get("error")
@@ -34,14 +42,15 @@ def classify(events):
         if isinstance(error, dict):
             codes = {str(error.get(k, "")) for k in ("codex_error_info", "code", "type", "status")}
         if codes & DENIAL:
-            failures.add("terminal_policy")
+            target.add("terminal_policy")
         elif codes & CONFIG:
-            failures.add("terminal_configuration")
+            target.add("terminal_configuration")
         elif codes & QUOTA or (isinstance(error, dict) and re.match(
                 r"^You[’']ve hit your usage limit\.", str(error.get('message', '')))):
-            failures.add("quota_exhausted")
+            target.add("quota_exhausted")
         else:
-            failures.add("terminal_error")
+            target.add("terminal_error")
+    failures.update(transient_errors)
     for failure in ("terminal_policy", "terminal_configuration", "terminal_error", "quota_exhausted"):
         if failure in failures:
             return failure

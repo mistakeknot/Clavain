@@ -223,3 +223,31 @@ PRE
     _extract_verdict "$OUTPUT"
     grep -q "^STATUS: pass$" "$VERDICT_FILE"
 }
+
+@test "extract: last structured verdict survives trailing connector warnings" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+--- VERDICT ---
+STATUS: PASS
+SUMMARY: earlier finding
+---
+Further review.
+--- VERDICT ---
+STATUS: FAIL
+SUMMARY: final finding
+Warning: claude.ai connectors are disabled in this environment.
+TEXT
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: FAIL$' "$VERDICT_FILE"
+    grep -q '^SUMMARY: final finding$' "$VERDICT_FILE"
+    ! grep -q 'earlier\|connectors' "$VERDICT_FILE"
+}
+
+@test "extract: a delimited verdict survives a long trailing warning" {
+    _load
+    printf -- '--- VERDICT ---\nSTATUS: FAIL\nSUMMARY: keep this\n---\n' > "$OUTPUT"
+    for n in {1..20}; do echo 'trailing warning' >> "$OUTPUT"; done
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: FAIL$' "$VERDICT_FILE"
+    ! grep -q 'trailing warning' "$VERDICT_FILE"
+}

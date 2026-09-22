@@ -420,7 +420,7 @@ def telemetry(args, record):
 
 def bb_sections(sections):
     """Remove explanations only; contract, ownership and blockers are unchanged."""
-    return [(name, text) for name, text in sections if name not in ('diagnostics', 'routing')]
+    return [(name, text) for name, text in sections if name != 'diagnostics']
 
 
 def render(args, current, payload, started):

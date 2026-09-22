@@ -31,6 +31,10 @@ and updated immediately when its ID arrives; this is crash recovery evidence,
 not a competing lifecycle store. Event sequence numbers make replay idempotent.
 Unclear spawn responses are final and require reconciliation; they never trigger
 a second spawn. A process lock excludes competing recovery of a live supervisor.
+Version 2 journals distinguish `intent` (no spawn attempted) from `spawning`
+(acceptance may be unclear). Recovery retires an unstarted intent without looking
+for a child; old ambiguous journals still require child reconciliation. The live
+BB thread list is an array; the adapter also accepts a `threads` wrapper.
 
 Interlock remains authoritative for reservations. Reservation leases belong to
 the attempt, with `BB_THREAD_ID` as agent identity. Only confirmed termination
@@ -75,6 +79,21 @@ same-profile pool retry precedes model fallback. `CLAVAIN_REQUIRE_USAGE=1`
 forbids automatic retries after a started attempt, including quota failures.
 Unknown usage/account evidence cannot be treated as zero or as accepted
 budgeted work.
+The pool retry repeats the same provider configuration. The hub chooses the
+account; no account exclusion hint is supplied. When the first invocation was
+already pooled, a different account on retry is **unverified**, not guaranteed
+by the retry-order test or the successful hub spike.
+
+Claude quota classification remains unverified against a real failure stream.
+The synthetic envelope test proves parser mechanics only; actual Claude values
+such as `rate_limit` and `billing_error` currently remain terminal unknown errors
+until a real fixture establishes their semantics. No live Claude quota success
+is claimed. Codex standalone `error` events are provisional when followed by a
+successful `turn.completed`; explicit failed turns/tasks remain terminal.
+
+Codex now uses `--json` even on the stock-awk path so provider failures remain
+available to the classifier. On hosts without GNU awk this changes streamed
+stdout to JSONL; the output file still contains the last agent message.
 
 ## Parity matrix
 
@@ -102,6 +121,9 @@ commands and approval boundaries, deduplicated by thread/cycle/stage/evidence
 hash. `bd where --json` owns workspace resolution; an unknown failure does not
 silently skip the primer. Tests: `test_bb_startup.py`, `test_startup.py`,
 `test_remontoire_facade.py` and dotfiles `test_bb_startup_hooks.py`.
+The routing instruction is retained too. Personal hooks resolve the managed
+`clavain` skills symlink to its package root; Beads absence is recognized through
+the `no_beads_directory` JSON error, while unknown workspace errors fail open.
 
 Seat results are exported before archive, including failures that have reached
 confirmed termination. An export or stop failure retains the seat for recovery.

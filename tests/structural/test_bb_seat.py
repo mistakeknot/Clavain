@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 
 import pytest
 
@@ -32,8 +33,12 @@ elif a[:2]==['provider','list']: value=[{'id':'codex','available':True,'capabili
 elif a[:2]==['provider','models']: value=[{'id':'gpt-6-astra','supportedReasoningEfforts':[{'reasoningEffort':'xhigh'}]}]
 elif a[:2]==['thread','spawn']:
  sys.stdin.read()
- if mode=='unclear': print('not-json'); sys.exit(0)
+ if mode!='unclear': (root/'accepted').touch()
+ if mode.startswith('unclear'): print('not-json'); sys.exit(0)
  value={'id':'thr_child','environmentId':'env_child'}
+elif a[:2]==['thread','list']:
+ value=[{'id':'thr_child','title':'Clavain seat attempt_one','parentThreadId':'thr_parent'}] if (root/'accepted').exists() else []
+ if mode=='unclear-wrapped': value={'threads':value}
 elif a[:2]==['thread','show']:
  value={'thread':{'id':'thr_child','status':'idle' if (root/'stopped').exists() or mode not in ('timeout','waiting') else 'active','environmentId':'env_child'},'environment':{'path':str(root/'child')}}
 elif a[:2]==['thread','log']:
@@ -55,11 +60,11 @@ print(json.dumps(value))
     cli.chmod(0o755)
     env=dict(os.environ,BB_CLI=str(cli),BB_THREAD_ID='thr_parent',BB_SERVER_URL='https://bb.example',
              FIXTURE=str(tmp_path),CLAVAIN_INTERCORE_DB=str(database),CLAVAIN_BB_STATE_DIR=str(tmp_path/'state'),CLAVAIN_REQUIRE_USAGE='0')
-    def run(mode='completed',role='deep-execution',attempt='attempt_one'):
+    def run(mode='completed',role='deep-execution',attempt='attempt_one',extra_env=None):
         return subprocess.run(['python3',str(ROOT/'scripts/bb-seat.py'),'--role',role,'--backend','codex',
                  '--model','gpt-6-astra','--effort','xhigh','--service-tier','standard','--workdir',str(work),
                  '--output',str(tmp_path/'result'), '--attempt-id',attempt,'--dispatch-id','dispatch_one',
-                 '--timeout','0.6'],input='Scratch fixture',text=True,capture_output=True,env=env | {'MODE':mode},timeout=15)
+                 '--timeout','0.6'],input='Scratch fixture',text=True,capture_output=True,env=env | {'MODE':mode} | (extra_env or {}),timeout=15)
     return tmp_path,run
 
 
@@ -113,3 +118,36 @@ def test_orphan(seat):
     row['cleanup']='pending';row['state']='running';path.write_text(json.dumps(row))
     assert run(attempt='attempt_two').returncode==1
     assert json.loads(path.read_text())['cleanup']=='archived'
+
+
+@pytest.mark.parametrize('mode',['unclear-found','unclear-wrapped'])
+def test_unclear_spawn_reconciles_real_list_shapes(seat,mode):
+    root,run=seat
+    assert run(mode).returncode!=0
+    row=json.loads((root/'result.receipt.json').read_text())
+    assert row['bb_thread_id']=='thr_child' and row['cleanup']=='archived'
+    assert (root/'calls').read_text().count('"spawn"')==1
+
+
+@pytest.mark.parametrize('fail_at',[1,2])
+def test_intercore_failure_before_spawn_does_not_block_next_attempt(seat,fail_at):
+    root,run=seat
+    real_ic=shutil.which('ic')
+    shim=root/'ic'
+    shim.write_text(f'''#!/usr/bin/env python3
+import os,sys
+from pathlib import Path
+p=Path({str(root/'ic-count')!r})
+count=int(p.read_text())+1 if p.exists() else 1
+p.write_text(str(count))
+if count=={fail_at}: sys.exit(1)
+os.execv({real_ic!r}, [{real_ic!r}, *sys.argv[1:]])
+''')
+    shim.chmod(0o755)
+    env={'PATH':str(root)+':'+os.environ['PATH']}
+    assert run(extra_env=env).returncode!=0
+    assert '"spawn"' not in (root/'calls').read_text()
+    path=next((root/'state').glob('*.json'))
+    assert run(attempt='attempt_two',extra_env=env).returncode==1
+    assert (root/'calls').read_text().count('"spawn"')==1
+    assert json.loads(path.read_text())['cleanup']=='not-started'
