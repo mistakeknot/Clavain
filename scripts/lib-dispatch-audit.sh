@@ -39,7 +39,11 @@ _prepare_role_audit() {
 }
 
 _role_audit_context() {
-  local state="$1" exit_code="$2" failure_class="$3" version="" verdict="" head_after=""
+  local state="$1" exit_code="$2" failure_class="$3" version="" verdict="" head_after="" bb_receipt=null
+  if [[ "${VIA:-}" == bb && "${DISPATCH_RESULT_READY:-false}" == true && -f "${OUTPUT}.receipt.json" ]]; then
+    bb_receipt="$(jq -c --arg attempt "$ATTEMPT_ID" 'select(.attempt_id == $attempt)' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
+    bb_receipt="${bb_receipt:-null}"
+  fi
   [[ "$ENGINE" != codex ]] || version="$(codex --version 2>/dev/null || true)"
   # A reused output path may still contain a previous attempt's sidecar.
   # Pending states have no verdict; App Server verdicts come from collection.
@@ -54,19 +58,20 @@ _role_audit_context() {
     --arg service "$SERVICE_TIER" --arg version "$version" --arg sandbox "$SANDBOX" \
     --arg transport "${DISPATCH_TRANSPORT:-${VIA:-exec}}" --arg parent "$DISPATCH_SESSION_ID" \
     --arg run "${CLAVAIN_RUN_ID:-}" --arg bead "${CLAVAIN_BEAD_ID:-}" \
-    --arg session "${ZAKA_SESSION:-}" --arg events "${ZAKA_EVENT_LOG:-}" \
+    --arg session "${ZAKA_SESSION:-}" --arg events "${PROVIDER_EVENTS:-${ZAKA_EVENT_LOG:-}}" \
     --arg before "$CHECKOUT_BEFORE" --arg after "$head_after" \
     --arg output "$OUTPUT" --arg verdict "$verdict" --arg failure "$failure_class" \
     --arg enrollment "${CLAVAIN_TASK_ENROLLMENT_ID:-}" --arg manifest "${CLAVAIN_TASK_MANIFEST_SHA256:-}" \
     --arg cohort "${CLAVAIN_TASK_COHORT_ID:-}" \
     --argjson exit_code "$exit_code" --argjson observation "${DISPATCH_EXECUTION_OBSERVATION:-null}" \
+    --argjson bb_receipt "$bb_receipt" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,retry_id:$retry_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
       run_id:$run,bead_id:$bead,
       execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
         codex_version:$version,sandbox:$sandbox,transport:$transport,account:$account,session_id:$session,event_log:$events}
         + (if $observation | type == "object" then $observation else {} end)),
-      checkout:{before:$before,after:$after},
+      checkout:{before:$before,after:$after},bb_seat:$bb_receipt,
       terminal:($state == "completed" or $state == "failed"),
       result:{exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict}}
       + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)'

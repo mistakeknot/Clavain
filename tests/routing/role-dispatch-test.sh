@@ -123,6 +123,7 @@ export FAKE_IC_LOG="$TMP_ROOT/ic.log"
 export FAKE_IC_CONTEXT_LOG="$TMP_ROOT/contexts.jsonl"
 export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
+export CLAVAIN_BB_DIRECT_POOL=0
 export CLAVAIN_429_BACKOFF_SECONDS=0
 
 dry_run="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role deep-execution -C "$TMP_ROOT/work" "hi" 2>&1)" \

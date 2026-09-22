@@ -23,7 +23,7 @@ Evidence:
   at epoch milliseconds `1790116608441`. This proves hub traffic, unlike a
   concurrent aggregate utilization change.
 - Raw output and report reside in `/tmp/clavain-bb-spike/`; Intercore records
-  are in `/tmp/.clavain/intercore.db`. No BB thread was created by this direct
+  are retained in `/tmp/clavain-bb-spike/intercore-evidence/intercore.db`. No BB thread was created by this direct
   probe. No child remains to archive.
 
 The pool exposes no supported request-scoped account attribution command.
@@ -31,11 +31,14 @@ The manual affinity inspection is spike evidence; production receipts must
 retain unknown attribution. A live forced account exhaustion/switch was not
 performed; account-before-model ordering is covered by
 `tests/routing/role-dispatch-test.sh`. Claude inherits its provider environment,
-but a Claude hub canary has not been run. The direct pool path remains an
-explicit `CLAVAIN_BB_DIRECT_POOL=1` opt-in until these acceptance gaps and the
-integration review are resolved. This is a staged implementation, not a
-claim of complete transport parity.
+but a Claude hub canary has not been run. After the exact hub/session tie was
+verified, direct Codex pooling became the default on enrolled BB hosts with
+the dedicated pool token. `CLAVAIN_BB_DIRECT_POOL=0` selects the legacy path.
+Unknown account attribution blocks budgeted pooled acceptance. This is not a
+claim of complete transport parity; independent integration review remains open.
 
-The real quota fixture is a Codex rollout event, supplied by the coordinator;
-the exit-zero regression is synthetic. A direct stdout capture was blocked
-before launch by read-only Codex state and is not a quota fixture.
+The coordinator supplied the real rollout quota fixture. A subsequent scratch
+stdout capture (session `01a0cb55-4e46-7093-8297-107fd705a968`, exit 1)
+confirmed the CLI emits `error.message` and `turn.failed.error.message` without
+`codex_error_info`. The classifier recognizes the observed anchored provider
+message only within those structured envelopes. The exit-zero test is synthetic.

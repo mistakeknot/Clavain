@@ -174,7 +174,9 @@ def test_next_goal_helper_records_a_receipt(project_root):
     assert "record_provenance" in helper
     assert "clavain.next-goal-provenance/v1" in helper
     # Keyed by session: a receipt from yesterday must not vouch for today.
-    assert "CLAUDE_SESSION_ID" in helper
+    assert 'PROVENANCE_SESSION="$(_clavain_session_id)"' in helper
+    identity = (project_root / "scripts" / "lib-bb.sh").read_text()
+    assert "CLAUDE_SESSION_ID" in identity and "BB_THREAD_ID" in identity
     # A crashed run records that it looked at nothing, so "helper failed" stays
     # distinguishable from "helper was never invoked".
     assert "record_provenance false" in helper

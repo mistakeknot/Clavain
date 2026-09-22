@@ -7,7 +7,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", budget=False):
+def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", budget=False, pool=False):
     work = tmp_path / "work"
     work.mkdir(exist_ok=True)
     if git:
@@ -26,9 +26,14 @@ for event in json.loads(os.environ['EVENTS']): print(json.dumps(event))
 print(os.environ['STDERR'], file=sys.stderr)
 """)
     stub.chmod(0o755)
+    bb = bin_dir/'bb'
+    bb.write_text('#!/bin/sh\necho \'{"thread":{"id":"thr_fixture","environment":{"hostId":"host_pda34naxgq"}}}\'\n')
+    bb.chmod(0o755)
     env = dict(os.environ, PATH=str(bin_dir)+":"+os.environ["PATH"], CALL=str(tmp_path/"call"),
                EVENTS=json.dumps(events), STDERR=stderr, CLAVAIN_CONTEXT_GATEWAY_MODE="off",
                CLAVAIN_DISPATCH_FAILURE_FILE=str(tmp_path/"failure"),
+               CLAVAIN_BB_DIRECT_POOL="1" if pool else "0", BB_CLI=str(bb), BB_THREAD_ID='thr_fixture',
+               BB_SERVER_URL='https://bb.example', CODEX_POOL_AUTH_TOKEN='fixture-only',
                CLAVAIN_REQUIRE_USAGE="1" if budget else "0", CLAVAIN_REVIEW_EVENTS=str(tmp_path/"events"))
     # Keep stdin open deliberately: communicate() would close it and mask the bug.
     p = subprocess.Popen(["bash", str(ROOT/"scripts/dispatch.sh"), "-s", sandbox, "-C", str(work),
@@ -89,6 +94,17 @@ def test_real_rollout_quota_fixture(tmp_path):
     event = json.loads((ROOT / "tests/fixtures/codex-usage-limit-rollout.jsonl").read_text())
     assert run_dispatch(tmp_path, [event]) != 0
     assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"
+
+
+def test_real_stdout_quota_fixture(tmp_path):
+    events=[json.loads(line) for line in (ROOT/'tests/fixtures/codex-usage-limit-stdout.jsonl').read_text().splitlines()]
+    assert run_dispatch(tmp_path, events) != 0
+    assert (tmp_path/'failure').read_text().strip() == 'quota_exhausted'
+
+
+def test_pooled_unknown_account_blocks_budget_acceptance(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, budget=True) != 0
+    assert (tmp_path/'failure').read_text().strip() == 'terminal_accounting'
 
 
 def test_claude_structured_quota_and_response(tmp_path):

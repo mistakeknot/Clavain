@@ -22,6 +22,7 @@ exit "${FAKE_CODEX_EXIT:-0}"
 CODEX
 chmod +x "$TMP_ROOT/bin/codex"
 export PATH="$TMP_ROOT/bin:$PATH" CLAVAIN_CONTEXT_GATEWAY_MODE=off
+export CLAVAIN_BB_DIRECT_POOL=0
 (cd "$TMP_ROOT/work" && ic init >/dev/null)
 # Reusing a report path must not attach a previous attempt's verdict at start.
 printf '%s\n' 'STALE PRIOR ATTEMPT' > "$TMP_ROOT/result.md.verdict"

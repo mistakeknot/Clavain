@@ -170,7 +170,10 @@ Options:
                                   flere — explicit admitted read-only worker; requires
                                           CLAVAIN_FLERE_BIN, CLAVAIN_FLERE_PROFILE,
                                           provider/model and Intercore attempt identity
-  --timeout <SECONDS>            Positive Flere worker deadline (default: 120)
+  --timeout <SECONDS>            Positive Flere or BB worker deadline (default: 120)
+  --via bb                      Governed writable execution seat in an enrolled BB
+                                  host; requires a clean source checkout and -o.
+                                  Missing observed identity keeps the result unaccepted.
   --via zaka                    Spawn a steerable tmux session via zaka instead of a
                                   one-shot headless exec. The engine maps to a zaka
                                   adapter (codex→codex, kimi→kimi, claude-code→claude-code);
@@ -379,7 +382,12 @@ _dispatch_write_failure_class() {
 
 _run_candidate_with_policy() {
   local failure_file retries attempt rc failure_class backoff pool_retry=0
-  local retry_id="$(_dispatch_audit_id)"
+  local retry_id="${CLAVAIN_RETRY_ID:-${DISPATCH_ID:-$(_dispatch_audit_id)}}"
+  local candidate_backend=codex previous_arg="" candidate_arg
+  for candidate_arg in "$@"; do
+    [[ "$previous_arg" != --to ]] || candidate_backend="$candidate_arg"
+    previous_arg="$candidate_arg"
+  done
   failure_file="$(mktemp "${TMPDIR:-/tmp}/clavain-dispatch-failure.XXXXXX")"
   retries="${CLAVAIN_429_MAX_RETRIES:-2}"
   [[ "$retries" =~ ^[0-9]+$ ]] || retries=2
@@ -399,7 +407,7 @@ _run_candidate_with_policy() {
       CLAVAIN_LAST_FAILURE_CLASS=""
       return 0
     fi
-    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == quota_exhausted && "$pool_retry" == 0 ]] && _bb_pool_available; then
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == quota_exhausted && "$pool_retry" == 0 ]] && _bb_pool_available "$candidate_backend"; then
       pool_retry=1
       echo 'dispatch: quota exhausted; retrying the same profile through the account pool before model fallback' >&2
       continue
@@ -565,9 +573,9 @@ while [[ $# -gt 0 ]]; do
       require_arg "$1" "${2:-}"
       VIA="$2"
       case "$VIA" in
-        zaka) ;;
+        zaka|bb) ;;
         *)
-          echo "Error: --via must be 'zaka' (got '$VIA')" >&2
+          echo "Error: --via must be 'zaka' or 'bb' (got '$VIA')" >&2
           exit 1
           ;;
       esac
@@ -1465,7 +1473,17 @@ if [[ "$ENGINE" == "flere" ]]; then
 fi
 
 # Build backend command
-if [[ "$ENGINE" == "kimi" ]]; then
+if [[ "$VIA" == bb ]]; then
+  if [[ "$ROLE_RESOLVED" != true || "$SANDBOX" == read-only || -z "$OUTPUT" ]] ||
+     [[ "$ROLE" != routine-execution && "$ROLE" != deep-execution ]]; then
+    echo 'Error: BB seats require a governed writable execution role and an output path' >&2
+    _dispatch_write_failure_class terminal_configuration
+    exit 1
+  fi
+  _clavain_in_bb || { echo 'Error: BB seat host is not enrolled' >&2; exit 1; }
+  DISPATCH_TRANSPORT=bb
+  CMD=(python3 "$DISPATCH_SCRIPT_DIR/bb-seat.py")
+elif [[ "$ENGINE" == "kimi" ]]; then
   # Kimi non-interactive mode: kimi -p "<prompt>".
   # Codex-only options don't translate — warn and drop them.
   if [[ "$SANDBOX_SET" == true ]]; then
@@ -1515,6 +1533,7 @@ AGENT
   # WORKDIR is applied at execution time via cd (kimi has no -C flag);
   # OUTPUT is written by teeing kimi's stdout (kimi has no -o flag).
 elif [[ "$ENGINE" == "claude" ]]; then
+  if _bb_pool_available claude; then DISPATCH_TRANSPORT=direct-pooled; fi
   # Claude headless one-shot: claude -p "<prompt>". Added for the review
   # seat in orchestrated delegation (goal 7d610151): an independent
   # validator from a different model family than the codex executors.
@@ -1682,6 +1701,10 @@ fi
 
 # Dry run: print command and exit
 if [[ "$DRY_RUN" == true ]]; then
+  if [[ "$VIA" == bb ]]; then
+    printf 'BB execution seat: role=%s backend=%s model=%s effort=%s checkout=%s\n' "$ROLE" "$ENGINE" "$MODEL" "$REASONING_EFFORT" "${WORKDIR:-.}"
+    exit 0
+  fi
   if [[ -n "$TIER" ]]; then
     echo "# Tier: $TIER → model: ${MODEL:-<default>}" >&2
   fi
@@ -2106,6 +2129,15 @@ _finalize_dispatch_result() {
   # failures must never pick up an older sidecar at the requested path.
   DISPATCH_RESULT_READY=true
   failure_class="$(python3 "$DISPATCH_SCRIPT_DIR/provider-errors.py" "$PROVIDER_EVENTS")"
+  if [[ "$VIA" == bb && -f "${OUTPUT}.receipt.json" ]]; then
+    failure_class="$(jq -r --arg attempt "$ATTEMPT_ID" 'select(.attempt_id == $attempt) | .failure_class // empty' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
+  fi
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "${DISPATCH_TRANSPORT:-}" == direct-pooled ]]; then
+    # Hub traffic is proven, but no supported request-scoped account receipt is
+    # exposed. A budgeted pooled invocation cannot be accepted from guesses.
+    exit_code=1
+    failure_class=terminal_accounting
+  fi
   # A terminal stderr denial dominates an earlier structured capacity error.
   if [[ -n "$failure_class" ]]; then
     local stderr_class
@@ -2151,7 +2183,30 @@ if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true && -n "$OUTPUT" ]]; then
   fi
 fi
 
-if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
+if [[ "$VIA" == bb ]]; then
+  # Keep the existing admission/audit setup above and finalizers below intact.
+  set +e
+  BB_CANCELLED=0
+  python3 "$DISPATCH_SCRIPT_DIR/bb-seat.py" --role "$ROLE" --backend "$ENGINE" \
+    --model "$MODEL" --effort "$REASONING_EFFORT" --service-tier "$SERVICE_TIER" \
+    --workdir "${WORKDIR:-.}" --output "$OUTPUT" --attempt-id "$ATTEMPT_ID" \
+    --dispatch-id "$DISPATCH_ID" --sandbox "$SANDBOX" \
+    --timeout "${CLAVAIN_BB_SEAT_TIMEOUT:-$FLERE_TIMEOUT}" <<< "$PROMPT" 2> "$STDERR_FILE" &
+  BB_PID=$!
+  trap 'BB_CANCELLED=1; kill -TERM "$BB_PID" 2>/dev/null || true; wait "$BB_PID" || true' INT TERM
+  wait "$BB_PID"
+  BB_EXIT=$?
+  [[ "$BB_CANCELLED" == 0 ]] || BB_EXIT=130
+  trap '_dispatch_cleanup_state; _dispatch_cleanup_stderr' EXIT INT TERM
+  set -e
+  [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
+  _extract_verdict "$OUTPUT"
+  [[ "$BB_EXIT" == 0 ]] || _write_error_verdict "$OUTPUT" error 'BB execution evidence incomplete; inspect seat receipt'
+  _post_dispatch_validate "$WORKDIR"
+  _dispatch_sync_interband_from_legacy
+  if ! _finalize_dispatch_result "$BB_EXIT"; then BB_EXIT=1; fi
+  exit "$BB_EXIT"
+elif [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   _render_backend_response() {
     if [[ "$ENGINE" == claude && "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]]; then
       tee "$PROVIDER_EVENTS" | python3 "$DISPATCH_SCRIPT_DIR/claude-response.py"

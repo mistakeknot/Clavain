@@ -63,7 +63,9 @@ responses endpoint `/api/v1/plugins/account-pool/http/v1`, an explicit
 `bb-account-pool` provider configuration, and an environment-sourced
 `x-bb-account-pool-token` header from `CODEX_POOL_AUTH_TOKEN`. No parent token
 is reused. See [the spike evidence](../research/bb-direct-pool-spike.md).
-Claude retains its inherited `ANTHROPIC_BASE_URL`.
+Codex pooling is enabled by default after the successful hub-correlated spike;
+`CLAVAIN_BB_DIRECT_POOL=0` selects the legacy path. Claude retains its inherited
+`ANTHROPIC_BASE_URL`; a Codex pool token never establishes Claude pool availability.
 
 Quota classification consumes structured provider errors, never quoted task
 text. Permission, configuration, policy or unclear acceptance is terminal and
@@ -104,6 +106,11 @@ silently skip the primer. Tests: `test_bb_startup.py`, `test_startup.py`,
 Seat results are exported before archive, including failures that have reached
 confirmed termination. An export or stop failure retains the seat for recovery.
 The adapter must report missing model/effort/permission evidence rather than
-copying requested settings into observed fields. Required Astra re-review,
-scratch seat live evidence and unresolved parity cells remain acceptance gates.
+copying requested settings into observed fields. The scratch seat completed,
+exported and archived, but the installed BB schema supplies no model/effort/
+permission attestation, so acceptance remains blocked. BB provider retries also
+lack a supported per-seat disable control. See [the canary](../research/bb-seat-canary.md).
+Independent review and unresolved parity cells remain acceptance gates. The
+coordinator corrected the reviewer to governed Fable because Astra produced this
+implementation; an additional Astra review cannot establish independence.
 Nothing in this record authorizes pushing, publishing, releasing or deployment.

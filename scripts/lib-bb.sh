@@ -7,7 +7,13 @@ _clavain_in_bb() {
 }
 
 _bb_pool_available() {
-  [[ "${CLAVAIN_BB_DIRECT_POOL:-0}" == 1 && -n "${CODEX_POOL_AUTH_TOKEN:-}" ]] && _clavain_in_bb
+  [[ "${CLAVAIN_BB_DIRECT_POOL:-1}" == 1 ]] || return 1
+  case "${1:-codex}" in
+    codex) [[ -n "${CODEX_POOL_AUTH_TOKEN:-}" ]] || return 1 ;;
+    claude) [[ -n "${ANTHROPIC_AUTH_TOKEN:-}" && "${ANTHROPIC_BASE_URL:-}" == "${BB_SERVER_URL:-}/api/v1/plugins/account-pool/http" ]] || return 1 ;;
+    *) return 1 ;;
+  esac
+  _clavain_in_bb
 }
 
 _clavain_session_id() {

@@ -60,7 +60,7 @@ sys.exit(int(os.environ['PROVIDER_EXIT']))
            "FIXTURE": str(fixture), "CALLS": str(tmp_path / "calls"),
            "PROVIDER_EXIT": str(exit_code), "PROVIDER_STDERR": stderr,
            "PROVIDER_WAIT": "1" if cancel else "0",
-           "CLAVAIN_REQUIRE_USAGE": "1", "CLAVAIN_REVIEW_EVENTS": str(ledger),
+           "CLAVAIN_REQUIRE_USAGE": "1", "CLAVAIN_BB_DIRECT_POOL": "0", "CLAVAIN_REVIEW_EVENTS": str(ledger),
            "CLAVAIN_TOKEN_BUDGET": str(budget), "CLAVAIN_DISPATCH_ID": "fixture-dispatch",
            "CLAVAIN_CONTEXT_GATEWAY_MODE": "off", "CLAVAIN_429_BACKOFF_SECONDS": "0"}
     cmd = ["bash", str(ROOT / "scripts/dispatch.sh"), "--to", "claude", "--model", MODEL,

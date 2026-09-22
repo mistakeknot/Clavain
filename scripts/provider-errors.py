@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Classify only provider event envelopes, never task text or tool output."""
 import json
+import re
 import sys
 
 QUOTA = {"usage_limit_exceeded", "quota_exhausted", "insufficient_quota"}
@@ -21,6 +22,8 @@ def classify(events):
         error = None
         if kind in ("task_complete", "turn.failed", "error"):
             error = event.get("error")
+            if kind == 'error' and error is None and isinstance(event.get('message'), str):
+                error = event
         elif kind == "result" and event.get("is_error"):
             error = event.get("error", {})
         elif kind == "assistant" and event.get("error"):
@@ -34,7 +37,8 @@ def classify(events):
             failures.add("terminal_policy")
         elif codes & CONFIG:
             failures.add("terminal_configuration")
-        elif codes & QUOTA:
+        elif codes & QUOTA or (isinstance(error, dict) and re.match(
+                r"^You[’']ve hit your usage limit\.", str(error.get('message', '')))):
             failures.add("quota_exhausted")
         else:
             failures.add("terminal_error")
