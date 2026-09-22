@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/work"
+git init -q "$TMP_ROOT/work"
 
 fail() {
   echo "FAIL: $1" >&2
@@ -74,6 +75,13 @@ for ((i=0; i<${#args[@]}; i++)); do
   fi
 done
 printf '%s\n' "$model" >> "$FAKE_CODEX_LOG"
+if [[ "${FAKE_CODEX_MODE:-}" == quota* ]]; then
+  printf '%s:%s\n' "$model" "${CLAVAIN_BB_POOL_RETRY:-0}" >> "$FAKE_CODEX_LOG.axes"
+  if [[ "$model" == gpt-6-astra && ( "${FAKE_CODEX_MODE}" == quota_all || "${CLAVAIN_BB_POOL_RETRY:-0}" != 1 ) ]]; then
+    echo '{"type":"task_complete","error":{"codex_error_info":"usage_limit_exceeded"}}'
+    exit 0
+  fi
+fi
 case "${FAKE_CODEX_MODE:-success}" in
   unsupported)
     if [[ "$model" == "gpt-6-astra" ]]; then
@@ -211,3 +219,20 @@ contains "$unsupported_adapter_out" 'unsupported_adapter'
 contains "$(cat "$FAKE_IC_LOG")" '--fallback-reason=unsupported_adapter'
 
 echo "PASS: role-aware dispatch profiles and fallback policy"
+
+# Account capacity retry precedes changing the model; a candidate/axis is visited once.
+cat > "$TMP_ROOT/bin/bb" <<'BB'
+#!/bin/sh
+printf '%s\n' '{"thread":{"id":"fixture-thread","environment":{"hostId":"host_pda34naxgq"}}}'
+BB
+chmod +x "$TMP_ROOT/bin/bb"
+export BB_CLI="$TMP_ROOT/bin/bb" BB_THREAD_ID=fixture-thread BB_SERVER_URL=https://bb.example
+export CODEX_POOL_AUTH_TOKEN=fixture-only CLAVAIN_BB_DIRECT_POOL=1
+for mode in quota_once quota_all; do
+  : > "$FAKE_CODEX_LOG.axes"
+  FAKE_CODEX_MODE="$mode" bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || fail "$mode failed"
+  expected=$'gpt-6-astra:0\ngpt-6-astra:1'
+  [[ "$mode" != quota_all ]] || expected+=$'\ngpt-5.6-sol:0'
+  [[ "$(cat "$FAKE_CODEX_LOG.axes")" == "$expected" ]] || fail "wrong account/model fallback order"
+done
+echo 'PASS: quota account retry precedes model fallback'

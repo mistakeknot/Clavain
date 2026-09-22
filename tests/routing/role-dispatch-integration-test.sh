@@ -6,6 +6,7 @@ command -v ic >/dev/null
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/work"
+git init -q "$TMP_ROOT/work"
 cat > "$TMP_ROOT/bin/codex" <<'CODEX'
 #!/usr/bin/env bash
 if [[ "${1:-}" == --version ]]; then echo 'codex-cli 0.153.3'; exit 0; fi

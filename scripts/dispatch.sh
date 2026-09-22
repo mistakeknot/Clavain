@@ -60,6 +60,7 @@ DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${DISPATCH_SESSION_ID:-${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
 source "${DISPATCH_SCRIPT_DIR}/lib-dispatch-audit.sh"
+source "${DISPATCH_SCRIPT_DIR}/lib-bb.sh"
 
 # Source routing library (shared with model-routing command)
 # shellcheck source=lib-routing.sh
@@ -377,7 +378,8 @@ _dispatch_write_failure_class() {
 }
 
 _run_candidate_with_policy() {
-  local failure_file retries attempt rc failure_class backoff
+  local failure_file retries attempt rc failure_class backoff pool_retry=0
+  local retry_id="$(_dispatch_audit_id)"
   failure_file="$(mktemp "${TMPDIR:-/tmp}/clavain-dispatch-failure.XXXXXX")"
   retries="${CLAVAIN_429_MAX_RETRIES:-2}"
   [[ "$retries" =~ ^[0-9]+$ ]] || retries=2
@@ -388,7 +390,7 @@ _run_candidate_with_policy() {
   while true; do
     : > "$failure_file"
     set +e
-    CLAVAIN_DISPATCH_FAILURE_FILE="$failure_file" "$@"
+    CLAVAIN_DISPATCH_FAILURE_FILE="$failure_file" CLAVAIN_RETRY_ID="$retry_id" CLAVAIN_BB_POOL_RETRY="$pool_retry" "$@"
     rc=$?
     set -e
     failure_class="$(head -1 "$failure_file" 2>/dev/null || true)"
@@ -396,6 +398,11 @@ _run_candidate_with_policy() {
       rm -f "$failure_file"
       CLAVAIN_LAST_FAILURE_CLASS=""
       return 0
+    fi
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == quota_exhausted && "$pool_retry" == 0 ]] && _bb_pool_available; then
+      pool_retry=1
+      echo 'dispatch: quota exhausted; retrying the same profile through the account pool before model fallback' >&2
+      continue
     fi
     if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == "rate_limited" && "$attempt" -lt "$retries" ]]; then
       attempt=$((attempt + 1))
@@ -520,7 +527,7 @@ _dispatch_role_profile() {
     # transport failure. Only its supervisor can admit another invocation.
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+      quota_exhausted|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
@@ -1576,6 +1583,9 @@ elif [[ "$ENGINE" == "claude" ]]; then
   PROMPT_STDIN_FILE=$(mktemp "${TMPDIR:-/tmp}/dispatch-claude-prompt.XXXXXX")
   printf '%s' "$PROMPT" > "$PROMPT_STDIN_FILE"
   CMD+=(-p)
+  if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]]; then
+    CMD+=(--output-format stream-json --verbose)
+  fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
     DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
     CMD=(python3 "$DISPATCH_SCRIPT_DIR/claude_usage.py"
@@ -1589,6 +1599,28 @@ else
   # Build codex exec command
   CMD=(codex exec)
   CMD+=(-s "$SANDBOX")
+  if _bb_pool_available; then
+    # Match BB's provider-codex launch contract. The hub token stays in env.
+    export CODEX_OPENAI_BASE_URL="${BB_SERVER_URL%/}/api/v1/plugins/account-pool/http/v1"
+    DISPATCH_TRANSPORT=direct-pooled
+    CMD+=(-c "openai_base_url=\"$CODEX_OPENAI_BASE_URL\""
+      -c 'model_provider="bb-account-pool"'
+      -c 'model_providers.bb-account-pool.name="OpenAI"'
+      -c "model_providers.bb-account-pool.base_url=\"$CODEX_OPENAI_BASE_URL\""
+      -c 'model_providers.bb-account-pool.wire_api="responses"'
+      -c 'model_providers.bb-account-pool.requires_openai_auth=true'
+      -c 'model_providers.bb-account-pool.supports_websockets=false'
+      -c 'model_providers.bb-account-pool.env_http_headers.x-bb-account-pool-token="CODEX_POOL_AUTH_TOKEN"')
+  fi
+  if ! git -C "${WORKDIR:-.}" rev-parse --git-dir >/dev/null 2>&1; then
+    if [[ "$SANDBOX" == read-only ]]; then
+      CMD+=(--skip-git-repo-check)
+    else
+      echo 'Error: writable Codex dispatch requires a Git repository; use read-only for non-Git tasks' >&2
+      _dispatch_write_failure_class terminal_configuration
+      exit 1
+    fi
+  fi
   # Tool caches outside the workspace (uv's, by default) are denied under
   # workspace-write, so a seat replaying `uv run pytest` cannot run it and a
   # validator has to answer UNRUN (run d9dd99e0, goal a7f02287). Grant the
@@ -2047,6 +2079,10 @@ VERDICT
 
 # Cleanup: register stderr capture file with existing trap.
 STDERR_FILE="${STATE_FILE}.stderr"
+PROVIDER_EVENTS="${OUTPUT:+${OUTPUT}.}provider-events.$(_dispatch_audit_id).jsonl"
+[[ -n "$OUTPUT" ]] || PROVIDER_EVENTS="${STATE_FILE}.events.jsonl"
+touch "$PROVIDER_EVENTS"
+chmod 600 "$PROVIDER_EVENTS"
 _dispatch_cleanup_stderr() {
   rm -f "$STDERR_FILE" 2>/dev/null || true
 }
@@ -2069,9 +2105,20 @@ _finalize_dispatch_result() {
   # Only a finished backend has a current extracted result. Pre-execution
   # failures must never pick up an older sidecar at the requested path.
   DISPATCH_RESULT_READY=true
+  failure_class="$(python3 "$DISPATCH_SCRIPT_DIR/provider-errors.py" "$PROVIDER_EVENTS")"
+  # A terminal stderr denial dominates an earlier structured capacity error.
+  if [[ -n "$failure_class" ]]; then
+    local stderr_class
+    stderr_class="$(_classify_dispatch_failure "$STDERR_FILE" 1)"
+    case "$stderr_class" in terminal_policy|terminal_configuration) failure_class="$stderr_class" ;; esac
+  fi
+  if [[ -n "$failure_class" ]]; then
+    exit_code=1
+    [[ -z "$OUTPUT" ]] || _write_error_verdict "$OUTPUT" error "$failure_class (structured provider event)"
+  fi
   if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$exit_code" != 0 ]]; then
     failure_class=terminal_accounting
-  else
+  elif [[ -z "$failure_class" ]]; then
     failure_class="$(_classify_dispatch_failure "$STDERR_FILE" "$exit_code")"
   fi
   if [[ "$exit_code" == "0" ]]; then
@@ -2083,7 +2130,8 @@ _finalize_dispatch_result() {
     _dispatch_write_failure_class terminal_recording
     return 1
   fi
-  return 0
+  # Preserve an existing backend exit status (including accounting failures).
+  [[ "$1" != 0 || "$exit_code" == 0 ]]
 }
 
 if ! _record_role_routing_decision 0 "" started; then
@@ -2104,6 +2152,13 @@ if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true && -n "$OUTPUT" ]]; then
 fi
 
 if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
+  _render_backend_response() {
+    if [[ "$ENGINE" == claude && "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]]; then
+      tee "$PROVIDER_EVENTS" | python3 "$DISPATCH_SCRIPT_DIR/claude-response.py"
+    else
+      cat
+    fi
+  }
   # kimi -p and claude -p both print the response on stdout and exit 0 on
   # success. Neither emits the codex-style JSONL event stream, so the
   # statusline parser is skipped and the state file stays at "starting"
@@ -2118,15 +2173,15 @@ if [[ "$ENGINE" == "kimi" || "$ENGINE" == "claude" ]]; then
   # inherits the orchestrator's stdin.
   if [[ -n "$OUTPUT" ]]; then
     if [[ -n "$WORKDIR" ]]; then
-      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | tee "$OUTPUT"
+      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response | tee "$OUTPUT"
     else
-      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | tee "$OUTPUT"
+      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response | tee "$OUTPUT"
     fi
   else
     if [[ -n "$WORKDIR" ]]; then
-      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE"
+      ( cd "$WORKDIR" && "${CMD[@]}" ) < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response
     else
-      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE"
+      "${CMD[@]}" < "${PROMPT_STDIN_FILE:-/dev/null}" 2> "$STDERR_FILE" | _render_backend_response
     fi
   fi
   KIMI_EXIT="${PIPESTATUS[0]}"
@@ -2188,10 +2243,10 @@ elif [[ "$HAS_GAWK" == true ]]; then
   # us run verdict override + cleanup before exiting with the captured code.
   set +e
   if [[ -n "${CLAVAIN_REVIEW_EVENTS:-}" ]]; then
-    "${CMD[@]}" 2> "$STDERR_FILE" | tee -a "$CLAVAIN_REVIEW_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+    "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | tee -a "$CLAVAIN_REVIEW_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   else
-    "${CMD[@]}" 2> "$STDERR_FILE" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
+    "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | _jsonl_parser "$STATE_FILE" "${NAME:-$ENGINE}" "${WORKDIR:-.}" "$STARTED_TS" "$SUMMARY_FILE"
     CODEX_EXIT="${PIPESTATUS[0]}"
   fi
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
@@ -2231,11 +2286,12 @@ else
     # The Go supervisor parses raw JSONL independently of optional GNU awk.
     # Stock macOS awk must not prevent budget-governed execution.
     CMD+=(--json)
-    "${CMD[@]}" 2> "$STDERR_FILE" | tee -a "$CLAVAIN_REVIEW_EVENTS"
+    "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS" | tee -a "$CLAVAIN_REVIEW_EVENTS"
     CODEX_EXIT="${PIPESTATUS[0]}"
   else
-    "${CMD[@]}" 2> "$STDERR_FILE"
-    CODEX_EXIT=$?
+    CMD+=(--json)
+    "${CMD[@]}" </dev/null 2> "$STDERR_FILE" | tee "$PROVIDER_EVENTS"
+    CODEX_EXIT="${PIPESTATUS[0]}"
   fi
   [[ ! -s "$STDERR_FILE" ]] || cat "$STDERR_FILE" >&2
   set -e
