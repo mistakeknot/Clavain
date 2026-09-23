@@ -12,9 +12,9 @@ This command is the **Validate** leg of the OODARC loop — a decision gate that
 ```
 plan-review (OODARC: Validate — decision gate):
 - [ ] Gauge lint (BLOCKING): plan-gauge-lint.py <plan> --repo-root <repo>
-- [ ] Route: /flux-melange (DEFAULT for design-shaping plans) vs fixed trio (routine mechanical plans only)
-- [ ] Dispatch 3 review agents in parallel (plan-reviewer, fd-architecture, fd-quality)
-- [ ] Collect all three verdicts
+- [ ] Route: /flux-drive (DEFAULT) vs /flux-melange (high-stakes only)
+- [ ] Dispatch the selected review pool (or the fallback trio when interflux is unavailable)
+- [ ] Collect every selected verdict
 - [ ] Synthesize into a unified, prioritized review
 ```
 
@@ -53,9 +53,17 @@ absent.
 `--self-test` replays all six pilot-1 defects plus a clean control; run it to confirm
 the linter still works after any change to it. `--json` for machine consumption.
 
-**Routing (first checkbox — standing rule 2026-08-28):** `/interflux:flux-melange <plan file> --goal="find what makes this plan fail and what it's missing" --weights=risk-hunt` is the DEFAULT review for any design-shaping plan — one derived from a brainstorm/PRD, an architecture pivot, a migration, a novel subsystem, or anywhere a missed flaw is expensive (requires interflux). Its adaptive rounds chase the scary-but-unconfirmed finding rather than reporting it once. The fixed trio below is the exception, reserved for routine mechanical plans (small bugfix or refactor plans with no design content).
+**Routing (first checkbox — standing rule 2026-09-23):** use
+`/interflux:flux-drive <plan file>` for plan reviews by default. Use
+`/interflux:flux-melange <plan file> --goal="find what makes this plan fail and
+what it's missing" --weights=risk-hunt` only for high-stakes work: architecture
+pivots, security or data-loss hunts, pre-mortems, and foundational plans. Run
+the balanced three-round profile; use to-dry only when the user explicitly
+asks. For bounded research, use one careful pass or `/interflux:flux-review`.
+When interflux is unavailable, use the fixed trio below as the fallback.
 
-Launch three review agents in parallel using the Task tool to review the provided plan:
+If interflux is unavailable, launch three review agents in parallel using the
+Task tool to review the provided plan:
 
 Resolve the plan-review role using the plan's decision context and actual author
 identity before dispatch. Use the selected installation's policy explicitly:
@@ -70,9 +78,9 @@ or especially consequential plans need the other frontier model. Use packaged
 `dispatch.sh --role plan-review --producer-identity "$PLAN_AUTHOR_MODEL"`; pass
 the context through `CLAVAIN_DECISION_CONTEXT`. Task is suitable only when the
 host can apply the resolved model AND effort. Never use `inherit` or silently
-fall back below the required frontier tier. Existing melange and gauge gates
-still apply. The routine trio supplies lens findings; it does not replace the
-required independent verdict:
+fall back below the required frontier tier. The selected interflux review and
+gauge gates still apply. The routine trio supplies lens findings; it does not
+replace the required independent verdict:
 
 1. **plan-reviewer** — review implementation standards and completeness.
 2. **fd-architecture** — evaluate boundaries and design decisions.

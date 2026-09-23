@@ -143,7 +143,13 @@ Propose **2-3 concrete approaches** based on research and dialogue. For each:
 
 Lead with recommendation and rationale. Apply YAGNI — prefer simpler.
 
-**Wide or high-stakes approach spaces — escalate to melange (if interflux is installed):** when the space is genuinely open (gap analysis, "what are we missing", architecture pivots, cross-domain design) or a missed approach is expensive, run `/interflux:flux-melange <research inputs or target dir> --goal="<the question>"` and derive the 2-3 proposed approaches from its surfaced findings rather than inventing them inline. Cite the melange synthesis path under Key Decisions in the brainstorm doc. For routine feature brainstorms, propose approaches directly — melange loops, so it costs more.
+**Research and escalation:** for a bounded question, use one careful pass or
+`/interflux:flux-review`; do not turn ordinary discovery-shaped work into an
+adaptive loop. Use `/interflux:flux-melange <research inputs or target dir>
+--goal="<the question>"` only when the work is high-stakes: an architecture
+pivot, a security or data-loss hunt, a pre-mortem, or a foundational plan.
+Use the balanced three-round profile; use to-dry only when the user explicitly
+asks. Cite any melange synthesis path under Key Decisions.
 
 AskUserQuestion: which approach does the user prefer?
 
@@ -175,16 +181,13 @@ optional but encouraged. The one-pager is the artifact later phases,
 reviewers, and future sessions load FIRST — keep it current when rulings
 land, and never let it grow past one page.
 
-**Melange review (DEFAULT for design-shaping brainstorms; standing rule
-2026-08-28).** After the doc (and one-pager) are written, review the
-captured design with
+**Review the captured design.** After the doc (and one-pager) are written,
+review it with `/interflux:flux-drive <brainstorm doc>` by default. Use
 `/interflux:flux-melange <brainstorm doc> --goal="stress-test this design:
-what makes it fail, what is it missing"` (requires interflux). This is not
-the Phase 2 escalation — it runs on the *captured artifact*, every time,
-for any brainstorm that shapes a product, game, architecture, or process.
-Skip only for trivial/mechanical scopes (a rename, a config toggle). Fold
-findings back into Key Decisions / Open Questions before handoff; cite the
-melange synthesis path in the doc.
+what makes it fail, what is it missing"` only for the high-stakes cases above,
+with the balanced three-round profile; use to-dry only when the user asks.
+Fold findings back into Key Decisions / Open Questions before handoff and cite
+the review artifact in the doc.
 
 ### Phase 3b: Record Phase (Reflect + Compound)
 
