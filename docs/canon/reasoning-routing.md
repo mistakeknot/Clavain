@@ -128,6 +128,38 @@ supplies eligibility and `dispatch.roles.<role>` plus the tier's ordered
 `fallbacks` supply selection. Setting only the second returns
 `role "plan-review": no eligible model satisfies reasoning contract`.
 
+### Execution headroom forecasts
+
+Before role resolution, dispatch may read `bb pool status --json` for
+`routine-execution`, `deep-execution`, and `scout`. A forecast excludes a
+candidate only when every enabled account for its provider/family is below the
+floor: less than 10% weekly headroom, or five-hour utilization at or above the
+pool's `switchThreshold` (0.98 when absent). Provider and family limits both
+apply. Missing telemetry is unknown; an unreachable pool leaves routing intact.
+
+The snapshot is saved as `.clavain/capacity/<date>-<unique>-headroom.json` in
+the task checkout. `capacity-fallback.sh --forecast --seat ...` derives a context
+whose rationale says `forecast from bb pool headroom`. It preserves existing
+availability exclusions and re-resolves through Intercore. No model assignments
+change. Receipts label these exclusions `headroom_exclusion`, separately from
+observed `model_unavailable` failures.
+If every eligible seat is below the floor, resolution fails before a model starts;
+the evidence and derived context remain available for inspection.
+
+For routine and deep execution, dispatch stably orders known cross-provider
+candidates from the eligible chain by remaining headroom. It compares the first
+known candidate per provider and preserves policy order within each provider.
+Headroom is the minimum remaining fraction across its known provider/family
+windows. Unknown candidates retain their positions, and ties retain policy order. Scout may exclude exhausted
+seats but does not reorder them. The receipt retains Intercore's `profile_ref`
+and records `headroom_reorder: {from, to, snapshot_at}` alongside the actual
+`resolved_profile`. `CLAVAIN_POOL_HEADROOM=0` disables forecasts.
+
+**Execution roles only:** `planning`, `plan-review`, `validation`, `escalation`,
+and `cross-lab-review` receive no headroom input, even when Fable is below the
+forecast floor. Those roles retain the observed-failure procedure below,
+frontier eligibility and independent reviewer requirements.
+
 ### Recording an observed capacity failure
 
 Do not edit the packaged policy for an outage, and do not infer a capacity failure

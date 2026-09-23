@@ -149,6 +149,9 @@ def resolve_project(work,host):
 def supervise(args):
     if args.role not in ('routine-execution','deep-execution') or args.sandbox=='read-only':
         raise SeatError('BB seats support writable execution roles only')
+    route=json.loads(args.resolved_route_json)
+    if not isinstance(route,dict):
+        raise SeatError('Resolved route must be an object')
     spec=importlib.util.spec_from_file_location('bb_host',Path(__file__).with_name('bb-host.py'))
     host_module=importlib.util.module_from_spec(spec);spec.loader.exec_module(host_module)
     host=host_module.bb_host()
@@ -185,6 +188,10 @@ def supervise(args):
          'source_commit':git(work,'rev-parse','HEAD'),'git_common_dir':common,'workdir':str(work),
          'output':str(output),'journal':str(journal),'state':'intent','cleanup':'pending',
          'outcome':'unknown','actual_model':'unknown','actual_effort':'unknown',
+         'requested_provider':provider,'requested_model':args.model,'requested_effort':args.effort,
+         'profile_ref':route.get('profile_ref'),'resolved_profile_ref':args.profile_ref,
+         'headroom_exclusion':route.get('headroom_exclusion',[]),
+         'headroom_reorder':route.get('headroom_reorder'),
          'effective_permission_mode':'unknown','usage':'unknown','account':'unknown',
          'prompt_sha256':hashlib.sha256(prompt.encode()).hexdigest(),'artifacts':{}}
     cancelled=False
@@ -288,6 +295,8 @@ def main():
     for name in ('role','backend','model','effort','service-tier','workdir','output','attempt-id','dispatch-id'):
         parser.add_argument('--'+name,required=True)
     parser.add_argument('--sandbox',default='workspace-write')
+    parser.add_argument('--resolved-route-json',default='{}')
+    parser.add_argument('--profile-ref',default='')
     parser.add_argument('--timeout',type=float,default=300)
     args=parser.parse_args()
     if not math.isfinite(args.timeout) or args.timeout<=0:

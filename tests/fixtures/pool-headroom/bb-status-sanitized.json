@@ -1,0 +1,114 @@
+{
+  "snapshot_at": "2026-09-23T03:22:26.587546+00:00",
+  "accounts": [
+    {
+      "provider": "codex",
+      "enabled": true,
+      "fiveHourUtilization": null,
+      "fiveHourResetAt": null,
+      "sevenDayUtilization": null,
+      "sevenDayResetAt": null,
+      "familyWeekly": {
+        "fable": null,
+        "sonnet": null,
+        "opus": null,
+        "haiku": null,
+        "other": null
+      },
+      "limitWindows": [
+        {
+          "slot": "primary",
+          "windowMinutes": 10080,
+          "utilization": 0.15,
+          "resetAt": 1790698290000,
+          "status": null,
+          "observedAt": 1790133726252,
+          "source": "header"
+        },
+        {
+          "slot": "secondary",
+          "windowMinutes": null,
+          "utilization": 0,
+          "resetAt": 1790133726252,
+          "status": null,
+          "observedAt": 1790133726252,
+          "source": "header"
+        }
+      ],
+      "id": "fixture-0"
+    },
+    {
+      "provider": "claude",
+      "enabled": true,
+      "fiveHourUtilization": 0,
+      "fiveHourResetAt": 1790129999520,
+      "sevenDayUtilization": 0.62,
+      "sevenDayResetAt": 1790388000133,
+      "familyWeekly": {
+        "fable": {
+          "utilization": 0.21,
+          "resetAt": 1790388000133,
+          "status": "allowed",
+          "observedAt": 1790133520192,
+          "source": "usage"
+        },
+        "sonnet": null,
+        "opus": null,
+        "haiku": null,
+        "other": null
+      },
+      "limitWindows": [],
+      "id": "fixture-1"
+    },
+    {
+      "provider": "codex",
+      "enabled": true,
+      "fiveHourUtilization": null,
+      "fiveHourResetAt": null,
+      "sevenDayUtilization": null,
+      "sevenDayResetAt": null,
+      "familyWeekly": {
+        "fable": null,
+        "sonnet": null,
+        "opus": null,
+        "haiku": null,
+        "other": null
+      },
+      "limitWindows": [
+        {
+          "slot": "primary",
+          "windowMinutes": 10080,
+          "utilization": 1,
+          "resetAt": 1790411770000,
+          "status": "rejected",
+          "observedAt": 1790133520212,
+          "source": "usage"
+        }
+      ],
+      "id": "fixture-2"
+    },
+    {
+      "provider": "claude",
+      "enabled": true,
+      "fiveHourUtilization": 0.08,
+      "fiveHourResetAt": 1790149200046,
+      "sevenDayUtilization": 0.94,
+      "sevenDayResetAt": 1790449200046,
+      "familyWeekly": {
+        "fable": {
+          "utilization": 0.61,
+          "resetAt": 1790449200046,
+          "status": "allowed",
+          "observedAt": 1790133520108,
+          "source": "usage"
+        },
+        "sonnet": null,
+        "opus": null,
+        "haiku": null,
+        "other": null
+      },
+      "limitWindows": [],
+      "id": "fixture-3"
+    }
+  ]
+}

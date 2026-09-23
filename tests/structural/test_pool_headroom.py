@@ -48,6 +48,35 @@ def test_healthy():
     assert advise(snapshot)['exclude'] == []
 
 
+def test_real_pool_schema_sanitized_capture():
+    # Captured with read-only bb pool status; labels, email and account IDs removed.
+    data = json.loads((ROOT/'tests/fixtures/pool-headroom/bb-status-sanitized.json').read_text())
+    assert {a['provider'] for a in data['accounts']} == {'claude', 'codex'}
+    snapshot = core(data)
+    assert snapshot['status'] == 'known'
+    assert snapshot['providers']['codex']['score'] == pytest.approx(.85)
+    assert snapshot['providers']['claude']['score'] == pytest.approx(.38)
+    result = advise(snapshot)
+    assert result['exclude'] == [] and result['headroom_reorder'] is None
+    assert result['candidates'][0]['profile_ref'] == 'routine-sol'
+
+
+def test_unreachable_cli_is_unknown(tmp_path):
+    import os
+    result = subprocess.run(['bash', str(SCRIPT)], env=dict(os.environ, BB_CLI=str(tmp_path/'absent')),
+                            capture_output=True, text=True, check=True)
+    assert json.loads(result.stdout)['status'] == 'unknown'
+
+
+def test_unknown_family_cannot_be_overtaken_by_its_provider_fallback():
+    snapshot = core({'accounts': [account('codex', .7),
+        account('claude', None, None, familyWeekly={'opus': {'utilization': .1}})]})
+    resolved = {'profile_ref': 'astra', 'profile': {'backend': 'codex', 'model': 'gpt-6-astra'},
+                'fallback_chain': [{'profile_ref': family, 'profile': {
+                    'backend': 'claude', 'model': 'claude-' + family}} for family in ('fable', 'opus')]}
+    assert advise(snapshot, 'deep-execution', resolved)['headroom_reorder'] is None
+
+
 def test_one_family_exhausted():
     fixture = copy.deepcopy(HEALTHY)
     fixture['accounts'][1]['familyWeekly']['fable']['utilization'] = .99
@@ -96,6 +125,18 @@ def test_reorder_retains_ic_profile():
     result = advise(core(fixture))
     assert result['headroom_reorder'] == {'from': ['routine-sol', 'routine-sonnet'],
         'to': ['routine-sonnet', 'routine-sol'], 'snapshot_at': HEALTHY['snapshot_at']}
+
+
+def test_cross_provider_preference_preserves_each_providers_policy_order():
+    fixture = copy.deepcopy(HEALTHY)
+    fixture['accounts'][0]['sevenDayUtilization'] = .7
+    fixture['accounts'][1]['sevenDayUtilization'] = .1
+    fixture['accounts'][1]['familyWeekly'] = {'fable': {'utilization': .5}, 'opus': {'utilization': .1}}
+    resolved = {'profile_ref': 'astra', 'profile': {'backend': 'codex', 'model': 'gpt-6-astra'},
+                'fallback_chain': [{'profile_ref': family, 'profile': {
+                    'backend': 'claude', 'model': 'claude-' + family}} for family in ('fable', 'opus')]}
+    result = advise(core(fixture), 'deep-execution', resolved)
+    assert [c['profile_ref'] for c in result['candidates']] == ['fable', 'opus', 'astra']
 
 
 @pytest.mark.parametrize('role', ['plan-review', 'validation', 'escalation', 'planning', 'cross-lab-review'])

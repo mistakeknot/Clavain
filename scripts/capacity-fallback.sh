@@ -31,6 +31,8 @@ CONTEXT=""
 EVIDENCE=""
 OUT=""
 PRODUCER=""
+FORECAST=false
+POLICY_PROFILE="${CLAVAIN_POLICY_PROFILE:-}"
 SEATS=()
 ROLES=()
 AVAILABLE=()
@@ -44,6 +46,7 @@ usage: capacity-fallback.sh --context <decision.json> --evidence <capacity.md>
                             --role <role> [--role <role>]...
                             [--producer-identity <model>] [--policy <routing.yaml>]
                             [--out <derived-context.json>]
+                            [--forecast] [--policy-profile <profile>]
 
   --seat        a model observed UNAVAILABLE; repeatable. Every other model named
                 in the policy is treated as available.
@@ -52,6 +55,8 @@ usage: capacity-fallback.sh --context <decision.json> --evidence <capacity.md>
                 what failed.
   --evidence    path to the capacity note holding the probe and its verbatim
                 output. Required: an unevidenced outage is not an observation.
+  --forecast    execution roles only; label evidence as a headroom forecast.
+                Existing available_models exclusions are retained.
 USAGE
   exit 2
 }
@@ -63,6 +68,8 @@ while [[ $# -gt 0 ]]; do
     --out) OUT="${2:-}"; shift 2 ;;
     --policy) POLICY="${2:-}"; shift 2 ;;
     --producer-identity) PRODUCER="${2:-}"; shift 2 ;;
+    --forecast) FORECAST=true; shift ;;
+    --policy-profile) POLICY_PROFILE="${2:-}"; shift 2 ;;
     --seat) SEATS+=("${2:-}"); shift 2 ;;
     --available) AVAILABLE+=("${2:-}"); shift 2 ;;
     --role) ROLES+=("${2:-}"); shift 2 ;;
@@ -121,6 +128,14 @@ fi
 
 [[ ${#AVAILABLE[@]} -gt 0 ]] || die "no models left available; an empty array means the whole fleet is down"
 
+if [[ "$FORECAST" == true ]]; then
+  for role in "${ROLES[@]}"; do
+    case "$role" in routine-execution|deep-execution|scout) ;;
+      *) die "headroom forecasts are forbidden for role $role" ;;
+    esac
+  done
+fi
+
 : "${OUT:=${CONTEXT%.json}.capacity-$(date +%Y-%m-%d).json}"
 EVIDENCE_ABS="$(cd "$(dirname "$EVIDENCE")" && pwd)/$(basename "$EVIDENCE")"
 
@@ -130,8 +145,10 @@ EVIDENCE_ABS="$(cd "$(dirname "$EVIDENCE")" && pwd)/$(basename "$EVIDENCE")"
 # capacity failure is operational and reclassifies nothing.
 jq --argjson models "$(printf '%s\n' "${AVAILABLE[@]}" | jq -R . | jq -s .)" \
    --arg evidence "$EVIDENCE_ABS" \
-   '. + {available_models: $models,
-         rationale: ((.rationale // "") + " Observed capacity failure; evidence: " + $evidence + ".")}' \
+   --arg label "$([[ "$FORECAST" == true ]] && echo 'forecast from bb pool headroom' || echo 'Observed capacity failure')" \
+   '.available_models as $prior | . + {available_models:
+           (if ($prior | type) == "array" then [$models[] | select(. as $m | $prior | index($m))] else $models end),
+         rationale: ((.rationale // "") + " " + $label + "; evidence: " + $evidence + ".")}' \
    "$CONTEXT" > "$OUT"
 
 echo "capacity context: $OUT"
@@ -145,6 +162,7 @@ status=0
 for role in "${ROLES[@]}"; do
   args=(--json route dispatch "--policy=$POLICY" "--role=$role" "--context-file=$OUT")
   [[ -n "$PRODUCER" ]] && args+=("--producer-identity=$PRODUCER")
+  [[ -n "$POLICY_PROFILE" ]] && args+=("--policy-profile=$POLICY_PROFILE")
   if ! receipt="$(ic "${args[@]}" 2>&1)"; then
     echo "FAIL $role: $receipt" >&2
     echo "  Every declared candidate was excluded. Freeze a policy snapshot only" >&2

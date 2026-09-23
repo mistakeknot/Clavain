@@ -67,6 +67,8 @@ _role_audit_context() {
     --argjson bb_receipt "$bb_receipt" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,retry_id:$retry_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
+      profile_ref:$route.profile_ref,headroom_exclusion:($route.headroom_exclusion // []),
+      headroom_reorder:($route.headroom_reorder // null),
       run_id:$run,bead_id:$bead,
       execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
         codex_version:$version,sandbox:$sandbox,transport:$transport,account:$account,session_id:$session,event_log:$events}

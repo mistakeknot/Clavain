@@ -95,12 +95,19 @@ def advice(data, role):
         if headroom.get('below_floor'):
             result['exclude'].append(model)
         scores[candidate['profile_ref']] = headroom.get('score')
-    # Unknown candidates retain their positions. Only the cross-provider known
-    # subsequence is sorted, with stable ties preserving policy preference.
-    known = [c for c in candidates if scores[c['profile_ref']] is not None]
+    # Freeze a provider with any unknown candidate: moving its known seats could
+    # otherwise overtake an unknown primary or strand an unknown fallback ahead.
+    unknown_backends = {c['profile']['backend'] for c in candidates if scores[c['profile_ref']] is None}
+    known = [c for c in candidates if c['profile']['backend'] not in unknown_backends]
     if role != 'scout' and len({c['profile']['backend'] for c in known}) > 1:
-        ordered = iter(sorted(known, key=lambda c: -scores[c['profile_ref']]))
-        result['candidates'] = [next(ordered) if scores[c['profile_ref']] is not None else c for c in candidates]
+        # A family's extra quota cannot promote a provider's own capacity
+        # substitute above its preferred model. Prefer providers, retaining
+        # their internal policy order and using their first known candidate.
+        backend_scores = {}
+        for candidate in known:
+            backend_scores.setdefault(candidate['profile']['backend'], scores[candidate['profile_ref']])
+        ordered = iter(sorted(known, key=lambda c: -backend_scores[c['profile']['backend']]))
+        result['candidates'] = [next(ordered) if c['profile']['backend'] not in unknown_backends else c for c in candidates]
         before = [c['profile_ref'] for c in candidates]
         after = [c['profile_ref'] for c in result['candidates']]
         if before != after:

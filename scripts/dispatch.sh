@@ -460,16 +460,64 @@ _dispatch_role_profile() {
     return 1
   }
   local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+  local headroom='{"status":"unknown"}' advice exclusions='[]' evidence derived base_context
+  # Probe before resolving, but only execution roles may even read a forecast.
+  case "$role" in
+    routine-execution|deep-execution|scout)
+      if [[ "${CLAVAIN_POOL_HEADROOM:-1}" == 1 ]]; then
+        headroom="$(bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh")" || headroom='{"status":"unknown"}'
+      fi
+      ;;
+  esac
   local -a route_cmd=(ic --json route dispatch --role="$role" --policy="$policy_source")
-  [[ -z "${CLAVAIN_DECISION_CONTEXT:-}" ]] || route_cmd+=(--context-file="$CLAVAIN_DECISION_CONTEXT")
+  local -a context_args=()
+  [[ -z "${CLAVAIN_DECISION_CONTEXT:-}" ]] || context_args+=(--context-file="$CLAVAIN_DECISION_CONTEXT")
   [[ -z "${CLAVAIN_POLICY_PROFILE:-}" ]] || route_cmd+=(--policy-profile="$CLAVAIN_POLICY_PROFILE")
   [[ -z "$PRODUCER_IDENTITY" ]] || route_cmd+=(--producer-identity="$PRODUCER_IDENTITY")
   # Resolve against the control-plane checkout, not the task repository (which
   # can live outside Sylveste and need not carry its own routing.yaml).
-  resolved="$("${route_cmd[@]}")" || {
+  resolved="$("${route_cmd[@]}" "${context_args[@]}")" || {
     echo "Error: Intercore could not resolve dispatch role '$role'" >&2
     return 1
   }
+  if [[ "$(jq -r '.status' <<< "$headroom")" == known ]]; then
+    advice="$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}' |
+      bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role")" || return 1
+    exclusions="$(jq -c '.exclude | unique' <<< "$advice")"
+    if [[ "$exclusions" != '[]' ]]; then
+      local capacity_dir="${WORKDIR:-.}/.clavain/capacity" seat
+      mkdir -p "$capacity_dir" || return 1
+      # Python's suffix support is portable; BSD mktemp requires trailing Xs.
+      evidence="$(python3 -c 'import os,sys,tempfile; fd,path=tempfile.mkstemp(dir=sys.argv[1], prefix=sys.argv[2]+"-", suffix="-headroom.json"); os.close(fd); print(path)' "$capacity_dir" "$(date -u +%Y%m%dT%H%M%SZ)")" || return 1
+      printf '%s\n' "$headroom" > "$evidence"
+      base_context="${CLAVAIN_DECISION_CONTEXT:-}"
+      if [[ -z "$base_context" ]]; then
+        base_context="${evidence%.json}.base.json"
+        printf '%s\n' '{"reasons":[],"rationale":"execution dispatch"}' > "$base_context"
+      fi
+      derived="${evidence%.json}.context.json"
+      local -a capacity_cmd=(bash "$DISPATCH_SCRIPT_DIR/capacity-fallback.sh" --forecast
+        --context "$base_context" --evidence "$evidence" --out "$derived"
+        --policy "$policy_source" --role "$role")
+      [[ -z "${CLAVAIN_POLICY_PROFILE:-}" ]] || capacity_cmd+=(--policy-profile "$CLAVAIN_POLICY_PROFILE")
+      [[ -z "$PRODUCER_IDENTITY" ]] || capacity_cmd+=(--producer-identity "$PRODUCER_IDENTITY")
+      while IFS= read -r seat; do capacity_cmd+=(--seat "$seat"); done < <(jq -r '.[]' <<< "$exclusions")
+      "${capacity_cmd[@]}" >&2 || return 1
+      # Only this dispatch sees the forecast context; protected callers retain
+      # their original context and the observed-failure path.
+      local forecast_refs
+      forecast_refs="$(jq -c --argjson seats "$exclusions" '[{profile_ref:.profile_ref,profile:.profile}] + (.fallback_chain // []) | [.[] | select(.profile.model as $m | $seats | index($m)) | .profile_ref]' <<< "$resolved")"
+      resolved="$("${route_cmd[@]}" --context-file="$derived")" || return 1
+      resolved="$(jq -c --argjson refs "$forecast_refs" --argjson seats "$exclusions" --arg evidence "$evidence" '
+        .headroom_exclusion=$seats | .headroom_evidence=$evidence |
+        .excluded |= map(if .reason == "model_unavailable" and (.profile_ref as $r | $refs | index($r))
+          then .reason="headroom_exclusion" else . end)' <<< "$resolved")" || return 1
+    fi
+    advice="$(jq -cn --argjson snapshot "$headroom" --argjson route "$resolved" '{snapshot:$snapshot,route:$route}' |
+      bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh" --stdin --role "$role")" || return 1
+    resolved="$(jq -c --argjson advice "$advice" --argjson snapshot "$headroom" '
+      .headroom_reorder=$advice.headroom_reorder | .headroom_snapshot=$snapshot' <<< "$resolved")" || return 1
+  fi
   fallback_reason="$(jq -r '.fallback_reason // empty' <<< "$resolved")"
   VALIDATOR_RELATIONSHIP="$(jq -r '.validator_relationship // empty' <<< "$resolved")"
   DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
@@ -478,6 +526,9 @@ _dispatch_role_profile() {
     echo "Error: invalid dispatch profile JSON for role '$role'" >&2
     return 1
   }
+  if [[ -n "${advice:-}" ]]; then
+    candidates="$(jq -c '.candidates[]' <<< "$advice")" || return 1
+  fi
 
   while IFS= read -r candidate; do
     [[ -n "$candidate" ]] || continue
@@ -2195,6 +2246,7 @@ if [[ "$VIA" == bb ]]; then
   set +e
   BB_CANCELLED=0
   python3 "$DISPATCH_SCRIPT_DIR/bb-seat.py" --role "$ROLE" --backend "$ENGINE" \
+    --resolved-route-json "${RESOLVED_ROUTE_JSON:-\{\}}" --profile-ref "$RESOLVED_PROFILE_REF" \
     --model "$MODEL" --effort "$REASONING_EFFORT" --service-tier "$SERVICE_TIER" \
     --workdir "${WORKDIR:-.}" --output "$OUTPUT" --attempt-id "$ATTEMPT_ID" \
     --dispatch-id "$DISPATCH_ID" --sandbox "$SANDBOX" \

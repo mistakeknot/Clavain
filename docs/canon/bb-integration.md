@@ -96,6 +96,38 @@ Codex now uses `--json` even on the stock-awk path so provider failures remain
 available to the classifier. On hosts without GNU awk this changes streamed
 stdout to JSONL; the output file still contains the last agent message.
 
+## Execution headroom
+
+`scripts/pool-headroom.sh` makes one read-only `bb pool status --json` call with
+a three-second deadline. `--stdin` runs the pure JSON fixture core. The summary
+retains account IDs, headroom and reset times; it omits labels, email addresses
+and credentials. It reads Codex `limitWindows` and Claude provider/family windows.
+The best enabled account can differ by family. Unknown telemetry never proves
+exhaustion, and a pool error produces `status: unknown` with no routing change.
+
+Only `routine-execution`, `deep-execution`, and `scout` consume the forecast.
+The default floor is 10% weekly headroom and the five-hour switch threshold is
+the pool's `switchThreshold`, defaulting to 0.98. Routine and deep execution may
+prefer a declared candidate from another provider with more headroom; scout
+only excludes seats below the floor. Planning, review, validation and escalation
+keep their existing routes and observed-failure fallback rules.
+
+Dispatch records the snapshot, forecast exclusions and any ordering change.
+`profile_ref` identifies Intercore's resolved profile, while `resolved_profile`
+identifies the attempted seat. The BB seat journal also retains both profile
+references and the requested provider/model/effort. These requested settings do
+not populate its observed identity fields. The existing BB transport carries the
+selected backend/model without a separate spawn helper.
+
+This is a provider/family forecast, not an account reservation. The hub still
+chooses the account; a best-account summary does not prove which account ran.
+Telemetry can change between the probe and invocation. Disable the forecast
+with `CLAVAIN_POOL_HEADROOM=0`; observed quota handling remains active.
+
+Tests: `test_pool_headroom.py`, `test_headroom_dispatch.py`, and
+`test_bb_seat.py::test_headroom_resolved_claude_seat`. Real Claude quota-stream
+classification and a live headroom-routed worker remain unverified.
+
 ## Parity matrix
 
 Tests named below are evidence contracts, not claims that an unrun cell passes.
