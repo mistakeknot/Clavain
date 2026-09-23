@@ -65,11 +65,31 @@ fields; none is substituted as an observed model or an observed effort.
 Direct pooling uses the installed BB provider's corrected mechanism: Codex
 responses endpoint `/api/v1/plugins/account-pool/http/v1`, an explicit
 `bb-account-pool` provider configuration, and an environment-sourced
-`x-bb-account-pool-token` header from `CODEX_POOL_AUTH_TOKEN`. No parent token
-is reused. See [the spike evidence](../research/bb-direct-pool-spike.md).
+`x-bb-account-pool-token` header from `CODEX_POOL_AUTH_TOKEN`. No nested-server
+parent token (`BB_ACCOUNT_POOL_PARENT_TOKEN`) is reused. See [the spike
+evidence](../research/bb-direct-pool-spike.md).
 Codex pooling is enabled by default after the successful hub-correlated spike;
 `CLAVAIN_BB_DIRECT_POOL=0` selects the legacy path. Claude retains its inherited
 `ANTHROPIC_BASE_URL`; a Codex pool token never establishes Claude pool availability.
+
+**Cross-route borrowing (Claude threads).** BB injects `CODEX_POOL_AUTH_TOKEN`
+only into Codex threads. The hub mints one bearer per machine, and a Claude Code
+thread carries it as `ANTHROPIC_AUTH_TOKEN` on the pool's Anthropic route. When
+the Codex token is absent, `ANTHROPIC_BASE_URL` is exactly
+`$BB_SERVER_URL/api/v1/plugins/account-pool/http`, and enrollment passes, a Codex
+attempt exports that bearer as `CODEX_POOL_AUTH_TOKEN`.
+- Trust assumption: the hub accepts the machine bearer on both provider routes
+  (verified live 2026-09-23).
+- Scope: the export happens only while building the codex command, inside the
+  per-candidate child dispatch process. `_bb_pool_available` is side-effect free,
+  so the alias never reaches the parent retry shell or Claude, Kimi or BB seats.
+- A native Codex-thread token always wins.
+- Kill switch: `CLAVAIN_BB_DIRECT_POOL=0` disables both pooled transport and
+  borrowing.
+- Enrollment asks the BB CLI and can be forged by a process that controls
+  `BB_CLI` or `PATH`. It selects a transport and is not an authorization
+  boundary, because the borrowed bearer is one the process already holds.
+- Raw provider captures are tracked separately (sylveste-2tpo).
 
 Quota classification consumes structured provider errors, never quoted task
 text. Permission, configuration, policy or unclear acceptance is terminal and

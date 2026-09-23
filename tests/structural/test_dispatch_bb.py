@@ -248,3 +248,45 @@ def test_codex_thread_token_wins_over_claude_route(tmp_path):
     assert run_dispatch(tmp_path, pool=True, env_override={
         'CODEX_POOL_AUTH_TOKEN': 'codex-fixture', 'ANTHROPIC_AUTH_TOKEN': 'machine-fixture', 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
     assert (tmp_path/'call.pooltoken').read_text() == 'codex-fixture'
+
+
+def _lib_bb_probe(tmp_path, env_extra):
+    """Source lib-bb.sh, run the availability check, report what leaked."""
+    bb = tmp_path / 'bb'
+    bb.write_text('#!/bin/sh\necho \'{"thread":{"id":"thr_fixture","environment":{"hostId":"host_pda34naxgq"}}}\'\n')
+    bb.chmod(0o755)
+    env = {k: v for k, v in os.environ.items() if k not in ('CODEX_POOL_AUTH_TOKEN', 'CLAVAIN_BB_DIRECT_POOL')}
+    env.update(BB_CLI=str(bb), BB_THREAD_ID='thr_fixture', BB_SERVER_URL='https://bb.example',
+               ANTHROPIC_AUTH_TOKEN='machine-fixture', ANTHROPIC_BASE_URL=POOL_ROUTE)
+    env.update(env_extra)
+    script = (f'source {ROOT}/scripts/lib-bb.sh; '
+              'if _bb_pool_available codex; then a=1; else a=0; fi; '
+              'printf "%s:%s" "$a" "${CODEX_POOL_AUTH_TOKEN:-}"')
+    return subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=20).stdout
+
+
+def test_pool_availability_check_exports_nothing(tmp_path):
+    # The retry loop calls the check from the parent role shell; an export there
+    # would reach later Claude/Kimi/BB candidates.
+    assert _lib_bb_probe(tmp_path, {}) == '1:'
+
+
+def test_failed_enrollment_is_not_pooled(tmp_path):
+    assert _lib_bb_probe(tmp_path, {'BB_THREAD_ID': 'thr_someone_else'}) == '0:'
+
+
+def test_direct_pool_kill_switch_disables_borrowing(tmp_path):
+    assert _lib_bb_probe(tmp_path, {'CLAVAIN_BB_DIRECT_POOL': '0'}) == '0:'
+    assert run_dispatch(tmp_path, pool=False, env_override={
+        'CODEX_POOL_AUTH_TOKEN': None, 'ANTHROPIC_AUTH_TOKEN': 'machine-fixture', 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
+    assert 'model_provider="bb-account-pool"' not in json.loads((tmp_path/'call').read_text())
+    assert (tmp_path/'call.pooltoken').read_text() == ''
+
+
+def test_borrowed_token_is_not_persisted_by_dispatch(tmp_path):
+    secret = 'borrowed-secret-fixture-7f3a'
+    assert run_dispatch(tmp_path, pool=True, env_override={
+        'CODEX_POOL_AUTH_TOKEN': None, 'ANTHROPIC_AUTH_TOKEN': secret, 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
+    leaked = [p for p in tmp_path.rglob('*') if p.is_file() and p.name != 'call.pooltoken'
+              and secret in p.read_text(errors='ignore')]
+    assert leaked == []

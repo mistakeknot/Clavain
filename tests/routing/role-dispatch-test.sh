@@ -75,6 +75,8 @@ for ((i=0; i<${#args[@]}; i++)); do
   fi
 done
 printf '%s\n' "$model" >> "$FAKE_CODEX_LOG"
+pooled=0; for a in "$@"; do [[ "$a" != 'model_provider="bb-account-pool"' ]] || pooled=1; done
+printf '%s:%s:%s\n' "$model" "$pooled" "${CODEX_POOL_AUTH_TOKEN:-}" >> "$FAKE_CODEX_LOG.pool"
 if [[ "${FAKE_CODEX_MODE:-}" == quota* ]]; then
   printf '%s:%s\n' "$model" "${CLAVAIN_BB_POOL_RETRY:-0}" >> "$FAKE_CODEX_LOG.axes"
   if [[ "$model" == gpt-6-astra && ( "${FAKE_CODEX_MODE}" == quota_all || "${CLAVAIN_BB_POOL_RETRY:-0}" != 1 ) ]]; then
@@ -272,3 +274,18 @@ for mode in quota_once quota_all; do
   [[ "$(cat "$FAKE_CODEX_LOG.axes")" == "$expected" ]] || fail "wrong account/model fallback order"
 done
 echo 'PASS: quota account retry precedes model fallback'
+
+# From a Claude Code BB thread there is no native Codex token: every Codex attempt,
+# the quota pool retry included, borrows the machine bearer from the Anthropic pool route.
+unset CODEX_POOL_AUTH_TOKEN
+export ANTHROPIC_AUTH_TOKEN=machine-fixture ANTHROPIC_BASE_URL="$BB_SERVER_URL/api/v1/plugins/account-pool/http"
+: > "$FAKE_CODEX_LOG.axes"; : > "$FAKE_CODEX_LOG.pool"
+FAKE_CODEX_MODE=quota_all bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || fail "claude-thread quota_all failed"
+[[ "$(cat "$FAKE_CODEX_LOG.axes")" == $'gpt-6-astra:0\ngpt-6-astra:1\ngpt-5.6-sol:0' ]] || fail "claude-thread pool retry did not fire"
+[[ "$(cat "$FAKE_CODEX_LOG.pool")" == $'gpt-6-astra:1:machine-fixture\ngpt-6-astra:1:machine-fixture\ngpt-5.6-sol:1:machine-fixture' ]] || fail "claude-thread codex attempts were not pooled"
+: > "$FAKE_CODEX_LOG.axes"; : > "$FAKE_CODEX_LOG.pool"
+CLAVAIN_BB_DIRECT_POOL=0 FAKE_CODEX_MODE=quota_all bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || true
+[[ "$(cat "$FAKE_CODEX_LOG.pool")" != *':1:'* ]] || fail "kill switch still pooled"
+[[ "$(cat "$FAKE_CODEX_LOG.axes")" != *'gpt-6-astra:1'* ]] || fail "kill switch still ran the pool retry"
+unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
+echo 'PASS: Claude-thread Codex seats borrow the pool token; kill switch holds'

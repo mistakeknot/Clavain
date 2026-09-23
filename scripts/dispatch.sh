@@ -1671,7 +1671,7 @@ else
   # Build codex exec command
   CMD=(codex exec)
   CMD+=(-s "$SANDBOX")
-  if _bb_pool_available; then
+  if _bb_pool_available && _bb_codex_pool_token; then
     # Match BB's provider-codex launch contract. The hub token stays in env.
     export CODEX_OPENAI_BASE_URL="${BB_SERVER_URL%/}/api/v1/plugins/account-pool/http/v1"
     DISPATCH_TRANSPORT=direct-pooled
