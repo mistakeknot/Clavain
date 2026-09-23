@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Classify provider error envelopes and retain safe failure evidence."""
 import argparse
+from collections import Counter
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
 import uuid
+from urllib.parse import unquote_plus
 
 QUOTA = {"usage_limit_exceeded", "quota_exhausted", "insufficient_quota"}
 DENIAL = {"permission_denied", "policy_denied", "policy_violation", "forbidden", "403"}
@@ -24,36 +27,48 @@ BODY_FIELDS = {"message", "result", "content", "text", "output", "input", "promp
 MAX_FIELD_BYTES = 256
 MAX_UNMAPPED_BYTES = 4096
 SENSITIVE_FIELD = re.compile(
-    r"(?:authorization|api[_-]?key|private[_-]?key|access[_-]?token|refresh[_-]?token|"
-    r"provider[_-]?token|password|secret|cookie|(?:^|[_-])token(?:$|[_-]))",
+    r"token|secret|passw|pwd|api[_-]?key|auth|cookie|session|credential|private",
     re.IGNORECASE,
 )
-PRIVATE_KEY = re.compile(
-    r"-----BEGIN [^-\r\n]*PRIVATE KEY-----.*?-----END [^-\r\n]*PRIVATE KEY-----",
+# Context rules run before shape heuristics: a credential may be short, low
+# entropy, or use an unknown provider/scheme. Values never escape on that basis.
+PEM_BLOCK = re.compile(
+    r"-----BEGIN [^-\r\n]+-----.*?(?:-----END [^-\r\n]+-----|\Z)",
     re.DOTALL,
 )
-AUTH_VALUE = re.compile(
-    r'''(?i)(["']?Authorization["']?\s*[:=]\s*["']?)(?:(?:Bearer|Basic)\s+)?[^"'\s,;}]+'''
+HEADER = re.compile(r"(?P<prefix>[ \t]*(?:[<>][ \t]*)?)(?P<key>[A-Za-z0-9_-]+)[ \t]*:[ \t]*")
+CREDENTIAL_HEADER = re.compile(
+    r"(?:proxy-)?authorization|(?:set-)?cookie|(?:[A-Za-z0-9_-]+-)?(?:key|secret|token)",
+    re.IGNORECASE,
 )
+ASSIGNMENT = re.compile(
+    r'''(?<![A-Za-z0-9_.%-])(?P<key>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_%][A-Za-z0-9_.%+-]*)[ \t]*(?P<separator>[:=])[ \t]*'''
+)
+JSON_STRING = re.compile(r'"(?:\\.|[^"\\])*"')
+URL_USERINFO = re.compile(r'''(://)[^\s"'<>]*@''')
 BEARER_VALUE = re.compile(r"(?i)(\bBearer\s+)[A-Za-z0-9._~+/=-]+")
-COOKIE_VALUE = re.compile(r"(?im)^(\s*(?:set-)?cookie\s*[:=]\s*).*$")
-ASSIGNED_SECRET = re.compile(
-    r'''(?i)(?<![A-Z0-9_-])(["']?[A-Z0-9_-]{0,64}(?:API[_-]?KEY|PRIVATE[_-]?KEY|'''
-    r'''ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN|PASSWORD|SECRET|TOKEN)[A-Z0-9_-]{0,64}'''
-    r'''["']?\s*[:=]\s*["']?)'''
-    r'''[^"'\s,;}]+'''
-)
 PASSWORD_VALUE = re.compile(r"(?i)(\bpassword\s+)[^\s,;}]+")
+# Vendor shapes supplement context and entropy detection, including short or
+# repetitive examples that intentionally fall below the entropy threshold.
 JWT_VALUE = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
 TOKEN_VALUE = re.compile(
-    r"\b(?:sk|tok|gh[pousr]|github_pat|glpat|ntn|xox[baprs])[-_][A-Za-z0-9._-]{6,}\b"
+    r"\b(?:sk|tok|gh[pousr]|github_pat|glpat|ntn|xox[beaprs])[-_][A-Za-z0-9._-]{6,}\b"
+    r"|\bAIza[A-Za-z0-9_-]{35}\b|\bya29\.[A-Za-z0-9._-]+"
 )
 AWS_KEY = re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")
 EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![\w.-])")
 HOME_PATH = re.compile(
-    r"(?<![A-Za-z0-9_])(?:/(?:home|Users)/[^/\s]+|/root|/tmp|/var/folders)(?=/|\b)"
+    r"(?<![A-Za-z0-9_])(?:/(?:home|Users)/[^/\s]+|/root|/(?:private/)?(?:tmp|var/folders))(?=/|\b)"
 )
 FIELD_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
+TOKEN_RUN = re.compile(r"[A-Za-z0-9_./+=-]{20,}")
+SAFE_HEX = re.compile(r"(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\Z")
+SAFE_UUID = re.compile(r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}\Z")
+SAFE_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:?\d{2})")
+# 3.5 bits/character retains repetitive diagnostics; mixed character classes
+# reject random-looking lowercase words. Exact SHA/UUID/date shapes are exempt
+# only here, never when they are a credential header or keyed value.
+MIN_SECRET_ENTROPY = 3.5
 
 
 def _envelope(event):
@@ -114,19 +129,204 @@ def classify(events, stderr=""):
     return ""
 
 
-def redact_text(value):
-    """Remove credential, identity, and machine-home material from text."""
-    value = PRIVATE_KEY.sub("[REDACTED PRIVATE KEY]", str(value))
-    value = AUTH_VALUE.sub(r"\1[REDACTED]", value)
+def _redact_headers(text):
+    """Blank complete credential header values, including obs-fold lines."""
+    lines = []
+    header_indent = None
+    for line in text.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        newline = line[len(body):]
+        # curl-style '< ' / '> ' prefixes retain the actual header indentation.
+        content = re.sub(r"^[ \t]*[<>][ ]?", "", body)
+        indent = len(content) - len(content.lstrip(" \t"))
+        if body.strip() and header_indent is not None and indent > header_indent:
+            prefix_end = len(body) - len(content) + indent
+            lines.append(body[:prefix_end] + "[REDACTED]" + newline)
+            continue
+        header_indent = None
+        match = HEADER.match(body)
+        if match and CREDENTIAL_HEADER.fullmatch(match["key"]):
+            lines.append(body[:match.end()] + "[REDACTED]" + newline)
+            header_indent = indent
+        else:
+            lines.append(line)
+    return "".join(lines)
+
+
+def _quoted_end(text, start):
+    """Scan a quoted value without depending on its contents or length."""
+    quote = text[start]
+    position = start + 1
+    while position < len(text):
+        if text[position] == "\\":
+            position += 2
+        elif text[position] == quote:
+            if quote == "'" and text[position:position + 2] == "''":
+                position += 2  # YAML single-quote escaping
+            else:
+                return position + 1
+        else:
+            position += 1
+    return len(text)  # An unterminated credential consumes the remainder.
+
+
+def _value_end(text, start, *, assignment=False):
+    """Consume a whole scalar or balanced collection in JSON/YAML/env text."""
+    if start == len(text):
+        return start
+    if assignment and text[start] not in "[{":
+        # Env and query values can contain commas/braces, and shell quoting may
+        # concatenate adjacent pieces. JSON collection separators do not apply.
+        position = start
+        while position < len(text) and text[position] not in " \t\r\n&;#":
+            if text[position] in "\"'":
+                position = _quoted_end(text, position)
+            elif text[position] == "\\":
+                position += 2
+            else:
+                position += 1
+        return min(position, len(text))
+    if text[start] in "\"'":
+        return _quoted_end(text, start)
+    if text[start] in "[{":
+        stack = []
+        position = start
+        while position < len(text):
+            char = text[position]
+            if char in "\"'":
+                position = _quoted_end(text, position)
+                continue
+            if char in "[{":
+                stack.append("]" if char == "[" else "}")
+            elif char in "]}":
+                if not stack or char != stack.pop():
+                    return len(text)  # Malformed credential collection.
+                if not stack:
+                    return position + 1
+            position += 1
+        return len(text)
+    position = start
+    while position < len(text) and text[position] not in "\r\n,;&}]":
+        position += 1
+    return position
+
+
+def _yaml_block_end(text, match):
+    """Include indented children of a sensitive YAML key/block scalar."""
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    prefix = text[line_start:match.start()]
+    if prefix.strip() not in ("", "-"):
+        return match.end()
+    line_end = text.find("\n", match.end())
+    if line_end == -1:
+        return len(text)
+    position = line_end + 1
+    while position < len(text):
+        end = text.find("\n", position)
+        end = len(text) if end == -1 else end + 1
+        line = text[position:end]
+        indent = len(line) - len(line.lstrip(" \t"))
+        if (line.strip() and indent <= len(prefix)
+                and not (indent == len(prefix) and line.lstrip().startswith("- "))):
+            break
+        position = end
+    return position
+
+
+def _credential_key(raw):
+    if raw.startswith('"'):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            raw = raw.strip('"')
+    else:
+        raw = raw.strip("'")
+    raw = unquote_plus(raw)
+    return bool(SENSITIVE_FIELD.search(raw) or CREDENTIAL_HEADER.fullmatch(raw))
+
+
+def _redact_assignments(text):
+    parts = []
+    copied = 0
+    position = 0
+    while match := ASSIGNMENT.search(text, position):
+        position = match.end()
+        if not _credential_key(match["key"]):
+            continue
+        end = _value_end(text, position, assignment=match["separator"] == "=")
+        if match["separator"] == ":":
+            # YAML block and multiline values are credential values too.
+            end = max(end, _yaml_block_end(text, match))
+        replacement = '"[REDACTED]"' if match["key"].startswith('"') else "[REDACTED]"
+        if text[position:end].endswith("\n"):
+            replacement += "\n"
+        parts.extend((text[copied:position], replacement))
+        copied = position = end
+    return "".join(parts) + text[copied:]
+
+
+def _safe_shape(value):
+    return bool(SAFE_HEX.fullmatch(value) or SAFE_UUID.fullmatch(value)
+                or SAFE_TIMESTAMP.fullmatch(value))
+
+
+def _redact_entropy(match):
+    value = match.group()
+    # The run alphabet contains '=' (base64 padding). Preserve common diagnostic
+    # assignments of safe IDs as well as standalone IDs.
+    candidate = value.partition("=")[2]
+    if _safe_shape(value) or (candidate and _safe_shape(candidate)):
+        return value
+    # ':' breaks the token alphabet; inspect the rest of a timestamp instead of
+    # classifying the prefix of e.g. revision=2026-09-23T16:04:46Z as a secret.
+    date_start = match.start() + (value.index("=") + 1 if candidate else 0)
+    date = SAFE_TIMESTAMP.match(match.string, date_start)
+    if date and date.end() >= match.end():
+        return value
+    classes = (any(c.islower() for c in value), any(c.isupper() for c in value),
+               any(c.isdigit() for c in value), any(not c.isalnum() for c in value))
+    if sum(classes) < 2:
+        return value
+    counts = Counter(value)
+    entropy = -sum((count / len(value)) * math.log2(count / len(value))
+                   for count in counts.values())
+    return "[REDACTED]" if entropy > MIN_SECRET_ENTROPY else value
+
+
+def redact_text(value, *, _depth=0):
+    """Redact credential contexts first; entropy/vendor rules are a backstop.
+
+    This is deliberately lossy diagnostic evidence, not a reversible log format.
+    Only safe-looking *unlabelled* identifiers receive shape exemptions.
+    """
+    def escaped_string(match):
+        literal = match.group()
+        if "\\" not in literal:
+            return literal
+        # Serialized logs may embed serialized headers/JSON. Decode one layer
+        # and use exactly the same context rules; do not regex-match through
+        # quote escapes. Stop pathological nesting by dropping the whole value.
+        if _depth >= 8:
+            return '"[REDACTED]"'
+        try:
+            decoded = json.loads(literal)
+        except ValueError:
+            return '"[REDACTED]"'
+        return json.dumps(redact_text(decoded, _depth=_depth + 1))
+
+    value = PEM_BLOCK.sub("[REDACTED PEM]", str(value))
+    value = JSON_STRING.sub(escaped_string, value)
+    value = _redact_headers(value)
+    value = URL_USERINFO.sub(r"\1[REDACTED]@", value)
+    value = _redact_assignments(value)
     value = BEARER_VALUE.sub(r"\1[REDACTED]", value)
-    value = COOKIE_VALUE.sub(r"\1[REDACTED]", value)
-    value = ASSIGNED_SECRET.sub(r"\1[REDACTED]", value)
     value = PASSWORD_VALUE.sub(r"\1[REDACTED]", value)
     value = JWT_VALUE.sub("[REDACTED]", value)
     value = TOKEN_VALUE.sub("[REDACTED]", value)
     value = AWS_KEY.sub("[REDACTED]", value)
     value = EMAIL.sub("[REDACTED EMAIL]", value)
-    return HOME_PATH.sub("~", value)
+    value = HOME_PATH.sub("~", value)
+    return TOKEN_RUN.sub(_redact_entropy, value)
 
 
 def _redact(value, key=""):
