@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", exit_code=0, budget=False, pool=False, block_intercept=False):
+def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", exit_code=0, budget=False, pool=False, block_intercept=False, env_override=None):
     work = tmp_path / "work"
     work.mkdir(exist_ok=True)
     if git:
@@ -25,6 +25,7 @@ from pathlib import Path
 if '--version' in sys.argv: print('codex-cli 0.153.3'); sys.exit(0)
 sys.stdin.read()
 Path(os.environ['CALL']).write_text(json.dumps(sys.argv))
+Path(os.environ['CALL']+'.pooltoken').write_text(os.environ.get('CODEX_POOL_AUTH_TOKEN', ''))
 if '-o' in sys.argv: Path(sys.argv[sys.argv.index('-o')+1]).write_text('VERDICT: CLEAN')
 for event in json.loads(os.environ['EVENTS']): print(json.dumps(event))
 print(os.environ['STDERR'], file=sys.stderr)
@@ -40,6 +41,11 @@ sys.exit(int(os.environ['EXIT_CODE']))
                CLAVAIN_BB_DIRECT_POOL="1" if pool else "0", BB_CLI=str(bb), BB_THREAD_ID='thr_fixture',
                BB_SERVER_URL='https://bb.example', CODEX_POOL_AUTH_TOKEN='fixture-only',
                CLAVAIN_REQUIRE_USAGE="1" if budget else "0", CLAVAIN_REVIEW_EVENTS=str(tmp_path/"events"))
+    for key, value in (env_override or {}).items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
     # Keep stdin open deliberately: communicate() would close it and mask the bug.
     p = subprocess.Popen(["bash", str(ROOT/"scripts/dispatch.sh"), "-s", sandbox, "-C", str(work),
                           "-o", str(tmp_path/"out"), "fixture"], env=env,
@@ -215,3 +221,30 @@ def test_claude_structured_quota_and_response(tmp_path):
             assert "VERDICT: CLEAN" in (tmp_path/"out").read_text()
         else:
             assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"
+
+
+POOL_ROUTE = 'https://bb.example/api/v1/plugins/account-pool/http'
+
+
+def test_claude_thread_borrows_machine_pool_token_for_codex(tmp_path):
+    # A Claude Code BB thread gets no CODEX_POOL_AUTH_TOKEN; the Codex seat must
+    # still go through the pool, not the local ~/.codex login.
+    assert run_dispatch(tmp_path, pool=True, env_override={
+        'CODEX_POOL_AUTH_TOKEN': None, 'ANTHROPIC_AUTH_TOKEN': 'machine-fixture', 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
+    argv = json.loads((tmp_path/'call').read_text())
+    assert 'model_provider="bb-account-pool"' in argv
+    assert (tmp_path/'call.pooltoken').read_text() == 'machine-fixture'
+
+
+def test_codex_stays_direct_without_any_pool_token(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, env_override={
+        'CODEX_POOL_AUTH_TOKEN': None, 'ANTHROPIC_AUTH_TOKEN': 'machine-fixture',
+        'ANTHROPIC_BASE_URL': 'https://api.anthropic.com'}) == 0
+    assert 'model_provider="bb-account-pool"' not in json.loads((tmp_path/'call').read_text())
+    assert (tmp_path/'call.pooltoken').read_text() == ''
+
+
+def test_codex_thread_token_wins_over_claude_route(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, env_override={
+        'CODEX_POOL_AUTH_TOKEN': 'codex-fixture', 'ANTHROPIC_AUTH_TOKEN': 'machine-fixture', 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
+    assert (tmp_path/'call.pooltoken').read_text() == 'codex-fixture'
