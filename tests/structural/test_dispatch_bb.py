@@ -107,11 +107,11 @@ def test_failed_dispatch_persists_redacted_intercept_evidence(tmp_path):
         {
             "event_type": "turn.failed",
             "fields": {
-                "request_id": "req-fixture",
+                "request_id": "<id>",
                 "error": {
                     "code": "unknown_failure",
                     "provider_reason": "seat_exhausted",
-                    "provider_token": "[REDACTED]",
+                    "provider_token": "<redacted>",
                 },
             },
         }

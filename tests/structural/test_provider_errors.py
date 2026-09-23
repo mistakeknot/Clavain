@@ -4,7 +4,10 @@ import importlib.util
 import json
 from pathlib import Path
 import random
+import re
 import string
+import subprocess
+import sys
 from urllib.parse import quote
 import uuid
 
@@ -100,7 +103,7 @@ def test_failure_evidence_redacts_secrets_identity_and_home_paths(tmp_path):
         "dict-cookie-fixture-secret",
     ):
         assert secret not in text
-    assert "[REDACTED]" in text
+    assert "<redacted>" in text
     assert "~/projects/secret/repo" in text
     assert reference == {
         "path": ".clavain/intercept/attempt-fixture.json",
@@ -111,7 +114,9 @@ def test_failure_evidence_redacts_secrets_identity_and_home_paths(tmp_path):
 
 def test_failure_evidence_bounds_redacted_stderr_tail_to_4096_bytes(tmp_path):
     artifact = tmp_path / "evidence.json"
-    stderr = "discard-me\n" * 800 + "tail-marker\n" + "z" * 5000
+    # Exercise truncation after allowlisting, not just compression of one huge
+    # unknown word into a placeholder. Use multibyte fixture vocabulary too.
+    stderr = "before\n" * 800 + "You’ve hit your usage limit.\n" * 200 + "z" * 5000
 
     provider_errors.write_evidence(
         artifact,
@@ -124,9 +129,10 @@ def test_failure_evidence_bounds_redacted_stderr_tail_to_4096_bytes(tmp_path):
     )
 
     evidence = json.loads(artifact.read_text())
-    assert len(evidence["stderr_tail"].encode()) <= 4096
-    assert "discard-me" not in evidence["stderr_tail"]
-    assert evidence["stderr_tail"].endswith("z" * 100)
+    assert 4093 <= len(evidence["stderr_tail"].encode()) <= 4096
+    assert "before" not in evidence["stderr_tail"]
+    assert evidence["stderr_tail"].endswith("You’ve hit your usage limit.\n<word>")
+    assert "z" * 100 not in evidence["stderr_tail"]
 
 
 def test_failure_evidence_captures_only_unmapped_failure_envelope_fields(tmp_path):
@@ -162,7 +168,7 @@ def test_failure_evidence_captures_only_unmapped_failure_envelope_fields(tmp_pat
         {
             "event_type": "turn.failed",
             "fields": {
-                "request_id": "req-123",
+                "request_id": "<id>",
                 "error": {
                     "code": "unknown_failure",
                     "provider_reason": "seat_exhausted",
@@ -185,7 +191,7 @@ def test_unmapped_capture_drops_claude_bodies_and_is_size_bounded(tmp_path):
             "result": body,
             "error": {
                 "code": "unknown_result_failure",
-                "provider_reason": "r" * 2000,
+                "provider_reason": "connection refused " * 2000,
                 "task_output": body,
             },
         },
@@ -195,7 +201,7 @@ def test_unmapped_capture_drops_claude_bodies_and_is_size_bounded(tmp_path):
             "message": {"content": [{"type": "text", "text": body}]},
             "error": {
                 "code": "unknown_assistant_failure",
-                "provider_reason": "s" * 2000,
+                "provider_reason": "server error " * 2000,
                 "message_body": body,
             },
         },
@@ -213,6 +219,8 @@ def test_unmapped_capture_drops_claude_bodies_and_is_size_bounded(tmp_path):
 
     evidence = json.loads(artifact.read_text())
     serialized = json.dumps(evidence["unmapped_provider_fields"], separators=(",", ":")).encode()
+    assert len(evidence["unmapped_provider_fields"]) >= 2
+    assert len(serialized) >= 3500  # Actually fill the budget, not an empty capture.
     assert len(serialized) <= 4096
     assert "task-output-fixture" not in artifact.read_text()
     for row in evidence["unmapped_provider_fields"]:
@@ -242,7 +250,7 @@ def test_generated_credentials_in_headers_and_folds(header):
             text = f"{header}: {scheme}{secret}\r\n\tcontinued={secret}\r\nSafe: visible\r\n"
             redacted = provider_errors.redact_text(text)
             assert secret not in redacted
-            assert redacted.splitlines()[0] == f"{header}: [REDACTED]"
+            assert redacted.splitlines()[0] == f"{header}: <redacted>"
             assert "Safe: visible" in redacted
         for text in (json.dumps({header: f"Custom {secret}"}),
                      f"curl -H '{header}: Custom {secret}'",
@@ -322,9 +330,64 @@ def test_generated_bare_high_entropy_secrets_and_safe_shapes():
         assert safe not in provider_errors.redact_text(f"credential={safe}")
 
 
+@pytest.mark.parametrize("safe", [
+    "error", "429", "a" * 40, "b" * 64,
+    "01a0cafd-2e09-75a1-94ec-14aafc8c38b9", "2026-09-23T16:04:46Z",
+])
+def test_contexts_override_allowlist_even_for_safe_values(safe):
+    for template in (
+        "codex --token={}", "codex --password={}", "codex --api-key={}",
+        "codex --token {}", "pass={}", "pw={}", "pass: {}", "password {}",
+        "curl -u alice:{}", "curl --user alice:{}", "sshpass -p {}", "mysql -p {}",
+        "creds[token]={}", "token => {}", '{{"token":\n"{}"}}',
+        "Bearer {}", "Basic {}", "Cookie: {}", "Authorization: Digest {}",
+        "https://operator:{}@localhost:3128/route",
+        "-----BEGIN VENDOR CREDENTIAL-----\n{}\n-----END VENDOR CREDENTIAL-----",
+    ):
+        sanitized = provider_errors.redact_text(template.format(safe))
+        assert safe not in sanitized, (template, sanitized)
+
+
+@pytest.mark.parametrize("digits", [11, 40, 64, 300])
+def test_long_numbers_cannot_use_identifier_exemptions(digits):
+    value = "7" * digits
+    assert provider_errors.redact_text(f"status={value}") == "status=<num>"
+    assert provider_errors._bounded_scalar(int(value), "status") == "<num>"
+    assert provider_errors.redact_text(f"~/repo/{value}") == "<path>"
+
+
+def test_identifier_exemption_never_exempts_its_prefix():
+    for value in ("c" * 40, "2026-09-23T16:04:46Z"):
+        assert provider_errors.redact_text(f"hUntEr2={value}") == f"<id>={value}"
+
+
+def test_url_summary_drops_path_query_fragment_but_keeps_host_and_punctuation():
+    for secret in generated_secrets():
+        value = quote(secret, safe="")
+        sanitized = provider_errors.redact_text(f"POST (https://api.openai.com/{value}?q={value}#{value}).")
+        assert secret not in sanitized and value not in sanitized
+        assert sanitized == "POST (<url-host:api.openai.com>)."
+
+
+def test_paths_only_keep_vocabulary_components_or_known_ids():
+    for prefix in ("/home/operator", "/Users/operator", "/root", "/tmp", "/var/folders",
+                   "/private/tmp", "/private/var/folders", "~"):
+        assert provider_errors.redact_text(f"{prefix}/repo/scripts/") == "~/repo/scripts/"
+        for secret in generated_secrets():
+            assert secret not in provider_errors.redact_text(f"{prefix}/repo/{secret}/file.py")
+
+
+def test_unknown_metadata_key_collisions_do_not_drop_fields():
+    events = [{"type": "turn.failed", "error": {"hunter2": "missing", "hunter3": "invalid"}}]
+    fields = provider_errors._unmapped_provider_fields(events)[0]["fields"]["error"]
+    assert set(fields) == {"<id>:0", "<id>:1"}
+    assert set(fields.values()) == {"missing", "invalid"}
+
+
 def test_pem_blocks_and_macos_private_paths():
     for secret in generated_secrets():
-        for label in ("PRIVATE KEY", "CERTIFICATE", "VENDOR CREDENTIAL", "PUBLIC KEY"):
+        for label in ("PRIVATE KEY", "CERTIFICATE", "VENDOR CREDENTIAL", "PUBLIC KEY",
+                      "RSA PRIVATE KEY", "OPENSSH PRIVATE KEY", "ENCRYPTED PRIVATE KEY"):
             for separator in ("\n", r"\n"):
                 text = f"before -----BEGIN {label}-----{separator}{secret}{separator}-----END {label}----- after"
                 redacted = provider_errors.redact_text(text)
@@ -368,6 +431,110 @@ def test_encoded_structured_credentials_and_malformed_values():
 
 
 def test_vendor_extras_still_cover_low_entropy_probe_shapes():
-    for prefix, size in (("AIza", 35), ("ya29.", 30), ("xoxe-", 30)):
-        fake = prefix + "q" * size
+    for prefix in ("AIza", "ya29.", "xoxe-", "xoxb-", "xoxp-", "xoxa-", "xoxr-", "xoxs-",
+                   "sk-", "sk-proj-", "sk-ant-api03-", "ghp_", "gho_", "ghs_", "ghu_", "ghr_",
+                   "github_pat_", "glpat-"):
+        fake = prefix + "q" * 35
         assert fake not in provider_errors.redact_text(f"provider diagnostic: {fake}")
+
+
+@pytest.mark.parametrize("template", [
+    "codex --token={}", "codex --password={}", "codex --api-key={}",
+    "pass={}", "pass: {}", "PASS={}", "pw={}", "curl -u alice:{}",
+    "curl --user alice:{}", "sshpass -p {}", "mysql -p {}", "codex --token {}",
+    '{{"token":\n"{}"}}', "Basic {}", "creds[token]={}", "token => {}",
+    "token%3D{}", "FOO={}", "diagnostic {} end",
+])
+def test_round_three_probes_and_generated_unrecognized_tokens(template, tmp_path):
+    # All contexts are persisted, not just passed through an isolated regex.
+    for index, secret in enumerate(["hunter2", "abc123", "aB9xQz7L", *generated_secrets()]):
+        artifact = tmp_path / f"probe-{index}.json"
+        provider_errors.write_evidence(
+            artifact, [{"type": "turn.failed", "error": {"details": template.format(secret)}}],
+            template.format(secret), failure_class="terminal_error",
+            dispatch_id="dispatch-fixture", attempt_id="attempt-fixture",
+            receipt_path=artifact.name,
+        )
+        assert secret not in artifact.read_text()
+
+
+def test_allowlist_replaces_unknown_tokens_and_preserves_diagnostic_shape():
+    raw = ("mysteryword 12345678901 hUntEr2 /opt/customer-data/credentials "
+           "~/projects/customer-data POST https://api.openai.com/v1/responses 429\n"
+           "request_id: req_011CRkDkPz9xKq2mNv7wYtLb\n"
+           "model=claude-fable-5-1 effort=high\n"
+           "attempt_id=dispatch-20260923T160446Z-a1b2c3\n"
+           'File "/home/mk/.local/lib/python3.12/site-packages/anthropic/_base_client.py", line 1034\n'
+           "EPIPE ECONNRESET authentication_error 403 1234567890\n")
+    sanitized = provider_errors.redact_text(raw)
+    for secret in ("mysteryword", "12345678901", "hUntEr2", "customer-data",
+                   "req_011CRkDkPz9xKq2mNv7wYtLb", "dispatch-20260923T160446Z-a1b2c3"):
+        assert secret not in sanitized
+    for useful in ("<word>", "<num>", "<id>", "<path>",
+                   "POST <url-host:api.openai.com> 429", "request_id: <id>",
+                   "model=<id> effort=high", "attempt_id=<id>",
+                   "~/.local/lib/python3.12/site-packages/anthropic/_base_client.py",
+                   "EPIPE ECONNRESET authentication_error 403 1234567890"):
+        assert useful in sanitized
+
+
+def test_real_usage_limit_fixtures_classify_and_meet_placeholder_budget():
+    messages = []
+    for filename in ("codex-usage-limit-rollout.jsonl", "codex-usage-limit-stdout.jsonl"):
+        events = [json.loads(line) for line in (ROOT / "tests/fixtures" / filename).read_text().splitlines()]
+        assert provider_errors.classify(events) == "quota_exhausted"
+        for event in events:
+            _, _, error = provider_errors._envelope(event)
+            if isinstance(error, dict) and "message" in error:
+                messages.append(error["message"])
+    assert len(messages) == 3
+    for message in messages:
+        for raw in (message, "ERROR: " + message, message.replace("’", "'")):
+            sanitized = provider_errors.redact_text(raw)
+            assert provider_errors.classify([], sanitized) == "quota_exhausted"
+            assert "usage limit" in sanitized and "try again at" in sanitized
+            assert "Sep 26th, 2026 2:36 AM" in sanitized
+            assert "<url-host:chatgpt.com>" in sanitized
+            # At most 5% placeholders: one host-only URL among 29 readable words.
+            placeholders = re.findall(r"<[^<>]+>", sanitized)
+            words = re.findall(r"<[^<>]+>|[\w’']+", sanitized)
+            assert len(placeholders) / len(words) <= 0.05
+
+
+def test_scalar_metadata_uses_same_allowlist_including_keys_and_large_numbers(tmp_path):
+    artifact = tmp_path / "metadata.json"
+    provider_errors.write_evidence(
+        artifact, [{"type": "turn.failed", "request_id": "req_011CRkDkPz9xKq2mNv7wYtLb",
+                    "error": {"hunter2": "shortunknown", "details": 123456789012345,
+                              "retry_after": 120, "will_retry": False}}],
+        "", failure_class="terminal_error", dispatch_id="dispatch-fixture",
+        attempt_id="attempt-fixture", receipt_path=artifact.name,
+    )
+    raw = artifact.read_text()
+    for secret in ("hunter2", "shortunknown", "123456789012345", "req_011CRkDkPz9xKq2mNv7wYtLb"):
+        assert secret not in raw
+    fields = json.loads(raw)["unmapped_provider_fields"][0]["fields"]
+    assert fields["request_id"] == "<id>"
+    assert fields["error"]["retry_after"] == 120
+    assert fields["error"]["will_retry"] is False
+
+
+def test_missing_vocabulary_cannot_break_provider_classification(tmp_path):
+    # The evidence dependency must not become a classification dependency.
+    isolated = tmp_path / "provider-errors.py"
+    isolated.write_bytes((ROOT / "scripts/provider-errors.py").read_bytes())
+    events = ROOT / "tests/fixtures/codex-usage-limit-rollout.jsonl"
+    result = subprocess.run([sys.executable, str(isolated), str(events)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "quota_exhausted"
+    stderr = tmp_path / "stderr.txt"
+    stderr.write_text("ERROR: You've hit your usage limit.\n")
+    artifact = tmp_path / "evidence.json"
+    result = subprocess.run([
+        sys.executable, str(isolated), str(events), "--stderr", str(stderr),
+        "--write-evidence", str(artifact), "--receipt-path", artifact.name,
+        "--failure-class", "quota_exhausted", "--dispatch-id", "dispatch-fixture",
+        "--attempt-id", "attempt-fixture",
+    ], text=True, capture_output=True)
+    assert result.returncode != 0
+    assert not artifact.exists()

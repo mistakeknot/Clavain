@@ -1,0 +1,45 @@
+# Reviewed keep-only vocabulary for persisted failure diagnostics (case-insensitive).
+# Sources: tests/fixtures/codex-usage-limit-{rollout,stdout}.jsonl; dispatch's
+# policy/configuration/quota envelopes; common CLI, HTTP and errno diagnostics.
+# This is NOT learned from stderr or provider fields. Changes expand disclosure.
+# Unknown words/identifiers must become placeholders, not automatic additions.
+# Usage-limit fixture prose and calendar words.
+you've you’ve hit your usage limit visit to purchase more credits or try again at
+jan feb mar apr may jun jul aug sep oct nov dec am pm 26th
+# Common diagnostic prose (not an arbitrary English dictionary).
+a an the and of for from in on is are was were be been being has have had
+not no none null true false with without by as this that it its please
+before after while when then now only all any too many available unavailable
+allowed denied forbidden unauthorized invalid valid unknown missing required blocked
+failed failure error errors warning warn fatal debug info trace traceback
+exception cause caused because cannot can could unable unexpected expected
+unsupported supported exceeded exhausted insufficient reached remaining quota rate billing limited
+timeout timed out retry retrying retries backoff reset retryable recovered
+cancelled canceled interrupted aborted terminated terminal pending completed
+started finished start end stop waiting wait refused closed open broken busy
+connection connect disconnected network socket pipe stream transport protocol
+request requests response responses status code reason details detail message
+configuration config permission permissions policy authentication authorization
+auth credential credentials token secret password pass passw pw pwd cookie session
+private bearer basic proxy-authorization set-cookie api-key api_key
+x-account-pool-token x-api-key service-key service-secret service-token
+account pool provider client server endpoint host hostname port proxy localhost access expired version
+http https get post put patch delete head options connect accept content type length
+redirect moved bad internal service gateway unprocessable conflict locked
+headers header body read write file line column path directory disk space memory
+process subprocess exit signal errno command option argument arguments flag
+syntax parse parsing json yaml env export stdout stderr stdin output input
+safe visible redacted diagnostic log logs identity revision effort high medium low
+request_id requestid status_code error_code provider_reason provider_token
+model will_retry willretry retry_after retryafter attempt_id dispatch_id thread_id
+hostid cf-ray code codex_error_info type event_type fields error details
+unknown_failure seat_exhausted usage_limit_exceeded quota_exhausted
+insufficient_quota permission_denied policy_denied policy_violation
+terminal_policy terminal_configuration terminal_error invalid_request_error
+authentication_error rate_limit billing_error
+# CLI/tool and package path words. Path components must consist solely of these
+# vocabulary atoms, small numbers, or the explicitly supported identifier shapes.
+curl sshpass mysql codex claude python python3 node npm uv git bash sh zsh
+projects repo local lib site packages anthropic openai base client py json
+cache work scripts bin usr tmp home root var folders codex settings usage
+process internal task queues ticks and rejections

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Classify provider error envelopes and retain safe failure evidence."""
 import argparse
-from collections import Counter
+from functools import lru_cache
 import hashlib
+import ipaddress
 import json
-import math
 import os
 from pathlib import Path
 import re
 import uuid
-from urllib.parse import unquote_plus
+from urllib.parse import unquote_plus, urlsplit
 
 QUOTA = {"usage_limit_exceeded", "quota_exhausted", "insufficient_quota"}
 DENIAL = {"permission_denied", "policy_denied", "policy_violation", "forbidden", "403"}
@@ -27,10 +27,10 @@ BODY_FIELDS = {"message", "result", "content", "text", "output", "input", "promp
 MAX_FIELD_BYTES = 256
 MAX_UNMAPPED_BYTES = 4096
 SENSITIVE_FIELD = re.compile(
-    r"token|secret|passw|pwd|api[_-]?key|auth|cookie|session|credential|private",
+    r"token|secret|pass|pwd|(?:^|[-_])pw(?:$|[-_])|api[_-]?key|auth|cookie|session|credential|private",
     re.IGNORECASE,
 )
-# Context rules run before shape heuristics: a credential may be short, low
+# Context rules run before the allowlist: a credential may be short, low
 # entropy, or use an unknown provider/scheme. Values never escape on that basis.
 PEM_BLOCK = re.compile(
     r"-----BEGIN [^-\r\n]+-----.*?(?:-----END [^-\r\n]+-----|\Z)",
@@ -42,14 +42,18 @@ CREDENTIAL_HEADER = re.compile(
     re.IGNORECASE,
 )
 ASSIGNMENT = re.compile(
-    r'''(?<![A-Za-z0-9_.%-])(?P<key>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_%][A-Za-z0-9_.%+-]*)[ \t]*(?P<separator>[:=])[ \t]*'''
+    r'''(?<![A-Za-z0-9_.%])(?P<key>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:--)?[A-Za-z_%][A-Za-z0-9_.%+-]*)\]?[ \t]*(?P<separator>=>|[:=])\s*'''
 )
 JSON_STRING = re.compile(r'"(?:\\.|[^"\\])*"')
 URL_USERINFO = re.compile(r'''(://)[^\s"'<>]*@''')
-BEARER_VALUE = re.compile(r"(?i)(\bBearer\s+)[A-Za-z0-9._~+/=-]+")
+BEARER_VALUE = re.compile(r"(?i)(\b(?:Bearer|Basic)\s+)[^\s,;}\]]+")
 PASSWORD_VALUE = re.compile(r"(?i)(\bpassword\s+)[^\s,;}]+")
-# Vendor shapes supplement context and entropy detection, including short or
-# repetitive examples that intentionally fall below the entropy threshold.
+CLI_OPTION = re.compile(r"(?<!\S)(?P<key>--[A-Za-z][A-Za-z0-9_-]*)[ \t]+")
+CLI_LOGIN = re.compile(
+    r"\b(?:curl\b[^\r\n]*?[ \t](?:-u|--user)|(?:sshpass|mysql)\b[^\r\n]*?[ \t]-p)[ \t]+"
+)
+# Vendor shapes remain supplemental; unfamiliar tokens are dropped regardless
+# of length, apparent randomness, or a provider prefix.
 JWT_VALUE = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
 TOKEN_VALUE = re.compile(
     r"\b(?:sk|tok|gh[pousr]|github_pat|glpat|ntn|xox[beaprs])[-_][A-Za-z0-9._-]{6,}\b"
@@ -61,14 +65,21 @@ HOME_PATH = re.compile(
     r"(?<![A-Za-z0-9_])(?:/(?:home|Users)/[^/\s]+|/root|/(?:private/)?(?:tmp|var/folders))(?=/|\b)"
 )
 FIELD_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
-TOKEN_RUN = re.compile(r"[A-Za-z0-9_./+=-]{20,}")
 SAFE_HEX = re.compile(r"(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\Z")
 SAFE_UUID = re.compile(r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}\Z")
-SAFE_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:?\d{2})")
-# 3.5 bits/character retains repetitive diagnostics; mixed character classes
-# reject random-looking lowercase words. Exact SHA/UUID/date shapes are exempt
-# only here, never when they are a credential header or keyed value.
-MIN_SECRET_ENTROPY = 3.5
+SAFE_TIMESTAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[Zz]|[+-][0-9]{2}:?[0-9]{2})")
+ERROR_CODE = re.compile(r"(?:E[A-Z0-9_]+|[a-z_]+_error)\Z")
+NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+)?\Z")
+# Punctuation is structural, never a reason to keep adjoining unknown data.
+# The final alternative consumes unknown runs WHOLE (including dotted strings),
+# so a random secret cannot be mistaken for a hostname or broken into safe words.
+LEXEME = re.compile(
+    rf"(?P<timestamp>{SAFE_TIMESTAMP.pattern})(?=$|[\s,;\"'<>\)\]}}])"
+    r"|(?P<url>[A-Za-z][A-Za-z0-9+.-]*://[^\s<>\"'`]+)"
+    r"|(?P<path>~?/[^\s\"'<>`,;()\[\]{}]*)"
+    r"|(?P<structure>[ \t\r\n:;=,{}\[\]()<>\"'`!?|&*\\])"
+    r"|(?P<atom>[^ \t\r\n:;=,{}\[\]()<>\"'`!?|&*\\]+(?:'[A-Za-z]+)?)"
+)
 
 
 def _envelope(event):
@@ -141,12 +152,12 @@ def _redact_headers(text):
         indent = len(content) - len(content.lstrip(" \t"))
         if body.strip() and header_indent is not None and indent > header_indent:
             prefix_end = len(body) - len(content) + indent
-            lines.append(body[:prefix_end] + "[REDACTED]" + newline)
+            lines.append(body[:prefix_end] + "<redacted>" + newline)
             continue
         header_indent = None
         match = HEADER.match(body)
         if match and CREDENTIAL_HEADER.fullmatch(match["key"]):
-            lines.append(body[:match.end()] + "[REDACTED]" + newline)
+            lines.append(body[:match.end()] + "<redacted>" + newline)
             header_indent = indent
         else:
             lines.append(line)
@@ -253,11 +264,11 @@ def _redact_assignments(text):
         position = match.end()
         if not _credential_key(match["key"]):
             continue
-        end = _value_end(text, position, assignment=match["separator"] == "=")
+        end = _value_end(text, position, assignment=match["separator"] != ":")
         if match["separator"] == ":":
             # YAML block and multiline values are credential values too.
             end = max(end, _yaml_block_end(text, match))
-        replacement = '"[REDACTED]"' if match["key"].startswith('"') else "[REDACTED]"
+        replacement = '"<redacted>"' if match["key"].startswith('"') else "<redacted>"
         if text[position:end].endswith("\n"):
             replacement += "\n"
         parts.extend((text[copied:position], replacement))
@@ -270,35 +281,21 @@ def _safe_shape(value):
                 or SAFE_TIMESTAMP.fullmatch(value))
 
 
-def _redact_entropy(match):
-    value = match.group()
-    # The run alphabet contains '=' (base64 padding). Preserve common diagnostic
-    # assignments of safe IDs as well as standalone IDs.
-    candidate = value.partition("=")[2]
-    if _safe_shape(value) or (candidate and _safe_shape(candidate)):
-        return value
-    # ':' breaks the token alphabet; inspect the rest of a timestamp instead of
-    # classifying the prefix of e.g. revision=2026-09-23T16:04:46Z as a secret.
-    date_start = match.start() + (value.index("=") + 1 if candidate else 0)
-    date = SAFE_TIMESTAMP.match(match.string, date_start)
-    if date and date.end() >= match.end():
-        return value
-    classes = (any(c.islower() for c in value), any(c.isupper() for c in value),
-               any(c.isdigit() for c in value), any(not c.isalnum() for c in value))
-    if sum(classes) < 2:
-        return value
-    counts = Counter(value)
-    entropy = -sum((count / len(value)) * math.log2(count / len(value))
-                   for count in counts.values())
-    return "[REDACTED]" if entropy > MIN_SECRET_ENTROPY else value
+def _redact_cli(text):
+    def suppress(match):
+        start = match.end()
+        end = _value_end(text, start, assignment=True)
+        return start, end
+
+    spans = [suppress(m) for m in CLI_OPTION.finditer(text) if _credential_key(m["key"])]
+    spans.extend(suppress(m) for m in CLI_LOGIN.finditer(text))
+    for start, end in sorted(set(spans), reverse=True):
+        text = text[:start] + "<redacted>" + text[end:]
+    return text
 
 
-def redact_text(value, *, _depth=0):
-    """Redact credential contexts first; entropy/vendor rules are a backstop.
-
-    This is deliberately lossy diagnostic evidence, not a reversible log format.
-    Only safe-looking *unlabelled* identifiers receive shape exemptions.
-    """
+def _redact_contexts(value, *, _depth=0):
+    """Suppress whole credential values even when they have an allowed shape."""
     def escaped_string(match):
         literal = match.group()
         if "\\" not in literal:
@@ -307,37 +304,139 @@ def redact_text(value, *, _depth=0):
         # and use exactly the same context rules; do not regex-match through
         # quote escapes. Stop pathological nesting by dropping the whole value.
         if _depth >= 8:
-            return '"[REDACTED]"'
+            return '"<redacted>"'
         try:
             decoded = json.loads(literal)
         except ValueError:
-            return '"[REDACTED]"'
-        return json.dumps(redact_text(decoded, _depth=_depth + 1))
+            return '"<redacted>"'
+        return json.dumps(_redact_contexts(decoded, _depth=_depth + 1), ensure_ascii=False)
 
-    value = PEM_BLOCK.sub("[REDACTED PEM]", str(value))
+    value = PEM_BLOCK.sub("<redacted>", str(value))
     value = JSON_STRING.sub(escaped_string, value)
     value = _redact_headers(value)
-    value = URL_USERINFO.sub(r"\1[REDACTED]@", value)
+    value = URL_USERINFO.sub(r"\1", value)
     value = _redact_assignments(value)
-    value = BEARER_VALUE.sub(r"\1[REDACTED]", value)
-    value = PASSWORD_VALUE.sub(r"\1[REDACTED]", value)
-    value = JWT_VALUE.sub("[REDACTED]", value)
-    value = TOKEN_VALUE.sub("[REDACTED]", value)
-    value = AWS_KEY.sub("[REDACTED]", value)
-    value = EMAIL.sub("[REDACTED EMAIL]", value)
+    value = _redact_cli(value)
+    value = BEARER_VALUE.sub(r"\1<redacted>", value)
+    value = PASSWORD_VALUE.sub(r"\1<redacted>", value)
+    value = JWT_VALUE.sub("<redacted>", value)
+    value = TOKEN_VALUE.sub("<redacted>", value)
+    value = AWS_KEY.sub("<redacted>", value)
+    return EMAIL.sub("<redacted>", value)
+
+
+@lru_cache(maxsize=1)
+def _vocabulary():
+    # Fail closed for evidence, but never prevent the independent classifier
+    # from reporting quota/policy/etc. if this evidence-only resource is absent.
+    return frozenset(
+        word.casefold()
+        for line in Path(__file__).with_name("provider-error-vocabulary.txt").read_text(
+            encoding="utf-8").splitlines()
+        for word in line.partition("#")[0].split()
+    )
+
+
+def _allowed_atom(value):
+    if NUMBER.fullmatch(value):
+        # A long decimal is not a git SHA just because it has 40/64 digits.
+        return sum(c.isdigit() for c in value) <= 10
+    return (value.casefold() in _vocabulary() or _safe_shape(value)
+            or ERROR_CODE.fullmatch(value))
+
+
+def _keep_atom(value):
+    # Keep sentence punctuation / CLI flag prefixes apart from the word, without
+    # exempting a whole assignment because just its value is a SHA or timestamp.
+    prefix = value[:len(value) - len(value.lstrip("-"))]
+    suffix = value[len(value.rstrip(".")):]
+    atom = value[len(prefix):len(value) - len(suffix) if suffix else len(value)]
+    if not atom:
+        return prefix + suffix if prefix or suffix else "<word>"
+    if _allowed_atom(atom):
+        kept = atom
+    elif NUMBER.fullmatch(atom):
+        kept = "<num>"
+    elif atom.isalpha():
+        kept = "<word>"
+    else:
+        kept = "<id>"
+    return prefix + kept + suffix
+
+
+def _keep_path(value):
     value = HOME_PATH.sub("~", value)
-    return TOKEN_RUN.sub(_redact_entropy, value)
+    if not value.startswith("~/"):
+        return "<path>"
+    for component in value[2:].rstrip("/").split("/"):
+        if _safe_shape(component) and not NUMBER.fullmatch(component):
+            continue
+        # Dotfiles, package names, and extensions can compose known words, but
+        # arbitrary alphanumeric components (e.g. customer names) cannot pass.
+        words = [part for part in re.split(r"[._-]", component) if part]
+        if not words or not all(_allowed_atom(word) for word in words):
+            return "<path>"
+    return value
+
+
+def _keep_url(value):
+    # A URL is summarized, never replayed. Neither query/fragment nor path nor
+    # userinfo is retained. Only here can a dotted string be a hostname; a bare
+    # dotted token may be an unfamiliar credential and receives no exemption.
+    suffix = value[len(value.rstrip(".,;)")):]
+    try:
+        parsed = urlsplit(value.rstrip(".,;)"))
+        host = parsed.hostname or ""
+        port = parsed.port
+        if ":" in host:
+            ipaddress.IPv6Address(host)
+            host = f"[{host}]"
+        elif not (0 < len(host) <= 253 and all(
+            re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+            for label in host.split(".")
+        )):
+            return "<url-host:unknown>" + suffix
+        return f"<url-host:{host}{':' + str(port) if port is not None else ''}>" + suffix
+    except ValueError:
+        return "<url-host:unknown>" + suffix
+
+
+def redact_text(value):
+    """Keep only reviewed diagnostic words and explicit non-secret token classes.
+
+    This lossy evidence is not a raw log or an arbitrary-secret detector: the
+    allowlisted words, short numbers, error codes, SHAs, UUIDs, timestamps and
+    URL hosts are intentional disclosures. Credential contexts override those
+    exemptions. No vocabulary is learned from the text being sanitized.
+    """
+    value = _redact_contexts(value)
+    value = re.sub(r"\x1b\[[0-9;]*m", "", value)
+    parts = []
+    for match in LEXEME.finditer(value):
+        token = match.group()
+        if match.lastgroup in {"timestamp", "structure"}:
+            parts.append(token)
+        elif match.lastgroup == "url":
+            parts.append(_keep_url(token))
+        elif match.lastgroup == "path":
+            parts.append(_keep_path(token))
+        else:
+            parts.append(_keep_atom(token))
+    return "".join(parts)
 
 
 def _redact(value, key=""):
     if key and SENSITIVE_FIELD.search(key):
-        return "[REDACTED]"
+        return "<redacted>"
     if isinstance(value, dict):
         return {str(k): _redact(v, str(k)) for k, v in value.items()}
     if isinstance(value, list):
         return [_redact(item) for item in value]
     if isinstance(value, str):
         return redact_text(value)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        # A JSON scalar must not bypass the textual numeric bound.
+        return value if _allowed_atom(str(value).lstrip("-")) else "<num>"
     return value
 
 
@@ -371,6 +470,12 @@ def _unmapped_provider_fields(events):
             value = _bounded_scalar(value, key)
             if value is None:
                 return True
+            safe_key = redact_text(key)
+            if safe_key != key:
+                # Unknown field names can themselves contain secrets. Preserve
+                # multiple unknown fields without overwriting a placeholder key.
+                occupied = fields.get("error", {}) if nested else fields
+                key = f"{safe_key}:{len(occupied)}"
             trial = dict(fields)
             if nested:
                 nested_fields = dict(trial.get("error", {}))
