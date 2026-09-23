@@ -284,8 +284,8 @@ FAKE_CODEX_MODE=quota_all bash "$ROOT/scripts/dispatch.sh" --role deep-execution
 [[ "$(cat "$FAKE_CODEX_LOG.axes")" == $'gpt-6-astra:0\ngpt-6-astra:1\ngpt-5.6-sol:0' ]] || fail "claude-thread pool retry did not fire"
 [[ "$(cat "$FAKE_CODEX_LOG.pool")" == $'gpt-6-astra:1:machine-fixture\ngpt-6-astra:1:machine-fixture\ngpt-5.6-sol:1:machine-fixture' ]] || fail "claude-thread codex attempts were not pooled"
 : > "$FAKE_CODEX_LOG.axes"; : > "$FAKE_CODEX_LOG.pool"
-CLAVAIN_BB_DIRECT_POOL=0 FAKE_CODEX_MODE=quota_all bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || true
-[[ "$(cat "$FAKE_CODEX_LOG.pool")" != *':1:'* ]] || fail "kill switch still pooled"
-[[ "$(cat "$FAKE_CODEX_LOG.axes")" != *'gpt-6-astra:1'* ]] || fail "kill switch still ran the pool retry"
+CLAVAIN_BB_DIRECT_POOL=0 FAKE_CODEX_MODE=quota_all bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || fail "kill-switch dispatch did not reach its Sol fallback"
+[[ "$(cat "$FAKE_CODEX_LOG.axes")" == $'gpt-6-astra:0\ngpt-5.6-sol:0' ]] || fail "kill switch still ran the pool retry"
+[[ "$(cat "$FAKE_CODEX_LOG.pool")" == $'gpt-6-astra:0:\ngpt-5.6-sol:0:' ]] || fail "kill switch still pooled or borrowed"
 unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
 echo 'PASS: Claude-thread Codex seats borrow the pool token; kill switch holds'

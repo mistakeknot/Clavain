@@ -34,6 +34,21 @@ performed; account-before-model ordering is covered by
 but a Claude hub canary has not been run. After the exact hub/session tie was
 verified, direct Codex pooling became the default on enrolled BB hosts with
 the dedicated pool token. `CLAVAIN_BB_DIRECT_POOL=0` selects the legacy path.
+
+**Addendum 2026-09-23: cross-route borrowing.** Codex seats dispatched from a
+Claude Code BB thread have no `CODEX_POOL_AUTH_TOKEN`, because BB injects it only
+into Codex threads. They therefore fell back to the local `~/.codex` login, which
+failed `quota_exhausted` while pooled accounts had headroom. They now borrow the
+machine bearer carried as `ANTHROPIC_AUTH_TOKEN` on the pool's Anthropic route.
+- Qualification: a live `gpt-6-astra` `codex exec` through
+  `/api/v1/plugins/account-pool/http/v1`, authenticated with the borrowed
+  bearer, answered from zklw, and `bb pool status` showed the pooled Codex
+  account's `lastUsedAt` advance.
+- Governed plan-review and cross-lab-review seats then ran through the pool from
+  a Claude thread.
+- Account attribution stays unknown in receipts, as before.
+- The contract (trust assumption, scope, kill switch and threat model) is in
+  [bb-integration](../canon/bb-integration.md).
 Unknown account attribution blocks budgeted pooled acceptance. This is not a
 claim of complete transport parity; independent integration review remains open.
 
