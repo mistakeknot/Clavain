@@ -36,14 +36,27 @@ OCKHAM_WEIGHTS_FILE="${OCKHAM_WEIGHTS_FILE:-$HOME/.config/ockham/weight-offsets.
 
 # Check if session has reached dispatch cap.
 # Returns: 0 if under cap, 1 if at/over cap
+_dispatch_counter_get() {
+    local key="$1" session_id="$2" value count rc=0
+    value=$(intercore_state_get "$key" "$session_id" 2>/dev/null) || rc=$?
+    case "$rc" in
+        1) printf '0'; return 0 ;; # Confirmed absent, not an unavailable DB.
+        0) ;;
+        *) return 1 ;;
+    esac
+    count=$(printf '%s' "$value" | jq -ser '
+        if length == 1 then .[0] else error("invalid dispatch counter") end |
+        if type == "object" then .count else . end |
+        if type == "number" and . >= 0 and . == floor then .
+        else error("invalid dispatch counter") end' 2>/dev/null) || return 1
+    [[ "$count" =~ ^[0-9]{1,9}$ ]] || return 1
+    printf '%s' "$count"
+}
+
 dispatch_cap_check() {
     local session_id="$1"
     local count
-    count=$(intercore_state_get "dispatch_count" "$session_id" 2>/dev/null) || count=""
-    # Parse — state may be JSON or raw string
-    count=$(echo "$count" | jq -r '.count // empty' 2>/dev/null || echo "$count")
-    count="${count:-0}"
-    [[ "$count" =~ ^[0-9]+$ ]] || count=0
+    count=$(_dispatch_counter_get "dispatch_count" "$session_id") || return 2
     [[ "$count" -lt "$DISPATCH_CAP" ]]
 }
 
@@ -51,12 +64,10 @@ dispatch_cap_check() {
 _dispatch_cap_increment() {
     local session_id="$1"
     local count
-    count=$(intercore_state_get "dispatch_count" "$session_id" 2>/dev/null) || count=""
-    count=$(echo "$count" | jq -r '.count // empty' 2>/dev/null || echo "$count")
-    count="${count:-0}"
-    [[ "$count" =~ ^[0-9]+$ ]] || count=0
+    count=$(_dispatch_counter_get "dispatch_count" "$session_id") || return 2
+    [[ "$count" -lt "$DISPATCH_CAP" ]] || return 1
     count=$((count + 1))
-    intercore_state_set "dispatch_count" "$session_id" "{\"count\":$count}" 2>/dev/null || true
+    intercore_state_set "dispatch_count" "$session_id" "{\"count\":$count}" 2>/dev/null || return 2
 }
 
 # ─── Circuit Breaker ──────────────────────────────────────────────
@@ -66,10 +77,7 @@ _dispatch_cap_increment() {
 dispatch_circuit_check() {
     local session_id="$1"
     local failures
-    failures=$(intercore_state_get "dispatch_failures" "$session_id" 2>/dev/null) || failures=""
-    failures=$(echo "$failures" | jq -r '.count // empty' 2>/dev/null || echo "$failures")
-    failures="${failures:-0}"
-    [[ "$failures" =~ ^[0-9]+$ ]] || failures=0
+    failures=$(_dispatch_counter_get "dispatch_failures" "$session_id") || return 2
     [[ "$failures" -lt "$DISPATCH_CIRCUIT_THRESHOLD" ]]
 }
 
@@ -77,12 +85,9 @@ dispatch_circuit_check() {
 _dispatch_circuit_increment() {
     local session_id="$1"
     local failures
-    failures=$(intercore_state_get "dispatch_failures" "$session_id" 2>/dev/null) || failures=""
-    failures=$(echo "$failures" | jq -r '.count // empty' 2>/dev/null || echo "$failures")
-    failures="${failures:-0}"
-    [[ "$failures" =~ ^[0-9]+$ ]] || failures=0
+    failures=$(_dispatch_counter_get "dispatch_failures" "$session_id") || return 2
     failures=$((failures + 1))
-    intercore_state_set "dispatch_failures" "$session_id" "{\"count\":$failures}" 2>/dev/null || true
+    intercore_state_set "dispatch_failures" "$session_id" "{\"count\":$failures}" 2>/dev/null || return 2
 }
 
 # Reset circuit breaker on success.
@@ -132,6 +137,7 @@ _dispatch_review_pressure() {
 # Args: $1 = JSON array from discovery_scan_beads
 # Output: JSON array sorted by adjusted score DESC, or "[]"
 dispatch_rescore() {
+    if intercore_remote_authority; then printf '[]'; return 1; fi
     local scan_json="$1"
 
     # Validate input
@@ -282,7 +288,8 @@ dispatch_rescore() {
 # Returns: 0 on success, 1 on failure
 dispatch_attempt_claim() {
     local session_id="$1"
-    local attempt
+    local attempt reserved=false
+    if intercore_remote_authority; then return 1; fi
 
     # "In the weeds" protocol (rsj.1.3): when review queue is deeply backed up,
     # reduce dispatch cap to 1 — recover flow before producing more work.
@@ -301,7 +308,7 @@ dispatch_attempt_claim() {
         # Check for infrastructure failure
         case "$scan_json" in
             DISCOVERY_UNAVAILABLE|DISCOVERY_ERROR|"")
-                _dispatch_circuit_increment "$session_id"
+                _dispatch_circuit_increment "$session_id" || true
                 dispatch_log "$session_id" "" "0" "infra_error"
                 return 1
                 ;;
@@ -316,7 +323,7 @@ dispatch_attempt_claim() {
             if [[ "$attempt" -gt 0 ]]; then
                 # Empty on retry suggests infra degradation (e.g., Dolt restart),
                 # not genuinely empty backlog. Count toward circuit breaker.
-                _dispatch_circuit_increment "$session_id"
+                _dispatch_circuit_increment "$session_id" || true
                 dispatch_log "$session_id" "" "0" "empty_on_retry"
             else
                 dispatch_log "$session_id" "" "0" "no_candidates"
@@ -335,10 +342,22 @@ dispatch_attempt_claim() {
             local jitter=$(( (RANDOM + (BASHPID % 1000)) % 400 + 100 ))
             sleep "0.$jitter" 2>/dev/null || true
 
+            # Reserve once, immediately before the first claim. Empty scans do
+            # not spend capacity; failed/raced claims conservatively do.
+            if [[ "$reserved" != true ]]; then
+                local reserve_rc=0
+                _dispatch_cap_increment "$session_id" || reserve_rc=$?
+                if [[ "$reserve_rc" -ne 0 ]]; then
+                    local reserve_reason="state_unavailable"
+                    [[ "$reserve_rc" -eq 1 ]] && reserve_reason="cap_reached"
+                    dispatch_log "$session_id" "" "0" "$reserve_reason"
+                    return 1
+                fi
+                reserved=true
+            fi
             # Attempt atomic claim — only emit result on confirmed success
             if bead_claim "$bead_id" "$session_id" 2>/dev/null; then
                 _dispatch_circuit_reset "$session_id"
-                _dispatch_cap_increment "$session_id"
                 dispatch_log "$session_id" "$bead_id" "$score" "claimed"
                 echo "${bead_id}|${score}"
                 return 0

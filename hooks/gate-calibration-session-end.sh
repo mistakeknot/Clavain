@@ -4,6 +4,7 @@
 
 set -uo pipefail
 trap 'exit 0' ERR
+if [[ -e "$HOME/.config/clavain/remote-shared-state" || -L "$HOME/.config/clavain/remote-shared-state" ]]; then exit 0; fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null

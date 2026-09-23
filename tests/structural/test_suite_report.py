@@ -276,3 +276,45 @@ def test_actions_baseline_warns_when_coverage_improves(tmp_path):
         "ok 1 a # skip yq not available (standalone CI)", "ok 2 b"
     ), extra=["--actions-skip-baseline", str(base)])
     assert proc.returncode == WARN, f"an improvement was not surfaced: {json.dumps(d)[:600]}"
+
+
+def test_an_accepted_improvement_stops_warning_without_rewriting_history(tmp_path):
+    """A reviewed decrease is recorded as an accepted delta, not by editing the
+    historical run's record. The baseline stays a faithful account of run
+    34150176247; acceptance is a separate, cited statement."""
+    base = tmp_path / "base.json"
+    base.write_text(json.dumps({
+        "run_id": "34150176247", "plan": 2, "skipped": 2,
+        "reason_counts": {"ic not available (standalone CI)": 2},
+        "skipped_cases": {"a": "ic not available (standalone CI)",
+                          "b": "ic not available (standalone CI)"},
+        "allowed_growth": {},
+        "accepted_improvements": {
+            "ic not available (standalone CI)": {
+                "count": 0,
+                "why": "guards were vestigial; assertions recovered",
+                "accepted_in_run": "35499967436",
+            }
+        },
+    }))
+    proc, d = report(tmp_path, tap("ok 1 a", "ok 2 b"),
+                     extra=["--actions-skip-baseline", str(base)])
+    assert proc.returncode == PASS, json.dumps(d)[:600]
+    # The historical counts are still readable; only the expectation moved.
+    assert d["status"] == "pass"
+
+
+def test_an_unaccepted_improvement_still_warns(tmp_path):
+    """[negative control] Acceptance must be per-reason and explicit."""
+    base = tmp_path / "base.json"
+    base.write_text(json.dumps({
+        "run_id": "x", "plan": 2, "skipped": 2,
+        "reason_counts": {"gawk required for JSONL parser tests": 2},
+        "skipped_cases": {"a": "gawk required for JSONL parser tests",
+                          "b": "gawk required for JSONL parser tests"},
+        "allowed_growth": {},
+        "accepted_improvements": {"some other reason": {"count": 0}},
+    }))
+    proc, d = report(tmp_path, tap("ok 1 a", "ok 2 b"),
+                     extra=["--actions-skip-baseline", str(base)])
+    assert proc.returncode == WARN, json.dumps(d)[:600]

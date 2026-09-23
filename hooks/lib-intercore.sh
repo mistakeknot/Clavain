@@ -16,11 +16,25 @@ INTERCORE_STOP_DEDUP_SENTINEL="stop"
 INTERCORE_BIN=""
 INTERCORE_WARNED=false
 
+# Host-local migration posture, outside the versioned plugin cache. Presence
+# means local automatic consumers must not open shared state, even when a
+# binary was cached earlier in the shell. Removing it is an explicit rebind.
+intercore_remote_authority() {
+    [[ -e "$HOME/.config/clavain/remote-shared-state" || -L "$HOME/.config/clavain/remote-shared-state" ]]
+}
+
 # Trace context: IC_TRACE_ID and IC_SPAN_ID are inherited from the environment.
 # They are set by session-start.sh and flow through to all ic CLI calls
 # via process environment inheritance. The ic binary reads them directly from env.
 
 intercore_available() {
+    if intercore_remote_authority; then
+        if [[ "$INTERCORE_WARNED" != true ]]; then
+            printf 'ic: shared-state authority is remote; local automatic actions are disabled\n' >&2
+            INTERCORE_WARNED=true
+        fi
+        return 1
+    fi
     # Returns 0 (available) or 1 (unavailable).
     # "binary not found" → return 1 (wrappers handle fail-safe individually)
     # "binary found but DB broken" → return 1, log error to stderr
@@ -50,8 +64,9 @@ intercore_state_set() {
 
 intercore_state_get() {
     local key="$1" scope_id="$2"
-    if ! intercore_available; then printf ''; return 1; fi
-    "$INTERCORE_BIN" state get "$key" "$scope_id" 2>/dev/null || printf ''
+    # Preserve ic's three states: 0=value, 1=absent, 2+=unavailable/error.
+    if ! intercore_available; then return 2; fi
+    "$INTERCORE_BIN" state get "$key" "$scope_id" 2>/dev/null
 }
 
 intercore_sentinel_check() {
@@ -63,9 +78,11 @@ intercore_sentinel_check() {
 # intercore_sentinel_check_or_legacy — ic sentinel check (legacy temp file fallback removed).
 # Args: $1=name, $2=scope_id, $3=interval_sec, $4=legacy_file (IGNORED, kept for caller compat)
 # Returns: 0 if allowed (proceed), 1 if throttled (skip)
-# NOTE: ic is now required. If unavailable, returns 0 (fail-open: allow the action).
+# A remote-authority marker always skips the action. Without a marker, legacy
+# local unavailable behavior remains fail-open for advisory callers.
 intercore_sentinel_check_or_legacy() {
     local name="$1" scope_id="$2" interval="$3"
+    if intercore_remote_authority; then return 1; fi
     # $4 (legacy_file) is accepted but ignored — callers may still pass it during transition
     if ! intercore_available; then
         return 0  # fail-open: no ic = allow (hooks skip gracefully)
@@ -181,6 +198,7 @@ intercore_dispatch_wait() {
 # intercore_dispatch_list_active — List active dispatches.
 # Prints: tab-separated list (id, status, type, name) to stdout
 intercore_dispatch_list_active() {
+    if intercore_remote_authority; then return 2; fi
     if ! intercore_available; then return 0; fi
     "$INTERCORE_BIN" dispatch list --active
 }
@@ -305,6 +323,7 @@ intercore_run_agent_update() {
 # Returns: 0=pass, 1=fail, 2+=error/fallthrough
 intercore_gate_check() {
     local run_id="$1"
+    if intercore_remote_authority; then return 2; fi
     if intercore_available; then
         local rc=0
         "$INTERCORE_BIN" gate check "$run_id" ${INTERCORE_DB:+--db="$INTERCORE_DB"} >/dev/null || rc=$?
@@ -318,6 +337,7 @@ intercore_gate_check() {
 # Returns: 0=success, 1=terminal, 2+=error
 intercore_gate_override() {
     local run_id="$1" reason="$2"
+    if intercore_remote_authority; then return 2; fi
     if intercore_available; then
         "$INTERCORE_BIN" gate override "$run_id" --reason="$reason" \
             ${INTERCORE_DB:+--db="$INTERCORE_DB"} || return $?
@@ -410,6 +430,7 @@ intercore_lock_clean() {
 # intercore_events_tail <run_id> [--since-phase=N] [--since-dispatch=N]
 # One-shot event dump. Returns JSON lines to stdout.
 intercore_events_tail() {
+    if intercore_remote_authority; then return 2; fi
     intercore_available || return 0
     local run_id="$1"; shift
     $INTERCORE_BIN events tail "$run_id" "$@" 2>/dev/null
@@ -418,6 +439,7 @@ intercore_events_tail() {
 # intercore_events_tail_all [--since-phase=N] [--since-dispatch=N]
 # One-shot event dump across all runs.
 intercore_events_tail_all() {
+    if intercore_remote_authority; then return 2; fi
     intercore_available || return 0
     $INTERCORE_BIN events tail --all "$@" 2>/dev/null
 }
@@ -427,6 +449,7 @@ intercore_events_tail_all() {
 # Uses `ic events cursor list` rather than reading state directly,
 # so cursor format changes don't silently break the wrapper.
 intercore_events_cursor_get() {
+    if intercore_remote_authority; then return 2; fi
     intercore_available || { echo ""; return 0; }
     local consumer="$1"
     $INTERCORE_BIN events cursor list 2>/dev/null | grep -P "^${consumer}\t" | cut -f2 || echo ""
