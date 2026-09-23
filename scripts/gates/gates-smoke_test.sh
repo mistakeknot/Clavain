@@ -405,6 +405,55 @@ scenario_explain_survives_op_with_no_policy_rule() {
 	echo "PASS: unknown ops explain cleanly"
 }
 
+scenario_schema_contract_between_cli_and_gate() {
+	echo "=== contract: the gate accepts this CLI's schema and names an old one ==="
+	# Sylveste-tozs: a schema-1 clavain-cli on zklw made every gate abort as
+	# "malformed policy (rc=3)", pointing at a policy file that was fine. Pin both
+	# halves: the CLI built from this tree must satisfy the gate built from this
+	# tree, and a schema-1 response must be refused with the schema named.
+	local rc
+	(
+		export CLAVAIN_AUTHZ_PROJECT_ROOT="$SANDBOX"
+		# shellcheck source=/dev/null
+		source "${GATES}/_common.sh"
+		rc=0
+		gate_check bead-close >/dev/null 2>&1 || rc=$?
+		if [[ "$rc" == "3" || -n "$GATE_MALFORMED_REASON" ]]; then
+			echo "FAIL: gate refused the CLI built from this tree: ${GATE_MALFORMED_REASON}"
+			exit 1
+		fi
+		if [[ "$GATE_OBSERVED_SCHEMA" != "2" ]]; then
+			echo "FAIL: CLI reports schema ${GATE_OBSERVED_SCHEMA}; the gate and this test pin 2 -- bump both together"
+			exit 1
+		fi
+	) || exit 1
+
+	local old_bin="${SANDBOX}/schema1-bin"
+	mkdir -p "$old_bin"
+	cat > "${old_bin}/clavain-cli" <<'STUB'
+#!/usr/bin/env bash
+printf '{"schema":1,"mode":"confirm","policy_match":"catchall","policy_hash":"h","reason":"r"}\n'
+exit 1
+STUB
+	chmod +x "${old_bin}/clavain-cli"
+	(
+		export CLAVAIN_AUTHZ_PROJECT_ROOT="$SANDBOX" PATH="${old_bin}:${PATH}"
+		# shellcheck source=/dev/null
+		source "${GATES}/_common.sh"
+		rc=0
+		gate_check bead-close >/dev/null 2>&1 || rc=$?
+		if [[ "$rc" != "3" ]]; then
+			echo "FAIL: schema-1 response was not refused (rc=${rc})"
+			exit 1
+		fi
+		if [[ "$GATE_MALFORMED_REASON" != *"schema 1"* || "$GATE_MALFORMED_REASON" != *">= 2"* ]]; then
+			echo "FAIL: refusal does not name observed vs required schema: ${GATE_MALFORMED_REASON}"
+			exit 1
+		fi
+	) || exit 1
+	echo "PASS: CLI and gate agree on schema 2; schema 1 is refused by name"
+}
+
 # capped_rows [op] → count of rows the delegation ceiling withheld
 capped_rows() {
   python3 - "${SANDBOX}/.clavain/intercore.db" "${1:-}" <<'SQL'
@@ -719,6 +768,7 @@ case "$FOCUS" in
     scenario_explain_names_the_floor
     scenario_explain_is_silent_for_exempt_ops
     scenario_explain_survives_op_with_no_policy_rule
+    scenario_schema_contract_between_cli_and_gate
     scenario_ceiling_records_what_it_withheld
     scenario_policy_confirm_is_not_counted_as_a_ceiling_save
     scenario_recording_did_not_change_the_decision
@@ -743,6 +793,7 @@ case "$FOCUS" in
     scenario_explain_names_the_floor
     scenario_explain_is_silent_for_exempt_ops
     scenario_explain_survives_op_with_no_policy_rule
+    scenario_schema_contract_between_cli_and_gate
     scenario_ceiling_records_what_it_withheld
     scenario_policy_confirm_is_not_counted_as_a_ceiling_save
     scenario_recording_did_not_change_the_decision
