@@ -1,9 +1,11 @@
 """Seat transport tests use a fake BB CLI and real Git/Intercore state."""
+import itertools
 import json
 import os
 from pathlib import Path
 import subprocess
 import shutil
+import sqlite3
 
 import pytest
 
@@ -22,7 +24,7 @@ def seat(tmp_path):
     subprocess.run(['git','-C',str(work),'worktree','add','--detach',str(child),head],check=True,capture_output=True)
     cli=tmp_path/'bb'
     cli.write_text('''#!/usr/bin/env python3
-import json,os,sys
+import json,os,signal,sys
 from pathlib import Path
 a=sys.argv[1:]; mode=os.environ.get('MODE','completed'); root=Path(os.environ['FIXTURE'])
 with (root/'calls').open('a') as f: f.write(json.dumps(a)+'\\n')
@@ -40,6 +42,7 @@ elif a[:2]==['thread','spawn']:
 elif a[:2]==['thread','list']:
  value=[{'id':'thr_child','title':'Clavain seat attempt_one','parentThreadId':'thr_parent'}] if (root/'accepted').exists() else []
  if mode=='unclear-wrapped': value={'threads':value}
+ if os.environ.get('BB_TEST_CANDIDATES_FILE'): value=json.loads(Path(os.environ['BB_TEST_CANDIDATES_FILE']).read_text())
 elif a[:2]==['thread','show']:
  value={'thread':{'id':'thr_child','status':'idle' if (root/'stopped').exists() or mode not in ('timeout','waiting') else 'active','environmentId':'env_child'},'environment':{'path':str(root/'child')}}
 elif a[:2]==['thread','log']:
@@ -52,10 +55,24 @@ elif a[:2]==['thread','log']:
   value += [ev(5,'item/agentMessage/delta',{'delta':'VERDICT: CLEAN'}),ev(6,'turn/completed',{'status':mode if mode in ('failed','interrupted') else 'completed'})]
  elif mode=='waiting': value.append(ev(5,'system/interaction/lifecycle',{}))
  after=int(a[a.index('--after-seq')+1]); value=[v for v in value if v['seq']>after]
+ if os.environ.get('BB_TEST_EVENTS_FILE'):
+  pages=json.loads(Path(os.environ['BB_TEST_EVENTS_FILE']).read_text())
+  counter=root/'log-count'; index=int(counter.read_text()) if counter.exists() else 0
+  counter.write_text(str(index+1))
+  value=pages[index] if index<len(pages) else []
 elif a[:2]==['thread','stop']: (root/'stopped').touch()
 elif a[:2]==['thread','archive']:
  assert list(root.glob('*.patch')), 'archive before export'
 elif a[:2]==['environment','show']: value={'path':str(root/'child'),'hostId':'host_pda34naxgq'}
+# Cut the real supervisor at an external side-effect boundary. The transport
+# does not implement recovery, deduplication, or any expected invariant.
+fault=os.environ.get('BB_TEST_CRASH')
+hit=(fault=='spawn-accepted' and a[:2]==['thread','spawn'] or
+     fault=='log-observed' and a[:2]==['thread','log'] and (root/'log-count').read_text()=='2' or
+     fault in ('stop','archive') and a[:2]==['thread',fault])
+if hit and not (root/'crashed').exists():
+ (root/'crashed').touch()
+ os.kill(os.getppid(),signal.SIGKILL)
 print(json.dumps(value))
 ''')
     cli.chmod(0o755)
@@ -196,3 +213,170 @@ os.execv({real_ic!r}, [{real_ic!r}, *sys.argv[1:]])
     assert run(attempt='attempt_two',extra_env=env).returncode==1
     assert (root/'calls').read_text().count('"spawn"')==1
     assert json.loads(path.read_text())['cleanup']=='not-started'
+
+
+def recovery_event(seq, kind, data=None, turn='turn_one'):
+    return {'seq':seq, 'type':kind, 'scope':{'kind':'turn', 'turnId':turn},
+            'data':data or {}}
+
+
+def recovery_pages(order, terminals=('interrupted','completed')):
+    """Reorder semantic observations, preserving BB's monotonic log sequence."""
+    events=[recovery_event(1, 'client/turn/requested', {'requestId':'request_one'}),
+            recovery_event(2, 'turn/input/accepted', {'clientRequestId':'request_one'})]
+    for kind in order:
+        if kind=='usage':
+            event=recovery_event(len(events)+1, 'thread/tokenUsage/updated',
+                                 {'tokenUsage':{'inputTokens':17, 'outputTokens':5}})
+        else:
+            event=recovery_event(len(events)+1, 'item/agentMessage/delta',
+                                 {'delta':'result before cancellation'})
+        events.append(event)
+    # A repeated page and unrelated turn may neither double usage nor replace
+    # this attempt's result. The fake delivers bytes; the real supervisor folds.
+    return [events, [events[-1],
+            recovery_event(5, 'thread/tokenUsage/updated',
+                           {'tokenUsage':{'inputTokens':999, 'outputTokens':999}}, 'other_turn'),
+            recovery_event(6, 'turn/completed', {'status':terminals[0]}),
+            recovery_event(7, 'turn/completed', {'status':terminals[1]})]]
+
+
+@pytest.mark.parametrize('order', list(itertools.permutations(('usage','result'))),
+                         ids=lambda order:'-'.join(order))
+@pytest.mark.parametrize('terminals', list(itertools.permutations(('interrupted','completed'))),
+                         ids=lambda order:'-'.join(order))
+def test_generated_observation_order_and_duplicate_cancellation(seat, order, terminals):
+    root, run=seat
+    events=root/'observations.json'
+    events.write_text(json.dumps(recovery_pages(order, terminals)))
+    result=run(extra_env={'BB_TEST_EVENTS_FILE':str(events)})
+    assert result.returncode==1, result.stderr
+    receipt=json.loads((root/'result.receipt.json').read_text())
+    assert receipt['outcome']==terminals[0]
+    assert receipt['usage']=={'inputTokens':17, 'outputTokens':5}
+    assert receipt['accepted'] is False
+    assert (root/'result').read_text()=='result before cancellation'
+    assert receipt['cleanup']=='archived'
+    assert sum(json.loads(line)[:2]==['thread','spawn']
+               for line in (root/'calls').read_text().splitlines())==1
+
+
+@pytest.mark.parametrize('order', list(itertools.permutations(('usage','result'))),
+                         ids=lambda order:'-'.join(order))
+@pytest.mark.parametrize('boundary', ['spawn-accepted','log-observed','stop','archive'])
+def test_generated_supervisor_crash_recovery(seat, order, boundary):
+    root, run=seat
+    events=root/'observations.json'
+    events.write_text(json.dumps(recovery_pages(order)))
+    env={'BB_TEST_EVENTS_FILE':str(events), 'BB_TEST_CRASH':boundary}
+    result=run(extra_env=env)
+    assert result.returncode==-9, result.stderr
+    journal=next((root/'state').glob('*.json'))
+    before=json.loads(journal.read_text())
+    assert before['cleanup']!='archived'
+    if boundary=='spawn-accepted':
+        assert before['state']=='spawning' and before['bb_thread_id']=='unknown'
+    else:
+        assert before['usage']=={'inputTokens':17, 'outputTokens':5}
+
+    # An orphan belonging to a different parent is not ours to retire. This
+    # journal represents another owner's reservation and must remain untouched.
+    foreign=root/'state'/'foreign.json'
+    foreign.write_text(json.dumps(dict(before, attempt_id='foreign_attempt',
+                                      parent_thread_id='thr_other', bb_thread_id='thr_foreign')))
+    foreign_bytes=foreign.read_bytes()
+    for _ in range(2):
+        # A new process recovers actual durable state and refuses replay of the
+        # same attempt, including loss of the accepted spawn response.
+        replay=run(extra_env=env)
+        assert replay.returncode==1, replay.stderr
+        assert 'Attempt already exists' in replay.stderr
+        after=json.loads(journal.read_text())
+        assert after['state']=='terminal' and after['outcome']=='interrupted'
+        assert after['cleanup']=='archived' and after['bb_thread_id']=='thr_child'
+        assert after['usage']==before['usage']
+        assert foreign.read_bytes()==foreign_bytes
+        calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
+        assert sum(call[:2]==['thread','spawn'] for call in calls)==1
+        assert not any('thr_foreign' in call for call in calls)
+        assert after['artifacts']['patch']['sha256']
+        with sqlite3.connect(root/'intercore.db') as db:
+            payload,=db.execute("SELECT payload FROM state WHERE key='clavain.bb-seat' AND scope_id=?",
+                                ('attempt_one',)).fetchone()
+        assert json.loads(payload)==after
+
+
+@pytest.mark.parametrize('discovery', ['missing','ambiguous','foreign-parent'])
+def test_unknown_acceptance_blocks_new_attempt_until_unambiguous(seat, discovery):
+    root, run=seat
+    assert run(extra_env={'BB_TEST_CRASH':'spawn-accepted'}).returncode==-9
+    child={'id':'thr_child', 'title':'Clavain seat attempt_one', 'parentThreadId':'thr_parent'}
+    foreign=dict(child, id='thr_foreign', parentThreadId='thr_other')
+    candidates={'missing':[], 'ambiguous':[child, dict(child,id='thr_duplicate')],
+                'foreign-parent':[foreign]}
+    listing=root/'candidates.json'
+    listing.write_text(json.dumps(candidates[discovery]))
+    env={'BB_TEST_CANDIDATES_FILE':str(listing)}
+    journal=next((root/'state').glob('*.json'))
+    before=journal.read_bytes()
+    for attempt in ('attempt_one','attempt_two'):
+        result=run(attempt=attempt,extra_env=env)
+        assert result.returncode==1
+        assert 'Spawn acceptance unknown' in result.stderr
+        assert journal.read_bytes()==before
+        calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
+        assert sum(call[:2]==['thread','spawn'] for call in calls)==1
+        assert not any(call[:2] in (['thread','stop'],['thread','archive']) for call in calls)
+    # Discovery later resolves the original call. A foreign same-title child
+    # is still excluded, irrespective of list order.
+    for listing_order in itertools.permutations((foreign,child)):
+        listing.write_text(json.dumps(listing_order))
+        assert run(extra_env=env).returncode==1
+        recovered=json.loads(journal.read_text())
+        assert recovered['bb_thread_id']=='thr_child' and recovered['cleanup']=='archived'
+        assert recovered['usage']=='unknown'
+        calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
+        assert sum(call[:2]==['thread','spawn'] for call in calls)==1
+        assert not any('thr_foreign' in call or 'thr_duplicate' in call for call in calls)
+
+
+@pytest.mark.parametrize('fixture', ['codex-usage-limit-rollout.jsonl',
+                                   'codex-usage-limit-stdout.jsonl'])
+@pytest.mark.parametrize('order', list(itertools.permutations(('failure','result','cancel'))),
+                         ids=lambda order:'-'.join(order))
+def test_recorded_failure_envelopes_with_reordered_results(tmp_path, fixture, order):
+    # Replay the recorded provider bytes through their production parser, not
+    # an invented translation to BB events. BB observation recovery is above.
+    recorded=(ROOT/'tests'/'fixtures'/fixture).read_bytes()
+    groups={'failure':recorded,
+            'result':b'{"type":"turn.completed","usage":{"input_tokens":17,"output_tokens":5}}\n',
+            'cancel':b'{"type":"turn.failed","error":{"message":"interrupted by user"}}\n'}
+    stream=b''.join(groups[kind] for kind in order)+recorded
+    (tmp_path/'replay.jsonl').write_bytes(stream)
+    work=tmp_path/'work'
+    subprocess.run(['git','init','-q',str(work)], check=True)
+    cli=tmp_path/'codex'
+    cli.write_text('''#!/usr/bin/env python3
+import os,sys
+from pathlib import Path
+root=Path(os.environ['REPLAY_ROOT'])
+with (root/'invocations').open('a') as log: log.write('spawn\\n')
+Path(sys.argv[sys.argv.index('-o')+1]).write_text('VERDICT: CLEAN')
+sys.stdout.buffer.write((root/'replay.jsonl').read_bytes())
+''')
+    cli.chmod(0o755)
+    env=dict(os.environ, PATH=str(tmp_path)+':'+os.environ['PATH'],
+             REPLAY_ROOT=str(tmp_path), CLAVAIN_CONTEXT_GATEWAY_MODE='off',
+             CLAVAIN_BB_DIRECT_POOL='0', CLAVAIN_REQUIRE_USAGE='0',
+             CLAVAIN_DISPATCH_FAILURE_FILE=str(tmp_path/'failure'),
+             CLAVAIN_REVIEW_EVENTS=str(tmp_path/'events'))
+    result=subprocess.run(['bash',str(ROOT/'scripts/dispatch.sh'),'-C',str(work),
+                           '-o',str(tmp_path/'out'),'fixture'],
+                          env=env, capture_output=True, text=True, timeout=15)
+    assert result.returncode!=0, result.stderr
+    # Explicit failed/cancelled work dominates quota fallback, regardless of
+    # ordering, and cannot be laundered into success by a later result.
+    assert (tmp_path/'failure').read_text().strip()=='terminal_error'
+    assert (tmp_path/'events').read_bytes()==stream
+    assert (tmp_path/'invocations').read_text()=='spawn\n'
+    assert 'Tokens: 17 in / 5 out\n' in (tmp_path/'out.summary').read_text()
