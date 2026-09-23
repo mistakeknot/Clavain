@@ -68,27 +68,38 @@ responses endpoint `/api/v1/plugins/account-pool/http/v1`, an explicit
 `x-bb-account-pool-token` header from `CODEX_POOL_AUTH_TOKEN`. No nested-server
 parent token (`BB_ACCOUNT_POOL_PARENT_TOKEN`) is reused. See [the spike
 evidence](../research/bb-direct-pool-spike.md).
-Codex pooling is enabled by default after the successful hub-correlated spike;
-`CLAVAIN_BB_DIRECT_POOL=0` selects the legacy path. Claude retains its inherited
-`ANTHROPIC_BASE_URL`; a Codex pool token never establishes Claude pool availability.
+Codex pooling is enabled by default after the successful hub-correlated spike.
+Before a cross-provider attempt, dispatch asks BB's authenticated thread-scoped
+availability endpoint for the target provider. BB uses the same routing, parent
+availability, account and thread-bypass decision as provider environment
+contribution. A missing, malformed or unauthorized response stops the attempt
+with `terminal_configuration`; it cannot silently select an unrelated local
+login. Older BB servers return only provider-wide availability. Native pooled
+routes inherited for the same provider keep working on those servers, while
+cross-provider borrowing waits for the thread-scoped response.
 
-**Cross-route borrowing (Claude threads).** BB injects `CODEX_POOL_AUTH_TOKEN`
-only into Codex threads. The hub mints one bearer per machine, and a Claude Code
-thread carries it as `ANTHROPIC_AUTH_TOKEN` on the pool's Anthropic route. When
-the Codex token is absent, `ANTHROPIC_BASE_URL` is exactly
-`$BB_SERVER_URL/api/v1/plugins/account-pool/http`, and enrollment passes, a Codex
-attempt exports that bearer as `CODEX_POOL_AUTH_TOKEN`.
+**Cross-provider dispatch.** BB contributes the pool route and its machine
+bearer only for the parent thread's provider. When the target provider is
+currently eligible, a Codex attempt can borrow the bearer from a Claude
+parent, and a Claude attempt can borrow it from a Codex parent. The inherited
+route must exactly match this BB server and the target provider variables must
+be absent. Explicit nonpool endpoints and empty variables used by isolation
+remain untouched. When an inherited pool route becomes ineligible after launch,
+the child drops that stale route and uses its own provider login.
 - Trust assumption: the hub accepts the machine bearer on both provider routes
   (verified live 2026-09-23).
-- Scope: the export happens only while building the codex command, inside the
-  per-candidate child dispatch process. `_bb_pool_available` is side-effect free,
-  so the alias never reaches the parent retry shell or Claude, Kimi or BB seats.
+- Scope: the export happens only while building the target provider command,
+  inside the per-candidate child dispatch process. `_bb_pool_available` is
+  side-effect free, so an alias never reaches the parent retry shell or other
+  candidates.
 - A native Codex-thread token always wins.
-- Kill switch: `CLAVAIN_BB_DIRECT_POOL=0` disables both pooled transport and
-  borrowing.
+- Kill switch: `CLAVAIN_BB_DIRECT_POOL=0` removes inherited pool routing from
+  the child and disables borrowing, so the child uses its own provider login.
 - Enrollment asks the BB CLI and can be forged by a process that controls
   `BB_CLI` or `PATH`. It selects a transport and is not an authorization
-  boundary, because the borrowed bearer is one the process already holds.
+  boundary, because the borrowed bearer is one the process already holds. When
+  pool-shaped variables are present but enrollment cannot be verified, dispatch
+  stops with `terminal_configuration` instead of trying an unrelated login.
 - Raw provider captures are tracked separately (sylveste-2tpo).
 
 Quota classification consumes structured provider errors, never quoted task

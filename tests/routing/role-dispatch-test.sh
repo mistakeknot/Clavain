@@ -259,13 +259,49 @@ contains "$(cat "$FAKE_IC_LOG")" '--fallback-reason=unsupported_adapter'
 echo "PASS: role-aware dispatch profiles and fallback policy"
 
 # Account capacity retry precedes changing the model; a candidate/axis is visited once.
+cat > "$TMP_ROOT/pool-server.py" <<'POOL_SERVER'
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import json
+import sys
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if not self.path.startswith('/api/v1/plugins/account-pool/http/availability?threadId='):
+            self.send_error(404)
+            return
+        if not self.headers.get('x-bb-account-pool-token'):
+            self.send_error(401)
+            return
+        body = json.dumps({'threadId': 'fixture-thread', 'availability': {'claude': True, 'codex': True}}).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args):
+        pass
+
+server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+Path(sys.argv[1]).write_text(str(server.server_port))
+server.serve_forever()
+POOL_SERVER
+python3 "$TMP_ROOT/pool-server.py" "$TMP_ROOT/pool-port" &
+pool_server_pid=$!
+trap 'kill "$pool_server_pid" 2>/dev/null || true; rm -rf "$TMP_ROOT"' EXIT
+for _ in $(seq 1 50); do
+  [[ -s "$TMP_ROOT/pool-port" ]] && break
+  sleep 0.1
+done
+[[ -s "$TMP_ROOT/pool-port" ]] || fail "pool fixture did not start"
 cat > "$TMP_ROOT/bin/bb" <<'BB'
 #!/bin/sh
 printf '%s\n' '{"thread":{"id":"fixture-thread","environment":{"hostId":"host_pda34naxgq"}}}'
 BB
 chmod +x "$TMP_ROOT/bin/bb"
-export BB_CLI="$TMP_ROOT/bin/bb" BB_THREAD_ID=fixture-thread BB_SERVER_URL=https://bb.example
-export CODEX_POOL_AUTH_TOKEN=fixture-only CLAVAIN_BB_DIRECT_POOL=1
+export BB_CLI="$TMP_ROOT/bin/bb" BB_THREAD_ID=fixture-thread BB_SERVER_URL="http://127.0.0.1:$(cat "$TMP_ROOT/pool-port")"
+export CODEX_POOL_AUTH_TOKEN=fixture-only CODEX_OPENAI_BASE_URL="$BB_SERVER_URL/api/v1/plugins/account-pool/http/v1" CLAVAIN_BB_DIRECT_POOL=1
 for mode in quota_once quota_all; do
   : > "$FAKE_CODEX_LOG.axes"
   FAKE_CODEX_MODE="$mode" bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || fail "$mode failed"
@@ -277,7 +313,7 @@ echo 'PASS: quota account retry precedes model fallback'
 
 # From a Claude Code BB thread there is no native Codex token: every Codex attempt,
 # the quota pool retry included, borrows the machine bearer from the Anthropic pool route.
-unset CODEX_POOL_AUTH_TOKEN
+unset CODEX_POOL_AUTH_TOKEN CODEX_OPENAI_BASE_URL
 export ANTHROPIC_AUTH_TOKEN=machine-fixture ANTHROPIC_BASE_URL="$BB_SERVER_URL/api/v1/plugins/account-pool/http"
 : > "$FAKE_CODEX_LOG.axes"; : > "$FAKE_CODEX_LOG.pool"
 FAKE_CODEX_MODE=quota_all bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" fixture >/dev/null 2>&1 || fail "claude-thread quota_all failed"

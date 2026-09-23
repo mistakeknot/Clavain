@@ -1,18 +1,75 @@
 """Direct dispatch integration: stdin, workspace admission and provider errors."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", exit_code=0, budget=False, pool=False, block_intercept=False, env_override=None):
+def pool_server(response=None, status=200, delay=0):
+    body = response or json.dumps({
+        'threadId': 'thr_fixture',
+        'availability': {'claude': True, 'codex': True},
+    })
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if delay:
+                time.sleep(delay)
+            allowed = False
+            if not self.path.startswith('/api/v1/plugins/account-pool/http/availability?threadId='):
+                self.send_response(404)
+            elif not self.headers.get('x-bb-account-pool-token'):
+                self.send_response(401)
+            else:
+                self.send_response(status)
+                if status == 302:
+                    self.send_header('Location', 'https://untrusted.example/steal')
+                else:
+                    self.send_header('Content-Type', 'application/json')
+                    allowed = True
+            try:
+                self.end_headers()
+            except BrokenPipeError:
+                return
+            if allowed:
+                try:
+                    self.wfile.write(body.encode())
+                except BrokenPipeError:
+                    pass
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, f'http://127.0.0.1:{server.server_port}'
+
+
+def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", exit_code=0, budget=False, pool=False, block_intercept=False, env_override=None, engine="codex"):
+    server = None
+    pool_origin = 'https://bb.example'
+    if pool:
+        server, pool_origin = pool_server(
+            response=(env_override or {}).get('BB_ELIGIBILITY_RESPONSE'),
+            status=int((env_override or {}).get('BB_ELIGIBILITY_STATUS') or (401 if (env_override or {}).get('BB_ELIGIBILITY_EXIT') else 200)),
+            delay=int((env_override or {}).get('BB_ELIGIBILITY_DELAY') or 0),
+        )
+        (tmp_path/'pool-origin').write_text(pool_origin)
     work = tmp_path / "work"
     work.mkdir(exist_ok=True)
     if git:
         subprocess.run(["git", "init", "-q", str(work)], check=True)
+        if engine == "claude":
+            subprocess.run(["git", "-C", str(work), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test",
+                            "commit", "-q", "--allow-empty", "-m", "fixture"], check=True)
     if block_intercept:
         (work / ".clavain").mkdir()
         (work / ".clavain" / "intercept").write_text("not a directory")
@@ -20,42 +77,68 @@ def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", st
     bin_dir.mkdir(exist_ok=True)
     stub = bin_dir / "codex"
     stub.write_text("""#!/usr/bin/env python3
-import json, os, sys
+import hashlib, json, os, sys
 from pathlib import Path
 if '--version' in sys.argv: print('codex-cli 0.153.3'); sys.exit(0)
 sys.stdin.read()
 Path(os.environ['CALL']).write_text(json.dumps(sys.argv))
-Path(os.environ['CALL']+'.pooltoken').write_text(os.environ.get('CODEX_POOL_AUTH_TOKEN', ''))
+token = os.environ.get('CODEX_POOL_AUTH_TOKEN', '')
+Path(os.environ['CALL']+'.pooltoken').write_text(hashlib.sha256(token.encode()).hexdigest() if token else '')
 if '-o' in sys.argv: Path(sys.argv[sys.argv.index('-o')+1]).write_text('VERDICT: CLEAN')
 for event in json.loads(os.environ['EVENTS']): print(json.dumps(event))
 print(os.environ['STDERR'], file=sys.stderr)
 sys.exit(int(os.environ['EXIT_CODE']))
 """)
     stub.chmod(0o755)
+    claude = bin_dir / "claude"
+    claude.write_text("""#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+sys.stdin.read()
+Path(os.environ['CALL']).write_text(json.dumps({
+    'argv': sys.argv,
+    'base_url': os.environ.get('ANTHROPIC_BASE_URL'),
+    'token_matches': os.environ.get('ANTHROPIC_AUTH_TOKEN') == os.environ.get('POOL_TOKEN_SENTINEL'),
+    'tool_search': os.environ.get('ENABLE_TOOL_SEARCH'),
+}))
+print(json.dumps({'type':'result','is_error':False,'result':'VERDICT: CLEAN'}))
+""")
+    claude.chmod(0o755)
     bb = bin_dir/'bb'
-    bb.write_text('#!/bin/sh\necho \'{"thread":{"id":"thr_fixture","environment":{"hostId":"host_pda34naxgq"}}}\'\n')
+    bb.write_text("""#!/usr/bin/env python3
+import json, os, sys
+if sys.argv[1:] == ['status', '--json']:
+    print(json.dumps({'thread': {'id': 'thr_fixture', 'environment': {'hostId': 'host_pda34naxgq'}}}))
+else:
+    sys.exit(1)
+""")
     bb.chmod(0o755)
     env = dict(os.environ, PATH=str(bin_dir)+":"+os.environ["PATH"], CALL=str(tmp_path/"call"),
                EVENTS=json.dumps(events), STDERR=stderr, EXIT_CODE=str(exit_code), CLAVAIN_CONTEXT_GATEWAY_MODE="off",
                CLAVAIN_DISPATCH_FAILURE_FILE=str(tmp_path/"failure"),
                CLAVAIN_BB_DIRECT_POOL="1" if pool else "0", BB_CLI=str(bb), BB_THREAD_ID='thr_fixture',
-               BB_SERVER_URL='https://bb.example', CODEX_POOL_AUTH_TOKEN='fixture-only',
+               BB_SERVER_URL=pool_origin, CODEX_POOL_AUTH_TOKEN='fixture-only',
+               CODEX_OPENAI_BASE_URL=pool_origin+'/api/v1/plugins/account-pool/http/v1',
+               POOL_TOKEN_SENTINEL='fixture-only',
                CLAVAIN_REQUIRE_USAGE="1" if budget else "0", CLAVAIN_REVIEW_EVENTS=str(tmp_path/"events"))
     for key, value in (env_override or {}).items():
         if value is None:
             env.pop(key, None)
         else:
-            env[key] = value
+            env[key] = value.replace('https://bb.example', pool_origin) if pool else value
     # Keep stdin open deliberately: communicate() would close it and mask the bug.
-    p = subprocess.Popen(["bash", str(ROOT/"scripts/dispatch.sh"), "-s", sandbox, "-C", str(work),
+    p = subprocess.Popen(["bash", str(ROOT/"scripts/dispatch.sh"), "--to", engine, "-s", sandbox, "-C", str(work),
                           "-o", str(tmp_path/"out"), "fixture"], env=env,
                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        return p.wait(timeout=5)
+        return p.wait(timeout=8 if (env_override or {}).get('BB_ELIGIBILITY_DELAY') else 5)
     finally:
         p.kill()
         p.wait()
         p.stdin.close()
+        if server is not None:
+            server.shutdown()
+            server.server_close()
 
 
 def test_codex_stdin_is_closed(tmp_path):
@@ -210,7 +293,7 @@ def test_claude_structured_quota_and_response(tmp_path):
     stub = tmp_path / "claude"
     stub.write_text("#!/usr/bin/env python3\nimport os,sys\nsys.stdin.read()\nprint(os.environ['EVENT'])\n")
     stub.chmod(0o755)
-    env = dict(os.environ, PATH=str(tmp_path)+":"+os.environ["PATH"], CLAVAIN_CONTEXT_GATEWAY_MODE="off",
+    env = dict(os.environ, PATH=str(tmp_path)+":"+os.environ["PATH"], CLAVAIN_CONTEXT_GATEWAY_MODE="off", CLAVAIN_BB_DIRECT_POOL="0",
                CLAVAIN_DISPATCH_FAILURE_FILE=str(tmp_path/"failure"))
     command = ["bash", str(ROOT/"scripts/dispatch.sh"), "--to", "claude", "-C", str(tmp_path), "-o", str(tmp_path/"out"), "fixture"]
     for event, expected in [({"type":"result", "is_error":False,"result":"VERDICT: CLEAN"}, 0),
@@ -226,14 +309,163 @@ def test_claude_structured_quota_and_response(tmp_path):
 POOL_ROUTE = 'https://bb.example/api/v1/plugins/account-pool/http'
 
 
+def test_codex_parent_dispatches_claude_through_eligible_pool(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'ANTHROPIC_AUTH_TOKEN': None, 'ANTHROPIC_BASE_URL': None,
+    }) == 0
+    call = json.loads((tmp_path/'call').read_text())
+    assert call['base_url'] == (tmp_path/'pool-origin').read_text()+'/api/v1/plugins/account-pool/http'
+    assert call['token_matches'] is True
+    assert call['tool_search'] == 'true'
+
+
+def test_claude_parent_keeps_eligible_inherited_pool(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'CODEX_POOL_AUTH_TOKEN': None, 'ANTHROPIC_AUTH_TOKEN': 'fixture-only',
+        'ANTHROPIC_BASE_URL': POOL_ROUTE,
+    }) == 0
+    call = json.loads((tmp_path/'call').read_text())
+    assert call['base_url'] == (tmp_path/'pool-origin').read_text()+'/api/v1/plugins/account-pool/http'
+    assert call['token_matches'] is True
+
+
+@pytest.mark.parametrize('engine', ['claude', 'codex'])
+def test_native_pool_remains_usable_with_legacy_bb_availability(tmp_path, engine):
+    response = json.dumps({'claude': True, 'codex': True})
+    env_override = {'BB_ELIGIBILITY_RESPONSE': response}
+    if engine == 'claude':
+        env_override.update(ANTHROPIC_AUTH_TOKEN='fixture-only', ANTHROPIC_BASE_URL=POOL_ROUTE)
+    assert run_dispatch(tmp_path, pool=True, engine=engine, env_override=env_override) == 0
+    if engine == 'claude':
+        assert json.loads((tmp_path/'call').read_text())['token_matches'] is True
+    else:
+        assert 'model_provider="bb-account-pool"' in json.loads((tmp_path/'call').read_text())
+
+
+def test_disabled_provider_in_legacy_bb_drops_inherited_route(tmp_path):
+    response = json.dumps({'claude': False, 'codex': True})
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'ANTHROPIC_AUTH_TOKEN': 'fixture-only', 'ANTHROPIC_BASE_URL': POOL_ROUTE,
+        'BB_ELIGIBILITY_RESPONSE': response,
+    }) == 0
+    call = json.loads((tmp_path/'call').read_text())
+    assert call['base_url'] is None
+    assert call['token_matches'] is False
+
+
+def test_pool_bypass_uses_local_claude_credentials(tmp_path):
+    response = json.dumps({'threadId': 'thr_fixture', 'availability': {'claude': False, 'codex': False}})
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'ANTHROPIC_AUTH_TOKEN': 'fixture-only', 'ANTHROPIC_BASE_URL': POOL_ROUTE,
+        'BB_ELIGIBILITY_RESPONSE': response,
+    }) == 0
+    call = json.loads((tmp_path/'call').read_text())
+    assert call['base_url'] is None
+    assert call['token_matches'] is False
+
+
+def test_disabled_codex_pool_uses_local_login(tmp_path):
+    response = json.dumps({'threadId': 'thr_fixture', 'availability': {'claude': True, 'codex': False}})
+    assert run_dispatch(tmp_path, pool=True, env_override={'BB_ELIGIBILITY_RESPONSE': response}) == 0
+    assert 'model_provider="bb-account-pool"' not in json.loads((tmp_path/'call').read_text())
+    assert (tmp_path/'call.pooltoken').read_text() == ''
+
+
+@pytest.mark.parametrize('claude_env', [
+    {'ANTHROPIC_AUTH_TOKEN': '', 'ANTHROPIC_BASE_URL': ''},
+    {'ANTHROPIC_AUTH_TOKEN': 'fixture-only', 'ANTHROPIC_BASE_URL': 'https://api.anthropic.com'},
+])
+def test_explicit_claude_environment_is_preserved(tmp_path, claude_env):
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override=claude_env) == 0
+    call = json.loads((tmp_path/'call').read_text())
+    assert call['base_url'] == claude_env['ANTHROPIC_BASE_URL']
+
+
+@pytest.mark.parametrize('eligibility', [
+    {'BB_ELIGIBILITY_EXIT': '1'},
+    {'BB_ELIGIBILITY_RESPONSE': '{invalid'},
+    {'BB_ELIGIBILITY_RESPONSE': json.dumps({'threadId': 'different', 'availability': {'claude': True, 'codex': True}})},
+    {'BB_ELIGIBILITY_RESPONSE': json.dumps({'claude': True, 'codex': True})},
+    {'BB_ELIGIBILITY_RESPONSE': '[]'},
+    {'BB_ELIGIBILITY_RESPONSE': json.dumps({'threadId': 'thr_fixture', 'availability': {'claude': 'yes', 'codex': True}})},
+])
+def test_unknown_pool_eligibility_fails_before_claude_login(tmp_path, eligibility):
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'ANTHROPIC_AUTH_TOKEN': None, 'ANTHROPIC_BASE_URL': None,
+        **eligibility,
+    }) != 0
+    assert not (tmp_path/'call').exists()
+    assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
+    assert not any('fixture-only' in p.read_text(errors='ignore') for p in tmp_path.rglob('*') if p.is_file())
+
+
+@pytest.mark.parametrize('eligibility', [
+    {'BB_ELIGIBILITY_EXIT': '1'},
+    {'BB_ELIGIBILITY_RESPONSE': '{invalid'},
+    {'BB_ELIGIBILITY_RESPONSE': json.dumps({'threadId': 'thr_fixture', 'availability': {'claude': True, 'codex': 'yes'}})},
+])
+def test_unknown_pool_eligibility_fails_before_codex_login(tmp_path, eligibility):
+    assert run_dispatch(tmp_path, pool=True, env_override=eligibility) != 0
+    assert not (tmp_path/'call').exists()
+    assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
+
+
+def test_old_bb_availability_cannot_authorize_claude_to_codex_borrowing(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, env_override={
+        'CODEX_POOL_AUTH_TOKEN': None, 'CODEX_OPENAI_BASE_URL': None,
+        'ANTHROPIC_AUTH_TOKEN': 'fixture-only', 'ANTHROPIC_BASE_URL': POOL_ROUTE,
+        'BB_ELIGIBILITY_RESPONSE': json.dumps({'claude': True, 'codex': True}),
+    }) != 0
+    assert not (tmp_path/'call').exists()
+    assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
+
+
+def test_untrusted_bb_origin_fails_before_claude_login(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'ANTHROPIC_AUTH_TOKEN': None, 'ANTHROPIC_BASE_URL': None,
+        'BB_SERVER_URL': 'https://user@bb.example',
+        'CODEX_OPENAI_BASE_URL': 'https://user@bb.example/api/v1/plugins/account-pool/http/v1',
+    }) != 0
+    assert not (tmp_path/'call').exists()
+    assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
+
+
+def test_unverified_bb_enrollment_fails_before_claude_login(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'ANTHROPIC_AUTH_TOKEN': None, 'ANTHROPIC_BASE_URL': None,
+        'BB_THREAD_ID': 'thr_unverified',
+    }) != 0
+    assert not (tmp_path/'call').exists()
+    assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
+
+
+def test_pool_eligibility_timeout_fails_before_claude_login(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'ANTHROPIC_AUTH_TOKEN': None, 'ANTHROPIC_BASE_URL': None,
+        'BB_ELIGIBILITY_DELAY': '6',
+    }) != 0
+    assert not (tmp_path/'call').exists()
+    assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
+
+
+def test_pool_redirect_is_not_followed(tmp_path):
+    assert run_dispatch(tmp_path, pool=True, engine='claude', env_override={
+        'ANTHROPIC_AUTH_TOKEN': None, 'ANTHROPIC_BASE_URL': None,
+        'BB_ELIGIBILITY_STATUS': '302',
+    }) != 0
+    assert not (tmp_path/'call').exists()
+    assert (tmp_path/'failure').read_text().strip() == 'terminal_configuration'
+
+
 def test_claude_thread_borrows_machine_pool_token_for_codex(tmp_path):
     # A Claude Code BB thread gets no CODEX_POOL_AUTH_TOKEN; the Codex seat must
     # still go through the pool, not the local ~/.codex login.
     assert run_dispatch(tmp_path, pool=True, env_override={
-        'CODEX_POOL_AUTH_TOKEN': None, 'ANTHROPIC_AUTH_TOKEN': 'machine-fixture', 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
+        'CODEX_POOL_AUTH_TOKEN': None, 'CODEX_OPENAI_BASE_URL': None,
+        'ANTHROPIC_AUTH_TOKEN': 'machine-fixture', 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
     argv = json.loads((tmp_path/'call').read_text())
     assert 'model_provider="bb-account-pool"' in argv
-    assert (tmp_path/'call.pooltoken').read_text() == 'machine-fixture'
+    assert (tmp_path/'call.pooltoken').read_text() == hashlib.sha256(b'machine-fixture').hexdigest()
 
 
 def test_codex_stays_direct_without_any_pool_token(tmp_path):
@@ -244,25 +476,48 @@ def test_codex_stays_direct_without_any_pool_token(tmp_path):
     assert (tmp_path/'call.pooltoken').read_text() == ''
 
 
+@pytest.mark.parametrize('codex_env', [
+    {'CODEX_POOL_AUTH_TOKEN': '', 'CODEX_OPENAI_BASE_URL': ''},
+    {'CODEX_POOL_AUTH_TOKEN': None, 'CODEX_OPENAI_BASE_URL': 'https://other.example/v1'},
+])
+def test_claude_parent_preserves_explicit_codex_environment(tmp_path, codex_env):
+    assert run_dispatch(tmp_path, pool=True, env_override={
+        'ANTHROPIC_AUTH_TOKEN': 'fixture-only', 'ANTHROPIC_BASE_URL': POOL_ROUTE,
+        **codex_env,
+    }) == 0
+    assert 'model_provider="bb-account-pool"' not in json.loads((tmp_path/'call').read_text())
+
+
 def test_codex_thread_token_wins_over_claude_route(tmp_path):
     assert run_dispatch(tmp_path, pool=True, env_override={
         'CODEX_POOL_AUTH_TOKEN': 'codex-fixture', 'ANTHROPIC_AUTH_TOKEN': 'machine-fixture', 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
-    assert (tmp_path/'call.pooltoken').read_text() == 'codex-fixture'
+    assert (tmp_path/'call.pooltoken').read_text() == hashlib.sha256(b'codex-fixture').hexdigest()
 
 
 def _lib_bb_probe(tmp_path, env_extra):
     """Source lib-bb.sh, run the availability check, report what leaked."""
+    server, pool_origin = pool_server()
     bb = tmp_path / 'bb'
-    bb.write_text('#!/bin/sh\necho \'{"thread":{"id":"thr_fixture","environment":{"hostId":"host_pda34naxgq"}}}\'\n')
+    bb.write_text("""#!/usr/bin/env python3
+import json, sys
+if sys.argv[1:] == ['status', '--json']:
+    print(json.dumps({'thread': {'id': 'thr_fixture', 'environment': {'hostId': 'host_pda34naxgq'}}}))
+else:
+    sys.exit(1)
+""")
     bb.chmod(0o755)
-    env = {k: v for k, v in os.environ.items() if k not in ('CODEX_POOL_AUTH_TOKEN', 'CLAVAIN_BB_DIRECT_POOL')}
-    env.update(BB_CLI=str(bb), BB_THREAD_ID='thr_fixture', BB_SERVER_URL='https://bb.example',
-               ANTHROPIC_AUTH_TOKEN='machine-fixture', ANTHROPIC_BASE_URL=POOL_ROUTE)
+    env = {k: v for k, v in os.environ.items() if k not in ('CODEX_POOL_AUTH_TOKEN', 'CODEX_OPENAI_BASE_URL', 'CLAVAIN_BB_DIRECT_POOL')}
+    env.update(BB_CLI=str(bb), BB_THREAD_ID='thr_fixture', BB_SERVER_URL=pool_origin,
+               ANTHROPIC_AUTH_TOKEN='machine-fixture', ANTHROPIC_BASE_URL=pool_origin+'/api/v1/plugins/account-pool/http')
     env.update(env_extra)
     script = (f'source {ROOT}/scripts/lib-bb.sh; '
               'if _bb_pool_available codex; then a=1; else a=0; fi; '
               'printf "%s:%s" "$a" "${CODEX_POOL_AUTH_TOKEN:-}"')
-    return subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=20).stdout
+    try:
+        return subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=20).stdout
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_pool_availability_check_exports_nothing(tmp_path):
@@ -286,7 +541,8 @@ def test_direct_pool_kill_switch_disables_borrowing(tmp_path):
 def test_borrowed_token_is_not_persisted_by_dispatch(tmp_path):
     secret = 'borrowed-secret-fixture-7f3a'
     assert run_dispatch(tmp_path, pool=True, env_override={
-        'CODEX_POOL_AUTH_TOKEN': None, 'ANTHROPIC_AUTH_TOKEN': secret, 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
-    leaked = [p for p in tmp_path.rglob('*') if p.is_file() and p.name != 'call.pooltoken'
+        'CODEX_POOL_AUTH_TOKEN': None, 'CODEX_OPENAI_BASE_URL': None,
+        'ANTHROPIC_AUTH_TOKEN': secret, 'ANTHROPIC_BASE_URL': POOL_ROUTE}) == 0
+    leaked = [p for p in tmp_path.rglob('*') if p.is_file()
               and secret in p.read_text(errors='ignore')]
     assert leaked == []

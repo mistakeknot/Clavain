@@ -15,6 +15,7 @@ setup() {
     git -C "$T/repo" -c user.name=t -c user.email=t@t add f.txt
     git -C "$T/repo" -c user.name=t -c user.email=t@t commit -q -m base
     export CLAVAIN_CONTEXT_GATEWAY_MODE=off
+    export CLAVAIN_BB_DIRECT_POOL=0
     unset CLAVAIN_CLAUDE_PERMISSION_MODE
 }
 

@@ -1586,7 +1586,17 @@ AGENT
   # WORKDIR is applied at execution time via cd (kimi has no -C flag);
   # OUTPUT is written by teeing kimi's stdout (kimi has no -o flag).
 elif [[ "$ENGINE" == "claude" ]]; then
-  if _bb_pool_available claude; then DISPATCH_TRANSPORT=direct-pooled; fi
+  if _bb_pool_available claude; then
+    _bb_claude_pool_env
+    DISPATCH_TRANSPORT=direct-pooled
+  else
+    pool_status=$?
+    if [[ "$pool_status" != 1 ]]; then
+      _dispatch_write_failure_class terminal_configuration
+      exit 1
+    fi
+    if _bb_claude_pooled; then unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL; fi
+  fi
   # Claude headless one-shot: claude -p "<prompt>". Added for the review
   # seat in orchestrated delegation (goal 7d610151): an independent
   # validator from a different model family than the codex executors.
@@ -1671,7 +1681,8 @@ else
   # Build codex exec command
   CMD=(codex exec)
   CMD+=(-s "$SANDBOX")
-  if _bb_pool_available && _bb_codex_pool_token; then
+  if _bb_pool_available codex; then
+    _bb_codex_pool_token
     # Match BB's provider-codex launch contract. The hub token stays in env.
     export CODEX_OPENAI_BASE_URL="${BB_SERVER_URL%/}/api/v1/plugins/account-pool/http/v1"
     DISPATCH_TRANSPORT=direct-pooled
@@ -1683,6 +1694,13 @@ else
       -c 'model_providers.bb-account-pool.requires_openai_auth=true'
       -c 'model_providers.bb-account-pool.supports_websockets=false'
       -c 'model_providers.bb-account-pool.env_http_headers.x-bb-account-pool-token="CODEX_POOL_AUTH_TOKEN"')
+  else
+    pool_status=$?
+    if [[ "$pool_status" != 1 ]]; then
+      _dispatch_write_failure_class terminal_configuration
+      exit 1
+    fi
+    if _bb_codex_pooled; then unset CODEX_POOL_AUTH_TOKEN CODEX_OPENAI_BASE_URL; fi
   fi
   if ! git -C "${WORKDIR:-.}" rev-parse --git-dir >/dev/null 2>&1; then
     if [[ "$SANDBOX" == read-only ]]; then
