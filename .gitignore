@@ -21,6 +21,7 @@ __pycache__/
 .clavain/verdicts/
 .clavain/quality-gates/
 .clavain/reviews/
+.clavain/intercept/
 .clavain/checkpoint.json
 .clavain/interspect/interspect.db
 .clavain/interspect/interspect.db-wal

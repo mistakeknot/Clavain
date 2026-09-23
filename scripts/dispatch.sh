@@ -373,6 +373,8 @@ for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
 done
 
 CLAVAIN_LAST_FAILURE_CLASS=""
+DISPATCH_INTERCEPT_EVIDENCE=null
+DISPATCH_INTERCEPT_EVIDENCE_ERROR=""
 
 _dispatch_write_failure_class() {
   local class="${1:-terminal_error}"
@@ -2181,12 +2183,37 @@ _surface_codex_errors() {
   fi
 }
 
+_persist_dispatch_failure_evidence() {
+  local failure_class="$1" root evidence_id relative_path evidence_path reference
+  local -a evidence_cmd
+  if ! root="$(git -C "${WORKDIR:-.}" rev-parse --show-toplevel 2>/dev/null)"; then
+    root="$(cd "${WORKDIR:-.}" && pwd -P)" || return 1
+  fi
+  evidence_id="${ATTEMPT_ID:-${DISPATCH_ID:-$(_dispatch_audit_id)}}"
+  evidence_id="$(printf '%s' "$evidence_id" | tr -c 'A-Za-z0-9._-' '_')"
+  relative_path=".clavain/intercept/${evidence_id}.json"
+  evidence_path="$root/$relative_path"
+  evidence_cmd=(python3 "$DISPATCH_SCRIPT_DIR/provider-errors.py" "$PROVIDER_EVENTS"
+    --stderr "$STDERR_FILE" --write-evidence "$evidence_path"
+    --receipt-path "$relative_path" --failure-class "$failure_class"
+    --dispatch-id "${DISPATCH_ID:-$evidence_id}" --attempt-id "${ATTEMPT_ID:-$evidence_id}")
+  reference="$("${evidence_cmd[@]}")" || return 1
+  jq -e 'type == "object" and (.path | type == "string") and (.sha256 | test("^[0-9a-f]{64}$"))' \
+    <<< "$reference" >/dev/null || return 1
+  DISPATCH_INTERCEPT_EVIDENCE="$reference"
+}
+
 _finalize_dispatch_result() {
   local exit_code="$1" failure_class
+  local -a classifier_cmd
   # Only a finished backend has a current extracted result. Pre-execution
   # failures must never pick up an older sidecar at the requested path.
   DISPATCH_RESULT_READY=true
-  failure_class="$(python3 "$DISPATCH_SCRIPT_DIR/provider-errors.py" "$PROVIDER_EVENTS")"
+  classifier_cmd=(python3 "$DISPATCH_SCRIPT_DIR/provider-errors.py" "$PROVIDER_EVENTS")
+  # Stderr is an error envelope only for a failed provider process. A successful
+  # task may quote identical text without turning it into a provider failure.
+  [[ "$exit_code" == 0 ]] || classifier_cmd+=(--stderr "$STDERR_FILE")
+  failure_class="$("${classifier_cmd[@]}")"
   if [[ "$VIA" == bb && -f "${OUTPUT}.receipt.json" ]]; then
     failure_class="$(jq -r --arg attempt "$ATTEMPT_ID" 'select(.attempt_id == $attempt) | .failure_class // empty' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
   fi
@@ -2214,6 +2241,11 @@ _finalize_dispatch_result() {
   if [[ "$exit_code" == "0" ]]; then
     : > "${CLAVAIN_DISPATCH_FAILURE_FILE:-/dev/null}" 2>/dev/null || true
   else
+    if ! _persist_dispatch_failure_evidence "$failure_class"; then
+      echo "Error: cannot persist redacted dispatch failure evidence" >&2
+      DISPATCH_INTERCEPT_EVIDENCE=null
+      DISPATCH_INTERCEPT_EVIDENCE_ERROR=terminal_recording
+    fi
     _dispatch_write_failure_class "$failure_class"
   fi
   if ! _record_role_routing_decision "$exit_code" "$failure_class"; then
