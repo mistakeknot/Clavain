@@ -35,7 +35,8 @@
     {
       "event": "SessionStart",
       "matcher": "startup|resume",
-      "command": "${KIMI_PLUGIN_ROOT}/hooks/session-start.sh"
+      "command": "${KIMI_PLUGIN_ROOT}/hooks/session-start.sh",
+      "timeout": 5
     },
     {
       "event": "SessionStart",
