@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", budget=False, pool=False):
+def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", exit_code=0, budget=False, pool=False):
     work = tmp_path / "work"
     work.mkdir(exist_ok=True)
     if git:
@@ -25,13 +25,14 @@ Path(os.environ['CALL']).write_text(json.dumps(sys.argv))
 if '-o' in sys.argv: Path(sys.argv[sys.argv.index('-o')+1]).write_text('VERDICT: CLEAN')
 for event in json.loads(os.environ['EVENTS']): print(json.dumps(event))
 print(os.environ['STDERR'], file=sys.stderr)
+sys.exit(int(os.environ['EXIT_CODE']))
 """)
     stub.chmod(0o755)
     bb = bin_dir/'bb'
     bb.write_text('#!/bin/sh\necho \'{"thread":{"id":"thr_fixture","environment":{"hostId":"host_pda34naxgq"}}}\'\n')
     bb.chmod(0o755)
     env = dict(os.environ, PATH=str(bin_dir)+":"+os.environ["PATH"], CALL=str(tmp_path/"call"),
-               EVENTS=json.dumps(events), STDERR=stderr, CLAVAIN_CONTEXT_GATEWAY_MODE="off",
+               EVENTS=json.dumps(events), STDERR=stderr, EXIT_CODE=str(exit_code), CLAVAIN_CONTEXT_GATEWAY_MODE="off",
                CLAVAIN_DISPATCH_FAILURE_FILE=str(tmp_path/"failure"),
                CLAVAIN_BB_DIRECT_POOL="1" if pool else "0", BB_CLI=str(bb), BB_THREAD_ID='thr_fixture',
                BB_SERVER_URL='https://bb.example', CODEX_POOL_AUTH_TOKEN='fixture-only',
@@ -69,8 +70,49 @@ def test_structured_quota_exit_zero(tmp_path):
 
 
 def test_quoted_quota_is_not_provider_failure(tmp_path):
-    event = {"type":"item.completed", "item":{"type":"agent_message", "text":'"codex_error_info":"usage_limit_exceeded"'}}
+    event = {"type":"item.completed", "item":{"type":"agent_message", "text":"ERROR: You've hit your usage limit. Quoted task text."}}
     assert run_dispatch(tmp_path, [event]) == 0
+
+
+def test_stderr_only_usage_limit_is_provider_failure(tmp_path):
+    assert run_dispatch(tmp_path, stderr="ERROR: You've hit your usage limit.", exit_code=7) != 0
+    assert (tmp_path / "failure").read_text().strip() == "quota_exhausted"
+
+
+def test_failed_dispatch_persists_redacted_intercept_evidence(tmp_path):
+    event = {
+        "type": "turn.failed",
+        "request_id": "req-fixture",
+        "error": {
+            "code": "unknown_failure",
+            "provider_reason": "seat_exhausted",
+            "provider_token": "tok-provider-fixture-secret",
+        },
+    }
+    stderr = "Authorization: Bearer bearer-fixture-secret\ncontact dev@example.test\n"
+
+    assert run_dispatch(tmp_path, [event], stderr=stderr) != 0
+
+    artifacts = list((tmp_path / "work" / ".clavain" / "intercept").glob("*.json"))
+    assert len(artifacts) == 1
+    raw = artifacts[0].read_text()
+    assert "bearer-fixture-secret" not in raw
+    assert "tok-provider-fixture-secret" not in raw
+    assert "dev@example.test" not in raw
+    evidence = json.loads(raw)
+    assert evidence["unmapped_provider_fields"] == [
+        {
+            "event_type": "turn.failed",
+            "fields": {
+                "request_id": "req-fixture",
+                "error": {
+                    "code": "unknown_failure",
+                    "provider_reason": "seat_exhausted",
+                    "provider_token": "[REDACTED]",
+                },
+            },
+        }
+    ]
 
 
 def test_denial_dominates_quota(tmp_path):

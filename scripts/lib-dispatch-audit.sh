@@ -64,6 +64,7 @@ _role_audit_context() {
     --arg enrollment "${CLAVAIN_TASK_ENROLLMENT_ID:-}" --arg manifest "${CLAVAIN_TASK_MANIFEST_SHA256:-}" \
     --arg cohort "${CLAVAIN_TASK_COHORT_ID:-}" \
     --argjson exit_code "$exit_code" --argjson observation "${DISPATCH_EXECUTION_OBSERVATION:-null}" \
+    --argjson intercept "${DISPATCH_INTERCEPT_EVIDENCE:-null}" \
     --argjson bb_receipt "$bb_receipt" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,retry_id:$retry_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
@@ -75,7 +76,8 @@ _role_audit_context() {
         + (if $observation | type == "object" then $observation else {} end)),
       checkout:{before:$before,after:$after},bb_seat:$bb_receipt,
       terminal:($state == "completed" or $state == "failed"),
-      result:{exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict}}
+      result:({exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict}
+        + (if $intercept | type == "object" then {intercept_evidence:$intercept} else {} end))}
       + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)'
 }
 

@@ -110,6 +110,11 @@ case "${FAKE_CODEX_MODE:-success}" in
     echo 'stream error: unexpected status 429 Too Many Requests: rate limited' >&2
     exit 1
     ;;
+  evidence)
+    echo '{"type":"turn.failed","request_id":"req-fixture","error":{"code":"unknown_failure","provider_reason":"seat_exhausted","provider_token":"tok-provider-fixture-secret"}}'
+    echo 'Authorization: Bearer bearer-fixture-secret for dev@example.test in /home/private-user/repo' >&2
+    exit 7
+    ;;
 esac
 echo 'VERDICT: CLEAN'
 FAKE_CODEX
@@ -207,6 +212,22 @@ contains "$(cat "$FAKE_IC_LOG")" "--producer-identity=codex/gpt-6-astra"
 [[ -s "$FAKE_IC_CONTEXT_LOG" ]] || fail "missing immutable routing contexts"
 jq -s -e 'all(.[]; .schema_version == 1 and (.dispatch_id | length > 0) and (.attempt_id | length > 0) and .resolved_profile.profile.model != null and .resolved_route.profile != null and .execution.service_tier == "standard")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "incomplete routing snapshot"
 jq -s -e 'any(.[]; .state == "started") and any(.[]; .state == "completed") and any(.[]; .state == "failed" and .result.failure_class == "terminal_policy")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "missing dispatch lifecycle evidence"
+
+rm -rf "$TMP_ROOT/work/.clavain/intercept"
+set +e
+FAKE_CODEX_MODE=evidence bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1
+evidence_rc=$?
+set -e
+[[ "$evidence_rc" != "0" ]] || fail "evidence fixture unexpectedly succeeded"
+mapfile -t evidence_files < <(find "$TMP_ROOT/work/.clavain/intercept" -maxdepth 1 -type f -name '*.json')
+[[ "${#evidence_files[@]}" == "1" ]] || fail "expected one intercept artifact"
+evidence_file="${evidence_files[0]}"
+if rg -q 'bearer-fixture-secret|tok-provider-fixture-secret|dev@example.test|/home/private-user' "$evidence_file"; then
+  fail "intercept artifact leaked redacted fixture data"
+fi
+evidence_ref="$(jq -sc '[.[] | select(.state == "failed" and .result.intercept_evidence != null)] | last.result.intercept_evidence' "$FAKE_IC_CONTEXT_LOG")"
+[[ "$(jq -r '.path' <<< "$evidence_ref")" == ".clavain/intercept/$(basename "$evidence_file")" ]] || fail "receipt did not link intercept path"
+[[ "$(jq -r '.sha256' <<< "$evidence_ref")" == "$(sha256sum "$evidence_file" | awk '{print $1}')" ]] || fail "receipt did not link intercept hash"
 
 : > "$FAKE_CODEX_LOG"
 FAKE_IC_RECORD_FAIL=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 && fail "dispatch accepted failed preflight audit"
