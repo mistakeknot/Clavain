@@ -117,6 +117,18 @@ def test_runtime_counters_change_but_permission_projection_is_stable(tmp_path, c
     assert native.input_snapshot(*args) != before
 
 
+def test_optional_routing_operations_change_invalidates_preparation_snapshot(tmp_path):
+    source = tmp_path / "selected-source"
+    operations = source / "docs/canon/reasoning-routing-operations.md"
+    operations.parent.mkdir(parents=True)
+    operations.write_text("operator detail v1\n")
+    args = ([sys.executable], source, tmp_path, {"HOME": str(tmp_path)})
+    before = native.input_snapshot(*args)
+    assert str(operations) in before
+    operations.write_text("operator detail v2\n")
+    assert native.input_snapshot(*args) != before
+
+
 @pytest.mark.parametrize("failure", ["invalid-decision", "binding", "project-change"])
 def test_full_launch_failure_never_starts_execution(tmp_path, monkeypatch, failure):
     project = tmp_path / "project"; project.mkdir()
