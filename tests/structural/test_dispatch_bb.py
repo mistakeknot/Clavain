@@ -8,11 +8,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", exit_code=0, budget=False, pool=False):
+def run_dispatch(tmp_path, events=(), *, git=True, sandbox="workspace-write", stderr="", exit_code=0, budget=False, pool=False, block_intercept=False):
     work = tmp_path / "work"
     work.mkdir(exist_ok=True)
     if git:
         subprocess.run(["git", "init", "-q", str(work)], check=True)
+    if block_intercept:
+        (work / ".clavain").mkdir()
+        (work / ".clavain" / "intercept").write_text("not a directory")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     stub = bin_dir / "codex"
@@ -113,6 +116,24 @@ def test_failed_dispatch_persists_redacted_intercept_evidence(tmp_path):
             },
         }
     ]
+    assert (tmp_path / "work" / ".clavain" / "intercept" / ".gitignore").read_text() == "*\n"
+    status = subprocess.run(
+        ["git", "-C", str(tmp_path / "work"), "status", "--porcelain", "--", ".clavain/intercept"],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert status.stdout == ""
+
+
+def test_evidence_write_failure_preserves_provider_class(tmp_path):
+    event = {
+        "type": "task_complete",
+        "error": {"codex_error_info": "usage_limit_exceeded"},
+    }
+
+    assert run_dispatch(tmp_path, [event], block_intercept=True) != 0
+    assert (tmp_path / "failure").read_text().strip() == "quota_exhausted"
 
 
 def test_denial_dominates_quota(tmp_path):

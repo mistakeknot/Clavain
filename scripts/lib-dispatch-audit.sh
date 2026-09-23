@@ -65,6 +65,7 @@ _role_audit_context() {
     --arg cohort "${CLAVAIN_TASK_COHORT_ID:-}" \
     --argjson exit_code "$exit_code" --argjson observation "${DISPATCH_EXECUTION_OBSERVATION:-null}" \
     --argjson intercept "${DISPATCH_INTERCEPT_EVIDENCE:-null}" \
+    --arg intercept_error "${DISPATCH_INTERCEPT_EVIDENCE_ERROR:-}" \
     --argjson bb_receipt "$bb_receipt" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,retry_id:$retry_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
@@ -77,7 +78,8 @@ _role_audit_context() {
       checkout:{before:$before,after:$after},bb_seat:$bb_receipt,
       terminal:($state == "completed" or $state == "failed"),
       result:({exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict}
-        + (if $intercept | type == "object" then {intercept_evidence:$intercept} else {} end))}
+        + (if $intercept | type == "object" then {intercept_evidence:$intercept} else {} end)
+        + (if $intercept_error != "" then {intercept_evidence_error:$intercept_error} else {} end))}
       + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)'
 }
 

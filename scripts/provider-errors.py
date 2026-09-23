@@ -16,9 +16,16 @@ STDERR_USAGE_LIMIT = re.compile(
     r"^(?:\x1b\[[0-9;]*m)*(?:ERROR\s*:\s*)?You[’']ve hit your usage limit\."
 )
 MAPPED_ERROR_FIELDS = {"codex_error_info", "code", "type", "status", "message"}
+SAFE_EVENT_FIELDS = {
+    "request_id", "requestId", "status", "status_code", "error_code",
+    "provider", "model", "will_retry", "willRetry", "retry_after", "retryAfter",
+}
+BODY_FIELDS = {"message", "result", "content", "text", "output", "input", "prompt", "task"}
+MAX_FIELD_BYTES = 256
+MAX_UNMAPPED_BYTES = 4096
 SENSITIVE_FIELD = re.compile(
     r"(?:authorization|api[_-]?key|private[_-]?key|access[_-]?token|refresh[_-]?token|"
-    r"provider[_-]?token|password|secret|(?:^|[_-])token(?:$|[_-]))",
+    r"provider[_-]?token|password|secret|cookie|(?:^|[_-])token(?:$|[_-]))",
     re.IGNORECASE,
 )
 PRIVATE_KEY = re.compile(
@@ -29,14 +36,24 @@ AUTH_VALUE = re.compile(
     r'''(?i)(["']?Authorization["']?\s*[:=]\s*["']?)(?:(?:Bearer|Basic)\s+)?[^"'\s,;}]+'''
 )
 BEARER_VALUE = re.compile(r"(?i)(\bBearer\s+)[A-Za-z0-9._~+/=-]+")
+COOKIE_VALUE = re.compile(r"(?im)^(\s*(?:set-)?cookie\s*[:=]\s*).*$")
 ASSIGNED_SECRET = re.compile(
-    r'''(?i)(["']?[A-Z0-9_-]*(?:API[_-]?KEY|PRIVATE[_-]?KEY|ACCESS[_-]?TOKEN|'''
-    r'''REFRESH[_-]?TOKEN|PASSWORD|SECRET|TOKEN)[A-Z0-9_-]*["']?\s*[:=]\s*["']?)'''
+    r'''(?i)(?<![A-Z0-9_-])(["']?[A-Z0-9_-]{0,64}(?:API[_-]?KEY|PRIVATE[_-]?KEY|'''
+    r'''ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN|PASSWORD|SECRET|TOKEN)[A-Z0-9_-]{0,64}'''
+    r'''["']?\s*[:=]\s*["']?)'''
     r'''[^"'\s,;}]+'''
 )
-TOKEN_VALUE = re.compile(r"\b(?:sk|tok|ghp|ntn|xox[baprs])[-_][A-Za-z0-9._-]{6,}\b")
+PASSWORD_VALUE = re.compile(r"(?i)(\bpassword\s+)[^\s,;}]+")
+JWT_VALUE = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
+TOKEN_VALUE = re.compile(
+    r"\b(?:sk|tok|gh[pousr]|github_pat|glpat|ntn|xox[baprs])[-_][A-Za-z0-9._-]{6,}\b"
+)
+AWS_KEY = re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")
 EMAIL = re.compile(r"(?<![\w.+-])[\w.+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![\w.-])")
-HOME_PATH = re.compile(r"(?<![A-Za-z0-9_])/(?:home|Users)/[^/\s]+")
+HOME_PATH = re.compile(
+    r"(?<![A-Za-z0-9_])(?:/(?:home|Users)/[^/\s]+|/root|/tmp|/var/folders)(?=/|\b)"
+)
+FIELD_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
 
 
 def _envelope(event):
@@ -102,8 +119,12 @@ def redact_text(value):
     value = PRIVATE_KEY.sub("[REDACTED PRIVATE KEY]", str(value))
     value = AUTH_VALUE.sub(r"\1[REDACTED]", value)
     value = BEARER_VALUE.sub(r"\1[REDACTED]", value)
+    value = COOKIE_VALUE.sub(r"\1[REDACTED]", value)
     value = ASSIGNED_SECRET.sub(r"\1[REDACTED]", value)
+    value = PASSWORD_VALUE.sub(r"\1[REDACTED]", value)
+    value = JWT_VALUE.sub("[REDACTED]", value)
     value = TOKEN_VALUE.sub("[REDACTED]", value)
+    value = AWS_KEY.sub("[REDACTED]", value)
     value = EMAIL.sub("[REDACTED EMAIL]", value)
     return HOME_PATH.sub("~", value)
 
@@ -120,32 +141,62 @@ def _redact(value, key=""):
     return value
 
 
+def _bounded_scalar(value, key):
+    if isinstance(value, (dict, list)) or value is None:
+        return None
+    if not isinstance(value, (str, int, float, bool)):
+        return None
+    value = _redact(value, key)
+    if isinstance(value, str):
+        value = value.encode("utf-8")[:MAX_FIELD_BYTES].decode("utf-8", errors="ignore")
+    return value
+
+
+def _serialized_size(value):
+    return len(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+
+
 def _unmapped_provider_fields(events):
     rows = []
     for original in events:
         event, kind, error = _envelope(original)
         if event is None or error is None:
             continue
-        mapped = {"type", "error"}
-        if kind == "result":
-            mapped.add("is_error")
-        if kind == "error" and error is event:
-            mapped.add("message")
-        fields = {key: value for key, value in event.items() if key not in mapped}
-        if isinstance(error, dict):
-            unknown_error = {}
-            for key, value in error.items():
-                if key not in MAPPED_ERROR_FIELDS:
-                    unknown_error[key] = value
-                elif key in {"codex_error_info", "code", "type", "status"}:
-                    if str(value) not in QUOTA | DENIAL | CONFIG:
-                        unknown_error[key] = value
-                elif key == "message" and not USAGE_LIMIT_MESSAGE.match(str(value)):
-                    unknown_error[key] = value
-            if unknown_error:
-                fields["error"] = unknown_error
+        fields = {}
+
+        def retain(key, value, *, nested=False):
+            if (not isinstance(key, str) or not FIELD_NAME.fullmatch(key)
+                    or any(body in key.lower() for body in BODY_FIELDS)):
+                return True
+            value = _bounded_scalar(value, key)
+            if value is None:
+                return True
+            trial = dict(fields)
+            if nested:
+                nested_fields = dict(trial.get("error", {}))
+                nested_fields[key] = value
+                trial["error"] = nested_fields
+            else:
+                trial[key] = value
+            candidate = rows + [{"event_type": kind, "fields": trial}]
+            if _serialized_size(candidate) > MAX_UNMAPPED_BYTES:
+                return False
+            fields.clear()
+            fields.update(trial)
+            return True
+
+        for key in sorted(SAFE_EVENT_FIELDS):
+            if key in event and not retain(key, event[key]):
+                return rows
+        if isinstance(error, dict) and error is not event:
+            for key, value in sorted(error.items()):
+                retain_field = key not in MAPPED_ERROR_FIELDS
+                if key in {"codex_error_info", "code", "type", "status"}:
+                    retain_field = str(value) not in QUOTA | DENIAL | CONFIG
+                if retain_field and not retain(key, value, nested=True):
+                    return rows
         if fields:
-            rows.append({"event_type": kind, "fields": _redact(fields)})
+            rows.append({"event_type": kind, "fields": fields})
     return rows
 
 
@@ -154,6 +205,27 @@ def _tail_bytes(value, limit=4096):
     if len(raw) <= limit:
         return value
     return raw[-limit:].decode("utf-8", errors="ignore")
+
+
+def _ensure_self_ignored(directory):
+    ignore = directory / ".gitignore"
+    raw = b"*\n"
+    if ignore.exists() and ignore.read_bytes() == raw:
+        os.chmod(ignore, 0o600)
+        return
+    temporary = ignore.with_name(f".{ignore.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open("xb") as stream:
+            os.chmod(temporary, 0o600)
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, ignore)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def write_evidence(path, events, stderr, *, failure_class, dispatch_id,
@@ -172,6 +244,7 @@ def write_evidence(path, events, stderr, *, failure_class, dispatch_id,
     raw = (json.dumps(evidence, sort_keys=True, separators=(",", ":")) + "\n").encode()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path.parent, 0o700)
+    _ensure_self_ignored(path.parent)
     if path.exists():
         if path.read_bytes() != raw:
             raise FileExistsError(f"failure evidence already exists with different content: {path}")

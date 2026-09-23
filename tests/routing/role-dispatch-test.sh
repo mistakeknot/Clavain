@@ -228,6 +228,20 @@ fi
 evidence_ref="$(jq -sc '[.[] | select(.state == "failed" and .result.intercept_evidence != null)] | last.result.intercept_evidence' "$FAKE_IC_CONTEXT_LOG")"
 [[ "$(jq -r '.path' <<< "$evidence_ref")" == ".clavain/intercept/$(basename "$evidence_file")" ]] || fail "receipt did not link intercept path"
 [[ "$(jq -r '.sha256' <<< "$evidence_ref")" == "$(sha256sum "$evidence_file" | awk '{print $1}')" ]] || fail "receipt did not link intercept hash"
+[[ -z "$(git -C "$TMP_ROOT/work" status --porcelain -- .clavain/intercept)" ]] || fail "intercept evidence is visible to target repository status"
+
+rm -rf "$TMP_ROOT/work/.clavain/intercept"
+mkdir -p "$TMP_ROOT/work/.clavain"
+printf '%s\n' 'not a directory' > "$TMP_ROOT/work/.clavain/intercept"
+set +e
+FAKE_CODEX_MODE=policy403 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1
+evidence_write_rc=$?
+set -e
+[[ "$evidence_write_rc" != "0" ]] || fail "blocked evidence write unexpectedly succeeded"
+evidence_write_result="$(jq -sc '[.[] | select(.state == "failed" and .result.intercept_evidence_error != null)] | last.result' "$FAKE_IC_CONTEXT_LOG")"
+[[ "$(jq -r '.failure_class' <<< "$evidence_write_result")" == "terminal_policy" ]] || fail "evidence failure replaced provider class"
+[[ "$(jq -r '.intercept_evidence_error' <<< "$evidence_write_result")" == "terminal_recording" ]] || fail "receipt omitted evidence write failure"
+rm -f "$TMP_ROOT/work/.clavain/intercept"
 
 : > "$FAKE_CODEX_LOG"
 FAKE_IC_RECORD_FAIL=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 && fail "dispatch accepted failed preflight audit"

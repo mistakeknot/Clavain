@@ -374,6 +374,7 @@ done
 
 CLAVAIN_LAST_FAILURE_CLASS=""
 DISPATCH_INTERCEPT_EVIDENCE=null
+DISPATCH_INTERCEPT_EVIDENCE_ERROR=""
 
 _dispatch_write_failure_class() {
   local class="${1:-terminal_error}"
@@ -2242,8 +2243,8 @@ _finalize_dispatch_result() {
   else
     if ! _persist_dispatch_failure_evidence "$failure_class"; then
       echo "Error: cannot persist redacted dispatch failure evidence" >&2
-      failure_class=terminal_recording
       DISPATCH_INTERCEPT_EVIDENCE=null
+      DISPATCH_INTERCEPT_EVIDENCE_ERROR=terminal_recording
     fi
     _dispatch_write_failure_class "$failure_class"
   fi
