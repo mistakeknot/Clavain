@@ -88,8 +88,9 @@ Claude quota classification remains unverified against a real failure stream.
 The synthetic envelope test proves parser mechanics only; actual Claude values
 such as `rate_limit` and `billing_error` currently remain terminal unknown errors
 until a real fixture establishes their semantics. No live Claude quota success
-is claimed. Codex standalone `error` events are provisional when followed by a
-successful `turn.completed`; explicit failed turns/tasks remain terminal.
+is claimed. Generic Codex standalone stream errors are provisional when followed
+by a successful `turn.completed`; policy, configuration and quota codes, and
+explicit failed turns/tasks, remain terminal.
 
 Codex now uses `--json` even on the stock-awk path so provider failures remain
 available to the classifier. On hosts without GNU awk this changes streamed

@@ -22,8 +22,8 @@ def classify(events):
         kind = event.get("type")
         if kind == 'turn.completed':
             # Codex can recover from stream errors within a turn. Only its
-            # standalone error envelopes are provisional; a failed turn or
-            # explicit task failure remains terminal even across later turns.
+            # generic standalone stream errors are provisional. Coded policy,
+            # configuration and quota failures remain sticky across success.
             transient_errors.clear()
             continue
         target = transient_errors if kind == 'error' else failures
@@ -42,12 +42,12 @@ def classify(events):
         if isinstance(error, dict):
             codes = {str(error.get(k, "")) for k in ("codex_error_info", "code", "type", "status")}
         if codes & DENIAL:
-            target.add("terminal_policy")
+            failures.add("terminal_policy")
         elif codes & CONFIG:
-            target.add("terminal_configuration")
+            failures.add("terminal_configuration")
         elif codes & QUOTA or (isinstance(error, dict) and re.match(
                 r"^You[’']ve hit your usage limit\.", str(error.get('message', '')))):
-            target.add("quota_exhausted")
+            failures.add("quota_exhausted")
         else:
             target.add("terminal_error")
     failures.update(transient_errors)

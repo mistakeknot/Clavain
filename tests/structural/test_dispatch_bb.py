@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -83,6 +84,17 @@ def test_recovered_codex_error_is_not_terminal(tmp_path):
     events = [{"type":"error", "message":"Transient stream error; reconnecting"},
               {"type":"turn.completed", "usage":{"input_tokens":10,"output_tokens":2}}]
     assert run_dispatch(tmp_path, events) == 0
+
+
+@pytest.mark.parametrize('code,expected',[
+    ('permission_denied','terminal_policy'),
+    ('authentication_error','terminal_configuration'),
+    ('usage_limit_exceeded','quota_exhausted'),
+])
+def test_coded_error_is_sticky_after_success(tmp_path,code,expected):
+    events=[{'type':'error','error':{'code':code}}, {'type':'turn.completed'}]
+    assert run_dispatch(tmp_path,events)!=0
+    assert (tmp_path/'failure').read_text().strip()==expected
 
 
 def test_error_after_success_remains_terminal(tmp_path):
