@@ -241,7 +241,7 @@ def generated_secrets(seed=8252):
 
 @pytest.mark.parametrize("header", [
     "Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie",
-    "X-Account-Pool-Token", "X-Api-Key", "Service-Key", "Service-Secret",
+    "X-Bb-Account-Pool-Token", "X-Api-Key", "Service-Key", "Service-Secret",
     "Service-Token",
 ])
 def test_generated_credentials_in_headers_and_folds(header):
@@ -250,7 +250,8 @@ def test_generated_credentials_in_headers_and_folds(header):
             text = f"{header}: {scheme}{secret}\r\n\tcontinued={secret}\r\nSafe: visible\r\n"
             redacted = provider_errors.redact_text(text)
             assert secret not in redacted
-            assert redacted.splitlines()[0] == f"{header}: <redacted>"
+            label = "<id>" if header == "X-Bb-Account-Pool-Token" else header
+            assert redacted.splitlines()[0] == f"{label}: <redacted>"
             assert "Safe: visible" in redacted
         for text in (json.dumps({header: f"Custom {secret}"}),
                      f"curl -H '{header}: Custom {secret}'",
@@ -299,8 +300,11 @@ def test_punctuation_does_not_split_env_or_query_credential_values():
             assert "visible" in redacted
 
 
-@pytest.mark.parametrize("host", ["localhost:3128", "10.0.0.1", "proxy", "[::1]:3128", "example.test"])
-def test_generated_url_userinfo_for_any_host(host):
+@pytest.mark.parametrize(("host", "summary"), [
+    ("localhost:3128", "localhost:3128"), ("10.0.0.1", "unknown"),
+    ("proxy", "unknown"), ("[::1]:3128", "unknown"), ("example.test", "*.example.test"),
+])
+def test_generated_url_userinfo_for_any_host(host, summary):
     for secret in generated_secrets():
         # URL userinfo uses percent encoding for delimiter characters.
         userinfo = quote(secret, safe="")
@@ -308,7 +312,7 @@ def test_generated_url_userinfo_for_any_host(host):
                      f"proxy=socks5://{userinfo}@{host}/route"):
             redacted = provider_errors.redact_text(text)
             assert userinfo not in redacted
-            assert host in redacted
+            assert f"<url-host:{summary}>" in redacted
 
 
 def test_generated_bare_high_entropy_secrets_and_safe_shapes():
@@ -382,6 +386,78 @@ def test_unknown_metadata_key_collisions_do_not_drop_fields():
     fields = provider_errors._unmapped_provider_fields(events)[0]["fields"]["error"]
     assert set(fields) == {"<id>:0", "<id>:1"}
     assert set(fields.values()) == {"missing", "invalid"}
+
+
+@pytest.mark.parametrize("option", ["curl -u", "curl --user", "sshpass -p", "mysql -p", "codex --token"])
+@pytest.mark.parametrize("inner", ["c", "c" * 10, "c" * 30, 'c --password d'])
+def test_overlapping_cli_credentials_are_removed_as_a_union(option, inner, tmp_path):
+    # The inner replacement used to change the string length before the outer
+    # span was removed, exposing the allowlisted word/number at its tail.
+    raw = f'{option} "a:b --token {inner} xxxxxxxx 123456 request"'
+    expected = option + " <redacted>"
+    assert provider_errors._redact_cli(raw) == expected
+    assert provider_errors.redact_text(raw) == provider_errors.redact_text(expected)
+    artifact = tmp_path / "overlapping.json"
+    provider_errors.write_evidence(
+        artifact, [{"type": "turn.failed", "error": {"details": raw}}], raw,
+        failure_class="terminal_error", dispatch_id="dispatch-fixture",
+        attempt_id="attempt-fixture", receipt_path=artifact.name,
+    )
+    assert "123456" not in artifact.read_text()
+    assert "request" not in artifact.read_text()
+
+
+def test_disjoint_cli_credential_spans_preserve_intervening_text():
+    raw = 'curl -u "short --token x tail" --retry 429 --password "error"'
+    assert provider_errors._redact_cli(raw) == 'curl -u <redacted> --retry 429 --password <redacted>'
+
+
+@pytest.mark.parametrize(("host", "summary"), [
+    ("api.openai.com", "api.openai.com"), ("chatgpt.com", "chatgpt.com"),
+    ("api.anthropic.com", "api.anthropic.com"), ("localhost:3128", "localhost:3128"),
+    ("127.0.0.1:3128", "127.0.0.1:3128"), ("API.OPENAI.COM", "api.openai.com"),
+    ("hunter2.oast.example", "*.oast.example"), ("hunter2.api.openai.com", "*.openai.com"),
+    ("api.openai.com.hunter2.example.com", "*.example.com"),
+    ("hunter2.example.co.uk", "*.example.co.uk"), ("hunter2.example.com.au", "*.example.com.au"),
+    ("hunter2.example.co.jp", "*.example.co.jp"), ("example.com", "*.example.com"),
+    ("co.uk", "unknown"), ("hunter2", "unknown"), ("10.0.0.1", "unknown"),
+])
+def test_url_hostnames_disclose_only_known_hosts_or_registrable_part(host, summary):
+    sanitized = provider_errors.redact_text(f"https://{host}/route")
+    assert sanitized == f"<url-host:{summary}>"
+    assert "hunter2" not in sanitized
+
+
+def test_generated_secret_subdomains_are_absent_from_saved_evidence(tmp_path):
+    rng = random.Random(82524)
+    for index in range(20):
+        secret = "".join(rng.choice(string.ascii_lowercase + string.digits) for _ in range(32))
+        artifact = tmp_path / f"host-{index}.json"
+        url = f"https://{secret}.tenant.example.co.uk/"
+        provider_errors.write_evidence(
+            artifact, [{"type": "turn.failed", "error": {"details": url}}], url,
+            failure_class="terminal_error", dispatch_id="dispatch-fixture",
+            attempt_id="attempt-fixture", receipt_path=artifact.name,
+        )
+        assert secret not in artifact.read_text()
+        assert "<url-host:*.example.co.uk>" in artifact.read_text()
+
+
+def ordinal_day(day):
+    suffix = "th" if 10 <= day % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{day}{suffix}"
+
+
+def test_ordinal_dates_are_a_bounded_class_not_vocabulary_entries():
+    vocabulary = provider_errors._vocabulary()
+    assert "x-account-pool-token" not in vocabulary
+    for day in range(1, 32):
+        ordinal = ordinal_day(day)
+        assert ordinal not in vocabulary
+        assert provider_errors.redact_text(ordinal) == ordinal
+        assert provider_errors.redact_text(f"token={ordinal}") == "token=<redacted>"
+    for invalid in ("0th", "32nd", "111th", "1th", "11st", "21th", "12345678901st"):
+        assert provider_errors.redact_text(invalid) == "<id>"
 
 
 def test_pem_blocks_and_macos_private_paths():
@@ -478,7 +554,12 @@ def test_allowlist_replaces_unknown_tokens_and_preserves_diagnostic_shape():
         assert useful in sanitized
 
 
-def test_real_usage_limit_fixtures_classify_and_meet_placeholder_budget():
+@pytest.mark.parametrize(("month", "day"), [
+    (month, day)
+    for month in ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    for day in range(1, 32)
+])
+def test_real_usage_limit_fixtures_classify_and_meet_placeholder_budget(month, day):
     messages = []
     for filename in ("codex-usage-limit-rollout.jsonl", "codex-usage-limit-stdout.jsonl"):
         events = [json.loads(line) for line in (ROOT / "tests/fixtures" / filename).read_text().splitlines()]
@@ -489,13 +570,19 @@ def test_real_usage_limit_fixtures_classify_and_meet_placeholder_budget():
                 messages.append(error["message"])
     assert len(messages) == 3
     for message in messages:
+        date = f"{month} {ordinal_day(day)}, 2027 2:36 AM"
+        message, replacements = re.subn(
+            r"[A-Z][a-z]{2} [0-9]{1,2}(?:st|nd|rd|th), [0-9]{4} [0-9]{1,2}:[0-9]{2} [AP]M",
+            date, message,
+        )
+        assert replacements == 1
         for raw in (message, "ERROR: " + message, message.replace("’", "'")):
             sanitized = provider_errors.redact_text(raw)
             assert provider_errors.classify([], sanitized) == "quota_exhausted"
             assert "usage limit" in sanitized and "try again at" in sanitized
-            assert "Sep 26th, 2026 2:36 AM" in sanitized
+            assert date in sanitized
             assert "<url-host:chatgpt.com>" in sanitized
-            # At most 5% placeholders: one host-only URL among 29 readable words.
+            # Same <=5% budget regardless of the calendar date in the fixture.
             placeholders = re.findall(r"<[^<>]+>", sanitized)
             words = re.findall(r"<[^<>]+>|[\w’']+", sanitized)
             assert len(placeholders) / len(words) <= 0.05

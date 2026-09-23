@@ -70,6 +70,16 @@ SAFE_UUID = re.compile(r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}\Z"
 SAFE_TIMESTAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[Zz]|[+-][0-9]{2}:?[0-9]{2})")
 ERROR_CODE = re.compile(r"(?:E[A-Z0-9_]+|[a-z_]+_error)\Z")
 NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+)?\Z")
+ORDINAL_DAY = re.compile(
+    r"(?:[23]?1st|2?2nd|2?3rd|(?:[4-9]|1[0-9]|20|2[4-9]|30)th)\Z", re.IGNORECASE
+)
+EXACT_URL_HOSTS = {"api.openai.com", "chatgpt.com", "api.anthropic.com", "localhost", "127.0.0.1"}
+# Bounded diagnostic suffix heuristic, not a public-suffix/ownership lookup.
+# Unlisted suffixes retain only two labels (less detail, not more).
+MULTIPART_URL_SUFFIXES = {
+    "ac.uk", "co.uk", "gov.uk", "org.uk",
+    "com.au", "net.au", "org.au", "co.jp", "co.nz", "co.in", "com.br", "com.cn",
+}
 # Punctuation is structural, never a reason to keep adjoining unknown data.
 # The final alternative consumes unknown runs WHOLE (including dotted strings),
 # so a random secret cannot be mistaken for a hostname or broken into safe words.
@@ -289,9 +299,20 @@ def _redact_cli(text):
 
     spans = [suppress(m) for m in CLI_OPTION.finditer(text) if _credential_key(m["key"])]
     spans.extend(suppress(m) for m in CLI_LOGIN.finditer(text))
-    for start, end in sorted(set(spans), reverse=True):
-        text = text[:start] + "<redacted>" + text[end:]
-    return text
+    # Spans refer to the original string. Merge them before replacement: an
+    # inner credential option must not shift an enclosing quoted value's end.
+    merged = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    parts = []
+    copied = 0
+    for start, end in merged:
+        parts.extend((text[copied:start], "<redacted>"))
+        copied = end
+    return "".join(parts) + text[copied:]
 
 
 def _redact_contexts(value, *, _depth=0):
@@ -342,7 +363,7 @@ def _allowed_atom(value):
         # A long decimal is not a git SHA just because it has 40/64 digits.
         return sum(c.isdigit() for c in value) <= 10
     return (value.casefold() in _vocabulary() or _safe_shape(value)
-            or ERROR_CODE.fullmatch(value))
+            or ERROR_CODE.fullmatch(value) or ORDINAL_DAY.fullmatch(value))
 
 
 def _keep_atom(value):
@@ -381,21 +402,28 @@ def _keep_path(value):
 
 def _keep_url(value):
     # A URL is summarized, never replayed. Neither query/fragment nor path nor
-    # userinfo is retained. Only here can a dotted string be a hostname; a bare
-    # dotted token may be an unfamiliar credential and receives no exemption.
+    # userinfo is retained. Unknown subdomain labels may contain tenant IDs or
+    # secrets, so only exact known hosts or a wildcarded domain summary survive.
     suffix = value[len(value.rstrip(".,;)")):]
     try:
         parsed = urlsplit(value.rstrip(".,;)"))
         host = parsed.hostname or ""
         port = parsed.port
-        if ":" in host:
-            ipaddress.IPv6Address(host)
-            host = f"[{host}]"
-        elif not (0 < len(host) <= 253 and all(
-            re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
-            for label in host.split(".")
-        )):
-            return "<url-host:unknown>" + suffix
+        if host not in EXACT_URL_HOSTS:
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                pass
+            else:
+                return "<url-host:unknown>" + suffix
+            labels = host.split(".")
+            keep = 3 if ".".join(labels[-2:]) in MULTIPART_URL_SUFFIXES else 2
+            if not (0 < len(host) <= 253 and len(labels) >= keep and all(
+                re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+                for label in labels
+            )):
+                return "<url-host:unknown>" + suffix
+            host = "*." + ".".join(labels[-keep:])
         return f"<url-host:{host}{':' + str(port) if port is not None else ''}>" + suffix
     except ValueError:
         return "<url-host:unknown>" + suffix
@@ -405,9 +433,10 @@ def redact_text(value):
     """Keep only reviewed diagnostic words and explicit non-secret token classes.
 
     This lossy evidence is not a raw log or an arbitrary-secret detector: the
-    allowlisted words, short numbers, error codes, SHAs, UUIDs, timestamps and
-    URL hosts are intentional disclosures. Credential contexts override those
-    exemptions. No vocabulary is learned from the text being sanitized.
+    allowlisted words, short numbers, ordinal days, error codes, SHAs, UUIDs,
+    timestamps and URL domain summaries are intentional disclosures. Credential
+    contexts override those exemptions. No vocabulary is learned from the text
+    being sanitized.
     """
     value = _redact_contexts(value)
     value = re.sub(r"\x1b\[[0-9;]*m", "", value)

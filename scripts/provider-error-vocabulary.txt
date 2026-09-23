@@ -5,7 +5,7 @@
 # Unknown words/identifiers must become placeholders, not automatic additions.
 # Usage-limit fixture prose and calendar words.
 you've you’ve hit your usage limit visit to purchase more credits or try again at
-jan feb mar apr may jun jul aug sep oct nov dec am pm 26th
+jan feb mar apr may jun jul aug sep oct nov dec am pm
 # Common diagnostic prose (not an arbitrary English dictionary).
 a an the and of for from in on is are was were be been being has have had
 not no none null true false with without by as this that it its please
@@ -22,7 +22,7 @@ request requests response responses status code reason details detail message
 configuration config permission permissions policy authentication authorization
 auth credential credentials token secret password pass passw pw pwd cookie session
 private bearer basic proxy-authorization set-cookie api-key api_key
-x-account-pool-token x-api-key service-key service-secret service-token
+x-api-key service-key service-secret service-token
 account pool provider client server endpoint host hostname port proxy localhost access expired version
 http https get post put patch delete head options connect accept content type length
 redirect moved bad internal service gateway unprocessable conflict locked
