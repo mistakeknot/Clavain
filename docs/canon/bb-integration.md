@@ -44,17 +44,30 @@ lease coupling remains unavailable until an existing admission supplies a lease.
 
 ## Transports and identities
 
-`--via bb` is an explicit execution transport for `routine-execution` and
-`deep-execution` only. It retains the resolved backend, model and effort, maps
-service tier `standard` to BB `default`, and creates an isolated worktree from
-the exact source commit. Dirty source changes are not silently omitted: the
-adapter refuses a dirty checkout. Project resolution follows `-C`, not an
-unrelated ambient project. No routing profiles change.
+`--via bb` is an explicit transport for `plan-review`, `validation`,
+`routine-execution`, and `deep-execution`. A role-to-sandbox allowlist is
+enforced by both dispatch and the seat adapter: review roles permit only
+`read-only`, while execution roles retain `workspace-write` and
+`danger-full-access`. Dispatch defaults review roles to `read-only` and rejects
+an explicit writable sandbox before spawning a child. Unknown roles are also
+rejected before spawn. The transport retains the resolved backend, model and
+effort, maps service tier `standard` to BB `default`, and creates an isolated
+worktree from the exact source commit. Dirty source changes are not silently
+omitted: the adapter refuses a dirty checkout. Project resolution follows `-C`,
+not an unrelated ambient project. No routing profiles change.
 
-BB `auto` is writable. Plan review, validation, cross-lab review and every
-other read-only role cannot use BB seats until BB offers enforced read-only
-access to an immutable snapshot. Direct Claude's tool restrictions and mutation
-snapshot are application controls, not OS read-only enforcement.
+BB review seats use provider-native plan mode (`bb thread spawn --plan`) with
+BB permission mode `auto`; execution seats keep the existing writable `auto`
+launch unchanged. The version 2 seat journal and receipt record both `role` and
+the requested `sandbox`. Because the installed BB event schema does not attest
+the effective provider permission mode, the adapter leaves
+`effective_permission_mode` unknown rather than copying the request. It also
+checks the isolated child worktree at termination: any tracked, committed, or
+untracked review-seat mutation changes the outcome to `sandbox-violation` and
+blocks acceptance. Token-usage events are reduced to an explicit numeric field
+allowlist before they enter the journal or receipt; arbitrary event payload
+fields are never retained. Cross-lab review and every role absent from the
+allowlist remain unsupported.
 
 Inside enrolled BB, next-goal helpers use `CLAUDE_SESSION_ID` when present,
 otherwise `BB_THREAD_ID`. The Stop receipt consumer uses the same fallback.
@@ -173,7 +186,7 @@ Tests named below are evidence contracts, not claims that an unrun cell passes.
 | Execution / direct-pooled | Same local sandbox as unpooled (`direct` + spike; execution live canary outstanding) | `transport=direct-pooled`, account unknown (spike) | Same direct limitation; no pool cancellation canary | Exact hub-session tie proved by spike; no supported request account API | Account before model (`roles`); forced live exhaustion not run |
 | Read-only / direct-pooled | Same read-only boundary; scratch plan-review canary passed (spike) | Same role audit, no inferred account | Same direct limitation | Codex raw usage retained (spike); Claude hub canary outstanding | Same budget gate (`test_claude_usage.py`) |
 | Execution / bb-seat | Writable `auto`, exact commit worktree (`BB.test_spawn_contract`) | Thread/turn, observed fields or unknown, prompt/artifact hashes (`BB.test_completion`) | Stop and confirmation; orphan recovery (`BB.test_timeout`, `BB.test_orphan`) | Only turn event evidence; unknown blocks required accounting (`BB.test_unknown_evidence`) | Terminal uncertainty never retries (`BB.test_unclear_spawn`) |
-| Read-only / bb-seat | Unsupported; rejected before spawn (`BB.test_read_only_refused`) | No seat receipt may claim read-only execution | Not applicable: no seat starts | Not applicable: no invocation | Never falls into a writable seat (`BB.test_read_only_refused`) |
+| Read-only / bb-seat | Review roles require `read-only`, spawn with provider plan mode, and fail on worktree mutation (`BB.test_review_roles_accept_only_read_only_and_record_receipt`, `BB.test_read_only_review_mutation_is_a_terminal_seat_failure`) | Version 2 receipt records role and sandbox; effective permission remains observed-or-unknown | Same stop/archive path as execution seats | Only turn event evidence; unknown still blocks required accounting | Writable review requests and unknown roles stop before spawn (`BB.test_review_roles_reject_writable_sandboxes_before_bb`, `BB.test_unknown_role_rejected_before_bb`) |
 
 ## Startup and acceptance
 
@@ -190,7 +203,8 @@ The routing instruction is retained too. Personal hooks resolve the managed
 the `no_beads_directory` JSON error, while unknown workspace errors fail open.
 
 Seat results are exported before archive, including failures that have reached
-confirmed termination. An export or stop failure retains the seat for recovery.
+confirmed termination. Review-seat export also provides the mutation
+postcondition described above. An export or stop failure retains the seat for recovery.
 The adapter must report missing model/effort/permission evidence rather than
 copying requested settings into observed fields. The scratch seat completed,
 exported and archived, but the installed BB schema supplies no model/effort/

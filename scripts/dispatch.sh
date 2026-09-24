@@ -56,11 +56,35 @@ IMAGES=()
 EXTRA_ARGS=()
 PHASE=""
 CONTEXT_GATEWAY_MODE="${CLAVAIN_CONTEXT_GATEWAY_MODE:-auto}"
+BB_ROLE_SANDBOX_ALLOWLIST=(
+  "plan-review:read-only"
+  "validation:read-only"
+  "routine-execution:workspace-write"
+  "routine-execution:danger-full-access"
+  "deep-execution:workspace-write"
+  "deep-execution:danger-full-access"
+)
 DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${DISPATCH_SESSION_ID:-${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
 source "${DISPATCH_SCRIPT_DIR}/lib-dispatch-audit.sh"
 source "${DISPATCH_SCRIPT_DIR}/lib-bb.sh"
+
+_bb_role_sandbox_allowed() {
+  local role="$1" sandbox="$2" entry
+  for entry in "${BB_ROLE_SANDBOX_ALLOWLIST[@]}"; do
+    [[ "$entry" == "$role:$sandbox" ]] && return 0
+  done
+  return 1
+}
+
+_bb_role_supported() {
+  local role="$1" entry
+  for entry in "${BB_ROLE_SANDBOX_ALLOWLIST[@]}"; do
+    [[ "${entry%%:*}" == "$role" ]] && return 0
+  done
+  return 1
+}
 
 # Source routing library (shared with model-routing command)
 # shellcheck source=lib-routing.sh
@@ -171,7 +195,7 @@ Options:
                                           CLAVAIN_FLERE_BIN, CLAVAIN_FLERE_PROFILE,
                                           provider/model and Intercore attempt identity
   --timeout <SECONDS>            Positive Flere or BB worker deadline (default: 120)
-  --via bb                      Governed writable execution seat in an enrolled BB
+  --via bb                      Governed role seat in an enrolled BB
                                   host; requires a clean source checkout and -o.
                                   Missing observed identity keeps the result unaccepted.
   --via zaka                    Spawn a steerable tmux session via zaka instead of a
@@ -1527,9 +1551,21 @@ fi
 
 # Build backend command
 if [[ "$VIA" == bb ]]; then
-  if [[ "$ROLE_RESOLVED" != true || "$SANDBOX" == read-only || -z "$OUTPUT" ]] ||
-     [[ "$ROLE" != routine-execution && "$ROLE" != deep-execution ]]; then
-    echo 'Error: BB seats require a governed writable execution role and an output path' >&2
+  if [[ "$ROLE_RESOLVED" != true || -z "$OUTPUT" ]]; then
+    echo 'Error: BB seats require a governed role and an output path' >&2
+    _dispatch_write_failure_class terminal_configuration
+    exit 1
+  fi
+  if ! _bb_role_supported "$ROLE"; then
+    echo "Error: unsupported BB seat role '$ROLE'" >&2
+    _dispatch_write_failure_class terminal_configuration
+    exit 1
+  fi
+  if [[ "$SANDBOX_SET" != true ]] && _bb_role_sandbox_allowed "$ROLE" read-only; then
+    SANDBOX=read-only
+  fi
+  if ! _bb_role_sandbox_allowed "$ROLE" "$SANDBOX"; then
+    echo "Error: sandbox '$SANDBOX' is not permitted for BB role '$ROLE'" >&2
     _dispatch_write_failure_class terminal_configuration
     exit 1
   fi

@@ -20,6 +20,49 @@ class SeatError(Exception):
     pass
 
 
+ROLE_SANDBOX_ALLOWLIST = {
+    'plan-review': frozenset({'read-only'}),
+    'validation': frozenset({'read-only'}),
+    'routine-execution': frozenset({'workspace-write', 'danger-full-access'}),
+    'deep-execution': frozenset({'workspace-write', 'danger-full-access'}),
+}
+USAGE_COUNT_FIELDS = (
+    'totalTokens', 'inputTokens', 'cachedInputTokens', 'cacheReadInputTokens',
+    'cacheWriteInputTokens', 'cacheCreationInputTokens', 'outputTokens',
+    'reasoningOutputTokens', 'thinkingTokens',
+)
+
+
+def allowlisted_usage(data):
+    raw=data.get('tokenUsage')
+    if not isinstance(raw,dict):
+        return 'unknown'
+
+    def counts(value):
+        if not isinstance(value,dict):
+            return None
+        selected={key:value[key] for key in USAGE_COUNT_FIELDS
+                  if key in value and isinstance(value[key],(int,float))
+                  and not isinstance(value[key],bool) and math.isfinite(value[key])
+                  and value[key]>=0}
+        return selected or None
+
+    # Current BB events nest cumulative and last-turn counts. Retain only the
+    # documented numeric usage fields; never persist arbitrary event payload.
+    if 'total' in raw or 'last' in raw:
+        selected={key:value for key in ('total','last')
+                  if (value:=counts(raw.get(key))) is not None}
+        if not selected:
+            return 'unknown'
+        window=raw.get('modelContextWindow')
+        if 'modelContextWindow' in raw and (window is None or
+           (isinstance(window,(int,float)) and not isinstance(window,bool)
+            and math.isfinite(window) and window>=0)):
+            selected['modelContextWindow']=window
+        return selected
+    return counts(raw) or 'unknown'
+
+
 def atomic(path, value):
     path=Path(path); temporary=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp')
     with temporary.open('x') as stream:
@@ -92,7 +135,8 @@ def stop_export_archive(row):
         raise SeatError('BB environment does not descend from the pinned commit')
     output=Path(row['output'])
     patch=Path(str(output)+'.'+row['attempt_id']+'.patch')
-    patch.write_text(command(['git','-C',str(work),'diff','--binary',row['source_commit']]))
+    patch_text=command(['git','-C',str(work),'diff','--binary',row['source_commit']])
+    patch.write_text(patch_text)
     extras=Path(str(output)+'.'+row['attempt_id']+'.untracked.tar')
     names=command(['git','-C',str(work),'ls-files','--others','--exclude-standard','-z']).split('\0')
     with tarfile.open(extras,'w') as archive:
@@ -103,6 +147,8 @@ def stop_export_archive(row):
     row['artifacts']={'patch':artifact(patch),'untracked':artifact(extras)}
     row['branch']=git(work,'rev-parse','--abbrev-ref','HEAD')
     row['checkout_after']=git(work,'rev-parse','HEAD')
+    if row.get('sandbox')=='read-only' and (patch_text or any(filter(None,names))):
+        row['outcome']='sandbox-violation'
     row['cleanup']='exported'
     # Durably record exported hashes before allowing archive to retire the tree.
     persist(Path(row['journal']),row)
@@ -147,8 +193,12 @@ def resolve_project(work,host):
 
 
 def supervise(args):
-    if args.role not in ('routine-execution','deep-execution') or args.sandbox=='read-only':
-        raise SeatError('BB seats support writable execution roles only')
+    permitted=ROLE_SANDBOX_ALLOWLIST.get(args.role)
+    if permitted is None:
+        raise SeatError(f'unsupported role {args.role!r}')
+    if args.sandbox not in permitted:
+        raise SeatError(f'sandbox {args.sandbox!r} is not permitted for BB role {args.role!r}')
+    read_only=args.sandbox=='read-only'
     route=json.loads(args.resolved_route_json)
     if not isinstance(route,dict):
         raise SeatError('Resolved route must be an object')
@@ -181,7 +231,8 @@ def supervise(args):
     journal=directory/(key+'.json')
     if journal.exists(): raise SeatError('Attempt already exists; never spawn it twice')
     output=Path(args.output).resolve();output.parent.mkdir(parents=True,exist_ok=True)
-    row={'schema_version':2,'transport':'bb','role':args.role,'attempt_id':args.attempt_id,
+    row={'schema_version':2,'transport':'bb','role':args.role,'sandbox':args.sandbox,
+         'attempt_id':args.attempt_id,
          'dispatch_id':args.dispatch_id,'bead_id':os.environ.get('CLAVAIN_BEAD_ID',''),
          'run_id':os.environ.get('CLAVAIN_RUN_ID',''),'parent_thread_id':parent,
          'bb_thread_id':'unknown','turn_id':'unknown','request_id':'unknown','after_seq':0,
@@ -215,11 +266,14 @@ def supervise(args):
                 atomic(journal,row)
                 raise
             spawn_started=True
-            spawned=bb('thread','spawn','--project',project,'--parent-thread',parent,
-                       '--lifecycle-owner-thread',parent,'--new-environment','worktree',
-                       '--base-branch',row['source_commit'],'--provider',provider,'--model',args.model,
-                       '--reasoning-level',args.effort,'--service-tier',tier,'--permission-mode','auto',
-                       '--title','Clavain seat '+args.attempt_id,'--prompt-file','-',prompt=prompt)
+            spawn_args=['thread','spawn','--project',project,'--parent-thread',parent,
+                        '--lifecycle-owner-thread',parent,'--new-environment','worktree',
+                        '--base-branch',row['source_commit'],'--provider',provider,'--model',args.model,
+                        '--reasoning-level',args.effort,'--service-tier',tier,'--permission-mode','auto']
+            if read_only:
+                spawn_args.append('--plan')
+            spawn_args+=['--title','Clavain seat '+args.attempt_id,'--prompt-file','-']
+            spawned=bb(*spawn_args,prompt=prompt)
             identity=spawned.get('id')
             if not isinstance(identity,str) or not identity.startswith('thr_'):
                 raise SeatError('Unclear spawn response')
@@ -248,8 +302,9 @@ def supervise(args):
                     # Installed BB has no turn event attesting model, effort or
                     # effective permission. Requested settings are not evidence.
                     if kind=='thread/tokenUsage/updated':
-                        row['usage']=data.get('tokenUsage','unknown')
-                    if kind=='item/agentMessage/delta': answer+=data.get('delta','')
+                        row['usage']=allowlisted_usage(data)
+                    if kind=='item/agentMessage/delta' or (read_only and kind=='item/plan/delta'):
+                        answer+=data.get('delta','')
                     if kind in ('system/interaction/lifecycle','system/userQuestion/lifecycle'):
                         row['outcome']='waiting'
                     if kind=='provider/modelFallback':

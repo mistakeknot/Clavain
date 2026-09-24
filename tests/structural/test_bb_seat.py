@@ -33,9 +33,10 @@ if a[:1]==['status']: value={'thread':{'id':'thr_parent','environment':{'hostId'
 elif a[:2]==['pool','status']: value={'accounts':[{'id':'fixture-'+p,'provider':p,'enabled':True,'sevenDayUtilization':v,'fiveHourUtilization':.1} for p,v in [('codex',.8),('claude',.2)]]}
 elif a[:2]==['project','list']: value=[{'id':'proj_fixture','sources':[{'hostId':'host_pda34naxgq','path':str(root/'work')}]}]
 elif a[:2]==['provider','list']: value=[{'id':p,'available':True,'capabilities':{'permissionModes':['auto']},'serviceTiers':[{'id':'default'}]} for p in ('codex','claude-code')]
-elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e}]} for m,e in [('gpt-6-astra','xhigh'),('claude-sonnet-5','high')]]
+elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e}]} for m,e in [('gpt-6-astra','xhigh'),('claude-sonnet-5','high'),('claude-fable-5-1','high'),('claude-opus-5','high')]]
 elif a[:2]==['thread','spawn']:
  sys.stdin.read()
+ if '--plan' in a: (root/'plan-mode').touch()
  if mode!='unclear': (root/'accepted').touch()
  if mode.startswith('unclear'): print('not-json'); sys.exit(0)
  value={'id':'thr_child','environmentId':'env_child'}
@@ -46,13 +47,15 @@ elif a[:2]==['thread','list']:
 elif a[:2]==['thread','show']:
  value={'thread':{'id':'thr_child','status':'idle' if (root/'stopped').exists() or mode not in ('timeout','waiting') else 'active','environmentId':'env_child'},'environment':{'path':str(root/'child')}}
 elif a[:2]==['thread','log']:
+ if mode=='mutated': (root/'child'/'unexpected.txt').write_text('review mutation')
  def ev(seq,kind,data): return {'seq':seq,'type':kind,'scope':{'kind':'turn','turnId':'turn_one'},'data':data}
  value=[ev(1,'client/turn/requested',{'requestId':'request_one'}),ev(2,'turn/started',{}),ev(3,'turn/input/accepted',{'clientRequestId':'request_one'})]
- if mode!='unknown': value.append(ev(4,'thread/tokenUsage/updated',{'tokenUsage':{'inputTokens':10,'outputTokens':2}}))
+ if mode!='unknown': value.append(ev(4,'thread/tokenUsage/updated',{'tokenUsage':{'inputTokens':10,'outputTokens':2,'sensitiveField':'must-not-persist'}}))
  if mode=='provider-retry': value.append(ev(5,'provider/error',{'willRetry':True}))
  if mode=='model-changed': value.append(ev(5,'provider/modelFallback',{}))
  if mode not in ('timeout','waiting'):
-  value += [ev(5,'item/agentMessage/delta',{'delta':'VERDICT: CLEAN'}),ev(6,'turn/completed',{'status':mode if mode in ('failed','interrupted') else 'completed'})]
+  message_kind='item/plan/delta' if (root/'plan-mode').exists() else 'item/agentMessage/delta'
+  value += [ev(5,message_kind,{'delta':'VERDICT: CLEAN'}),ev(6,'turn/completed',{'status':mode if mode in ('failed','interrupted') else 'completed'})]
  elif mode=='waiting': value.append(ev(5,'system/interaction/lifecycle',{}))
  after=int(a[a.index('--after-seq')+1]); value=[v for v in value if v['seq']>after]
  if os.environ.get('BB_TEST_EVENTS_FILE'):
@@ -79,18 +82,29 @@ print(json.dumps(value))
     env=dict(os.environ,BB_CLI=str(cli),BB_THREAD_ID='thr_parent',BB_SERVER_URL='https://bb.example',
              FIXTURE=str(tmp_path),CLAVAIN_INTERCORE_DB=str(database),CLAVAIN_BB_STATE_DIR=str(tmp_path/'state'),CLAVAIN_REQUIRE_USAGE='0')
     def run(mode='completed',role='deep-execution',attempt='attempt_one',extra_env=None,
-            backend='codex',model='gpt-6-astra',effort='xhigh',extra_args=(),via_dispatch=False):
+            backend='codex',model='gpt-6-astra',effort='xhigh',extra_args=(),via_dispatch=False,
+            sandbox=None):
         if via_dispatch:
             context=tmp_path/'decision.json'
             context.write_text(json.dumps({'reasons':[], 'rationale':'fixture'}))
-            return subprocess.run(['bash',str(ROOT/'scripts/dispatch.sh'),'--role','routine-execution',
-                '--via','bb','--context-file',str(context),'-C',str(work),'-o',str(tmp_path/'result'),'fixture'],
+            command=['bash',str(ROOT/'scripts/dispatch.sh'),'--role',role,
+                '--via','bb','--context-file',str(context),'-C',str(work),'-o',str(tmp_path/'result')]
+            if role in ('plan-review','validation'):
+                command += ['--producer-identity','gpt-6-astra']
+            if sandbox is not None:
+                command += ['--sandbox',sandbox]
+            command += ['fixture']
+            return subprocess.run(command,
                 text=True,capture_output=True,env=env | {'CLAVAIN_CONTEXT_GATEWAY_MODE':'off',
                     'CLAVAIN_BB_DIRECT_POOL':'1','CLAVAIN_POOL_HEADROOM':'1'},timeout=15)
-        return subprocess.run(['python3',str(ROOT/'scripts/bb-seat.py'),'--role',role,'--backend',backend,
+        command=['python3',str(ROOT/'scripts/bb-seat.py'),'--role',role,'--backend',backend,
                  '--model',model,'--effort',effort,'--service-tier','standard','--workdir',str(work),
                  '--output',str(tmp_path/'result'), '--attempt-id',attempt,'--dispatch-id','dispatch_one',
-                 '--timeout','0.6',*extra_args],input='Scratch fixture',text=True,capture_output=True,env=env | {'MODE':mode} | (extra_env or {}),timeout=15)
+                 '--timeout','0.6']
+        if sandbox is not None:
+            command += ['--sandbox',sandbox]
+        command += list(extra_args)
+        return subprocess.run(command,input='Scratch fixture',text=True,capture_output=True,env=env | {'MODE':mode} | (extra_env or {}),timeout=15)
     return tmp_path,run
 
 
@@ -101,6 +115,7 @@ def test_spawn_contract(seat):
     assert spawn[spawn.index('--project')+1]=='proj_fixture'
     assert spawn[spawn.index('--service-tier')+1]=='default'
     assert spawn[spawn.index('--permission-mode')+1]=='auto'
+    assert '--plan' not in spawn
     assert len(spawn[spawn.index('--base-branch')+1])==40
 
 
@@ -129,7 +144,7 @@ def test_headroom_resolved_claude_seat(seat):
 @pytest.mark.requires_ic
 def test_dispatch_carries_headroom_route_to_bb_journal(seat):
     root,run=seat
-    p=run(via_dispatch=True)
+    p=run(role='routine-execution',via_dispatch=True)
     assert p.returncode==1,p.stderr  # Unknown observed identity still blocks acceptance.
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['requested_provider']=='claude-code'
@@ -146,6 +161,7 @@ def test_completion(seat):
     assert r['bb_thread_id']=='thr_child' and r['turn_id']=='turn_one'
     assert r['actual_model']=='unknown' and r['actual_effort']=='unknown'
     assert r['outcome']=='completed' and r['accepted'] is False
+    assert r['usage']=={'inputTokens':10,'outputTokens':2}
     assert r['cleanup']=='archived' and r['artifacts']['patch']['sha256']
 
 
@@ -162,8 +178,84 @@ def test_unknown_evidence(seat):
     r=json.loads((root/'result.receipt.json').read_text()); assert r['actual_model']=='unknown'
 
 
-def test_read_only_refused(seat):
-    root,run=seat; assert run(role='plan-review').returncode!=0
+@pytest.mark.parametrize('role', ['plan-review','validation'])
+def test_review_roles_accept_only_read_only_and_record_receipt(seat,role):
+    root,run=seat
+    result=run(role=role,sandbox='read-only')
+    assert result.returncode==1,result.stderr  # Missing observed identity still blocks acceptance.
+    calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
+    spawn=next(call for call in calls if call[:2]==['thread','spawn'])
+    assert '--plan' in spawn
+    assert spawn[spawn.index('--permission-mode')+1]=='auto'
+    receipt=json.loads((root/'result.receipt.json').read_text())
+    assert receipt['schema_version']==2
+    assert receipt['role']==role
+    assert receipt['sandbox']=='read-only'
+    assert (root/'result').read_text()=='VERDICT: CLEAN'
+
+
+def test_read_only_review_mutation_is_a_terminal_seat_failure(seat):
+    root,run=seat
+    result=run(mode='mutated',role='plan-review',sandbox='read-only')
+    assert result.returncode!=0
+    receipt=json.loads((root/'result.receipt.json').read_text())
+    assert receipt['outcome']=='sandbox-violation'
+    assert receipt['accepted'] is False
+    assert receipt['artifacts']['patch']['sha256']
+
+
+@pytest.mark.parametrize('role', ['plan-review','validation'])
+@pytest.mark.parametrize('sandbox', ['workspace-write','danger-full-access'])
+def test_review_roles_reject_writable_sandboxes_before_bb(seat,role,sandbox):
+    root,run=seat
+    result=run(role=role,sandbox=sandbox)
+    assert result.returncode!=0
+    assert 'not permitted' in result.stderr
+    assert not (root/'calls').exists()
+
+
+def test_unknown_role_rejected_before_bb(seat):
+    root,run=seat
+    result=run(role='cross-lab-review',sandbox='read-only')
+    assert result.returncode!=0
+    assert 'unsupported role' in result.stderr
+    assert not (root/'calls').exists()
+
+
+@pytest.mark.parametrize('role', ['routine-execution','deep-execution'])
+@pytest.mark.parametrize('sandbox', ['workspace-write','danger-full-access'])
+def test_execution_roles_keep_writable_auto_mode(seat,role,sandbox):
+    root,run=seat
+    result=run(role=role,sandbox=sandbox)
+    assert result.returncode==1,result.stderr  # Missing observed identity still blocks acceptance.
+    calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
+    spawn=next(call for call in calls if call[:2]==['thread','spawn'])
+    assert '--plan' not in spawn
+    assert spawn[spawn.index('--permission-mode')+1]=='auto'
+    receipt=json.loads((root/'result.receipt.json').read_text())
+    assert receipt['role']==role
+    assert receipt['sandbox']==sandbox
+
+
+@pytest.mark.requires_ic
+def test_dispatch_plan_review_defaults_read_only_through_helper(seat):
+    root,run=seat
+    result=run(role='plan-review',via_dispatch=True)
+    assert result.returncode==1,result.stderr  # Missing observed identity still blocks acceptance.
+    receipt=json.loads((root/'result.receipt.json').read_text())
+    assert receipt['role']=='plan-review'
+    assert receipt['sandbox']=='read-only'
+    calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
+    spawn=next(call for call in calls if call[:2]==['thread','spawn'])
+    assert '--plan' in spawn
+
+
+@pytest.mark.requires_ic
+def test_dispatch_plan_review_rejects_explicit_writable_sandbox(seat):
+    root,run=seat
+    result=run(role='plan-review',via_dispatch=True,sandbox='workspace-write')
+    assert result.returncode!=0
+    assert 'not permitted' in result.stderr
     assert not (root/'calls').exists()
 
 
