@@ -1,11 +1,13 @@
 """Seat transport tests use a fake BB CLI and real Git/Intercore state."""
 import itertools
+import importlib.util
 import json
 import os
 from pathlib import Path
 import subprocess
 import shutil
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
@@ -88,20 +90,21 @@ print(json.dumps(value))
              FIXTURE=str(tmp_path),CLAVAIN_INTERCORE_DB=str(database),CLAVAIN_BB_STATE_DIR=str(tmp_path/'state'),CLAVAIN_REQUIRE_USAGE='0')
     def run(mode='completed',role='deep-execution',attempt='attempt_one',extra_env=None,
             backend='codex',model='gpt-6-astra',effort='xhigh',extra_args=(),via_dispatch=False,
-            sandbox=None):
+            sandbox=None,producer_identity='gpt-6-astra'):
         if via_dispatch:
             context=tmp_path/'decision.json'
             context.write_text(json.dumps({'reasons':[], 'rationale':'fixture'}))
             command=['bash',str(ROOT/'scripts/dispatch.sh'),'--role',role,
                 '--via','bb','--context-file',str(context),'-C',str(work),'-o',str(tmp_path/'result')]
             if role in ('plan-review','validation'):
-                command += ['--producer-identity','gpt-6-astra']
+                command += ['--producer-identity',producer_identity]
             if sandbox is not None:
                 command += ['--sandbox',sandbox]
+            command += list(extra_args)
             command += ['fixture']
             return subprocess.run(command,
                 text=True,capture_output=True,env=env | {'CLAVAIN_CONTEXT_GATEWAY_MODE':'off',
-                    'CLAVAIN_BB_DIRECT_POOL':'1','CLAVAIN_POOL_HEADROOM':'1'},timeout=15)
+                    'CLAVAIN_BB_DIRECT_POOL':'1','CLAVAIN_POOL_HEADROOM':'1'} | (extra_env or {}),timeout=15)
         command=['python3',str(ROOT/'scripts/bb-seat.py'),'--role',role,'--backend',backend,
                  '--model',model,'--effort',effort,'--service-tier','standard','--workdir',str(work),
                  '--output',str(tmp_path/'result'), '--attempt-id',attempt,'--dispatch-id','dispatch_one',
@@ -168,6 +171,19 @@ def test_completion(seat):
     assert r['outcome']=='completed' and r['accepted'] is False
     assert r['usage']=={'inputTokens':10,'outputTokens':2}
     assert r['cleanup']=='archived' and r['artifacts']['patch']['sha256']
+
+
+def test_read_only_completion_rejects_writable_permission_attestation():
+    spec=importlib.util.spec_from_file_location('bb_seat_completion',ROOT/'scripts/bb-seat.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    args=SimpleNamespace(model='claude-fable-5-1',effort='high')
+    receipt={'outcome':'completed','cleanup':'archived','actual_model':args.model,
+             'actual_effort':args.effort,'effective_permission_mode':'auto'}
+    assert module.completion_evidence_matches(receipt,args,read_only=True) is False
+    receipt['effective_permission_mode']='plan'
+    assert module.completion_evidence_matches(receipt,args,read_only=True) is True
+    receipt['effective_permission_mode']='auto'
+    assert module.completion_evidence_matches(receipt,args,read_only=False) is True
 
 
 @pytest.mark.parametrize('mode',['timeout','waiting','failed','interrupted','provider-retry','model-changed'])
@@ -247,10 +263,52 @@ def test_recovery_preserves_review_sandbox_violation(seat):
 
 def test_codex_review_rejected_without_enforced_read_only_bb_permission(seat):
     root,run=seat
-    result=run(role='plan-review',sandbox='read-only')
+    failure=root/'failure-class'
+    result=run(role='plan-review',sandbox='read-only',
+               extra_env={'CLAVAIN_DISPATCH_FAILURE_FILE':str(failure)})
     assert result.returncode!=0
     assert 'cannot enforce read-only' in result.stderr
+    assert failure.read_text().strip()=='unsupported_adapter'
     assert not (root/'calls').exists()
+
+
+def astra_first_review_policy(root):
+    policy=(ROOT/'config/routing.yaml').read_text()
+    policy=policy.replace('    plan-review: review-fable\n','    plan-review: review-astra\n',1)
+    policy=policy.replace('      description: Cross-lab reviewer for Claude-authored plans\n',
+                          '      fallbacks: [review-opus]\n'
+                          '      description: Cross-lab reviewer for Claude-authored plans\n',1)
+    path=root/'astra-first-routing.yaml';path.write_text(policy)
+    return path
+
+
+@pytest.mark.requires_ic
+def test_dispatch_astra_first_review_falls_back_to_read_only_claude_seat(seat):
+    root,run=seat
+    policy=astra_first_review_policy(root)
+    result=run(role='plan-review',via_dispatch=True,producer_identity='gpt-5',
+               extra_env={'CLAVAIN_ROUTING_POLICY':str(policy)})
+    assert result.returncode==1,result.stderr  # Fallback ran; observed identity remains unknown.
+    assert "review-astra' unavailable (unsupported_adapter)" in result.stderr
+    receipt=json.loads((root/'result.receipt.json').read_text())
+    assert receipt['resolved_profile_ref']=='review-opus'
+    assert receipt['requested_provider']=='claude-code'
+    calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
+    assert sum(call[:2]==['thread','spawn'] for call in calls)==1
+
+
+@pytest.mark.requires_ic
+def test_dispatch_dry_run_applies_backend_check_and_reports_read_only_fallback(seat):
+    root,run=seat
+    policy=astra_first_review_policy(root)
+    result=run(role='plan-review',via_dispatch=True,producer_identity='gpt-5',
+               extra_env={'CLAVAIN_ROUTING_POLICY':str(policy)},extra_args=['--dry-run'])
+    assert result.returncode==0,result.stderr
+    assert "review-astra' unavailable (unsupported_adapter)" in result.stderr
+    assert 'backend=claude' in result.stdout
+    assert 'backend=codex' not in result.stdout
+    calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
+    assert not any(call[:2]==['thread','spawn'] for call in calls)
 
 
 @pytest.mark.parametrize('role', ['plan-review','validation'])

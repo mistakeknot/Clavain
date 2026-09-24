@@ -20,6 +20,10 @@ class SeatError(Exception):
     pass
 
 
+class UnsupportedAdapter(SeatError):
+    pass
+
+
 ROLE_SANDBOX_ALLOWLIST = {
     'plan-review': frozenset({'read-only'}),
     'validation': frozenset({'read-only'}),
@@ -62,6 +66,19 @@ def allowlisted_usage(data):
             selected['modelContextWindow']=window
         return selected
     return counts(raw) or 'unknown'
+
+
+def write_failure_class(value):
+    path=os.environ.get('CLAVAIN_DISPATCH_FAILURE_FILE')
+    if path:
+        Path(path).write_text(value+'\n')
+
+
+def completion_evidence_matches(row,args,read_only):
+    expected_permission='plan' if read_only else 'auto'
+    return (row['outcome']=='completed' and row['cleanup']=='archived' and
+            row['actual_model']==args.model and row['actual_effort']==args.effort and
+            row['effective_permission_mode']==expected_permission)
 
 
 def atomic(path, value):
@@ -204,7 +221,7 @@ def supervise(args):
         raise SeatError(f'sandbox {args.sandbox!r} is not permitted for BB role {args.role!r}')
     read_only=args.sandbox=='read-only'
     if read_only and args.backend not in READ_ONLY_BACKENDS:
-        raise SeatError(f'BB backend {args.backend!r} cannot enforce read-only review permissions')
+        raise UnsupportedAdapter(f'BB backend {args.backend!r} cannot enforce read-only review permissions')
     route=json.loads(args.resolved_route_json)
     if not isinstance(route,dict):
         raise SeatError('Resolved route must be an object')
@@ -359,9 +376,7 @@ def supervise(args):
                     row.update(state='terminal',cleanup='not-started')
             except (SeatError,OSError,ValueError,KeyError,TypeError,AttributeError,subprocess.SubprocessError) as error:
                 row['cleanup_error']=str(error)
-            complete=(row['outcome']=='completed' and row['cleanup']=='archived' and
-                      row['actual_model']==args.model and row['actual_effort']==args.effort and
-                      row['effective_permission_mode']=='auto')
+            complete=completion_evidence_matches(row,args,read_only)
             if os.environ.get('CLAVAIN_REQUIRE_USAGE')=='1' and (row['usage']=='unknown' or row['account']=='unknown'):
                 complete=False
             row['accepted']=False  # independent validation is always separate
@@ -387,6 +402,9 @@ def main():
     if not math.isfinite(args.timeout) or args.timeout<=0:
         parser.error('--timeout must be positive and finite')
     try: return supervise(args)
+    except UnsupportedAdapter as error:
+        write_failure_class('unsupported_adapter')
+        print('BB seat: '+str(error),file=sys.stderr);return 1
     except (SeatError,OSError,ValueError,KeyError,TypeError,AttributeError,subprocess.SubprocessError) as error:
         print('BB seat: '+str(error),file=sys.stderr);return 1
 

@@ -60,27 +60,34 @@ unrelated ambient project. No routing profiles change.
 
 On the installed BB release, Claude review seats use `bb thread spawn --plan`,
 which selects Claude Code's plan permission mode; execution seats keep the
-existing writable `auto` launch unchanged. BB's Codex provider currently maps
+existing writable `auto` launch unchanged. Plan mode is a provider-harness
+control, not an operating-system read-only sandbox. In particular, there is a
+plan-approval race: if a human approves the plan in the BB UI before the seat
+supervisor stops the child, the provider can switch to writable `auto` mode.
+The completion predicate therefore requires an effective `plan` attestation for
+review seats and `auto` for execution seats. BB's Codex provider currently maps
 every exposed permission mode to a writable sandbox, and its `--plan` flag
-changes the prompt action without changing that sandbox. The adapter therefore
-rejects read-only Codex BB seats instead of treating plan prompting or a clean
-postcondition as permission enforcement. This includes an Astra fallback for a
-review role: it must use a transport with an enforced read-only sandbox rather
-than silently entering a writable BB seat.
+changes the prompt action without changing that sandbox. Both live and dry-run
+dispatch reject a read-only Codex BB candidate as `unsupported_adapter`, which
+allows only a declared read-only-capable fallback to continue instead of
+silently entering a writable BB seat.
 
 The version 2 seat journal and receipt record both `role` and the requested
 `sandbox`. Because the installed BB event schema does not attest the effective
 provider permission mode, the adapter leaves
 `effective_permission_mode` unknown rather than copying the request. It also
-checks the isolated child worktree at termination: a changed commit identity or
-any tracked or untracked review-seat mutation changes the outcome to
-`sandbox-violation` and blocks acceptance, including during recovery. Plan
-deltas, completed plan items, and pending plan approvals are folded by item ID
-so a terminal plan can replace its partial delta without losing the review
-output. Token-usage events are reduced to an explicit numeric field allowlist
-before they enter the journal or receipt; arbitrary event payload fields are
-never retained. Cross-lab review and every role absent from the allowlist remain
-unsupported.
+checks the isolated child worktree as a termination postcondition: `HEAD` must
+still match the source commit, the tracked diff from that commit must be empty,
+and there must be no nonignored untracked files. A failure changes the outcome
+to `sandbox-violation` and blocks acceptance, including during recovery. This is
+defence in depth, not sandbox enforcement: it cannot see writes to ignored
+paths, shared-repository refs or tags, shared `.git/config`, or paths outside the
+child worktree. Plan deltas, completed plan items, and pending plan approvals
+are folded by item ID so a terminal plan can replace its partial delta without
+losing the review output. Token-usage events are reduced to an explicit numeric
+field allowlist before they enter the journal or receipt; arbitrary event
+payload fields are never retained. Cross-lab review and every role absent from
+the allowlist remain unsupported.
 
 Inside enrolled BB, next-goal helpers use `CLAUDE_SESSION_ID` when present,
 otherwise `BB_THREAD_ID`. The Stop receipt consumer uses the same fallback.

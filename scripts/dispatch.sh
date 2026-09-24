@@ -64,6 +64,7 @@ BB_ROLE_SANDBOX_ALLOWLIST=(
   "deep-execution:workspace-write"
   "deep-execution:danger-full-access"
 )
+BB_READ_ONLY_BACKENDS=("claude")
 DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
 DISPATCH_SESSION_ID="${DISPATCH_SESSION_ID:-${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-}}}"
@@ -82,6 +83,14 @@ _bb_role_supported() {
   local role="$1" entry
   for entry in "${BB_ROLE_SANDBOX_ALLOWLIST[@]}"; do
     [[ "${entry%%:*}" == "$role" ]] && return 0
+  done
+  return 1
+}
+
+_bb_read_only_backend_supported() {
+  local backend="$1" allowed
+  for allowed in "${BB_READ_ONLY_BACKENDS[@]}"; do
+    [[ "$allowed" == "$backend" ]] && return 0
   done
   return 1
 }
@@ -1567,6 +1576,11 @@ if [[ "$VIA" == bb ]]; then
   if ! _bb_role_sandbox_allowed "$ROLE" "$SANDBOX"; then
     echo "Error: sandbox '$SANDBOX' is not permitted for BB role '$ROLE'" >&2
     _dispatch_write_failure_class terminal_configuration
+    exit 1
+  fi
+  if [[ "$SANDBOX" == read-only ]] && ! _bb_read_only_backend_supported "$ENGINE"; then
+    echo "Error: BB backend '$ENGINE' cannot enforce read-only review permissions" >&2
+    _dispatch_write_failure_class unsupported_adapter
     exit 1
   fi
   _clavain_in_bb || { echo 'Error: BB seat host is not enrolled' >&2; exit 1; }
