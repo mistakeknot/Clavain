@@ -80,6 +80,23 @@ parallel, then promote each track independently with a bar set by its risk.
 - **Contract:** typed question in, then `{choice, probs, confidence, backend,
   latency_ms}` out. Every call has a **deterministic fallback**: the current
   heuristic or haiku path. The layer never blocks a sprint.
+- **Where the layer lives (ruled 2026-09-24).** The layer is split into
+  three jobs:
+  - **Serving** stays in interfer, the warm B5 daemon at `:8421`. CLM's
+    speed depends on a long-lived embedding cache, so the layer is a client
+    and never hosts a model.
+  - **Policy** is a new `clavain-cli decide` command, alongside the
+    `classify-complexity` and `review-calibration` contracts. It reads
+    `decision_models:`, chooses the backend, applies the confidence bands and
+    falls back to today's path.
+  - **Logging** goes through `ic` when it is installed. Otherwise it appends
+    to `.clavain/interspect/microrouter-shadow.jsonl`, the stream reserved for
+    B6.
+
+  Once the contract is stable across 2–3 tracks, the policy moves into
+  `ic decide` in intercore (the same path `ic route model` took) and
+  `clavain-cli decide` calls through to it. Not starting in intercore avoids
+  changes across two repos while the contract is still changing.
 - **Rollout per track:** off → shadow → enforce, set in `decision_models:` in
   `routing.yaml`. Shadow logs both answers plus the downstream outcome.
 - **Promotion bars (the C part):**
@@ -101,21 +118,17 @@ parallel, then promote each track independently with a bar set by its risk.
 
 ## Open Questions
 
-1. **Where the layer lives.** Options: a `clavain-cli decide` subcommand
-   (fastest), `ic decide` in intercore (kernel-native, logs next to
-   `ic route`), or a script beside `lib-routing.sh`. The leaning is intercore
-   for logging, with a clavain-cli wrapper.
-2. **Is CLM zero-shot good enough on Clavain states?** If not, the recipe is
+1. **Is CLM zero-shot good enough on Clavain states?** If not, the recipe is
    fine-tuning the heads on interspect evidence and verdict history. Who owns
    that data pipeline?
-3. **Serving footprint.** CLM needs an 8B backbone for embeddings. Is it
+2. **Serving footprint.** CLM needs an 8B backbone for embeddings. Is it
    acceptable on dev machines and cloud sessions, or does it need a shared
    interfer host?
-4. **Track 1 slicing is structural.** Per-agent document slicing changes the
+3. **Track 1 slicing is structural.** Per-agent document slicing changes the
    contracts of interflux, a separate repo. It needs a coordinated bead there.
-5. **Privacy and egress for Jev.** Hosted calls send state (plans, diffs)
+4. **Privacy and egress for Jev.** Hosted calls send state (plans, diffs)
    off-box. We need a policy for which decisions may use a hosted backend.
-6. **Relation to open beads.** This may subsume or refine iv-jdow, iv-4xqu,
+5. **Relation to open beads.** This may subsume or refine iv-jdow, iv-4xqu,
    iv-jgdct, iv-sym06 and B6 (sylveste-s3z6.19.10). `/clavain:strategy` Phase
    0.5 should rule subsume, supersede or orthogonal. The bead corpus was not
    available in this session.

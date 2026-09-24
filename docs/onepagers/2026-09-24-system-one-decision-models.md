@@ -15,8 +15,10 @@ shrinks the expensive thread. It also turns fixed-depth reviews into early exits
 based on confidence.
 
 **How it works.**
-- **One decision layer.** It takes a typed question plus state and returns
-  `{choice, probs, confidence}`. The backend (CLM, Jev or a heuristic) is
+- **One decision layer.** `clavain-cli decide` takes a typed question plus
+  state and returns `{choice, probs, confidence}`. It calls models served by
+  interfer (CLM) or hosted Jev, and logs through `ic` with a JSONL fallback.
+  It moves to `ic decide` once the contract is stable. The backend (CLM, Jev or a heuristic) is
   chosen per decision in `routing.yaml` under `decision_models:`, with
   off/shadow/enforce modes.
 - **Deterministic fallback on every call.** If confidence falls below the B5
@@ -49,10 +51,10 @@ based on confidence.
 - Jev is not used on decisions whose state may not leave the machine.
 
 **Open.**
-1. Where the layer lives: `ic decide` in intercore or `clavain-cli decide`.
-2. Whether CLM is good enough zero-shot, or who owns fine-tuning on interspect
+1. Whether CLM is good enough zero-shot, or who owns fine-tuning on interspect
    evidence.
-3. Per-agent slicing requires coordinated contract changes in interflux.
+2. Per-agent slicing requires coordinated contract changes in interflux.
+3. The egress policy: which decisions may send state to hosted Jev.
 
 (Full list: brainstorm § Open Questions.)
 
