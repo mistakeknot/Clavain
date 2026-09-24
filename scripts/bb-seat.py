@@ -26,6 +26,7 @@ ROLE_SANDBOX_ALLOWLIST = {
     'routine-execution': frozenset({'workspace-write', 'danger-full-access'}),
     'deep-execution': frozenset({'workspace-write', 'danger-full-access'}),
 }
+READ_ONLY_BACKENDS = frozenset({'claude'})
 USAGE_COUNT_FIELDS = (
     'totalTokens', 'inputTokens', 'cachedInputTokens', 'cacheReadInputTokens',
     'cacheWriteInputTokens', 'cacheCreationInputTokens', 'outputTokens',
@@ -147,7 +148,8 @@ def stop_export_archive(row):
     row['artifacts']={'patch':artifact(patch),'untracked':artifact(extras)}
     row['branch']=git(work,'rev-parse','--abbrev-ref','HEAD')
     row['checkout_after']=git(work,'rev-parse','HEAD')
-    if row.get('sandbox')=='read-only' and (patch_text or any(filter(None,names))):
+    if row.get('sandbox')=='read-only' and (row['checkout_after']!=row['source_commit'] or
+       patch_text or any(filter(None,names))):
         row['outcome']='sandbox-violation'
     row['cleanup']='exported'
     # Durably record exported hashes before allowing archive to retire the tree.
@@ -171,7 +173,9 @@ def reconcile(directory,parent):
                 persist(path,row)
                 continue
             stop_export_archive(row)
-            row.update(state='terminal',outcome='interrupted')
+            row['state']='terminal'
+            if row.get('outcome')!='sandbox-violation':
+                row['outcome']='interrupted'
             persist(path,row)
 
 
@@ -199,6 +203,8 @@ def supervise(args):
     if args.sandbox not in permitted:
         raise SeatError(f'sandbox {args.sandbox!r} is not permitted for BB role {args.role!r}')
     read_only=args.sandbox=='read-only'
+    if read_only and args.backend not in READ_ONLY_BACKENDS:
+        raise SeatError(f'BB backend {args.backend!r} cannot enforce read-only review permissions')
     route=json.loads(args.resolved_route_json)
     if not isinstance(route,dict):
         raise SeatError('Resolved route must be an object')
@@ -251,6 +257,17 @@ def supervise(args):
         cancelled=True
     previous={s:signal.signal(s,cancel) for s in (signal.SIGTERM,signal.SIGINT)}
     answer=''
+    plan_order=[]
+    plan_text={}
+    def record_plan(item_id,text,append=False):
+        if not isinstance(text,str):
+            return
+        if not isinstance(item_id,str) or not item_id:
+            item_id='unknown-plan'
+        if item_id not in plan_text:
+            plan_order.append(item_id)
+            plan_text[item_id]=''
+        plan_text[item_id]=plan_text[item_id]+text if append else text
     spawn_started=False
     with journal.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -303,9 +320,21 @@ def supervise(args):
                     # effective permission. Requested settings are not evidence.
                     if kind=='thread/tokenUsage/updated':
                         row['usage']=allowlisted_usage(data)
-                    if kind=='item/agentMessage/delta' or (read_only and kind=='item/plan/delta'):
+                    if kind=='item/agentMessage/delta':
                         answer+=data.get('delta','')
+                    if read_only and kind=='item/plan/delta':
+                        record_plan(data.get('itemId'),data.get('delta'),append=True)
+                    if read_only and kind=='item/completed':
+                        item=data.get('item')
+                        if isinstance(item,dict) and item.get('type')=='plan':
+                            record_plan(item.get('id'),item.get('text'))
                     if kind in ('system/interaction/lifecycle','system/userQuestion/lifecycle'):
+                        interaction=data.get('interaction')
+                        payload=interaction.get('payload') if isinstance(interaction,dict) else None
+                        subject=payload.get('subject') if isinstance(payload,dict) else None
+                        if (read_only and isinstance(subject,dict) and
+                            payload.get('kind')=='approval' and subject.get('kind')=='plan'):
+                            record_plan(subject.get('itemId'),subject.get('plan'))
                         row['outcome']='waiting'
                     if kind=='provider/modelFallback':
                         row['outcome']='model-changed'
@@ -337,7 +366,8 @@ def supervise(args):
                 complete=False
             row['accepted']=False  # independent validation is always separate
             row['failure_class']='' if complete else 'terminal_bb_evidence'
-            output.write_text(answer)
+            output.write_text(''.join(plan_text[item_id] for item_id in plan_order)
+                              if read_only and plan_text else answer)
             persist(journal,row)
             atomic(str(output)+'.receipt.json',row)
     if not complete:

@@ -24,7 +24,7 @@ def seat(tmp_path):
     subprocess.run(['git','-C',str(work),'worktree','add','--detach',str(child),head],check=True,capture_output=True)
     cli=tmp_path/'bb'
     cli.write_text('''#!/usr/bin/env python3
-import json,os,signal,sys
+import json,os,signal,subprocess,sys
 from pathlib import Path
 a=sys.argv[1:]; mode=os.environ.get('MODE','completed'); root=Path(os.environ['FIXTURE'])
 with (root/'calls').open('a') as f: f.write(json.dumps(a)+'\\n')
@@ -48,14 +48,19 @@ elif a[:2]==['thread','show']:
  value={'thread':{'id':'thr_child','status':'idle' if (root/'stopped').exists() or mode not in ('timeout','waiting') else 'active','environmentId':'env_child'},'environment':{'path':str(root/'child')}}
 elif a[:2]==['thread','log']:
  if mode=='mutated': (root/'child'/'unexpected.txt').write_text('review mutation')
+ if mode=='committed-mutation': subprocess.run(['git','-C',str(root/'child'),'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-qm','review mutation'],check=True)
  def ev(seq,kind,data): return {'seq':seq,'type':kind,'scope':{'kind':'turn','turnId':'turn_one'},'data':data}
  value=[ev(1,'client/turn/requested',{'requestId':'request_one'}),ev(2,'turn/started',{}),ev(3,'turn/input/accepted',{'clientRequestId':'request_one'})]
  if mode!='unknown': value.append(ev(4,'thread/tokenUsage/updated',{'tokenUsage':{'inputTokens':10,'outputTokens':2,'sensitiveField':'must-not-persist'}}))
  if mode=='provider-retry': value.append(ev(5,'provider/error',{'willRetry':True}))
  if mode=='model-changed': value.append(ev(5,'provider/modelFallback',{}))
- if mode not in ('timeout','waiting'):
+ if mode=='plan-completed':
+  value += [ev(5,'item/plan/delta',{'itemId':'plan_one','delta':'partial'}),ev(6,'item/completed',{'item':{'type':'plan','id':'plan_one','text':'VERDICT: FINAL'}}),ev(7,'turn/completed',{'status':'completed'})]
+ elif mode=='plan-approval':
+  value.append(ev(5,'system/interaction/lifecycle',{'interaction':{'payload':{'kind':'approval','subject':{'kind':'plan','itemId':'plan_one','plan':'VERDICT: APPROVAL','planFilePath':None}}}}))
+ elif mode not in ('timeout','waiting'):
   message_kind='item/plan/delta' if (root/'plan-mode').exists() else 'item/agentMessage/delta'
-  value += [ev(5,message_kind,{'delta':'VERDICT: CLEAN'}),ev(6,'turn/completed',{'status':mode if mode in ('failed','interrupted') else 'completed'})]
+  value += [ev(5,message_kind,{'itemId':'plan_one','delta':'VERDICT: CLEAN'}),ev(6,'turn/completed',{'status':mode if mode in ('failed','interrupted') else 'completed'})]
  elif mode=='waiting': value.append(ev(5,'system/interaction/lifecycle',{}))
  after=int(a[a.index('--after-seq')+1]); value=[v for v in value if v['seq']>after]
  if os.environ.get('BB_TEST_EVENTS_FILE'):
@@ -181,11 +186,12 @@ def test_unknown_evidence(seat):
 @pytest.mark.parametrize('role', ['plan-review','validation'])
 def test_review_roles_accept_only_read_only_and_record_receipt(seat,role):
     root,run=seat
-    result=run(role=role,sandbox='read-only')
+    result=run(role=role,sandbox='read-only',backend='claude',model='claude-fable-5-1',effort='high')
     assert result.returncode==1,result.stderr  # Missing observed identity still blocks acceptance.
     calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
     spawn=next(call for call in calls if call[:2]==['thread','spawn'])
     assert '--plan' in spawn
+    assert spawn[spawn.index('--provider')+1]=='claude-code'
     assert spawn[spawn.index('--permission-mode')+1]=='auto'
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['schema_version']==2
@@ -194,14 +200,57 @@ def test_review_roles_accept_only_read_only_and_record_receipt(seat,role):
     assert (root/'result').read_text()=='VERDICT: CLEAN'
 
 
+@pytest.mark.parametrize(('mode','expected'), [
+    ('plan-completed','VERDICT: FINAL'),
+    ('plan-approval','VERDICT: APPROVAL'),
+])
+def test_review_roles_capture_terminal_plan_shapes(seat,mode,expected):
+    root,run=seat
+    result=run(mode=mode,role='plan-review',sandbox='read-only',backend='claude',
+               model='claude-fable-5-1',effort='high')
+    assert result.returncode==1,result.stderr
+    assert (root/'result').read_text()==expected
+
+
 def test_read_only_review_mutation_is_a_terminal_seat_failure(seat):
     root,run=seat
-    result=run(mode='mutated',role='plan-review',sandbox='read-only')
+    result=run(mode='mutated',role='plan-review',sandbox='read-only',backend='claude',
+               model='claude-fable-5-1',effort='high')
     assert result.returncode!=0
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['outcome']=='sandbox-violation'
     assert receipt['accepted'] is False
     assert receipt['artifacts']['patch']['sha256']
+
+
+def test_read_only_review_commit_is_a_terminal_seat_failure(seat):
+    root,run=seat
+    result=run(mode='committed-mutation',role='plan-review',sandbox='read-only',backend='claude',
+               model='claude-fable-5-1',effort='high')
+    assert result.returncode!=0
+    receipt=json.loads((root/'result.receipt.json').read_text())
+    assert receipt['checkout_after']!=receipt['source_commit']
+    assert receipt['outcome']=='sandbox-violation'
+
+
+def test_recovery_preserves_review_sandbox_violation(seat):
+    root,run=seat
+    result=run(mode='mutated',role='plan-review',sandbox='read-only',backend='claude',
+               model='claude-fable-5-1',effort='high',extra_env={'BB_TEST_CRASH':'archive'})
+    assert result.returncode==-9,result.stderr
+    journal=next((root/'state').glob('*.json'))
+    assert json.loads(journal.read_text())['outcome']=='sandbox-violation'
+    run(mode='mutated',role='plan-review',attempt='attempt_two',sandbox='read-only',backend='claude',
+        model='claude-fable-5-1',effort='high',extra_env={'BB_TEST_CRASH':'archive'})
+    assert json.loads(journal.read_text())['outcome']=='sandbox-violation'
+
+
+def test_codex_review_rejected_without_enforced_read_only_bb_permission(seat):
+    root,run=seat
+    result=run(role='plan-review',sandbox='read-only')
+    assert result.returncode!=0
+    assert 'cannot enforce read-only' in result.stderr
+    assert not (root/'calls').exists()
 
 
 @pytest.mark.parametrize('role', ['plan-review','validation'])
@@ -238,16 +287,18 @@ def test_execution_roles_keep_writable_auto_mode(seat,role,sandbox):
 
 
 @pytest.mark.requires_ic
-def test_dispatch_plan_review_defaults_read_only_through_helper(seat):
+@pytest.mark.parametrize('role', ['plan-review','validation'])
+def test_dispatch_review_roles_default_read_only_through_helper(seat,role):
     root,run=seat
-    result=run(role='plan-review',via_dispatch=True)
+    result=run(role=role,via_dispatch=True)
     assert result.returncode==1,result.stderr  # Missing observed identity still blocks acceptance.
     receipt=json.loads((root/'result.receipt.json').read_text())
-    assert receipt['role']=='plan-review'
+    assert receipt['role']==role
     assert receipt['sandbox']=='read-only'
     calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
     spawn=next(call for call in calls if call[:2]==['thread','spawn'])
     assert '--plan' in spawn
+    assert spawn[spawn.index('--provider')+1]=='claude-code'
 
 
 @pytest.mark.requires_ic

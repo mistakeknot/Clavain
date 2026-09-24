@@ -50,24 +50,37 @@ enforced by both dispatch and the seat adapter: review roles permit only
 `read-only`, while execution roles retain `workspace-write` and
 `danger-full-access`. Dispatch defaults review roles to `read-only` and rejects
 an explicit writable sandbox before spawning a child. Unknown roles are also
-rejected before spawn. The transport retains the resolved backend, model and
-effort, maps service tier `standard` to BB `default`, and creates an isolated
-worktree from the exact source commit. Dirty source changes are not silently
-omitted: the adapter refuses a dirty checkout. Project resolution follows `-C`,
-not an unrelated ambient project. No routing profiles change.
+rejected before spawn. A review seat also requires a BB backend whose provider
+can enforce read-only operation; the helper rejects unsupported backends before
+calling BB. The transport retains the resolved backend, model and effort, maps
+service tier `standard` to BB `default`, and creates an isolated worktree from
+the exact source commit. Dirty source changes are not silently omitted: the
+adapter refuses a dirty checkout. Project resolution follows `-C`, not an
+unrelated ambient project. No routing profiles change.
 
-BB review seats use provider-native plan mode (`bb thread spawn --plan`) with
-BB permission mode `auto`; execution seats keep the existing writable `auto`
-launch unchanged. The version 2 seat journal and receipt record both `role` and
-the requested `sandbox`. Because the installed BB event schema does not attest
-the effective provider permission mode, the adapter leaves
+On the installed BB release, Claude review seats use `bb thread spawn --plan`,
+which selects Claude Code's plan permission mode; execution seats keep the
+existing writable `auto` launch unchanged. BB's Codex provider currently maps
+every exposed permission mode to a writable sandbox, and its `--plan` flag
+changes the prompt action without changing that sandbox. The adapter therefore
+rejects read-only Codex BB seats instead of treating plan prompting or a clean
+postcondition as permission enforcement. This includes an Astra fallback for a
+review role: it must use a transport with an enforced read-only sandbox rather
+than silently entering a writable BB seat.
+
+The version 2 seat journal and receipt record both `role` and the requested
+`sandbox`. Because the installed BB event schema does not attest the effective
+provider permission mode, the adapter leaves
 `effective_permission_mode` unknown rather than copying the request. It also
-checks the isolated child worktree at termination: any tracked, committed, or
-untracked review-seat mutation changes the outcome to `sandbox-violation` and
-blocks acceptance. Token-usage events are reduced to an explicit numeric field
-allowlist before they enter the journal or receipt; arbitrary event payload
-fields are never retained. Cross-lab review and every role absent from the
-allowlist remain unsupported.
+checks the isolated child worktree at termination: a changed commit identity or
+any tracked or untracked review-seat mutation changes the outcome to
+`sandbox-violation` and blocks acceptance, including during recovery. Plan
+deltas, completed plan items, and pending plan approvals are folded by item ID
+so a terminal plan can replace its partial delta without losing the review
+output. Token-usage events are reduced to an explicit numeric field allowlist
+before they enter the journal or receipt; arbitrary event payload fields are
+never retained. Cross-lab review and every role absent from the allowlist remain
+unsupported.
 
 Inside enrolled BB, next-goal helpers use `CLAUDE_SESSION_ID` when present,
 otherwise `BB_THREAD_ID`. The Stop receipt consumer uses the same fallback.
@@ -186,7 +199,7 @@ Tests named below are evidence contracts, not claims that an unrun cell passes.
 | Execution / direct-pooled | Same local sandbox as unpooled (`direct` + spike; execution live canary outstanding) | `transport=direct-pooled`, account unknown (spike) | Same direct limitation; no pool cancellation canary | Exact hub-session tie proved by spike; no supported request account API | Account before model (`roles`); forced live exhaustion not run |
 | Read-only / direct-pooled | Same read-only boundary; scratch plan-review canary passed (spike) | Same role audit, no inferred account | Same direct limitation | Codex raw usage retained (spike); Claude hub canary outstanding | Same budget gate (`test_claude_usage.py`) |
 | Execution / bb-seat | Writable `auto`, exact commit worktree (`BB.test_spawn_contract`) | Thread/turn, observed fields or unknown, prompt/artifact hashes (`BB.test_completion`) | Stop and confirmation; orphan recovery (`BB.test_timeout`, `BB.test_orphan`) | Only turn event evidence; unknown blocks required accounting (`BB.test_unknown_evidence`) | Terminal uncertainty never retries (`BB.test_unclear_spawn`) |
-| Read-only / bb-seat | Review roles require `read-only`, spawn with provider plan mode, and fail on worktree mutation (`BB.test_review_roles_accept_only_read_only_and_record_receipt`, `BB.test_read_only_review_mutation_is_a_terminal_seat_failure`) | Version 2 receipt records role and sandbox; effective permission remains observed-or-unknown | Same stop/archive path as execution seats | Only turn event evidence; unknown still blocks required accounting | Writable review requests and unknown roles stop before spawn (`BB.test_review_roles_reject_writable_sandboxes_before_bb`, `BB.test_unknown_role_rejected_before_bb`) |
+| Read-only / bb-seat | Review roles require `read-only`; Claude uses enforced plan permission, while writable-only Codex is rejected (`BB.test_review_roles_accept_only_read_only_and_record_receipt`, `BB.test_codex_review_rejected_without_enforced_read_only_bb_permission`) | Version 2 receipt records role and sandbox; effective permission remains observed-or-unknown | Same stop/archive path; mutation evidence survives recovery (`BB.test_recovery_preserves_review_sandbox_violation`) | Only allowlisted turn-usage evidence; unknown still blocks required accounting | Writable review requests, unknown roles, commit/worktree mutations, and unsupported backends fail closed (`BB.test_review_roles_reject_writable_sandboxes_before_bb`, `BB.test_read_only_review_commit_is_a_terminal_seat_failure`) |
 
 ## Startup and acceptance
 
