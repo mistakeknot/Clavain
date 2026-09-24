@@ -152,6 +152,14 @@ dispatch:
     release-preparation: release-sol
     release-authority: release-authority-main
     cross-lab-review: crosslab-fable
+  # mk ruling 2026-09-24: review another lab's work first. For these roles the
+  # resolver stably moves eligible seats from a frontier lab other than the
+  # producer's ahead of same-lab seats, and the receipt records the change as
+  # `cross_lab_reorder`. Claude-produced code therefore reaches Sol before Opus
+  # in `validation`; Opus is the same-lab substitute when the Codex lane is out,
+  # and Fable is not in the validation chain. Codex-produced work keeps the
+  # policy order. Requires ic >= intercore 2caa435.
+  cross_lab_first: [validation, cross-lab-review]
 
   tiers:
     planning-astra:

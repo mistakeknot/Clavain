@@ -20,6 +20,24 @@ jq -e '.profile.model == "gpt-6-astra"' "$work/fable-producer.json" >/dev/null
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
   --producer-identity=claude-fable-5-1 --context-file="$work/routine.json" > "$work/crosslab.json"
 jq -e '.profile.backend != "claude"' "$work/crosslab.json" >/dev/null
+# Code review reaches another frontier lab first (mk ruling 2026-09-24): Claude
+# work goes to Sol, then Opus as the same-lab substitute, never Fable; Codex work
+# keeps the policy order with Opus first. Needs ic >= intercore 2caa435.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
+  --producer-identity=claude-fable-5-1 --context-file="$work/routine.json" > "$work/claude-review.json"
+jq -e '.profile.model == "gpt-5.6-sol" and .fallback_chain[0].profile.model == "claude-opus-5"
+  and ([.profile.model, .fallback_chain[].profile.model] | index("claude-fable-5-1") == null)
+  and .cross_lab_reorder.to[0] == "validation-sol"' "$work/claude-review.json" >/dev/null ||
+  { echo 'FAIL: Claude-produced code does not reach Sol, then Opus'; exit 1; }
+printf '%s\n' '{"reasons":[],"rationale":"codex lane out","available_models":["claude-opus-5","claude-sonnet-5","claude-fable-5-1","kimi-code/k3"]}' > "$work/codex-out.json"
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
+  --producer-identity=claude-fable-5-1 --context-file="$work/codex-out.json" > "$work/codex-out-review.json"
+jq -e '.profile.model == "claude-opus-5"' "$work/codex-out-review.json" >/dev/null ||
+  { echo 'FAIL: Codex out does not fall back to Opus'; exit 1; }
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
+  --producer-identity=gpt-6-astra --context-file="$work/routine.json" > "$work/codex-review.json"
+jq -e '.profile.model == "claude-opus-5" and .cross_lab_reorder == null' "$work/codex-review.json" >/dev/null ||
+  { echo 'FAIL: Codex-produced code review order changed'; exit 1; }
 # A separately frozen capacity snapshot is explicit, never a default downgrade.
 python3 - "$ROOT/config/routing.yaml" "$work/capacity.yaml" <<'PYFIXTURE'
 from pathlib import Path

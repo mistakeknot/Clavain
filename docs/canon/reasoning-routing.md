@@ -128,6 +128,23 @@ supplies eligibility and `dispatch.roles.<role>` plus the tier's ordered
 `fallbacks` supply selection. Setting only the second returns
 `role "plan-review": no eligible model satisfies reasoning contract`.
 
+**Code review goes to another lab first (mk ruling 2026-09-24).** A static chain
+cannot prefer "the other lab" for every producer, so `dispatch.cross_lab_first`
+names the review roles (`validation`, `cross-lab-review`) where the resolver,
+after removing the producer, stably moves seats from a frontier lab other than
+the producer's ahead of same-lab seats. Frontier labs are those of
+`reasoning.frontier_models`; Kimi keeps its policy position. The receipt records
+any change as `cross_lab_reorder: {from, to}` over the seats that survive the
+reasoning contract. For `validation`, Claude-produced code therefore reaches Sol
+first. When the Codex lane is out, observed as a capacity failure, the same-lab
+substitute is Opus. Do not wait for the Codex reset and do not escalate to Fable:
+Fable is not in the `validation` chain, and `validation-fable` is explicit-tier
+only. Codex-produced work keeps the policy order, with Opus first.
+`cross-lab-review` keeps Fable as its designed first-pass seat; for a Claude
+producer it now resolves Sol, then Fable, then Kimi. Requires Intercore `ic` at or
+after commit 2caa435; an older `ic` ignores `cross_lab_first` and keeps the
+policy order.
+
 ### Execution headroom forecasts
 
 Before role resolution, dispatch may read `bb pool status --json` for
