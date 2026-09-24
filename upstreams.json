@@ -5,7 +5,7 @@
       "url": "https://github.com/steveyegge/beads.git",
       "branch": "main",
       "floating": true,
-      "lastSyncedCommit": "4a904961367d2ee66b70bee3a4e2095645203d74",
+      "lastSyncedCommit": "5b9e938b59ba07eba0683a2d97f27e91eea8ccd3",
       "basePath": "",
       "fileMap": {}
     },
@@ -13,7 +13,7 @@
       "name": "oracle",
       "url": "https://github.com/steipete/oracle.git",
       "branch": "main",
-      "lastSyncedCommit": "5f3aef5ae7a0195d5103fdd340a16cc11e0475ae",
+      "lastSyncedCommit": "1866b14624db124b50226d3018b4f429d31308d4",
       "basePath": "",
       "fileMap": {
         "skills/oracle/SKILL.md": "skills/interpeer/references/oracle-reference.md",
@@ -34,7 +34,7 @@
       "name": "superpowers",
       "url": "https://github.com/obra/superpowers.git",
       "branch": "main",
-      "lastSyncedCommit": "e4a2375cb705ca5800f0833528ce36a3faf9017a",
+      "lastSyncedCommit": "5bf4e78011075bcfc0dc295f0724994cd123ee71",
       "basePath": "",
       "fileMap": {
         "skills/dispatching-parallel-agents/SKILL.md": "skills/dispatching-parallel-agents/SKILL.md",
@@ -68,7 +68,7 @@
       "name": "superpowers-lab",
       "url": "https://github.com/obra/superpowers-lab.git",
       "branch": "main",
-      "lastSyncedCommit": "897eebf86cf131ef82fe42a6b2991f8ac463f978",
+      "lastSyncedCommit": "51111f74f24058117752d9aa917cb19859f8ec86",
       "basePath": "",
       "fileMap": {
         "skills/using-tmux-for-interactive-commands/SKILL.md": "skills/using-tmux-for-interactive-commands/SKILL.md"
@@ -94,7 +94,7 @@
       "name": "compound-engineering",
       "url": "https://github.com/EveryInc/compound-engineering-plugin.git",
       "branch": "main",
-      "lastSyncedCommit": "e8f3bbcb3580862a2715575d609333306ed02ee3",
+      "lastSyncedCommit": "be14bfe28b2679e3c3b958c409cb23626d47d714",
       "basePath": "plugins/compound-engineering",
       "fileMap": {
         "skills/create-agent-skills/SKILL.md": "skills/create-agent-skills/SKILL.md",
