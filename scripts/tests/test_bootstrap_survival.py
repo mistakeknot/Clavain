@@ -83,7 +83,8 @@ CLAUSES = {
         "capacity_roles": "`main-integrator` and `release-authority` have no capacity substitute",
         "headroom_scope": "planning, plan-review, validation, escalation and cross-lab-review receive no headroom input",
         "cross_lab_review": "Review roles `validation` and `cross-lab-review` prefer a frontier lab other than the producer's",
-        "codex_out_substitute": "when the Codex lane is out, `validation` substitutes Opus without waiting for reset or escalating to Fable",
+        "cross_lab_ic": "needs `ic` >= 2caa435",
+        "codex_out_substitute": "for Claude-produced work, when the Codex lane is out, `validation` substitutes Opus without waiting for reset or escalating to Fable",
         "escalation": "Two demonstrated capability, verdict, or criteria failures request escalation; a disproven premise escalates immediately",
         "handoff": "Handoff carries decisions, constraints, verification, and escalation conditions",
         "empirical": "Retain relevant playtests, experiments, user evidence, and production canaries",
@@ -130,7 +131,7 @@ class BootstrapSurvivalTests(unittest.TestCase):
         canon = (ROOT / "docs/canon/reasoning-routing.md").read_text()
         operations = (ROOT / "docs/canon/reasoning-routing-operations.md").read_text()
         self.assertIn("reasoning-routing-operations.md", canon)
-        for heading in ("## Capacity failure and fallback", "## Host delivery and evidence", "## Calibration and rollout"):
+        for heading in ("## Capacity failure and fallback", "### Code review goes to another lab first", "## Host delivery and evidence", "## Calibration and rollout"):
             self.assertIn(heading, operations)
 
     def test_probe_requires_current_render_instead_of_frozen_contract(self):
