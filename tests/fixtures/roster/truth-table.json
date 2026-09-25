@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "note": "Consumed by `scripts/roster/generate.py --self-test`. Every case runs the same pipeline as a real run: routing.yaml text (fragment or file) + registry + snapshot rows -> mapping, effective chains, rules, gates, patch, in-memory apply and validation. `kind: validate` cases feed an attempted edit straight to the patch validator. Every `expect` is derived by hand from PLAN-M1-r5 \u00a7P1 rules, never from generator output. Snapshot rows are verbatim (slug, name, providerSlug) copies from the pinned evidence snapshot sha256 510dfcc8...2f2bad.",
+  "note": "Consumed by `scripts/roster/generate.py --self-test`. Every case runs the same pipeline as a real run: routing.yaml text (fragment or file) + registry + snapshot rows -> mapping, effective chains, rules, gates, patch, in-memory apply and validation. `kind: validate` cases feed an attempted edit straight to the patch validator. Every `expect` is derived by hand from PLAN-M1-r5 §P1 rules, never from generator output. Snapshot rows are verbatim (slug, name, providerSlug) copies from the pinned evidence snapshot sha256 510dfcc8...2f2bad.",
   "defaults": {
     "families": {
       "models": {
@@ -83,6 +83,11 @@
           "lab": "nvidia",
           "family": "nemotron",
           "snapshot_name": "Nemotron Cascade 2 30B A3B"
+        },
+        "gpt-5.5": {
+          "lab": "openai",
+          "family": "gpt-5.5",
+          "snapshot_name": "GPT-5.5"
         }
       },
       "candidates": [
@@ -167,11 +172,13 @@
           "slug": "kimi-k3",
           "row_effort": null,
           "row_reasoning_mode": "unlabelled",
-          "status": "RATIFIED (mk waiver, 2026-09-25)",
+          "status": "RATIFIED",
           "label": "max-effort evidence standing in for high; upper bound",
           "evidence": [
             "Moonshot default max; AA 'Kimi K3 (max)'"
-          ]
+          ],
+          "approved_by": "mk",
+          "approval": "fixture"
         }
       ]
     },
@@ -355,6 +362,11 @@
         "slug": "nemotron-cascade-2-30b-a3b",
         "name": "Nemotron Cascade 2 30B A3B",
         "providerSlug": "nvidia"
+      },
+      {
+        "slug": "gpt-5-5",
+        "name": "GPT-5.5 (xhigh)",
+        "providerSlug": "openai"
       }
     ],
     "generatedAt": "2026-09-23T12:20:44.712Z",
@@ -537,7 +549,9 @@
         {
           "seat": "crosslab-luna",
           "by": "mk (fixture)",
-          "reason": "truth-table waiver"
+          "reason": "truth-table waiver",
+          "approved_by": "mk",
+          "approval": "fixture"
         }
       ],
       "expect": {
@@ -1177,11 +1191,13 @@
             "slug": "kimi-k3",
             "row_effort": "max",
             "row_reasoning_mode": "unlabelled",
-            "status": "RATIFIED (mk waiver, 2026-09-25)",
+            "status": "RATIFIED",
             "label": "max-effort evidence standing in for high; upper bound",
             "evidence": [
               "Moonshot default max; AA 'Kimi K3 (max)'"
-            ]
+            ],
+            "approved_by": "mk",
+            "approval": "fixture"
           }
         ]
       },
@@ -1197,7 +1213,7 @@
     },
     {
       "id": "waiver-without-status-refused",
-      "note": "A waiver must be RATIFIED or PROPOSED.",
+      "note": "N2: a waiver status is a closed enum, PROPOSED or RATIFIED.",
       "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-kimi]\n      description: fixture seat validation-opus\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "waivers_drop": [
@@ -1224,7 +1240,7 @@
           "registry:kimi-code/k3@high"
         ],
         "messages_include": [
-          "waiver status must start with RATIFIED or PROPOSED"
+          "waiver status must be exactly one of PROPOSED, RATIFIED"
         ]
       }
     },
@@ -1264,7 +1280,7 @@
     },
     {
       "id": "strict-subagent-local-executor-unmapped",
-      "note": "STRICT (mk 2026-09-25): subagent aliases, local models and executors are references too; unmapped means refusal. `inherit` and `cloud` are keywords, not models.",
+      "note": "STRICT (mk 2026-09-25): subagent aliases, local models, executors and the `cloud` keyword are references too; unmapped means refusal. `inherit` is a keyword, not a model.",
       "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat validation-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  defaults:\n    model: sonnet\n    categories:\n      bulk: haiku\n      same: inherit\nlocal_models:\n  tier_mappings:\n    \"local:qwen3.5-9b-4bit\": 1\n  complexity_routing:\n    C3: \"cloud\"\nexecutor_routing:\n  classes:\n    tagging: [kimi]\n",
       "expect": {
         "status": "refused",
@@ -1272,13 +1288,14 @@
           "unmapped:subagent:sonnet",
           "unmapped:subagent:haiku",
           "unmapped:local:qwen3.5-9b-4bit",
-          "unmapped:executor:kimi"
+          "unmapped:executor:kimi",
+          "unmapped:cloud"
         ]
       }
     },
     {
       "id": "strict-proposed-waivers-map",
-      "note": "PROPOSED waivers map for the run (listed as pending mk); executor maps via the tiers using that backend.",
+      "note": "PROPOSED waivers map for the run (listed as pending mk). Executors and `cloud` map only through an explicit waiver, never derived from tiers (Blocker 1, REVIEW-P1-r2).",
       "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-kimi]\n      description: fixture seat validation-opus\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  defaults:\n    model: sonnet\n    categories:\n      bulk: haiku\n      same: inherit\nlocal_models:\n  tier_mappings:\n    \"local:qwen3.5-9b-4bit\": 1\n  complexity_routing:\n    C3: \"cloud\"\nexecutor_routing:\n  classes:\n    tagging: [kimi]\n",
       "slugs_patch": {
         "waivers_add": [
@@ -1288,7 +1305,7 @@
             "slug": "claude-sonnet-5-xhigh",
             "row_effort": "xhigh",
             "row_reasoning_mode": "reasoning",
-            "status": "PROPOSED (mk to ratify)",
+            "status": "PROPOSED",
             "evidence": [
               "fixture"
             ]
@@ -1299,7 +1316,7 @@
             "slug": "claude-4-5-haiku",
             "row_effort": null,
             "row_reasoning_mode": "non-reasoning",
-            "status": "PROPOSED (mk to ratify)",
+            "status": "PROPOSED",
             "evidence": [
               "fixture"
             ]
@@ -1310,7 +1327,29 @@
             "slug": "qwen3-5-9b",
             "row_effort": null,
             "row_reasoning_mode": "reasoning",
-            "status": "PROPOSED (mk to ratify)",
+            "status": "PROPOSED",
+            "evidence": [
+              "fixture"
+            ]
+          },
+          {
+            "ref": "executor:kimi",
+            "model": "kimi-code/k3",
+            "slug": "kimi-k3",
+            "row_effort": null,
+            "row_reasoning_mode": "unlabelled",
+            "status": "PROPOSED",
+            "evidence": [
+              "fixture"
+            ]
+          },
+          {
+            "ref": "cloud",
+            "model": "gpt-5.5",
+            "slug": "gpt-5-5",
+            "row_effort": "xhigh",
+            "row_reasoning_mode": "reasoning",
+            "status": "PROPOSED",
             "evidence": [
               "fixture"
             ]
@@ -1323,8 +1362,9 @@
           "subagent:sonnet": "waiver-proposed",
           "subagent:haiku": "waiver-proposed",
           "local:qwen3.5-9b-4bit": "waiver-proposed",
-          "executor:kimi": "derived",
-          "kimi-code/k3@high": "waiver-ratified"
+          "executor:kimi": "waiver-proposed",
+          "kimi-code/k3@high": "waiver-ratified",
+          "cloud": "waiver-proposed"
         }
       }
     },
@@ -1340,7 +1380,7 @@
             "slug": "alibaba-qwen3-5-9b",
             "row_effort": null,
             "row_reasoning_mode": "unlabelled",
-            "status": "PROPOSED (mk to ratify)",
+            "status": "PROPOSED",
             "evidence": [
               "fixture"
             ]
@@ -1415,8 +1455,331 @@
       }
     },
     {
+      "id": "executor-without-row-refuses",
+      "note": "Blocker 1 (REVIEW-P1-r2): an executor maps only through an explicit row or waiver. A codex tier whose (model, effort) is in the registry does not map executor:codex, because executor_routing dispatches untiered and runs the host default model.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nexecutor_routing:\n  classes:\n    reasoning: [codex]\n",
+      "expect": {
+        "status": "refused",
+        "refusal_include": [
+          "unmapped:executor:codex"
+        ],
+        "refusal_exclude": [
+          "unmapped:gpt-5.6-sol@high"
+        ]
+      }
+    },
+    {
+      "id": "executor-explicit-waiver-maps-and-produces",
+      "note": "Blocker 1: executor:codex mapped by an explicit PROPOSED waiver to the host default (GPT-5.5 xhigh); its model is then analysed as a producer.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nexecutor_routing:\n  classes:\n    reasoning: [codex]\n",
+      "slugs_patch": {
+        "waivers_add": [
+          {
+            "ref": "executor:codex",
+            "model": "gpt-5.5",
+            "slug": "gpt-5-5",
+            "row_effort": "xhigh",
+            "row_reasoning_mode": "reasoning",
+            "status": "PROPOSED",
+            "evidence": [
+              "fixture"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "mapping": {
+          "executor:codex": "waiver-proposed"
+        },
+        "mapping_field": {
+          "executor:codex": {
+            "model": "gpt-5.5",
+            "slug": "gpt-5-5"
+          }
+        },
+        "producers_include": [
+          "gpt-5.5"
+        ],
+        "heads": {
+          "default|validation|gpt-5.5|nominal|default": "validation-sol"
+        }
+      }
+    },
+    {
+      "id": "n4-crosslab-sol-no-per-seat-rule2",
+      "note": "Blocker 2 + n4 (mk 2026-09-25: n4 covers validation and cross-lab-review): Opus-produced cross-lab-review goes to Sol first under cross_lab_first; the Sol seat and the other non-Fable seats carry no per-seat rule2 flag. The chain-level no-Astra lint still fires, and the Fable seat keeps its m2 flag.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-fable\n    deep-execution: deep-opus\n  tiers:\n    crosslab-fable:\n      role: cross-lab-review\n      backend: claude\n      model: fable\n      reasoning_effort: high\n      fallbacks: [crosslab-sol]\n      description: fixture seat crosslab-fable\n    crosslab-sol:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [crosslab-sonnet]\n      description: fixture seat crosslab-sol\n    crosslab-sonnet:\n      role: cross-lab-review\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat crosslab-sonnet\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "expect": {
+        "status": "ok",
+        "removals": [],
+        "heads": {
+          "default|cross-lab-review|claude-opus-5|nominal|default": "crosslab-sol"
+        },
+        "flags": {
+          "crosslab-fable": [
+            "rule2/cross-lab-review/opus"
+          ],
+          "crosslab-sol": [
+            "A2/cross-lab-review/sol",
+            "rule1/cross-lab-review/sol"
+          ]
+        },
+        "flags_exclude": {
+          "crosslab-sol": [
+            "rule2"
+          ],
+          "crosslab-sonnet": [
+            "rule2"
+          ]
+        },
+        "not_flagged": [
+          "crosslab-sonnet"
+        ],
+        "lint_include": {
+          "rule2_no_astra_seat": [
+            "default|cross-lab-review: no Astra seat for claude-opus-5-produced work"
+          ]
+        },
+        "annotations_include": [
+          "crosslab-fable (cross-lab-review, opus-produced): m2: declared same-lab downgrade"
+        ],
+        "schema_gaps_include": [
+          "Rule 2 cannot be met by removal or flag alone"
+        ]
+      }
+    },
+    {
+      "id": "n4-crosslab-with-astra-lint-quiet",
+      "note": "Blocker 2: the same cross-lab-review chain with an Astra seat reachable. The chain-level lint is quiet, Sol still carries no per-seat rule2 flag, and only the Fable m2 downgrade is flagged.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-fable\n    deep-execution: deep-opus\n  tiers:\n    crosslab-fable:\n      role: cross-lab-review\n      backend: claude\n      model: fable\n      reasoning_effort: high\n      fallbacks: [crosslab-sol]\n      description: fixture seat crosslab-fable\n    crosslab-sol:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [crosslab-sonnet, crosslab-astra]\n      description: fixture seat crosslab-sol\n    crosslab-sonnet:\n      role: cross-lab-review\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat crosslab-sonnet\n    crosslab-astra:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: xhigh\n      description: fixture seat crosslab-astra\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "expect": {
+        "status": "ok",
+        "lint_empty": [
+          "rule2_no_astra_seat"
+        ],
+        "flags_include": {
+          "crosslab-fable": [
+            "rule2/cross-lab-review/opus"
+          ]
+        },
+        "flags_exclude": {
+          "crosslab-sol": [
+            "rule2"
+          ],
+          "crosslab-sonnet": [
+            "rule2"
+          ],
+          "crosslab-astra": [
+            "rule2"
+          ]
+        },
+        "schema_gaps_exclude": [
+          "Rule 2 cannot be met by removal or flag alone"
+        ]
+      }
+    },
+    {
+      "id": "rule2-plan-review-keeps-per-seat",
+      "note": "plan-review is not cross_lab_first, so n4's exemption does not apply: every non-Astra seat reachable for Opus-produced plan-review carries a per-seat rule2 flag.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    plan-review: review-sonnet\n  tiers:\n    review-sonnet:\n      role: plan-review\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [review-astra]\n      description: fixture seat review-sonnet\n    review-astra:\n      role: plan-review\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: xhigh\n      description: fixture seat review-astra\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "expect": {
+        "status": "ok",
+        "flags": {
+          "review-sonnet": [
+            "rule2/plan-review/opus"
+          ]
+        },
+        "lint_empty": [
+          "rule2_no_astra_seat",
+          "m2"
+        ]
+      }
+    },
+    {
+      "id": "waiver-ratified-prefix-refused",
+      "note": "N2: status is a closed enum; `RATIFIED-by-nobody` is not RATIFIED.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-kimi]\n      description: fixture seat validation-opus\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "slugs_patch": {
+        "waivers_drop": [
+          "kimi-code/k3@high"
+        ],
+        "waivers_add": [
+          {
+            "ref": "kimi-code/k3@high",
+            "model": "kimi-code/k3",
+            "slug": "kimi-k3",
+            "row_effort": null,
+            "row_reasoning_mode": "unlabelled",
+            "label": "fixture",
+            "evidence": [
+              "fixture"
+            ],
+            "status": "RATIFIED-by-nobody",
+            "approved_by": "mk",
+            "approval": "fixture"
+          }
+        ]
+      },
+      "expect": {
+        "status": "refused",
+        "refusal_include": [
+          "registry:kimi-code/k3@high"
+        ],
+        "messages_include": [
+          "waiver status must be exactly one of PROPOSED, RATIFIED"
+        ]
+      }
+    },
+    {
+      "id": "waiver-ratified-without-approval-refused",
+      "note": "N2: a RATIFIED waiver needs approved_by and an approval pointer.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-kimi]\n      description: fixture seat validation-opus\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "slugs_patch": {
+        "waivers_drop": [
+          "kimi-code/k3@high"
+        ],
+        "waivers_add": [
+          {
+            "ref": "kimi-code/k3@high",
+            "model": "kimi-code/k3",
+            "slug": "kimi-k3",
+            "row_effort": null,
+            "row_reasoning_mode": "unlabelled",
+            "label": "fixture",
+            "evidence": [
+              "fixture"
+            ],
+            "status": "RATIFIED",
+            "approved_by": "mk"
+          }
+        ]
+      },
+      "expect": {
+        "status": "refused",
+        "refusal_include": [
+          "registry:kimi-code/k3@high"
+        ],
+        "messages_include": [
+          "a RATIFIED waiver needs approved_by and an approval pointer"
+        ]
+      }
+    },
+    {
+      "id": "waiver-proposed-with-approver-refused",
+      "note": "N2: a PROPOSED waiver has no approver yet.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-kimi]\n      description: fixture seat validation-opus\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "slugs_patch": {
+        "waivers_drop": [
+          "kimi-code/k3@high"
+        ],
+        "waivers_add": [
+          {
+            "ref": "kimi-code/k3@high",
+            "model": "kimi-code/k3",
+            "slug": "kimi-k3",
+            "row_effort": null,
+            "row_reasoning_mode": "unlabelled",
+            "label": "fixture",
+            "evidence": [
+              "fixture"
+            ],
+            "status": "PROPOSED",
+            "approved_by": "mk"
+          }
+        ]
+      },
+      "expect": {
+        "status": "refused",
+        "refusal_include": [
+          "registry:kimi-code/k3@high"
+        ],
+        "messages_include": [
+          "a PROPOSED waiver cannot carry approved_by"
+        ]
+      }
+    },
+    {
+      "id": "fallback-ref-is-a-producer",
+      "note": "Waiver fallback_ref (Fable closed -> Claude Code opus): the fallback model is analysed as a producer even when it is not a declared candidate.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
+      "families_patch": {
+        "candidates": []
+      },
+      "slugs_patch": {
+        "waivers_add": [
+          {
+            "ref": "subagent:fable",
+            "model": "claude-fable-5-1",
+            "slug": "claude-fable-5-1-xhigh",
+            "row_effort": "xhigh",
+            "row_reasoning_mode": "reasoning",
+            "status": "PROPOSED",
+            "fallback_ref": "subagent:opus",
+            "evidence": [
+              "fixture"
+            ]
+          },
+          {
+            "ref": "subagent:opus",
+            "model": "claude-opus-5-5",
+            "slug": "claude-opus-5-5-xhigh",
+            "row_effort": "xhigh",
+            "row_reasoning_mode": "reasoning",
+            "status": "PROPOSED",
+            "evidence": [
+              "fixture"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "producers_include": [
+          "claude-fable-5-1",
+          "claude-opus-5-5"
+        ],
+        "mapping_field": {
+          "subagent:fable": {
+            "fallback_model": "claude-opus-5-5"
+          }
+        }
+      }
+    },
+    {
+      "id": "fallback-ref-unverified-refused",
+      "note": "A fallback_ref must name a verified registry entry.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
+      "slugs_patch": {
+        "waivers_add": [
+          {
+            "ref": "subagent:fable",
+            "model": "claude-fable-5-1",
+            "slug": "claude-fable-5-1-xhigh",
+            "row_effort": "xhigh",
+            "row_reasoning_mode": "reasoning",
+            "status": "PROPOSED",
+            "fallback_ref": "subagent:opus",
+            "evidence": [
+              "fixture"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "status": "refused",
+        "refusal_include": [
+          "registry:subagent:fable",
+          "unmapped:subagent:fable"
+        ],
+        "messages_include": [
+          "fallback_ref 'subagent:opus' is not a verified registry entry"
+        ]
+      }
+    },
+    {
       "id": "repo-routing-end-to-end",
-      "note": "B9: the repository's routing.yaml, families and slug registry against fixture copies of the pinned snapshot rows. No removals; validation-sol, validation-kimi, review-fable and crosslab-fable are flagged; Opus 5.5 work is headed by Opus 5 in validation when Sol is down.",
+      "note": "B9: the repository's routing.yaml, families and slug registry against fixture copies of the pinned snapshot rows. No removals; validation-sol, validation-kimi, review-fable and crosslab-fable are flagged; Opus 5.5 work is headed by Opus 5 in validation when Sol is down. r2 fix: executors and `cloud` map only through explicit PROPOSED waivers, and no per-seat rule2 flag lands on a cross_lab_first cross-lab-review seat other than Fable (n4).",
       "routing_file": "config/routing.yaml",
       "families_file": "config/roster-families.yaml",
       "slugs_file": "config/roster-slugs.yaml",
@@ -1476,10 +1839,39 @@
           "subagent:haiku": "waiver-proposed",
           "subagent:opus": "waiver-proposed",
           "local:qwen3.6-35b-a3b-4bit": "exact",
-          "claude-sonnet-5@medium": "exact"
+          "claude-sonnet-5@medium": "exact",
+          "executor:codex": "waiver-proposed",
+          "executor:kimi": "waiver-proposed",
+          "cloud": "waiver-proposed"
         },
         "schema_gaps_include": [
           "validation-kimi is INOPERABLE"
+        ],
+        "mapping_field": {
+          "executor:codex": {
+            "model": "gpt-5.5",
+            "slug": "gpt-5-5"
+          },
+          "executor:kimi": {
+            "model": "kimi-code/k3"
+          }
+        },
+        "flags_exclude": {
+          "validation-sol": [
+            "rule2"
+          ],
+          "validation-opus": [
+            "rule2"
+          ],
+          "validation-sonnet": [
+            "rule2"
+          ],
+          "validation-kimi": [
+            "rule2"
+          ]
+        },
+        "producers_include": [
+          "gpt-5.5"
         ]
       }
     }

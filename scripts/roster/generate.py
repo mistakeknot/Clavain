@@ -48,7 +48,14 @@ FIXER = "Claude Opus 5.5 (mk-chosen P1 fixer, 2026-09-25; the P1 build was Claud
 # intercore identity.go: the review roles that require a producer identity.
 REVIEW_ROLES = ("validation", "cross-lab-review", "plan-review")
 # Rule 2 scope (n4, mk-ratified 2026-09-25): review roles only, not validation.
+# n4 also exempts cross_lab_first routing (mk, 2026-09-25: it covers both
+# validation and cross-lab-review), so in a cross_lab_first role rule 2 is a
+# chain-level lint (no Astra seat) and only the Fable m2 downgrade is flagged
+# per seat. plan-review is not cross_lab_first and keeps per-seat flags.
 RULE2_ROLES = ("plan-review", "cross-lab-review")
+# N2: a waiver status is a closed enum. RATIFIED needs approved_by and an
+# approval pointer; PROPOSED has no approver yet.
+WAIVER_STATUSES = ("PROPOSED", "RATIFIED")
 
 ROLE_CLASS = {
     "scout": "evidence",
@@ -149,7 +156,12 @@ def freshness(generated_at, now):
 
 
 def _iso(ts):
-    return ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if ts else None
+    # N4: keep sub-second precision so the printed deadline is the exact one.
+    if not ts:
+        return None
+    ts = ts.astimezone(timezone.utc)
+    spec = "milliseconds" if ts.microsecond else "seconds"
+    return ts.isoformat(timespec=spec).replace("+00:00", "Z")
 
 
 # --------------------------------------------------------------------------
@@ -248,10 +260,7 @@ def resolve_registry(slugs_cfg, families, snap_index):
         key = row["ref"] if row.get("ref") else f"{row.get('model')}@{row.get('effort')}"
         specs.append((key, row, row.get("effort"), row.get("reasoning_mode"), "exact"))
     for w in slugs_cfg.get("waivers") or []:
-        status = str(w.get("status") or "")
-        kind = ("waiver-ratified" if status.startswith("RATIFIED")
-                else "waiver-proposed" if status.startswith("PROPOSED") else None)
-        specs.append((w.get("ref"), w, w.get("row_effort"), w.get("row_reasoning_mode"), kind))
+        specs.append((w.get("ref"), w, w.get("row_effort"), w.get("row_reasoning_mode"), waiver_kind(w)))
     seen = set()
     for key, spec, want_effort, want_mode, kind in specs:
         if not key or not spec.get("model") or not spec.get("slug") or want_mode is None:
@@ -262,8 +271,8 @@ def resolve_registry(slugs_cfg, families, snap_index):
             entries.pop(key, None)
             continue
         seen.add(key)
-        if kind is None:
-            gaps.append((key, "waiver status must start with RATIFIED or PROPOSED"))
+        if isinstance(kind, tuple):
+            gaps.append((key, kind[1]))
             continue
         row = snap_index.get(spec["slug"])
         if row is None:
@@ -279,10 +288,37 @@ def resolve_registry(slugs_cfg, families, snap_index):
             "slug": spec["slug"],
             "row_name": row["name"],
             "label": spec.get("label"),
+            "caveats": spec.get("caveats"),
             "waiver_status": spec.get("status"),
+            "approved_by": spec.get("approved_by"),
+            "approval": spec.get("approval"),
+            "fallback_ref": spec.get("fallback_ref"),
             "evidence": spec.get("evidence"),
         }
+    # A waiver's fallback_ref (e.g. Fable closed -> Claude Code `opus`) names
+    # the producer that runs instead; it must itself be a verified entry.
+    for key in sorted(entries):
+        fb = entries[key].get("fallback_ref")
+        if fb and fb not in entries:
+            gaps.append((key, f"fallback_ref '{fb}' is not a verified registry entry"))
+    for key, _ in gaps:
+        entries.pop(key, None)
     return entries, gaps
+
+
+def waiver_kind(w):
+    """Closed-enum waiver status (N2). Returns the mapping kind, or
+    ("invalid", reason)."""
+    status = w.get("status")
+    if status not in WAIVER_STATUSES:
+        return ("invalid", f"waiver status must be exactly one of {', '.join(WAIVER_STATUSES)} (got {status!r})")
+    if status == "RATIFIED":
+        if not w.get("approved_by") or not w.get("approval"):
+            return ("invalid", "a RATIFIED waiver needs approved_by and an approval pointer")
+        return "waiver-ratified"
+    if w.get("approved_by"):
+        return ("invalid", "a PROPOSED waiver cannot carry approved_by")
+    return "waiver-proposed"
 
 
 # --------------------------------------------------------------------------
@@ -488,8 +524,9 @@ def model_references(routing):
     for key in sorted(local.get("tier_mappings") or {}):
         add(key, "local", "local_models.tier_mappings")
     for level, v in sorted((local.get("complexity_routing") or {}).items()):
-        if v != "cloud":
-            add(v, "local", f"local_models.complexity_routing.{level}")
+        # N11: `cloud` names a model too (routing.yaml's C3 comment says
+        # GPT-5.5 xhigh via codex), so it needs an explicit row or waiver.
+        add(v, "cloud" if v == "cloud" else "local", f"local_models.complexity_routing.{level}")
 
     ex = routing.get("executor_routing") or {}
     for cls, backends in sorted((ex.get("classes") or {}).items()):
@@ -508,27 +545,26 @@ def map_references(routing, families, registry):
     by_model = {}
     for key, entry in registry.items():
         by_model.setdefault(entry["model"], []).append(key)
-    tiers = (routing.get("dispatch") or {}).get("tiers") or {}
-    aliases = (routing.get("dispatch") or {}).get("model_aliases") or {}
     mapping, unmapped = {}, []
     for ref in sorted(refs):
         info = refs[ref]
         kind = info["kind"]
         m = None
-        if kind in ("tier", "subagent", "local"):
-            entry = registry.get(ref)
-            if entry and (kind != "tier" or entry["model"] == info["model"]):
-                m = dict(entry)
-        elif kind in ("alias", "frontier"):
+        if kind in ("alias", "frontier"):
             target = info["model"]
             if target in fam_models and by_model.get(target):
                 m = {"status": "derived", "model": target, "via": sorted(by_model[target])}
-        elif kind == "executor":
-            backend = info["backend"]
-            used = sorted(n for n, t in tiers.items() if (t or {}).get("backend") == backend)
-            keys = sorted({f"{aliases.get(tiers[n].get('model'), tiers[n].get('model'))}@{tiers[n].get('reasoning_effort') or 'unset'}" for n in used})
-            if used and all(k in registry for k in keys):
-                m = {"status": "derived", "model": None, "via": keys, "tiers": used}
+        else:
+            # Tiers, subagents, local models, executors and `cloud` map only
+            # through an explicit row or waiver. Executors are never derived
+            # from tiers: executor_routing dispatches untiered, so the model
+            # is the host default, not any tier's (Blocker 1, r2).
+            entry = registry.get(ref)
+            if entry and (kind != "tier" or entry["model"] == info["model"]):
+                m = dict(entry)
+                fb = entry.get("fallback_ref")
+                if fb:
+                    m["fallback_model"] = registry[fb]["model"]
         if m is None:
             unmapped.append(ref)
             mapping[ref] = {"status": "unmapped", "kind": kind, "where": info["where"]}
@@ -549,7 +585,10 @@ def seat_failures(world, role, producer, seat, luna_evals):
     if role in REVIEW_ROLES and pfam == "sol" and not (seat["lab"] == "anthropic" or seat["family"] == "astra"):
         fails.append(("rule1", "m1: Kimi validating Sol-produced work" if seat["family"] == "kimi" else ""))
     if role in RULE2_ROLES and pfam == "opus" and seat["family"] != "astra":
-        fails.append(("rule2", "m2: declared same-lab downgrade" if seat["family"] == "fable" else ""))
+        if seat["family"] == "fable":
+            fails.append(("rule2", "m2: declared same-lab downgrade"))
+        elif role not in world.cross_lab_first:
+            fails.append(("rule2", ""))
     if role in REVIEW_ROLES and producer and pfam and pfam == seat["family"] and producer != seat["model"]:
         fails.append(("A2", "runtime_family_unenforced"))
     if seat["family"] == "luna" and cls in RULE5_CLASSES and cls not in luna_evals:
@@ -566,8 +605,10 @@ def producers_of(world, mapping, families):
     local models, plus the unevaluated candidates (A2 is checked for them)."""
     out = {s["model"] for s in world.seats.values() if s["model"]}
     for m in mapping.values():
-        if m.get("kind") in ("subagent", "local") and m.get("model"):
+        if m.get("kind") in ("subagent", "local", "executor", "cloud") and m.get("model"):
             out.add(m["model"])
+            if m.get("fallback_model"):
+                out.add(m["fallback_model"])
     out.update(families.get("candidates") or [])
     return sorted(out)
 
@@ -912,8 +953,46 @@ def validate_patched(base, patched, families, producers, removals, allowed_head_
 # The pipeline shared by the real run and --self-test
 # --------------------------------------------------------------------------
 
+def config_shape_problems(families, slugs_cfg, reorder_waivers):
+    """N6: a list or scalar where a mapping is expected is a refusal with a
+    diagnostic, never a traceback."""
+    out = []
+    if not isinstance(families, dict):
+        return [f"roster-families.yaml top level is {type(families).__name__}, not a mapping"]
+    if not isinstance(slugs_cfg, dict):
+        return [f"roster-slugs.yaml top level is {type(slugs_cfg).__name__}, not a mapping"]
+    if not isinstance(families.get("models") or {}, dict):
+        out.append("roster-families.yaml `models` is not a mapping")
+    else:
+        for k, v in (families.get("models") or {}).items():
+            if not isinstance(v, dict):
+                out.append(f"roster-families.yaml models.{k} is not a mapping")
+    if not isinstance(families.get("candidates") or [], list):
+        out.append("roster-families.yaml `candidates` is not a list")
+    if not isinstance(families.get("luna_class_evaluations") or {}, dict):
+        out.append("roster-families.yaml `luna_class_evaluations` is not a mapping")
+    for key in ("rows", "waivers"):
+        items = slugs_cfg.get(key) or []
+        if not isinstance(items, list) or not all(isinstance(x, dict) for x in items):
+            out.append(f"roster-slugs.yaml `{key}` is not a list of mappings")
+    if not isinstance(reorder_waivers or [], list):
+        out.append("reorder waivers `waivers` is not a list")
+    else:
+        for i, w in enumerate(reorder_waivers or []):
+            # N3: a reorder waiver is an mk decision, so it carries the same
+            # approval fields as a RATIFIED registry waiver.
+            if not isinstance(w, dict) or not isinstance(w.get("seat"), str):
+                out.append(f"reorder waiver #{i} is not a mapping with a `seat` string")
+            elif not w.get("approved_by") or not w.get("approval"):
+                out.append(f"reorder waiver for {w['seat']} needs approved_by and an approval pointer")
+    return out
+
+
 def run_pipeline(routing_text, families, slugs_cfg, snapshot, now, reorder_waivers=None):
     res = {"promotion_ready": False, "status": "refused", "refusal": [], "messages": []}
+    shape = config_shape_problems(families, slugs_cfg, reorder_waivers)
+    if shape:
+        raise Refusal(["config_corrupt"], shape)
     try:
         routing = yaml.safe_load(routing_text) or {}
     except yaml.YAMLError as exc:
@@ -987,7 +1066,7 @@ def run_pipeline(routing_text, families, slugs_cfg, snapshot, now, reorder_waive
             if s["family"] == pfam and s["model"] != producer:
                 where = "head" if i == 0 else "reachable"
                 rfu.add(f"{producer} -> {name} ({s['model']}) in {role} [{where}, {scenario}]")
-    candidate_a2 = set()
+    candidate_a2, candidate_rfu = set(), set()
     for cand in families.get("candidates") or []:
         cfam = (world.family(cand) or {}).get("family")
         for context, role, head, _ in world.contexts():
@@ -996,6 +1075,7 @@ def run_pipeline(routing_text, families, slugs_cfg, snapshot, now, reorder_waive
             for name in world.chain(head):
                 s = world.seats[name]
                 if s["family"] == cfam and s["model"] != cand:
+                    candidate_rfu.add(cand)
                     candidate_a2.add(f"{cand}: refused as reviewer/validator in {role} while {name} ({s['model']}) is reachable; "
                                      f"refused as producer while {name} can review it")
 
@@ -1058,38 +1138,58 @@ def run_pipeline(routing_text, families, slugs_cfg, snapshot, now, reorder_waive
         "heads_changed": changed_heads(heads, pheads),
         "runtime_family_unenforced": sorted(rfu),
         "candidate_a2": sorted(candidate_a2),
+        "candidate_rfu": sorted(candidate_rfu),
         "lint": lint,
         "diff": diff,
         "patched_yaml_parses": True,
         "patch_validation": violations,
-        "schema_gaps": schema_gaps(routing, world, lint),
+        "schema_gaps": schema_gaps(routing, world, lint, mapping, producers, heads),
         "rules_reference": RULE_REFERENCES,
         "reorder_waivers": reorder_waivers or [],
     })
     return res
 
 
-def schema_gaps(routing, world, lint):
+def inoperable_seats(world):
+    """Kimi seats that set reasoning_effort: dispatch.sh:1053 rejects them as
+    governed runs (bead mk-d3rf)."""
+    return sorted(n for n, s in world.seats.items() if s["backend"] == "kimi" and s["effort"])
+
+
+def schema_gaps(routing, world, lint, mapping, producers, heads):
     gaps = []
     if lint["rule2_no_astra_seat"]:
         gaps.append("Rule 2 cannot be met by removal or flag alone: a review chain lacks an Astra seat for "
                     "Opus-produced work, and P1 never adds seats.")
     gaps.append("Additions have no apply path through M1 (the generator never emits additions); a "
                 "Promotable- or waiver-backed addition fails closed.")
-    ex = routing.get("executor_routing") or {}
-    backends = set(ex.get("default") or [])
-    for v in (ex.get("classes") or {}).values():
-        backends.update(v or [])
-    if backends:
-        gaps.append("executor_routing names backends, not models; an untiered `--to codex` run uses the host "
-                    "~/.codex/config.toml model, which routing.yaml does not name. The `reasoning: [codex]` "
-                    "comment cites a Luna-only parity eval (FLUXrig-92u), so rule 5 cannot be checked there.")
-    if "cloud" in ((routing.get("local_models") or {}).get("complexity_routing") or {}).values():
-        gaps.append("local_models.complexity_routing uses the keyword `cloud`, which names no model.")
-    for name, s in sorted(world.seats.items()):
-        if s["backend"] == "kimi" and s["effort"]:
-            gaps.append(f"{name} is INOPERABLE as a governed seat: scripts/dispatch.sh:1053 rejects governed "
-                        f"Kimi runs that set reasoning_effort (bead mk-d3rf). routing.yaml is not changed.")
+    executors = sorted(r for r, m in mapping.items() if m.get("kind") in ("executor", "cloud"))
+    if executors:
+        gaps.append("executor_routing and the `cloud` keyword name no model: "
+                    + ", ".join(f"`{r}` -> {mapping[r].get('model')} ({mapping[r]['status']})" for r in executors)
+                    + " are host-default mappings from explicit waivers, true only for the host whose config they cite.")
+    if "codex" in ((((routing.get("executor_routing") or {}).get("classes") or {}).get("reasoning")) or []):
+        gaps.append("The `reasoning: [codex]` comment cites a Luna-only parity eval (FLUXrig-92u), which is not "
+                    "evidence for the model the executor actually runs.")
+    inop = inoperable_seats(world)
+    for name in inop:
+        gaps.append(f"{name} is INOPERABLE as a governed seat: scripts/dispatch.sh:1053 rejects governed "
+                    f"Kimi runs that set reasoning_effort (bead mk-d3rf). routing.yaml is not changed.")
+    # N10: an inoperable effective head leaves that pair without a working head.
+    dead = sorted(k for k, h in heads.items() if h in inop and k.split("|")[0] == "default"
+                  and k.split("|")[4] == "default")
+    for k in dead:
+        context, role, producer, scenario, _ = k.split("|")
+        gaps.append(f"{role} for {producer}-produced work under {scenario}: the effective head is "
+                    f"{heads[k]}, which is INOPERABLE, so that pair has no working head.")
+    # N7: explicit --tier contexts bypass intercore producer exclusion.
+    for context, role, head, _ in world.contexts():
+        if not context.startswith("tier:"):
+            continue
+        selfrev = sorted(p for p in producers if p in {world.seats[n]["model"] for n in world.chain(head)})
+        if selfrev:
+            gaps.append(f"{context} ({role}) bypasses producer exclusion: {', '.join(selfrev)}-produced work can "
+                        f"be reviewed by the same model along its fallback chain (known gap; the generator mirrors dispatch --tier).")
     return gaps
 
 
@@ -1123,6 +1223,7 @@ def write_outputs(out_dir, res, meta):
         "runtime_family_unenforced": res["runtime_family_unenforced"],
         "candidate_a2": res["candidate_a2"],
         "lint": res["lint"],
+        "schema_gaps": res["schema_gaps"],
         "heads_changed": res["heads_changed"],
         "rules_reference": RULE_REFERENCES,
     }
@@ -1145,7 +1246,8 @@ def write_outputs(out_dir, res, meta):
                       if r["base_name"] == f.get("snapshot_name") and not r["is_provider_duplicate"]
                       and not r["is_latest_alias"] and not r["is_composite"] and not r["unrecognised_qualifiers"])
         cands.append({"candidate": c, "lab": f.get("lab"), "family": f.get("family"), "exact_version": c,
-                      "snapshot_rows": rows, "evidence": "unevaluated", "runtime_family_unenforced": True})
+                      "snapshot_rows": rows, "evidence": "unevaluated",
+                      "runtime_family_unenforced": c in res["candidate_rfu"]})
     roster = {"promotion_ready": False, **meta, "seats": seats, "candidates": cands,
               "note": "Ties are kept; no weighted score is computed."}
     (out_dir / "roster.generated.json").write_text(json.dumps(roster, indent=2, sort_keys=True) + "\n")
@@ -1153,6 +1255,8 @@ def write_outputs(out_dir, res, meta):
     header = [
         "# routing.proposed.patch -- generated in memory, never applied. promotion_ready: false",
         f"# base config/routing.yaml sha256 {meta['base_sha256']}; snapshot sha256 {meta['snapshot_sha256']}",
+        f"# families sha256 {meta['families_sha256']}; slugs sha256 {meta['slugs_sha256']}; "
+        f"reorder waivers sha256 {meta['reorder_waivers_sha256'] or 'none'}",
         f"# removals: {', '.join(res['removals']) or 'none'}; flagged seats: {', '.join(sorted(res['flags'])) or 'none'}",
         "",
     ]
@@ -1171,43 +1275,53 @@ def render_report(res, meta):
       f"`{res['freshness']['generatedAt']}`; freshness deadline **{res['freshness']['deadline']}**")
     a("- promotion_ready: **false** (every output). M1 never applies the patch.")
     a("")
-    a("## mk decisions applied (2026-09-25)")
+    a(f"- inputs sha256: families `{meta['families_sha256']}`, slugs `{meta['slugs_sha256']}`, "
+      f"reorder waivers `{meta['reorder_waivers_sha256'] or 'none'}`")
+    a("")
+    mapping = res["mapping"]
+    pending = [(r, m) for r, m in sorted(mapping.items()) if m.get("status") == "waiver-proposed"]
+    ratified = [(r, m) for r, m in sorted(mapping.items()) if m.get("status") == "waiver-ratified"]
+    a("## mk decisions applied")
     a("")
     a("- **STRICT:** every model string routing.yaml references (tiers, aliases, frontier_models, subagents, "
-      "complexity overrides, executors, local models) must be mapped or waived before a patch is emitted; "
-      "anything unmapped is a refusal.")
-    a("- **Kimi waiver (RATIFIED):** `kimi-code/k3@high` maps to snapshot row `kimi-k3`, labelled "
-      "\"max-effort evidence standing in for high; upper bound\". Evidence: Moonshot's API default effort is max "
-      "(platform.kimi.ai K3 quickstart), and Artificial Analysis's default K3 page is headed \"Kimi K3 (max)\".")
-    a("- **validation-kimi is INOPERABLE:** `scripts/dispatch.sh:1053` rejects governed Kimi runs that set an "
-      "effort. Tracked as bead mk-d3rf. routing.yaml is unchanged.")
-    a("- **Seven ambiguous models** carry PROPOSED waivers in `config/roster-slugs.yaml`, listed below. P1 is "
-      "not accepted until mk ratifies them.")
+      "complexity overrides, executors, the `cloud` keyword, local models) must be mapped or waived before a "
+      "patch is emitted; anything unmapped is a refusal. Executors map only through an explicit row or waiver.")
+    for ref, m in ratified:
+        a(f"- **Waiver RATIFIED by {m.get('approved_by')}** ({m.get('approval')}): `{ref}` maps to snapshot row "
+          f"`{m['slug']}` ({m['row_name']}), labelled \"{m.get('label')}\". Evidence: {' / '.join(m.get('evidence') or [])}")
+    if not ratified:
+        a("- Ratified mk waivers: none.")
+    for name in inoperable_seats(res["_world"]):
+        a(f"- **{name} is INOPERABLE:** `scripts/dispatch.sh:1053` rejects governed Kimi runs that set an "
+          "effort (bead mk-d3rf). routing.yaml is unchanged.")
+    a(f"- **{len(pending)} waiver(s) PROPOSED** in `config/roster-slugs.yaml`, listed below. "
+      + ("P1 is not accepted until mk ratifies them." if pending else "None are pending."))
     a("")
     a("## Waivers pending mk")
     a("")
-    a("| Reference | Snapshot row | Evidence |")
-    a("|---|---|---|")
-    pending = [(r, m) for r, m in sorted(res["mapping"].items()) if m.get("status") == "waiver-proposed"]
+    a("| Reference | Snapshot row | Label and caveats | Evidence |")
+    a("|---|---|---|---|")
     for ref, m in pending:
-        a(f"| `{ref}` | `{m['slug']}` ({m['row_name']}) | {' / '.join(m.get('evidence') or [])} |")
+        cav = [m.get("label") or "(no label)"] + list(m.get("caveats") or [])
+        if m.get("fallback_ref"):
+            cav.append(f"fallback producer `{m['fallback_ref']}` ({m.get('fallback_model')})")
+        a(f"| `{ref}` | `{m['slug']}` ({m['row_name']}) | {' / '.join(cav)} | {' / '.join(m.get('evidence') or [])} |")
     if not pending:
-        a("| (none) | | |")
-    ratified = [(r, m) for r, m in sorted(res["mapping"].items()) if m.get("status") == "waiver-ratified"]
-    a("")
-    a("Ratified mk waivers: " + (", ".join(f"`{r}` -> `{m['slug']}` ({m.get('label')})" for r, m in ratified) or "none"))
+        a("| (none) | | | |")
     a("")
     a("## Reference coverage (STRICT)")
     a("")
     a("| Reference | Status | Row / via |")
     a("|---|---|---|")
-    for ref, m in sorted(res["mapping"].items()):
+    for ref, m in sorted(mapping.items()):
         a(f"| `{ref}` | {m['status']} | {m.get('slug') or ', '.join(m.get('via') or [])} |")
     a("")
-    a("Mapping caveat: `local:qwen3.6-35b-a3b-4bit` is mapped to the non-reasoning row from routing.yaml's "
-      "`enable_thinking=False` note, but interfer `server/metal_worker.py:196` passes no `enable_thinking`, "
-      "so the served mode may differ from the declared one.")
-    a("")
+    caveated = [(r, m) for r, m in sorted(mapping.items())
+                if m.get("status") in ("exact", "waiver-ratified") and m.get("caveats")]
+    for ref, m in caveated:
+        a(f"Mapping caveat, `{ref}`: {' / '.join(m['caveats'])}")
+    if caveated:
+        a("")
     a("## Proposed patch (remove or flag only)")
     a("")
     a(f"- Removals: {', '.join(res['removals']) or 'none'}")
@@ -1227,7 +1341,11 @@ def render_report(res, meta):
     a("")
     a("- **m1 (existing conflict):** " + ("; ".join(res["lint"]["m1"]) or "none"))
     a("- **m2 (declared same-lab downgrade):** " + ("; ".join(res["lint"]["m2"]) or "none"))
-    a("- **Rule 2 (plan-review, cross-lab-review; n4):** " + ("; ".join(res["lint"]["rule2_no_astra_seat"]) or "every chain has an Astra seat"))
+    a("- **Rule 2 (plan-review, cross-lab-review; n4):** " + ("; ".join(res["lint"]["rule2_no_astra_seat"]) or "every chain has an Astra seat")
+      + ". In cross_lab_first roles (" + ", ".join(res["lint"]["cross_lab_first"]) + ") rule 2 is this chain-level "
+      "lint only; per-seat rule-2 flags there are the Fable m2 downgrade alone (n4, mk 2026-09-25).")
+    a("- **Rule 1 scope:** applied to every review role (" + ", ".join(REVIEW_ROLES) + "), plan-review included, "
+      "which is broader than the plan's \"validated by\" wording.")
     a("- **Opus-last (no Opus ahead of a frontier_models seat; no Opus added to frontier_models):** "
       + ("; ".join(res["lint"]["opus_last"]) or "holds") + ". `validation-opus` as validation primary is allowed.")
     a(f"- **Fable canon seat (r7):** fable seats kept: {', '.join(res['lint']['fable_seats']) or 'none'}")
@@ -1243,8 +1361,13 @@ def render_report(res, meta):
     grouped = {}
     for role, producer, scenario, head in _heads_summary(res):
         grouped.setdefault((role, producer), {})[scenario] = head
+    inop = set(inoperable_seats(res["_world"]))
+
+    def cell(h):
+        return f"{h} (INOPERABLE)" if h in inop else f"{h}"
     for (role, producer), sc in sorted(grouped.items()):
-        a(f"| {role} | {producer} | {sc.get('nominal')} | {sc.get('sol-unavailable')} | {sc.get('openai-unavailable')} |")
+        a(f"| {role} | {producer} | {cell(sc.get('nominal'))} | {cell(sc.get('sol-unavailable'))} | "
+          f"{cell(sc.get('openai-unavailable'))} |")
     a("")
     a("## runtime_family_unenforced (A2, along effective chains)")
     a("")
@@ -1275,9 +1398,12 @@ def render_report(res, meta):
 
 def write_refusal(out_dir, refusal, meta, partial):
     out_dir.mkdir(parents=True, exist_ok=True)
-    stale = out_dir / "routing.proposed.patch"
-    if stale.exists():
-        stale.unlink()
+    # N5: a refusal replaces every output of an earlier run; no stale patch
+    # or roster survives next to the refusal record.
+    for name in ("routing.proposed.patch", "roster.generated.json"):
+        stale = out_dir / name
+        if stale.exists():
+            stale.unlink()
     doc = {"promotion_ready": False, "status": "refused", "fixer": FIXER, **meta,
            "refusal": refusal.codes, "messages": refusal.messages,
            "freshness": partial.get("freshness"), "mapping": partial.get("mapping"),
@@ -1312,22 +1438,39 @@ def load_yaml_file(path):
         return yaml.safe_load(fh) or {}
 
 
+class EarlyRefusal(Exception):
+    """A refusal before the pipeline runs (hash mismatch, missing or corrupt
+    input). N5: it still writes a refusal record, so an earlier run's
+    report.md and eligibility.json never stay in --out looking current."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
 def run_generate(args):
     routing_path = Path(args.routing)
     if not routing_path.exists():
         return diagnostic(f"routing file not found: {routing_path}")
     base_sha = sha256_file(routing_path)
+    out_dir = Path(args.out)
     rc = 1
     try:
         rc = _run_generate(args, routing_path, base_sha)
+    except EarlyRefusal as exc:
+        write_refusal(out_dir, Refusal([exc.code], [exc.message]), {"base_sha256": base_sha}, {})
+        rc = diagnostic(exc.message)
     finally:
         # N4: the post-run base check runs on every path, refusals included.
         if sha256_file(routing_path) != base_sha:
-            rc = diagnostic("routing.yaml hash changed during the run -- this must never happen", code=1)
+            msg = "routing.yaml hash changed during the run -- this must never happen"
+            write_refusal(out_dir, Refusal(["base_changed"], [msg]), {"base_sha256": base_sha}, {})
+            rc = diagnostic(msg, code=1)
         if rc != 0:
             # A refusal never leaves an earlier run's proposal behind.
             for name in ("routing.proposed.patch", "roster.generated.json"):
-                stale = Path(args.out) / name
+                stale = out_dir / name
                 if stale.exists():
                     stale.unlink()
     return rc
@@ -1335,19 +1478,24 @@ def run_generate(args):
 
 def _run_generate(args, routing_path, base_sha):
     if base_sha != args.expect_base:
-        return diagnostic(f"--expect-base mismatch: routing.yaml is {base_sha}, approval record expects {args.expect_base}")
-    for label, p in (("families", args.families), ("slugs", args.slugs), ("snapshot", args.snapshot)):
-        if not Path(p).exists():
-            return diagnostic(f"{label} file not found: {p}")
+        raise EarlyRefusal("expect_base", f"--expect-base mismatch: routing.yaml is {base_sha}, "
+                                          f"approval record expects {args.expect_base}")
+    for label, p in (("families", args.families), ("slugs", args.slugs), ("snapshot", args.snapshot),
+                     ("reorder waivers", args.reorder_waivers)):
+        if p is not None and not Path(p).exists():
+            raise EarlyRefusal("input_missing", f"{label} file not found: {p}")
     try:
         families = load_yaml_file(args.families)
         slugs_cfg = load_yaml_file(args.slugs)
-        reorder_waivers = (load_yaml_file(args.reorder_waivers).get("waivers") or []) if args.reorder_waivers else []
+        reorder_doc = load_yaml_file(args.reorder_waivers) if args.reorder_waivers else {}
     except yaml.YAMLError as exc:
-        return diagnostic(f"families/slugs/waiver config is corrupt: {exc}")
+        raise EarlyRefusal("config_corrupt", f"families/slugs/waiver config is corrupt: {exc}")
+    if not isinstance(reorder_doc, dict):
+        raise EarlyRefusal("config_corrupt", "reorder waivers top level is not a mapping")
+    reorder_waivers = reorder_doc.get("waivers") or []
     actual = sha256_file(args.snapshot)
     if actual != args.snapshot_sha256:
-        return diagnostic(
+        raise EarlyRefusal("snapshot_sha256",
             "snapshot sha256 mismatch: refusing unpinned/unverified input "
             f"(expected {args.snapshot_sha256}, got {actual}). "
             "The expected value must come from the plan record, never from hashing the copy.")
@@ -1355,11 +1503,13 @@ def _run_generate(args, routing_path, base_sha):
         with open(args.snapshot, encoding="utf-8") as fh:
             snapshot = json.load(fh)
     except json.JSONDecodeError as exc:
-        return diagnostic(f"snapshot is corrupt (invalid JSON): {exc}")
+        raise EarlyRefusal("snapshot_corrupt", f"snapshot is corrupt (invalid JSON): {exc}")
     if not isinstance(snapshot, dict):
-        return diagnostic("snapshot is corrupt (not a JSON object)")
+        raise EarlyRefusal("snapshot_corrupt", "snapshot is corrupt (not a JSON object)")
     routing_text = routing_path.read_text(encoding="utf-8")
-    meta = {"base_sha256": base_sha, "snapshot_sha256": actual, "snapshot_path": str(args.snapshot)}
+    meta = {"base_sha256": base_sha, "snapshot_sha256": actual, "snapshot_path": str(args.snapshot),
+            "families_sha256": sha256_file(args.families), "slugs_sha256": sha256_file(args.slugs),
+            "reorder_waivers_sha256": sha256_file(args.reorder_waivers) if args.reorder_waivers else None}
     out_dir = Path(args.out)
     now = datetime.now(timezone.utc)  # no override outside --self-test (A1)
     partial = {}
@@ -1447,11 +1597,22 @@ def _check(expect, got):
         if present:
             errs.append(f"{name}: unexpected {present!r}")
 
+    def fields(name, want, have, sep, keep):
+        # N9: structured match on sep-delimited fields, so "rule2" matches the
+        # rule2 flags and never "rule2_no_astra_seat".
+        def hit(w, h):
+            return isinstance(h, str) and h.split(sep)[:len(w.split(sep))] == w.split(sep)
+        bad = [w for w in want if any(hit(w, h) for h in have) != keep]
+        if bad:
+            errs.append(f"{name}: {'missing' if keep else 'unexpected'} {bad!r} in {have!r}")
+
     for key, want in expect.items():
         if key == "status":
             eq(key, want, got["status"])
         elif key == "refusal_include":
-            includes(key, want, got.get("refusal", []))
+            fields(key, want, got.get("refusal", []), ":", True)
+        elif key == "refusal_exclude":
+            fields(key, want, got.get("refusal", []), ":", False)
         elif key == "messages_include":
             includes(key, want, got.get("messages", []))
         elif key == "removals":
@@ -1462,14 +1623,14 @@ def _check(expect, got):
             eq(key, want, got.get("flags"))
         elif key == "flags_include":
             for seat, items in want.items():
-                includes(f"flags[{seat}]", items, got.get("flags", {}).get(seat, []))
+                fields(f"flags[{seat}]", items, got.get("flags", {}).get(seat, []), "/", True)
         elif key == "flags_exclude":
             for seat, items in want.items():
-                excludes(f"flags[{seat}]", items, got.get("flags", {}).get(seat, []))
+                fields(f"flags[{seat}]", items, got.get("flags", {}).get(seat, []), "/", False)
         elif key == "not_flagged":
-            excludes(key, want, list(got.get("flags", {})))
+            fields(key, want, list(got.get("flags", {})), "\0", False)
         elif key == "not_removed":
-            excludes(key, want, got.get("removals", []))
+            fields(key, want, got.get("removals", []), "\0", False)
         elif key == "annotations_include":
             includes(key, want, got.get("annotations", []))
         elif key == "rfu_include":
@@ -1504,6 +1665,14 @@ def _check(expect, got):
             eq(key, want, got.get("rules_reference"))
         elif key == "schema_gaps_include":
             includes(key, want, got.get("schema_gaps", []))
+        elif key == "schema_gaps_exclude":
+            excludes(key, want, got.get("schema_gaps", []))
+        elif key == "mapping_field":
+            for ref, kv in want.items():
+                for field, v in kv.items():
+                    eq(f"mapping[{ref}].{field}", v, (got.get("mapping", {}).get(ref) or {}).get(field))
+        elif key == "producers_include":
+            fields(key, want, got.get("producers", []), "\0", True)
         else:
             errs.append(f"unknown expectation key {key!r}")
     return errs

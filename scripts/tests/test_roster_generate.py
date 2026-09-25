@@ -48,12 +48,12 @@ class RosterGenerateNegativeCases(unittest.TestCase):
         self.out = self.base / "out"
         self.routing_sha = sha256_bytes(ROUTING.read_bytes())
 
-    def run_generate(self, snapshot_path, snapshot_sha256, expect_base="routing"):
+    def run_generate(self, snapshot_path, snapshot_sha256, expect_base="routing", families=FAMILIES, slugs=SLUGS):
         cmd = [
             sys.executable, str(SCRIPT),
             "--routing", str(ROUTING),
-            "--families", str(FAMILIES),
-            "--slugs", str(SLUGS),
+            "--families", str(families),
+            "--slugs", str(slugs),
             "--snapshot", str(snapshot_path),
             "--snapshot-sha256", snapshot_sha256,
             "--out", str(self.out),
@@ -124,6 +124,35 @@ class RosterGenerateNegativeCases(unittest.TestCase):
         result = self.run_generate(snap, sha, expect_base="0" * 64)
         self.assert_refused_without_patch(result, "--expect-base mismatch")
 
+    def test_early_refusal_replaces_stale_outputs(self):
+        # N5: a refusal before the pipeline runs still overwrites the outputs
+        # of an earlier successful run.
+        self.out.mkdir()
+        (self.out / "report.md").write_text("STALE PASS\n")
+        (self.out / "eligibility.json").write_text('{"status": "ok"}\n')
+        (self.out / "roster.generated.json").write_text("{}\n")
+        (self.out / "routing.proposed.patch").write_text("stale\n")
+        snap, sha = self.write_snapshot("2026-09-23T12:20:44.712Z")
+        result = self.run_generate(snap, sha, expect_base="0" * 64)
+        self.assert_refused_without_patch(result, "--expect-base mismatch")
+        record = json.loads((self.out / "eligibility.json").read_text())
+        self.assertEqual(record["status"], "refused")
+        self.assertIs(record["promotion_ready"], False)
+        self.assertNotIn("STALE PASS", (self.out / "report.md").read_text())
+        self.assertIn("--expect-base mismatch", (self.out / "report.md").read_text())
+        self.assertFalse((self.out / "roster.generated.json").exists())
+
+    def test_non_mapping_families_is_a_diagnostic(self):
+        # N6: a well-formed YAML file of the wrong shape is refused, not a traceback.
+        families = self.base / "families.yaml"
+        families.write_text("- gpt-6-astra\n- claude-opus-5\n")
+        snap, sha = self.write_snapshot("2026-09-23T12:20:44.712Z")
+        result = self.run_generate(snap, sha, families=families)
+        self.assert_refused_without_patch(result, "families")
+        self.assertNotIn("Traceback", result.stderr)
+        record = json.loads((self.out / "eligibility.json").read_text())
+        self.assertIn("config_corrupt", record["refusal"])
+
     def test_self_test_fixture_passes(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--self-test", str(TRUTH_TABLE)],
@@ -164,6 +193,27 @@ class RosterGenerateNegativeCases(unittest.TestCase):
         self.assertIn("rule1/validation/sol", record["flags"]["validation-sol"])
         self.assertEqual(record["heads_changed"], [])
         self.assertTrue((self.out / "routing.proposed.patch").exists())
+
+    @unittest.skipUnless(EVIDENCE_SNAPSHOT.exists(), "pinned evidence snapshot not present on this host")
+    def test_report_decisions_follow_waiver_status(self):
+        # N1: "mk decisions applied" is derived from the slugs file, so a
+        # Kimi waiver demoted to PROPOSED is no longer reported as ratified.
+        import yaml
+        doc = yaml.safe_load(SLUGS.read_text())
+        for w in doc["waivers"]:
+            if w["ref"] == "kimi-code/k3@high":
+                w["status"] = "PROPOSED"
+                w.pop("approved_by", None)
+                w.pop("approval", None)
+        slugs = self.base / "slugs.yaml"
+        slugs.write_text(yaml.safe_dump(doc, sort_keys=False))
+        result = self.run_generate(EVIDENCE_SNAPSHOT, EVIDENCE_SHA256, slugs=slugs)
+        if result.returncode == 2 and "stale" in result.stderr:
+            self.skipTest("pinned snapshot is past its freshness deadline")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = (self.out / "report.md").read_text()
+        self.assertNotIn("RATIFIED by", report)
+        self.assertIn("11 waiver(s) PROPOSED", report)
 
 
 if __name__ == "__main__":

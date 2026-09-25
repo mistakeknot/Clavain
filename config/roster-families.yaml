@@ -58,6 +58,16 @@ models:
     lab: moonshot
     family: kimi
     snapshot_name: Kimi K3
+  # Executor host default (executor:codex, and the `cloud` keyword in
+  # local_models.complexity_routing): zklw ~/.codex/config.toml model
+  # "gpt-5.5". Its own family: not collapsed into sol or luna, because
+  # GPT-5.5 predates the Sol/Luna split (mk to confirm if that matters for A2).
+  # kimi-for-coding ("K2.8 Preview" in ~/.kimi-code/config.toml) is absent:
+  # executor routing never reaches it and the snapshot has no row for it.
+  gpt-5.5:
+    lab: openai
+    family: gpt-5.5
+    snapshot_name: GPT-5.5
   # Local interfer models (local_models.tier_mappings). One family per model
   # line; none of them sits in a review chain today.
   qwen3.6-35b-a3b:

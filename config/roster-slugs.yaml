@@ -4,9 +4,12 @@
 # STRICT (mk, 2026-09-25): every model string routing.yaml references must be
 # mapped here, by a `rows` entry or a `waivers` entry, before the generator
 # emits a patch. That covers dispatch tiers, model aliases, frontier_models,
-# subagent/complexity model aliases and local models. Executor names in
-# executor_routing are backends and resolve through the dispatch tiers that
-# use that backend. Anything unmapped is a refusal.
+# subagent/complexity model aliases, local models, executor backends and
+# the `cloud` keyword. Executors are never derived from dispatch tiers:
+# executor_routing dispatches `--to <backend>` with no tier, so the model is
+# the host config default, and an executor maps only through an explicit
+# `rows` or `waivers` entry keyed `executor:<backend>`. Anything unmapped is
+# a refusal.
 #
 # The generator never trusts this file alone. For every row and waiver it
 # re-parses the target snapshot row and requires:
@@ -66,6 +69,8 @@ rows:
     reasoning_mode: non-reasoning
     slug: qwen3-6-35b-a3b-non-reasoning
     evidence: routing.yaml tier_mappings comment "enable_thinking=False" and "Thinking mode hurts ...; keep off"
+    caveats:
+      - "interfer server/metal_worker.py:196 passes no enable_thinking, so the served mode may differ from the declared non-reasoning one"
   - ref: "local:nemotron-30b-a3b-8bit"
     model: nemotron-cascade-2-30b-a3b
     effort: null
@@ -76,16 +81,32 @@ rows:
 # Waivers bind a reference whose snapshot evidence does not match exactly.
 # `row_effort` / `row_reasoning_mode` describe the snapshot row as parsed (not
 # the seat), so the generator still verifies the row is what the waiver says
-# it is. `status` RATIFIED rows are mk decisions; PROPOSED rows are mapped for
-# this run but listed in report.md under "Waivers pending mk", and P1 is not
-# accepted until mk ratifies them.
+# it is.
+#
+# `status` is a closed enum (N2): PROPOSED or RATIFIED, nothing else.
+#   - RATIFIED needs `approved_by` and `approval` (a pointer to the record of
+#     the decision). Only mk ratifies.
+#   - PROPOSED carries no approver. It maps for this run but is listed in
+#     report.md under "Waivers pending mk", and P1 is not accepted until mk
+#     ratifies it. Every waiver below except Kimi is PROPOSED: mk has not
+#     ratified them (REVIEW-P1-r2 assessed them; mk's labels applied
+#     2026-09-25).
+# `label` is the one-line honesty label; `caveats` are the reviewer's
+# conditions; `fallback_ref` names the waiver of the producer that runs when
+# this one is unavailable, so its model is analysed as a producer too.
+#
+# Subagent effort: mk-rpnv.16 (pending mk directive, 2026-09-25: Opus/Sol and
+# higher default to medium, Sonnet/Luna to xhigh) may change the subagent
+# effort mappings below. It is not implemented here.
 waivers:
   - ref: "kimi-code/k3@high"
     model: kimi-code/k3
     slug: kimi-k3
     row_effort: null
     row_reasoning_mode: unlabelled
-    status: RATIFIED (mk waiver, 2026-09-25)
+    status: RATIFIED
+    approved_by: mk
+    approval: "mk decision 2026-09-25, coordinator thr_n8twxx4psd (recorded in rpnv9/fix-p1-prompt.md, Kimi waiver)"
     label: "max-effort evidence standing in for high; upper bound"
     evidence:
       - "Moonshot Kimi API quickstart (platform.kimi.ai/docs/guide/kimi-k3-quickstart): reasoning effort low/high/max, default max"
@@ -96,7 +117,12 @@ waivers:
     slug: claude-sonnet-5-xhigh
     row_effort: xhigh
     row_reasoning_mode: reasoning
-    status: PROPOSED (mk to ratify)
+    status: PROPOSED
+    label: "host-scoped (zklw effortLevel xhigh)"
+    caveats:
+      - "A host setting, not a routing.yaml fact; Clavain or another host may differ, and it changes silently"
+      - "Better: pin subagent effort in routing.yaml (P2 schema item) so this becomes a mapping"
+      - "mk-rpnv.16 (pending) may change this effort mapping"
     evidence:
       - "Claude Code built-in alias `sonnet` resolves to the latest Sonnet (claude-sonnet-5); subagents carry no effort field"
       - "Claude Code 2.1.282 on this host: ~/.claude/settings.json:717 effortLevel \"xhigh\""
@@ -105,7 +131,12 @@ waivers:
     slug: claude-opus-5-5-xhigh
     row_effort: xhigh
     row_reasoning_mode: reasoning
-    status: PROPOSED (mk to ratify)
+    status: PROPOSED
+    label: "Opus 5.5 at the Claude Code subagent layer; host-scoped effort"
+    caveats:
+      - "Alias conflict: dispatch.model_aliases.opus is claude-opus-5, but the Claude Code subagent alias `opus` is Opus 5.5; this waiver takes the subagent-layer reading. mk to confirm it holds on the hosts that matter, otherwise map to claude-opus-5-xhigh"
+      - "Effort is the host effortLevel (host-scoped)"
+      - "mk-rpnv.16 (pending) may change this effort mapping"
     evidence:
       - "Claude Code built-in alias `opus` resolves to the latest Opus (Opus 5.5), not dispatch.model_aliases.opus (claude-opus-5); used by complexity C4/C5 subagent_model"
       - "Host effortLevel xhigh (~/.claude/settings.json:717)"
@@ -115,7 +146,12 @@ waivers:
     slug: claude-fable-5-1-xhigh
     row_effort: xhigh
     row_reasoning_mode: reasoning
-    status: PROPOSED (mk to ratify)
+    status: PROPOSED
+    label: "host-scoped (zklw effortLevel xhigh)"
+    fallback_ref: "subagent:opus"
+    caveats:
+      - "Opus fallback: routing.yaml's subagent phases say fable falls back to opus when closed, so a Fable-closed session produces Opus 5.5 work; that producer is covered by the subagent:opus waiver (fallback_ref) and analysed as a producer"
+      - "mk-rpnv.16 (pending) may change this effort mapping"
     evidence:
       - "Clavain `fable` = claude-fable-5-1 (dispatch.model_aliases.fable); lib-routing.sh and intercore resolve it to `opus` when CLAVAIN_FABLE_AVAILABLE != 1"
       - "Host effortLevel xhigh (~/.claude/settings.json:717)"
@@ -124,7 +160,11 @@ waivers:
     slug: claude-4-5-haiku
     row_effort: null
     row_reasoning_mode: non-reasoning
-    status: PROPOSED (mk to ratify)
+    status: PROPOSED
+    label: "low confidence; unverified mode"
+    caveats:
+      - "The non-reasoning row is asserted, not demonstrated; do not cite this mapping as evidence"
+      - "Low impact: haiku holds complexity-routing subagent slots only, no review or authority seat"
     evidence:
       - "Claude Code alias `haiku` = Claude Haiku 4.5; subagent calls set no thinking budget, so the non-reasoning row is the default-mode match"
       - "Low confidence: the alternative is claude-4-5-haiku-reasoning"
@@ -133,7 +173,10 @@ waivers:
     slug: qwen3-5-122b-a10b
     row_effort: null
     row_reasoning_mode: reasoning
-    status: PROPOSED (mk to ratify)
+    status: PROPOSED
+    label: "upper bound (4-bit quantisation has no row); thinking ON in code, against routing.yaml config"
+    caveats:
+      - "Code/config mismatch: interfer runs thinking on, routing.yaml says keep it off; the waiver follows the code (what runs). The mismatch is an interfer defect in its own right"
     evidence:
       - "interfer server/metal_worker.py:196 calls apply_chat_template without enable_thinking, so the Qwen3.5 template default (thinking on) applies; only benchmarks/ set it"
       - "Counter-evidence: routing.yaml local_models comment \"Thinking mode hurts at <600s budgets ...; keep off\""
@@ -142,7 +185,10 @@ waivers:
     slug: qwen3-5-9b
     row_effort: null
     row_reasoning_mode: reasoning
-    status: PROPOSED (mk to ratify)
+    status: PROPOSED
+    label: "upper bound (4-bit quantisation has no row); thinking ON in code, against routing.yaml config"
+    caveats:
+      - "Same code/config mismatch as qwen3.5-122b"
     evidence:
       - "Same as qwen3.5-122b: interfer server sets no enable_thinking, template default is thinking on"
       - "Counter-evidence: routing.yaml local_models comment \"keep off\"; alibaba-qwen3-5-9b is a provider/batch duplicate and is excluded"
@@ -151,7 +197,51 @@ waivers:
     slug: gpt-oss-120b
     row_effort: high
     row_reasoning_mode: reasoning
-    status: PROPOSED (mk to ratify)
+    status: PROPOSED
+    label: "upper bound (effort and quantisation)"
+    caveats:
+      - "Effort: gpt-oss runtime default is medium and nothing raises it; the (high) row overstates the seat"
+      - "Quantisation: no MXFP4 row exists"
     evidence:
       - "Upper bound: gpt-oss default reasoning effort is medium and the snapshot has only (high) and (low) rows"
       - "No row encodes the MXFP4 local quantisation (mlx-community/gpt-oss-120b-MXFP4-Q8)"
+  # Executors and `cloud` (Blocker 1, REVIEW-P1-r2; N11). New evidence for mk:
+  # mk's original seven omitted these because the research labelled them N/A.
+  - ref: "executor:codex"
+    model: gpt-5.5
+    slug: gpt-5-5
+    row_effort: xhigh
+    row_reasoning_mode: reasoning
+    status: PROPOSED
+    label: "host-scoped (zklw ~/.codex/config.toml default)"
+    caveats:
+      - "executor_routing dispatches `--to codex` with no tier, so the model is the host default, not a routing.yaml fact; another host or a config edit changes it silently"
+      - "The `reasoning: [codex]` comment cites a Luna-only parity eval (FLUXrig-92u), which is not evidence for GPT-5.5"
+    evidence:
+      - "zklw ~/.codex/config.toml: model = \"gpt-5.5\", model_reasoning_effort = \"xhigh\" (verified 2026-09-25)"
+      - "scripts/dispatch.sh --to auto forwards PASSTHROUGH args with no --tier; -m defaults to ~/.codex/config.toml"
+      - "Snapshot row gpt-5-5 is \"GPT-5.5 (xhigh)\""
+  - ref: "executor:kimi"
+    model: kimi-code/k3
+    slug: kimi-k3
+    row_effort: null
+    row_reasoning_mode: unlabelled
+    status: PROPOSED
+    label: "host-scoped (zklw ~/.kimi-code/config.toml default); same max-for-high upper bound as the ratified kimi-code/k3@high waiver"
+    caveats:
+      - "Not the model mk directed: mk named kimi-for-coding, which is unreachable here. Untiered `--to kimi` uses default_model kimi-code/k3; only `--tier fast` (never passed by executor_routing) selects kimi-code/kimi-for-coding (\"K2.8 Preview\"), and the snapshot has no row for it. mk to rule"
+    evidence:
+      - "zklw ~/.kimi-code/config.toml: default_model = \"kimi-code/k3\"; [thinking] effort = \"high\"; k3 default_effort = \"high\" (verified 2026-09-25)"
+      - "scripts/dispatch.sh:222-226: -m defaults to default_model for --to kimi; fast -> kimi-for-coding only via --tier"
+  - ref: "cloud"
+    model: gpt-5.5
+    slug: gpt-5-5
+    row_effort: xhigh
+    row_reasoning_mode: reasoning
+    status: PROPOSED
+    label: "host-scoped; the routing.yaml comment names the model, the keyword does not"
+    caveats:
+      - "Same host-default model as executor:codex; a routing.yaml comment is not a pinned model"
+    evidence:
+      - "routing.yaml local_models.complexity_routing C3 comment: \"GPT-5.5 xhigh fast (codex CLI)\""
+      - "zklw ~/.codex/config.toml: model = \"gpt-5.5\", model_reasoning_effort = \"xhigh\""
