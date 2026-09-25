@@ -176,7 +176,7 @@ run_review() {
   (cd "$workdir" && ic init >/dev/null 2>&1) || true
   rc=0
   CLAVAIN_RECHECK_BEADS_DIR="$beads_dir_override" \
-  bash "$ROOT/scripts/dispatch.sh" --role plan-review --producer-identity "$producer" \
+  bash "$ROOT/scripts/dispatch.sh" --role "${REVIEW_ROLE:-plan-review}" --producer-identity "$producer" \
     --context-file "$CONTEXT_FILE" -C "$workdir" -o "$TMP_ROOT/answer.md" \
     "review the plan" >/dev/null 2>"$TMP_ROOT/err" || rc=$?
 }
@@ -244,6 +244,20 @@ grep -q "quota_exhausted" "$TMP_ROOT/err" || fail "Sol producer, Opus out: the O
 never_reviewed_by "Sol producer, Opus out" gpt-5.6-sol
 
 echo "PASS: plan review degrades to a distinct frontier model when the preferred reviewer is out of quota"
+
+# Cross-lab review of Sol work, Opus out of quota. crosslab-opus and the
+# validation-opus seat it reaches through validation-sol are both Opus 5.5
+# (mk-3b8z); once that seat failed on capacity the walk must not retry it
+# under the second profile_ref, and goes on to Sonnet.
+REVIEW_ROLE=cross-lab-review FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-5.6-sol
+[[ "$rc" == 0 ]] || fail "cross-lab, Opus out: expected review to reach Sonnet, got exit $rc: $(grep '^dispatch:' "$TMP_ROOT/err" | tail -3)"
+[[ "$(paste -sd' ' "$FAKE_CLAUDE_LOG")" == "claude-opus-5-5 claude-sonnet-5" ]] \
+  || fail "cross-lab, Opus out: expected one Opus attempt then Sonnet, got: $(paste -sd' ' "$FAKE_CLAUDE_LOG")"
+grep -q "reuses claude/claude-opus-5-5, already unavailable" "$TMP_ROOT/err" \
+  || fail "cross-lab, Opus out: the repeated Opus seat was not skipped by name"
+never_reviewed_by "cross-lab, Opus out" gpt-5.6-sol
+
+echo "PASS: a seat that failed on capacity is not retried under another profile_ref"
 
 # Opus-authored plan, Codex out: no distinct frontier seat is left, so the
 # review blocks (mk-3b8z fail-closed) and never falls through to Opus itself.

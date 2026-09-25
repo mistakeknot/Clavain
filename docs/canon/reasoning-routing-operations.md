@@ -63,19 +63,23 @@ to in that reordered position. `producer_model_conflict` and the existing
 `validation-opus -> validation-sonnet -> validation-sol -> validation-kimi`
 chain are unaffected: Intercore dedupes an already-visited profile_ref, so the
 new edge cannot reintroduce a seat the walk already excluded or already used.
+Distinct profile_refs can still name one seat (`crosslab-opus` and
+`validation-opus` are both Opus 5.5), so the dispatch walk also skips a
+candidate whose backend and model already failed on capacity in the same walk
+(mk-3b8z).
 
 Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
-`planning-astra`, then `planning-fable`, then `planning-opus` (mk ruling
-2026-09-18). It previously failed closed when both frontier labs were out. mk
-ruled that asymmetric: `claude-opus-5` is already in `reasoning.frontier_models`
-and is already authorised to independently review a frontier-authored plan, which
-is the harder job, so refusing to let it author in an emergency was arbitrary.
-The substitute stays last, so a reachable Astra still authors every plan.
+`planning-astra`, then `planning-opus` (mk ruling 2026-09-18; the Fable seat
+between them was removed by mk-3b8z on 2026-09-25). It previously failed closed
+when both frontier labs were out. mk ruled that asymmetric: Opus is in
+`reasoning.frontier_models` and is authorised to independently review a
+frontier-authored plan, which is the harder job, so refusing to let it author in
+an emergency was arbitrary. The Opus seat stays last, so a reachable Astra still
+authors every plan.
 
 The review and authoring lanes remain separate profile chains
-(`review-fable`/`review-astra`/`review-opus` against
-`planning-astra`/`planning-fable`/`planning-opus`) so that adding a seat to one
-cannot reach the other. That separation, not a refusal, is what keeps a
+(`review-opus`/`review-astra` against `planning-astra`/`planning-opus`) so that
+adding a seat to one cannot reach the other. That separation, not a refusal, is what keeps a
 review-side substitute from silently changing who authors a plan;
 `tests/routing/reasoning-contract-test.sh` asserts an authoring receipt is
 unchanged by edits to the review lane, and that Astra is still preferred while
@@ -113,9 +117,9 @@ has no distinct routed reviewer, and routing fails closed rather than admitting 
 same-model review. The agent then applies mk's adversarial orthogonal same-model
 Opus review by hand and declares it as such in the receipt and evidence; mk-2e1e
 tracks a routable seat for that review. The mk-9yyt same-lab degradation still
-applies where a distinct same-lab seat exists: for example, an Astra outage on a
-Sol-authored plan is not one of these, but Opus quota exhaustion on a Sol-authored
-plan walks to Astra as a capacity substitute.
+applies where a distinct same-lab seat exists. The only such plan-review path is
+a Sol-authored plan whose Opus reviewer fails on capacity: the walk reaches Astra,
+another OpenAI model, as a provisional capacity substitute.
 A pooled Codex lane whose own retries ran out (`exceeded retry limit, last
 status: 429`) now classifies as `rate_limited` rather than `terminal_error`. An
 exhausted-retries 429 is capacity, not a reason to keep hammering the same

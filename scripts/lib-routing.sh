@@ -84,9 +84,23 @@ _routing_model_tier() {
     local:qwen3.5-122b-a10b-4bit)       echo 3 ;;  # Track B5: MoE opus-equivalent
     local:gpt-oss-120b-mxfp4)           echo 3 ;;  # Track B5: opus-equivalent
     flash-moe:qwen3.5-397b)             echo 3 ;;  # Track B5: SSD-streamed opus-equivalent
-    fable)                              echo 4 ;;  # retired frontier tier (mk-3b8z); resolves to opus
+    fable)                              echo 3 ;;  # retired (mk-3b8z): ranks as opus, never above it
     *)                                  echo 0 ;;
   esac
+}
+
+# --- Retire the fable tier ---
+# Usage: _routing_retire_fable <model> <context>
+# Fable is retired (mk-3b8z, 2026-09-25): Opus 5.5 took every Fable seat. A
+# legacy `fable` from an older routing.yaml, agency spec, complexity override or
+# safety floor always leaves the resolver as opus.
+_routing_retire_fable() {
+  if [[ "${1:-}" == "fable" ]]; then
+    echo "[fable-retired] fable→opus (mk-3b8z) ${2:-}" >&2
+    echo "opus"
+  else
+    echo "${1:-}"
+  fi
 }
 
 # --- Apply safety floor clamping ---
@@ -105,7 +119,8 @@ _routing_apply_safety_floor() {
   fi
 
   if [[ -n "${_ROUTING_SF_AGENT_MIN[$floor_key]:-}" ]]; then
-    local floor="${_ROUTING_SF_AGENT_MIN[$floor_key]}"
+    local floor
+    floor=$(_routing_retire_fable "${_ROUTING_SF_AGENT_MIN[$floor_key]}" "min_model agent=$agent")
     local model_tier floor_tier
     model_tier=$(_routing_model_tier "$model")
     floor_tier=$(_routing_model_tier "$floor")
@@ -1254,12 +1269,7 @@ routing_resolve_model() {
   # Guard: resolve_model MUST never return "inherit"
   [[ "$result" == "inherit" ]] && result="sonnet"
 
-  # Fable is retired (mk-3b8z, 2026-09-25): Opus 5.5 took every Fable seat. A
-  # legacy `fable` in an older routing.yaml or agency spec always resolves to opus.
-  if [[ "$result" == "fable" ]]; then
-    echo "[fable-retired] fable→opus (mk-3b8z) phase=${phase:-} agent=${agent:-}" >&2
-    result="opus"
-  fi
+  result=$(_routing_retire_fable "$result" "phase=${phase:-} agent=${agent:-}")
 
   # Safety floor: clamp up to min_model if agent has one
   if [[ -n "$agent" && -n "$result" ]]; then
@@ -1358,7 +1368,7 @@ routing_resolve_model_complex() {
   local final_result="$base_result"
 
   if [[ -n "$cx_model" && "$cx_model" != "inherit" ]]; then
-    final_result="$cx_model"
+    final_result=$(_routing_retire_fable "$cx_model" "complexity=$complexity")
   fi
 
   # Shadow mode: log but return base result

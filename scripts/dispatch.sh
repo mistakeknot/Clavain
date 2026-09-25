@@ -508,6 +508,7 @@ _dispatch_role_profile() {
   local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
   local fallback_reason="" rc=1 candidate_count=0 producer_model="" capacity_substitute=null
   local candidate_model_identity="" producer_lab="" reviewer_lab="" capacity_failure_class=""
+  local capacity_failed_seats=$'\n'
   local -a resolved_args
 
   if [[ "$role" == "validation" || "$role" == "cross-lab-review" || "$role" == "plan-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
@@ -623,6 +624,13 @@ _dispatch_role_profile() {
       echo "dispatch: profile '$profile_ref' requires Codex >= $minimum; trying its declared fallback" >&2
       continue
     fi
+    # Distinct profile_refs can name the same seat (mk-3b8z: crosslab-opus and
+    # validation-opus are both Opus 5.5). Once a seat failed on capacity in this
+    # walk, a second profile for it would only fail again.
+    if [[ "$capacity_failed_seats" == *$'\n'"$backend/$model"$'\n'* ]]; then
+      echo "dispatch: '$profile_ref' reuses $backend/$model, already unavailable ($capacity_failure_class); skipping" >&2
+      continue
+    fi
 
     # A capacity substitute (mk-gp32): this review role already had an earlier
     # candidate actually run and fail with a capacity class (quota_exhausted,
@@ -675,6 +683,7 @@ _dispatch_role_profile() {
       quota_exhausted|rate_limited|model_unavailable|account_access_absent)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
+        capacity_failed_seats+="$backend/$model"$'\n'
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
       insufficient_codex_version|unsupported_adapter)

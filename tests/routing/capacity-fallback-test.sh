@@ -104,8 +104,13 @@ PY
 if out="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" claude-opus-5-5)"; then
   fail "Opus-authored plan-review found a routed reviewer with Astra out: $out"
 fi
-[[ "$out" == *"no model distinct from producer"* || "$out" == *"no eligible model satisfies reasoning contract"* ]] \
+[[ "$out" == *"no eligible model satisfies reasoning contract"* ]] \
   || fail "Opus-authored plan-review refused for the wrong reason: $out"
+# ic's refusal is generic, so pin its cause: the same context with a
+# non-Opus producer still routes to Opus 5.5.
+out="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" claude-sonnet-5)" \
+  || fail "Astra-out context refuses every producer, not just Opus: $out"
+[[ "$(jq -r .profile.model <<< "$out")" == claude-opus-5-5 ]] || fail "Sonnet-authored plan, Astra out: expected Opus 5.5, got: $out"
 
 # An Astra-authored plan is reviewed by Opus 5.5, a distinct frontier model.
 receipt="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" gpt-6-astra)" \

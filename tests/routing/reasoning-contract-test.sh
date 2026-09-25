@@ -57,7 +57,12 @@ if ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-rev
   --producer-identity=claude-opus-5-5 --context-file="$work/no-astra.json" > "$work/producer-route.json" 2>&1; then
   echo 'FAIL: Opus producer admitted as its own plan reviewer'; exit 1
 fi
-grep -Eq 'no model distinct from producer "claude-opus-5-5"|no eligible model satisfies reasoning contract' "$work/producer-route.json"
+grep -q 'no eligible model satisfies reasoning contract' "$work/producer-route.json"
+# ic's refusal is generic, so pin its cause: the same context with a
+# non-Opus producer still routes to Opus 5.5.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
+  --producer-identity=claude-sonnet-5 --context-file="$work/no-astra.json" \
+  | jq -e '.profile.model == "claude-opus-5-5"' >/dev/null
 # A review-lane edit is fixtured separately so the guard below can prove it
 # never reaches the authoring lane.
 python3 - "$ROOT/config/routing.yaml" "$work/capacity.yaml" <<'PYFIXTURE'
