@@ -29,14 +29,14 @@ supersedes: revision 5 (commit 59243f9), which superseded revision 4 (commit fe0
 }
 ```
 
-**Accountable decision (revision 6):** The coordinator (claude-sonnet-5) dispatched role `frontier-planning`, with primary profile `planning-astra` (gpt-6-astra) and frontier fallback `planning-opus`. Revision 6 was authored by claude-opus-5-5 through that fallback. Why the primary was not used is recorded in the coordinator's dispatch receipt and is unknown to this author. Clavain installation 0.6.324, policy SHA256 `7209d67e29c4d9e668cb1ecd1d4d931600902cba4031fd35866b8b434b34f79b`, policy source `/home/mk/projects/.clavain-jev/config/routing.yaml`. Review requirement: other-frontier, not yet run. The native Skill `clavain:using-clavain` was not available to the authoring session (unsupported host capability), so the selected root was not re-verified from a skill location. This JSON is not a usage receipt.
+**Accountable decision (revision 6):** The coordinator (claude-sonnet-5) dispatched role `frontier-planning`, with primary profile `planning-astra` (gpt-6-astra) and frontier fallback `planning-opus`. Revision 6 was authored by claude-opus-5-5 through that fallback. The primary was not used because `planning-astra` returned Codex HTTP 429 twice (initial attempt and account-pool retry), an operational failure; dispatch then walked the declared fallback (coordinator correction from the dispatch log). Clavain installation 0.6.324, policy SHA256 `7209d67e29c4d9e668cb1ecd1d4d931600902cba4031fd35866b8b434b34f79b`, policy source `/home/mk/projects/.clavain-jev/config/routing.yaml`. Review requirement: other-frontier, not yet run. The native Skill `clavain:using-clavain` was not available to the authoring session (unsupported host capability), so the selected root was not re-verified from a skill location. This JSON is not a usage receipt.
 
 ```json
 {
   "reasons": ["foundational-invariants", "broad-consequences", "difficult-verification"],
   "rationale": "Revision 6 adds typed client contracts, reproducibility fields, deterministic ordering guarantees, and two authorization/fingerprint security fixes to the shared Jev selector layer that six hosts and three dependent beads (.8, .9, .10) will build on; the fixes amend landed code, and permutation invariance and TOCTOU freedom are hard to verify without dedicated tests.",
-  "producer": {"model": "claude-opus-5-5", "profile": "planning-opus", "fallback_from": "planning-astra", "fallback_cause": "unknown to author (coordinator receipt)"},
-  "producer_identity_for_review": "claude-sonnet-5 (coordinator)",
+  "producer": {"model": "claude-opus-5-5", "profile": "planning-opus", "fallback_from": "planning-astra", "fallback_cause": "Codex HTTP 429 x2 (operational)"},
+  "producer_identity_for_review": "claude-opus-5-5 (author; the coordinator only dispatched)",
   "review_requirement": "other-frontier",
   "frontier_required": true
 }
