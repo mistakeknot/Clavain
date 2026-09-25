@@ -705,6 +705,21 @@ _dispatch_role_profile() {
   fallback_reason="$(jq -r '.fallback_reason // empty' <<< "$resolved")"
   VALIDATOR_RELATIONSHIP="$(jq -r '.validator_relationship // empty' <<< "$resolved")"
   producer_model="$(jq -r '.producer_model // empty' <<< "$resolved")"
+  # mk-c66x follow-up (P1-1): a pre-walk `ic` exclusion for an OPERATIONAL
+  # reason (model_unavailable from `available_models`, or headroom_exclusion
+  # from the pool-headroom probe above) already removed a candidate before
+  # this loop ever runs. capacity-fallback.sh's own header calls capacity
+  # exhaustion an OPERATIONAL failure, not a policy one, so this must seed
+  # capacity_failure_class exactly like an in-loop skip/failure would — the
+  # surviving candidate still needs to be marked a capacity substitute when
+  # it lands same-lab as the producer. A pre-walk POLICY exclusion
+  # (producer_model_conflict) must never seed this — only the operational
+  # reasons above do.
+  local pre_walk_operational_reason
+  pre_walk_operational_reason="$(jq -r '
+    [(.excluded // [])[] | select(.reason == "model_unavailable" or .reason == "headroom_exclusion") | .reason] | first // empty
+  ' <<< "$resolved")"
+  [[ -z "$pre_walk_operational_reason" ]] || capacity_failure_class="$pre_walk_operational_reason"
   DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
   export CLAVAIN_DISPATCH_ID="$DISPATCH_ID"
   candidates="$(jq -c '[{profile_ref:.profile_ref,profile:.profile}] + (.fallback_chain // []) | .[]' <<< "$resolved")" || {
@@ -2632,9 +2647,38 @@ _extract_verdict() {
         return 0
     fi
 
-    # No verdict block — synthesize from output
-    local verdict_line
-    verdict_line=$(grep -m1 "^VERDICT:" "$output_file" 2>/dev/null) || verdict_line=""
+    # No verdict block — synthesize from output.
+    #
+    # P1-2: the verdict is read ONLY from the first non-blank line of the
+    # agent's raw output, never from anywhere else in the body. The old
+    # `grep -m1 "^VERDICT:"` was case-sensitive and matched the FIRST line
+    # ANYWHERE in the file starting with literal "VERDICT:" — real review
+    # prompts and models commonly write mixed-case "Verdict: ...", which that
+    # grep never matched at all, so it fell through to whatever later line
+    # happened to start with uppercase "VERDICT:" (a quoted example inside a
+    # code fence, a later "--- VERDICT ---"-style recap) and used THAT as the
+    # ruling. A NEEDS-FIXES review whose first line reads "Verdict:
+    # NEEDS-FIXES" but whose body later quotes "VERDICT: CLEAN" therefore
+    # synthesized STATUS: pass. The fix: take only the first non-blank line
+    # (CRLF-tolerant), strip surrounding markdown bold (`**Verdict: ...**`),
+    # match "VERDICT:"/the label case-insensitively, and then match the
+    # verdict word itself against an exact, word-bounded token — nothing
+    # appearing after that first line is ever consulted again.
+    local first_line=""
+    first_line="$(awk '{ sub(/\r$/, ""); if ($0 ~ /[^[:space:]]/) { print; exit } }' "$output_file" 2>/dev/null)" || first_line=""
+
+    local verdict_line="" verdict_word=""
+    if [[ -n "$first_line" ]]; then
+        local normalized="$first_line"
+        # Strip a leading/trailing markdown bold wrapper (`**...**` or `*...*`)
+        # around the whole line, e.g. "**Verdict: NEEDS-FIXES**".
+        normalized="$(sed -E 's/^[[:space:]]*\*{1,2}//; s/\*{1,2}[[:space:]]*$//' <<< "$normalized")"
+        if [[ "$normalized" =~ ^[[:space:]]*[Vv][Ee][Rr][Dd][Ii][Cc][Tt]:[[:space:]]*(.*)$ ]]; then
+            verdict_word="$(sed -E 's/[[:space:]]+$//' <<< "${BASH_REMATCH[1]}")"
+            verdict_line="VERDICT: $verdict_word"
+        fi
+    fi
+    local verdict_word_upper="${verdict_word^^}"
 
     # Default is warn, not pass: this branch synthesizes a verdict the model
     # never structured, and orchestrate reads STATUS: pass as approved. A
@@ -2647,31 +2691,32 @@ _extract_verdict() {
     # UNRUN is a refusal to rule, surfaced as warn so nothing reads it as
     # approval; PASS is the only value that becomes STATUS: pass.
     #
-    # mk-rzi5: CLEAN and NEEDS_ATTENTION/NEEDS-FIXES are matched anchored at
-    # "VERDICT: " (like PASS/FAIL/UNRUN above), not as a bare substring —
-    # verdict_line always starts with "VERDICT:" (the grep above filters for
-    # that), so an unanchored *"CLEAN"* match let prose like "VERDICT: NOT
-    # CLEAN, see findings" or "VERDICT: not fully CLEAN yet" synthesize
-    # STATUS: pass from a line that said the opposite. NEEDS-FIXES gets its
-    # own branch (previously fell through to the generic "Unrecognized
-    # verdict" case — same warn outcome, but undistinguished from a truly
-    # unknown vocabulary).
-    if [[ "$verdict_line" == "VERDICT: PASS"* ]]; then
+    # Every branch below requires a trailing word boundary (end of string, or
+    # a non-alphanumeric/underscore/hyphen character) right after its token —
+    # a bare prefix match would let "CLEANUP-REQUIRED" satisfy "CLEAN" (mk P3
+    # finding: `"VERDICT: CLEAN"*` used to accept exactly that).
+    if [[ "$verdict_word_upper" =~ ^PASS($|[^A-Z0-9_-]) ]]; then
         status="pass"
         summary="Validator replay PASS."
-    elif [[ "$verdict_line" == "VERDICT: FAIL"* ]]; then
+    elif [[ "$verdict_word_upper" =~ ^FAIL($|[^A-Z0-9_-]) ]]; then
         status="warn"
         summary="Validator replay FAIL: $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || echo "criterion not stated")"
-    elif [[ "$verdict_line" == "VERDICT: UNRUN"* ]]; then
+    elif [[ "$verdict_word_upper" =~ ^UNRUN($|[^A-Z0-9_-]) ]]; then
         status="warn"
         summary="Validator could not run Verification (UNRUN); no ruling. $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || true)"
-    elif [[ "$verdict_line" == "VERDICT: NEEDS_ATTENTION"* ]]; then
+    elif [[ "$verdict_word_upper" =~ ^NEEDS_ATTENTION($|[^A-Z0-9_-]) ]]; then
         status="warn"
-        summary="${verdict_line#VERDICT: }"
-    elif [[ "$verdict_line" == "VERDICT: NEEDS-FIXES"* ]]; then
+        summary="$verdict_line"
+        summary="${summary#VERDICT: }"
+    elif [[ "$verdict_word_upper" =~ ^NEEDS-FIXES($|[^A-Z0-9_-]) ]]; then
         status="warn"
-        summary="${verdict_line#VERDICT: }"
-    elif [[ "$verdict_line" == "VERDICT: CLEAN"* ]]; then
+        summary="$verdict_line"
+        summary="${summary#VERDICT: }"
+    elif [[ "$verdict_word_upper" =~ ^NOT[[:space:]]+CLEAN($|[^A-Z0-9_-]) ]]; then
+        status="warn"
+        summary="$verdict_line"
+        summary="${summary#VERDICT: }"
+    elif [[ "$verdict_word_upper" =~ ^CLEAN($|[^A-Z0-9_-]) ]]; then
         status="pass"
         summary="Agent reports clean completion."
     elif [[ -z "$verdict_line" ]]; then
@@ -3123,28 +3168,36 @@ _dispatch_process_capacity_recheck() {
     bd_stderr="$(cat "$bd_stderr_file" 2>/dev/null)"
     rm -f "$bd_stderr_file"
   fi
-  # mk-c66x: parse a bead id out of bd_output regardless of bd_rc. A bd that
-  # creates the issue but then exits nonzero for an unrelated reason (its
-  # --deps attachment rejected, e.g.) still leaves a real bead behind — the
-  # old code discarded bd_output entirely on any nonzero exit and reported
-  # "could not file", which is wrong (a bead WAS filed) and, on a caller that
-  # retries after seeing that false "not filed" report, sets up exactly the
-  # duplicate-filing hazard the idempotency guard above exists to catch.
+  # P2 ruling (review findings 5, 6): only parse/report a bead id when `bd
+  # create` actually exited 0. A bd that exits nonzero must never have its
+  # stdout scanned for an id-shaped substring — on failure that stdout is
+  # unstructured (an error message, a partial log, a completely unrelated
+  # hyphenated word like "read-only" or "auto-import"), and guessing an id
+  # out of it can silently report a fake "partial" filing instead of the
+  # honest "could not file" the elif branch below produces when bead_id stays
+  # empty. This supersedes mk-c66x's regardless-of-bd_rc parsing.
+  #
+  # The id shape itself (finding 5) also had to widen: a tracker's bead-id
+  # PREFIX can itself contain hyphens and digits (e.g. a tracker prefixed
+  # "After-Them-rust" produces ids like "After-Them-rust-a1b2"), so the old
+  # `^[A-Za-z]+-[a-z0-9]+$` rejected every valid id from such a tracker. The
+  # id is now: one or more hyphen-separated alnum segments, the final segment
+  # lowercase alnum (bd's own suffix convention), with at least one hyphen
+  # overall.
   local bead_id=""
-  if [[ "$bd_supports_silent" == true ]]; then
-    bead_id="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$bd_output")"
-    [[ "$bead_id" =~ ^[A-Za-z]+-[a-z0-9]+$ ]] || bead_id=""
-  else
-    bead_id="$(awk 'match($0, /[A-Za-z]+-[a-z0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<< "$bd_output")"
+  if [[ "$bd_rc" == 0 ]]; then
+    if [[ "$bd_supports_silent" == true ]]; then
+      bead_id="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$bd_output")"
+      [[ "$bead_id" =~ ^[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]+)*-[a-z0-9]+$ ]] || bead_id=""
+    else
+      bead_id="$(awk 'match($0, /[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]+)*-[a-z0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<< "$bd_output")"
+    fi
   fi
   if [[ -n "$bead_id" ]]; then
+    # bead_id is only ever non-empty when bd_rc==0 (gated above), so a
+    # successfully-parsed id always means a clean filing.
     RECHECK_BEAD_JSON="$(jq -cn --arg id "$bead_id" '$id')"
-    if [[ "$bd_rc" == 0 ]]; then
-      RECHECK_BEAD_STATUS_JSON='"filed"'
-    else
-      RECHECK_BEAD_STATUS_JSON='"partial"'
-      echo "dispatch: WARNING — filed capacity-recheck bead $bead_id for '$ROLE' but bd exited $bd_rc afterward (its --deps attachment may not have taken)${bd_stderr:+: $bd_stderr}" >&2
-    fi
+    RECHECK_BEAD_STATUS_JSON='"filed"'
   elif [[ "$bd_rc" != 0 ]]; then
     RECHECK_BEAD_STATUS_JSON='"bd_failed"'
     echo "dispatch: WARNING — could not file the capacity-recheck bead for '$ROLE'; items are recorded at $recheck_file only${bd_stderr:+: $bd_stderr}" >&2
@@ -3171,11 +3224,22 @@ _finalize_dispatch_result() {
     exit_code=1
     failure_class=terminal_accounting
   fi
-  # A terminal stderr denial dominates an earlier structured capacity error.
+  # A terminal stderr denial dominates an earlier structured capacity error —
+  # EXCEPT a structured rate_limited or quota_exhausted result (review
+  # finding: a stderr terminal_configuration override, e.g. from an
+  # incidental 401-shaped phrase elsewhere in the same stderr, was silently
+  # turning a real, correctly-classified capacity failure into a terminal one
+  # and suppressing the fallback walk). Once provider-errors.py has already
+  # structured the failure as one of those two, that result always wins.
   if [[ -n "$failure_class" ]]; then
-    local stderr_class
-    stderr_class="$(_classify_dispatch_failure "$STDERR_FILE" 1)"
-    case "$stderr_class" in terminal_policy|terminal_configuration) failure_class="$stderr_class" ;; esac
+    case "$failure_class" in
+      rate_limited|quota_exhausted) ;;
+      *)
+        local stderr_class
+        stderr_class="$(_classify_dispatch_failure "$STDERR_FILE" 1)"
+        case "$stderr_class" in terminal_policy|terminal_configuration) failure_class="$stderr_class" ;; esac
+        ;;
+    esac
   fi
   if [[ -n "$failure_class" ]]; then
     exit_code=1

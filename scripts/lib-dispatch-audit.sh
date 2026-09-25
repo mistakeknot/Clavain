@@ -23,9 +23,26 @@ _classify_dispatch_failure() {
     # (Claude's `rate_limit_error`) or the adjectival/verb phrase
     # ("rate[- ]limited", "rate limit exceeded") — never a bare "rate-limit"
     # noun mention or an "x-ratelimit-*" header name.
+    #
+    # P2 follow-up (review findings 3+4): the 401/unauthorized check now runs
+    # BEFORE the 429/rate-limit check (a real observed 401 message like
+    # 'Error code: 401 - unauthenticated clients are rate limited' or '401
+    # Unauthorized: invalid x-api-key (see rate limit exceeded FAQ)' also
+    # contains rate-limit-shaped prose; checking 401 first means that prose
+    # is never reached). The 429 patterns below are widened to real observed
+    # shapes — 'HTTP/2 429', 'HTTP/1.1 429' (an explicit HTTP-version form,
+    # since the old `[^0-9]{0,15}` gap broke on the version's own digits),
+    # 'Error 429:', 'upstream responded 429', OpenAI's
+    # `"code":"rate_limit_exceeded"` / bare 'rate_limit_exceeded', 'Rate
+    # limit reached for', Moonshot's 'rate_limit_reached_error', and
+    # 'ratelimited' with no separator — while a traceback's 'line 429' (even
+    # when the file is literally named status.py/http.py/code.py) still must
+    # NEVER match: the status/code/http anchor below requires an actual `:`
+    # or `=` directly against the word, not an arbitrary character gap, so a
+    # filename's own punctuation can never bridge it.
     if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then echo terminal_policy
-    elif grep -qiE '429[[:space:]]+too many requests|too many requests[^0-9]{0,20}429|\b(status|code|http)[^0-9]{0,15}429\b|rate_limit_error|rate[-_ ]limited\b|rate[-_ ]limit[[:space:]]+exceeded' "$stderr_file"; then echo rate_limited
     elif grep -qiE '\b401\b|unauthorized|invalid_api_key|authentication[^[:alnum:]]+fail' "$stderr_file"; then echo terminal_configuration
+    elif grep -qiE '429[[:space:]]+too many requests|too many requests[^0-9]{0,20}429|http/[0-9.]+[[:space:]]+429\b|\b(status|code|http)[[:space:]]*[:=][[:space:]]*429\b|\berror[[:space:]]+429:|upstream responded[[:space:]]+429|rate_limit_exceeded|rate_limit_reached_error|rate limit reached for|rate_limit_error|rate[-_ ]?limited\b|rate[-_ ]limit[[:space:]]+exceeded' "$stderr_file"; then echo rate_limited
     elif grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then echo account_access_absent
     elif grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then echo model_unavailable
     elif grep -qiE '\b4[0-9]{2}\b|bad request|unauthorized|forbidden' "$stderr_file"; then echo terminal_configuration
@@ -59,6 +76,16 @@ _role_audit_context() {
     bb_receipt="${bb_receipt:-null}"
   fi
   [[ "$ENGINE" != codex ]] || version="$(codex --version 2>/dev/null || true)"
+  # P3: `_dispatch_ic_version` used to be recorded only inside an already-
+  # marked capacity_substitute — exactly the unmarked same-lab reviews its
+  # own stated purpose (auditing whether an old `ic` explains a missed mark)
+  # needs to check. Record it on every review-role receipt now, marked or not.
+  local ic_version=""
+  case "${ROLE:-}" in
+    plan-review|validation|cross-lab-review)
+      command -v _dispatch_ic_version >/dev/null 2>&1 && ic_version="$(_dispatch_ic_version 2>/dev/null || true)"
+      ;;
+  esac
   # A reused output path may still contain a previous attempt's sidecar.
   # Pending states have no verdict; App Server verdicts come from collection.
   if [[ "$state" == completed || "$state" == failed ]] && [[ "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka && -n "${OUTPUT:-}" && -f "${OUTPUT}.verdict" ]]; then
@@ -93,6 +120,7 @@ _role_audit_context() {
     --arg session "${ZAKA_SESSION:-}" --arg events "${PROVIDER_EVENTS:-${ZAKA_EVENT_LOG:-}}" \
     --arg before "$CHECKOUT_BEFORE" --arg after "$head_after" \
     --arg output "$OUTPUT" --arg verdict "$verdict" --arg failure "$failure_class" \
+    --arg ic_version "$ic_version" \
     --arg enrollment "${CLAVAIN_TASK_ENROLLMENT_ID:-}" --arg manifest "${CLAVAIN_TASK_MANIFEST_SHA256:-}" \
     --arg cohort "${CLAVAIN_TASK_COHORT_ID:-}" \
     --argjson exit_code "$exit_code" --argjson observation "${DISPATCH_EXECUTION_OBSERVATION:-null}" \
@@ -114,6 +142,7 @@ _role_audit_context() {
       primary_profile_ref:$route.profile_ref,
       executed_profile_ref:(if $executed_profile_ref != "" then $executed_profile_ref else $profile.profile_ref end),
       headroom_reorder:($route.headroom_reorder // null),
+      ic_version:(if $ic_version != "" then $ic_version else null end),
       capacity_substitute:$capacity_substitute,recheck_items:$recheck_items,recheck_source:$recheck_source,
       recheck_bead:$recheck_bead,recheck_bead_status:$recheck_bead_status,
       recheck_tracker_dir:$recheck_tracker_dir,recheck_sidecar_path:$recheck_sidecar_path,
