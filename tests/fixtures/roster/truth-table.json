@@ -1,0 +1,426 @@
+{
+  "version": 1,
+  "note": "Consumed by `scripts/roster/generate.py --self-test`. Each case calls one pure rule function by name with `args` and compares the JSON-normalized result to `expect`. Coverage follows PLAN-M1-r5.md §P1 Tests.",
+  "cases": [
+    {
+      "id": "opus-cross-version-5.5-producer-5-reviewer",
+      "note": "Opus 5.5 as producer, Opus 5 as reviewer -- refused (A2)",
+      "fn": "chain_refusal",
+      "args": {
+        "family_a": "opus",
+        "exact_a": "claude-opus-5-5",
+        "family_b": "opus",
+        "exact_b": "claude-opus-5"
+      },
+      "expect": true
+    },
+    {
+      "id": "opus-cross-version-5-producer-5.5-reviewer",
+      "note": "Opus 5.5 as reviewer of Opus 5 -- refused, other direction (A2)",
+      "fn": "chain_refusal",
+      "args": {
+        "family_a": "opus",
+        "exact_a": "claude-opus-5",
+        "family_b": "opus",
+        "exact_b": "claude-opus-5-5"
+      },
+      "expect": true
+    },
+    {
+      "id": "sol-sol-refused",
+      "fn": "rule1_validate",
+      "args": {
+        "producer_family": "sol",
+        "validator_family": "sol"
+      },
+      "expect": false
+    },
+    {
+      "id": "kimi-sol-refused-m1",
+      "note": "m1: current chain lets Kimi validate Sol work; lint reports it as an existing conflict",
+      "fn": "rule1_validate",
+      "args": {
+        "producer_family": "sol",
+        "validator_family": "kimi"
+      },
+      "expect": false
+    },
+    {
+      "id": "sol-claude-allowed",
+      "fn": "rule1_validate",
+      "args": {
+        "producer_family": "sol",
+        "validator_family": "sonnet"
+      },
+      "expect": true
+    },
+    {
+      "id": "sol-astra-allowed",
+      "fn": "rule1_validate",
+      "args": {
+        "producer_family": "sol",
+        "validator_family": "astra"
+      },
+      "expect": true
+    },
+    {
+      "id": "fable-opus-downgrade-m2",
+      "note": "m2: Fable reviewing Opus is a declared same-lab downgrade, never compliant",
+      "fn": "rule2_review",
+      "args": {
+        "producer_family": "opus",
+        "reviewer_family": "fable"
+      },
+      "expect": {
+        "compliant": false,
+        "same_lab_downgrade": true
+      }
+    },
+    {
+      "id": "opus-astra-review-compliant",
+      "fn": "rule2_review",
+      "args": {
+        "producer_family": "opus",
+        "reviewer_family": "astra"
+      },
+      "expect": {
+        "compliant": true,
+        "same_lab_downgrade": false
+      }
+    },
+    {
+      "id": "luna-substring-near-miss-not-matched",
+      "note": "sao10k-l3-lunaris-8b must never match a 'luna' lookup by substring; slug matching is exact-field only",
+      "fn": "slug_row_matches",
+      "args": {
+        "row": {
+          "model": "sao10k-l3-lunaris-8b",
+          "effort": "high",
+          "reasoning_mode": "reasoning"
+        },
+        "want_model": "luna",
+        "want_effort": "high"
+      },
+      "expect": false
+    },
+    {
+      "id": "relay-rejects-opus",
+      "note": "coordination-sonnet rejects Opus 5.5 -- relay seat, not an authority/judgment role",
+      "fn": "rule6_relay",
+      "args": {
+        "role": "coordination",
+        "candidate_family": "opus"
+      },
+      "expect": {
+        "refused": true
+      }
+    },
+    {
+      "id": "relay-rejects-astra",
+      "fn": "rule6_relay",
+      "args": {
+        "role": "coordination",
+        "candidate_family": "astra"
+      },
+      "expect": {
+        "refused": true
+      }
+    },
+    {
+      "id": "relay-allows-sonnet",
+      "fn": "rule6_relay",
+      "args": {
+        "role": "coordination",
+        "candidate_family": "sonnet"
+      },
+      "expect": {
+        "refused": false
+      }
+    },
+    {
+      "id": "unknown-alias-flagged",
+      "fn": "unknown_alias",
+      "args": {
+        "families_cfg": {
+          "models": {}
+        },
+        "model_id": "mystery-model-x"
+      },
+      "expect": true
+    },
+    {
+      "id": "runtime-family-unenforced-gpt56sol-to-gpt6sol",
+      "note": "added per CHECK-M1-r3 recommendation: GPT-5.6 Sol <-> GPT-6 Sol, both directions",
+      "fn": "chain_refusal",
+      "args": {
+        "family_a": "sol",
+        "exact_a": "gpt-5.6-sol",
+        "family_b": "sol",
+        "exact_b": "gpt-6-sol"
+      },
+      "expect": true
+    },
+    {
+      "id": "runtime-family-unenforced-gpt6sol-to-gpt56sol",
+      "fn": "chain_refusal",
+      "args": {
+        "family_a": "sol",
+        "exact_a": "gpt-6-sol",
+        "family_b": "sol",
+        "exact_b": "gpt-5.6-sol"
+      },
+      "expect": true
+    },
+    {
+      "id": "effective-chain-sol-failed-opus5-opus55-still-refused",
+      "note": "added per CHECK-M1-r3 recommendation: Sol operationally failed, cross_lab_first falls through to Opus; Opus 5 <-> Opus 5.5 stays refused",
+      "fn": "chain_refusal",
+      "args": {
+        "family_a": "opus",
+        "exact_a": "claude-opus-5",
+        "family_b": "opus",
+        "exact_b": "claude-opus-5-5"
+      },
+      "expect": true
+    },
+    {
+      "id": "rules-3-4-7-references-only",
+      "fn": "rules_reference",
+      "args": {},
+      "expect": {
+        "3": {
+          "enforced_by": "bb checkpoint rotation; the mk-rpnv.3 boundary envelope",
+          "status": "not_verified_by_generator"
+        },
+        "4": {
+          "enforced_by": "pool-headroom and the mk-rpnv.3 Jev/headroom envelope",
+          "status": "not_verified_by_generator"
+        },
+        "7": {
+          "enforced_by": "event triggers and the coordinator messaging rules",
+          "status": "not_verified_by_generator"
+        }
+      }
+    },
+    {
+      "id": "stale-over-8-days",
+      "fn": "freshness_status",
+      "args": {
+        "generated_at": "2026-09-01T00:00:00Z",
+        "now": "2026-09-25T00:00:00Z"
+      },
+      "expect": "stale"
+    },
+    {
+      "id": "stale-generatedAt-absent",
+      "fn": "freshness_status",
+      "args": {
+        "generated_at": null,
+        "now": "2026-09-25T00:00:00Z"
+      },
+      "expect": "stale"
+    },
+    {
+      "id": "stale-generatedAt-unparseable",
+      "fn": "freshness_status",
+      "args": {
+        "generated_at": "not-a-date",
+        "now": "2026-09-25T00:00:00Z"
+      },
+      "expect": "stale"
+    },
+    {
+      "id": "fresh-within-8-days",
+      "fn": "freshness_status",
+      "args": {
+        "generated_at": "2026-09-23T12:20:44.712Z",
+        "now": "2026-09-25T00:00:00Z"
+      },
+      "expect": "fresh"
+    },
+    {
+      "id": "slug-excludes-latest-alias",
+      "fn": "slug_row_matches",
+      "args": {
+        "row": {
+          "model": "gpt-6-astra",
+          "effort": "xhigh",
+          "reasoning_mode": "reasoning",
+          "is_latest_alias": true
+        },
+        "want_model": "gpt-6-astra",
+        "want_effort": "xhigh"
+      },
+      "expect": false
+    },
+    {
+      "id": "slug-excludes-composite",
+      "fn": "slug_row_matches",
+      "args": {
+        "row": {
+          "model": "claude-fable-5-1",
+          "effort": "high",
+          "reasoning_mode": "reasoning",
+          "is_composite": true
+        },
+        "want_model": "claude-fable-5-1",
+        "want_effort": "high"
+      },
+      "expect": false
+    },
+    {
+      "id": "slug-excludes-provider-duplicate",
+      "fn": "slug_row_matches",
+      "args": {
+        "row": {
+          "model": "gpt-5.6-sol",
+          "effort": "high",
+          "reasoning_mode": "reasoning",
+          "is_provider_duplicate": true
+        },
+        "want_model": "gpt-5.6-sol",
+        "want_effort": "high"
+      },
+      "expect": false
+    },
+    {
+      "id": "slug-excludes-wrong-effort",
+      "fn": "slug_row_matches",
+      "args": {
+        "row": {
+          "model": "gpt-5.6-sol",
+          "effort": "medium",
+          "reasoning_mode": "reasoning"
+        },
+        "want_model": "gpt-5.6-sol",
+        "want_effort": "high"
+      },
+      "expect": false
+    },
+    {
+      "id": "slug-excludes-wrong-reasoning-mode",
+      "fn": "slug_row_matches",
+      "args": {
+        "row": {
+          "model": "claude-sonnet-5",
+          "effort": "high",
+          "reasoning_mode": "non-reasoning"
+        },
+        "want_model": "claude-sonnet-5",
+        "want_effort": "high"
+      },
+      "expect": false
+    },
+    {
+      "id": "slug-excludes-effort-unlabelled",
+      "note": "kimi-k3 (no effort label) never stands in for a labelled-effort lookup",
+      "fn": "slug_row_matches",
+      "args": {
+        "row": {
+          "model": "kimi-code/k3",
+          "effort": null,
+          "reasoning_mode": "reasoning"
+        },
+        "want_model": "kimi-code/k3",
+        "want_effort": "high"
+      },
+      "expect": false
+    },
+    {
+      "id": "slug-accepts-exact-match",
+      "note": "sanity: a fully-matching row is accepted",
+      "fn": "slug_row_matches",
+      "args": {
+        "row": {
+          "model": "claude-sonnet-5",
+          "effort": "high",
+          "reasoning_mode": "reasoning"
+        },
+        "want_model": "claude-sonnet-5",
+        "want_effort": "high"
+      },
+      "expect": true
+    },
+    {
+      "id": "reorder-refused-without-promotable-or-waiver",
+      "fn": "reorder_change_allowed",
+      "args": {
+        "promotable": false,
+        "waiver": false
+      },
+      "expect": false
+    },
+    {
+      "id": "reorder-allowed-with-promotable",
+      "fn": "reorder_change_allowed",
+      "args": {
+        "promotable": true,
+        "waiver": false
+      },
+      "expect": true
+    },
+    {
+      "id": "reorder-allowed-with-waiver",
+      "fn": "reorder_change_allowed",
+      "args": {
+        "promotable": false,
+        "waiver": true
+      },
+      "expect": true
+    },
+    {
+      "id": "validation-sol-flagged-not-removed",
+      "note": "added per CHECK-M1-r3 A3 fix: validation-sol ineligible for Sol-produced work only, so it is flagged, never removed",
+      "fn": "patch_scope_decision",
+      "args": {
+        "ineligible_for": [
+          "sol"
+        ],
+        "producer_families_reaching_chain": [
+          "sol",
+          "sonnet",
+          "opus"
+        ]
+      },
+      "expect": "flag"
+    },
+    {
+      "id": "seat-removed-when-ineligible-for-every-reaching-family",
+      "note": "sanity: removal is correct only when the seat is ineligible for every producer family that can reach the chain",
+      "fn": "patch_scope_decision",
+      "args": {
+        "ineligible_for": [
+          "sol",
+          "kimi"
+        ],
+        "producer_families_reaching_chain": [
+          "sol",
+          "kimi"
+        ]
+      },
+      "expect": "remove"
+    },
+    {
+      "id": "validation-opus-allowed-as-primary",
+      "note": "added per CHECK-M1-r3 A3 fix: validation-opus as validation primary is not 'Opus last' -- that governs ordering relative to frontier_models only",
+      "fn": "frontier_ordering_violation",
+      "args": {
+        "role": "validation",
+        "seat_family": "opus",
+        "placing_ahead_of_frontier": false
+      },
+      "expect": false
+    },
+    {
+      "id": "opus-ahead-of-frontier-seat-flagged",
+      "note": "sanity: an Opus version actually placed ahead of a frontier_models seat is flagged",
+      "fn": "frontier_ordering_violation",
+      "args": {
+        "role": "frontier-planning",
+        "seat_family": "opus",
+        "placing_ahead_of_frontier": true
+      },
+      "expect": true
+    }
+  ]
+}

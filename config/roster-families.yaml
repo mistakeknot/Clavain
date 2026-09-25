@@ -1,0 +1,38 @@
+# mk-rpnv.9 P1 — hand-reviewed lab/family map for scripts/roster/generate.py.
+#
+# Family collapses cross-version conflict checks (A2 in PLAN-M1-r5.md): every
+# Opus version is one family, every Sol version is one family, and so on.
+# Performance evidence stays per exact version; a new version inherits no
+# replay pass (PLAN-M1-r5.md §P1 Identity). Add a row here only after the
+# exact ID is confirmed; an unmapped ID is flagged and kept out of any
+# proposed chain rather than guessed at.
+models:
+  gpt-6-astra:
+    lab: openai
+    family: astra
+  claude-fable-5-1:
+    lab: anthropic
+    family: fable
+  claude-opus-5:
+    lab: anthropic
+    family: opus
+  claude-opus-5-5:
+    lab: anthropic
+    family: opus
+  claude-sonnet-5:
+    lab: anthropic
+    family: sonnet
+  gpt-5.6-sol:
+    lab: openai
+    family: sol
+  gpt-6-sol:
+    lab: openai
+    family: sol
+  kimi-code/k3:
+    lab: moonshot
+    family: kimi
+  # Unevaluated candidate per §P1 Identity: GPT-6 Sol must not be relabelled
+  # from GPT-5.6 Sol results (m5). Listed above as gpt-6-sol / family sol.
+  sao10k-l3-lunaris-8b:
+    lab: sao10k
+    family: luna
