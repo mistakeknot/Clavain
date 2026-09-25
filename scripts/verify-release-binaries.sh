@@ -94,11 +94,53 @@ git -C "$REPO_ROOT" diff --quiet "$source_revision"..HEAD -- cmd/clavain-cli ||
 intercore_root="$(resolve_intercore_root)"
 git -C "$intercore_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
     unavailable "Intercore replacement is not a Git worktree"
-actual_intercore_revision="$(git -C "$intercore_root" rev-parse HEAD)"
-[[ "$actual_intercore_revision" == "$intercore_revision" ]] ||
-    die "Intercore revision mismatch: manifest=$intercore_revision checkout=$actual_intercore_revision"
+git -C "$intercore_root" cat-file -e "${intercore_revision}^{commit}" 2>/dev/null ||
+    die "Intercore pinned revision is not present in the checkout"
 [[ -z "$(git -C "$intercore_root" status --porcelain=v1 --untracked-files=normal)" ]] ||
     die "Intercore worktree is not clean"
+
+# zklw autosync auto-commits into the linked Intercore checkout on its own
+# schedule, including docs-only and internal/-only commits that no Clavain
+# binary imports. Requiring HEAD == intercore_revision (mk-y5de, 2026-09-25)
+# meant every such commit re-broke Clavain publication even though the
+# binaries embed a build tag pinning the exact revision (checked below) and
+# nothing they actually import had changed. Fall through to a content check
+# over clavain-cli's real Intercore dependency tree instead of HEAD equality:
+# a commit outside that tree changes nothing this release ships.
+actual_intercore_revision="$(git -C "$intercore_root" rev-parse HEAD)"
+if [[ "$actual_intercore_revision" != "$intercore_revision" ]]; then
+    git -C "$intercore_root" merge-base --is-ancestor "$intercore_revision" "$actual_intercore_revision" 2>/dev/null ||
+        die "Intercore pinned revision is not an ancestor of the checkout HEAD"
+
+    # Module files sit outside every package directory but still decide which
+    # third-party versions the release links.
+    git -C "$intercore_root" diff --quiet "$intercore_revision".."$actual_intercore_revision" -- go.mod go.sum ||
+        die "Intercore go.mod/go.sum changed between the pinned revision and checkout HEAD"
+
+    # Resolve imports per shipped platform with the release build tag: a
+    # host-only listing would miss darwin- or windows-only Intercore imports.
+    imported_pkgs=""
+    for target in linux/amd64 darwin/arm64 windows/amd64; do
+        target_pkgs="$(GOENV=off GOWORK=off GOFLAGS='' GOOS="${target%/*}" GOARCH="${target#*/}" \
+            go -C "$REPO_ROOT/cmd/clavain-cli" list -deps -tags="intercore_rev_$intercore_revision" . 2>/dev/null)" ||
+            unavailable "cannot resolve Clavain's Intercore package imports for $target"
+        imported_pkgs+="$(printf '%s\n' "$target_pkgs" | grep '^github.com/mistakeknot/intercore/' || true)"$'\n'
+    done
+    imported_pkgs="$(printf '%s' "$imported_pkgs" | sort -u | sed '/^$/d')"
+    [[ -n "$imported_pkgs" ]] || unavailable "clavain-cli imports no Intercore packages to diff"
+
+    while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] || continue
+        pkg_dir="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -f '{{.Dir}}' -e "$pkg" 2>/dev/null)" ||
+            unavailable "cannot resolve directory for $pkg"
+        pkg_dir="$(cd "$pkg_dir" 2>/dev/null && pwd)" || unavailable "$pkg directory does not exist"
+        rel_dir="${pkg_dir#"$intercore_root"/}"
+        [[ "$rel_dir" != "$pkg_dir" ]] ||
+            unavailable "$pkg resolved outside the pinned Intercore checkout"
+        git -C "$intercore_root" diff --quiet "$intercore_revision".."$actual_intercore_revision" -- "$rel_dir" ||
+            die "Intercore package $pkg changed between the pinned revision and checkout HEAD"
+    done <<<"$imported_pkgs"
+fi
 
 artifact_rows="$(jq -er '.artifacts | to_entries[] | [.key, .value.path, .value.sha256, .value.goos, .value.goarch] | @tsv' "$MANIFEST")" ||
     die "cannot read artifact manifest entries"

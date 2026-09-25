@@ -39,6 +39,10 @@ MINIMUM_CODEX_VERSION=""
 FALLBACK_REASON=""
 PRODUCER_IDENTITY=""
 VALIDATOR_RELATIONSHIP=""
+CAPACITY_SUBSTITUTE_JSON=""
+RECHECK_ITEMS=""
+RECHECK_SOURCE_JSON=""
+RECHECK_BEAD_JSON=""
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
@@ -392,15 +396,35 @@ done
 ROLE_PASSTHROUGH=()
 for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
   case "${ORIGINAL_ARGS[$i]}" in
-    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--fallback-reason|--producer-identity|--validator-relationship)
+    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--fallback-reason|--producer-identity|--validator-relationship|--capacity-substitute)
       i=$((i + 1))
       ;;
-    --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*)
+    --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*|--capacity-substitute=*)
       ;;
     --role-resolved)
       ;;
     *)
       ROLE_PASSTHROUGH+=("${ORIGINAL_ARGS[$i]}")
+      ;;
+  esac
+done
+
+# Arguments retained when a bare --tier (not --role) dispatch invokes this
+# script for a resolved primary or fallback tier candidate. Mirrors
+# ROLE_PASSTHROUGH; --tier itself and any explicit model/engine/effort/service
+# selection are replaced by the exact candidate chosen from the tier's
+# declared `fallbacks:` chain (mk ruling 2026-09-25: Codex exhaustion must
+# never block development).
+TIER_PASSTHROUGH=()
+for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
+  case "${ORIGINAL_ARGS[$i]}" in
+    --tier|--to|--engine|-m|--model|--reasoning-effort|--service-tier)
+      i=$((i + 1))
+      ;;
+    --tier=*|--to=*|--engine=*|--model=*|--reasoning-effort=*|--service-tier=*)
+      ;;
+    *)
+      TIER_PASSTHROUGH+=("${ORIGINAL_ARGS[$i]}")
       ;;
   esac
 done
@@ -416,7 +440,7 @@ _dispatch_write_failure_class() {
 }
 
 _run_candidate_with_policy() {
-  local failure_file retries attempt rc failure_class backoff pool_retry=0
+  local failure_file rc failure_class pool_retry=0
   local retry_id="${CLAVAIN_RETRY_ID:-${DISPATCH_ID:-$(_dispatch_audit_id)}}"
   local candidate_backend=codex previous_arg="" candidate_arg
   for candidate_arg in "$@"; do
@@ -424,11 +448,6 @@ _run_candidate_with_policy() {
     previous_arg="$candidate_arg"
   done
   failure_file="$(mktemp "${TMPDIR:-/tmp}/clavain-dispatch-failure.XXXXXX")"
-  retries="${CLAVAIN_429_MAX_RETRIES:-2}"
-  [[ "$retries" =~ ^[0-9]+$ ]] || retries=2
-  backoff="${CLAVAIN_429_BACKOFF_SECONDS:-2}"
-  [[ "$backoff" =~ ^[0-9]+$ ]] || backoff=2
-  attempt=0
 
   while true; do
     : > "$failure_file"
@@ -442,17 +461,14 @@ _run_candidate_with_policy() {
       CLAVAIN_LAST_FAILURE_CLASS=""
       return 0
     fi
-    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == quota_exhausted && "$pool_retry" == 0 ]] && _bb_pool_available "$candidate_backend"; then
+    # An exhausted-retries 429 is capacity, not a reason to keep hammering the
+    # same model: it gets the identical single account-pool retry
+    # quota_exhausted gets, then walks to the profile's declared fallback (mk
+    # ruling 2026-09-25, mk-nh6v). The provider's own client already retried
+    # the request before reporting this failure class.
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && ( "$failure_class" == quota_exhausted || "$failure_class" == rate_limited ) && "$pool_retry" == 0 ]] && _bb_pool_available "$candidate_backend"; then
       pool_retry=1
-      echo 'dispatch: quota exhausted; retrying the same profile through the account pool before model fallback' >&2
-      continue
-    fi
-    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == "rate_limited" && "$attempt" -lt "$retries" ]]; then
-      attempt=$((attempt + 1))
-      echo "dispatch: HTTP 429; retrying the same resolved model ($attempt/$retries)" >&2
-      if [[ "$backoff" -gt 0 ]]; then
-        sleep $((backoff * attempt))
-      fi
+      echo "dispatch: ${failure_class//_/ }; retrying the same profile through the account pool before model fallback" >&2
       continue
     fi
     rm -f "$failure_file"
@@ -476,9 +492,22 @@ _codex_version_at_least() {
   }'
 }
 
+# Bash port of intercore's modelLab (internal/routing/identity.go:138-148),
+# used to detect a capacity-substitute review (mk-gp32): a model identity
+# without a recognized prefix is "unknown" and never counts as a lab match.
+_dispatch_model_lab() {
+  case "$1" in
+    gpt-*) echo openai ;;
+    claude-*) echo anthropic ;;
+    kimi*) echo moonshot ;;
+    *) echo "" ;;
+  esac
+}
+
 _dispatch_role_profile() {
   local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
-  local fallback_reason="" rc=1 candidate_count=0
+  local fallback_reason="" rc=1 candidate_count=0 producer_model="" capacity_substitute=null
+  local candidate_model_identity="" producer_lab="" reviewer_lab="" capacity_failure_class=""
   local -a resolved_args
 
   if [[ "$role" == "validation" || "$role" == "cross-lab-review" || "$role" == "plan-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
@@ -555,6 +584,7 @@ _dispatch_role_profile() {
   fi
   fallback_reason="$(jq -r '.fallback_reason // empty' <<< "$resolved")"
   VALIDATOR_RELATIONSHIP="$(jq -r '.validator_relationship // empty' <<< "$resolved")"
+  producer_model="$(jq -r '.producer_model // empty' <<< "$resolved")"
   DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
   export CLAVAIN_DISPATCH_ID="$DISPATCH_ID"
   candidates="$(jq -c '[{profile_ref:.profile_ref,profile:.profile}] + (.fallback_chain // []) | .[]' <<< "$resolved")" || {
@@ -594,6 +624,26 @@ _dispatch_role_profile() {
       continue
     fi
 
+    # A capacity substitute (mk-gp32): this review role already had an earlier
+    # candidate actually run and fail with a capacity class (quota_exhausted,
+    # rate_limited, model_unavailable, account_access_absent — set below,
+    # never by a pre-walk ic fallback_reason like producer_model_conflict, nor
+    # by a pre-run skip like usage_reporting_unavailable or
+    # insufficient_codex_version), and this candidate lands on a model from
+    # the producer's own lab. Same-lab is fine when it is the only reachable
+    # reviewer, but the review is provisional, not a real cross-lab check —
+    # see B1's reviewer paragraph and B3's re-check filing below.
+    capacity_substitute=null
+    if [[ ( "$role" == plan-review || "$role" == validation || "$role" == cross-lab-review ) && -n "$capacity_failure_class" ]]; then
+      candidate_model_identity="$(jq -r '.profile.model_identity // .profile.model' <<< "$candidate")"
+      producer_lab="$(_dispatch_model_lab "$producer_model")"
+      reviewer_lab="$(_dispatch_model_lab "$candidate_model_identity")"
+      if [[ -n "$producer_lab" && "$producer_lab" == "$reviewer_lab" ]]; then
+        capacity_substitute="$(jq -cn --arg fc "$capacity_failure_class" --arg pl "$producer_lab" --arg rl "$reviewer_lab" \
+          '{failure_class:$fc,producer_lab:$pl,reviewer_lab:$rl}')"
+      fi
+    fi
+
     resolved_args=(
       bash "${BASH_SOURCE[0]}"
       --role-resolved
@@ -610,6 +660,7 @@ _dispatch_role_profile() {
     [[ -n "$fallback_reason" ]] && resolved_args+=(--fallback-reason "$fallback_reason")
     [[ -n "$PRODUCER_IDENTITY" ]] && resolved_args+=(--producer-identity "$PRODUCER_IDENTITY")
     [[ -n "$VALIDATOR_RELATIONSHIP" ]] && resolved_args+=(--validator-relationship "$VALIDATOR_RELATIONSHIP")
+    [[ "$capacity_substitute" == null ]] || resolved_args+=(--capacity-substitute "$capacity_substitute")
     resolved_args+=("${ROLE_PASSTHROUGH[@]}")
 
     if _run_candidate_with_policy "${resolved_args[@]}"; then
@@ -621,7 +672,12 @@ _dispatch_role_profile() {
     # transport failure. Only its supervisor can admit another invocation.
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      quota_exhausted|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent)
+        fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
+        capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
+        echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
+        ;;
+      insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
@@ -633,6 +689,133 @@ _dispatch_role_profile() {
   done <<< "$candidates"
 
   [[ "$candidate_count" -gt 0 ]] || echo "Error: role '$role' has no executable profiles" >&2
+  return "$rc"
+}
+
+# Walk a bare --tier's declared `fallbacks:` chain (config/routing.yaml
+# dispatch.tiers.<name>.fallbacks), retrying on the same observed failure
+# classes _dispatch_role_profile uses. Unlike --role, this reads the chain
+# directly from routing.yaml via scripts/tier-fallback-chain.py: `ic route
+# dispatch --tier=<name>` only ever resolves the single named tier and never
+# walks or returns its fallbacks (mk ruling 2026-09-25).
+_dispatch_tier_profile() {
+  local tier="$1" policy candidates candidate backend model effort service minimum role
+  local rc=1 candidate_count=0 chain_rc=0
+  local -a resolved_args
+
+  command -v python3 >/dev/null 2>&1 || {
+    echo "Error: python3 is required for --tier fallback resolution" >&2
+    return 1
+  }
+  command -v jq >/dev/null 2>&1 || {
+    echo "Error: jq is required for --tier fallback resolution" >&2
+    return 1
+  }
+  # Discovery order matches _routing_find_config() (lib-routing.sh): an
+  # explicit --policy/CLAVAIN_ROUTING_POLICY wins outright (dispatch.sh's own
+  # established convention, e.g. _dispatch_role_profile); otherwise defer to
+  # the same CLAVAIN_ROUTING_CONFIG / script-relative / CLAVAIN_SOURCE_DIR /
+  # CLAUDE_PLUGIN_ROOT search the rest of the routing stack uses.
+  policy="${CLAVAIN_ROUTING_POLICY:-}"
+  if [[ -z "$policy" ]] && declare -f _routing_find_config >/dev/null 2>&1; then
+    policy="$(_routing_find_config 2>/dev/null)" || policy=""
+  fi
+  policy="${policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+
+  candidates="$(python3 "$DISPATCH_SCRIPT_DIR/tier-fallback-chain.py" --policy "$policy" --tier "$tier")"
+  chain_rc=$?
+  if [[ $chain_rc -eq 3 ]]; then
+    # pyyaml unavailable: degrade instead of failing dispatch outright (mk
+    # ruling 2026-09-25 — Codex exhaustion, or any capacity failure, must
+    # never block development). Fall back to the legacy bash-native,
+    # pyyaml-free resolver (lib-routing.sh's routing_resolve_dispatch_tier),
+    # which also still honors the legacy dispatch.fallback: alias table —
+    # single-hop only, no multi-candidate chain walking.
+    echo "Warning: pyyaml unavailable; tier fallback chain disabled for '$tier' — resolving a single candidate via the legacy resolver" >&2
+    if ! declare -f routing_resolve_dispatch_tier >/dev/null 2>&1; then
+      echo "Error: could not resolve tier '$tier' — pyyaml is unavailable and the legacy resolver is not loaded" >&2
+      return 1
+    fi
+    model="$(CLAVAIN_ROUTING_CONFIG="$policy" routing_resolve_dispatch_tier "$tier" 2>/dev/null)" || model=""
+    [[ -n "$model" ]] || { echo "Error: could not resolve tier '$tier' from routing.yaml (legacy resolver)" >&2; return 1; }
+    resolved_args=(bash "${BASH_SOURCE[0]}" --to codex --model "$model")
+    resolved_args+=("${TIER_PASSTHROUGH[@]}")
+    _run_candidate_with_policy "${resolved_args[@]}"
+    return $?
+  elif [[ $chain_rc -ne 0 ]]; then
+    echo "Error: could not resolve tier '$tier' from routing.yaml" >&2
+    return 1
+  fi
+
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" ]] || continue
+    candidate_count=$((candidate_count + 1))
+    role="$(jq -r '.role // empty' <<< "$candidate")"
+    backend="$(jq -r '.backend // empty' <<< "$candidate")"
+    model="$(jq -r '.model // empty' <<< "$candidate")"
+    effort="$(jq -r '.reasoning_effort // empty' <<< "$candidate")"
+    service="$(jq -r '.service_tier // empty' <<< "$candidate")"
+    minimum="$(jq -r '.minimum_codex_version // empty' <<< "$candidate")"
+
+    if [[ -z "$backend" || -z "$model" ]]; then
+      echo "Error: tier '$tier' resolved an incomplete profile" >&2
+      return 1
+    fi
+    if [[ "$backend" == "main" ]]; then
+      echo "Error: tier '$tier' resolved a main-integrator-only profile and cannot be delegated" >&2
+      return 1
+    fi
+    # Same usage-budget guard _dispatch_role_profile applies: a backend that
+    # cannot report usage cannot run under an approved token budget.
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$backend" != codex && "$backend" != claude ]]; then
+      echo "dispatch: tier candidate '$model' cannot report usage for this approved token budget; trying its declared fallback" >&2
+      continue
+    fi
+    if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
+      echo "dispatch: tier candidate '$model' requires Codex >= $minimum; trying its declared fallback" >&2
+      continue
+    fi
+
+    resolved_args=(bash "${BASH_SOURCE[0]}" --to "$backend" --model "$model")
+    [[ -n "$effort" ]] && resolved_args+=(--reasoning-effort "$effort")
+    [[ -n "$service" ]] && resolved_args+=(--service-tier "$service")
+    # Give a Claude candidate the same write authority a resolved execution
+    # role gets (dispatch.sh:~1771): routine-execution/deep-execution/
+    # escalation may write when the sandbox is not read-only; every other
+    # role (validation, scout, main-integrator, ...) keeps the mutation
+    # prohibition. Computed here (not via --role-resolved) because
+    # ROLE_RESOLVED==true separately demands an ic-issued policy hash
+    # (governed-contract delivery, ~line 1410) that bare --tier resolution
+    # never has — --claude-unsafe grants write authority without claiming
+    # that unrelated ic-governance contract.
+    if [[ "$backend" == claude && -n "$role" && "$SANDBOX" != read-only ]]; then
+      case "$role" in
+        routine-execution|deep-execution|escalation) resolved_args+=(--claude-unsafe) ;;
+      esac
+    fi
+    resolved_args+=("${TIER_PASSTHROUGH[@]}")
+
+    if _run_candidate_with_policy "${resolved_args[@]}"; then
+      return 0
+    else
+      rc=$?
+    fi
+    # A started budgeted candidate may have already spent tokens, even on an
+    # access or transport failure. Only its supervisor can admit another
+    # invocation (mirrors _dispatch_role_profile).
+    [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
+    case "$CLAVAIN_LAST_FAILURE_CLASS" in
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+        echo "dispatch: tier '$tier' candidate '$model' unavailable ($CLAVAIN_LAST_FAILURE_CLASS); trying its declared fallback" >&2
+        ;;
+      *)
+        echo "dispatch: tier '$tier' candidate '$model' failed with terminal class '$CLAVAIN_LAST_FAILURE_CLASS'; fallback suppressed" >&2
+        return "$rc"
+        ;;
+    esac
+  done <<< "$(jq -c '.[]' <<< "$candidates")"
+
+  [[ "$candidate_count" -gt 0 ]] || echo "Error: tier '$tier' has no executable profiles" >&2
   return "$rc"
 }
 
@@ -724,7 +907,7 @@ while [[ $# -gt 0 ]]; do
       ROLE_RESOLVED=true
       shift
       ;;
-    --resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship)
+    --resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship|--capacity-substitute)
       require_arg "$1" "${2:-}"
       case "$1" in
         --resolved-profile-ref) RESOLVED_PROFILE_REF="$2" ;;
@@ -736,6 +919,7 @@ while [[ $# -gt 0 ]]; do
         --fallback-reason) FALLBACK_REASON="$2" ;;
         --producer-identity) PRODUCER_IDENTITY="$2" ;;
         --validator-relationship) VALIDATOR_RELATIONSHIP="$2" ;;
+        --capacity-substitute) CAPACITY_SUBSTITUTE_JSON="$2" ;;
       esac
       shift 2
       ;;
@@ -945,11 +1129,24 @@ if [[ -n "$TIER" ]]; then
     fi
     # On failure the warning is printed — MODEL stays empty (claude CLI default)
   else
-    if RESOLVED_MODEL=$(resolve_tier_model "$TIER"); then
-      MODEL="$RESOLVED_MODEL"
-      echo "Tier '$TIER' resolved to model: $MODEL" >&2
+    # Default engine (codex): walk the tier's own declared `fallbacks:` chain
+    # from routing.yaml (mk ruling 2026-09-25 — Codex exhaustion must never
+    # block development), same interserve remap resolve_tier_model used.
+    TIER_TARGET="$TIER"
+    if [[ "$CLAVAIN_INTERSERVE_MODE" == true && "$TIER" == "fast" ]]; then
+      TIER_TARGET="fast-clavain"
+    elif [[ "$CLAVAIN_INTERSERVE_MODE" == true && "$TIER" == "deep" ]]; then
+      TIER_TARGET="deep-clavain"
     fi
-    # If resolution fails, warning already printed — MODEL stays empty (uses config.toml default)
+    if [[ "$TIER_TARGET" != "$TIER" ]] && ! python3 "$DISPATCH_SCRIPT_DIR/tier-fallback-chain.py" --policy "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" --tier "$TIER_TARGET" >/dev/null 2>&1; then
+      echo "Note: tier '$TIER_TARGET' not found. Trying '$TIER'." >&2
+      TIER_TARGET="$TIER"
+    fi
+    set +e
+    _dispatch_tier_profile "$TIER_TARGET"
+    tier_rc=$?
+    set -e
+    exit "$tier_rc"
   fi
 fi
 
@@ -1279,6 +1476,21 @@ $RESOLVED_ROUTE_JSON
 
 Task:
 $PROMPT"
+      # A capacity substitute (mk-gp32): the walk that reached this candidate
+      # landed on a model from the producer's own lab, so the review needs
+      # its own provisional framing and a re-check hook for the other lab.
+      if [[ -n "$CAPACITY_SUBSTITUTE_JSON" && "$CAPACITY_SUBSTITUTE_JSON" != null ]]; then
+        PROMPT="$PROMPT
+
+This review landed on a model from the producer's own lab because the
+preferred other-lab reviewer was out of capacity (a capacity-substitute
+review). Treat your verdict as provisional: it has not had independent
+cross-lab confirmation. End your output with a section headed exactly
+\"## Re-check by the other lab\", listing one item per line starting with
+\"- \": (a) claims you confirmed without actually running anything, and (b)
+judgments you are not fully sure of. If there is nothing to flag, write the
+single line \"None.\" instead of a list."
+      fi
       ;;
     *)
       echo "Error: governed reasoning contract delivery is unsupported for backend '$ENGINE'" >&2
@@ -2271,6 +2483,170 @@ _persist_dispatch_failure_evidence() {
   DISPATCH_INTERCEPT_EVIDENCE="$reference"
 }
 
+# Extracts the body of OUTPUT's "## Re-check by the other lab" section (B1's
+# fixed reviewer instruction). Returns 1 if the heading itself is absent, so
+# the caller can distinguish "reviewer wrote the section" from "didn't".
+_dispatch_capacity_recheck_section() {
+  local file="$1"
+  grep -q '^## Re-check by the other lab' "$file" || return 1
+  awk '
+    /^## Re-check by the other lab/ { found=1; next }
+    found && /^## / { found=0 }
+    found { print }
+  ' "$file"
+}
+
+# Resolves the directory to run `bd` from for capacity-recheck bead filing
+# (mk-hadt): `bd -C <dir>` walks UP from <dir> looking for a `.beads`
+# directory, exactly like git looks for `.git` — a worktree with no `.beads`
+# of its own walks past its own repo root into whatever unrelated tracker
+# happens to sit above it. Observed in production: WORKDIR
+# /home/mk/projects/.clavain-capreview has no .beads, so `bd -C` there
+# filed capacity-recheck beads into /home/mk/projects/.beads, an unrelated
+# tracker (mk-hadt fix). CLAVAIN_RECHECK_BEADS_DIR overrides outright (e.g.
+# zklw points it at /home/mk/hub) but only when it names a directory that
+# itself has `.beads` — an override pointed at a bare directory would just
+# let bd walk up from there and reopen the same hazard. Otherwise mirror
+# next-goal-candidates.sh's tracker_home() (scripts/next-goal-candidates.sh:
+# 115-134): resolve WORKDIR to its main checkout via `git rev-parse
+# --git-common-dir` (a linked worktree's .beads, if it has one, lives in the
+# main checkout, not the worktree) — but unlike tracker_home, only use that
+# directory if it actually contains `.beads`; never fall through to letting
+# bd resolve a tracker above the repo root on its own. A non-worktree WORKDIR
+# (gitdir == common-dir) resolves via `git rev-parse --show-toplevel`, not
+# WORKDIR itself, so a subdirectory checkout still finds its repo's own
+# `.beads` at the top. The linked-worktree shortcut (dirname of common-dir)
+# only holds when common-dir is literally named `.git`; a bare repo's shared
+# worktrees have a common-dir that IS the bare repo itself, one level above
+# every checkout, so that case refuses rather than filing above the repo.
+# Empty output means "file nothing".
+_dispatch_recheck_tracker_dir() {
+  if [[ -n "${CLAVAIN_RECHECK_BEADS_DIR:-}" ]]; then
+    [[ -d "${CLAVAIN_RECHECK_BEADS_DIR}/.beads" ]] || return 1
+    printf '%s\n' "$CLAVAIN_RECHECK_BEADS_DIR"
+    return 0
+  fi
+  local dir="${WORKDIR:-.}" gitdir common main
+  command -v git >/dev/null 2>&1 || return 1
+  gitdir="$(git -C "$dir" rev-parse --git-dir 2>/dev/null)" || return 1
+  common="$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null)" || return 1
+  [[ "$gitdir" = /* ]] || gitdir="$dir/$gitdir"
+  [[ "$common" = /* ]] || common="$dir/$common"
+  gitdir="$(cd "$gitdir" 2>/dev/null && pwd -P)"
+  common="$(cd "$common" 2>/dev/null && pwd -P)"
+  if [[ -n "$gitdir" && -n "$common" && "$gitdir" != "$common" ]]; then
+    [[ "$(basename "$common")" == .git ]] || return 1
+    main="$(dirname "$common")"
+  else
+    main="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  fi
+  [[ -n "$main" && -d "$main/.beads" ]] || return 1
+  printf '%s\n' "$main"
+}
+
+# After a successful capacity-substitute review (mk-gp32), parse its
+# "## Re-check by the other lab" section and turn any listed items into a
+# filed bead for the lab that never actually reviewed. Never fails the
+# dispatch: a bd problem is a loud stderr warning, not a withheld verdict.
+#
+# A present heading with no "- " items under it is treated the same as an
+# absent heading — the reviewer wrote the label but not the substance, so the
+# whole review still needs a re-check. Only an explicit "None." body means
+# the reviewer actually confirmed there is nothing to flag. RECHECK_SOURCE_JSON
+# records which of the three happened ("listed"/"none"/"missing", the last
+# covering both absent and empty) so the receipt can tell a real item list
+# apart from a fabricated one. RECHECK_BEAD_JSON carries the filed bead's id
+# (a quoted JSON string), staying empty (receipt: null) when nothing was
+# filed — not a substitute, CLAVAIN_RECHECK_BEADS=0, no tracker resolved, or
+# bd itself failed.
+_dispatch_process_capacity_recheck() {
+  local exit_code="$1" body section_found=true item line
+  local -a items=()
+  RECHECK_ITEMS=""
+  RECHECK_SOURCE_JSON=""
+  RECHECK_BEAD_JSON=""
+  [[ "$exit_code" == 0 ]] || return 0
+  [[ -n "${CAPACITY_SUBSTITUTE_JSON:-}" && "$CAPACITY_SUBSTITUTE_JSON" != null ]] || return 0
+  [[ -n "$OUTPUT" && -f "$OUTPUT" ]] || return 0
+
+  if ! body="$(_dispatch_capacity_recheck_section "$OUTPUT")"; then
+    section_found=false
+  fi
+  if [[ "$section_found" == true ]]; then
+    if [[ "$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$body" | grep -v '^$')" == "None." ]]; then
+      RECHECK_ITEMS=0
+      RECHECK_SOURCE_JSON='"none"'
+      return 0
+    fi
+    while IFS= read -r line; do
+      [[ "$line" == -\ * ]] && items+=("${line#- }")
+    done <<< "$body"
+  fi
+  if [[ "${#items[@]}" -eq 0 ]]; then
+    items=("reviewer did not list re-check items; re-check the whole review")
+    RECHECK_SOURCE_JSON='"missing"'
+  else
+    RECHECK_SOURCE_JSON='"listed"'
+  fi
+  RECHECK_ITEMS="${#items[@]}"
+  [[ "$RECHECK_ITEMS" -gt 0 ]] || return 0
+
+  local recheck_file="${OUTPUT}.recheck.md"
+  {
+    printf '# Re-check by the other lab\n\n'
+    printf 'Capacity-substitute %s review (dispatch %s). These need\n' "$ROLE" "$DISPATCH_ID"
+    printf 'independent confirmation by a reviewer from the other lab.\n\n'
+    for item in "${items[@]}"; do printf -- '- %s\n' "$item"; done
+  } > "$recheck_file"
+
+  [[ "${CLAVAIN_RECHECK_BEADS:-1}" != 0 ]] || return 0
+  local producer_lab reviewer_lab failure_class bead_ref title desc tracker_dir
+  producer_lab="$(jq -r '.producer_lab // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
+  reviewer_lab="$(jq -r '.reviewer_lab // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
+  failure_class="$(jq -r '.failure_class // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
+  bead_ref="${CLAVAIN_BEAD_ID:-$DISPATCH_ID}"
+  title="Re-check capacity-substitute $ROLE review ($bead_ref)"
+  desc="$(
+    printf 'Producer lab %s, reviewer lab %s (capacity walk: %s).\n\n' "$producer_lab" "$reviewer_lab" "$failure_class"
+    printf 'Items to re-check:\n'
+    for item in "${items[@]}"; do printf -- '- %s\n' "$item"; done
+    printf '\nReceipt: %s\n' "$recheck_file"
+  )"
+  if ! tracker_dir="$(_dispatch_recheck_tracker_dir)" || [[ -z "$tracker_dir" ]]; then
+    echo "dispatch: WARNING — no beads tracker resolved for the capacity-recheck bead ('$ROLE'); items are recorded at $recheck_file only (set CLAVAIN_RECHECK_BEADS_DIR to file one)" >&2
+    return 0
+  fi
+  local -a bd_cmd=(bd create "$title" -d "$desc" -l capacity-recheck -C "$tracker_dir")
+  [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || bd_cmd+=(--deps "discovered-from:$CLAVAIN_BEAD_ID")
+  # `--silent` (bd 1.1.2+) prints only the issue id, removing any dependence
+  # on a title/id ordering convention in bd's normal human-readable output.
+  # Detect support rather than assuming it, and keep the old awk extraction
+  # (matches real bd's "✓ Created issue: <id> — <title>", id before title)
+  # as a fallback for older bd builds without the flag.
+  local bd_supports_silent=false
+  if command -v bd >/dev/null 2>&1 && bd create --help 2>/dev/null | grep -q -- '--silent'; then
+    bd_supports_silent=true
+    bd_cmd+=(--silent)
+  fi
+  local bd_output="" bd_rc=0
+  if command -v bd >/dev/null 2>&1; then
+    bd_output="$("${bd_cmd[@]}" 2>/dev/null)" || bd_rc=$?
+  else
+    bd_rc=127
+  fi
+  if [[ "$bd_rc" != 0 ]]; then
+    echo "dispatch: WARNING — could not file the capacity-recheck bead for '$ROLE'; items are recorded at $recheck_file only" >&2
+    return 0
+  fi
+  local bead_id
+  if [[ "$bd_supports_silent" == true ]]; then
+    bead_id="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$bd_output")"
+  else
+    bead_id="$(awk 'match($0, /[A-Za-z]+-[a-z0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<< "$bd_output")"
+  fi
+  [[ -z "$bead_id" ]] || RECHECK_BEAD_JSON="$(jq -cn --arg id "$bead_id" '$id')"
+}
+
 _finalize_dispatch_result() {
   local exit_code="$1" failure_class
   local -a classifier_cmd
@@ -2316,6 +2692,7 @@ _finalize_dispatch_result() {
     fi
     _dispatch_write_failure_class "$failure_class"
   fi
+  _dispatch_process_capacity_recheck "$exit_code"
   if ! _record_role_routing_decision "$exit_code" "$failure_class"; then
     _dispatch_write_failure_class terminal_recording
     return 1

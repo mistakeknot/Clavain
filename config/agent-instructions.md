@@ -5,68 +5,16 @@ Managed by the selected Clavain installation. {{INSTALLATION_RECEIPT}}
 
 {{HOST_ADAPTER}}
 
-For substantive work, read the selected `clavain:using-clavain` skill once and
-select relevant skills from the current catalog. All unique specialist skills
-remain eligible. Load bodies and references only when needed; reuse valid context
-on resume and refresh changed or missing evidence. Trivial requests stay lightweight.
-Changing code behavior or executing an implementation plan is substantive even
-for a one-line edit. Before that work, read `clavain:using-clavain` and the workflow
-skills it selects; a skill listed in the catalog or these instructions is not
-loaded until its body has been read. Before substantive planning or edits, also
-read the selected `docs/canon/reasoning-routing.md` and record an accountable JSON
-decision context. Routine work still requires both. When no listed frontier
-trigger applies, record `reasons: []` with a short rationale; do not invent one.
+For substantive work, read the selected `clavain:using-clavain` router and selected `docs/canon/reasoning-routing.md`; read applicable installed skill bodies before use; all unique specialists remain eligible. One-line behavior edits and plan execution are substantive; trivial requests are not. Reuse valid context; refresh changes.
 
-Apply Observe → Orient → Decide → Act → Reflect → Compound → Synthesize: inspect
-actual evidence, align with intent and constraints, choose a proportionate action
-and verification, finish authorized work, and reconcile what the result teaches.
-Compound only in authorized artifacts; memory writes need explicit permission.
-Do not force seven headings, invent lessons or start unrelated follow-up work.
+Apply Observe → Orient → Decide → Act → Reflect → Compound → Synthesize without forced headings. Act on evidence, verify, and reconcile; compound in authorized artifacts only. Memory writes need permission.
 
-User intent and runtime restrictions govern procedures. Continue authorized work
-without repeated confirmation, while preserving independent review, fresh
-verification, release and publication authority. A push does not authorize
-publication. Missing companions do not authorize installation. Continue unaffected
-work and ask only for missing information or authority. Unavailable evidence is
-unknown; completion and acceptance require the specified current evidence.
-Restrictions on dispatch do not remove authorized local guidance reads or decision
-recording. Report routing requirements that cannot be performed within the task's
-authority and keep their gates outstanding.
-Unsupported `--role` resolution is not satisfied by legacy `--type` or `--tier`
-output; retain the failed resolution as an open gate.
+Record an accountable JSON decision context with `reasons` and nonempty `rationale`; settled routine work records `reasons: []`. The five reasons are `unresolved-success-criteria`, `foundational-invariants`, `broad-consequences`, `difficult-verification`, and `capability-failure`. Domain labels do not elevate. Substantial new game, agent, AI/ML, graph, or product-strategy capabilities need frontier planning through changing investigation.
 
-Read the selected `docs/canon/reasoning-routing.md` for substantive planning or
-execution. Record an accountable JSON decision context with reasons and a short
-rationale: `unresolved-success-criteria`, `foundational-invariants`,
-`broad-consequences`, `difficult-verification`, or `capability-failure`. Domain names
-alone do not elevate a task. Substantial new game, agent-system, AI/ML, graph or
-product-strategy capabilities require frontier planning. Keep frontier involvement
-while investigation changes the plan. Handoff requires explicit decisions,
-constraints, verification and escalation conditions. Retain real playtests,
-experiments, user evidence and production canaries where applicable.
+Resolve the actual role using `ic --json route dispatch --policy={{POLICY_PATH}} --role=<role> --context-file=<json>`; execute governed work through packaged `scripts/dispatch.sh --role <role>` with the same `CLAVAIN_ROUTING_POLICY` and `CLAVAIN_DECISION_CONTEXT`. Unsupported `--role` resolution remains an open gate; legacy `--type` or `--tier` output cannot satisfy it. `CLAVAIN_POLICY_PROFILE=ci-campaign-pilot` requires `scope: mk-ag2s` and applies only there. Keep policy unchanged.
 
-Resolve `planning`, `plan-review`, `routine-execution`, `deep-execution`,
-`validation`, or `escalation` with:
-`ic --json route dispatch --policy={{POLICY_PATH}} --role=<role> --context-file=<json>`.
-Execute through packaged `scripts/dispatch.sh --role <role>` with that
-`CLAVAIN_ROUTING_POLICY` and the `CLAVAIN_DECISION_CONTEXT` file.
-`CLAVAIN_POLICY_PROFILE=ci-campaign-pilot` requires `scope: mk-ag2s` and applies only
-to that campaign. Keep the general Astra/Fable policy unchanged.
+Use one frontier author ordinarily. Foundational or especially consequential plans need an independent other-frontier reviewer; pass `--producer-identity` from the actual producer receipt. Never self-review, downgrade frontier work, or evade blocked review. Two demonstrated capability failures request escalation; a disproven premise escalates immediately. Authentication, quota, permissions, timeout and infrastructure failures are operational. Retain receipts, policy hash, classifications, exclusions, profile, actual model/effort, retries, usage, outcomes and defects in attribution. Calibration cannot relax frontier requirements, reviewer independence, quality floors, or authority gates.
 
-Ordinarily use one frontier author. Foundational or especially consequential plans
-require the other frontier reviewer; review roles take `--producer-identity` from
-the actual producer receipt. Never downgrade required frontier access, waive
-stricter gates, or evade a blocked review by changing model or destination.
-Two capability failures require escalation; a disproven premise requires immediate
-escalation. Authentication, limits, permissions and infrastructure are operational
-failures. Preserve policy hash, classifications, exclusions, profile, actual
-model/effort, retries, usage, outcomes and defects in existing attribution evidence.
-Calibration cannot lower quality requirements or expand authority.
-
-Instructions and configuration prove instructional routing only. Governed dispatch
-provides enforced model/effort receipts; fresh host sessions establish observed
-behavior. Configuration does not change a running parent's model. Report unsupported
-host capabilities and missing identity/usage fields explicitly. Never cache a
-passing result as a substitute for required fresh verification.
+User intent and runtime restrictions govern. Restrictions on dispatch do not remove authorized local guidance reads or decision recording. Continue authorized work while preserving independent review, fresh verification, release/publication approval, and empirical acceptance. A push does not authorize publication. Missing companions do not authorize installation. No broad installer or automatic refresh for a narrow instruction update. Unknown evidence stays unknown; blank identity or policy hash makes conformance unknown and acceptance false. Report unsupported host capabilities and unsatisfied gates. Configuration does not change a running parent's model; only fresh host sessions establish observed behavior. Never substitute cached green results for fresh evidence. Handoff states decisions, constraints, verification, escalation; retain playtests, experiments, user evidence and production canaries when applicable.
 
 <!-- END CLAVAIN CODEX TOOL MAP -->

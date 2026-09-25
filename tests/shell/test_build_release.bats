@@ -53,6 +53,28 @@ if [[ " $* " == *" list -m "* ]]; then
     exit 0
 fi
 
+if [[ " $* " == *" list -deps "* ]]; then
+    printf 'github.com/mistakeknot/intercore/pkg/authz\n'
+    if [[ "${GOOS:-}" == darwin ]]; then
+        printf 'github.com/mistakeknot/intercore/pkg/darwinonly\n'
+    fi
+    exit 0
+fi
+
+if [[ " $* " == *" list -f "* ]]; then
+    pkg="${*: -1}"
+    case "$pkg" in
+        github.com/mistakeknot/intercore/*)
+            printf '%s/%s\n' "$FAKE_INTERCORE_ROOT" "${pkg#github.com/mistakeknot/intercore/}"
+            ;;
+        *)
+            echo "fake go: unknown package for list -f: $pkg" >&2
+            exit 12
+            ;;
+    esac
+    exit 0
+fi
+
 out=""
 trimpath=false
 tags=""
@@ -123,7 +145,11 @@ EOF
     git -C "$INTERCORE_ROOT" config user.name "Intercore Test"
     git -C "$INTERCORE_ROOT" config user.email "intercore-test@example.invalid"
     printf 'module github.com/mistakeknot/intercore\n' >"$INTERCORE_ROOT/go.mod"
-    git -C "$INTERCORE_ROOT" add go.mod
+    mkdir -p "$INTERCORE_ROOT/pkg/authz"
+    printf 'package authz\n' >"$INTERCORE_ROOT/pkg/authz/authz.go"
+    mkdir -p "$INTERCORE_ROOT/pkg/darwinonly"
+    printf '//go:build darwin\n\npackage darwinonly\n' >"$INTERCORE_ROOT/pkg/darwinonly/darwinonly.go"
+    git -C "$INTERCORE_ROOT" add go.mod pkg/authz/authz.go pkg/darwinonly/darwinonly.go
     git -C "$INTERCORE_ROOT" commit -q -m "fixture"
 }
 
@@ -303,7 +329,68 @@ EOF
     run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
 
     [ "$status" -ne 0 ]
-    [[ "$output" == *"Intercore revision mismatch"* ]]
+    [[ "$output" == *"Intercore pinned revision is not present in the checkout"* ]]
+}
+
+@test "release verification tolerates the Intercore checkout advancing outside clavain-cli's imports" {
+    write_release_fixture
+    printf 'unrelated docs change\n' >"$INTERCORE_ROOT/README.md"
+    git -C "$INTERCORE_ROOT" add README.md
+    git -C "$INTERCORE_ROOT" commit -q -m "docs-only autosync commit"
+
+    run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
+
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e \
+        --arg revision "$(jq -r .intercore_revision "$FIXTURE_ROOT/bin/release-manifest.json")" \
+        '.verified == true and .intercore_revision == $revision' >/dev/null
+}
+
+@test "release verification rejects an Intercore checkout that changed an imported package after the pinned revision" {
+    write_release_fixture
+    printf 'package authz\n\nfunc changed() {}\n' >"$INTERCORE_ROOT/pkg/authz/authz.go"
+    git -C "$INTERCORE_ROOT" add pkg/authz/authz.go
+    git -C "$INTERCORE_ROOT" commit -q -m "changed an imported package"
+
+    run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Intercore package github.com/mistakeknot/intercore/pkg/authz changed between the pinned revision and checkout HEAD"* ]]
+}
+
+@test "release verification rejects a change to an Intercore package only another shipped platform imports" {
+    write_release_fixture
+    printf '//go:build darwin\n\npackage darwinonly\n\nfunc changed() {}\n' >"$INTERCORE_ROOT/pkg/darwinonly/darwinonly.go"
+    git -C "$INTERCORE_ROOT" add pkg/darwinonly/darwinonly.go
+    git -C "$INTERCORE_ROOT" commit -q -m "changed a darwin-only imported package"
+
+    run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Intercore package github.com/mistakeknot/intercore/pkg/darwinonly changed between the pinned revision and checkout HEAD"* ]]
+}
+
+@test "release verification rejects an Intercore go.mod change after the pinned revision" {
+    write_release_fixture
+    printf 'module github.com/mistakeknot/intercore\n\nrequire example.com/dep v1.2.3\n' >"$INTERCORE_ROOT/go.mod"
+    git -C "$INTERCORE_ROOT" add go.mod
+    git -C "$INTERCORE_ROOT" commit -q -m "bumped a dependency"
+
+    run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Intercore go.mod/go.sum changed between the pinned revision and checkout HEAD"* ]]
+}
+
+@test "release verification rejects an Intercore checkout that no longer descends from the pinned revision" {
+    write_release_fixture
+    git -C "$INTERCORE_ROOT" checkout --orphan divergent -q
+    git -C "$INTERCORE_ROOT" commit -q -m "divergent history" --allow-empty
+
+    run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Intercore pinned revision is not an ancestor of the checkout HEAD"* ]]
 }
 
 @test "release verification accepts matching checkout and artifact provenance" {

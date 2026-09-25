@@ -152,6 +152,9 @@ dispatch:
     release-preparation: release-sol
     release-authority: release-authority-main
     cross-lab-review: crosslab-fable
+    # mk ruling 2026-09-25 (mk-42j9.5): relaying, waiting and status reports
+    # run on Sonnet. Planning and review keep their frontier seats.
+    coordination: coordination-sonnet
   # mk ruling 2026-09-24: review another lab's work first. For these roles the
   # resolver stably moves eligible seats from a frontier lab other than the
   # producer's ahead of same-lab seats, and the receipt records the change as
@@ -254,6 +257,10 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      # mk ruling 2026-09-25: Codex exhaustion must never block development.
+      # Sonnet, not Opus — same seat routine-sol already falls back to for this
+      # role; scoped/routine work doesn't need the Opus floor.
+      fallbacks: [routine-sonnet]
       description: Scoped read-only tasks, exploration, verification, quick reviews
     fast-clavain:
       role: scout
@@ -261,6 +268,8 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      # mk ruling 2026-09-25: same seat scout-sol already falls back to.
+      fallbacks: [scout-sonnet]
       description: Clavain interserve-mode default for read-only/administrative tasks
     deep:
       role: deep-execution
@@ -268,6 +277,10 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: xhigh
       service_tier: standard
+      # mk ruling 2026-09-25: Opus — deep lanes carry the generative/implementation
+      # load deep-astra->deep-sol->deep-opus already trusts to Opus as capacity
+      # substitute; same floor applies here.
+      fallbacks: [deep-opus]
       description: Generative tasks, implementation, complex reasoning, debates
     deep-clavain:
       role: deep-execution
@@ -275,6 +288,7 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: xhigh
       service_tier: standard
+      fallbacks: [deep-opus]
       description: Clavain interserve-mode high-complexity/research/flux-drive dispatch
 
     main-astra:
@@ -292,6 +306,12 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: xhigh
       service_tier: standard
+      # mk ruling 2026-09-25: Codex exhaustion must never block development —
+      # pilot-opus is the same main-integrator role's Claude seat (ci-campaign-pilot
+      # profile already declares it for this role), so the substitute is not a new
+      # quality claim. backend: main (not codex/claude) keeps commit/push/deploy
+      # authority with the main integrator; release-authority is unaffected.
+      fallbacks: [pilot-opus]
       description: Main-integrator fallback while Astra account access is unavailable
     scout-sol:
       role: scout
@@ -310,6 +330,23 @@ dispatch:
       # Not kimi: the Kimi seat runs a toolless agent file (goal 60771535, run
       # 120d9aa1) and scouting is exactly the work that needs repository tools.
       description: Capacity fallback for scout when the Codex lane is out of usage
+    coordination-sonnet:
+      role: coordination
+      backend: claude
+      model: claude-sonnet-5
+      reasoning_effort: medium
+      service_tier: standard
+      fallbacks: [coordination-sol]
+      description: Coordinator relay, wait and status turns (burn rule 5, mk-42j9.5)
+    coordination-sol:
+      role: coordination
+      backend: codex
+      model: gpt-5.6-sol
+      reasoning_effort: medium
+      service_tier: standard
+      # Codex coordinates through the bb CLI in its shell; it has no in-session
+      # thread tools, so it relays and waits by running `bb thread` commands.
+      description: Capacity fallback for coordination when the Claude lane is out
     routine-sol:
       role: routine-execution
       backend: codex
@@ -402,6 +439,7 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      fallbacks: [validation-opus, validation-sonnet]
       description: Codex validation fallback when its resolved model differs from the producer
     release-sol:
       role: release-preparation

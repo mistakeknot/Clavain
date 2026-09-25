@@ -38,6 +38,79 @@ def test_stderr_usage_limit_envelope_is_classified_but_task_text_is_not():
     assert provider_errors.classify(events, "ERROR: You've hit your usage limit.\n") == "quota_exhausted"
 
 
+def claude_limit_events(text):
+    """Claude CLI stream-json shape for a subscription limit (mk-esex)."""
+    return [
+        {
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": text}]},
+            "error": "rate_limit",
+        },
+        {"type": "result", "subtype": "success", "is_error": True, "result": text},
+    ]
+
+
+@pytest.mark.parametrize("text", [
+    "You've hit your usage limit · resets Sep 26, 7pm (UTC)",
+    "You've hit your weekly limit · resets Sep 26, 7pm (UTC)",
+    "You’ve hit your session limit · resets 3am (UTC)",
+    "You've hit your Opus limit · resets Sep 26, 7pm (UTC)",
+    "You've hit your team's shared budget. /model to switch models.",
+    "Claude AI usage limit reached|1790000000",
+])
+def test_claude_subscription_limit_is_quota_exhausted(text):
+    # Without this, a Claude seat that runs out of quota classifies as
+    # terminal_error and dispatch suppresses its declared fallback, so an
+    # Opus-authored plan review blocks on a Fable outage instead of degrading.
+    assert provider_errors.classify(claude_limit_events(text)) == "quota_exhausted"
+    assert provider_errors.classify(claude_limit_events(text)[1:]) == "quota_exhausted"
+
+
+def test_claude_rate_limit_without_limit_text_stays_terminal():
+    # A transient 429 or overload carries the same error code; only the
+    # subscription-limit text makes it a capacity failure.
+    events = claude_limit_events("API Error: Request rejected (429) · retry later")
+    assert provider_errors.classify(events) == "terminal_error"
+
+
+def test_claude_limit_text_in_ordinary_output_is_not_a_failure():
+    events = [
+        {
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": "You've hit your weekly limit · quoted"}]},
+        },
+        {"type": "result", "subtype": "success", "is_error": False,
+         "result": "You've hit your weekly limit · quoted"},
+    ]
+    assert provider_errors.classify(events) == ""
+
+
+CODEX_EXHAUSTED_429 = "exceeded retry limit, last status: 429 Too Many Requests"
+
+
+def test_codex_exhausted_429_retries_is_rate_limited():
+    # Captured 2026-09-25 from a pooled cross-lab review: Codex had already
+    # retried internally. As terminal_error it suppressed the review's
+    # fallback chain; rate_limited now gets the same single account-pool
+    # retry quota_exhausted gets, then walks to the declared fallback
+    # (mk ruling 2026-09-25, mk-nh6v).
+    events = [
+        {"type": "thread.started", "thread_id": "fixture"},
+        {"type": "turn.started"},
+        {"type": "error", "message": CODEX_EXHAUSTED_429},
+        {"type": "turn.failed", "error": {"message": CODEX_EXHAUSTED_429}},
+    ]
+    assert provider_errors.classify(events) == "rate_limited"
+
+
+def test_recovered_codex_429_is_not_a_failure():
+    events = [
+        {"type": "error", "message": CODEX_EXHAUSTED_429},
+        {"type": "turn.completed"},
+    ]
+    assert provider_errors.classify(events) == ""
+
+
 def test_failure_evidence_redacts_secrets_identity_and_home_paths(tmp_path):
     artifact = tmp_path / "evidence.json"
     aws_access = "AKIA" + "IOSFODNN7EXAMPLE"

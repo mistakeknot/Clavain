@@ -424,7 +424,8 @@ def input_snapshot(command, source, project, env):
     claude = Path(env.get("CLAUDE_CONFIG_DIR", str(home / ".claude")))
     paths = [Path(command[0]).resolve(), source / "scripts/readiness.py", source / "scripts/native-readiness.py",
              source / "config/routing.yaml", source / "skills/using-clavain/SKILL.md",
-             source / "docs/canon/reasoning-routing.md", source / "hooks/hooks.json",
+             source / "docs/canon/reasoning-routing.md",
+             source / "docs/canon/reasoning-routing-operations.md", source / "hooks/hooks.json",
              codex / "config.toml", codex / "hooks.json", codex / "AGENTS.md",
              claude / "settings.json", claude / "CLAUDE.md",
              project / ".claude/settings.json", project / ".claude/settings.local.json",

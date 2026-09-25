@@ -20,7 +20,15 @@ const (
 	minAuditedAuthorizationSchema = 36
 	// v39 audited 2026-07-21: goal containment only (runs.goal_id + goals
 	// table); authorization tables untouched (last authz change: v35→v36).
-	maxAuditedAuthorizationSchema = 39
+	// v40 audited 2026-09-25 (mk-4meg): dispatch terminal records only
+	// (dispatch_terminals, dispatch_supervision, dispatch_intents,
+	// dispatch_consumptions, dispatch_terminal_deliveries, plus triggers on
+	// dispatches/dispatch_terminals); no DDL, trigger, or data change touches
+	// authorizations, authz_tokens, action_receipts, or the legacy anchor.
+	// Unversioned d93fad4 (foreign_keys=1 on every pooled Intercore
+	// connection) only tightens authz_tokens.parent_token RESTRICT; clavain-cli
+	// opens its own connections, so the gate is unaffected.
+	maxAuditedAuthorizationSchema = 40
 )
 
 func isAuditedAuthorizationSchema(schema int) bool {
