@@ -1,30 +1,27 @@
-# mk-rpnv.9 P1 — closed-world (model, effort) -> interrank/AgMoDB snapshot
-# slug registry (A1, CHECK-M1-r3 A1 fix). See PLAN-M1-r5.md §P1 Identity.
+# mk-rpnv.9 P1 — closed-world reference -> interrank/AgMoDB snapshot row
+# registry (A1, CHECK-M1-r3 A1 fix). See PLAN-M1-r5.md §P1 Identity.
 #
-# Every row here is hand-verified against the pinned snapshot
-# (thread-storage/thr_ttex5g4ker/agmodb-snapshot-ff3f250-20260923T122044Z.json,
-# sha256 510dfcc8...2f2bad). The generator (scripts/roster/generate.py) still
-# re-checks each row's slug against that snapshot's own parsed effort and
-# reasoning mode at run time; it never trusts this file alone.
+# STRICT (mk, 2026-09-25): every model string routing.yaml references must be
+# mapped here, by a `rows` entry or a `waivers` entry, before the generator
+# emits a patch. That covers dispatch tiers, model aliases, frontier_models,
+# subagent/complexity model aliases and local models. Executor names in
+# executor_routing are backends and resolve through the dispatch tiers that
+# use that backend. Anything unmapped is a refusal.
 #
-# Deliberately absent: kimi-code/k3 at "high" (used by routing.yaml's
-# validation-kimi and crosslab-fable fallback). The pinned snapshot has only
-# an effort-unlabelled row (`kimi-k3`) and a `kimi-k3-low` row -- no row
-# explicitly labelled high-effort Kimi K3 exists. Per the closed-world rule
-# below, an effort-unlabelled row never satisfies a labelled-effort lookup,
-# so this triple stays unmapped and the generator refuses rather than
-# guessing. This is the plan's own worked example (§P1 Identity), realized
-# in the real pinned snapshot -- not a bug in this registry.
+# The generator never trusts this file alone. For every row and waiver it
+# re-parses the target snapshot row and requires:
+#   - the row's base name to equal roster-families.yaml `snapshot_name` for
+#     `model` (identity, B4);
+#   - parsed effort and reasoning mode to equal the declared ones exactly;
+#   - no `-latest` alias, composite ("<X> Fallback" other than Default),
+#     provider-prefixed duplicate, or unrecognised qualifier ("batch",
+#     "free", "Fast", "Pro").
+# Pinned snapshot: rpnv9/evidence/agmodb-snapshot-ff3f250-20260923T122044Z.json
+# (sha256 510dfcc8...2f2bad).
 #
-# Excluded row shapes (never mapped, whatever they superficially resemble):
-#   - "-latest" floating aliases (openai-gpt-astra-latest, ...)
-#   - composite rows (claude-fable-5-opus-5-fallback)
-#   - provider-prefixed pricing-only duplicates (openai-gpt-5-6-sol next to
-#     gpt-5-6-sol)
-#   - wrong-effort or wrong-reasoning-mode rows, even when the model name
-#     matches (claude-sonnet-5-non-reasoning never satisfies a plain
-#     (sonnet-5, high) lookup)
-#   - effort-unlabelled rows standing in for any labelled effort
+# `rows` are exact matches. A tier row is keyed by (model, effort). A row with
+# `ref` binds a non-tier reference (local model) whose routing.yaml entry
+# declares its mode; its declared effort/mode are still re-checked.
 rows:
   - model: claude-opus-5
     effort: high
@@ -62,3 +59,99 @@ rows:
     effort: xhigh
     reasoning_mode: reasoning
     slug: gpt-6-astra-xhigh
+  # Local models whose routing.yaml entry fixes the mode.
+  - ref: "local:qwen3.6-35b-a3b-4bit"
+    model: qwen3.6-35b-a3b
+    effort: null
+    reasoning_mode: non-reasoning
+    slug: qwen3-6-35b-a3b-non-reasoning
+    evidence: routing.yaml tier_mappings comment "enable_thinking=False" and "Thinking mode hurts ...; keep off"
+  - ref: "local:nemotron-30b-a3b-8bit"
+    model: nemotron-cascade-2-30b-a3b
+    effort: null
+    reasoning_mode: unlabelled
+    slug: nemotron-cascade-2-30b-a3b
+    evidence: routing.yaml comment names mlx-community/Nemotron-Cascade-2-30B-A3B-8bit; the snapshot has one unqualified row
+
+# Waivers bind a reference whose snapshot evidence does not match exactly.
+# `row_effort` / `row_reasoning_mode` describe the snapshot row as parsed (not
+# the seat), so the generator still verifies the row is what the waiver says
+# it is. `status` RATIFIED rows are mk decisions; PROPOSED rows are mapped for
+# this run but listed in report.md under "Waivers pending mk", and P1 is not
+# accepted until mk ratifies them.
+waivers:
+  - ref: "kimi-code/k3@high"
+    model: kimi-code/k3
+    slug: kimi-k3
+    row_effort: null
+    row_reasoning_mode: unlabelled
+    status: RATIFIED (mk waiver, 2026-09-25)
+    label: "max-effort evidence standing in for high; upper bound"
+    evidence:
+      - "Moonshot Kimi API quickstart (platform.kimi.ai/docs/guide/kimi-k3-quickstart): reasoning effort low/high/max, default max"
+      - "Artificial Analysis artificialanalysis.ai/models/kimi-k3 is headed \"Kimi K3 (max)\""
+      - "The snapshot has only kimi-k3 (unlabelled) and kimi-k3-low; no high row"
+  - ref: "subagent:sonnet"
+    model: claude-sonnet-5
+    slug: claude-sonnet-5-xhigh
+    row_effort: xhigh
+    row_reasoning_mode: reasoning
+    status: PROPOSED (mk to ratify)
+    evidence:
+      - "Claude Code built-in alias `sonnet` resolves to the latest Sonnet (claude-sonnet-5); subagents carry no effort field"
+      - "Claude Code 2.1.282 on this host: ~/.claude/settings.json:717 effortLevel \"xhigh\""
+  - ref: "subagent:opus"
+    model: claude-opus-5-5
+    slug: claude-opus-5-5-xhigh
+    row_effort: xhigh
+    row_reasoning_mode: reasoning
+    status: PROPOSED (mk to ratify)
+    evidence:
+      - "Claude Code built-in alias `opus` resolves to the latest Opus (Opus 5.5), not dispatch.model_aliases.opus (claude-opus-5); used by complexity C4/C5 subagent_model"
+      - "Host effortLevel xhigh (~/.claude/settings.json:717)"
+      - "Consequence: Opus 5.5 subagent work reaches Opus 5 review/validation seats (runtime_family_unenforced)"
+  - ref: "subagent:fable"
+    model: claude-fable-5-1
+    slug: claude-fable-5-1-xhigh
+    row_effort: xhigh
+    row_reasoning_mode: reasoning
+    status: PROPOSED (mk to ratify)
+    evidence:
+      - "Clavain `fable` = claude-fable-5-1 (dispatch.model_aliases.fable); lib-routing.sh and intercore resolve it to `opus` when CLAVAIN_FABLE_AVAILABLE != 1"
+      - "Host effortLevel xhigh (~/.claude/settings.json:717)"
+  - ref: "subagent:haiku"
+    model: claude-haiku-4-5
+    slug: claude-4-5-haiku
+    row_effort: null
+    row_reasoning_mode: non-reasoning
+    status: PROPOSED (mk to ratify)
+    evidence:
+      - "Claude Code alias `haiku` = Claude Haiku 4.5; subagent calls set no thinking budget, so the non-reasoning row is the default-mode match"
+      - "Low confidence: the alternative is claude-4-5-haiku-reasoning"
+  - ref: "local:qwen3.5-122b-a10b-4bit"
+    model: qwen3.5-122b-a10b
+    slug: qwen3-5-122b-a10b
+    row_effort: null
+    row_reasoning_mode: reasoning
+    status: PROPOSED (mk to ratify)
+    evidence:
+      - "interfer server/metal_worker.py:196 calls apply_chat_template without enable_thinking, so the Qwen3.5 template default (thinking on) applies; only benchmarks/ set it"
+      - "Counter-evidence: routing.yaml local_models comment \"Thinking mode hurts at <600s budgets ...; keep off\""
+  - ref: "local:qwen3.5-9b-4bit"
+    model: qwen3.5-9b
+    slug: qwen3-5-9b
+    row_effort: null
+    row_reasoning_mode: reasoning
+    status: PROPOSED (mk to ratify)
+    evidence:
+      - "Same as qwen3.5-122b: interfer server sets no enable_thinking, template default is thinking on"
+      - "Counter-evidence: routing.yaml local_models comment \"keep off\"; alibaba-qwen3-5-9b is a provider/batch duplicate and is excluded"
+  - ref: "local:gpt-oss-120b-mxfp4"
+    model: gpt-oss-120b
+    slug: gpt-oss-120b
+    row_effort: high
+    row_reasoning_mode: reasoning
+    status: PROPOSED (mk to ratify)
+    evidence:
+      - "Upper bound: gpt-oss default reasoning effort is medium and the snapshot has only (high) and (low) rows"
+      - "No row encodes the MXFP4 local quantisation (mlx-community/gpt-oss-120b-MXFP4-Q8)"

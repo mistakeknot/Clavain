@@ -6,33 +6,90 @@
 # replay pass (PLAN-M1-r5.md §P1 Identity). Add a row here only after the
 # exact ID is confirmed; an unmapped ID is flagged and kept out of any
 # proposed chain rather than guessed at.
+#
+# `snapshot_name` is the exact base name (the text before the first " (")
+# the pinned AgMoDB snapshot uses for this exact version. The generator
+# checks every registry row's target against it (B4), so a registry row can
+# never bind a model to another model's row. Rule 5 (Luna) is keyed on the
+# family below, never on a name or slug fragment: `sao10k-l3-lunaris-8b`
+# ("Sao10K: Llama 3 8B Lunaris") is deliberately absent.
 models:
   gpt-6-astra:
     lab: openai
     family: astra
+    snapshot_name: GPT-6 Astra
   claude-fable-5-1:
     lab: anthropic
     family: fable
+    snapshot_name: Claude Fable 5.1
   claude-opus-5:
     lab: anthropic
     family: opus
+    snapshot_name: Claude Opus 5
   claude-opus-5-5:
     lab: anthropic
     family: opus
+    snapshot_name: Claude Opus 5.5
   claude-sonnet-5:
     lab: anthropic
     family: sonnet
+    snapshot_name: Claude Sonnet 5
+  claude-haiku-4-5:
+    lab: anthropic
+    family: haiku
+    snapshot_name: Claude 4.5 Haiku
   gpt-5.6-sol:
     lab: openai
     family: sol
+    snapshot_name: GPT-5.6 Sol
   gpt-6-sol:
     lab: openai
     family: sol
+    snapshot_name: GPT-6 Sol
+  gpt-5.6-luna:
+    lab: openai
+    family: luna
+    snapshot_name: GPT-5.6 Luna
+  gpt-6-luna:
+    lab: openai
+    family: luna
+    snapshot_name: GPT-6 Luna
   kimi-code/k3:
     lab: moonshot
     family: kimi
-  # Unevaluated candidate per §P1 Identity: GPT-6 Sol must not be relabelled
-  # from GPT-5.6 Sol results (m5). Listed above as gpt-6-sol / family sol.
-  sao10k-l3-lunaris-8b:
-    lab: sao10k
-    family: luna
+    snapshot_name: Kimi K3
+  # Local interfer models (local_models.tier_mappings). One family per model
+  # line; none of them sits in a review chain today.
+  qwen3.6-35b-a3b:
+    lab: alibaba
+    family: qwen
+    snapshot_name: Qwen3.6 35B A3B
+  qwen3.5-122b-a10b:
+    lab: alibaba
+    family: qwen
+    snapshot_name: Qwen3.5 122B A10B
+  qwen3.5-9b:
+    lab: alibaba
+    family: qwen
+    snapshot_name: Qwen3.5 9B
+  gpt-oss-120b:
+    lab: openai
+    family: gpt-oss
+    snapshot_name: gpt-oss-120b
+  nemotron-cascade-2-30b-a3b:
+    lab: nvidia
+    family: nemotron
+    snapshot_name: Nemotron Cascade 2 30B A3B
+
+# Unevaluated candidates (§P1 Identity, m5): listed in report.md and
+# roster.generated.json only, never added to a chain. GPT-6 Sol is not
+# relabelled from GPT-5.6 Sol results. Each is checked against A2 along every
+# effective review chain, as producer and as reviewer.
+candidates:
+  - claude-opus-5-5
+  - gpt-6-sol
+
+# Rule 5: per-class Luna evaluations accepted by mk. A benchmark rank does not
+# count. Keys are role classes (evidence, authority, review); values cite the
+# accepted evaluation. Empty today, so Luna is excluded from all three.
+luna_class_evaluations: {}
