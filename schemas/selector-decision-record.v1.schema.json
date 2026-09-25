@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clavain.internal/schemas/selector-decision-record.v1.schema.json",
+  "title": "Clavain selector decision record (schema v1)",
+  "description": "Documentation schema for scripts/clavain_selector/records.build_record's output, per docs/plans/2026-09-25-jev-decision-layer.md's 'Decision records (schema v1)' section. Not enforced by a JSON Schema validator in tests (stdlib/pytest/pyyaml only, no jsonschema dependency); `tests/structural/test_selector_records.py::test_record_shape` checks that `required` here equals build_record's top-level keys exactly. Records never contain prompts, task text, context, candidate payloads, raw model output or credentials -- only hashes, ids, bounded summaries (<=96 chars), scores and reasons.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "decision_id",
+    "created_at",
+    "point",
+    "integration",
+    "host",
+    "adapter_version",
+    "mode",
+    "session",
+    "task_revision",
+    "request",
+    "candidates",
+    "selector",
+    "result",
+    "validation",
+    "fallback",
+    "applied",
+    "egress",
+    "flags",
+    "policy"
+  ],
+  "properties": {
+    "schema": {
+      "const": "clavain.selector.decision"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "decision_id": {
+      "type": "string",
+      "pattern": "^sel_[0-9a-f]{32}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "point": {
+      "type": "string",
+      "enum": [
+        "launch_profile",
+        "prompt_submit",
+        "pre_tool",
+        "post_tool_output",
+        "pre_compact",
+        "session_start",
+        "skill_loading",
+        "library"
+      ]
+    },
+    "integration": {
+      "type": "string"
+    },
+    "host": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "adapter_version": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "shadow",
+        "active",
+        "eval"
+      ]
+    },
+    "session": {
+      "type": "object",
+      "required": [
+        "host_session_id",
+        "bead_id"
+      ],
+      "properties": {
+        "host_session_id": {
+          "type": "string"
+        },
+        "bead_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "task_revision": {
+      "type": "string"
+    },
+    "request": {
+      "type": "object",
+      "required": [
+        "sha256",
+        "bytes",
+        "task_sha256",
+        "context_sha256",
+        "candidate_count"
+      ],
+      "properties": {
+        "sha256": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "task_sha256": {
+          "type": "string"
+        },
+        "context_sha256": {
+          "type": "string"
+        },
+        "candidate_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Only present when egress.verdict == \"admitted\".",
+            "required": [
+              "id",
+              "summary",
+              "payload_sha256",
+              "prepared_at_revision",
+              "expires_at_ms",
+              "read_set_fingerprint"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 96
+              },
+              "payload_sha256": {
+                "type": "string"
+              },
+              "prepared_at_revision": {
+                "type": "string"
+              },
+              "expires_at_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "read_set_fingerprint": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Present whenever egress.verdict != \"admitted\" (including rows 2-4, which run before egress).",
+            "required": [
+              "id_sha256",
+              "payload_sha256"
+            ],
+            "properties": {
+              "id_sha256": {
+                "type": "string"
+              },
+              "payload_sha256": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "selector": {
+      "type": "object",
+      "required": [
+        "backend"
+      ],
+      "properties": {
+        "backend": {
+          "const": "jev"
+        },
+        "model_requested": {
+          "type": "string"
+        },
+        "model_returned": {
+          "type": "string"
+        },
+        "floors": {
+          "type": "object",
+          "properties": {
+            "confidence": {
+              "type": "number"
+            },
+            "fit": {
+              "type": "number"
+            }
+          }
+        },
+        "attempts": {
+          "type": "integer"
+        },
+        "http_status": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "latency_ms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "jev_usage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {
+              "type": "integer"
+            },
+            "output_tokens": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "selected",
+            "abstained",
+            "not_called"
+          ]
+        },
+        "candidate_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "selected_probability": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fit": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "required": [
+        "stage",
+        "reject_reason"
+      ],
+      "properties": {
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reject_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "required": [
+        "reason",
+        "detail"
+      ],
+      "properties": {
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "applied": {
+      "type": "string",
+      "enum": [
+        "native",
+        "emitted"
+      ]
+    },
+    "egress": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "rule_ids",
+        "terms_version"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "admitted",
+            "refused",
+            "not_run"
+          ]
+        },
+        "rule_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "terms_version": {
+          "type": "string"
+        }
+      }
+    },
+    "flags": {
+      "type": "object"
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "contract_version",
+        "config_sha256"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "clavain-selection-v1"
+        },
+        "config_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "inputs_ref": {
+      "type": "string",
+      "description": "Optional; allowed only when mode == \"eval\" (a path under the eval output dir)."
+    }
+  }
+}
