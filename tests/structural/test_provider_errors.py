@@ -84,6 +84,30 @@ def test_claude_limit_text_in_ordinary_output_is_not_a_failure():
     assert provider_errors.classify(events) == ""
 
 
+CODEX_EXHAUSTED_429 = "exceeded retry limit, last status: 429 Too Many Requests"
+
+
+def test_codex_exhausted_429_retries_is_rate_limited():
+    # Captured 2026-09-25 from a pooled cross-lab review: Codex had already
+    # retried internally. As terminal_error it suppressed the review's
+    # fallback chain; rate_limited lets dispatch retry, then walk.
+    events = [
+        {"type": "thread.started", "thread_id": "fixture"},
+        {"type": "turn.started"},
+        {"type": "error", "message": CODEX_EXHAUSTED_429},
+        {"type": "turn.failed", "error": {"message": CODEX_EXHAUSTED_429}},
+    ]
+    assert provider_errors.classify(events) == "rate_limited"
+
+
+def test_recovered_codex_429_is_not_a_failure():
+    events = [
+        {"type": "error", "message": CODEX_EXHAUSTED_429},
+        {"type": "turn.completed"},
+    ]
+    assert provider_errors.classify(events) == ""
+
+
 def test_failure_evidence_redacts_secrets_identity_and_home_paths(tmp_path):
     artifact = tmp_path / "evidence.json"
     aws_access = "AKIA" + "IOSFODNN7EXAMPLE"

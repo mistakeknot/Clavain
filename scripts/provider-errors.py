@@ -20,6 +20,8 @@ USAGE_LIMIT_MESSAGE = re.compile(r"^You[’']ve hit your usage limit\.")
 CLAUDE_LIMIT_MESSAGE = re.compile(
     r"^(?:You[’']ve hit your [\w’' -]{0,40}?limit\b|Claude AI usage limit reached\b)"
 )
+# Codex's own retries ran out on HTTP 429; dispatch retries, then walks.
+CODEX_EXHAUSTED_429 = re.compile(r"^exceeded retry limit, last status: 429\b")
 STDERR_USAGE_LIMIT = re.compile(
     r"^(?:\x1b\[[0-9;]*m)*(?:ERROR\s*:\s*)?You[’']ve hit your usage limit\."
 )
@@ -159,12 +161,15 @@ def classify(events, stderr=""):
             failures.add("quota_exhausted")
         elif CLAUDE_LIMIT_MESSAGE.match(_claude_error_text(event, kind).strip()):
             failures.add("quota_exhausted")
+        elif isinstance(error, dict) and CODEX_EXHAUSTED_429.match(str(error.get("message", ""))):
+            target.add("rate_limited")
         else:
             target.add("terminal_error")
     failures.update(transient_errors)
     if any(STDERR_USAGE_LIMIT.match(line.strip()) for line in stderr.splitlines()):
         failures.add("quota_exhausted")
-    for failure in ("terminal_policy", "terminal_configuration", "terminal_error", "quota_exhausted"):
+    for failure in ("terminal_policy", "terminal_configuration", "terminal_error",
+                    "quota_exhausted", "rate_limited"):
         if failure in failures:
             return failure
     return ""
