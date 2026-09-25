@@ -15,6 +15,11 @@ QUOTA = {"usage_limit_exceeded", "quota_exhausted", "insufficient_quota"}
 DENIAL = {"permission_denied", "policy_denied", "policy_violation", "forbidden", "403"}
 CONFIG = {"invalid_request_error", "authentication_error", "unauthorized", "401", "400"}
 USAGE_LIMIT_MESSAGE = re.compile(r"^You[’']ve hit your usage limit\.")
+# Claude reports a subscription limit as error "rate_limit" (shared with
+# transient 429s) and says which in the text; only the text marks capacity.
+CLAUDE_LIMIT_MESSAGE = re.compile(
+    r"^(?:You[’']ve hit your [\w’' -]{0,40}?limit\b|Claude AI usage limit reached\b)"
+)
 STDERR_USAGE_LIMIT = re.compile(
     r"^(?:\x1b\[[0-9;]*m)*(?:ERROR\s*:\s*)?You[’']ve hit your usage limit\."
 )
@@ -113,6 +118,19 @@ def _envelope(event):
     return event, kind, error
 
 
+def _claude_error_text(event, kind):
+    """Text of a Claude error event; empty for every other shape."""
+    if kind == "result":
+        return str(event.get("result") or "")
+    message = event.get("message")
+    if kind != "assistant" or not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if not isinstance(content, list):
+        return ""
+    return "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
+
+
 def classify(events, stderr=""):
     failures = set()
     transient_errors = set()
@@ -138,6 +156,8 @@ def classify(events, stderr=""):
             failures.add("terminal_configuration")
         elif codes & QUOTA or (isinstance(error, dict) and USAGE_LIMIT_MESSAGE.match(
                 str(error.get('message', '')))):
+            failures.add("quota_exhausted")
+        elif CLAUDE_LIMIT_MESSAGE.match(_claude_error_text(event, kind).strip()):
             failures.add("quota_exhausted")
         else:
             target.add("terminal_error")

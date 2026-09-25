@@ -92,6 +92,17 @@ frontier model is the declared degradation when no cross-lab seat is reachable.
 The preference is a preference, not a gate — a stalled review gate is the worse
 outcome, and the receipt records which seats were excluded and why.
 
+**Both directions walk at runtime (mk-esex).** The chains were symmetric after
+mk-9yyt, but only a Codex limit classified as `quota_exhausted`. The Claude CLI
+reports a subscription limit as `error: "rate_limit"` — the same code as a
+transient 429 — with the limit named in the text ("You've hit your weekly
+limit · resets …"), so a Fable seat out of quota landed as `terminal_error` and
+dispatch suppressed its fallback: an Opus-authored plan review blocked instead of
+reaching Astra. `scripts/provider-errors.py` now classifies that text on a Claude
+error event as `quota_exhausted`; a `rate_limit` without it stays terminal.
+`tests/routing/plan-review-capacity-test.sh` drives the real dispatch walk in both
+directions, and the case where every non-producer seat is out still blocks.
+
 Reviewer separation is not part of that degradation. It is enforced structurally,
 below the policy layer: a candidate whose canonical identity matches the producer
 is removed with reason `producer_model_conflict`, primary and fallbacks alike, and
