@@ -17,17 +17,17 @@ Execution authority is explicit. Resolve the complete profile with `ic route dis
 
 | Role | Primary route | Policy |
 |------|---------------|--------|
-| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-5.6 Sol xhigh until Astra account access succeeds, then Opus 5 high (`pilot-opus`, mk ruling 2026-09-25: Codex exhaustion must never block development). `pilot-opus` is `backend: main` — it informs which model the running session itself claims, not a subprocess dispatch.sh can spawn; `_dispatch_role_profile` still refuses to delegate to a `backend: main` candidate |
+| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-5.6 Sol xhigh until Astra account access succeeds, then Opus 5.5 high (`pilot-opus`, mk ruling 2026-09-25: Codex exhaustion must never block development). `pilot-opus` is `backend: main` — it informs which model the running session itself claims, not a subprocess dispatch.sh can spawn; `_dispatch_role_profile` still refuses to delegate to a `backend: main` candidate |
 | `scout` | GPT-5.6 Sol high | Read-only exploration; Sonnet 5 high is the capacity seat when the Codex lane is out |
 | `routine-execution` | GPT-5.6 Sol high | High-volume coding; Sonnet 5 high is the capacity seat when the Codex lane is out |
-| `deep-execution` | GPT-6 Astra high, Standard | Sol xhigh only for explicit model/account/version unavailability, then Opus 5 high. A frontier-classified task skips Sol — it is not frontier-eligible — and degrades straight to Opus |
-| `plan-review` | Fable high | Cross-lab first: Astra xhigh when Fable is the producer. Opus 5 high is the last resort and the only same-lab route; `producer_model_conflict` still removes any candidate equal to the producer |
-| `validation` | Claude Opus 5 high | Must differ from the producer; Sonnet 5, then Sol, then Kimi fallbacks. Fable left routine validation on 2026-09-08 (mk ruling); it stays on `plan-review` and `escalation` |
+| `deep-execution` | GPT-6 Astra high, Standard | Sol xhigh only for explicit model/account/version unavailability, then Opus 5.5 high. A frontier-classified task skips Sol — it is not frontier-eligible — and degrades straight to Opus |
+| `plan-review` | Opus 5.5 high | Astra xhigh when Opus is the producer or out of capacity. `producer_model_conflict` still removes any candidate equal to the producer, so an Opus-authored plan with Astra out fails closed: the agent then runs a declared adversarial Opus review by hand (mk ruling 2026-09-25, mk-3b8z; mk-2e1e tracks a routable seat). Opus 5.5 replaced Fable 5.1 here |
+| `validation` | Claude Opus 5.5 high | Must differ from the producer; Sonnet 5, then Sol, then Kimi fallbacks. Fable left routine validation on 2026-09-08 and every other seat on 2026-09-25 (mk rulings; mk-3b8z) |
 | `release-preparation` | GPT-5.6 Sol high | Returns a compact release packet; Sonnet 5 high is the capacity seat when the Codex lane is out |
 | `release-authority` | main integrator | Never delegated implicitly. No capacity seat: substituting release authority is an authority change, not a fallback |
 | `cross-lab-review` | provider/model unlike producer | Sealed first-pass findings |
 
-Frontier authoring (`planning`, `frontier-planning`, `escalation`) runs Astra xhigh, then Fable high, then Opus 5 high (mk ruling 2026-09-18 — Opus already reviews frontier plans, which is the harder job, so refusing to let it author in an emergency was arbitrary). The substitute is last, so a reachable Astra still authors every plan. What keeps a review substitute from changing authoring is that the two lanes are separate profile chains, asserted by `tests/routing/reasoning-contract-test.sh` — not a refusal to resolve.
+Frontier authoring (`planning`, `frontier-planning`, `escalation`) runs Astra xhigh, then Opus 5.5 high (mk ruling 2026-09-18 — Opus already reviews frontier plans, which is the harder job, so refusing to let it author in an emergency was arbitrary; Opus 5.5 replaced the Fable 5.1 seat between them on 2026-09-25, mk-3b8z). The substitute is last, so a reachable Astra still authors every plan. What keeps a review substitute from changing authoring is that the two lanes are separate profile chains, asserted by `tests/routing/reasoning-contract-test.sh` — not a refusal to resolve.
 
 HTTP 429 retries are bounded and remain on the same resolved model. Misalignment-policy 403s and all other configuration 4xx responses are terminal and never trigger model/backend fallback. Bounded work uses headless execution; clarification-prone or long work uses `--via zaka` for steering.
 

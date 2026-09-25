@@ -15,7 +15,7 @@
 #
 # When this file is absent, all consumers fall back to their existing defaults.
 #
-# Capability-routing doctrine (frontier windows, fable-tier sessions):
+# Capability-routing doctrine (frontier-tier sessions):
 #   see commands/model-routing.md § "Capability-routing doctrine" — frontier plans/reviews,
 #   sonnet executes, opus validates against plan criteria, two-strikes escalation.
 
@@ -53,7 +53,7 @@ subagents:
 
   phases:
     brainstorm:
-      model: fable  # frontier window; falls back to opus when closed (fc5.1)
+      model: opus  # frontier tier; Opus 5.5 replaced Fable 5.1 (mk ruling 2026-09-25, mk-3b8z)
       categories:
         # Research agents stay cheap even during brainstorm
         research: haiku
@@ -66,19 +66,16 @@ subagents:
     # plan authoring and plan review carry the doctrine's highest leverage —
     # a plan defect replicates into every downstream consumer (§1 asymmetry,
     # restated by the parley as fan-out multiplicity: count the consumers).
-    # fable on these phases; falls back to opus when unavailable (fc5.1, same
-    # machinery as brainstorm). DOSE GUARD (parley consensus 7): the phase
+    # opus on these phases (Fable 5.1 until mk ruled on 2026-09-25 that Opus 5.5
+    # outperforms it, mk-3b8z). DOSE GUARD (parley consensus 7): the phase
     # default is for the author/verdict agent — bulk categories stay cheap so
-    # a 10-lens plan review never becomes 10 fable calls. Every fable call
-    # drains BOTH the shared weekly pool and the 50% fable sub-cap
-    # (ic state get model.fable.pool global; verified 2026-07-27, standing
-    # capacity since 2026-07-20 — the "limited window" era is over).
+    # a 10-lens plan review never becomes 10 opus calls.
     # PILOT-1 EVIDENCE (n=1/arm, provisional): both fable- and opus-authored
     # plans produced exact code and DEFECTIVE VERIFY GAUGES — gauge review by
     # a model other than the plan author is required before freeze; see
     # commands/model-routing.md § Routing-table v2.
     strategized:
-      model: fable  # plan authoring; falls back to opus when closed (fc5.1)
+      model: opus  # plan authoring
       categories:
         research: haiku
         review: sonnet
@@ -86,7 +83,7 @@ subagents:
     strategy-reviewed:
       model: sonnet
     planned:
-      model: fable  # plan-review verdict; falls back to opus when closed (fc5.1)
+      model: opus  # plan-review verdict
       categories:
         research: haiku
         # fd-* lens pool stays cheap; the verdict/synthesis step rides the
@@ -105,15 +102,18 @@ subagents:
       model: sonnet
 
 reasoning:
-  # gpt-6-astra and claude-fable-5-1 are the two frontier authors. claude-opus-5
-  # is eligible ONLY as a declared capacity substitute (mk ruling 2026-09-10,
-  # widened to the default policy by mk-9yyt): it appears last in every chain it
-  # belongs to, so it is never selected while a frontier primary is reachable,
-  # and the structural producer_model_conflict check still applies to it. Listing
-  # it here is the eligibility half of the two-gate contract; the selection half
-  # is the ordered `fallbacks:` on each tier below. Both are required — a chain
-  # entry that is not frontier-eligible is dropped with reason `frontier_required`.
-  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]
+  # gpt-6-astra and claude-opus-5-5 are the two frontier authors. mk ruled on
+  # 2026-09-25 (mk-3b8z) that Opus 5.5 outperforms Fable 5.1 and replaces it,
+  # and that every Opus seat runs Opus 5.5; claude-fable-5-1 and claude-opus-5
+  # are no longer selectable. Listing a model here is the eligibility half of the
+  # two-gate contract; the selection half is the ordered `fallbacks:` on each
+  # tier below. Both are required — a chain entry that is not frontier-eligible
+  # is dropped with reason `frontier_required`. The structural
+  # producer_model_conflict check is unchanged: when an Opus-produced artifact
+  # has no reachable reviewer from another model, routing fails closed and the
+  # agent applies mk's adversarial orthogonal same-model Opus review by hand,
+  # declared as such (routable seat tracked in mk-2e1e).
+  frontier_models: [gpt-6-astra, claude-opus-5-5]
   frontier_reasons: [unresolved-success-criteria, foundational-invariants, broad-consequences, difficult-verification, capability-failure]
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
@@ -128,8 +128,7 @@ reasoning:
 dispatch:
   # Canonical endpoints, not UI aliases, define producer/validator separation.
   model_aliases:
-    fable: claude-fable-5-1
-    opus: claude-opus-5
+    opus: claude-opus-5-5
     sonnet: claude-sonnet-5
     gpt-5.6: gpt-5.6-sol
     k3: kimi-code/k3
@@ -139,19 +138,18 @@ dispatch:
   roles:
     planning: routine-sol
     frontier-planning: planning-astra
-    plan-review: review-fable
+    plan-review: review-opus
     escalation: planning-astra
     main-integrator: main-astra
     scout: scout-sol
     routine-execution: routine-sol
     deep-execution: deep-astra
-    # mk ruling 2026-09-08: Fable leaves routine validation (plan-review and
-    # escalation keep it); Opus 5 validates, Sonnet 5 is the fallback. The
+    # mk ruling 2026-09-08: Opus validates, Sonnet 5 is the fallback. The
     # producer is normally gpt-5.6-sol, so any Claude model keeps independence.
     validation: validation-opus
     release-preparation: release-sol
     release-authority: release-authority-main
-    cross-lab-review: crosslab-fable
+    cross-lab-review: crosslab-opus
     # mk ruling 2026-09-25 (mk-42j9.5): relaying, waiting and status reports
     # run on Sonnet. Planning and review keep their frontier seats.
     coordination: coordination-sonnet
@@ -159,8 +157,8 @@ dispatch:
   # resolver stably moves eligible seats from a frontier lab other than the
   # producer's ahead of same-lab seats, and the receipt records the change as
   # `cross_lab_reorder`. Claude-produced code therefore reaches Sol before Opus
-  # in `validation`; Opus is the same-lab substitute when the Codex lane is out,
-  # and Fable is not in the validation chain. Codex-produced work keeps the
+  # in `validation`; Opus is the same-lab substitute when the Codex lane is out.
+  # Codex-produced work keeps the
   # policy order. Requires ic >= intercore 2caa435.
   cross_lab_first: [validation, cross-lab-review]
 
@@ -172,51 +170,21 @@ dispatch:
       reasoning_effort: xhigh
       service_tier: standard
       minimum_codex_version: 0.153.1
-      # planning-fable, not review-fable (mk-9yyt). Chains are walked transitively:
+      # planning-opus, not review-opus (mk-9yyt). Chains are walked transitively:
       # while the authoring head pointed at a plan-review profile, every seat added
       # to the review lane also became reachable from planning, and a frontier-
-      # planning receipt reported `role: plan-review`. Same model and same effort
-      # as before — only the profile object differs — and the two lanes are now
-      # independent, so the review-side capacity seat cannot silently change who
-      # authors a plan.
-      #
-      # planning-opus is the third authoring seat (mk ruling 2026-09-18). It was
-      # deliberately absent when the lanes were split: authoring failed closed
-      # when both frontier labs were out. mk ruled that asymmetric — Opus is
-      # already in frontier_models and already authorised to independently review
-      # a frontier-authored plan, which is the harder job, so refusing to let it
-      # author in an emergency was arbitrary. It stays LAST: a substitute is
-      # reached only once both frontier primaries are excluded, so a healthy
-      # estate still authors on Astra, then Fable.
-      fallbacks: [planning-fable, planning-opus]
-    planning-fable:
-      role: frontier-planning
-      backend: claude
-      model: fable
-      reasoning_effort: high
-      service_tier: standard
-      description: Frontier authoring fallback when Astra is unavailable
+      # planning receipt reported `role: plan-review`. The two lanes stay
+      # independent, so a review-side seat cannot silently change who authors a
+      # plan. planning-opus runs Opus 5.5, the Anthropic frontier author since
+      # mk-3b8z replaced planning-fable.
+      fallbacks: [planning-opus]
     planning-opus:
       role: frontier-planning
       backend: claude
-      model: claude-opus-5
+      model: claude-opus-5-5
       reasoning_effort: high
       service_tier: standard
-      description: Declared capacity substitute for frontier authoring when neither frontier lab is reachable (mk ruling 2026-09-18)
-    review-fable:
-      role: plan-review
-      backend: claude
-      model: fable
-      reasoning_effort: high
-      service_tier: standard
-      # review-opus is the third seat (mk-9yyt). Without it a Fable-authored plan
-      # had exactly ONE eligible reviewer: review-fable is removed structurally by
-      # producer_model_conflict and the Astra seat became the primary with an EMPTY
-      # fallback_chain, so an Astra outage stopped the gate dead. Cross-lab review
-      # is still preferred — Astra is first and Opus is reached only when both
-      # frontier primaries are excluded, by producer conflict or by an observed
-      # capacity failure.
-      fallbacks: [review-astra, review-opus]
+      description: Frontier authoring fallback when Astra is unavailable (Opus 5.5 replaced Fable 5.1, mk-3b8z)
     review-astra:
       role: plan-review
       backend: codex
@@ -230,15 +198,15 @@ dispatch:
     review-opus:
       role: plan-review
       backend: claude
-      model: claude-opus-5
+      model: claude-opus-5-5
       reasoning_effort: high
       service_tier: standard
-      # No fallbacks: Opus must not end up reviewing its own work, and this seat is
-      # the terminus of the review capacity chain, not a general frontier peer.
-      # Same-lab review (Anthropic reviewing Anthropic) is the declared degradation,
-      # never the default — see docs/canon/reasoning-routing.md § Capacity failure
-      # and fallback.
-      description: Declared capacity substitute for plan review when no cross-lab reviewer is reachable
+      # Plan-review primary since mk-3b8z (was review-fable). An Opus-authored plan
+      # removes this seat by producer_model_conflict and reaches review-astra. When
+      # Astra is also out there is no routed reviewer: routing fails closed and the
+      # agent applies mk's adversarial orthogonal same-model Opus review, declared
+      # (mk-2e1e tracks a routable seat).
+      fallbacks: [review-astra]
     pilot-opus:
       role: main-integrator
       backend: main
@@ -388,7 +356,7 @@ dispatch:
     deep-opus:
       role: deep-execution
       backend: claude
-      model: claude-opus-5
+      model: claude-opus-5-5
       reasoning_effort: high
       service_tier: standard
       # Frontier-eligible, so it survives the frontier_required filter that removes
@@ -398,7 +366,7 @@ dispatch:
     validation-opus:
       role: validation
       backend: claude
-      model: claude-opus-5
+      model: claude-opus-5-5
       reasoning_effort: high
       service_tier: standard
       # sonnet before sol before kimi: the kimi seat runs with a toolless agent
@@ -413,18 +381,7 @@ dispatch:
       reasoning_effort: high
       service_tier: standard
       fallbacks: [validation-sol, validation-kimi]
-      description: Validation fallback when Opus 5 is unavailable or is the producer
-    validation-fable:
-      role: validation
-      backend: claude
-      model: fable
-      reasoning_effort: high
-      service_tier: standard
-      # sol before kimi: the kimi seat runs with a toolless agent file and can only
-      # answer UNRUN for a plan whose Verification must run (goal 60771535, run 120d9aa1);
-      # the codex seat executes and still differs from a fable producer.
-      fallbacks: [validation-sol, validation-kimi]
-      description: Frontier validator, no longer the validation primary (explicit --tier only since 2026-09-08)
+      description: Validation fallback when Opus is unavailable or is the producer
     validation-kimi:
       role: validation
       backend: kimi
@@ -474,10 +431,10 @@ dispatch:
       reasoning_effort: xhigh
       service_tier: standard
       description: Main-integrator release authority while Astra access is unavailable
-    crosslab-fable:
+    crosslab-opus:
       role: cross-lab-review
       backend: claude
-      model: fable
+      model: claude-opus-5-5
       reasoning_effort: high
       service_tier: standard
       fallbacks: [validation-kimi, validation-sol]

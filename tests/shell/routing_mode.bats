@@ -20,17 +20,17 @@ phase_cat() {    # $1 = phase, $2 = category → value
 }
 
 @test "baseline fixture carries the doctrine entries" {
-    [ "$(phase_model strategized)" = "fable" ]
-    [ "$(phase_model planned)" = "fable" ]
+    [ "$(phase_model strategized)" = "opus" ]
+    [ "$(phase_model planned)" = "opus" ]
     [ "$(phase_cat planned research)" = "haiku" ]
 }
 
-@test "economy leaves brainstorm/strategized/planned on fable and moves executing to sonnet" {
+@test "economy leaves brainstorm/strategized/planned on opus and moves executing to sonnet" {
     run bash "$SCRIPT" economy
     [ "$status" -eq 0 ]
-    [ "$(phase_model strategized)" = "fable" ]
-    [ "$(phase_model planned)" = "fable" ]
-    [ "$(phase_model brainstorm)" = "fable" ]
+    [ "$(phase_model strategized)" = "opus" ]
+    [ "$(phase_model planned)" = "opus" ]
+    [ "$(phase_model brainstorm)" = "opus" ]
     [ "$(phase_model executing)" = "sonnet" ]
     [ "$(phase_model shipping)" = "sonnet" ]
     grep -q '^    model: sonnet' "$ROUTING_FILE"
@@ -41,7 +41,7 @@ phase_cat() {    # $1 = phase, $2 = category → value
     [ "$status" -eq 0 ]
     [ "$(phase_model executing)" = "inherit" ]
     [ "$(phase_cat executing review)" = "inherit" ]
-    [ "$(phase_model planned)" = "fable" ]
+    [ "$(phase_model planned)" = "opus" ]
     [ "$(phase_cat planned research)" = "haiku" ]
     [ "$(phase_cat planned review)" = "sonnet" ]
     grep -q '^    model: opus' "$ROUTING_FILE"
@@ -51,7 +51,7 @@ phase_cat() {    # $1 = phase, $2 = category → value
     bash "$SCRIPT" quality >/dev/null
     bash "$SCRIPT" economy >/dev/null
     [ "$(phase_model executing)" = "sonnet" ]
-    [ "$(phase_model strategized)" = "fable" ]
+    [ "$(phase_model strategized)" = "opus" ]
     diff <(awk '/^    (brainstorm|strategized|planned):/,/^    [a-z-]*:$/' "$REPO/config/routing.yaml" | grep -E 'model:|research:|review:|synthesis:') \
          <(awk '/^    (brainstorm|strategized|planned):/,/^    [a-z-]*:$/' "$ROUTING_FILE"      | grep -E 'model:|research:|review:|synthesis:')
 }

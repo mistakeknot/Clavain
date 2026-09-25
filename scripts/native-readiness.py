@@ -334,7 +334,7 @@ def validate_request(request):
         raise ValueError("exactly one native model assignment required")
     expected = request.get("expected_model", readiness.MODELS[host])
     if expected != readiness.MODELS[host]:
-        if host != "claude" or expected != "claude-opus-5":
+        if expected not in readiness.FALLBACK_MODELS.get(host, ()):
             raise ValueError("model change requires the recorded user-authorized capacity fallback")
         readiness.validate_fallback(request.get("fallback"))
     model_flag = "--model" if "--model" in command else "-m"

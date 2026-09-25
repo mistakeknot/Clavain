@@ -89,7 +89,7 @@ CLAUSES = {
         "headroom_scope": "planning, plan-review, validation, escalation and cross-lab-review receive no headroom input",
         "cross_lab_review": "Review roles `validation` and `cross-lab-review` prefer a frontier lab other than the producer's",
         "cross_lab_ic": "needs `ic` >= 2caa435",
-        "codex_out_substitute": "for Claude-produced work, when the Codex lane is out, `validation` substitutes Opus without waiting for reset or escalating to Fable",
+        "codex_out_substitute": "for Claude-produced work, when the Codex lane is out, `validation` substitutes Opus without waiting for reset, or Sonnet when Opus produced it",
         "escalation": "Two demonstrated capability, verdict, or criteria failures request escalation; a disproven premise escalates immediately",
         "handoff": "Handoff carries decisions, constraints, verification, and escalation conditions",
         "empirical": "Retain relevant playtests, experiments, user evidence, and production canaries",

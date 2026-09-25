@@ -33,11 +33,12 @@ def main():
         parser.add_argument('--'+flag,type=Path,required=True)
     for flag in ('clavain-sha','intertest-sha','parent-session-id','cohort-id'):
         parser.add_argument('--'+flag,required=True)
-    parser.add_argument('--claude-model',choices=['claude-fable-5-1','claude-opus-5'],default='claude-fable-5-1')
+    fixed=readiness.MODELS['claude']
+    parser.add_argument('--claude-model',choices=[fixed,*readiness.FALLBACK_MODELS.get('claude',())],default=fixed)
     parser.add_argument('--fallback-record',type=Path)
     args=parser.parse_args()
     fallback = None
-    if args.claude_model != 'claude-fable-5-1':
+    if args.claude_model != fixed:
         if not args.fallback_record: raise ValueError('explicit fallback authorization and capacity evidence required')
         fallback=json.loads(args.fallback_record.read_text())
         readiness.validate_fallback(fallback)

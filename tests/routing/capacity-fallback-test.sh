@@ -35,8 +35,8 @@ cat > "$WORK/routine.json" <<'JSON'
 {"reasons": [], "rationale": "routine change with settled constraints"}
 JSON
 
-CLAUDE_LANE='["claude-opus-5","claude-sonnet-5","claude-fable-5-1","kimi-code/k3"]'
-NO_ASTRA='["gpt-5.6-sol","claude-opus-5","claude-sonnet-5","claude-fable-5-1","kimi-code/k3"]'
+CLAUDE_LANE='["claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]'
+NO_ASTRA='["gpt-5.6-sol","claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]'
 
 ctx() { # ctx <base> <available_models-json|-> <out>
   if [[ "$2" == "-" ]]; then cp "$1" "$3"; else
@@ -69,42 +69,52 @@ check_primary scout               "$WORK/c-routine.json" scout-sol
 check_primary release-preparation "$WORK/c-routine.json" release-sol
 check_primary deep-execution      "$WORK/c-routine.json" deep-astra
 check_primary deep-execution      "$WORK/c-front.json"   deep-astra
-check_primary plan-review         "$WORK/c-front.json"   review-fable gpt-6-astra
-check_primary plan-review         "$WORK/c-front.json"   review-astra claude-fable-5-1
+check_primary plan-review         "$WORK/c-front.json"   review-opus gpt-6-astra
+check_primary plan-review         "$WORK/c-front.json"   review-astra claude-opus-5-5
 check_primary validation          "$WORK/c-front.json"   validation-opus gpt-5.6-sol
 
 # ---------------------------------------------------------------------------
-# 2. A Fable-authored plan-review resolves to a DISTINCT FRONTIER model under an
-#    Astra capacity failure. This is the hole the bead exists to close: before
-#    mk-9yyt it resolved planning-astra with an EMPTY fallback_chain, so an Astra
-#    outage stopped the gate dead.
+# 2. mk-3b8z: Opus 5.5 replaced Fable 5.1 and every Opus seat runs Opus 5.5.
+#    No Fable or Opus 5 seat is selectable, and every Claude Opus seat is 5.5.
+#    An Opus-authored plan has Astra as its only routed reviewer; with Astra out,
+#    routing fails CLOSED rather than admitting the producer (the agent then
+#    applies mk's declared adversarial same-model Opus review by hand, mk-2e1e).
 # ---------------------------------------------------------------------------
-ctx "$WORK/frontier.json" "$CLAUDE_LANE" "$WORK/c-codex-down.json"
-receipt="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" claude-fable-5-1)" \
-  || fail "Fable-authored plan-review has no reviewer under an Astra outage: $receipt"
-echo "$receipt" | jq -e '
-  .profile.backend == "claude"
-  and .profile.model_identity != .producer_model
-  and .validator_relationship == "different-model"
-  and (.excluded | map(.reason) | index("producer_model_conflict") != null)
-' >/dev/null || fail "Fable-authored plan-review capacity route is wrong: $receipt"
+python3 - "$POLICY" <<'PY' || fail "policy still selects Fable or Opus 5"
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1])) or {}
+dispatch = cfg.get("dispatch") or {}
+aliases = dispatch.get("model_aliases") or {}
+models = {aliases.get(t.get("model"), t.get("model")) for t in (dispatch.get("tiers") or {}).values()}
+frontier = set((cfg.get("reasoning") or {}).get("frontier_models") or [])
+phases = {p.get("model") for p in ((cfg.get("subagents") or {}).get("phases") or {}).values()}
+bad = ({"claude-fable-5-1", "claude-opus-5", "fable"} & (models | frontier | phases)) or ("fable" in aliases)
+opus = {m for m in models if m.startswith("claude-opus")}
+sys.exit(1 if bad or opus != {"claude-opus-5-5"} or "claude-opus-5-5" not in frontier else 0)
+PY
 
+ctx "$WORK/frontier.json" "$CLAUDE_LANE" "$WORK/c-codex-down.json"
+ctx "$WORK/frontier.json" "$NO_ASTRA" "$WORK/c-no-astra.json"
 frontier_models="$(python3 - "$POLICY" <<'PY'
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1])) or {}
 print(" ".join((cfg.get("reasoning") or {}).get("frontier_models") or []))
 PY
 )"
-selected="$(echo "$receipt" | jq -r '.profile.model_identity')"
-[[ " $frontier_models " == *" $selected "* ]] \
-  || fail "plan-review capacity fallback $selected is not frontier-eligible"
+if out="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" claude-opus-5-5)"; then
+  fail "Opus-authored plan-review found a routed reviewer with Astra out: $out"
+fi
+[[ "$out" == *"no model distinct from producer"* || "$out" == *"no eligible model satisfies reasoning contract"* ]] \
+  || fail "Opus-authored plan-review refused for the wrong reason: $out"
 
-# Astra alone down (Sol still up) must reach the same distinct frontier reviewer.
-ctx "$WORK/frontier.json" "$NO_ASTRA" "$WORK/c-no-astra.json"
-receipt="$(resolve "$POLICY" plan-review "$WORK/c-no-astra.json" claude-fable-5-1)" \
-  || fail "Fable-authored plan-review stalled with only Astra down: $receipt"
-echo "$receipt" | jq -e '.profile.model_identity != .producer_model' >/dev/null \
-  || fail "plan-review resolved to its own producer"
+# An Astra-authored plan is reviewed by Opus 5.5, a distinct frontier model.
+receipt="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" gpt-6-astra)" \
+  || fail "Astra-authored plan-review has no reviewer: $receipt"
+echo "$receipt" | jq -e '
+  .profile_ref == "review-opus"
+  and .profile.model_identity == "claude-opus-5-5"
+  and .validator_relationship == "different-model"
+' >/dev/null || fail "Astra-authored plan-review route is wrong: $receipt"
 
 # ---------------------------------------------------------------------------
 # 3. Every role the bead names reaches a non-Codex seat when the whole Codex lane
@@ -177,41 +187,39 @@ done
 
 # ---------------------------------------------------------------------------
 # 5. The producer_model_conflict check must stay unweakened. A snapshot that
-#    explicitly SELECTS review-fable with Fable as producer still has to exclude
-#    it. If this ever passes, an escape hatch was added below the policy layer.
+#    SELECTS review-opus with Opus 5.5 as producer still has to exclude it. If
+#    this ever passes, an escape hatch was added below the policy layer.
 # ---------------------------------------------------------------------------
-sed 's/^    plan-review: .*/    plan-review: review-fable/' "$POLICY" > "$WORK/select-fable.yaml"
-receipt="$(resolve "$WORK/select-fable.yaml" plan-review "$WORK/c-front.json" claude-fable-5-1)" \
+receipt="$(resolve "$POLICY" plan-review "$WORK/c-front.json" claude-opus-5-5)" \
   || fail "self-review snapshot failed for the wrong reason: $receipt"
 echo "$receipt" | jq -e '
-  (.excluded | map(select(.profile_ref == "review-fable" and .reason == "producer_model_conflict")) | length == 1)
-  and .profile_ref != "review-fable"
-' >/dev/null || fail "reviewer separation weakened: Fable was admitted to review Fable"
+  (.excluded | map(select(.profile_ref == "review-opus" and .reason == "producer_model_conflict")) | length == 1)
+  and .profile_ref != "review-opus"
+' >/dev/null || fail "reviewer separation weakened: Opus was admitted to review Opus"
 
 # ---------------------------------------------------------------------------
 # 6. TWO GATES, NOT ONE. Selecting a substitute without frontier eligibility must
 #    still be refused: eligibility (reasoning.frontier_models) and selection
 #    (dispatch.roles + fallbacks) are separate mechanisms.
 # ---------------------------------------------------------------------------
-sed 's/^  frontier_models: .*/  frontier_models: [gpt-6-astra, claude-fable-5-1]/' "$POLICY" > "$WORK/no-eligibility.yaml"
-if out="$(resolve "$WORK/no-eligibility.yaml" plan-review "$WORK/c-codex-down.json" claude-fable-5-1)"; then
+sed 's/^  frontier_models: .*/  frontier_models: [gpt-6-astra]/' "$POLICY" > "$WORK/no-eligibility.yaml"
+if out="$(resolve "$WORK/no-eligibility.yaml" plan-review "$WORK/c-codex-down.json" gpt-6-astra)"; then
   fail "plan-review resolved without frontier eligibility for the substitute: $out"
 fi
 [[ "$out" == *"no eligible model satisfies reasoning contract"* ]] \
   || fail "unexpected refusal for a selection-only substitute: $out"
 
 # ---------------------------------------------------------------------------
-# 7. FRONTIER AUTHORING has its own capacity seat (mk ruling 2026-09-18) and it is
-#    LAST. Authoring previously failed closed when both frontier labs were out.
-#    Two properties, and the second is the one worth guarding: a reachable Astra
-#    must still author every plan, so the substitute can never become preferred.
+# 7. FRONTIER AUTHORING falls back from Astra to Opus 5.5 (planning-opus, which
+#    replaced planning-fable in mk-3b8z). A reachable Astra must still author
+#    every plan, so the fallback can never become preferred.
 # ---------------------------------------------------------------------------
 receipt="$(resolve "$POLICY" planning "$WORK/c-front.json")" \
   || fail "frontier authoring refused while Astra is reachable: $receipt"
 echo "$receipt" | jq -e '.profile.model_identity == "gpt-6-astra"' >/dev/null \
   || fail "frontier authoring no longer prefers Astra while it is reachable: $receipt"
 
-ctx "$WORK/frontier.json" '["claude-opus-5"]' "$WORK/c-opus-only.json"
+ctx "$WORK/frontier.json" '["claude-opus-5-5"]' "$WORK/c-opus-only.json"
 receipt="$(resolve "$POLICY" planning "$WORK/c-opus-only.json")" \
   || fail "frontier authoring has no seat when neither frontier lab is reachable: $receipt"
 echo "$receipt" | jq -e '
@@ -225,8 +233,8 @@ echo "$receipt" | jq -e '
 python3 - "$POLICY" "$WORK/no-authoring-seat.yaml" <<'PYMUT'
 import sys
 t = open(sys.argv[1]).read()
-t = t.replace("      fallbacks: [planning-fable, planning-opus]\n",
-              "      fallbacks: [planning-fable]\n")
+assert t.count("      fallbacks: [planning-opus]\n") == 1
+t = t.replace("      fallbacks: [planning-opus]\n", "      fallbacks: []\n")
 open(sys.argv[2], "w").write(t)
 PYMUT
 if out="$(resolve "$WORK/no-authoring-seat.yaml" planning "$WORK/c-opus-only.json")"; then

@@ -89,7 +89,7 @@ def test_changed_record_and_linked_evidence_are_rejected(tmp_path):
 def test_claude_binding_requires_actual_structured_tool_authorship(tmp_path):
     value = {"reasons": [], "rationale": "Settled canary with explicit fixture bounds."}
     row = {"type": "assistant", "sessionId": "subject", "uuid": "native-row-1", "effort": "high",
-        "message": {"id": "provider-message-1", "model": "claude-fable-5-1", "content": [
+        "message": {"id": "provider-message-1", "model": "claude-opus-5-5", "content": [
             {"type": "tool_use", "id": "tool-1", "name": "StructuredOutput", "input": value}]}}
     path = tmp_path / "native.jsonl"
     start = {"type": "user", "sessionId": "subject", "permissionMode": "dontAsk", "message": {"content": "Prepare only."}}
@@ -112,7 +112,7 @@ def test_claude_mutating_or_unapproved_skill_call_cannot_bind(tmp_path, tool):
     rows = [
         {"type": "user", "sessionId": "subject", "permissionMode": "dontAsk", "message": {"content": "Prepare."}},
         {"type": "assistant", "sessionId": "subject", "uuid": "a", "effort": "high", "message": {
-            "id": "m1", "model": "claude-fable-5-1", "content": [
+            "id": "m1", "model": "claude-opus-5-5", "content": [
                 {"type": "tool_use", "id": "bad", "name": tool, "input": {"skill": "forked"}},
                 {"type": "tool_use", "id": "decision", "name": "StructuredOutput", "input": value}]}},
         {"type": "user", "sessionId": "subject", "message": {"content": [
@@ -161,7 +161,7 @@ def claude_rows():
     rows = [
         {"type": "user", "sessionId": "subject", "permissionMode": "dontAsk", "message": {"content": "Prepare."}},
         {"type": "assistant", "sessionId": "subject", "uuid": "row", "effort": "high", "message": {
-            "id": "message", "model": "claude-fable-5-1", "content": [
+            "id": "message", "model": "claude-opus-5-5", "content": [
                 {"type": "tool_use", "id": "decision", "name": "StructuredOutput", "input": value}]}},
         {"type": "user", "sessionId": "subject", "message": {"content": [
             {"type": "tool_result", "tool_use_id": "decision", "content": "ok"}]}},
@@ -207,13 +207,26 @@ def test_deep_json_and_duplicate_reasons_fail_cleanly():
         with pytest.raises(ValueError): readiness.validate_decision(text)
 
 
-def test_opus_requires_explicit_fallback_binding(tmp_path):
-    value, rows = claude_rows(); rows[1]["message"]["model"] = "claude-opus-5"
+@pytest.mark.parametrize("former", ["claude-fable-5-1", "claude-opus-5"])
+def test_former_claude_models_refused_even_with_fallback_record(tmp_path, former):
+    # mk-3b8z: Opus 5.5 is the fixed Claude assignment and FALLBACK_MODELS is
+    # empty, so neither the former fixed model nor its former substitute binds.
+    assert readiness.MODELS["claude"] == "claude-opus-5-5" and readiness.FALLBACK_MODELS == {}
+    value, rows = claude_rows(); rows[1]["message"]["model"] = former
     path = tmp_path / "native.jsonl"; path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     with pytest.raises(ValueError): readiness.bind_decision("claude", path, "subject", value)
-    with pytest.raises(ValueError): readiness.bind_decision("claude", path, "subject", value, "claude-opus-5")
     fallback = {"reason": "fable-usage-limit", "user_authorization": "explicit test fixture authorization", "evidence_sha256": "a" * 64}
-    result = readiness.bind_decision("claude", path, "subject", value, "claude-opus-5", fallback)
+    with pytest.raises(ValueError, match="unsupported model assignment"):
+        readiness.bind_decision("claude", path, "subject", value, former, fallback)
+
+
+def test_listed_fallback_requires_explicit_binding(tmp_path, monkeypatch):
+    monkeypatch.setattr(readiness, "FALLBACK_MODELS", {"claude": ("claude-sonnet-5",)})
+    value, rows = claude_rows(); rows[1]["message"]["model"] = "claude-sonnet-5"
+    path = tmp_path / "native.jsonl"; path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises(ValueError): readiness.bind_decision("claude", path, "subject", value, "claude-sonnet-5")
+    fallback = {"reason": "fable-usage-limit", "user_authorization": "explicit test fixture authorization", "evidence_sha256": "a" * 64}
+    result = readiness.bind_decision("claude", path, "subject", value, "claude-sonnet-5", fallback)
     assert result["assignment"] == "authorized-fallback"
     assert result["fallback"] == fallback
 

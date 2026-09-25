@@ -84,7 +84,7 @@ _routing_model_tier() {
     local:qwen3.5-122b-a10b-4bit)       echo 3 ;;  # Track B5: MoE opus-equivalent
     local:gpt-oss-120b-mxfp4)           echo 3 ;;  # Track B5: opus-equivalent
     flash-moe:qwen3.5-397b)             echo 3 ;;  # Track B5: SSD-streamed opus-equivalent
-    fable)                              echo 4 ;;  # frontier tier — capability-routing doctrine
+    fable)                              echo 4 ;;  # retired frontier tier (mk-3b8z); resolves to opus
     *)                                  echo 0 ;;
   esac
 }
@@ -1254,9 +1254,10 @@ routing_resolve_model() {
   # Guard: resolve_model MUST never return "inherit"
   [[ "$result" == "inherit" ]] && result="sonnet"
 
-  # Fable-window fallback: fable resolves only while the window is open (fail-closed).
-  if [[ "$result" == "fable" && "${CLAVAIN_FABLE_AVAILABLE:-0}" != "1" ]]; then
-    echo "[fable-window] fable→opus (window closed) phase=${phase:-} agent=${agent:-}" >&2
+  # Fable is retired (mk-3b8z, 2026-09-25): Opus 5.5 took every Fable seat. A
+  # legacy `fable` in an older routing.yaml or agency spec always resolves to opus.
+  if [[ "$result" == "fable" ]]; then
+    echo "[fable-retired] fable→opus (mk-3b8z) phase=${phase:-} agent=${agent:-}" >&2
     result="opus"
   fi
 

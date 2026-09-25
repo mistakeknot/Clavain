@@ -26,7 +26,12 @@ SCHEMA = {
     },
     "required": ["reasons", "rationale"], "additionalProperties": False,
 }
-MODELS = {"codex": "gpt-6-astra", "claude": "claude-fable-5-1"}
+MODELS = {"codex": "gpt-6-astra", "claude": "claude-opus-5-5"}
+# Models a recorded, user-authorized capacity fallback may substitute for the
+# fixed assignment. Empty since mk-3b8z (2026-09-25): Opus 5.5 replaced Fable
+# 5.1 as the fixed Claude model, and the former Opus-for-Fable substitute has
+# nothing left to substitute for. Any model change is refused.
+FALLBACK_MODELS = {}
 
 
 def validate_fallback(fallback):
@@ -176,13 +181,14 @@ def bind_decision(host, path, session, decision, expected_model=None, fallback=N
     this validator rejects unexpected outer native calls. Codex nested tools
     remain governed by the OS sandbox and disabled features/connectors; the
     outer exec name does not establish what every nested tool did.
-    An expected Opus model is permitted only when the caller has recorded the
-    user's conditional fallback authorization and the Fable capacity failure.
+    A model other than the fixed assignment is permitted only when it is listed
+    in FALLBACK_MODELS and the caller has recorded the user's conditional
+    fallback authorization and the capacity failure.
     """
     if host not in MODELS or not isinstance(session, str) or not session:
         raise ValueError("known host and native session required")
     expected_model = expected_model or MODELS[host]
-    allowed = {MODELS[host]} | ({"claude-opus-5"} if host == "claude" else set())
+    allowed = {MODELS[host]} | set(FALLBACK_MODELS.get(host, ()))
     if expected_model not in allowed:
         raise ValueError("unsupported model assignment")
     if expected_model != MODELS[host]:

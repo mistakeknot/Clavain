@@ -32,7 +32,7 @@ models:
   planned:
     default: sonnet
     categories:
-      review: fable      # was: opus
+      review: opus       # fable until mk-3b8z (Opus 5.5 replaced Fable 5.1)
   executing:
     default: sonnet
     categories:

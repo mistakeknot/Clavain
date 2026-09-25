@@ -16,7 +16,7 @@ agents:
 
 models:
   strategized:
-    default: fable      # was: opus
+    default: opus       # fable until mk-3b8z (Opus 5.5 replaced Fable 5.1)
   planned:
     default: sonnet
 
