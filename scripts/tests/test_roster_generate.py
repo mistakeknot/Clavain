@@ -198,6 +198,11 @@ class RosterGenerateNegativeCases(unittest.TestCase):
     def test_report_decisions_follow_waiver_status(self):
         # N1: "mk decisions applied" is derived from the slugs file, so a
         # Kimi waiver demoted to PROPOSED is no longer reported as ratified.
+        # Updated 2026-09-25 (mk-rpnv.9 coordinator ruling): the other 10
+        # waivers are now RATIFIED in the real slugs file, so "RATIFIED by"
+        # legitimately appears in the report for those; only kimi's own
+        # entry must drop out of the ratified list and land in the pending
+        # table instead.
         import yaml
         doc = yaml.safe_load(SLUGS.read_text())
         for w in doc["waivers"]:
@@ -212,8 +217,9 @@ class RosterGenerateNegativeCases(unittest.TestCase):
             self.skipTest("pinned snapshot is past its freshness deadline")
         self.assertEqual(result.returncode, 0, result.stderr)
         report = (self.out / "report.md").read_text()
-        self.assertNotIn("RATIFIED by", report)
-        self.assertIn("11 waiver(s) PROPOSED", report)
+        self.assertNotIn("RATIFIED by mk** (coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25): `kimi-code/k3@high`", report)
+        self.assertIn("1 waiver(s) PROPOSED", report)
+        self.assertIn("| `kimi-code/k3@high` | `kimi-k3` (Kimi K3) |", report)
 
 
 if __name__ == "__main__":

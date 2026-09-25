@@ -30,6 +30,15 @@ rows:
     effort: high
     reasoning_mode: reasoning
     slug: claude-opus-5-high
+  # mk-3b8z: dispatch.model_aliases.opus is now claude-opus-5-5, so the
+  # opus dispatch tiers (crosslab-opus, deep-opus, pilot-opus, planning-opus,
+  # review-opus, validation-opus) resolve to claude-opus-5-5@high, not
+  # claude-opus-5@high. Coordinator ruling thr_n8twxx4psd, 2026-09-25
+  # (mechanical, exact snapshot match, not a waiver).
+  - model: claude-opus-5-5
+    effort: high
+    reasoning_mode: reasoning
+    slug: claude-opus-5-5-high
   - model: claude-sonnet-5
     effort: high
     reasoning_mode: reasoning
@@ -138,13 +147,13 @@ waivers:
     approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "Opus 5.5 at the Claude Code subagent layer; host-scoped effort"
     caveats:
-      - "Alias conflict: dispatch.model_aliases.opus is claude-opus-5, but the Claude Code subagent alias `opus` is Opus 5.5; this waiver takes the subagent-layer reading. mk to confirm it holds on the hosts that matter, otherwise map to claude-opus-5-xhigh"
+      - "Alias conflict resolved 2026-09-25 (mk-3b8z): dispatch.model_aliases.opus is now claude-opus-5-5, matching the Claude Code subagent alias `opus`; both readings agree"
       - "Effort is the host effortLevel (host-scoped)"
       - "mk-rpnv.16 (pending) may change this effort mapping"
     evidence:
-      - "Claude Code built-in alias `opus` resolves to the latest Opus (Opus 5.5), not dispatch.model_aliases.opus (claude-opus-5); used by complexity C4/C5 subagent_model"
+      - "Claude Code built-in alias `opus` resolves to the latest Opus (Opus 5.5), matching dispatch.model_aliases.opus (claude-opus-5-5) since mk-3b8z; used by complexity C4/C5 subagent_model"
       - "Host effortLevel xhigh (~/.claude/settings.json:717)"
-      - "Consequence: Opus 5.5 subagent work reaches Opus 5 review/validation seats (runtime_family_unenforced)"
+      - "2026-09-25 (mk-3b8z): dispatch tiers and the subagent alias both resolve to claude-opus-5-5, so Opus 5.5 work reaches Opus 5.5 review/validation seats; the prior cross-version (Opus 5 seat / Opus 5.5 producer) mismatch no longer applies"
   - ref: "subagent:fable"
     model: claude-fable-5-1
     slug: claude-fable-5-1-xhigh
@@ -158,6 +167,7 @@ waivers:
     caveats:
       - "Opus fallback: routing.yaml's subagent phases say fable falls back to opus when closed, so a Fable-closed session produces Opus 5.5 work; that producer is covered by the subagent:opus waiver (fallback_ref) and analysed as a producer"
       - "mk-rpnv.16 (pending) may change this effort mapping"
+      - "unreferenced since mk-3b8z"
     evidence:
       - "Clavain `fable` = claude-fable-5-1 (dispatch.model_aliases.fable); lib-routing.sh and intercore resolve it to `opus` when CLAVAIN_FABLE_AVAILABLE != 1"
       - "Host effortLevel xhigh (~/.claude/settings.json:717)"

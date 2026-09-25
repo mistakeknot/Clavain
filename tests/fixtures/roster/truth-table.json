@@ -1858,7 +1858,7 @@
     },
     {
       "id": "repo-routing-end-to-end",
-      "note": "B9: the repository's routing.yaml, families and slug registry against fixture copies of the pinned snapshot rows. No removals; validation-sol, validation-kimi, review-fable and crosslab-fable are flagged; Opus 5.5 work is headed by Opus 5 in validation when Sol is down. r2 fix: executors and `cloud` map only through explicit PROPOSED waivers, and no per-seat rule2 flag lands on a cross_lab_first cross-lab-review seat other than Fable (n4).",
+      "note": "B9: the repository's routing.yaml, families and slug registry against fixture copies of the pinned snapshot rows. No removals; validation-sol, validation-kimi and review-opus are flagged; Opus 5.5 work is headed by Opus 5.5 in validation. Updated 2026-09-25 (mk-3b8z: Opus 5.5 replaces Fable 5.1 and Opus 5 in every seat, so review-fable/crosslab-fable are gone and dispatch.model_aliases.opus -> claude-opus-5-5; mk-rpnv.9 coordinator ruling: all 10 PROPOSED waivers RATIFIED, plus the new claude-opus-5-5@high tier row).",
       "routing_file": "config/routing.yaml",
       "families_file": "config/roster-families.yaml",
       "slugs_file": "config/roster-slugs.yaml",
@@ -1878,50 +1878,42 @@
           "validation-kimi": [
             "rule1/validation/sol"
           ],
-          "review-fable": [
-            "rule2/plan-review/opus"
-          ],
-          "crosslab-fable": [
-            "rule2/cross-lab-review/opus"
-          ],
           "review-opus": [
-            "A2/plan-review/opus"
+            "rule2/plan-review/opus"
           ]
         },
         "annotations_include": [
-          "validation-kimi (validation, sol-produced): m1",
-          "review-fable (plan-review, opus-produced): m2",
-          "crosslab-fable (cross-lab-review, opus-produced): m2"
+          "validation-kimi (validation, sol-produced): m1"
         ],
         "heads": {
           "default|validation|claude-opus-5-5|nominal|default": "validation-sol",
-          "default|validation|claude-opus-5-5|sol-unavailable|default": "validation-opus",
-          "default|plan-review|claude-opus-5|nominal|default": "review-fable",
+          "default|plan-review|claude-opus-5-5|nominal|default": "review-astra",
           "default|coordination|-|nominal|default": "coordination-sonnet"
         },
         "rfu_include": [
-          "claude-opus-5-5 -> validation-opus (claude-opus-5) in validation [head, sol-unavailable]"
+          "gpt-6-sol -> validation-sol (gpt-5.6-sol) in validation [reachable, nominal]"
         ],
         "candidate_a2_include": [
           "gpt-6-sol: refused as reviewer/validator in validation while validation-sol (gpt-5.6-sol) is reachable"
         ],
-        "lint_empty": [
-          "opus_last"
-        ],
         "lint_include": {
           "rule2_no_astra_seat": [
             "cross-lab-review"
+          ],
+          "opus_last": [
+            "frontier_models: Opus version claude-opus-5-5 added"
           ]
         },
         "mapping": {
           "kimi-code/k3@high": "waiver-ratified",
-          "subagent:haiku": "waiver-proposed",
-          "subagent:opus": "waiver-proposed",
+          "subagent:haiku": "waiver-ratified",
+          "subagent:opus": "waiver-ratified",
           "local:qwen3.6-35b-a3b-4bit": "exact",
+          "claude-opus-5-5@high": "exact",
           "claude-sonnet-5@medium": "exact",
-          "executor:codex": "waiver-proposed",
-          "executor:kimi": "waiver-proposed",
-          "cloud": "waiver-proposed"
+          "executor:codex": "waiver-ratified",
+          "executor:kimi": "waiver-ratified",
+          "cloud": "waiver-ratified"
         },
         "schema_gaps_include": [
           "validation-kimi is INOPERABLE"
@@ -1933,6 +1925,9 @@
           },
           "executor:kimi": {
             "model": "kimi-code/k3"
+          },
+          "claude-opus-5-5@high": {
+            "slug": "claude-opus-5-5-high"
           }
         },
         "flags_exclude": {
