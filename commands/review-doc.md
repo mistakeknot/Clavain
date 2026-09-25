@@ -1,7 +1,7 @@
 ---
 name: review-doc
 description: Quick single-pass document refinement — assess clarity, score quality, fix issues, offer iteration
-argument-hint: "[document path]"
+argument-hint: "[document path or inline text]"
 disable-model-invocation: true
 ---
 
@@ -14,6 +14,8 @@ Single-pass refinement for brainstorm outputs, PRDs, plans, or any markdown doc.
 ## Step 1: Read
 
 Read target file. If no argument, check in order: `docs/brainstorms/*.md`, `docs/prds/*.md`, `docs/plans/*.md` (most recent). Report: "Reviewing <filename> (<N> lines)"
+
+If the argument is not a valid path on disk, treat it as inline text: review the text itself, report "Reviewing inline text (<N> lines)", present fixes as a revised version in the reply instead of editing a file, and skip Step 4b.
 
 ## Step 2: Assess
 

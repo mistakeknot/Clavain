@@ -39,6 +39,7 @@ Mark each `[x]` as you complete it. After Phase 5, strategy is **done** — no f
 
 Resolve input:
 1. Argument is a file path → read it as brainstorm doc
+   - Argument is not a valid path on disk (feature description or inline text) → use it as the idea text and proceed without a brainstorm doc
 2. No argument + bead ID set → `clavain-cli get-artifact "$CLAVAIN_BEAD_ID" "brainstorm" 2>/dev/null`
 3. No argument + no bead → `ls -t docs/brainstorms/*.md 2>/dev/null | head -1`
 4. No brainstorm found → ask user what to build, proceed directly
