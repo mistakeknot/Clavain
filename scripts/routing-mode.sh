@@ -4,9 +4,9 @@
 #
 # Sylveste-0pk: the old inline seds in commands/model-routing.md rewrote every
 # `model:` line under subagents.phases, so a mode toggle silently reverted the
-# routing-table v2 entries (brainstorm/strategized/planned → fable, with cheap
-# categories as the dose guard; see commands/model-routing.md § Routing-table
-# v2). Those three phases are never rewritten here. Everything else under
+# routing-table v2 entries (brainstorm/strategized/planned → opus, which was
+# fable until mk-3b8z, with cheap categories as the dose guard; see
+# commands/model-routing.md § Routing-table v2). Those three phases are never rewritten here. Everything else under
 # phases: is, and so are the defaults.
 set -euo pipefail
 

@@ -16,11 +16,11 @@ agents:
 
 models:
   brainstorm:
-    default: fable      # was: opus
+    default: opus       # fable until mk-3b8z (Opus 5.5 replaced Fable 5.1)
     categories:
       research: haiku
   brainstorm-reviewed:
-    default: fable      # was: opus
+    default: opus       # fable until mk-3b8z (Opus 5.5 replaced Fable 5.1)
 
 artifacts:
   required: []

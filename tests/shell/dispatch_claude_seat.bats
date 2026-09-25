@@ -40,7 +40,7 @@ EOF
 }
 
 @test "seat: Bash allowed, mutation tools disallowed, plan directory readable" {
-    run bash "$DISPATCH" --dry-run --to claude --model claude-fable-5-1 --plan "$T/plans/plan.md" -C "$T/repo" "prompt"
+    run bash "$DISPATCH" --dry-run --to claude --model claude-opus-5-5 --plan "$T/plans/plan.md" -C "$T/repo" "prompt"
     [ "$status" -eq 0 ]
     [[ "$output" == *"--permission-mode dontAsk"* ]]
     [[ "$output" == *"--allowedTools Bash"* ]]

@@ -35,7 +35,7 @@ if a[:1]==['status']: value={'thread':{'id':'thr_parent','environment':{'hostId'
 elif a[:2]==['pool','status']: value={'accounts':[{'id':'fixture-'+p,'provider':p,'enabled':True,'sevenDayUtilization':v,'fiveHourUtilization':.1} for p,v in [('codex',.8),('claude',.2)]]}
 elif a[:2]==['project','list']: value=[{'id':'proj_fixture','sources':[{'hostId':'host_pda34naxgq','path':str(root/'work')}]}]
 elif a[:2]==['provider','list']: value=[{'id':p,'available':True,'capabilities':{'permissionModes':['auto']},'serviceTiers':[{'id':'default'}]} for p in ('codex','claude-code')]
-elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e}]} for m,e in [('gpt-6-astra','xhigh'),('claude-sonnet-5','high'),('claude-fable-5-1','high'),('claude-opus-5','high')]]
+elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e}]} for m,e in [('gpt-6-astra','xhigh'),('claude-sonnet-5','high'),('claude-opus-5-5','high')]]
 elif a[:2]==['thread','spawn']:
  sys.stdin.read()
  if '--plan' in a: (root/'plan-mode').touch()
@@ -178,7 +178,7 @@ def test_completion(seat):
 def test_read_only_completion_rejects_writable_permission_attestation():
     spec=importlib.util.spec_from_file_location('bb_seat_completion',ROOT/'scripts/bb-seat.py')
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    args=SimpleNamespace(model='claude-fable-5-1',effort='high')
+    args=SimpleNamespace(model='claude-opus-5-5',effort='high')
     receipt={'outcome':'completed','cleanup':'archived','actual_model':args.model,
              'actual_effort':args.effort,'effective_permission_mode':'auto'}
     assert module.completion_evidence_matches(receipt,args,read_only=True) is False
@@ -207,7 +207,7 @@ def test_unknown_evidence(seat):
 @pytest.mark.parametrize('role', ['plan-review','validation'])
 def test_review_roles_accept_only_read_only_and_record_receipt(seat,role):
     root,run=seat
-    result=run(role=role,sandbox='read-only',backend='claude',model='claude-fable-5-1',effort='high')
+    result=run(role=role,sandbox='read-only',backend='claude',model='claude-opus-5-5',effort='high')
     assert result.returncode==1,result.stderr  # Missing observed identity still blocks acceptance.
     calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
     spawn=next(call for call in calls if call[:2]==['thread','spawn'])
@@ -229,7 +229,7 @@ def test_review_roles_accept_only_read_only_and_record_receipt(seat,role):
 def test_review_roles_capture_terminal_plan_shapes(seat,mode,expected):
     root,run=seat
     result=run(mode=mode,role='plan-review',sandbox='read-only',backend='claude',
-               model='claude-fable-5-1',effort='high')
+               model='claude-opus-5-5',effort='high')
     assert result.returncode==1,result.stderr
     assert (root/'result').read_text()==expected
 
@@ -238,7 +238,7 @@ def test_review_roles_capture_terminal_plan_shapes(seat,mode,expected):
 def test_read_only_review_mutation_is_a_terminal_seat_failure(seat):
     root,run=seat
     result=run(mode='mutated',role='plan-review',sandbox='read-only',backend='claude',
-               model='claude-fable-5-1',effort='high')
+               model='claude-opus-5-5',effort='high')
     assert result.returncode!=0
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['outcome']=='sandbox-violation'
@@ -250,7 +250,7 @@ def test_read_only_review_mutation_is_a_terminal_seat_failure(seat):
 def test_read_only_review_commit_is_a_terminal_seat_failure(seat):
     root,run=seat
     result=run(mode='committed-mutation',role='plan-review',sandbox='read-only',backend='claude',
-               model='claude-fable-5-1',effort='high')
+               model='claude-opus-5-5',effort='high')
     assert result.returncode!=0
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['checkout_after']!=receipt['source_commit']
@@ -261,12 +261,12 @@ def test_read_only_review_commit_is_a_terminal_seat_failure(seat):
 def test_recovery_preserves_review_sandbox_violation(seat):
     root,run=seat
     result=run(mode='mutated',role='plan-review',sandbox='read-only',backend='claude',
-               model='claude-fable-5-1',effort='high',extra_env={'BB_TEST_CRASH':'archive'})
+               model='claude-opus-5-5',effort='high',extra_env={'BB_TEST_CRASH':'archive'})
     assert result.returncode==-9,result.stderr
     journal=next((root/'state').glob('*.json'))
     assert json.loads(journal.read_text())['outcome']=='sandbox-violation'
     run(mode='mutated',role='plan-review',attempt='attempt_two',sandbox='read-only',backend='claude',
-        model='claude-fable-5-1',effort='high',extra_env={'BB_TEST_CRASH':'archive'})
+        model='claude-opus-5-5',effort='high',extra_env={'BB_TEST_CRASH':'archive'})
     assert json.loads(journal.read_text())['outcome']=='sandbox-violation'
 
 
@@ -284,7 +284,8 @@ def test_codex_review_rejected_without_enforced_read_only_bb_permission(seat):
 
 def astra_first_review_policy(root):
     policy=(ROOT/'config/routing.yaml').read_text()
-    policy=policy.replace('    plan-review: review-fable\n','    plan-review: review-astra\n',1)
+    assert '    plan-review: review-opus\n' in policy
+    policy=policy.replace('    plan-review: review-opus\n','    plan-review: review-astra\n',1)
     policy=policy.replace('      description: Cross-lab reviewer for Claude-authored plans\n',
                           '      fallbacks: [review-opus]\n'
                           '      description: Cross-lab reviewer for Claude-authored plans\n',1)

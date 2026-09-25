@@ -12,57 +12,74 @@ jq -e '.classification_reasons == [] and .frontier_required == false and .decisi
   "$work/routine-resolution.json" >/dev/null
 printf '%s\n' '{"reasons":["foundational-invariants"],"rationale":"shared admission policy"}' > "$work/context.json"
 out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --producer-identity gpt-6-astra --context-file "$work/context.json" -C "$work" fixture 2>&1)"
-[[ "$out" == *'claude-fable-5-1'* && "$out" == *'--effort high'* ]] || { echo 'FAIL: Claude effort not propagated'; exit 1; }
+[[ "$out" == *'claude-opus-5-5'* && "$out" == *'--effort high'* ]] || { echo 'FAIL: Claude effort not propagated'; exit 1; }
 # Default producer exclusions must retain Astra and the cross-lab route.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
-  --producer-identity=claude-fable-5-1 --context-file="$work/context.json" > "$work/fable-producer.json"
-jq -e '.profile.model == "gpt-6-astra"' "$work/fable-producer.json" >/dev/null
+  --producer-identity=claude-opus-5-5 --context-file="$work/context.json" > "$work/opus-producer.json"
+jq -e '.profile.model == "gpt-6-astra"' "$work/opus-producer.json" >/dev/null
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
-  --producer-identity=claude-fable-5-1 --context-file="$work/routine.json" > "$work/crosslab.json"
+  --producer-identity=claude-opus-5-5 --context-file="$work/routine.json" > "$work/crosslab.json"
 jq -e '.profile.backend != "claude"' "$work/crosslab.json" >/dev/null
 # Code review reaches another frontier lab first (mk ruling 2026-09-24): Claude
-# work goes to Sol, then Opus as the same-lab substitute, never Fable; Codex work
-# keeps the policy order with Opus first. Needs ic >= intercore 2caa435.
+# work goes to Sol, then a distinct Claude model as the same-lab substitute,
+# never the producer itself; Codex work keeps the policy order with Opus first.
+# Needs ic >= intercore 2caa435.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=claude-fable-5-1 --context-file="$work/routine.json" > "$work/claude-review.json"
-jq -e '.profile.model == "gpt-5.6-sol" and .fallback_chain[0].profile.model == "claude-opus-5"
-  and ([.profile.model, .fallback_chain[].profile.model] | index("claude-fable-5-1") == null)
+  --producer-identity=claude-sonnet-5 --context-file="$work/routine.json" > "$work/claude-review.json"
+jq -e '.profile.model == "gpt-5.6-sol" and .fallback_chain[0].profile.model == "claude-opus-5-5"
+  and ([.profile.model, .fallback_chain[].profile.model] | index("claude-sonnet-5") == null)
   and .cross_lab_reorder.to[0] == "validation-sol"' "$work/claude-review.json" >/dev/null ||
   { echo 'FAIL: Claude-produced code does not reach Sol, then Opus'; exit 1; }
-printf '%s\n' '{"reasons":[],"rationale":"codex lane out","available_models":["claude-opus-5","claude-sonnet-5","claude-fable-5-1","kimi-code/k3"]}' > "$work/codex-out.json"
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=claude-fable-5-1 --context-file="$work/codex-out.json" > "$work/codex-out-review.json"
-jq -e '.profile.model == "claude-opus-5"' "$work/codex-out-review.json" >/dev/null ||
+  --producer-identity=claude-opus-5-5 --context-file="$work/routine.json" > "$work/opus-review.json"
+jq -e '.profile.model == "gpt-5.6-sol"
+  and ([.profile.model, .fallback_chain[].profile.model] | index("claude-opus-5-5") == null)' "$work/opus-review.json" >/dev/null ||
+  { echo 'FAIL: Opus-produced code reaches Opus or skips Sol'; exit 1; }
+printf '%s\n' '{"reasons":[],"rationale":"codex lane out","available_models":["claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]}' > "$work/codex-out.json"
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
+  --producer-identity=claude-sonnet-5 --context-file="$work/codex-out.json" > "$work/codex-out-review.json"
+jq -e '.profile.model == "claude-opus-5-5"' "$work/codex-out-review.json" >/dev/null ||
   { echo 'FAIL: Codex out does not fall back to Opus'; exit 1; }
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
   --producer-identity=gpt-6-astra --context-file="$work/routine.json" > "$work/codex-review.json"
-jq -e '.profile.model == "claude-opus-5" and .cross_lab_reorder == null' "$work/codex-review.json" >/dev/null ||
+jq -e '.profile.model == "claude-opus-5-5" and .cross_lab_reorder == null' "$work/codex-review.json" >/dev/null ||
   { echo 'FAIL: Codex-produced code review order changed'; exit 1; }
-# A separately frozen capacity snapshot is explicit, never a default downgrade.
+# Opus 5.5 is the packaged plan reviewer (mk-3b8z): a distinct frontier model
+# for Astra-authored plans, never a downgrade.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
+  --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/astra-plan-route.json"
+jq -e '.profile.model == "claude-opus-5-5" and .frontier_required and .validator_relationship == "different-model"' "$work/astra-plan-route.json" >/dev/null
+# With Astra out an Opus-authored plan has no routed reviewer: resolution
+# fails closed rather than admitting Opus as its own reviewer (the agent then
+# runs the declared adversarial Opus review by hand; mk-2e1e).
+jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5"]' "$work/context.json" > "$work/no-astra.json"
+if ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
+  --producer-identity=claude-opus-5-5 --context-file="$work/no-astra.json" > "$work/producer-route.json" 2>&1; then
+  echo 'FAIL: Opus producer admitted as its own plan reviewer'; exit 1
+fi
+grep -q 'no eligible model satisfies reasoning contract' "$work/producer-route.json"
+# ic's refusal is generic, so pin its cause: the same context with a
+# non-Opus producer still routes to Opus 5.5.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
+  --producer-identity=claude-sonnet-5 --context-file="$work/no-astra.json" \
+  | jq -e '.profile.model == "claude-opus-5-5"' >/dev/null
+# A review-lane edit is fixtured separately so the guard below can prove it
+# never reaches the authoring lane.
 python3 - "$ROOT/config/routing.yaml" "$work/capacity.yaml" <<'PYFIXTURE'
 from pathlib import Path
 import sys
 text = Path(sys.argv[1]).read_text()
-text = text.replace('frontier_models: [gpt-6-astra, claude-fable-5-1]',
-                    'frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]')
-text = text.replace('    plan-review: review-fable\n', '    plan-review: review-opus\n')
+assert text.count('    plan-review: review-opus\n') == 1
+text = text.replace('    plan-review: review-opus\n', '    plan-review: review-astra\n')
 Path(sys.argv[2]).write_text(text)
 PYFIXTURE
-ic --json route dispatch --policy="$work/capacity.yaml" --role=plan-review \
-  --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/capacity-route.json"
-jq -e '.profile.model == "claude-opus-5" and .frontier_required and .validator_relationship == "different-model"' "$work/capacity-route.json" >/dev/null
-if ic --json route dispatch --policy="$work/capacity.yaml" --role=plan-review \
-  --producer-identity=claude-opus-5 --context-file="$work/context.json" > "$work/producer-route.json" 2>&1; then
-  echo 'FAIL: Opus producer admitted as its own capacity substitute'; exit 1
-fi
-grep -q 'no model distinct from producer "claude-opus-5"' "$work/producer-route.json"
-jq '.available_models = ["claude-opus-5"]' "$work/context.json" > "$work/opus-only.json"
+jq '.available_models = ["claude-opus-5-5"]' "$work/context.json" > "$work/opus-only.json"
 # Frontier authoring has its own declared Opus seat as of mk's 2026-09-18 ruling,
 # so with only Opus reachable `planning` resolves rather than refusing. What this
 # guard still protects is the ORIGINAL intent: the authoring lane must reach that
 # seat through its OWN chain, never by leaking across from the review lane. The
-# capacity fixture above rewrites only `plan-review`, so if editing the review
-# lane can change an authoring receipt, the lanes have been re-coupled.
+# fixture above rewrites only `plan-review`, so if editing the review lane can
+# change an authoring receipt, the lanes have been re-coupled.
 for policy in "$ROOT/config/routing.yaml" "$work/capacity.yaml"; do
   ic --json route dispatch --policy="$policy" --role=planning \
     --context-file="$work/opus-only.json" > "$work/planning.json"

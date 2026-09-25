@@ -103,12 +103,12 @@ grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5" || fa
 # deep-astra -> deep-sol -> deep-opus's own terminus).
 run_tier deep
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-5.6-sol" ]] || fail "deep: expected one gpt-5.6-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
-grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-opus-5" || fail "deep: quota_exhausted did not reach claude-opus-5, got: $(cat "$FAKE_CLAUDE_LOG")"
+grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-opus-5-5" || fail "deep: quota_exhausted did not reach claude-opus-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 # deep-clavain: same terminus.
 run_tier deep-clavain
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-5.6-sol" ]] || fail "deep-clavain: expected one gpt-5.6-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
-grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-opus-5" || fail "deep-clavain: quota_exhausted did not reach claude-opus-5, got: $(cat "$FAKE_CLAUDE_LOG")"
+grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-opus-5-5" || fail "deep-clavain: quota_exhausted did not reach claude-opus-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 # A healthy Codex lane keeps using the primary tier model unchanged (Claude
 # fallbacks go last, so nothing changes while Codex is reachable).

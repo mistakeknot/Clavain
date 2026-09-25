@@ -17,7 +17,7 @@
 #   scripts/capacity-fallback.sh --seat gpt-6-astra \
 #     --context .clavain/decisions/2026-09-17-rift-slice-1-planning.json \
 #     --evidence .clavain/capacity/2026-09-18-astra-usage-limit.md \
-#     --role plan-review --producer-identity claude-fable-5-1 \
+#     --role plan-review --producer-identity claude-opus-5-5 \
 #     --role deep-execution
 #
 # Exit 0 only when every requested role resolved AND no resolution landed on the

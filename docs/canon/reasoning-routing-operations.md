@@ -14,10 +14,12 @@ Capacity exhaustion is an operational failure. It consumes no capability strike,
 and it must neither silently downgrade the work nor silently stall it. The remedy
 is a declared, ordered fallback that is visible in the receipt.
 
-The user's 2026-09-10 ruling makes Opus 5 the capacity substitute for a frontier
+The user's 2026-09-10 ruling makes Opus the capacity substitute for a frontier
 seat, including independent plan review. As of mk-9yyt that substitution lives in
-the packaged default policy rather than in a per-caller snapshot: `claude-opus-5`
-is listed in `reasoning.frontier_models`, and `review-opus`, `deep-opus`,
+the packaged default policy rather than in a per-caller snapshot. Since mk-3b8z
+(2026-09-25) Opus 5.5 (`claude-opus-5-5`) has replaced both Fable 5.1 and Opus 5
+in every seat: it is the only Claude entry in `reasoning.frontier_models`, the
+`plan-review` primary, and `planning-opus`, `deep-opus`,
 `routine-sonnet`, `scout-sonnet` and `release-sonnet` are the last entries of the
 chains that reach them. `plan-review`, `deep-execution`, `routine-execution`,
 `scout` and `release-preparation` therefore each have a reachable destination
@@ -61,19 +63,23 @@ to in that reordered position. `producer_model_conflict` and the existing
 `validation-opus -> validation-sonnet -> validation-sol -> validation-kimi`
 chain are unaffected: Intercore dedupes an already-visited profile_ref, so the
 new edge cannot reintroduce a seat the walk already excluded or already used.
+Distinct profile_refs can still name one seat (`crosslab-opus` and
+`validation-opus` are both Opus 5.5), so the dispatch walk also skips a
+candidate whose backend and model already failed on capacity in the same walk
+(mk-3b8z).
 
 Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
-`planning-astra`, then `planning-fable`, then `planning-opus` (mk ruling
-2026-09-18). It previously failed closed when both frontier labs were out. mk
-ruled that asymmetric: `claude-opus-5` is already in `reasoning.frontier_models`
-and is already authorised to independently review a frontier-authored plan, which
-is the harder job, so refusing to let it author in an emergency was arbitrary.
-The substitute stays last, so a reachable Astra still authors every plan.
+`planning-astra`, then `planning-opus` (mk ruling 2026-09-18; the Fable seat
+between them was removed by mk-3b8z on 2026-09-25). It previously failed closed
+when both frontier labs were out. mk ruled that asymmetric: Opus is in
+`reasoning.frontier_models` and is authorised to independently review a
+frontier-authored plan, which is the harder job, so refusing to let it author in
+an emergency was arbitrary. The Opus seat stays last, so a reachable Astra still
+authors every plan.
 
 The review and authoring lanes remain separate profile chains
-(`review-fable`/`review-astra`/`review-opus` against
-`planning-astra`/`planning-fable`/`planning-opus`) so that adding a seat to one
-cannot reach the other. That separation, not a refusal, is what keeps a
+(`review-opus`/`review-astra` against `planning-astra`/`planning-opus`) so that
+adding a seat to one cannot reach the other. That separation, not a refusal, is what keeps a
 review-side substitute from silently changing who authors a plan;
 `tests/routing/reasoning-contract-test.sh` asserts an authoring receipt is
 unchanged by edits to the review lane, and that Astra is still preferred while
@@ -82,7 +88,7 @@ reachable.
 **Scope correction (mk-9yyt).** The earlier wording — *scope a capacity snapshot
 to reviews of the bound producer from another lab; reviews of Claude-authored work
 keep the default independent route* — excluded the exact failure it existed to
-remedy. Routing-table v2 puts the `strategized` and `planned` phases on Fable, so
+remedy. Routing-table v2 put the `strategized` and `planned` phases on Fable, so
 most plans are Claude-authored; "keep the default independent route" sent those
 reviews back to Astra, the seat that was down, and `plan-review` resolved with an
 empty `fallback_chain`. The rule is corrected to read: **a capacity substitute is
@@ -102,6 +108,18 @@ reaching Astra. `scripts/provider-errors.py` now classifies that text on a Claud
 error event as `quota_exhausted`; a `rate_limit` without it stays terminal.
 `tests/routing/plan-review-capacity-test.sh` drives the real dispatch walk in both
 directions, and the case where every non-producer seat is out still blocks.
+
+**Opus 5.5 replaces Fable 5.1 (mk-3b8z).** mk ruled on 2026-09-25 that Opus 5.5
+outperforms Fable 5.1 and takes every Fable and Opus 5 seat. Fable is removed from
+routing entirely. `plan-review` now has two frontier seats, Opus 5.5 then Astra,
+so each reviews the other's plans. An Opus-authored plan with Astra out therefore
+has no distinct routed reviewer, and routing fails closed rather than admitting a
+same-model review. The agent then applies mk's adversarial orthogonal same-model
+Opus review by hand and declares it as such in the receipt and evidence; mk-2e1e
+tracks a routable seat for that review. The mk-9yyt same-lab degradation still
+applies where a distinct same-lab seat exists. The only such plan-review path is
+a Sol-authored plan whose Opus reviewer fails on capacity: the walk reaches Astra,
+another OpenAI model, as a provisional capacity substitute.
 A pooled Codex lane whose own retries ran out (`exceeded retry limit, last
 status: 429`) now classifies as `rate_limited` rather than `terminal_error`. An
 exhausted-retries 429 is capacity, not a reason to keep hammering the same
@@ -133,11 +151,11 @@ the producer's ahead of same-lab seats. Frontier labs are those of
 any change as `cross_lab_reorder: {from, to}` over the seats that survive the
 reasoning contract. For `validation`, Claude-produced code therefore reaches Sol
 first. When the Codex lane is out, observed as a capacity failure, the same-lab
-substitute is Opus. Do not wait for the Codex reset and do not escalate to Fable:
-Fable is not in the `validation` chain, and `validation-fable` is explicit-tier
-only. Codex-produced work keeps the policy order, with Opus first.
-`cross-lab-review` keeps Fable as its designed first-pass seat; for a Claude
-producer it now resolves Sol, then Fable, then Kimi. Requires Intercore `ic` at or
+substitute is Opus 5.5, or Sonnet 5 when Opus produced the work. Do not wait for
+the Codex reset; Fable is retired (mk-3b8z). Codex-produced work keeps the policy
+order, with Opus first. `cross-lab-review` keeps its Claude first-pass seat, now
+`crosslab-opus` (it was `crosslab-fable`); for a Claude producer it resolves Sol
+first, and never the producer's own model. Requires Intercore `ic` at or
 after commit 2caa435; an older `ic` ignores `cross_lab_first` and keeps the
 policy order.
 
@@ -237,7 +255,7 @@ and records `headroom_reorder: {from, to, snapshot_at}` alongside the actual
 `resolved_profile`. `CLAVAIN_POOL_HEADROOM=0` disables forecasts.
 
 **Execution roles only:** `planning`, `plan-review`, `validation`, `escalation`,
-and `cross-lab-review` receive no headroom input, even when Fable is below the
+and `cross-lab-review` receive no headroom input, even when Opus is below the
 forecast floor. Those roles retain the observed-failure procedure below,
 frontier eligibility and independent reviewer requirements.
 

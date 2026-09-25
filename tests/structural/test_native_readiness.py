@@ -86,7 +86,7 @@ def test_existing_attempt_directory_cannot_be_reused(tmp_path):
 
 def valid_request(project, host="codex"):
     command = ([sys.executable, "exec", "--json", "-m", "gpt-6-astra", "-c", 'model_reasoning_effort="high"']
-               if host == "codex" else [sys.executable, "--model", "claude-fable-5-1", "--effort", "high",
+               if host == "codex" else [sys.executable, "--model", "claude-opus-5-5", "--effort", "high",
                                        "--output-format", "stream-json", "--verbose", "-p"])
     return dict(host=host, command=command, project=str(project), source=str(SCRIPTS.parent.resolve()), prompt="task")
 
@@ -167,7 +167,7 @@ def test_claude_missing_or_invalid_init_fails_closed(tmp_path, monkeypatch, init
         def close(self, abort=False): return {"exit_code": -15 if abort else 0}
     monkeypatch.setattr(native, "NativeProcess", Fake)
     with pytest.raises(ValueError):
-        native.claude_control([], tmp_path, tmp_path, {}, "prep", "prompt", "subject", "claude-fable-5-1")
+        native.claude_control([], tmp_path, tmp_path, {}, "prep", "prompt", "subject", "claude-opus-5-5")
 
 
 def test_interrupt_terminates_detached_child(tmp_path, monkeypatch):
@@ -198,7 +198,7 @@ def test_native_execution_requires_unchanged_prefix_and_model(tmp_path):
 @pytest.mark.parametrize("mutation", [None, "model", "session", "mode", "duplicate", "error"])
 def test_claude_init_positive_control_and_individual_failures(tmp_path, monkeypatch, mutation):
     init = dict(type="system", subtype="init", tools=["Read", "Glob", "Grep", "StructuredOutput"],
-                mcp_servers=[], permissionMode="dontAsk", model="claude-fable-5-1", session_id="subject")
+                mcp_servers=[], permissionMode="dontAsk", model="claude-opus-5-5", session_id="subject")
     result = dict(type="result", subtype="success", session_id="subject")
     if mutation == "model": init["model"] = "other"
     if mutation == "session": init["session_id"] = "other"
@@ -214,9 +214,9 @@ def test_claude_init_positive_control_and_individual_failures(tmp_path, monkeypa
         def close(self, abort=False): return {"exit_code": -15 if abort else 0}
     monkeypatch.setattr(native, "NativeProcess", Fake)
     if mutation:
-        with pytest.raises(ValueError): native.claude_control([], tmp_path, tmp_path, {}, "prep", "prompt", "subject", "claude-fable-5-1")
+        with pytest.raises(ValueError): native.claude_control([], tmp_path, tmp_path, {}, "prep", "prompt", "subject", "claude-opus-5-5")
     else:
-        assert native.claude_control([], tmp_path, tmp_path, {}, "prep", "prompt", "subject", "claude-fable-5-1")[-1] == result
+        assert native.claude_control([], tmp_path, tmp_path, {}, "prep", "prompt", "subject", "claude-opus-5-5")[-1] == result
 
 
 @pytest.mark.parametrize("mutation", [None, "prefix-only", "edit-first", "wrong-root", "missing-result", "wrong-call"])
@@ -243,15 +243,15 @@ def test_router_requires_ordered_execution_call_result_and_body(tmp_path, mutati
 @pytest.mark.parametrize("mutation", [None, "sidechain", "session", "effort"])
 def test_claude_execution_native_checks(tmp_path, mutation):
     snapshot = tmp_path / "prefix"; snapshot.write_text('{}\n')
-    row = dict(type="assistant", sessionId="subject", effort="high", message={"model": "claude-opus-5", "content": [{"type": "text", "text": "done"}]})
+    row = dict(type="assistant", sessionId="subject", effort="high", message={"model": "claude-opus-5-5", "content": [{"type": "text", "text": "done"}]})
     if mutation == "sidechain": row["isSidechain"] = True
     if mutation == "session": row["sessionId"] = "other"
     if mutation == "effort": row["effort"] = "low"
     synthetic = dict(type="assistant", sessionId="subject", message={"model": "<synthetic>", "content": [{"type": "text", "text": "done"}]})
     actual = tmp_path / "native"; actual.write_text('{}\n' + json.dumps(row) + '\n' + json.dumps(synthetic) + '\n')
     if mutation:
-        with pytest.raises(ValueError): native.verify_execution_native("claude", actual, snapshot, "subject", "claude-opus-5")
-    else: assert native.verify_execution_native("claude", actual, snapshot, "subject", "claude-opus-5")["model"] == "claude-opus-5"
+        with pytest.raises(ValueError): native.verify_execution_native("claude", actual, snapshot, "subject", "claude-opus-5-5")
+    else: assert native.verify_execution_native("claude", actual, snapshot, "subject", "claude-opus-5-5")["model"] == "claude-opus-5-5"
 
 
 def test_closed_leader_still_gets_group_cleanup(tmp_path, monkeypatch):
@@ -328,7 +328,7 @@ def test_invalid_claude_init_preserves_original_error_after_abort(tmp_path, monk
         def close(self,abort=False): aborts.append(abort); return {"exit_code":-15}
     monkeypatch.setattr(native,"NativeProcess",Fake)
     with pytest.raises(ValueError,match="unexpected preparation tool or connector"):
-        native.claude_control([],tmp_path,tmp_path,{},"prep","prompt","subject","claude-fable-5-1")
+        native.claude_control([],tmp_path,tmp_path,{},"prep","prompt","subject","claude-opus-5-5")
     assert aborts==[True]
     assert json.loads((tmp_path/'prep.stage.json').read_text())['exit_code']==-15
 

@@ -157,7 +157,7 @@ After pushing, register the implementation artifact:
 clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "implementation" "$(git rev-parse HEAD)" 2>/dev/null || true
 ```
 
-**Record the routing outcome** (capability-routing doctrine Rule 7 — silent, fail-open). Skip this if `/clavain:quality-gates` ran for this bead — it already recorded the outcome. Set `_executor` to your model tier (`fable`/`opus`/`sonnet`/`haiku`), `_author` to the plan author's tier if a plan drove this work (else same as `_executor`), and `_validator` to `self` unless a separate model validated:
+**Record the routing outcome** (capability-routing doctrine Rule 7 — silent, fail-open). Skip this if `/clavain:quality-gates` ran for this bead — it already recorded the outcome. Set `_executor` to your model tier (`opus`/`sonnet`/`haiku`), `_author` to the plan author's tier if a plan drove this work (else same as `_executor`), and `_validator` to `self` unless a separate model validated:
 
 ```bash
 if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then

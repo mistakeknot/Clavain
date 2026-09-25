@@ -2,8 +2,8 @@
 
 `prepare.py` creates a new twelve-subject manifest from full committed source
 SHAs and an existing authoritative Intercore database. It preserves the stopped
-comparison. The six scenarios use Astra high in Codex on the Mac and Fable high
-in Claude on zklw, with the existing isolated profiles and specialist catalog.
+comparison. The six scenarios use Astra high in Codex on the Mac and Opus 5.5
+high in Claude on zklw (Fable 5.1 before mk-3b8z), with the existing isolated profiles and specialist catalog.
 
 New manifests select `native-two-phase`. Preparation reads the router, routing
 canon and task evidence with model write tools unavailable, then emits the subject's
@@ -28,10 +28,12 @@ are separate evidence. This is not a sandbox for arbitrary host hooks or a claim
 of complete hook discovery. Codex uses its native OS sandbox and disabled agents,
 features and connectors; an outer exec tool record cannot prove every nested call.
 
-An explicit user-authorized Fable capacity fallback can be preregistered with
-`--claude-model claude-opus-5 --fallback-record RECORD`. The record must identify
-the `fable-usage-limit` reason, the user's authorization and the SHA256 of the
-retained capacity evidence. The manifest and native binding preserve the changed
+An explicit user-authorized capacity fallback can be preregistered with
+`--claude-model MODEL --fallback-record RECORD` for a model listed in
+`readiness.FALLBACK_MODELS`; that table is empty since mk-3b8z, so no fallback is
+currently admissible. The record must identify the `fable-usage-limit` reason
+(its historical name), the user's authorization and the SHA256 of the retained
+capacity evidence. The manifest and native binding preserve the changed
 assignment. A fallback is not inferred from a generic execution failure, and it
 does not change the default routing policy or permit another model.
 

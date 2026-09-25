@@ -9,7 +9,7 @@ import time
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-MODEL = "claude-fable-5-1"
+MODEL = "claude-opus-5-5"
 
 
 def events():
