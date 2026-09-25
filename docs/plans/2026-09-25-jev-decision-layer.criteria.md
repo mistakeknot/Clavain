@@ -1,6 +1,6 @@
 ## Acceptance Criteria
 
-All commands run on zklw from a clean checkout of the landed branch. `ART` is the T11 evidence directory. Each result is recorded with commit SHA, host, time and raw exit status. No criterion is satisfied by this document's promises.
+All commands run on zklw from a clean checkout of the landed branch. `ART` is the T12 evidence directory. Each result is recorded with commit SHA, host, time and raw exit status. No criterion is satisfied by this document's promises.
 
 1. **The structural selector suite passes with Interstat present and no hidden skips.**
 
@@ -26,10 +26,10 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_orchestrator.py -q -k flag_off && test -z "$(find ~/.clavain/selector/records -newer /tmp/selector-structural.txt -type f 2>/dev/null)"
    ```
 
-5. **Egress refusal opens zero connections.** For every rule id, a loopback listener records zero accepted connections.
+5. **Egress refusal opens zero connections, realistic secrets are refused, and admission cannot be forged.** For every rule id (including JSON-quoted keys, provider prefixes and the high-entropy rule), a loopback listener records zero accepted connections; realistic payloads are refused; false-positive fixtures are admitted; a hand-built `AdmittedRequest` fails `verify()` and the client refuses it before connecting.
 
    ```check
-   cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_egress.py structural/test_selector_orchestrator.py -q -k "egress or refus"
+   cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_egress.py -q && uv run pytest structural/test_selector_orchestrator.py structural/test_selector_jev_client.py -q -k "egress or refus or only_admitted"
    ```
 
 6. **Every fallback reason resolves to native, in the documented order.**
@@ -38,13 +38,13 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_contract.py structural/test_selector_orchestrator.py -q -k "fallback_table or gate_order"
    ```
 
-7. **Records never contain task, context, payload, raw output or key material.**
+7. **Records never contain task, context, payload, raw output or key material; refused records carry no summaries; the selector never records `applied: selected`.**
 
    ```check
-   cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_records.py structural/test_selector_jev_client.py -q -k "forbidden or leak"
+   cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_records.py structural/test_selector_jev_client.py structural/test_selector_orchestrator.py -q -k "forbidden or leak or refused_record or applied or emits_never_selects"
    ```
 
-8. **One real, authorized Jev shadow round trip produced a valid schema-v1 record and native behavior.**
+8. **One real, authorized Jev shadow round trip produced a valid schema-v1 record and native behavior,** and no record in the run has `applied` other than `native`.
 
    ```check
    python3 - "$ART/records" <<'PY'
@@ -57,26 +57,28 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
    assert r["egress"]["verdict"] == "admitted" and r["applied"] == "native"
    assert r["result"]["kind"] in ("selected", "abstained") and r["selector"]["latency_ms"] > 0
    assert r["candidates"] and len(r["candidates"]) <= 16
+   assert all(x["applied"] in ("native", "emitted") for x in recs), "unexpected applied value"
+   assert not any(x["applied"] == "emitted" for x in recs), ".7 must not emit"
    print("ok", r["decision_id"], r["result"], r["selector"]["latency_ms"])
    PY
    ```
 
-9. **Live latency is within budget:** p95 ≤1000ms and ≤10% of 30 calls exceed 1500ms.
+9. **Live latency is within budget over distinct inputs:** p95 ≤1000ms and ≤10% of 30 calls exceed 1500ms (wrapper timeouts counted as over-deadline), across at least 5 distinct request bodies.
 
    ```check
-   python3 /home/mk/projects/.clavain-jev/scripts/clavain-select.py records --record-dir "$ART/latency" --latency-summary --assert-p95-ms 1000 --assert-over-deadline-frac 0.10
+   python3 /home/mk/projects/.clavain-jev/scripts/clavain-select.py records --record-dir "$ART/latency" --latency-summary --assert-p95-ms 1000 --assert-over-deadline-frac 0.10 --assert-distinct-inputs 5
    ```
 
-10. **Burn ledger matches burn-report on a real Claude session and the final cumulative total on a real Codex rollout,** and reports invalidation, expiry and compaction separately.
+10. **Burn ledger reconciles with burn-report on a real Claude session (unexplained delta within tolerance) and with the compaction-excluded final cumulative on a real Codex rollout (no `session_cumulative_mismatch`),** and reports invalidation, expiry and compaction separately.
 
     ```check
-    test -f "$ART/burn-claude.json" && test -f "$ART/burn-codex.json" && python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); x=json.load(open(sys.argv[2])); assert c["consistency"]["matches_burn_report"] and x["consistency"]["matches_final_cumulative"]; assert {"invalidation","expiry","compaction_or_reset"} <= set(c["events"])' "$ART/burn-claude.json" "$ART/burn-codex.json"
+    test -f "$ART/burn-claude.json" && test -f "$ART/burn-codex.json" && python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); x=json.load(open(sys.argv[2])); cc=c["consistency"]; xc=x["consistency"]; assert cc["reconciled"] and abs(cc["unexplained"]) <= cc["tolerance"]; assert xc["matches_final_cumulative_excluding_compaction"] and not xc["session_cumulative_mismatch"]; assert {"invalidation","expiry","compaction_or_reset"} <= set(c["events"]) and {"invalidation","expiry","compaction_or_reset"} <= set(x["events"])' "$ART/burn-claude.json" "$ART/burn-codex.json"
     ```
 
-11. **The eval refuses unsealed or changed labels, and the selftest set runs all three arms with zero forbidden selections.**
+11. **The eval refuses unsealed or changed labels, scores the holdout once against its first seal, reports shortlist recall separately, and the selftest set runs all three arms with zero forbidden selections.**
 
     ```check
-    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_eval.py -q
+    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_eval.py -q && uv run pytest structural/test_selector_eval.py -q -k "holdout_first_seal_only or holdout_scored_once or holdout_refused_on_changed_floors or shortlist_recall_reported" | grep -q "4 passed"
     ```
 
 12. **The canon doc matches the host matrix and names every fallback reason and the retention terms.**
@@ -85,11 +87,17 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
     cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_docs.py -q
     ```
 
-13. **The Intercore disposition is recorded.** Either the inventory says `export-safe: yes` and an exported `selector_decision_v1` event is visible once, or it says `no` and names a filed Intercore bead with export off.
+13. **The Intercore disposition is recorded and export is idempotent.** The `requires_ic` idempotency test runs (not skipped). Either the inventory says `export-safe: yes` and the live `selector_decision_v1` count (from `ic --json events tail --all`, since `ic` 0.3.5 has no `events list`) is nonzero after the first export and unchanged after the second, or it says `no` and names a filed Intercore bead with export off.
 
     ```check
-    f=$(ls /home/mk/projects/.clavain-jev/docs/research/jev/*interspect-consumer-inventory.md) && grep -Eq 'export-safe: (yes|no)' "$f" && { grep -q 'export-safe: yes' "$f" && ic events list --source interspect --json | grep -c selector_decision_v1 | grep -qx 1 || grep -Eq 'export-safe: no.*(bead|Bead) [A-Za-z0-9.-]+' "$f"; }
+    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_ic_export.py -q -rs 2>&1 | tee /tmp/selector-ic.txt; test "${PIPESTATUS[0]}" -eq 0 && ! grep -q SKIPPED /tmp/selector-ic.txt && f=$(ls /home/mk/projects/.clavain-jev/docs/research/jev/*interspect-consumer-inventory.md) && grep -Eq 'export-safe: (yes|no)' "$f" && { { grep -q 'export-safe: yes' "$f" && test "$(cat "$ART/ic-count-1.txt")" -gt 0 && cmp -s "$ART/ic-count-1.txt" "$ART/ic-count-2.txt"; } || grep -Eq 'export-safe: no.*(bead|Bead) [A-Za-z0-9.-]+' "$f"; }
     ```
 
 14. **Independent review is recorded** with reviewer identity, model, whether it was other-frontier or provisional same-model, and verdict, on bead mk-42j9.7 (checked by reading the bead notes; not automatable here).
+
+15. **The operator CLI works and `doctor` never opens the secrets file;** the latency probe rotates at least 5 distinct inputs.
+
+    ```check
+    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_cli.py -q
+    ```
 
