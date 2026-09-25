@@ -103,10 +103,11 @@ error event as `quota_exhausted`; a `rate_limit` without it stays terminal.
 `tests/routing/plan-review-capacity-test.sh` drives the real dispatch walk in both
 directions, and the case where every non-producer seat is out still blocks.
 A pooled Codex lane whose own retries ran out (`exceeded retry limit, last
-status: 429`) now classifies as `rate_limited` rather than `terminal_error`, so it
-gets dispatch's bounded same-model retries. It still does not walk: a persistent
-429 never changes models (`tests/routing/role-dispatch-test.sh`), so review
-blocks on it until that rule is revisited.
+status: 429`) now classifies as `rate_limited` rather than `terminal_error`. An
+exhausted-retries 429 is capacity, not a reason to keep hammering the same
+model: it gets the identical single account-pool retry `quota_exhausted` gets,
+then walks to the profile's declared fallback (mk ruling 2026-09-25, mk-nh6v;
+`tests/routing/role-dispatch-test.sh`).
 
 Reviewer separation is not part of that degradation. It is enforced structurally,
 below the policy layer: a candidate whose canonical identity matches the producer
@@ -139,6 +140,74 @@ only. Codex-produced work keeps the policy order, with Opus first.
 producer it now resolves Sol, then Fable, then Kimi. Requires Intercore `ic` at or
 after commit 2caa435; an older `ic` ignores `cross_lab_first` and keeps the
 policy order.
+
+### Capacity-substitute reviews are provisional, never blocking
+
+mk-gp32. A `plan-review`, `validation` or `cross-lab-review` candidate counts as
+a capacity substitute only when an *earlier* candidate in the same walk was
+actually attempted and failed with a real capacity class — `quota_exhausted`,
+`rate_limited`, `model_unavailable` or `account_access_absent`, tracked in
+`_dispatch_role_profile` as `capacity_failure_class` — and this candidate's
+lab matches the producer's. A pre-walk `ic` `fallback_reason` such as
+`producer_model_conflict` (seeded before any candidate in this loop has run,
+e.g. from `cross_lab_first` reordering) or a pre-run skip such as
+`usage_reporting_unavailable`/`insufficient_codex_version` never marks a
+substitute by itself; both keep the walk going without setting
+`capacity_failure_class`. `_dispatch_model_lab` in `scripts/dispatch.sh` ports
+intercore's `modelLab` (`internal/routing/identity.go:138-148`) from the model
+identity prefix (`gpt-` → openai, `claude-` → anthropic, `kimi` → moonshot;
+anything else never counts as same-lab). When it fires, the reviewer prompt
+gets a fixed paragraph naming the review as a same-lab capacity substitute and
+asking the output to end with a `## Re-check by the other lab` section: claims
+confirmed without running anything, and judgments the reviewer is unsure of,
+one per line, or the single line `None.` if there is nothing to flag. The
+receipt (`_role_audit_context`) always carries `capacity_substitute` (`null`
+when the review was not a substitute, otherwise `{failure_class, producer_lab,
+reviewer_lab}` with the triggering capacity class), `recheck_items` (an int, or
+`null` when not a substitute) and `recheck_source` (`"listed"`, `"none"` or
+`"missing"`, or `null` when not a substitute). The verdict itself is never
+withheld for this. After a successful substituted review, dispatch parses that
+section from `OUTPUT`: a heading with `- ` items writes `recheck_source:
+"listed"`; an explicit `None.` body writes `recheck_source: "none"` and files
+nothing; a missing heading *or* a present heading with no items under it both
+write `recheck_source: "missing"`, fabricating the single item "reviewer did
+not list re-check items; re-check the whole review" — a present-but-empty
+section is not read as `None.`, only an explicit `None.` is. `"listed"` and
+`"missing"` both write `${OUTPUT}.recheck.md` and file one `bd create` (label
+`capacity-recheck`, `--deps discovered-from:$CLAVAIN_BEAD_ID` when set) so the
+other lab re-verifies. `CLAVAIN_RECHECK_BEADS=0` disables filing the bead but
+still writes the sidecar; a `bd` failure prints to stderr and never fails the
+dispatch. `tests/routing/plan-review-capacity-test.sh` drives all these
+outcomes plus the different-lab case where no paragraph or bead is expected,
+the producer-conflict-only case where no capacity failure occurred, and the
+tracker-resolution cases below.
+
+Bead filing never lets `bd` resolve its own tracker (mk-hadt: `bd -C
+$WORKDIR` from a worktree with no local `.beads` walked up past the repo root
+into an unrelated ancestor tracker and filed real beads there). If
+`CLAVAIN_RECHECK_BEADS_DIR` is set, dispatch runs `bd -C` there — but only
+when that directory itself contains `.beads` (zklw sets it to `/home/mk/hub`);
+an override pointed anywhere else is refused with the same warning as no
+tracker resolving at all, rather than trusted to let `bd` walk up from there.
+Otherwise dispatch resolves `WORKDIR` to its repo's own top level (mirroring
+`scripts/next-goal-candidates.sh`'s `tracker_home()`): a non-worktree
+`WORKDIR` (including a subdirectory of a checkout) resolves via `git
+rev-parse --show-toplevel`; a linked worktree resolves to its main checkout
+via `git rev-parse --git-common-dir`, but only when that common-dir is
+literally named `.git` — a bare repository's shared worktrees have a
+common-dir that *is* the bare repo itself, one level above every checkout, so
+that case is refused rather than treated as a checkout. Either way, dispatch
+files there only if `.beads` actually exists at that resolved directory — it
+never falls through to letting `bd` search further on its own. Resolution
+requires `WORKDIR` to actually be inside a git checkout: a plain non-git
+directory with its own `.beads` no longer files there (it did before this
+fix, since the old code ran `bd -C $WORKDIR` directly with no git dependence
+at all) — real dispatch `WORKDIR`s are always git checkouts, so this is not
+expected to matter in practice, but it is a real behavior change from before
+mk-hadt. When no tracker resolves, dispatch files nothing, still writes the sidecar, and
+prints a loud stderr warning naming the sidecar and
+`CLAVAIN_RECHECK_BEADS_DIR`. The receipt carries
+`recheck_bead` (the filed bead's id, or `null` when nothing was filed).
 
 ### Execution headroom forecasts
 

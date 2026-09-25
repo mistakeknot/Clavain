@@ -45,6 +45,13 @@ if [[ "${FAKE_CODEX_MODE:-success}" == quota_all ]]; then
   echo '{"type":"task_complete","error":{"codex_error_info":"usage_limit_exceeded"}}'
   exit 0
 fi
+if [[ "${FAKE_CODEX_MODE:-success}" == rate429_all ]]; then
+  # A pooled Codex lane whose own client already retried and gave up
+  # (mk-nh6v): classifies rate_limited, distinct from quota_all above.
+  echo '{"type":"error","message":"exceeded retry limit, last status: 429 Too Many Requests"}'
+  echo '{"type":"turn.failed","error":{"message":"exceeded retry limit, last status: 429 Too Many Requests"}}'
+  exit 1
+fi
 echo '{"type":"task_complete","last_agent_message":"ok"}'
 FAKE_CODEX
 
@@ -68,7 +75,6 @@ export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
 export FAKE_CLAUDE_LOG="$TMP_ROOT/claude.log"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 export CLAVAIN_BB_DIRECT_POOL=0
-export CLAVAIN_429_BACKOFF_SECONDS=0
 export CLAVAIN_ROUTING_POLICY="$ROOT/config/routing.yaml"
 (cd "$TMP_ROOT/work" && ic init >/dev/null 2>&1) || true
 
@@ -115,6 +121,20 @@ bash "$ROOT/scripts/dispatch.sh" --tier fast -C "$TMP_ROOT/work" -o "$TMP_ROOT/a
 if python3 "$ROOT/scripts/tier-fallback-chain.py" --policy "$ROOT/config/routing.yaml" --tier does-not-exist >/dev/null 2>&1; then
   fail "unknown tier silently resolved"
 fi
+
+# An exhausted-retries 429 (rate_limited) walks the tier chain exactly like
+# quota_exhausted (mk ruling 2026-09-25, mk-nh6v): one attempt on the primary
+# Codex model, one account-pool retry gets skipped (CLAVAIN_BB_DIRECT_POOL=0),
+# then the walk reaches the same Sonnet capacity seat as the quota case.
+run_tier_rate429() {
+  local tier="$1"
+  : > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"
+  FAKE_CODEX_MODE=rate429_all bash "$ROOT/scripts/dispatch.sh" --tier "$tier" \
+    -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer-429.md" "hi" >/dev/null 2>&1
+}
+run_tier_rate429 fast
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-5.6-sol" ]] || fail "fast/429: expected one gpt-5.6-sol Codex attempt before fallback, got: $(cat "$FAKE_CODEX_LOG")"
+grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5" || fail "fast/429: rate_limited did not reach claude-sonnet-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 echo "PASS: bare --tier dispatch reaches its declared Claude fallback on quota_exhausted"
 
