@@ -48,6 +48,14 @@ if [[ "${FAKE_CODEX_MODE:-quota}" == success ]]; then
   echo '{"type":"task_complete","last_agent_message":"VERDICT: CLEAN"}'
   exit 0
 fi
+if [[ "${FAKE_CODEX_MODE:-quota}" == rate429 ]]; then
+  # A pooled Codex lane whose own client already retried and gave up
+  # (mk-nh6v): classifies rate_limited, distinct from the model-level
+  # usage_limit_exceeded quota case below.
+  echo '{"type":"error","message":"exceeded retry limit, last status: 429 Too Many Requests"}'
+  echo '{"type":"turn.failed","error":{"message":"exceeded retry limit, last status: 429 Too Many Requests"}}'
+  exit 1
+fi
 echo '{"type":"task_complete","error":{"codex_error_info":"usage_limit_exceeded"}}'
 FAKE_CODEX
 
@@ -78,7 +86,6 @@ export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
 export FAKE_CLAUDE_LOG="$TMP_ROOT/claude.log"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 export CLAVAIN_BB_DIRECT_POOL=0
-export CLAVAIN_429_BACKOFF_SECONDS=0
 export CLAVAIN_ROUTING_POLICY="${PLAN_REVIEW_TEST_POLICY:-$ROOT/config/routing.yaml}"
 (cd "$TMP_ROOT/work" && ic init >/dev/null 2>&1) || true
 
@@ -110,6 +117,17 @@ run_review claude-fable-5-1
 [[ "$(cat "$FAKE_CLAUDE_LOG")" == "claude-opus-5" ]] || fail "Fable producer: expected the capacity substitute claude-opus-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 grep -q "quota_exhausted" "$TMP_ROOT/err" || fail "Fable producer: the Astra quota failure left no record on stderr"
 never_reviewed_by "Fable producer" claude-fable-5-1
+
+# Fable-authored plan, Codex 429 (exhausted-retries, not model-level quota):
+# per mk-nh6v this classifies rate_limited, gets the same single account-pool
+# retry quota_exhausted gets (none available here: CLAVAIN_BB_DIRECT_POOL=0),
+# then walks to Opus exactly like the quota case above.
+FAKE_CODEX_MODE=rate429 run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "Fable producer, Codex 429: expected review to degrade and succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Fable producer, Codex 429: expected one gpt-6-astra attempt first, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CLAUDE_LOG")" == "claude-opus-5" ]] || fail "Fable producer, Codex 429: expected the capacity substitute claude-opus-5, got: $(cat "$FAKE_CLAUDE_LOG")"
+grep -q "rate_limited" "$TMP_ROOT/err" || fail "Fable producer, Codex 429: the Astra 429 failure left no record on stderr"
+never_reviewed_by "Fable producer, Codex 429" claude-fable-5-1
 
 # Opus-authored plan: Fable is the preferred reviewer and Codex is never
 # needed, so the outage does not touch it.

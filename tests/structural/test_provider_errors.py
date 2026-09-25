@@ -91,8 +91,9 @@ CODEX_EXHAUSTED_429 = "exceeded retry limit, last status: 429 Too Many Requests"
 def test_codex_exhausted_429_retries_is_rate_limited():
     # Captured 2026-09-25 from a pooled cross-lab review: Codex had already
     # retried internally. As terminal_error it suppressed the review's
-    # fallback chain; rate_limited gets dispatch's bounded same-model retries
-    # (a persistent 429 still does not walk).
+    # fallback chain; rate_limited now gets the same single account-pool
+    # retry quota_exhausted gets, then walks to the declared fallback
+    # (mk ruling 2026-09-25, mk-nh6v).
     events = [
         {"type": "thread.started", "thread_id": "fixture"},
         {"type": "turn.started"},

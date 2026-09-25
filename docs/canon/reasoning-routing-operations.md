@@ -103,10 +103,11 @@ error event as `quota_exhausted`; a `rate_limit` without it stays terminal.
 `tests/routing/plan-review-capacity-test.sh` drives the real dispatch walk in both
 directions, and the case where every non-producer seat is out still blocks.
 A pooled Codex lane whose own retries ran out (`exceeded retry limit, last
-status: 429`) now classifies as `rate_limited` rather than `terminal_error`, so it
-gets dispatch's bounded same-model retries. It still does not walk: a persistent
-429 never changes models (`tests/routing/role-dispatch-test.sh`), so review
-blocks on it until that rule is revisited.
+status: 429`) now classifies as `rate_limited` rather than `terminal_error`. An
+exhausted-retries 429 is capacity, not a reason to keep hammering the same
+model: it gets the identical single account-pool retry `quota_exhausted` gets,
+then walks to the profile's declared fallback (mk ruling 2026-09-25, mk-nh6v;
+`tests/routing/role-dispatch-test.sh`).
 
 Reviewer separation is not part of that degradation. It is enforced structurally,
 below the policy layer: a candidate whose canonical identity matches the producer

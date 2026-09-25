@@ -436,7 +436,7 @@ _dispatch_write_failure_class() {
 }
 
 _run_candidate_with_policy() {
-  local failure_file retries attempt rc failure_class backoff pool_retry=0
+  local failure_file rc failure_class pool_retry=0
   local retry_id="${CLAVAIN_RETRY_ID:-${DISPATCH_ID:-$(_dispatch_audit_id)}}"
   local candidate_backend=codex previous_arg="" candidate_arg
   for candidate_arg in "$@"; do
@@ -444,11 +444,6 @@ _run_candidate_with_policy() {
     previous_arg="$candidate_arg"
   done
   failure_file="$(mktemp "${TMPDIR:-/tmp}/clavain-dispatch-failure.XXXXXX")"
-  retries="${CLAVAIN_429_MAX_RETRIES:-2}"
-  [[ "$retries" =~ ^[0-9]+$ ]] || retries=2
-  backoff="${CLAVAIN_429_BACKOFF_SECONDS:-2}"
-  [[ "$backoff" =~ ^[0-9]+$ ]] || backoff=2
-  attempt=0
 
   while true; do
     : > "$failure_file"
@@ -462,17 +457,14 @@ _run_candidate_with_policy() {
       CLAVAIN_LAST_FAILURE_CLASS=""
       return 0
     fi
-    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == quota_exhausted && "$pool_retry" == 0 ]] && _bb_pool_available "$candidate_backend"; then
+    # An exhausted-retries 429 is capacity, not a reason to keep hammering the
+    # same model: it gets the identical single account-pool retry
+    # quota_exhausted gets, then walks to the profile's declared fallback (mk
+    # ruling 2026-09-25, mk-nh6v). The provider's own client already retried
+    # the request before reporting this failure class.
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && ( "$failure_class" == quota_exhausted || "$failure_class" == rate_limited ) && "$pool_retry" == 0 ]] && _bb_pool_available "$candidate_backend"; then
       pool_retry=1
-      echo 'dispatch: quota exhausted; retrying the same profile through the account pool before model fallback' >&2
-      continue
-    fi
-    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 && "$failure_class" == "rate_limited" && "$attempt" -lt "$retries" ]]; then
-      attempt=$((attempt + 1))
-      echo "dispatch: HTTP 429; retrying the same resolved model ($attempt/$retries)" >&2
-      if [[ "$backoff" -gt 0 ]]; then
-        sleep $((backoff * attempt))
-      fi
+      echo "dispatch: ${failure_class//_/ }; retrying the same profile through the account pool before model fallback" >&2
       continue
     fi
     rm -f "$failure_file"
@@ -641,7 +633,7 @@ _dispatch_role_profile() {
     # transport failure. Only its supervisor can admit another invocation.
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      quota_exhausted|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
@@ -769,7 +761,7 @@ _dispatch_tier_profile() {
     # invocation (mirrors _dispatch_role_profile).
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      quota_exhausted|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
         echo "dispatch: tier '$tier' candidate '$model' unavailable ($CLAVAIN_LAST_FAILURE_CLASS); trying its declared fallback" >&2
         ;;
       *)

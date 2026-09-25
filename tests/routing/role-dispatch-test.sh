@@ -131,7 +131,6 @@ export FAKE_IC_CONTEXT_LOG="$TMP_ROOT/contexts.jsonl"
 export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 export CLAVAIN_BB_DIRECT_POOL=0
-export CLAVAIN_429_BACKOFF_SECONDS=0
 
 dry_run="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role deep-execution -C "$TMP_ROOT/work" "hi" 2>&1)" \
   || fail "role dry-run failed"
@@ -177,12 +176,16 @@ done
 
 : > "$FAKE_CODEX_LOG"
 set +e
-FAKE_CODEX_MODE=rate429 CLAVAIN_429_MAX_RETRIES=2 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1
+FAKE_CODEX_MODE=rate429 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1
 rate_rc=$?
 set -e
+# An exhausted-retries 429 is capacity, not a reason to keep hammering the
+# same model (mk ruling 2026-09-25, mk-nh6v): exactly one attempt on the
+# first model, then the walk moves to its declared fallback — which also
+# 429s here, so the role stays blocked rather than looping.
 [[ "$rate_rc" != "0" ]] || fail "persistent 429 unexpectedly succeeded"
-[[ "$(wc -l < "$FAKE_CODEX_LOG" | tr -d ' ')" == "3" ]] || fail "429 attempts were not bounded at 3"
-[[ "$(sort -u "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "429 silently changed models"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "$(printf 'gpt-6-astra\ngpt-5.6-sol')" ]] \
+  || fail "429 did not make exactly one attempt per candidate then walk: $(cat "$FAKE_CODEX_LOG")"
 
 : > "$FAKE_CODEX_LOG"
 FAKE_CODEX_VERSION=0.150.0 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 \
