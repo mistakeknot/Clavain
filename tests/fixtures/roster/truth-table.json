@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "note": "Consumed by `scripts/roster/generate.py --self-test`. Every case runs the same pipeline as a real run: routing.yaml text (fragment or file) + registry + snapshot rows -> mapping, effective chains, rules, gates, patch, in-memory apply and validation. `kind: validate` cases feed an attempted edit straight to the patch validator. Every `expect` is derived by hand from PLAN-M1-r5 §P1 rules, never from generator output. Snapshot rows are verbatim (slug, name, providerSlug) copies from the pinned evidence snapshot sha256 510dfcc8...2f2bad.",
+  "note": "Consumed by `scripts/roster/generate.py --self-test`. Every case runs the same pipeline as a real run: routing.yaml text (fragment or file) + registry + snapshot rows -> mapping, effective chains, rules, gates, patch, in-memory apply and validation. `kind: validate` cases feed an attempted edit straight to the patch validator. Every `expect` is derived by hand from PLAN-M1-r5 \u00a7P1 rules, never from generator output. Snapshot rows are verbatim (slug, name, providerSlug) copies from the pinned evidence snapshot sha256 510dfcc8...2f2bad.",
   "defaults": {
     "families": {
       "models": {
@@ -1666,6 +1666,41 @@
       }
     },
     {
+      "id": "waiver-ratified-non-mk-approver-refused",
+      "note": "F2 (CHECK-P1-r3): approved_by was free text, against the roster-slugs.yaml comment 'Only mk ratifies'. RATIFIED now requires approved_by == \"mk\" exactly.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-kimi]\n      description: fixture seat validation-opus\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "slugs_patch": {
+        "waivers_drop": [
+          "kimi-code/k3@high"
+        ],
+        "waivers_add": [
+          {
+            "ref": "kimi-code/k3@high",
+            "model": "kimi-code/k3",
+            "slug": "kimi-k3",
+            "row_effort": null,
+            "row_reasoning_mode": "unlabelled",
+            "label": "fixture",
+            "evidence": [
+              "fixture"
+            ],
+            "status": "RATIFIED",
+            "approved_by": "nobody",
+            "approval": "some record"
+          }
+        ]
+      },
+      "expect": {
+        "status": "refused",
+        "refusal_include": [
+          "registry:kimi-code/k3@high"
+        ],
+        "messages_include": [
+          "a RATIFIED waiver needs approved_by == \"mk\" (got 'nobody')"
+        ]
+      }
+    },
+    {
       "id": "waiver-proposed-with-approver-refused",
       "note": "N2: a PROPOSED waiver has no approver yet.",
       "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-kimi]\n      description: fixture seat validation-opus\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
@@ -1773,6 +1808,50 @@
           "unmapped:subagent:fable"
         ],
         "messages_include": [
+          "fallback_ref 'subagent:opus' is not a verified registry entry"
+        ]
+      }
+    },
+    {
+      "id": "fallback-ref-chain-fixpoint-refused",
+      "note": "F1 (CHECK-P1-r3): a two-link fallback_ref chain (A -> B -> missing) must refuse cleanly, not KeyError. A single non-iterating pass missed this when A sorts before B, because B was popped after A had already been checked.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
+      "slugs_patch": {
+        "waivers_add": [
+          {
+            "ref": "subagent:opus",
+            "model": "claude-opus-5-5",
+            "slug": "claude-opus-5-5-xhigh",
+            "row_effort": "xhigh",
+            "row_reasoning_mode": "reasoning",
+            "status": "PROPOSED",
+            "fallback_ref": "subagent:nonexistent",
+            "evidence": [
+              "fixture"
+            ]
+          },
+          {
+            "ref": "subagent:fable",
+            "model": "claude-fable-5-1",
+            "slug": "claude-fable-5-1-xhigh",
+            "row_effort": "xhigh",
+            "row_reasoning_mode": "reasoning",
+            "status": "PROPOSED",
+            "fallback_ref": "subagent:opus",
+            "evidence": [
+              "fixture"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "status": "refused",
+        "refusal_include": [
+          "registry:subagent:opus",
+          "registry:subagent:fable"
+        ],
+        "messages_include": [
+          "fallback_ref 'subagent:nonexistent' is not a verified registry entry",
           "fallback_ref 'subagent:opus' is not a verified registry entry"
         ]
       }

@@ -117,7 +117,9 @@ waivers:
     slug: claude-sonnet-5-xhigh
     row_effort: xhigh
     row_reasoning_mode: reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "host-scoped (zklw effortLevel xhigh)"
     caveats:
       - "A host setting, not a routing.yaml fact; Clavain or another host may differ, and it changes silently"
@@ -131,7 +133,9 @@ waivers:
     slug: claude-opus-5-5-xhigh
     row_effort: xhigh
     row_reasoning_mode: reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "Opus 5.5 at the Claude Code subagent layer; host-scoped effort"
     caveats:
       - "Alias conflict: dispatch.model_aliases.opus is claude-opus-5, but the Claude Code subagent alias `opus` is Opus 5.5; this waiver takes the subagent-layer reading. mk to confirm it holds on the hosts that matter, otherwise map to claude-opus-5-xhigh"
@@ -146,7 +150,9 @@ waivers:
     slug: claude-fable-5-1-xhigh
     row_effort: xhigh
     row_reasoning_mode: reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "host-scoped (zklw effortLevel xhigh)"
     fallback_ref: "subagent:opus"
     caveats:
@@ -160,7 +166,9 @@ waivers:
     slug: claude-4-5-haiku
     row_effort: null
     row_reasoning_mode: non-reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "low confidence; unverified mode"
     caveats:
       - "The non-reasoning row is asserted, not demonstrated; do not cite this mapping as evidence"
@@ -173,7 +181,9 @@ waivers:
     slug: qwen3-5-122b-a10b
     row_effort: null
     row_reasoning_mode: reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "upper bound (4-bit quantisation has no row); thinking ON in code, against routing.yaml config"
     caveats:
       - "Code/config mismatch: interfer runs thinking on, routing.yaml says keep it off; the waiver follows the code (what runs). The mismatch is an interfer defect in its own right"
@@ -185,7 +195,9 @@ waivers:
     slug: qwen3-5-9b
     row_effort: null
     row_reasoning_mode: reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "upper bound (4-bit quantisation has no row); thinking ON in code, against routing.yaml config"
     caveats:
       - "Same code/config mismatch as qwen3.5-122b"
@@ -197,7 +209,9 @@ waivers:
     slug: gpt-oss-120b
     row_effort: high
     row_reasoning_mode: reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "upper bound (effort and quantisation)"
     caveats:
       - "Effort: gpt-oss runtime default is medium and nothing raises it; the (high) row overstates the seat"
@@ -212,11 +226,14 @@ waivers:
     slug: gpt-5-5
     row_effort: xhigh
     row_reasoning_mode: reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "host-scoped (zklw ~/.codex/config.toml default)"
     caveats:
       - "executor_routing dispatches `--to codex` with no tier, so the model is the host default, not a routing.yaml fact; another host or a config edit changes it silently"
       - "The `reasoning: [codex]` comment cites a Luna-only parity eval (FLUXrig-92u), which is not evidence for GPT-5.5"
+      - "deprecated model; retire per mk-rpnv.17"
     evidence:
       - "zklw ~/.codex/config.toml: model = \"gpt-5.5\", model_reasoning_effort = \"xhigh\" (verified 2026-09-25)"
       - "scripts/dispatch.sh --to auto forwards PASSTHROUGH args with no --tier; -m defaults to ~/.codex/config.toml"
@@ -226,7 +243,9 @@ waivers:
     slug: kimi-k3
     row_effort: null
     row_reasoning_mode: unlabelled
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "host-scoped (zklw ~/.kimi-code/config.toml default); same max-for-high upper bound as the ratified kimi-code/k3@high waiver"
     caveats:
       - "Not the model mk directed: mk named kimi-for-coding, which is unreachable here. Untiered `--to kimi` uses default_model kimi-code/k3; only `--tier fast` (never passed by executor_routing) selects kimi-code/kimi-for-coding (\"K2.8 Preview\"), and the snapshot has no row for it. mk to rule"
@@ -238,10 +257,13 @@ waivers:
     slug: gpt-5-5
     row_effort: xhigh
     row_reasoning_mode: reasoning
-    status: PROPOSED
+    status: RATIFIED
+    approved_by: mk
+    approval: "coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25"
     label: "host-scoped; the routing.yaml comment names the model, the keyword does not"
     caveats:
       - "Same host-default model as executor:codex; a routing.yaml comment is not a pinned model"
+      - "deprecated model; retire per mk-rpnv.17"
     evidence:
       - "routing.yaml local_models.complexity_routing C3 comment: \"GPT-5.5 xhigh fast (codex CLI)\""
       - "zklw ~/.codex/config.toml: model = \"gpt-5.5\", model_reasoning_effort = \"xhigh\""

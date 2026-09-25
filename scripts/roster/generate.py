@@ -297,12 +297,21 @@ def resolve_registry(slugs_cfg, families, snap_index):
         }
     # A waiver's fallback_ref (e.g. Fable closed -> Claude Code `opus`) names
     # the producer that runs instead; it must itself be a verified entry.
-    for key in sorted(entries):
-        fb = entries[key].get("fallback_ref")
-        if fb and fb not in entries:
-            gaps.append((key, f"fallback_ref '{fb}' is not a verified registry entry"))
-    for key, _ in gaps:
-        entries.pop(key, None)
+    # F1 (CHECK-P1-r3): iterate to a fixpoint. A single pass misses a chain
+    # (A -> B -> missing) when A sorts before B: A passes because B is still
+    # present at check time, and only B gets popped, leaving A's fallback_ref
+    # dangling for map_references to KeyError on.
+    while True:
+        round_gaps = []
+        for key in sorted(entries):
+            fb = entries[key].get("fallback_ref")
+            if fb and fb not in entries:
+                round_gaps.append((key, f"fallback_ref '{fb}' is not a verified registry entry"))
+        if not round_gaps:
+            break
+        gaps.extend(round_gaps)
+        for key, _ in round_gaps:
+            entries.pop(key, None)
     return entries, gaps
 
 
@@ -315,6 +324,11 @@ def waiver_kind(w):
     if status == "RATIFIED":
         if not w.get("approved_by") or not w.get("approval"):
             return ("invalid", "a RATIFIED waiver needs approved_by and an approval pointer")
+        # F2 (CHECK-P1-r3): "Only mk ratifies" (roster-slugs.yaml comment) was
+        # not enforced -- approved_by was free text. RATIFIED now requires
+        # approved_by to be exactly "mk".
+        if w.get("approved_by") != "mk":
+            return ("invalid", f"a RATIFIED waiver needs approved_by == \"mk\" (got {w.get('approved_by')!r})")
         return "waiver-ratified"
     if w.get("approved_by"):
         return ("invalid", "a PROPOSED waiver cannot carry approved_by")
@@ -561,10 +575,16 @@ def map_references(routing, families, registry):
             # is the host default, not any tier's (Blocker 1, r2).
             entry = registry.get(ref)
             if entry and (kind != "tier" or entry["model"] == info["model"]):
-                m = dict(entry)
                 fb = entry.get("fallback_ref")
-                if fb:
-                    m["fallback_model"] = registry[fb]["model"]
+                if fb and fb not in registry:
+                    # F1 defense-in-depth: resolve_registry's fixpoint pass
+                    # should never leave a dangling fallback_ref here, but if
+                    # it does, refuse instead of KeyError-ing on registry[fb].
+                    m = None
+                else:
+                    m = dict(entry)
+                    if fb:
+                        m["fallback_model"] = registry[fb]["model"]
         if m is None:
             unmapped.append(ref)
             mapping[ref] = {"status": "unmapped", "kind": kind, "where": info["where"]}
