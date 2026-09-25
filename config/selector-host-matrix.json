@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "source": "docs/plans/2026-09-25-jev-decision-layer.md#host-matrix-configselector-host-matrixjson, docs/research/jev/2026-09-25-host-integration-matrix.md",
+  "hosts": {
+    "claude-code": {
+      "launch_profile": {
+        "status": "reachable",
+        "mechanism": "claude plugin enable --scope local",
+        "limits": "",
+        "evidence_level": "first_hand",
+        "verified_on": "2.1.282",
+        "verified_at": "2026-09-25"
+      },
+      "prompt_submit": {
+        "status": "partial",
+        "mechanism": "UserPromptSubmit hook, hookSpecificOutput.additionalContext",
+        "limits": "append only: no field replaces or rewrites the raw prompt text",
+        "evidence_level": "clavain_code",
+        "verified_on": "2.1.282",
+        "verified_at": "2026-09-25"
+      },
+      "pre_tool": {
+        "status": "partial",
+        "mechanism": "PreToolUse hook, exit 2 blocks",
+        "limits": "policy: adapters never emit updatedInput or allow. A decision-less updatedInput can be yielded as hookUpdatedInput by the host and replace the tool input before the normal permission pipeline runs on it, so a host-side rewrite does not bypass permission (not observed first-hand); this adapter never emits updatedInput.",
+        "evidence_level": "binary",
+        "verified_on": "2.1.282",
+        "verified_at": "2026-09-25"
+      },
+      "post_tool_output": {
+        "status": "reachable",
+        "mechanism": "PostToolUse hookSpecificOutput.updatedToolOutput",
+        "limits": "the host keeps the original output when the replacement does not match the tool's output shape, and parallel PostToolUse hooks compete last-write-wins (not first-hand)",
+        "evidence_level": "binary",
+        "verified_on": "2.1.282",
+        "verified_at": "2026-09-25"
+      },
+      "pre_compact": {
+        "status": "partial",
+        "mechanism": "PreCompact hook (matcher manual/auto)",
+        "limits": "exact block-vs-replace-summary semantics not fully confirmed",
+        "evidence_level": "docs",
+        "verified_on": "2.1.282",
+        "verified_at": "2026-09-25"
+      },
+      "session_start": {
+        "status": "reachable",
+        "mechanism": "SessionStart hook, confirmed active on this host (bd-prime-once.sh, canongraph-recall.py)",
+        "limits": "",
+        "evidence_level": "clavain_code",
+        "verified_on": "2.1.282",
+        "verified_at": "2026-09-25"
+      },
+      "skill_loading": {
+        "status": "reachable",
+        "mechanism": "plugin manifest skill declarations, --settings, .claude/settings.json scoping",
+        "limits": "",
+        "evidence_level": "clavain_code",
+        "verified_on": "2.1.282",
+        "verified_at": "2026-09-25"
+      }
+    },
+    "codex": {
+      "launch_profile": {
+        "status": "reachable",
+        "mechanism": "~/.codex/config.toml [profiles.<name>], codex --profile <name>",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.157.0",
+        "verified_at": "2026-09-25"
+      },
+      "prompt_submit": {
+        "status": "partial",
+        "mechanism": "UserPromptSubmit event, hookSpecificOutput.additionalContext",
+        "limits": "append only: no prompt-text rewrite field",
+        "evidence_level": "docs",
+        "verified_on": "0.157.0",
+        "verified_at": "2026-09-25"
+      },
+      "pre_tool": {
+        "status": "reachable",
+        "mechanism": "PreToolUse and PermissionRequest events",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.157.0",
+        "verified_at": "2026-09-25"
+      },
+      "post_tool_output": {
+        "status": "partial",
+        "mechanism": "PostToolUse hookSpecificOutput.additionalContext (append) plus an inert updatedMCPToolOutput stub",
+        "limits": "append only: no general replace field equivalent to Claude Code's updatedToolOutput",
+        "evidence_level": "docs",
+        "verified_on": "0.157.0",
+        "verified_at": "2026-09-25"
+      },
+      "pre_compact": {
+        "status": "partial",
+        "mechanism": "PreCompact/PostCompact events",
+        "limits": "no hookSpecificOutput field at all for these two events: a hook can block the compact or attach a system message, but cannot inject or replace the compact summary content",
+        "evidence_level": "docs",
+        "verified_on": "0.157.0",
+        "verified_at": "2026-09-25"
+      },
+      "session_start": {
+        "status": "reachable",
+        "mechanism": "SessionStart hook (~/.codex/hooks.json, e.g. remontoire-attention.sh)",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.157.0",
+        "verified_at": "2026-09-25"
+      },
+      "skill_loading": {
+        "status": "reachable",
+        "mechanism": "~/.codex/config.toml / AGENTS.md resolution, profile-scoped",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.157.0",
+        "verified_at": "2026-09-25"
+      }
+    },
+    "hermes": {
+      "launch_profile": {
+        "status": "reachable",
+        "mechanism": "hermes profile use <name>, --provider/-m/--skills/-t/--ignore-user-config/--ignore-rules flags",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "v0.16.0",
+        "verified_at": "2026-09-25"
+      },
+      "prompt_submit": {
+        "status": "partial",
+        "mechanism": "pre_llm_call hook injects context via subprocess",
+        "limits": "append only; ephemeral, not persisted to the session DB",
+        "evidence_level": "clavain_code",
+        "verified_on": "v0.16.0",
+        "verified_at": "2026-09-25"
+      },
+      "pre_tool": {
+        "status": "reachable",
+        "mechanism": "pre_tool_call hook (Clavain's Hermes adapter blocks delegate_task through it)",
+        "limits": "",
+        "evidence_level": "clavain_code",
+        "verified_on": "v0.16.0",
+        "verified_at": "2026-09-25"
+      },
+      "post_tool_output": {
+        "status": "reachable",
+        "mechanism": "transform_tool_result hook: first valid string return replaces the result",
+        "limits": "",
+        "evidence_level": "first_hand",
+        "verified_on": "v0.16.0",
+        "verified_at": "2026-09-25"
+      },
+      "pre_compact": {
+        "status": "unverified",
+        "mechanism": "",
+        "limits": "a PreCompact-specific entry was not confirmed distinctly from the general hook list in the excerpt captured",
+        "evidence_level": "none",
+        "verified_on": "v0.16.0",
+        "verified_at": "2026-09-25"
+      },
+      "session_start": {
+        "status": "reachable",
+        "mechanism": "on_session_start hook (Clavain's Hermes adapter registers this)",
+        "limits": "",
+        "evidence_level": "clavain_code",
+        "verified_on": "v0.16.0",
+        "verified_at": "2026-09-25"
+      },
+      "skill_loading": {
+        "status": "reachable",
+        "mechanism": "hermes skills subcommand (search/install/configure/manage), bundles, --skills flag, curator",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "v0.16.0",
+        "verified_at": "2026-09-25"
+      }
+    },
+    "kimi": {
+      "launch_profile": {
+        "status": "reachable",
+        "mechanism": "Kimi config.toml profile resolution before session start",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.42.0",
+        "verified_at": "2026-09-25"
+      },
+      "prompt_submit": {
+        "status": "partial",
+        "mechanism": "bridged to Claude's UserPromptSubmit protocol (kimi-hook-bridge.sh)",
+        "limits": "append only (inherits Claude Code's limit); protocol-parity claim is Clavain/Sylveste-sourced, not independently confirmed against Kimi's own docs",
+        "evidence_level": "sylveste_code",
+        "verified_on": "0.42.0",
+        "verified_at": "2026-09-25"
+      },
+      "pre_tool": {
+        "status": "reachable",
+        "mechanism": "kimi.plugin.json declares PreToolUse with matcher support, bridged 1:1 to Claude's protocol",
+        "limits": "",
+        "evidence_level": "clavain_code",
+        "verified_on": "0.42.0",
+        "verified_at": "2026-09-25"
+      },
+      "post_tool_output": {
+        "status": "unverified",
+        "mechanism": "",
+        "limits": "bridged to Claude's protocol per kimi-hook-bridge.sh, but the exact updatedToolOutput-equivalent field's presence was not independently confirmed against Kimi's own docs",
+        "evidence_level": "none",
+        "verified_on": "0.42.0",
+        "verified_at": "2026-09-25"
+      },
+      "pre_compact": {
+        "status": "reachable",
+        "mechanism": "reachable by protocol parity with Claude's registered hook set",
+        "limits": "a distinct PreCompact entry was not specifically re-verified in this pass",
+        "evidence_level": "sylveste_code",
+        "verified_on": "0.42.0",
+        "verified_at": "2026-09-25"
+      },
+      "session_start": {
+        "status": "reachable",
+        "mechanism": "SessionStart with matcher support in kimi.plugin.json; $KIMI_CODE_HOME/AGENTS.md static injection",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.42.0",
+        "verified_at": "2026-09-25"
+      },
+      "skill_loading": {
+        "status": "reachable",
+        "mechanism": "native ~/.agents/skills scan (install-kimi.sh)",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.42.0",
+        "verified_at": "2026-09-25"
+      }
+    },
+    "pi": {
+      "launch_profile": {
+        "status": "reachable",
+        "mechanism": "provider/model/skill/theme selection resolved pre-session",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.84.0",
+        "verified_at": "2026-09-25"
+      },
+      "prompt_submit": {
+        "status": "reachable",
+        "mechanism": "input extension event supports {action: transform, text}",
+        "limits": "true rewrite, not just append",
+        "evidence_level": "docs",
+        "verified_on": "0.84.0",
+        "verified_at": "2026-09-25"
+      },
+      "pre_tool": {
+        "status": "reachable",
+        "mechanism": "tool_call event can block and mutate event.input in place before execution",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.84.0",
+        "verified_at": "2026-09-25"
+      },
+      "post_tool_output": {
+        "status": "reachable",
+        "mechanism": "tool_result event supports true replace via partial patches",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.84.0",
+        "verified_at": "2026-09-25"
+      },
+      "pre_compact": {
+        "status": "reachable",
+        "mechanism": "session_before_compact event can cancel the compact or supply a fully custom summary",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.84.0",
+        "verified_at": "2026-09-25"
+      },
+      "session_start": {
+        "status": "reachable",
+        "mechanism": "before_agent_start event injects a message and can modify the system prompt outright",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.84.0",
+        "verified_at": "2026-09-25"
+      },
+      "skill_loading": {
+        "status": "reachable",
+        "mechanism": "resources_discover event contributes skill/prompt/theme paths pre-session",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.84.0",
+        "verified_at": "2026-09-25"
+      }
+    },
+    "bb": {
+      "launch_profile": {
+        "status": "reachable",
+        "mechanism": "bb thread spawn --provider/--model/--reasoning-level/--permission-mode, bb plugin enable",
+        "limits": "bb layer only: selects bb-layer config, not the underlying provider's own native plugin/hook config",
+        "evidence_level": "docs",
+        "verified_on": "0.43.4+aleph.2",
+        "verified_at": "2026-09-25"
+      },
+      "prompt_submit": {
+        "status": "unreachable",
+        "mechanism": "",
+        "limits": "experimental_thread.events is observational-only (notifies after the fact); no interception point before the provider processes the prompt",
+        "evidence_level": "docs",
+        "verified_on": "0.43.4+aleph.2",
+        "verified_at": "2026-09-25"
+      },
+      "pre_tool": {
+        "status": "unreachable",
+        "mechanism": "",
+        "limits": "experimental_thread.events is observational-only; bb's provider bridges are thin passthroughs, not tool-loop interceptors",
+        "evidence_level": "docs",
+        "verified_on": "0.43.4+aleph.2",
+        "verified_at": "2026-09-25"
+      },
+      "post_tool_output": {
+        "status": "unreachable",
+        "mechanism": "",
+        "limits": "experimental_thread.events is observational-only; no tool-result interception point",
+        "evidence_level": "docs",
+        "verified_on": "0.43.4+aleph.2",
+        "verified_at": "2026-09-25"
+      },
+      "pre_compact": {
+        "status": "unreachable",
+        "mechanism": "",
+        "limits": "bb thread compact is bb's own provider-agnostic operation, not a hook the provider fires that a bb plugin can intercept before the provider's own compaction logic runs",
+        "evidence_level": "docs",
+        "verified_on": "0.43.4+aleph.2",
+        "verified_at": "2026-09-25"
+      },
+      "session_start": {
+        "status": "reachable",
+        "mechanism": "<dataDir>/AGENTS.md and <workspace>/.bb/AGENTS.md appended to the system prompt for all providers at session start",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.43.4+aleph.2",
+        "verified_at": "2026-09-25"
+      },
+      "skill_loading": {
+        "status": "reachable",
+        "mechanism": "three-tier skill resolution (plugin < user < project), bb skill install",
+        "limits": "",
+        "evidence_level": "docs",
+        "verified_on": "0.43.4+aleph.2",
+        "verified_at": "2026-09-25"
+      }
+    }
+  }
+}
