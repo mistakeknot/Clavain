@@ -26,7 +26,7 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_orchestrator.py -q -k flag_off && test -z "$(find ~/.clavain/selector/records -newer /tmp/selector-structural.txt -type f 2>/dev/null)"
    ```
 
-5. **Egress refusal opens zero connections, realistic secrets are refused, avoidable false positives are admitted, and admission cannot be bypassed by accident.** For every rule id (including JSON-quoted keys, provider prefixes, Basic auth, cookies, netrc, PGP, package tokens, short and spaced passwords and the high-entropy rule with its path and slug handling), a loopback listener records zero accepted connections; realistic payloads are refused; false-positive fixtures are admitted; a hand-built `AdmittedRequest` fails `verify()` and the client refuses it before connecting.
+5. **Egress refusal opens zero connections, realistic secrets are refused, avoidable false positives are admitted, and admission cannot be bypassed by accident.** For every rule id (including JSON-quoted keys, provider prefixes, Basic auth, cookies, netrc, PGP, package tokens, short and spaced passwords and the high-entropy rule with its path and slug handling), a loopback listener records zero accepted connections; realistic payloads are refused; false-positive fixtures are admitted, including env dumps (`PWD=/…`), JSON Schema and YAML structure, templated, redacted and placeholder values, placeholder bearers, and netrc-like prose; a hand-built `AdmittedRequest` fails `verify()` and the client refuses it before connecting.
 
    ```check
    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_egress.py -q && uv run pytest structural/test_selector_orchestrator.py structural/test_selector_jev_client.py -q -k "egress or refus or only_admitted"
@@ -75,10 +75,10 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
     test -f "$ART/burn-claude.json" && test -f "$ART/burn-codex.json" && python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); x=json.load(open(sys.argv[2])); cc=c["consistency"]; xc=x["consistency"]; assert cc["reconciled"] and abs(cc["unexplained"]) <= cc["tolerance"]; assert xc["matches_final_cumulative_excluding_compaction"] and not xc["session_cumulative_mismatch"]; assert {"invalidation","expiry","compaction_or_reset"} <= set(c["events"]) and {"invalidation","expiry","compaction_or_reset"} <= set(x["events"])' "$ART/burn-claude.json" "$ART/burn-codex.json"
     ```
 
-11. **The eval refuses unsealed or changed labels, scores the holdout once against its first seal (disjointness by case content hash), reports shortlist recall separately, has a counts-only offline egress scan, and the selftest set runs all three arms with zero forbidden selections.**
+11. **The eval refuses unsealed or changed labels, scores the holdout once against its first seal (disjointness by case content hash), reports shortlist recall separately, has a counts-only offline egress scan whose `--transcripts` repeats and is expanded by the script and whose `--since`, stratified `--sample` and `--seed` are tested, and the selftest set runs all three arms with zero forbidden selections.**
 
     ```check
-    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_eval.py -q -rA 2>&1 | tee /tmp/selector-eval.txt; test "${PIPESTATUS[0]}" -eq 0 && python3 -c 'import re,sys; s=open(sys.argv[1]).read(); miss=[t for t in ("holdout_first_seal_only","holdout_scored_once","holdout_refused_on_changed_floors","shortlist_recall_reported","egress_scan_counts_only") if not re.search(r"^PASSED \S+::test_"+t+r"\b",s,re.M)]; print("missing:",miss) if miss else None; sys.exit(1 if miss else 0)' /tmp/selector-eval.txt
+    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_eval.py -q -rA 2>&1 | tee /tmp/selector-eval.txt; test "${PIPESTATUS[0]}" -eq 0 && python3 -c 'import re,sys; s=open(sys.argv[1]).read(); miss=[t for t in ("holdout_first_seal_only","holdout_scored_once","holdout_refused_on_changed_floors","shortlist_recall_reported","egress_scan_counts_only","egress_scan_flags") if not re.search(r"^PASSED \S+::test_"+t+r"\b",s,re.M)]; print("missing:",miss) if miss else None; sys.exit(1 if miss else 0)' /tmp/selector-eval.txt
     ```
 
 12. **The canon doc matches the host matrix and names every fallback reason and the retention terms.**
@@ -101,9 +101,9 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
     cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_cli.py -q
     ```
 
-16. **High-entropy false positives are measured where the rule is on.** The offline `post_tool_output` calibration over real tool output (T12 step 8) sampled at least 500 blocks, and the high-entropy-only refusal fraction is ≤0.03 and the total refusal fraction is ≤0.10. A failure triggers the egress calibration escalation and blocks .10's `post_tool_output` use; it does not block landing .7.
+16. **High-entropy false positives are measured where the rule is on.** The offline `post_tool_output` calibration over real tool output (T12 step 8) is stratified by source. Each of `claude` and `codex` sampled at least 500 blocks. The high-entropy-only refusal fraction is ≤0.02 for Claude `tool_result` blocks and ≤0.03 for Codex call outputs, and the total refusal fraction is ≤0.10 for each. Revision 4 measured 0.0–0.8% and 0.4–1.6% high-entropy-only over 500-block draws; Codex gets the wider bound because its exec output is path-dense and varies more by draw. A failure triggers the egress calibration escalation and blocks .10's `post_tool_output` use; it does not block landing .7.
 
     ```check
-    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["point"]=="post_tool_output" and d["sampled"]>=500, d.get("sampled"); assert d["high_entropy_only_frac"]<=0.03 and d["refused_frac"]<=0.10, (d["high_entropy_only_frac"], d["refused_frac"]); print("ok", d["sampled"], d["refused_frac"], d["high_entropy_only_frac"])' "$ART/egress-offline.json"
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["point"]=="post_tool_output", d.get("point"); T={"claude":0.02,"codex":0.03}; r=[(k,d["by_source"][k]) for k in T]; bad=[(k,b["sampled"],b["refused_frac"],b["high_entropy_only_frac"]) for k,b in r if b["sampled"]<500 or b["refused_frac"]>0.10 or b["high_entropy_only_frac"]>T[k]]; assert not bad, bad; print("ok", [(k,b["sampled"],b["refused_frac"],b["high_entropy_only_frac"]) for k,b in r])' "$ART/egress-offline.json"
     ```
 
