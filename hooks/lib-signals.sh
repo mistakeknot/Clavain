@@ -18,7 +18,7 @@
 #   bead-closed     (weight 1) — bd close in transcript
 #   recovery        (weight 2) — test/build failure followed by pass
 #   version-bump    (weight 2) — bump-version.sh or interpub:release
-#   goal-completed  (weight 0) — /goal completion or goal-scale milestone language.
+#   goal-completed  (weight 0) — a met /goal (goal_status met:true) or an epic closing.
 #                    Weight 0 by design: this is a STRUCTURAL trigger (see the
 #                    goal-cadence tier in auto-stop-actions.sh), not meant to
 #                    add to the compound/drift weight ladder. Surfaced in
@@ -78,10 +78,17 @@ detect_signals() {
         CLAVAIN_SIGNAL_WEIGHT=$((CLAVAIN_SIGNAL_WEIGHT + 2))
     fi
 
-    # 7. Goal completion / goal-scale milestone (weight 0 — structural trigger,
-    # not a weight-ladder contributor; see goal-cadence tier in
-    # auto-stop-actions.sh, which fires independently of CLAVAIN_SIGNAL_WEIGHT).
-    if echo "$text" | grep -iq '/goal\b.*\(complet\|done\|shipped\|landed\)\|goal.*\(is\|was\)\s*complet\|goal-scale milestone\|milestone.*landed\|epic.*\(closed\|complete\)\b'; then
+    # 7. Goal completion (weight 0 — structural trigger, not a weight-ladder
+    # contributor; see goal-cadence tier in auto-stop-actions.sh, which fires
+    # independently of CLAVAIN_SIGNAL_WEIGHT).
+    #
+    # Narrowed 2026-09-24 to two events: Claude Code's own record that a /goal
+    # was met, and an epic said to close within a few words. The old pattern
+    # also took "goal ... complete", "/goal ... done" (every DONE WHEN line) and
+    # "milestone ... landed" anywhere in 80 transcript lines, hook text
+    # included, so it fired on ordinary progress and each firing cost a turn.
+    if echo "$text" | grep -q '"type":"goal_status","met":true' \
+        || echo "$text" | grep -iqE '\bepic\b[^"]{0,40}\b(closed|completed?)\b'; then
         CLAVAIN_SIGNALS="${CLAVAIN_SIGNALS}goal-completed,"
     fi
 

@@ -100,23 +100,29 @@ teardown() {
     [[ "$CLAVAIN_SIGNALS" == *","* ]]  # but has internal comma (2 signals)
 }
 
-@test "lib-signals: detects goal-completed signal (weight 0, structural)" {
-    local transcript='The goal is complete. Wrapping up this session.'
+@test "lib-signals: detects goal-completed from a met goal_status (weight 0, structural)" {
+    local transcript='{"type":"attachment","attachment":{"type":"goal_status","met":true,"condition":"x"}}'
     detect_signals "$transcript"
     [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
     [[ "$CLAVAIN_SIGNAL_WEIGHT" -eq 0 ]]
 }
 
-@test "lib-signals: detects goal-completed via /goal landed phrasing" {
-    local transcript='Ran /goal review and it landed successfully'
+@test "lib-signals: an unmet goal_status is not goal-completed" {
+    local transcript='{"type":"attachment","attachment":{"type":"goal_status","met":false,"condition":"x"}}'
+    detect_signals "$transcript"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+}
+
+@test "lib-signals: detects goal-completed when an epic closes" {
+    local transcript='Closed the last child, so the epic is now closed.'
     detect_signals "$transcript"
     [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
 }
 
-@test "lib-signals: detects goal-completed via goal-scale milestone phrasing" {
-    local transcript='This goal-scale milestone landed after three sprints'
+@test "lib-signals: milestone and goal wording alone is not goal-completed" {
+    local transcript=$'The goal is complete.\nRan /goal review and it landed successfully\nThis goal-scale milestone landed after three sprints\n/goal Ship it. DONE WHEN tests pass.'
     detect_signals "$transcript"
-    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
 }
 
 @test "lib-signals: goal-completed does not fire on unrelated text" {
@@ -126,7 +132,7 @@ teardown() {
 }
 
 @test "lib-signals: goal-completed does not add to weight ladder alongside other signals" {
-    local transcript=$'Running "git commit -m fix"\nThe goal is complete.'
+    local transcript=$'Running "git commit -m fix"\n{"type":"goal_status","met":true}'
     detect_signals "$transcript"
     [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
     [[ "$CLAVAIN_SIGNALS" == *"commit"* ]]

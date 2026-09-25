@@ -228,18 +228,21 @@ EOF
         cd "$tmp" || exit 1
         printf '{"session_id":"%s","transcript_path":"%s","stop_hook_active":false}' \
             "$session" "$tmp/transcript.jsonl" \
-        | PATH="$tmp:$PATH" CLAVAIN_PROVENANCE_DIR="$CLAVAIN_PROVENANCE_DIR" \
+        | env -u CLAUDE_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u BB_THREAD_ID \
+              ${HOOK_ENV:-} \
+              PATH="$tmp:$PATH" CLAVAIN_PROVENANCE_DIR="$CLAVAIN_PROVENANCE_DIR" \
               CLAVAIN_LOOP_BREAKER_DIR="$tmp/loop-breaker" \
               bash "$BATS_TEST_DIRNAME/../../hooks/auto-stop-actions.sh"
     )
     rm -rf "$tmp"
 }
 
-@test "hook blocks with the provenance warning on an unbacked block" {
+@test "hook reports an unbacked block to the user without blocking" {
     run run_stop_hook "$(block_claiming_provenance)" "sess-1"
     [ "$status" -eq 0 ]
-    [[ "$output" == *'"decision"'* ]]
+    [[ "$output" == *'"systemMessage"'* ]]
     [[ "$output" == *"Next-goal provenance"* ]]
+    [[ "$output" != *'"decision"'* ]]
 }
 
 @test "hook stays quiet when a receipt vouches for the block" {
@@ -249,20 +252,31 @@ EOF
     [[ "$output" != *"Next-goal provenance"* ]]
 }
 
-@test "provenance outranks goal-cadence rather than being overwritten by it" {
-    # Both tiers are eligible: the turn says a goal was completed AND the block
-    # it emitted cannot back its provenance. The specific complaint must win.
-    transcript="$(assistant_line "The /goal is complete and shipped.")
-$(block_claiming_provenance)"
-    # Distinct session id on purpose: lib-loop-breaker.sh (mk-ax8) goes silent
-    # when the same demand repeats for one session with no intervening
-    # progress, and the unbacked-block case above already fired this exact
-    # reason for sess-1. Reusing it would make this test pass or fail on test
-    # ordering rather than on tier precedence.
-    run run_stop_hook "$transcript" "sess-tier-order"
+@test "a receipt filed under this session's bb thread id vouches (thr_xg8t59tfba)" {
+    # The helper ran from a Bash tool in bb, which has BB_THREAD_ID and no
+    # CLAUDE_SESSION_ID, so the receipt is keyed by thread id. The hook is
+    # handed the Claude session id. Both name this session.
+    write_receipt true
+    mv "$CLAVAIN_PROVENANCE_DIR/sess-1.json" "$CLAVAIN_PROVENANCE_DIR/thr_test.json"
+    HOOK_ENV="BB_THREAD_ID=thr_test" run run_stop_hook "$(block_claiming_provenance)" "claude-uuid-1"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Next-goal provenance"* ]]
+    [[ "$output" != *"Next-goal provenance"* ]]
+}
+
+@test "a met goal whose Next-goal block is already written is not re-demanded" {
+    write_receipt true
+    transcript="$(printf '{"type":"attachment","attachment":{"type":"goal_status","met":true}}')
+$(block_claiming_provenance)"
+    run run_stop_hook "$transcript" "sess-1"
+    [ "$status" -eq 0 ]
     [[ "$output" != *"Goal-cadence:"* ]]
+}
+
+@test "a met goal with no block yet gets the goal-cadence request" {
+    transcript="$(printf '{"type":"attachment","attachment":{"type":"goal_status","met":true}}')"
+    run run_stop_hook "$transcript" "sess-cadence"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Goal-cadence:"* ]]
 }
 
 # ---------------------------------------------------- verification (2026-08-14)

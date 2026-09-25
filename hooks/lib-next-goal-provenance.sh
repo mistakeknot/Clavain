@@ -93,6 +93,27 @@ next_goal_receipt_path() {
     printf '%s/%s.json' "$CLAVAIN_PROVENANCE_DIR" "${1:-unknown}"
 }
 
+# next_goal_receipt_session <dir> <id>...
+# The first id that has a receipt in <dir>, else the first id given.
+#
+# One session has several names. The Stop hook is handed Claude Code's session
+# id; scripts run from a Bash tool key their receipt by CLAUDE_SESSION_ID, or by
+# BB_THREAD_ID inside bb, and a Bash tool in bb has no CLAUDE_SESSION_ID. So a
+# receipt the helper wrote under the thread id was looked for under the session
+# id, and the other way round, and the audit re-demanded a lookup that had
+# already run (thr_xg8t59tfba, 2026-09-24). Every id tried here belongs to this
+# process, so another session's receipt still cannot vouch.
+next_goal_receipt_session() {
+    local dir="$1" first="" id
+    shift
+    for id in "$@"; do
+        [[ -n "$id" ]] || continue
+        [[ -n "$first" ]] || first="$id"
+        [[ -f "$dir/$id.json" ]] && { printf '%s\n' "$id"; return 0; }
+    done
+    printf '%s\n' "${first:-unknown}"
+}
+
 # next_goal_receipt_state <session_id>
 # Echoes one of: missing | unreadable | reachable | unreachable
 #
