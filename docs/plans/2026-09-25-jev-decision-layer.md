@@ -3,8 +3,8 @@ artifact_type: plan
 bead: mk-42j9.7
 stage: design
 requirements: [D1-generalize-hosts, D2-authorized-egress, D3-three-arm-eval, D4-weighted-burn, D5-flag-per-candidate]
-revision: 2
-supersedes: revision 1 (commit d16a765)
+revision: 3
+supersedes: revision 2 (commit 938fba3), which superseded revision 1 (commit d16a765)
 ---
 # Jev decision layer (shared selector) implementation plan
 
@@ -14,7 +14,7 @@ supersedes: revision 1 (commit d16a765)
 
 **Authorship:** claude-opus-5-5 via planning-opus after planning-astra 429
 
-**Revision 2** folds in the other-frontier plan review (claude-fable-5-1, verdict NEEDS-FIXES); see the Review fold-in section at the end. It supersedes revision 1 (commit d16a765). Revision 2 is still authored by claude-opus-5-5 and needs the review loop closed before execution.
+**Revision 2** folds in the other-frontier plan review (claude-fable-5-1, verdict NEEDS-FIXES); see the Review fold-in section at the end. It supersedes revision 1 (commit d16a765). **Revision 3** folds in the re-review of revision 2 (938fba3, claude-fable-5-1, NEEDS-FIXES, bounded) and supersedes it. Both revisions are authored by claude-opus-5-5, and the review loop must close before execution.
 
 **Accountable decision:** The primary `planning-astra` profile returned HTTP 429, which is an operational failure, so this revision was authored by the frontier fallback `planning-opus` (claude-opus-5-5). The frontier requirement is not downgraded. Clavain installation 0.6.323, policy SHA256 `3f4a8c387398d8d9affaecf38ab6fd3dc952db24b7f71cc0ea31a9001b1240cd`. The producer receipt belongs to the coordinator; this JSON is not a usage receipt.
 
@@ -85,7 +85,7 @@ supersedes: revision 1 (commit d16a765)
 
 **Key links:**
 - `selector.select` runs flag → validation → pre-eligibility → egress → budget → breaker → credential → Jev → response validation → floors → host revalidation → mode, in that order; a later stage never runs when an earlier one falls back.
-- `JevClient.call` accepts only an `AdmittedRequest` whose HMAC tag verifies under a per-process key held privately by `egress.py`, so a caller cannot forge admission even by building the dataclass with a correct body hash.
+- `JevClient.call` accepts only an `AdmittedRequest` whose HMAC tag verifies under a per-process key held privately by `egress.py`, so a caller that bypasses `admit()` by accident, even one that builds the dataclass with a correct body hash, is refused. This guards against accidental bypass, not against hostile in-process code: any Python code in the same process can read the module-level key.
 - `burn.load_weights` imports `WEIGHTS` from `scripts/burn-report.py`, so there is one source of truth for weights.
 - `docs/canon/selector-layer.md`'s matrix table is generated from, and tested against, `config/selector-host-matrix.json`.
 
@@ -255,30 +255,43 @@ All prefix rules are anchored with `\b` (or a non-word lookbehind where the pref
 | `cred.github_token` | `\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}` or `\bgithub_pat_[A-Za-z0-9_]{20,}` |
 | `cred.gitlab_token` | `\bglpat-[A-Za-z0-9_-]{20,}` |
 | `cred.anthropic_key` | `\bsk-ant-[A-Za-z0-9_-]{20,}` |
-| `cred.openai_style_key` | `\bsk-(proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}` |
+| `cred.openai_style_key` | `\bsk-(?:proj-|svcacct-|admin-)?(?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{20,}` (the body must contain a digit, so slugs such as `sk-learn-based-classification-model` are admitted) |
 | `cred.stripe_key` | `\b[rsp]k_(live|test)_[A-Za-z0-9]{16,}` |
 | `cred.google_api_key` | `\bAIza[0-9A-Za-z_-]{35}` |
 | `cred.vault_token` | `\bhvs\.[A-Za-z0-9_-]{20,}` |
 | `cred.azure_account_key` | `AccountKey=[A-Za-z0-9+/=]{20,}` or `SharedAccessSignature=` |
 | `cred.gcp_service_account` | `"type"\s*:\s*"service_account"` or a `private_key_id` key with a value |
 | `cred.slack_token` | `\bxox[abprs]-[A-Za-z0-9-]{10,}` |
-| `cred.private_key` | `-----BEGIN [A-Z ]*PRIVATE KEY-----` |
+| `cred.private_key` | `-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----` (covers PGP `PRIVATE KEY BLOCK`) |
+| `cred.package_token` | `\bnpm_[A-Za-z0-9]{36}\b` or `\bpypi-AgEI[A-Za-z0-9_-]{50,}` |
+| `cred.netrc` | case-insensitive `\b(?:machine\s+\S+|default)(?:\s+login\s+\S+)?(?:\s+account\s+\S+)?\s+password\s+\S+` (whitespace includes newlines) |
 | `cred.jwt` | `\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}` |
-| `cred.assignment` | case-insensitive, key optionally JSON- or shell-quoted and optionally prefixed (`DB_`, `SESSION_`, `x-`): `["']?[\w.-]*(api[_-]?key|apikey|secret|access[_-]?key|token|passw(or)?d|pass|pwd|private[_-]?key|session[_-]?key|account[_-]?key|credential)s?["']?\s*[:=]\s*["']?[^\s"',;}]{8,}` |
-| `cred.bearer` | `Authorization:\s*Bearer\s+\S{8,}` or `\bbearer\s+[A-Za-z0-9._~+/=-]{20,}` |
+| `cred.assignment` | case-insensitive. The key starts at the beginning of the text or after a non-alphanumeric character, is optionally JSON- or shell-quoted, and may carry a prefix that ends in a separator (`DB_`, `SESSION_`, `x-`, `_`), so `bypass` does not match `pass`: `(?<![A-Za-z0-9])["']?(?:[\w.-]*[_.-])?(?:api[_-]?key|apikey|secret|access[_-]?key|auth[_-]?token|token|passw(?:or)?d|passphrase|pass|pwd|private[_-]?key|session[_-]?key|account[_-]?key|credential)s?["']?\s*[:=]\s*VALUE`. VALUE is a quoted string of ≥8 characters that may contain spaces (`(?P<q>["'])(?!\s)[^"'\n]{8,}(?P=q)`; all groups other than the quote are non-capturing), or an unquoted run of ≥8 characters from `[^\s"',;}()]`. In both cases VALUE is rejected when it is a pure integer, a call expression (`[\w.]*\(`), `true`/`false`/`null`/`none`/`required`/`optional`, an env reference (`$X`, `${X}`) or a `<placeholder>`. |
+| `cred.password_assignment` | the same key anchoring and prefix rule, restricted to `passw(or)?d|passphrase|pwd`, with a VALUE of any length ≥1 (quoted values may contain spaces), under the same VALUE exclusions plus empty quotes and `***`. This catches `password: x`, `password: hunter2` and `"password": "correct horse battery staple"`. |
+| `cred.bearer` | case-insensitive `\b(?:proxy-)?authorization\s*:\s*bearer\s+\S{8,}` or `\bbearer\s+[A-Za-z0-9._~+/=-]{20,}` |
+| `cred.basic_auth` | case-insensitive `\b(?:proxy-)?authorization\s*:\s*basic\s+[A-Za-z0-9+/=]{8,}` |
+| `cred.cookie` | case-insensitive `\b(?:set-)?cookie\s*:[^\n]*?[\w.-]*(?:session|sess|sid|token|auth|jwt)[\w.-]*=[^;\s]{16,}` |
 | `cred.url_userinfo` | `[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]+@` |
-| `cred.high_entropy` | on by default for `post_tool_output` and `pre_compact`, opt-in elsewhere (`high_entropy: true` in the registry): a token of ≥32 characters from `[A-Za-z0-9+/=_-]` containing at least one uppercase letter, one lowercase letter and one digit, with Shannon entropy ≥4.2 bits per character. Pure lowercase hex (git SHAs, sha256 digests) is exempt; hex secrets are caught by `cred.assignment` when named. |
+| `cred.high_entropy` | on by default for `post_tool_output` and `pre_compact`, opt-in elsewhere (`high_entropy: true` in the registry). Tokenization: take runs of `[A-Za-z0-9+/=_.:\\~-]` of ≥32 characters. Split every run on `.` and `:`, and also split it on `/` and `\\` when it is path-like: it starts with `/`, `~/`, `./` or `../`, or it contains ≥3 path separators. (Base64 secrets, which may contain an occasional `/`, stay whole.) Remove canonical UUIDs from each segment. Then score each remaining `[A-Za-z0-9+/=_-]` run of ≥32 characters. A run refuses when it contains at least one uppercase letter, one lowercase letter and one digit and has Shannon entropy ≥4.2 bits per character. Exempt: pure lowercase hex (git SHAs, sha256 digests; hex secrets are caught by `cred.assignment` when named) and slugs (≥4 segments on `-`/`_`, at least three quarters of them purely alphabetic, such as Claude's project-directory names). |
 | `cred.loaded_key` | literal occurrence of the loaded key (checked after credential load, before send) |
 | `src.denylisted_path` | a declared source under `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/**/secrets*`, any `.env`/`.env.*`, `~/.config/jev/` |
 | `src.outside_project` | a declared source outside `project_root` |
 | `proj.unowned` | `project_root` has no `origin`, or its owner is not `mistakeknot`/`gensysven` |
 | `size.over_limit` | serialized body >90,000 bytes |
 
-The rules are a pattern set, not a proof. Unknown credential formats can pass; that residual risk is stated in the canon doc and the non-claims, and every discovered miss follows the egress escalation rule. False positives only cost a native fallback, and T12 records the refusal rate on real inputs.
+The rules are a pattern set, not a proof. Unknown credential formats can pass; that residual risk is stated in the canon doc and the non-claims, and every discovered miss follows the egress escalation rule. False positives only cost a native fallback. T12 records the refusal rate on the live inputs and, offline, on real tool output at `post_tool_output`, where the high-entropy rule is on.
+
+Author probe (2026-09-25, zklw, rules transcribed from this table into a scratch script, counts only, no text printed):
+- Every re-review payload is refused: Basic auth, lowercase bearer, `Set-Cookie: sessionid=…`, short and spaced passwords, PGP, netrc (inline and multi-line), `npm_` and `pypi-`.
+- Every re-review false positive is admitted: usage-token integers, `os.environ.get`, `get_credentials()`, `bypass: …`, `sk-learn-…`. So are `password: required`, `${DB_PASSWORD}` and `<your password>`.
+- `DB_PASS=`, `x-api-key` and `_authToken` still refuse.
+- All 26 skill descriptions, all 26 SKILL.md bodies and the five T12 bead descriptions are admitted.
+- High entropy: the path and slug handling removed every hit in a `find` of this repo, `ls -la ~/.claude/projects` and `ls -laR` of the bb plugin dirs. Random 40-character base64 and 43-character base64url secrets are still caught in about 97.5% and 99.3% of draws.
+- Over 1000 sampled `tool_result` blocks from 40 recent Claude transcripts, 4.0% refused under all rules, and 2.1% refused under high-entropy alone. The sample includes this plan's own probe sessions, so it overstates. T12 step 8 repeats this measurement formally.
 
 `project_owner(root)` never runs a subprocess. It reads `<root>/.git`; if that is a file (`gitdir: …`, as in worktrees such as this one), it follows it and then the `commondir` file to the shared git directory, reads `config`, and parses the `[remote "origin"]` `url`. Both `git@github.com:OWNER/…` and `https://github.com/OWNER/…` forms are accepted. The result is cached per session in `$CLAVAIN_STATE_DIR/selector/owner-cache.json`, keyed by `(resolved root, config st_mtime_ns)`. Any read or parse error resolves to `proj.unowned`. Total cost is a few small file reads, well under the 200ms this step may use.
 
-Admission is a capability. `egress.py` generates a private 32-byte key per process (`secrets.token_bytes`) at import. `AdmittedRequest(body, sha256, tag)` carries `tag = HMAC-SHA256(key, sha256)`, and only `admit()` (and `readmit_with_key_check()`, which runs `cred.loaded_key`) can compute a valid tag. `JevClient.call` calls `egress.verify(admitted)`, which recomputes the body hash and checks the tag with `hmac.compare_digest`. An instance built by hand with a correct body hash but no valid tag is refused before any connection. The loaded-key check runs inside `selector.select` after credential load and before `call`.
+Admission is an accidental-bypass guard, not a security boundary: any code running in the same Python process can read the module-private key and mint a tag, so it stops mistakes (a new call path that forgets `admit()`, a hand-built request in a test or a dependent's adapter), not hostile code. `egress.py` generates a private 32-byte key per process (`secrets.token_bytes`) at import. `AdmittedRequest(body, sha256, tag)` carries `tag = HMAC-SHA256(key, sha256)`, and only `admit()` (and `readmit_with_key_check()`, which runs `cred.loaded_key`) can compute a valid tag. `JevClient.call` calls `egress.verify(admitted)`, which recomputes the body hash and checks the tag with `hmac.compare_digest`. An instance built by hand with a correct body hash but no valid tag is refused before any connection. The loaded-key check runs inside `selector.select` after credential load and before `call`.
 
 Retention disclosure (TypeSafe terms as read 2026-09-25, recorded as `egress.terms_version = "typesafe-2026-09-25"`): no zero-retention guarantee, no training without consent, telemetry kept in perpetuity, no SLA. `doctor` prints this and `docs/canon/selector-layer.md` states it.
 
@@ -316,7 +329,7 @@ Location: `${CLAVAIN_SELECTOR_RECORD_DIR:-${CLAVAIN_STATE_DIR:-~/.clavain}/selec
 
 ### How records reach Intercore
 
-`clavain-select.py export-ic` is a batch command outside the hot path, enabled only by `CLAVAIN_SELECTOR_IC_EXPORT=1`. It reads records after a cursor (`…/selector/ic-export.cursor`) and, per record, runs:
+`clavain-select.py export-ic [--record-dir DIR]` is a batch command outside the hot path, enabled only by `CLAVAIN_SELECTOR_IC_EXPORT=1`. It reads records after a cursor (`…/selector/ic-export.cursor`) and, per record, runs:
 
 ```bash
 ic events record --source=interspect --type=selector_decision_v1 \
@@ -331,6 +344,7 @@ ic events record --source=interspect --type=selector_decision_v1 \
 - Per integration: `CLAVAIN_SELECTOR_<INTEGRATION>` ∈ {`off` (default), `shadow`, `active`}, case-insensitive. Any other value resolves to `off` and `doctor` reports it.
 - Global kill switch: `CLAVAIN_SELECTOR=off` forces every integration off.
 - `active` resolves to `shadow` unless the registry entry has `active_allowed: true` and `shadow_only` is false; the downgrade is recorded as `flags.active_denied: true`.
+- `eval` is not a flag value. Only the eval harness and `latency-probe` set it, by calling `select(…, mode_override="eval")`. An eval call still requires the integration flag to resolve to `shadow` or `active`, and the kill switch still wins: with the flag off or `CLAVAIN_SELECTOR=off` it falls back at row 1 (`flag_off`) and makes no call. An eval run behaves like shadow (row 13, reason `shadow_mode`, `applied: native`, never `emitted`) and records `mode: eval`. Any other `mode_override` value raises `ValueError`.
 - Other knobs: `CLAVAIN_SELECTOR_DEADLINE_MS` (clamped to ≤5000), `CLAVAIN_SELECTOR_RECORD_DIR`, `CLAVAIN_JEV_SECRETS_FILE`, `CLAVAIN_JEV_KEY_VAR`, `CLAVAIN_SELECTOR_IC_EXPORT`, `CLAVAIN_INTERSTAT_ROOT`.
 
 `config/selector-integrations.json` in .7:
@@ -383,7 +397,7 @@ Versions observed: Claude Code 2.1.282, Codex 0.157.0, Hermes v0.16.0, Kimi 0.42
 |---|---|---|---|---|---|---|
 | (a) launch profile | R [fh: `claude plugin enable --scope local`] | R [d] | R [d] | R [d] | R [d] | R, bb layer only [d] |
 | (b) prompt submit | P, append only [c] | P, append only [d] | P, append only [c] | P, append only [s: `Sylveste/scripts/kimi-hook-bridge.sh` protocol-parity comment] | R, true transform [d] | U |
-| (c) pre-tool | P, observe/deny/ask only: no silent input rewrite, because `updatedInput` takes effect with `permissionDecision` allow (or ask, which prompts the user) and adapters never emit allow [c; b] | R [d] | R [c: `pre_tool_call`] | R [c: `kimi.plugin.json` PreToolUse; s: bridge] | R [d] | U |
+| (c) pre-tool | P, observe/deny/ask only by policy: adapters never emit `updatedInput` or allow. The host can rewrite input: a decision-less `updatedInput` is yielded as `hookUpdatedInput` and replaces the tool input before the normal permission pipeline runs on it, so a rewrite does not bypass permission (not observed first-hand) [b] | R [d] | R [c: `pre_tool_call`] | R [c: `kimi.plugin.json` PreToolUse; s: bridge] | R [d] | U |
 | (d) post-tool replace | R via `updatedToolOutput` for all tools; the host keeps the original output when the replacement does not match the tool's output shape, and parallel PostToolUse hooks compete last-write-wins [b; not first-hand] | P, append only [d] | R `transform_tool_result` [fh: test-verified] | ? | R [d] | U |
 | (e) pre-compact | P [d] | P, no hookSpecificOutput [d] | ? | R by parity [s] | R, custom summary [d] | U (`bb thread compact` is bb's) |
 | (f) session start | R [c] | R [d] | R [c: `on_session_start`] | R [d] | R [d] | R via AGENTS.md [d] |
@@ -432,8 +446,8 @@ Weighted invalidation cost for Claude = `invalidated × (1.25 − 0.1)`; for Cod
 Case schema v1 (`schemas/selector-eval-case.v1.schema.json`): `case_id`, `integration`, `split` (`calibrate`|`holdout`), `host`, `task`, `context_refs`, `candidates`, `label {expected: <id>|"abstain", required: [...], acceptable: [...], forbidden: [...], required_evidence: [...]}`, `label_author`, `labeled_at`.
 
 - `selector-eval.py seal --cases <path>`: refuses unless the cases file and `criteria.json` are committed and the worktree is clean for them. Appends a seal entry (`sha256`, `count`, `commit`, `sealed_at`, `criteria_sha256`) to `labels.seal.json`.
-- `run --arm native|rules|jev --cases … --out …`: refuses if the seal is missing, the hashes differ, the seal commit is not an ancestor of HEAD, or `--out` already holds results for that arm. `native` reproduces today's behavior (for `selftest`: no selection, i.e. abstain). `rules` is a deterministic lexical ranker (token overlap with IDF weights over candidate descriptions), an explicit-mention rule (a candidate id appearing verbatim in the task wins) and an abstain threshold; dependents may add rules. `jev` runs with `mode: eval`, writing records into `--out`.
-- Holdout discipline: each case set has a `case_set_id` (integration + cases path). A holdout run is accepted only against the first seal entry recorded for that `case_set_id`. A later seal (after any label edit) can be used for calibrate runs, or for a new holdout only if none of its holdout `case_id`s appeared in an earlier seal. `score` scores a holdout set once per first seal, writing `holdout.scored.json` and refusing a second score. It refuses (not flags) a holdout score when the floors or `criteria.json` differ from what that first seal recorded.
+- `run --arm native|rules|jev --cases … --out …`: refuses if the seal is missing, the hashes differ, the seal commit is not an ancestor of HEAD, or `--out` already holds results for that arm. `native` reproduces today's behavior (for `selftest`: no selection, i.e. abstain). `rules` is a deterministic lexical ranker (token overlap with IDF weights over candidate descriptions), an explicit-mention rule (a candidate id appearing verbatim in the task wins) and an abstain threshold; dependents may add rules. `jev` calls `select(…, mode_override="eval")` (the integration flag must be `shadow` or `active`; `run` exits 2 otherwise), writing records into `--out`.
+- Holdout discipline: each case set has a `case_set_id` (integration + cases path). A holdout run is accepted only against the first seal entry recorded for that `case_set_id`. A later seal (after any label edit) can be used for calibrate runs, or for a new holdout only if none of its holdout cases appeared in an earlier seal. Disjointness is keyed on `case_content_sha256` = sha256 of the canonical JSON of `(task, context_refs, candidates, label)`, not on `case_id`, so renaming ids does not reopen a holdout. The seal entry records every holdout case's content hash. `score` scores a holdout set once per first seal, writing `holdout.scored.json` and refusing a second score. It refuses (not flags) a holdout score when the floors or `criteria.json` differ from what that first seal recorded.
 - `score --out … --criteria …`: refuses on a labels hash mismatch and reports per arm: shortlist recall (the fraction of non-abstain cases whose expected id was inside the ≤16 candidates actually offered; reported separately so that a shortlist miss, which fails the rules and Jev arms together, is not read as "Jev no better than rules"), Jev and rules accuracy conditional on the expected id being in the shortlist, correct (expected or acceptable), missed_required, forbidden_selected (must be 0), abstain rate, fallback counts by reason, Jev calls, latency p50/p95/max, missed_evidence, and Wilson 95% intervals.
 - `shortlist --skills-root skills --task-file … --limit 16`: the rules ranker used to cut real candidate sets to ≤16. Its output records the full ranked list length and cut-off so shortlist recall can be computed.
 - Level 2 (`burn --manifest …`): a manifest maps (case, arm) to fresh-session transcripts; output is weighted tokens, turns, requests, invalidation/expiry/compaction events, Jev overhead and task acceptance per arm. Effects count only where `effective_applied` is `selected`.
@@ -461,7 +475,7 @@ Case schema v1 (`schemas/selector-eval-case.v1.schema.json`): `case_id`, `integr
 | Measurement confounds | Same host and model only; level-2 reports acceptance next to burn; Jev tokens separate. |
 | Label leakage or tuning on holdout | Seal before any arm; the holdout is scored once against its first seal; re-sealing never reopens it; changed floors refuse holdout scoring. |
 | Egress is a pattern set | Unknown credential formats can pass. Mitigated by JSON-quoted key rules, `\b` anchors, provider prefixes, the loaded-key literal, the high-entropy rule on tool-output points and whole-request refusal; residual risk is accepted by D2 and handled by the false-negative escalation. |
-| High-entropy rule false positives | Refusals fall back to native (no harm beyond a lost selection); T12 reports the refusal rate on real inputs, and the rule is opt-in at points where false positives are common. |
+| High-entropy rule false positives | Refusals fall back to native, so the only harm is a lost selection. Path-like tokens are split and UUIDs and slugs are exempt. T12 step 8 measures the refusal rate offline over real `post_tool_output` blocks, with thresholds (criterion 16) that gate .10. The rule is opt-in at other points. |
 | `applied: emitted` mistaken for effect | The selector never records `selected`; only an adapter acknowledgement or an operator outcome sets `host_applied: selected`, and level-2 burn credits only that. |
 | Latency probe measures a warm cache | T12 rotates five distinct real inputs and reports first-call-per-input latency separately. |
 | Interspect consumers misread export | Inventory gate; export default off. |
@@ -516,9 +530,9 @@ Paths are relative to `/home/mk/projects/.clavain-jev`. Test command base: `cd /
 
 **Step 1: Write the failing tests**
 - One test per rule id in the egress table, with the secret-like value built by concatenation (for example `"gh" + "p_" + "A" * 36`). Each asserts `Refusal.rule_ids == [rule]` and that the refusal's `repr`, `rule_ids` and `detail` do not contain the secret.
-- `test_realistic_payloads_refused` (parametrized, values built by concatenation): `{"password": "hunter2hunter2hunter2"}`, `{"api_key":"<24 chars>"}`, `DB_PASS=<12 chars>`, `SESSION_KEY=<64 hex>`, a Stripe `sk_` + `live_` key, a GCP service-account JSON fragment with `"private_key_id": "<40 hex>"`, an Azure connection string with `AccountKey=<base64>`, `aws_secret_access_key = <40 chars>`, a `glpat-` token, an `AIza` key, an `hvs.` token. Each is refused with the expected rule id, both in context and inside a candidate description.
-- `test_false_positives_admitted`: `desk-organization-toolkit`, `risk-assessment-framework-tool`, `scikit-learn`, a 40-hex git SHA, a 64-hex sha256 digest in prose, `token budget: 1500ms` and the real descriptions of all 26 Clavain skills are admitted (the skills test reads `skills/*/SKILL.md` frontmatter).
-- `test_high_entropy_rule`: a 40-char mixed-case alphanumeric random token in context is refused as `cred.high_entropy` for `post_tool_output` and `pre_compact`, and admitted for `launch_profile` unless the registry sets `high_entropy: true`; a 40-hex SHA is admitted at every point.
+- `test_realistic_payloads_refused` (parametrized, values built by concatenation): `{"password": "hunter2hunter2hunter2"}`, `{"api_key":"<24 chars>"}`, `DB_PASS=<12 chars>`, `SESSION_KEY=<64 hex>`, a Stripe `sk_` + `live_` key, a GCP service-account JSON fragment with `"private_key_id": "<40 hex>"`, an Azure connection string with `AccountKey=<base64>`, `aws_secret_access_key = <40 chars>`, a `glpat-` token, an `AIza` key, an `hvs.` token, `Authorization: Basic <base64>`, lowercase `authorization: bearer <10 chars>`, `Set-Cookie: sessionid=<32 lowercase alnum>; Path=/`, `password: x`, `password: hunter2`, `"password": "correct horse battery staple"`, `-----BEGIN PGP PRIVATE KEY BLOCK-----`, an inline and a multi-line netrc entry, an `npm_` token, a `pypi-AgEI` token, `DB_PASS=<12 chars>`, `x-api-key: <20 chars>` and `//registry.npmjs.org/:_authToken=<25 chars>`. Each is refused with the expected rule id, both in context and inside a candidate description.
+- `test_false_positives_admitted`: `desk-organization-toolkit`, `risk-assessment-framework-tool`, `scikit-learn`, a 40-hex git SHA, a 64-hex sha256 digest in prose, `token budget: 1500ms`, `"input_tokens": 18000000`, `token = os.environ.get("X")`, `credentials = get_credentials()`, `bypass: enabled_by_default`, `passthrough: true`, `sk-learn-based-classification-model`, `password: required`, `password: ${DB_PASSWORD}`, `password = <your password>` and the real descriptions of all 26 Clavain skills are admitted (the skills test reads `skills/*/SKILL.md` frontmatter).
+- `test_high_entropy_rule`: a 40-char mixed-case alphanumeric random token in context is refused as `cred.high_entropy` for `post_tool_output` and `pre_compact`, and admitted for `launch_profile` unless the registry sets `high_entropy: true`; a 40-hex SHA is admitted at every point. At `post_tool_output`, these are all admitted: a `find` path listing with deep mixed-case paths, a Claude project-directory slug such as `-home-mk--bb-machines-…-thr-ay39nh2cpv`, and a file name with a UUID suffix. A 40-character base64 secret containing one `/` is still refused.
 - `test_candidate_ids_scanned`: a candidate id shaped like an AWS key is refused.
 - `test_clean_request_admitted`: ordinary task text and skill descriptions → `AdmittedRequest` whose `sha256` equals `hashlib.sha256(body).hexdigest()`.
 - `test_loaded_key_literal`: `admit(req, key_literal=k)` refuses `cred.loaded_key` when `k` appears in context.
@@ -654,7 +668,7 @@ Paths are relative to `/home/mk/projects/.clavain-jev`. Test command base: `cd /
 - Test: `tests/structural/test_selector_adapters.py`
 
 **Step 1: Write the failing tests**
-- `test_matrix_complete`: 6 hosts × 7 points, each with `status`, `mechanism`, `limits`, `evidence_level`, `verified_on`, `verified_at`; the enum values are valid (`evidence_level` ∈ first_hand, binary, clavain_code, sylveste_code, docs, none); the statuses equal this plan's host matrix, including Claude Code (c) = partial with the no-rewrite limit and Kimi's Sylveste-sourced evidence.
+- `test_matrix_complete`: 6 hosts × 7 points, each with `status`, `mechanism`, `limits`, `evidence_level`, `verified_on`, `verified_at`; the enum values are valid (`evidence_level` ∈ first_hand, binary, clavain_code, sylveste_code, docs, none); the statuses equal this plan's host matrix, including Claude Code (c) = partial, evidence `binary`, and a `limits` text that states the policy ("adapters never emit updatedInput or allow"), not a host incapability. Kimi's evidence is Sylveste-sourced.
 - `test_stub_capabilities_match_matrix` for codex, hermes, kimi, pi, bb.
 - `test_unreachable_raises`: bb `pre_tool`, Kimi `post_tool_output` (unverified) → `PointUnreachable`.
 - `test_render_never_allows`: for every point and every `Outcome` (shadow, native fallback per reason, emitted), the Claude render output never contains `"permissionDecision": "allow"`, `"decision": "approve"` or `updatedInput`.
@@ -691,6 +705,7 @@ Paths are relative to `/home/mk/projects/.clavain-jev`. Test command base: `cd /
 - `test_gate_order`: parametrized over the fallback table; for each row, arrange that row's failure plus every later row's failure and assert the recorded reason is that row's.
 - `test_shadow_records_and_returns_native`: fake server selects a candidate → `applied == "native"`, `fallback.reason == "shadow_mode"`, `result.kind == "selected"`.
 - `test_active_emits_never_selects`: registry fixture with `active_allowed: true` on a first-hand point → `applied == "emitted"` and no record anywhere has `applied == "selected"`.
+- `test_eval_mode_override`: `mode_override="eval"` with the flag off → `flag_off`, zero socket attempts; with `shadow` → record `mode: eval`, `applied: native`, `fallback.reason: shadow_mode`; with `active` allowed by a registry fixture → still `applied: native`; `mode_override="active"` → `ValueError`.
 - `test_active_denied_for_selftest`: `CLAVAIN_SELECTOR_SELFTEST=active` → shadow, `flags.active_denied: true`.
 - `test_record_unwritable_in_active`: registry fixture with `active_allowed: true`, a first-hand point and an unwritable record dir → native, `record_unwritable` on stderr.
 - `test_internal_error`: adapter raising `RuntimeError("secret-canary")` → native, `internal_error`, and `secret-canary` is absent from the record.
@@ -700,7 +715,7 @@ Paths are relative to `/home/mk/projects/.clavain-jev`. Test command base: `cd /
 
 **Step 2:** Run `uv run pytest structural/test_selector_orchestrator.py -q` and `bats tests/shell/selector_hook.bats`. Expected: FAIL.
 
-**Step 3:** Implement `select(request, *, adapter, env, now)` in the documented order and the `hook` subcommand; the wrapper mirrors `hooks/context-gateway.sh` (fail-open, always `exit 0`, `timeout` bound, no `set -e`) plus the wrapper-timeout line. Do not register it in `hooks/hooks.json`.
+**Step 3:** Implement `select(request, *, adapter, env, now, mode_override=None)` in the documented order and the `hook` subcommand; the wrapper mirrors `hooks/context-gateway.sh` (fail-open, always `exit 0`, `timeout` bound, no `set -e`) plus the wrapper-timeout line. Do not register it in `hooks/hooks.json`.
 
 **Step 4:** Same commands. Expected: PASS.
 
@@ -724,11 +739,12 @@ Paths are relative to `/home/mk/projects/.clavain-jev`. Test command base: `cd /
 - Test: `tests/structural/test_selector_cli.py`
 
 **Step 1: Write the failing tests**
+- Every subcommand that reads or writes records (`records`, `outcome`, `shadow-live`, `latency-probe`, and T11's `export-ic`) takes `--record-dir DIR`. The default is `CLAVAIN_SELECTOR_RECORD_DIR`, else the documented default, and `--record-dir` wins over the env var; a test covers the precedence.
 - `doctor` prints flags, registry, matrix summary, the retention disclosure and the secrets file status from `os.lstat` only (exists, mode, owner); a test asserts via a monkeypatched `open`/`os.open` that it never opens the secrets file.
-- `records --since` lists records; `records --latency-summary [--assert-p95-ms N] [--assert-over-deadline-frac F]` prints p50/p95/max, the number of distinct request hashes, and counts `wrapper-timeouts.jsonl` lines in the window as over-deadline; it exits 1 when an assertion fails, and `--assert-distinct-inputs K` exits 1 when fewer than K distinct `request.sha256` values are present.
+- `records --record-dir DIR --since` lists records; `records --latency-summary [--assert-p95-ms N] [--assert-over-deadline-frac F]` prints p50/p95/max, the number of distinct request hashes, and counts `wrapper-timeouts.jsonl` lines in the window as over-deadline; it exits 1 when an assertion fails, and `--assert-distinct-inputs K` exits 1 when fewer than K distinct `request.sha256` values are present.
 - `outcome --decision-id … --result … --host-applied …` appends one outcome line; an unknown decision id exits 2.
 - `shadow-live` requires `--task-file`, `--candidates-file` and `--project-root`, and refuses (exit 2, no network) unless the integration flag is `shadow`.
-- `latency-probe --inputs <jsonl of {task_file, candidates_file}> --n N --budget N` rotates round-robin through the inputs (at least 5 distinct inputs required, else exit 2), runs in `mode: eval` with the explicit budget recorded, and prints `distinct_inputs`; against the loopback fake with 5 inputs and N=30 it makes 30 calls with 5 distinct request hashes.
+- `latency-probe --inputs <jsonl of {task_file, candidates_file}> --n N --budget N` rotates round-robin through the inputs (at least 5 distinct inputs required, else exit 2), calls `select(…, mode_override="eval")` (so it requires the integration flag to be `shadow` or `active` and exits 2 otherwise), records the explicit budget, and prints `distinct_inputs`; against the loopback fake with 5 inputs and N=30 it makes 30 calls with 5 distinct request hashes.
 
 **Step 2:** Run `uv run pytest structural/test_selector_cli.py -q`. Expected: FAIL.
 
@@ -748,7 +764,7 @@ Paths are relative to `/home/mk/projects/.clavain-jev`. Test command base: `cd /
 **Depends:** T3, T5, T7
 
 **Files:**
-- Create: `scripts/clavain_selector/eval.py`, `scripts/selector-eval.py`, `schemas/selector-eval-case.v1.schema.json`
+- Create: `scripts/clavain_selector/eval.py`, `scripts/selector-eval.py` (subcommands `seal`, `run`, `score`, `shortlist`, `burn`, `egress-scan`), `schemas/selector-eval-case.v1.schema.json`
 - Create: `tests/fixtures/selector/eval/selftest/cases.jsonl` (about 12 synthetic cases over real Clavain skill names, both splits, including abstain and forbidden labels), `tests/fixtures/selector/eval/selftest/criteria.json`
 - Test: `tests/structural/test_selector_eval.py`
 
@@ -757,10 +773,11 @@ Paths are relative to `/home/mk/projects/.clavain-jev`. Test command base: `cd /
 - `test_run_refusals`: no seal, hash mismatch, seal commit not an ancestor, existing results → each refused with a distinct message.
 - `test_native_arm_selftest_abstains`.
 - `test_rules_arm_deterministic`: two runs give identical output; explicit mention wins; below threshold → abstain.
-- `test_jev_arm_uses_eval_mode`: loopback fake; records land in `--out` with `mode: eval`.
+- `test_jev_arm_uses_eval_mode`: loopback fake with `CLAVAIN_SELECTOR_SELFTEST=shadow`; records land in `--out` with `mode: eval`; with the flag unset `run --arm jev` exits 2 and makes no call.
+- `test_egress_scan_counts_only`: `selector-eval.py egress-scan --point post_tool_output --transcripts <fixtures>` over a Claude fixture with `tool_result` blocks and a Codex fixture with `function_call_output` (string) and `custom_tool_call_output` (list) items, one of which holds a canary secret; the JSON output has `blocks`, `sampled`, `refused`, `refused_frac`, `high_entropy_only`, `high_entropy_only_frac` and `by_rule`, counts the canary under its rule id, contains no block text or canary, and makes zero socket attempts.
 - `test_score_metrics`: known outputs → exact counts; one forbidden pick → `forbidden_selected == 1` and exit code 3; Wilson interval for 8/10 matches the reference value (0.490, 0.943) to 3 decimals.
 - `test_score_refuses_changed_labels`: labels changed after the seal → scoring refused.
-- `test_holdout_first_seal_only`: re-sealing after a label edit does not reopen the holdout; a holdout run is refused unless its case_ids are disjoint from every previously sealed holdout.
+- `test_holdout_first_seal_only`: re-sealing after a label edit does not reopen the holdout; a holdout run is refused unless its cases' `case_content_sha256` values are disjoint from every previously sealed holdout; renaming the `case_id`s of already-sealed cases and re-sealing is refused.
 - `test_holdout_scored_once`: a second `score --split holdout` against the same first seal is refused.
 - `test_holdout_refused_on_changed_floors`: floors that differ from the sealed criteria → holdout scoring refused.
 - `test_shortlist_recall_reported`: `score` reports `shortlist_recall` (the share of cases whose labelled skill is in the shortlist) separately from selection accuracy, and cases whose label is outside the shortlist are counted as `shortlist_miss`, not as Jev errors.
@@ -814,10 +831,10 @@ Paths are relative to `/home/mk/projects/.clavain-jev`. Test command base: `cd /
 
 **Files:**
 - Create: `docs/canon/selector-layer.md` (contract, fallback table, flags, matrix table, cache rule, retention disclosure, dependents' needs, unknowns)
-- Modify: `scripts/clavain-select.py` (add the `export-ic` subcommand calling `ic_export.export`)
+- Modify: `scripts/clavain-select.py` (add the `export-ic [--record-dir DIR]` subcommand calling `ic_export.export`, with the same `--record-dir` precedence as T8)
 - Test: `tests/structural/test_selector_docs.py`
 
-**Step 1:** Tests: the doc's matrix table parsed from markdown equals `config/selector-host-matrix.json`; every `FallbackReason` appears in the doc; the retention disclosure text matches `terms_version`; the matrix legend documents each `evidence_level` value; `clavain-select.py export-ic --help` exits 0.
+**Step 1:** Tests: the doc's matrix table parsed from markdown equals `config/selector-host-matrix.json`; every `FallbackReason` appears in the doc; the retention disclosure text matches `terms_version`; the matrix legend documents each `evidence_level` value; `clavain-select.py export-ic --help` exits 0 and lists `--record-dir`.
 
 **Step 2–4:** Fail, implement, pass.
 
@@ -842,8 +859,9 @@ Set `ART=/home/mk/.clavain/selector-acceptance/$(date -u +%Y%m%dT%H%M%SZ)` (priv
 5. Latency sample over distinct inputs: for each of mk-42j9.7, .8, .9, .10 and .11, write the bead description to `$ART/probe/<id>.txt` and its own shortlist to `$ART/probe/<id>.json` (steps 2–3), list the five pairs in `$ART/probe/inputs.jsonl`, then `CLAVAIN_SELECTOR_SELFTEST=shadow CLAVAIN_SELECTOR_RECORD_DIR="$ART/latency" python3 scripts/clavain-select.py latency-probe --integration selftest --inputs "$ART/probe/inputs.jsonl" --n 30 --budget 30 --json > "$ART/latency-probe.json"` (6 calls per input, interleaved, `mode: eval`). Expected: `distinct_inputs == 5`, p95 ≤1000ms and ≤10% of calls over the 1500ms hook deadline, with first-call-per-input latency reported separately. Also report the egress refusal rate over these real inputs. About 31 calls at roughly 5k input tokens each; cost is negligible at the listed price.
 6. Burn: pick one real Claude session transcript and one real Codex rollout from the last 7 days; run `python3 scripts/selector-eval.py burn --transcript <claude.jsonl> --host claude-code --compare-burn-report --json > "$ART/burn-claude.json"` (it copies only that session into a temp root and runs `burn-report.py --root <tmp> --json` over the session's full time span) and `python3 scripts/selector-eval.py burn --transcript <rollout.jsonl> --host codex --compare-burn-report --json > "$ART/burn-codex.json"` (compared with the rollout's final cumulative minus compaction requests, as Interstat does). Expected: Claude `consistency.reconciled == true` (`|unexplained| ≤ tolerance`); Codex `consistency.matches_final_cumulative_excluding_compaction == true` and no `session_cumulative_mismatch`; invalidation, expiry and compaction counts reported.
 7. Flags-off invariance: in a fresh shell with no `CLAVAIN_SELECTOR*` variables, run `./tests/run-tests.sh` and the structural suite; confirm no file appears under `~/.clavain/selector/records` during the run.
-8. Optional, only after T10 says `export-safe: yes`: run `CLAVAIN_SELECTOR_IC_EXPORT=1 python3 scripts/clavain-select.py export-ic --record-dir "$ART/records"` twice, and after each run count `ic --json events tail --all --limit 100000 | python3 -c 'import json,sys; print(sum(1 for l in sys.stdin if l.strip() and (e:=json.loads(l)).get("source")=="interspect" and e.get("type")=="selector_decision_v1"))'` into `$ART/ic-count-1.txt` and `$ART/ic-count-2.txt`. Expected: the count grows by the number of records after the first run and is unchanged after the second.
-9. Write `docs/research/jev/2026-09-XX-selector-live-acceptance.md` with the commands, commit SHA, host versions, the round-trip record (it contains no task text), latency percentiles with `distinct_inputs`, the egress refusal rate and burn reconciliations. Commit it.
+8. Offline egress calibration at `post_tool_output` (no network, no Jev call): `python3 scripts/selector-eval.py egress-scan --point post_tool_output --transcripts '~/.claude/projects/*/*.jsonl' --transcripts '~/.codex/sessions/2026/*/*/*.jsonl' --since 7d --sample 1000 --seed 1 --json > "$ART/egress-offline.json"`. It extracts Claude `tool_result` blocks and Codex `function_call_output`/`custom_tool_call_output` items, runs `egress.scan_text` in-process under `post_tool_output` rules, and writes counts only, never matched or block text. Expected: `sampled ≥ 500`, `high_entropy_only_frac ≤ 0.03` and `refused_frac ≤ 0.10`. Above either threshold, escalate (see Escalation conditions): .7 may still land, but .10 must not enable `post_tool_output` until the rule is retuned and re-measured.
+9. Optional, only after T10 says `export-safe: yes`: run `CLAVAIN_SELECTOR_IC_EXPORT=1 python3 scripts/clavain-select.py export-ic --record-dir "$ART/records"` twice, and after each run count `ic --json events tail --all --limit 100000 | python3 -c 'import json,sys; print(sum(1 for l in sys.stdin if l.strip() and (e:=json.loads(l)).get("source")=="interspect" and e.get("type")=="selector_decision_v1"))'` into `$ART/ic-count-1.txt` and `$ART/ic-count-2.txt`. Expected: the count grows by the number of records after the first run and is unchanged after the second.
+10. Write `docs/research/jev/2026-09-XX-selector-live-acceptance.md` with the commands, commit SHA, host versions, the round-trip record (it contains no task text), latency percentiles with `distinct_inputs`, the egress refusal rate on the live inputs, the offline `post_tool_output` calibration (fractions and per-rule counts) and burn reconciliations. Commit it.
 
 Any failure here follows the escalation rules; a TypeSafe 429 is operational and is retried later, not worked around.
 
@@ -905,7 +923,7 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
 1. **The structural selector suite passes with Interstat present and no hidden skips.**
 
    ```check
-   cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/ -q -k selector -rs 2>&1 | tee /tmp/selector-structural.txt; test "${PIPESTATUS[0]}" -eq 0 && ! grep -q "SKIPPED.*interstat" /tmp/selector-structural.txt
+   cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/ -q -k selector -rs 2>&1 | tee /tmp/selector-structural.txt; test "${PIPESTATUS[0]}" -eq 0 && ! grep -qi "SKIPPED.*interstat" /tmp/selector-structural.txt
    ```
 
 2. **The hook wrapper is fail-open on every path.**
@@ -914,10 +932,10 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
    cd /home/mk/projects/.clavain-jev && bats tests/shell/selector_hook.bats
    ```
 
-3. **Default install is unchanged: no hook registration or host-adapter change, and the full existing suites pass with flags unset.**
+3. **Default install is unchanged: no hook registration or host-adapter change, and the full existing suites pass with flags unset.** After landing, `git diff origin/main` is trivially clean, so the check also requires that no commit touching those two files mentions the selector or this bead. The per-commit guard remains T7's verify block.
 
    ```check
-   cd /home/mk/projects/.clavain-jev && git diff --quiet origin/main -- hooks/hooks.json config/host-adapters.json && env -u CLAVAIN_SELECTOR -u CLAVAIN_SELECTOR_SELFTEST ./tests/run-tests.sh
+   cd /home/mk/projects/.clavain-jev && git diff --quiet origin/main -- hooks/hooks.json config/host-adapters.json && test -z "$(git log --oneline -i --grep=selector --grep=mk-42j9.7 -- hooks/hooks.json config/host-adapters.json)" && env -u CLAVAIN_SELECTOR -u CLAVAIN_SELECTOR_SELFTEST ./tests/run-tests.sh
    ```
 
 4. **Flag off makes no records and touches no credential.** A test proves zero socket attempts and no call to the credential loader; after criterion 3's run no records exist from that time window.
@@ -926,7 +944,7 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_orchestrator.py -q -k flag_off && test -z "$(find ~/.clavain/selector/records -newer /tmp/selector-structural.txt -type f 2>/dev/null)"
    ```
 
-5. **Egress refusal opens zero connections, realistic secrets are refused, and admission cannot be forged.** For every rule id (including JSON-quoted keys, provider prefixes and the high-entropy rule), a loopback listener records zero accepted connections; realistic payloads are refused; false-positive fixtures are admitted; a hand-built `AdmittedRequest` fails `verify()` and the client refuses it before connecting.
+5. **Egress refusal opens zero connections, realistic secrets are refused, avoidable false positives are admitted, and admission cannot be bypassed by accident.** For every rule id (including JSON-quoted keys, provider prefixes, Basic auth, cookies, netrc, PGP, package tokens, short and spaced passwords and the high-entropy rule with its path and slug handling), a loopback listener records zero accepted connections; realistic payloads are refused; false-positive fixtures are admitted; a hand-built `AdmittedRequest` fails `verify()` and the client refuses it before connecting.
 
    ```check
    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_egress.py -q && uv run pytest structural/test_selector_orchestrator.py structural/test_selector_jev_client.py -q -k "egress or refus or only_admitted"
@@ -975,10 +993,10 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
     test -f "$ART/burn-claude.json" && test -f "$ART/burn-codex.json" && python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); x=json.load(open(sys.argv[2])); cc=c["consistency"]; xc=x["consistency"]; assert cc["reconciled"] and abs(cc["unexplained"]) <= cc["tolerance"]; assert xc["matches_final_cumulative_excluding_compaction"] and not xc["session_cumulative_mismatch"]; assert {"invalidation","expiry","compaction_or_reset"} <= set(c["events"]) and {"invalidation","expiry","compaction_or_reset"} <= set(x["events"])' "$ART/burn-claude.json" "$ART/burn-codex.json"
     ```
 
-11. **The eval refuses unsealed or changed labels, scores the holdout once against its first seal, reports shortlist recall separately, and the selftest set runs all three arms with zero forbidden selections.**
+11. **The eval refuses unsealed or changed labels, scores the holdout once against its first seal (disjointness by case content hash), reports shortlist recall separately, has a counts-only offline egress scan, and the selftest set runs all three arms with zero forbidden selections.**
 
     ```check
-    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_eval.py -q && uv run pytest structural/test_selector_eval.py -q -k "holdout_first_seal_only or holdout_scored_once or holdout_refused_on_changed_floors or shortlist_recall_reported" | grep -q "4 passed"
+    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_eval.py -q -rA 2>&1 | tee /tmp/selector-eval.txt; test "${PIPESTATUS[0]}" -eq 0 && python3 -c 'import re,sys; s=open(sys.argv[1]).read(); miss=[t for t in ("holdout_first_seal_only","holdout_scored_once","holdout_refused_on_changed_floors","shortlist_recall_reported","egress_scan_counts_only") if not re.search(r"^PASSED \S+::test_"+t+r"\b",s,re.M)]; print("missing:",miss) if miss else None; sys.exit(1 if miss else 0)' /tmp/selector-eval.txt
     ```
 
 12. **The canon doc matches the host matrix and names every fallback reason and the retention terms.**
@@ -1001,10 +1019,17 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
     cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_cli.py -q
     ```
 
+16. **High-entropy false positives are measured where the rule is on.** The offline `post_tool_output` calibration over real tool output (T12 step 8) sampled at least 500 blocks, and the high-entropy-only refusal fraction is ≤0.03 and the total refusal fraction is ≤0.10. A failure triggers the egress calibration escalation and blocks .10's `post_tool_output` use; it does not block landing .7.
+
+    ```check
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["point"]=="post_tool_output" and d["sampled"]>=500, d.get("sampled"); assert d["high_entropy_only_frac"]<=0.03 and d["refused_frac"]<=0.10, (d["high_entropy_only_frac"], d["refused_frac"]); print("ok", d["sampled"], d["refused_frac"], d["high_entropy_only_frac"])' "$ART/egress-offline.json"
+    ```
+
 ## Escalation conditions
 
 - Live p95 >1000ms or >10% of calls over the hook deadline: stop, record, and return to the frontier planner. Dependents on hook points (.10) cannot proceed until budgets are revisited; launch-time (.8) may proceed under its 3000ms deadline.
 - Any live `model_mismatch`: stop live work, record the returned string, and ask mk whether to recalibrate on a new pin.
+- Offline egress calibration above threshold (high-entropy-only >3% or total >10% of sampled `post_tool_output` blocks): record the per-rule counts, retune the tokenization or threshold test-first, re-measure, and return to the frontier planner if two retunes fail. .10 does not use `post_tool_output` until the calibration passes; .7 may land.
 - Any egress false negative found in review or live use: set `CLAVAIN_SELECTOR=off` everywhere, ask mk to rotate the key, write an incident note in `docs/research/jev/`, and do not resume until a regression test covers the case.
 - A dependent needs a contract change (multi-select, new point semantics, schema field): return to the frontier planner and bump `schema_version`.
 - Credential file missing, rejected (401/403) or a terms concern: BLOCKED for mk. Do not look for other keys.
@@ -1019,7 +1044,7 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
 - TypeSafe rate limits, and real latency from zklw (vendor claims 70–500ms, unverified).
 - The latency and accuracy cost of the per-candidate fit questions.
 - The exact HTTP status codes TypeSafe uses for each error.
-- How Claude Code's `updatedToolOutput` behaves first-hand on 2.1.282 (the binary says it works for all tools and falls back to the original output on a shape mismatch, but no replacement has been observed), and how an adapter can reliably detect the fallback; whether PreToolUse `updatedInput` has any effect without `permissionDecision: allow`; Claude Code PreCompact semantics.
+- How Claude Code's `updatedToolOutput` behaves first-hand on 2.1.282 (the binary says it works for all tools and falls back to the original output on a shape mismatch, but no replacement has been observed), and how an adapter can reliably detect the fallback; PreToolUse decision-less `updatedInput` rewrite: the binary shows the `hookUpdatedInput` path, but it has not been observed first-hand; Claude Code PreCompact semantics.
 - Hermes pre-compact reachability; Kimi post-tool replacement; Pi's deployment surface outside bb provider-pi.
 - Whether Codex hooks may reach the network under its sandbox settings.
 - Whether bb propagates `CLAVAIN_SELECTOR_*` flags into launched hosts.
@@ -1053,7 +1078,8 @@ Before implementation, this plan needs an independent other-frontier plan review
     "Burn via Interstat parsers with burn-report weights; Jev tokens reported separately",
     "Active mode needs registry permission and first-hand evidence; .7 ships none",
     "applied is native or emitted; selected only from an adapter acknowledgement or operator outcome (host_applied)",
-    "AdmittedRequest is an HMAC capability with a module-private key; hand-built instances fail verify()",
+    "Eval runs use select(mode_override=\"eval\") and still need the integration flag at shadow or active",
+    "AdmittedRequest carries an HMAC tag under a module-private key; hand-built instances fail verify(); an accidental-bypass guard, not a security boundary",
     "Refused and pre-egress records keep only id_sha256 and payload_sha256 per candidate",
     "Project owner read from git config files without a subprocess, cached per session",
     "Holdout scored once against its first seal; shortlist recall reported separately",
@@ -1067,7 +1093,7 @@ Before implementation, this plan needs an independent other-frontier plan review
     "At most 3 parallel Sonnet-class workers"
   ],
   "verification": [
-    "Acceptance criteria 1-15 with recorded commit, host, time and exit status",
+    "Acceptance criteria 1-16 with recorded commit, host, time and exit status",
     "One real shadow round trip record from zklw",
     "Burn consistency on one real Claude session and one real Codex rollout"
   ],
@@ -1090,7 +1116,7 @@ Source: `/home/mk/.bb-machines/autarch.getbb.app/thread-storage/thr_gfuk4djvvr/j
 
 | # | Sev | Disposition |
 |---|-----|-------------|
-| 1 | P1 | Accepted, verified: `ic` 0.3.5 `events` has `tail, cursor, emit, record, list-review, list-agency` and no `list`. T10, T12 step 8 and criterion 13 now use `ic --json events tail --all --limit 100000` filtered on `source`/`type`, plus a double-export count check. |
+| 1 | P1 | Accepted, verified: `ic` 0.3.5 `events` has `tail, cursor, emit, record, list-review, list-agency` and no `list`. T10, T12 step 9 (step 8 in revision 2) and criterion 13 now use `ic --json events tail --all --limit 100000` filtered on `source`/`type`, plus a double-export count check. |
 | 2 | P1 | Accepted: egress rules now cover JSON-quoted keys, `\b` anchors, provider prefixes (Stripe, GCP, Azure, GitLab, Google API, Vault) and `cred.high_entropy` (on by default for `post_tool_output`/`pre_compact`). T2 adds realistic-payload, false-positive and high-entropy tests, and the registry gains `high_entropy`. |
 | 3 | P1 | Accepted, verified in the 2.1.282 binary (shape-mismatch fallback, parallel last-write-wins): `applied` ∈ {native, emitted}; `selected` comes only from `host_applied` via adapter acknowledgement or operator outcome; `effective_applied` is used for level-2 burn. |
 | 4 | P2 | Accepted: `AdmittedRequest(body, sha256, tag)` carries an HMAC under a module-private per-process key; the hand-built-with-correct-hash and copied-tag tests are in T2 and T5 and criterion 5. |
@@ -1109,3 +1135,21 @@ Source: `/home/mk/.bb-machines/autarch.getbb.app/thread-storage/thr_gfuk4djvvr/j
 | 17 | P3 | Accepted: `score` reports `shortlist_recall` and counts `shortlist_miss` separately from arm errors (`test_shortlist_recall_reported`, criterion 11). |
 
 Acceptance criteria changed in revision 2: 5, 7, 8, 9, 10, 11 and 13 were rewritten, and 15 is new. Criteria 1–4, 6, 12 and 14 are unchanged, but criterion 1 now also covers the new `test_selector_cli.py`.
+
+### Revision 3 (re-review of revision 2)
+
+Source: `/home/mk/.bb-machines/autarch.getbb.app/thread-storage/thr_gfuk4djvvr/jev/plan-rereview.md` (claude-fable-5-1, NEEDS-FIXES, bounded; 16 of 17 prior findings fixed, no regressions). The author checked each claim against source first. None was rejected.
+
+| Finding | Disposition |
+|---------|-------------|
+| P2-1 | Accepted, verified: under revision 2's rules, transcribed and run, Basic auth, lowercase bearer and `Set-Cookie: sessionid=…` were all admitted. Added `cred.basic_auth` and `cred.cookie`, made `cred.bearer` case-insensitive, and added the payloads to `test_realistic_payloads_refused` (criterion 5). |
+| P2-2 | Accepted: T12 step 8 is a new offline `egress-scan` at `post_tool_output` over real Claude `tool_result` and Codex tool-output items (counts only). High entropy now splits path-like tokens and exempts UUIDs and slugs. The thresholds (≤3% high-entropy-only, ≤10% total) are in criterion 16 and the escalation rules. The author probe removed every directory-listing hit while still catching about 97.5% of random base64 secrets. |
+| P3-1 | Accepted, verified in the 2.1.282 binary: `if(we.updatedInput&&we.permissionBehavior===void 0)yield{type:"hookUpdatedInput",…}`, consumed as `D=_.updatedInput` before the permission pipeline, with `guardHookUpdatedInput` present. Matrix (c) now states the policy reason with evidence `b`; the T6 test encodes the policy limit text; the unknown now reads "not observed first-hand". This also corrects the mechanism text of revision 2's #9 disposition. |
+| P3-2 | Accepted, verified: short and spaced passwords, PGP, netrc, `npm_` and `pypi-` were all admitted. Added `cred.password_assignment`, quoted values with spaces in `cred.assignment`, PGP `BLOCK`, `cred.netrc` and `cred.package_token`, with T2 payloads for each. |
+| P3-3 | Accepted, verified: all five cited false positives refused under revision 2. The key is now anchored at a separator, pure-integer, call-expression, env-reference and placeholder values are excluded, and `cred.openai_style_key` needs a digit. The probe confirms that `DB_PASS`, `x-api-key` and `_authToken` still refuse. |
+| P3-4 | Accepted, verified: criterion 1 now uses `grep -qi`; criterion 11 asserts a `PASSED` line per named test (it works with parametrized tests); `--record-dir` is specified for T8's subcommands and T11's `export-ic`. Also taken up: the reviewer's note that criterion 3 is trivially true once landed, answered with a history check. |
+| P3-5 | Accepted (the reviewer only reasoned it; the author agrees from the spec text): holdout disjointness is keyed on `case_content_sha256` of (task, context_refs, candidates, label), and the T9 test covers renamed ids. |
+| P3-6 | Accepted: admission is described as an accidental-bypass guard, not a security boundary, in Key links, the Egress section, criterion 5 and the handoff decisions. |
+| Eval-mode gap | Accepted: `select(…, mode_override=None)`; only `"eval"` is allowed; eval needs the integration flag at `shadow`/`active`, and the kill switch wins; eval behaves as shadow and records `mode: eval`. Covered in the Flags section, T7 `test_eval_mode_override`, T8 `latency-probe` and T9 `run --arm jev`. |
+
+Acceptance criteria changed in revision 3: 1, 3, 5 and 11 were rewritten, and 16 is new. T12's optional export step moved from step 8 to step 9, and the write-up is now step 10.
