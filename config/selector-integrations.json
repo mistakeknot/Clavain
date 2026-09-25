@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "integrations": {
+    "selftest": {
+      "flag": "CLAVAIN_SELECTOR_SELFTEST",
+      "points": [
+        "launch_profile",
+        "library"
+      ],
+      "active_allowed": false,
+      "shadow_only": true,
+      "floors": {
+        "confidence": 0.6,
+        "fit": 0.8
+      },
+      "fit_questions": true,
+      "high_entropy": false,
+      "deadline_ms": {
+        "launch_profile": 3000,
+        "library": 3000
+      },
+      "session_budget": 8,
+      "owner_bead": "mk-42j9.7"
+    }
+  }
+}
