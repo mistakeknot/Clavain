@@ -55,6 +55,7 @@ def claude_limit_events(text):
     "You've hit your weekly limit · resets Sep 26, 7pm (UTC)",
     "You’ve hit your session limit · resets 3am (UTC)",
     "You've hit your Opus limit · resets Sep 26, 7pm (UTC)",
+    "You've hit your team's shared budget. /model to switch models.",
     "Claude AI usage limit reached|1790000000",
 ])
 def test_claude_subscription_limit_is_quota_exhausted(text):
@@ -90,7 +91,8 @@ CODEX_EXHAUSTED_429 = "exceeded retry limit, last status: 429 Too Many Requests"
 def test_codex_exhausted_429_retries_is_rate_limited():
     # Captured 2026-09-25 from a pooled cross-lab review: Codex had already
     # retried internally. As terminal_error it suppressed the review's
-    # fallback chain; rate_limited lets dispatch retry, then walk.
+    # fallback chain; rate_limited gets dispatch's bounded same-model retries
+    # (a persistent 429 still does not walk).
     events = [
         {"type": "thread.started", "thread_id": "fixture"},
         {"type": "turn.started"},

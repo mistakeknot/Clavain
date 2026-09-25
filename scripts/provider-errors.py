@@ -18,9 +18,11 @@ USAGE_LIMIT_MESSAGE = re.compile(r"^You[’']ve hit your usage limit\.")
 # Claude reports a subscription limit as error "rate_limit" (shared with
 # transient 429s) and says which in the text; only the text marks capacity.
 CLAUDE_LIMIT_MESSAGE = re.compile(
-    r"^(?:You[’']ve hit your [\w’' -]{0,40}?limit\b|Claude AI usage limit reached\b)"
+    r"^(?:You[’']ve hit your (?:[\w’' -]{0,40}?limit\b|team[’']s shared budget\b)"
+    r"|Claude AI usage limit reached\b)"
 )
-# Codex's own retries ran out on HTTP 429; dispatch retries, then walks.
+# Codex's own retries ran out on HTTP 429. Dispatch retries the same model;
+# a persistent 429 does not walk (tests/routing/role-dispatch-test.sh).
 CODEX_EXHAUSTED_429 = re.compile(r"^exceeded retry limit, last status: 429\b")
 STDERR_USAGE_LIMIT = re.compile(
     r"^(?:\x1b\[[0-9;]*m)*(?:ERROR\s*:\s*)?You[’']ve hit your usage limit\."
