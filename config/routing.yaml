@@ -152,6 +152,9 @@ dispatch:
     release-preparation: release-sol
     release-authority: release-authority-main
     cross-lab-review: crosslab-fable
+    # mk ruling 2026-09-25 (mk-42j9.5): relaying, waiting and status reports
+    # run on Sonnet. Planning and review keep their frontier seats.
+    coordination: coordination-sonnet
   # mk ruling 2026-09-24: review another lab's work first. For these roles the
   # resolver stably moves eligible seats from a frontier lab other than the
   # producer's ahead of same-lab seats, and the receipt records the change as
@@ -327,6 +330,21 @@ dispatch:
       # Not kimi: the Kimi seat runs a toolless agent file (goal 60771535, run
       # 120d9aa1) and scouting is exactly the work that needs repository tools.
       description: Capacity fallback for scout when the Codex lane is out of usage
+    coordination-sonnet:
+      role: coordination
+      backend: claude
+      model: claude-sonnet-5
+      reasoning_effort: medium
+      service_tier: standard
+      fallbacks: [coordination-sol]
+      description: Coordinator relay, wait and status turns (burn rule 5, mk-42j9.5)
+    coordination-sol:
+      role: coordination
+      backend: codex
+      model: gpt-5.6-sol
+      reasoning_effort: medium
+      service_tier: standard
+      description: Capacity fallback for coordination when the Claude lane is out
     routine-sol:
       role: routine-execution
       backend: codex
