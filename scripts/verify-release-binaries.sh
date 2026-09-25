@@ -94,11 +94,40 @@ git -C "$REPO_ROOT" diff --quiet "$source_revision"..HEAD -- cmd/clavain-cli ||
 intercore_root="$(resolve_intercore_root)"
 git -C "$intercore_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
     unavailable "Intercore replacement is not a Git worktree"
-actual_intercore_revision="$(git -C "$intercore_root" rev-parse HEAD)"
-[[ "$actual_intercore_revision" == "$intercore_revision" ]] ||
-    die "Intercore revision mismatch: manifest=$intercore_revision checkout=$actual_intercore_revision"
+git -C "$intercore_root" cat-file -e "${intercore_revision}^{commit}" 2>/dev/null ||
+    die "Intercore pinned revision is not present in the checkout"
 [[ -z "$(git -C "$intercore_root" status --porcelain=v1 --untracked-files=normal)" ]] ||
     die "Intercore worktree is not clean"
+
+# zklw autosync auto-commits into the linked Intercore checkout on its own
+# schedule, including docs-only and internal/-only commits that no Clavain
+# binary imports. Requiring HEAD == intercore_revision (mk-y5de, 2026-09-25)
+# meant every such commit re-broke Clavain publication even though the
+# binaries embed a build tag pinning the exact revision (checked below) and
+# nothing they actually import had changed. Fall through to a content check
+# over clavain-cli's real Intercore dependency tree instead of HEAD equality:
+# a commit outside that tree changes nothing this release ships.
+actual_intercore_revision="$(git -C "$intercore_root" rev-parse HEAD)"
+if [[ "$actual_intercore_revision" != "$intercore_revision" ]]; then
+    git -C "$intercore_root" merge-base --is-ancestor "$intercore_revision" "$actual_intercore_revision" 2>/dev/null ||
+        die "Intercore pinned revision is not an ancestor of the checkout HEAD"
+
+    imported_pkgs="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -deps . 2>/dev/null | grep '^github.com/mistakeknot/intercore/')" ||
+        unavailable "cannot resolve Clavain's Intercore package imports"
+    [[ -n "$imported_pkgs" ]] || unavailable "clavain-cli imports no Intercore packages to diff"
+
+    while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] || continue
+        pkg_dir="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -f '{{.Dir}}' "$pkg" 2>/dev/null)" ||
+            unavailable "cannot resolve directory for $pkg"
+        pkg_dir="$(cd "$pkg_dir" 2>/dev/null && pwd)" || unavailable "$pkg directory does not exist"
+        rel_dir="${pkg_dir#"$intercore_root"/}"
+        [[ "$rel_dir" != "$pkg_dir" ]] ||
+            unavailable "$pkg resolved outside the pinned Intercore checkout"
+        git -C "$intercore_root" diff --quiet "$intercore_revision".."$actual_intercore_revision" -- "$rel_dir" ||
+            die "Intercore package $pkg changed between the pinned revision and checkout HEAD"
+    done <<<"$imported_pkgs"
+fi
 
 artifact_rows="$(jq -er '.artifacts | to_entries[] | [.key, .value.path, .value.sha256, .value.goos, .value.goarch] | @tsv' "$MANIFEST")" ||
     die "cannot read artifact manifest entries"
