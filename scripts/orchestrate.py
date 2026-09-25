@@ -438,6 +438,25 @@ def _read_verdict_status(verdict_path: str) -> str | None:
     return None
 
 
+def _read_verdict_provisional(verdict_path: str) -> str | None:
+    """mk-rzi5: dispatch.sh's _extract_verdict stamps a PROVISIONAL line on
+    any .verdict sidecar written by a same-lab capacity-substitute review
+    (mk-gp32/mk-dabt) — reviewer_lab == producer_lab reached after a
+    capacity walk, never an independent other-lab review. The gate itself
+    stays unchanged (provisional but non-blocking, see
+    reasoning-routing-operations.md "Capacity-substitute reviews are
+    provisional, never blocking") — this only lets a caller surface the
+    caveat alongside an approval instead of reporting it as an ordinary,
+    fully independent pass."""
+    if not os.path.exists(verdict_path):
+        return None
+    with open(verdict_path, errors="replace") as f:
+        for line in f:
+            if line.startswith("PROVISIONAL:"):
+                return line.split(":", 1)[1].strip()
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Review pipeline (goal 7d610151) — implement → machine verify → independent
 # review → bounded fix loop.
@@ -2720,7 +2739,14 @@ def pf_validate(
             f"receipt mismatch: wrote {nonce}, seat echoed {rec or 'none'}; nothing shows the block was run",
             False, findings, model,
         )
-    return PFValidation(v, crit, (crit if v == "UNRUN" else None), receipt_ok, findings, model)
+    # mk-rzi5: a PASS from a same-lab capacity-substitute validator is still
+    # accepted (provisional, never blocking) but must say so in the note the
+    # merge/report path surfaces, not read as an ordinary independent PASS.
+    final_note = crit if v == "UNRUN" else None
+    provisional = _read_verdict_provisional(output + ".verdict")
+    if provisional:
+        final_note = f"{final_note}; {provisional}" if final_note else provisional
+    return PFValidation(v, crit, final_note, receipt_ok, findings, model)
 
 
 def pf_merge(run: PFRun, branch: str, wt: str) -> tuple[bool, str | None, str]:
@@ -2877,8 +2903,14 @@ def _pf_item_steps(
     val = pf_validate(run, item, contract, wt, commit, packet, producer, item_dir, dispatch_sh, meter)
     res.validator_model = val.model
     res.validator_verdict, res.validator_criterion, res.receipt_ok = val.verdict, val.criterion, val.receipt_ok
-    if val.note and val.verdict != "PASS":
-        res.note = val.note  # the packet says why a seat did not rule, not only the register
+    # mk-rzi5: previously gated to verdict != "PASS", on the assumption a
+    # PASS never carries a note — true before this bead (the only note a
+    # PASS could carry is the mk-rzi5 same-lab capacity-substitute
+    # PROVISIONAL caveat pf_validate now appends). A provisional PASS must
+    # reach the packet, not just the register row below, or the report
+    # reads it as an ordinary fully independent pass with no caveat at all.
+    if val.note:
+        res.note = val.note  # the packet says why a seat did not rule (or, on a PASS, that it was provisional)
     pf_register(
         run, verdict_sh, res, commit=commit, role="validator", kind="replay",
         verdict=val.verdict, criterion=(val.criterion if val.verdict != "PASS" else None), note=val.note,

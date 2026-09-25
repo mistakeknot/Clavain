@@ -607,6 +607,22 @@ _dispatch_model_lab() {
   esac
 }
 
+# mk-dabt: cross_lab_first (config/routing.yaml dispatch.cross_lab_first)
+# needs ic >= commit 2caa435; an older ic silently ignores it and keeps
+# policy order, which can put a same-lab candidate first with no observed
+# skip/failure in this loop to flag it as a capacity substitute at all.
+# There is no reliable ancestry check available from a bare `ic version`
+# string (it reports a short commit hash, not a comparable ordinal, and this
+# script has no clone of intercore to check ancestry against) — so this
+# cannot gate behavior. Record the running ic's version on every
+# capacity_substitute so a human auditing a same-lab review that was NOT
+# flagged (no capacity_failure_class was ever set) can at least check
+# whether an old ic explains it.
+_dispatch_ic_version() {
+  command -v ic >/dev/null 2>&1 || return 0
+  ic version 2>/dev/null | head -1
+}
+
 _dispatch_role_profile() {
   local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
   local fallback_reason="" rc=1 candidate_count=0 producer_model="" capacity_substitute=null
@@ -719,11 +735,13 @@ _dispatch_role_profile() {
     fi
     if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$backend" != codex && "$backend" != claude ]]; then
       fallback_reason="usage_reporting_unavailable"
+      capacity_failure_class="$fallback_reason"
       echo "dispatch: '$profile_ref' cannot report usage for this approved token budget; trying its declared fallback" >&2
       continue
     fi
     if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
       fallback_reason="insufficient_codex_version"
+      capacity_failure_class="$fallback_reason"
       echo "dispatch: profile '$profile_ref' requires Codex >= $minimum; trying its declared fallback" >&2
       continue
     fi
@@ -735,15 +753,23 @@ _dispatch_role_profile() {
       continue
     fi
 
-    # A capacity substitute (mk-gp32): this review role already had an earlier
-    # candidate actually run and fail with a capacity class (quota_exhausted,
-    # rate_limited, model_unavailable, account_access_absent — set below,
-    # never by a pre-walk ic fallback_reason like producer_model_conflict, nor
-    # by a pre-run skip like usage_reporting_unavailable or
-    # insufficient_codex_version), and this candidate lands on a model from
-    # the producer's own lab. Same-lab is fine when it is the only reachable
-    # reviewer, but the review is provisional, not a real cross-lab check —
-    # see B1's reviewer paragraph and B3's re-check filing below.
+    # A capacity substitute (mk-gp32, tightened by mk-dabt): this review role
+    # already had an earlier candidate skipped or failed for an OPERATIONAL
+    # reason — actually run and failed with a capacity class (quota_exhausted,
+    # rate_limited, model_unavailable, account_access_absent), or skipped
+    # pre-run/post-run for insufficient_codex_version, unsupported_adapter or
+    # usage_reporting_unavailable (all set into capacity_failure_class above
+    # and below) — and this candidate lands on a model from the producer's
+    # own lab. mk-dabt: an operational skip is not a policy decision that the
+    # other lab shouldn't review; per canon, operational failures never
+    # satisfy other-lab review, so any of these must still mark the
+    # substitute. The ONLY thing that must NOT mark one is a pre-walk `ic`
+    # fallback_reason such as producer_model_conflict — a POLICY exclusion
+    # baked into the resolved route before this loop ever sees a candidate,
+    # never a skip/failure this loop observed. Same-lab is fine when it is
+    # the only reachable reviewer, but the review is provisional, not a real
+    # cross-lab check — see B1's reviewer paragraph and B3's re-check filing
+    # below.
     capacity_substitute=null
     if [[ ( "$role" == plan-review || "$role" == validation || "$role" == cross-lab-review ) && -n "$capacity_failure_class" ]]; then
       candidate_model_identity="$(jq -r '.profile.model_identity // .profile.model' <<< "$candidate")"
@@ -751,7 +777,9 @@ _dispatch_role_profile() {
       reviewer_lab="$(_dispatch_model_lab "$candidate_model_identity")"
       if [[ -n "$producer_lab" && "$producer_lab" == "$reviewer_lab" ]]; then
         capacity_substitute="$(jq -cn --arg fc "$capacity_failure_class" --arg pl "$producer_lab" --arg rl "$reviewer_lab" \
-          '{failure_class:$fc,producer_lab:$pl,reviewer_lab:$rl}')"
+          --arg icv "$(_dispatch_ic_version)" \
+          '{failure_class:$fc,producer_lab:$pl,reviewer_lab:$rl}
+            + (if $icv != "" then {ic_version:$icv} else {} end)')"
       fi
     fi
 
@@ -794,6 +822,7 @@ _dispatch_role_profile() {
         ;;
       insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
+        capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
       *)
@@ -2563,6 +2592,25 @@ _extract_verdict() {
 
     local verdict_file="${output_file}.verdict"
 
+    # mk-rzi5: a same-lab capacity-substitute review (mk-gp32, tightened by
+    # mk-dabt) still gates normally — provisional, never blocking, see
+    # reasoning-routing-operations.md "Capacity-substitute reviews are
+    # provisional, never blocking" — but nothing reading this sidecar in
+    # isolation from the routing receipt could otherwise tell a substitute
+    # CLEAN apart from an ordinary independent one. Stamp every sidecar this
+    # attempt writes below with a marker computed HERE, deterministically,
+    # from CAPACITY_SUBSTITUTE_JSON (set by the role-profile walk before this
+    # candidate ran) — never from the reviewing model's own output text,
+    # which cannot be trusted to self-report this.
+    local provisional_line=""
+    if [[ -n "${CAPACITY_SUBSTITUTE_JSON:-}" && "$CAPACITY_SUBSTITUTE_JSON" != null ]]; then
+        local prov_pl prov_rl prov_fc
+        prov_pl="$(jq -r '.producer_lab // "unknown"' <<< "$CAPACITY_SUBSTITUTE_JSON" 2>/dev/null)" || prov_pl="unknown"
+        prov_rl="$(jq -r '.reviewer_lab // "unknown"' <<< "$CAPACITY_SUBSTITUTE_JSON" 2>/dev/null)" || prov_rl="unknown"
+        prov_fc="$(jq -r '.failure_class // "unknown"' <<< "$CAPACITY_SUBSTITUTE_JSON" 2>/dev/null)" || prov_fc="unknown"
+        provisional_line="PROVISIONAL: capacity-substitute reviewer_lab=$prov_rl producer_lab=$prov_pl failure_class=$prov_fc; not an independent other-lab review, pending re-check"
+    fi
+
     # The final verdict can precede transport warnings and need not have seven
     # lines or a closing delimiter. Keep the last block's fields only.
     local verdict_block
@@ -2575,6 +2623,11 @@ _extract_verdict() {
     ' "$output_file") || return 0
 
     if [[ -n "$verdict_block" ]] && grep -q '^STATUS: ' <<< "$verdict_block"; then
+        if [[ -n "$provisional_line" ]]; then
+            # Insert right after the opening delimiter (before STATUS), so a
+            # consumer reading top-down sees the marker before any verdict.
+            verdict_block="$(awk -v line="$provisional_line" 'NR==1 { print; print line; next } { print }' <<< "$verdict_block")"
+        fi
         printf '%s\n' "$verdict_block" > "$verdict_file"
         return 0
     fi
@@ -2593,6 +2646,16 @@ _extract_verdict() {
     # The validation seat speaks PASS/FAIL/UNRUN (pattern-f-contracts.md).
     # UNRUN is a refusal to rule, surfaced as warn so nothing reads it as
     # approval; PASS is the only value that becomes STATUS: pass.
+    #
+    # mk-rzi5: CLEAN and NEEDS_ATTENTION/NEEDS-FIXES are matched anchored at
+    # "VERDICT: " (like PASS/FAIL/UNRUN above), not as a bare substring —
+    # verdict_line always starts with "VERDICT:" (the grep above filters for
+    # that), so an unanchored *"CLEAN"* match let prose like "VERDICT: NOT
+    # CLEAN, see findings" or "VERDICT: not fully CLEAN yet" synthesize
+    # STATUS: pass from a line that said the opposite. NEEDS-FIXES gets its
+    # own branch (previously fell through to the generic "Unrecognized
+    # verdict" case — same warn outcome, but undistinguished from a truly
+    # unknown vocabulary).
     if [[ "$verdict_line" == "VERDICT: PASS"* ]]; then
         status="pass"
         summary="Validator replay PASS."
@@ -2602,10 +2665,13 @@ _extract_verdict() {
     elif [[ "$verdict_line" == "VERDICT: UNRUN"* ]]; then
         status="warn"
         summary="Validator could not run Verification (UNRUN); no ruling. $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || true)"
-    elif [[ "$verdict_line" == *"NEEDS_ATTENTION"* ]]; then
+    elif [[ "$verdict_line" == "VERDICT: NEEDS_ATTENTION"* ]]; then
         status="warn"
         summary="${verdict_line#VERDICT: }"
-    elif [[ "$verdict_line" == *"CLEAN"* ]]; then
+    elif [[ "$verdict_line" == "VERDICT: NEEDS-FIXES"* ]]; then
+        status="warn"
+        summary="${verdict_line#VERDICT: }"
+    elif [[ "$verdict_line" == "VERDICT: CLEAN"* ]]; then
         status="pass"
         summary="Agent reports clean completion."
     elif [[ -z "$verdict_line" ]]; then
@@ -2618,14 +2684,15 @@ _extract_verdict() {
 
     # This synthesized FINDINGS line is a compatibility placeholder only;
     # receipt attribution uses result.findings parsed from the output body.
-    cat > "$verdict_file" <<VERDICT
---- VERDICT ---
-STATUS: $status
-FILES: 0 changed
-FINDINGS: 0 (P0: 0, P1: 0, P2: 0)
-SUMMARY: $summary
----
-VERDICT
+    {
+        echo "--- VERDICT ---"
+        [[ -z "$provisional_line" ]] || echo "$provisional_line"
+        echo "STATUS: $status"
+        echo "FILES: 0 changed"
+        echo "FINDINGS: 0 (P0: 0, P1: 0, P2: 0)"
+        echo "SUMMARY: $summary"
+        echo "---"
+    } > "$verdict_file"
 }
 
 # ─── Codex error surfacing (sylveste-mb3i) ──────────────────────────────────
@@ -2781,12 +2848,23 @@ _persist_dispatch_failure_evidence() {
 # Extracts the body of OUTPUT's "## Re-check by the other lab" section (B1's
 # fixed reviewer instruction). Returns 1 if the heading itself is absent, so
 # the caller can distinguish "reviewer wrote the section" from "didn't".
+#
+# mk-c66x: the section also ends at a "--- VERDICT ---" delimiter, not only
+# at the next "## " heading. The reviewer is told to end its output with this
+# section (dispatch.sh's capacity-substitute prompt addendum), but a
+# structured verdict block (_extract_verdict's own delimited format) is not a
+# "## " heading and previously kept getting swept into the section body when
+# it trailed the "None." line in the same message — the body then had extra
+# non-blank content, so the exact-string "None." check below never matched,
+# fell through to the empty-items branch, and filed a spurious re-check bead
+# for a reviewer who had correctly reported nothing to flag.
 _dispatch_capacity_recheck_section() {
   local file="$1"
   grep -q '^## Re-check by the other lab' "$file" || return 1
   awk '
     /^## Re-check by the other lab/ { found=1; next }
     found && /^## / { found=0 }
+    found && /^--- VERDICT ---[[:space:]]*$/ { found=0 }
     found { print }
   ' "$file"
 }
@@ -2844,25 +2922,71 @@ _dispatch_recheck_tracker_dir() {
 # filed bead for the lab that never actually reviewed. Never fails the
 # dispatch: a bd problem is a loud stderr warning, not a withheld verdict.
 #
-# A present heading with no "- " items under it is treated the same as an
+# A present heading with no list items under it is treated the same as an
 # absent heading — the reviewer wrote the label but not the substance, so the
 # whole review still needs a re-check. Only an explicit "None." body means
-# the reviewer actually confirmed there is nothing to flag. RECHECK_SOURCE_JSON
-# records which of the three happened ("listed"/"none"/"missing", the last
-# covering both absent and empty) so the receipt can tell a real item list
-# apart from a fabricated one. RECHECK_BEAD_JSON carries the filed bead's id
-# (a quoted JSON string), staying empty (receipt: null) when nothing was
-# filed — not a substitute, CLAVAIN_RECHECK_BEADS=0, no tracker resolved, or
-# bd itself failed.
+# the reviewer actually confirmed there is nothing to flag. Items are
+# accepted as "- item", "* item" or a numbered "1. item"/"1) item" line
+# (mk-c66x: a reviewer's own Markdown convention varies; only the leading
+# marker style differs, not the semantics — dropping "*"/numbered items back
+# to the fabricated "whole review" item lost real reviewer content and gave a
+# false "missing" receipt). RECHECK_SOURCE_JSON records which of the three
+# happened ("listed"/"none"/"missing", the last covering both absent and
+# empty) so the receipt can tell a real item list apart from a fabricated
+# one.
+#
+# RECHECK_BEAD_JSON carries the filed bead's id (a quoted JSON string),
+# staying empty (receipt: null) when nothing was filed. mk-c66x:
+# RECHECK_BEAD_JSON alone conflated every reason for that null — not a
+# substitute, no items, disabled, no tracker resolved, bd itself failed, or a
+# bd call that created the issue but exited nonzero anyway (its --deps
+# attachment rejected, say) — a human reading only recheck_bead:null could
+# not tell "nothing needed filing" from "filing broke". RECHECK_BEAD_STATUS_JSON
+# now names the specific outcome ("filed"/"partial"/"bd_failed"/"no_tracker"/
+# "disabled"/"sidecar_write_failed") whenever there was at least one item to
+# file, and stays empty otherwise (RECHECK_SOURCE_JSON already fully explains
+# a "none"/not-a-substitute null). RECHECK_TRACKER_DIR_JSON and
+# RECHECK_SIDECAR_PATH_JSON likewise carry the resolved tracker directory and
+# sidecar path onto the receipt, which previously omitted both — an auditor
+# reading the receipt in isolation, without dispatch.sh's own stderr, could
+# not tell where a bead (or its absence) should have landed.
 _dispatch_process_capacity_recheck() {
   local exit_code="$1" body section_found=true item line
   local -a items=()
+
+  # mk-c66x: a defensive idempotency guard, checked BEFORE any RECHECK_* var
+  # is touched. Every dispatch.sh process reaches this function from exactly
+  # one of the four mutually exclusive VIA branches today, so this cannot
+  # yet fire in practice — but nothing stops a future error-handling path
+  # from calling it twice for the same attempt (e.g. a retry-within-process
+  # after `_record_role_routing_decision` fails), and a second pass would
+  # file a second, duplicate bead for the same review with no signal
+  # anywhere that it was a repeat. Sitting ahead of the resets below matters:
+  # an earlier version reset every RECHECK_* var unconditionally first and
+  # checked this guard second, so a harmless repeat call silently blanked
+  # the first call's real result (a filed bead id, say) back to "nothing to
+  # report" for whatever reads RECHECK_* after it returns — worse than the
+  # duplicate-filing hazard the guard exists to prevent. Keyed on OUTPUT,
+  # not on content, deliberately: this is about one process filing twice for
+  # one attempt, not about detecting a genuinely new attempt that happens to
+  # reuse an old OUTPUT path (that is the fresh-attempt reset's job, not
+  # this function's).
+  if [[ -n "${OUTPUT:-}" && "${_DISPATCH_RECHECK_PROCESSED:-}" == "$OUTPUT" ]]; then
+    echo "dispatch: WARNING — capacity-recheck already processed for this attempt's OUTPUT ($OUTPUT); skipping a second filing pass" >&2
+    return 0
+  fi
+
   RECHECK_ITEMS=""
   RECHECK_SOURCE_JSON=""
   RECHECK_BEAD_JSON=""
+  RECHECK_BEAD_STATUS_JSON=""
+  RECHECK_TRACKER_DIR_JSON=""
+  RECHECK_SIDECAR_PATH_JSON=""
   [[ "$exit_code" == 0 ]] || return 0
   [[ -n "${CAPACITY_SUBSTITUTE_JSON:-}" && "$CAPACITY_SUBSTITUTE_JSON" != null ]] || return 0
   [[ -n "$OUTPUT" && -f "$OUTPUT" ]] || return 0
+
+  _DISPATCH_RECHECK_PROCESSED="$OUTPUT"
 
   if ! body="$(_dispatch_capacity_recheck_section "$OUTPUT")"; then
     section_found=false
@@ -2873,8 +2997,19 @@ _dispatch_process_capacity_recheck() {
       RECHECK_SOURCE_JSON='"none"'
       return 0
     fi
+    # mk-c66x: pattern held in a variable, not written inline in `[[ =~ ]]` —
+    # an unquoted, unparenthesized `[.)]` character class in that position
+    # trips bash's own parser (it reads the bare `)` as shell syntax before
+    # the regex engine ever sees it), regardless of the class being
+    # regex-legal.
+    local bullet_re='^[[:space:]]*[-*][[:space:]]+(.+)$'
+    local numbered_re='^[[:space:]]*[0-9]+[.)][[:space:]]+(.+)$'
     while IFS= read -r line; do
-      [[ "$line" == -\ * ]] && items+=("${line#- }")
+      if [[ "$line" =~ $bullet_re ]]; then
+        items+=("${BASH_REMATCH[1]}")
+      elif [[ "$line" =~ $numbered_re ]]; then
+        items+=("${BASH_REMATCH[1]}")
+      fi
     done <<< "$body"
   fi
   if [[ "${#items[@]}" -eq 0 ]]; then
@@ -2887,14 +3022,50 @@ _dispatch_process_capacity_recheck() {
   [[ "$RECHECK_ITEMS" -gt 0 ]] || return 0
 
   local recheck_file="${OUTPUT}.recheck.md"
+  RECHECK_SIDECAR_PATH_JSON="$(jq -cn --arg p "$recheck_file" '$p')"
+  # mk-c66x: the write's own exit status is captured into a variable rather
+  # than tested inline as `if ! { ...; } > file; then`. Confirmed by hand
+  # (bash 5.2): when the redirection target itself cannot be opened (e.g.
+  # EACCES on the directory), `if ! { cmd; } > file; then` takes the wrong
+  # branch — bash reports the "Permission denied" error to stderr but the
+  # negated compound command still evaluates as success, so the `if !` body
+  # never runs. `if { cmd; } > file; then ... else ...` (no `!`) gets this
+  # right, but dispatch.sh runs under `set -euo pipefail`, so the group
+  # cannot be a bare statement either: an unguarded failing command outside
+  # an `if`/`&&`/`||`/`while` head aborts the whole script under errexit
+  # instead of reaching the warning below. `... || recheck_write_rc=$?`
+  # captures the true failing status while staying inside an `||` list,
+  # which errexit treats as handled. The `-s` check just below remains as a
+  # second, independent safety net for the "exit status claimed success but
+  # nothing landed" case (e.g. a concurrent cleanup removed OUTPUT's
+  # directory mid-write), which this alone does not cover.
+  local recheck_write_rc=0
   {
     printf '# Re-check by the other lab\n\n'
     printf 'Capacity-substitute %s review (dispatch %s). These need\n' "$ROLE" "$DISPATCH_ID"
     printf 'independent confirmation by a reviewer from the other lab.\n\n'
     for item in "${items[@]}"; do printf -- '- %s\n' "$item"; done
-  } > "$recheck_file"
+  } > "$recheck_file" || recheck_write_rc=$?
+  if [[ "$recheck_write_rc" != 0 ]]; then
+    # mk-c66x: a write failure here used to be silently ignored — the
+    # function fell straight through to filing a bead whose description
+    # pointed a "Receipt:" reader at a sidecar that might be missing or
+    # truncated. Treat it the same as any other filing failure: loud
+    # warning, no bead (there is nothing trustworthy to reference).
+    echo "dispatch: WARNING — could not write the capacity-recheck sidecar at $recheck_file for '$ROLE'; no bead filed" >&2
+    RECHECK_BEAD_STATUS_JSON='"sidecar_write_failed"'
+    return 0
+  fi
+  # A write that "succeeded" per its exit status but left nothing on disk
+  # (e.g. a concurrent cleanup removed OUTPUT's directory between the printf
+  # calls) is the same hazard by another route — same treatment.
+  if [[ ! -s "$recheck_file" ]]; then
+    echo "dispatch: WARNING — the capacity-recheck sidecar at $recheck_file for '$ROLE' is missing or empty after writing it; no bead filed" >&2
+    RECHECK_BEAD_STATUS_JSON='"sidecar_write_failed"'
+    return 0
+  fi
 
-  [[ "${CLAVAIN_RECHECK_BEADS:-1}" != 0 ]] || return 0
+  [[ "${CLAVAIN_RECHECK_BEADS:-1}" != 0 ]] || { RECHECK_BEAD_STATUS_JSON='"disabled"'; return 0; }
   local producer_lab reviewer_lab failure_class bead_ref title desc tracker_dir
   producer_lab="$(jq -r '.producer_lab // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
   reviewer_lab="$(jq -r '.reviewer_lab // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
@@ -2909,8 +3080,10 @@ _dispatch_process_capacity_recheck() {
   )"
   if ! tracker_dir="$(_dispatch_recheck_tracker_dir)" || [[ -z "$tracker_dir" ]]; then
     echo "dispatch: WARNING — no beads tracker resolved for the capacity-recheck bead ('$ROLE'); items are recorded at $recheck_file only (set CLAVAIN_RECHECK_BEADS_DIR to file one)" >&2
+    RECHECK_BEAD_STATUS_JSON='"no_tracker"'
     return 0
   fi
+  RECHECK_TRACKER_DIR_JSON="$(jq -cn --arg d "$tracker_dir" '$d')"
   local -a bd_cmd=(bd create "$title" -d "$desc" -l capacity-recheck -C "$tracker_dir")
   [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || bd_cmd+=(--deps "discovered-from:$CLAVAIN_BEAD_ID")
   # `--silent` (bd 1.1.2+) prints only the issue id, removing any dependence
@@ -2923,23 +3096,59 @@ _dispatch_process_capacity_recheck() {
     bd_supports_silent=true
     bd_cmd+=(--silent)
   fi
-  local bd_output="" bd_rc=0
+  # mk-c66x: bounded with a timeout — an unresponsive `bd` (a stuck remote
+  # tracker connection, say) previously hung this indefinitely with no way
+  # out short of killing dispatch.sh itself. Stderr is captured too (it used
+  # to be discarded outright), so a nonzero exit can be explained in the
+  # warning below instead of just "could not file".
+  local bd_output="" bd_rc=0 bd_stderr="" bd_stderr_file bd_timeout="${CLAVAIN_RECHECK_BD_TIMEOUT:-30}"
+  bd_stderr_file="$(mktemp 2>/dev/null)" || bd_stderr_file=""
   if command -v bd >/dev/null 2>&1; then
-    bd_output="$("${bd_cmd[@]}" 2>/dev/null)" || bd_rc=$?
+    if command -v timeout >/dev/null 2>&1; then
+      if [[ -n "$bd_stderr_file" ]]; then
+        bd_output="$(timeout "$bd_timeout" "${bd_cmd[@]}" 2>"$bd_stderr_file")" || bd_rc=$?
+      else
+        bd_output="$(timeout "$bd_timeout" "${bd_cmd[@]}" 2>/dev/null)" || bd_rc=$?
+      fi
+      [[ "$bd_rc" != 124 ]] || echo "dispatch: WARNING — bd create timed out after ${bd_timeout}s filing the capacity-recheck bead for '$ROLE'" >&2
+    elif [[ -n "$bd_stderr_file" ]]; then
+      bd_output="$("${bd_cmd[@]}" 2>"$bd_stderr_file")" || bd_rc=$?
+    else
+      bd_output="$("${bd_cmd[@]}" 2>/dev/null)" || bd_rc=$?
+    fi
   else
     bd_rc=127
   fi
-  if [[ "$bd_rc" != 0 ]]; then
-    echo "dispatch: WARNING — could not file the capacity-recheck bead for '$ROLE'; items are recorded at $recheck_file only" >&2
-    return 0
+  if [[ -n "$bd_stderr_file" ]]; then
+    bd_stderr="$(cat "$bd_stderr_file" 2>/dev/null)"
+    rm -f "$bd_stderr_file"
   fi
-  local bead_id
+  # mk-c66x: parse a bead id out of bd_output regardless of bd_rc. A bd that
+  # creates the issue but then exits nonzero for an unrelated reason (its
+  # --deps attachment rejected, e.g.) still leaves a real bead behind — the
+  # old code discarded bd_output entirely on any nonzero exit and reported
+  # "could not file", which is wrong (a bead WAS filed) and, on a caller that
+  # retries after seeing that false "not filed" report, sets up exactly the
+  # duplicate-filing hazard the idempotency guard above exists to catch.
+  local bead_id=""
   if [[ "$bd_supports_silent" == true ]]; then
     bead_id="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$bd_output")"
+    [[ "$bead_id" =~ ^[A-Za-z]+-[a-z0-9]+$ ]] || bead_id=""
   else
     bead_id="$(awk 'match($0, /[A-Za-z]+-[a-z0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<< "$bd_output")"
   fi
-  [[ -z "$bead_id" ]] || RECHECK_BEAD_JSON="$(jq -cn --arg id "$bead_id" '$id')"
+  if [[ -n "$bead_id" ]]; then
+    RECHECK_BEAD_JSON="$(jq -cn --arg id "$bead_id" '$id')"
+    if [[ "$bd_rc" == 0 ]]; then
+      RECHECK_BEAD_STATUS_JSON='"filed"'
+    else
+      RECHECK_BEAD_STATUS_JSON='"partial"'
+      echo "dispatch: WARNING — filed capacity-recheck bead $bead_id for '$ROLE' but bd exited $bd_rc afterward (its --deps attachment may not have taken)${bd_stderr:+: $bd_stderr}" >&2
+    fi
+  elif [[ "$bd_rc" != 0 ]]; then
+    RECHECK_BEAD_STATUS_JSON='"bd_failed"'
+    echo "dispatch: WARNING — could not file the capacity-recheck bead for '$ROLE'; items are recorded at $recheck_file only${bd_stderr:+: $bd_stderr}" >&2
+  fi
 }
 
 _finalize_dispatch_result() {
@@ -3011,6 +3220,16 @@ if [[ -n "$ROLE" && "$ROLE_RESOLVED" == true && -n "$OUTPUT" ]]; then
     _record_role_routing_decision 1 terminal_configuration || true
     exit 1
   fi
+  # mk-c66x: OUTPUT and .verdict are always rewritten by this attempt (a
+  # blank truncation now, a real result later), so re-truncating them here is
+  # enough to guarantee neither ever carries over stale content. .recheck.md
+  # is different — _dispatch_process_capacity_recheck only ever WRITES it
+  # when this attempt itself finds re-check items, so an attempt that finds
+  # none (or isn't a capacity substitute at all) leaves whatever a PRIOR
+  # attempt at this same reused OUTPUT path wrote there completely
+  # untouched. Remove it outright rather than truncate it, matching that "not
+  # written this attempt" means "does not exist", not "exists but empty".
+  rm -f "${OUTPUT}.recheck.md"
 fi
 
 if [[ "$VIA" == bb ]]; then

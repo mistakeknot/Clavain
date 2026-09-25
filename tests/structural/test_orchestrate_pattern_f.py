@@ -99,7 +99,11 @@ case "$role" in
     [[ -n "${PF_STUB_TOUCH:-}" ]] && echo "seat wrote here" >> "$C/src/other.py"
     printf '%sVERDICT: %s\n%sCRITERION: %s\n%sRECEIPT: %s\n%sBEYOND THE GAUGE:\n%s\n' \
       "${PF_STUB_BULLET:-}" "${PF_STUB_VERDICT:-PASS}" "${PF_STUB_BULLET:-}" "${PF_STUB_CRITERION:-none}" "${PF_STUB_BULLET:-}" "${PF_STUB_RECEIPT:-$rec}" "${PF_STUB_BULLET:-}" "${PF_STUB_BEYOND:-- none}" > "$out"
-    printf -- '--- VERDICT ---\nSTATUS: warn\nSUMMARY: stub\n---\n' > "$out.verdict"
+    if [[ -n "${PF_STUB_PROVISIONAL:-}" ]]; then
+      printf -- '--- VERDICT ---\nPROVISIONAL: %s\nSTATUS: warn\nSUMMARY: stub\n---\n' "$PF_STUB_PROVISIONAL" > "$out.verdict"
+    else
+      printf -- '--- VERDICT ---\nSTATUS: warn\nSUMMARY: stub\n---\n' > "$out.verdict"
+    fi
     ;;
   routine-execution)
     [[ -n "${PF_STUB_EXEC_SLEEP:-}" ]] && sleep "$PF_STUB_EXEC_SLEEP"
@@ -386,6 +390,43 @@ def test_validator_fail_parks_the_item_with_its_criterion(orc, repo, tmp_path, s
     assert r.status == "validator_fail" and r.validator_criterion.startswith("grep -n")
     assert "--role validator --kind replay --verdict FAIL" in stubs["register_log"].read_text().splitlines()[1]
     assert _packet(capsys)["items"][0]["validator_strikes"] == 1
+
+
+def test_a_provisional_pass_still_merges_but_carries_the_caveat(orc, repo, tmp_path, stubs, monkeypatch, capsys):
+    # mk-rzi5: a same-lab capacity-substitute validator PASS (mk-gp32/mk-dabt)
+    # gates exactly like an ordinary PASS (provisional, never blocking — see
+    # reasoning-routing-operations.md) but must not be reported as an
+    # ordinary, fully independent one: the caveat dispatch.sh's
+    # _extract_verdict stamped into the .verdict sidecar's PROVISIONAL line
+    # must reach the item's result note and the register row, not be
+    # silently dropped the way a PASS's note always was before this bead.
+    monkeypatch.setenv(
+        "PF_STUB_PROVISIONAL",
+        "capacity-substitute reviewer_lab=anthropic producer_lab=anthropic failure_class=quota_exhausted",
+    )
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.status == "merged" and r.merged and r.validator_verdict == "PASS"
+    assert r.note is not None and "capacity-substitute" in r.note
+    assert "reviewer_lab=anthropic" in r.note
+    rows = stubs["register_log"].read_text().splitlines()
+    assert "--role validator --kind replay --verdict PASS" in rows[1]
+    assert "capacity-substitute" in rows[1]
+    out = _packet(capsys)
+    assert "capacity-substitute" in json.dumps(out)
+
+
+def test_an_ordinary_pass_still_carries_no_note(orc, repo, tmp_path, stubs):
+    # Control for the fix above: an ordinary independent PASS (no
+    # PROVISIONAL line in the sidecar) must still carry no note at all —
+    # confirms the broadened `if val.note:` condition did not start
+    # fabricating notes for a genuine independent pass.
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.status == "merged" and r.validator_verdict == "PASS"
+    assert r.note is None
 
 
 def test_register_write_failure_is_loud_but_does_not_stop_the_run(orc, repo, tmp_path, stubs, monkeypatch, capsys):
