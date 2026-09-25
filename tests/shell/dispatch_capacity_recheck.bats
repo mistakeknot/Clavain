@@ -6,10 +6,18 @@
 # trailing VERDICT block instead of swallowing it, a receipt that names WHY
 # recheck_bead is null instead of leaving every cause indistinguishable, a
 # defensive idempotency guard, bd create bounded by a timeout with its
-# stderr no longer discarded, a bd call that creates the issue but exits
-# nonzero anyway (its --deps attachment rejected) recognized as a partial
-# success rather than reported as "not filed", and a sidecar write failure
-# that no longer still files a bead.
+# stderr no longer discarded, and a sidecar write failure that no longer
+# still files a bead.
+#
+# P2 ruling follow-up (review finding 6, superseding mk-c66x's "partial
+# success" handling below): a bd call that creates the issue but then exits
+# nonzero for an unrelated reason used to have its stdout scanned for an id
+# anyway and reported "partial". That is no longer safe in general — a
+# failed bd's stdout is unstructured, and guessing an id out of it (an
+# unrelated hyphenated word, e.g.) can silently report a fake filing. Only
+# bd_rc==0 ever yields a parsed id now; any nonzero exit reports "could not
+# file" (bd_failed), even when bd's stdout happens to contain something
+# id-shaped.
 #
 # tests/routing/plan-review-capacity-test.sh drives the equivalent behavior
 # end-to-end through the real dispatch.sh CLI with fake codex/claude/bd
@@ -189,14 +197,37 @@ _answer_with_section() {
     [[ -z "${RECHECK_BEAD_JSON:-}" ]]
 }
 
-@test "recheck: bd creating the issue but exiting nonzero is a partial success, not 'not filed' (mk-c66x)" {
+@test "recheck: bd creating the issue but exiting nonzero reports bd_failed, not a guessed id (P2 ruling, supersedes mk-c66x partial handling)" {
     _load
     FAKE_BD_MODE=partial _fake_bd
     _answer_with_section '- confirmed nothing was executed'
     FAKE_BD_MODE=partial _dispatch_process_capacity_recheck 0 2>"$TMPDIR_T/stderr.txt"
-    [[ "$RECHECK_BEAD_JSON" == '"fake-42"' ]]
-    [[ "$RECHECK_BEAD_STATUS_JSON" == '"partial"' ]]
-    grep -qi "may not have taken" "$TMPDIR_T/stderr.txt"
+    [[ -z "${RECHECK_BEAD_JSON:-}" ]]
+    [[ "$RECHECK_BEAD_STATUS_JSON" == '"bd_failed"' ]]
+    grep -qi "could not file" "$TMPDIR_T/stderr.txt"
+}
+
+# --- P2 ruling (review finding 5): a tracker whose bead-id prefix itself
+# contains hyphens and digits (e.g. "After-Them-rust") must still parse.
+
+@test "recheck: a hyphenated multi-segment bead-id prefix parses under --silent (P2 ruling, finding 5)" {
+    _load
+    cat > "$BINDIR/bd" <<'FAKE_BD'
+#!/usr/bin/env bash
+for a in "$@"; do
+  if [[ "$a" == --help ]]; then
+    echo "      --silent    Output only the issue ID (for scripting)"
+    exit 0
+  fi
+done
+{ printf '<<<BD-CALL>>>\n'; printf '%s\x1f' "$@"; printf '\n'; } >> "$BD_LOG"
+echo "After-Them-rust-a1b2"
+FAKE_BD
+    chmod +x "$BINDIR/bd"
+    _answer_with_section '- confirmed nothing was executed'
+    _dispatch_process_capacity_recheck 0
+    [[ "$RECHECK_BEAD_JSON" == '"After-Them-rust-a1b2"' ]]
+    [[ "$RECHECK_BEAD_STATUS_JSON" == '"filed"' ]]
 }
 
 # --- mk-c66x: defensive idempotency — one process files at most once -------

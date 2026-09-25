@@ -85,6 +85,58 @@ assert_class "rate limit exceeded phrasing" \
 assert_class "hyphenated rate-limited adjective" \
   'Request was rate-limited by the upstream provider' rate_limited
 
+# --- P2 follow-up (review findings 3, 4): widened real 429/rate-limit forms,
+# the 401-before-429 ordering, and the traceback false positive surviving a
+# status/http/code-named source file.
+
+assert_class "HTTP/2 429 status line" \
+  'HTTP/2 429' rate_limited
+
+assert_class "HTTP/1.1 429 status line (digits in the version must not break the gap)" \
+  '< HTTP/1.1 429' rate_limited
+
+assert_class "Error 429: colon form" \
+  'Error 429: too many requests from this key' rate_limited
+
+assert_class "upstream responded 429" \
+  'upstream responded 429' rate_limited
+
+assert_class "OpenAI structured code field" \
+  '{"error":{"code":"rate_limit_exceeded","message":"..."}}' rate_limited
+
+assert_class "bare rate_limit_exceeded" \
+  'rate_limit_exceeded' rate_limited
+
+assert_class "Rate limit reached for phrasing" \
+  'Rate limit reached for gpt-9 in organization org-abc' rate_limited
+
+assert_class "Moonshot rate_limit_reached_error" \
+  'moonshot: rate_limit_reached_error' rate_limited
+
+assert_class "ratelimited with no space or hyphen" \
+  'Request was ratelimited' rate_limited
+
+echo "PASS: widened 429/rate-limit forms all classify rate_limited"
+
+assert_class "401 message that also contains rate-limit-shaped prose (401 must win)" \
+  '401 Unauthorized: invalid x-api-key (see rate limit exceeded FAQ)' terminal_configuration
+
+assert_class "401 message with 'rate limited' adjective inline (401 must win)" \
+  'Error code: 401 - unauthenticated clients are rate limited' terminal_configuration
+
+echo "PASS: 401 check runs before the 429/rate-limit check"
+
+assert_class "traceback line 429 with filename literally named status.py" \
+  'File "/app/status.py", line 429, in main' terminal_configuration
+
+assert_class "traceback line 429 with filename literally named http.py" \
+  'File "/app/http.py", line 429, in main' terminal_configuration
+
+assert_class "traceback line 429 with filename literally named code.py" \
+  'File "/app/code.py", line 429, in main' terminal_configuration
+
+echo "PASS: a traceback's 'line 429' never classifies rate_limited, even when the filename contains status/http/code"
+
 echo "PASS: real 429/rate-limit signals still classify as rate_limited"
 
 # --- Existing classes stay intact ------------------------------------------

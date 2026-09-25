@@ -217,9 +217,13 @@ PRE
     grep -q "^STATUS: warn$" "$VERDICT_FILE"
 }
 
+# P1-2 (mk-rzi5 follow-up): the verdict is now read ONLY from the first
+# non-blank line of the output — a later "VERDICT:" line (e.g. after a
+# preceding "body" line) is no longer scanned for at all, so this fixture
+# moved the verdict onto line 1 to keep testing the fallback-synthesis path.
 @test "extract: CLEAN still synthesizes pass" {
     _load
-    printf 'body\nVERDICT: CLEAN\n' > "$OUTPUT"
+    printf 'VERDICT: CLEAN\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q "^STATUS: pass$" "$VERDICT_FILE"
 }
@@ -279,9 +283,11 @@ TEXT
 # undistinguished from a truly unknown vocabulary and reported with a
 # confusing summary. Give it its own branch, like NEEDS_ATTENTION.
 
+# P1-2 (mk-rzi5 follow-up): verdict is read only from the first non-blank
+# line, so this fixture's verdict line moved to line 1.
 @test "extract: VERDICT: NEEDS-FIXES synthesizes warn with its own summary (mk-rzi5)" {
     _load
-    printf 'body\nVERDICT: NEEDS-FIXES the retry loop leaks a file handle\n' > "$OUTPUT"
+    printf 'VERDICT: NEEDS-FIXES the retry loop leaks a file handle\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q '^STATUS: warn$' "$VERDICT_FILE"
     grep -q '^SUMMARY: NEEDS-FIXES the retry loop leaks a file handle$' "$VERDICT_FILE"
@@ -295,10 +301,12 @@ TEXT
 # CAPACITY_SUBSTITUTE_JSON from the resolved candidate walk (never from the
 # reviewing model's own text) before calling _extract_verdict.
 
+# P1-2 (mk-rzi5 follow-up): verdict is read only from the first non-blank
+# line, so this fixture's verdict line moved to line 1.
 @test "extract: capacity-substitute stamps PROVISIONAL on a synthesized pass (mk-rzi5)" {
     _load
     CAPACITY_SUBSTITUTE_JSON='{"failure_class":"quota_exhausted","producer_lab":"anthropic","reviewer_lab":"anthropic"}'
-    printf 'body\nVERDICT: CLEAN\n' > "$OUTPUT"
+    printf 'VERDICT: CLEAN\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q '^STATUS: pass$' "$VERDICT_FILE"
     grep -q '^PROVISIONAL: capacity-substitute' "$VERDICT_FILE"
