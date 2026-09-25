@@ -70,6 +70,16 @@ EOF
   [ "$(sed -n '4p' "$CALL_LOG")" = "dolt:$DB_DIR:push origin main" ]
 }
 
+@test "schema 40, the top of the audited range, reaches the Dolt push" {
+  export SIGNER_SCHEMA=40
+
+  run bash "$TEST_ROOT/scripts/gates/bd-push-dolt.sh" "$DB_DIR"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"bd-push-dolt: ok"* ]]
+  [ "$(sed -n '4p' "$CALL_LOG")" = "dolt:$DB_DIR:push origin main" ]
+}
+
 @test "unaudited future schema blocks before policy evaluation or Dolt push" {
   # First schema beyond the audited range (36–40 as of the v40 audit)
   export SIGNER_SCHEMA=41
