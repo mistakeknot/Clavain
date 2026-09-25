@@ -185,14 +185,28 @@ tracker-resolution cases below.
 Bead filing never lets `bd` resolve its own tracker (mk-hadt: `bd -C
 $WORKDIR` from a worktree with no local `.beads` walked up past the repo root
 into an unrelated ancestor tracker and filed real beads there). If
-`CLAVAIN_RECHECK_BEADS_DIR` is set, dispatch runs `bd -C` there unconditionally
-(zklw sets it to `/home/mk/hub`); otherwise it resolves `WORKDIR` to its main
-checkout via `git rev-parse --git-common-dir` (mirroring
-`scripts/next-goal-candidates.sh`'s `tracker_home()`) and files there only if
-that checkout's top level actually contains `.beads` — it never falls through
-to letting `bd` search further on its own. When no tracker resolves, dispatch
-files nothing, still writes the sidecar, and prints a loud stderr warning
-naming the sidecar and `CLAVAIN_RECHECK_BEADS_DIR`. The receipt carries
+`CLAVAIN_RECHECK_BEADS_DIR` is set, dispatch runs `bd -C` there — but only
+when that directory itself contains `.beads` (zklw sets it to `/home/mk/hub`);
+an override pointed anywhere else is refused with the same warning as no
+tracker resolving at all, rather than trusted to let `bd` walk up from there.
+Otherwise dispatch resolves `WORKDIR` to its repo's own top level (mirroring
+`scripts/next-goal-candidates.sh`'s `tracker_home()`): a non-worktree
+`WORKDIR` (including a subdirectory of a checkout) resolves via `git
+rev-parse --show-toplevel`; a linked worktree resolves to its main checkout
+via `git rev-parse --git-common-dir`, but only when that common-dir is
+literally named `.git` — a bare repository's shared worktrees have a
+common-dir that *is* the bare repo itself, one level above every checkout, so
+that case is refused rather than treated as a checkout. Either way, dispatch
+files there only if `.beads` actually exists at that resolved directory — it
+never falls through to letting `bd` search further on its own. Resolution
+requires `WORKDIR` to actually be inside a git checkout: a plain non-git
+directory with its own `.beads` no longer files there (it did before this
+fix, since the old code ran `bd -C $WORKDIR` directly with no git dependence
+at all) — real dispatch `WORKDIR`s are always git checkouts, so this is not
+expected to matter in practice, but it is a real behavior change from before
+mk-hadt. When no tracker resolves, dispatch files nothing, still writes the sidecar, and
+prints a loud stderr warning naming the sidecar and
+`CLAVAIN_RECHECK_BEADS_DIR`. The receipt carries
 `recheck_bead` (the filed bead's id, or `null` when nothing was filed).
 
 ### Execution headroom forecasts

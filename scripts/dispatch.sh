@@ -2504,16 +2504,25 @@ _dispatch_capacity_recheck_section() {
 # /home/mk/projects/.clavain-capreview has no .beads, so `bd -C` there
 # filed capacity-recheck beads into /home/mk/projects/.beads, an unrelated
 # tracker (mk-hadt fix). CLAVAIN_RECHECK_BEADS_DIR overrides outright (e.g.
-# zklw points it at /home/mk/hub). Otherwise mirror next-goal-candidates.sh's
-# tracker_home() (scripts/next-goal-candidates.sh:115-134): resolve WORKDIR
-# to its main checkout via `git rev-parse --git-common-dir` (a linked
-# worktree's .beads, if it has one, lives in the main checkout, not the
-# worktree) — but unlike tracker_home, only use that directory if its top
-# level actually contains `.beads`; never fall through to letting bd resolve
-# a tracker above the repo root on its own. Empty output means "file
-# nothing".
+# zklw points it at /home/mk/hub) but only when it names a directory that
+# itself has `.beads` — an override pointed at a bare directory would just
+# let bd walk up from there and reopen the same hazard. Otherwise mirror
+# next-goal-candidates.sh's tracker_home() (scripts/next-goal-candidates.sh:
+# 115-134): resolve WORKDIR to its main checkout via `git rev-parse
+# --git-common-dir` (a linked worktree's .beads, if it has one, lives in the
+# main checkout, not the worktree) — but unlike tracker_home, only use that
+# directory if it actually contains `.beads`; never fall through to letting
+# bd resolve a tracker above the repo root on its own. A non-worktree WORKDIR
+# (gitdir == common-dir) resolves via `git rev-parse --show-toplevel`, not
+# WORKDIR itself, so a subdirectory checkout still finds its repo's own
+# `.beads` at the top. The linked-worktree shortcut (dirname of common-dir)
+# only holds when common-dir is literally named `.git`; a bare repo's shared
+# worktrees have a common-dir that IS the bare repo itself, one level above
+# every checkout, so that case refuses rather than filing above the repo.
+# Empty output means "file nothing".
 _dispatch_recheck_tracker_dir() {
   if [[ -n "${CLAVAIN_RECHECK_BEADS_DIR:-}" ]]; then
+    [[ -d "${CLAVAIN_RECHECK_BEADS_DIR}/.beads" ]] || return 1
     printf '%s\n' "$CLAVAIN_RECHECK_BEADS_DIR"
     return 0
   fi
@@ -2526,9 +2535,10 @@ _dispatch_recheck_tracker_dir() {
   gitdir="$(cd "$gitdir" 2>/dev/null && pwd -P)"
   common="$(cd "$common" 2>/dev/null && pwd -P)"
   if [[ -n "$gitdir" && -n "$common" && "$gitdir" != "$common" ]]; then
+    [[ "$(basename "$common")" == .git ]] || return 1
     main="$(dirname "$common")"
   else
-    main="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+    main="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || return 1
   fi
   [[ -n "$main" && -d "$main/.beads" ]] || return 1
   printf '%s\n' "$main"
@@ -2608,6 +2618,16 @@ _dispatch_process_capacity_recheck() {
   fi
   local -a bd_cmd=(bd create "$title" -d "$desc" -l capacity-recheck -C "$tracker_dir")
   [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || bd_cmd+=(--deps "discovered-from:$CLAVAIN_BEAD_ID")
+  # `--silent` (bd 1.1.2+) prints only the issue id, removing any dependence
+  # on a title/id ordering convention in bd's normal human-readable output.
+  # Detect support rather than assuming it, and keep the old awk extraction
+  # (matches real bd's "✓ Created issue: <id> — <title>", id before title)
+  # as a fallback for older bd builds without the flag.
+  local bd_supports_silent=false
+  if command -v bd >/dev/null 2>&1 && bd create --help 2>/dev/null | grep -q -- '--silent'; then
+    bd_supports_silent=true
+    bd_cmd+=(--silent)
+  fi
   local bd_output="" bd_rc=0
   if command -v bd >/dev/null 2>&1; then
     bd_output="$("${bd_cmd[@]}" 2>/dev/null)" || bd_rc=$?
@@ -2619,7 +2639,11 @@ _dispatch_process_capacity_recheck() {
     return 0
   fi
   local bead_id
-  bead_id="$(awk 'match($0, /[A-Za-z]+-[a-z0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<< "$bd_output")"
+  if [[ "$bd_supports_silent" == true ]]; then
+    bead_id="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$bd_output")"
+  else
+    bead_id="$(awk 'match($0, /[A-Za-z]+-[a-z0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<< "$bd_output")"
+  fi
   [[ -z "$bead_id" ]] || RECHECK_BEAD_JSON="$(jq -cn --arg id "$bead_id" '$id')"
 }
 
