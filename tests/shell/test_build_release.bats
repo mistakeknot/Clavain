@@ -55,6 +55,9 @@ fi
 
 if [[ " $* " == *" list -deps "* ]]; then
     printf 'github.com/mistakeknot/intercore/pkg/authz\n'
+    if [[ "${GOOS:-}" == darwin ]]; then
+        printf 'github.com/mistakeknot/intercore/pkg/darwinonly\n'
+    fi
     exit 0
 fi
 
@@ -144,7 +147,9 @@ EOF
     printf 'module github.com/mistakeknot/intercore\n' >"$INTERCORE_ROOT/go.mod"
     mkdir -p "$INTERCORE_ROOT/pkg/authz"
     printf 'package authz\n' >"$INTERCORE_ROOT/pkg/authz/authz.go"
-    git -C "$INTERCORE_ROOT" add go.mod pkg/authz/authz.go
+    mkdir -p "$INTERCORE_ROOT/pkg/darwinonly"
+    printf '//go:build darwin\n\npackage darwinonly\n' >"$INTERCORE_ROOT/pkg/darwinonly/darwinonly.go"
+    git -C "$INTERCORE_ROOT" add go.mod pkg/authz/authz.go pkg/darwinonly/darwinonly.go
     git -C "$INTERCORE_ROOT" commit -q -m "fixture"
 }
 
@@ -351,6 +356,30 @@ EOF
 
     [ "$status" -ne 0 ]
     [[ "$output" == *"Intercore package github.com/mistakeknot/intercore/pkg/authz changed between the pinned revision and checkout HEAD"* ]]
+}
+
+@test "release verification rejects a change to an Intercore package only another shipped platform imports" {
+    write_release_fixture
+    printf '//go:build darwin\n\npackage darwinonly\n\nfunc changed() {}\n' >"$INTERCORE_ROOT/pkg/darwinonly/darwinonly.go"
+    git -C "$INTERCORE_ROOT" add pkg/darwinonly/darwinonly.go
+    git -C "$INTERCORE_ROOT" commit -q -m "changed a darwin-only imported package"
+
+    run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Intercore package github.com/mistakeknot/intercore/pkg/darwinonly changed between the pinned revision and checkout HEAD"* ]]
+}
+
+@test "release verification rejects an Intercore go.mod change after the pinned revision" {
+    write_release_fixture
+    printf 'module github.com/mistakeknot/intercore\n\nrequire example.com/dep v1.2.3\n' >"$INTERCORE_ROOT/go.mod"
+    git -C "$INTERCORE_ROOT" add go.mod
+    git -C "$INTERCORE_ROOT" commit -q -m "bumped a dependency"
+
+    run release_env bash "$FIXTURE_ROOT/scripts/verify-release-binaries.sh"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"Intercore go.mod/go.sum changed between the pinned revision and checkout HEAD"* ]]
 }
 
 @test "release verification rejects an Intercore checkout that no longer descends from the pinned revision" {

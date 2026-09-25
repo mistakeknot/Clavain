@@ -112,13 +112,26 @@ if [[ "$actual_intercore_revision" != "$intercore_revision" ]]; then
     git -C "$intercore_root" merge-base --is-ancestor "$intercore_revision" "$actual_intercore_revision" 2>/dev/null ||
         die "Intercore pinned revision is not an ancestor of the checkout HEAD"
 
-    imported_pkgs="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -deps . 2>/dev/null | grep '^github.com/mistakeknot/intercore/')" ||
-        unavailable "cannot resolve Clavain's Intercore package imports"
+    # Module files sit outside every package directory but still decide which
+    # third-party versions the release links.
+    git -C "$intercore_root" diff --quiet "$intercore_revision".."$actual_intercore_revision" -- go.mod go.sum ||
+        die "Intercore go.mod/go.sum changed between the pinned revision and checkout HEAD"
+
+    # Resolve imports per shipped platform with the release build tag: a
+    # host-only listing would miss darwin- or windows-only Intercore imports.
+    imported_pkgs=""
+    for target in linux/amd64 darwin/arm64 windows/amd64; do
+        target_pkgs="$(GOENV=off GOWORK=off GOFLAGS='' GOOS="${target%/*}" GOARCH="${target#*/}" \
+            go -C "$REPO_ROOT/cmd/clavain-cli" list -deps -tags="intercore_rev_$intercore_revision" . 2>/dev/null)" ||
+            unavailable "cannot resolve Clavain's Intercore package imports for $target"
+        imported_pkgs+="$(printf '%s\n' "$target_pkgs" | grep '^github.com/mistakeknot/intercore/' || true)"$'\n'
+    done
+    imported_pkgs="$(printf '%s' "$imported_pkgs" | sort -u | sed '/^$/d')"
     [[ -n "$imported_pkgs" ]] || unavailable "clavain-cli imports no Intercore packages to diff"
 
     while IFS= read -r pkg; do
         [[ -n "$pkg" ]] || continue
-        pkg_dir="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -f '{{.Dir}}' "$pkg" 2>/dev/null)" ||
+        pkg_dir="$(GOENV=off GOWORK=off GOFLAGS='' go -C "$REPO_ROOT/cmd/clavain-cli" list -f '{{.Dir}}' -e "$pkg" 2>/dev/null)" ||
             unavailable "cannot resolve directory for $pkg"
         pkg_dir="$(cd "$pkg_dir" 2>/dev/null && pwd)" || unavailable "$pkg directory does not exist"
         rel_dir="${pkg_dir#"$intercore_root"/}"
