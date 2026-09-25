@@ -5,7 +5,7 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
 1. **The structural selector suite passes with Interstat present and no hidden skips.**
 
    ```check
-   cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/ -q -k selector -rs 2>&1 | tee /tmp/selector-structural.txt; test "${PIPESTATUS[0]}" -eq 0 && ! grep -q "SKIPPED.*interstat" /tmp/selector-structural.txt
+   cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/ -q -k selector -rs 2>&1 | tee /tmp/selector-structural.txt; test "${PIPESTATUS[0]}" -eq 0 && ! grep -qi "SKIPPED.*interstat" /tmp/selector-structural.txt
    ```
 
 2. **The hook wrapper is fail-open on every path.**
@@ -14,10 +14,10 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
    cd /home/mk/projects/.clavain-jev && bats tests/shell/selector_hook.bats
    ```
 
-3. **Default install is unchanged: no hook registration or host-adapter change, and the full existing suites pass with flags unset.**
+3. **Default install is unchanged: no hook registration or host-adapter change, and the full existing suites pass with flags unset.** After landing, `git diff origin/main` is trivially clean, so the check also requires that no commit touching those two files mentions the selector or this bead. The per-commit guard remains T7's verify block.
 
    ```check
-   cd /home/mk/projects/.clavain-jev && git diff --quiet origin/main -- hooks/hooks.json config/host-adapters.json && env -u CLAVAIN_SELECTOR -u CLAVAIN_SELECTOR_SELFTEST ./tests/run-tests.sh
+   cd /home/mk/projects/.clavain-jev && git diff --quiet origin/main -- hooks/hooks.json config/host-adapters.json && test -z "$(git log --oneline -i --grep=selector --grep=mk-42j9.7 -- hooks/hooks.json config/host-adapters.json)" && env -u CLAVAIN_SELECTOR -u CLAVAIN_SELECTOR_SELFTEST ./tests/run-tests.sh
    ```
 
 4. **Flag off makes no records and touches no credential.** A test proves zero socket attempts and no call to the credential loader; after criterion 3's run no records exist from that time window.
@@ -26,7 +26,7 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_orchestrator.py -q -k flag_off && test -z "$(find ~/.clavain/selector/records -newer /tmp/selector-structural.txt -type f 2>/dev/null)"
    ```
 
-5. **Egress refusal opens zero connections, realistic secrets are refused, and admission cannot be forged.** For every rule id (including JSON-quoted keys, provider prefixes and the high-entropy rule), a loopback listener records zero accepted connections; realistic payloads are refused; false-positive fixtures are admitted; a hand-built `AdmittedRequest` fails `verify()` and the client refuses it before connecting.
+5. **Egress refusal opens zero connections, realistic secrets are refused, avoidable false positives are admitted, and admission cannot be bypassed by accident.** For every rule id (including JSON-quoted keys, provider prefixes, Basic auth, cookies, netrc, PGP, package tokens, short and spaced passwords and the high-entropy rule with its path and slug handling), a loopback listener records zero accepted connections; realistic payloads are refused; false-positive fixtures are admitted; a hand-built `AdmittedRequest` fails `verify()` and the client refuses it before connecting.
 
    ```check
    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_egress.py -q && uv run pytest structural/test_selector_orchestrator.py structural/test_selector_jev_client.py -q -k "egress or refus or only_admitted"
@@ -75,10 +75,10 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
     test -f "$ART/burn-claude.json" && test -f "$ART/burn-codex.json" && python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); x=json.load(open(sys.argv[2])); cc=c["consistency"]; xc=x["consistency"]; assert cc["reconciled"] and abs(cc["unexplained"]) <= cc["tolerance"]; assert xc["matches_final_cumulative_excluding_compaction"] and not xc["session_cumulative_mismatch"]; assert {"invalidation","expiry","compaction_or_reset"} <= set(c["events"]) and {"invalidation","expiry","compaction_or_reset"} <= set(x["events"])' "$ART/burn-claude.json" "$ART/burn-codex.json"
     ```
 
-11. **The eval refuses unsealed or changed labels, scores the holdout once against its first seal, reports shortlist recall separately, and the selftest set runs all three arms with zero forbidden selections.**
+11. **The eval refuses unsealed or changed labels, scores the holdout once against its first seal (disjointness by case content hash), reports shortlist recall separately, has a counts-only offline egress scan, and the selftest set runs all three arms with zero forbidden selections.**
 
     ```check
-    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_eval.py -q && uv run pytest structural/test_selector_eval.py -q -k "holdout_first_seal_only or holdout_scored_once or holdout_refused_on_changed_floors or shortlist_recall_reported" | grep -q "4 passed"
+    cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_eval.py -q -rA 2>&1 | tee /tmp/selector-eval.txt; test "${PIPESTATUS[0]}" -eq 0 && python3 -c 'import re,sys; s=open(sys.argv[1]).read(); miss=[t for t in ("holdout_first_seal_only","holdout_scored_once","holdout_refused_on_changed_floors","shortlist_recall_reported","egress_scan_counts_only") if not re.search(r"^PASSED \S+::test_"+t+r"\b",s,re.M)]; print("missing:",miss) if miss else None; sys.exit(1 if miss else 0)' /tmp/selector-eval.txt
     ```
 
 12. **The canon doc matches the host matrix and names every fallback reason and the retention terms.**
@@ -99,5 +99,11 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
 
     ```check
     cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_cli.py -q
+    ```
+
+16. **High-entropy false positives are measured where the rule is on.** The offline `post_tool_output` calibration over real tool output (T12 step 8) sampled at least 500 blocks, and the high-entropy-only refusal fraction is ≤0.03 and the total refusal fraction is ≤0.10. A failure triggers the egress calibration escalation and blocks .10's `post_tool_output` use; it does not block landing .7.
+
+    ```check
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["point"]=="post_tool_output" and d["sampled"]>=500, d.get("sampled"); assert d["high_entropy_only_frac"]<=0.03 and d["refused_frac"]<=0.10, (d["high_entropy_only_frac"], d["refused_frac"]); print("ok", d["sampled"], d["refused_frac"], d["high_entropy_only_frac"])' "$ART/egress-offline.json"
     ```
 
