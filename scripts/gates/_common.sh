@@ -82,10 +82,11 @@ gate_require_jq() {
 # Fails before any proof-state mutation, token consumption, or irreversible op
 # when the selected DB/keypair is missing, stale, mismatched, or unsafe.
 gate_require_signer() {
-  # Schemas 37–39 add tables/columns outside the signed authorization ledger
-  # (v39: goal containment, audited 2026-07-21). Keep this range closed so a
-  # future Intercore migration requires another audit.
-  local out min_schema=36 max_schema=39
+  # Schemas 37–40 add tables/columns outside the signed authorization ledger
+  # (v39: goal containment, audited 2026-07-21; v40: dispatch terminal
+  # records, audited 2026-09-25). Keep this range closed so a future
+  # Intercore migration requires another audit.
+  local out min_schema=36 max_schema=40
   gate_require_jq || return 1
   if ! out="$(clavain-cli policy doctor --require-signer \
       --project-root="$CLAVAIN_AUTHZ_PROJECT_ROOT" 2>&1)"; then

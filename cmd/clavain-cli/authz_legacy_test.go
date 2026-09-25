@@ -161,6 +161,44 @@ func TestPolicyAnchorLegacy_AcceptsAuditedCurrentSchema(t *testing.T) {
 	}
 }
 
+// v40 (dispatch terminal records) is the audited upper bound; the anchor must
+// seal it and still refuse the first unaudited schema.
+func TestPolicyAnchorLegacy_AcceptsAuditedSchema40(t *testing.T) {
+	root := setupLegacyProposalDomain(t, 0)
+	setSigningSandboxSchema(t, root, 40)
+
+	proposal := inspectLegacyAnchor(t, root)
+	if proposal.Schema != 40 || proposal.LegacyCount != 0 {
+		t.Fatalf("schema-40 proposal = %+v", proposal)
+	}
+	if _, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicyAnchorLegacy([]string{"--project-root=" + root, "--expect-empty"})
+	}); err != nil {
+		t.Fatalf("anchor schema-40 domain: %v", err)
+	}
+	if _, err := authz.LoadLegacyManifest(root); err != nil {
+		t.Fatalf("load schema-40 manifest: %v", err)
+	}
+}
+
+func TestPolicyAnchorLegacy_RejectsUnauditedSchema(t *testing.T) {
+	root := setupLegacyProposalDomain(t, 0)
+	setSigningSandboxSchema(t, root, 41)
+
+	_, err := captureStdoutAuthz(t, func() error {
+		return cmdPolicyAnchorLegacy([]string{"--project-root=" + root, "--expect-empty"})
+	})
+	if err == nil {
+		t.Fatal("anchor-legacy sealed unaudited schema 41")
+	}
+	if !strings.Contains(err.Error(), "unsupported intercore schema 41") {
+		t.Fatalf("anchor schema-41 error = %v", err)
+	}
+	if _, err := authz.LoadLegacyManifest(root); err == nil {
+		t.Fatal("unaudited schema-41 domain produced a legacy manifest")
+	}
+}
+
 func TestPolicyVerify_RejectsDowngradeOutsideDisplayFilter(t *testing.T) {
 	root := setupLegacyAnchoredDomain(t, 2)
 	signedID := insertSignableRow(t, root, "downgrade-target", "bead-close")
