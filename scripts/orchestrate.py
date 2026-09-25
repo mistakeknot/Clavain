@@ -2679,6 +2679,18 @@ def pf_validate(
     receipt_path = os.path.join(item_dir, "receipt")
     prompt_path = os.path.join(item_dir, "validator.prompt.md")
     output = os.path.join(item_dir, "validator.md")
+    # P3: item_dir (and so `output`) is a fixed path per item.id, reused
+    # across capacity-recheck walk attempts. If a previous walk step wrote
+    # validator.md/.verdict/.recheck.md and then the walk failed before this
+    # attempt's dispatch call ever produced fresh output (a crash, a denied
+    # tool call before the seat wrote anything), reading these sidecars below
+    # would silently pick up the PREVIOUS attempt's verdict/recheck items
+    # instead of reporting "no output for this attempt". Clear them first.
+    for stale in (output, output + ".verdict", output + ".recheck.md"):
+        try:
+            os.remove(stale)
+        except FileNotFoundError:
+            pass
     _write_text(prompt_path, pf_validator_prompt(item.plan, contract, wt, commit, packet, receipt_path))
     # The nonce is written only after the prompt is fixed on disk, so the
     # prompt cannot carry it: the seat has to run the receipt command.
@@ -2910,7 +2922,11 @@ def _pf_item_steps(
     # reach the packet, not just the register row below, or the report
     # reads it as an ordinary fully independent pass with no caveat at all.
     if val.note:
-        res.note = val.note  # the packet says why a seat did not rule (or, on a PASS, that it was provisional)
+        # P3: append to any note the executor already set (e.g. "worktree
+        # dirty after the executor" above) instead of overwriting it — a
+        # provisional-PASS caveat here used to silently erase that earlier
+        # warning rather than add to it.
+        res.note = f"{res.note}; {val.note}" if res.note else val.note  # the packet says why a seat did not rule (or, on a PASS, that it was provisional)
     pf_register(
         run, verdict_sh, res, commit=commit, role="validator", kind="replay",
         verdict=val.verdict, criterion=(val.criterion if val.verdict != "PASS" else None), note=val.note,
