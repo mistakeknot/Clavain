@@ -1,2 +1,7 @@
 # Synthetic test fixtures in galiana eval golden files — not real secrets
 c49353fc1e9763b0df8b9582f7da78c9ffc51bcf:galiana/evals/golden/synth-stale-docs/input/README.md:generic-api-key:66
+# Synthetic redaction fixtures in provider-error tests: a fake HS256 JWT (payload {"sub":"fixture"}, signature "signature-fixture") — not a real token
+fd17873757983ec3f333fa40db426626dae17609:tests/structural/test_provider_errors.py:jwt:43
+fd17873757983ec3f333fa40db426626dae17609:tests/structural/test_provider_errors.py:jwt:80
+# Synthetic borrowed-token fixture ('borrowed-secret-fixture-7f3a') used to assert dispatch does not persist it — not a real key
+c76adb668fe7da961c53d82893c651753fed03e7:tests/structural/test_dispatch_bb.py:generic-api-key:287
