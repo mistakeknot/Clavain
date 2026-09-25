@@ -17,7 +17,7 @@ Execution authority is explicit. Resolve the complete profile with `ic route dis
 
 | Role | Primary route | Policy |
 |------|---------------|--------|
-| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-5.6 Sol xhigh until Astra account access succeeds. No Claude capacity seat: this is the running session's own orchestration |
+| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-5.6 Sol xhigh until Astra account access succeeds, then Opus 5 high (`pilot-opus`, mk ruling 2026-09-25: Codex exhaustion must never block development). `pilot-opus` is `backend: main` — it informs which model the running session itself claims, not a subprocess dispatch.sh can spawn; `_dispatch_role_profile` still refuses to delegate to a `backend: main` candidate |
 | `scout` | GPT-5.6 Sol high | Read-only exploration; Sonnet 5 high is the capacity seat when the Codex lane is out |
 | `routine-execution` | GPT-5.6 Sol high | High-volume coding; Sonnet 5 high is the capacity seat when the Codex lane is out |
 | `deep-execution` | GPT-6 Astra high, Standard | Sol xhigh only for explicit model/account/version unavailability, then Opus 5 high. A frontier-classified task skips Sol — it is not frontier-eligible — and degrades straight to Opus |

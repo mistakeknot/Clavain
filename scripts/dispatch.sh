@@ -405,6 +405,26 @@ for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
   esac
 done
 
+# Arguments retained when a bare --tier (not --role) dispatch invokes this
+# script for a resolved primary or fallback tier candidate. Mirrors
+# ROLE_PASSTHROUGH; --tier itself and any explicit model/engine/effort/service
+# selection are replaced by the exact candidate chosen from the tier's
+# declared `fallbacks:` chain (mk ruling 2026-09-25: Codex exhaustion must
+# never block development).
+TIER_PASSTHROUGH=()
+for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
+  case "${ORIGINAL_ARGS[$i]}" in
+    --tier|--to|--engine|-m|--model|--reasoning-effort|--service-tier)
+      i=$((i + 1))
+      ;;
+    --tier=*|--to=*|--engine=*|--model=*|--reasoning-effort=*|--service-tier=*)
+      ;;
+    *)
+      TIER_PASSTHROUGH+=("${ORIGINAL_ARGS[$i]}")
+      ;;
+  esac
+done
+
 CLAVAIN_LAST_FAILURE_CLASS=""
 DISPATCH_INTERCEPT_EVIDENCE=null
 DISPATCH_INTERCEPT_EVIDENCE_ERROR=""
@@ -633,6 +653,78 @@ _dispatch_role_profile() {
   done <<< "$candidates"
 
   [[ "$candidate_count" -gt 0 ]] || echo "Error: role '$role' has no executable profiles" >&2
+  return "$rc"
+}
+
+# Walk a bare --tier's declared `fallbacks:` chain (config/routing.yaml
+# dispatch.tiers.<name>.fallbacks), retrying on the same observed failure
+# classes _dispatch_role_profile uses. Unlike --role, this reads the chain
+# directly from routing.yaml via scripts/tier-fallback-chain.py: `ic route
+# dispatch --tier=<name>` only ever resolves the single named tier and never
+# walks or returns its fallbacks (mk ruling 2026-09-25).
+_dispatch_tier_profile() {
+  local tier="$1" policy candidates candidate backend model effort service minimum
+  local rc=1 candidate_count=0
+  local -a resolved_args
+
+  command -v python3 >/dev/null 2>&1 || {
+    echo "Error: python3 is required for --tier fallback resolution" >&2
+    return 1
+  }
+  command -v jq >/dev/null 2>&1 || {
+    echo "Error: jq is required for --tier fallback resolution" >&2
+    return 1
+  }
+  policy="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+  candidates="$(python3 "$DISPATCH_SCRIPT_DIR/tier-fallback-chain.py" --policy "$policy" --tier "$tier")" || {
+    echo "Error: could not resolve tier '$tier' from routing.yaml" >&2
+    return 1
+  }
+
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" ]] || continue
+    candidate_count=$((candidate_count + 1))
+    backend="$(jq -r '.backend // empty' <<< "$candidate")"
+    model="$(jq -r '.model // empty' <<< "$candidate")"
+    effort="$(jq -r '.reasoning_effort // empty' <<< "$candidate")"
+    service="$(jq -r '.service_tier // empty' <<< "$candidate")"
+    minimum="$(jq -r '.minimum_codex_version // empty' <<< "$candidate")"
+
+    if [[ -z "$backend" || -z "$model" ]]; then
+      echo "Error: tier '$tier' resolved an incomplete profile" >&2
+      return 1
+    fi
+    if [[ "$backend" == "main" ]]; then
+      echo "Error: tier '$tier' resolved a main-integrator-only profile and cannot be delegated" >&2
+      return 1
+    fi
+    if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
+      echo "dispatch: tier candidate '$model' requires Codex >= $minimum; trying its declared fallback" >&2
+      continue
+    fi
+
+    resolved_args=(bash "${BASH_SOURCE[0]}" --to "$backend" --model "$model")
+    [[ -n "$effort" ]] && resolved_args+=(--reasoning-effort "$effort")
+    [[ -n "$service" ]] && resolved_args+=(--service-tier "$service")
+    resolved_args+=("${TIER_PASSTHROUGH[@]}")
+
+    if _run_candidate_with_policy "${resolved_args[@]}"; then
+      return 0
+    else
+      rc=$?
+    fi
+    case "$CLAVAIN_LAST_FAILURE_CLASS" in
+      quota_exhausted|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+        echo "dispatch: tier '$tier' candidate '$model' unavailable ($CLAVAIN_LAST_FAILURE_CLASS); trying its declared fallback" >&2
+        ;;
+      *)
+        echo "dispatch: tier '$tier' candidate '$model' failed with terminal class '$CLAVAIN_LAST_FAILURE_CLASS'; fallback suppressed" >&2
+        return "$rc"
+        ;;
+    esac
+  done <<< "$(jq -c '.[]' <<< "$candidates")"
+
+  [[ "$candidate_count" -gt 0 ]] || echo "Error: tier '$tier' has no executable profiles" >&2
   return "$rc"
 }
 
@@ -945,11 +1037,24 @@ if [[ -n "$TIER" ]]; then
     fi
     # On failure the warning is printed — MODEL stays empty (claude CLI default)
   else
-    if RESOLVED_MODEL=$(resolve_tier_model "$TIER"); then
-      MODEL="$RESOLVED_MODEL"
-      echo "Tier '$TIER' resolved to model: $MODEL" >&2
+    # Default engine (codex): walk the tier's own declared `fallbacks:` chain
+    # from routing.yaml (mk ruling 2026-09-25 — Codex exhaustion must never
+    # block development), same interserve remap resolve_tier_model used.
+    TIER_TARGET="$TIER"
+    if [[ "$CLAVAIN_INTERSERVE_MODE" == true && "$TIER" == "fast" ]]; then
+      TIER_TARGET="fast-clavain"
+    elif [[ "$CLAVAIN_INTERSERVE_MODE" == true && "$TIER" == "deep" ]]; then
+      TIER_TARGET="deep-clavain"
     fi
-    # If resolution fails, warning already printed — MODEL stays empty (uses config.toml default)
+    if [[ "$TIER_TARGET" != "$TIER" ]] && ! python3 "$DISPATCH_SCRIPT_DIR/tier-fallback-chain.py" --policy "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" --tier "$TIER_TARGET" >/dev/null 2>&1; then
+      echo "Note: tier '$TIER_TARGET' not found. Trying '$TIER'." >&2
+      TIER_TARGET="$TIER"
+    fi
+    set +e
+    _dispatch_tier_profile "$TIER_TARGET"
+    tier_rc=$?
+    set -e
+    exit "$tier_rc"
   fi
 fi
 

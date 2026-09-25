@@ -25,10 +25,42 @@ outside the Codex lane. Ordering carries the preference: a substitute is selecte
 only after the seats ahead of it are excluded, so the default routes are unchanged
 while the primaries are up.
 
-Two roles deliberately have no capacity substitute. `main-integrator` and
-`release-authority` belong to the running main session; resolving them elsewhere
-would not change the running parent model and substituting release authority is an
-authority change rather than a fallback.
+One role deliberately has no capacity substitute. `release-authority` belongs to
+the running main session; substituting it is an authority change rather than a
+fallback, and that stays unchanged — commit/push/deploy/publication approval
+stays with the main integrator regardless of Codex availability.
+
+`main-integrator` previously had no capacity substitute for the same reason
+(resolving it elsewhere would not change the running parent model). mk ruled
+2026-09-25 that Codex exhaustion must never block development on any project,
+so `main-sol` now falls back to `pilot-opus`. That fallback is informational,
+not delegated: it tells the running session which model it should itself claim
+when both Astra and Sol are out, the same way the `ci-campaign-pilot` profile
+already used `pilot-opus` for this role in its scoped campaign. `pilot-opus`
+declares `backend: main`, and `_dispatch_role_profile` (`scripts/dispatch.sh`)
+still refuses to spawn any `backend: main` candidate as a delegated subprocess
+— a `main-integrator` fallback_chain entry is read by the running session
+choosing its own model, never fed to a dispatched worker.
+
+Ordinary execution roles reached the same floor earlier: `fast`/`fast-clavain`
+(routine-execution/scout tier aliases) fall back to the Sonnet capacity seats
+`routine-sonnet`/`scout-sonnet` already declared for those roles, and
+`deep`/`deep-clavain` fall back to `deep-opus`, matching `deep-astra`'s own
+Opus terminus. These tier names are resolved by bare `--tier <name>` (not
+`--role`), a separate surface `ic route dispatch --tier=...` does not walk —
+`scripts/dispatch.sh` reads each tier's `fallbacks:` directly (see
+`scripts/tier-fallback-chain.py`) and retries through the same
+`quota_exhausted`/`model_unavailable`/... classes as role dispatch.
+
+`validation-sol` gained the same terminal fallback: `[validation-opus,
+validation-sonnet]`. Before this it was the one Codex seat in the `validation`
+chain with no declared exit — reachable as the *first* candidate whenever
+`cross_lab_first` reorders a Claude producer's chain ahead of `validation-opus`
+(see below), so a Codex outage on a Claude-authored review had nothing to fall
+to in that reordered position. `producer_model_conflict` and the existing
+`validation-opus -> validation-sonnet -> validation-sol -> validation-kimi`
+chain are unaffected: Intercore dedupes an already-visited profile_ref, so the
+new edge cannot reintroduce a seat the walk already excluded or already used.
 
 Frontier authoring — `planning`, `frontier-planning`, `escalation` — runs
 `planning-astra`, then `planning-fable`, then `planning-opus` (mk ruling

@@ -254,6 +254,10 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      # mk ruling 2026-09-25: Codex exhaustion must never block development.
+      # Sonnet, not Opus — same seat routine-sol already falls back to for this
+      # role; scoped/routine work doesn't need the Opus floor.
+      fallbacks: [routine-sonnet]
       description: Scoped read-only tasks, exploration, verification, quick reviews
     fast-clavain:
       role: scout
@@ -261,6 +265,8 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      # mk ruling 2026-09-25: same seat scout-sol already falls back to.
+      fallbacks: [scout-sonnet]
       description: Clavain interserve-mode default for read-only/administrative tasks
     deep:
       role: deep-execution
@@ -268,6 +274,10 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: xhigh
       service_tier: standard
+      # mk ruling 2026-09-25: Opus — deep lanes carry the generative/implementation
+      # load deep-astra->deep-sol->deep-opus already trusts to Opus as capacity
+      # substitute; same floor applies here.
+      fallbacks: [deep-opus]
       description: Generative tasks, implementation, complex reasoning, debates
     deep-clavain:
       role: deep-execution
@@ -275,6 +285,7 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: xhigh
       service_tier: standard
+      fallbacks: [deep-opus]
       description: Clavain interserve-mode high-complexity/research/flux-drive dispatch
 
     main-astra:
@@ -292,6 +303,12 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: xhigh
       service_tier: standard
+      # mk ruling 2026-09-25: Codex exhaustion must never block development —
+      # pilot-opus is the same main-integrator role's Claude seat (ci-campaign-pilot
+      # profile already declares it for this role), so the substitute is not a new
+      # quality claim. backend: main (not codex/claude) keeps commit/push/deploy
+      # authority with the main integrator; release-authority is unaffected.
+      fallbacks: [pilot-opus]
       description: Main-integrator fallback while Astra account access is unavailable
     scout-sol:
       role: scout
