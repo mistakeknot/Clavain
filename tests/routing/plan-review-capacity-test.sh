@@ -24,6 +24,10 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/work"
 git -C "$TMP_ROOT/work" init -q
 git -C "$TMP_ROOT/work" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m init
+# mk-hadt: bd filing only happens when $TMP_ROOT/work's own top level has a
+# .beads — the baseline for every test below except the "no tracker
+# resolved" block, which removes it again to reproduce the production shape.
+mkdir -p "$TMP_ROOT/work/.beads"
 
 fail() {
   echo "FAIL: $1" >&2
@@ -100,7 +104,11 @@ FAKE_CLAUDE
 # per call, and returns a fake id — verifies the capacity-recheck bead
 # filing without touching the real tracker. FAKE_BD_MODE=fail still logs the
 # call (bd was actually invoked with the right argv) but exits 1, so B3's
-# loud-stderr-warning-never-fails-the-dispatch behavior can be checked.
+# loud-stderr-warning-never-fails-the-dispatch behavior can be checked. The
+# success output "fake-42" is deliberately unambiguous under dispatch.sh's
+# real id-extraction pattern (hooks/lib-sprint.sh's
+# `match($0, /[A-Za-z]+-[a-z0-9]+/)`), which stops at the second `-` — a
+# fixture id with more than one hyphen would silently truncate.
 cat > "$TMP_ROOT/bin/bd" <<'FAKE_BD'
 #!/usr/bin/env bash
 { printf '<<<BD-CALL>>>\n'; printf '%s\x1f' "$@"; printf '\n'; } >> "$FAKE_BD_LOG"
@@ -108,7 +116,7 @@ if [[ "${FAKE_BD_MODE:-}" == fail ]]; then
   echo "fake-bd: simulated failure" >&2
   exit 1
 fi
-echo "fake-bd-1"
+echo "fake-42"
 FAKE_BD
 chmod +x "$TMP_ROOT/bin/codex" "$TMP_ROOT/bin/claude" "$TMP_ROOT/bin/bd"
 
@@ -241,6 +249,7 @@ receipt="$(latest_receipt)"
 [[ "$(jq -r '.capacity_substitute.reviewer_lab' <<< "$receipt")" == "anthropic" ]] || fail "capacity substitute: receipt capacity_substitute.reviewer_lab was not anthropic: $receipt"
 [[ "$(jq -r '.recheck_items' <<< "$receipt")" == "1" ]] || fail "capacity substitute: receipt recheck_items was not 1 for the fabricated item: $receipt"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "missing" ]] || fail "capacity substitute: receipt recheck_source was not 'missing' for an absent heading: $receipt"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "capacity substitute: receipt recheck_bead was not the filed id: $receipt"
 
 # The reviewer lists two re-check items: dispatch writes a recheck sidecar
 # and files exactly one bead, tagged back to the producing bead.
@@ -258,6 +267,7 @@ grep -q "Re-check capacity-substitute plan-review review (bd-parent-1)" "$FAKE_B
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_items' <<< "$receipt")" == "2" ]] || fail "two re-check items: receipt recheck_items was not 2: $receipt"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "listed" ]] || fail "two re-check items: receipt recheck_source was not 'listed': $receipt"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "two re-check items: receipt recheck_bead was not the filed id: $receipt"
 
 # CLAVAIN_RECHECK_BEADS=0: the sidecar is still written (items are not lost)
 # but no bd create call is made.
@@ -268,6 +278,8 @@ CLAVAIN_BEAD_ID="bd-parent-1b" CLAVAIN_RECHECK_BEADS=0 \
 [[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "CLAVAIN_RECHECK_BEADS=0: expected the sidecar to still be written"
 grep -q "confirmed nothing was executed" "$TMP_ROOT/answer.md.recheck.md" || fail "CLAVAIN_RECHECK_BEADS=0: sidecar missing the item"
 [[ ! -s "$FAKE_BD_LOG" ]] || fail "CLAVAIN_RECHECK_BEADS=0: expected no bd create call, got: $(cat "$FAKE_BD_LOG")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "CLAVAIN_RECHECK_BEADS=0: receipt recheck_bead was not null: $receipt"
 
 # A failing bd never fails the dispatch: exit 0, a loud stderr warning, and
 # the sidecar is still there for a human to find.
@@ -278,6 +290,8 @@ FAKE_BD_MODE=fail \
 [[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "failing bd: expected the sidecar to still be written"
 grep -qi "WARNING.*could not file the capacity-recheck bead" "$TMP_ROOT/err" || fail "failing bd: expected a loud stderr warning: $(tail -5 "$TMP_ROOT/err")"
 [[ -s "$FAKE_BD_LOG" ]] || fail "failing bd: expected bd to have actually been invoked (and logged) before failing"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "failing bd: receipt recheck_bead was not null: $receipt"
 
 # The reviewer writes the heading with no items under it (not "None."): B3
 # treats an empty section the same as a missing one — the whole review still
@@ -300,6 +314,7 @@ CLAVAIN_BEAD_ID="bd-parent-2" \
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_items' <<< "$receipt")" == "0" ]] || fail "None. re-check: receipt recheck_items was not 0: $receipt"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "none" ]] || fail "None. re-check: receipt recheck_source was not 'none': $receipt"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "None. re-check: receipt recheck_bead was not null: $receipt"
 
 echo "PASS: capacity-substitute plan reviews carry the re-check paragraph and file re-check beads for real items only"
 
@@ -317,6 +332,7 @@ receipt="$(latest_receipt)"
 [[ "$(jq -r '.capacity_substitute' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt capacity_substitute was not null: $receipt"
 [[ "$(jq -r '.recheck_items' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_items was not null: $receipt"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_source was not null: $receipt"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_bead was not null: $receipt"
 
 echo "PASS: a different-lab fallback review is not treated as a capacity substitute"
 
@@ -340,3 +356,48 @@ receipt="$(latest_receipt)"
 [[ "$(jq -r '.capacity_substitute' <<< "$receipt")" == "null" ]] || fail "producer_model_conflict only: receipt capacity_substitute was not null: $receipt"
 
 echo "PASS: a pre-walk producer_model_conflict exclusion plus a pre-run version skip is not a capacity substitute"
+
+# --- mk-hadt: bd -C $WORKDIR must never resolve a tracker above the repo --
+#
+# Production incident: this branch's own capacity-recheck filing ran
+# `bd -C $WORKDIR` from a worktree with no `.beads` of its own, and bd's own
+# upward directory walk landed on an unrelated tracker one level up
+# (/home/mk/projects/.beads, sitting above the real
+# /home/mk/projects/.clavain-capreview worktree). Reproduce that shape:
+# $TMP_ROOT/work loses the `.beads` every prior block relied on, and a decoy
+# `.beads` sits at $TMP_ROOT itself — one level above work, exactly like the
+# real incident's unrelated tracker sat one level above the worktree. Filing
+# must refuse rather than reach the decoy.
+rm -rf "$TMP_ROOT/work/.beads"
+mkdir -p "$TMP_ROOT/.beads"
+CLAVAIN_BEAD_ID="bd-parent-3" \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- would have filed into the wrong tracker if bd walked up\n')" \
+  run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "no tracker resolved: expected review to still succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "no tracker resolved: expected the sidecar to still be written"
+grep -q "would have filed" "$TMP_ROOT/answer.md.recheck.md" || fail "no tracker resolved: sidecar missing the item"
+[[ ! -s "$FAKE_BD_LOG" ]] || fail "no tracker resolved: expected no bd call at all (not even to the decoy parent tracker), got: $(cat "$FAKE_BD_LOG")"
+grep -qi "no beads tracker resolved" "$TMP_ROOT/err" || fail "no tracker resolved: expected a loud stderr warning: $(tail -5 "$TMP_ROOT/err")"
+grep -q "CLAVAIN_RECHECK_BEADS_DIR" "$TMP_ROOT/err" || fail "no tracker resolved: expected the warning to name the override: $(tail -5 "$TMP_ROOT/err")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "no tracker resolved: receipt recheck_bead was not null: $receipt"
+
+# CLAVAIN_RECHECK_BEADS_DIR overrides tracker resolution outright: used even
+# though $TMP_ROOT/work still has no .beads (from the block above) and a
+# decoy .beads still sits at $TMP_ROOT/, one level up.
+mkdir -p "$TMP_ROOT/override-tracker/.beads"
+CLAVAIN_BEAD_ID="bd-parent-4" CLAVAIN_RECHECK_BEADS_DIR="$TMP_ROOT/override-tracker" \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed the override directory was used\n')" \
+  run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+grep -qF "$TMP_ROOT/override-tracker" "$FAKE_BD_LOG" || fail "CLAVAIN_RECHECK_BEADS_DIR: expected bd to be invoked with the override as -C, got: $(cat "$FAKE_BD_LOG")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: receipt recheck_bead was not the filed id: $receipt"
+
+# Restore the baseline .beads for cleanliness/order-independence, in case a
+# future block is appended after this one.
+rm -rf "$TMP_ROOT/.beads" "$TMP_ROOT/override-tracker"
+mkdir -p "$TMP_ROOT/work/.beads"
+
+echo "PASS: capacity-recheck bead filing never resolves a tracker above the repo root, and CLAVAIN_RECHECK_BEADS_DIR overrides resolution outright"

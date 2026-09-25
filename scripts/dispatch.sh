@@ -42,6 +42,7 @@ VALIDATOR_RELATIONSHIP=""
 CAPACITY_SUBSTITUTE_JSON=""
 RECHECK_ITEMS=""
 RECHECK_SOURCE_JSON=""
+RECHECK_BEAD_JSON=""
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
@@ -2495,6 +2496,44 @@ _dispatch_capacity_recheck_section() {
   ' "$file"
 }
 
+# Resolves the directory to run `bd` from for capacity-recheck bead filing
+# (mk-hadt): `bd -C <dir>` walks UP from <dir> looking for a `.beads`
+# directory, exactly like git looks for `.git` — a worktree with no `.beads`
+# of its own walks past its own repo root into whatever unrelated tracker
+# happens to sit above it. Observed in production: WORKDIR
+# /home/mk/projects/.clavain-capreview has no .beads, so `bd -C` there
+# filed capacity-recheck beads into /home/mk/projects/.beads, an unrelated
+# tracker (mk-hadt fix). CLAVAIN_RECHECK_BEADS_DIR overrides outright (e.g.
+# zklw points it at /home/mk/hub). Otherwise mirror next-goal-candidates.sh's
+# tracker_home() (scripts/next-goal-candidates.sh:115-134): resolve WORKDIR
+# to its main checkout via `git rev-parse --git-common-dir` (a linked
+# worktree's .beads, if it has one, lives in the main checkout, not the
+# worktree) — but unlike tracker_home, only use that directory if its top
+# level actually contains `.beads`; never fall through to letting bd resolve
+# a tracker above the repo root on its own. Empty output means "file
+# nothing".
+_dispatch_recheck_tracker_dir() {
+  if [[ -n "${CLAVAIN_RECHECK_BEADS_DIR:-}" ]]; then
+    printf '%s\n' "$CLAVAIN_RECHECK_BEADS_DIR"
+    return 0
+  fi
+  local dir="${WORKDIR:-.}" gitdir common main
+  command -v git >/dev/null 2>&1 || return 1
+  gitdir="$(git -C "$dir" rev-parse --git-dir 2>/dev/null)" || return 1
+  common="$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null)" || return 1
+  [[ "$gitdir" = /* ]] || gitdir="$dir/$gitdir"
+  [[ "$common" = /* ]] || common="$dir/$common"
+  gitdir="$(cd "$gitdir" 2>/dev/null && pwd -P)"
+  common="$(cd "$common" 2>/dev/null && pwd -P)"
+  if [[ -n "$gitdir" && -n "$common" && "$gitdir" != "$common" ]]; then
+    main="$(dirname "$common")"
+  else
+    main="$(cd "$dir" 2>/dev/null && pwd -P)" || return 1
+  fi
+  [[ -n "$main" && -d "$main/.beads" ]] || return 1
+  printf '%s\n' "$main"
+}
+
 # After a successful capacity-substitute review (mk-gp32), parse its
 # "## Re-check by the other lab" section and turn any listed items into a
 # filed bead for the lab that never actually reviewed. Never fails the
@@ -2506,12 +2545,16 @@ _dispatch_capacity_recheck_section() {
 # the reviewer actually confirmed there is nothing to flag. RECHECK_SOURCE_JSON
 # records which of the three happened ("listed"/"none"/"missing", the last
 # covering both absent and empty) so the receipt can tell a real item list
-# apart from a fabricated one.
+# apart from a fabricated one. RECHECK_BEAD_JSON carries the filed bead's id
+# (a quoted JSON string), staying empty (receipt: null) when nothing was
+# filed — not a substitute, CLAVAIN_RECHECK_BEADS=0, no tracker resolved, or
+# bd itself failed.
 _dispatch_process_capacity_recheck() {
   local exit_code="$1" body section_found=true item line
   local -a items=()
   RECHECK_ITEMS=""
   RECHECK_SOURCE_JSON=""
+  RECHECK_BEAD_JSON=""
   [[ "$exit_code" == 0 ]] || return 0
   [[ -n "${CAPACITY_SUBSTITUTE_JSON:-}" && "$CAPACITY_SUBSTITUTE_JSON" != null ]] || return 0
   [[ -n "$OUTPUT" && -f "$OUTPUT" ]] || return 0
@@ -2547,7 +2590,7 @@ _dispatch_process_capacity_recheck() {
   } > "$recheck_file"
 
   [[ "${CLAVAIN_RECHECK_BEADS:-1}" != 0 ]] || return 0
-  local producer_lab reviewer_lab failure_class bead_ref title desc
+  local producer_lab reviewer_lab failure_class bead_ref title desc tracker_dir
   producer_lab="$(jq -r '.producer_lab // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
   reviewer_lab="$(jq -r '.reviewer_lab // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
   failure_class="$(jq -r '.failure_class // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
@@ -2559,11 +2602,25 @@ _dispatch_process_capacity_recheck() {
     for item in "${items[@]}"; do printf -- '- %s\n' "$item"; done
     printf '\nReceipt: %s\n' "$recheck_file"
   )"
-  local -a bd_cmd=(bd create "$title" -d "$desc" -l capacity-recheck -C "${WORKDIR:-.}")
-  [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || bd_cmd+=(--deps "discovered-from:$CLAVAIN_BEAD_ID")
-  if ! command -v bd >/dev/null 2>&1 || ! "${bd_cmd[@]}" >/dev/null 2>&1; then
-    echo "dispatch: WARNING — could not file the capacity-recheck bead for '$ROLE'; items are recorded at $recheck_file only" >&2
+  if ! tracker_dir="$(_dispatch_recheck_tracker_dir)" || [[ -z "$tracker_dir" ]]; then
+    echo "dispatch: WARNING — no beads tracker resolved for the capacity-recheck bead ('$ROLE'); items are recorded at $recheck_file only (set CLAVAIN_RECHECK_BEADS_DIR to file one)" >&2
+    return 0
   fi
+  local -a bd_cmd=(bd create "$title" -d "$desc" -l capacity-recheck -C "$tracker_dir")
+  [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || bd_cmd+=(--deps "discovered-from:$CLAVAIN_BEAD_ID")
+  local bd_output="" bd_rc=0
+  if command -v bd >/dev/null 2>&1; then
+    bd_output="$("${bd_cmd[@]}" 2>/dev/null)" || bd_rc=$?
+  else
+    bd_rc=127
+  fi
+  if [[ "$bd_rc" != 0 ]]; then
+    echo "dispatch: WARNING — could not file the capacity-recheck bead for '$ROLE'; items are recorded at $recheck_file only" >&2
+    return 0
+  fi
+  local bead_id
+  bead_id="$(awk 'match($0, /[A-Za-z]+-[a-z0-9]+/) { print substr($0, RSTART, RLENGTH); exit }' <<< "$bd_output")"
+  [[ -z "$bead_id" ]] || RECHECK_BEAD_JSON="$(jq -cn --arg id "$bead_id" '$id')"
 }
 
 _finalize_dispatch_result() {

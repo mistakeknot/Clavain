@@ -178,8 +178,22 @@ section is not read as `None.`, only an explicit `None.` is. `"listed"` and
 other lab re-verifies. `CLAVAIN_RECHECK_BEADS=0` disables filing the bead but
 still writes the sidecar; a `bd` failure prints to stderr and never fails the
 dispatch. `tests/routing/plan-review-capacity-test.sh` drives all these
-outcomes plus the different-lab case where no paragraph or bead is expected
-and the producer-conflict-only case where no capacity failure occurred.
+outcomes plus the different-lab case where no paragraph or bead is expected,
+the producer-conflict-only case where no capacity failure occurred, and the
+tracker-resolution cases below.
+
+Bead filing never lets `bd` resolve its own tracker (mk-hadt: `bd -C
+$WORKDIR` from a worktree with no local `.beads` walked up past the repo root
+into an unrelated ancestor tracker and filed real beads there). If
+`CLAVAIN_RECHECK_BEADS_DIR` is set, dispatch runs `bd -C` there unconditionally
+(zklw sets it to `/home/mk/hub`); otherwise it resolves `WORKDIR` to its main
+checkout via `git rev-parse --git-common-dir` (mirroring
+`scripts/next-goal-candidates.sh`'s `tracker_home()`) and files there only if
+that checkout's top level actually contains `.beads` — it never falls through
+to letting `bd` search further on its own. When no tracker resolves, dispatch
+files nothing, still writes the sidecar, and prints a loud stderr warning
+naming the sidecar and `CLAVAIN_RECHECK_BEADS_DIR`. The receipt carries
+`recheck_bead` (the filed bead's id, or `null` when nothing was filed).
 
 ### Execution headroom forecasts
 
