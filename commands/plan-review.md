@@ -20,6 +20,8 @@ plan-review (OODARC: Validate — decision gate):
 
 ## Step 0 — gauge lint (blocking)
 
+If the argument is inline plan content rather than a path on disk, first write it verbatim to `/tmp/plan-review-<slug>.md` and use that file as `<plan.md>` / `<plan file>` for every step below.
+
 Run this **before** dispatching any reviewer, and do not proceed while it reports findings:
 
 ```bash
