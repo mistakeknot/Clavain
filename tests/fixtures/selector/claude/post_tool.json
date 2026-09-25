@@ -1,0 +1,12 @@
+{
+  "session_id": "sess-fake-0001",
+  "transcript_path": "/tmp/fake-transcript.jsonl",
+  "cwd": "/tmp/fake-project",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo hello",
+    "description": "fake command for fixture purposes only"
+  },
+  "tool_response": "hello\n"
+}
