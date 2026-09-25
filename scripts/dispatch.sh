@@ -41,6 +41,7 @@ PRODUCER_IDENTITY=""
 VALIDATOR_RELATIONSHIP=""
 CAPACITY_SUBSTITUTE_JSON=""
 RECHECK_ITEMS=""
+RECHECK_SOURCE_JSON=""
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
@@ -505,7 +506,7 @@ _dispatch_model_lab() {
 _dispatch_role_profile() {
   local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
   local fallback_reason="" rc=1 candidate_count=0 producer_model="" capacity_substitute=null
-  local candidate_model_identity="" producer_lab="" reviewer_lab=""
+  local candidate_model_identity="" producer_lab="" reviewer_lab="" capacity_failure_class=""
   local -a resolved_args
 
   if [[ "$role" == "validation" || "$role" == "cross-lab-review" || "$role" == "plan-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
@@ -622,18 +623,22 @@ _dispatch_role_profile() {
       continue
     fi
 
-    # A capacity substitute (mk-gp32): this review role already walked past a
-    # failed candidate (fallback_reason non-empty) and landed on a model from
+    # A capacity substitute (mk-gp32): this review role already had an earlier
+    # candidate actually run and fail with a capacity class (quota_exhausted,
+    # rate_limited, model_unavailable, account_access_absent — set below,
+    # never by a pre-walk ic fallback_reason like producer_model_conflict, nor
+    # by a pre-run skip like usage_reporting_unavailable or
+    # insufficient_codex_version), and this candidate lands on a model from
     # the producer's own lab. Same-lab is fine when it is the only reachable
     # reviewer, but the review is provisional, not a real cross-lab check —
     # see B1's reviewer paragraph and B3's re-check filing below.
     capacity_substitute=null
-    if [[ ( "$role" == plan-review || "$role" == validation || "$role" == cross-lab-review ) && -n "$fallback_reason" ]]; then
+    if [[ ( "$role" == plan-review || "$role" == validation || "$role" == cross-lab-review ) && -n "$capacity_failure_class" ]]; then
       candidate_model_identity="$(jq -r '.profile.model_identity // .profile.model' <<< "$candidate")"
       producer_lab="$(_dispatch_model_lab "$producer_model")"
       reviewer_lab="$(_dispatch_model_lab "$candidate_model_identity")"
       if [[ -n "$producer_lab" && "$producer_lab" == "$reviewer_lab" ]]; then
-        capacity_substitute="$(jq -cn --arg fc "$fallback_reason" --arg pl "$producer_lab" --arg rl "$reviewer_lab" \
+        capacity_substitute="$(jq -cn --arg fc "$capacity_failure_class" --arg pl "$producer_lab" --arg rl "$reviewer_lab" \
           '{failure_class:$fc,producer_lab:$pl,reviewer_lab:$rl}')"
       fi
     fi
@@ -666,7 +671,12 @@ _dispatch_role_profile() {
     # transport failure. Only its supervisor can admit another invocation.
     [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
-      quota_exhausted|rate_limited|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
+      quota_exhausted|rate_limited|model_unavailable|account_access_absent)
+        fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
+        capacity_failure_class="$CLAVAIN_LAST_FAILURE_CLASS"
+        echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
+        ;;
+      insufficient_codex_version|unsupported_adapter)
         fallback_reason="$CLAVAIN_LAST_FAILURE_CLASS"
         echo "dispatch: '$profile_ref' unavailable ($fallback_reason); trying its declared fallback" >&2
         ;;
@@ -2489,10 +2499,19 @@ _dispatch_capacity_recheck_section() {
 # "## Re-check by the other lab" section and turn any listed items into a
 # filed bead for the lab that never actually reviewed. Never fails the
 # dispatch: a bd problem is a loud stderr warning, not a withheld verdict.
+#
+# A present heading with no "- " items under it is treated the same as an
+# absent heading — the reviewer wrote the label but not the substance, so the
+# whole review still needs a re-check. Only an explicit "None." body means
+# the reviewer actually confirmed there is nothing to flag. RECHECK_SOURCE_JSON
+# records which of the three happened ("listed"/"none"/"missing", the last
+# covering both absent and empty) so the receipt can tell a real item list
+# apart from a fabricated one.
 _dispatch_process_capacity_recheck() {
   local exit_code="$1" body section_found=true item line
   local -a items=()
   RECHECK_ITEMS=""
+  RECHECK_SOURCE_JSON=""
   [[ "$exit_code" == 0 ]] || return 0
   [[ -n "${CAPACITY_SUBSTITUTE_JSON:-}" && "$CAPACITY_SUBSTITUTE_JSON" != null ]] || return 0
   [[ -n "$OUTPUT" && -f "$OUTPUT" ]] || return 0
@@ -2503,13 +2522,18 @@ _dispatch_process_capacity_recheck() {
   if [[ "$section_found" == true ]]; then
     if [[ "$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$body" | grep -v '^$')" == "None." ]]; then
       RECHECK_ITEMS=0
+      RECHECK_SOURCE_JSON='"none"'
       return 0
     fi
     while IFS= read -r line; do
       [[ "$line" == -\ * ]] && items+=("${line#- }")
     done <<< "$body"
-  else
+  fi
+  if [[ "${#items[@]}" -eq 0 ]]; then
     items=("reviewer did not list re-check items; re-check the whole review")
+    RECHECK_SOURCE_JSON='"missing"'
+  else
+    RECHECK_SOURCE_JSON='"listed"'
   fi
   RECHECK_ITEMS="${#items[@]}"
   [[ "$RECHECK_ITEMS" -gt 0 ]] || return 0

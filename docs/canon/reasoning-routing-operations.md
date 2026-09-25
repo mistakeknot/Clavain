@@ -144,29 +144,42 @@ policy order.
 ### Capacity-substitute reviews are provisional, never blocking
 
 mk-gp32. A `plan-review`, `validation` or `cross-lab-review` candidate counts as
-a capacity substitute when it is reached after a walk (`fallback_reason` is
-non-empty) and its lab matches the producer's — `_dispatch_model_lab` in
-`scripts/dispatch.sh` ports intercore's `modelLab`
-(`internal/routing/identity.go:138-148`) from the model identity prefix
-(`gpt-` → openai, `claude-` → anthropic, `kimi` → moonshot; anything else never
-counts as same-lab). When it fires, the reviewer prompt gets a fixed paragraph
-naming the review as a same-lab capacity substitute and asking the output to
-end with a `## Re-check by the other lab` section: claims confirmed without
-running anything, and judgments the reviewer is unsure of, one per line, or the
-single line `None.` if there is nothing to flag. The receipt
-(`_role_audit_context`) always carries `capacity_substitute` (`null` when the
-review was not a substitute, otherwise `{failure_class, producer_lab,
-reviewer_lab}`) and `recheck_items` (an int, or `null` when not a substitute).
-The verdict itself is never withheld for this. After a successful substituted
-review, dispatch parses that section from `OUTPUT`: items present, or the
-heading missing entirely, both write `${OUTPUT}.recheck.md` and file one
-`bd create` (label `capacity-recheck`, `--deps discovered-from:$CLAVAIN_BEAD_ID`
-when set) so the other lab re-verifies; a missing heading is treated as the
-whole review needing a re-check, not as `None.`, which alone files nothing.
-`CLAVAIN_RECHECK_BEADS=0` disables filing the bead but still writes the
-sidecar; a `bd` failure prints to stderr and never fails the dispatch.
-`tests/routing/plan-review-capacity-test.sh` drives all three outcomes plus the
-different-lab case where no paragraph or bead is expected.
+a capacity substitute only when an *earlier* candidate in the same walk was
+actually attempted and failed with a real capacity class — `quota_exhausted`,
+`rate_limited`, `model_unavailable` or `account_access_absent`, tracked in
+`_dispatch_role_profile` as `capacity_failure_class` — and this candidate's
+lab matches the producer's. A pre-walk `ic` `fallback_reason` such as
+`producer_model_conflict` (seeded before any candidate in this loop has run,
+e.g. from `cross_lab_first` reordering) or a pre-run skip such as
+`usage_reporting_unavailable`/`insufficient_codex_version` never marks a
+substitute by itself; both keep the walk going without setting
+`capacity_failure_class`. `_dispatch_model_lab` in `scripts/dispatch.sh` ports
+intercore's `modelLab` (`internal/routing/identity.go:138-148`) from the model
+identity prefix (`gpt-` → openai, `claude-` → anthropic, `kimi` → moonshot;
+anything else never counts as same-lab). When it fires, the reviewer prompt
+gets a fixed paragraph naming the review as a same-lab capacity substitute and
+asking the output to end with a `## Re-check by the other lab` section: claims
+confirmed without running anything, and judgments the reviewer is unsure of,
+one per line, or the single line `None.` if there is nothing to flag. The
+receipt (`_role_audit_context`) always carries `capacity_substitute` (`null`
+when the review was not a substitute, otherwise `{failure_class, producer_lab,
+reviewer_lab}` with the triggering capacity class), `recheck_items` (an int, or
+`null` when not a substitute) and `recheck_source` (`"listed"`, `"none"` or
+`"missing"`, or `null` when not a substitute). The verdict itself is never
+withheld for this. After a successful substituted review, dispatch parses that
+section from `OUTPUT`: a heading with `- ` items writes `recheck_source:
+"listed"`; an explicit `None.` body writes `recheck_source: "none"` and files
+nothing; a missing heading *or* a present heading with no items under it both
+write `recheck_source: "missing"`, fabricating the single item "reviewer did
+not list re-check items; re-check the whole review" — a present-but-empty
+section is not read as `None.`, only an explicit `None.` is. `"listed"` and
+`"missing"` both write `${OUTPUT}.recheck.md` and file one `bd create` (label
+`capacity-recheck`, `--deps discovered-from:$CLAVAIN_BEAD_ID` when set) so the
+other lab re-verifies. `CLAVAIN_RECHECK_BEADS=0` disables filing the bead but
+still writes the sidecar; a `bd` failure prints to stderr and never fails the
+dispatch. `tests/routing/plan-review-capacity-test.sh` drives all these
+outcomes plus the different-lab case where no paragraph or bead is expected
+and the producer-conflict-only case where no capacity failure occurred.
 
 ### Execution headroom forecasts
 

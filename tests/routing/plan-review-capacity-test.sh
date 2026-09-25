@@ -31,20 +31,28 @@ fail() {
 }
 
 # Fake codex: every model reports the Codex usage-limit error unless
-# FAKE_CODEX_MODE=success.
+# FAKE_CODEX_MODE=success. --version answers FAKE_CODEX_VERSION (default new
+# enough for every declared minimum_codex_version), so a test can simulate an
+# old Codex CLI and exercise the insufficient_codex_version pre-run skip. On
+# success, real codex writes its answer to the file named by -o directly (not
+# to stdout — dispatch.sh passes -o "$OUTPUT"), so the fixture does too;
+# otherwise OUTPUT stays empty and a future Codex substitute would misread as
+# a missing re-check section.
 cat > "$TMP_ROOT/bin/codex" <<'FAKE_CODEX'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then
-  echo "codex-cli 0.154.0"
+  echo "codex-cli ${FAKE_CODEX_VERSION:-0.154.0}"
   exit 0
 fi
-model=""
+model="" outfile=""
 args=("$@")
 for ((i=0; i<${#args[@]}; i++)); do
   [[ "${args[$i]}" == "-m" ]] && model="${args[$((i+1))]:-}"
+  [[ "${args[$i]}" == "-o" ]] && outfile="${args[$((i+1))]:-}"
 done
 printf '%s\n' "$model" >> "$FAKE_CODEX_LOG"
 if [[ "${FAKE_CODEX_MODE:-quota}" == success ]]; then
+  [[ -z "$outfile" ]] || printf '%s\n' "${FAKE_CODEX_ANSWER:-VERDICT: CLEAN}" > "$outfile"
   echo '{"type":"task_complete","last_agent_message":"VERDICT: CLEAN"}'
   exit 0
 fi
@@ -90,10 +98,16 @@ FAKE_CLAUDE
 
 # Fake bd (B3/B5): logs each invocation's argv as one \x1f-separated line
 # per call, and returns a fake id — verifies the capacity-recheck bead
-# filing without touching the real tracker.
+# filing without touching the real tracker. FAKE_BD_MODE=fail still logs the
+# call (bd was actually invoked with the right argv) but exits 1, so B3's
+# loud-stderr-warning-never-fails-the-dispatch behavior can be checked.
 cat > "$TMP_ROOT/bin/bd" <<'FAKE_BD'
 #!/usr/bin/env bash
 { printf '<<<BD-CALL>>>\n'; printf '%s\x1f' "$@"; printf '\n'; } >> "$FAKE_BD_LOG"
+if [[ "${FAKE_BD_MODE:-}" == fail ]]; then
+  echo "fake-bd: simulated failure" >&2
+  exit 1
+fi
 echo "fake-bd-1"
 FAKE_BD
 chmod +x "$TMP_ROOT/bin/codex" "$TMP_ROOT/bin/claude" "$TMP_ROOT/bin/bd"
@@ -127,6 +141,27 @@ never_reviewed_by() {
   if grep -qx -- "$model" "$FAKE_CODEX_LOG" "$FAKE_CLAUDE_LOG" 2>/dev/null; then
     fail "$label: the producer's own model $model reviewed its plan (codex: $(paste -sd' ' "$FAKE_CODEX_LOG"); claude: $(paste -sd' ' "$FAKE_CLAUDE_LOG"))"
   fi
+}
+
+# Prints the context_json of the most recent terminal (completed/failed)
+# `ic route record` receipt from this run's dispatch(es), so a test can
+# assert on capacity_substitute/recheck_items/recheck_source the way a real
+# receipt consumer would. `_record_role_routing_decision` runs `ic route
+# record`/`ic route list` with cwd=$WORKDIR ("-C $TMP_ROOT/work" here); an
+# unrecognized project directory like a throwaway mktemp resolves to a
+# shared fallback store also used by OTHER concurrent test/integration runs
+# on this machine (not a per-directory db) — --agent/--model/--limit are
+# accepted but silently ignored by the installed `ic`, so filter client-side
+# on project_dir (recorded from that same cwd) to isolate this run's own
+# rows. One dispatch call writes a terminal record per attempted candidate
+# (e.g. Astra's quota_exhausted, then the one that actually finished the
+# review) — sort by row id (insertion order) and take the LAST terminal
+# record to land on the outcome the caller actually saw.
+latest_receipt() {
+  (cd "$TMP_ROOT/work" && ic route list --json 2>/dev/null) |
+    jq -c --arg dir "$TMP_ROOT/work" '
+      [.[] | select(.project_dir == $dir)] | sort_by(.id) |
+      [.[] | (.context_json | fromjson) | select(.state == "completed" or .state == "failed")] | .[-1] // empty'
 }
 
 # Fable-authored plan, Codex out: Astra is tried, quota-exhausts, and the
@@ -199,6 +234,13 @@ grep -q "## Re-check by the other lab" "$FAKE_CLAUDE_PROMPT_LOG" || fail "capaci
 # item, not like "None." — it still files, using the fabricated item.
 grep -q "reviewer did not list re-check items" "$TMP_ROOT/answer.md.recheck.md" || fail "capacity substitute: a missing re-check section did not fall back to the whole-review item: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
 [[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "capacity substitute: a missing re-check section should still file one bead, got: $(cat "$FAKE_BD_LOG")"
+receipt="$(latest_receipt)"
+[[ -n "$receipt" ]] || fail "capacity substitute: no terminal ic route record receipt found for plan-review"
+[[ "$(jq -r '.capacity_substitute.failure_class' <<< "$receipt")" == "quota_exhausted" ]] || fail "capacity substitute: receipt capacity_substitute.failure_class was not quota_exhausted: $receipt"
+[[ "$(jq -r '.capacity_substitute.producer_lab' <<< "$receipt")" == "anthropic" ]] || fail "capacity substitute: receipt capacity_substitute.producer_lab was not anthropic: $receipt"
+[[ "$(jq -r '.capacity_substitute.reviewer_lab' <<< "$receipt")" == "anthropic" ]] || fail "capacity substitute: receipt capacity_substitute.reviewer_lab was not anthropic: $receipt"
+[[ "$(jq -r '.recheck_items' <<< "$receipt")" == "1" ]] || fail "capacity substitute: receipt recheck_items was not 1 for the fabricated item: $receipt"
+[[ "$(jq -r '.recheck_source' <<< "$receipt")" == "missing" ]] || fail "capacity substitute: receipt recheck_source was not 'missing' for an absent heading: $receipt"
 
 # The reviewer lists two re-check items: dispatch writes a recheck sidecar
 # and files exactly one bead, tagged back to the producing bead.
@@ -213,6 +255,41 @@ grep -q "unsure whether the fallback order" "$TMP_ROOT/answer.md.recheck.md" || 
 grep -q "capacity-recheck" "$FAKE_BD_LOG" || fail "two re-check items: bd create did not carry the capacity-recheck label"
 grep -q "discovered-from:bd-parent-1" "$FAKE_BD_LOG" || fail "two re-check items: bd create did not carry --deps discovered-from"
 grep -q "Re-check capacity-substitute plan-review review (bd-parent-1)" "$FAKE_BD_LOG" || fail "two re-check items: unexpected bd create title: $(cat "$FAKE_BD_LOG")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_items' <<< "$receipt")" == "2" ]] || fail "two re-check items: receipt recheck_items was not 2: $receipt"
+[[ "$(jq -r '.recheck_source' <<< "$receipt")" == "listed" ]] || fail "two re-check items: receipt recheck_source was not 'listed': $receipt"
+
+# CLAVAIN_RECHECK_BEADS=0: the sidecar is still written (items are not lost)
+# but no bd create call is made.
+CLAVAIN_BEAD_ID="bd-parent-1b" CLAVAIN_RECHECK_BEADS=0 \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed nothing was executed\n')" \
+  run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "CLAVAIN_RECHECK_BEADS=0: expected review to succeed, got exit $rc"
+[[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "CLAVAIN_RECHECK_BEADS=0: expected the sidecar to still be written"
+grep -q "confirmed nothing was executed" "$TMP_ROOT/answer.md.recheck.md" || fail "CLAVAIN_RECHECK_BEADS=0: sidecar missing the item"
+[[ ! -s "$FAKE_BD_LOG" ]] || fail "CLAVAIN_RECHECK_BEADS=0: expected no bd create call, got: $(cat "$FAKE_BD_LOG")"
+
+# A failing bd never fails the dispatch: exit 0, a loud stderr warning, and
+# the sidecar is still there for a human to find.
+FAKE_BD_MODE=fail \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed nothing was executed\n')" \
+  run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "failing bd: expected the dispatch to still succeed, got exit $rc"
+[[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "failing bd: expected the sidecar to still be written"
+grep -qi "WARNING.*could not file the capacity-recheck bead" "$TMP_ROOT/err" || fail "failing bd: expected a loud stderr warning: $(tail -5 "$TMP_ROOT/err")"
+[[ -s "$FAKE_BD_LOG" ]] || fail "failing bd: expected bd to have actually been invoked (and logged) before failing"
+
+# The reviewer writes the heading with no items under it (not "None."): B3
+# treats an empty section the same as a missing one — the whole review still
+# needs a re-check, not a silent "nothing to flag".
+CLAVAIN_BEAD_ID="bd-parent-2b" \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n\n')" \
+  run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "empty re-check section: expected review to succeed, got exit $rc"
+grep -q "reviewer did not list re-check items" "$TMP_ROOT/answer.md.recheck.md" || fail "empty re-check section: expected the fabricated whole-review item, got: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "empty re-check section: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_source' <<< "$receipt")" == "missing" ]] || fail "empty re-check section: receipt recheck_source was not 'missing': $receipt"
 
 # The reviewer writes "None." (nothing to flag): no bead is filed.
 CLAVAIN_BEAD_ID="bd-parent-2" \
@@ -220,6 +297,9 @@ CLAVAIN_BEAD_ID="bd-parent-2" \
   run_review claude-fable-5-1
 [[ "$rc" == 0 ]] || fail "None. re-check: expected review to succeed, got exit $rc"
 [[ ! -s "$FAKE_BD_LOG" ]] || fail "None. re-check: expected no bd create call, got: $(cat "$FAKE_BD_LOG")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_items' <<< "$receipt")" == "0" ]] || fail "None. re-check: receipt recheck_items was not 0: $receipt"
+[[ "$(jq -r '.recheck_source' <<< "$receipt")" == "none" ]] || fail "None. re-check: receipt recheck_source was not 'none': $receipt"
 
 echo "PASS: capacity-substitute plan reviews carry the re-check paragraph and file re-check beads for real items only"
 
@@ -233,5 +313,30 @@ FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-fable-5-1" run_review claude-o
 grep -q "capacity-substitute" "$FAKE_CLAUDE_PROMPT_LOG" 2>/dev/null && fail "cross-lab (not substitute): the Fable prompt unexpectedly carried the re-check paragraph"
 [[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "cross-lab (not substitute): unexpectedly wrote a recheck sidecar"
 [[ ! -s "$FAKE_BD_LOG" ]] || fail "cross-lab (not substitute): unexpectedly filed a bd create call"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.capacity_substitute' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt capacity_substitute was not null: $receipt"
+[[ "$(jq -r '.recheck_items' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_items was not null: $receipt"
+[[ "$(jq -r '.recheck_source' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_source was not null: $receipt"
 
 echo "PASS: a different-lab fallback review is not treated as a capacity substitute"
+
+# review-fable is excluded pre-walk with fallback_reason=producer_model_conflict
+# (producer is also claude-fable-5-1); review-astra is then skipped pre-run
+# via insufficient_codex_version (an old Codex CLI, never actually invoked
+# with a real prompt); the walk lands on review-opus (claude-opus-5), same
+# lab as the producer. Neither exclusion is a real capacity-class failure, so
+# capacity_failure_class stays empty and this must NOT be flagged as a
+# capacity substitute even though it is same-lab and reached after a walk.
+FAKE_CODEX_VERSION="0.100.0" run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "producer_model_conflict only: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ ! -s "$FAKE_CODEX_LOG" ]] || fail "producer_model_conflict only: review-astra should never have been actually attempted, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CLAUDE_LOG")" == "claude-opus-5" ]] || fail "producer_model_conflict only: expected claude-opus-5 to review, got: $(cat "$FAKE_CLAUDE_LOG")"
+grep -q "requires Codex >=" "$TMP_ROOT/err" || fail "producer_model_conflict only: expected the insufficient_codex_version pre-run skip recorded on stderr: $(cat "$TMP_ROOT/err")"
+never_reviewed_by "producer_model_conflict only" claude-fable-5-1
+grep -q "capacity-substitute" "$FAKE_CLAUDE_PROMPT_LOG" 2>/dev/null && fail "producer_model_conflict only: the Opus prompt unexpectedly carried the re-check paragraph"
+[[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "producer_model_conflict only: unexpectedly wrote a recheck sidecar"
+[[ ! -s "$FAKE_BD_LOG" ]] || fail "producer_model_conflict only: unexpectedly filed a bd create call"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.capacity_substitute' <<< "$receipt")" == "null" ]] || fail "producer_model_conflict only: receipt capacity_substitute was not null: $receipt"
+
+echo "PASS: a pre-walk producer_model_conflict exclusion plus a pre-run version skip is not a capacity substitute"
