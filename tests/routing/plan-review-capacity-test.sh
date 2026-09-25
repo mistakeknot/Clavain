@@ -59,9 +59,14 @@ fi
 echo '{"type":"task_complete","error":{"codex_error_info":"usage_limit_exceeded"}}'
 FAKE_CODEX
 
-# Fake claude: logs the --model it was given. A model listed in
+# Fake claude: logs the --model it was given and its full stdin prompt
+# (FAKE_CLAUDE_PROMPT_LOG; B1's re-check paragraph is verified there — real
+# Claude receives the prompt via stdin, never argv). A model listed in
 # FAKE_CLAUDE_QUOTA answers the way the Claude CLI's stream-json reports a
 # subscription limit: error "rate_limit" plus the limit text, exit 1.
+# Otherwise it answers with FAKE_CLAUDE_ANSWER (default "VERDICT: CLEAN") as
+# a real stream-json result event, so dispatch's claude-response.py renders
+# it into OUTPUT — required for B3 to parse a "## Re-check" section back out.
 cat > "$TMP_ROOT/bin/claude" <<'FAKE_CLAUDE'
 #!/usr/bin/env bash
 model=""
@@ -70,20 +75,34 @@ for ((i=0; i<${#args[@]}; i++)); do
   [[ "${args[$i]}" == "--model" ]] && model="${args[$((i+1))]:-}"
 done
 printf '%s\n' "$model" >> "$FAKE_CLAUDE_LOG"
-cat > /dev/null
+stdin_prompt="$(cat)"
+if [[ -n "${FAKE_CLAUDE_PROMPT_LOG:-}" ]]; then
+  { printf '%s' "$stdin_prompt"; printf '\n<<<END-OF-PROMPT>>>\n'; } >> "$FAKE_CLAUDE_PROMPT_LOG"
+fi
 if [[ " ${FAKE_CLAUDE_QUOTA:-} " == *" $model "* ]]; then
   text="You've hit your weekly limit · resets Sep 26, 7pm (UTC)"
   jq -cn --arg t "$text" '{type:"assistant",message:{content:[{type:"text",text:$t}]},error:"rate_limit"}'
   jq -cn --arg t "$text" '{type:"result",subtype:"success",is_error:true,result:$t}'
   exit 1
 fi
-echo 'VERDICT: CLEAN'
+jq -cn --arg t "${FAKE_CLAUDE_ANSWER:-VERDICT: CLEAN}" '{type:"result",subtype:"success",is_error:false,result:$t}'
 FAKE_CLAUDE
-chmod +x "$TMP_ROOT/bin/codex" "$TMP_ROOT/bin/claude"
+
+# Fake bd (B3/B5): logs each invocation's argv as one \x1f-separated line
+# per call, and returns a fake id — verifies the capacity-recheck bead
+# filing without touching the real tracker.
+cat > "$TMP_ROOT/bin/bd" <<'FAKE_BD'
+#!/usr/bin/env bash
+{ printf '<<<BD-CALL>>>\n'; printf '%s\x1f' "$@"; printf '\n'; } >> "$FAKE_BD_LOG"
+echo "fake-bd-1"
+FAKE_BD
+chmod +x "$TMP_ROOT/bin/codex" "$TMP_ROOT/bin/claude" "$TMP_ROOT/bin/bd"
 
 export PATH="$TMP_ROOT/bin:$PATH"
 export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
 export FAKE_CLAUDE_LOG="$TMP_ROOT/claude.log"
+export FAKE_CLAUDE_PROMPT_LOG="$TMP_ROOT/claude-prompt.log"
+export FAKE_BD_LOG="$TMP_ROOT/bd.log"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 export CLAVAIN_BB_DIRECT_POOL=0
 export CLAVAIN_ROUTING_POLICY="${PLAN_REVIEW_TEST_POLICY:-$ROOT/config/routing.yaml}"
@@ -95,7 +114,8 @@ printf '%s\n' '{"reasons":["foundational-invariants"],"rationale":"plan-review c
 # Runs one plan review; leaves the exit code in $rc and stderr in $TMP_ROOT/err.
 run_review() {
   local producer="$1"
-  : > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"
+  : > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"; : > "$FAKE_CLAUDE_PROMPT_LOG"; : > "$FAKE_BD_LOG"
+  rm -f "$TMP_ROOT/answer.md.recheck.md"
   rc=0
   bash "$ROOT/scripts/dispatch.sh" --role plan-review --producer-identity "$producer" \
     --context-file "$CONTEXT_FILE" -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer.md" \
@@ -162,3 +182,56 @@ FAKE_CLAUDE_QUOTA="claude-opus-5" run_review claude-fable-5-1
 never_reviewed_by "all reviewers out" claude-fable-5-1
 
 echo "PASS: plan review stays blocked rather than self-reviewing when no distinct frontier model is available"
+
+# --- mk-gp32: capacity-substitute reviews are provisional, never blocking --
+#
+# The Fable-producer/Codex-out case above (Astra quota-exhausts or 429s,
+# Opus reviews) is itself the same-lab substitute this covers: producer
+# claude-fable-5-1 and reviewer claude-opus-5 are both anthropic, and the
+# candidate is reached after a walk (fallback_reason non-empty). Reuse it to
+# check the reviewer's prompt carries B1's fixed re-check paragraph.
+run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "capacity substitute: expected review to succeed, got exit $rc"
+grep -q "capacity-substitute" "$FAKE_CLAUDE_PROMPT_LOG" || fail "capacity substitute: reviewer prompt did not carry the re-check paragraph: $(cat "$FAKE_CLAUDE_PROMPT_LOG")"
+grep -q "## Re-check by the other lab" "$FAKE_CLAUDE_PROMPT_LOG" || fail "capacity substitute: reviewer prompt did not ask for a re-check section"
+# The reviewer's answer (fixture default "VERDICT: CLEAN") omitted the
+# section entirely: B3's parser treats a missing section like a full-review
+# item, not like "None." — it still files, using the fabricated item.
+grep -q "reviewer did not list re-check items" "$TMP_ROOT/answer.md.recheck.md" || fail "capacity substitute: a missing re-check section did not fall back to the whole-review item: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "capacity substitute: a missing re-check section should still file one bead, got: $(cat "$FAKE_BD_LOG")"
+
+# The reviewer lists two re-check items: dispatch writes a recheck sidecar
+# and files exactly one bead, tagged back to the producing bead.
+CLAVAIN_BEAD_ID="bd-parent-1" \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed the migration script runs without executing it\n- unsure whether the fallback order still matches routing.yaml\n')" \
+  run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "two re-check items: expected review to succeed, got exit $rc"
+[[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "two re-check items: expected a recheck sidecar file"
+grep -q "confirmed the migration script" "$TMP_ROOT/answer.md.recheck.md" || fail "two re-check items: sidecar missing first item"
+grep -q "unsure whether the fallback order" "$TMP_ROOT/answer.md.recheck.md" || fail "two re-check items: sidecar missing second item"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "two re-check items: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+grep -q "capacity-recheck" "$FAKE_BD_LOG" || fail "two re-check items: bd create did not carry the capacity-recheck label"
+grep -q "discovered-from:bd-parent-1" "$FAKE_BD_LOG" || fail "two re-check items: bd create did not carry --deps discovered-from"
+grep -q "Re-check capacity-substitute plan-review review (bd-parent-1)" "$FAKE_BD_LOG" || fail "two re-check items: unexpected bd create title: $(cat "$FAKE_BD_LOG")"
+
+# The reviewer writes "None." (nothing to flag): no bead is filed.
+CLAVAIN_BEAD_ID="bd-parent-2" \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\nNone.\n')" \
+  run_review claude-fable-5-1
+[[ "$rc" == 0 ]] || fail "None. re-check: expected review to succeed, got exit $rc"
+[[ ! -s "$FAKE_BD_LOG" ]] || fail "None. re-check: expected no bd create call, got: $(cat "$FAKE_BD_LOG")"
+
+echo "PASS: capacity-substitute plan reviews carry the re-check paragraph and file re-check beads for real items only"
+
+# Opus producer, Fable out of quota: the walk reaches Astra (openai), a
+# different lab than the producer (anthropic) — not a capacity substitute.
+# No re-check paragraph, no sidecar, no bead, even though this is also a
+# fallback-walk review.
+FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-fable-5-1" run_review claude-opus-5
+[[ "$rc" == 0 ]] || fail "cross-lab (not substitute): expected review to degrade to Astra, got exit $rc"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "cross-lab (not substitute): expected the fallback gpt-6-astra, got: $(cat "$FAKE_CODEX_LOG")"
+grep -q "capacity-substitute" "$FAKE_CLAUDE_PROMPT_LOG" 2>/dev/null && fail "cross-lab (not substitute): the Fable prompt unexpectedly carried the re-check paragraph"
+[[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "cross-lab (not substitute): unexpectedly wrote a recheck sidecar"
+[[ ! -s "$FAKE_BD_LOG" ]] || fail "cross-lab (not substitute): unexpectedly filed a bd create call"
+
+echo "PASS: a different-lab fallback review is not treated as a capacity substitute"

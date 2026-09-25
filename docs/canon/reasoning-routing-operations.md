@@ -141,6 +141,33 @@ producer it now resolves Sol, then Fable, then Kimi. Requires Intercore `ic` at 
 after commit 2caa435; an older `ic` ignores `cross_lab_first` and keeps the
 policy order.
 
+### Capacity-substitute reviews are provisional, never blocking
+
+mk-gp32. A `plan-review`, `validation` or `cross-lab-review` candidate counts as
+a capacity substitute when it is reached after a walk (`fallback_reason` is
+non-empty) and its lab matches the producer's — `_dispatch_model_lab` in
+`scripts/dispatch.sh` ports intercore's `modelLab`
+(`internal/routing/identity.go:138-148`) from the model identity prefix
+(`gpt-` → openai, `claude-` → anthropic, `kimi` → moonshot; anything else never
+counts as same-lab). When it fires, the reviewer prompt gets a fixed paragraph
+naming the review as a same-lab capacity substitute and asking the output to
+end with a `## Re-check by the other lab` section: claims confirmed without
+running anything, and judgments the reviewer is unsure of, one per line, or the
+single line `None.` if there is nothing to flag. The receipt
+(`_role_audit_context`) always carries `capacity_substitute` (`null` when the
+review was not a substitute, otherwise `{failure_class, producer_lab,
+reviewer_lab}`) and `recheck_items` (an int, or `null` when not a substitute).
+The verdict itself is never withheld for this. After a successful substituted
+review, dispatch parses that section from `OUTPUT`: items present, or the
+heading missing entirely, both write `${OUTPUT}.recheck.md` and file one
+`bd create` (label `capacity-recheck`, `--deps discovered-from:$CLAVAIN_BEAD_ID`
+when set) so the other lab re-verifies; a missing heading is treated as the
+whole review needing a re-check, not as `None.`, which alone files nothing.
+`CLAVAIN_RECHECK_BEADS=0` disables filing the bead but still writes the
+sidecar; a `bd` failure prints to stderr and never fails the dispatch.
+`tests/routing/plan-review-capacity-test.sh` drives all three outcomes plus the
+different-lab case where no paragraph or bead is expected.
+
 ### Execution headroom forecasts
 
 Before role resolution, dispatch may read `bb pool status --json` for

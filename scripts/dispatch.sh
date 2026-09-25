@@ -39,6 +39,8 @@ MINIMUM_CODEX_VERSION=""
 FALLBACK_REASON=""
 PRODUCER_IDENTITY=""
 VALIDATOR_RELATIONSHIP=""
+CAPACITY_SUBSTITUTE_JSON=""
+RECHECK_ITEMS=""
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
@@ -392,10 +394,10 @@ done
 ROLE_PASSTHROUGH=()
 for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
   case "${ORIGINAL_ARGS[$i]}" in
-    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--fallback-reason|--producer-identity|--validator-relationship)
+    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--fallback-reason|--producer-identity|--validator-relationship|--capacity-substitute)
       i=$((i + 1))
       ;;
-    --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*)
+    --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*|--capacity-substitute=*)
       ;;
     --role-resolved)
       ;;
@@ -488,9 +490,22 @@ _codex_version_at_least() {
   }'
 }
 
+# Bash port of intercore's modelLab (internal/routing/identity.go:138-148),
+# used to detect a capacity-substitute review (mk-gp32): a model identity
+# without a recognized prefix is "unknown" and never counts as a lab match.
+_dispatch_model_lab() {
+  case "$1" in
+    gpt-*) echo openai ;;
+    claude-*) echo anthropic ;;
+    kimi*) echo moonshot ;;
+    *) echo "" ;;
+  esac
+}
+
 _dispatch_role_profile() {
   local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
-  local fallback_reason="" rc=1 candidate_count=0
+  local fallback_reason="" rc=1 candidate_count=0 producer_model="" capacity_substitute=null
+  local candidate_model_identity="" producer_lab="" reviewer_lab=""
   local -a resolved_args
 
   if [[ "$role" == "validation" || "$role" == "cross-lab-review" || "$role" == "plan-review" ]] && [[ -z "$PRODUCER_IDENTITY" ]]; then
@@ -567,6 +582,7 @@ _dispatch_role_profile() {
   fi
   fallback_reason="$(jq -r '.fallback_reason // empty' <<< "$resolved")"
   VALIDATOR_RELATIONSHIP="$(jq -r '.validator_relationship // empty' <<< "$resolved")"
+  producer_model="$(jq -r '.producer_model // empty' <<< "$resolved")"
   DISPATCH_ID="${DISPATCH_ID:-$(_dispatch_audit_id)}"
   export CLAVAIN_DISPATCH_ID="$DISPATCH_ID"
   candidates="$(jq -c '[{profile_ref:.profile_ref,profile:.profile}] + (.fallback_chain // []) | .[]' <<< "$resolved")" || {
@@ -606,6 +622,22 @@ _dispatch_role_profile() {
       continue
     fi
 
+    # A capacity substitute (mk-gp32): this review role already walked past a
+    # failed candidate (fallback_reason non-empty) and landed on a model from
+    # the producer's own lab. Same-lab is fine when it is the only reachable
+    # reviewer, but the review is provisional, not a real cross-lab check —
+    # see B1's reviewer paragraph and B3's re-check filing below.
+    capacity_substitute=null
+    if [[ ( "$role" == plan-review || "$role" == validation || "$role" == cross-lab-review ) && -n "$fallback_reason" ]]; then
+      candidate_model_identity="$(jq -r '.profile.model_identity // .profile.model' <<< "$candidate")"
+      producer_lab="$(_dispatch_model_lab "$producer_model")"
+      reviewer_lab="$(_dispatch_model_lab "$candidate_model_identity")"
+      if [[ -n "$producer_lab" && "$producer_lab" == "$reviewer_lab" ]]; then
+        capacity_substitute="$(jq -cn --arg fc "$fallback_reason" --arg pl "$producer_lab" --arg rl "$reviewer_lab" \
+          '{failure_class:$fc,producer_lab:$pl,reviewer_lab:$rl}')"
+      fi
+    fi
+
     resolved_args=(
       bash "${BASH_SOURCE[0]}"
       --role-resolved
@@ -622,6 +654,7 @@ _dispatch_role_profile() {
     [[ -n "$fallback_reason" ]] && resolved_args+=(--fallback-reason "$fallback_reason")
     [[ -n "$PRODUCER_IDENTITY" ]] && resolved_args+=(--producer-identity "$PRODUCER_IDENTITY")
     [[ -n "$VALIDATOR_RELATIONSHIP" ]] && resolved_args+=(--validator-relationship "$VALIDATOR_RELATIONSHIP")
+    [[ "$capacity_substitute" == null ]] || resolved_args+=(--capacity-substitute "$capacity_substitute")
     resolved_args+=("${ROLE_PASSTHROUGH[@]}")
 
     if _run_candidate_with_policy "${resolved_args[@]}"; then
@@ -863,7 +896,7 @@ while [[ $# -gt 0 ]]; do
       ROLE_RESOLVED=true
       shift
       ;;
-    --resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship)
+    --resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--reasoning-effort|--service-tier|--minimum-codex-version|--fallback-reason|--producer-identity|--validator-relationship|--capacity-substitute)
       require_arg "$1" "${2:-}"
       case "$1" in
         --resolved-profile-ref) RESOLVED_PROFILE_REF="$2" ;;
@@ -875,6 +908,7 @@ while [[ $# -gt 0 ]]; do
         --fallback-reason) FALLBACK_REASON="$2" ;;
         --producer-identity) PRODUCER_IDENTITY="$2" ;;
         --validator-relationship) VALIDATOR_RELATIONSHIP="$2" ;;
+        --capacity-substitute) CAPACITY_SUBSTITUTE_JSON="$2" ;;
       esac
       shift 2
       ;;
@@ -1431,6 +1465,21 @@ $RESOLVED_ROUTE_JSON
 
 Task:
 $PROMPT"
+      # A capacity substitute (mk-gp32): the walk that reached this candidate
+      # landed on a model from the producer's own lab, so the review needs
+      # its own provisional framing and a re-check hook for the other lab.
+      if [[ -n "$CAPACITY_SUBSTITUTE_JSON" && "$CAPACITY_SUBSTITUTE_JSON" != null ]]; then
+        PROMPT="$PROMPT
+
+This review landed on a model from the producer's own lab because the
+preferred other-lab reviewer was out of capacity (a capacity-substitute
+review). Treat your verdict as provisional: it has not had independent
+cross-lab confirmation. End your output with a section headed exactly
+\"## Re-check by the other lab\", listing one item per line starting with
+\"- \": (a) claims you confirmed without actually running anything, and (b)
+judgments you are not fully sure of. If there is nothing to flag, write the
+single line \"None.\" instead of a list."
+      fi
       ;;
     *)
       echo "Error: governed reasoning contract delivery is unsupported for backend '$ENGINE'" >&2
@@ -2423,6 +2472,76 @@ _persist_dispatch_failure_evidence() {
   DISPATCH_INTERCEPT_EVIDENCE="$reference"
 }
 
+# Extracts the body of OUTPUT's "## Re-check by the other lab" section (B1's
+# fixed reviewer instruction). Returns 1 if the heading itself is absent, so
+# the caller can distinguish "reviewer wrote the section" from "didn't".
+_dispatch_capacity_recheck_section() {
+  local file="$1"
+  grep -q '^## Re-check by the other lab' "$file" || return 1
+  awk '
+    /^## Re-check by the other lab/ { found=1; next }
+    found && /^## / { found=0 }
+    found { print }
+  ' "$file"
+}
+
+# After a successful capacity-substitute review (mk-gp32), parse its
+# "## Re-check by the other lab" section and turn any listed items into a
+# filed bead for the lab that never actually reviewed. Never fails the
+# dispatch: a bd problem is a loud stderr warning, not a withheld verdict.
+_dispatch_process_capacity_recheck() {
+  local exit_code="$1" body section_found=true item line
+  local -a items=()
+  RECHECK_ITEMS=""
+  [[ "$exit_code" == 0 ]] || return 0
+  [[ -n "${CAPACITY_SUBSTITUTE_JSON:-}" && "$CAPACITY_SUBSTITUTE_JSON" != null ]] || return 0
+  [[ -n "$OUTPUT" && -f "$OUTPUT" ]] || return 0
+
+  if ! body="$(_dispatch_capacity_recheck_section "$OUTPUT")"; then
+    section_found=false
+  fi
+  if [[ "$section_found" == true ]]; then
+    if [[ "$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$body" | grep -v '^$')" == "None." ]]; then
+      RECHECK_ITEMS=0
+      return 0
+    fi
+    while IFS= read -r line; do
+      [[ "$line" == -\ * ]] && items+=("${line#- }")
+    done <<< "$body"
+  else
+    items=("reviewer did not list re-check items; re-check the whole review")
+  fi
+  RECHECK_ITEMS="${#items[@]}"
+  [[ "$RECHECK_ITEMS" -gt 0 ]] || return 0
+
+  local recheck_file="${OUTPUT}.recheck.md"
+  {
+    printf '# Re-check by the other lab\n\n'
+    printf 'Capacity-substitute %s review (dispatch %s). These need\n' "$ROLE" "$DISPATCH_ID"
+    printf 'independent confirmation by a reviewer from the other lab.\n\n'
+    for item in "${items[@]}"; do printf -- '- %s\n' "$item"; done
+  } > "$recheck_file"
+
+  [[ "${CLAVAIN_RECHECK_BEADS:-1}" != 0 ]] || return 0
+  local producer_lab reviewer_lab failure_class bead_ref title desc
+  producer_lab="$(jq -r '.producer_lab // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
+  reviewer_lab="$(jq -r '.reviewer_lab // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
+  failure_class="$(jq -r '.failure_class // empty' <<< "$CAPACITY_SUBSTITUTE_JSON")"
+  bead_ref="${CLAVAIN_BEAD_ID:-$DISPATCH_ID}"
+  title="Re-check capacity-substitute $ROLE review ($bead_ref)"
+  desc="$(
+    printf 'Producer lab %s, reviewer lab %s (capacity walk: %s).\n\n' "$producer_lab" "$reviewer_lab" "$failure_class"
+    printf 'Items to re-check:\n'
+    for item in "${items[@]}"; do printf -- '- %s\n' "$item"; done
+    printf '\nReceipt: %s\n' "$recheck_file"
+  )"
+  local -a bd_cmd=(bd create "$title" -d "$desc" -l capacity-recheck -C "${WORKDIR:-.}")
+  [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || bd_cmd+=(--deps "discovered-from:$CLAVAIN_BEAD_ID")
+  if ! command -v bd >/dev/null 2>&1 || ! "${bd_cmd[@]}" >/dev/null 2>&1; then
+    echo "dispatch: WARNING — could not file the capacity-recheck bead for '$ROLE'; items are recorded at $recheck_file only" >&2
+  fi
+}
+
 _finalize_dispatch_result() {
   local exit_code="$1" failure_class
   local -a classifier_cmd
@@ -2468,6 +2587,7 @@ _finalize_dispatch_result() {
     fi
     _dispatch_write_failure_class "$failure_class"
   fi
+  _dispatch_process_capacity_recheck "$exit_code"
   if ! _record_role_routing_decision "$exit_code" "$failure_class"; then
     _dispatch_write_failure_class terminal_recording
     return 1
