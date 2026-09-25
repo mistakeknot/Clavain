@@ -53,7 +53,7 @@ Applies while you coordinate threads or workers (mk ruling 2026-09-25, mk-42j9.5
 2. Workers report only DONE or BLOCKED. Wait on a thread instead of checking in; answer batched reports in one reply.
 3. Waits and wakeups stay under 270s or go to 1200s or more. A ~300s wait expires the 5-minute cache and rewrites it in full.
 4. Run at most 2-3 concurrent workers per coordinator; stagger the rest.
-5. Relaying, waiting and status turns use the `coordination` role (Sonnet); planning and review keep their roles.
+5. Relaying, waiting and status work runs on Sonnet: dispatch it with `--role coordination`, or hand the relay stage to a Sonnet thread. A running session cannot change its own model. Planning and review keep their roles.
 6. Broad searches and log dumps run in a subagent, so your context carries only the conclusion.
 7. Keep reports and messages terse: output costs five times input.
 

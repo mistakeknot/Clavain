@@ -3,7 +3,8 @@
 
 Reads every Claude Code transcript under the projects root, subagent
 transcripts included, and counts each API response once: streaming writes the
-same (message id, request id) on several lines. Weights approximate relative
+same (message id, request id) on several lines, and a later line can carry a
+larger output count than the first, so each field takes its largest value. Weights approximate relative
 cost: cache write 1.25, cache read 0.1, input 1, output 5. This is an estimate
 of burn, not the provider's quota accounting.
 
@@ -45,11 +46,11 @@ def lineage(path: Path, root: Path) -> str:
     threads = THREAD_SLUG.findall(slug)
     if threads:
         return f"thr_{threads[-1]}"
-    return re.sub(r"^-home-[^-]+-+", "", slug) or slug
+    return re.sub(r"^-home-[^-]+-*", "", slug) or slug
 
 
 def context_bucket(usage: dict) -> str:
-    size = usage.get("cache_read_input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
+    size = sum(usage.get(field) or 0 for field in WEIGHTS if field != "output_tokens")
     for limit, name in CONTEXT_BUCKETS:
         if size < limit:
             return name
@@ -57,8 +58,8 @@ def context_bucket(usage: dict) -> str:
 
 
 def responses(root: Path, since: dt.datetime, until: dt.datetime):
-    """Yield (path, timestamp, model, usage) once per API response in the window."""
-    seen = set()
+    """Return {key: (path, timestamp, model, usage)}, one entry per API response in the window."""
+    seen = {}
     for path in sorted(root.rglob("*.jsonl")):
         try:
             if dt.datetime.fromtimestamp(path.stat().st_mtime, dt.timezone.utc) < since:
@@ -82,10 +83,12 @@ def responses(root: Path, since: dt.datetime, until: dt.datetime):
                 if not isinstance(usage, dict) or model == "<synthetic>":
                     continue
                 key = (message.get("id"), event.get("requestId"))
-                if key in seen:
-                    continue
-                seen.add(key)
-                yield path, moment, model, usage
+                if key not in seen:
+                    seen[key] = (path, moment, model, dict.fromkeys(WEIGHTS, 0))
+                merged = seen[key][3]
+                for field in WEIGHTS:
+                    merged[field] = max(merged[field], usage.get(field) or 0)
+    return seen
 
 
 def report(root: Path, since: dt.datetime, until: dt.datetime) -> dict:
@@ -94,7 +97,7 @@ def report(root: Path, since: dt.datetime, until: dt.datetime) -> dict:
     tallies = {name: collections.Counter() for name in ("lineage", "model", "hour", "context")}
     pace_start = until - dt.timedelta(hours=PACE_HOURS)
     pace = calls = 0
-    for path, moment, model, usage in responses(root, since, until):
+    for path, moment, model, usage in responses(root, since, until).values():
         weighted = 0.0
         for field, weight in WEIGHTS.items():
             value = usage.get(field) or 0
@@ -146,7 +149,7 @@ def render(data: dict, top: int) -> str:
         f"Weighted burn {data['since']} to {data['until']}: {millions(total)} over {data['calls']} calls",
         "By token type: " + ", ".join(f"{k.removesuffix('_tokens')} {share(v, total)}" for k, v in data["by_token_type"].items()),
         "By context size: " + ", ".join(f"{k} {share(v, total)}" for k, v in data["by_context"].items()),
-        f"Last {data['pace']['hours']}h: {millions(data['pace']['weighted'])}, {millions(data['pace']['per_hour'])}/h",
+        f"Last {data['pace']['hours']}h (or the whole window, if shorter): {millions(data['pace']['weighted'])}, {millions(data['pace']['per_hour'])}/h",
         "",
         "By hour (UTC):",
         *(f"  {k}  {millions(v)}" for k, v in data["by_hour"].items()),

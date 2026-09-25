@@ -344,6 +344,8 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: medium
       service_tier: standard
+      # Codex coordinates through the bb CLI in its shell; it has no in-session
+      # thread tools, so it relays and waits by running `bb thread` commands.
       description: Capacity fallback for coordination when the Claude lane is out
     routine-sol:
       role: routine-execution

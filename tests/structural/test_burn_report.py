@@ -1,8 +1,11 @@
 """Weighted burn from synthetic Claude Code transcripts."""
 import json
+import shutil
 from pathlib import Path
 import subprocess
 import sys
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/burn-report.py"
@@ -75,3 +78,25 @@ def test_text_report_and_bad_window(tmp_path):
                           "--since", "2026-09-25T01:00Z", "--until", "2026-09-25T00:00Z"],
                          capture_output=True, text=True)
     assert bad.returncode == 2 and "--since must be before --until" in bad.stderr
+
+
+def test_streamed_lines_merge_to_largest_usage_and_dedup_across_files(tmp_path):
+    write(tmp_path, f"{WORKSPACE}/a.jsonl",
+          line("m1", "r1", "2026-09-25T00:00:00Z", cache_read_input_tokens=1000, output_tokens=7),
+          line("m1", "r1", "2026-09-25T00:00:02Z", cache_read_input_tokens=1000, output_tokens=108))
+    write(tmp_path, f"{WORKSPACE}/fork.jsonl",
+          line("m1", "r1", "2026-09-25T00:00:02Z", cache_read_input_tokens=1000, output_tokens=108))
+    data = run(tmp_path, "--since", "2026-09-25T00:00Z", "--until", "2026-09-25T01:00Z")
+    assert data["calls"] == 1
+    assert data["weighted_total"] == 100 + 108 * 5
+
+
+def test_coordination_role_resolves_to_sonnet():
+    ic = shutil.which("ic")
+    if not ic:
+        pytest.skip("ic not installed")
+    r = subprocess.run([ic, "--json", "route", "dispatch", f"--policy={ROOT / 'config/routing.yaml'}",
+                        "--role=coordination"], capture_output=True, text=True, check=True)
+    route = json.loads(r.stdout)
+    assert route["profile"]["model_identity"] == "claude-sonnet-5"
+    assert [c["profile"]["backend"] for c in route["fallback_chain"]] == ["codex"]
