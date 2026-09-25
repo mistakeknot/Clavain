@@ -18,6 +18,19 @@ Settled routine work records `reasons: []` with rationale. An empty reasons arra
 
 Resolve roles with `ic --json route dispatch --policy=<selected-policy> --role=planning --context-file=<decision.json>`. Execute through packaged `scripts/dispatch.sh --role <role>` with the same `CLAVAIN_ROUTING_POLICY` and `CLAVAIN_DECISION_CONTEXT`. Unsupported `--role` stays open; `--type` or `--tier` cannot satisfy it. Receipts retain policy source/hash, reasons, exclusions, profile and actual model/effort. Source order: `--policy`, `CLAVAIN_ROUTING_POLICY`, `CLAVAIN_ROOT`, selected Claude plugin root, managed Clavain skill link, legacy discovery; bad explicit choices fail closed. The dispatch wrapper selects its packaged policy unless explicitly overridden. Never select the newest cache directory by accident. Configuration does not change a running parent model.
 
+Routine example (settled scope; write the file, then resolve once):
+
+```json
+{"reasons": [], "rationale": "Settled routine change; tests define acceptance", "investigation_active": false}
+```
+
+```bash
+ic --json route dispatch --policy="$CLAVAIN_ROUTING_POLICY" --role=routine-execution --context-file=/tmp/decision.json
+CLAVAIN_DECISION_CONTEXT=/tmp/decision.json bash "$CLAVAIN_SELECTED_ROOT/scripts/dispatch.sh" --role routine-execution --prompt-file /tmp/brief.md
+```
+
+Elevated work lists its `reasons` and a `domain`; review roles add `--producer-identity=<author receipt identity>`.
+
 Use one frontier author. Foundational or especially consequential plans require independent other-frontier plan review. Bind `--producer-identity` from the actual author receipt. No fallback may review its producer, route frontier-required work to a non-frontier seat, or evade blocked review by changing destination. Aliases and dated/provider-decorated identities cannot evade reviewer separation. `ci-campaign-pilot` requires `scope: mk-ag2s`; keep the general policy unchanged.
 
 ## Capacity failure and fallback

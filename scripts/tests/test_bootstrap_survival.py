@@ -71,6 +71,8 @@ CLAUSES = {
         "frontier_planning": "Substantial new game, agent, AI/ML, graph, or product-strategy capabilities require frontier planning",
         "resolution": "ic --json route dispatch --policy=<selected-policy> --role=planning --context-file=<decision.json>",
         "packaged_dispatch": "Execute through packaged `scripts/dispatch.sh --role <role>`",
+        "routine_example": '{"reasons": [], "rationale": "Settled routine change; tests define acceptance", "investigation_active": false}',
+        "routine_example_resolve": 'ic --json route dispatch --policy="$CLAVAIN_ROUTING_POLICY" --role=routine-execution --context-file=/tmp/decision.json',
         "unsupported_role": "Unsupported `--role` stays open; `--type` or `--tier` cannot satisfy it",
         "source_order": "Source order: `--policy`, `CLAVAIN_ROUTING_POLICY`, `CLAVAIN_ROOT`, selected Claude plugin root, managed Clavain skill link",
         "packaged_policy": "The dispatch wrapper selects its packaged policy unless explicitly overridden",
