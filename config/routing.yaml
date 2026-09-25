@@ -419,6 +419,7 @@ dispatch:
       model: gpt-5.6-sol
       reasoning_effort: high
       service_tier: standard
+      fallbacks: [validation-opus, validation-sonnet]
       description: Codex validation fallback when its resolved model differs from the producer
     release-sol:
       role: release-preparation

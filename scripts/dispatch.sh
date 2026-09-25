@@ -663,8 +663,8 @@ _dispatch_role_profile() {
 # dispatch --tier=<name>` only ever resolves the single named tier and never
 # walks or returns its fallbacks (mk ruling 2026-09-25).
 _dispatch_tier_profile() {
-  local tier="$1" policy candidates candidate backend model effort service minimum
-  local rc=1 candidate_count=0
+  local tier="$1" policy candidates candidate backend model effort service minimum role
+  local rc=1 candidate_count=0 chain_rc=0
   local -a resolved_args
 
   command -v python3 >/dev/null 2>&1 || {
@@ -675,15 +675,46 @@ _dispatch_tier_profile() {
     echo "Error: jq is required for --tier fallback resolution" >&2
     return 1
   }
-  policy="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
-  candidates="$(python3 "$DISPATCH_SCRIPT_DIR/tier-fallback-chain.py" --policy "$policy" --tier "$tier")" || {
+  # Discovery order matches _routing_find_config() (lib-routing.sh): an
+  # explicit --policy/CLAVAIN_ROUTING_POLICY wins outright (dispatch.sh's own
+  # established convention, e.g. _dispatch_role_profile); otherwise defer to
+  # the same CLAVAIN_ROUTING_CONFIG / script-relative / CLAVAIN_SOURCE_DIR /
+  # CLAUDE_PLUGIN_ROOT search the rest of the routing stack uses.
+  policy="${CLAVAIN_ROUTING_POLICY:-}"
+  if [[ -z "$policy" ]] && declare -f _routing_find_config >/dev/null 2>&1; then
+    policy="$(_routing_find_config 2>/dev/null)" || policy=""
+  fi
+  policy="${policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+
+  candidates="$(python3 "$DISPATCH_SCRIPT_DIR/tier-fallback-chain.py" --policy "$policy" --tier "$tier")"
+  chain_rc=$?
+  if [[ $chain_rc -eq 3 ]]; then
+    # pyyaml unavailable: degrade instead of failing dispatch outright (mk
+    # ruling 2026-09-25 — Codex exhaustion, or any capacity failure, must
+    # never block development). Fall back to the legacy bash-native,
+    # pyyaml-free resolver (lib-routing.sh's routing_resolve_dispatch_tier),
+    # which also still honors the legacy dispatch.fallback: alias table —
+    # single-hop only, no multi-candidate chain walking.
+    echo "Warning: pyyaml unavailable; tier fallback chain disabled for '$tier' — resolving a single candidate via the legacy resolver" >&2
+    if ! declare -f routing_resolve_dispatch_tier >/dev/null 2>&1; then
+      echo "Error: could not resolve tier '$tier' — pyyaml is unavailable and the legacy resolver is not loaded" >&2
+      return 1
+    fi
+    model="$(CLAVAIN_ROUTING_CONFIG="$policy" routing_resolve_dispatch_tier "$tier" 2>/dev/null)" || model=""
+    [[ -n "$model" ]] || { echo "Error: could not resolve tier '$tier' from routing.yaml (legacy resolver)" >&2; return 1; }
+    resolved_args=(bash "${BASH_SOURCE[0]}" --to codex --model "$model")
+    resolved_args+=("${TIER_PASSTHROUGH[@]}")
+    _run_candidate_with_policy "${resolved_args[@]}"
+    return $?
+  elif [[ $chain_rc -ne 0 ]]; then
     echo "Error: could not resolve tier '$tier' from routing.yaml" >&2
     return 1
-  }
+  fi
 
   while IFS= read -r candidate; do
     [[ -n "$candidate" ]] || continue
     candidate_count=$((candidate_count + 1))
+    role="$(jq -r '.role // empty' <<< "$candidate")"
     backend="$(jq -r '.backend // empty' <<< "$candidate")"
     model="$(jq -r '.model // empty' <<< "$candidate")"
     effort="$(jq -r '.reasoning_effort // empty' <<< "$candidate")"
@@ -698,6 +729,12 @@ _dispatch_tier_profile() {
       echo "Error: tier '$tier' resolved a main-integrator-only profile and cannot be delegated" >&2
       return 1
     fi
+    # Same usage-budget guard _dispatch_role_profile applies: a backend that
+    # cannot report usage cannot run under an approved token budget.
+    if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 && "$backend" != codex && "$backend" != claude ]]; then
+      echo "dispatch: tier candidate '$model' cannot report usage for this approved token budget; trying its declared fallback" >&2
+      continue
+    fi
     if [[ "$backend" == "codex" && -n "$minimum" ]] && ! _codex_version_at_least "$minimum"; then
       echo "dispatch: tier candidate '$model' requires Codex >= $minimum; trying its declared fallback" >&2
       continue
@@ -706,6 +743,20 @@ _dispatch_tier_profile() {
     resolved_args=(bash "${BASH_SOURCE[0]}" --to "$backend" --model "$model")
     [[ -n "$effort" ]] && resolved_args+=(--reasoning-effort "$effort")
     [[ -n "$service" ]] && resolved_args+=(--service-tier "$service")
+    # Give a Claude candidate the same write authority a resolved execution
+    # role gets (dispatch.sh:~1771): routine-execution/deep-execution/
+    # escalation may write when the sandbox is not read-only; every other
+    # role (validation, scout, main-integrator, ...) keeps the mutation
+    # prohibition. Computed here (not via --role-resolved) because
+    # ROLE_RESOLVED==true separately demands an ic-issued policy hash
+    # (governed-contract delivery, ~line 1410) that bare --tier resolution
+    # never has — --claude-unsafe grants write authority without claiming
+    # that unrelated ic-governance contract.
+    if [[ "$backend" == claude && -n "$role" && "$SANDBOX" != read-only ]]; then
+      case "$role" in
+        routine-execution|deep-execution|escalation) resolved_args+=(--claude-unsafe) ;;
+      esac
+    fi
     resolved_args+=("${TIER_PASSTHROUGH[@]}")
 
     if _run_candidate_with_policy "${resolved_args[@]}"; then
@@ -713,6 +764,10 @@ _dispatch_tier_profile() {
     else
       rc=$?
     fi
+    # A started budgeted candidate may have already spent tokens, even on an
+    # access or transport failure. Only its supervisor can admit another
+    # invocation (mirrors _dispatch_role_profile).
+    [[ "${CLAVAIN_REQUIRE_USAGE:-0}" != 1 ]] || return "$rc"
     case "$CLAVAIN_LAST_FAILURE_CLASS" in
       quota_exhausted|model_unavailable|account_access_absent|insufficient_codex_version|unsupported_adapter)
         echo "dispatch: tier '$tier' candidate '$model' unavailable ($CLAVAIN_LAST_FAILURE_CLASS); trying its declared fallback" >&2
