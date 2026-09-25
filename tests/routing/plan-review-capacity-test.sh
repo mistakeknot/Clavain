@@ -428,6 +428,44 @@ grep -q "requires Codex >=" "$TMP_ROOT/err" || fail "producer_model_conflict plu
 
 echo "PASS: a pre-walk ic exclusion is not a capacity substitute, and a producer conflict plus a version skip blocks"
 
+# mk-dabt, re-expressed after mk-3b8z (Opus 5.5 replaced Fable 5.1, review-fable
+# no longer exists): the rule is that ANY operational skip/failure this loop
+# itself observes must mark a same-lab landing as a capacity substitute, and
+# the ONLY thing that must never do so is a pre-walk `ic` POLICY exclusion
+# such as producer_model_conflict (or the model_unavailable exclusion above).
+#
+# The positive half of that rule — an operational skip landing same-lab —
+# is already exercised above by the mk-gp32 block ("capacity substitute",
+# Sol producer, review-opus quota_exhausted, walk lands on review-astra,
+# same lab, marked). Under the post-swap two-seat plan-review chain
+# (review-opus -> [review-astra]), that Sol/Opus-quota-exhausted walk is the
+# only reachable "operational skip then same-lab landing" shape: whenever a
+# pre-walk POLICY exclusion (producer_model_conflict, or the available_models
+# exclusion above) already removes review-opus, review-astra is the last
+# remaining candidate, so any operational failure on it exhausts the chain
+# instead of landing anywhere — that is exactly the blocked-review case just
+# above, not a substitute case. insufficient_codex_version can therefore
+# never itself produce a same-lab landing here; it only ever blocks review
+# once producer_model_conflict has already removed review-opus.
+#
+# What is NOT yet covered above is the negative half in isolation, with an
+# explicit receipt check: a pure producer_model_conflict exclusion, with the
+# walk completing normally on review-astra and no operational failure
+# anywhere, must leave capacity_substitute null. FAKE_CODEX_MODE=success (a
+# current Codex version) means review-astra actually runs and succeeds, so
+# capacity_failure_class is never set and review-opus is never reached.
+FAKE_CODEX_MODE=success run_review claude-opus-5-5
+[[ "$rc" == 0 ]] || fail "producer_model_conflict alone: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "producer_model_conflict alone: expected review-astra to actually review, got: $(cat "$FAKE_CODEX_LOG")"
+[[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "producer_model_conflict alone: review-opus should never have been reached, got: $(cat "$FAKE_CLAUDE_LOG")"
+never_reviewed_by "producer_model_conflict alone" claude-opus-5-5
+[[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "producer_model_conflict alone: unexpectedly wrote a recheck sidecar"
+[[ ! -s "$FAKE_BD_LOG" ]] || fail "producer_model_conflict alone: unexpectedly filed a bd create call"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.capacity_substitute' <<< "$receipt")" == "null" ]] || fail "producer_model_conflict alone: receipt capacity_substitute was not null: $receipt"
+
+echo "PASS: mk-dabt: a pre-walk producer_model_conflict exclusion alone is still not a capacity substitute; an operational skip landing same-lab still is (see the mk-gp32 block above)"
+
 # --- mk-hadt: bd -C $WORKDIR must never resolve a tracker above the repo --
 #
 # Production incident: this branch's own capacity-recheck filing ran
@@ -547,3 +585,30 @@ grep -qi "no beads tracker resolved" "$TMP_ROOT/err" || fail "bare repo worktree
 rm -rf "$TMP_ROOT/.beads"
 
 echo "PASS: capacity-recheck bead filing never resolves a tracker above the repo root, validates its override, and correctly walks subdirectory/linked-worktree/bare-repo checkouts"
+
+# --- mk-c66x: a stale .recheck.md must not survive a reused OUTPUT path ----
+#
+# dispatch.sh resets OUTPUT and OUTPUT.verdict for every fresh attempt (see
+# "Role output paths are fresh attempt artifacts" above the main dispatch
+# loop) but, before this fix, never touched OUTPUT.recheck.md. A stale
+# sidecar left by an EARLIER attempt that reused the same -o path (a retry,
+# or two unrelated dispatch.sh invocations sharing one OUTPUT) survived
+# untouched into an attempt that itself files nothing this time — here, an
+# explicit "None." — silently misleading anyone who reads the sidecar
+# expecting it to reflect only the current attempt. Seed the stale file
+# directly (run_review's own `rm -f` before each call would otherwise mask
+# exactly the bug this covers) and invoke dispatch.sh the same way run_review
+# does.
+: > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"; : > "$FAKE_CLAUDE_PROMPT_LOG"; : > "$FAKE_BD_LOG"
+printf '# Re-check by the other lab\n\n- stale item from a previous attempt at this OUTPUT path\n' > "$TMP_ROOT/answer.md.recheck.md"
+(cd "$TMP_ROOT/work" && ic init >/dev/null 2>&1) || true
+rc=0
+CLAVAIN_RECHECK_BEADS_DIR="" CLAVAIN_BEAD_ID="bd-parent-stale" \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\nNone.\n')" \
+  bash "$ROOT/scripts/dispatch.sh" --role plan-review --producer-identity gpt-5.6-sol \
+  --context-file "$CONTEXT_FILE" -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer.md" \
+  "review the plan" >/dev/null 2>"$TMP_ROOT/err" || rc=$?
+[[ "$rc" == 0 ]] || fail "stale recheck sidecar: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "stale recheck sidecar: a stale .recheck.md from a prior attempt at this OUTPUT path survived an attempt that itself filed nothing: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
+
+echo "PASS: mk-c66x: a stale .recheck.md sidecar does not survive a reused OUTPUT path"

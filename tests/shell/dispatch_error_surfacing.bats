@@ -251,3 +251,75 @@ TEXT
     grep -q '^STATUS: FAIL$' "$VERDICT_FILE"
     ! grep -q 'trailing warning' "$VERDICT_FILE"
 }
+
+# --- mk-rzi5: CLEAN must be anchored, not a substring match -----------------
+# Before mk-rzi5 the synthesized-verdict branch matched *"CLEAN"* anywhere in
+# the VERDICT line, so a reviewer writing "VERDICT: NOT CLEAN, see findings"
+# (or any text merely containing the word CLEAN) synthesized STATUS: pass —
+# ungrounded approval of a review that explicitly said the opposite.
+
+@test "extract: VERDICT: NOT CLEAN must not synthesize pass (mk-rzi5)" {
+    _load
+    printf 'body\nVERDICT: NOT CLEAN, see findings below\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: prose mentioning CLEAN off-anchor must not synthesize pass (mk-rzi5)" {
+    _load
+    printf 'body\nVERDICT: the migration is not fully CLEAN yet\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+# --- mk-rzi5: NEEDS-FIXES must be recognized explicitly ---------------------
+# Before mk-rzi5 "VERDICT: NEEDS-FIXES ..." fell through to the generic
+# "Unrecognized verdict" branch — functionally warn (not a false pass), but
+# undistinguished from a truly unknown vocabulary and reported with a
+# confusing summary. Give it its own branch, like NEEDS_ATTENTION.
+
+@test "extract: VERDICT: NEEDS-FIXES synthesizes warn with its own summary (mk-rzi5)" {
+    _load
+    printf 'body\nVERDICT: NEEDS-FIXES the retry loop leaks a file handle\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    grep -q '^SUMMARY: NEEDS-FIXES the retry loop leaks a file handle$' "$VERDICT_FILE"
+}
+
+# --- mk-rzi5: capacity-substitute reviews get a PROVISIONAL marker ---------
+# A same-lab capacity-substitute review (mk-gp32/mk-dabt) is provisional —
+# still gating normally (never blocking), but nothing reading the .verdict
+# sidecar in isolation from the receipt could otherwise tell a substitute
+# CLEAN apart from an ordinary independent one. dispatch.sh sets
+# CAPACITY_SUBSTITUTE_JSON from the resolved candidate walk (never from the
+# reviewing model's own text) before calling _extract_verdict.
+
+@test "extract: capacity-substitute stamps PROVISIONAL on a synthesized pass (mk-rzi5)" {
+    _load
+    CAPACITY_SUBSTITUTE_JSON='{"failure_class":"quota_exhausted","producer_lab":"anthropic","reviewer_lab":"anthropic"}'
+    printf 'body\nVERDICT: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^PROVISIONAL: capacity-substitute' "$VERDICT_FILE"
+    grep -q 'reviewer_lab=anthropic' "$VERDICT_FILE"
+    grep -q 'producer_lab=anthropic' "$VERDICT_FILE"
+    grep -q 'failure_class=quota_exhausted' "$VERDICT_FILE"
+}
+
+@test "extract: capacity-substitute stamps PROVISIONAL on a structured block too (mk-rzi5)" {
+    _load
+    CAPACITY_SUBSTITUTE_JSON='{"failure_class":"insufficient_codex_version","producer_lab":"anthropic","reviewer_lab":"anthropic"}'
+    printf -- '--- VERDICT ---\nSTATUS: pass\nSUMMARY: looks fine\n---\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^PROVISIONAL: capacity-substitute' "$VERDICT_FILE"
+}
+
+@test "extract: no CAPACITY_SUBSTITUTE_JSON means no PROVISIONAL marker (mk-rzi5)" {
+    _load
+    unset CAPACITY_SUBSTITUTE_JSON
+    printf 'body\nVERDICT: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q 'PROVISIONAL' "$VERDICT_FILE"
+}

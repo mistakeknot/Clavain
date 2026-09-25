@@ -11,8 +11,21 @@ _classify_dispatch_failure() {
   [[ "$exit_code" == 0 ]] && { echo success; return 0; }
   if [[ -f "$stderr_file" ]]; then
     # A final denial dominates earlier transport/account failures in this attempt.
+    # mk-zz4m: rate_limited walks the fallback chain (dispatch.sh, since
+    # db2b24e), so this match must be status-code-anchored, not bare prose —
+    # the old `\b429\b|too many requests|rate.?limit` mapped 'HTTP 401
+    # Unauthorized (x-ratelimit-remaining: 0)' (the header name contains
+    # "ratelimit"), 'File "runner.py", line 429, in main' (a traceback line
+    # number), and 'invalid_api_key; see rate-limit docs' (a doc reference) to
+    # rate_limited, silently switching the reviewing model on an auth failure.
+    # A real 429 is anchored to "Too Many Requests" or a status/code/http
+    # marker; a real rate-limit signal is the provider's own error code
+    # (Claude's `rate_limit_error`) or the adjectival/verb phrase
+    # ("rate[- ]limited", "rate limit exceeded") — never a bare "rate-limit"
+    # noun mention or an "x-ratelimit-*" header name.
     if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then echo terminal_policy
-    elif grep -qiE '\b429\b|too many requests|rate.?limit' "$stderr_file"; then echo rate_limited
+    elif grep -qiE '429[[:space:]]+too many requests|too many requests[^0-9]{0,20}429|\b(status|code|http)[^0-9]{0,15}429\b|rate_limit_error|rate[-_ ]limited\b|rate[-_ ]limit[[:space:]]+exceeded' "$stderr_file"; then echo rate_limited
+    elif grep -qiE '\b401\b|unauthorized|invalid_api_key|authentication[^[:alnum:]]+fail' "$stderr_file"; then echo terminal_configuration
     elif grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then echo account_access_absent
     elif grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then echo model_unavailable
     elif grep -qiE '\b4[0-9]{2}\b|bad request|unauthorized|forbidden' "$stderr_file"; then echo terminal_configuration
@@ -91,6 +104,9 @@ _role_audit_context() {
     --argjson recheck_source "${RECHECK_SOURCE_JSON:-null}" \
     --argjson recheck_bead "${RECHECK_BEAD_JSON:-null}" \
     --argjson findings "$findings" \
+    --argjson recheck_bead_status "${RECHECK_BEAD_STATUS_JSON:-null}" \
+    --argjson recheck_tracker_dir "${RECHECK_TRACKER_DIR_JSON:-null}" \
+    --argjson recheck_sidecar_path "${RECHECK_SIDECAR_PATH_JSON:-null}" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,retry_id:$retry_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
       # Consumers must key attribution on executed_profile_ref, not profile_ref.
@@ -99,7 +115,8 @@ _role_audit_context() {
       executed_profile_ref:(if $executed_profile_ref != "" then $executed_profile_ref else $profile.profile_ref end),
       headroom_reorder:($route.headroom_reorder // null),
       capacity_substitute:$capacity_substitute,recheck_items:$recheck_items,recheck_source:$recheck_source,
-      recheck_bead:$recheck_bead,
+      recheck_bead:$recheck_bead,recheck_bead_status:$recheck_bead_status,
+      recheck_tracker_dir:$recheck_tracker_dir,recheck_sidecar_path:$recheck_sidecar_path,
       run_id:$run,bead_id:$bead,bead_source:$bead_source,
       execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
         codex_version:$version,sandbox:$sandbox,transport:$transport,account:$account,session_id:$session,event_log:$events}
