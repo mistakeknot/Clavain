@@ -118,6 +118,35 @@ assert_class "ratelimited with no space or hyphen" \
 
 echo "PASS: widened 429/rate-limit forms all classify rate_limited"
 
+# --- Round-2 re-check (P2 finding 2): forms the narrower `[:=]`-only anchor
+# lost, now restored via the letter/digit-free separator class -------------
+
+assert_class "status 429 (plain space, no colon/equals)" \
+  'status 429' rate_limited
+
+assert_class "error code 429 (plain space)" \
+  'error code 429' rate_limited
+
+assert_class "status_code=429 (underscore-joined key)" \
+  'status_code=429' rate_limited
+
+assert_class "quoted JSON status field 429" \
+  '"status":429' rate_limited
+
+assert_class "JSON object with status 429 field" \
+  '{"status": 429, "message": "..."}' rate_limited
+
+assert_class "HTTP status 429 (keyword then status then number)" \
+  'HTTP status 429' rate_limited
+
+assert_class "got http 429 from upstream" \
+  'got http 429 from upstream' rate_limited
+
+assert_class "response code 429" \
+  'response code 429' rate_limited
+
+echo "PASS: all eight 429 forms lost by the narrower anchor are restored"
+
 assert_class "401 message that also contains rate-limit-shaped prose (401 must win)" \
   '401 Unauthorized: invalid x-api-key (see rate limit exceeded FAQ)' terminal_configuration
 
@@ -138,6 +167,34 @@ assert_class "traceback line 429 with filename literally named code.py" \
 echo "PASS: a traceback's 'line 429' never classifies rate_limited, even when the filename contains status/http/code"
 
 echo "PASS: real 429/rate-limit signals still classify as rate_limited"
+
+# --- Round-2 re-check (P3 finding 3): 401 must be anchored the same way as
+# 429 — a bare, incidental "401" (e.g. a token count) must not beat real
+# rate-limit text, but the original mk-zz4m 401 strings must still classify
+# as auth. ------------------------------------------------------------------
+
+assert_class "incidental 401 inside real rate-limit text (401 must not win)" \
+  'Rate limit reached for gpt-4o in organization org-abc. Limit 30000, Used 29800, Requested 401.' rate_limited
+
+assert_class "401 Unauthorized (anchored form)" \
+  '401 Unauthorized' terminal_configuration
+
+assert_class "HTTP/1.1 401 status line" \
+  '< HTTP/1.1 401' terminal_configuration
+
+assert_class "status 401 (plain space)" \
+  'status 401' terminal_configuration
+
+assert_class "code=401" \
+  'code=401' terminal_configuration
+
+assert_class "unauthenticated standalone" \
+  'request unauthenticated, no credentials supplied' terminal_configuration
+
+assert_class "invalid x-api-key (space form)" \
+  'invalid x-api-key supplied' terminal_configuration
+
+echo "PASS: 401 is anchored like 429, without losing the original mk-zz4m auth cases"
 
 # --- Existing classes stay intact ------------------------------------------
 
