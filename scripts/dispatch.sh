@@ -2600,8 +2600,15 @@ _post_dispatch_validate() {
 }
 
 # Extract verdict header from agent output and write .verdict sidecar.
-# The verdict is the last block delimited by "--- VERDICT ---" ... "---".
-# If no verdict block found, synthesize one from the output's last lines.
+# The verdict has two possible sources: the first non-blank line of the raw
+# output, and a trailing "--- VERDICT ---" ... "---" structured block. The
+# first line decides whenever it carries a recognised verdict label, even
+# without a structured block; the block is consulted on its own only when
+# the first line has no verdict label at all. A first-line "pass" is always
+# subject to a fail-safe: a present, valid trailing block that disagrees
+# demotes the result to warn, so a pass requires every present verdict
+# source to agree — the block can never upgrade a result to pass by itself
+# when the first line already gave an (even unrecognised) ruling.
 _extract_verdict() {
     local output_file="$1"
     [[ -z "$output_file" || ! -f "$output_file" ]] && return 0
@@ -2648,23 +2655,28 @@ _extract_verdict() {
     #    result to warn — never pass. A pass requires every verdict source
     #    that is actually present to agree; disagreement is never resolved
     #    in favor of pass.
+    # mk P3-6 (round-3 re-check): field names in the trailing block (STATUS,
+    # FINDINGS, ...) are matched case-insensitively — a reviewer writing
+    # "Status: fail" instead of the canonical "STATUS: fail" must still be
+    # read as a real, disagreeing block, not silently dropped as unmatched
+    # noise (which would let a first-line pass through with no fail-safe).
     local verdict_block
     verdict_block=$(awk '
         { if ($0 ~ /[^[:space:]]/) last_nonblank = NR }
         /^--- VERDICT ---\r?$/ { block="--- VERDICT ---"; active=1; close_line=0; next }
         active && /^---\r?$/ { block=block "\n---"; active=0; close_line=NR; next }
-        active && /^[A-Z][A-Z_ ]*: / { sub(/\r$/, ""); block=block "\n" $0; next }
+        active && /^[A-Za-z][A-Za-z_ ]*: / { sub(/\r$/, ""); block=block "\n" $0; next }
         active { active=0 }
         END { if (block != "" && close_line == last_nonblank) print block }
     ' "$output_file") || verdict_block=""
 
     local has_valid_block=0
-    if [[ -n "$verdict_block" ]] && grep -q '^STATUS: ' <<< "$verdict_block"; then
+    if [[ -n "$verdict_block" ]] && grep -qi '^status:[[:space:]]' <<< "$verdict_block"; then
         has_valid_block=1
     fi
     local block_status_lower=""
     if [[ "$has_valid_block" == 1 ]]; then
-        block_status_lower="$(grep -m1 '^STATUS: ' <<< "$verdict_block" | sed -E 's/^STATUS:[[:space:]]*//')"
+        block_status_lower="$(grep -im1 '^status:[[:space:]]' <<< "$verdict_block" | sed -E 's/^[^:]*:[[:space:]]*//')"
         block_status_lower="${block_status_lower,,}"
     fi
 
@@ -2694,9 +2706,19 @@ _extract_verdict() {
     local verdict_line="" verdict_word=""
     if [[ -n "$first_line" ]]; then
         local normalized="$first_line"
-        # Strip a leading/trailing markdown bold wrapper (`**...**` or `*...*`)
-        # around the whole line, e.g. "**Verdict: NEEDS-FIXES**".
-        normalized="$(sed -E 's/^[[:space:]]*\*{1,2}//; s/\*{1,2}[[:space:]]*$//' <<< "$normalized")"
+        # mk P3-7 (round-3 re-check): common markdown/whitespace dressing
+        # around the label and the token must not defeat the match —
+        # `**Verdict:** CLEAN`, `` Verdict: `CLEAN` `` and an NBSP
+        # (" ") standing in for the space before CLEAN are all real
+        # forms models emit and must all read as plain "Verdict: CLEAN".
+        # Strip a leading UTF-8 BOM (only meaningful at the very start of
+        # the line), fold NBSP to an ordinary space, and drop every `*`/`` ` ``
+        # in the line outright — those characters are markdown emphasis
+        # noise around the label or the token and never part of a real
+        # verdict word.
+        normalized="$(sed 's/^\xEF\xBB\xBF//' <<< "$normalized")"
+        normalized="$(sed 's/\xC2\xA0/ /g' <<< "$normalized")"
+        normalized="$(sed -E 's/[`*]//g' <<< "$normalized")"
         if [[ "$normalized" =~ ^[[:space:]]*[Vv][Ee][Rr][Dd][Ii][Cc][Tt]:[[:space:]]*(.*)$ ]]; then
             verdict_word="$(sed -E 's/[[:space:]]+$//' <<< "${BASH_REMATCH[1]}")"
             verdict_line="VERDICT: $verdict_word"
@@ -2709,6 +2731,14 @@ _extract_verdict() {
     # slide through as a pass nothing grounded.
     local status="warn"
     local summary="No structured verdict found."
+    # first_line_recognized: 0 = no verdict label at all on the first line
+    # (fall back to the trailing block alone, below); 1 = an exact/known
+    # token decided the result (subject to the pass fail-safe below); 2 = a
+    # verdict label IS present but its token is unrecognized, or only
+    # starts with NEEDS-FIXES/NOT CLEAN without matching exactly (e.g.
+    # "NEEDS-FIXES (2 P2)") — this is warn, unconditionally, and a trailing
+    # block is never consulted to decide the result (see mk P2 round-3
+    # re-check below).
     local first_line_recognized=0
     # The validation seat speaks PASS/FAIL/UNRUN (pattern-f-contracts.md).
     # UNRUN is a refusal to rule, surfaced as warn so nothing reads it as
@@ -2721,8 +2751,18 @@ _extract_verdict() {
     # NEEDS-FIXES and NOT CLEAN additionally require an EXACT token: the
     # token ends the line (trailing whitespace and a closing markdown `**`
     # were already stripped above), so "CLEAN, pending P3 items" or
-    # "CLEAN." no longer read as pass/CLEAN — they fall through as
-    # unrecognized, never a false pass.
+    # "CLEAN." no longer read as pass/CLEAN.
+    #
+    # mk P2 (round-3 re-check): a first line that carries a verdict label
+    # must NEVER produce a pass unless its token is exactly CLEAN. A label
+    # present with an unrecognized token, or one that only STARTS WITH
+    # NEEDS-FIXES/NOT CLEAN without matching exactly, therefore does not
+    # fall through to "no verdict line" treatment (which used to hand the
+    # decision to a trailing structured block wholesale, including any
+    # STATUS: pass it carried — a real first-line "Verdict: NEEDS-FIXES (2
+    # P2)" could be overridden by a stray `STATUS: pass` block elsewhere in
+    # the output). It is its own case: always warn, and a trailing block
+    # cannot upgrade it to pass — see first_line_recognized==2 below.
     if [[ "$verdict_word_upper" =~ ^PASS($|[^A-Z0-9_-]) ]]; then
         status="pass"
         summary="Validator replay PASS."
@@ -2757,9 +2797,19 @@ _extract_verdict() {
     elif [[ -z "$verdict_line" ]]; then
         status="warn"
         summary="No verdict line in agent output."
+    elif [[ "$verdict_word_upper" =~ ^(NEEDS-FIXES|NOT[[:space:]]+CLEAN) ]]; then
+        # Starts with a NEEDS-FIXES/NOT CLEAN prefix but isn't the exact
+        # token (e.g. "NEEDS-FIXES (2 P2)") — still unambiguously a
+        # non-pass ruling, so the summary carries it verbatim rather than
+        # the generic "Unrecognized verdict" wording.
+        status="warn"
+        summary="$verdict_line"
+        summary="${summary#VERDICT: }"
+        first_line_recognized=2
     else
         status="warn"
         summary="Unrecognized verdict: ${verdict_line#VERDICT: }"
+        first_line_recognized=2
     fi
 
     if [[ "$first_line_recognized" == 1 ]]; then
@@ -2770,9 +2820,16 @@ _extract_verdict() {
             status="warn"
             summary="$summary (trailing verdict block disagreed: STATUS: $block_status_lower)"
         fi
+    elif [[ "$first_line_recognized" == 2 ]]; then
+        # A verdict label is present but unrecognized (or only prefix-
+        # matched NEEDS-FIXES/NOT CLEAN). This is warn unconditionally: a
+        # trailing block may only ever be consulted to note a further
+        # disagreement, never to upgrade the result to pass. status is
+        # already "warn" here, so there is nothing to do.
+        :
     elif [[ "$has_valid_block" == 1 ]]; then
-        # No recognised token on the first line — fall back to the trailing
-        # structured block.
+        # No verdict label at all on the first line — fall back to the
+        # trailing structured block alone.
         _write_verdict_block "$verdict_block"
         return 0
     fi
