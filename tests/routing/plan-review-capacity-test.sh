@@ -394,8 +394,14 @@ receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_items' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_items was not null: $receipt"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_source was not null: $receipt"
 [[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_bead was not null: $receipt"
+# P3 (round-2 review finding 7): _dispatch_ic_version used to be recorded
+# only inside an already-marked capacity_substitute; this receipt is the
+# opposite case (capacity_substitute is null, asserted above) and must
+# still carry a non-null ic_version, since that field's own stated purpose
+# is auditing whether an old `ic` explains a review that was NOT flagged.
+[[ "$(jq -r '.ic_version' <<< "$receipt")" != "null" ]] || fail "cross-lab (not substitute): receipt ic_version was null on an unmarked review receipt: $receipt"
 
-echo "PASS: a different-lab fallback review is not treated as a capacity substitute"
+echo "PASS: a different-lab fallback review is not treated as a capacity substitute, and still records ic_version"
 
 # review-opus is excluded pre-walk by ic (available_models omits Opus:
 # model_unavailable) and the walk lands on review-astra, the same lab as the
@@ -439,7 +445,12 @@ FAKE_CODEX_VERSION="0.100.0" run_review claude-opus-5-5
 grep -q "requires Codex >=" "$TMP_ROOT/err" || fail "producer_model_conflict plus version skip: expected the insufficient_codex_version pre-run skip recorded on stderr: $(cat "$TMP_ROOT/err")"
 [[ ! -s "$FAKE_BD_LOG" ]] || fail "producer_model_conflict plus version skip: unexpectedly filed a bd create call"
 
-echo "PASS: a pre-walk ic exclusion is not a capacity substitute, and a producer conflict plus a version skip blocks"
+# Round-2 review (P3 finding 8): this message used to say "is not a capacity
+# substitute", left over from before the P1-1 fix flipped the assertion
+# above (a pre-walk operational exclusion for model_unavailable IS now
+# flagged, with provisional handling). Only the policy-based
+# producer_model_conflict case, paired with a version skip, blocks outright.
+echo "PASS: a pre-walk operational (model_unavailable) exclusion IS a capacity substitute; a producer_model_conflict exclusion plus a version skip still blocks"
 
 # mk-dabt, re-expressed after mk-3b8z (Opus 5.5 replaced Fable 5.1, review-fable
 # no longer exists): the rule is that ANY operational skip/failure this loop
@@ -626,18 +637,30 @@ CLAVAIN_RECHECK_BEADS_DIR="" CLAVAIN_BEAD_ID="bd-parent-stale" \
 
 echo "PASS: mk-c66x: a stale .recheck.md sidecar does not survive a reused OUTPUT path"
 
-# --- P1-1: a 3-seat fixture policy end-to-end, isolated from the real policy
+# --- P1-1: a genuinely 3-seat fixture policy end-to-end, isolated from the
+# real policy
 #
 # The pre-walk-exclusion-only block above already exercises this against the
 # real config/routing.yaml plan-review/Sol/Astra seats. This uses a minimal,
-# purpose-built fixture policy instead so the scenario (seat 1 excluded
-# pre-walk for model_unavailable, seat 2 in the SAME lab becomes the
-# surviving reviewer) is pinned independent of any future change to the real
-# policy's seat list or lab assignments.
+# purpose-built fixture policy instead so the scenario is pinned independent
+# of any future change to the real policy's seat list or lab assignments.
+#
+# Round-2 review (P3 finding 9): the previous version of this block only
+# defined two seats (fixture-seat-a, fixture-seat-b) despite its name and
+# comment claiming three. This defines all three the finding asked for:
+#   - fixture-seat-a: same lab as the producer (openai), excluded PRE-WALK
+#     for model_unavailable (never actually dispatched).
+#   - fixture-seat-b: same lab as the producer, becomes the reviewer that
+#     actually runs — must be marked capacity_substitute.
+#   - fixture-seat-c: a DIFFERENT lab (anthropic), fixture-seat-b's own
+#     fallback, so it sits later in the chain than seat-b — and must never
+#     be reached, since seat-b succeeds. available_models below leaves
+#     seat-c un-excluded pre-walk, so "never reached" is proven by seat-b's
+#     success stopping the walk, not by a second pre-walk exclusion.
 FIXTURE_POLICY="$TMP_ROOT/fixture-routing.yaml"
 cat > "$FIXTURE_POLICY" <<'FIXTURE_YAML'
 reasoning:
-  frontier_models: [gpt-9-fixture-a, gpt-9-fixture-b]
+  frontier_models: [gpt-9-fixture-a, gpt-9-fixture-b, claude-9-fixture-c]
   frontier_reasons: [unresolved-success-criteria, foundational-invariants, broad-consequences, difficult-verification, capability-failure]
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
@@ -658,11 +681,21 @@ dispatch:
       model: gpt-9-fixture-b
       reasoning_effort: high
       service_tier: standard
+      fallbacks: [fixture-seat-c]
+    fixture-seat-c:
+      role: plan-review
+      backend: claude
+      model: claude-9-fixture-c
+      reasoning_effort: high
+      service_tier: standard
 FIXTURE_YAML
 
 : > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"; : > "$FAKE_CLAUDE_PROMPT_LOG"; : > "$FAKE_CODEX_PROMPT_LOG"; : > "$FAKE_BD_LOG"
 rm -f "$TMP_ROOT/answer.md.recheck.md"
-jq -c '. + {available_models: ["gpt-9-fixture-b"]}' "$CONTEXT_FILE" > "$TMP_ROOT/context-fixture.json"
+# Only seat-a is excluded pre-walk: seat-b and seat-c are both left available
+# so seat-c's absence from the run proves the walk stopped at seat-b's
+# success, not that seat-c was itself pre-excluded.
+jq -c '. + {available_models: ["gpt-9-fixture-b", "claude-9-fixture-c"]}' "$CONTEXT_FILE" > "$TMP_ROOT/context-fixture.json"
 (cd "$TMP_ROOT/work" && ic init >/dev/null 2>&1) || true
 rc=0
 CLAVAIN_ROUTING_POLICY="$FIXTURE_POLICY" CLAVAIN_RECHECK_BEADS_DIR="" FAKE_CODEX_MODE=success \
@@ -671,6 +704,7 @@ CLAVAIN_ROUTING_POLICY="$FIXTURE_POLICY" CLAVAIN_RECHECK_BEADS_DIR="" FAKE_CODEX
   "review the plan" >/dev/null 2>"$TMP_ROOT/err" || rc=$?
 [[ "$rc" == 0 ]] || fail "3-seat fixture policy: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-9-fixture-b" ]] || fail "3-seat fixture policy: expected fixture-seat-a to be excluded pre-walk and fixture-seat-b to review, got: $(cat "$FAKE_CODEX_LOG")"
+[[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "3-seat fixture policy: fixture-seat-c should never have been reached (seat-b already succeeded), got: $(cat "$FAKE_CLAUDE_LOG")"
 never_reviewed_by "3-seat fixture policy" gpt-9-fixture-producer
 grep -q "capacity-substitute" "$FAKE_CODEX_PROMPT_LOG" || fail "3-seat fixture policy: reviewer prompt did not carry the re-check paragraph: $(cat "$FAKE_CODEX_PROMPT_LOG")"
 grep -q "reviewer did not list re-check items" "$TMP_ROOT/answer.md.recheck.md" || fail "3-seat fixture policy: a missing re-check section did not fall back to the whole-review item: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
@@ -682,4 +716,4 @@ receipt="$(cd "$TMP_ROOT/work" && ic route list --json 2>/dev/null | jq -c --arg
 [[ "$(jq -r '.capacity_substitute.producer_lab' <<< "$receipt")" == "openai" ]] || fail "3-seat fixture policy: receipt capacity_substitute.producer_lab unexpected: $receipt"
 [[ "$(jq -r '.capacity_substitute.reviewer_lab' <<< "$receipt")" == "openai" ]] || fail "3-seat fixture policy: receipt capacity_substitute.reviewer_lab unexpected: $receipt"
 
-echo "PASS: P1-1 3-seat fixture policy: a pre-walk model_unavailable exclusion of seat 1 landing on same-lab seat 2 is marked a capacity substitute with provisional handling"
+echo "PASS: P1-1 genuinely-3-seat fixture policy: seat-a excluded pre-walk (model_unavailable), same-lab seat-b becomes the capacity-substitute reviewer, and different-lab seat-c (next in the chain) is never reached"
