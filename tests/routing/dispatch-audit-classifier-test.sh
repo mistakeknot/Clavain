@@ -208,3 +208,27 @@ got="$(_classify_dispatch_failure /dev/null 0)"
 [[ "$got" == "success" ]] || fail "exit 0 did not classify as success: $got"
 
 echo "PASS: unrelated classes (account_access_absent, model_unavailable, success) are unaffected"
+
+# --- Round-3 re-check (P3-2): the (status|code|http) 429 anchor's leading
+# \b blocked a match starting mid-word, so camelCase and SCREAMING_CASE keys
+# never reached the number. -------------------------------------------------
+
+assert_class "camelCase statusCode key" \
+  'statusCode: 429' rate_limited
+
+assert_class "camelCase httpStatus key" \
+  'httpStatus: 429' rate_limited
+
+assert_class "SCREAMING_CASE HTTP_STATUS key" \
+  'HTTP_STATUS 429' rate_limited
+
+echo "PASS: camelCase/SCREAMING_CASE status/code/http keys classify rate_limited"
+
+# --- Round-3 re-check (P3-3): a bare \b403\b had the same incidental-number
+# flaw the 401 fix removed — a real rate-limit message's own "Requested
+# 403." must not be read as a policy denial. ---------------------------------
+
+assert_class "incidental 403 inside real rate-limit text (403 must not win)" \
+  'Rate limit reached for gpt-4o in organization org-abc. Limit 30000, Used 29800, Requested 403.' rate_limited
+
+echo "PASS: 403 is anchored like 401, without losing the original bare-403 cases"

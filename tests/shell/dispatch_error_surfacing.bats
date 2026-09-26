@@ -212,6 +212,10 @@ PRE
     printf 'VERDICT: QUESTION which schema should win?\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q "^STATUS: warn$" "$VERDICT_FILE"
+    # mk P3-5 (round-3 re-check): also pin the SUMMARY, so a regression back
+    # to the "No verdict line" branch (which also produces STATUS: warn)
+    # would fail this test instead of passing it.
+    grep -q "^SUMMARY: Unrecognized verdict: QUESTION which schema should win?$" "$VERDICT_FILE"
 }
 
 @test "extract: unknown verdict vocabulary synthesizes warn, not pass" {
@@ -219,6 +223,9 @@ PRE
     printf 'VERDICT: SHIPSHAPE\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q "^STATUS: warn$" "$VERDICT_FILE"
+    # mk P3-5 (round-3 re-check): same as above — pin the SUMMARY so a
+    # regression to "No verdict line" fails this test.
+    grep -q "^SUMMARY: Unrecognized verdict: SHIPSHAPE$" "$VERDICT_FILE"
 }
 
 # P1-2 (mk-rzi5 follow-up): the verdict is now read ONLY from the first
@@ -427,4 +434,91 @@ TEXT
     printf 'body\nVERDICT: CLEAN\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     ! grep -q 'PROVISIONAL' "$VERDICT_FILE"
+}
+
+# --- mk P2 (round-3 re-check): a first line that carries a verdict label
+# must never produce a pass unless its token is exactly CLEAN. Before this
+# fix, a label present with an unrecognized token (or one that only starts
+# with NEEDS-FIXES/NOT CLEAN without matching exactly) fell through to the
+# same branch as "no verdict line at all", handing the decision entirely to
+# a trailing structured block — including a stray STATUS: pass in it. These
+# are the review's three literal reproductions.
+
+@test "extract: first-line 'NEEDS-FIXES (2 P2)' is not overridden by a trailing pass block (P2 repro 1)" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+Verdict: NEEDS-FIXES (2 P2)
+
+body
+--- VERDICT ---
+STATUS: pass
+---
+TEXT
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: first-line QUESTION is not overridden by a trailing pass block (P2 repro 2)" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+Verdict: QUESTION
+--- VERDICT ---
+STATUS: pass
+---
+TEXT
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: a UTF-8 BOM before Verdict: NEEDS-FIXES is not overridden by a trailing pass block (P2 repro 3)" {
+    _load
+    printf '\xEF\xBB\xBFVerdict: NEEDS-FIXES\n--- VERDICT ---\nSTATUS: pass\n---\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+# --- mk P3-7 (round-3 re-check): common markdown/whitespace dressing around
+# the label and the token must still read as plain CLEAN. -------------------
+
+@test "extract: '**Verdict:** CLEAN' (bold-wrapped label) synthesizes pass" {
+    _load
+    printf '**Verdict:** CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: 'Verdict: \`CLEAN\`' (backtick-wrapped token) synthesizes pass" {
+    _load
+    printf 'Verdict: `CLEAN`\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: NBSP before CLEAN synthesizes pass" {
+    _load
+    printf 'Verdict:\xC2\xA0CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+# --- mk P3-6 (round-3 re-check): trailing-block field names are matched
+# case-insensitively, so a mixed-case "Status: fail" block still demotes a
+# first-line CLEAN — it must never be silently ignored as unmatched noise.
+
+@test "extract: first-line CLEAN demoted by a mixed-case 'Status: fail' trailing block (P3-6)" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+Verdict: CLEAN
+
+--- VERDICT ---
+Status: fail
+SUMMARY: automated recheck disagrees
+---
+TEXT
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
 }
