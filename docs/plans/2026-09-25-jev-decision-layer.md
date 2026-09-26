@@ -56,13 +56,13 @@ supersedes: revision 7 (commit a136b44), which superseded revision 6 (commit 272
 }
 ```
 
-**Accountable decision (revision 8):** Authored by claude-opus-5-5 through the `planning-opus` frontier fallback of the `frontier-planning` dispatch (primary `planning-astra`, gpt-6-astra). The dispatch for this revision shows the fallback chain but reports no cause for walking it, so the cause is recorded as not reported; the coordinator corrects it from the dispatch log, as it did for revisions 6 and 7. The frontier requirement is not downgraded. Clavain installation 0.6.324, policy SHA256 `7209d67e29c4d9e668cb1ecd1d4d931600902cba4031fd35866b8b434b34f79b`, policy source `/home/mk/projects/.clavain-jev/config/routing.yaml`, profile default. The native Skill `clavain:using-clavain` was unavailable to the authoring session ("Unknown skill", an unsupported host capability); the router body and `docs/canon/reasoning-routing.md` were read as files from the worktree, so the selected root was not re-verified from a skill location. The review folded in here is same-model and provisional, so the other-frontier review requirement remains open and must be met before R6a, R6b or T5 executes. This JSON is not a usage receipt.
+**Accountable decision (revision 8):** Authored by claude-opus-5-5 through the `planning-opus` frontier fallback of the `frontier-planning` dispatch (primary `planning-astra`, gpt-6-astra). The primary was not used because `planning-astra` returned Codex HTTP 429 twice (initial attempt and account-pool retry), an operational failure; dispatch then walked the declared fallback (coordinator correction from the dispatch log). The frontier requirement is not downgraded. Clavain installation 0.6.324, policy SHA256 `7209d67e29c4d9e668cb1ecd1d4d931600902cba4031fd35866b8b434b34f79b`, policy source `/home/mk/projects/.clavain-jev/config/routing.yaml`, profile default. The native Skill `clavain:using-clavain` was unavailable to the authoring session ("Unknown skill", an unsupported host capability); the router body and `docs/canon/reasoning-routing.md` were read as files from the worktree, so the selected root was not re-verified from a skill location. The review folded in here is same-model and provisional, so the other-frontier review requirement remains open and must be met before R6a, R6b or T5 executes. This JSON is not a usage receipt.
 
 ```json
 {
   "reasons": ["foundational-invariants", "broad-consequences", "difficult-verification"],
   "rationale": "Revision 8 closes the revision-7 review of the shared selector layer's determinism and authorization fixes: stage B of permute-check could fail correct code, negative tests could not reach name-imported guards, the emitted bytes were not the bound bytes, per-candidate read sets had no source, and several tests were unimplementable as written. Six hosts and three dependents (.8, .9, .10) build on these contracts, and each fix needs a test that can fail.",
-  "producer": {"model": "claude-opus-5-5", "profile": "planning-opus", "fallback_from": "planning-astra", "fallback_cause": "not reported in this dispatch (fallback chain shown without a cause); coordinator to correct from the dispatch log"},
+  "producer": {"model": "claude-opus-5-5", "profile": "planning-opus", "fallback_from": "planning-astra", "fallback_cause": "Codex HTTP 429 x2 (operational)"},
   "producer_identity_for_review": "claude-opus-5-5 (author; the coordinator only dispatched)",
   "folded_review": {"source": "thr_ay39nh2cpv/jev/rev7-review-samemodel.md", "reviewer_model": "claude-opus-5-5", "kind": "declared same-model adversarial", "status": "PROVISIONAL", "verdict": "NEEDS-FIXES", "findings": {"P1": 1, "P2": 9, "P3": 9}, "routing": "review-astra HTTP 429 x2; review-opus excluded producer_model_conflict; mk ruling mk-3b8z"},
   "review_requirement": "other-frontier, owed before R6a, R6b or T5 executes",
@@ -1940,7 +1940,7 @@ If mk approves, the criterion goes into the Acceptance Criteria section, the han
 
 - Frontmatter: `revision: 8`, and `supersedes` names revision 7 (a136b44). The Authorship line and a Revision 8 header paragraph are added, plus a revision-8 accountable-decision block:
   - author claude-opus-5-5 via the planning-opus fallback;
-  - the fallback cause is not reported in this dispatch, and the coordinator corrects it;
+  - the fallback cause is Codex HTTP 429 x2 (operational), corrected by the coordinator from the dispatch log;
   - the folded review is same-model and PROVISIONAL;
   - other-frontier review is owed before R6a, R6b or T5;
   - the native Skill was unavailable.
