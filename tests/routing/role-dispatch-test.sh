@@ -23,7 +23,7 @@ cat > "$TMP_ROOT/bin/ic" <<'FAKE_IC'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_IC_LOG"
 if [[ "$*" == *"route dispatch"* ]]; then
-  cat <<'JSON' | jq --arg args "$*" --arg policy "$FAKE_ROUTING_POLICY" --arg hash "$FAKE_POLICY_HASH" '.policy_source=$policy | .policy_hash=$hash | if env.FAKE_ROUTE_KIMI_FIRST == "1" then .profile_ref="unsupported-kimi" | .profile.backend="kimi" | .profile.model="kimi-code/k3" else . end | if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end'
+  cat <<'JSON' | jq --arg args "$*" --arg policy "$FAKE_ROUTING_POLICY" --arg hash "$FAKE_POLICY_HASH" '.policy_source=$policy | .policy_hash=$hash | if env.FAKE_ROUTE_KIMI_FIRST == "1" then .profile_ref="unsupported-kimi" | .profile.backend="kimi" | .profile.model="kimi-code/k3" else . end | if ($args | contains("--producer-identity=")) then .producer_model="gpt-6-astra" | .validator_relationship="different-model" | .fallback_reason="producer_model_conflict" | .profile_ref=.fallback_chain[0].profile_ref | .profile=.fallback_chain[0].profile | .fallback_chain=[] else . end | if env.FAKE_ROUTE_CROSS_LAB_REORDER == "1" then .cross_lab_reorder={"from":["a","b"],"to":["b","a"]} else . end'
 {
   "requested_role": "deep-execution",
   "profile_ref": "deep-astra",
@@ -258,6 +258,20 @@ unsupported_adapter_out="$(FAKE_ROUTE_KIMI_FIRST=1 bash "$ROOT/scripts/dispatch.
 contains "$unsupported_adapter_out" 'unsupported_adapter'
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-5.6-sol" ]] || fail "unsupported Kimi effort did not reach declared Sol fallback"
 contains "$(cat "$FAKE_IC_LOG")" '--fallback-reason=unsupported_adapter'
+
+# A route resolution that reordered candidates across labs is recorded verbatim
+# on the routing decision; a route with no reorder never gets the flag.
+: > "$FAKE_IC_LOG"
+FAKE_ROUTE_CROSS_LAB_REORDER=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 \
+  || fail "cross-lab-reorder dispatch failed"
+contains "$(cat "$FAKE_IC_LOG")" '--cross-lab-reorder={"from":["a","b"],"to":["b","a"]}'
+
+: > "$FAKE_IC_LOG"
+bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 \
+  || fail "no-reorder dispatch failed"
+if grep -q -- '--cross-lab-reorder=' "$FAKE_IC_LOG"; then
+  fail "route record passed --cross-lab-reorder without a reorder"
+fi
 
 echo "PASS: role-aware dispatch profiles and fallback policy"
 

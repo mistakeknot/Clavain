@@ -105,6 +105,9 @@ _record_role_routing_decision() {
     "--dispatch=$DISPATCH_ID" "--context=$context"
     "--policy-hash=$(jq -r '.policy_hash // empty' <<< "${RESOLVED_ROUTE_JSON:-null}")"
     "--excluded=$(jq -c '.excluded // []' <<< "${RESOLVED_ROUTE_JSON:-null}")")
+  local cross_lab_reorder
+  cross_lab_reorder="$(jq -c '.cross_lab_reorder // empty' <<< "${RESOLVED_ROUTE_JSON:-null}" 2>/dev/null || true)"
+  [[ -z "$cross_lab_reorder" ]] || record_cmd+=("--cross-lab-reorder=$cross_lab_reorder")
   [[ -z "$DISPATCH_SESSION_ID" ]] || record_cmd+=("--session=$DISPATCH_SESSION_ID")
   [[ -z "${CLAVAIN_RUN_ID:-}" ]] || record_cmd+=("--run=$CLAVAIN_RUN_ID")
   [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || record_cmd+=("--bead=$CLAVAIN_BEAD_ID")
