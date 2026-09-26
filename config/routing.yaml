@@ -170,13 +170,6 @@ dispatch:
       reasoning_effort: medium
       service_tier: standard
       minimum_codex_version: 0.153.1
-      # planning-opus, not review-opus (mk-9yyt). Chains are walked transitively:
-      # while the authoring head pointed at a plan-review profile, every seat added
-      # to the review lane also became reachable from planning, and a frontier-
-      # planning receipt reported `role: plan-review`. The two lanes stay
-      # independent, so a review-side seat cannot silently change who authors a
-      # plan. planning-opus runs Opus 5.5, the Anthropic frontier author since
-      # mk-3b8z replaced planning-fable.
       # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
       # xhigh -> medium, overriding "calibration cannot relax quality floors" by
       # mk's own authority — models, reviewer independence and role routing are
@@ -190,6 +183,13 @@ dispatch:
       # Neither the effort-by-reason nor the 48h-revert rule is enforced by the
       # router/dispatch code — both are agent-discipline-only until a real
       # mechanism lands.
+      # planning-opus, not review-opus (mk-9yyt). Chains are walked transitively:
+      # while the authoring head pointed at a plan-review profile, every seat added
+      # to the review lane also became reachable from planning, and a frontier-
+      # planning receipt reported `role: plan-review`. The two lanes stay
+      # independent, so a review-side seat cannot silently change who authors a
+      # plan. planning-opus runs Opus 5.5, the Anthropic frontier author since
+      # mk-3b8z replaced planning-fable.
       fallbacks: [planning-opus]
     planning-opus:
       role: frontier-planning
@@ -404,8 +404,8 @@ dispatch:
       # file and can only answer UNRUN for a plan whose Verification must run
       # (goal 60771535, run 120d9aa1).
       # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
-      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same mandatory escalation/48h-revert
-      # terms as planning-astra above.
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-sonnet, validation-sol, validation-kimi]
       description: Independent validator for Codex-produced work (mk ruling 2026-09-08)
     validation-sonnet:
@@ -415,8 +415,8 @@ dispatch:
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): validation seat,
-      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same mandatory escalation/48h-revert
-      # terms as planning-astra above.
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-sol, validation-kimi]
       description: Validation fallback when Opus is unavailable or is the producer
     validation-kimi:
@@ -426,8 +426,8 @@ dispatch:
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): validation seat,
-      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same mandatory escalation/48h-revert
-      # terms as planning-astra above.
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-sol]
       description: Cross-provider validation fallback
     validation-sol:
@@ -437,8 +437,8 @@ dispatch:
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): validation seat,
-      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same mandatory escalation/48h-revert
-      # terms as planning-astra above.
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-opus, validation-sonnet]
       description: Codex validation fallback when its resolved model differs from the producer
     release-sol:
@@ -481,8 +481,8 @@ dispatch:
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
-      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same mandatory escalation/48h-revert
-      # terms as planning-astra above.
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-kimi, validation-sol]
       description: Sealed first-pass review by a provider/model other than the producer
 
