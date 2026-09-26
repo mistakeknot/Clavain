@@ -116,6 +116,7 @@ print(json.dumps(value))
     return tmp_path,run
 
 
+@pytest.mark.requires_ic
 def test_spawn_contract(seat):
     root,run=seat; run()
     calls=[json.loads(s) for s in (root/'calls').read_text().splitlines()]
@@ -163,6 +164,7 @@ def test_dispatch_carries_headroom_route_to_bb_journal(seat):
     assert receipt['actual_model']=='unknown'
 
 
+@pytest.mark.requires_ic
 def test_completion(seat):
     root,run=seat; p=run(); assert p.returncode==1,p.stderr
     r=json.loads((root/'result.receipt.json').read_text())
@@ -186,6 +188,7 @@ def test_read_only_completion_rejects_writable_permission_attestation():
     assert module.completion_evidence_matches(receipt,args,read_only=False) is True
 
 
+@pytest.mark.requires_ic
 @pytest.mark.parametrize('mode',['timeout','waiting','failed','interrupted','provider-retry','model-changed'])
 def test_timeout(seat,mode):
     root,run=seat; p=run(mode); assert p.returncode!=0
@@ -194,11 +197,13 @@ def test_timeout(seat,mode):
     assert json.loads((root/'result.receipt.json').read_text())['outcome']==mode
 
 
+@pytest.mark.requires_ic
 def test_unknown_evidence(seat):
     root,run=seat; p=run('unknown'); assert p.returncode!=0
     r=json.loads((root/'result.receipt.json').read_text()); assert r['actual_model']=='unknown'
 
 
+@pytest.mark.requires_ic
 @pytest.mark.parametrize('role', ['plan-review','validation'])
 def test_review_roles_accept_only_read_only_and_record_receipt(seat,role):
     root,run=seat
@@ -220,6 +225,7 @@ def test_review_roles_accept_only_read_only_and_record_receipt(seat,role):
     ('plan-completed','VERDICT: FINAL'),
     ('plan-approval','VERDICT: APPROVAL'),
 ])
+@pytest.mark.requires_ic
 def test_review_roles_capture_terminal_plan_shapes(seat,mode,expected):
     root,run=seat
     result=run(mode=mode,role='plan-review',sandbox='read-only',backend='claude',
@@ -228,6 +234,7 @@ def test_review_roles_capture_terminal_plan_shapes(seat,mode,expected):
     assert (root/'result').read_text()==expected
 
 
+@pytest.mark.requires_ic
 def test_read_only_review_mutation_is_a_terminal_seat_failure(seat):
     root,run=seat
     result=run(mode='mutated',role='plan-review',sandbox='read-only',backend='claude',
@@ -239,6 +246,7 @@ def test_read_only_review_mutation_is_a_terminal_seat_failure(seat):
     assert receipt['artifacts']['patch']['sha256']
 
 
+@pytest.mark.requires_ic
 def test_read_only_review_commit_is_a_terminal_seat_failure(seat):
     root,run=seat
     result=run(mode='committed-mutation',role='plan-review',sandbox='read-only',backend='claude',
@@ -249,6 +257,7 @@ def test_read_only_review_commit_is_a_terminal_seat_failure(seat):
     assert receipt['outcome']=='sandbox-violation'
 
 
+@pytest.mark.requires_ic
 def test_recovery_preserves_review_sandbox_violation(seat):
     root,run=seat
     result=run(mode='mutated',role='plan-review',sandbox='read-only',backend='claude',
@@ -261,6 +270,7 @@ def test_recovery_preserves_review_sandbox_violation(seat):
     assert json.loads(journal.read_text())['outcome']=='sandbox-violation'
 
 
+@pytest.mark.requires_ic
 def test_codex_review_rejected_without_enforced_read_only_bb_permission(seat):
     root,run=seat
     failure=root/'failure-class'
@@ -312,6 +322,7 @@ def test_dispatch_dry_run_applies_backend_check_and_reports_read_only_fallback(s
     assert not any(call[:2]==['thread','spawn'] for call in calls)
 
 
+@pytest.mark.requires_ic
 @pytest.mark.parametrize('role', ['plan-review','validation'])
 @pytest.mark.parametrize('sandbox', ['workspace-write','danger-full-access'])
 def test_review_roles_reject_writable_sandboxes_before_bb(seat,role,sandbox):
@@ -322,6 +333,7 @@ def test_review_roles_reject_writable_sandboxes_before_bb(seat,role,sandbox):
     assert not (root/'calls').exists()
 
 
+@pytest.mark.requires_ic
 def test_unknown_role_rejected_before_bb(seat):
     root,run=seat
     result=run(role='cross-lab-review',sandbox='read-only')
@@ -330,6 +342,7 @@ def test_unknown_role_rejected_before_bb(seat):
     assert not (root/'calls').exists()
 
 
+@pytest.mark.requires_ic
 @pytest.mark.parametrize('role', ['routine-execution','deep-execution'])
 @pytest.mark.parametrize('sandbox', ['workspace-write','danger-full-access'])
 def test_execution_roles_keep_writable_auto_mode(seat,role,sandbox):
@@ -369,6 +382,7 @@ def test_dispatch_plan_review_rejects_explicit_writable_sandbox(seat):
     assert not (root/'calls').exists()
 
 
+@pytest.mark.requires_ic
 def test_unclear_spawn(seat):
     root,run=seat; assert run('unclear').returncode!=0
     assert (root/'calls').read_text().count('"spawn"')==1
@@ -376,6 +390,7 @@ def test_unclear_spawn(seat):
     assert (root/'calls').read_text().count('"spawn"')==1
 
 
+@pytest.mark.requires_ic
 def test_orphan(seat):
     root,run=seat; assert run().returncode==1
     path=next((root/'state').glob('*.json')); row=json.loads(path.read_text())
@@ -384,6 +399,7 @@ def test_orphan(seat):
     assert json.loads(path.read_text())['cleanup']=='archived'
 
 
+@pytest.mark.requires_ic
 @pytest.mark.parametrize('mode',['unclear-found','unclear-wrapped'])
 def test_unclear_spawn_reconciles_real_list_shapes(seat,mode):
     root,run=seat
@@ -393,6 +409,7 @@ def test_unclear_spawn_reconciles_real_list_shapes(seat,mode):
     assert (root/'calls').read_text().count('"spawn"')==1
 
 
+@pytest.mark.requires_ic
 @pytest.mark.parametrize('fail_at',[1,2])
 def test_intercore_failure_before_spawn_does_not_block_next_attempt(seat,fail_at):
     root,run=seat
@@ -447,6 +464,7 @@ def recovery_pages(order, terminals=('interrupted','completed')):
                          ids=lambda order:'-'.join(order))
 @pytest.mark.parametrize('terminals', list(itertools.permutations(('interrupted','completed'))),
                          ids=lambda order:'-'.join(order))
+@pytest.mark.requires_ic
 def test_generated_observation_order_and_duplicate_cancellation(seat, order, terminals):
     root, run=seat
     events=root/'observations.json'
@@ -465,6 +483,7 @@ def test_generated_observation_order_and_duplicate_cancellation(seat, order, ter
 
 @pytest.mark.parametrize('order', list(itertools.permutations(('usage','result'))),
                          ids=lambda order:'-'.join(order))
+@pytest.mark.requires_ic
 @pytest.mark.parametrize('boundary', ['spawn-accepted','log-observed','stop','archive'])
 def test_generated_supervisor_crash_recovery(seat, order, boundary):
     root, run=seat
@@ -508,6 +527,7 @@ def test_generated_supervisor_crash_recovery(seat, order, boundary):
         assert json.loads(payload)==after
 
 
+@pytest.mark.requires_ic
 @pytest.mark.parametrize('discovery', ['missing','ambiguous','foreign-parent'])
 def test_unknown_acceptance_blocks_new_attempt_until_unambiguous(seat, discovery):
     root, run=seat

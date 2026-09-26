@@ -8,6 +8,9 @@ setup() {
 
     DISPATCH_SCRIPT="$BATS_TEST_DIRNAME/../../scripts/dispatch.sh"
     TMPDIR_T="$(mktemp -d)"
+    # The default Codex route is writable, and writable Codex dispatch refuses
+    # a directory that is not a Git repository.
+    git -C "$TMPDIR_T" init -q
     GATEWAY_LOG="$TMPDIR_T/gateway.log"
     GATEWAY_STUB="$TMPDIR_T/context-gateway"
     cat > "$GATEWAY_STUB" <<'EOF'

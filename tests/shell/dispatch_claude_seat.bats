@@ -23,14 +23,17 @@ teardown() {
     rm -rf "$T"
 }
 
-# $1 = body the fake seat prints; $2 = optional shell to run first (a mutation)
+# $1 = body the fake seat returns; $2 = optional shell to run first (a mutation).
+# dispatch runs the seat with --output-format stream-json and renders the
+# response from its `result` event (scripts/claude-response.py), so the fake
+# emits one result event rather than plain text.
 fake_claude() {
     cat > "$T/bin/claude" <<EOF
 #!/usr/bin/env bash
 printf '%s ' "\$@" > "$T/claude.argv"
 cat > /dev/null
 ${2:-}
-printf '%s\n' "\$FAKE_BODY"
+jq -cn --arg body "\$FAKE_BODY" '{type:"result",subtype:"success",is_error:false,result:\$body}'
 EOF
     chmod +x "$T/bin/claude"
     export FAKE_BODY="$1"
