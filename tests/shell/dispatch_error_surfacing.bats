@@ -522,3 +522,99 @@ TEXT
     ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
     grep -q '^STATUS: warn$' "$VERDICT_FILE"
 }
+
+# --- mk P2 round-5: rounds 2-4 patched one first-line dressing at a time; a
+# general rule now covers markdown container prefixes, all four separator
+# forms, the footnote-asterisk-vs-bold distinction, and the case where the
+# first line mentions "verdict" but doesn't parse at all. ------------------
+
+@test "extract: em dash separator ('Verdict — CLEAN') synthesizes pass" {
+    _load
+    printf 'Verdict — CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: en dash separator ('Verdict – NEEDS-FIXES') synthesizes warn" {
+    _load
+    printf 'Verdict – NEEDS-FIXES\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^SUMMARY: NEEDS-FIXES$' "$VERDICT_FILE"
+}
+
+@test "extract: bare hyphen separator ('Verdict - CLEAN') synthesizes pass" {
+    _load
+    printf 'Verdict - CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: a heading-prefixed '# Verdict: CLEAN' first line still synthesizes pass" {
+    _load
+    printf '# Verdict: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: a stacked blockquote+list prefix ('> - Verdict: CLEAN') reduces like a bare line" {
+    _load
+    printf '> - Verdict: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: 'Verdict: CLEAN*' (trailing footnote asterisk) does not synthesize pass" {
+    _load
+    printf 'Verdict: CLEAN*\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: 'Verdict: *CLEAN*' (balanced italic, not a footnote) still synthesizes pass" {
+    _load
+    printf 'Verdict: *CLEAN*\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: first line mentions 'verdict' in prose with no parseable shape synthesizes warn, not pass" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+The verdict here is unclear.
+
+--- VERDICT ---
+STATUS: pass
+SUMMARY: fine
+---
+TEXT
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: an unparseable 'verdict' mention with a trailing STATUS: fail block wins outright as fail" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+The verdict here is unclear.
+
+--- VERDICT ---
+STATUS: fail
+SUMMARY: a real bug
+---
+TEXT
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: fail$' "$VERDICT_FILE"
+}
+
+@test "extract: a delimiter-only first line ('--- VERDICT ---') still falls back to the trailing block alone" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+--- VERDICT ---
+STATUS: pass
+SUMMARY: fine
+---
+TEXT
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}

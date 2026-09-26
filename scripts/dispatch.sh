@@ -2601,14 +2601,41 @@ _post_dispatch_validate() {
 
 # Extract verdict header from agent output and write .verdict sidecar.
 # The verdict has two possible sources: the first non-blank line of the raw
-# output, and a trailing "--- VERDICT ---" ... "---" structured block. The
-# first line decides whenever it carries a recognised verdict label, even
-# without a structured block; the block is consulted on its own only when
-# the first line has no verdict label at all. A first-line "pass" is always
-# subject to a fail-safe: a present, valid trailing block that disagrees
-# demotes the result to warn, so a pass requires every present verdict
-# source to agree — the block can never upgrade a result to pass by itself
-# when the first line already gave an (even unrecognised) ruling.
+# output, and a trailing "--- VERDICT ---" ... "---" structured block.
+#
+# mk P2 round-5: rounds 2-4 patched one first-line dressing at a time (a bold
+# label, a backticked token, an NBSP, a BOM, a heading marker...) and every
+# review round found a new one a markdown-savvy model actually emits. This is
+# now a single general rule instead of a growing list of special cases:
+#   1. Normalize the first non-blank line: fold a leading BOM and NBSP, then
+#      strip a leading markdown prefix (heading `#`, blockquote `>`, or a
+#      single list marker `-`/`*`/`+`, each requiring trailing whitespace),
+#      REPEATEDLY, so stacked forms like "> - Verdict: ..." reduce the same
+#      way as a bare "Verdict: ...". Emphasis markers (backtick, asterisk)
+#      around the label or token are then dropped.
+#   2. The label's separator may be a colon, an em dash, an en dash, or a
+#      bare hyphen — "Verdict: ...", "Verdict — ...", and "Verdict - ..."
+#      are all real forms.
+#   3. CLEAN must not be immediately followed by a lone footnote asterisk
+#      ("CLEAN*", a caveat marker) — but a genuine closing bold pair
+#      ("**CLEAN**") is unaffected, since that is emphasis, not a footnote.
+#   4. If the (prefix-stripped) first line mentions "verdict" at all — even
+#      when the label+separator+token shape does not parse into one of the
+#      known tokens below, or CLEAN was disqualified by rule 3 — the
+#      decision stays on the first line: warn, and NEVER a synthesized pass,
+#      no matter what a trailing block says. A trailing block that says fail
+#      still wins outright in that case (two independent sources agreeing on
+#      a hard failure should not read as a mere "warn").
+#   5. The trailing structured block is consulted alone ONLY when the first
+#      line has no mention of "verdict" whatsoever. (The block's own
+#      "--- VERDICT ---" opening line is delimiter syntax, not a prose
+#      mention, and is excluded from this check — see "last structured
+#      verdict wins" below.)
+# A first-line "pass" is always subject to a fail-safe: a present, valid
+# trailing block that disagrees demotes the result to warn, so a pass
+# requires every present verdict source to agree — the block can never
+# upgrade a result to pass by itself when the first line already gave an
+# (even unrecognised) ruling.
 _extract_verdict() {
     local output_file="$1"
     [[ -z "$output_file" || ! -f "$output_file" ]] && return 0
@@ -2703,24 +2730,70 @@ _extract_verdict() {
     local first_line=""
     first_line="$(awk '{ sub(/\r$/, ""); if ($0 ~ /[^[:space:]]/) { print; exit } }' "$output_file" 2>/dev/null)" || first_line=""
 
-    local verdict_line="" verdict_word=""
+    local verdict_line="" verdict_word="" mentions_verdict=0
     if [[ -n "$first_line" ]]; then
         local normalized="$first_line"
         # mk P3-7 (round-3 re-check): common markdown/whitespace dressing
         # around the label and the token must not defeat the match —
         # `**Verdict:** CLEAN`, `` Verdict: `CLEAN` `` and an NBSP
-        # (" ") standing in for the space before CLEAN are all real
-        # forms models emit and must all read as plain "Verdict: CLEAN".
-        # Strip a leading UTF-8 BOM (only meaningful at the very start of
-        # the line), fold NBSP to an ordinary space, and drop every `*`/`` ` ``
-        # in the line outright — those characters are markdown emphasis
-        # noise around the label or the token and never part of a real
-        # verdict word.
+        # (" ") standing in for the space before CLEAN are all real forms
+        # models emit. Strip a leading UTF-8 BOM (only meaningful at the
+        # very start of the line) and fold NBSP to an ordinary space first.
         normalized="$(sed 's/^\xEF\xBB\xBF//' <<< "$normalized")"
         normalized="$(sed 's/\xC2\xA0/ /g' <<< "$normalized")"
-        normalized="$(sed -E 's/[`*]//g' <<< "$normalized")"
-        if [[ "$normalized" =~ ^[[:space:]]*[Vv][Ee][Rr][Dd][Ii][Cc][Tt]:[[:space:]]*(.*)$ ]]; then
-            verdict_word="$(sed -E 's/[[:space:]]+$//' <<< "${BASH_REMATCH[1]}")"
+        # mk P2 round-5: repeatedly strip a leading markdown container
+        # prefix — a heading (`#`, one or more), a blockquote (`>`), or a
+        # single list marker (`-`/`*`/`+`) — each requiring trailing
+        # whitespace, so a stacked form like "> - Verdict: ..." reduces the
+        # same way a bare "Verdict: ..." does.
+        local stripped_prefix=1
+        while [[ "$stripped_prefix" == 1 ]]; do
+            stripped_prefix=0
+            if [[ "$normalized" =~ ^[[:space:]]*(#+|\>|[-*+])[[:space:]]+(.*)$ ]]; then
+                normalized="${BASH_REMATCH[2]}"
+                stripped_prefix=1
+            fi
+        done
+        # mk P2 round-5 rule 4/5: does the (prefix-stripped) first line
+        # mention "verdict" at all, in prose, regardless of whether it goes
+        # on to parse as a label+separator+token? The delimiter line itself
+        # ("--- VERDICT ---") is excluded — that is structural syntax for
+        # the trailing block, not a prose mention, so a file that opens
+        # directly on the block still falls to the block-alone path below.
+        if ! [[ "$normalized" =~ ^---[[:space:]]*[Vv][Ee][Rr][Dd][Ii][Cc][Tt][[:space:]]*---[[:space:]]*$ ]] \
+            && grep -qi 'verdict' <<< "$normalized"; then
+            mentions_verdict=1
+        fi
+        # mk P2 round-5 rule 2: the label's separator may be a colon, an em
+        # dash, an en dash, or a bare hyphen — "Verdict: ...",
+        # "Verdict — ...", and "Verdict - ..." are all real forms.
+        # Kept in a variable (single-quoted at assignment) rather than
+        # inlined in the [[ =~ ]] test: an unquoted backtick there would
+        # trigger command substitution instead of matching a literal
+        # backtick character.
+        # Note: the separator bracket expression puts the colon LAST, not
+        # first — a `:` immediately after `[` opens a POSIX class name
+        # (like `[:alpha:]`) instead of matching a literal colon, which
+        # silently broke the em/en dash and bare-hyphen separator forms.
+        local label_re='^[[:space:]]*[`*]*[Vv][Ee][Rr][Dd][Ii][Cc][Tt][`*]*[[:space:]]*[—–:-][`*]*[[:space:]]*(.*)$'
+        if [[ "$normalized" =~ $label_re ]]; then
+            local rest="${BASH_REMATCH[1]}"
+            rest="$(sed -E 's/[[:space:]]+$//' <<< "$rest")"
+            # Backticks carry no footnote semantics — drop them outright.
+            rest="$(sed -E 's/[\`]//g' <<< "$rest")"
+            # mk P2 round-5 rule 3: balanced emphasis asterisks around the
+            # token ("**CLEAN**", "*CLEAN*") are decoration and are
+            # stripped; an UNBALANCED trailing asterisk ("CLEAN*", a
+            # footnote/caveat marker) is left in place so it fails the
+            # exact-token match below instead of silently vanishing.
+            local lead_stars="" trail_stars=""
+            [[ "$rest" =~ ^(\*+) ]] && lead_stars="${BASH_REMATCH[1]}"
+            [[ "$rest" =~ (\*+)$ ]] && trail_stars="${BASH_REMATCH[1]}"
+            if [[ "${#lead_stars}" == "${#trail_stars}" ]]; then
+                [[ -n "$lead_stars" ]] && rest="${rest#"$lead_stars"}"
+                [[ -n "$trail_stars" ]] && rest="${rest%"$trail_stars"}"
+            fi
+            verdict_word="$rest"
             verdict_line="VERDICT: $verdict_word"
         fi
     fi
@@ -2794,6 +2867,16 @@ _extract_verdict() {
         status="pass"
         summary="Agent reports clean completion."
         first_line_recognized=1
+    elif [[ -z "$verdict_line" && "$mentions_verdict" == 1 ]]; then
+        # mk P2 round-5 rule 4: the first line mentions "verdict" in prose
+        # but doesn't parse into a label+separator+token shape (no
+        # recognised separator, or no separator at all). This must not
+        # fall through to "no verdict label at all" (which hands the
+        # decision to a trailing block wholesale, below) — it stays on the
+        # first line: warn, never a synthesized pass.
+        status="warn"
+        summary="Verdict mentioned but not in a recognized 'Verdict: TOKEN' shape: $first_line"
+        first_line_recognized=2
     elif [[ -z "$verdict_line" ]]; then
         status="warn"
         summary="No verdict line in agent output."
@@ -2822,11 +2905,18 @@ _extract_verdict() {
         fi
     elif [[ "$first_line_recognized" == 2 ]]; then
         # A verdict label is present but unrecognized (or only prefix-
-        # matched NEEDS-FIXES/NOT CLEAN). This is warn unconditionally: a
-        # trailing block may only ever be consulted to note a further
-        # disagreement, never to upgrade the result to pass. status is
-        # already "warn" here, so there is nothing to do.
-        :
+        # matched NEEDS-FIXES/NOT CLEAN, or mentioned in prose with no
+        # parseable label+separator+token shape). This is warn
+        # unconditionally: a trailing block may only ever be consulted to
+        # note a further disagreement, never to upgrade the result to pass.
+        #
+        # mk P2 round-5 rule 4: the one exception is a trailing block that
+        # says FAIL outright — two independent sources agreeing on a hard
+        # failure should not read as a mere warn.
+        if [[ "$has_valid_block" == 1 && "$block_status_lower" == "fail" ]]; then
+            status="fail"
+            summary="$summary (trailing verdict block confirms STATUS: fail)"
+        fi
     elif [[ "$has_valid_block" == 1 ]]; then
         # No verdict label at all on the first line — fall back to the
         # trailing structured block alone.
