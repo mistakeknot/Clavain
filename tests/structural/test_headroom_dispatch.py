@@ -105,8 +105,8 @@ def test_forecast_exclusion_has_evidence_and_separate_label(dispatch):
     assert p.returncode == 0, p.stderr
     r = rows[-1]
     assert r['execution']['model'] == 'claude-sonnet-5'
-    assert r['headroom_exclusion'] == ['gpt-5.6-sol']
-    assert r['resolved_route']['headroom_exclusion'] == ['gpt-5.6-sol']
+    assert r['headroom_exclusion'] == ['gpt-6-sol']
+    assert r['resolved_route']['headroom_exclusion'] == ['gpt-6-sol']
     assert not any(e['reason'] == 'model_unavailable' for e in r['resolved_route'].get('excluded', []))
     ctx = r['resolved_route']['decision_context']
     assert 'forecast from bb pool headroom' in ctx['rationale']
@@ -130,14 +130,14 @@ def test_protected_resolution_never_probes_pool(dispatch, role):
 def test_unknown_pool_does_not_change_execution(dispatch):
     p, rows, _, work = dispatch([])
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['execution']['model'] == 'gpt-5.6-sol'
+    assert rows[-1]['execution']['model'] == 'gpt-6-sol'
     assert rows[-1].get('headroom_exclusion', []) == []
     assert not list(work.glob('.clavain/capacity/*'))
 
 
 def test_forecast_does_not_resurrect_previously_unavailable_models(dispatch):
     p, rows, _, _ = dispatch([account('codex', .99), account('claude', .2)],
-                            available=['gpt-5.6-sol'])
+                            available=['gpt-6-sol'])
     assert p.returncode != 0
     assert not rows  # No eligible seat remains; never invoke Claude.
 
@@ -145,10 +145,10 @@ def test_forecast_does_not_resurrect_previously_unavailable_models(dispatch):
 def test_probe_wrapper_failure_leaves_route_unchanged(dispatch):
     p, rows, _, _ = dispatch([], broken_probe=True)
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['execution']['model'] == 'gpt-5.6-sol'
+    assert rows[-1]['execution']['model'] == 'gpt-6-sol'
 
 
 def test_evidence_creation_is_portable(dispatch):
     p, rows, _, _ = dispatch([account('codex', .99), account('claude', .2)], bsd_temp=True)
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['headroom_exclusion'] == ['gpt-5.6-sol']
+    assert rows[-1]['headroom_exclusion'] == ['gpt-6-sol']

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "note": "Consumed by `scripts/roster/generate.py --self-test`. Every case runs the same pipeline as a real run: routing.yaml text (fragment or file) + registry + snapshot rows -> mapping, effective chains, rules, gates, patch, in-memory apply and validation. `kind: validate` cases feed an attempted edit straight to the patch validator. Every `expect` is derived by hand from PLAN-M1-r5 \u00a7P1 rules, never from generator output. Snapshot rows are verbatim (slug, name, providerSlug) copies from the pinned evidence snapshot sha256 510dfcc8...2f2bad.",
+  "note": "Consumed by `scripts/roster/generate.py --self-test`. Every case runs the same pipeline as a real run: routing.yaml text (fragment or file) + registry + snapshot rows -> mapping, effective chains, rules, gates, patch, in-memory apply and validation. `kind: validate` cases feed an attempted edit straight to the patch validator. Every `expect` is derived by hand from PLAN-M1-r5 §P1 rules, never from generator output. Snapshot rows are verbatim (slug, name, providerSlug) copies from the pinned evidence snapshot sha256 510dfcc8...2f2bad.",
   "defaults": {
     "families": {
       "models": {
@@ -33,11 +33,6 @@
           "lab": "anthropic",
           "family": "haiku",
           "snapshot_name": "Claude 4.5 Haiku"
-        },
-        "gpt-5.6-sol": {
-          "lab": "openai",
-          "family": "sol",
-          "snapshot_name": "GPT-5.6 Sol"
         },
         "gpt-6-sol": {
           "lab": "openai",
@@ -91,8 +86,7 @@
         }
       },
       "candidates": [
-        "claude-opus-5-5",
-        "gpt-6-sol"
+        "claude-opus-5-5"
       ],
       "luna_class_evaluations": {}
     },
@@ -129,22 +123,16 @@
           "slug": "claude-fable-5-1-high"
         },
         {
-          "model": "gpt-5.6-sol",
-          "effort": "high",
-          "reasoning_mode": "reasoning",
-          "slug": "gpt-5-6-sol-high"
-        },
-        {
-          "model": "gpt-5.6-sol",
-          "effort": "medium",
-          "reasoning_mode": "reasoning",
-          "slug": "gpt-5-6-sol-medium"
-        },
-        {
           "model": "gpt-6-sol",
           "effort": "high",
           "reasoning_mode": "reasoning",
           "slug": "gpt-6-sol-high"
+        },
+        {
+          "model": "gpt-6-sol",
+          "effort": "medium",
+          "reasoning_mode": "reasoning",
+          "slug": "gpt-6-sol-medium"
         },
         {
           "model": "gpt-6-astra",
@@ -249,28 +237,23 @@
         "providerSlug": "anthropic"
       },
       {
-        "slug": "gpt-5-6-sol-high",
-        "name": "GPT-5.6 Sol (high)",
+        "slug": "gpt-6-sol-medium",
+        "name": "GPT-6 Sol (medium)",
         "providerSlug": "openai"
       },
       {
-        "slug": "gpt-5-6-sol-medium",
-        "name": "GPT-5.6 Sol (medium)",
+        "slug": "gpt-6-sol-xhigh",
+        "name": "GPT-6 Sol (xhigh)",
         "providerSlug": "openai"
       },
       {
-        "slug": "gpt-5-6-sol-xhigh",
-        "name": "GPT-5.6 Sol (xhigh)",
+        "slug": "gpt-6-sol-non-reasoning",
+        "name": "GPT-6 Sol (Non-reasoning)",
         "providerSlug": "openai"
       },
       {
-        "slug": "gpt-5-6-sol-non-reasoning",
-        "name": "GPT-5.6 Sol (Non-reasoning)",
-        "providerSlug": "openai"
-      },
-      {
-        "slug": "openai-gpt-5-6-sol",
-        "name": "OpenAI: GPT-5.6 Sol (batch)",
+        "slug": "openai-gpt-6-sol",
+        "name": "OpenAI: GPT-6 Sol (batch)",
         "providerSlug": "openai"
       },
       {
@@ -375,15 +358,14 @@
   "cases": [
     {
       "id": "validation-sol-flagged-not-removed",
-      "note": "B1: rule 1 is producer-aware. Sol seat is ineligible for Sol producers (5.6, and candidate 6 via A2) but eligible for Claude producers, so it is flagged, never removed. Opus 5.5 candidate reaches validation-opus (Opus 5): A2.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "note": "B1: rule 1 is producer-aware. The Sol seat is ineligible for Sol producers but eligible for Claude producers, so it is flagged, never removed. Opus 5.5 candidate reaches validation-opus (Opus 5): A2. Updated 2026-09-26 (mk: GPT-6 Sol replaces GPT-5.6 Sol, so no Sol candidate remains and the Sol A2 flag is gone).",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "removals": [],
         "withheld": {},
         "flags": {
           "validation-sol": [
-            "A2/validation/sol",
             "rule1/validation/sol"
           ],
           "validation-opus": [
@@ -401,14 +383,12 @@
           "default|validation|claude-opus-5-5|nominal|default": "validation-sol",
           "default|validation|claude-opus-5-5|sol-unavailable|default": "validation-opus",
           "default|validation|claude-opus-5|sol-unavailable|default": "validation-sonnet",
-          "default|validation|gpt-5.6-sol|nominal|default": "validation-opus"
+          "default|validation|gpt-6-sol|nominal|default": "validation-opus"
         },
         "rfu_include": [
-          "claude-opus-5-5 -> validation-opus (claude-opus-5) in validation [head, sol-unavailable]",
-          "gpt-6-sol -> validation-sol (gpt-5.6-sol) in validation [reachable, nominal]"
+          "claude-opus-5-5 -> validation-opus (claude-opus-5) in validation [head, sol-unavailable]"
         ],
         "candidate_a2_include": [
-          "gpt-6-sol: refused as reviewer/validator in validation while validation-sol (gpt-5.6-sol) is reachable",
           "claude-opus-5-5: refused as reviewer/validator in validation while validation-opus (claude-opus-5) is reachable"
         ],
         "heads_changed": [],
@@ -438,7 +418,7 @@
     {
       "id": "kimi-validates-sol-m1",
       "note": "m1: Kimi validating Sol work is an existing conflict: flagged (rule 1, m1 note), eligible for Claude producers, not removed. Kimi maps through the ratified mk waiver; validation-kimi is reported INOPERABLE (mk-d3rf).",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sol, validation-kimi]\n      description: fixture seat validation-opus\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sol, validation-kimi]\n      description: fixture seat validation-opus\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: high\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "removals": [],
@@ -636,7 +616,7 @@
     {
       "id": "rule2-not-applied-to-validation",
       "note": "n4 (mk 2026-09-25): rule 2 covers plan-review and cross-lab-review only; a validation chain without Astra is not flagged for Opus-produced work.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sonnet\n    deep-execution: deep-opus\n  tiers:\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sonnet\n    deep-execution: deep-opus\n  tiers:\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "removals": [],
@@ -651,7 +631,7 @@
     {
       "id": "rule2-crosslab-without-astra-lint",
       "note": "Rule 2 lint on routing.yaml: a cross-lab-review chain with no Astra seat is reported for Opus producers; the fix needs an addition, so it is a schema gap, not a patch.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-fable\n    deep-execution: deep-opus\n  tiers:\n    crosslab-fable:\n      role: cross-lab-review\n      backend: claude\n      model: fable\n      reasoning_effort: high\n      fallbacks: [crosslab-sol]\n      description: fixture seat crosslab-fable\n    crosslab-sol:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat crosslab-sol\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-fable\n    deep-execution: deep-opus\n  tiers:\n    crosslab-fable:\n      role: cross-lab-review\n      backend: claude\n      model: fable\n      reasoning_effort: high\n      fallbacks: [crosslab-sol]\n      description: fixture seat crosslab-fable\n    crosslab-sol:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat crosslab-sol\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "removals": [],
@@ -673,7 +653,7 @@
     {
       "id": "a2-opus55-to-opus5-across-fallbacks",
       "note": "A2 across roles: an Opus 5.5 cross-lab-review seat falls back into validation-sol then validation-opus (Opus 5). With Sol operationally failed, Opus 5 heads review of Opus 5.5 work and stays refused (runtime_family_unenforced); the reverse direction (Opus 5 work reaching the 5.5 seat) is refused too.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-opus55\n  tiers:\n    crosslab-opus55:\n      role: cross-lab-review\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat crosslab-opus55\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat validation-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-opus55\n  tiers:\n    crosslab-opus55:\n      role: cross-lab-review\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat crosslab-opus55\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat validation-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "heads": {
@@ -699,24 +679,22 @@
       }
     },
     {
-      "id": "a2-sol56-sol6-both-directions",
-      "note": "A2 symmetric for Sol: GPT-5.6 Sol work reaching a GPT-6 Sol seat and GPT-6 Sol work reaching a GPT-5.6 Sol seat are both runtime_family_unenforced. Both seats stay (eligible for Claude producers).",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sol, validation-sol6]\n      description: fixture seat validation-opus\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n    validation-sol6:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol6\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "id": "a2-opus5-opus55-both-directions",
+      "note": "A2 symmetric: Opus 5 work reaching an Opus 5.5 seat and Opus 5.5 work reaching an Opus 5 seat are both runtime_family_unenforced. Both seats stay (eligible for Sol producers). Rewritten 2026-09-26 from the GPT-5.6/GPT-6 Sol pair when mk removed GPT-5.6 Sol.",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus, validation-opus55]\n      description: fixture seat validation-sol\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat validation-opus\n    validation-opus55:\n      role: validation\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: high\n      description: fixture seat validation-opus55\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "removals": [],
         "rfu_include": [
-          "gpt-5.6-sol -> validation-sol6 (gpt-6-sol) in validation",
-          "gpt-6-sol -> validation-sol (gpt-5.6-sol) in validation"
+          "claude-opus-5 -> validation-opus55 (claude-opus-5-5) in validation",
+          "claude-opus-5-5 -> validation-opus (claude-opus-5) in validation"
         ],
         "flags_include": {
-          "validation-sol": [
-            "A2/validation/sol",
-            "rule1/validation/sol"
+          "validation-opus": [
+            "A2/validation/opus"
           ],
-          "validation-sol6": [
-            "A2/validation/sol",
-            "rule1/validation/sol"
+          "validation-opus55": [
+            "A2/validation/opus"
           ]
         }
       }
@@ -724,7 +702,7 @@
     {
       "id": "rule6-coordination-rejects-opus55-astra",
       "note": "Rule 6 / n6: coordination is a relay and admits Sonnet and Sol only. Opus 5.5 and Astra seats fail for every producer and removing them changes no head, so both are removed. The base chain also has Opus ahead of a frontier seat (Opus-last lint), which the patch does not create.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    coordination: coordination-sonnet\n  tiers:\n    coordination-sonnet:\n      role: coordination\n      backend: claude\n      model: sonnet\n      reasoning_effort: medium\n      fallbacks: [coordination-sol, coordination-opus55, coordination-astra]\n      description: fixture seat coordination-sonnet\n    coordination-sol:\n      role: coordination\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: medium\n      description: fixture seat coordination-sol\n    coordination-opus55:\n      role: coordination\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: high\n      description: fixture seat coordination-opus55\n    coordination-astra:\n      role: coordination\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: high\n      description: fixture seat coordination-astra\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    coordination: coordination-sonnet\n  tiers:\n    coordination-sonnet:\n      role: coordination\n      backend: claude\n      model: sonnet\n      reasoning_effort: medium\n      fallbacks: [coordination-sol, coordination-opus55, coordination-astra]\n      description: fixture seat coordination-sonnet\n    coordination-sol:\n      role: coordination\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: medium\n      description: fixture seat coordination-sol\n    coordination-opus55:\n      role: coordination\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: high\n      description: fixture seat coordination-opus55\n    coordination-astra:\n      role: coordination\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: high\n      description: fixture seat coordination-astra\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "removals": [
@@ -755,7 +733,7 @@
     {
       "id": "rule6-sol-medium-in-authority",
       "note": "Rule 6: a Sol-medium seat in main-integrator (authority) is ineligible; not a head in any scenario, so removed.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    main-integrator: main-astra\n  tiers:\n    main-astra:\n      role: main-integrator\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: xhigh\n      fallbacks: [main-solmed, main-sonnet]\n      description: fixture seat main-astra\n    main-solmed:\n      role: main-integrator\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: medium\n      description: fixture seat main-solmed\n    main-sonnet:\n      role: main-integrator\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat main-sonnet\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    main-integrator: main-astra\n  tiers:\n    main-astra:\n      role: main-integrator\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: xhigh\n      fallbacks: [main-solmed, main-sonnet]\n      description: fixture seat main-astra\n    main-solmed:\n      role: main-integrator\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: medium\n      description: fixture seat main-solmed\n    main-sonnet:\n      role: main-integrator\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat main-sonnet\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "removals": [
@@ -823,8 +801,8 @@
       "id": "validator-refuses-reorder",
       "note": "A3: the validator refuses a fallback reorder.",
       "kind": "validate",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
-      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sol, validation-sonnet]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sol, validation-sonnet]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "violations_include": [
@@ -836,13 +814,13 @@
       "id": "validator-refuses-repoint",
       "note": "A3: repointing validation to validation-sonnet edits outside tiers and moves Sol work's head from validation-opus to validation-sonnet (cross_lab_first puts Anthropic seats first for a Sol producer).",
       "kind": "validate",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
-      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sonnet\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sonnet\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "violations_include": [
           "non_tier_edit",
-          "head_changed_without_gate:default|validation|gpt-5.6-sol|nominal|default"
+          "head_changed_without_gate:default|validation|gpt-6-sol|nominal|default"
         ]
       }
     },
@@ -850,8 +828,8 @@
       "id": "validator-refuses-frontier-edit",
       "note": "A3: frontier_models is never edited.",
       "kind": "validate",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
-      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5, claude-opus-5-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5, claude-opus-5-5]\n",
       "expect": {
         "status": "ok",
         "violations_include": [
@@ -863,8 +841,8 @@
       "id": "validator-refuses-addition",
       "note": "A3: seats are never added.",
       "kind": "validate",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
-      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n    validation-astra:\n      role: validation\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: high\n      description: fixture seat validation-astra\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n    validation-astra:\n      role: validation\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: high\n      description: fixture seat validation-astra\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "violations_include": [
@@ -876,7 +854,7 @@
       "id": "validator-refuses-dangling",
       "note": "B8: removing a seat without stripping fallbacks leaves a dangling reference.",
       "kind": "validate",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "removals": [
         "validation-sol"
       ],
@@ -892,8 +870,8 @@
       "id": "validator-accepts-noop",
       "note": "B8: an unchanged document validates clean.",
       "kind": "validate",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
-      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "patched": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "violations": []
@@ -902,25 +880,25 @@
     {
       "id": "registry-latest-alias",
       "note": "A1: -latest aliases never map.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
-            "model": "gpt-5.6-sol",
+            "model": "gpt-6-sol",
             "effort": "high",
             "reasoning_mode": "reasoning",
             "slug": "openai-gpt-sol-latest"
           }
         ],
         "rows_drop": [
-          "gpt-5.6-sol@high"
+          "gpt-6-sol@high"
         ]
       },
       "expect": {
         "status": "refused",
         "refusal_include": [
-          "registry:gpt-5.6-sol@high",
-          "unmapped:gpt-5.6-sol@high"
+          "registry:gpt-6-sol@high",
+          "unmapped:gpt-6-sol@high"
         ],
         "messages_include": [
           "latest_alias"
@@ -930,7 +908,7 @@
     {
       "id": "registry-composite",
       "note": "A1: '<X> Fallback' composite rows never map.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
@@ -958,7 +936,7 @@
     {
       "id": "registry-provider-duplicate",
       "note": "A1: provider-prefixed duplicates never map.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
@@ -986,7 +964,7 @@
     {
       "id": "registry-unrecognised-qualifier",
       "note": "A1: 'Fast' is not a recognised qualifier.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
@@ -1014,7 +992,7 @@
     {
       "id": "registry-wrong-effort",
       "note": "A1: declared high, row is medium.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
@@ -1042,7 +1020,7 @@
     {
       "id": "registry-xhigh-is-not-high",
       "note": "B3: 'Xhigh Effort' parses as xhigh deterministically, never high.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
@@ -1070,25 +1048,25 @@
     {
       "id": "registry-wrong-mode",
       "note": "A1: declared reasoning, row is non-reasoning.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
-            "model": "gpt-5.6-sol",
+            "model": "gpt-6-sol",
             "effort": "high",
             "reasoning_mode": "reasoning",
-            "slug": "gpt-5-6-sol-non-reasoning"
+            "slug": "gpt-6-sol-non-reasoning"
           }
         ],
         "rows_drop": [
-          "gpt-5.6-sol@high"
+          "gpt-6-sol@high"
         ]
       },
       "expect": {
         "status": "refused",
         "refusal_include": [
-          "registry:gpt-5.6-sol@high",
-          "unmapped:gpt-5.6-sol@high"
+          "registry:gpt-6-sol@high",
+          "unmapped:gpt-6-sol@high"
         ],
         "messages_include": [
           "reasoning_mode:row 'non-reasoning' != declared 'reasoning'"
@@ -1098,7 +1076,7 @@
     {
       "id": "registry-wrong-model",
       "note": "B4: identity is checked against the snapshot row, not the registry.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
@@ -1126,7 +1104,7 @@
     {
       "id": "registry-duplicate-row",
       "note": "Closed world: one row per key.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "slugs_patch": {
         "rows_add": [
           {
@@ -1400,7 +1378,7 @@
     {
       "id": "freshness-stale",
       "note": "A1/N2: stale snapshot refuses with no patch.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "now": "2026-10-01T12:20:45Z",
       "expect": {
         "status": "refused",
@@ -1412,7 +1390,7 @@
     {
       "id": "freshness-absent",
       "note": "A1/N2: stale snapshot refuses with no patch.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "generatedAt_absent": true,
       "expect": {
         "status": "refused",
@@ -1424,7 +1402,7 @@
     {
       "id": "freshness-unparseable",
       "note": "A1/N2: stale snapshot refuses with no patch.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "generatedAt": "not-a-date",
       "expect": {
         "status": "refused",
@@ -1436,7 +1414,7 @@
     {
       "id": "freshness-future",
       "note": "A1/N2: future snapshot refuses with no patch.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "generatedAt": "2026-09-26T00:00:00Z",
       "expect": {
         "status": "refused",
@@ -1448,7 +1426,7 @@
     {
       "id": "freshness-at-deadline",
       "note": "8 days to the millisecond is still fresh.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-opus\n  tiers:\n    validation-opus:\n      role: validation\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      fallbacks: [validation-sonnet, validation-sol]\n      description: fixture seat validation-opus\n    validation-sonnet:\n      role: validation\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      fallbacks: [validation-sol]\n      description: fixture seat validation-sonnet\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [validation-opus]\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "now": "2026-10-01T12:20:44.712Z",
       "expect": {
         "status": "ok"
@@ -1457,21 +1435,21 @@
     {
       "id": "executor-without-row-refuses",
       "note": "Blocker 1 (REVIEW-P1-r2): an executor maps only through an explicit row or waiver. A codex tier whose (model, effort) is in the registry does not map executor:codex, because executor_routing dispatches untiered and runs the host default model.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nexecutor_routing:\n  classes:\n    reasoning: [codex]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nexecutor_routing:\n  classes:\n    reasoning: [codex]\n",
       "expect": {
         "status": "refused",
         "refusal_include": [
           "unmapped:executor:codex"
         ],
         "refusal_exclude": [
-          "unmapped:gpt-5.6-sol@high"
+          "unmapped:gpt-6-sol@high"
         ]
       }
     },
     {
       "id": "executor-explicit-waiver-maps-and-produces",
       "note": "Blocker 1: executor:codex mapped by an explicit PROPOSED waiver to the host default (GPT-5.5 xhigh); its model is then analysed as a producer.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nexecutor_routing:\n  classes:\n    reasoning: [codex]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nexecutor_routing:\n  classes:\n    reasoning: [codex]\n",
       "slugs_patch": {
         "waivers_add": [
           {
@@ -1509,7 +1487,7 @@
     {
       "id": "n4-crosslab-sol-no-per-seat-rule2",
       "note": "Blocker 2 + n4 (mk 2026-09-25: n4 covers validation and cross-lab-review): Opus-produced cross-lab-review goes to Sol first under cross_lab_first; the Sol seat and the other non-Fable seats carry no per-seat rule2 flag. The chain-level no-Astra lint still fires, and the Fable seat keeps its m2 flag.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-fable\n    deep-execution: deep-opus\n  tiers:\n    crosslab-fable:\n      role: cross-lab-review\n      backend: claude\n      model: fable\n      reasoning_effort: high\n      fallbacks: [crosslab-sol]\n      description: fixture seat crosslab-fable\n    crosslab-sol:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [crosslab-sonnet]\n      description: fixture seat crosslab-sol\n    crosslab-sonnet:\n      role: cross-lab-review\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat crosslab-sonnet\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-fable\n    deep-execution: deep-opus\n  tiers:\n    crosslab-fable:\n      role: cross-lab-review\n      backend: claude\n      model: fable\n      reasoning_effort: high\n      fallbacks: [crosslab-sol]\n      description: fixture seat crosslab-fable\n    crosslab-sol:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [crosslab-sonnet]\n      description: fixture seat crosslab-sol\n    crosslab-sonnet:\n      role: cross-lab-review\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat crosslab-sonnet\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "removals": [],
@@ -1521,7 +1499,6 @@
             "rule2/cross-lab-review/opus"
           ],
           "crosslab-sol": [
-            "A2/cross-lab-review/sol",
             "rule1/cross-lab-review/sol"
           ]
         },
@@ -1552,7 +1529,7 @@
     {
       "id": "n4-crosslab-with-astra-lint-quiet",
       "note": "Blocker 2: the same cross-lab-review chain with an Astra seat reachable. The chain-level lint is quiet, Sol still carries no per-seat rule2 flag, and only the Fable m2 downgrade is flagged.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-fable\n    deep-execution: deep-opus\n  tiers:\n    crosslab-fable:\n      role: cross-lab-review\n      backend: claude\n      model: fable\n      reasoning_effort: high\n      fallbacks: [crosslab-sol]\n      description: fixture seat crosslab-fable\n    crosslab-sol:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      fallbacks: [crosslab-sonnet, crosslab-astra]\n      description: fixture seat crosslab-sol\n    crosslab-sonnet:\n      role: cross-lab-review\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat crosslab-sonnet\n    crosslab-astra:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: xhigh\n      description: fixture seat crosslab-astra\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    cross-lab-review: crosslab-fable\n    deep-execution: deep-opus\n  tiers:\n    crosslab-fable:\n      role: cross-lab-review\n      backend: claude\n      model: fable\n      reasoning_effort: high\n      fallbacks: [crosslab-sol]\n      description: fixture seat crosslab-fable\n    crosslab-sol:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      fallbacks: [crosslab-sonnet, crosslab-astra]\n      description: fixture seat crosslab-sol\n    crosslab-sonnet:\n      role: cross-lab-review\n      backend: claude\n      model: sonnet\n      reasoning_effort: high\n      description: fixture seat crosslab-sonnet\n    crosslab-astra:\n      role: cross-lab-review\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: xhigh\n      description: fixture seat crosslab-astra\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: high\n      description: fixture seat deep-opus\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\n",
       "expect": {
         "status": "ok",
         "lint_empty": [
@@ -1737,7 +1714,7 @@
     {
       "id": "fallback-ref-is-a-producer",
       "note": "Waiver fallback_ref (Fable closed -> Claude Code opus): the fallback model is analysed as a producer even when it is not a declared candidate.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
       "families_patch": {
         "candidates": []
       },
@@ -1784,7 +1761,7 @@
     {
       "id": "fallback-ref-unverified-refused",
       "note": "A fallback_ref must name a verified registry entry.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
       "slugs_patch": {
         "waivers_add": [
           {
@@ -1815,7 +1792,7 @@
     {
       "id": "fallback-ref-chain-fixpoint-refused",
       "note": "F1 (CHECK-P1-r3): a two-link fallback_ref chain (A -> B -> missing) must refuse cleanly, not KeyError. A single non-iterating pass missed this when A sorts before B, because B was popped after A had already been checked.",
-      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-5.6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
+      "routing": "# fixture routing.yaml fragment\ndispatch:\n  model_aliases:\n    opus: claude-opus-5\n    fable: claude-fable-5-1\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-sol\n  tiers:\n    validation-sol:\n      role: validation\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat validation-sol\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-fable-5-1, claude-opus-5]\nsubagents:\n  phases:\n    brainstorm:\n      model: fable\n",
       "slugs_patch": {
         "waivers_add": [
           {
@@ -1858,7 +1835,7 @@
     },
     {
       "id": "repo-routing-end-to-end",
-      "note": "B9: the repository's routing.yaml, families and slug registry against fixture copies of the pinned snapshot rows. No removals; validation-sol, validation-kimi and review-opus are flagged; Opus 5.5 work is headed by Opus 5.5 in validation. Updated 2026-09-25 (mk-3b8z: Opus 5.5 replaces Fable 5.1 and Opus 5 in every seat, so review-fable/crosslab-fable are gone and dispatch.model_aliases.opus -> claude-opus-5-5; mk-rpnv.9 coordinator ruling: all 10 PROPOSED waivers RATIFIED, plus the new claude-opus-5-5@high tier row).",
+      "note": "B9: the repository's routing.yaml, families and slug registry against fixture copies of the pinned snapshot rows. No removals; validation-sol, validation-kimi and review-opus are flagged; Opus 5.5 work is headed by Opus 5.5 in validation. Updated 2026-09-25 (mk-3b8z: Opus 5.5 replaces Fable 5.1 and Opus 5 in every seat, so review-fable/crosslab-fable are gone and dispatch.model_aliases.opus -> claude-opus-5-5; mk-rpnv.9 coordinator ruling: all 10 PROPOSED waivers RATIFIED, plus the new claude-opus-5-5@high tier row). Updated 2026-09-26 (mk: GPT-6 Sol at medium replaces GPT-5.6 Sol in every seat and leaves the candidate list, so validation-sol loses its A2 flag and no Sol candidate is reported).",
       "routing_file": "config/routing.yaml",
       "families_file": "config/roster-families.yaml",
       "slugs_file": "config/roster-slugs.yaml",
@@ -1872,8 +1849,7 @@
         ],
         "flags_include": {
           "validation-sol": [
-            "rule1/validation/sol",
-            "A2/validation/sol"
+            "rule1/validation/sol"
           ],
           "validation-kimi": [
             "rule1/validation/sol"
@@ -1890,12 +1866,6 @@
           "default|plan-review|claude-opus-5-5|nominal|default": "review-astra",
           "default|coordination|-|nominal|default": "coordination-sonnet"
         },
-        "rfu_include": [
-          "gpt-6-sol -> validation-sol (gpt-5.6-sol) in validation [reachable, nominal]"
-        ],
-        "candidate_a2_include": [
-          "gpt-6-sol: refused as reviewer/validator in validation while validation-sol (gpt-5.6-sol) is reachable"
-        ],
         "lint_include": {
           "rule2_no_astra_seat": [
             "cross-lab-review"

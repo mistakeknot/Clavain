@@ -36,7 +36,7 @@ cat > "$WORK/routine.json" <<'JSON'
 JSON
 
 CLAUDE_LANE='["claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]'
-NO_ASTRA='["gpt-5.6-sol","claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]'
+NO_ASTRA='["gpt-6-sol","claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]'
 
 ctx() { # ctx <base> <available_models-json|-> <out>
   if [[ "$2" == "-" ]]; then cp "$1" "$3"; else
@@ -71,7 +71,7 @@ check_primary deep-execution      "$WORK/c-routine.json" deep-astra
 check_primary deep-execution      "$WORK/c-front.json"   deep-astra
 check_primary plan-review         "$WORK/c-front.json"   review-opus gpt-6-astra
 check_primary plan-review         "$WORK/c-front.json"   review-astra claude-opus-5-5
-check_primary validation          "$WORK/c-front.json"   validation-opus gpt-5.6-sol
+check_primary validation          "$WORK/c-front.json"   validation-opus gpt-6-sol
 
 # ---------------------------------------------------------------------------
 # 2. mk-3b8z: Opus 5.5 replaced Fable 5.1 and every Opus seat runs Opus 5.5.

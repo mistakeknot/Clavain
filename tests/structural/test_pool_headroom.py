@@ -28,7 +28,7 @@ def core(value, *args):
 
 
 def route():
-    return {'profile_ref': 'routine-sol', 'profile': {'backend': 'codex', 'model': 'gpt-5.6-sol'},
+    return {'profile_ref': 'routine-sol', 'profile': {'backend': 'codex', 'model': 'gpt-6-sol'},
             'fallback_chain': [{'profile_ref': 'routine-sonnet', 'profile': {
                 'backend': 'claude', 'model': 'claude-sonnet-5'}}]}
 
@@ -101,7 +101,7 @@ def test_limit_windows_and_disabled_accounts():
         dict(account('codex', 0), enabled=False)]}
     snapshot = core(fixture)
     assert snapshot['providers']['codex']['soonest_reset'] == 1790388000419
-    assert advise(snapshot)['exclude'] == ['gpt-5.6-sol']
+    assert advise(snapshot)['exclude'] == ['gpt-6-sol']
 
 
 def test_best_account_is_family_specific_and_unknown_is_not_exhausted():
@@ -116,7 +116,7 @@ def test_best_account_is_family_specific_and_unknown_is_not_exhausted():
 
 def test_floor_and_switch_boundary():
     assert advise(core({'accounts': [account('codex', .9, .97)]}))['exclude'] == []
-    assert advise(core({'accounts': [account('codex', .9, .98)]}))['exclude'] == ['gpt-5.6-sol']
+    assert advise(core({'accounts': [account('codex', .9, .98)]}))['exclude'] == ['gpt-6-sol']
 
 
 def test_reorder_retains_ic_profile():
