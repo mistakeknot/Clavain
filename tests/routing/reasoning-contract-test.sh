@@ -26,13 +26,13 @@ jq -e '.profile.backend != "claude"' "$work/crosslab.json" >/dev/null
 # Needs ic >= intercore 2caa435.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
   --producer-identity=claude-sonnet-5 --context-file="$work/routine.json" > "$work/claude-review.json"
-jq -e '.profile.model == "gpt-5.6-sol" and .fallback_chain[0].profile.model == "claude-opus-5-5"
+jq -e '.profile.model == "gpt-6-sol" and .fallback_chain[0].profile.model == "claude-opus-5-5"
   and ([.profile.model, .fallback_chain[].profile.model] | index("claude-sonnet-5") == null)
   and .cross_lab_reorder.to[0] == "validation-sol"' "$work/claude-review.json" >/dev/null ||
   { echo 'FAIL: Claude-produced code does not reach Sol, then Opus'; exit 1; }
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
   --producer-identity=claude-opus-5-5 --context-file="$work/routine.json" > "$work/opus-review.json"
-jq -e '.profile.model == "gpt-5.6-sol"
+jq -e '.profile.model == "gpt-6-sol"
   and ([.profile.model, .fallback_chain[].profile.model] | index("claude-opus-5-5") == null)' "$work/opus-review.json" >/dev/null ||
   { echo 'FAIL: Opus-produced code reaches Opus or skips Sol'; exit 1; }
 printf '%s\n' '{"reasons":[],"rationale":"codex lane out","available_models":["claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]}' > "$work/codex-out.json"

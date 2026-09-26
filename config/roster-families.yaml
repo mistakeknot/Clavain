@@ -38,10 +38,6 @@ models:
     lab: anthropic
     family: haiku
     snapshot_name: Claude 4.5 Haiku
-  gpt-5.6-sol:
-    lab: openai
-    family: sol
-    snapshot_name: GPT-5.6 Sol
   gpt-6-sol:
     lab: openai
     family: sol
@@ -92,12 +88,11 @@ models:
     snapshot_name: Nemotron Cascade 2 30B A3B
 
 # Unevaluated candidates (§P1 Identity, m5): listed in report.md and
-# roster.generated.json only, never added to a chain. GPT-6 Sol is not
-# relabelled from GPT-5.6 Sol results. Each is checked against A2 along every
-# effective review chain, as producer and as reviewer.
+# roster.generated.json only, never added to a chain. Each is checked against
+# A2 along every effective review chain, as producer and as reviewer. GPT-6 Sol
+# left this list when mk put it in every Sol seat (2026-09-26).
 candidates:
   - claude-opus-5-5
-  - gpt-6-sol
 
 # Rule 5: per-class Luna evaluations accepted by mk. A benchmark rank does not
 # count. Keys are role classes (evidence, authority, review); values cite the

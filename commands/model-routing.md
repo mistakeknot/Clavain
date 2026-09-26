@@ -17,15 +17,15 @@ Execution authority is explicit. Resolve the complete profile with `ic route dis
 
 | Role | Primary route | Policy |
 |------|---------------|--------|
-| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-5.6 Sol xhigh until Astra account access succeeds, then Opus 5.5 high (`pilot-opus`, mk ruling 2026-09-25: Codex exhaustion must never block development). `pilot-opus` is `backend: main` — it informs which model the running session itself claims, not a subprocess dispatch.sh can spawn; `_dispatch_role_profile` still refuses to delegate to a `backend: main` candidate |
-| `scout` | GPT-5.6 Sol high | Read-only exploration; Sonnet 5 high is the capacity seat when the Codex lane is out |
-| `routine-execution` | GPT-5.6 Sol high | High-volume coding; Sonnet 5 high is the capacity seat when the Codex lane is out |
-| `deep-execution` | GPT-6 Astra high, Standard | Sol xhigh only for explicit model/account/version unavailability, then Opus 5.5 high. A frontier-classified task skips Sol — it is not frontier-eligible — and degrades straight to Opus |
+| `main-integrator` | GPT-6 Astra, xhigh, Standard | GPT-6 Sol medium until Astra account access succeeds, then Opus 5.5 high (`pilot-opus`, mk ruling 2026-09-25: Codex exhaustion must never block development). `pilot-opus` is `backend: main` — it informs which model the running session itself claims, not a subprocess dispatch.sh can spawn; `_dispatch_role_profile` still refuses to delegate to a `backend: main` candidate |
+| `scout` | GPT-6 Sol medium | Read-only exploration; Sonnet 5 high is the capacity seat when the Codex lane is out |
+| `routine-execution` | GPT-6 Sol medium | High-volume coding; Sonnet 5 high is the capacity seat when the Codex lane is out |
+| `deep-execution` | GPT-6 Astra high, Standard | Sol medium only for explicit model/account/version unavailability, then Opus 5.5 high. A frontier-classified task skips Sol — it is not frontier-eligible — and degrades straight to Opus |
 | `plan-review` | Opus 5.5 high | Astra xhigh when Opus is the producer or out of capacity. `producer_model_conflict` still removes any candidate equal to the producer, so an Opus-authored plan with Astra out fails closed: the agent then runs a declared adversarial Opus review by hand (mk ruling 2026-09-25, mk-3b8z; mk-2e1e tracks a routable seat). Opus 5.5 replaced Fable 5.1 here |
 | `validation` | Claude Opus 5.5 high | Must differ from the producer; Sonnet 5, then Sol, then Kimi fallbacks. Fable left routine validation on 2026-09-08 and every other seat on 2026-09-25 (mk rulings; mk-3b8z) |
-| `release-preparation` | GPT-5.6 Sol high | Returns a compact release packet; Sonnet 5 high is the capacity seat when the Codex lane is out |
+| `release-preparation` | GPT-6 Sol medium | Returns a compact release packet; Sonnet 5 high is the capacity seat when the Codex lane is out |
 | `release-authority` | main integrator | Never delegated implicitly. No capacity seat: substituting release authority is an authority change, not a fallback |
-| `cross-lab-review` | provider/model unlike producer | Sealed first-pass findings |
+| `cross-lab-review` | GPT-6 Sol medium | Sealed first-pass findings from a provider/model unlike the producer. Opus 5.5 is moved ahead for OpenAI-produced work, then Kimi (mk ruling 2026-09-26, which also replaced GPT-5.6 Sol with GPT-6 Sol medium in every seat) |
 
 Frontier authoring (`planning`, `frontier-planning`, `escalation`) runs Astra xhigh, then Opus 5.5 high (mk ruling 2026-09-18 — Opus already reviews frontier plans, which is the harder job, so refusing to let it author in an emergency was arbitrary; Opus 5.5 replaced the Fable 5.1 seat between them on 2026-09-25, mk-3b8z). The substitute is last, so a reachable Astra still authors every plan. What keeps a review substitute from changing authoring is that the two lanes are separate profile chains, asserted by `tests/routing/reasoning-contract-test.sh` — not a refusal to resolve.
 
@@ -134,7 +134,7 @@ GPT-5.6 07-09; consensus 16).
 | Validation | opus, against FROZEN criteria only | per plan | verification asymmetry; criteria frozen before execution, exogenous to the treatment in any A/B (parley item 33) |
 | Scouts — correctness (recuttable) | haiku / cheap lane | wide | wrong candidates leave artifacts a verifier can reject |
 | Scouts — coverage (propagates) | frontier or adversarial second scout | narrow | omitted candidates leave NO artifact; verification cannot see gaps (f-030, consensus 4). Pattern D requires a coverage adversary, not just a frontier synthesizer |
-| Cross-lab second review at gates | gpt-5.6-sol via codex peer (sandboxed) — reviewer must RE-DERIVE from requirements, never inspect the incumbent plan (consensus 10); K3 via kimi CLI lane (interflux ≥0.2.85) as third seat when warranted | gate-tier only | sealed first-pass + disposition field (upheld/dismissed), never raw disagreement counts (consensus 11) |
+| Cross-lab second review at gates | gpt-6-sol via codex peer (sandboxed) — reviewer must RE-DERIVE from requirements, never inspect the incumbent plan (consensus 10); K3 via kimi CLI lane (interflux ≥0.2.85) as third seat when warranted | gate-tier only | sealed first-pass + disposition field (upheld/dismissed), never raw disagreement counts (consensus 11) |
 | Escalation / tie-break | fable | reserve-protected | two-strikes, with STRIKE TAXONOMY below |
 
 ### Rules added in v2

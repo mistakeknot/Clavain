@@ -20,7 +20,7 @@ class ReasoningFollowups(unittest.TestCase):
                 path = Path(td)
                 (path/'.clavain/verdicts').mkdir(parents=True)
                 env = dict(os.environ, conf_status='CLEAN', conf_findings='0', results_path='results.md',
-                           _author='gpt-6-astra', _executor='gpt-5.6-sol', _crit_total='1',
+                           _author='gpt-6-astra', _executor='gpt-6-sol', _crit_total='1',
                            _crit_failed='0', _esc='0', _src='normal', CLAVAIN_BEAD_ID='fixture', criteria_path='criteria.md')
                 env.pop('VALIDATOR_MODEL', None)
                 env.pop('VALIDATOR_POLICY_HASH', None)

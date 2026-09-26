@@ -36,7 +36,7 @@ CLAVAIN_RUN_ID=integration-run CLAVAIN_BEAD_ID=integration-bead DISPATCH_SESSION
 records="$(route_records --limit=10)"
 jq -e 'length == 2 and all(.[]; .dispatch_id != null and .session_id == "integration-parent" and (.policy_hash | length == 64))' <<< "$records" >/dev/null
 jq -e 'all(.[]; .run_id == "integration-run" and .bead_id == "integration-bead" and (.context_json | fromjson | .run_id == "integration-run" and .bead_id == "integration-bead"))' <<< "$records" >/dev/null
-jq -e '[.[] | .context_json | fromjson] | all(.[]; .resolved_profile.profile.model == "gpt-6-astra" and .resolved_profile.profile.model_identity == "gpt-6-astra" and .resolved_route.fallback_chain[0].profile.model == "gpt-5.6-sol") and ([.[].state] | sort == ["completed","started"]) and ([.[].attempt_id] | unique | length == 1)' <<< "$records" >/dev/null
+jq -e '[.[] | .context_json | fromjson] | all(.[]; .resolved_profile.profile.model == "gpt-6-astra" and .resolved_profile.profile.model_identity == "gpt-6-astra" and .resolved_route.fallback_chain[0].profile.model == "gpt-6-sol") and ([.[].state] | sort == ["completed","started"]) and ([.[].attempt_id] | unique | length == 1)' <<< "$records" >/dev/null
 jq -e '[.[] | .context_json | fromjson | select(.state == "started")] | length == 1 and all(.[]; .result.verdict == "")' <<< "$records" >/dev/null || { echo 'FAIL: started record inherited a prior verdict' >&2; exit 1; }
 jq -e '[.[] | .context_json | fromjson | select(.state == "completed")] | length == 1 and all(.[]; .result.verdict | contains("STATUS: pass"))' <<< "$records" >/dev/null
 # A later successful process that fails to write its report must not inherit
@@ -55,10 +55,10 @@ latest="$(route_records --limit=20 | jq 'sort_by(.id) | reverse | .[:2]')"
 jq -e '[.[] | .context_json | fromjson | select(.state == "failed")] | length == 1 and all(.[]; .result.verdict == "" and .result.failure_class == "terminal_configuration")' <<< "$latest" >/dev/null
 sonnet="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role validation --producer-identity 'anthropic/claude-sonnet-5[1m]' -C "$TMP_ROOT/work" fixture 2>&1)"
 # Claude-produced code goes to the other lab first (cross_lab_first): Sol.
-[[ "$sonnet" == *'gpt-5.6-sol'* && "$sonnet" != *'claude-sonnet-5'* ]]
+[[ "$sonnet" == *'gpt-6-sol'* && "$sonnet" != *'claude-sonnet-5'* ]]
 # A decorated Opus identity must still exclude Opus as its own validator.
 opus="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role validation --producer-identity 'anthropic/claude-opus-5-5[1m]' -C "$TMP_ROOT/work" fixture 2>&1)"
-[[ "$opus" == *'gpt-5.6-sol'* && "$opus" != *'claude-opus-5-5'* ]]
+[[ "$opus" == *'gpt-6-sol'* && "$opus" != *'claude-opus-5-5'* ]]
 astra="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --via zaka --role validation --producer-identity codex/gpt-6-astra -C "$TMP_ROOT/work" fixture 2>&1)"
 [[ "$astra" == *'--agent claude-code'* && "$astra" == *'--model claude-opus-5-5'* ]]
 echo 'PASS: real Intercore identity, dispatch and immutable SQLite audit integration'
