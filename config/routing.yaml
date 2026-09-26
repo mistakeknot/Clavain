@@ -130,7 +130,6 @@ dispatch:
   model_aliases:
     opus: claude-opus-5-5
     sonnet: claude-sonnet-5
-    gpt-5.6: gpt-5.6-sol
     k3: kimi-code/k3
     kimi/k3: kimi-code/k3
   # Roles are the authoritative dispatch interface. Tier names remain for
@@ -145,11 +144,14 @@ dispatch:
     routine-execution: routine-sol
     deep-execution: deep-astra
     # mk ruling 2026-09-08: Opus validates, Sonnet 5 is the fallback. The
-    # producer is normally gpt-5.6-sol, so any Claude model keeps independence.
+    # producer is normally gpt-6-sol, so any Claude model keeps independence.
     validation: validation-opus
     release-preparation: release-sol
     release-authority: release-authority-main
-    cross-lab-review: crosslab-opus
+    # mk ruling 2026-09-26: cross-lab review runs on GPT-6 Sol at medium, and
+    # GPT-6 Sol at medium replaces GPT-5.6 Sol in every seat that used it.
+    # cross_lab_first still moves crosslab-opus ahead for OpenAI-produced work.
+    cross-lab-review: crosslab-sol
     # mk ruling 2026-09-25 (mk-42j9.5): relaying, waiting and status reports
     # run on Sonnet. Planning and review keep their frontier seats.
     coordination: coordination-sonnet
@@ -247,7 +249,7 @@ dispatch:
     fast:
       role: routine-execution
       backend: codex
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: Codex exhaustion must never block development.
@@ -260,7 +262,7 @@ dispatch:
     fast-clavain:
       role: scout
       backend: codex
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: same seat scout-sol already falls back to.
@@ -271,8 +273,8 @@ dispatch:
     deep:
       role: deep-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: Opus — deep lanes carry the generative/implementation
       # load deep-astra->deep-sol->deep-opus already trusts to Opus as capacity
@@ -282,8 +284,8 @@ dispatch:
     deep-clavain:
       role: deep-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       fallbacks: [deep-opus]
       description: Clavain interserve-mode high-complexity/research/flux-drive dispatch
@@ -300,8 +302,8 @@ dispatch:
     main-sol:
       role: main-integrator
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: Codex exhaustion must never block development —
       # pilot-opus is the same main-integrator role's Claude seat (ci-campaign-pilot
@@ -313,8 +315,8 @@ dispatch:
     scout-sol:
       role: scout
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       fallbacks: [scout-sonnet]
       description: Repository exploration and bounded read-only reconnaissance
@@ -340,7 +342,7 @@ dispatch:
     coordination-sol:
       role: coordination
       backend: codex
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       reasoning_effort: medium
       service_tier: standard
       # Codex coordinates through the bb CLI in its shell; it has no in-session
@@ -349,8 +351,8 @@ dispatch:
     routine-sol:
       role: routine-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       fallbacks: [routine-sonnet]
       description: High-volume routine implementation
@@ -377,8 +379,8 @@ dispatch:
     deep-sol:
       role: deep-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       # deep-astra reaches deep-opus transitively through this list. Sol stays
       # ahead of Opus: when only Astra is out, the cheaper Codex seat is correct.
@@ -433,7 +435,7 @@ dispatch:
     validation-sol:
       role: validation
       backend: codex
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): validation seat,
@@ -444,8 +446,8 @@ dispatch:
     release-sol:
       role: release-preparation
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       fallbacks: [release-sonnet]
       description: Release packet and documentation preparation
@@ -470,10 +472,18 @@ dispatch:
     release-authority-sol:
       role: release-authority
       backend: main
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       description: Main-integrator release authority while Astra access is unavailable
+    crosslab-sol:
+      role: cross-lab-review
+      backend: codex
+      model: gpt-6-sol
+      reasoning_effort: medium
+      service_tier: standard
+      fallbacks: [crosslab-opus]
+      description: Sealed first-pass review by a provider/model other than the producer
     crosslab-opus:
       role: cross-lab-review
       backend: claude
@@ -483,7 +493,7 @@ dispatch:
       # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
       # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
       # mandatory escalation/48h-revert terms as planning-astra above.
-      fallbacks: [validation-kimi, validation-sol]
+      fallbacks: [validation-kimi]
       description: Sealed first-pass review by a provider/model other than the producer
 
   # Legacy aliases apply only when a requested tier is absent. Executable
