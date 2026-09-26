@@ -65,6 +65,7 @@ fi
 # self-exec below receives this context explicitly.
 export -n CLAVAIN_BEAD_ID CLAVAIN_BEAD_SOURCE CLAVAIN_BEAD_CONTEXT_RESOLVED
 BEAD_SOURCE="none"
+RECHECK_BEAD_DEP_JSON=""
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
@@ -3036,14 +3037,33 @@ _dispatch_recheck_tracker_dir() {
 # bd call that created the issue but exited nonzero anyway (its --deps
 # attachment rejected, say) — a human reading only recheck_bead:null could
 # not tell "nothing needed filing" from "filing broke". RECHECK_BEAD_STATUS_JSON
-# now names the specific outcome ("filed"/"partial"/"bd_failed"/"no_tracker"/
-# "disabled"/"sidecar_write_failed") whenever there was at least one item to
-# file, and stays empty otherwise (RECHECK_SOURCE_JSON already fully explains
-# a "none"/not-a-substitute null). RECHECK_TRACKER_DIR_JSON and
+# now names the specific outcome ("filed"/"filed_id_unparsed"/"bd_failed"/
+# "no_tracker"/"disabled"/"sidecar_write_failed") whenever there was at least
+# one item to file, and stays empty otherwise (RECHECK_SOURCE_JSON already
+# fully explains a "none"/not-a-substitute null). RECHECK_TRACKER_DIR_JSON and
 # RECHECK_SIDECAR_PATH_JSON likewise carry the resolved tracker directory and
 # sidecar path onto the receipt, which previously omitted both — an auditor
 # reading the receipt in isolation, without dispatch.sh's own stderr, could
 # not tell where a bead (or its absence) should have landed.
+#
+# Round-2 review, ruling disagreement: `bd create ... --deps
+# discovered-from:$CLAVAIN_BEAD_ID` used to attach the dependency in the same
+# call that files the bead. A `bd` that creates the issue but then exits
+# nonzero because THAT attachment was rejected reported "bd_failed" even
+# though the bead genuinely exists — a retrying caller reading bd_failed
+# could file a duplicate. The dependency is now a separate `bd dep add` call
+# made only after a bead id is successfully parsed from a clean `bd create`;
+# its own failure never downgrades a successful filing. RECHECK_BEAD_DEP_JSON
+# records that outcome ("linked" on success, "failed" otherwise, staying
+# empty/null when there was no CLAVAIN_BEAD_ID to link to at all) so the
+# receipt distinguishes "bead filed, link broke" from "bead itself failed".
+#
+# Round-2 review, P3 finding 10: a `bd create` that exits 0 but whose output
+# doesn't match the id regex used to leave bead_id empty and fall through
+# BOTH branches below silently — recheck_bead stayed null with no status at
+# all, indistinguishable from "nothing needed filing". RECHECK_BEAD_STATUS_JSON
+# now gets "filed_id_unparsed" for that case, with a warning that includes
+# bd's raw stdout (truncated) so a human can recover the id by hand.
 _dispatch_process_capacity_recheck() {
   local exit_code="$1" body section_found=true item line
   local -a items=()
@@ -3074,6 +3094,7 @@ _dispatch_process_capacity_recheck() {
   RECHECK_SOURCE_JSON=""
   RECHECK_BEAD_JSON=""
   RECHECK_BEAD_STATUS_JSON=""
+  RECHECK_BEAD_DEP_JSON=""
   RECHECK_TRACKER_DIR_JSON=""
   RECHECK_SIDECAR_PATH_JSON=""
   [[ "$exit_code" == 0 ]] || return 0
@@ -3178,8 +3199,13 @@ _dispatch_process_capacity_recheck() {
     return 0
   fi
   RECHECK_TRACKER_DIR_JSON="$(jq -cn --arg d "$tracker_dir" '$d')"
+  # Round-2 ruling disagreement: the discovered-from dependency used to ride
+  # along in this same `bd create --deps ...` call, so a rejected attachment
+  # made an otherwise-successful filing look like "bd_failed" (rc != 0) to
+  # everything downstream — a retrying caller could then file a duplicate
+  # bead for the same recheck. It is filed separately below, only after a
+  # clean create with a parsed id.
   local -a bd_cmd=(bd create "$title" -d "$desc" -l capacity-recheck -C "$tracker_dir")
-  [[ -z "${CLAVAIN_BEAD_ID:-}" ]] || bd_cmd+=(--deps "discovered-from:$CLAVAIN_BEAD_ID")
   # `--silent` (bd 1.1.2+) prints only the issue id, removing any dependence
   # on a title/id ordering convention in bd's normal human-readable output.
   # Detect support rather than assuming it, and keep the old awk extraction
@@ -3247,9 +3273,48 @@ _dispatch_process_capacity_recheck() {
     # successfully-parsed id always means a clean filing.
     RECHECK_BEAD_JSON="$(jq -cn --arg id "$bead_id" '$id')"
     RECHECK_BEAD_STATUS_JSON='"filed"'
+    # Round-2 ruling disagreement: the discovered-from link is now a
+    # separate call, made only now that the bead demonstrably exists. Its
+    # own failure warns and is recorded, but never turns a clean filing
+    # into "bd_failed" (which would risk a retrying caller filing a
+    # duplicate bead for the same recheck).
+    if [[ -n "${CLAVAIN_BEAD_ID:-}" ]]; then
+      local dep_rc=0 dep_stderr="" dep_stderr_file
+      dep_stderr_file="$(mktemp 2>/dev/null)" || dep_stderr_file=""
+      if command -v timeout >/dev/null 2>&1; then
+        if [[ -n "$dep_stderr_file" ]]; then
+          timeout "$bd_timeout" bd dep add "$bead_id" "$CLAVAIN_BEAD_ID" --type discovered-from -C "$tracker_dir" >/dev/null 2>"$dep_stderr_file" || dep_rc=$?
+        else
+          timeout "$bd_timeout" bd dep add "$bead_id" "$CLAVAIN_BEAD_ID" --type discovered-from -C "$tracker_dir" >/dev/null 2>/dev/null || dep_rc=$?
+        fi
+      elif [[ -n "$dep_stderr_file" ]]; then
+        bd dep add "$bead_id" "$CLAVAIN_BEAD_ID" --type discovered-from -C "$tracker_dir" >/dev/null 2>"$dep_stderr_file" || dep_rc=$?
+      else
+        bd dep add "$bead_id" "$CLAVAIN_BEAD_ID" --type discovered-from -C "$tracker_dir" >/dev/null 2>/dev/null || dep_rc=$?
+      fi
+      if [[ -n "$dep_stderr_file" ]]; then
+        dep_stderr="$(cat "$dep_stderr_file" 2>/dev/null)"
+        rm -f "$dep_stderr_file"
+      fi
+      if [[ "$dep_rc" == 0 ]]; then
+        RECHECK_BEAD_DEP_JSON='"linked"'
+      else
+        RECHECK_BEAD_DEP_JSON='"failed"'
+        echo "dispatch: WARNING — filed the capacity-recheck bead $bead_id for '$ROLE' but could not link it to $CLAVAIN_BEAD_ID (bd dep add exited $dep_rc)${dep_stderr:+: $dep_stderr}" >&2
+      fi
+    fi
   elif [[ "$bd_rc" != 0 ]]; then
     RECHECK_BEAD_STATUS_JSON='"bd_failed"'
     echo "dispatch: WARNING — could not file the capacity-recheck bead for '$ROLE'; items are recorded at $recheck_file only${bd_stderr:+: $bd_stderr}" >&2
+  else
+    # P3 finding 10: `bd create` exited 0 (a real filing happened) but its
+    # stdout did not match the id-shaped pattern above — neither branch
+    # otherwise fires, so this used to leave RECHECK_BEAD_STATUS_JSON
+    # (and RECHECK_BEAD_JSON) silently null, indistinguishable from "nothing
+    # needed filing". Name it and surface bd's own stdout so a human can
+    # recover the id by hand instead of re-filing a duplicate.
+    RECHECK_BEAD_STATUS_JSON='"filed_id_unparsed"'
+    echo "dispatch: WARNING — bd create for the capacity-recheck bead ('$ROLE') exited 0 but no id could be parsed from its output; raw stdout: ${bd_output:0:200}" >&2
   fi
 }
 

@@ -155,6 +155,7 @@ _role_audit_context() {
     --argjson recheck_bead "${RECHECK_BEAD_JSON:-null}" \
     --argjson findings "$findings" \
     --argjson recheck_bead_status "${RECHECK_BEAD_STATUS_JSON:-null}" \
+    --argjson recheck_bead_dep "${RECHECK_BEAD_DEP_JSON:-null}" \
     --argjson recheck_tracker_dir "${RECHECK_TRACKER_DIR_JSON:-null}" \
     --argjson recheck_sidecar_path "${RECHECK_SIDECAR_PATH_JSON:-null}" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,retry_id:$retry_id,state:$state,
@@ -166,7 +167,7 @@ _role_audit_context() {
       headroom_reorder:($route.headroom_reorder // null),
       ic_version:(if $ic_version != "" then $ic_version else null end),
       capacity_substitute:$capacity_substitute,recheck_items:$recheck_items,recheck_source:$recheck_source,
-      recheck_bead:$recheck_bead,recheck_bead_status:$recheck_bead_status,
+      recheck_bead:$recheck_bead,recheck_bead_status:$recheck_bead_status,recheck_bead_dep:$recheck_bead_dep,
       recheck_tracker_dir:$recheck_tracker_dir,recheck_sidecar_path:$recheck_sidecar_path,
       run_id:$run,bead_id:$bead,bead_source:$bead_source,
       execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,

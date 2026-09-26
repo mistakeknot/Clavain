@@ -68,7 +68,7 @@ _load() {
     source "$HELPERS"
 }
 
-# FAKE_BD_MODE: success (default) | fail | partial | hang
+# FAKE_BD_MODE: success (default) | fail | partial | hang | depfail | unparsable
 _fake_bd() {
     cat > "$BINDIR/bd" <<'FAKE_BD'
 #!/usr/bin/env bash
@@ -79,6 +79,8 @@ for a in "$@"; do
   fi
 done
 { printf '<<<BD-CALL>>>\n'; printf '%s\x1f' "$@"; printf '\n'; } >> "$BD_LOG"
+is_dep_add=0
+[[ "$1" == dep && "$2" == add ]] && is_dep_add=1
 case "${FAKE_BD_MODE:-success}" in
   hang)
     sleep 30
@@ -93,6 +95,25 @@ case "${FAKE_BD_MODE:-success}" in
     echo "fake-bd: --deps target not found" >&2
     echo "fake-42"
     exit 1
+    ;;
+  depfail)
+    # P3 finding 10 (ruling disagreement): fails only the separate `bd dep
+    # add` link call, leaving `bd create` itself untouched — a rejected link
+    # must never turn an already-successful filing into bd_failed.
+    if [[ "$is_dep_add" == 1 ]]; then
+      echo "fake-bd: simulated dep add failure" >&2
+      exit 1
+    fi
+    echo "fake-42"
+    ;;
+  unparsable)
+    # P3 finding 9: `bd create` exits 0 (a real filing happened) but prints
+    # nothing id-shaped.
+    if [[ "$is_dep_add" == 1 ]]; then
+      echo "fake-42"
+    else
+      echo "unexpected response containing no issue identifier at all"
+    fi
     ;;
   *)
     echo "fake-42"
@@ -274,4 +295,60 @@ FAKE_BD
     [[ "$RECHECK_BEAD_STATUS_JSON" == '"sidecar_write_failed"' ]]
     [[ ! -s "$BD_LOG" ]]
     grep -qi "could not write the capacity-recheck sidecar" "$TMPDIR_T/stderr.txt"
+}
+
+# --- P3 finding 10 (ruling disagreement): the discovered-from link is filed
+# via a separate `bd dep add` call, only after a clean create with a parsed
+# id, so a rejected link never demotes an already-successful filing --------
+
+@test "recheck: CLAVAIN_BEAD_ID set links the filed bead via a separate bd dep add call (P3 finding 10)" {
+    _load
+    _fake_bd
+    CLAVAIN_BEAD_ID="bd-parent-1"
+    _answer_with_section '- confirmed nothing was executed'
+    _dispatch_process_capacity_recheck 0
+    [[ "$RECHECK_BEAD_JSON" == '"fake-42"' ]]
+    [[ "$RECHECK_BEAD_STATUS_JSON" == '"filed"' ]]
+    [[ "$RECHECK_BEAD_DEP_JSON" == '"linked"' ]]
+    [[ "$(grep -c '<<<BD-CALL>>>' "$BD_LOG")" == 2 ]]
+    tr '\037' '\n' < "$BD_LOG" | grep -qx "dep"
+    tr '\037' '\n' < "$BD_LOG" | grep -qx "add"
+    tr '\037' '\n' < "$BD_LOG" | grep -qx "discovered-from"
+    tr '\037' '\n' < "$BD_LOG" | grep -qx "bd-parent-1"
+}
+
+@test "recheck: no CLAVAIN_BEAD_ID set never attempts a bd dep add call" {
+    _load
+    _fake_bd
+    _answer_with_section '- confirmed nothing was executed'
+    _dispatch_process_capacity_recheck 0
+    [[ "$RECHECK_BEAD_JSON" == '"fake-42"' ]]
+    [[ "$RECHECK_BEAD_STATUS_JSON" == '"filed"' ]]
+    [[ -z "${RECHECK_BEAD_DEP_JSON:-}" ]]
+    [[ "$(grep -c '<<<BD-CALL>>>' "$BD_LOG")" == 1 ]]
+}
+
+@test "recheck: a failing bd dep add keeps the bead 'filed' and marks only the link as failed (P3 finding 10)" {
+    _load
+    FAKE_BD_MODE=depfail _fake_bd
+    CLAVAIN_BEAD_ID="bd-parent-1"
+    _answer_with_section '- confirmed nothing was executed'
+    FAKE_BD_MODE=depfail _dispatch_process_capacity_recheck 0 2>"$TMPDIR_T/stderr.txt"
+    [[ "$RECHECK_BEAD_JSON" == '"fake-42"' ]]
+    [[ "$RECHECK_BEAD_STATUS_JSON" == '"filed"' ]]
+    [[ "$RECHECK_BEAD_DEP_JSON" == '"failed"' ]]
+    grep -qi "could not link it to bd-parent-1" "$TMPDIR_T/stderr.txt"
+}
+
+# --- P3 finding 9: bd create exits 0 but its stdout has no id-shaped token -
+
+@test "recheck: bd create exiting 0 with no parseable id reports status 'filed_id_unparsed' (P3 finding 9)" {
+    _load
+    FAKE_BD_MODE=unparsable _fake_bd
+    _answer_with_section '- confirmed nothing was executed'
+    FAKE_BD_MODE=unparsable _dispatch_process_capacity_recheck 0 2>"$TMPDIR_T/stderr.txt"
+    [[ -z "${RECHECK_BEAD_JSON:-}" ]]
+    [[ "$RECHECK_BEAD_STATUS_JSON" == '"filed_id_unparsed"' ]]
+    grep -qi "exited 0 but no id could be parsed" "$TMPDIR_T/stderr.txt"
+    grep -q "unexpected response containing no issue identifier at all" "$TMPDIR_T/stderr.txt"
 }

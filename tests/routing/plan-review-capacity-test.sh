@@ -134,9 +134,25 @@ for a in "$@"; do
   fi
 done
 { printf '<<<BD-CALL>>>\n'; printf '%s\x1f' "$@"; printf '\n'; } >> "$FAKE_BD_LOG"
+is_dep_add=0
+[[ "$1" == dep && "$2" == add ]] && is_dep_add=1
 if [[ "${FAKE_BD_MODE:-}" == fail ]]; then
   echo "fake-bd: simulated failure" >&2
   exit 1
+fi
+# P3 finding 10: fails only the separate `bd dep add` link call, leaving
+# `bd create` itself untouched — proves a rejected link never turns an
+# already-successful filing into "bd_failed".
+if [[ "${FAKE_BD_MODE:-}" == depfail && "$is_dep_add" == 1 ]]; then
+  echo "fake-bd: simulated dep add failure" >&2
+  exit 1
+fi
+# P3 finding 10: `bd create` exits 0 (a real filing happened) but prints
+# nothing id-shaped — dispatch.sh's id-parse must fail distinctly from both
+# a clean filing and a hard bd_failed.
+if [[ "${FAKE_BD_MODE:-}" == unparsable_id && "$is_dep_add" == 0 ]]; then
+  echo "unexpected response containing no issue identifier at all"
+  exit 0
 fi
 for a in "$@"; do
   if [[ "$a" == --silent ]]; then
@@ -196,6 +212,20 @@ bd_log_has_dir() {
   # \037 is the octal form of the unit separator (\x1f) — tr does not accept
   # \x hex escapes, so a \x1f pattern here silently matches nothing at all.
   tr '\037' '\n' < "$FAKE_BD_LOG" | grep -qx -- "$1"
+}
+
+# Round-2 ruling disagreement fix: the discovered-from link is now its own
+# `bd dep add <child> <parent> --type discovered-from` call, separate from
+# `bd create`, so a filing that gets linked back to its parent bead logs two
+# <<<BD-CALL>>> entries, not one. True when the fake bd log contains exactly
+# that dep-add call, argv-exact (fake bd always returns the id "fake-42").
+bd_log_has_dep() {
+  # Substring (not -x) match: dispatch.sh's fake-bd fixture writes a trailing
+  # \x1f after the final argv token (before the newline), so an exact-line
+  # match built without one would never match. The joined-token substring
+  # below is still unambiguous — it can't appear inside a `bd create` call.
+  local parent_id="$1" sep=$'\x1f'
+  grep -Fq -- "dep${sep}add${sep}fake-42${sep}${parent_id}${sep}--type${sep}discovered-from${sep}-C${sep}$2${sep}" "$FAKE_BD_LOG"
 }
 
 # Prints the context_json of the most recent terminal (completed/failed)
@@ -321,11 +351,17 @@ CLAVAIN_BEAD_ID="bd-parent-1" \
 [[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "two re-check items: expected a recheck sidecar file"
 grep -q "confirmed the migration script" "$TMP_ROOT/answer.md.recheck.md" || fail "two re-check items: sidecar missing first item"
 grep -q "unsure whether the fallback order" "$TMP_ROOT/answer.md.recheck.md" || fail "two re-check items: sidecar missing second item"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "two re-check items: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+# Round-2 ruling disagreement: bd create no longer carries --deps directly
+# (a rejected dep attachment used to make an otherwise-successful filing look
+# like "bd_failed" to everything downstream); the link is now a separate
+# `bd dep add` call, made only after a clean create with a parsed id, so a
+# successful link is exactly two bd calls, not one.
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "two re-check items: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
 grep -q "capacity-recheck" "$FAKE_BD_LOG" || fail "two re-check items: bd create did not carry the capacity-recheck label"
-grep -q "discovered-from:bd-parent-1" "$FAKE_BD_LOG" || fail "two re-check items: bd create did not carry --deps discovered-from"
+bd_log_has_dep "bd-parent-1" "$TMP_ROOT/work" || fail "two re-check items: bd dep add did not link fake-42 back to bd-parent-1, got: $(cat "$FAKE_BD_LOG")"
 grep -q "Re-check capacity-substitute plan-review review (bd-parent-1)" "$FAKE_BD_LOG" || fail "two re-check items: unexpected bd create title: $(cat "$FAKE_BD_LOG")"
 receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead_dep' <<< "$receipt")" == "linked" ]] || fail "two re-check items: receipt recheck_bead_dep was not 'linked': $receipt"
 [[ "$(jq -r '.recheck_items' <<< "$receipt")" == "2" ]] || fail "two re-check items: receipt recheck_items was not 2: $receipt"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "listed" ]] || fail "two re-check items: receipt recheck_source was not 'listed': $receipt"
 [[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "two re-check items: receipt recheck_bead was not the filed id: $receipt"
@@ -354,6 +390,40 @@ grep -qi "WARNING.*could not file the capacity-recheck bead" "$TMP_ROOT/err" || 
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "failing bd: receipt recheck_bead was not null: $receipt"
 
+# P3 finding 10: a `bd create` that exits 0 but whose output has no
+# id-shaped token must be distinguished from both a clean filing and a hard
+# bd_failed — a human should be able to recover the id from the raw stdout
+# a warning surfaces, instead of a caller re-filing a duplicate bead.
+FAKE_BD_MODE=unparsable_id \
+  FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed nothing was executed\n')" \
+  run_substitute_review
+[[ "$rc" == 0 ]] || fail "unparsable bd id: expected the dispatch to still succeed, got exit $rc"
+[[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "unparsable bd id: expected the sidecar to still be written"
+grep -qi "WARNING.*bd create.*exited 0 but no id could be parsed" "$TMP_ROOT/err" || fail "unparsable bd id: expected a loud stderr warning naming the unparsed-id case: $(tail -5 "$TMP_ROOT/err")"
+grep -q "unexpected response containing no issue identifier at all" "$TMP_ROOT/err" || fail "unparsable bd id: expected the warning to include bd's own raw stdout: $(tail -5 "$TMP_ROOT/err")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "unparsable bd id: receipt recheck_bead was not null: $receipt"
+[[ "$(jq -r '.recheck_bead_status' <<< "$receipt")" == "filed_id_unparsed" ]] || fail "unparsable bd id: receipt recheck_bead_status was not 'filed_id_unparsed': $receipt"
+
+echo "PASS: a bd create that exits 0 with no parseable id is reported as filed_id_unparsed, distinct from bd_failed"
+
+# P3 finding 10 (ruling disagreement): a `bd dep add` failure never
+# retroactively fails an already-successful `bd create` — the bead stays
+# filed under its own id, the link is separately recorded as failed, and a
+# stderr warning names the bead and the parent it could not attach to.
+CLAVAIN_BEAD_ID="bd-parent-depfail" FAKE_BD_MODE=depfail \
+  FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed nothing was executed\n')" \
+  run_substitute_review
+[[ "$rc" == 0 ]] || fail "dep add failure: expected the dispatch to still succeed, got exit $rc"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "dep add failure: expected one bd create call and one (failing) bd dep add call, got: $(cat "$FAKE_BD_LOG")"
+grep -qi "WARNING.*could not link it to bd-parent-depfail" "$TMP_ROOT/err" || fail "dep add failure: expected a loud stderr warning naming the unlinked parent: $(tail -5 "$TMP_ROOT/err")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "dep add failure: receipt recheck_bead was not the filed id despite the failed link: $receipt"
+[[ "$(jq -r '.recheck_bead_status' <<< "$receipt")" == "filed" ]] || fail "dep add failure: receipt recheck_bead_status was not 'filed' (a failed link must not demote it to bd_failed): $receipt"
+[[ "$(jq -r '.recheck_bead_dep' <<< "$receipt")" == "failed" ]] || fail "dep add failure: receipt recheck_bead_dep was not 'failed': $receipt"
+
+echo "PASS: a failing bd dep add keeps the bead 'filed' and only marks the link itself as failed"
+
 # The reviewer writes the heading with no items under it (not "None."): B3
 # treats an empty section the same as a missing one — the whole review still
 # needs a re-check, not a silent "nothing to flag".
@@ -362,7 +432,8 @@ CLAVAIN_BEAD_ID="bd-parent-2b" \
   run_substitute_review
 [[ "$rc" == 0 ]] || fail "empty re-check section: expected review to succeed, got exit $rc"
 grep -q "reviewer did not list re-check items" "$TMP_ROOT/answer.md.recheck.md" || fail "empty re-check section: expected the fabricated whole-review item, got: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "empty re-check section: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "empty re-check section: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
+bd_log_has_dep "bd-parent-2b" "$TMP_ROOT/work" || fail "empty re-check section: bd dep add did not link fake-42 back to bd-parent-2b, got: $(cat "$FAKE_BD_LOG")"
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "missing" ]] || fail "empty re-check section: receipt recheck_source was not 'missing': $receipt"
 
@@ -526,8 +597,9 @@ CLAVAIN_BEAD_ID="bd-parent-4" \
   FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed the override directory was used\n')" \
   run_substitute_review "$TMP_ROOT/work" "$TMP_ROOT/override-tracker"
 [[ "$rc" == 0 ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/override-tracker" || fail "CLAVAIN_RECHECK_BEADS_DIR: expected bd to be invoked with the override as -C, got: $(cat "$FAKE_BD_LOG")"
+bd_log_has_dep "bd-parent-4" "$TMP_ROOT/override-tracker" || fail "CLAVAIN_RECHECK_BEADS_DIR: bd dep add did not link fake-42 back to bd-parent-4 using the override -C, got: $(cat "$FAKE_BD_LOG")"
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: receipt recheck_bead was not the filed id: $receipt"
 
@@ -554,9 +626,10 @@ CLAVAIN_BEAD_ID="bd-parent-5" \
   FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed the repo toplevel was used, not the subdirectory\n')" \
   run_substitute_review "$TMP_ROOT/work/sub/dir"
 [[ "$rc" == 0 ]] || fail "subdirectory WORKDIR: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "subdirectory WORKDIR: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "subdirectory WORKDIR: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/work" || fail "subdirectory WORKDIR: expected bd -C to resolve to the repo toplevel, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/work/sub/dir" && fail "subdirectory WORKDIR: bd was invoked with the subdirectory instead of the toplevel: $(cat "$FAKE_BD_LOG")"
+bd_log_has_dep "bd-parent-5" "$TMP_ROOT/work" || fail "subdirectory WORKDIR: bd dep add did not link fake-42 back to bd-parent-5 using the repo toplevel -C, got: $(cat "$FAKE_BD_LOG")"
 
 # A linked worktree whose main checkout HAS its own .beads: files into main,
 # never into the worktree — the production shape this incident actually
@@ -570,9 +643,10 @@ CLAVAIN_BEAD_ID="bd-parent-6" \
   FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed the main checkout tracker was used\n')" \
   run_substitute_review "$TMP_ROOT/wt-linked"
 [[ "$rc" == 0 ]] || fail "linked worktree, main has .beads: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "linked worktree, main has .beads: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "linked worktree, main has .beads: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/wt-main" || fail "linked worktree, main has .beads: expected bd -C to resolve to the main checkout, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/wt-linked" && fail "linked worktree, main has .beads: bd was invoked with the worktree itself instead of main: $(cat "$FAKE_BD_LOG")"
+bd_log_has_dep "bd-parent-6" "$TMP_ROOT/wt-main" || fail "linked worktree, main has .beads: bd dep add did not link fake-42 back to bd-parent-6 using the main checkout -C, got: $(cat "$FAKE_BD_LOG")"
 
 # A linked worktree whose main checkout LACKS .beads, with a decoy .beads
 # sitting one level above main: refuses even though bd itself would happily
