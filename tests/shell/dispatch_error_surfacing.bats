@@ -203,16 +203,20 @@ PRE
 # QUESTION <q>" (or any future verdict vocabulary) produced a sidecar that
 # orchestrate.py:736 reads as approved. An unrecognized verdict is not a pass.
 
+# mk P1-2 round 2 (finding 5): the verdict is read only from the first
+# non-blank line, so these fixtures must put the VERDICT line there —
+# otherwise the test exercises "No verdict line" (still warn, but not the
+# QUESTION/unknown-vocabulary branch the test name claims).
 @test "extract: VERDICT: QUESTION synthesizes warn, not pass" {
     _load
-    printf 'Which schema should win?\nVERDICT: QUESTION which schema should win?\n' > "$OUTPUT"
+    printf 'VERDICT: QUESTION which schema should win?\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q "^STATUS: warn$" "$VERDICT_FILE"
 }
 
 @test "extract: unknown verdict vocabulary synthesizes warn, not pass" {
     _load
-    printf 'body\nVERDICT: SHIPSHAPE\n' > "$OUTPUT"
+    printf 'VERDICT: SHIPSHAPE\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q "^STATUS: warn$" "$VERDICT_FILE"
 }
@@ -228,7 +232,13 @@ PRE
     grep -q "^STATUS: pass$" "$VERDICT_FILE"
 }
 
-@test "extract: last structured verdict survives trailing connector warnings" {
+# mk P1-2 round 2 (finding 1): a structured block only counts as THE verdict
+# when its closing "---" is the last non-blank line of the whole output —
+# so of two fully-closed blocks, only the later one that actually ends the
+# file is read. (A block followed by further non-blank content, such as one
+# quoted in a code fence or mid-body, is ignored outright — see the
+# "quoted mid-body" test below, which is the literal round-2 repro.)
+@test "extract: last structured verdict wins when it is the trailing block" {
     _load
     cat > "$OUTPUT" <<'TEXT'
 --- VERDICT ---
@@ -239,21 +249,65 @@ Further review.
 --- VERDICT ---
 STATUS: FAIL
 SUMMARY: final finding
-Warning: claude.ai connectors are disabled in this environment.
+---
 TEXT
     _extract_verdict "$OUTPUT"
     grep -q '^STATUS: FAIL$' "$VERDICT_FILE"
     grep -q '^SUMMARY: final finding$' "$VERDICT_FILE"
-    ! grep -q 'earlier\|connectors' "$VERDICT_FILE"
+    ! grep -q 'earlier' "$VERDICT_FILE"
 }
 
-@test "extract: a delimited verdict survives a long trailing warning" {
+# mk P1-2 round 2 (finding 1): trailing noise is only tolerated BEFORE the
+# block now, not after — the block must itself be the last non-blank
+# content. A first-line-less output (no recognized verdict token on line 1)
+# that ends in a valid trailing block still resolves via that block.
+@test "extract: a delimited verdict at file end survives leading warning noise" {
     _load
-    printf -- '--- VERDICT ---\nSTATUS: FAIL\nSUMMARY: keep this\n---\n' > "$OUTPUT"
     for n in {1..20}; do echo 'trailing warning' >> "$OUTPUT"; done
+    printf -- '--- VERDICT ---\nSTATUS: FAIL\nSUMMARY: keep this\n---\n' >> "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q '^STATUS: FAIL$' "$VERDICT_FILE"
     ! grep -q 'trailing warning' "$VERDICT_FILE"
+}
+
+# mk P1-2 round 2 (finding 1, exact repro): a NEEDS-FIXES review whose body
+# later quotes the sidecar format (e.g. explaining it to the reader) must
+# not have that quoted block override the real first-line verdict — the
+# quoted block is mid-body (followed by further prose), not trailing.
+@test "extract: first-line NEEDS-FIXES beats a quoted mid-body pass block" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+Verdict: NEEDS-FIXES
+
+The reviewer explains the sidecar format like this:
+--- VERDICT ---
+STATUS: pass
+SUMMARY: example only
+---
+This is illustrative, not the actual verdict.
+TEXT
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+# mk P1-2 round 2 (finding 1, fail-safe): even when the first line decides
+# and says CLEAN (pass), a present, valid TRAILING block with a non-pass
+# STATUS demotes the result to warn — a pass needs every present verdict
+# source to agree.
+@test "extract: first-line CLEAN demoted to warn by a disagreeing trailing block" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+Verdict: CLEAN
+
+--- VERDICT ---
+STATUS: fail
+SUMMARY: automated recheck disagrees
+---
+TEXT
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
 # --- mk-rzi5: CLEAN must be anchored, not a substring match -----------------
@@ -264,17 +318,46 @@ TEXT
 
 @test "extract: VERDICT: NOT CLEAN must not synthesize pass (mk-rzi5)" {
     _load
-    printf 'body\nVERDICT: NOT CLEAN, see findings below\n' > "$OUTPUT"
+    printf 'VERDICT: NOT CLEAN, see findings below\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
     grep -q '^STATUS: warn$' "$VERDICT_FILE"
 }
 
-@test "extract: prose mentioning CLEAN off-anchor must not synthesize pass (mk-rzi5)" {
+@test "extract: first-line NOT CLEAN (bare) synthesizes warn" {
     _load
-    printf 'body\nVERDICT: the migration is not fully CLEAN yet\n' > "$OUTPUT"
+    printf 'VERDICT: NOT CLEAN\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    grep -q '^SUMMARY: NOT CLEAN$' "$VERDICT_FILE"
+}
+
+@test "extract: prose mentioning CLEAN off-anchor must not synthesize pass (mk-rzi5)" {
+    _load
+    printf 'VERDICT: the migration is not fully CLEAN yet\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+# mk P1-2 round 2 (finding 4): CLEAN is an EXACT token — nothing but
+# trailing whitespace/closing "**" may follow it on the first line, so
+# trailing prose (even punctuation-glued) must not read as pass. Both fall
+# through to "Unrecognized verdict", which is warn.
+@test "extract: VERDICT: CLEAN, <trailing prose> does not synthesize pass" {
+    _load
+    printf 'Verdict: CLEAN, pending P3 items\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: VERDICT: CLEAN. (trailing period) does not synthesize pass" {
+    _load
+    printf 'VERDICT: CLEAN.\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
 }
 
 # --- mk-rzi5: NEEDS-FIXES must be recognized explicitly ---------------------
@@ -285,12 +368,26 @@ TEXT
 
 # P1-2 (mk-rzi5 follow-up): verdict is read only from the first non-blank
 # line, so this fixture's verdict line moved to line 1.
-@test "extract: VERDICT: NEEDS-FIXES synthesizes warn with its own summary (mk-rzi5)" {
+#
+# mk P1-2 round 2 (finding 4): NEEDS-FIXES is now also an EXACT token (like
+# CLEAN and NOT CLEAN) — a bare "VERDICT: NEEDS-FIXES" still gets its own
+# branch and summary, but elaboration after it now falls to the generic
+# "Unrecognized verdict" bucket instead. That's still always warn, never
+# pass — see the next test.
+@test "extract: VERDICT: NEEDS-FIXES (bare) synthesizes warn with its own summary (mk-rzi5)" {
+    _load
+    printf 'VERDICT: NEEDS-FIXES\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    grep -q '^SUMMARY: NEEDS-FIXES$' "$VERDICT_FILE"
+}
+
+@test "extract: VERDICT: NEEDS-FIXES with elaboration still warns, never pass" {
     _load
     printf 'VERDICT: NEEDS-FIXES the retry loop leaks a file handle\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
     grep -q '^STATUS: warn$' "$VERDICT_FILE"
-    grep -q '^SUMMARY: NEEDS-FIXES the retry loop leaks a file handle$' "$VERDICT_FILE"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
 # --- mk-rzi5: capacity-substitute reviews get a PROVISIONAL marker ---------

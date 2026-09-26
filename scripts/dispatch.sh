@@ -2626,44 +2626,67 @@ _extract_verdict() {
         provisional_line="PROVISIONAL: capacity-substitute reviewer_lab=$prov_rl producer_lab=$prov_pl failure_class=$prov_fc; not an independent other-lab review, pending re-check"
     fi
 
-    # The final verdict can precede transport warnings and need not have seven
-    # lines or a closing delimiter. Keep the last block's fields only.
+    # mk P1-2 round 2: the verdict has TWO possible sources — the first
+    # non-blank line of the raw output, and a structured "--- VERDICT ---"
+    # block — and they must not be read independently of each other.
+    #
+    # 1. A structured block counts only if it is the TRAILING block: its
+    #    closing "---" must be the last non-blank line of the whole output.
+    #    A block quoted mid-body (in a code fence, in a recap, followed by
+    #    any further prose) is ignored outright — it is not "the" verdict,
+    #    it just looks like one. This is why the naive last-block-wins awk
+    #    used to let a NEEDS-FIXES review's own quoted example of the
+    #    sidecar format ("--- VERDICT ---" / "STATUS: pass" / "---" inside a
+    #    fence) win over a real first-line "Verdict: NEEDS-FIXES".
+    # 2. Precedence: if the first non-blank line carries a recognised
+    #    verdict token, THAT decides. The trailing block (1) is consulted
+    #    only when the first line has none (empty, or an unrecognised word
+    #    like "QUESTION").
+    # 3. Fail-safe: even when the first line decides and says CLEAN (pass),
+    #    a present, valid trailing block with a non-pass STATUS demotes the
+    #    result to warn — never pass. A pass requires every verdict source
+    #    that is actually present to agree; disagreement is never resolved
+    #    in favor of pass.
     local verdict_block
     verdict_block=$(awk '
-        /^--- VERDICT ---\r?$/ { block="--- VERDICT ---"; active=1; next }
-        active && /^---\r?$/ { block=block "\n---"; active=0; next }
+        { if ($0 ~ /[^[:space:]]/) last_nonblank = NR }
+        /^--- VERDICT ---\r?$/ { block="--- VERDICT ---"; active=1; close_line=0; next }
+        active && /^---\r?$/ { block=block "\n---"; active=0; close_line=NR; next }
         active && /^[A-Z][A-Z_ ]*: / { sub(/\r$/, ""); block=block "\n" $0; next }
         active { active=0 }
-        END { if (block != "") print block }
-    ' "$output_file") || return 0
+        END { if (block != "" && close_line == last_nonblank) print block }
+    ' "$output_file") || verdict_block=""
 
+    local has_valid_block=0
     if [[ -n "$verdict_block" ]] && grep -q '^STATUS: ' <<< "$verdict_block"; then
+        has_valid_block=1
+    fi
+    local block_status_lower=""
+    if [[ "$has_valid_block" == 1 ]]; then
+        block_status_lower="$(grep -m1 '^STATUS: ' <<< "$verdict_block" | sed -E 's/^STATUS:[[:space:]]*//')"
+        block_status_lower="${block_status_lower,,}"
+    fi
+
+    _write_verdict_block() {
+        local block="$1"
         if [[ -n "$provisional_line" ]]; then
             # Insert right after the opening delimiter (before STATUS), so a
             # consumer reading top-down sees the marker before any verdict.
-            verdict_block="$(awk -v line="$provisional_line" 'NR==1 { print; print line; next } { print }' <<< "$verdict_block")"
+            block="$(awk -v line="$provisional_line" 'NR==1 { print; print line; next } { print }' <<< "$block")"
         fi
-        printf '%s\n' "$verdict_block" > "$verdict_file"
-        return 0
-    fi
+        printf '%s\n' "$block" > "$verdict_file"
+    }
 
-    # No verdict block — synthesize from output.
-    #
-    # P1-2: the verdict is read ONLY from the first non-blank line of the
-    # agent's raw output, never from anywhere else in the body. The old
-    # `grep -m1 "^VERDICT:"` was case-sensitive and matched the FIRST line
-    # ANYWHERE in the file starting with literal "VERDICT:" — real review
-    # prompts and models commonly write mixed-case "Verdict: ...", which that
-    # grep never matched at all, so it fell through to whatever later line
-    # happened to start with uppercase "VERDICT:" (a quoted example inside a
-    # code fence, a later "--- VERDICT ---"-style recap) and used THAT as the
-    # ruling. A NEEDS-FIXES review whose first line reads "Verdict:
-    # NEEDS-FIXES" but whose body later quotes "VERDICT: CLEAN" therefore
-    # synthesized STATUS: pass. The fix: take only the first non-blank line
-    # (CRLF-tolerant), strip surrounding markdown bold (`**Verdict: ...**`),
-    # match "VERDICT:"/the label case-insensitively, and then match the
-    # verdict word itself against an exact, word-bounded token — nothing
-    # appearing after that first line is ever consulted again.
+    # First non-blank line of the raw output. The old `grep -m1 "^VERDICT:"`
+    # was case-sensitive and matched the FIRST line ANYWHERE in the file
+    # starting with literal "VERDICT:" — real review prompts and models
+    # commonly write mixed-case "Verdict: ...", which that grep never
+    # matched at all, so it fell through to whatever later line happened to
+    # start with uppercase "VERDICT:" and used THAT as the ruling. The fix:
+    # take only the first non-blank line (CRLF-tolerant), strip surrounding
+    # markdown bold (`**Verdict: ...**`), match "VERDICT:"/the label
+    # case-insensitively, and then match the verdict word itself against an
+    # exact, word-bounded token.
     local first_line=""
     first_line="$(awk '{ sub(/\r$/, ""); if ($0 ~ /[^[:space:]]/) { print; exit } }' "$output_file" 2>/dev/null)" || first_line=""
 
@@ -2680,13 +2703,12 @@ _extract_verdict() {
     fi
     local verdict_word_upper="${verdict_word^^}"
 
-    # Default is warn, not pass: this branch synthesizes a verdict the model
-    # never structured, and orchestrate reads STATUS: pass as approved. A
-    # VERDICT line this parser does not recognize (QUESTION, or vocabulary
-    # added after it) must surface for a human, not slide through as a pass
-    # nothing grounded.
+    # Default is warn, not pass: an unrecognized or absent first-line verdict
+    # (QUESTION, or vocabulary added after it) must surface for a human, not
+    # slide through as a pass nothing grounded.
     local status="warn"
     local summary="No structured verdict found."
+    local first_line_recognized=0
     # The validation seat speaks PASS/FAIL/UNRUN (pattern-f-contracts.md).
     # UNRUN is a refusal to rule, surfaced as warn so nothing reads it as
     # approval; PASS is the only value that becomes STATUS: pass.
@@ -2694,37 +2716,64 @@ _extract_verdict() {
     # Every branch below requires a trailing word boundary (end of string, or
     # a non-alphanumeric/underscore/hyphen character) right after its token —
     # a bare prefix match would let "CLEANUP-REQUIRED" satisfy "CLEAN" (mk P3
-    # finding: `"VERDICT: CLEAN"*` used to accept exactly that).
+    # finding: `"VERDICT: CLEAN"*` used to accept exactly that). CLEAN,
+    # NEEDS-FIXES and NOT CLEAN additionally require an EXACT token: the
+    # token ends the line (trailing whitespace and a closing markdown `**`
+    # were already stripped above), so "CLEAN, pending P3 items" or
+    # "CLEAN." no longer read as pass/CLEAN — they fall through as
+    # unrecognized, never a false pass.
     if [[ "$verdict_word_upper" =~ ^PASS($|[^A-Z0-9_-]) ]]; then
         status="pass"
         summary="Validator replay PASS."
+        first_line_recognized=1
     elif [[ "$verdict_word_upper" =~ ^FAIL($|[^A-Z0-9_-]) ]]; then
         status="warn"
         summary="Validator replay FAIL: $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || echo "criterion not stated")"
+        first_line_recognized=1
     elif [[ "$verdict_word_upper" =~ ^UNRUN($|[^A-Z0-9_-]) ]]; then
         status="warn"
         summary="Validator could not run Verification (UNRUN); no ruling. $(grep -m1 "^CRITERION:" "$output_file" 2>/dev/null || true)"
+        first_line_recognized=1
     elif [[ "$verdict_word_upper" =~ ^NEEDS_ATTENTION($|[^A-Z0-9_-]) ]]; then
         status="warn"
         summary="$verdict_line"
         summary="${summary#VERDICT: }"
-    elif [[ "$verdict_word_upper" =~ ^NEEDS-FIXES($|[^A-Z0-9_-]) ]]; then
+        first_line_recognized=1
+    elif [[ "$verdict_word_upper" =~ ^NEEDS-FIXES$ ]]; then
         status="warn"
         summary="$verdict_line"
         summary="${summary#VERDICT: }"
-    elif [[ "$verdict_word_upper" =~ ^NOT[[:space:]]+CLEAN($|[^A-Z0-9_-]) ]]; then
+        first_line_recognized=1
+    elif [[ "$verdict_word_upper" =~ ^NOT[[:space:]]+CLEAN$ ]]; then
         status="warn"
         summary="$verdict_line"
         summary="${summary#VERDICT: }"
-    elif [[ "$verdict_word_upper" =~ ^CLEAN($|[^A-Z0-9_-]) ]]; then
+        first_line_recognized=1
+    elif [[ "$verdict_word_upper" =~ ^CLEAN$ ]]; then
         status="pass"
         summary="Agent reports clean completion."
+        first_line_recognized=1
     elif [[ -z "$verdict_line" ]]; then
         status="warn"
         summary="No verdict line in agent output."
     else
         status="warn"
         summary="Unrecognized verdict: ${verdict_line#VERDICT: }"
+    fi
+
+    if [[ "$first_line_recognized" == 1 ]]; then
+        # The first line decides. Fail-safe: a present, valid trailing block
+        # that disagrees with a first-line "pass" demotes to warn — a pass
+        # needs every present verdict source to agree.
+        if [[ "$status" == "pass" && "$has_valid_block" == 1 && "$block_status_lower" != "pass" ]]; then
+            status="warn"
+            summary="$summary (trailing verdict block disagreed: STATUS: $block_status_lower)"
+        fi
+    elif [[ "$has_valid_block" == 1 ]]; then
+        # No recognised token on the first line — fall back to the trailing
+        # structured block.
+        _write_verdict_block "$verdict_block"
+        return 0
     fi
 
     # This synthesized FINDINGS line is a compatibility placeholder only;

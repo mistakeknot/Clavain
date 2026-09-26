@@ -37,12 +37,34 @@ _classify_dispatch_failure() {
     # limit reached for', Moonshot's 'rate_limit_reached_error', and
     # 'ratelimited' with no separator — while a traceback's 'line 429' (even
     # when the file is literally named status.py/http.py/code.py) still must
-    # NEVER match: the status/code/http anchor below requires an actual `:`
-    # or `=` directly against the word, not an arbitrary character gap, so a
-    # filename's own punctuation can never bridge it.
+    # NEVER match.
+    #
+    # Round-2 re-check follow-up (P2 finding 2, P3 finding 3): the previous
+    # anchor (`[[:space:]]*[:=][[:space:]]*`) required a literal `:` or `=`
+    # directly against the keyword, which broke real forms with a plain
+    # space ('status 429'), an underscore-joined key ('status_code=429'), or
+    # a quoted JSON field ('"status":429'). The anchor is now "no letters or
+    # digits between the keyword and the number" — `[^0-9a-z]{0,15}` — which
+    # still refuses to bridge a filename's own letters (status.py, http.py,
+    # code.py), so the traceback false positive stays excluded, while
+    # 'status_code=429', '"status":429', and '{"status": 429, ...}' all
+    # match again. A dedicated 'http/<version> 429|401' alternative covers
+    # the HTTP-status-line form, since the version's own digits ('1.1')
+    # would otherwise break the letter/digit-free gap.
+    #
+    # The bare `\b401\b` used to match ANY mention of the number, including
+    # one that has nothing to do with auth (e.g. a token-count "Requested
+    # 401." in a real rate-limit message) — turning a capacity failure into
+    # a false auth classification and suppressing the fallback walk. 401 is
+    # now anchored the same way as 429: a status/code/http marker next to
+    # the number, or '401' directly followed by an "unauthor..." word, are
+    # required for the bare number to count; "Unauthorized", "unauthenticated",
+    # "invalid_api_key" and "invalid ... x-api-key" still match standalone,
+    # with no number required, since those words are unambiguous auth
+    # signals on their own.
     if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then echo terminal_policy
-    elif grep -qiE '\b401\b|unauthorized|invalid_api_key|authentication[^[:alnum:]]+fail' "$stderr_file"; then echo terminal_configuration
-    elif grep -qiE '429[[:space:]]+too many requests|too many requests[^0-9]{0,20}429|http/[0-9.]+[[:space:]]+429\b|\b(status|code|http)[[:space:]]*[:=][[:space:]]*429\b|\berror[[:space:]]+429:|upstream responded[[:space:]]+429|rate_limit_exceeded|rate_limit_reached_error|rate limit reached for|rate_limit_error|rate[-_ ]?limited\b|rate[-_ ]limit[[:space:]]+exceeded' "$stderr_file"; then echo rate_limited
+    elif grep -qiE 'http/[0-9.]+[[:space:]]+401\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}401\b|\b401[^0-9a-z]{0,15}unauthor|unauthorized|unauthenticated|invalid_api_key|invalid[^0-9a-z]{1,10}x-api-key|authentication[^[:alnum:]]+fail' "$stderr_file"; then echo terminal_configuration
+    elif grep -qiE '429[[:space:]]+too many requests|too many requests[^0-9]{0,20}429|http/[0-9.]+[[:space:]]+429\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}429\b|\berror[[:space:]]+429:|upstream responded[[:space:]]+429|rate_limit_exceeded|rate_limit_reached_error|rate limit reached for|rate_limit_error|rate[-_ ]?limited\b|rate[-_ ]limit[[:space:]]+exceeded' "$stderr_file"; then echo rate_limited
     elif grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then echo account_access_absent
     elif grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then echo model_unavailable
     elif grep -qiE '\b4[0-9]{2}\b|bad request|unauthorized|forbidden' "$stderr_file"; then echo terminal_configuration
