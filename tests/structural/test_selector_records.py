@@ -17,7 +17,7 @@ import pytest
 from selector_helpers import make_candidate, make_request, selector_socket_guard  # noqa: F401
 
 from clavain_selector import records
-from clavain_selector.contract import Point, SessionRef
+from clavain_selector.contract import Point, Provenance, SessionRef
 from clavain_selector.records import (
     RecordUnwritable,
     append_outcome,
@@ -48,6 +48,7 @@ def _base_kwargs(**overrides):
         egress_verdict="admitted",
         applied="native",
         fallback_reason="shadow_mode",
+        provenance=Provenance.OPERATOR,
     )
     kwargs.update(overrides)
     return kwargs
@@ -173,6 +174,7 @@ def _append_worker(record_dir: str, n: int) -> None:
     _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
     os.environ["CLAVAIN_SELECTOR_RECORD_DIR"] = record_dir
     from clavain_selector import records as _records  # noqa: PLC0415
+    from clavain_selector.contract import Provenance as _Provenance  # noqa: PLC0415
     from clavain_selector.records import build_record as _build_record  # noqa: PLC0415
     from selector_helpers import make_request  # noqa: PLC0415
 
@@ -186,6 +188,7 @@ def _append_worker(record_dir: str, n: int) -> None:
             egress_verdict="admitted",
             applied="native",
             fallback_reason="shadow_mode",
+            provenance=_Provenance.OPERATOR,
         )
         _records.append_record(rec, record_dir=record_dir)
 
@@ -290,6 +293,33 @@ def test_record_duplicate_id_request_does_not_raise():
         **_base_kwargs(request=dup_request, egress_verdict="not_run", fallback_reason="invalid_input")
     )
     assert record["request"]["questions_sha256"] is None
+
+
+def test_record_provenance_and_preparer_round_trip():
+    record_operator = build_record(**_base_kwargs(provenance=Provenance.OPERATOR, preparer=None))
+    assert record_operator["request"]["provenance"] == Provenance.OPERATOR.value
+    assert record_operator["request"]["preparer"] is None
+
+    record_preparer = build_record(**_base_kwargs(provenance=Provenance.PREPARER, preparer="claude-code-bash"))
+    assert record_preparer["request"]["provenance"] == Provenance.PREPARER.value
+    assert record_preparer["request"]["preparer"] == "claude-code-bash"
+
+    record_eval = build_record(**_base_kwargs(provenance=Provenance.EVAL_CASE))
+    assert record_eval["request"]["provenance"] == Provenance.EVAL_CASE.value
+    assert record_eval["request"]["preparer"] is None
+
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    request_schema = schema["properties"]["request"]
+    assert "provenance" in request_schema["required"]
+    assert "preparer" in request_schema["required"]
+    assert set(request_schema["properties"]["provenance"]["enum"]) == {p.value for p in Provenance}
+
+
+def test_build_record_requires_provenance_keyword():
+    kwargs = _base_kwargs()
+    del kwargs["provenance"]
+    with pytest.raises(TypeError):
+        build_record(**kwargs)
 
 
 def test_unwritable_raises(tmp_path):

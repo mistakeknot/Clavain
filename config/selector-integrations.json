@@ -20,6 +20,10 @@
         "library": 3000
       },
       "session_budget": 8,
+      "authorize": {
+        "allow_all": true
+      },
+      "hooks": [],
       "owner_bead": "mk-42j9.7"
     }
   }

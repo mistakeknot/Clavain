@@ -12,40 +12,34 @@ without this layer.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from clavain_selector.contract import Candidate, Point
+from clavain_selector import contract
+from clavain_selector.contract import AuthorizationPolicy, Candidate, Point, ValidatedCandidates
 
-from .base import Capability, HostEvent, Outcome, PointUnreachable, fingerprint_paths, load_matrix
+from .base import (
+    Capability,
+    HostEvent,
+    Outcome,
+    PointUnreachable,
+    authorize_by_policy,
+    fingerprint_paths,
+    load_matrix,
+)
 
 _IMPLEMENTED_POINTS = frozenset({Point.LAUNCH_PROFILE, Point.PRE_TOOL, Point.POST_TOOL_OUTPUT})
 _JSON_SEPARATORS = (",", ":")
 
 
 def _hash_payload(payload: Any) -> str:
-    """Same hashing convention as records._sha256_payload, reimplemented locally.
-
-    acknowledge() needs to compare a live tool_response against a decision
-    record's `candidates[].payload_sha256`, which records.py computed with
-    this exact json.dumps(..., sort_keys=True, ensure_ascii=True,
-    default=str) shape; duplicated here rather than imported so this adapter
-    module stays independent of records.py's internals.
+    """`contract.payload_sha256`, kept as a thin local alias for callers already
+    importing it from this module. No `except TypeError: repr(...)` fallback --
+    a non-JSON-native value raises `ValueError` (from `contract.payload_bytes`)
+    rather than silently hashing a `repr()` string instead.
     """
-    try:
-        serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str)
-    except TypeError:
-        serialized = repr(payload)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
-def _shape_like(original: Any, payload: Any) -> Any:
-    """Coerce `payload` into the same JSON shape `original` had (str vs. structured)."""
-    if isinstance(original, str) and not isinstance(payload, str):
-        return str(payload)
-    return payload
+    return contract.payload_sha256(payload)
 
 
 class ClaudeCodeAdapter:
@@ -111,37 +105,45 @@ class ClaudeCodeAdapter:
     def _render_post_tool(self, outcome: Outcome, event: HostEvent) -> bytes:
         if outcome.kind in ("shadow", "native"):
             return b""
-        replacement = _shape_like(event.tool_response, outcome.render_payload)
+        # `outcome.render_bytes` is the exact, already-hash-checked payload
+        # bytes (`__post_init__` on Outcome enforces payload_sha256/
+        # binding_sha256 consistency) -- splice it in verbatim rather than
+        # re-deriving a replacement shape from the live event.
+        updated_tool_output = json.loads(outcome.render_bytes)
         payload = {
             "hookSpecificOutput": {
                 "hookEventName": "PostToolUse",
-                "updatedToolOutput": replacement,
+                "updatedToolOutput": updated_tool_output,
             }
         }
         return json.dumps(payload, separators=_JSON_SEPARATORS).encode("utf-8")
 
-    def authorize(self, candidate: Candidate, event: HostEvent) -> bool:
-        # Defers to Claude Code's own permission gate; this adapter never
-        # grants anything on its own. `raw["authorized"]` is populated (if at
-        # all) by whatever already ran the host's real gate before this call.
-        return bool(event.raw.get("authorized", False))
+    def authorize(self, chosen: Candidate, validated: ValidatedCandidates, policy: AuthorizationPolicy) -> bool:
+        # Every adapter's authorize must delegate to this one payload-bound
+        # rule verbatim -- Claude Code has no additional gate of its own to
+        # apply here; its real permission pipeline runs independently and is
+        # never influenced by this return value.
+        return authorize_by_policy(chosen, validated, policy)
 
     def fingerprint(self, paths: Sequence[Path]) -> str:
         return fingerprint_paths(paths)
 
     def acknowledge(self, record: Mapping[str, Any], next_event: HostEvent) -> str:
-        result = record.get("result") or {}
-        if result.get("kind") != "selected":
+        try:
+            result = record.get("result") or {}
+            if result.get("kind") != "selected":
+                return "unknown"
+            candidate_id = result.get("candidate_id")
+            matched = next(
+                (c for c in record.get("candidates", []) if c.get("id") == candidate_id),
+                None,
+            )
+            if matched is None:
+                return "unknown"
+            expected_hash = matched.get("payload_sha256")
+            if not expected_hash:
+                return "unknown"
+            observed_hash = contract.payload_sha256(next_event.tool_response)
+            return "selected" if observed_hash == expected_hash else "original"
+        except Exception:
             return "unknown"
-        candidate_id = result.get("candidate_id")
-        matched = next(
-            (c for c in record.get("candidates", []) if c.get("id") == candidate_id),
-            None,
-        )
-        if matched is None:
-            return "unknown"
-        expected_hash = matched.get("payload_sha256")
-        if not expected_hash:
-            return "unknown"
-        observed_hash = _hash_payload(next_event.tool_response)
-        return "selected" if observed_hash == expected_hash else "original"

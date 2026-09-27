@@ -14,11 +14,14 @@ from selector_helpers import make_candidate, make_request, selector_socket_guard
 import clavain_selector.contract as contract
 from clavain_selector.contract import (
     FALLBACK_TABLE,
+    AuthorizationPolicy,
     FallbackReason,
     NonCanonicalOrder,
     Point,
+    Provenance,
     RejectReason,
     SessionRef,
+    ValidatedCandidates,
     ValidationContext,
     canonical_order,
     canonical_request_body,
@@ -30,6 +33,7 @@ from clavain_selector.contract import (
     require_canonical,
     revalidate,
     validate_request,
+    validated_candidates,
 )
 
 
@@ -80,7 +84,7 @@ def test_fallback_table_complete():
 
 
 def test_pre_eligibility():
-    ctx = ValidationContext(now_ms=1_000, current_revision="rev-1", current_read_set_fingerprint=None, authorized=True)
+    ctx = ValidationContext(now_ms=1_000, current_revision="rev-1", current_read_set_fingerprints={}, authorized=True)
     valid = (make_candidate(id="a"), make_candidate(id="b"))
     assert pre_eligibility(valid, ctx) is None
 
@@ -89,7 +93,9 @@ def test_pre_eligibility():
 
 
 def test_revalidate_each_reason():
-    ctx = ValidationContext(now_ms=1_000, current_revision="rev-1", current_read_set_fingerprint="fp-1", authorized=True)
+    ctx = ValidationContext(
+        now_ms=1_000, current_revision="rev-1", current_read_set_fingerprints={"a": "fp-1"}, authorized=True
+    )
     candidates = (make_candidate(id="a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1"),)
 
     assert revalidate(candidates, "unknown", ctx) == RejectReason.INVALID_ID
@@ -97,18 +103,38 @@ def test_revalidate_each_reason():
     stale_rev = (make_candidate(id="a", prepared_at_revision="rev-0", read_set_fingerprint="fp-1"),)
     assert revalidate(stale_rev, "a", ctx) == RejectReason.STALE_REVISION
 
-    stale_read_set = (make_candidate(id="a", prepared_at_revision="rev-1", read_set_fingerprint="fp-0"),)
-    assert revalidate(stale_read_set, "a", ctx) == RejectReason.STALE_READ_SET
+    stale_read_set_ctx = ValidationContext(
+        now_ms=1_000, current_revision="rev-1", current_read_set_fingerprints={"a": "fp-0"}, authorized=True
+    )
+    stale_read_set = (make_candidate(id="a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1"),)
+    assert revalidate(stale_read_set, "a", stale_read_set_ctx) == RejectReason.STALE_READ_SET
 
     expired = (make_candidate(id="a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1", expires_at_ms=1),)
     assert revalidate(expired, "a", ctx) == RejectReason.EXPIRED
 
     assert revalidate(candidates, "a", ctx, preconditions_met=False) == RejectReason.UNMET_PRECONDITION
 
-    unauthorized_ctx = ValidationContext(now_ms=1_000, current_revision="rev-1", current_read_set_fingerprint="fp-1", authorized=False)
+    unauthorized_ctx = ValidationContext(
+        now_ms=1_000, current_revision="rev-1", current_read_set_fingerprints={"a": "fp-1"}, authorized=False
+    )
     assert revalidate(candidates, "a", unauthorized_ctx) == RejectReason.UNAUTHORIZED
 
     assert revalidate(candidates, "a", ctx) is None
+
+    # Per-candidate fingerprints: candidate "b" can be current while "a" is
+    # stale, and each is judged only against its own entry in the mapping.
+    multi_ctx = ValidationContext(
+        now_ms=1_000,
+        current_revision="rev-1",
+        current_read_set_fingerprints={"a": "fp-1", "b": "fp-stale"},
+        authorized=True,
+    )
+    multi_candidates = (
+        make_candidate(id="a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1"),
+        make_candidate(id="b", prepared_at_revision="rev-1", read_set_fingerprint="fp-current"),
+    )
+    assert revalidate(multi_candidates, "a", multi_ctx) is None
+    assert revalidate(multi_candidates, "b", multi_ctx) == RejectReason.STALE_READ_SET
 
 
 def test_point_and_reject_reason_values_are_stable_strings():
@@ -231,9 +257,15 @@ def test_request_body_single_source():
     assert egress._build_body(request) == body
 
     import clavain_selector.records as records
+    from clavain_selector.contract import Provenance
 
     block = records._request_block(
-        request, len(request.candidates), question_set_version="v", questions_sha256=None
+        request,
+        len(request.candidates),
+        question_set_version="v",
+        questions_sha256=None,
+        provenance=Provenance.OPERATOR,
+        preparer=None,
     )
     assert block["sha256"] == request_sha256(request)
     assert block["bytes"] == len(body)
@@ -250,6 +282,107 @@ def test_request_body_single_source():
         if isinstance(node, ast.Import):
             for alias in node.names:
                 assert not alias.name.startswith("clavain_selector"), alias.name
+
+
+# ---------------------------------------------------------------------------
+# Task R6b: ValidatedCandidates / validated_candidates
+# ---------------------------------------------------------------------------
+
+
+def test_validated_candidates_happy_path():
+    request = make_request(candidates=(make_candidate(id="b"), make_candidate(id="a")))
+    bindings = tuple((c.id, payload_sha256(c.payload)) for c in request.candidates)
+    vc = validated_candidates(request, bindings=bindings, provenance=Provenance.OPERATOR)
+    assert vc.integration == request.integration
+    assert vc.point == request.point
+    assert vc.request_sha256 == request_sha256(request)
+    assert vc.candidates == request.candidates
+    assert vc.bindings == bindings
+    assert vc.provenance is Provenance.OPERATOR
+
+
+def test_validated_candidates_rejects_bindings_mismatch():
+    request = make_request(candidates=(make_candidate(id="a"),))
+    wrong_bindings = (("a", "0" * 64),)
+    with pytest.raises(ValueError):
+        validated_candidates(request, bindings=wrong_bindings, provenance=Provenance.OPERATOR)
+
+
+def test_validated_candidates_rejects_structurally_invalid_request():
+    invalid_request = make_request(candidates=())
+    with pytest.raises(ValueError):
+        validated_candidates(invalid_request, bindings=(), provenance=Provenance.OPERATOR)
+
+
+def test_validated_candidates_post_init_rejects_hand_built_bad_shapes():
+    good_candidate = make_candidate(id="a")
+    good_bindings = ((good_candidate.id, payload_sha256(good_candidate.payload)),)
+
+    # Too many / too few candidates.
+    with pytest.raises(ValueError):
+        ValidatedCandidates(
+            integration="selftest", point=Point.LIBRARY, candidates=(), request_sha256="0" * 64,
+            bindings=(), provenance=Provenance.OPERATOR,
+        )
+
+    # Duplicate ids.
+    dup = (make_candidate(id="same"), make_candidate(id="same"))
+    with pytest.raises(ValueError):
+        ValidatedCandidates(
+            integration="selftest", point=Point.LIBRARY, candidates=dup, request_sha256="0" * 64,
+            bindings=(("same", "0" * 64), ("same", "0" * 64)), provenance=Provenance.OPERATOR,
+        )
+
+    # Invalid id pattern.
+    bad_id = make_candidate(id="has a space")
+    with pytest.raises(ValueError):
+        ValidatedCandidates(
+            integration="selftest", point=Point.LIBRARY, candidates=(bad_id,), request_sha256="0" * 64,
+            bindings=(("has a space", payload_sha256(bad_id.payload)),), provenance=Provenance.OPERATOR,
+        )
+
+    # Reserved id.
+    reserved = make_candidate(id="escalate")
+    with pytest.raises(ValueError):
+        ValidatedCandidates(
+            integration="selftest", point=Point.LIBRARY, candidates=(reserved,), request_sha256="0" * 64,
+            bindings=(("escalate", payload_sha256(reserved.payload)),), provenance=Provenance.OPERATOR,
+        )
+
+    # Non-canonical order.
+    a = make_candidate(id="a")
+    b = make_candidate(id="b")
+    ordered = canonical_order((a, b))
+    if ordered == (a, b):
+        ordered = (b, a)  # force the reversed, non-canonical order
+    else:
+        ordered = (a, b)
+    with pytest.raises(NonCanonicalOrder):
+        ValidatedCandidates(
+            integration="selftest", point=Point.LIBRARY, candidates=ordered, request_sha256="0" * 64,
+            bindings=tuple((c.id, payload_sha256(c.payload)) for c in ordered), provenance=Provenance.OPERATOR,
+        )
+
+    # bindings ids don't match candidates ids.
+    with pytest.raises(ValueError):
+        ValidatedCandidates(
+            integration="selftest", point=Point.LIBRARY, candidates=(good_candidate,), request_sha256="0" * 64,
+            bindings=(("different-id", good_bindings[0][1]),), provenance=Provenance.OPERATOR,
+        )
+
+    # Sanity: the good shape passes.
+    ValidatedCandidates(
+        integration="selftest", point=Point.LIBRARY, candidates=(good_candidate,), request_sha256="0" * 64,
+        bindings=good_bindings, provenance=Provenance.OPERATOR,
+    )
+
+
+def test_authorization_policy_defaults():
+    policy = AuthorizationPolicy(integration="selftest", point=Point.LIBRARY)
+    assert policy.allow_all is False
+    assert policy.allow_ids == frozenset()
+    assert policy.allow_id_prefixes == ()
+    assert policy.deny_ids == frozenset()
 
 
 # ---------------------------------------------------------------------------

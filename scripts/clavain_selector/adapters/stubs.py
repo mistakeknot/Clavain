@@ -14,9 +14,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from clavain_selector.contract import Candidate, Point
+from clavain_selector.contract import AuthorizationPolicy, Candidate, Point, ValidatedCandidates
 
-from .base import Capability, HostEvent, Outcome, PointUnreachable, fingerprint_paths, load_matrix
+from .base import (
+    Capability,
+    HostEvent,
+    Outcome,
+    PointUnreachable,
+    authorize_by_policy,
+    fingerprint_paths,
+    load_matrix,
+)
 
 _UNREACHABLE_STATUSES = ("unreachable", "unverified")
 
@@ -49,8 +57,11 @@ class _StubAdapter:
         self._require_reachable(point)
         raise NotImplementedError("adapter owned by dependent bead")
 
-    def authorize(self, candidate: Candidate, event: HostEvent) -> bool:
-        raise NotImplementedError("adapter owned by dependent bead")
+    def authorize(self, chosen: Candidate, validated: ValidatedCandidates, policy: AuthorizationPolicy) -> bool:
+        # Payload-bound authorization is the one part of the contract every
+        # adapter -- even an otherwise-unimplemented stub -- must honor
+        # identically; it needs no host-specific behavior to be correct.
+        return authorize_by_policy(chosen, validated, policy)
 
     def fingerprint(self, paths: Sequence[Path]) -> str:
         # Shared, host-independent, and safe to expose even before the rest
