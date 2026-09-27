@@ -179,6 +179,7 @@ dispatch:
   # effort level a backend can't run (an unenforceable floor excludes that
   # candidate with reason unsupported_adapter instead of clamping). See
   # docs/research/2026-09-27-effort-per-role-validation.md.
+  # Requires ic >= intercore 5b707ec.
   effort_floors:
     foundational-invariants: high
     difficult-verification: high

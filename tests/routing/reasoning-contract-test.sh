@@ -249,4 +249,18 @@ out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --policy "$
 [[ "$out" == *'claude-opus-5-5'* && "$out" == *'--effort high'* ]] \
   || { echo 'FAIL: floor-raised effort did not propagate to the dispatched child'; exit 1; }
 
+# Real-policy coverage: main-integrator's actual fallback chain (not a synthetic
+# fixture) already has a backend: main candidate (pilot-opus) unrepresentable in
+# effort.go's capability table. A floored reason must exclude it via
+# unsupported_adapter against the real committed routing.yaml, not just a
+# fixture that artificially injects a backend: main candidate.
+printf '%s\n' '{"reasons":["capability-failure"],"rationale":"real-policy main-integrator floor sweep"}' > "$work/main-integrator.json"
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=main-integrator \
+  --context-file="$work/main-integrator.json" > "$work/floor-real-policy.json"
+jq -e '.profile_ref == "main-astra"
+  and (.fallback_chain[] | select(.profile_ref == "main-sol") | .profile.reasoning_effort) == "high"
+  and (.excluded[] | select(.profile_ref == "pilot-opus") | .reason) == "unsupported_adapter"' \
+  "$work/floor-real-policy.json" >/dev/null \
+  || { echo 'FAIL: real-policy main-integrator chain did not exclude pilot-opus via unsupported_adapter'; exit 1; }
+
 echo 'PASS: identical contracts across host surfaces, Claude effort propagation, and effort floors'
