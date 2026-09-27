@@ -263,4 +263,18 @@ jq -e '.profile_ref == "main-astra"
   "$work/floor-real-policy.json" >/dev/null \
   || { echo 'FAIL: real-policy main-integrator chain did not exclude pilot-opus via unsupported_adapter'; exit 1; }
 
+# mk ruling 2026-09-27 (mk-42j9.28 effort-floor conflict, option 3): pilot-opus
+# (backend: main) is correctly excluded via unsupported_adapter under a
+# floored reason, but that must not leave main-integrator with zero eligible
+# seats when Codex is ALSO exhausted -- main-opus (backend: claude,
+# claude-opus-5-5, high) is pilot-opus's declared fallback for exactly this
+# case and already meets every floor.
+jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5"]' "$work/main-integrator.json" > "$work/main-integrator-codex-out.json"
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=main-integrator \
+  --context-file="$work/main-integrator-codex-out.json" > "$work/floor-codex-out.json"
+jq -e '.profile_ref == "main-opus" and .profile.reasoning_effort == "high"
+  and (.excluded[] | select(.profile_ref == "pilot-opus") | .reason) == "unsupported_adapter"' \
+  "$work/floor-codex-out.json" >/dev/null \
+  || { echo 'FAIL: Codex exhausted plus a floored reason did not fall back to main-opus at high'; exit 1; }
+
 echo 'PASS: identical contracts across host surfaces, Claude effort propagation, and effort floors'

@@ -236,6 +236,28 @@ dispatch:
       model: opus
       reasoning_effort: high
       service_tier: standard
+      # mk ruling 2026-09-27 (mk-42j9.28 effort-floor conflict, option 3):
+      # backend: main is unrepresentable in effort.go's backendEffortOrders, so
+      # a floored reason (foundational-invariants/difficult-verification/
+      # capability-failure) always excludes this candidate via
+      # unsupported_adapter, even though its configured effort (high) already
+      # meets every floor. Without a further fallback, that left
+      # main-integrator with zero eligible seats exactly when Codex was also
+      # exhausted, contradicting the 2026-09-25 "Codex exhaustion must never
+      # block development" ruling. main-opus is the floor-safe substitute;
+      # this fallback is expanded transitively wherever pilot-opus is reached
+      # (both directly, e.g. ci-campaign-pilot, and via main-sol).
+      fallbacks: [main-opus]
+    main-opus:
+      role: main-integrator
+      backend: claude
+      model: claude-opus-5-5
+      reasoning_effort: high
+      service_tier: standard
+      description: >-
+        Floor-safe main-integrator substitute when Codex is exhausted and a
+        floored reason excludes pilot-opus (backend: main). Does not carry
+        commit/push/deploy authority the way pilot-opus does.
     pilot-sonnet:
       role: routine-execution
       backend: claude
