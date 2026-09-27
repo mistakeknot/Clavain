@@ -68,6 +68,7 @@ ROLE_CLASS = {
     "cross-lab-review": "review",
     "plan-review": "review",
     "coordination": "relay",
+    "coordinator-seat": "judgment",
     "routine-execution": "execution",
     "deep-execution": "execution",
     "release-preparation": "execution",

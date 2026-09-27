@@ -118,16 +118,16 @@ reasoning:
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
   profiles:
-    # mk-42j9.25: logical projects override only their coordination seat.
-    project-aleph: {scope: "project:aleph", roles: {coordination: coordination-opus}}
-    project-clavain: {scope: "project:clavain", roles: {coordination: coordination-opus}}
-    project-autarch: {scope: "project:autarch", roles: {coordination: coordination-opus}}
-    project-after-them: {scope: "project:after-them", roles: {coordination: coordination-opus}}
-    project-bbops: {scope: "project:bbops", roles: {coordination: coordination-opus}}
-    project-shadow-work: {scope: "project:shadow-work", roles: {coordination: coordination-opus}}
-    project-quilan: {scope: "project:quilan", roles: {coordination: coordination-opus}}
-    project-sylvesteops: {scope: "project:sylvesteops", roles: {coordination: coordination-opus}}
-    project-nartopo: {scope: "project:nartopo", roles: {coordination: coordination-opus}}
+    # mk-42j9.25: logical projects override only the coordinator seat.
+    project-aleph: {scope: "project:aleph", roles: {coordinator-seat: coordinator-seat-opus}}
+    project-clavain: {scope: "project:clavain", roles: {coordinator-seat: coordinator-seat-opus}}
+    project-autarch: {scope: "project:autarch", roles: {coordinator-seat: coordinator-seat-opus}}
+    project-after-them: {scope: "project:after-them", roles: {coordinator-seat: coordinator-seat-opus}}
+    project-bbops: {scope: "project:bbops", roles: {coordinator-seat: coordinator-seat-opus}}
+    project-shadow-work: {scope: "project:shadow-work", roles: {coordinator-seat: coordinator-seat-opus}}
+    project-quilan: {scope: "project:quilan", roles: {coordinator-seat: coordinator-seat-opus}}
+    project-sylvesteops: {scope: "project:sylvesteops", roles: {coordinator-seat: coordinator-seat-opus}}
+    project-nartopo: {scope: "project:nartopo", roles: {coordinator-seat: coordinator-seat-opus}}
     ci-campaign-pilot:
       scope: mk-ag2s
       roles:
@@ -213,6 +213,8 @@ dispatch:
     # mk ruling 2026-09-25 (mk-42j9.5): relaying, waiting and status reports
     # run on Sonnet. Planning and review keep their frontier seats.
     coordination: coordination-sonnet
+    # A coordinator's own thread seat is separate from relay work above.
+    coordinator-seat: coordinator-seat-sonnet
     main-session: main-sonnet
     lane: lane-status-quo
   # mk ruling 2026-09-24: review another lab's work first. For these roles the
@@ -408,30 +410,38 @@ dispatch:
       model: claude-sonnet-5
       reasoning_effort: medium
       service_tier: standard
-      fallbacks: [main-session-sol]
-    main-session-sol:
+      fallbacks: [main-session-astra]
+    main-session-astra:
       role: main-session
       backend: codex
-      model: gpt-5.6-sol
+      model: gpt-6-astra
       reasoning_effort: medium
       service_tier: standard
     lane-status-quo:
       # Records today's de facto lane spawn as the explicit control arm.
       # Deliberately fall back to the Sonnet treatment seat (main-sonnet):
-      # Opus exhaustion degrades to Sonnet, never to an arbitrary seat.
+      # Opus exhaustion degrades to Sonnet, then Astra medium if Claude is out.
       role: lane
       backend: claude
       model: claude-opus-5-5
       reasoning_effort: medium
       service_tier: standard
       fallbacks: [main-sonnet]
-    coordination-opus:
-      role: coordination
+    coordinator-seat-opus:
+      role: coordinator-seat
       backend: claude
       model: claude-opus-5-5
       reasoning_effort: medium
       service_tier: standard
-      fallbacks: [coordination-sonnet]
+      fallbacks: [coordinator-seat-sonnet]
+    coordinator-seat-sonnet:
+      role: coordinator-seat
+      backend: claude
+      model: claude-sonnet-5
+      reasoning_effort: medium
+      service_tier: standard
+      # mk 2026-09-27: spawn roles fall back to Astra medium, never Sol.
+      fallbacks: [main-session-astra]
     coordination-sonnet:
       role: coordination
       backend: claude

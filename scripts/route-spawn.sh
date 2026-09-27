@@ -37,7 +37,8 @@ done
 
 [[ -n "$ROLE" ]] || usage_error "--role is required"
 case "$ROLE" in
-  coordination) [[ -n "$PROJECT" ]] || usage_error "coordination requires --project" ;;
+  coordination) usage_error "coordinator threads resolve --role coordinator-seat; relay work uses dispatch.sh" ;;
+  coordinator-seat) [[ -n "$PROJECT" ]] || usage_error "coordinator-seat requires --project" ;;
   lane) [[ -n "$LINEAGE" ]] || usage_error "lane requires --lineage" ;;
   plan-review|validation|cross-lab-review)
     [[ -n "$PRODUCER" ]] || usage_error "$ROLE requires --producer-identity" ;;
@@ -62,11 +63,14 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 python3 - "$POLICY" "$ROLE" "$PROJECT" "$LINEAGE" "$PRODUCER" "$CONTEXT" "$ARM" "$TMP_ROOT" "$$" "$ROOT" <<'PY' || { rc=$?; [[ "$rc" == 2 ]] && exit 2; exit 3; }
 import datetime
 import json
+import math
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 import yaml
 
@@ -76,8 +80,51 @@ def fail(message, code=3):
     sys.exit(code)
 
 
+def timeout_setting(name, default):
+    try:
+        value = float(os.environ.get(name, default))
+    except ValueError:
+        fail(f"{name} must be a finite number > 0", 2)
+    if not math.isfinite(value) or value <= 0:
+        fail(f"{name} must be a finite number > 0", 2)
+    return value
+
+
+def run_bounded(command, timeout):
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True,
+                               start_new_session=True)
+    try:
+        stdout, _ = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # Descendants can inherit both our stdout and the caller's stderr pipe.
+        # Kill the entire session group before waiting or draining those pipes.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.communicate()
+        raise
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, command, stdout)
+    return stdout
+
+
+def active_window(window, threshold, now_ms):
+    if not window:
+        return False
+    reset_at = window.get("resetAt")
+    utilization = window.get("utilization")
+    return (reset_at is None or reset_at > now_ms) and (
+        str(window.get("status", "")).lower() == "rejected"
+        or (utilization is not None and utilization >= threshold)
+    )
+
+
 def main():
     policy, role, project_input, lineage, producer, context_file, arm, tmp, pid, root = sys.argv[1:]
+    pool_timeout = timeout_setting("ROUTE_SPAWN_POOL_TIMEOUT", "20")
+    ic_timeout = timeout_setting("ROUTE_SPAWN_IC_TIMEOUT", "30")
+    spawn_roles = ("lane", "coordinator-seat", "main-session")
     resolved_role = role
     if role == "lane":
         if arm == "control":
@@ -112,23 +159,36 @@ def main():
         fail("project_profiles and project_aliases must be mappings")
     if any(p not in known for p in project_profiles) or any(p not in known for p in aliases.values()):
         fail("project_profiles keys and project_aliases values must belong to reasoning.projects")
+    if any(alias in known for alias in aliases):
+        fail("project_aliases keys must not be project slugs")
+    profiles = reasoning.get("profiles") or {}
+    if not isinstance(profiles, dict):
+        fail("reasoning.profiles must be a mapping")
+    for slug, profile_name in project_profiles.items():
+        if not isinstance(profile_name, str) or profile_name not in profiles:
+            fail(f"project_profiles.{slug} must name an existing reasoning profile")
+        project_config = profiles[profile_name]
+        if not isinstance(project_config, dict) or project_config.get("scope") != f"project:{slug}":
+            fail(f"project profile {profile_name} must have scope project:{slug}")
+        roles = project_config.get("roles")
+        if not isinstance(roles, dict) or set(roles) != {"coordinator-seat"}:
+            fail(f"project profile {profile_name} must override only coordinator-seat")
     slug = aliases.get(project_input, project_input)
     project = slug if slug in known else None
-    if role == "coordination" and project is None:
-        fail(f"unknown coordination project: {project_input}; pass a known slug", 2)
+    if role == "coordinator-seat" and project is None:
+        fail(f"unknown coordinator-seat project: {project_input}; pass a known slug", 2)
     if project_input and project is None:
         print(f"route-spawn: unknown project: {project_input}; using fleet routing", file=sys.stderr)
 
     # Decide the profile before changing the decision context's scope.
     project_profile = project_profiles.get(project)
-    profiles = reasoning.get("profiles") or {}
     applicable = role in (profiles.get(project_profile, {}).get("roles") or {})
     profile = None
     profile_source = "none"
     campaign_profile = os.environ.get("CLAVAIN_POLICY_PROFILE")
     if campaign_profile and campaign_profile != "default":
-        if role == "coordination" and applicable:
-            fail("campaign profile conflicts with the project coordination profile")
+        if role == "coordinator-seat" and applicable:
+            fail("campaign profile conflicts with the project coordinator-seat profile")
         profile = campaign_profile
         profile_source = "campaign"
     elif applicable:
@@ -152,14 +212,27 @@ def main():
 
     fallbacks_evaluated = False
     # Governed roles leave capacity handling to dispatch.sh.
-    if role in ("lane", "coordination", "main-session"):
+    if role in spawn_roles:
         try:
-            probe = subprocess.run(["bb", "pool", "status", "--json"],
-                                   stdout=subprocess.PIPE, text=True, check=True,
-                                   timeout=float(os.environ.get("ROUTE_SPAWN_POOL_TIMEOUT", "20")))
-            pool = json.loads(probe.stdout)
+            deadline = time.monotonic() + pool_timeout
+            pool = json.loads(run_bounded(["bb", "pool", "status", "--json"], pool_timeout))
+            if pool.get("parent") is not None:
+                raise ValueError("child host delegates pool routing to its parent")
             if pool.get("accepting") is not True:
                 raise ValueError("pool is not accepting")
+            threshold = 0.98
+            try:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired("bb pool config", pool_timeout)
+                pool_config = json.loads(run_bounded(["bb", "pool", "config", "--json"], remaining))
+                configured = pool_config["config"]["switchThreshold"]
+                if type(configured) in (int, float) and 0 < configured <= 1:
+                    threshold = configured
+            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired,
+                    ValueError, KeyError, TypeError):
+                pass  # bb's default applies when its config cannot be read.
+            routing = pool.get("routing") or {}
             accounts = pool["accounts"]
             if not isinstance(accounts, list) or not all(isinstance(a, dict) for a in accounts):
                 raise ValueError("pool accounts must be an array of objects")
@@ -170,15 +243,19 @@ def main():
             with open(Path(root) / "config/roster-families.yaml", encoding="utf-8") as stream:
                 families = (yaml.safe_load(stream) or {}).get("models") or {}
             available = []
+            now_ms = time.time() * 1000
             for tier in (dispatch.get("tiers") or {}).values():
                 backend = tier.get("backend")
                 model = tier.get("model")
-                if backend not in ("claude", "codex") or backend not in up or not model:
+                if backend not in ("claude", "codex") or not model:
+                    continue
+                pooled = routing.get(backend) is not False
+                if pooled and backend not in up:
                     continue
                 model = model_aliases.get(model, model)
                 family = (families.get(model) or {}).get("family")
-                if backend == "claude" and family and all(
-                    ((a.get("familyWeekly") or {}).get(family) or {}).get("status") == "rejected"
+                if pooled and backend == "claude" and family and all(
+                    active_window((a.get("familyWeekly") or {}).get(family), threshold, now_ms)
                     for a in claude_accounts
                 ):
                     continue
@@ -201,11 +278,11 @@ def main():
         command.append(f"--policy-profile={profile}")
     if producer:
         command.append(f"--producer-identity={producer}")
-    resolved = subprocess.run(command, stdout=subprocess.PIPE, text=True, check=True,
-                              timeout=float(os.environ.get("ROUTE_SPAWN_IC_TIMEOUT", "30")))
-    route = json.loads(resolved.stdout)
+    route = json.loads(run_bounded(command, ic_timeout))
     seat = route["profile"]
     model = seat["model_identity"]
+    if role in spawn_roles and model == "gpt-5.6-sol":
+        fail("gpt-5.6-sol is forbidden for spawn roles (mk ruling 2026-09-27)")
     effort = seat["reasoning_effort"]
     for label, value in (("model identity", model), ("reasoning effort", effort)):
         if not isinstance(value, str) or not value or any(c.isspace() for c in value):
@@ -219,7 +296,10 @@ def main():
     head = (profiles.get(profile, {}).get("roles") or {}).get(resolved_role)
     head = head or (dispatch.get("roles") or {}).get(resolved_role)
     chosen = route["profile_ref"]
-    if route.get("fallback_reason") or chosen != head:
+    fallback_reason = route.get("fallback_reason") or ""
+    if "producer" in fallback_reason:
+        print(f"route-spawn: {fallback_reason}; selected {chosen}", file=sys.stderr)
+    elif fallback_reason or chosen != head:
         print(f"route-spawn: fallback from {head} to {chosen}", file=sys.stderr)
 
     receipt = {

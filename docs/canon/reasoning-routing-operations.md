@@ -317,13 +317,14 @@ Never type a model id on a spawn line. Frontier lanes use `--role frontier-plann
 receipt. Until Quilan carry-forward ships, a pinned coordinator's self-handoff
 passes its own current tuple explicitly:
 `bb handoff --provider "$current_provider" --model "$current_model" --reasoning-level "$current_effort" …`.
-Populate these variables from the coordinator's own seat, never from literals
-or a worker's tuple. On a non-zero resolver exit, do not spawn; report it. Exit codes are
+Set these variables from the coordinator's own route-spawn receipt:
+`.spawn.provider`, `.spawn.model`, and `.spawn.reasoning_level`, respectively.
+On a non-zero resolver exit, do not spawn; report it. Exit codes are
 0 for success, 2 for usage errors, and 3 for resolution or receipt failures.
 
 For a new coordinator thread, the spawner resolves its own seat with
-`"${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role coordination --project <slug>`.
-Relay work dispatched by a coordinator still uses `scripts/dispatch.sh --role coordination`.
+`"${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role coordinator-seat --project <slug>`.
+Relay work uses `"${CLAVAIN_SELECTED_ROOT:?}/scripts/dispatch.sh" --role coordination`.
 
 Each successful call writes an atomic JSON receipt under
 `${ROUTE_SPAWN_RECEIPT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/route-spawn}/`.
@@ -334,34 +335,42 @@ write prevents the tuple from reaching stdout.
 
 Only role `lane` consults the rollout arm. Until mk-42j9.25 Phase 2b, the lookup
 is a stub returning `control`, so landing this guidance keeps every lineage on
-the status quo. Coordination and governed roles ignore `--lineage` for routing
+the status quo. Coordinator-seat and governed roles ignore `--lineage` for routing
 and record a null arm.
 
 Known slugs come from `reasoning.projects`. Project profiles come from
 `reasoning.project_profiles`; dedicated bb project
 ids resolve through `reasoning.project_aliases` before slug lookup. A project
 profile applies only to roles in its `roles` map. `--project` is mandatory for
-coordination and must resolve to a known slug. Shared projects `proj_personal`
+coordinator-seat and must resolve to a known slug. Shared projects `proj_personal`
 and `proj_bnq4zi2wiv` ("projects/Sylveste") deliberately have no alias: pass the
-logical slug. The nine project profiles select the Opus coordination seat;
-the six Sonnet slugs keep fleet routing. Unknown projects on non-coordination
+logical slug. The nine project profiles select the Opus coordinator seat;
+the six Sonnet slugs keep fleet routing. Unknown projects on other
 roles warn and resolve with `project: null`.
 
 Select the profile before changing context scope. A project profile requires
 `project:<slug>` scope and rejects a conflicting caller scope. An explicit
 `CLAVAIN_POLICY_PROFILE` (nonempty and not `default`) requires campaign-scoped
 context and takes precedence for
-other roles, but combining it with an applicable project coordination profile
+other roles, but combining it with an applicable project coordinator-seat profile
 exits 3. `CLAVAIN_DECISION_CONTEXT` is inherited unless `--context-file` overrides
 it. Caller context files are never modified.
 
-Only `lane`, `coordination` and `main-session` probe the pool. Governed roles
+Only `lane`, `coordinator-seat` and `main-session` probe the pool. Governed roles
 keep capacity handling in dispatch and retain the caller's available models.
 Pool status restricts available models without removing caller exclusions;
-unavailable, non-accepting or timed-out probes record `fallbacks_evaluated: false`.
+unavailable, non-accepting or timed-out status probes and child hosts record
+`fallbacks_evaluated: false`. Providers with pool routing disabled count as up.
+A family counts as exhausted by bb's own rule (the pool `switchThreshold`,
+default 0.98) only when every up Claude account has an active family window.
+With Claude exhausted, spawn roles fall back to gpt-6-astra medium, never
+gpt-5.6-sol (mk 2026-09-27); with no eligible seat, exit 3: do not spawn.
 The probe timeout is `ROUTE_SPAWN_POOL_TIMEOUT` seconds (default 20); the resolver
 timeout is `ROUTE_SPAWN_IC_TIMEOUT` seconds (default 30, exit 3 on timeout).
-A stderr `fallback` line names the head and chosen seat when a spawn uses a fallback.
+Both must be finite and positive (otherwise exit 2); timeouts kill the whole
+process group. The pool status and config calls share one timeout budget.
+A stderr `fallback from` line names the head and chosen capacity seat;
+producer exclusions state their reason instead.
 
 ## Handoff and escalation
 

@@ -272,6 +272,11 @@
         "providerSlug": "openai"
       },
       {
+        "slug": "gpt-6-astra-medium",
+        "name": "GPT-6 Astra (medium)",
+        "providerSlug": "openai"
+      },
+      {
         "slug": "gpt-6-astra-xhigh",
         "name": "GPT-6 Astra (xhigh)",
         "providerSlug": "openai"
