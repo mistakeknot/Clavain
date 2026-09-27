@@ -31,7 +31,7 @@ from typing import Any, Mapping, Sequence
 
 import clavain_selector.contract as contract
 import clavain_selector.questions as questions
-from clavain_selector.contract import MAX_CANDIDATES, Candidate, Point, SelectionRequest, SessionRef
+from clavain_selector.contract import MAX_CANDIDATES, Candidate, Point, Provenance, SelectionRequest, SessionRef
 
 SCHEMA = "clavain.selector.decision"
 SCHEMA_VERSION = 1
@@ -102,6 +102,8 @@ def _request_block(
     *,
     question_set_version: str,
     questions_sha256: str | None,
+    provenance: Provenance,
+    preparer: str | None,
 ) -> dict[str, Any]:
     """The `request` sub-block, including the question-set identity fields.
 
@@ -119,6 +121,8 @@ def _request_block(
         "candidate_count": candidate_count,
         "question_set_version": question_set_version,
         "questions_sha256": questions_sha256,
+        "provenance": provenance.value if isinstance(provenance, Provenance) else str(provenance),
+        "preparer": preparer,
     }
 
 
@@ -172,6 +176,8 @@ def build_record(
     egress_verdict: str,
     applied: str,
     fallback_reason: str | None,
+    provenance: Provenance,
+    preparer: str | None = None,
     egress_rule_ids: Sequence[str] = (),
     terms_version: str = "typesafe-2026-09-25",
     fallback_detail: str = "",
@@ -239,6 +245,8 @@ def build_record(
             candidate_count,
             question_set_version=question_set_version,
             questions_sha256=questions_sha256_value,
+            provenance=provenance,
+            preparer=preparer,
         ),
         "candidates": candidates,
         "selector": dict({"backend": "jev"}, **(selector or {})),

@@ -355,11 +355,94 @@ def request_sha256(request: "SelectionRequest") -> str:
     return hashlib.sha256(canonical_request_body(request)).hexdigest()
 
 
+class Provenance(str, Enum):
+    """Where a `ValidatedCandidates`/`PreparedSet` came from (revision 7, S1)."""
+
+    PREPARER = "preparer"
+    OPERATOR = "operator"
+    EVAL_CASE = "eval_case"
+    EXTERNAL = "external"
+
+
+@dataclass(frozen=True)
+class AuthorizationPolicy:
+    """A per-integration, per-point authorization policy parsed from the registry."""
+
+    integration: str
+    point: Point
+    allow_all: bool = False
+    allow_ids: frozenset[str] = frozenset()
+    allow_id_prefixes: tuple[str, ...] = ()
+    deny_ids: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class ValidatedCandidates:
+    """A canonically-ordered, structurally-checked candidate set bound to payload hashes.
+
+    Only built by `validated_candidates` in normal use; `__post_init__` still
+    re-validates a hand-built instance so a bad set cannot reach `authorize()`.
+    """
+
+    integration: str
+    point: Point
+    candidates: tuple[Candidate, ...]
+    request_sha256: str
+    bindings: tuple[tuple[str, str], ...]
+    provenance: "Provenance"
+
+    def __post_init__(self) -> None:
+        candidates = tuple(self.candidates)
+        object.__setattr__(self, "candidates", candidates)
+        n = len(candidates)
+        if n < MIN_CANDIDATES or n > MAX_CANDIDATES:
+            raise ValueError(f"ValidatedCandidates must have {MIN_CANDIDATES}..{MAX_CANDIDATES} candidates, got {n}")
+        ids = [c.id for c in candidates]
+        if len(set(ids)) != n:
+            raise ValueError("ValidatedCandidates ids must be unique")
+        for cid in ids:
+            if not _CANDIDATE_ID_PATTERN.match(cid):
+                raise ValueError(f"invalid candidate id: {cid!r}")
+            if cid == _RESERVED_CANDIDATE_ID:
+                raise ValueError(f"reserved candidate id: {cid!r}")
+        require_canonical(candidates)
+        binding_ids = tuple(b[0] for b in self.bindings)
+        if binding_ids != tuple(ids):
+            raise ValueError("bindings ids do not match candidates ids")
+
+
+def validated_candidates(
+    request: "SelectionRequest",
+    *,
+    bindings: tuple[tuple[str, str], ...],
+    provenance: "Provenance",
+) -> "ValidatedCandidates":
+    """The only normal-use constructor for `ValidatedCandidates`.
+
+    Raises `ValueError` unless `validate_request(request) is None` and
+    `bindings` equals `tuple((c.id, payload_sha256(c.payload)) for c in
+    request.candidates)`.
+    """
+    if validate_request(request) is not None:
+        raise ValueError("request is not structurally valid")
+    expected_bindings = tuple((c.id, payload_sha256(c.payload)) for c in request.candidates)
+    if tuple(bindings) != expected_bindings:
+        raise ValueError("bindings do not match request payload hashes")
+    return ValidatedCandidates(
+        integration=request.integration,
+        point=request.point,
+        candidates=request.candidates,
+        request_sha256=request_sha256(request),
+        bindings=tuple(bindings),
+        provenance=provenance,
+    )
+
+
 @dataclass(frozen=True)
 class ValidationContext:
     now_ms: int
     current_revision: str
-    current_read_set_fingerprint: str | None
+    current_read_set_fingerprints: Mapping[str, str]
     authorized: bool
 
 
@@ -395,8 +478,10 @@ def validate_request(request: SelectionRequest) -> FallbackReason | None:
 def _is_stale(candidate: Candidate, ctx: ValidationContext) -> bool:
     if candidate.prepared_at_revision != ctx.current_revision:
         return True
-    if candidate.read_set_fingerprint is not None and candidate.read_set_fingerprint != ctx.current_read_set_fingerprint:
-        return True
+    if candidate.read_set_fingerprint is not None:
+        current = ctx.current_read_set_fingerprints.get(candidate.id)
+        if current != candidate.read_set_fingerprint:
+            return True
     if candidate.expires_at_ms is not None and candidate.expires_at_ms < ctx.now_ms:
         return True
     return False
@@ -427,8 +512,10 @@ def revalidate(
         return RejectReason.INVALID_ID
     if candidate.prepared_at_revision != ctx.current_revision:
         return RejectReason.STALE_REVISION
-    if candidate.read_set_fingerprint is not None and candidate.read_set_fingerprint != ctx.current_read_set_fingerprint:
-        return RejectReason.STALE_READ_SET
+    if candidate.read_set_fingerprint is not None:
+        current = ctx.current_read_set_fingerprints.get(candidate.id)
+        if current != candidate.read_set_fingerprint:
+            return RejectReason.STALE_READ_SET
     if candidate.expires_at_ms is not None and candidate.expires_at_ms < ctx.now_ms:
         return RejectReason.EXPIRED
     if not preconditions_met:
