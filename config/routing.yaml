@@ -135,7 +135,9 @@ dispatch:
   # Roles are the authoritative dispatch interface. Tier names remain for
   # existing consumers that need only a model string.
   roles:
-    planning: routine-sol
+    # mk-42j9.27: planning is a judgment role, and roster Rule 6 bars Sol-medium
+    # there, so it has its own Sol seat at high instead of borrowing routine-sol.
+    planning: planning-sol
     frontier-planning: planning-astra
     plan-review: review-opus
     escalation: planning-astra
@@ -247,7 +249,8 @@ dispatch:
       role: deep-execution
       backend: codex
       model: gpt-6-sol
-      reasoning_effort: medium
+      reasoning_effort: high
+      # mk-42j9.26 verdict item 2: the deep-execution Sol seats stay at or above high.
       service_tier: standard
       # mk ruling 2026-09-25: Opus — deep lanes carry the generative/implementation
       # load deep-astra->deep-sol->deep-opus already trusts to Opus as capacity
@@ -258,7 +261,8 @@ dispatch:
       role: deep-execution
       backend: codex
       model: gpt-6-sol
-      reasoning_effort: medium
+      reasoning_effort: high
+      # mk-42j9.26 verdict item 2: the deep-execution Sol seats stay at or above high.
       service_tier: standard
       fallbacks: [deep-opus]
       description: Clavain interserve-mode high-complexity/research/flux-drive dispatch
@@ -329,6 +333,16 @@ dispatch:
       service_tier: standard
       fallbacks: [routine-sonnet]
       description: High-volume routine implementation
+    planning-sol:
+      role: planning
+      backend: codex
+      model: gpt-6-sol
+      reasoning_effort: high
+      service_tier: standard
+      # Same chain routine-sol gave planning before mk-42j9.27. An elevated context
+      # redirects planning to frontier-planning before this chain is reached.
+      fallbacks: [routine-sonnet]
+      description: Unelevated planning; Sol at high because Rule 6 bars Sol-medium from judgment roles
     routine-sonnet:
       role: routine-execution
       backend: claude
@@ -353,7 +367,8 @@ dispatch:
       role: deep-execution
       backend: codex
       model: gpt-6-sol
-      reasoning_effort: medium
+      reasoning_effort: high
+      # mk-42j9.26 verdict item 2: the deep-execution Sol seats stay at or above high.
       service_tier: standard
       # deep-astra reaches deep-opus transitively through this list. Sol stays
       # ahead of Opus: when only Astra is out, the cheaper Codex seat is correct.
