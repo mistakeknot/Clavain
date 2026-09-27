@@ -142,4 +142,111 @@ if PATH="$work/bin:$PATH" CONTRACT_PROMPT="$work/should-not-run" CONTRACT_ARGS="
 fi
 grep -q 'policy changed after resolution' "$work/drift.log"
 [[ ! -e "$work/should-not-run" && ! -e "$work/should-not-have-args" ]]
-echo 'PASS: identical contracts across host surfaces and Claude effort propagation'
+
+# mk-42j9.28: a minimum reasoning effort applies after fallback expansion to
+# EVERY candidate a role resolves to, not just the primary, and never
+# invents an effort level a backend can't run. See config/routing.yaml
+# dispatch.effort_floors and docs/research/2026-09-27-effort-per-role-validation.md.
+
+# A medium-configured fallback candidate under a floored reason is raised,
+# and the raise is receipted with its from/to and the reason that fired.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
+  --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/floor-medium.json"
+jq -e '(.fallback_chain[] | select(.profile_ref == "validation-sol") | .profile.reasoning_effort) == "high"
+  and (.effort_floors_applied[] | select(.profile_ref == "validation-sol")
+    | .from == "medium" and .to == "high" and (.reasons | index("foundational-invariants")) != null)' \
+  "$work/floor-medium.json" >/dev/null \
+  || { echo 'FAIL: medium fallback candidate not raised to the floor'; exit 1; }
+
+# A candidate already at or above the floor is left untouched: no rewrite,
+# no no-op entry in the receipt.
+jq -e '(.fallback_chain[] | select(.profile_ref == "validation-kimi") | .profile.reasoning_effort) == "high"
+  and ((.effort_floors_applied // []) | map(select(.profile_ref == "validation-kimi")) | length) == 0' \
+  "$work/floor-medium.json" >/dev/null \
+  || { echo 'FAIL: floor recorded a no-op raise for an already-compliant candidate'; exit 1; }
+
+# The floor applies to every expanded candidate, including the primary
+# itself -- crosslab-sol is the declared primary for cross-lab-review at
+# medium (mk ruling 2026-09-26), and a floored reason must still raise it.
+printf '%s\n' '{"reasons":["difficult-verification"],"rationale":"cross-lab floor check"}' > "$work/dv.json"
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
+  --producer-identity=claude-opus-5-5 --context-file="$work/dv.json" > "$work/floor-primary.json"
+jq -e '.profile_ref == "crosslab-sol" and .profile.reasoning_effort == "high"
+  and (.effort_floors_applied[] | select(.profile_ref == "crosslab-sol") | .to == "high")' \
+  "$work/floor-primary.json" >/dev/null \
+  || { echo 'FAIL: floor did not raise the primary candidate itself'; exit 1; }
+
+# Floors apply after cross-lab reordering too: Claude-produced work moves
+# validation-sol to the front (mk ruling 2026-09-24), and the floor must
+# still raise it there rather than only checking the pre-reorder chain.
+printf '%s\n' '{"reasons":["foundational-invariants"],"rationale":"reorder floor check"}' > "$work/fi-reorder.json"
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
+  --producer-identity=claude-sonnet-5 --context-file="$work/fi-reorder.json" > "$work/floor-reorder.json"
+jq -e '.profile_ref == "validation-sol" and .profile.reasoning_effort == "high"
+  and (.effort_floors_applied[] | select(.profile_ref == "validation-sol") | .to == "high")' \
+  "$work/floor-reorder.json" >/dev/null \
+  || { echo 'FAIL: floor did not survive cross-lab reordering'; exit 1; }
+
+# A floor that cannot be represented by a backend's effort levels excludes
+# that candidate with unsupported_adapter rather than inventing an effort
+# level it cannot run. pilot-opus's backend, main, has no effort order, so
+# fixture it into validation's chain and confirm it is excluded, not clamped.
+python3 - "$ROOT/config/routing.yaml" "$work/unsupported-adapter.yaml" <<'PYFIXTURE'
+from pathlib import Path
+import sys
+text = Path(sys.argv[1]).read_text()
+needle = '      fallbacks: [validation-sonnet, validation-sol, validation-kimi]\n'
+assert text.count(needle) == 1
+text = text.replace(needle, '      fallbacks: [validation-sonnet, pilot-opus, validation-sol, validation-kimi]\n')
+Path(sys.argv[2]).write_text(text)
+PYFIXTURE
+ic --json route dispatch --policy="$work/unsupported-adapter.yaml" --role=validation \
+  --producer-identity=gpt-6-astra --context-file="$work/context.json" > "$work/floor-unsupported.json"
+jq -e '(.excluded[]? | select(.profile_ref == "pilot-opus") | .reason) == "unsupported_adapter"
+  and (([.profile_ref] + [.fallback_chain[]?.profile_ref]) | index("pilot-opus")) == null' \
+  "$work/floor-unsupported.json" >/dev/null \
+  || { echo 'FAIL: unrepresentable floor did not exclude the candidate via unsupported_adapter'; exit 1; }
+
+# --effort-override is receipted (requested/applied/changed/from/to) and
+# targets only the resolved primary. It can genuinely lower that candidate's
+# effort, but the floor is applied AFTER the override, so a floored reason
+# still wins: final_effort reflects the floor, never the requested value
+# (mk-42j9.30 -- experiment-only, can never go below effort_floors).
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
+  --producer-identity=claude-opus-5-5 --context-file="$work/context.json" --effort-override=low \
+  > "$work/override-below-floor.json"
+jq -e '.profile_ref == "crosslab-sol"
+  and .effort_override.requested == "low" and .effort_override.applied == true
+  and .effort_override.changed == true and .effort_override.from == "medium" and .effort_override.to == "low"
+  and .effort_override.final_effort == "high" and .profile.reasoning_effort == "high"
+  and (.effort_floors_applied[] | select(.profile_ref == "crosslab-sol") | .from == "low" and .to == "high")' \
+  "$work/override-below-floor.json" >/dev/null \
+  || { echo 'FAIL: effort override was admitted below the floor'; exit 1; }
+
+# An override matching the already-resolved effort is still receipted, with
+# applied true and changed false -- a no-op override is not silently dropped.
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
+  --producer-identity=gpt-6-astra --context-file="$work/routine.json" --effort-override=high \
+  > "$work/override-noop.json"
+jq -e '.effort_override.requested == "high" and .effort_override.applied == true
+  and .effort_override.changed == false and .effort_override.from == "high" and .effort_override.to == "high"' \
+  "$work/override-noop.json" >/dev/null \
+  || { echo 'FAIL: no-op override not receipted correctly'; exit 1; }
+
+# The floor-raised effort, not the tier's configured value, is what reaches
+# the dispatched child process (Claude backend, real --effort propagation).
+python3 - "$ROOT/config/routing.yaml" "$work/claude-propagation.yaml" <<'PYFIXTURE'
+from pathlib import Path
+import sys
+text = Path(sys.argv[1]).read_text()
+needle = '      model: claude-opus-5-5\n      reasoning_effort: high\n      service_tier: standard\n      # Plan-review primary'
+assert text.count(needle) == 1
+text = text.replace(needle, needle.replace('reasoning_effort: high', 'reasoning_effort: medium'))
+Path(sys.argv[2]).write_text(text)
+PYFIXTURE
+out="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role plan-review --policy "$work/claude-propagation.yaml" \
+  --producer-identity gpt-6-astra --context-file "$work/context.json" -C "$work" fixture 2>&1)"
+[[ "$out" == *'claude-opus-5-5'* && "$out" == *'--effort high'* ]] \
+  || { echo 'FAIL: floor-raised effort did not propagate to the dispatched child'; exit 1; }
+
+echo 'PASS: identical contracts across host surfaces, Claude effort propagation, and effort floors'
