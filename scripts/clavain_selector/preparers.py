@@ -654,6 +654,98 @@ def from_case(case: Mapping[str, Any], registry: Mapping[str, Any]) -> PreparedS
     )
 
 
+def from_external(
+    registry: Mapping[str, Any],
+    integration: str,
+    task: str,
+    context: str,
+    candidates: Sequence[Candidate],
+    project_root: str | Path,
+    *,
+    task_revision: str,
+    read_set_paths: Sequence[tuple[str, Sequence[str]]],
+    sources: Sequence[str],
+) -> PreparedSet:
+    """Build a `PreparedSet` from host-external candidate data (Task 7 Worker 1).
+
+    For candidate sets built entirely outside the selector (e.g. in a
+    language-neutral caller), where the `integration` must serve the
+    `"library"` point but no `Preparer` is consulted -- the integration
+    and point requirement are still checked against the registry, but the
+    caller has already performed whatever build logic makes sense for that
+    data shape. This is the external-provenance entry point; it never looks
+    up or consults `PREPARERS`.
+
+    `registry` is the loaded integration registry (the same `Mapping[str, Any]`
+    shape other factories use: a `dict` with an `integrations` mapping from
+    integration name to an entry `dict`). Looks up `registry["integrations"]
+    [integration]["points"]` (or rejects `NotPrepared` for an unknown
+    integration); requires `"library"` to be present in that `points` list
+    (this is the constraint that `from_external` serves only the library
+    point, never LAUNCH_PROFILE, PROMPT_SUBMIT, etc.).
+
+    All other invariants (`project_root` mandatory, read_set_paths
+    correspondence with candidates, empty-path/null-fingerprint consistency,
+    source-boundary rejection, canonical ordering, payload-hash binding)
+    apply identically to `from_operator` and `from_case`. Preconditions are
+    carried opaquely (never evaluated here) and remain unmet until `select()`
+    processes them in Task 7 Worker 2.
+    """
+    integrations = registry.get("integrations", {}) if isinstance(registry, Mapping) else {}
+    if not isinstance(integrations, Mapping):
+        raise NotPrepared(f"registry integrations is not a mapping: {integrations!r}")
+    try:
+        entry = integrations.get(integration)
+    except TypeError as exc:
+        # Commit D Minor 3: an unhashable `integration` (e.g. a list) must
+        # not raise a raw `TypeError` from the dict lookup.
+        raise NotPrepared(f"integration is not a valid key: {integration!r}") from exc
+    if not isinstance(entry, Mapping):
+        raise NotPrepared(f"unknown integration: {integration!r}")
+
+    try:
+        points = entry.get("points")
+    except (TypeError, AttributeError) as exc:
+        raise NotPrepared(f"integration {integration!r} points entry is invalid: {points!r}") from exc
+
+    if not isinstance(points, (list, tuple, frozenset, set)):
+        raise NotPrepared(f"integration {integration!r} points is not a sequence: {points!r}")
+
+    # Check that "library" is in the points list for this integration.
+    try:
+        points_list = list(points)
+    except TypeError as exc:
+        raise NotPrepared(f"integration {integration!r} points is not iterable: {points!r}") from exc
+
+    # Convert point strings to Point enum values for comparison.
+    try:
+        point_values = set()
+        for p in points_list:
+            if isinstance(p, Point):
+                point_values.add(p)
+            else:
+                point_values.add(Point(p))
+    except ValueError as exc:
+        raise NotPrepared(f"integration {integration!r} has invalid point value: {exc}") from exc
+
+    if Point.LIBRARY not in point_values:
+        raise NotPrepared(f"integration {integration!r} does not serve point {Point.LIBRARY!r}")
+
+    return _finish_prepare(
+        integration=integration,
+        point=Point.LIBRARY,
+        provenance=Provenance.EXTERNAL,
+        preparer=None,
+        task=task,
+        context=context,
+        candidates=candidates,
+        sources=sources,
+        project_root=project_root,
+        task_revision=task_revision,
+        read_set_paths=read_set_paths,
+    )
+
+
 def verify(prepared: PreparedSet) -> None:
     """Recompute the tag and independently recompute the payload bindings.
 

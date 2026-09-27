@@ -322,6 +322,28 @@ def test_build_record_requires_provenance_keyword():
         build_record(**kwargs)
 
 
+def test_record_external_provenance():
+    """build_record accepts a request with provenance == Provenance.EXTERNAL
+    and preparer is None; the record's request block reflects these values."""
+    request = make_request()
+    record = build_record(
+        **_base_kwargs(
+            request=request,
+            provenance=Provenance.EXTERNAL,
+            preparer=None,
+        )
+    )
+    # Verify the record was built successfully
+    assert record["request"]["provenance"] == "external"
+    assert record["request"]["preparer"] is None
+
+    # Round-trip through JSON to ensure serialization is valid
+    serialized = json.dumps(record)
+    deserialized = json.loads(serialized)
+    assert deserialized["request"]["provenance"] == "external"
+    assert deserialized["request"]["preparer"] is None
+
+
 def test_unwritable_raises(tmp_path):
     record_dir = tmp_path / "readonly" / "records"
     record_dir.parent.mkdir(parents=True)

@@ -43,6 +43,7 @@ from clavain_selector.preparers import (
     PreparedInput,
     PreparedSet,
     from_case,
+    from_external,
     from_operator,
     prepare,
     request_from,
@@ -1334,3 +1335,330 @@ def test_validated_rejects_non_selection_request(tmp_path):
     prepared = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,), project_root=tmp_path)
     with pytest.raises(NotPrepared):
         validated(prepared, None)
+
+
+# ---------------------------------------------------------------------------
+# from_external (Task 7 Worker 1): external-provenance factory for
+# host-external candidate sets. Never consults PREPARERS; requires registry
+# entry with "library" in its points list.
+# ---------------------------------------------------------------------------
+
+
+def _registry_with_library_point(integration: str) -> dict:
+    """A registry with an integration entry that lists 'library' in its points."""
+    return {"schema_version": 1, "integrations": {integration: {"points": ["library"]}}}
+
+
+def _registry_with_points(integration: str, points: list) -> dict:
+    """A registry with an integration entry with custom points."""
+    return {"schema_version": 1, "integrations": {integration: {"points": points}}}
+
+
+def test_from_external_happy_path_produces_verifiable_set(tmp_path):
+    """from_external builds a valid PreparedSet with correct hardcoded fields."""
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    result = from_external(
+        registry, "external-test", "do the thing", "some context",
+        (candidate,), tmp_path,
+        task_revision="rev-1", read_set_paths=(), sources=()
+    )
+    assert result.provenance is Provenance.EXTERNAL
+    assert result.preparer is None
+    assert result.point is Point.LIBRARY
+    assert result.integration == "external-test"
+    assert result.task == "do the thing"
+    assert result.context == "some context"
+    assert result.task_revision == "rev-1"
+    assert [c.id for c in result.candidates] == ["cand-a"]
+    assert result.bindings == tuple((c.id, payload_sha256(c.payload)) for c in result.candidates)
+    assert verify(result) is None
+
+
+def test_from_external_unknown_integration_raises(tmp_path):
+    """Unknown integration → NotPrepared."""
+    registry = _registry_with_library_point("known-integration")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "unknown-integration", "task", "",
+            (candidate,), tmp_path,
+            task_revision="rev-1", read_set_paths=(), sources=()
+        )
+
+
+def test_from_external_integration_without_library_point_raises(tmp_path):
+    """Known integration lacking 'library' in its points list → NotPrepared."""
+    registry = _registry_with_points("exists-but-no-library", ["pre_tool", "post_tool_output"])
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "exists-but-no-library", "task", "",
+            (candidate,), tmp_path,
+            task_revision="rev-1", read_set_paths=(), sources=()
+        )
+
+
+def test_from_external_never_consults_preparers(monkeypatch, tmp_path):
+    """from_external must never look up PREPARERS, even if an integration
+    name matches a preparer name."""
+    from types import MappingProxyType
+
+    # Monkeypatch PREPARERS to a mapping that raises if accessed
+    class FailingPREPARES(dict):
+        def __getitem__(self, key):
+            raise AssertionError(f"PREPARERS was consulted for {key!r}, but from_external must never do this")
+
+        def get(self, key, default=None):
+            raise AssertionError(f"PREPARERS.get was called for {key!r}, but from_external must never do this")
+
+    monkeypatch.setattr(preparers, "PREPARERS", MappingProxyType(FailingPREPARES()))
+
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    # This should succeed despite PREPARERS being instrumented to fail
+    result = from_external(
+        registry, "external-test", "task", "",
+        (candidate,), tmp_path,
+        task_revision="rev-1", read_set_paths=(), sources=()
+    )
+    assert result.provenance is Provenance.EXTERNAL
+
+
+def test_from_external_preparers_with_same_integration_name_is_ignored(monkeypatch, tmp_path):
+    """Even if a preparer is registered under the integration name,
+    from_external must ignore it and use the registry entry's points list."""
+    from types import MappingProxyType
+
+    # Install a preparer under the "external-test" name
+    fake = Preparer(
+        name="external-test-preparer",
+        points=frozenset({Point.PRE_TOOL}),  # Only serves PRE_TOOL, not LIBRARY
+        vocabulary=lambda project_root: frozenset({"cand-a"}),
+        event_fields=frozenset(),
+        build=lambda event, project_root: PreparedInput(task="x", candidates=(make_candidate(id="cand-a"),)),
+    )
+    monkeypatch.setattr(preparers, "PREPARERS", MappingProxyType({"external-test": fake}))
+
+    # The registry says external-test serves LIBRARY (in points)
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    # This should succeed, proving from_external never consulted PREPARERS
+    result = from_external(
+        registry, "external-test", "task", "",
+        (candidate,), tmp_path,
+        task_revision="rev-1", read_set_paths=(), sources=()
+    )
+    assert result.provenance is Provenance.EXTERNAL
+    assert result.preparer is None
+
+
+def test_from_external_mismatched_read_set_ids_raises(tmp_path):
+    """read_set_paths entry naming an id not in candidates → NotPrepared."""
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            (candidate,), tmp_path,
+            task_revision="rev-1",
+            read_set_paths=(("cand-b", ()),),  # cand-b doesn't exist
+            sources=()
+        )
+
+
+def test_from_external_missing_candidate_id_in_read_set_paths_raises(tmp_path):
+    """Candidate id missing from read_set_paths (when read_set_paths is non-empty) → NotPrepared."""
+    registry = _registry_with_library_point("external-test")
+    candidates = (
+        make_candidate(id="cand-a", prepared_at_revision="rev-1"),
+        make_candidate(id="cand-b", prepared_at_revision="rev-1"),
+    )
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            candidates, tmp_path,
+            task_revision="rev-1",
+            read_set_paths=(("cand-a", ()),),  # Only cand-a, missing cand-b
+            sources=()
+        )
+
+
+def test_from_external_inconsistent_empty_path_null_fingerprint_raises(tmp_path):
+    """Candidate with nonempty read_set_paths but null fingerprint → NotPrepared."""
+    registry = _registry_with_library_point("external-test")
+    inside = tmp_path / "file.py"
+    inside.write_text("x = 1\n")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint=None)
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            (candidate,), tmp_path,
+            task_revision="rev-1",
+            read_set_paths=(("cand-a", (str(inside),)),),
+            sources=()
+        )
+
+
+def test_from_external_inconsistent_nonempty_fingerprint_empty_paths_raises(tmp_path):
+    """Candidate with non-null fingerprint but empty read_set_paths → NotPrepared."""
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            (candidate,), tmp_path,
+            task_revision="rev-1",
+            read_set_paths=(("cand-a", ()),),  # Empty paths but fingerprint set
+            sources=()
+        )
+
+
+def test_from_external_mutation_after_construction_fails_verify(tmp_path):
+    """Mutation after construction (dataclasses.replace) must fail verify()."""
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    result = from_external(
+        registry, "external-test", "task", "",
+        (candidate,), tmp_path,
+        task_revision="rev-1", read_set_paths=(), sources=()
+    )
+    tampered = dataclasses.replace(result, task="tampered task")
+    with pytest.raises(NotPrepared):
+        verify(tampered)
+
+
+def test_from_external_nonempty_preconditions_construct_fine(tmp_path):
+    """A candidate with nonempty preconditions passes through from_external
+    unchanged (preconditions are opaque, unverified here)."""
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(
+        id="cand-a", prepared_at_revision="rev-1",
+        preconditions=("condition-1", "condition-2")
+    )
+    result = from_external(
+        registry, "external-test", "task", "",
+        (candidate,), tmp_path,
+        task_revision="rev-1", read_set_paths=(), sources=()
+    )
+    assert result.candidates[0].preconditions == ("condition-1", "condition-2")
+    assert verify(result) is None
+
+
+def test_from_external_canonical_order_matches_from_operator(tmp_path):
+    """from_external applies the same canonical ordering as from_operator."""
+    registry = _registry_with_library_point("external-test")
+    candidates = (
+        make_candidate(id="cand-b", prepared_at_revision="rev-1"),
+        make_candidate(id="cand-a", prepared_at_revision="rev-1"),
+    )
+    result_external = from_external(
+        registry, "external-test", "task", "",
+        candidates, tmp_path,
+        task_revision="rev-1", read_set_paths=(), sources=()
+    )
+    result_operator = from_operator(
+        UNUSED_REGISTRY, "external-test", Point.LIBRARY, "task", "",
+        candidates, project_root=tmp_path
+    )
+    # Both should have the same canonical order
+    assert [c.id for c in result_external.candidates] == [c.id for c in result_operator.candidates]
+    assert result_external.bindings == result_operator.bindings
+
+
+def test_from_external_project_root_mandatory(tmp_path):
+    """project_root is mandatory; None or empty string raises NotPrepared."""
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            (candidate,), None,
+            task_revision="rev-1", read_set_paths=(), sources=()
+        )
+
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            (candidate,), "",
+            task_revision="rev-1", read_set_paths=(), sources=()
+        )
+
+
+def test_from_external_read_set_outside_project_root_raises(tmp_path):
+    """read_set_paths pointing outside project_root is rejected."""
+    registry = _registry_with_library_point("external-test")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    outside = tmp_path / "outside.py"
+    outside.write_text("x = 1\n")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            (candidate,), project_root,
+            task_revision="rev-1",
+            read_set_paths=(("cand-a", (str(outside),)),),
+            sources=()
+        )
+
+
+def test_from_external_read_set_inside_project_root_accepted(tmp_path):
+    """read_set_paths inside project_root is accepted."""
+    registry = _registry_with_library_point("external-test")
+    inside = tmp_path / "src" / "file.py"
+    inside.parent.mkdir(parents=True)
+    inside.write_text("x = 1\n")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
+    result = from_external(
+        registry, "external-test", "task", "",
+        (candidate,), tmp_path,
+        task_revision="rev-1",
+        read_set_paths=(("cand-a", (str(inside),)),),
+        sources=()
+    )
+    assert result.read_set_paths == (("cand-a", (str(inside.resolve()),)),)
+    assert verify(result) is None
+
+
+def test_from_external_denylist_path_rejected(tmp_path):
+    """read_set_paths on a denylisted path (e.g. ~/.ssh) is rejected."""
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
+    ssh_key = str(Path("~/.ssh/id_rsa").expanduser())
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            (candidate,), tmp_path,
+            task_revision="rev-1",
+            read_set_paths=(("cand-a", (ssh_key,)),),
+            sources=()
+        )
+
+
+def test_from_external_duplicate_candidate_ids_raises(tmp_path):
+    """Duplicate candidate ids must be rejected with NotPrepared."""
+    registry = _registry_with_library_point("external-test")
+    candidates = (
+        make_candidate(id="cand-a", prepared_at_revision="rev-1"),
+        make_candidate(id="cand-a", prepared_at_revision="rev-1", description="different"),
+    )
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            candidates, tmp_path,
+            task_revision="rev-1", read_set_paths=(), sources=()
+        )
+
+
+def test_from_external_non_json_native_payload_raises(tmp_path):
+    """Non-JSON-native payload raises NotPrepared."""
+    registry = _registry_with_library_point("external-test")
+    candidate = make_candidate(id="cand-a", payload={1, 2, 3}, prepared_at_revision="rev-1")
+    with pytest.raises(NotPrepared):
+        from_external(
+            registry, "external-test", "task", "",
+            (candidate,), tmp_path,
+            task_revision="rev-1", read_set_paths=(), sources=()
+        )
