@@ -17,9 +17,11 @@ Dispatch tasks to Codex agents for parallelization.
 4. **Between batches:** Report pass/fail/issues; continue within existing authorization
 5. **On failure:** Offer retry with tighter prompt, fall back to 2B, or skip
 
-## Step 2B: Direct Execution (default)
+## Step 2B: Native Execution (default)
 
-Default: first 3 tasks per batch. Per task: mark in_progress → follow steps exactly → run verifications → mark completed.
+Follow [native-execution.md](native-execution.md): per task, `task-start` →
+steps in order → verifications → `task-done`; one independent whole-branch
+review at the end.
 
 ## Step 2C: Orchestrated Execution (manifest exists)
 

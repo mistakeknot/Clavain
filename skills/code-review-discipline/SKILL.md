@@ -32,7 +32,7 @@ Use Task tool with `clavain:plan-reviewer` type. Fill template at `code-review-d
 
 **Integration:**
 - Subagent-Driven Development: review after EACH task
-- Executing Plans: review after each batch (3 tasks)
+- Executing Plans: one whole-branch review after the last task
 - Ad-Hoc: review before merge or when stuck
 
 ---

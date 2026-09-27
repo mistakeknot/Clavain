@@ -1,6 +1,6 @@
 ---
 name: executing-plans
-description: Execute a written implementation plan in a separate session with review checkpoints.
+description: Execute a written implementation plan task by task with a progress ledger and a final independent review.
 ---
 
 # Executing Plans
@@ -15,16 +15,24 @@ and independent review requirements. Hand off only with decisions, constraints,
 verification and escalation conditions. Missing authentication is an operational
 blocker, not permission to change the required reviewer or destination.
 
-Execute sequentially by default. If a companion `.exec.yaml` exists or the project
-has `.claude/clodex-toggle.flag`, read
-[execution-modes.md](references/execution-modes.md) for that mode before dispatch.
+Execute natively by default: implement every task in this session, keep the
+plan's ledger with this skill's `scripts/task-start` and `scripts/task-done`
+(invoke them through `bash`), then get one independent whole-branch review. Read
+[native-execution.md](references/native-execution.md) before Task 1. If a
+companion `.exec.yaml` exists or the project has `.claude/clodex-toggle.flag`,
+read [execution-modes.md](references/execution-modes.md) for that mode before
+dispatch.
 Use only authorized delegation and available host capabilities. Pattern F runs
 also require [pattern-f-contracts.md](references/pattern-f-contracts.md).
 
 For each logical task: mark progress, implement the specified behavior, run the
 meaningful checks, inspect their results and preserve review evidence. Use
-`intertest:test-driven-development` for behavior changes. Report material findings
-between batches and continue authorized work without ceremonial approval requests.
+`intertest:test-driven-development` for behavior changes. Execute continuously;
+do not pause between tasks for approval. Rule on conflicts, ambiguities and plan
+defects against the spec and ledger each ruling with its cost if wrong. Stop and
+ask only for an irreversible or destructive operation, a security-sensitive
+action, a side effect outside the worktree that needs authority (merge, shared
+push, publish) or a plan so broken that every path is a guess.
 
 Verification blocks require a zero process exit as well as the declared
 expectation. Reject unknown expectation syntax; output text never overrides a
