@@ -27,9 +27,11 @@ VERDICT_FINDINGS = re.compile(
 )
 FINDING_HEADING = re.compile(
     r"^(?:#{1,6}\s+|[-+*]\s+|\d+[.)]\s+)"
-    r"(?:\*\*|__)?\[?"
-    r"(P[0-3]|Critical|High|Medium|Low)"
-    r"(?=\]|\s|:|—|–|-)",
+    r"(?:"
+    r"(?:\*\*|__)?\[?(P[0-3])(?=\]|\s|:|—|–)\]?"
+    r"|(?:\*\*|__)?\[(Critical|High|Medium|Low)\]"
+    r"|(?:\*\*|__)(Critical|High|Medium|Low)(?=\s+[—–]|:)"
+    r")",
     re.IGNORECASE,
 )
 SEVERITY = {
@@ -72,24 +74,35 @@ def verdict_counts(lines: list[str]) -> dict[str, int | str] | None:
     if not matches:
         return None
     match = matches[-1]
-    return {
+    counts = {
         "source": "verdict",
         "P0": int(match.group(2)),
         "P1": int(match.group(3)),
         "P2": int(match.group(4)),
         "P3": int(match.group(5) or 0),
-        "total": int(match.group(1)),
     }
+    # Severity counts are the evidence; repair inconsistent stated totals using
+    # their sum. P3 remains optional and defaults to zero by the receipt contract.
+    counts["total"] = sum(counts[key] for key in ("P0", "P1", "P2", "P3"))
+    return counts
 
 
 def heading_counts(lines: list[str]) -> dict[str, int | str] | None:
     counts = {"P0": 0, "P1": 0, "P2": 0, "P3": 0}
     total = 0
-    for line in lines:
+    nonempty = [line.strip() for line in lines if line.strip()]
+    for index, line in enumerate(nonempty):
         match = FINDING_HEADING.match(line)
         if not match:
             continue
-        counts[SEVERITY[match.group(1).lower()]] += 1
+        if re.match(r"^(?:\*\*|__)?\s*:\s*(?:0|none|n/?a)\b", line[match.end():], re.IGNORECASE):
+            continue
+        # A severity section immediately introducing tagged children is not an
+        # additional finding. Headings otherwise remain the unit of counting.
+        if line.startswith("#") and index + 1 < len(nonempty) and FINDING_HEADING.match(nonempty[index + 1]):
+            continue
+        severity = next(group for group in match.groups() if group is not None)
+        counts[SEVERITY[severity.lower()]] += 1
         total += 1
     if total == 0:
         return None
@@ -98,17 +111,18 @@ def heading_counts(lines: list[str]) -> dict[str, int | str] | None:
 
 def clean_verdict(lines: list[str]) -> bool:
     joined = "\n".join(lines)
+    if re.search(r"\b(?:REVISE|FAIL|REJECT|UNRUN|NEEDS_ATTENTION|WITH-CHANGES)\b", joined, re.IGNORECASE):
+        return False
     if re.search(r"^\s*STATUS:\s*pass\s*$", joined, re.IGNORECASE | re.MULTILINE):
         return True
-    if re.search(r"^\s*VERDICT:\s*(?:CLEAN|PASS)\b", joined, re.IGNORECASE | re.MULTILINE):
+    if re.search(r"^\s*VERDICT:\s*(?:CLEAN|PASS)\s*$", joined, re.IGNORECASE | re.MULTILINE):
         return True
-    if re.search(r"\bWITH-CHANGES\b", joined, re.IGNORECASE):
-        return False
+    final_line = next((line for line in reversed(lines) if line.strip()), "")
     return bool(
         re.search(
             r"^\s*(?:#{1,6}\s*)?(?:\*\*)?(?:APPROVE|pass)(?:\*\*)?[.!]?\s*$",
-            joined,
-            re.IGNORECASE | re.MULTILINE,
+            final_line,
+            re.IGNORECASE,
         )
     )
 

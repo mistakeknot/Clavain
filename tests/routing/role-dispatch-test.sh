@@ -259,11 +259,12 @@ jq -s -e 'any(.[]; .state == "completed" and .bead_id == "session-bead_3" and .b
   "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "interstat bead source not recorded"
 
 : > "$FAKE_IC_CONTEXT_LOG"
-CLAVAIN_BEAD_ID=env-fallback bash "$ROOT/scripts/dispatch.sh" --role deep-execution \
-  --bead 'invalid bead' -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 \
-  || fail "invalid flag fallback dispatch failed"
-jq -s -e 'any(.[]; .state == "completed" and .bead_id == "env-fallback" and .bead_source == "env")' \
-  "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "invalid bead flag did not fall through to environment"
+if CLAVAIN_BEAD_ID=env-fallback bash "$ROOT/scripts/dispatch.sh" --role deep-execution \
+  --bead 'invalid bead' -C "$TMP_ROOT/work" "hi" >"$TMP_ROOT/invalid-bead.log" 2>&1; then
+  fail "invalid explicit bead silently fell through to environment"
+fi
+contains "$(cat "$TMP_ROOT/invalid-bead.log")" 'invalid --bead'
+[[ ! -s "$FAKE_IC_CONTEXT_LOG" ]] || fail "invalid explicit bead recorded a different bead"
 
 : > "$FAKE_IC_CONTEXT_LOG"
 FAKE_ROUTE_KIMI_FIRST=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution \

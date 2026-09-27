@@ -44,7 +44,11 @@ RECHECK_ITEMS=""
 RECHECK_SOURCE_JSON=""
 RECHECK_BEAD_JSON=""
 DISPATCH_BEAD_FLAG=""
+DISPATCH_BEAD_FLAG_SET=false
 DISPATCH_BEAD_ENV="${CLAVAIN_BEAD_ID:-}"
+# Receipt bookkeeping is shell-local, including values supplied by the caller.
+# Only the recognized role self-exec below receives this context explicitly.
+export -n CLAVAIN_BEAD_ID CLAVAIN_BEAD_SOURCE CLAVAIN_BEAD_CONTEXT_RESOLVED
 BEAD_SOURCE="none"
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
@@ -289,37 +293,47 @@ _valid_dispatch_bead() {
 }
 
 _resolve_dispatch_bead() {
-  local candidate="" bead_file=""
-  if [[ -n "$DISPATCH_BEAD_FLAG" ]] && _valid_dispatch_bead "$DISPATCH_BEAD_FLAG"; then
+  local candidate="" bead_file="" invalid_prefix=""
+  if [[ "$DISPATCH_BEAD_FLAG_SET" == true ]]; then
+    if ! _valid_dispatch_bead "$DISPATCH_BEAD_FLAG"; then
+      echo "Error: invalid --bead; expected a non-empty ID containing only letters, digits, _, ., :, or -" >&2
+      exit 1
+    fi
     CLAVAIN_BEAD_ID="$DISPATCH_BEAD_FLAG"
     BEAD_SOURCE="flag"
-  elif [[ "${CLAVAIN_BEAD_CONTEXT_RESOLVED:-}" == 1 ]] \
+  elif [[ "$ROLE_RESOLVED" == true && "${CLAVAIN_BEAD_CONTEXT_RESOLVED:-}" == 1 ]] \
     && _valid_dispatch_bead "$DISPATCH_BEAD_ENV" \
-    && [[ "${CLAVAIN_BEAD_SOURCE:-}" =~ ^(flag|env|interstat-session)$ ]]; then
+    && [[ "${CLAVAIN_BEAD_SOURCE:-}" =~ ^(flag|env|interstat-session|invalid-env-then-interstat-session)$ ]]; then
     CLAVAIN_BEAD_ID="$DISPATCH_BEAD_ENV"
     BEAD_SOURCE="$CLAVAIN_BEAD_SOURCE"
   elif [[ -n "$DISPATCH_BEAD_ENV" ]] && _valid_dispatch_bead "$DISPATCH_BEAD_ENV"; then
     CLAVAIN_BEAD_ID="$DISPATCH_BEAD_ENV"
     BEAD_SOURCE="env"
-  elif [[ -n "$DISPATCH_SESSION_ID" ]]; then
-    bead_file="${CLAVAIN_INTERSTAT_BEAD_DIR:-/tmp}/interstat-bead-${DISPATCH_SESSION_ID}"
-    if [[ -r "$bead_file" ]]; then
-      IFS= read -r candidate < "$bead_file" || true
-      candidate="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$candidate")"
-    fi
-    if [[ -n "$candidate" ]] && _valid_dispatch_bead "$candidate"; then
-      CLAVAIN_BEAD_ID="$candidate"
-      BEAD_SOURCE="interstat-session"
-    else
-      CLAVAIN_BEAD_ID=""
-      BEAD_SOURCE="none"
-    fi
   else
     CLAVAIN_BEAD_ID=""
     BEAD_SOURCE="none"
+    if [[ -n "$DISPATCH_BEAD_ENV" ]]; then
+      echo "dispatch: WARNING — invalid CLAVAIN_BEAD_ID; checking interstat-session bead" >&2
+      invalid_prefix="invalid-env-then-"
+      BEAD_SOURCE="invalid-env"
+    fi
+    if [[ -n "$DISPATCH_SESSION_ID" ]]; then
+      bead_file="${CLAVAIN_INTERSTAT_BEAD_DIR:-/tmp}/interstat-bead-${DISPATCH_SESSION_ID}"
+      if [[ -r "$bead_file" ]]; then
+        IFS= read -r candidate < "$bead_file" || true
+        candidate="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$candidate")"
+      fi
+    fi
+    if [[ -n "$candidate" ]] && _valid_dispatch_bead "$candidate"; then
+      CLAVAIN_BEAD_ID="$candidate"
+      BEAD_SOURCE="${invalid_prefix}interstat-session"
+    elif [[ -n "$candidate" ]]; then
+      echo "dispatch: WARNING — invalid interstat-session bead; recording no bead" >&2
+      BEAD_SOURCE="${invalid_prefix}invalid-interstat-session"
+    fi
   fi
-  export CLAVAIN_BEAD_ID
-  export CLAVAIN_BEAD_SOURCE="$BEAD_SOURCE" CLAVAIN_BEAD_CONTEXT_RESOLVED=1
+  CLAVAIN_BEAD_SOURCE="$BEAD_SOURCE"
+  CLAVAIN_BEAD_CONTEXT_RESOLVED=1
 }
 
 # Resolve a tier name to a model string via routing.yaml (dispatch: section).
@@ -696,6 +710,8 @@ _dispatch_role_profile() {
     fi
 
     resolved_args=(
+      env "CLAVAIN_BEAD_ID=$CLAVAIN_BEAD_ID" "CLAVAIN_BEAD_SOURCE=$CLAVAIN_BEAD_SOURCE"
+      CLAVAIN_BEAD_CONTEXT_RESOLVED=1
       bash "${BASH_SOURCE[0]}"
       --role-resolved
       --role "$role"
@@ -958,10 +974,12 @@ while [[ $# -gt 0 ]]; do
     --bead)
       require_arg "$1" "${2:-}"
       DISPATCH_BEAD_FLAG="$2"
+      DISPATCH_BEAD_FLAG_SET=true
       shift 2
       ;;
     --bead=*)
       DISPATCH_BEAD_FLAG="${1#--bead=}"
+      DISPATCH_BEAD_FLAG_SET=true
       shift
       ;;
     --role-resolved)
