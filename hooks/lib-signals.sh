@@ -58,11 +58,12 @@ _signals_deadline() {
 # _signals_tokenize
 # Reads "<line>\t<tool id>\t<epoch>\t<command>" records and prints one record
 # per simple command: the same three fields, then its words joined by \037.
-# Commands split on && || ; | & and newlines, words on blanks, both only
-# outside quotes (the caller turns newlines into ;); quotes are removed and a backslash escapes the next
-# character, so `echo "x; bd close y"` is one command whose words are
-# echo and "x; bd close y". The & of 2>&1, >&2 and &> is not a separator.
-# $(...) and heredocs are not modelled.
+# Commands split on && || ; | & and newlines (which the caller writes as
+# \036), words on blanks, both only outside quotes; quotes are removed, a
+# backslash escapes the next character and an unquoted # starting a word
+# comments out the rest of the line. So `echo "x; bd close y"` is one
+# command whose words are echo and "x; bd close y". The & of 2>&1, >&2 and
+# &> is not a separator. $(...) and heredocs are not modelled.
 _signals_tokenize() {
     awk -F'\t' '
     function flush_word() { if (have) { seg = seg (nw++ ? "\037" : "") word }; word = ""; have = 0 }
@@ -70,9 +71,10 @@ _signals_tokenize() {
     {
         head = $1 "\t" $2 "\t" $3 "\t"
         cmd = $0; sub(/^[^\t]*\t[^\t]*\t[^\t]*\t/, "", cmd)
-        seg = ""; nw = 0; word = ""; have = 0; q = ""
+        seg = ""; nw = 0; word = ""; have = 0; q = ""; comment = 0
         for (i = 1; i <= length(cmd); i++) {
             c = substr(cmd, i, 1)
+            if (comment) { if (c == "\036") { comment = 0; flush_seg() }; continue }
             if (q != "") {
                 if (c == q) q = ""
                 else if (c == "\\" && q == "\"" && i < length(cmd)) { word = word substr(cmd, ++i, 1) }
@@ -81,8 +83,9 @@ _signals_tokenize() {
             }
             if (c == "\\" && i < length(cmd)) { word = word substr(cmd, ++i, 1); have = 1; continue }
             if (c == "\"" || c == "\047") { q = c; have = 1; continue }
+            if (c == "#" && !have) { comment = 1; continue }
             if (c == "&" && (substr(cmd, i - 1, 1) ~ /[<>]/ || substr(cmd, i + 1, 1) == ">")) { word = word c; have = 1; continue }
-            if (c == ";" || c == "|" || c == "&") {
+            if (c == ";" || c == "|" || c == "&" || c == "\036") {
                 flush_seg()
                 if ((c == "|" || c == "&") && substr(cmd, i + 1, 1) == c) i++
                 continue
@@ -113,28 +116,27 @@ _signals_bd_segment() {
     done
     [[ "${w[i]:-}" == bd || "${w[i]:-}" == */bd ]] || return 0
     i=$((i + 1))
-    while (( i < n )) && [[ "${w[i]}" == -* ]]; do
-        case "${w[i]}" in
-            -h|--help) return 0 ;;
-            -C|--directory) dir="${w[i+1]:-}"; i=$((i + 2)) ;;
-            --directory=*) dir="${w[i]#--directory=}"; i=$((i + 1)) ;;
-            --actor|--db|--dolt-auto-commit) i=$((i + 2)) ;;
-            *) i=$((i + 1)) ;;
-        esac
-    done
-    local verb="${w[i]:-}" sub="${w[i+1]:-}" args="" eligible=0
-    case "$verb" in
-        close|done) i=$((i + 1)) ;;
-        epic) [[ "$sub" == close-eligible ]] || return 0; i=$((i + 2)); eligible=1 ;;
-        *) return 0 ;;
-    esac
+    # Global flags may come before or after the verb; flags that take a
+    # value have it skipped, so it is never read as the verb or an ID.
+    local verb="" args="" eligible=0
     while (( i < n )); do
         case "${w[i]}" in
             -h|--help|--dry-run) return 0 ;;
-            # Flags that take a value: the value is not an ID.
-            -r|--reason|--reason-file|--session) i=$((i + 2)); continue ;;
+            -C|--directory) dir="${w[i+1]:-}"; i=$((i + 2)); continue ;;
+            --directory=*) dir="${w[i]#--directory=}" ;;
+            --actor|--db|--dolt-auto-commit|-r|--reason|--reason-file|--session) i=$((i + 2)); continue ;;
             -*) ;;
-            *) (( eligible )) || args+="${w[i]} " ;;
+            *)
+                if [[ -z "$verb" ]]; then
+                    verb="${w[i]}"
+                    case "$verb" in
+                        close|done) ;;
+                        epic) [[ "${w[i+1]:-}" == close-eligible ]] || return 0; i=$((i + 1)); eligible=1 ;;
+                        *) return 0 ;;
+                    esac
+                elif (( ! eligible )); then
+                    args+="${w[i]} "
+                fi ;;
         esac
         i=$((i + 1))
     done
@@ -180,7 +182,7 @@ _signals_epic_closed() {
         | (.timestamp | epoch) as $t
         | .message.content[]? | select(type == "object" and .type == "tool_use" and .name == "Bash")
         | (.input.command? | strings) as $c | select($c | test("\\bbd\\b"))
-        | "\($n)\t\(.id // "-" | if . == "" then "-" else . end)\t\($t)\t\($c | gsub("\t"; " ") | gsub("\n"; "; "))"' 2>/dev/null \
+        | "\($n)\t\(.id // "-" | if . == "" then "-" else . end)\t\($t)\t\($c | gsub("\t"; " ") | gsub("\n"; "\u001e"))"' 2>/dev/null \
         | tail -n 20 | _signals_tokenize) || true
     [[ -n "$segs" ]] || return 1
     command -v bd >/dev/null 2>&1 || return 1

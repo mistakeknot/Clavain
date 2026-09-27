@@ -254,6 +254,24 @@ EOF
     rm -rf "$STUB_DIR"
 }
 
+@test "lib-signals: global flag values after close are not read as IDs" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(bash_call 'bd close proj-t1 -C proj-ep1 --actor proj-ep1 --db proj-ep1')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    ! grep -q "proj-ep1" "$STUB_DIR/calls"
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: a shell comment is not read, and ends at the newline" {
+    stub_bd; export STUB_EPICS="proj-ep1 proj-ep2"
+    detect_signals "$(bash_call 'bd close proj-t1 # context: proj-ep1')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    ! grep -q "proj-ep1" "$STUB_DIR/calls"
+    detect_signals "$(bash_call $'bd close proj-t1 # context\nbd close proj-ep2')"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
 @test "lib-signals: an epic closed seconds before the call is not goal-completed" {
     stub_bd; export STUB_EPICS="proj-ep1" STUB_CLOSED_AT="2026-09-27T11:59:55Z"
     detect_signals "$(bash_call 'bd close proj-ep1')"
