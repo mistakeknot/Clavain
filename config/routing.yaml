@@ -130,7 +130,6 @@ dispatch:
   model_aliases:
     opus: claude-opus-5-5
     sonnet: claude-sonnet-5
-    gpt-5.6: gpt-5.6-sol
     k3: kimi-code/k3
     kimi/k3: kimi-code/k3
   # Roles are the authoritative dispatch interface. Tier names remain for
@@ -145,11 +144,16 @@ dispatch:
     routine-execution: routine-sol
     deep-execution: deep-astra
     # mk ruling 2026-09-08: Opus validates, Sonnet 5 is the fallback. The
-    # producer is normally gpt-5.6-sol, so any Claude model keeps independence.
+    # producer is normally gpt-6-sol, so any Claude model keeps independence.
     validation: validation-opus
     release-preparation: release-sol
     release-authority: release-authority-main
-    cross-lab-review: crosslab-opus
+    # mk ruling 2026-09-26: cross-lab review runs on GPT-6 Sol at medium, and
+    # GPT-6 Sol at medium replaces GPT-5.6 Sol in every seat that used it,
+    # except the authority seats main-sol and release-authority-sol, which run
+    # at high (roster Rule 6 bars Sol-medium from authority roles; mk-rpnv.17).
+    # cross_lab_first still moves crosslab-opus ahead for OpenAI-produced work.
+    cross-lab-review: crosslab-sol
     # mk ruling 2026-09-25 (mk-42j9.5): relaying, waiting and status reports
     # run on Sonnet. Planning and review keep their frontier seats.
     coordination: coordination-sonnet
@@ -167,9 +171,22 @@ dispatch:
       role: frontier-planning
       backend: codex
       model: gpt-6-astra
-      reasoning_effort: xhigh
+      reasoning_effort: medium
       service_tier: standard
       minimum_codex_version: 0.153.1
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
+      # xhigh -> medium, overriding "calibration cannot relax quality floors" by
+      # mk's own authority — models, reviewer independence and role routing are
+      # unchanged. Mandatory, not advisory (mk confirmed 2026-09-26): (1) this
+      # seat runs at high, not medium, whenever the decision context carries
+      # foundational-invariants or difficult-verification (security, data loss,
+      # core rules); (2) track review/gauge pass rate and defect escapes for 48h
+      # after landing and revert this seat to xhigh (its pre-PR value) if either
+      # regresses. `roles.escalation` (line 142) also resolves to this seat, so
+      # two-strikes capability-failure escalation runs at this same effort.
+      # Neither the effort-by-reason nor the 48h-revert rule is enforced by the
+      # router/dispatch code — both are agent-discipline-only until a real
+      # mechanism lands.
       # planning-opus, not review-opus (mk-9yyt). Chains are walked transitively:
       # while the authoring head pointed at a plan-review profile, every seat added
       # to the review lane also became reachable from planning, and a frontier-
@@ -182,30 +199,42 @@ dispatch:
       role: frontier-planning
       backend: claude
       model: claude-opus-5-5
-      reasoning_effort: high
+      reasoning_effort: medium
       service_tier: standard
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh, which
+      # this seat never ran at), same mandatory escalation/48h-revert terms as
+      # planning-astra above.
       description: Frontier authoring fallback when Astra is unavailable (Opus 5.5 replaced Fable 5.1, mk-3b8z)
     review-astra:
       role: plan-review
       backend: codex
       model: gpt-6-astra
-      reasoning_effort: xhigh
+      reasoning_effort: medium
       service_tier: standard
       minimum_codex_version: 0.153.1
       # The review lane's own Astra seat: same model and effort planning-astra
       # supplied here before mk-9yyt, without re-entering the authoring chain.
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
+      # xhigh -> medium (revert ceiling xhigh, its pre-PR value, same as
+      # planning-astra), same mandatory escalation/48h-revert terms as
+      # planning-astra above.
       description: Cross-lab reviewer for Claude-authored plans
     review-opus:
       role: plan-review
       backend: claude
       model: claude-opus-5-5
-      reasoning_effort: high
+      reasoning_effort: medium
       service_tier: standard
       # Plan-review primary since mk-3b8z (was review-fable). An Opus-authored plan
       # removes this seat by producer_model_conflict and reaches review-astra. When
       # Astra is also out there is no routed reviewer: routing fails closed and the
       # agent applies mk's adversarial orthogonal same-model Opus review, declared
       # (mk-2e1e tracks a routable seat).
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh, which
+      # this seat never ran at), same mandatory escalation/48h-revert terms as
+      # planning-astra above.
       fallbacks: [review-astra]
     pilot-opus:
       role: main-integrator
@@ -222,28 +251,32 @@ dispatch:
     fast:
       role: routine-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: Codex exhaustion must never block development.
       # Sonnet, not Opus — same seat routine-sol already falls back to for this
       # role; scoped/routine work doesn't need the Opus floor.
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): read-only/exploration
+      # tier, high -> medium.
       fallbacks: [routine-sonnet]
       description: Scoped read-only tasks, exploration, verification, quick reviews
     fast-clavain:
       role: scout
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: same seat scout-sol already falls back to.
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): read-only/exploration
+      # tier, high -> medium.
       fallbacks: [scout-sonnet]
       description: Clavain interserve-mode default for read-only/administrative tasks
     deep:
       role: deep-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       # mk ruling 2026-09-25: Opus — deep lanes carry the generative/implementation
       # load deep-astra->deep-sol->deep-opus already trusts to Opus as capacity
@@ -253,8 +286,8 @@ dispatch:
     deep-clavain:
       role: deep-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       fallbacks: [deep-opus]
       description: Clavain interserve-mode high-complexity/research/flux-drive dispatch
@@ -271,8 +304,10 @@ dispatch:
     main-sol:
       role: main-integrator
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      # mk ruling 2026-09-26 (mk-rpnv.17): authority seat, high not medium —
+      # roster Rule 6 bars Sol-medium from authority roles.
+      reasoning_effort: high
       service_tier: standard
       # mk ruling 2026-09-25: Codex exhaustion must never block development —
       # pilot-opus is the same main-integrator role's Claude seat (ci-campaign-pilot
@@ -284,8 +319,8 @@ dispatch:
     scout-sol:
       role: scout
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       fallbacks: [scout-sonnet]
       description: Repository exploration and bounded read-only reconnaissance
@@ -293,8 +328,10 @@ dispatch:
       role: scout
       backend: claude
       model: claude-sonnet-5
-      reasoning_effort: high
+      reasoning_effort: medium
       service_tier: standard
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): read-only/exploration
+      # tier, high -> medium.
       # Not kimi: the Kimi seat runs a toolless agent file (goal 60771535, run
       # 120d9aa1) and scouting is exactly the work that needs repository tools.
       description: Capacity fallback for scout when the Codex lane is out of usage
@@ -309,7 +346,7 @@ dispatch:
     coordination-sol:
       role: coordination
       backend: codex
-      model: gpt-5.6-sol
+      model: gpt-6-sol
       reasoning_effort: medium
       service_tier: standard
       # Codex coordinates through the bb CLI in its shell; it has no in-session
@@ -318,8 +355,8 @@ dispatch:
     routine-sol:
       role: routine-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       fallbacks: [routine-sonnet]
       description: High-volume routine implementation
@@ -346,8 +383,8 @@ dispatch:
     deep-sol:
       role: deep-execution
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       # deep-astra reaches deep-opus transitively through this list. Sol stays
       # ahead of Opus: when only Astra is out, the cheaper Codex seat is correct.
@@ -367,42 +404,54 @@ dispatch:
       role: validation
       backend: claude
       model: claude-opus-5-5
-      reasoning_effort: high
+      reasoning_effort: medium
       service_tier: standard
       # sonnet before sol before kimi: the kimi seat runs with a toolless agent
       # file and can only answer UNRUN for a plan whose Verification must run
       # (goal 60771535, run 120d9aa1).
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-sonnet, validation-sol, validation-kimi]
       description: Independent validator for Codex-produced work (mk ruling 2026-09-08)
     validation-sonnet:
       role: validation
       backend: claude
       model: claude-sonnet-5
-      reasoning_effort: high
+      reasoning_effort: medium
       service_tier: standard
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): validation seat,
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-sol, validation-kimi]
       description: Validation fallback when Opus is unavailable or is the producer
     validation-kimi:
       role: validation
       backend: kimi
       model: kimi-code/k3
-      reasoning_effort: high
+      reasoning_effort: medium
       service_tier: standard
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): validation seat,
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-sol]
       description: Cross-provider validation fallback
     validation-sol:
       role: validation
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): validation seat,
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
       fallbacks: [validation-opus, validation-sonnet]
       description: Codex validation fallback when its resolved model differs from the producer
     release-sol:
       role: release-preparation
       backend: codex
-      model: gpt-5.6-sol
-      reasoning_effort: high
+      model: gpt-6-sol
+      reasoning_effort: medium
       service_tier: standard
       fallbacks: [release-sonnet]
       description: Release packet and documentation preparation
@@ -427,17 +476,29 @@ dispatch:
     release-authority-sol:
       role: release-authority
       backend: main
-      model: gpt-5.6-sol
-      reasoning_effort: xhigh
+      model: gpt-6-sol
+      # mk ruling 2026-09-26 (mk-rpnv.17): authority seat, high not medium.
+      reasoning_effort: high
       service_tier: standard
       description: Main-integrator release authority while Astra access is unavailable
+    crosslab-sol:
+      role: cross-lab-review
+      backend: codex
+      model: gpt-6-sol
+      reasoning_effort: medium
+      service_tier: standard
+      fallbacks: [crosslab-opus]
+      description: Sealed first-pass review by a provider/model other than the producer
     crosslab-opus:
       role: cross-lab-review
       backend: claude
       model: claude-opus-5-5
-      reasoning_effort: high
+      reasoning_effort: medium
       service_tier: standard
-      fallbacks: [validation-kimi, validation-sol]
+      # mk ruling 2026-09-26 (token efficiency, mk-42j9.20): review/planning seat,
+      # high -> medium (revert ceiling high, its pre-PR value — not xhigh), same
+      # mandatory escalation/48h-revert terms as planning-astra above.
+      fallbacks: [validation-kimi]
       description: Sealed first-pass review by a provider/model other than the producer
 
   # Legacy aliases apply only when a requested tier is absent. Executable

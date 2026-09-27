@@ -202,4 +202,4 @@ Phase one from `Sylveste-d3m` is complete and was not repeated. The configured c
 
 ## Rollback
 
-Restore the role mapping to its declared GPT-5.6 Sol fallback. Keep the isolated Astra profile and collected decision/evaluation evidence for diagnosis. Rollback never changes release authority or silently switches direct API clients.
+Restore the role mapping to its declared GPT-6 Sol fallback. Keep the isolated Astra profile and collected decision/evaluation evidence for diagnosis. Rollback never changes release authority or silently switches direct API clients.
