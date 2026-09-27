@@ -293,7 +293,7 @@ $(printf '{"type":"attachment","attachment":{"type":"goal_status","met":true}}')
 # tracker confirms the parent is an epic and the texts say "epic" and "closed".
 @test "a turn that creates a bead under an epic and closes nothing stops cleanly" {
     local stub; stub="$(mktemp -d)"
-    printf '#!/usr/bin/env bash\necho "[{\\"id\\":\\"proj-ep1\\",\\"issue_type\\":\\"epic\\",\\"status\\":\\"closed\\"}]"\n' > "$stub/bd"
+    printf '#!/usr/bin/env bash\necho "[{\\"id\\":\\"proj-ep1\\",\\"issue_type\\":\\"epic\\",\\"status\\":\\"closed\\",\\"closed_at\\":\\"2026-09-27T12:00:00Z\\"}]"\n' > "$stub/bd"
     chmod +x "$stub/bd"
     local create
     create=$(jq -cn --arg c 'cd /tmp && bd create --parent jawnomicon-dv5p --title "Rewrite review tool" --description "Google-only, closed registration"' \
@@ -307,9 +307,9 @@ $(printf '{"type":"attachment","attachment":{"type":"goal_status","met":true}}')
 
 @test "a turn that closes an epic gets the goal-cadence request" {
     local stub; stub="$(mktemp -d)"
-    printf '#!/usr/bin/env bash\necho "[{\\"id\\":\\"proj-ep1\\",\\"issue_type\\":\\"epic\\",\\"status\\":\\"closed\\"}]"\n' > "$stub/bd"
+    printf '#!/usr/bin/env bash\necho "[{\\"id\\":\\"proj-ep1\\",\\"issue_type\\":\\"epic\\",\\"status\\":\\"closed\\",\\"closed_at\\":\\"2026-09-27T12:00:00Z\\"}]"\n' > "$stub/bd"
     chmod +x "$stub/bd"
-    PATH="$stub:$PATH" run run_stop_hook "$(jq -cn '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:"bd close proj-ep1"}}]}}')" "sess-epic-close"
+    PATH="$stub:$PATH" run run_stop_hook "$(jq -cn '{type:"assistant",timestamp:"2026-09-27T11:59:58Z",message:{content:[{type:"tool_use",name:"Bash",input:{command:"bd close proj-ep1"}}]}}')" "sess-epic-close"
     rm -rf "$stub"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Goal-cadence:"* ]]

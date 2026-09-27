@@ -113,9 +113,11 @@ teardown() {
     [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
 }
 
-# A Bash tool call as Claude Code records it.
+# A Bash tool call as Claude Code records it, stamped 2s before the stub
+# tracker's closed_at.
 bash_call() {
-    jq -cn --arg c "$1" --arg id "${2:-toolu_1}" '{type:"assistant",message:{content:[{type:"tool_use",id:$id,name:"Bash",input:{command:$c}}]}}'
+    jq -cn --arg c "$1" --arg id "${2:-toolu_1}" \
+        '{type:"assistant",timestamp:"2026-09-27T11:59:58.000Z",message:{content:[{type:"tool_use",id:$id,name:"Bash",input:{command:$c}}]}}'
 }
 
 # The tool_result Claude Code records for a call.
@@ -125,7 +127,7 @@ tool_result() {
 
 # A bd on PATH that answers `bd show ID... --json` like the real one: the IDs in
 # $STUB_EPICS are epics, the rest tasks; the IDs in $STUB_OPEN are open, the
-# rest closed. Every call is logged.
+# rest closed at $STUB_CLOSED_AT. Every call is logged.
 stub_bd() {
     STUB_DIR="$(mktemp -d)"
     cat > "$STUB_DIR/bd" <<'EOF'
@@ -137,7 +139,7 @@ for id in "$@"; do
     [[ "$id" == -* ]] && continue
     t=task; [[ " $STUB_EPICS " == *" $id "* ]] && t=epic
     st=closed; [[ " ${STUB_OPEN:-} " == *" $id "* ]] && st=open
-    printf '%s{"id":"%s","issue_type":"%s","status":"%s"}' "$sep" "$id" "$t" "$st"; sep=,
+    printf '%s{"id":"%s","issue_type":"%s","status":"%s","closed_at":"%s"}' "$sep" "$id" "$t" "$st" "${STUB_CLOSED_AT:-2026-09-27T12:00:00Z}"; sep=,
 done
 printf ']\n'
 EOF
@@ -169,6 +171,37 @@ EOF
     rm -rf "$STUB_DIR"
 }
 
+@test "lib-signals: closing an epic that was already closed is not goal-completed" {
+    stub_bd; export STUB_EPICS="proj-ep1" STUB_CLOSED_AT="2026-09-20T09:00:00Z"
+    detect_signals "$(bash_call 'false && bd close proj-ep1')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: a call with no timestamp is not goal-completed" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(jq -cn '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:"bd close proj-ep1"}}]}}')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: the newest IDs are kept when there are more than 20" {
+    stub_bd; export STUB_EPICS="proj-ep21"
+    detect_signals "$(bash_call "bd close $(printf 'proj-t%d ' $(seq 1 20)) proj-ep21")"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: a tracker that hangs is abandoned within the budget" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    printf '#!/usr/bin/env bash\nsleep 10\n' > "$STUB_DIR/bd"
+    local start=$SECONDS
+    detect_signals "$(bash_call 'bd close proj-ep1')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    (( SECONDS - start <= 3 ))
+    rm -rf "$STUB_DIR"
+}
+
 @test "lib-signals: quoted IDs, -C and a sixth ID are all read, in one lookup" {
     stub_bd; export STUB_EPICS="proj-ep6"
     detect_signals "$(bash_call 'bd -C /tmp close "proj-t1" proj-t2 proj-t3 proj-t4 proj-t5 '\''proj-ep6'\''')"
@@ -182,6 +215,7 @@ EOF
     detect_signals "$(printf '%s\n' "$(bash_call 'echo bd close proj-ep1')" \
         "$(bash_call 'bd close proj-ep1 --help')" \
         "$(bash_call 'bd epic close-eligible -h')" \
+        "$(bash_call 'bd --help close proj-ep1')" \
         "$(jq -cn '{type:"assistant",message:{content:[{type:"tool_use",name:"Monitor",input:{command:"bd close proj-ep1"}}]}}')")"
     [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
     [[ ! -e "$STUB_DIR/calls" ]]
@@ -235,6 +269,13 @@ EOF
     rm -rf "$STUB_DIR"
 }
 
+@test "lib-signals: goal_status outside an attachment is not goal-completed" {
+    detect_signals '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Other","input":{"type":"goal_status","met":true}}]}}'
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    detect_signals '{"type":"attachment","attachment":{"type":"goal_status","condition":"x","met":true}}'
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+}
+
 @test "lib-signals: prose about an epic closing is not goal-completed" {
     detect_signals '{"type":"assistant","message":{"content":[{"type":"text","text":"Closed the last child, so the epic is now closed."}]}}'
     [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
@@ -253,7 +294,7 @@ EOF
 }
 
 @test "lib-signals: goal-completed does not add to weight ladder alongside other signals" {
-    local transcript=$'Running "git commit -m fix"\n{"type":"goal_status","met":true}'
+    local transcript=$'Running "git commit -m fix"\n{"type":"attachment","attachment":{"type":"goal_status","met":true}}'
     detect_signals "$transcript"
     [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
     [[ "$CLAVAIN_SIGNALS" == *"commit"* ]]

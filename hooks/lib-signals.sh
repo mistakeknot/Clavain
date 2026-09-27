@@ -33,14 +33,24 @@
 [[ -n "${_LIB_SIGNALS_LOADED:-}" ]] && return 0
 _LIB_SIGNALS_LOADED=1
 
-# _signals_timeout_bin — a timeout(1), which macOS lacks unless coreutils is
-# installed. Kept here rather than shared because tests source this file alone.
-_signals_timeout_bin() {
-    local c
-    for c in timeout gtimeout /opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout /usr/bin/timeout; do
-        if command -v "$c" >/dev/null 2>&1; then command -v "$c"; return 0; fi
-    done
-    return 1
+# _signals_deadline <seconds> <command...>
+# Runs a command and kills it after <seconds>. Written in bash because macOS
+# has no timeout(1) unless coreutils is installed. Output goes through a file:
+# a child the kill does not reach (a wrapper script's own children) would
+# otherwise hold the caller's pipe open past the deadline.
+_signals_deadline() {
+    local secs=$1 pid watchdog out rc=0
+    shift
+    out=$(mktemp 2>/dev/null) || return 1
+    "$@" >"$out" &
+    pid=$!
+    ( sleep "$secs"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+    watchdog=$!
+    wait "$pid" || rc=$?
+    kill "$watchdog" 2>/dev/null
+    (( rc == 0 )) && cat "$out"
+    rm -f "$out"
+    return "$rc"
 }
 
 # _signals_bd_segment <segment>
@@ -65,6 +75,7 @@ _signals_bd_segment() {
     i=$((i + 1))
     while (( i < n )) && [[ "${w[i]}" == -* ]]; do
         case "${w[i]}" in
+            -h|--help) return 0 ;;
             -C|--directory) dir="${w[i+1]:-}"; i=$((i + 2)) ;;
             --directory=*) dir="${w[i]#--directory=}"; i=$((i + 1)) ;;
             --actor|--db|--dolt-auto-commit) i=$((i + 2)) ;;
@@ -91,35 +102,49 @@ _signals_bd_segment() {
     fi
 }
 
+# jq: an ISO-8601 time ("2026-09-27T11:46:17.195Z", "...+02:00") as epoch
+# seconds, or -1 when absent or unreadable.
+_SIGNALS_JQ_EPOCH='def epoch: (if type == "string" then
+    (capture("^(?<b>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\\.[0-9]+)?(?<z>Z|[+-][0-9]{2}:?[0-9]{2})$")? // null)
+    else null end) as $m
+  | if $m == null then -1 else
+      (($m.b + "Z") | fromdateiso8601)
+      - (if $m.z == "Z" then 0 else ($m.z | gsub(":"; "")) as $o
+            | ($o[1:3] | tonumber) * 3600 + ($o[3:5] | tonumber) * 60
+            | if $o[0:1] == "-" then -. else . end end)
+    end; '
+
 # _signals_epic_closed <transcript text>
 # Prints the transcript line of the last Bash tool call that closed an epic:
 # `bd close`/`bd done` on an ID, or a real `bd epic close-eligible` (its IDs
-# read from the call's own tool_result). Only IDs the tracker then reports as
-# type epic AND status closed count, so a failed or no-op close does not.
-# Reads only Bash tool_use commands, never prose or tool output text.
+# read from the call's own tool_result). An ID counts only if the tracker now
+# reports it as an epic, closed, with a closed_at no earlier than the call:
+# so a failed close, a close of an epic that was already closed, and
+# `false && bd close` do not count. Reads only Bash tool_use commands, never
+# prose or tool output text.
 #
 # Budget: the Stop hook has 5s. The tracker is asked only when a close ran,
 # once per directory with every ID batched, 1s each, at most 2 directories and
-# 20 IDs. Without a timeout binary it is not asked at all. Every failure
-# answers "no": a missed Next-goal block costs less than a stop blocked for
-# work that did not finish.
+# the newest 20 IDs. Every failure answers "no": a missed Next-goal block
+# costs less than a stop blocked for work that did not finish.
+#
+# Known miss: words are split on whitespace, so `bd -C "/my repo" close x` is
+# not read.
 _signals_epic_closed() {
     command -v jq >/dev/null 2>&1 || return 1
     local calls
-    calls=$(printf '%s\n' "$1" | jq -Rc 'input_line_number as $n | fromjson?
+    calls=$(printf '%s\n' "$1" | jq -Rc "${_SIGNALS_JQ_EPOCH}"'input_line_number as $n | fromjson?
         | select(type == "object" and .type == "assistant")
+        | (.timestamp | epoch) as $t
         | .message.content[]? | select(type == "object" and .type == "tool_use" and .name == "Bash")
         | select((.input.command? | strings | test("\\bbd\\b")))
-        | [$n, (.id // ""), .input.command]' 2>/dev/null) || true
+        | [$n, (.id // ""), .input.command, $t]' 2>/dev/null) || true
     [[ -n "$calls" ]] || return 1
     command -v bd >/dev/null 2>&1 || return 1
-    local tbin
-    tbin=$(_signals_timeout_bin) || return 1
-
-    # Candidate records: "<line>\t<dir>\t<id>".
-    local rec n tid cmd seg dir cd_dir hit verb ids id out cands=""
+    # Candidate records: "<line>\t<dir>\t<id>\t<call epoch>".
+    local rec n tid cmd ts seg dir cd_dir hit verb ids id out cands=""
     while IFS= read -r rec; do
-        n=$(jq -r '.[0]' <<<"$rec") tid=$(jq -r '.[1]' <<<"$rec") cmd=$(jq -r '.[2]' <<<"$rec")
+        n=$(jq -r '.[0]' <<<"$rec") tid=$(jq -r '.[1]' <<<"$rec") cmd=$(jq -r '.[2]' <<<"$rec") ts=$(jq -r '.[3]' <<<"$rec")
         cd_dir=""
         while IFS= read -r seg; do
             if [[ "$seg" =~ ^[[:space:]]*cd[[:space:]]+([^[:space:]]+) ]]; then
@@ -142,24 +167,29 @@ _signals_epic_closed() {
             fi
             for id in $ids; do
                 [[ "$id" =~ ^[A-Za-z][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*-[a-z0-9]+(\.[0-9]+)*$ ]] || continue
-                cands+="$n"$'\t'"$dir"$'\t'"$id"$'\n'
+                cands+="$n"$'\t'"$dir"$'\t'"$id"$'\t'"$ts"$'\n'
             done
         done < <(sed -E 's/(&&|\|\||;|\|)/\n/g' <<<"$cmd")
     done <<<"$calls"
     [[ -n "$cands" ]] || return 1
-    cands=$(printf '%s' "$cands" | head -n 20)
+    cands=$(printf '%s' "$cands" | tail -n 20)
 
-    local dirs closed best=0 lookups=0 line
+    local dirs closed best=0 lookups=0 line at
     dirs=$(cut -f2 <<<"$cands" | sort -u)
     while IFS= read -r dir; do
         (( lookups++ < 2 )) || break
         ids=$(awk -F'\t' -v d="$dir" '$2 == d { print $3 }' <<<"$cands" | sort -u | tr '\n' ' ')
         # shellcheck disable=SC2086  # IDs are validated tokens, split on purpose
-        closed=$( (cd "${dir:-.}" 2>/dev/null && "$tbin" 1 bd show $ids --json 2>/dev/null) \
-            | jq -r '(if type == "array" then .[] else . end)
-                | select(.issue_type == "epic" and .status == "closed") | .id' 2>/dev/null) || true
-        for id in $closed; do
-            line=$(awk -F'\t' -v d="$dir" -v i="$id" '$2 == d && $3 == i { l = $1 } END { print l + 0 }' <<<"$cands")
+        closed=$( (cd "${dir:-.}" 2>/dev/null && _signals_deadline 1 bd show $ids --json 2>/dev/null) \
+            | jq -r "${_SIGNALS_JQ_EPOCH}"'(if type == "array" then .[] else . end)
+                | select(.issue_type == "epic" and .status == "closed")
+                | "\(.id)=\(.closed_at | epoch)"' 2>/dev/null) || true
+        for rec in $closed; do
+            id=${rec%%=*} at=${rec#*=}
+            # 5s of slack: the call is stamped when written, before it runs,
+            # and the tracker may keep another clock.
+            line=$(awk -F'\t' -v d="$dir" -v i="$id" -v at="$at" \
+                '$2 == d && $3 == i && $4 >= 0 && at >= $4 - 5 { l = $1 } END { print l + 0 }' <<<"$cands")
             (( line > best )) && best=$line
         done
     done <<<"$dirs"
@@ -235,7 +265,10 @@ detect_signals() {
     # event, so the hook can tell a Next-goal block written after it from a
     # stale one written for an earlier goal.
     local goal_line epic_line
-    goal_line=$(printf '%s\n' "$text" | grep -n '"type":"goal_status","met":true' | tail -n 1 | cut -d: -f1) || true
+    goal_line=$(printf '%s\n' "$text" | jq -Rr 'input_line_number as $n | fromjson?
+        | select(type == "object" and .type == "attachment"
+            and .attachment.type? == "goal_status" and .attachment.met? == true) | $n' 2>/dev/null \
+        | tail -n 1) || true
     epic_line=$(_signals_epic_closed "$text") || true
     CLAVAIN_GOAL_COMPLETED_LINE=$(( ${goal_line:-0} > ${epic_line:-0} ? ${goal_line:-0} : ${epic_line:-0} ))
     if (( CLAVAIN_GOAL_COMPLETED_LINE > 0 )); then
