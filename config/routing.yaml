@@ -149,7 +149,9 @@ dispatch:
     release-preparation: release-sol
     release-authority: release-authority-main
     # mk ruling 2026-09-26: cross-lab review runs on GPT-6 Sol at medium, and
-    # GPT-6 Sol at medium replaces GPT-5.6 Sol in every seat that used it.
+    # GPT-6 Sol at medium replaces GPT-5.6 Sol in every seat that used it,
+    # except the authority seats main-sol and release-authority-sol, which run
+    # at high (roster Rule 6 bars Sol-medium from authority roles; mk-rpnv.17).
     # cross_lab_first still moves crosslab-opus ahead for OpenAI-produced work.
     cross-lab-review: crosslab-sol
     # mk ruling 2026-09-25 (mk-42j9.5): relaying, waiting and status reports
@@ -274,7 +276,9 @@ dispatch:
       role: main-integrator
       backend: codex
       model: gpt-6-sol
-      reasoning_effort: medium
+      # mk ruling 2026-09-26 (mk-rpnv.17): authority seat, high not medium —
+      # roster Rule 6 bars Sol-medium from authority roles.
+      reasoning_effort: high
       service_tier: standard
       # mk ruling 2026-09-25: Codex exhaustion must never block development —
       # pilot-opus is the same main-integrator role's Claude seat (ci-campaign-pilot
@@ -430,7 +434,8 @@ dispatch:
       role: release-authority
       backend: main
       model: gpt-6-sol
-      reasoning_effort: medium
+      # mk ruling 2026-09-26 (mk-rpnv.17): authority seat, high not medium.
+      reasoning_effort: high
       service_tier: standard
       description: Main-integrator release authority while Astra access is unavailable
     crosslab-sol:
