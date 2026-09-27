@@ -525,38 +525,39 @@ for bad in "$TMP_ROOT/no-such-dir/seat.json" "$TMP_ROOT"; do
   [[ ! -s "$TMP_ROOT/bb.log" && ! -e "$TMP_ROOT/ic.ran" ]] || fail "--seat-out $bad must be rejected before bb or ic runs"
   [[ "$(ls "$ROUTE_SPAWN_RECEIPT_DIR" | wc -l)" == "$before" ]] || fail "--seat-out $bad must not leave a receipt"
 done
-# The recipe's mktemp file exists beforehand: success replaces it, and a failed
-# stdout write leaves the caller's file as it was.
+# The recipe's mktemp file exists beforehand: success replaces it.
 : > "$TMP_ROOT/seat-pre.json"
 run --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-pre.json"
 expect 0 "$OPUS" "--seat-out over an existing file"
 jq -e '.model == "claude-opus-5-5"' "$TMP_ROOT/seat-pre.json" >/dev/null || fail "--seat-out replaces an existing file on success"
+# The seat is replaced before the tuple is printed; a failed print exits
+# non-zero and leaves the (accurate) new seat in place.
 echo OLD > "$TMP_ROOT/seat-keep.json"
 RC=0; bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-keep.json" >/dev/full 2>"$TMP_ROOT/stderr" || RC=$?
-[[ "$RC" != 0 ]] || fail "a failed stdout write must exit non-zero"
-[[ "$(cat "$TMP_ROOT/seat-keep.json" 2>/dev/null)" == OLD ]] || fail "a failed stdout write must leave an existing --seat-out file unchanged"
-rm -f "$TMP_ROOT/seat-new.json"
-RC=0; bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-new.json" >/dev/full 2>"$TMP_ROOT/stderr" || RC=$?
-[[ "$RC" != 0 && ! -e "$TMP_ROOT/seat-new.json" ]] || fail "a failed stdout write must not create the --seat-out file"
-! compgen -G "$TMP_ROOT/.route-spawn-*" >/dev/null || fail "a failed stdout write must not leave temp or backup files"
-# The seat file is in place before the tuple is printed: a seat write that
-# fails after validation exits 3 with empty stdout. The fake ic turns the
-# --seat-out path into a non-empty directory once validation has passed.
-REAL_IC="$(command -v ic)"
-mkdir -p "$TMP_ROOT/swapic" "$TMP_ROOT/swapdir"
-cat > "$TMP_ROOT/swapic/ic" <<SWAPIC
-#!/usr/bin/env bash
-if [[ ! -d "\$SWAP_SEAT" ]]; then rm -f "\$SWAP_SEAT"; mkdir "\$SWAP_SEAT"; touch "\$SWAP_SEAT/keep"; fi
-exec "$REAL_IC" "\$@"
-SWAPIC
-chmod +x "$TMP_ROOT/swapic/ic"
+[[ "$RC" == 3 ]] || fail "a failed stdout write must exit 3, got $RC"
+jq -e '.model == "claude-opus-5-5"' "$TMP_ROOT/seat-keep.json" >/dev/null || fail "the seat is in place before the tuple is printed"
+! compgen -G "$TMP_ROOT/.route-spawn-*" >/dev/null || fail "a failed stdout write must not leave temp files"
+# A failed os.replace onto the seat path exits 3 with empty stdout, before
+# the tuple is printed. sitecustomize makes that one rename raise.
+mkdir -p "$TMP_ROOT/failreplace" "$TMP_ROOT/seatdir"
+cat > "$TMP_ROOT/failreplace/sitecustomize.py" <<'SITE'
+import os
+_replace = os.replace
+def replace(src, dst, *args, **kwargs):
+    if os.path.abspath(dst) == os.path.abspath(os.environ["FAIL_REPLACE"]):
+        raise PermissionError(13, "injected rename failure", str(dst))
+    return _replace(src, dst, *args, **kwargs)
+os.replace = replace
+SITE
 for pre in none file; do
-  seat="$TMP_ROOT/swapdir/seat-$pre.json"
+  seat="$TMP_ROOT/seatdir/seat-$pre.json"
   [[ "$pre" == none ]] || echo OLD > "$seat"
-  RC=0; OUT="$(PATH="$TMP_ROOT/swapic:$PATH" SWAP_SEAT="$seat" bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$seat" 2>"$TMP_ROOT/stderr")" || RC=$?
-  expect 3 "" "a seat write failing after validation ($pre beforehand)"
-  [[ -e "$seat/keep" ]] || fail "a failed seat write must leave the path it could not replace alone ($pre)"
-  ! compgen -G "$TMP_ROOT/swapdir/.route-spawn-*" >/dev/null || fail "a failed seat write must not leave temp or backup files ($pre)"
+  RC=0; OUT="$(PYTHONPATH="$TMP_ROOT/failreplace" FAIL_REPLACE="$seat" bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$seat" 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 3 "" "a failed seat rename ($pre beforehand)"
+  grep -q "injected rename failure" "$TMP_ROOT/stderr" || fail "the injected os.replace failure must be the one reported ($pre)"
+  if [[ "$pre" == none ]]; then [[ ! -e "$seat" ]] || fail "a failed seat rename must not create the seat file"
+  else [[ "$(cat "$seat")" == OLD ]] || fail "a failed seat rename must leave the existing file alone"; fi
+  ! compgen -G "$TMP_ROOT/seatdir/.route-spawn-*" >/dev/null || fail "a failed seat rename must not leave temp files ($pre)"
 done
 
 # N6c: a relative XDG_STATE_HOME is ignored and a symlinked script works.
