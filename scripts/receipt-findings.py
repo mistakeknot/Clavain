@@ -98,8 +98,21 @@ def heading_counts(lines: list[str]) -> dict[str, int | str] | None:
         if re.match(r"^(?:\*\*|__)?\s*:\s*(?:0|none|n/?a)\b", line[match.end():], re.IGNORECASE):
             continue
         # A severity section immediately introducing tagged children is not an
-        # additional finding. Headings otherwise remain the unit of counting.
-        if line.startswith("#") and index + 1 < len(nonempty) and FINDING_HEADING.match(nonempty[index + 1]):
+        # additional finding — but only when the heading carries no text of
+        # its own beyond the tag (e.g. "### P1 findings"). A heading that IS
+        # itself a distinct finding (e.g. "### [P1] leak" followed by another
+        # finding line) must still be counted; otherwise it silently
+        # disappears. Headings otherwise remain the unit of counting.
+        trailing = re.sub(r"^[:\-–—\]]+\s*", "", line[match.end():].strip())
+        is_bare_heading = trailing == "" or re.match(
+            r"(?i)^(?:findings?|items?|issues?)\s*\(?\d*\)?[:.]?$", trailing
+        )
+        if (
+            line.startswith("#")
+            and is_bare_heading
+            and index + 1 < len(nonempty)
+            and FINDING_HEADING.match(nonempty[index + 1])
+        ):
             continue
         severity = next(group for group in match.groups() if group is not None)
         counts[SEVERITY[severity.lower()]] += 1
@@ -111,11 +124,20 @@ def heading_counts(lines: list[str]) -> dict[str, int | str] | None:
 
 def clean_verdict(lines: list[str]) -> bool:
     joined = "\n".join(lines)
-    if re.search(r"\b(?:REVISE|FAIL|REJECT|UNRUN|NEEDS_ATTENTION|WITH-CHANGES)\b", joined, re.IGNORECASE):
+    # This repo's own reviewer vocabulary (skills/interserve-engine/templates/
+    # review-agent.md, commands/clavain-review.md) uses "needs-changes" and
+    # "risky" as verdict values, and both hyphen/underscore/space separators
+    # show up across templates ("PASS WITH CHANGES", "CHANGES_REQUESTED").
+    if re.search(
+        r"\b(?:REVISE|FAIL|REJECT|UNRUN|NEEDS[-_ ]?ATTENTION|NEEDS[-_ ]?CHANGES"
+        r"|CHANGES[-_ ]?REQUESTED|RISKY|WITH[-_ ]?CHANGES)\b",
+        joined,
+        re.IGNORECASE,
+    ):
         return False
-    if re.search(r"^\s*STATUS:\s*pass\s*$", joined, re.IGNORECASE | re.MULTILINE):
+    if re.search(r"^\s*STATUS:\s*(?:pass|safe)\s*$", joined, re.IGNORECASE | re.MULTILINE):
         return True
-    if re.search(r"^\s*VERDICT:\s*(?:CLEAN|PASS)\s*$", joined, re.IGNORECASE | re.MULTILINE):
+    if re.search(r"^\s*VERDICT:\s*(?:CLEAN|PASS|SAFE)\s*$", joined, re.IGNORECASE | re.MULTILINE):
         return True
     final_line = next((line for line in reversed(lines) if line.strip()), "")
     return bool(

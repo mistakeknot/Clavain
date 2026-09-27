@@ -46,8 +46,23 @@ RECHECK_BEAD_JSON=""
 DISPATCH_BEAD_FLAG=""
 DISPATCH_BEAD_FLAG_SET=false
 DISPATCH_BEAD_ENV="${CLAVAIN_BEAD_ID:-}"
-# Receipt bookkeeping is shell-local, including values supplied by the caller.
-# Only the recognized role self-exec below receives this context explicitly.
+# A caller that already exported CLAVAIN_BEAD_ID (e.g. commands/work.md,
+# quality-gates.md, resolve.md, route.md) expects it to keep flowing through
+# to the dispatched worker's own environment — that predates this receipt
+# work and must stay additive. Record that fact before stripping exports.
+if [[ "${CLAVAIN_BEAD_CONTEXT_RESOLVED:-}" == 1 ]]; then
+  # Recognized --role-resolved self-exec child: CLAVAIN_BEAD_ID always
+  # arrives pre-exported via the parent's explicit `env VAR=...` prefix,
+  # which is an implementation detail of the self-exec, not a real external
+  # caller export — trust the flag the parent passed through instead.
+  DISPATCH_BEAD_ID_CALLER_EXPORTED="${DISPATCH_BEAD_ID_CALLER_EXPORTED:-false}"
+elif declare -p CLAVAIN_BEAD_ID 2>/dev/null | grep -q '^declare -x'; then
+  DISPATCH_BEAD_ID_CALLER_EXPORTED=true
+else
+  DISPATCH_BEAD_ID_CALLER_EXPORTED=false
+fi
+# Receipt bookkeeping is otherwise shell-local. Only the recognized role
+# self-exec below receives this context explicitly.
 export -n CLAVAIN_BEAD_ID CLAVAIN_BEAD_SOURCE CLAVAIN_BEAD_CONTEXT_RESOLVED
 BEAD_SOURCE="none"
 CLAVAIN_INTERSERVE_MODE=false
@@ -301,11 +316,14 @@ _resolve_dispatch_bead() {
     fi
     CLAVAIN_BEAD_ID="$DISPATCH_BEAD_FLAG"
     BEAD_SOURCE="flag"
-  elif [[ "$ROLE_RESOLVED" == true && "${CLAVAIN_BEAD_CONTEXT_RESOLVED:-}" == 1 ]] \
-    && _valid_dispatch_bead "$DISPATCH_BEAD_ENV" \
-    && [[ "${CLAVAIN_BEAD_SOURCE:-}" =~ ^(flag|env|interstat-session|invalid-env-then-interstat-session)$ ]]; then
+  elif [[ "$ROLE_RESOLVED" == true && "${CLAVAIN_BEAD_CONTEXT_RESOLVED:-}" == 1 ]]; then
+    # The parent already resolved bead context for this dispatch and passed
+    # it through explicitly (see the --role-resolved self-exec below). Trust
+    # its label unconditionally, including "none" or an invalid-* label with
+    # an empty id — re-deriving here would lose exactly the honesty the
+    # invalid-* labels exist to preserve.
     CLAVAIN_BEAD_ID="$DISPATCH_BEAD_ENV"
-    BEAD_SOURCE="$CLAVAIN_BEAD_SOURCE"
+    BEAD_SOURCE="${CLAVAIN_BEAD_SOURCE:-none}"
   elif [[ -n "$DISPATCH_BEAD_ENV" ]] && _valid_dispatch_bead "$DISPATCH_BEAD_ENV"; then
     CLAVAIN_BEAD_ID="$DISPATCH_BEAD_ENV"
     BEAD_SOURCE="env"
@@ -712,6 +730,7 @@ _dispatch_role_profile() {
     resolved_args=(
       env "CLAVAIN_BEAD_ID=$CLAVAIN_BEAD_ID" "CLAVAIN_BEAD_SOURCE=$CLAVAIN_BEAD_SOURCE"
       CLAVAIN_BEAD_CONTEXT_RESOLVED=1
+      "DISPATCH_BEAD_ID_CALLER_EXPORTED=$DISPATCH_BEAD_ID_CALLER_EXPORTED"
       bash "${BASH_SOURCE[0]}"
       --role-resolved
       --role "$role"
@@ -1120,6 +1139,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 _resolve_dispatch_bead
+# Purely additive means: don't newly export what dispatch resolved for its
+# own bookkeeping (CLAVAIN_BEAD_SOURCE, CLAVAIN_BEAD_CONTEXT_RESOLVED stay
+# shell-local), but don't take away a export the caller already had — restore
+# it, now carrying the resolved value, only for the process tree the model
+# seat below inherits from.
+if [[ "$DISPATCH_BEAD_ID_CALLER_EXPORTED" == true ]]; then
+  export CLAVAIN_BEAD_ID
+fi
 
 if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
   if [[ -n "$VIA" || ( "$ENGINE" != codex && "$ENGINE" != claude ) ]]; then

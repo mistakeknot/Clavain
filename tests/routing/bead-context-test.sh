@@ -67,8 +67,30 @@ for source in flag env session; do
     -C "$TEST_WORK" hi > "$TMP_ROOT/$source.log" 2>&1 \
     || { cat "$TMP_ROOT/$source.log"; exit 1; }
   check "$source survives self-exec" receipt_has "$bead" "$provenance"
-  check "$source absent from model seat environment" test "$(sort -u "$TEST_ENV_LOG")" = 'unset|unset|unset'
-  check "$source does not override nested session" receipt_has child-bead interstat-session
+  # Only CLAVAIN_BEAD_ID itself may reach the model seat, and only when the
+  # caller already had it exported (the "env" source, via `env VAR=... cmd`).
+  # Bookkeeping (source/resolved) must never leak; a --bead flag or an
+  # interstat-session file never exported anything for the caller to keep.
+  if [[ "$source" == env ]]; then
+    check "$source id reaches model seat, bookkeeping does not" \
+      test "$(sort -u "$TEST_ENV_LOG")" = 'env-bead|unset|unset'
+  else
+    check "$source absent from model seat environment" test "$(sort -u "$TEST_ENV_LOG")" = 'unset|unset|unset'
+  fi
+  if [[ "$source" == env ]]; then
+    # A genuinely caller-exported CLAVAIN_BEAD_ID is real shell state: it flows
+    # to every descendant process the worker spawns, including a nested
+    # dispatch.sh call, exactly as it did before cdaa910 introduced bead
+    # resolution at all. Item 6 requires restoring that passthrough for the
+    # worker's own environment; there is no env-var-scoping trick that gives
+    # the worker the export while hiding it from a grandchild process the
+    # worker itself launches, since both read the same process environment.
+    # A nested dispatch therefore correctly reports the inherited env bead
+    # here, not its own interstat-session mapping.
+    check "env inherited by nested dispatch (accepted item-6 tradeoff)" receipt_has env-bead env
+  else
+    check "$source does not override nested session" receipt_has child-bead interstat-session
+  fi
 done
 for value in 'not valid!' ''; do
   : > "$TEST_RECEIPTS"; : > "$TEST_ENV_LOG"
@@ -90,5 +112,21 @@ DISPATCH_SESSION_ID=invalid bash "$ROOT/scripts/dispatch.sh" --role deep-executi
   -C "$TEST_WORK" hi > "$TMP_ROOT/session-invalid.log" 2>&1
 check 'invalid session warns' grep -q 'invalid interstat-session bead' "$TMP_ROOT/session-invalid.log"
 check 'invalid session records no bead' receipt_has '' invalid-interstat-session
+
+# The --role-resolved self-exec must preserve the parent's invalid-env label
+# rather than silently re-deriving a different, less-honest one.
+: > "$TEST_RECEIPTS"
+CLAVAIN_BEAD_ID='invalid env!' DISPATCH_SESSION_ID=outer-no-session \
+  bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TEST_WORK" hi \
+  > "$TMP_ROOT/env-invalid-no-session.log" 2>&1
+check 'invalid env with no session preserves invalid-env label' receipt_has '' invalid-env
+
+: > "$TEST_RECEIPTS"
+CLAVAIN_BEAD_ID='invalid env!' DISPATCH_SESSION_ID=invalid \
+  bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TEST_WORK" hi \
+  > "$TMP_ROOT/env-invalid-and-session-invalid.log" 2>&1
+check 'invalid env then invalid session preserves compound label' \
+  receipt_has '' invalid-env-then-invalid-interstat-session
+
 echo "RESULT: $passed passed, $failed failed"
 [[ "$failed" == 0 ]]

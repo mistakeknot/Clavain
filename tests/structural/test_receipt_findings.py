@@ -153,6 +153,32 @@ def test_non_clean_body_never_fabricates_zero(tmp_path, body):
     assert all(result[key] is None for key in ("P0", "P1", "P2", "P3", "total"))
 
 
+@pytest.mark.parametrize("body", [
+    "Verdict: needs-changes\n- fix x\n\nAPPROVE",
+    "STATUS: needs-attention\n\npass",
+    "Verdict: PASS WITH CHANGES\npass",
+    "CHANGES_REQUESTED\nSTATUS: pass",
+])
+def test_repo_verdict_vocabulary_never_fabricates_zero(tmp_path, body):
+    result = findings(tmp_path, body)
+    assert result["source"] == "unknown"
+    assert all(result[key] is None for key in ("P0", "P1", "P2", "P3", "total"))
+
+
+def test_tagged_heading_followed_by_another_finding_still_counts(tmp_path):
+    result = findings(tmp_path, "### [P1] leak\n### [P2] race")
+    assert result["P1"] == 1
+    assert result["P2"] == 1
+    assert result["total"] == 2
+
+
+def test_tagged_heading_followed_by_bullet_finding_still_counts(tmp_path):
+    result = findings(tmp_path, "### [P0] SQL injection\n- [P1] also in admin path")
+    assert result["P0"] == 1
+    assert result["P1"] == 1
+    assert result["total"] == 2
+
+
 @pytest.mark.parametrize("heading", [
     "### Findings: 3 (2 High, 1 Low)",
     "## High-risk items reviewed",
