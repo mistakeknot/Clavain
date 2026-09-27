@@ -245,6 +245,44 @@ EOF
     rm -rf "$STUB_DIR"
 }
 
+@test "lib-signals: an epic named in close reason text is not read as an ID" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(printf '%s\n' "$(bash_call 'bd close proj-t1 --reason "superseded by proj-ep1"')" \
+        "$(bash_call "bd close -r 'see proj-ep1' --session proj-ep1 proj-t2")")"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    ! grep -q "proj-ep1" "$STUB_DIR/calls"
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: an epic closed seconds before the call is not goal-completed" {
+    stub_bd; export STUB_EPICS="proj-ep1" STUB_CLOSED_AT="2026-09-27T11:59:55Z"
+    detect_signals "$(bash_call 'bd close proj-ep1')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: -C with a quoted directory containing a space is read" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    mkdir -p "$STUB_DIR/my repo"
+    detect_signals "$(bash_call "bd -C \"$STUB_DIR/my repo\" close proj-ep1")"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: a transcript full of bd calls is read within the budget" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    local i records=""
+    for i in $(seq 1 40); do
+        records+="$(bash_call "bd close proj-a$i; bd close proj-b$i && bd close proj-c$i | cat; bd close proj-d$i || bd close proj-e$i" "toolu_$i")"$'\n'
+    done
+    records+="$(bash_call 'bd close proj-ep1' toolu_last)"
+    local start=$SECONDS
+    detect_signals "$records"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    (( SECONDS - start <= 2 ))
+    rm -rf "$STUB_DIR"
+}
+
 @test "lib-signals: bd not run as the command, or run for help, is not read" {
     stub_bd; export STUB_EPICS="proj-ep1"
     detect_signals "$(printf '%s\n' "$(bash_call 'echo bd close proj-ep1')" \

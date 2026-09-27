@@ -55,39 +55,53 @@ _signals_deadline() {
     return "$rc"
 }
 
-# _signals_split_segments < command
-# Prints each simple command of a shell line on its own line, splitting on
-# && || ; | and newlines outside quotes, so `echo "x; bd close y"` stays one
-# segment. Escapes and $(...) are not modelled.
-_signals_split_segments() {
-    awk '{
-        out = ""; q = ""
-        for (i = 1; i <= length($0); i++) {
-            c = substr($0, i, 1)
-            if (q != "") { if (c == q) q = ""; out = out c; continue }
-            if (c == "\"" || c == "\047") { q = c; out = out c; continue }
-            # The & of 2>&1, >&2 and &> is a redirection, not a separator.
-            if (c == "&" && (substr($0, i - 1, 1) ~ /[<>]/ || substr($0, i + 1, 1) == ">")) { out = out c; continue }
-            if (c == ";" || c == "|" || c == "&") {
-                out = out "\n"
-                if (substr($0, i + 1, 1) == c) i++
+# _signals_tokenize
+# Reads "<line>\t<tool id>\t<epoch>\t<command>" records and prints one record
+# per simple command: the same three fields, then its words joined by \037.
+# Commands split on && || ; | & and newlines, words on blanks, both only
+# outside quotes (the caller turns newlines into ;); quotes are removed and a backslash escapes the next
+# character, so `echo "x; bd close y"` is one command whose words are
+# echo and "x; bd close y". The & of 2>&1, >&2 and &> is not a separator.
+# $(...) and heredocs are not modelled.
+_signals_tokenize() {
+    awk -F'\t' '
+    function flush_word() { if (have) { seg = seg (nw++ ? "\037" : "") word }; word = ""; have = 0 }
+    function flush_seg() { flush_word(); if (nw) print head seg; seg = ""; nw = 0 }
+    {
+        head = $1 "\t" $2 "\t" $3 "\t"
+        cmd = $0; sub(/^[^\t]*\t[^\t]*\t[^\t]*\t/, "", cmd)
+        seg = ""; nw = 0; word = ""; have = 0; q = ""
+        for (i = 1; i <= length(cmd); i++) {
+            c = substr(cmd, i, 1)
+            if (q != "") {
+                if (c == q) q = ""
+                else if (c == "\\" && q == "\"" && i < length(cmd)) { word = word substr(cmd, ++i, 1) }
+                else word = word c
                 continue
             }
-            out = out c
+            if (c == "\\" && i < length(cmd)) { word = word substr(cmd, ++i, 1); have = 1; continue }
+            if (c == "\"" || c == "\047") { q = c; have = 1; continue }
+            if (c == "&" && (substr(cmd, i - 1, 1) ~ /[<>]/ || substr(cmd, i + 1, 1) == ">")) { word = word c; have = 1; continue }
+            if (c == ";" || c == "|" || c == "&") {
+                flush_seg()
+                if ((c == "|" || c == "&") && substr(cmd, i + 1, 1) == c) i++
+                continue
+            }
+            if (c == " " || c == "\t") { flush_word(); continue }
+            word = word c; have = 1
         }
-        print out
+        flush_seg()
     }'
 }
 
-# _signals_bd_segment <segment>
-# If a shell segment runs bd as its command, print "<dir>^_<verb>^_<args>"
-# (unit separator, since a tab in IFS would swallow an empty dir):
-# verb is close (args are its IDs) or eligible (a real `bd epic close-eligible`).
-# `echo bd close x`, help and dry runs print nothing.
+# _signals_bd_segment <word>...
+# If the words of a simple command run bd as the command, print
+# "<dir>^_<verb>^_<ids>" (unit separators): verb is close, with the words it
+# was given as IDs, or eligible for a real `bd epic close-eligible`. Help and
+# dry runs print nothing, and so does `echo bd close x`.
 _signals_bd_segment() {
-    local -a w
-    read -r -a w <<<"$1" || true
-    local i=0 n=${#w[@]} dir=""
+    local -a w=("$@")
+    local i=0 n=$# dir=""
     # Assignments and wrappers that still run bd as the command.
     while (( i < n )); do
         case "${w[i]}" in
@@ -108,23 +122,22 @@ _signals_bd_segment() {
             *) i=$((i + 1)) ;;
         esac
     done
-    local verb="${w[i]:-}" sub="${w[i+1]:-}" a args="" eligible=0
+    local verb="${w[i]:-}" sub="${w[i+1]:-}" args="" eligible=0
     case "$verb" in
         close|done) i=$((i + 1)) ;;
         epic) [[ "$sub" == close-eligible ]] || return 0; i=$((i + 2)); eligible=1 ;;
         *) return 0 ;;
     esac
-    for (( ; i < n; i++ )); do
-        a="${w[i]}"
-        case "$a" in
+    while (( i < n )); do
+        case "${w[i]}" in
             -h|--help|--dry-run) return 0 ;;
+            # Flags that take a value: the value is not an ID.
+            -r|--reason|--reason-file|--session) i=$((i + 2)); continue ;;
             -*) ;;
-            # Every word, since flags may come first; the ID pattern later
-            # drops --reason text, and the tracker drops what is not an issue.
-            *) (( eligible )) || args+="${a//[\"\']/} " ;;
+            *) (( eligible )) || args+="${w[i]} " ;;
         esac
+        i=$((i + 1))
     done
-    dir="${dir//[\"\']/}"
     if (( eligible )); then printf '%s\037eligible\037\n' "$dir"
     elif [[ -n "$args" ]]; then printf '%s\037close\037%s\n' "$dir" "$args"
     fi
@@ -146,65 +159,64 @@ _SIGNALS_JQ_EPOCH='def epoch: (if type == "string" then
 # Prints the transcript line of the last Bash tool call that closed an epic:
 # `bd close`/`bd done` on an ID, or a real `bd epic close-eligible` (its IDs
 # read from the call's own tool_result). An ID counts only if the tracker now
-# reports it as an epic, closed, with a closed_at no earlier than the call:
-# so a failed close, a close of an epic that was already closed, and
-# `false && bd close` do not count, nor a failed close of an epic someone
-# else closed minutes later. Reads only Bash tool_use commands, never
-# prose or tool output text.
+# reports it as an epic, closed, with a closed_at from 1s before the call (the
+# rounding of two clocks to the second) to 120s after it. So a failed close,
+# a close of an epic that was already closed, and `false && bd close` do not
+# count. Reads only Bash tool_use commands, never prose or tool output text.
 #
-# Budget: the Stop hook has 5s. The tracker is asked only when a close ran,
-# once per directory with every ID batched, 1s each, at most 2 directories and
-# the newest 50 IDs. Every failure answers "no": a missed Next-goal block
-# costs less than a stop blocked for work that did not finish.
+# Budget: the Stop hook has 5s. One jq pass and one awk pass read the newest
+# 20 bd calls; the tracker is asked only when a close ran, once per directory
+# with the newest 50 IDs batched, 1s each, at most 2 directories. Every
+# failure answers "no": a missed Next-goal block costs less than a stop
+# blocked for work that did not finish.
 #
-# Known misses, both quiet: words are split on whitespace, so
-# `bd -C "/my repo" close x` is not read; and a failed close followed within
-# 120s by someone else's close of the same epic counts.
+# Known miss, quiet: a failed close followed within 120s by someone else's
+# close of the same epic counts.
 _signals_epic_closed() {
     command -v jq >/dev/null 2>&1 || return 1
-    local calls
-    calls=$(printf '%s\n' "$1" | jq -Rc "${_SIGNALS_JQ_EPOCH}"'input_line_number as $n | fromjson?
+    local segs
+    segs=$(printf '%s\n' "$1" | jq -Rr "${_SIGNALS_JQ_EPOCH}"'input_line_number as $n | fromjson?
         | select(type == "object" and .type == "assistant")
         | (.timestamp | epoch) as $t
         | .message.content[]? | select(type == "object" and .type == "tool_use" and .name == "Bash")
-        | select((.input.command? | strings | test("\\bbd\\b")))
-        | [$n, (.id // ""), .input.command, $t]' 2>/dev/null) || true
-    [[ -n "$calls" ]] || return 1
+        | (.input.command? | strings) as $c | select($c | test("\\bbd\\b"))
+        | "\($n)\t\(.id // "-" | if . == "" then "-" else . end)\t\($t)\t\($c | gsub("\t"; " ") | gsub("\n"; "; "))"' 2>/dev/null \
+        | tail -n 20 | _signals_tokenize) || true
+    [[ -n "$segs" ]] || return 1
     command -v bd >/dev/null 2>&1 || return 1
+
     # Candidate records: "<line>\t<dir>\t<id>\t<call epoch>".
-    local rec n tid cmd ts seg dir cd_dir hit verb ids id out cands=""
-    while IFS= read -r rec; do
-        n=$(jq -r '.[0]' <<<"$rec") tid=$(jq -r '.[1]' <<<"$rec") cmd=$(jq -r '.[2]' <<<"$rec") ts=$(jq -r '.[3]' <<<"$rec")
-        cd_dir=""
-        while IFS= read -r seg; do
-            if [[ "$seg" =~ ^[[:space:]]*cd[[:space:]]+([^[:space:]]+) ]]; then
-                cd_dir="${BASH_REMATCH[1]//[\"\']/}"
-                continue
-            fi
-            hit=$(_signals_bd_segment "$seg")
-            [[ -n "$hit" ]] || continue
-            IFS=$'\037' read -r dir verb ids <<<"$hit"
-            [[ -n "$dir" ]] || dir="$cd_dir"
-            dir="${dir/#\~/$HOME}"
-            if [[ "$verb" == eligible ]]; then
-                [[ -n "$tid" ]] || continue
-                # close-eligible lists what it closed as "  - <id>: <title>".
-                out=$(printf '%s\n' "$1" | jq -Rr --arg t "$tid" 'fromjson?
-                    | select(type == "object" and .type == "user")
-                    | .message.content[]? | select(type == "object" and .type == "tool_result" and .tool_use_id == $t)
-                    | .content | if type == "array" then (map(.text? // empty) | join("\n")) else tostring end' 2>/dev/null) || true
-                ids=$(sed -nE 's/^[[:space:]]*-[[:space:]]+([A-Za-z][A-Za-z0-9_.-]*):.*/\1/p' <<<"$out" | tr '\n' ' ')
-            fi
-            for id in $ids; do
-                [[ "$id" =~ ^[A-Za-z][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*-[a-z0-9]+(\.[0-9]+)*$ ]] || continue
-                cands+="$n"$'\t'"$dir"$'\t'"$id"$'\t'"$ts"$'\n'
-            done
-        done < <(_signals_split_segments <<<"$cmd")
-    done <<<"$calls"
+    local n tid ts words key="" cd_dir="" hit dir verb ids id out cands=""
+    local -a w
+    while IFS=$'\t' read -r n tid ts words; do
+        [[ "$n:$tid" == "$key" ]] || { key="$n:$tid"; cd_dir=""; }
+        IFS=$'\037' read -r -a w <<<"$words"
+        if [[ "${w[0]:-}" == cd ]]; then
+            cd_dir="${w[1]:-}"
+            continue
+        fi
+        hit=$(_signals_bd_segment "${w[@]}")
+        [[ -n "$hit" ]] || continue
+        IFS=$'\037' read -r dir verb ids <<<"$hit"
+        [[ -n "$dir" ]] || dir="$cd_dir"
+        dir="${dir/#\~/$HOME}"
+        if [[ "$verb" == eligible ]]; then
+            # close-eligible lists what it closed as "  - <id>: <title>".
+            out=$(printf '%s\n' "$1" | jq -Rr --arg t "$tid" 'fromjson?
+                | select(type == "object" and .type == "user")
+                | .message.content[]? | select(type == "object" and .type == "tool_result" and .tool_use_id == $t)
+                | .content | if type == "array" then (map(.text? // empty) | join("\n")) else tostring end' 2>/dev/null) || true
+            ids=$(sed -nE 's/^[[:space:]]*-[[:space:]]+([A-Za-z][A-Za-z0-9_.-]*):.*/\1/p' <<<"$out" | tr '\n' ' ')
+        fi
+        for id in $ids; do
+            [[ "$id" =~ ^[A-Za-z][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*-[a-z0-9]+(\.[0-9]+)*$ ]] || continue
+            cands+="$n"$'\t'"$dir"$'\t'"$id"$'\t'"$ts"$'\n'
+        done
+    done <<<"$segs"
     [[ -n "$cands" ]] || return 1
     cands=$(printf '%s' "$cands" | tail -n 50)
 
-    local dirs closed best=0 lookups=0 line at
+    local dirs closed best=0 lookups=0 line at rec
     dirs=$(cut -f2 <<<"$cands" | sort -u)
     while IFS= read -r dir; do
         (( lookups++ < 2 )) || break
@@ -216,11 +228,8 @@ _signals_epic_closed() {
                 | "\(.id)=\(.closed_at | epoch)"' 2>/dev/null) || true
         for rec in $closed; do
             id=${rec%%=*} at=${rec#*=}
-            # Closed from 5s before the call (it is stamped when written, and
-            # the tracker may keep another clock) to 120s after it: later than
-            # that, someone else closed it after this call failed.
             line=$(awk -F'\t' -v d="$dir" -v i="$id" -v at="$at" \
-                '$2 == d && $3 == i && $4 >= 0 && at >= $4 - 5 && at <= $4 + 120 { l = $1 } END { print l + 0 }' <<<"$cands")
+                '$2 == d && $3 == i && $4 >= 0 && at >= $4 - 1 && at <= $4 + 120 { l = $1 } END { print l + 0 }' <<<"$cands")
             (( line > best )) && best=$line
         done
     done <<<"$dirs"
