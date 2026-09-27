@@ -44,6 +44,8 @@ if "--prompt-file" in args:
     record["prompt_file"] = sys.stdin.read() if path == "-" else open(path).read()
 with open(os.environ["FAKE_BB_LOG"], "a") as log:
     log.write(json.dumps(record) + "\n")
+if os.environ.get("FAKE_BB_FAIL"):
+    sys.exit(1)
 """
 
 FAKE_ROUTE_SPAWN = r"""#!/usr/bin/env python3
@@ -102,9 +104,10 @@ def _harness(tmp_path):
     return env, scratch
 
 
-def _run(snippet, env, **extra):
+def _run(snippet, env, errexit=False, **extra):
     env = dict(env, **extra)
-    return subprocess.run(["bash", "-c", snippet], env=env, capture_output=True, text=True, timeout=30)
+    shell = ["bash", "-ec" if errexit else "-c", snippet]
+    return subprocess.run(shell, env=env, capture_output=True, text=True, timeout=30)
 
 
 def _bb_calls(env):
@@ -151,6 +154,15 @@ def test_coordinator_spawn_recipe_runs_verbatim(rel, tmp_path):
 
 
 @pytest.mark.parametrize("rel", GUIDES)
+def test_coordinator_spawn_recipe_cleans_up_when_spawn_fails_under_errexit(rel, tmp_path):
+    snippet = _recipe(rel, "--role coordinator-seat", "bb thread spawn")
+    env, scratch = _harness(tmp_path)
+    _run(snippet, env, errexit=True, FAKE_BB_FAIL="1")
+    assert len(_bb_calls(env)) == 1, f"{rel}: the spawn must have been attempted"
+    assert not any(scratch.iterdir()), f"{rel}: the mktemp seat file must be removed when bb fails under set -e"
+
+
+@pytest.mark.parametrize("rel", GUIDES)
 def test_self_handoff_carries_the_seat_to_every_generation(rel, tmp_path):
     spawn = _recipe(rel, "--role coordinator-seat", "bb thread spawn")
     handoff = _recipe(rel, "bb handoff --self", "$seat_json")
@@ -177,6 +189,21 @@ def test_self_handoff_without_a_seat_does_not_guess(rel, tmp_path):
     env, _ = _harness(tmp_path)
     _run(handoff, env, seat_json="")
     assert _bb_calls(env) == [], f"{rel}: no handoff without a Seat block"
+
+
+@pytest.mark.parametrize("field", ["provider", "model", "reasoning_level"])
+@pytest.mark.parametrize("value", ["", None, "missing"])
+@pytest.mark.parametrize("rel", GUIDES)
+def test_self_handoff_refuses_an_incomplete_seat(rel, field, value, tmp_path):
+    handoff = _recipe(rel, "bb handoff --self", "$seat_json")
+    env, _ = _harness(tmp_path)
+    seat = dict(SEAT)
+    if value == "missing":
+        del seat[field]
+    else:
+        seat[field] = value
+    _run(handoff, env, seat_json=json.dumps(seat))
+    assert _bb_calls(env) == [], f"{rel}: no handoff when the Seat {field} is {value!r}"
 
 
 @pytest.mark.parametrize("rel", GUIDES)

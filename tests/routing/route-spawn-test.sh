@@ -538,6 +538,26 @@ RC=0; bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_
 rm -f "$TMP_ROOT/seat-new.json"
 RC=0; bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-new.json" >/dev/full 2>"$TMP_ROOT/stderr" || RC=$?
 [[ "$RC" != 0 && ! -e "$TMP_ROOT/seat-new.json" ]] || fail "a failed stdout write must not create the --seat-out file"
+! compgen -G "$TMP_ROOT/.route-spawn-*" >/dev/null || fail "a failed stdout write must not leave temp or backup files"
+# The seat file is in place before the tuple is printed: a seat write that
+# fails after validation exits 3 with empty stdout. The fake ic turns the
+# --seat-out path into a non-empty directory once validation has passed.
+REAL_IC="$(command -v ic)"
+mkdir -p "$TMP_ROOT/swapic" "$TMP_ROOT/swapdir"
+cat > "$TMP_ROOT/swapic/ic" <<SWAPIC
+#!/usr/bin/env bash
+if [[ ! -d "\$SWAP_SEAT" ]]; then rm -f "\$SWAP_SEAT"; mkdir "\$SWAP_SEAT"; touch "\$SWAP_SEAT/keep"; fi
+exec "$REAL_IC" "\$@"
+SWAPIC
+chmod +x "$TMP_ROOT/swapic/ic"
+for pre in none file; do
+  seat="$TMP_ROOT/swapdir/seat-$pre.json"
+  [[ "$pre" == none ]] || echo OLD > "$seat"
+  RC=0; OUT="$(PATH="$TMP_ROOT/swapic:$PATH" SWAP_SEAT="$seat" bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$seat" 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 3 "" "a seat write failing after validation ($pre beforehand)"
+  [[ -e "$seat/keep" ]] || fail "a failed seat write must leave the path it could not replace alone ($pre)"
+  ! compgen -G "$TMP_ROOT/swapdir/.route-spawn-*" >/dev/null || fail "a failed seat write must not leave temp or backup files ($pre)"
+done
 
 # N6c: a relative XDG_STATE_HOME is ignored and a symlinked script works.
 unset ROUTE_SPAWN_RECEIPT_DIR
