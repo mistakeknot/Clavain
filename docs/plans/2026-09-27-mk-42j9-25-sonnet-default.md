@@ -85,6 +85,22 @@ Evidence was collected read-only against `bb.db` (opened `mode=ro`), Aleph `feat
 
 ---
 
+## Phases (mk, 2026-09-27)
+
+- **Phase 2a (authorized):** Tasks 1–3 only, all Clavain.
+  - routing.yaml roles, tiers, profiles and aliases;
+  - `scripts/route-spawn.sh`, with open findings 1 and 8 fixed;
+  - spawner guidance.
+
+  The rollout arm is a stub that always returns `control`. 2a ships behind lane B's scorecard baseline, and the lane-A coordinator authorizes landing.
+- **Phase 2b (deferred):** the rollout-arm state, `rollout-arm.sh`, Tasks 4–9, and open findings 2–7 and 9. It needs the D5 lineage key agreed with lane B (thr_mds6migd85) first.
+- **mk's decisions:**
+  - D1: spawners first; Aleph defaults wait for 2b.
+  - D2b: option (a), mk re-pins.
+  - D3: slug-keyed profiles through the ic overlay.
+  - D4: restore the prior execution, never write overrides (2b).
+  - D5: lineage as the cohort key, agreed with lane B before 2b.
+
 ## Design decisions (recommendations; D1–D5 need mk)
 
 **D1. Where the "unpinned default" lives.** In three places, in order of leverage:
@@ -351,20 +367,28 @@ A regression triggers Task 9 for that lineage only.
   - N6: lineage key agreed with lane B (D5).
   - N10: treatment successors re-resolve.
 
-## Open findings after the delta re-review (stopping rule reached; unfixed)
+## Open findings after the delta re-review, split by phase
 
 - **Round-2 verdicts.**
   - **Astra** (dispatch f80c3ff7, 650k/7.2k tokens): REJECT.
   - **Opus 5.5** (declared same-model): APPROVE_WITH_CHANGES.
-- **Resolved:** 12 of the 18 round-1 findings, by both reviewers' account. A second fix round needs coordinator authorization.
-- **Phase 2 cannot start until these are fixed:**
+- **Resolved:** 12 of the 18 round-1 findings.
 
-1. **P1, both reviewers. Treatment re-resolution drops governed roles.** D2's rule sends every unpinned successor through `lane`, including unpinned coordinators (After Them) and Astra/Opus review or planning lanes. Fix: record each thread's governed role at spawn (receipt), and re-resolve only role `lane`. Coordinator and governed-role successors carry forward.
-2. **P1, both. The treatment tuple has no writer.** Fix: `rollout-arm.sh set … treatment` resolves `main-session` once and stores the tuple and its `policy_hash` in the rollout state. Quilan reads it, and it is refreshed on each release.
-3. **P1 (Astra) / P2 (Opus). Cross-provider rollback.** A treatment lane on the `main-sol` fallback cannot be told back to Claude. Fix: track the actual selections, and flag those threads for handoff or re-spawn on the prior provider.
-4. **P1, Astra. Retiring arms at stage 2 erases earlier `reverted` exceptions.** Fix: keep reverted entries and their prior tuples until they are explicitly cleared.
-5. **P1, Astra. Whole-change rollback does not restore the server fallback default.** Fix: snapshot and restore it.
-6. **P2, Opus. Rollback tells wake idle threads**, and every child turn-end wakes its parent. Fix: steer running threads only; apply to idle ones on their next natural turn.
-7. **P3, Opus. `thread-send.ts:559-573` rewrites an existing pin** when a non-thread sender passes a differing `--model`. Fix: re-check the pin before each tell, or send with a sender thread id. Correct fact 1.
-8. **P3, Opus. A campaign profile silently overrides `coordination`.** Fix: that conflict exits 3.
-9. **Astra, PARTIAL.** Exercise the rollback before treatment starts (make it a stage-1 precondition). Explicit UI creates in new projects still produce unlocked defaults (Aleph Task 7 scope).
+**Fixed inside Phase 2a:**
+
+1. **P1, both reviewers. Treatment re-resolution drops governed roles.**
+   - `route-spawn.sh` applies a lineage arm **only** to role `lane`.
+   - `coordination` and every governed role (planning, frontier-planning, plan-review, validation, cross-lab-review, escalation, deep-execution) ignore `--lineage` and never re-route.
+   - In 2a the arm lookup is a stub that always returns `control`; 2b plugs in the rollout state (see Task 2).
+   - For 2b, Quilan successors carry forward, except threads whose receipt records role `lane`.
+8. **P3, Opus. Campaign profile over `coordination`.** When `CLAVAIN_POLICY_PROFILE` is set and a project profile also applies to role `coordination`, `route-spawn.sh` exits 3 (fail closed), and never silently skips the project profile. Other roles keep campaign precedence with the campaign scope preserved.
+
+**Deferred to Phase 2b.** Each must be fixed, with one delta re-review, before 2b is authorized:
+
+2. **P1. The treatment tuple has no writer.** `rollout-arm.sh set … treatment` resolves `main-session` once and stores the tuple and its `policy_hash`; it is refreshed on each release.
+3. **P1/P2. Cross-provider rollback.** Track the actual selections; flag `main-sol` fallback threads for handoff or re-spawn.
+4. **P1. Retiring arms erases `reverted` exceptions.** Keep them until explicitly cleared.
+5. **P1. Whole-change rollback misses the server fallback default.** Snapshot and restore it.
+6. **P2. Rollback tells wake idle threads.** Steer running threads only.
+7. **P3. A non-thread tell with a differing `--model` rewrites an existing pin** (`thread-send.ts:559-573`). Re-check the pin, or send with a sender id. Correct fact 1.
+9. **PARTIAL.** Exercise the rollback before treatment starts. UI creates in new projects produce unlocked defaults (Aleph Task 7).
