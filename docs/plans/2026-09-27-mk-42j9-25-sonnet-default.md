@@ -21,6 +21,8 @@ requirements:
 - mainly at every spawner, which must stop hardcoding Opus;
 - secondarily in bb's per-project execution defaults, for threads created with no model.
 
+Static policy (roles, tiers, per-project coordination profiles) lives in routing.yaml and ships through a Clavain release. **Rollout state** (which lineage is in the control or treatment arm, and the prior execution tuple to restore) lives in a host-local runtime file that `route-spawn.sh` reads. The automatic rollback therefore never needs a commit or a release (fix round 1: A1, N4, N5).
+
 **Tech Stack:** YAML policy + Go `ic` (unchanged), bash/python Clavain scripts, TypeScript Quilan plugin (`bb-plugin-handoff`), TypeScript Aleph server/CLI.
 
 **Spec:** the mk-42j9.25 and mk-42j9.17 descriptions and notes; the mk-42j9.5 notes (reversal table); mk-42j9.33 (scorecard).
@@ -64,7 +66,8 @@ Evidence was collected read-only against `bb.db` (opened `mode=ro`), Aleph `feat
 
 ## Global Constraints
 
-- Pinned threads are never changed by this work. mk applies pins with `bb thread update <id> --model … --reasoning-level medium`. No task writes `threads.model_override` except Task 6's copy of an existing pin to that pin's own rotation successor (Decision D2).
+- Pinned threads are never changed by this work. mk applies pins with `bb thread update <id> --model … --reasoning-level medium`. **No task writes `threads.model_override`, for any thread.** Carry-forward and rollback use explicit spawn or turn inputs only, which bb's last-turn stickiness then holds. Spawn/tell flags are not pins (fact 2).
+- Every routing failure fails closed. When `route-spawn.sh` exits non-zero, the spawn does not happen and the spawner reports it. There is no silent default and no hardcoded model.
 - The mk-42j9.5-reversal table stays exactly as recorded. Opus 5.5 medium: Aleph, Clavain, Autarch, After Them, bbOps, Shadow Work, Quilan, SylvesteOps, Nartopo. Sonnet 5 medium: Autosigil, Rakes, Uncrancher, Cujgel, AgMoDB, Linsenkasten.
 - Opus and Astra are reached only through routing.yaml roles: planning/frontier-planning, plan-review, validation, cross-lab-review, escalation, deep-execution, and the per-project `coordination` seats. Every spawner resolves model **and effort** through `ic route dispatch --role`; none hardcodes them.
 - Quilan code is implemented by the Quilan coordinator (thr_n8twxx4psd). Aleph code is implemented by the Aleph coordinator, who gates its release; release and switch go through the publisher thread (thr_d8mtvmpmer). Lane A edits Clavain only.
@@ -75,85 +78,105 @@ Evidence was collected read-only against `bb.db` (opened `mode=ro`), Aleph `feat
 ## Review Focus
 
 - **Sticky last turn.** A thread that last ran Opus stays on Opus after a default flips (fact 1.3). The treatment cohort is therefore **new** threads only. Existing unpinned threads are neither migrated nor counted as treatment.
-- **Unpinned successors carried as pins.** If carry-forward pins the successor of an *unpinned* source, the successor freezes on the old model and rollback cannot reach it. Task 6 pins only when the source was pinned; otherwise it passes spawn flags only.
+- **Pinned coordinators across rotation.** A successor of a pinned coordinator runs the pinned tuple through flags and stays unpinned (D2). Whether mk re-pins successors or authorizes pin inheritance is open decision D2b.
 - **Cross-provider successors.** When the successor provider differs, the source effort may not exist on the target model. Carry-forward drops the effort to the target model's default and records the drop, rather than failing the spawn.
 - **Campaign profile collision.** Only one `--policy-profile` applies. A `ci-campaign-pilot` (scope `mk-ag2s`) resolution inside a project with a project profile keeps the campaign profile, and the receipt records the skip.
-- **Receipt schema drift.** If the `ic` output keys change, `route-spawn.sh` exits non-zero. The spawner then falls back to carry-forward or to no model flag, and **never** to a hardcoded Opus.
+- **Receipt schema drift.** If the `ic` output keys change, `route-spawn.sh` exits non-zero and the spawn stops (fail closed). Quilan rotation, which never calls `ic` at rotation time, carries the source forward.
 
 ---
 
-## Design decisions (recommendations; D1–D4 need mk)
+## Design decisions (recommendations; D1–D5 need mk)
 
 **D1. Where the "unpinned default" lives.** In three places, in order of leverage:
-1. **Spawners.** Coordinators' lane spawns and handoffs resolve `main-session` or a governed role through Clavain, instead of `--model claude-opus-5-5` (fact 5). Clavain owns the guidance; each coordinator follows it.
-2. **bb `project_execution_defaults`,** for threads created with no model. The write needs a setter that does not exist yet, which is Aleph Task 7. mk (or the Quilan re-pin actor, D4) applies it, and Clavain never writes `bb.db`.
-3. **Not changed:** the Claude Code catalog default, which is not ours to set. Aleph's last-turn stickiness is also left alone, because changing it alters bb semantics for all users; that is an open option for mk.
+1. **Spawners.** Coordinators' lane spawns resolve role `lane` through Clavain, instead of `--model claude-opus-5-5` (fact 5). Clavain owns the guidance; each coordinator follows it.
+2. **bb project defaults,** for threads created with no model. This needs Aleph Task 7:
+   - a setter;
+   - a **managed/locked** flag, so UI creates stop overwriting the row (`project-execution-defaults.ts:113-129`);
+   - a **server-level fallback** for projects with no row, used instead of the catalog default.
 
-Clavain routing.yaml records the desired default as role `main-session`, and a read-only reconciler reports drift.
+   mk applies stage flips. The automatic actor (D4) writes only dedicated-project rows.
+3. **Not changed:** the Claude Code catalog default and Aleph's last-turn stickiness.
 
-**D2. Pin carry-forward.** When the source has `model_override` set, the successor gets the same override (model and effort). When the source is unpinned, the successor gets the source's live model and effort as spawn flags only, and stays unpinned. This is the only automated override write, and it propagates mk's own pin to the same logical coordinator. mk should confirm it.
+`route-spawn.sh` reads the policy for spawners, and a read-only reconciler reports drift in bb defaults.
 
-**D3. The per-project routing mechanism, keyed by logical project and not by bb project (fact 4).** Reuse `ic`'s existing profile overlay, with no `ic` change:
-- `reasoning.profiles.project-<slug>: {scope: "project:<slug>", roles: {...}}` for each project that deviates from the fleet default.
-- `reasoning.project_profiles: {<slug>: project-<slug>}` lists which slugs have one.
-- `reasoning.project_aliases: {<bb project id>: <slug>}` maps dedicated bb projects to a slug. `proj_personal` has **no** alias, so its threads name their slug explicitly.
-- A Clavain wrapper, `scripts/route-spawn.sh --project <slug|bb project id>`, resolves the slug, passes `--policy-profile`, and sets `scope` in the decision context. The receipt's `policy_profile` names the profile.
-- The slug source for a spawner:
-  - for a coordinator, its Quilan marking field `project` (Task 6);
-  - for a worker lane, the spawning coordinator's slug, passed explicitly;
-  - otherwise the alias, and failing that, the fleet default.
+**D2. Carry-forward, with no pin writes.**
+- Every successor (rotation, `--replace`, compact, failover) gets the source's resolved model and effort as **explicit spawn flags**. bb stickiness keeps them, so the successor runs the same tuple without a pin.
+- Where a Quilan **alternate decision** fires (rotation headroom or failover), the alternate's model wins and the effort drops to the target default.
+- **Treatment lineages** (N10): an unpinned successor re-resolves `route-spawn.sh --role lane` instead of carrying forward, so F1 converges. Everywhere else, it carries forward.
+
+**D2b (mk).** A pinned coordinator's successor is unpinned, although it runs the same tuple. So after rotation, mk's pinned list stops matching bb state. The options:
+- (a) mk re-pins successors with `bb thread update`, prompted by a Quilan notice;
+- (b) mk explicitly authorizes Quilan to copy the source's own pin to its successor (an Aleph spawn option), with the ownership contract revised to say so.
+
+Recommend (a) until rotation frequency makes it burdensome.
+
+**D3. Per-project routing, keyed by logical project and not by bb project (fact 4).** Use `ic`'s existing profile overlay, with no `ic` change:
+- `reasoning.profiles.project-<slug>: {scope: "project:<slug>", roles: {coordination: coordination-opus}}` for each of the 9 Opus coordinators.
+- `reasoning.project_profiles: {<slug>: project-<slug>}`.
+- `reasoning.project_aliases: {<bb project id>: <slug>}` for dedicated bb projects. `proj_personal` has no alias.
+- `route-spawn.sh --project <slug|id>` resolves the slug and chooses the effective profile **before** it touches the context. An existing `CLAVAIN_POLICY_PROFILE` wins and keeps its own scope. The project is recorded separately in the receipt (A8).
+- `--project` is mandatory for role `coordination`. There is no silent fleet default for a coordinator.
 
 Rejected alternatives:
-- Keying on bb project id cannot tell the Clavain coordinator from the Quilan coordinator.
-- Per-project overlay files through `CLAVAIN_ROUTING_POLICY` fork the policy hash and drift.
-- A new `ic --project` flag is an intercore change that collides with lane C; it can be a follow-up bead if mk prefers it.
+- keying on bb project id, which cannot separate the Personal coordinators;
+- per-project policy files, which fork the hash;
+- a new `ic --project` flag, which is lane C's code (possible follow-up).
 
-**D4. What "automatic re-pin on regression" writes.** On a scorecard regression for cohort P:
-- The spawner side reverts by a policy change: remove P's `main-session` treatment entry. That is a Clavain commit, which the re-pin actor proposes and the lane-A coordinator lands.
-- The bb-default side is restored by the Quilan re-pin actor to the prior value recorded in `project_profiles_prior`.
+**D4. Automatic "re-pin" means restoring the prior execution, never writing overrides.** F5's "re-pin" is read as "return the regressed lineage to its prior model"; mk should confirm. On a lane-B `regressed` verdict for lineage L, the Quilan actor does four things:
+1. Sets L's arm to `reverted` in the runtime rollout state. `route-spawn.sh --role lane` then resolves L's recorded prior tuple.
+2. For each live unpinned thread in L whose last execution is the treatment tuple, sends `bb thread tell <id> --model <prior> --reasoning-level <prior>` with a one-line rollback notice. This is explicit turn input: it becomes sticky and is not a pin (A3).
+3. Restores a bb project default only when the project is **dedicated to L** (all its lineages are L). It never writes `proj_personal` or any other shared project (A2).
+4. Records a receipt.
 
-It never touches `threads.model_override`. mk must authorize Quilan as the automatic writer of project defaults.
+mk must authorize Quilan as the writer of (1)–(3).
+
+**D5. Lineage is the cohort key.** A lineage is Quilan's `coordinatorId` (it survives rotation) plus every thread that lineage spawns. Lane B's scorecard (mk-42j9.33, currently keyed by project) and the bead→lineage attribution (assignee or actor → coordinatorId) must be agreed with lane B **before** stage-0 baselining (N6).
 
 **Where each part lands.**
 
 | Part | Owner | Tasks |
 |---|---|---|
-| routing.yaml roles, tiers, profiles, aliases; `route-spawn.sh`; reconciler; spawner guidance; docs; tests | Clavain (lane A) | 1–5 |
-| Carry-forward, coordinator `--model/--reasoning-level/--project`, fitted receipt schema, re-pin actor | Quilan coordinator | 6, 9 |
-| Project-default setter; spawn-time pin option; override read in SDK | Aleph coordinator | 7 |
-| Scorecard metrics, cohort thresholds, regression verdict | lane B (mk-42j9.33) | consumed in 8 |
-| Stage approvals, project-default flips before Task 9 exists, coordinator pins | mk | 8 |
+| routing.yaml roles/tiers/profiles/aliases; `route-spawn.sh`; rollout-state schema and `rollout-arm.sh`; reconciler; spawner guidance; docs; tests | Clavain (lane A) | 1–5 |
+| Carry-forward, coordinator execution flags, fitted receipt schema, rollback actor, lineage id lookup | Quilan coordinator | 6, 9 |
+| Project-default setter, managed/locked rows, server fallback default | Aleph coordinator | 7 |
+| Scorecard metrics, lineage key, thresholds, verdict JSON | lane B (mk-42j9.33) | consumed in 8, 9 |
+| Stage approvals, Clavain release/publication, shared-project default flips, coordinator pins | mk | 8 |
 
 ## Must-Haves
 
 **Truths**
-- A worker lane spawned per the Task 3 guidance by a treatment coordinator runs `claude-sonnet-5` at `medium`, unpinned.
-- `route-spawn.sh --role coordination --project clavain` prints `claude-code claude-opus-5-5 medium` plus a receipt path.
-  - `--project autosigil` and `--project proj_3ktdvx76vj` (alias) print `claude-code claude-sonnet-5 medium`.
-  - An unlisted project gets the fleet default.
-- `route-spawn.sh --role main-session` prints `claude-code claude-sonnet-5 medium` for every slug.
-- A rotation successor of a pinned Opus-medium coordinator is pinned Opus medium, and a successor of an unpinned Sonnet thread is unpinned Sonnet.
-- A regression verdict on a treatment cohort restores its prior defaults within one Quilan evaluation cycle, and a receipt records it.
+- In a treatment lineage, `route-spawn.sh --role lane --lineage L` gives `claude-code claude-sonnet-5 medium`. In a control lineage it gives the status-quo `lane` tier. In a reverted lineage it gives L's recorded prior tuple.
+- `route-spawn.sh --role coordination --project clavain` prints `claude-code claude-opus-5-5 medium`. `--project autosigil` and `--project proj_3ktdvx76vj` print Sonnet 5 medium. Omitting `--project` exits 2.
+- `route-spawn.sh --role plan-review` without `--producer-identity` exits non-zero, and nothing is spawned.
+- Every successor runs its source's tuple, or the Quilan alternate's, and no `model_override` changes.
+- A regressed verdict for lineage L changes L's arm, L's live threads' next turns and L's dedicated defaults within one Quilan cycle. It does not change any other lineage or any shared project default. There is no release in the loop.
 
 **Artifacts**
-- `config/routing.yaml`: role `main-session`; tiers `main-sonnet`, `main-sol`, `coordination-opus`; `reasoning.profiles.project-*`; `reasoning.project_profiles`, `project_aliases`, `project_profiles_prior`.
-- `scripts/route-spawn.sh`: role + project → `<bb-provider> <model> <effort>` + receipt.
-- `scripts/project-defaults-reconcile.py`: read-only drift and exposure report.
-- Tests: `tests/routing/route-spawn-test.sh`, `project-profiles-test.sh`, `project-defaults-reconcile-test.sh`; a structural no-hardcoded-Opus-spawn test.
+- `config/routing.yaml`: roles `main-session` and `lane`; tiers `main-sonnet`, `main-sol`, `lane-status-quo`, `coordination-opus`; `reasoning.profiles.project-*`, `project_profiles`, `project_aliases`.
+- `scripts/route-spawn.sh`; `scripts/rollout-arm.sh`; the rollout-state schema `schemas/rollout-state.schema.json`.
+- `scripts/project-defaults-reconcile.py`.
+- Tests: `tests/routing/route-spawn-test.sh`, `project-profiles-test.sh`, `rollout-arm-test.sh`, `project-defaults-reconcile-test.sh`; a structural no-hardcoded-Opus-spawn test.
 
 **Key Links**
-- Spawner → `route-spawn.sh` → `ic route dispatch --policy-profile` → bb spawn flags.
-- Quilan rotation → source override → successor override (D2).
-- Scorecard verdict (lane B) → re-pin actor → policy entry and bb default → reconciler.
+- Spawner → `route-spawn.sh` (arm lookup) → `ic route dispatch` → `bb thread spawn --provider --model --reasoning-level`.
+- Quilan rotation → source's resolved tuple → successor flags.
+- Lane-B verdict → Quilan actor → rollout state + `bb thread tell --model` + dedicated defaults → reconciler.
 
 ## Acceptance Criteria
 
-1. The new routing tests pass. The routing, structural and shell suites show no new failures against the recorded baseline.
-2. All 15 coordinators in the mk-42j9.5 table resolve `coordination` to the table's model at `medium` through `route-spawn.sh --project <slug>`, and the test asserts all 15.
-3. `main-session` resolves Sonnet 5 medium, and its capacity fallback is `gpt-5.6-sol` medium, never Opus.
-4. Quilan tests cover four cases: pinned to pinned, unpinned to unpinned (no override write), cross-provider effort drop, and marking precedence.
-5. The shadow reconciler report exists for at least 2 cohorts before any treatment starts.
-6. Every stage transition in Task 8 cites a lane-B verdict artifact, and rollback is exercised once on a synthetic regression.
+1. The new tests pass. The routing, structural and shell suites show no new failures against the recorded baseline.
+2. All 15 coordinators in the table resolve `coordination` correctly by slug and by alias, and the test asserts all 15.
+3. `main-session` resolves Sonnet 5 medium, and its fallback chain never includes Opus.
+4. Quilan tests cover:
+   - carry-forward on rotation, `--replace`, compact and failover;
+   - an alternate beating carry-forward;
+   - the cross-provider effort drop;
+   - no override write in any path;
+   - pin beats marking;
+   - `--clear-execution`;
+   - a stale marking being ignored.
+5. Before stage 0 is declared, the Clavain release carrying Tasks 1–3 is installed on every coordinator host, and each host's receipt `policy_hash` equals the committed hash.
+6. Rollback is exercised on a synthetic regression, with one regressed and one healthy lineage both inside `proj_personal`. Only the regressed lineage changes.
 
 ---
 
@@ -161,128 +184,169 @@ It never touches `threads.model_override`. mk must authorize Quilan as the autom
 
 **Files:** Modify `config/routing.yaml`. Test `tests/routing/project-profiles-test.sh` (new).
 
-- Tier `main-sonnet`: role `main-session`, backend claude, `claude-sonnet-5`, `medium`, standard, `fallbacks: [main-sol]`. Tier `main-sol` (`gpt-5.6-sol`, medium). There is no Opus fallback: an outage must not upgrade the default.
-- Tier `coordination-opus`: role `coordination`, `claude-opus-5-5`, `medium`, `fallbacks: [coordination-sonnet]`.
-- `dispatch.roles.main-session: main-sonnet`. Keep `coordination: coordination-sonnet` as the fleet default; the 6 Sonnet coordinators need no profile.
-- 9 profiles `project-<slug>`, each with `scope: "project:<slug>"` and `roles: {coordination: coordination-opus}`, for aleph, clavain, autarch, after-them, bbops, shadow-work, quilan, sylvesteops and nartopo.
-- `project_profiles` lists those 9. `project_aliases` maps each dedicated bb project to its slug, including the 6 Sonnet projects so `--project <bb id>` works. `project_profiles_prior: {}`.
-- Take the ids read-only from `bb project list --json` and cross-check them against each coordinator thread's `project_id`, then verify them live before commit. A coordinator whose bb project is shared (for example `proj_personal`) gets no alias. Names alone are ambiguous. As checked live on 2026-09-27, `After-Them` is `proj_2apc9fag87`, while the After Them coordinator runs in `After-Them-rust` `proj_fsrj27djw2`, and the Rakes coordinator runs in `rotnb` `proj_sy6myvvmq2`. Both ids get aliases, and the test asserts each one.
+- Tier `main-sonnet`: role `main-session`, claude, `claude-sonnet-5`, medium, `fallbacks: [main-sol]`. Tier `main-sol`: `gpt-5.6-sol`, medium. There is no Opus fallback.
+- Role `lane` → tier `lane-status-quo`: `claude-opus-5-5`, medium, `fallbacks: [main-sonnet]`. This is today's de facto lane spawn, recorded as policy so the control arm is explicit and governed (N4). It flips to `main-sonnet` only at stage 2 keep.
+- Tier `coordination-opus`: `claude-opus-5-5`, medium, `fallbacks: [coordination-sonnet]`. The fleet `coordination` stays `coordination-sonnet`.
+- The 9 profiles, `project_profiles`, and `project_aliases`: verify ids live against each coordinator thread's `project_id`. Names are ambiguous. As checked live on 2026-09-27, `After-Them` is `proj_2apc9fag87` but the After Them coordinator runs in `After-Them-rust` `proj_fsrj27djw2`, and the Rakes coordinator runs in `rotnb` `proj_sy6myvvmq2`.
 
 **Tests first:**
-- Every `project_profiles` value names a profile whose `scope == "project:"+slug`.
-- Every alias targets a slug from the 15-row table.
-- No profile maps `main-session` to an Opus or Astra tier.
-- `ic --json route dispatch --role=coordination --policy-profile=project-clavain` with context `scope=project:clavain` returns `claude-opus-5-5` / `medium` / `policy_profile=project-clavain`. The same call without a profile returns Sonnet.
+- Each profile's scope is `project:<slug>`.
+- Each alias targets a table slug.
+- No profile maps `main-session` or `lane` to Astra.
+- `ic` resolves `coordination` with `--policy-profile=project-clavain` and scope `project:clavain` to Opus medium, and without a profile to Sonnet.
+- If `ic` rejects `:` in scope, the test fails, and scope becomes `project-<slug>`.
 
-**Run:** `bash tests/routing/project-profiles-test.sh`. Expected: FAIL before, PASS after.
+### Task 2: `scripts/route-spawn.sh` and `scripts/rollout-arm.sh` (Clavain; supersedes `coordinator-model.sh`)
 
-### Task 2: `scripts/route-spawn.sh` (Clavain; supersedes `coordinator-model.sh`)
+**`route-spawn.sh`**
+- Usage: `route-spawn.sh --role <role> [--project <slug|id>] [--lineage <coordinatorId>] [--producer-identity <id>] [--context-file <json>]`.
+- `--project` is required for `coordination`. `--lineage` is required for `lane`. `--producer-identity` is required for the roles `ic` demands it for (`plan-review`, `validation`, `cross-lab-review`), and is forwarded to `ic` (A5).
+- **Arm lookup** for `lane`: read `${XDG_STATE_HOME:-$HOME/.local/state}/clavain/rollout/mk-42j9-25.json`.
+  - `treatment` → resolve `main-session`.
+  - `reverted` → print the recorded `prior` tuple; no `ic` call.
+  - `control`, or absent → resolve `lane`.
+- **Profile selection** (A8): pick the effective profile first. An existing `CLAVAIN_POLICY_PROFILE` wins and its context scope is untouched. Otherwise use the project profile, with its scope written into a temporary copy of the context.
+- `available_models`: populated from `bb pool status --json` when available; otherwise omitted, and the receipt notes that fallbacks were not evaluated (N7).
+- Output: `<bb-provider> <model> <effort>` on stdout. The receipt goes under `${ROUTE_SPAWN_RECEIPT_DIR:-$XDG_STATE_HOME/clavain/route-spawn}/` and records the `ic` output, slug, profile decision, arm, lineage and policy hash.
+- Exit codes: 0 ok; 2 usage; 3 resolution failure, with empty stdout and **fail closed**.
 
-**Files:** Create `scripts/route-spawn.sh`. Test `tests/routing/route-spawn-test.sh`.
-
-- Usage: `route-spawn.sh --role <role> [--project <slug|bb project id>] [--context-file <json>]`.
-- Resolve the alias, then the slug, then the profile, with `python3` + PyYAML; confirm the dependency is present during implementation. Merge `scope` into a temporary copy of the context and run `ic --json route dispatch` with `--policy-profile` when one applies.
-- If `CLAVAIN_POLICY_PROFILE` is already set, keep it and record `project_profile_skipped` in the receipt.
-- Print `<bb-provider> <model> <effort>`. Write the receipt JSON (ic output plus slug and profile decision) under `${ROUTE_SPAWN_RECEIPT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/route-spawn}/`.
-- Map backend `codex→codex` and everything else to `claude-code`, with the model/effort allowlist regex.
-- **Failure:** exit 3 with empty stdout. Callers carry forward or omit flags. This removes `coordinator-model.sh`'s hardcoded Sonnet fallback and its Opus ban.
+**`rollout-arm.sh get|set <lineage> <control|treatment|reverted> [--prior provider,model,effort] [--verdict <path>]`**
+- Writes atomically under `flock`, validated against `schemas/rollout-state.schema.json`.
+- Used by mk or the lane-A coordinator for stage moves, and by the Quilan actor for `reverted`.
+- The state file is host-local. Each coordinator host holds its own copy, and the stage checklist verifies it on every host.
 
 **Tests first:**
-- The 15-row table by slug and by alias.
-- An unlisted project.
-- `main-session`.
-- `ic` missing or a bad policy exits 3 with empty stdout.
-- Campaign precedence.
+- the 15-row table by slug and by alias;
+- missing `--project` or `--lineage`;
+- a missing producer identity for `plan-review`;
+- same-producer exclusion;
+- `ic` missing or a bad policy gives 3 with empty stdout;
+- campaign + project: `ci-campaign-pilot` with scope `mk-ag2s` resolves and records the project;
+- each arm, including `reverted` without `ic`;
+- a concurrent `set`.
 
 ### Task 3: spawner guidance (Clavain)
 
-**Files:** `skills/dispatching-parallel-agents/SKILL.md` (full and compact coordinator sections), `docs/canon/reasoning-routing-operations.md` (new subsection "Spawning bb threads"), and the handoff command doc if it is on main; otherwise record that the coordburn branch must adopt this.
+**Files:** `skills/dispatching-parallel-agents/SKILL.md` (full and compact coordinator sections), `docs/canon/reasoning-routing-operations.md` § "Spawning bb threads", and the handoff command doc if it is on main (otherwise note on mk-42j9.12 that coordburn must adopt it).
 
 **Rules:**
-- A worker lane spawned as a bb thread resolves `main-session`, which is Sonnet 5 medium.
-- A lane whose job is frontier planning or review resolves `planning`, `plan-review` or `validation`, with `--producer-identity` where required.
-- `--model` and `--reasoning-level` both come from `route-spawn.sh --project <coordinator slug>`.
-- A self-rotation of a pinned coordinator passes no model; Quilan carries the pin (Task 6).
-- If `route-spawn.sh` fails, spawn with no model flag and report it; never hardcode Opus.
+- Worker lanes use `route-spawn.sh --role lane --lineage <own coordinatorId> --project <own slug>` → `bb thread spawn --provider P --model M --reasoning-level E`.
+- Frontier lanes use `planning`, or `plan-review` / `validation` with `--producer-identity` taken from the producer's receipt.
+- Pinned coordinators' self-handoffs pass no model; Quilan carries forward.
+- On a non-zero exit: do not spawn, and report.
+- The guidance is arm-neutral. Until a lineage is set to `treatment`, `lane` resolves the status quo, so landing the guidance does not contaminate the controls (N4).
 
-**Test first:** a structural test that fails on any `bb thread spawn` / `bb handoff` line under `skills/ commands/ hooks/ docs/canon/` carrying a literal Opus or Fable model id.
+**Test first:** a structural test failing on a literal Opus or Fable model id in any `bb thread spawn` / `bb handoff` line under `skills/ commands/ hooks/ docs/canon/`.
 
 ### Task 4: `scripts/project-defaults-reconcile.py` (Clavain, read-only)
 
-- It reads `project_execution_defaults` (`bb.db` `mode=ro`, or the HTTP read route when `BB_SERVER` is set) and compares it with the policy's desired `main-session` value per bb project.
-- It reports exposure: the count of unpinned threads by last-turn model, per bb project and per spawning coordinator lineage (join `threads.model_override IS NULL` with the last `client/turn/requested`). This is the cohort-exposure input lane B needs, and it corrects the sidebar-pin confusion (fact 2).
+- It compares bb defaults (`bb.db` read-only, or the HTTP read route) against the stage's intended values, and flags UI-create overwrites (A4).
+- It reports exposure per lineage: unpinned threads by last-turn model, and threads whose last turn differs from their lineage's arm.
 - It never writes.
 
-**Tests first:** a fixture SQLite database with 3 projects and 6 threads (pinned and unpinned, sticky Opus) gives the expected drift and exposure JSON.
+**Tests first:** a fixture DB with 3 projects and 6 threads (pinned, unpinned, sticky Opus, and two lineages in one project).
 
 ### Task 5: docs and bead records (Clavain)
 
-- Add `reasoning-routing-operations.md` § "Per-project routing": profiles, aliases, slug sources, campaign precedence and rollback. The short canon gets one line at most.
-- Note on mk-42j9.12 that `coordinator-model.sh` is superseded by `route-spawn.sh --role coordination`.
+- `reasoning-routing-operations.md` § "Per-project routing and rollout arms".
+- Note on mk-42j9.12 that `coordinator-model.sh` is superseded.
 
-### Task 6: Quilan carry-forward and coordinator override (Quilan coordinator implements)
+### Task 6: Quilan carry-forward and coordinator execution flags (Quilan coordinator implements)
 
-Behavior specification only; Quilan chooses the code. Target the live tree (Quilan-live / main); the dormant checkpoint path stays Quilan's experiment.
+This is a behavior spec on the live tree (Quilan-live / main). The checkpoint path stays Quilan's experiment.
 
-1. **Rotation, `--compact --replace`, plain `--replace` handoff, failover.** Carry forward the source's resolved model and effort. Same provider: both. Cross provider: model per the rotation decision, and effort drops to the target default with the drop logged. If the source is pinned, the successor gets the same override through Task 7's spawn option. There is never an implicit fall to the project or catalog default for a replacement (closes fact 7).
-2. **`coordinator enable --model <m> --reasoning-level <e> --project <slug>` (mk-42j9.17).**
-   - The flags are stored on the marking.
-   - Precedence: marking override > source pin > source live execution.
-   - Optional `--route-role coordination`: run Clavain `route-spawn.sh` **once, at enable time**, and store the result and receipt path, so Quilan stays `ic`-free per rotation.
-3. **`routing-receipt.ts`.** Fit the schema to real snake_case `ic` output (fixture: `.clavain/decisions/mk-rpnv.2-route.json` plus a fresh sample with `policy_profile`). Use it only for the item-2 receipt. A parse failure leaves the marking without an override (carry-forward) and never reaches the catalog default.
+1. **Carry-forward** (D2) on rotation, plain and non-compact `--replace`, `--compact --replace`, and failover.
+   - Explicit `--provider/--model/--reasoning-level` from the source's resolved execution. The implicit fall to the project or catalog default is closed (fact 7).
+   - The Quilan alternate decision beats carry-forward, with a cross-provider effort drop.
+   - **No `model_override` write.**
+   - When the source was pinned, post a notice to mk's coordinator channel so mk can re-pin (D2b option a).
+   - For a treatment lineage, an unpinned successor re-resolves via the arm, per the recorded tuple Quilan reads from the rollout state; no `ic` call.
+2. **`coordinator enable --model <m> --reasoning-level <e> [--route-receipt <path>]` and `--clear-execution`** (mk-42j9.17, N1).
+   - The coordinator's own session resolves the tuple first with `route-spawn.sh --role coordination --project <slug>`. Quilan stores the tuple, the receipt's `policy_hash`, and the source's execution **at enable time**. Quilan's server never calls `route-spawn.sh` or `ic` (N8).
+   - Precedence: source pin > marking > live execution. An enable whose tuple conflicts with a pinned source is refused (N2).
+   - A marking is ignored if the source's live execution has changed since enable (A7).
+   - `--clear-execution` removes the stored tuple.
+3. **Lineage id.** `bb handoff coordinator id` (or its equivalent) prints the thread's `coordinatorId` for use as `--lineage`. Threads spawned by a coordinator inherit it through spawn metadata, if bb supports that; otherwise through the spawner's `--lineage` in the receipt.
+4. **`routing-receipt.ts`.** Fit the schema to real snake_case `ic` output (fixture `.clavain/decisions/mk-rpnv.2-route.json` plus a fresh sample with `policy_profile`), for validating `--route-receipt`. A parse failure means the enable is refused with a clear error.
 
-**Quilan tests:** pinned to pinned; unpinned to unpinned with no override write; cross-provider effort drop; marking precedence; parse failure falls back to carry-forward.
+**Quilan tests:** as in Acceptance 4.
 
-### Task 7: Aleph setter and pin option (Aleph coordinator implements)
+### Task 7: Aleph project defaults (Aleph coordinator implements)
 
-- `bb project defaults show|set <project> --provider --model --reasoning-level`, as an authenticated PATCH on the existing route, plus `sdk.projects.setDefaultExecutionOptions`.
-- A spawn-time option to persist the requested execution as the override (`pinExecution: true`), and `modelOverride` / `reasoningLevelOverride` exposed read-only to plugins.
-- Through the Aleph release-coordinator gate and the publisher thread.
+- `bb project defaults show|set|lock|unlock <project> --provider --model --reasoning-level`, plus SDK setters.
+- A locked row is not overwritten by UI creates.
+- A server-level fallback default (config) applies to projects with no row, before the catalog default.
+- Through the Aleph release-coordinator gate and the publisher thread (thr_d8mtvmpmer).
+- No spawn-time pin option (A6, N3, N9).
 
 ### Task 8: rollout (mk approves stages; lane B gates)
 
-The cohort unit is the **coordinator lineage**: a coordinator plus the threads it spawns. bb projects cannot separate the `proj_personal` coordinators (fact 4).
+**Precondition for every stage:** the Clavain release carrying the needed policy is installed on each coordinator host, with the receipt `policy_hash` matching (N5), and the rollout state is present on each host. Each release is a publication step mk approves; rollback never needs one.
 
 | Stage | What changes | Cohort | Exit rule |
 |---|---|---|---|
-| 0: shadow | Tasks 1–6 land. Carry-forward only preserves the status quo. The guidance lands with `main-session` recorded but spawners unchanged. The reconciler runs daily, and lane B baselines per lineage. | none | ≥7 days of baseline for ≥2 lineages, or lane B's minimum-sample rule |
-| 1: A/B | The 6 Sonnet-coordinator lineages (Autosigil, Rakes, Uncrancher, Cujgel, AgMoDB, Linsenkasten) adopt the Task 3 spawns (lanes on `main-session`). mk flips their dedicated bb projects' defaults to Sonnet 5 medium via Task 7. The 9 Opus lineages are concurrent controls. | new lanes and threads in treatment lineages | 7 days (the escaped-defect window) plus lane B's minimum closed beads |
-| 2: expand | The 9 Opus lineages adopt `main-session` for their lanes. mk flips `proj_personal` and the remaining defaults. Coordinator pins are unchanged. | all new unpinned threads | 7 days, same metrics |
+| 0: shadow | Release Tasks 1–3 and Quilan Task 6. Every lineage is `control`, so behaviour is unchanged except that carry-forward closes the fall-to-Opus gaps. The reconciler runs daily, and lane B baselines per lineage (D5). | none | ≥7 days of baseline for ≥2 lineages, or lane B's minimum-sample rule |
+| 1: A/B | The 6 Sonnet-coordinator lineages are set to `treatment` (`rollout-arm.sh`). Their dedicated bb project defaults are set to Sonnet medium **and locked** (Task 7). The 9 Opus lineages stay `control`. | new lanes, and successors, in treatment lineages | 7 days plus lane B's minimum closed beads |
+| 2: expand | The 9 Opus lineages go to `treatment`. Once all Personal lineages keep for a full window, mk sets and locks `proj_personal` and sets the server fallback. Then the fleet `lane` role flips to `main-sonnet` in a release, and the arms retire. Coordinator pins are unchanged. | all new unpinned threads | 7 days, same metrics |
 
-**Keep rule** (lane B sets the thresholds; stage 1 does not start without them). Per treatment lineage, measured against its own baseline and against the control drift:
-- P0/P1 review findings per deliverable do not rise;
-- escaped defects (reopens, reverts, failed landings within 7 days) do not rise;
-- rework turns per bead do not rise beyond the threshold;
-- beads closed per hour do not fall beyond the threshold;
+**Keep rule** (lane B sets the thresholds; stage 1 does not start without them). Per lineage, against its own baseline and the control drift:
+- P0/P1 findings per deliverable do not rise;
+- escaped defects within 7 days do not rise;
+- rework turns per bead stay within the threshold;
+- beads closed per hour stay within the threshold;
 - weighted burn per closed bead falls.
 
-**Regression →** Task 9 reverts that lineage. Other cohorts stay in their stage.
+A regression triggers Task 9 for that lineage only.
 
-### Task 9: regression re-pin actor (Quilan implements; lane B supplies the verdict)
+### Task 9: regression rollback actor (Quilan implements; lane B supplies the verdict)
 
-- Input: lane B's verdict JSON (`{cohort, change: "mk-42j9.25", verdict: regressed|holds|insufficient, metrics}`). The schema is agreed with lane B before stage 1.
-- On `regressed`:
-  - restore the lineage's dedicated bb project default from `project_profiles_prior` via Task 7;
-  - write a Clavain policy-revert proposal (the lineage's `main-session` treatment entry) for the lane-A coordinator to land;
-  - message the lineage's coordinator to resume its prior spawn model;
-  - record a receipt.
-
-  All of it is idempotent.
-- It is tested on a synthetic regression (mk-42j9.33 acceptance).
+- Input: lane B's verdict JSON `{lineage, change: "mk-42j9.25", verdict: regressed|holds|insufficient, metrics}` (schema agreed before stage 0).
+- On `regressed`, run steps (1)–(4) of D4. The actor is idempotent and does not wait for a release.
+- On `holds` at a stage exit, nothing changes. mk advances the stage.
+- Tested with a synthetic regression: one regressed lineage and one healthy lineage, both in `proj_personal` (Acceptance 6).
 
 ## Rollback
 
-- **Policy:** revert the Task 1 commit, or remove one profile, alias or treatment entry. The policy hash change shows in the receipts.
-- **bb defaults:** `bb project defaults set` to the stage-entry snapshot. Before stage 1, snapshot all `project_execution_defaults` rows to `${XDG_STATE_HOME:-$HOME/.local/state}/clavain/project-defaults-snapshot-<date>.json`, recorded in `project_profiles_prior`.
-- **Threads:** new threads follow the restored defaults at once. Existing unpinned treatment threads keep Sonnet by stickiness until they end; mk can pin any back with `bb thread update`. Pinned coordinators are never touched.
-- **Quilan:** clear marking overrides with `coordinator enable` without `--model`. Carry-forward preserves the status quo and needs no rollback.
+- **One lineage (automatic):** Task 9.
+- **The whole change (manual, mk):**
+  1. `rollout-arm.sh set <each lineage> reverted`.
+  2. `bb project defaults set` + `unlock` from the snapshot at `$XDG_STATE_HOME/clavain/project-defaults-snapshot-<date>.json`, taken before stage 1. The snapshot also records each treatment lineage's prior tuple for `--prior`.
+  3. Tells to live treatment threads, as in D4 (2).
+  4. Revert the Task 1 policy in the next Clavain release.
+- **Quilan:** `coordinator enable --clear-execution` per coordinator. Carry-forward itself is the status quo and stays.
+- **Pinned coordinators** are never touched at any step.
 
 ## Handoff to Phase 2
 
-- **Decisions for mk:** D1–D4; the stage-1 cohort; authorizing Quilan as the automatic project-default writer; whether to pin the unpinned After Them, Autosigil and Cujgel coordinators (mk's pins, not this plan's).
+- **Decisions for mk:**
+  - D1–D5;
+  - D2b, re-pin successors or authorize pin inheritance;
+  - reading F5's "re-pin" as prior-execution restore (D4);
+  - authorizing Quilan as the automatic writer of the rollout arm, tells and dedicated defaults;
+  - the stage-1 cohort;
+  - Clavain release timing for stage 0;
+  - whether to pin the unpinned After Them, Autosigil and Cujgel coordinators.
 - **Constraints:** Global Constraints.
-- **Verification:** the acceptance criteria.
+- **Verification:** Acceptance Criteria.
 - **Escalation:**
-  - If Task 7 is refused, bb defaults can only be set through UI creates and rollback of that half is manual. Escalate before stage 1.
-  - If lane B has no thresholds, stage 1 does not start.
-  - If `ic` rejects a scope with `:`, Task 1's test catches it and the scope becomes `project-<slug>`.
+  - If Task 7 is refused, shared-project defaults stay UI-driven and stage 2's default half is manual.
+  - If lane B has no lineage key or thresholds, stage 0 baselining does not start.
+  - If bb cannot carry lineage through spawn metadata, attribution relies on receipts, and lane B must accept that.
+
+## Review record
+
+- **Round 1 reviewers.**
+  - **Astra** (governed `plan-review` → review-astra, gpt-6-astra xhigh, producer `claude-opus-5-5`; dispatch f3a19004, 436k/6.1k tokens): REJECT, 6 P1 and 2 P2.
+  - **Opus 5.5** (declared same-model, adversarial orthogonal, fresh context): REJECT. It confirmed A1–A8 and added N1–N10.
+- **Fix round 1 changes:**
+  - A1/N4/N5: the `lane` role, runtime arms and a release precondition.
+  - A2: lineage-scoped rollback; no automated shared-default write.
+  - A3: `bb thread tell --model` for live threads.
+  - A4: Aleph locked rows and the server fallback.
+  - A5/N7: producer identity, `--provider`, `available_models`, fail-closed routing.
+  - A6/N3/N9: pin writes dropped, alternates first, the Task 7 pin option removed.
+  - A7/N2/N8: pin beats marking, stale markings ignored, enable-time resolution in the coordinator's session.
+  - A8: profile chosen before scope.
+  - N1: `--clear-execution`.
+  - N6: lineage key agreed with lane B (D5).
+  - N10: treatment successors re-resolve.
