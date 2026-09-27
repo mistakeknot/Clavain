@@ -321,24 +321,26 @@ For a new coordinator thread, the spawner resolves its seat and passes it in
 the spawn prompt:
 
 ```bash
-seat="$(mktemp)"
-if read -r P M E < <("${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role coordinator-seat --project "$project_slug" --seat-out "$seat"); then
-  bb thread spawn --provider "$P" --model "$M" --reasoning-level "$E" --prompt "…Seat: $(cat "$seat")"
-else
-  echo "Coordinator routing failed; no thread spawned" >&2
-fi
-rm -f "$seat"
+(
+  seat="$(mktemp)"
+  trap 'rm -f "$seat"' EXIT
+  if read -r P M E < <("${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role coordinator-seat --project "$project_slug" --seat-out "$seat"); then
+    bb thread spawn --provider "$P" --model "$M" --reasoning-level "$E" --prompt "…Seat: $(cat "$seat")"
+  else
+    echo "Coordinator routing failed; no thread spawned" >&2
+  fi
+)
 ```
 
 Until Quilan carry-forward ships, a pinned coordinator's self-handoff passes
 its own seat. Set `seat_json` to the JSON after "Seat: " in your own spawn or
 handoff prompt; its `.provider`, `.model` and `.reasoning_level` become the
-handoff tuple. Each handoff passes the Seat block on, so every generation has
-it. A coordinator spawned before `--seat-out` has no Seat block: report it and
-do not guess.
+handoff tuple, and each must be a nonempty string. Each handoff passes the
+Seat block on, so every generation has it. A coordinator spawned before
+`--seat-out` has no Seat block: report it and do not guess.
 
 ```bash
-if P="$(jq -er .provider <<<"$seat_json")" && M="$(jq -er .model <<<"$seat_json")" && E="$(jq -er .reasoning_level <<<"$seat_json")"; then
+if P="$(jq -er '.provider | strings | select(length > 0)' <<<"$seat_json")" && M="$(jq -er '.model | strings | select(length > 0)' <<<"$seat_json")" && E="$(jq -er '.reasoning_level | strings | select(length > 0)' <<<"$seat_json")"; then
   bb handoff --self --to "$P" --model "$M" --effort "$E" --instructions "Seat: $seat_json" …
 else
   echo "No Seat block; not handing off" >&2
@@ -355,7 +357,8 @@ availability, spawn tuple, policy hash and full `ic` route. A failed receipt
 write prevents the tuple from reaching stdout. `--seat-out FILE` also writes,
 atomically and on success only, a JSON seat: `provider`, `model`,
 `reasoning_level`, `role`, `profile_ref`, `policy_profile` (null when none),
-`policy_hash` and the absolute `receipt` path.
+`policy_hash` and the absolute `receipt` path. The seat is in place before the
+tuple is printed, and a failed print restores the prior file.
 
 Only role `lane` consults the rollout arm. Until mk-42j9.25 Phase 2b, the lookup
 is a stub returning `control`, so landing this guidance keeps every lineage on
