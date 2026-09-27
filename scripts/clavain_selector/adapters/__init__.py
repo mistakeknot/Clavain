@@ -13,6 +13,7 @@ from __future__ import annotations
 from .base import (
     FINGERPRINT_MAX_BYTES,
     FINGERPRINT_MAX_PATHS,
+    FingerprintPhase,
     LAUNCH_ARGV_TEMPLATE,
     Capability,
     FingerprintUnavailable,
@@ -35,6 +36,7 @@ __all__ = [
     "FINGERPRINT_MAX_BYTES",
     "FINGERPRINT_MAX_PATHS",
     "FingerprintUnavailable",
+    "FingerprintPhase",
     "HostAdapter",
     "HostEvent",
     "LAUNCH_ARGV_TEMPLATE",

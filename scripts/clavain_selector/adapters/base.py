@@ -200,7 +200,9 @@ class HostAdapter(Protocol):
 
     def authorize(self, chosen: Candidate, validated: ValidatedCandidates, policy: AuthorizationPolicy) -> bool: ...
 
-    def fingerprint(self, paths: Sequence[Path]) -> str: ...
+    def fingerprint(
+        self, paths: Sequence[Path], *, phase: "FingerprintPhase | None" = None
+    ) -> str: ...
 
     def acknowledge(self, record: Mapping[str, Any], next_event: HostEvent) -> str: ...
 
@@ -260,7 +262,21 @@ class FingerprintUnavailable(Exception):
     """
 
 
-def _entry_for_path(raw_path: Path | str) -> list[Any]:
+@dataclass
+class FingerprintPhase:
+    """Per-row fingerprint cache and aggregate budget.
+
+    A selector creates one instance for row 4 and a fresh instance for row
+    12. Resolved paths shared by multiple candidate read sets are therefore
+    read once within a phase, while the chosen candidate is independently
+    re-read during row 12.
+    """
+
+    entries: dict[str, list[Any]] = field(default_factory=dict)
+    bytes_read: int = 0
+
+
+def _entry_for_path(raw_path: Path | str, *, max_bytes: int | None = None) -> list[Any]:
     p = Path(raw_path)
     try:
         resolved = str(p.resolve())
@@ -279,8 +295,9 @@ def _entry_for_path(raw_path: Path | str) -> list[Any]:
         if not stat_module.S_ISREG(st1.st_mode):
             return [resolved, "not_regular", st1.st_mode, st1.st_dev, st1.st_ino, st1.st_size, st1.st_mtime_ns]
 
-        if st1.st_size > FINGERPRINT_MAX_BYTES:
-            raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({FINGERPRINT_MAX_BYTES})")
+        read_limit = FINGERPRINT_MAX_BYTES if max_bytes is None else min(FINGERPRINT_MAX_BYTES, max_bytes)
+        if st1.st_size > read_limit:
+            raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
 
         try:
             with open(p, "rb") as handle:
@@ -290,12 +307,12 @@ def _entry_for_path(raw_path: Path | str) -> list[Any]:
                     # once, then raise rather than fingerprint a moving target.
                     last_exc = None
                     continue
-                data = handle.read(FINGERPRINT_MAX_BYTES + 1)
+                data = handle.read(read_limit + 1)
         except OSError as exc:
             raise FingerprintUnavailable(f"could not read {resolved}: {exc}") from exc
 
-        if len(data) > FINGERPRINT_MAX_BYTES:
-            raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({FINGERPRINT_MAX_BYTES})")
+        if len(data) > read_limit:
+            raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
 
         content_sha256 = hashlib.sha256(data).hexdigest()
         return [resolved, st1.st_dev, st1.st_ino, st1.st_size, st1.st_mtime_ns, content_sha256]
@@ -303,7 +320,9 @@ def _entry_for_path(raw_path: Path | str) -> list[Any]:
     raise FingerprintUnavailable(f"unstable identity for {resolved}: dev/ino swapped between lstat and open")
 
 
-def fingerprint_paths(paths: Sequence[Path]) -> str:
+def fingerprint_paths(
+    paths: Sequence[Path], *, phase: FingerprintPhase | None = None
+) -> str:
     """sha256 over the sorted per-path entries described above.
 
     Raises `FingerprintUnavailable` (never returns a marker value) when any
@@ -313,7 +332,31 @@ def fingerprint_paths(paths: Sequence[Path]) -> str:
     path_list = list(paths)
     if len(path_list) > FINGERPRINT_MAX_PATHS:
         raise FingerprintUnavailable(f"too many paths for fingerprint_paths: {len(path_list)} > {FINGERPRINT_MAX_PATHS}")
-    entries = [_entry_for_path(p) for p in path_list]
+    resolved_paths = tuple(sorted({str(Path(path).resolve()) for path in path_list}))
+    if phase is None:
+        phase = FingerprintPhase()
+    distinct = set(phase.entries) | set(resolved_paths)
+    if len(distinct) > FINGERPRINT_MAX_PATHS:
+        raise FingerprintUnavailable(
+            f"too many paths for fingerprint phase: {len(distinct)} > {FINGERPRINT_MAX_PATHS}"
+        )
+    entries: list[list[Any]] = []
+    for resolved in resolved_paths:
+        entry = phase.entries.get(resolved)
+        if entry is None:
+            entry = _entry_for_path(
+                Path(resolved),
+                max_bytes=FINGERPRINT_MAX_BYTES - phase.bytes_read,
+            )
+            # A regular-file entry is [path, dev, ino, size, mtime, sha].
+            size = entry[3] if len(entry) == 6 and not isinstance(entry[1], str) else 0
+            if phase.bytes_read + size > FINGERPRINT_MAX_BYTES:
+                raise FingerprintUnavailable(
+                    f"fingerprint phase exceeds max bytes ({FINGERPRINT_MAX_BYTES})"
+                )
+            phase.bytes_read += size
+            phase.entries[resolved] = entry
+        entries.append(entry)
     entries.sort(key=lambda e: e[0])
     canonical = json.dumps(sorted(entries), ensure_ascii=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

@@ -63,10 +63,10 @@ class _StubAdapter:
         # identically; it needs no host-specific behavior to be correct.
         return authorize_by_policy(chosen, validated, policy)
 
-    def fingerprint(self, paths: Sequence[Path]) -> str:
+    def fingerprint(self, paths: Sequence[Path], *, phase=None) -> str:
         # Shared, host-independent, and safe to expose even before the rest
         # of the adapter exists.
-        return fingerprint_paths(paths)
+        return fingerprint_paths(paths, phase=phase)
 
     def acknowledge(self, record: Mapping[str, Any], next_event: HostEvent) -> str:
         return "unknown"

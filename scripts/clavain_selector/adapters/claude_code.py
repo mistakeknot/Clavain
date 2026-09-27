@@ -125,8 +125,8 @@ class ClaudeCodeAdapter:
         # never influenced by this return value.
         return authorize_by_policy(chosen, validated, policy)
 
-    def fingerprint(self, paths: Sequence[Path]) -> str:
-        return fingerprint_paths(paths)
+    def fingerprint(self, paths: Sequence[Path], *, phase=None) -> str:
+        return fingerprint_paths(paths, phase=phase)
 
     def acknowledge(self, record: Mapping[str, Any], next_event: HostEvent) -> str:
         try:
