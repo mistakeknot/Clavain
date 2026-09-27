@@ -3,8 +3,8 @@ artifact_type: plan
 bead: mk-42j9.7
 stage: design
 requirements: [D1-generalize-hosts, D2-authorized-egress, D3-three-arm-eval, D4-weighted-burn, D5-flag-per-candidate]
-revision: 10
-supersedes: revision 9 (commit eec3b53), which superseded revision 8 (commit 60e578f), revision 7 (commit a136b44), revision 6 (commit 272c90e), revision 5 (commit 59243f9), revision 4 (commit fe0793b), revision 3 (commit 87fd357), revision 2 (commit 938fba3) and revision 1 (commit d16a765)
+revision: 11
+supersedes: revision 10 (commit 44d3860), which superseded revision 9 (commit eec3b53), revision 8 (commit 60e578f), revision 7 (commit a136b44), revision 6 (commit 272c90e), revision 5 (commit 59243f9), revision 4 (commit fe0793b), revision 3 (commit 87fd357), revision 2 (commit 938fba3) and revision 1 (commit d16a765)
 ---
 # Jev decision layer (shared selector) implementation plan
 
@@ -12,9 +12,9 @@ supersedes: revision 9 (commit eec3b53), which superseded revision 8 (commit 60e
 
 **Bead:** mk-42j9.7 (hub tracker, run `bd` from `/home/mk/hub`). It blocks mk-42j9.8, mk-42j9.9 and mk-42j9.10. mk-42j9.11 is independent and out of scope.
 
-**Authorship:** claude-opus-5-5 via planning-opus after planning-astra 429 (revisions 6 and 7); revision 8 also by claude-opus-5-5 via the planning-opus fallback; revision 9 also by claude-opus-5-5 via the planning-opus fallback (planning-astra Codex HTTP 429, operational). Revision 10 is applied by the coordinator session (claude-sonnet-5, routine execution per mk-42j9.5) folding in the genuine other-frontier review of revision 9 (review-astra, gpt-6-astra) and applying that review's own literal, fully-specified fixes; it exercises no new design judgment beyond a choice among two fixes the review itself offered (see Revision 10 fold-in section).
+**Authorship:** claude-opus-5-5 via planning-opus after planning-astra 429 (revisions 6 and 7); revision 8 also by claude-opus-5-5 via the planning-opus fallback; revision 9 also by claude-opus-5-5 via the planning-opus fallback (planning-astra Codex HTTP 429, operational). Revision 10 is applied by the coordinator session (claude-sonnet-5, routine execution per mk-42j9.5) folding in the genuine other-frontier review of revision 9 (review-astra, gpt-6-astra) and applying that review's own literal, fully-specified fixes; it exercises no new design judgment beyond a choice among two fixes the review itself offered (see Revision 10 fold-in section). Revision 11 is authored by gpt-6-astra through the supplied `frontier-planning` dispatch, profile `planning-astra`, reasoning effort xhigh. It adds a language-neutral, shadow-only stdin/stdout contract for non-Python callers such as Quilan (`mk-rpnv.3`), preserving the rule that only trusted-preparer provenance may emit an effect. Review requirement: other-frontier, not yet run. Revision 10’s review does not cover this new design.
 
-**Revision 2** folds in the other-frontier plan review (claude-fable-5-1, verdict NEEDS-FIXES); see the Review fold-in section at the end. It supersedes revision 1 (commit d16a765). **Revision 3** folds in the re-review of revision 2 (938fba3, claude-fable-5-1, NEEDS-FIXES, bounded) and supersedes it. **Revision 4** folds in the confirmation review of revision 3 (87fd357, NEEDS-FIXES, bounded) and supersedes it. **Revision 5** folds in the confirmation review of revision 4 (fe0793b, NEEDS-FIXES, one P2) and supersedes it. **Revision 6** folds in three coordinator-added goals (G1 a typed battery client API, G2 question-set identity on records and eval cases, G3 deterministic candidate order with a permutation-invariance eval check) and two security-review fixes (S1 `authorize()` never reads the hook payload, S2 a single-descriptor, full-content read-set fingerprint), and supersedes revision 5 (59243f9). It amends code that T1–T4 and T6 already landed, through the new tasks R6a and R6b; no other-frontier review has run on it yet. **Revision 7** folds in the review of revision 6 (272c90e), a declared same-model adversarial review (claude-opus-5-5 reviewing claude-opus-5-5, verdict NEEDS-FIXES, PROVISIONAL): three P1s (G3 permute-check could not fail, S2 unavailable markers compared equal, S1 hook candidates came from stdin), seven P2s and five P3s. It was run by hand because review-astra (gpt-6-astra) returned HTTP 429 twice and review-opus was excluded as `producer_model_conflict`; the fallback follows mk's standing ruling ("Opus 5.5 replaces Fable 5.1", mk-3b8z, `docs/canon/reasoning-routing-operations.md`). Revision 7 supersedes revision 6. All seven revisions are authored by claude-opus-5-5, and the review loop must close before execution: a provisional same-model review cannot close it, so an other-frontier re-review of revision 7 is still required. **Revision 8** folds in the review of revision 7 (a136b44), again a declared same-model adversarial review (claude-opus-5-5 reviewing claude-opus-5-5, verdict NEEDS-FIXES, PROVISIONAL; review-astra HTTP 429 twice, review-opus excluded as `producer_model_conflict`): one P1 (stage B of `permute-check` flagged correct serializers on canonical-coincident orders), nine P2s and nine P3s. Revision 8 supersedes revision 7 and is authored by claude-opus-5-5. The same-model review cannot close the loop: an other-frontier review of revision 8 is still owed before R6a, R6b or T5 executes. **Revision 9** is a narrow revision. It folds in a third declared same-model review (of revision 8, 60e578f; claude-opus-5-5 reviewing claude-opus-5-5, verdict NEEDS-FIXES, PROVISIONAL, judged converging; same routing): no P1, two P2s (an R6a test that needed R6b's `validated_candidates`, and a launch argv no longer bound to the fixed plugin-enable template) and ten P3s. Each P3 is applied as a one-line text fix or recorded as a named in-task obligation with the test that closes it. The only new check is the launch template (P2-2). Revision 9 supersedes revision 8 and is authored by claude-opus-5-5. The other-frontier review is now owed on revision 9 before R6a, R6b or T5 executes. **Revision 10** folds in the genuine other-frontier review of revision 9 (dispatch `--role plan-review --producer-identity claude-opus-5-5`, routed to `review-astra`/gpt-6-astra after three prior rate-limited attempts on revisions 6–9; STATUS warn, P0: 0, P1: 0, P2: 0, P3: 4, no finding blocking R6a/R6b/T5): the review closes the other-frontier requirement owed since revision 6, and its four fix-in-task findings (a contradiction between R6a's canonical-order-reference AST rule and T9's harness reference; the missing `harness_self_check` value in the documented violation-kind union; a contradiction between T7's "read once per select" fingerprint dedup and R6b's row-12 reread; and a previously unrecorded residual that launch-template equality does not prove only `chosen.id` is enabled, since the host's own enable command can also enable declared dependencies) are applied as text fixes and named obligations. Revision 10 supersedes revision 9. No new FallbackReason, no acceptance-criteria change, no reseal.
+**Revision 2** folds in the other-frontier plan review (claude-fable-5-1, verdict NEEDS-FIXES); see the Review fold-in section at the end. It supersedes revision 1 (commit d16a765). **Revision 3** folds in the re-review of revision 2 (938fba3, claude-fable-5-1, NEEDS-FIXES, bounded) and supersedes it. **Revision 4** folds in the confirmation review of revision 3 (87fd357, NEEDS-FIXES, bounded) and supersedes it. **Revision 5** folds in the confirmation review of revision 4 (fe0793b, NEEDS-FIXES, one P2) and supersedes it. **Revision 6** folds in three coordinator-added goals (G1 a typed battery client API, G2 question-set identity on records and eval cases, G3 deterministic candidate order with a permutation-invariance eval check) and two security-review fixes (S1 `authorize()` never reads the hook payload, S2 a single-descriptor, full-content read-set fingerprint), and supersedes revision 5 (59243f9). It amends code that T1–T4 and T6 already landed, through the new tasks R6a and R6b; no other-frontier review has run on it yet. **Revision 7** folds in the review of revision 6 (272c90e), a declared same-model adversarial review (claude-opus-5-5 reviewing claude-opus-5-5, verdict NEEDS-FIXES, PROVISIONAL): three P1s (G3 permute-check could not fail, S2 unavailable markers compared equal, S1 hook candidates came from stdin), seven P2s and five P3s. It was run by hand because review-astra (gpt-6-astra) returned HTTP 429 twice and review-opus was excluded as `producer_model_conflict`; the fallback follows mk's standing ruling ("Opus 5.5 replaces Fable 5.1", mk-3b8z, `docs/canon/reasoning-routing-operations.md`). Revision 7 supersedes revision 6. All seven revisions are authored by claude-opus-5-5, and the review loop must close before execution: a provisional same-model review cannot close it, so an other-frontier re-review of revision 7 is still required. **Revision 8** folds in the review of revision 7 (a136b44), again a declared same-model adversarial review (claude-opus-5-5 reviewing claude-opus-5-5, verdict NEEDS-FIXES, PROVISIONAL; review-astra HTTP 429 twice, review-opus excluded as `producer_model_conflict`): one P1 (stage B of `permute-check` flagged correct serializers on canonical-coincident orders), nine P2s and nine P3s. Revision 8 supersedes revision 7 and is authored by claude-opus-5-5. The same-model review cannot close the loop: an other-frontier review of revision 8 is still owed before R6a, R6b or T5 executes. **Revision 9** is a narrow revision. It folds in a third declared same-model review (of revision 8, 60e578f; claude-opus-5-5 reviewing claude-opus-5-5, verdict NEEDS-FIXES, PROVISIONAL, judged converging; same routing): no P1, two P2s (an R6a test that needed R6b's `validated_candidates`, and a launch argv no longer bound to the fixed plugin-enable template) and ten P3s. Each P3 is applied as a one-line text fix or recorded as a named in-task obligation with the test that closes it. The only new check is the launch template (P2-2). Revision 9 supersedes revision 8 and is authored by claude-opus-5-5. The other-frontier review is now owed on revision 9 before R6a, R6b or T5 executes. **Revision 10** folds in the genuine other-frontier review of revision 9 (dispatch `--role plan-review --producer-identity claude-opus-5-5`, routed to `review-astra`/gpt-6-astra after three prior rate-limited attempts on revisions 6–9; STATUS warn, P0: 0, P1: 0, P2: 0, P3: 4, no finding blocking R6a/R6b/T5): the review closes the other-frontier requirement owed since revision 6, and its four fix-in-task findings (a contradiction between R6a's canonical-order-reference AST rule and T9's harness reference; the missing `harness_self_check` value in the documented violation-kind union; a contradiction between T7's "read once per select" fingerprint dedup and R6b's row-12 reread; and a previously unrecorded residual that launch-template equality does not prove only `chosen.id` is enabled, since the host's own enable command can also enable declared dependencies) are applied as text fixes and named obligations. Revision 10 supersedes revision 9. No new FallbackReason, no acceptance-criteria change, no reseal. **Revision 11** closes the non-Python transport gap identified after revision 10: `clavain-select.py select-json` accepts externally prepared candidates through a versioned JSON contract, assigns `EXTERNAL` provenance, and returns the existing decision-record shape with `applied: native`; it reuses the shared selector and Jev client, adds complete request and response schemas, and names external active/emitted support as a deferred obligation of `mk-rpnv.3`. Revision 11 supersedes revision 10 (44d3860). Its other-frontier review has not yet run. No acceptance-criteria change, no reseal, and no changes to R6a, R6b or T5.
 
 **Accountable decision:** The primary `planning-astra` profile returned HTTP 429, which is an operational failure, so this revision was authored by the frontier fallback `planning-opus` (claude-opus-5-5). The frontier requirement is not downgraded. Clavain installation 0.6.323, policy SHA256 `3f4a8c387398d8d9affaecf38ab6fd3dc952db24b7f71cc0ea31a9001b1240cd`. The producer receipt belongs to the coordinator; this JSON is not a usage receipt.
 
@@ -101,9 +101,34 @@ supersedes: revision 9 (commit eec3b53), which superseded revision 8 (commit 60e
 }
 ```
 
+**Accountable decision (revision 11):** Authored by gpt-6-astra through the supplied `frontier-planning` dispatch, profile `planning-astra`, backend codex, reasoning effort xhigh. Clavain installation 0.6.324, policy source `/home/mk/projects/.clavain-jev/config/routing.yaml`, policy SHA256 `7209d67e29c4d9e668cb1ecd1d4d931600902cba4031fd35866b8b434b34f79b`, profile default. The selected router, writing-plans skill and reasoning-routing canon were read from the explicitly selected worktree. A local `planning` resolution with the accountable reasons below returned `planning-astra`, `frontier_required: true` and `review_requirement: other-frontier` under the same policy hash. This is a new design decision about a shared trust boundary, not routine application of revision 10’s review. Review requirement: other-frontier, not yet run; revision 11 has not been reviewed. No review or implementation is authorized by this drafting task. The supplied dispatch identifies the producer; this JSON is not an execution or usage receipt.
+
+Read-only prerequisite checks were unavailable in this authoring environment: the GitHub API connection failed, `zklw` did not resolve, the Clavain `bd-hub` adapter was absent, and session-history search could not open its database. Repository identity and current CI/tracker status therefore remain unverified here; the existing plan’s recorded repository ID is not substituted for a fresh check. These failures do not constitute migration or acceptance evidence.
+
+```json
+{
+  "reasons": ["foundational-invariants", "broad-consequences"],
+  "rationale": "Revision 11 defines a shared non-Python stdin/stdout contract while preserving the trusted-preparer active-emission boundary. Candidate ids, descriptions and payloads arriving over stdin must not acquire PREPARER authority merely because their hashes agree. Quilan must reuse this package's client without treating a shadow selection as an executable effect.",
+  "producer": {
+    "model": "gpt-6-astra",
+    "profile": "planning-astra",
+    "backend": "codex",
+    "reasoning_effort": "xhigh",
+    "identity_source": "supplied frontier-planning dispatch"
+  },
+  "producer_identity_for_review": "gpt-6-astra",
+  "policy_source": "/home/mk/projects/.clavain-jev/config/routing.yaml",
+  "policy_hash": "7209d67e29c4d9e668cb1ecd1d4d931600902cba4031fd35866b8b434b34f79b",
+  "policy_profile": "default",
+  "review_requirement": "other-frontier",
+  "review_status": "not yet run",
+  "frontier_required": true
+}
+```
+
 **Goal:** Give Clavain one shared, host-neutral, flag-gated selector layer that can ask Jev (TypeSafe `jev-1.13.0`) to choose among host-prepared candidates, always falls back to today's native behavior, records every decision as a bounded schema-v1 record, and can prove through a sealed three-arm eval and cache-aware burn accounting whether Jev earns its place.
 
-**Architecture:** A stdlib-only Python package `scripts/clavain_selector/` owns the contract (candidates, limits, validation, fallback table), flags, an egress guard, a hard-deadline Jev client, schema-v1 decision records, a host-adapter interface backed by a checked-in capability matrix, a cache-aware burn ledger, and an eval harness. Hosts reach it through a thin fail-open wrapper (`hooks/selector-hook.sh`) and a CLI (`scripts/clavain-select.py`). .7 ships one inert `selftest` integration and registers no hooks, so a default install behaves exactly as today. Each dependent bead (.8, .9, .10) adds its own integration entry, flag, adapter work and labeled eval set.
+**Architecture:** A stdlib-only Python package `scripts/clavain_selector/` owns the contract (candidates, limits, validation, fallback table), flags, an egress guard, a hard-deadline Jev client, schema-v1 decision records, a host-adapter interface backed by a checked-in capability matrix, a cache-aware burn ledger, and an eval harness. Python hook integrations reach it through `clavain-select.py hook` and the thin fail-open wrapper `hooks/selector-hook.sh`; that path still obtains candidates from a registered trusted Python preparer. Non-Python callers reach the same selector and client through `clavain-select.py select-json`, a one-request/one-response stdin/stdout interface at `Point.library`. Its externally supplied candidates receive `EXTERNAL` provenance and are capped at shadow: the command returns a decision record, never a rendered effect. .7 ships one inert `selftest` integration and registers no hooks, so a default install behaves exactly as today. Dependents add their own integration entries, flags and labeled eval sets; `mk-rpnv.3` owns Quilan’s TypeScript subprocess integration and any later proposal for external active/emitted support.
 
 **Tech stack:** Python 3.12 stdlib only (`urllib`/`http.client`, `threading`, `fcntl`, `hashlib`, `json`); pytest via `uv` in `tests/`; bats for the hook wrapper; `ic` 0.3.5 for the optional Intercore export; Interstat's per-request transcript parsers for burn. The TypeSafe Python SDK is deliberately not used: it retries twice for up to 30s on 408, 429 and 5xx by default, and a hook cannot afford that.
 
@@ -137,13 +162,14 @@ supersedes: revision 9 (commit eec3b53), which superseded revision 8 (commit 60e
 - The burn ledger reconciles with `burn-report.py` for a real Claude session and with the final cumulative total, excluding compaction requests, for a real Codex rollout, with any difference fully explained by listed causes, and reports cache invalidation separately from expiry and compaction.
 - The selector never claims that the host applied its choice: records say `applied: native` or `applied: emitted`, and `selected` exists only as a host acknowledgement or an outcome joined later.
 - Reordering a request's candidates changes nothing the selector sends or writes: the Jev wire body, `request.sha256`, `request.questions_sha256` and each record's `candidates` list are byte-identical for every permutation, and an eval case's expected winner and rules-arm pick do not move. Rankers break exact score ties by the canonical order; Jev probabilities that lie within 1e-9 of the maximum are treated as tied and broken the same way. Every function in the package that the registration check's patterns match (candidate, view, binding, read-set and probability sequences) is either registered and proven order-invariant under the sampled permutations, refuses a non-canonical sequence with `NonCanonicalOrder`, or is declared order-agnostic with a reason (revision 7; scoped in revision 8).
-- `authorize()` reads no hook-payload field: it receives only the chosen candidate, the validated candidate set (with its payload bindings) and the integration's registry policy. Stdin cannot pick the integration, add a candidate id or bypass a preparer: the hook takes its integration from the registry and its candidates from a registered trusted preparer whose ids come from an event-blind vocabulary. Payload derivation from the event is bounded by the preparer contract (declared event fields only, never `raw`). A candidate is authorized only if its payload hashes to the binding the preparer recorded, and the host receives exactly the bound bytes. The preparer tag and the bindings guard against accidental misuse within one process; they are not a security boundary against hostile in-process code (revision 7; reworded in revision 8).
+- `authorize()` reads no hook-payload field: it receives only the chosen candidate, the validated candidate set (with its payload bindings) and the integration's registry policy. On the `hook` path, stdin cannot pick the integration, add a candidate id or bypass a preparer: the hook takes its integration from the registry and its candidates from a registered trusted preparer whose ids come from an event-blind vocabulary. Payload derivation from the event is bounded by the preparer contract (declared event fields only, never `raw`). A candidate is authorized only if its payload hashes to the binding the preparer recorded, and the host receives exactly the bound bytes. The preparer tag and the bindings guard against accidental misuse within one process; they are not a security boundary against hostile in-process code (revision 7; reworded in revision 8).
 - A read-set fingerprint describes one inode per path: metadata and content come from the same open descriptor, every regular file within the byte budget is hashed in full, whatever its size, and any freshness that cannot be proved (unstable content, an unreadable path, a swapped symlink, too many paths or bytes) raises `FingerprintUnavailable` and maps to stale, never to a comparable marker (revision 7).
+- `select-json` accepts one bounded JSON request and returns one decision-record JSON object. Its candidate list and payloads are external input, so every constructed set carries `EXTERNAL` provenance, every response has `applied: native`, and even a registry/flag combination permitting active mode cannot make it emit. `result.kind: selected` describes a shadow observation, not permission to apply the candidate. The command uses the package’s existing egress guard, selector, client, validation and record builder.
 
 **Artifacts:**
 - `scripts/clavain_selector/contract.py` exports `Point`, `Candidate`, `SelectionRequest`, `FallbackReason`, `RejectReason`, `FALLBACK_TABLE`, `validate_request`, `pre_eligibility`, `revalidate`, `order_salt`, `candidate_sort_key`, `canonical_order`, `require_canonical`, `NonCanonicalOrder`, `payload_sha256`, `canonical_request_body`, `request_sha256`, `Provenance`, `ValidatedCandidates`, `validated_candidates`, `AuthorizationPolicy`
 - `scripts/clavain_selector/flags.py` exports `resolve_mode`, `load_registry`, `registry_errors`, `RegistryError`, `authorization_policy`, `hook_integration`
-- `scripts/clavain_selector/preparers.py` exports `PreparedSet`, `Preparer`, `PREPARERS`, `prepare`, `from_operator`, `from_case`, `verify`, `request_from`, `validated`, `NotPrepared` (revision 7)
+- `scripts/clavain_selector/preparers.py` exports `PreparedSet`, `Preparer`, `PREPARERS`, `prepare`, `from_operator`, `from_case`, `from_external`, `verify`, `request_from`, `validated`, `NotPrepared` (revision 7)
 - `scripts/clavain_selector/questions.py` exports `QUESTION_SET_VERSION`, `ESCALATE_ID`, `ESCALATE_CRITERION`, `FIT_INSTRUCTIONS`, `ChoiceQuestion`, `NoulQuestion`, `QuestionBattery`, `build_battery`, `questions_sha256`
 - `scripts/clavain_selector/egress.py` exports `admit`, `AdmittedRequest`, `Refusal`, `project_owner`, `scan_text`
 - `scripts/clavain_selector/credentials.py` exports `load_key`, `CredentialUnavailable`
@@ -159,14 +185,17 @@ supersedes: revision 9 (commit eec3b53), which superseded revision 8 (commit 60e
 - `config/selector-integrations.json`, `config/selector-host-matrix.json`
 - `schemas/selector-decision-record.v1.schema.json`, `schemas/selector-eval-case.v1.schema.json`
 - `docs/canon/selector-layer.md`
+- `scripts/clavain_selector/external.py` exports `read_request`, `from_wire`, `write_decision`
+- `schemas/selector-select-request.v1.schema.json`, `schemas/selector-select-response.v1.schema.json`
 
 **Key links:**
 - `selector.select` takes a `PreparedSet`, never a bare `SelectionRequest`, and runs provenance verify → flag → validation → pre-eligibility → egress → budget → breaker → credential → Jev → response validation → floors → host revalidation → mode, in that order; a later stage never runs when an earlier one falls back.
 - `JevClient.call` accepts only an `AdmittedRequest` whose HMAC tag verifies under a per-process key held privately by `egress.py`, so a caller that bypasses `admit()` by accident, even one that builds the dataclass with a correct body hash, is refused. This guards against accidental bypass, not against hostile in-process code: any Python code in the same process can read the module-level key.
 - `SelectionRequest.__post_init__` puts candidates in canonical (salted-hash) order, so the egress admitted body, the Jev wire body, the question battery, records and the eval harness all read one order and none of them re-sorts. Serializers do not rely on that silently: each calls `contract.require_canonical`, and `contract.canonical_request_body`/`request_sha256` are the single source of the request body and its hash for both `egress` and `records` (revision 7).
 - `jev_client` builds the wire `questions` object only through `questions.build_battery`, and `records.build_record` hashes the same battery, so a record's `questions_sha256` is the hash of what was, or would have been, sent.
-- `authorize()` takes `(chosen, ValidatedCandidates, AuthorizationPolicy)` and no `HostEvent`; the orchestrator never passes it host-supplied data. `ValidatedCandidates` carries the preparer's `(id, payload_sha256)` bindings. `Outcome` stores the payload as immutable canonical bytes plus the binding, checks at construction that the bytes hash to the binding, and `render` emits exactly those bytes (revision 7; revision 8).
+- `authorize()` takes `(chosen, ValidatedCandidates, AuthorizationPolicy)` and no `HostEvent` or additional caller-supplied authorization verdict. `ValidatedCandidates` carries the set’s `(id, payload_sha256)` bindings. Bindings prove payload consistency, not trusted origin: `PREPARER` identifies registered preparation, while `OPERATOR`, `EVAL_CASE` and `EXTERNAL` remain unable to emit. `Outcome` stores immutable canonical bytes plus the binding, checks their equality at construction, and render emits exactly those bytes.
 - `clavain-select.py hook` resolves the integration with `flags.hook_integration(registry, host, point)` and the candidates with `preparers.prepare(...)`; stdin reaches only `parse_event` and the preparer's `build`, never the integration name, the candidate list or `project_root` (revision 7).
+- `clavain-select.py select-json --integration NAME --project-root ROOT --session-id ID` fixes `point=library`; integration, root and session come from process arguments, never stdin. `external.from_wire` checks the versioned request, then `preparers.from_external` canonicalizes and tags it with fixed `EXTERNAL` provenance. `selector.select` performs the existing selection flow, and stdout receives the decision built by `records.build_record`. Neither this command nor Quilan implements another Jev HTTP client.
 - `burn.load_weights` imports `WEIGHTS` from `scripts/burn-report.py`, so there is one source of truth for weights.
 - `docs/canon/selector-layer.md`'s matrix table is generated from, and tested against, `config/selector-host-matrix.json`.
 
@@ -187,6 +216,7 @@ supersedes: revision 9 (commit eec3b53), which superseded revision 8 (commit 60e
 - Python stdlib only in `scripts/clavain_selector/`; test dependencies stay pytest and pyyaml (no jsonschema).
 - At most 3 workers in parallel; every task is sized for a Sonnet-class worker.
 - CI stays on existing zklw-ci package jobs for Clavain (repo_id 1151593132). No GitHub Actions changes. The CI migration task mk-ag2s.25 is not touched.
+- The external transport is a local subprocess interface for shadow observation. It accepts no stdin integration, project root, host adapter, mode, policy, authorization verdict, preparer name or provenance override. It exposes no active-mode option and returns no payload or host-rendered effect. External candidates do not satisfy the trusted-preparer condition for active emission. A caller must keep native behavior whenever `applied` is `native`, including when `result.kind` is `selected`.
 
 ## Alignment
 
@@ -213,14 +243,15 @@ supersedes: revision 9 (commit eec3b53), which superseded revision 8 (commit 60e
 | B13 | Question-set identity (`question_set_version` plus `questions_sha256`) on every record and eval case; a holdout is bound to the question set of its first seal | Records and runs stay reproducible and diffable across edits to the escalate text, the fit template, the question layout or `fit_questions`. Changing the question set after sealing a holdout is treated like changing floors: freeze it on calibrate first. |
 | B14 | `authorize()` reads only the chosen candidate, the validated set with its preparer bindings and a registry `authorize` policy; a missing policy denies. The hook's integration comes from the registry and its candidates from a registered trusted preparer (revision 7) | Removes the payload-controlled bypass in the landed Claude adapter (`event.raw["authorized"]`) and the indirect path revision 6 left open, where stdin supplied the candidates whose payloads drive the applied effect. A future need for a real host permission verdict needs a typed, first-hand-evidenced input and a return to the frontier planner. |
 | B15 | Fingerprint: `lstat` first, never open a non-regular file; one `O_NOFOLLOW|O_NONBLOCK` descriptor per regular file, `fstat` identity check and a capped, streamed full-content sha256 on it; ≤4096 paths and ≤64 MiB actually read per call; anything unprovable raises `FingerprintUnavailable` (revision 7) | Closes the stat-then-open TOCTOU gap and the `large` literal that made same-size edits of files over 1 MiB invisible. Revision 6's `unstable`/`unreadable` markers compared equal to themselves, so two unprovable passes looked fresh; freshness that cannot be proved now falls back to native. |
+| B16 | `select-json` exposes the existing `library` selector over versioned JSON, with fixed `EXTERNAL` provenance and a shadow-only cap | A TypeScript host cannot register an in-process Python preparer. Accepting its candidates over stdin therefore loses the preparer’s event-blind vocabulary and payload-origin guarantees. Hash binding still detects mutation, but does not restore those guarantees. The explicit cap enables shared-client observation without creating a new authorization mechanism; external effects require a separate dependent design and review. |
 
-Boundaries: .7 does not choose plugins, triage security findings or reduce tool output. It does not implement non-Claude adapters beyond stubs, does not register hooks, and does not enable active mode anywhere.
+Boundaries: .7 does not choose plugins, triage security findings or reduce tool output. It does not implement non-Claude adapters beyond stubs, does not register hooks, and does not enable active mode anywhere. Revision 11 adds the non-Python transport only. It does not implement Quilan’s caller, add a non-Claude host adapter, or establish trusted external preparation.
 
 ---
 
 ## Selector contract
 
-Integration points (`contract.Point`): `launch_profile` (a), `prompt_submit` (b), `pre_tool` (c), `post_tool_output` (d), `pre_compact` (e), `session_start` (f), `skill_loading` (g), plus `library` for in-process callers with no host event (used by .9).
+Integration points (`contract.Point`): `launch_profile` (a), `prompt_submit` (b), `pre_tool` (c), `post_tool_output` (d), `pre_compact` (e), `session_start` (f), `skill_loading` (g), plus `library` for callers with no host event: in-process preparation used by .9, and the shadow-only external transport introduced in revision 11.
 
 ```python
 @dataclass(frozen=True)
@@ -259,12 +290,13 @@ class ValidatedCandidates:
     candidates: tuple[Candidate, ...]  # canonical order, 1..16, ids unique and valid
     request_sha256: str                # contract.request_sha256(request) of the originating request (revision 7: computed in contract, no records import)
     bindings: tuple[tuple[str, str], ...]   # (id, payload_sha256) in canonical order, from the PreparedSet (revision 7)
-    provenance: "Provenance"           # PREPARER, OPERATOR or EVAL_CASE (revision 7)
+    provenance: "Provenance"           # PREPARER, OPERATOR, EVAL_CASE or EXTERNAL
 
 class Provenance(str, Enum):           # revision 7, S1
     PREPARER = "preparer"              # a registered trusted preparer built the set; may run active
     OPERATOR = "operator"              # clavain-select.py shadow-live / latency-probe files; shadow or eval only
     EVAL_CASE = "eval_case"            # sealed eval case; eval only
+    EXTERNAL = "external"              # non-Python stdin transport; shadow only, never active/emitted
 
 class NonCanonicalOrder(ValueError): ...   # revision 7, G3: a serializer was given a non-canonical sequence
 
@@ -293,7 +325,7 @@ Serialized request limit 90,000 bytes; response cap 64KB.
 1. identity: `any(c is chosen for c in validated.candidates)`. The chosen object must be one of the validated set's own `Candidate` objects, not an equal copy and not a candidate matched by id alone;
 2. `policy.integration == validated.integration` and `policy.point == validated.point`;
 3. `chosen.id not in policy.deny_ids`, and at least one of `policy.allow_all`, `chosen.id in policy.allow_ids`, or `chosen.id` starting with a member of `policy.allow_id_prefixes`;
-4. payload binding: `contract.payload_sha256(chosen.payload) == dict(validated.bindings)[chosen.id]`. The binding was computed by the trusted preparer when it built the set, so a payload mutated afterwards (candidates are frozen, but a payload may be a mutable `dict`) fails.
+4. payload binding: `contract.payload_sha256(chosen.payload) == dict(validated.bindings)[chosen.id]`. The binding was computed when the set was constructed, so a payload mutated afterwards fails. For `PREPARER`, the registered preparer supplies the original payload; for `EXTERNAL`, stdin supplies it. Equality with an external binding proves consistency only and cannot lift the provenance cap.
 
 It reads nothing else: no `HostEvent`, no hook payload, no environment, no files and no adapter instance state. The orchestrator computes it once, after Jev returns and before row 12, and passes `authorize(chosen, validated, policy) and base.launch_argv_ok(chosen, validated)` as `ValidationContext.authorized` (revision 9, P2-2), so `revalidate` keeps checking `unauthorized` last. After Jev returns, the order is pinned (revision 9, P3-9): first the row-12 fingerprint recompute of the chosen candidate (`adapter.fingerprint`), then `authorize` and `launch_argv_ok`, then `revalidate`. A true verdict is not a grant. It only lets the selection continue to `mode`, and render never emits "allow", so the host's own permission gate still decides downstream. A false verdict yields `unauthorized` (row 12).
 
@@ -304,7 +336,7 @@ It reads nothing else: no `HostEvent`, no hook payload, no environment, no files
 
 Rejected alternatives: an "id-only" binding for launch, where render appends the id to an adapter-owned argv, so the bytes the host runs would differ from the bytes that were bound; and (revision 9) a bound but unconstrained argv, where a careless .8 preparer or a declared event field could produce `["sh", "-c", …]` and the binding would only prove that the preparer produced it. Revision 9 keeps both properties: the host runs exactly the bound bytes, and those bytes must be the fixed plugin-enable template for the chosen id. A .8 launch adapter for a host other than Claude Code that needs another command returns to the frontier planner to extend `launch_argv_ok`, with a named test.
 
-What authorization does and does not bind (reworded in revision 8, P2-3). The integration comes from the registry. The candidate ids come from the trusted preparer's event-blind vocabulary, and the descriptions come from project state or fixed text. The payloads come from the preparer too, but a preparer may derive them from the event fields it declares (see the preparer contract under Trusted preparers). For .10, hook input therefore does shape the payload, but only through the preparer's own transform. Stdin cannot add a candidate id, bypass a preparer, change a payload after preparation or change a verdict. Task and context are host input: they may steer which of the authorized candidates Jev picks, and so which one is applied. That residual is inherent in selection. It is bounded by the preparer's vocabulary, the preparer contract and the registry policy.
+What authorization does and does not bind (reworded in revision 8, P2-3). On the `hook` path, the integration comes from the registry. The candidate ids come from the trusted preparer's event-blind vocabulary, and the descriptions come from project state or fixed text. The payloads come from the preparer too, but a preparer may derive them from the event fields it declares (see the preparer contract under Trusted preparers). For .10, hook input therefore does shape the payload, but only through the preparer's own transform. Stdin cannot add a candidate id, bypass a preparer, change a payload after preparation or change a verdict. Task and context are host input: they may steer which of the authorized candidates Jev picks, and so which one is applied. That residual is inherent in selection. It is bounded by the preparer's vocabulary, the preparer contract and the registry policy. The `select-json` path deliberately has a different input boundary: its caller supplies the candidate vocabulary, descriptions and payloads. Its hash checks do not establish that those candidates are appropriate or authorized host effects. The fixed `EXTERNAL` provenance and shadow cap scope that loss; `authorize_by_policy` remains a narrowing check over the validated set and registry policy, with no new authorization input.
 
 `read_set_fingerprint` is computed by `HostAdapter.fingerprint(paths)`, which is `base.fingerprint_paths(paths)` for every adapter (revision 6, S2; B15; revised in revision 7). It either returns a fingerprint or raises `FingerprintUnavailable`; it never returns a marker that stands for "could not tell", because two such markers would compare equal and read as fresh. The procedure:
 
@@ -334,7 +366,7 @@ Rejected alternative: a fingerprint callable inside `ValidationContext`. It woul
 
 ### Trusted preparers (`preparers.py`, revision 7, S1)
 
-The hook payload is host input: anyone who can shape the hook JSON controls it. Revision 6 kept it out of `authorize()`, but T7's `hook` subcommand still read the integration and the candidates from stdin, and the applied effect is driven by `candidate.payload` (the Claude adapter's `_render_post_tool` returns `render_payload`; `_render_launch` appends `candidate.id` to an argv). Revision 7 closes that path: candidates reach `select()` only inside a `PreparedSet`, built by a preparer the registry names.
+The hook payload is host input: anyone who can shape the hook JSON controls it. Revision 6 kept it out of `authorize()`, but T7's `hook` subcommand still read the integration and the candidates from stdin, and the applied effect is driven by `candidate.payload` (the Claude adapter's `_render_post_tool` returns `render_payload`; `_render_launch` appends `candidate.id` to an argv). Revision 7 closes that hook path: hook candidates reach `select()` only inside a `PreparedSet` built by a preparer the registry names. Operator, eval and revision-11 external sets use separate factories and provenance caps; none can acquire `PREPARER` provenance.
 
 ```python
 @dataclass(frozen=True)
@@ -367,6 +399,10 @@ class NotPrepared(ValueError): ...
 def prepare(registry, integration: str, point: Point, event: HostEvent | None, project_root: Path) -> PreparedSet: ...
 def from_operator(registry, integration: str, point: Point, task: str, context: str, candidates, project_root: Path) -> PreparedSet: ...
 def from_case(case: Mapping, registry) -> PreparedSet: ...
+def from_external(
+    registry, integration: str, task: str, context: str, candidates,
+    project_root: Path, *, task_revision: str, read_set_paths, sources
+) -> PreparedSet: ...                  # fixed Point.library, EXTERNAL, preparer=None
 def verify(prepared: PreparedSet) -> None: ...                 # NotPrepared unless the tag verifies (hmac.compare_digest)
 def request_from(prepared: PreparedSet, session: SessionRef) -> SelectionRequest: ...
 def validated(prepared: PreparedSet, request: SelectionRequest) -> ValidatedCandidates: ...
@@ -382,9 +418,430 @@ def validated(prepared: PreparedSet, request: SelectionRequest) -> ValidatedCand
 - Provenance limits the mode. `PREPARER` may run shadow, eval or active (active still needs the registry and first-hand evidence, B9). `OPERATOR` runs shadow or eval: a request for `active` resolves to shadow with `flags.active_denied: true`, the same downgrade as B9. `EVAL_CASE` runs only with `mode_override="eval"`; any other use raises `NotPrepared` (→ `internal_error`). Records carry `request.provenance` and, for `PREPARER`, `request.preparer`.
 - Hook path. `clavain-select.py hook --point P --host H` resolves the integration with `flags.hook_integration(registry, H, P)`: the unique registry entry whose `hooks` list contains `{"host": H, "point": P}`. None → exit 0 with empty output, no record and no network (native). More than one → registry malformed (`registry_errors`), every integration off. `project_root` comes from the process environment (`CLAUDE_PROJECT_DIR`, else the working directory), never from stdin. Stdin reaches only `adapter.parse_event`. The resulting event reaches only the preparer's `build` (as the projection of its declared `event_fields`) and the adapter's `acknowledge`; `render` is passed it but reads no field of it (revision 8). The hook command line has no `--integration` or candidate option.
 - Library callers (.9, `Point.library`) call `prepare(registry, integration, "library", None, project_root)`, with their own preparer registered for the library point.
+- `from_external` uses the same canonicalization, JSON-native payload checks, binding computation, read-set correspondence checks and HMAC tagging as the existing factories. It fixes `point=Point.library`, `provenance=Provenance.EXTERNAL` and `preparer=None`; none is a caller parameter. It requires a known registry integration serving `library`, but does not require or call `PREPARERS`. No external input is promoted by passing through this factory.
+- `EXTERNAL` is shadow-only. An enabled integration requested as active resolves to shadow with `flags.active_denied: true`, even when its registry entry permits active use. An external set with any `mode_override` is `NotPrepared`; this transport is not another eval entrypoint. The final emission branch also requires `prepared.provenance is PREPARER`, so a successful policy check is insufficient to emit.
+- External nonempty `Candidate.preconditions` are unverified conditions. This revision adds no host-state callback or expression evaluator: before selection, any such candidate yields `stale_before_select`, `validation.stage: pre_eligibility`, `validation.reject_reason: unmet_precondition`. An empty tuple asserts no additional condition. Condition text is never executed, used as a path or treated as an authorization verdict.
+- External revision tokens and declared read sets are caller assertions. The selector compares tokens and recomputes declared fingerprints; it cannot prove that the caller listed every dependency or that its revision token represents current host state. Those limitations remain visible in the transport’s non-claims.
 
 Rejected alternative: a static registry allowlist of `(id, payload_sha256)` pairs checked in `authorize()`. It binds payloads too, but it cannot express payloads that are computed per event (the .10 tool-output reductions and the .9 finding summaries have no fixed hash), and on its own it leaves the integration and the candidate list coming from stdin, so the hook would still let the payload choose which allowlisted pairs are in play and what task and context accompany them. Preparer provenance binds every candidate and payload to code the registry names, and keeps the registry allowlist (`authorize`) as the narrowing policy on top.
 
+### External stdin/stdout contract (`select-json`, revision 11)
+
+**Name and invocation.** The name `select-json` identifies the existing selection operation and its machine-readable transport. It does not imply hook registration, trusted preparation or application of an effect.
+
+```bash
+python3 scripts/clavain-select.py select-json \
+  --integration selftest \
+  --project-root /home/mk/projects/.clavain-jev \
+  --session-id 0123456789abcdef0123456789abcdef \
+  < request.json
+```
+
+`--record-dir DIR` has T8’s existing precedence. `--integration`, `--project-root` and `--session-id` are required process arguments. `--session-id` is a 32-character lowercase hexadecimal identifier supplied by the caller and held stable for its host session, so the ordinary session budget spans subprocess invocations. The command uses `Point.library`, no host adapter and no hook event. Transport records use `host: {"name": "external", "version": "1"}` and `adapter_version: "1"`; this identifies the transport, not first-hand evidence about a host.
+
+The integration must already exist in the registry and serve `library`. .7 adds no new integration or flag. Its existing selftest entry can exercise this transport in shadow. Quilan’s real entry and flag belong to `mk-rpnv.3`.
+
+**Framing and limits.** One invocation accepts exactly one UTF-8 JSON object, followed only by whitespace and EOF, and writes exactly one compact JSON decision object followed by a newline. There are no progress messages on stdout. The request frame is limited to 90,000 bytes, including payloads and whitespace; the existing 90,000-byte selector-visible body limit still applies separately. Read at most the limit plus one byte. Reject duplicate object keys at any depth, non-finite numbers, invalid UTF-8, lone surrogate code points, trailing non-whitespace, arrays at the top level, unknown fields and unsupported versions. The decoder performs explicit stdlib checks; JSON Schema is the published contract, not a new runtime dependency.
+
+The caller must close stdin and impose an end-to-end subprocess timeout. Input reading is itself bounded by the configured library deadline, capped at 5000ms. After decoding, `deadline_ms` may shorten that budget, never extend the registry/environment limit or the absolute cap. Preserve the command-entry monotonic start when constructing the shared `Deadline`, so reading and decoding do not reset the clock. Pass the remaining budget through the existing selector/client path. A deadline exhausted before the call gives `timeout` with no socket. Missing, truncated or invalid stdout, nonzero exit, or a killed subprocess means native behavior for the caller.
+
+**Candidate representation and binding.** Each candidate carries its own `id`, selector-visible `description`, opaque already-rendered textual `payload`, expected `payload_sha256`, preparation revision, preconditions, expiry and read-set evidence. Payloads in this transport are strings, not arbitrary JSON values or executable templates. They may contain a host’s already-rendered JSON as text, but the selector never parses that inner text or transforms it into a host effect.
+
+`payload_sha256` is the existing `contract.payload_sha256(payload)`: SHA256 of the JSON string literal produced by `contract.payload_bytes`, including its quotes and escapes, not SHA256 of the unquoted UTF-8 text. This deliberately uses the existing binding vocabulary. The caller must reproduce `ensure_ascii=True` string encoding, including lowercase hexadecimal Unicode escapes and surrogate-pair escapes for supplementary characters. Golden vectors cover quotes, backslashes, newlines and non-ASCII characters. Restricting payloads to strings avoids cross-language object-key and floating-point serialization differences. The Python boundary recomputes the digest and rejects a mismatch as `invalid_input`; the factory then independently computes the bindings stored in the tagged `PreparedSet`.
+
+The payload and its digest originate from the same untrusted caller. Their agreement is an integrity check, not proof of authorized preparation. The payload never enters the Jev body, stdout decision or persisted record.
+
+**Revision, freshness and preconditions.** `task_revision` is a caller-supplied 64-character lowercase hexadecimal snapshot/request token; each candidate supplies `prepared_at_revision` in the same form. A mismatch is stale under the existing checks. These tokens must contain identifiers or hashes, never task text or credentials.
+
+The read-set choice is a **precomputed aggregate digest using `base.fingerprint_paths`**, accompanied by the complete path manifest needed to recompute it. It is not a new list-of-content-hashes algorithm. For each candidate:
+
+- `read_set_paths` contains project-relative POSIX paths; empty paths require `read_set_fingerprint: null`, and nonempty paths require a lowercase SHA256 digest.
+- A nonempty digest is the exact result of the existing `fingerprint_paths` algorithm for those paths on the same filesystem used by the Python subprocess. A non-Python caller must reproduce that documented algorithm, preserving integer metadata exactly; a content-only hash, a digest from another filesystem or an unavailable fingerprint is not interchangeable.
+- Resolve paths against the process-supplied project root. Reject absolute paths, NULs, backslashes and `.` or `..` components. Before fingerprinting any path, apply `egress._source_rule` to its resolved location. Outside-project and denylisted paths are refused without opening their contents. Repeat the scope check before each fingerprint phase; the existing intermediate-directory residual remains.
+- The ordinary orchestrator recomputes all candidates’ declared read sets at row 4 and only the chosen candidate’s read set at row 12. Preserve revision 10’s per-phase deduplication and per-phase byte/path budgets. Do not replace the supplied baseline with the newly computed value.
+- A mismatch at row 4 yields `stale_before_select`; `FingerprintUnavailable` there has `detail: fingerprint_unavailable`. A mismatch or unavailable fingerprint at row 12 yields `stale_read_set`. Never convert an unavailable fingerprint to `null`, a marker or an empty read set.
+
+This representation reuses the one-descriptor, full-content fingerprint machinery and its failure mapping. A digest without paths was rejected because Python could not recompute it; defining portable content-only hashes was rejected because it would introduce different freshness semantics from B15. Cross-machine freshness and remote read sets are out of scope.
+
+`expires_at_ms` is required for every external candidate and uses Unix epoch milliseconds. Check it at pre-eligibility and revalidation with the existing expiry rule. Nonempty preconditions are handled as the unverified conditions specified under Trusted preparers; the caller cannot mark them satisfied through stdin.
+
+`sources` declares the material used for task, context and descriptions. The boundary adds the candidates’ read-set paths to that declaration before egress checks. Neither source declarations nor fingerprint equality prove that external text came only from those sources. Existing owner, source, credential-pattern, loaded-key, size, budget and breaker checks still apply.
+
+**Result and fallback vocabulary.** Stdout is the decision record produced by `records.build_record`, not a second result vocabulary or a rendered payload:
+
+- `applied` is the existing `native|emitted` effect field. For this v1 external contract it is always `native`.
+- `result.kind` remains `selected|abstained|not_called`; `result.confidence` is always present and is `null` when unavailable.
+- `validation.stage` and `validation.reject_reason` report validation, using the existing reject reasons.
+- `fallback.reason` and `fallback.detail` use the existing fallback table. A successful shadow selection has `fallback.reason: shadow_mode`.
+- `request.provenance` is `external`; `request.preparer` is `null`.
+
+A caller must not execute a selected candidate when `applied` is `native`. No payload, argv, hook output or permission decision is returned. A successful registry authorization check does not change this rule.
+
+For a normal enabled request, return the same decision object used for the JSONL append, including its `decision_id`; do not read the latest record file or construct a second decision afterward. If shadow persistence fails, stdout still carries the native decision and stderr reports only a fixed diagnostic and exception type; do not claim persistence succeeded.
+
+Flag-off handling remains inert: no request-dependent filesystem reads, owner lookup, credentials, sockets or durable record. The explicit machine command nevertheless returns an **in-memory-only** `flag_off` decision, without consuming stdin. It uses an empty synthetic request, `mode: shadow` as the transport’s maximum execution mode, `egress.verdict: not_run`, `result: {"kind": "not_called", "confidence": null}`, and flags reporting the actual off state. This does not change `hook` stdout or row 1’s no-record-file rule.
+
+For enabled malformed/version/shape/hash-invalid input, return `invalid_input` (`no_candidates` for an otherwise valid empty candidate array), native, with no network. Use `build_record` over an empty synthetic request rather than echoing rejected input. Synthetic records have empty task/context/candidates and a fixed all-zero `task_revision`; their request hash describes that synthetic request, not the rejected frame. Fixed details may identify `bad_json`, `schema_version`, `schema`, `oversize` or `payload_hash`; never include supplied text, paths or JSON-decoder excerpts. Scope refusal uses the existing `egress_refused` reason and source rule IDs without echoing paths. Unexpected exceptions remain `internal_error`, type name only. No new `FallbackReason` is added.
+
+A handled decision or native fallback exits 0. Command-line usage errors exit 2 with bounded stderr; process failure and broken stdout are transport failures, for which the caller retains native behavior. The one-record guarantee applies to handled requests and fallbacks, not an interpreter that cannot start or a process killed by its caller.
+
+**Versioning and schemas.** The wire request has its own `schema_version`; it is not `asdict(SelectionRequest)` and changes to that dataclass do not silently alter the wire format. The response intentionally retains decision-record schema v1. Its transport schema is a complete compositional JSON Schema referencing the adjacent canonical record schema, so inherited record fields have one definition. Both references resolve locally; validators must not fetch the `$id` URLs.
+
+T7 extends the unreleased decision-record v1 provenance enum with `external`. T8 adds the following two files. No other decision-record vocabulary changes.
+
+`schemas/selector-select-request.v1.schema.json`:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clavain.internal/schemas/selector-select-request.v1.schema.json",
+  "title": "Clavain select-json request v1",
+  "description": "One external shadow-selection request. UTF-8 frame limit: 90000 bytes. Duplicate keys and non-finite numbers are invalid. Integration, project root, session and mode are not stdin fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "task_revision",
+    "task",
+    "context",
+    "candidates",
+    "sources",
+    "deadline_ms"
+  ],
+  "properties": {
+    "schema": {
+      "const": "clavain.selector.select.request"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "task_revision": {
+      "$ref": "#/$defs/sha256"
+    },
+    "task": {
+      "type": "string",
+      "maxLength": 12000
+    },
+    "context": {
+      "type": "string",
+      "maxLength": 40000
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "sources": {
+      "$ref": "#/$defs/paths"
+    },
+    "deadline_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)[^\\u0000]+$",
+      "description": "Project-relative POSIX path. Runtime also rejects '.' and '..' components and applies resolved-root and egress-denylist checks before file-content access."
+    },
+    "paths": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/path"
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "payload",
+        "payload_sha256",
+        "prepared_at_revision",
+        "preconditions",
+        "read_set_paths",
+        "read_set_fingerprint",
+        "expires_at_ms"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]{1,64}$",
+          "not": {
+            "const": "escalate"
+          },
+          "description": "Must be unique across candidates; uniqueness by id is checked at runtime."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "payload": {
+          "type": "string",
+          "maxLength": 65536,
+          "description": "Opaque already-rendered text. Never parsed as a command, sent to Jev or returned in the decision."
+        },
+        "payload_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA256 of contract.payload_bytes(payload), including JSON string quotes and ensure_ascii escapes."
+        },
+        "prepared_at_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "preconditions": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "description": "Additional conditions the caller requires. Nonempty lists are unverified in v1 and cause a native stale_before_select fallback with unmet_precondition."
+        },
+        "read_set_paths": {
+          "$ref": "#/$defs/paths"
+        },
+        "read_set_fingerprint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Exact aggregate base.fingerprint_paths result for the declared paths on the subprocess filesystem; null only for an empty read set."
+        },
+        "expires_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "read_set_paths": {
+                "maxItems": 0
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "read_set_fingerprint": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "read_set_fingerprint": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+`schemas/selector-select-response.v1.schema.json`:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clavain.internal/schemas/selector-select-response.v1.schema.json",
+  "title": "Clavain select-json response v1",
+  "description": "The records.build_record schema-v1 decision, restricted to the external shadow transport. The adjacent record schema supplies the complete shared record shape. Native/emitted is expressed by applied, not result.kind.",
+  "allOf": [
+    {
+      "$ref": "selector-decision-record.v1.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema",
+        "schema_version",
+        "point",
+        "mode",
+        "request",
+        "result",
+        "validation",
+        "fallback",
+        "applied"
+      ],
+      "properties": {
+        "schema": {
+          "const": "clavain.selector.decision"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "point": {
+          "const": "library"
+        },
+        "mode": {
+          "const": "shadow"
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": {
+              "const": "external"
+            },
+            "version": {
+              "const": "1"
+            }
+          }
+        },
+        "adapter_version": {
+          "const": "1"
+        },
+        "request": {
+          "type": "object",
+          "required": ["provenance", "preparer"],
+          "properties": {
+            "provenance": {
+              "const": "external"
+            },
+            "preparer": {
+              "type": "null"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "confidence"],
+          "properties": {
+            "kind": {
+              "enum": ["selected", "abstained", "not_called"]
+            },
+            "candidate_id": {
+              "type": ["string", "null"]
+            },
+            "jev_choice": {
+              "type": ["string", "null"]
+            },
+            "tie_size": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "maximum": 17
+            },
+            "confidence": {
+              "$ref": "#/$defs/score"
+            },
+            "selected_probability": {
+              "$ref": "#/$defs/score"
+            },
+            "fit": {
+              "$ref": "#/$defs/score"
+            }
+          }
+        },
+        "validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stage", "reject_reason"],
+          "properties": {
+            "stage": {
+              "type": ["string", "null"]
+            },
+            "reject_reason": {
+              "enum": [
+                null,
+                "invalid_id",
+                "stale_revision",
+                "stale_read_set",
+                "expired",
+                "unmet_precondition",
+                "unauthorized"
+              ]
+            }
+          }
+        },
+        "fallback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reason", "detail"],
+          "properties": {
+            "reason": {
+              "enum": [
+                "flag_off",
+                "invalid_input",
+                "no_candidates",
+                "point_unreachable",
+                "stale_before_select",
+                "egress_refused",
+                "budget_exhausted",
+                "circuit_open",
+                "credential_unavailable",
+                "timeout",
+                "rate_limited",
+                "credential_rejected",
+                "http_error",
+                "invalid_response",
+                "model_mismatch",
+                "jev_escalated",
+                "low_confidence",
+                "low_fit",
+                "invalid_id",
+                "stale_revision",
+                "stale_read_set",
+                "expired",
+                "unmet_precondition",
+                "unauthorized",
+                "shadow_mode",
+                "record_unwritable",
+                "internal_error"
+              ]
+            },
+            "detail": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        },
+        "applied": {
+          "const": "native"
+        }
+      },
+      "not": {
+        "required": ["inputs_ref"]
+      }
+    }
+  ],
+  "$defs": {
+    "score": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}
+```
+
+The schemas describe shape; runtime additionally enforces byte limits, unique candidate ids, payload-hash equality, path scope, revision/fingerprint/expiry comparisons and provenance. JSON Schema cannot prove any of those provenance claims.
 
 ### Selection flow and fallback table
 
@@ -733,6 +1190,8 @@ Revision 6 amendments to schema v1. `schema_version` stays `1`: no non-test v1 r
 - `candidates` follows canonical order, and the `[:16]` cap applies to canonical order (G3).
 - Permutation invariance: for any permutation of a request's candidates, every record field except `decision_id`, `created_at`, `selector.latency_ms` and `selector.attempts` is byte-identical under a fake server whose answer is a function of the (canonical) wire body.
 
+Revision 11 adds `external` to `request.provenance`; `request.preparer` is `null` for that provenance. The existing pre-release schema-v1 amendment policy applies. `select-json` supplies `result.confidence: null` when no confidence exists, using `build_record`’s existing `result` argument rather than adding a top-level score. Its response schema composes the canonical decision-record schema. It introduces no raw input field, payload field, additional applied state or new fallback reason.
+
 ### How records reach Intercore
 
 `clavain-select.py export-ic [--record-dir DIR]` is a batch command outside the hot path, enabled only by `CLAVAIN_SELECTOR_IC_EXPORT=1`. It reads records after a cursor (`…/selector/ic-export.cursor`) and, per record, runs:
@@ -779,7 +1238,7 @@ ic events record --source=interspect --type=selector_decision_v1 \
 
 `authorize` block (revision 6, S1). Shape: `{"allow_all": bool, "allow_ids": [id…], "allow_id_prefixes": [prefix…], "deny_ids": [id…]}`, with every key optional. Ids and prefixes must match `[A-Za-z0-9_.-]{1,64}` and no list may repeat a value. `allow_all: true` is legal only when the entry has `shadow_only: true`. A missing block means deny everything: the integration can still record (row 12 then reports `unauthorized`), but it can never pass revalidation. An invalid block (bad type, bad id, `allow_all` without `shadow_only`, or an unknown key) makes the registry malformed. Every integration then resolves to `off` (the same rule as other registry errors), and `doctor` names the key through `flags.registry_errors` (below). `flags.authorization_policy(registry, integration, point)` returns the `AuthorizationPolicy` for that point, with lists turned into frozensets and sorted tuples. For a point not in the entry's `points`, it returns a deny-all policy. The block is part of `config_sha256`, so a policy edit is visible in records.
 
-Hook binding and preparer (revision 7, S1). Two optional entry keys: `preparer` (a name in `preparers.PREPARERS`) and `hooks` (a list of `{"host": <matrix host>, "point": <one of the entry's points>}`). A non-empty `hooks` requires `preparer`. No two entries may list the same `{host, point}`. `flags.hook_integration(registry, host, point) -> str | None` returns the one entry that lists the pair, or `None`. .7 ships selftest with `hooks: []` and no preparer, so no hook can reach it; it runs only through `shadow-live`, `latency-probe` and the eval harness.
+Hook binding and preparer (revision 7, S1). Two optional entry keys: `preparer` (a name in `preparers.PREPARERS`) and `hooks` (a list of `{"host": <matrix host>, "point": <one of the entry's points>}`). A non-empty `hooks` requires `preparer`. No two entries may list the same `{host, point}`. `flags.hook_integration(registry, host, point) -> str | None` returns the one entry that lists the pair, or `None`. .7 ships selftest with `hooks: []` and no preparer, so no hook can reach it; it runs only through `shadow-live`, `latency-probe`, the eval harness and revision 11’s shadow-only `select-json` library transport.
 
 Per-entry validation (revision 7, P3-14). The landed `load_registry` checks only the top-level shape. Revision 7 adds `flags.registry_errors(data) -> tuple[RegistryError, ...]`, with `RegistryError(integration: str | None, key: str, message: str)`, which validates every entry against a closed key set: `flag`, `points`, `active_allowed`, `shadow_only`, `floors`, `fit_questions`, `high_entropy`, `deadline_ms`, `session_budget`, `authorize`, `preparer`, `hooks`, `owner_bead`. It checks each key's type and value (point names, floors in [0,1], deadlines ≤5000, the `authorize` rules above, the `preparer`/`hooks` rules, duplicate hook pairs across entries). An unknown key is an error. `load_registry` returns `EMPTY_REGISTRY` (every integration off) when the tuple is non-empty, and `doctor` prints each error's integration and key. The errors never include values from the file other than key names.
 
@@ -903,6 +1362,9 @@ Case schema v1 (`schemas/selector-eval-case.v1.schema.json`): `case_id`, `integr
 | .8 launch-time plugin/skill/role profile | `Point.launch_profile`; Claude adapter render of a launch plan (`claude plugin enable --scope local` works on 2.1.282); B10 bundles as candidates; B11 shortlist; 3000ms deadline; cache rule; eval harness and level-2 burn | Registry entry and `CLAVAIN_SELECTOR_LAUNCH_PROFILE`; point (a) adapters for Codex, Hermes, Kimi, Pi and bb; hook/launcher registration; labeled cases |
 | .9 security-review triage (shadow only) | `Point.library` (in-process `select()` with no host adapter); `forbidden` labels with a hard zero gate; `shadow_only: true` enforcement that env flags cannot override; records and outcomes | Registry entry, candidate preparation from review findings, labeled cases, any later request to lift shadow-only (needs mk) |
 | .10 large tool-output reduction | `Point.post_tool_output`; Claude adapter point (d) (and (c) only for observe/deny, never rewrite); `payload_sha256` and `read_set_fingerprint` so originals are traceable; 1500ms deadline; egress refusal on credential-shaped output with `cred.high_entropy` on by default; `applied: emitted` plus host acknowledgement, so burn credits only reductions the host actually used | First-hand verification of Claude `updatedToolOutput` on 2.1.282, including the output-shape check and an adapter acknowledgement that detects a discarded replacement; the retrievable-original store; Hermes/Pi adapters for (d); registry entry and labeled cases |
+| mk-rpnv.3 Quilan | `select-json` request/response schemas; shared `Point.library` selector/client; fixed `EXTERNAL` provenance; native shadow decisions; per-candidate payload bindings and recomputable read sets | TypeScript subprocess caller, its registry entry/flag and labeled cases; bounded stdin/stdout handling and stable session identity; tests that native decisions never apply a candidate; any proposal for external active/emitted support |
+
+Revision 11 scope clarification: the registered Python-preparer obligations below apply to integrations seeking `PREPARER` provenance or using `hook`. Quilan’s external shadow path instead satisfies the `select-json` contract and remains `EXTERNAL`; it is not required to register a Python preparer merely to observe decisions.
 
 Every dependent also adds (revision 6) an `authorize` block to its registry entry, since a missing block denies all; stamps `question_set_version`/`questions_sha256` into its cases before sealing; and must keep `permute-check` passing on its cases. Revision 7 adds three obligations: a trusted preparer registered in `preparers.PREPARERS`, named by the entry's `preparer` key, for every point it serves (and `hooks` pairs for every hook it registers); every new candidate-reading function in `ORDER_CONSUMERS`, guarded by `require_canonical` or listed in `ORDER_AGNOSTIC` with a reason; and payloads computed only inside the preparer, so their bindings are recorded before selection. Revision 8 adds three more:
 - Each preparer declares its `event_fields` and ships a hostile-event test. Spoofed values in every undeclared field and in `raw` leave the `PreparedSet`'s ids, descriptions, bindings and `read_set_paths` byte-identical to a clean event's. Spoofed values in a declared field change payloads only as the documented transform specifies, which the test asserts against the transform's expected output (P2-3).
@@ -914,6 +1376,8 @@ Revision 9 adds two more:
 - Each preparer's `read_set_paths` stay inside `project_root` and outside the egress source denylist (`egress._source_rule`), and `build` fingerprints only such paths; the dependent's hostile-event test covers it (P3-7).
 
 Revision 10 (other-frontier review) adds one: .8 documents, in its own plan, which bundle effects the pinned `claude plugin enable` command can produce beyond enabling `chosen.id` (at minimum, declared plugin dependencies), and adds a named test, `test_launch_dependency_effects`, that exercises a fixture plugin with a declared dependency and asserts what actually gets enabled. .8 must not treat `launch_argv_ok`'s template equality as proof that only `chosen.id` is affected.
+
+Revision 11 adds the named follow-on obligation **`mk-rpnv.3 / external-active-provenance`**. If Quilan needs a selected payload to affect routing or host behavior, that dependent must return to frontier planning and independent other-frontier review with an evidenced preparation and application boundary. This plan does not choose that mechanism. It must preserve `authorize_by_policy`, `ValidatedCandidates`, payload binding, host permission gates and fresh validation rather than treating hashes or a caller-supplied flag as authorization. Until that obligation closes, Quilan must retain native behavior for every external result. Required caller tests are `test_quilan_select_json_contract` and `test_quilan_selector_native_fallback`, including `result.kind: selected` together with `applied: native`. The transport does not by itself complete or fully unblock any active-effects requirement in `mk-rpnv.3`, and that bead must not add a second Jev HTTP client.
 
 ## Risks
 
@@ -939,6 +1403,7 @@ Revision 10 (other-frontier review) adds one: .8 documents, in its own plan, whi
 | Hook wrapper breaks a host | Wrapper exits 0 on every path, bounded by `timeout`; bats test. |
 | Promo pricing ends or rate limits unknown | Usage recorded per decision; budgets; 429 is operational. |
 | Vendor outage (no SLA) | Breaker and native fallback. |
+| External stdin is mistaken for trusted preparation | `select-json` permits the caller to choose candidate ids, descriptions and payloads, unlike `hook`. Hash agreement proves consistency only. Fixed `EXTERNAL` provenance, the core shadow cap and the final `PREPARER` emission condition prevent application through this package. The caller must obey `applied: native`; a caller that independently applies a shadow pick is outside this contract. Caller-supplied revision/source/read-set declarations are not proof of complete host state. External active effects remain `mk-rpnv.3 / external-active-provenance`. |
 
 ---
 
@@ -1289,6 +1754,8 @@ Revision 6 status. T1 (18ff9c8), T3 (ce59824), T2 (729d696), T4 (627c749) and T6
 - Create: `scripts/clavain_selector/selector.py`, `scripts/clavain-select.py` (only the `hook` subcommand in this task), `hooks/selector-hook.sh`
 - Test: `tests/structural/test_selector_orchestrator.py`, `tests/shell/selector_hook.bats`; the fixture preparer lives in the test module and is installed with `monkeypatch.setattr(preparers, "PREPARERS", MappingProxyType({...}))` (revision 8, P3-11), never shipped
 - Modify, only if `test_select_fingerprint_budget` needs it (revision 9, P3-6): `scripts/clavain_selector/adapters/base.py` (an optional `fingerprint_paths` keyword whose default keeps every R6b test unchanged)
+- Modify: `scripts/clavain_selector/contract.py` (`Provenance.EXTERNAL`), `scripts/clavain_selector/preparers.py` (`from_external`), `scripts/clavain_selector/records.py` and `schemas/selector-decision-record.v1.schema.json` (external provenance)
+- Test additions: `tests/structural/test_selector_preparers.py`, `tests/structural/test_selector_records.py`
 
 **Step 1: Write the failing tests**
 - `test_flag_off_is_inert`: no env → returns native, record dir absent afterwards, zero socket attempts, no credential file access (monkeypatch `credentials.load_key` to fail the test if called), no owner lookup.
@@ -1303,7 +1770,7 @@ Revision 6 status. T1 (18ff9c8), T3 (ce59824), T2 (729d696), T4 (627c749) and T6
 - `test_hook_subcommand` (revision 7): with a registry fixture whose entry lists `hooks: [{"host": "claude-code", "point": "pre_tool"}]` and names a fixture preparer installed in `PREPARERS` by the test, `clavain-select.py hook --point pre_tool --host claude-code` parses the fixture from stdin, prepares candidates through the preparer and writes the adapter's output (empty in shadow); with the shipped registry (no hooks) it exits 0 with empty output, writes no record and opens no socket; `--integration` is not an accepted option.
 - `test_hook_ignores_stdin_candidates` (revision 7, S1): the pre-tool fixture gains `"integration": "other"`, `"candidates": [{"id": "evil", "payload": …}]`, `"project_root": "/tmp/x"` and a `CLAUDE_PROJECT_DIR`-shaped field; the record's integration, candidate ids, `payload_sha256` values and project root are exactly those from the registry, the fixture preparer and the process environment, and no `evil` id or payload hash appears anywhere in the record or output.
 - `test_select_requires_prepared` (revision 7, S1): `select()` given a `SelectionRequest`, a hand-built `PreparedSet` or one rebuilt with `dataclasses.replace` → `internal_error` (`NotPrepared`), native, zero socket attempts, no credential read.
-- `test_provenance_limits_mode` (revision 7, S1): with a registry fixture allowing active on a first-hand point, an `OPERATOR` set requested as `active` runs as shadow with `flags.active_denied: true`, an `EVAL_CASE` set outside `mode_override="eval"` is refused as `internal_error`, and a `PREPARER` set can reach `applied: emitted`; records carry `request.provenance`.
+- `test_provenance_limits_mode` (revision 7, extended in revision 11): with registry fixtures permitting active use, an `OPERATOR` set requested as active runs as shadow with `flags.active_denied: true`; an `EVAL_CASE` set outside `mode_override="eval"` is refused as `internal_error`; and a registered `PREPARER` set on a first-hand host point can reach `applied: emitted`. Add an `EXTERNAL` library set: an active flag and active-permitting registry still give `mode: shadow`, `flags.active_denied: true`, `applied: native`, `request.provenance: external` and `request.preparer: null`. Any external `mode_override`, including `"eval"`, is refused. A successful `authorize_by_policy` result cannot lift this cap.
 - `test_payload_mutation_not_emitted` (revision 7, S1; revised in revision 8, P2-4): in active mode, a fake server selects `a`.
   - `a` has a one-file read set. A fake adapter whose `fingerprint`, on the row-12 recompute of `a` (which runs before `authorize`; see Authorization), mutates `a.payload` → `unauthorized` (row 12), and nothing is emitted (revision 9, P3-9: the hook is pinned).
   - A fake adapter that replaces the outcome with `dataclasses.replace(outcome, render_bytes=<other bytes>)` → `internal_error` from `Outcome.__post_init__`, and nothing is emitted.
@@ -1317,10 +1784,20 @@ Revision 6 status. T1 (18ff9c8), T3 (ce59824), T2 (729d696), T4 (627c749) and T6
 - `test_select_fingerprint_budget` (revision 9, P3-6, in-task obligation; dedup scope corrected in revision 10, other-frontier review): a shared file is deduplicated only within a phase — once across all candidates fingerprinted at row 4, and again (independently) if row 12 re-fingerprints the chosen candidate — never across the whole select, because row 12 must re-read the chosen candidate's files to detect a change since row 4 (`test_per_candidate_read_sets`, R6b), and a read once per select would make that detection impossible. The byte and path budget (`FINGERPRINT_MAX_BYTES`, `FINGERPRINT_MAX_PATHS`) applies per phase, not as one aggregate across rows 4 and 12. With 16 candidates sharing one 8 MiB file, an `os.read` spy counts at most 8 MiB + 1 bytes read at row 4 (deduplicated within that phase); with 16 candidates that each add a distinct 5 MiB file to one shared 5 MiB file, row 4's aggregate overruns its own budget and the result is `stale_before_select` with `detail: fingerprint_unavailable`; row 12's later, separate re-read of the one chosen candidate is unaffected by row 4's budget.
 - `test_record_matches_call_battery` (G2): with a fake server, the record's `request.questions_sha256` equals the sha256 of the `questions` object the server received.
 - bats: the wrapper exits 0 when python is missing, when the script exits 1, when it hangs past `timeout` (1.8s for hook points), and when stdin is malformed; stdout is empty when the flag is off; on a `timeout` kill (exit 124) it appends one line `{at, point, integration, kind: "wrapper_timeout"}` to `$CLAVAIN_STATE_DIR/selector/wrapper-timeouts.jsonl` so hangs are visible to the latency summary.
+- `test_external_factory`: `from_external` creates a canonical, verifiable set with fixed `library`, `EXTERNAL` and `preparer=None`, without consulting `PREPARERS`. Unknown integration, an integration not serving `library`, mismatched read-set ids or inconsistent empty-path/null-fingerprint pairs raise `NotPrepared`. Mutation of payload, paths, provenance or revision after construction fails `verify`.
+- `test_external_authorization_stays_narrow`: an external set with an allowed id and matching binding may pass `authorize_by_policy`, but still returns native; deny-all or denied-id policies yield `unauthorized` after a fake selection. No event, wire dictionary or additional external verdict reaches `authorize_by_policy`.
+- `test_external_preconditions_unverified`: a nonempty precondition list yields row 4 with `stale_before_select`, stage `pre_eligibility` and reject reason `unmet_precondition`, with no credential read or connection. An empty list continues through the ordinary checks. Condition text is never executed or read as a path.
+- `test_external_fingerprint_phases`: external candidates with disjoint real read sets use the supplied baselines at row 4; a changed baseline falls back before a call. After the fake server selects `a`, changing only `b` does not reject `a`, while changing `a` gives `stale_read_set`. Repeated `FingerprintUnavailable` never compares equal or becomes a null read set. Preserve per-phase deduplication and budgets.
+- `test_external_emission_guard`: with an external set and an active-permitting registry, spies on `emitted_outcome` and host render fail the test if called. The selector's final emission condition requires `PREPARER`; external selection cannot reach it.
+- `test_select_existing_deadline`: an optional caller-supplied `Deadline` can only tighten the ordinary integration deadline. An already exhausted deadline gives native `timeout` with zero socket attempts; a partially consumed deadline does not restart at Jev-call construction. Existing callers omitting it retain their current behavior.
+- `test_select_returns_built_record`: the internal selection result exposes the exact decision object used for append, alongside its existing host output. The machine CLI can return it without another call or a record-directory lookup. Flag-off retains no durable record and may expose no record object; T8 builds its documented synthetic response separately.
+- `test_record_external_provenance`: `build_record` accepts `EXTERNAL`, records `request.provenance: external` and `request.preparer: null`, and retains the existing payload/privacy rules.
 
 **Step 2:** Run `uv run pytest structural/test_selector_orchestrator.py -q` and `bats tests/shell/selector_hook.bats`. Expected: FAIL.
 
 **Step 3:** Implement `select(prepared, *, session, adapter, env, now, mode_override=None)` (revision 7: a `PreparedSet` only) in the documented order and the `hook` subcommand (integration from `flags.hook_integration`, candidates from `preparers.prepare`, `project_root` from the environment); the wrapper mirrors `hooks/context-gateway.sh` (fail-open, always `exit 0`, `timeout` bound, no `set -e`) plus the wrapper-timeout line. Do not register it in `hooks/hooks.json`.
+
+Revision 11 also implements `from_external`, the external provenance cap, unverified-precondition handling and the final `PREPARER` emission condition. Add an optional `deadline: Deadline | None = None` keyword to `select`; intersect it with the existing configured limit. Retain the built decision in the internal return value for T8 instead of reconstructing it from disk. These are later amendments to the APIs produced by R6b; R6a, R6b and T5 remain unchanged.
 
 **Step 4:** Same commands. Expected: PASS.
 
@@ -1333,40 +1810,66 @@ Revision 6 status. T1 (18ff9c8), T3 (ce59824), T2 (729d696), T4 (627c749) and T6
   expect: exit 0
 - run: `cd /home/mk/projects/.clavain-jev && git diff --quiet origin/main -- hooks/hooks.json config/host-adapters.json`
   expect: exit 0
+- run: `cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_preparers.py structural/test_selector_records.py -q`
+  expect: exit 0
 </verify>
 
-### Task 8: Operator CLI
+### Task 8: Operator CLI and external JSON transport
 
 **Depends:** T7
 
 **Files:**
-- Modify: `scripts/clavain-select.py` (add `doctor`, `records`, `outcome`, `shadow-live`, `latency-probe`)
+- Modify: `scripts/clavain-select.py` (add `doctor`, `records`, `outcome`, `shadow-live`, `latency-probe`, also add `select-json`)
 - Test: `tests/structural/test_selector_cli.py`
+- Create: `scripts/clavain_selector/external.py`, `schemas/selector-select-request.v1.schema.json`, `schemas/selector-select-response.v1.schema.json`
+- Test: `tests/structural/test_selector_external.py`, using the shared non-loopback socket guard
 
 **Step 1: Write the failing tests**
-- Every subcommand that reads or writes records (`records`, `outcome`, `shadow-live`, `latency-probe`, and T11's `export-ic`) takes `--record-dir DIR`. The default is `CLAVAIN_SELECTOR_RECORD_DIR`, else the documented default, and `--record-dir` wins over the env var; a test covers the precedence.
+- Every subcommand that reads or writes records (`records`, `outcome`, `shadow-live`, `latency-probe`, `select-json`, and T11's `export-ic`) takes `--record-dir DIR`. The default is `CLAVAIN_SELECTOR_RECORD_DIR`, else the documented default, and `--record-dir` wins over the env var; a test covers the precedence.
 - `doctor` prints flags, registry, matrix summary, the retention disclosure and the secrets file status from `os.lstat` only (exists, mode, owner); a test asserts via a monkeypatched `open`/`os.open` that it never opens the secrets file.
 - `records --record-dir DIR --since` lists records; `records --latency-summary [--assert-p95-ms N] [--assert-over-deadline-frac F]` prints p50/p95/max, the number of distinct request hashes, and counts `wrapper-timeouts.jsonl` lines in the window as over-deadline; it exits 1 when an assertion fails, and `--assert-distinct-inputs K` exits 1 when fewer than K distinct `request.sha256` values are present.
 - `outcome --decision-id … --result … --host-applied …` appends one outcome line; an unknown decision id exits 2.
 - `shadow-live` requires `--task-file`, `--candidates-file` and `--project-root`, and refuses (exit 2, no network) unless the integration flag is `shadow`. Revision 7: it builds its set with `preparers.from_operator`, so records carry `provenance: operator` and it can never emit.
 - `latency-probe --inputs <jsonl of {task_file, candidates_file}> --n N --budget N` rotates round-robin through the inputs (at least 5 distinct inputs required, else exit 2), builds each set with `preparers.from_operator` and calls `select(…, mode_override="eval")` (so it requires the integration flag to be `shadow` or `active` and exits 2 otherwise), records the explicit budget, and prints `distinct_inputs`; against the loopback fake with 5 inputs and N=30 it makes 30 calls with 5 distinct request hashes.
+- `test_select_json_subcommand`: invoke the CLI with a complete UTF-8 request and EOF against the loopback fake. It produces exactly one JSON line, exits 0, records `point: library`, external provenance and native application, and returns the same `decision_id` and record content as the JSONL append. No Python preparer is registered or called.
+- `test_select_json_schema_contract`: load both new schemas and the adjacent decision-record schema with stdlib `json`. Assert the request's version discriminator, required fields, closed objects and declared bounds; assert the response's local canonical-record reference, external provenance, native cap and required confidence/validation/fallback fields. Runtime positive and negative fixtures exercise each declared constraint. No remote schema lookup or new dependency is used.
+- `test_select_json_framing`: valid trailing whitespace is accepted. Duplicate keys at either object level, a second JSON value, top-level array, malformed UTF-8, lone surrogates, non-finite numbers and truncated JSON each give one native `invalid_input` decision, no connection and no input excerpt in stdout/stderr. An unsupported version gives fixed detail `schema_version`.
+- `test_select_json_limits`: test 90,000 versus 90,001 UTF-8 frame bytes, including multibyte text; all candidate/task/context/description/path-count bounds; duplicate ids; reserved `escalate`; and booleans where integers are required. An otherwise valid zero-candidate request gives `no_candidates`. Oversize reading stops after at most limit-plus-one bytes.
+- `test_select_json_payload_binding`: valid payloads preserve their existing `payload_sha256` in the record. Golden vectors cover quotes, backslashes, newline, non-ASCII and supplementary characters. Hashing raw text instead of the JSON string literal, or changing payload text without changing its expected digest, gives native `invalid_input` with detail `payload_hash` before a call. A matching caller-supplied hash never promotes provenance.
+- `test_select_json_no_authority_fields`: adding stdin `integration`, `project_root`, `session`, `mode`, `provenance`, `preparer`, `authorize` or `authorized` is a schema error. Process arguments determine integration/root/session. Active environment flags still produce a shadow/native result with `active_denied`; there is no CLI active option.
+- `test_select_json_read_set_contract`: nonempty paths with null/missing digest, empty paths with a digest, malformed digests and absent required freshness fields are rejected. A valid digest is recomputed from the same paths through `base.fingerprint_paths`; a caller-supplied digest alone is insufficient.
+- `test_select_json_source_scope`: outside-root paths, `..`, absolute paths and resolved denylisted or escaping symlink targets cannot cause file-content access or a connection. Shape-invalid paths yield `invalid_input`; resolved source-policy violations yield `egress_refused` with the existing rule IDs. The union of declared sources and read sets reaches the source guard. No path text is echoed.
+- `test_select_json_freshness`: revision mismatch and already expired candidates give `stale_before_select`; expiration after the fake answer gives `expired`; read-set changes and `FingerprintUnavailable` map as specified at both phases. No failure refreshes the supplied baseline to manufacture equality.
+- `test_select_json_preconditions`: a nonempty list yields native `stale_before_select` with `unmet_precondition` and zero server hits; a forged `preconditions_met` or equivalent field is rejected rather than accepted as evidence.
+- `test_select_json_deadline`: input that never reaches EOF is bounded by the configured input deadline. A request whose smaller `deadline_ms` is already consumed by decoding makes no call; a slow fake server cannot reset the remaining budget. All handled timeout responses are native; the caller-side fixture treats killed or incomplete output as native.
+- `test_select_json_flag_off`: with flags unset or the kill switch off, stdin is not consumed; no request-dependent path read, owner lookup, credential access, socket, record file or state directory occurs. Exactly one synthetic native `flag_off` response is emitted, with null confidence and external provenance.
+- `test_select_json_egress_and_privacy`: credential-shaped task/context/id/description inputs give zero connections and the existing redacted record form. A distinct payload canary appears in neither the captured Jev body nor stdout, stderr or records. Malformed input canaries do not escape through parse errors.
+- `test_select_json_native_is_not_effect`: a high-confidence fake selection under active-permitting registry/flag fixtures still returns `result.kind: selected`, `fallback.reason: shadow_mode`, `applied: native`; stdout contains no payload, argv or hook permission output. A consumer fixture never applies that candidate.
+- `test_select_json_failures`: fake timeout, malformed Jev response, missing test credential and an unexpected exception each produce one native record with the existing reason. Exception messages containing a canary are absent. An unwritable shadow record directory does not suppress the stdout native decision or claim persistence.
+- `test_select_json_shared_client`: spies show that the command delegates to `selector.select` and the existing `JevClient`; `external.py` imports no HTTP client and implements no retry, credential or authorization policy. The existing session budget still applies across calls with the same process-supplied session id.
+- `test_select_json_permutation`: identity, reversed and seeded permutations produce the same admitted body, request/question hashes, canonical candidate records and decision fields after removing the existing volatile fields. Wire decoding must not introduce an order-sensitive shortlist or tie rule.
+- `test_select_json_record_dir_precedence`: explicit `--record-dir` wins over the environment, which wins over the normal default; stdout returns the decision from that invocation regardless of other records already present.
 
-**Step 2:** Run `uv run pytest structural/test_selector_cli.py -q`. Expected: FAIL.
+**Step 2:** Run `uv run pytest structural/test_selector_cli.py structural/test_selector_external.py -q`. Expected: FAIL for the missing subcommand/module and external contract behavior.
 
-**Step 3:** Implement the subcommands with `argparse`, each delegating to library functions.
+**Step 3:** Implement the existing operator subcommands and `select-json` with `argparse`, delegating to library functions. `external.read_request` owns bounded framing and strict decoding; `external.from_wire` performs wire-to-domain validation, payload-hash checks and safe path mapping before calling `preparers.from_external`; `external.write_decision` writes the already-built record as one JSON line. Use the schemas and semantics in External stdin/stdout contract exactly. Keep `hook` argument parsing and trusted-preparer behavior unchanged. Add no registry entry, HTTP client, credential path or authorization mechanism.
 
-**Step 4:** Same command. Expected: PASS.
+**Step 4:** Run both test files and T7's orchestrator suite. Expected: PASS. These tests use loopback only and do not replace T12's existing live acceptance.
 
-**Step 5:** Commit `feat(selector): operator CLI (mk-42j9.7)`.
+**Step 5:** Commit `feat(selector): operator CLI and shadow-only JSON transport (mk-42j9.7)`.
 
 <verify>
-- run: `cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_cli.py -q`
+- run: `cd /home/mk/projects/.clavain-jev/tests && uv run pytest structural/test_selector_cli.py structural/test_selector_external.py structural/test_selector_orchestrator.py -q`
   expect: exit 0
+- run: `cd /home/mk/projects/.clavain-jev && python3 -m json.tool schemas/selector-select-request.v1.schema.json >/dev/null && python3 -m json.tool schemas/selector-select-response.v1.schema.json >/dev/null`
+  expect: exit 0
+- run: `cd /home/mk/projects/.clavain-jev && python3 scripts/clavain-select.py select-json --help`
+  expect: contains "--session-id"
 </verify>
 
 ### Task 9: Eval harness
 
-**Depends:** T3, T5, T7, R6a
+**Depends:** T3, T5, T7, T8, R6a
 
 **Files:**
 - Create: `scripts/clavain_selector/eval.py`, `scripts/selector-eval.py` (subcommands `seal`, `run`, `score`, `shortlist`, `burn`, `egress-scan`, `stamp-questions`, `permute-check`), `schemas/selector-eval-case.v1.schema.json`
@@ -1414,6 +1917,8 @@ Revision 6 status. T1 (18ff9c8), T3 (ce59824), T2 (729d696), T4 (627c749) and T6
   - a `.probabilities` loop.
 
   In-task obligation (revision 9, P3-5): each `ORDER_AGNOSTIC` reason is one of the codes `canonicalizer`, `guard`, `order_invariant_reduction` or `guarded_upstream:<qualified name>`, and every `guarded_upstream` target is itself in `ORDER_CONSUMERS` or calls `contract.require_canonical`. The negative fixture adds an entry with a free-text reason and one whose `guarded_upstream` target is unregistered, and the checker reports both.
+
+  Revision 11 adds `preparers.from_external` as an `ORDER_AGNOSTIC` `canonicalizer`: it accepts unordered external candidates and constructs the canonical set. Apply the existing registration/guard rules to any matching functions in `external.py` as well. T9 waits for T8 so its package-wide AST check observes the completed transport module.
 - `test_position_balance` (revision 7, P2-9): `score` output has `position_balance` per arm with three terciles, each with `n`, `accuracy` and a Wilson interval, over known fixture outputs; `score`'s exit code is the same with the terciles' accuracies swapped (descriptive only, revision 8, P3-16).
 - `test_run_records_permutation_check` (G3; rewritten in revision 7): `run --arm rules` writes `run.json` with `permutation_check.violations == 0` and `stages == ["A", "B"]`; with negative case (i) above patched in, `run --arm rules` (in-process `main`) exits 2 and writes no arm output, while `SelectionRequest` construction still canonicalizes (B12 unchanged: the test asserts a request built from the reversed order has canonical `candidates`).
 - `test_burn_cli_consistency`: `selector-eval.py burn --transcript <fixture> --host claude-code --compare-burn-report --json` emits `consistency.{burn_report_weighted, ledger_weighted, delta, explained, unexplained, tolerance, reconciled}` with `reconciled: true`, and with `--host codex` (the `token_usage_record` fixture from T3) emits `consistency.matches_final_cumulative_excluding_compaction: true` and no `session_cumulative_mismatch`; `events` always has the keys `invalidation`, `expiry` and `compaction_or_reset` (zero counts included).
@@ -1467,7 +1972,9 @@ Revision 6 status. T1 (18ff9c8), T3 (ce59824), T2 (729d696), T4 (627c749) and T6
 - Modify: `scripts/clavain-select.py` (add the `export-ic [--record-dir DIR]` subcommand calling `ic_export.export`, with the same `--record-dir` precedence as T8)
 - Test: `tests/structural/test_selector_docs.py`
 
-**Step 1:** Tests: the doc's matrix table parsed from markdown equals `config/selector-host-matrix.json`; every `FallbackReason` appears in the doc; the retention disclosure text matches `terms_version`; the matrix legend documents each `evidence_level` value; `clavain-select.py export-ic --help` exits 0 and lists `--record-dir`; the doc names the current `QUESTION_SET_VERSION` and every `FailureDetail` value.
+Revision 11: document the `select-json` invocation, both schemas, the distinction between `applied` and `result.kind`, payload-string hashing, aggregate fingerprint/path-manifest requirements, unverified external preconditions, inert flag-off response, external shadow cap and `mk-rpnv.3 / external-active-provenance`.
+
+**Step 1:** Tests: the doc's matrix table parsed from markdown equals `config/selector-host-matrix.json`; every `FallbackReason` appears in the doc; the retention disclosure text matches `terms_version`; the matrix legend documents each `evidence_level` value; `clavain-select.py export-ic --help` exits 0 and lists `--record-dir`; the doc names the current `QUESTION_SET_VERSION` and every `FailureDetail` value. `test_external_transport_docs` asserts that the doc names both schema paths, `EXTERNAL`, `select-json`, the required `--integration`/`--project-root`/`--session-id` arguments, `applied: native`, and the named external-active follow-on. The existing T11 verify command runs this test.
 
 **Step 2–4:** Fail, implement, pass.
 
@@ -1538,11 +2045,11 @@ stages:
       - {id: task-10, title: "Intercore export and consumer inventory", files: [scripts/clavain_selector/ic_export.py], depends: [task-4, task-r6a]}
   - name: "Wave 4 — orchestrator"
     tasks:
-      - {id: task-7, title: "Orchestrator and hook wrapper", files: [scripts/clavain_selector/selector.py, scripts/clavain-select.py, hooks/selector-hook.sh, scripts/clavain_selector/adapters/base.py], depends: [task-1, task-2, task-4, task-5, task-6, task-r6b]}
+      - {id: task-7, title: "Orchestrator, provenance caps and hook wrapper", files: [scripts/clavain_selector/selector.py, scripts/clavain-select.py, hooks/selector-hook.sh, scripts/clavain_selector/adapters/base.py, scripts/clavain_selector/contract.py, scripts/clavain_selector/preparers.py, scripts/clavain_selector/records.py, schemas/selector-decision-record.v1.schema.json, tests/structural/test_selector_orchestrator.py, tests/structural/test_selector_preparers.py, tests/structural/test_selector_records.py, tests/shell/selector_hook.bats], depends: [task-1, task-2, task-4, task-5, task-6, task-r6b]}
   - name: "Wave 5 — CLI and eval"
     tasks:
-      - {id: task-8, title: "Operator CLI", files: [scripts/clavain-select.py], depends: [task-7]}
-      - {id: task-9, title: "Eval harness", files: [scripts/clavain_selector/eval.py, scripts/selector-eval.py], depends: [task-3, task-5, task-7, task-r6a]}
+      - {id: task-8, title: "Operator CLI and external JSON transport", files: [scripts/clavain-select.py, scripts/clavain_selector/external.py, schemas/selector-select-request.v1.schema.json, schemas/selector-select-response.v1.schema.json, tests/structural/test_selector_cli.py, tests/structural/test_selector_external.py], depends: [task-7]}
+      - {id: task-9, title: "Eval harness", files: [scripts/clavain_selector/eval.py, scripts/selector-eval.py], depends: [task-3, task-5, task-7, task-8, task-r6a]}
   - name: "Wave 6 — docs and export wiring"
     tasks:
       - {id: task-11, title: "Canon doc and export wiring", files: [docs/canon/selector-layer.md, scripts/clavain-select.py], depends: [task-6, task-8, task-10]}
@@ -1693,6 +2200,8 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
 - Whether the $0.042/MTok price is a launch promotion.
 - Whether Jev has a positional bias over candidate order. Revision 7's salted order keeps any bias from lining up with id spelling, and `score`'s `position_balance` reports per-tercile accuracy, but the selftest set is too small to measure it; each dependent's labeled set is the first real measurement. A dependent that wants a direct measurement can run the jev arm under `permute-check` orders against the live API as a separate, budgeted experiment.
 - Fingerprint residuals (revisions 6 and 7): intermediate directory components are not pinned, so a directory swapped between `realpath` and `lstat`/`open` is not detected; the entry still describes the file actually opened, and a final-component swap between `lstat` and `open` is detected by the dev/ino check. Closing the intermediate case would need `openat` walking with `O_NOFOLLOW` per component, deferred until a dependent shows a need. Non-regular entries are described by `lstat` metadata only: a change that preserves a directory's size and `st_mtime_ns` (for example, a file edited inside it without adding or removing an entry) is not seen at the directory entry, so preparers must list the files they read, not only their directories. On a filesystem with coarse mtime granularity, an entry added and removed within one tick is not seen either (revision 8; regular files are content-hashed, so this applies only to non-regular entries).
+- Whether Quilan needs active effects beyond external shadow observations. Revision 11 supplies transport and shared-client access only; `mk-rpnv.3 / external-active-provenance` remains unresolved.
+- Whether Quilan can reproduce the existing aggregate fingerprint exactly on its subprocess filesystem. Its caller tests must establish this before offering fingerprinted candidates; an unavailable or mismatched digest means native fallback.
 
 ## Non-claims
 
@@ -1705,10 +2214,13 @@ All commands run on zklw from a clean checkout of the landed branch. `ART` is th
 - Shortlist recall bounds what any arm can score; a Jev result on a shortlist with low recall says little about Jev.
 - The host matrix reflects the listed versions and evidence levels; `docs` evidence is not first-hand.
 - Nothing here enables active mode, registers hooks, or authorizes a plugin release or publication.
+- `EXTERNAL` provenance does not prove trusted candidate construction, complete source/read-set declarations, current external host state or satisfied external preconditions. A matching payload hash does not restore the `hook` preparer boundary.
+- Returning `result.kind: selected` through `select-json` does not authorize applying that candidate. Revision 11 never returns `applied: emitted` and does not implement Quilan's TypeScript integration.
+- The request and response schemas specify interoperability; they are not empirical evidence that Quilan obeys the native fallback rule.
 
 ## Landing, review and handoff
 
-Before implementation, this plan needs an independent other-frontier plan review (bead notes on mk-42j9.7). If Codex still returns 429, use an adversarial Opus review declared same-model and provisional, and file a capacity-recheck bead. Pass `--producer-identity` from this plan's actual author receipt (held by the coordinator). Revision 1 was reviewed by claude-fable-5-1 (NEEDS-FIXES); revisions 2–5 answered every finding. Revision 6 was reviewed only by a declared same-model adversarial review (claude-opus-5-5, PROVISIONAL, NEEDS-FIXES; review-astra HTTP 429 twice, review-opus excluded as `producer_model_conflict`, fallback per mk's ruling mk-3b8z), which revision 7 answers. A provisional capacity-substitute review never closes the other-frontier requirement, so before R6a, R6b or T5 executes, revision 7 still needs an other-frontier review (not claude-opus-5-5, and not self-review), with `--producer-identity` from the coordinator's receipt for this revision, and the capacity-recheck bead for the provisional review stays open until it runs. Revision 8 answers a second declared same-model review (of revision 7; claude-opus-5-5, PROVISIONAL, NEEDS-FIXES, same routing), which again cannot close the requirement. The other-frontier review is therefore owed on revision 8, and none of R6a, R6b or T5 may execute before it passes. Revision 9 answers a third declared same-model review (of revision 8; claude-opus-5-5, PROVISIONAL, NEEDS-FIXES, judged converging, same routing), which cannot close the requirement either. That reviewer judged another same-model round unwarranted, so the other-frontier review is owed on revision 9, and none of R6a, R6b or T5 may execute before it passes. mk also needs to answer the open acceptance-criteria question (criterion 17), last updated in the revision 9 fold-in. Then execute with `clavain:executing-plans`, at most 3 workers in parallel following the waves above, and finish with T13.
+Revision 10's genuine other-frontier review closed the review requirement for the revision-9 design and its specified fold-in; that approval remains the history for unchanged R6a, R6b and T5. Revision 11 introduces a new trust-boundary design and requires a new independent other-frontier plan review before its additions execute. It has not yet been reviewed. Pass `--producer-identity` from the coordinator's actual gpt-6-astra author receipt; an Astra self-review or revision 10's review cannot close this requirement. This drafting task runs no review. The proposed criterion 17 remains a separate, unanswered proposal and is not adopted here. After the applicable review gates close, execute with `clavain:executing-plans`, follow the dependencies above and finish with T13.
 
 ```json
 {
@@ -1738,19 +2250,29 @@ Before implementation, this plan needs an independent other-frontier plan review
     "Outcome carries immutable render_bytes plus payload_sha256 and binding_sha256, built by emitted_outcome; render emits exactly render_bytes and reads no HostEvent field; the launch payload is the argv (rev 8)",
     "Adapter authorize body is exactly return authorize_by_policy(chosen, validated, policy); authorize_by_policy is allowlisted (rev 8)",
     "Preparers receive a projected event (declared event_fields only, never raw), return per-candidate read_set_paths bound into the tag; PREPARERS is read-only; payloads are JSON-native only (rev 8)",
-    "ValidationContext holds per-candidate current_read_set_fingerprints recomputed by the orchestrator from read_set_paths (rev 8)"
+    "ValidationContext holds per-candidate current_read_set_fingerprints recomputed by the orchestrator from read_set_paths (rev 8)",
+    "select-json is one bounded JSON request and one schema-v1 decision response at Point.library; integration, project root and session come from process arguments",
+    "External candidates are tagged EXTERNAL, never PREPARER; active requests downgrade to shadow, and only PREPARER may reach the final emission branch",
+    "External payloads are opaque strings bound with contract.payload_sha256; matching a caller-supplied hash proves consistency, not authorized origin",
+    "External read sets supply the existing aggregate fingerprint plus paths for independent recomputation; FingerprintUnavailable remains stale, never a comparable marker",
+    "Nonempty external preconditions are unverified and fall back before selection; no external satisfaction or authorization verdict is accepted",
+    "applied: native forbids applying the shadow pick even when result.kind is selected; mk-rpnv.3 owns its caller tests and the deferred external-active-provenance obligation"
   ],
   "constraints": [
     "Default off; native fallback on every path; hook wrapper always exits 0",
     "Never record prompts, raw outputs, payloads or credentials",
     "Key read in-process only; never in env, logs, records or child processes",
     "Only api.typesafe.ai and loopback; no new destinations",
-    "At most 3 parallel Sonnet-class workers"
+    "At most 3 parallel Sonnet-class workers",
+    "No second Jev HTTP client in Quilan; no external active/emitted support in revision 11",
+    "R6a, R6b, T5 and the sealed Acceptance Criteria text remain unchanged"
   ],
   "verification": [
     "Acceptance criteria 1-16 with recorded commit, host, time and exit status",
     "One real shadow round trip record from zklw",
-    "Burn consistency on one real Claude session and one real Codex rollout"
+    "Burn consistency on one real Claude session and one real Codex rollout",
+    "T7 external provenance/freshness tests and T8 select-json contract, privacy, framing and fallback tests",
+    "Revision 11 other-frontier plan review is required and has not yet run; proposed implementation checks are not passing evidence"
   ],
   "escalation": [
     "p95 > 1000ms or >10% over deadline",
@@ -1758,7 +2280,8 @@ Before implementation, this plan needs an independent other-frontier plan review
     "any egress false negative (kill switch, key rotation by mk)",
     "contract change requested by a dependent",
     "credential missing/rejected or terms concern: BLOCKED for mk",
-    "two capability failures or a disproven premise"
+    "two capability failures or a disproven premise",
+    "Any dependent requirement to apply an EXTERNAL selection: return to frontier planning under mk-rpnv.3 / external-active-provenance"
   ]
 }
 ```
@@ -2075,3 +2598,40 @@ Acceptance criteria changed in revision 10: none, so no reseal. The Acceptance C
 - R10-3: T7's `test_select_fingerprint_budget` text corrected to per-phase dedup and per-phase budget.
 - R10-4: the "Selector used as authority" Risks row gains the bundle-effects residual; the "What each dependent needs from .7" obligations list gains an .8 obligation naming `test_launch_dependency_effects`.
 - Landing and handoff: the other-frontier review requirement is CLOSED as of revision 10 (review-astra, gpt-6-astra, STATUS warn). R6a, R6b and T5 may proceed. The architecture-gap work (a language-neutral stdin/stdout contract for non-Python callers such as Quilan, per mk-rpnv.3) is out of scope for revision 10 and is tracked separately.
+
+### Revision 11 (language-neutral external shadow contract)
+
+Source: coordinator task identifying Quilan's TypeScript integration gap (`mk-rpnv.3`, no second Jev client). Revision 10's Architecture and Key links exposed only a registered-Python-preparer hook path for host integration; a TypeScript caller could not use that boundary as specified. This revision adds a separate transport while retaining the hook boundary. It is authored by gpt-6-astra and has not yet received other-frontier review.
+
+| Item | Disposition |
+|------|-------------|
+| R11-1 — Non-Python entrypoint | Add `clavain-select.py select-json`, one JSON request and one decision-record response at the existing `library` point. It delegates to the package's selector and client. T8 owns framing, mapping and CLI wiring; no Quilan implementation or second HTTP client is added. |
+| R11-2 — Lost preparer guarantee | State explicitly that external stdin supplies the candidate vocabulary, descriptions and payloads. Add fixed `EXTERNAL` provenance through `from_external`, the shadow cap and the final `PREPARER` emission condition in T7. Matching hashes do not establish trusted preparation. |
+| R11-3 — Binding and freshness | Use opaque textual payloads hashed by the existing `contract.payload_sha256`; use the existing aggregate `fingerprint_paths` digest with its path manifest, independently recomputed at rows 4 and 12. Preserve `FingerprintUnavailable`, scope checks and per-phase budgets. Nonempty external preconditions remain unverified and fall back. |
+| R11-4 — Versioned wire shape | Add full request and response schemas beside the canonical decision-record schema. The response composes that schema and retains `applied`, `result.confidence`, `validation` and `fallback`; it adds no competing result vocabulary. External provenance is an additive amendment to unreleased record v1. |
+| R11-5 — Default-off and failures | The explicit machine command returns an in-memory native `flag_off` decision without consuming stdin or writing records. Enabled malformed inputs produce sanitized native fallback records. All existing egress, deadline, budget, breaker and credential gates remain. |
+| R11-6 — Dependent obligation | Name `mk-rpnv.3 / external-active-provenance` for any future requirement to apply an external choice. Quilan must test that a selected shadow result still preserves native behavior. That future boundary is neither designed nor authorized here. |
+| R11-7 — Execution and documentation | Extend T7, T8 and T11; make T9 wait for the completed transport and include the external canonicalizer in its existing registration check. R6a, R6b and T5 text is unchanged. |
+
+Rejected alternatives: routing external candidates through `hook` would weaken its stdin boundary; labelling a stdin-built set `PREPARER` would falsely assert trusted origin; a standalone digest without paths cannot be recomputed; a new content-only fingerprint would diverge from B15; a separate TypeScript Jev client would violate `mk-rpnv.3`; and applying a shadow-selected payload would defeat the provenance cap.
+
+Acceptance criteria changed in revision 11: **none; no reseal is required.** The existing Acceptance Criteria section, `.criteria.md` and `.criteria.md.seal` remain unchanged. During drafting, the section and criteria file both hashed to `f2bc746e690075123433508701c1cd29f8f707121912047c0df1d45628d8ed1d`, matching the seal. This confirms the starting text only, not implementation acceptance.
+
+- Criterion 1 already runs all structural selector tests, including the new transport module.
+- Criteria 4–7 retain default-off, fallback, egress and privacy requirements; the external response creates no record file with flags off.
+- Criterion 8 retains the existing real shadow round trip and schema-v1/native assertions; this revision adds no external live acceptance claim.
+- Criterion 12 covers the extended canon documentation.
+- Criterion 15 continues to run the CLI tests; detailed transport checks also run through criterion 1 and T8's verify block.
+- Criterion 17 remains a proposal, not an adopted criterion.
+
+Review requirement: **other-frontier, not yet run.** Revision 10's closed review does not cover revision 11. No implementation, live call, caller integration or acceptance result is established by this draft.
+
+### Revision 11 changes
+
+- Frontmatter: `revision: 11`, `supersedes` names revision 10 (44d3860). The Authorship line, the revision-10 sentence's successor, and a new revision-11 accountable-decision block are added, recording the review as owed, not closed.
+- Architecture and Key links: document the non-Python `select-json` transport, `EXTERNAL` provenance and the shadow-only cap, alongside the unchanged `hook` path.
+- `contract.py`/`preparers.py`/`records.py`: add `Provenance.EXTERNAL` and `from_external`, with the shadow cap and the final `PREPARER` emission condition enforced in the orchestrator.
+- New subsection "External stdin/stdout contract (`select-json`, revision 11)" documents invocation, framing, candidate representation and binding, freshness, result/fallback vocabulary and the two new JSON Schema files.
+- T7 gains external-provenance and freshness/preconditions tests; T8 is retitled "Operator CLI and external JSON transport" and gains the `select-json` subcommand, `external.py` and its test suite; T9 now depends on T8 and registers the external canonicalizer; T11 documents the transport.
+- Dependents and Risks: add the `mk-rpnv.3` Quilan row, the revision-11 scope clarification, the named follow-on obligation `mk-rpnv.3 / external-active-provenance`, and a new Risks row for external stdin being mistaken for trusted preparation.
+- Unknowns, Non-claims and handoff: Quilan's caller obligations and `mk-rpnv.3 / external-active-provenance` are explicit; active/emitted external behavior remains deferred.
