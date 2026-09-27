@@ -53,7 +53,7 @@ but the sprint remains in `reflect` until its terminal ship step succeeds.
    complexity=$(echo "$state" | jq -r '.complexity // "3"')
    ```
    - **C1-C2:** Write brief memory note. If routine, write complexity calibration note instead.
-   - **C3+:** Use `clavain:engineering-docs` skill (full 7-step workflow).
+   - **C3+:** Use `clavain:engineering-docs` skill (full 8-step workflow).
    - **Required frontmatter:**
      ```yaml
      ---
