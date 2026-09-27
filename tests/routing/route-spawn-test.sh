@@ -17,26 +17,49 @@ fail() {
 }
 
 # Fake bb: FAKE_POOL=ready (default) | claude-down | claude-held | codex-down |
-# opus-weekly-rejected | not-accepting | hang | error. Every call is logged.
+# all-down | opus-weekly-rejected | opus-weekly-warning | opus-weekly-below |
+# opus-weekly-expired | claude-mixed | routing-off | child-host |
+# not-accepting | hang | error. `pool config --json` reports
+# FAKE_THRESHOLD (bb's default 0.98). Every call is logged. resetAt is in
+# epoch milliseconds, as bb reports it.
 cat > "$TMP_ROOT/bin/bb" <<'FAKE_BB'
 #!/usr/bin/env bash
-[[ "$*" == "pool status --json" ]] || { echo "unexpected bb call: $*" >&2; exit 64; }
 echo "$*" >> "${FAKE_BB_LOG:-/dev/null}"
+if [[ "$*" == "pool config --json" ]]; then
+  [[ "${FAKE_POOL:-}" == error ]] && exit 1
+  printf '{"ok":true,"config":{"switchThreshold":%s,"parentMode":"proxy"}}\n' "${FAKE_THRESHOLD:-0.98}"
+  exit 0
+fi
+[[ "$*" == "pool status --json" ]] || { echo "unexpected bb call: $*" >&2; exit 64; }
+FUTURE=4102444800000 PAST=1000
 claude_status=ready codex_status=ready accepting=true opus_weekly=null
+second_claude='{"provider":"claude","enabled":false,"status":"ready"}'
+routing='{"claude":true,"codex":true}' parent=null
 case "${FAKE_POOL:-ready}" in
   error) echo "pool unreachable" >&2; exit 1 ;;
-  hang) exec sleep 60 ;;
+  hang) sleep 60; exit 0 ;;
   claude-down) claude_status=exhausted ;;
   claude-held) claude_status=held ;;
   codex-down) codex_status=exhausted ;;
-  opus-weekly-rejected) opus_weekly='{"status":"rejected","utilization":1}' ;;
+  all-down) claude_status=exhausted codex_status=exhausted ;;
+  opus-weekly-rejected) opus_weekly="{\"status\":\"rejected\",\"utilization\":1,\"resetAt\":$FUTURE}" ;;
+  opus-weekly-warning) opus_weekly="{\"status\":\"allowed_warning\",\"utilization\":1.0,\"resetAt\":$FUTURE}" ;;
+  opus-weekly-below) opus_weekly="{\"status\":\"allowed_warning\",\"utilization\":0.9,\"resetAt\":$FUTURE}" ;;
+  opus-weekly-expired) opus_weekly="{\"status\":\"rejected\",\"utilization\":1,\"resetAt\":$PAST}" ;;
+  claude-mixed)
+    opus_weekly="{\"status\":\"rejected\",\"utilization\":1,\"resetAt\":$FUTURE}"
+    second_claude='{"provider":"claude","enabled":true,"status":"ready","familyWeekly":{"sonnet":null,"opus":{"status":"allowed","utilization":0.2,"resetAt":null}}}' ;;
+  routing-off) claude_status=exhausted routing='{"claude":false,"codex":true}' ;;
+  child-host) claude_status=exhausted parent='{"hubUrl":"https://hub.example"}' ;;
   not-accepting) accepting=false ;;
 esac
 cat <<JSON
-{"accepting":$accepting,"accounts":[
+{"accepting":$accepting,"routing":$routing,"parent":$parent,"accounts":[
  {"provider":"codex","enabled":true,"status":"$codex_status","familyWeekly":{"fable":null,"sonnet":null,"opus":null,"haiku":null,"other":null}},
  {"provider":"claude","enabled":true,"status":"$claude_status","familyWeekly":{"fable":null,"sonnet":{"status":"allowed"},"opus":$opus_weekly,"haiku":null,"other":null}},
- {"provider":"claude","enabled":false,"status":"ready"}]}
+ $second_claude,
+ {"provider":"kimi","enabled":true,"status":"ready"},
+ {"provider":"main","enabled":true,"status":"ready"}]}
 JSON
 FAKE_BB
 chmod +x "$TMP_ROOT/bin/bb"
@@ -47,7 +70,8 @@ exit 1
 FAKE_IC
 chmod +x "$TMP_ROOT/failic/ic"
 mkdir -p "$TMP_ROOT/hangic"
-printf '#!/usr/bin/env bash\nexec sleep 60\n' > "$TMP_ROOT/hangic/ic"
+# Not `exec`: the grandchild sleep must die with the timed-out resolver (N5).
+printf '#!/usr/bin/env bash\nsleep 60\nexit 0\n' > "$TMP_ROOT/hangic/ic"
 chmod +x "$TMP_ROOT/hangic/ic"
 
 export PATH="$TMP_ROOT/bin:$PATH"
@@ -74,37 +98,43 @@ latest_receipt() {
 
 OPUS="claude-code claude-opus-5-5 medium"
 SONNET="claude-code claude-sonnet-5 medium"
+ASTRA="codex gpt-6-astra medium"
 
 # --- The mk-42j9.5 table, by slug (15 rows) and by alias (10 dedicated ids).
 for slug in aleph clavain autarch after-them bbops shadow-work quilan sylvesteops nartopo; do
-  run --role coordination --project "$slug"
-  expect 0 "$OPUS" "coordination --project $slug"
+  run --role coordinator-seat --project "$slug"
+  expect 0 "$OPUS" "coordinator-seat --project $slug"
 done
 for slug in autosigil rakes uncrancher cujgel agmodb linsenkasten; do
-  run --role coordination --project "$slug"
-  expect 0 "$SONNET" "coordination --project $slug"
+  run --role coordinator-seat --project "$slug"
+  expect 0 "$SONNET" "coordinator-seat --project $slug"
 done
 for pair in proj_dnrqkvnf5x:autarch proj_fsrj27djw2:after-them proj_2apc9fag87:after-them \
             proj_eh66ikerj2:shadow-work proj_ewcj55ndy5:nartopo; do
-  run --role coordination --project "${pair%%:*}"
-  expect 0 "$OPUS" "coordination alias ${pair%%:*} (${pair#*:})"
+  run --role coordinator-seat --project "${pair%%:*}"
+  expect 0 "$OPUS" "coordinator-seat alias ${pair%%:*} (${pair#*:})"
   jq -e --arg s "${pair#*:}" '.project == $s' <<< "$(latest_receipt)" >/dev/null \
     || fail "alias ${pair%%:*} must record slug ${pair#*:}"
 done
 for pair in proj_3ktdvx76vj:autosigil proj_sy6myvvmq2:rakes proj_94669ff46u:uncrancher \
             proj_qdsjncqfd4:cujgel proj_5wt5mmgska:agmodb proj_g4vgbq6jst:linsenkasten; do
-  run --role coordination --project "${pair%%:*}"
-  expect 0 "$SONNET" "coordination alias ${pair%%:*} (${pair#*:})"
+  run --role coordinator-seat --project "${pair%%:*}"
+  expect 0 "$SONNET" "coordinator-seat alias ${pair%%:*} (${pair#*:})"
   jq -e --arg s "${pair#*:}" '.project == $s' <<< "$(latest_receipt)" >/dev/null \
     || fail "alias ${pair%%:*} must record slug ${pair#*:}"
 done
 
 # --- Usage errors: exit 2, empty stdout, no spawn tuple.
-run --role coordination
+# coordination is the relay role for dispatch.sh; a coordinator thread's own
+# seat is coordinator-seat, and route-spawn says so.
+run --role coordination --project clavain
+expect 2 "" "relay role coordination is not a spawn role"
+grep -q "coordinator-seat" "$TMP_ROOT/stderr" || fail "rejecting coordination must point at coordinator-seat"
+run --role coordinator-seat
 expect 2 "" "coordination without --project"
-run --role coordination --project proj_personal
+run --role coordinator-seat --project proj_personal
 expect 2 "" "coordination on the shared proj_personal"
-run --role coordination --project no-such-project
+run --role coordinator-seat --project no-such-project
 expect 2 "" "coordination on an unknown project"
 run --role lane --project clavain
 expect 2 "" "lane without --lineage"
@@ -129,10 +159,10 @@ jq -e '.role == "lane" and .arm == "control" and .lineage == "coord-123" and .ro
 
 # --- Finding 1: only role lane consults the arm. Coordination and governed
 # roles ignore --lineage and are never re-routed.
-run --role coordination --project autosigil --lineage coord-123
+run --role coordinator-seat --project autosigil --lineage coord-123
 expect 0 "$SONNET" "coordination ignores --lineage"
-jq -e '.arm == null and .route.requested_role == "coordination"' <<< "$(latest_receipt)" >/dev/null \
-  || fail "coordination receipt must not carry an arm"
+jq -e '.arm == null and .route.requested_role == "coordinator-seat"' <<< "$(latest_receipt)" >/dev/null \
+  || fail "coordinator-seat receipt must not carry an arm"
 run --role validation --producer-identity claude-opus-5-5
 base="$OUT"; [[ "$RC" == 0 ]] || fail "validation with producer must resolve ($(cat "$TMP_ROOT/stderr"))"
 run --role validation --producer-identity claude-opus-5-5 --lineage coord-123
@@ -146,9 +176,9 @@ jq -e '.arm == null and .route.requested_role == "validation" and .producer_iden
 # --- Finding 8 and campaign precedence.
 printf '%s\n' '{"reasons":[],"rationale":"campaign","scope":"mk-ag2s"}' > "$TMP_ROOT/campaign.json"
 cp "$TMP_ROOT/campaign.json" "$TMP_ROOT/campaign.orig.json"
-RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role coordination --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role coordinator-seat --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 3 "" "campaign profile over a project coordination profile fails closed"
-RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role coordination --project autosigil --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role coordinator-seat --project autosigil --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "campaign profile with a project that has no profile"
 jq -e '.project == "autosigil" and .policy_profile == "ci-campaign-pilot" and .route.policy_profile == "ci-campaign-pilot"' <<< "$(latest_receipt)" >/dev/null \
   || fail "campaign receipt must record the project and the campaign profile"
@@ -159,10 +189,10 @@ jq -e '.project == "clavain" and .route.decision_context.scope == "mk-ag2s"' <<<
 cmp -s "$TMP_ROOT/campaign.json" "$TMP_ROOT/campaign.orig.json" || fail "the caller's context file must never be modified"
 
 # A caller context whose scope contradicts the project profile fails closed.
-run --role coordination --project clavain --context-file "$TMP_ROOT/campaign.json"
+run --role coordinator-seat --project clavain --context-file "$TMP_ROOT/campaign.json"
 expect 3 "" "context scope conflicting with the project profile"
 # CLAVAIN_DECISION_CONTEXT is honored when --context-file is absent.
-RC=0; OUT="$(CLAVAIN_DECISION_CONTEXT="$TMP_ROOT/campaign.json" bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_DECISION_CONTEXT="$TMP_ROOT/campaign.json" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 3 "" "CLAVAIN_DECISION_CONTEXT is the default context"
 
 # --- Resolution failures: exit 3 with empty stdout.
@@ -176,11 +206,11 @@ expect 3 "" "unparseable policy"
 
 # --- Pool probe: an exhausted Claude pool moves the spawn to Codex; an
 # unreachable pool leaves fallbacks unevaluated but still resolves.
-RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
-expect 0 "codex gpt-5.6-sol medium" "coordination with the Claude pool exhausted"
-jq -e '.fallbacks_evaluated == true and (.available_models | index("claude-opus-5-5") | not) and (.available_models | index("gpt-5.6-sol"))' <<< "$(latest_receipt)" >/dev/null \
+RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$ASTRA" "coordinator-seat with the Claude pool exhausted"
+jq -e '.fallbacks_evaluated == true and (.available_models | index("claude-opus-5-5") | not) and (.available_models | index("gpt-6-astra"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "receipt must record the probed available_models"
-RC=0; OUT="$(FAKE_POOL=error bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=error bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "coordination with the pool unreachable"
 receipt="$(latest_receipt)"
 jq -e '.fallbacks_evaluated == false and .available_models == null' <<< "$receipt" >/dev/null \
@@ -205,34 +235,37 @@ expect 3 "" "release-authority resolves a main-backend seat"
 
 # An empty or "default" CLAVAIN_POLICY_PROFILE is no campaign.
 for value in "" default; do
-  RC=0; OUT="$(CLAVAIN_POLICY_PROFILE="$value" bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+  RC=0; OUT="$(CLAVAIN_POLICY_PROFILE="$value" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
   expect 0 "$OPUS" "CLAVAIN_POLICY_PROFILE='$value' is unset"
 done
 
 # Pool states: held accounts still serve; a rejected weekly family is down;
 # a pool that is not accepting leaves fallbacks unevaluated.
-RC=0; OUT="$(FAKE_POOL=claude-held bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=claude-held bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "held Claude accounts count as up"
-RC=0; OUT="$(FAKE_POOL=opus-weekly-rejected bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=opus-weekly-rejected bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "a rejected Opus weekly family excludes Opus seats"
-grep -qi fallback "$TMP_ROOT/stderr" || fail "a fallback seat must be announced on stderr"
+grep -q "fallback from .* to " "$TMP_ROOT/stderr" || fail "a fallback seat must be announced on stderr"
 jq -e '(.available_models | index("claude-opus-5-5") | not) and (.available_models | index("claude-sonnet-5"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "a rejected Opus family must drop only Opus models"
-RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
-grep -qi fallback "$TMP_ROOT/stderr" || fail "a provider change must be announced on stderr"
-RC=0; OUT="$(FAKE_POOL=codex-down bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$ASTRA" "coordinator-seat with the Claude pool exhausted"
+grep -q "fallback from .* to " "$TMP_ROOT/stderr" || fail "a provider change must be announced on stderr"
+RC=0; OUT="$(FAKE_POOL=codex-down bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "coordination with the Codex pool exhausted"
-jq -e '.fallbacks_evaluated == true and (.available_models | index("gpt-5.6-sol") | not) and (.available_models | index("claude-opus-5-5"))' <<< "$(latest_receipt)" >/dev/null \
+jq -e '.fallbacks_evaluated == true and (.available_models | index("gpt-6-astra") | not) and (.available_models | index("claude-opus-5-5"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "a Codex outage must drop Codex models only"
-jq -e '[.available_models[] | select(. == "gpt-6-astra" or . == "kimi-code/k3")] == []' <<< "$(latest_receipt)" >/dev/null \
+# The fake pool has ready kimi and main accounts; bb still cannot spawn them.
+RC=0; OUT="$(bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+jq -e '[.available_models[] | select(. == "kimi-code/k3")] == []' <<< "$(latest_receipt)" >/dev/null \
   || fail "main and unspawnable backends must not count as available"
-RC=0; OUT="$(FAKE_POOL=not-accepting bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=not-accepting bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "pool not accepting"
 jq -e '.fallbacks_evaluated == false and .available_models == null' <<< "$(latest_receipt)" >/dev/null \
   || fail "a pool that is not accepting must leave fallbacks unevaluated"
 
 # A hanging pool probe is bounded and treated as not evaluated.
-RC=0; OUT="$(FAKE_POOL=hang ROUTE_SPAWN_POOL_TIMEOUT=1 timeout 30 bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=hang ROUTE_SPAWN_POOL_TIMEOUT=1 timeout 30 bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "hanging pool probe"
 jq -e '.fallbacks_evaluated == false' <<< "$(latest_receipt)" >/dev/null || fail "a timed-out probe is not evaluated"
 # A hanging resolver is bounded and fails closed.
@@ -265,7 +298,111 @@ cfg = yaml.safe_load(open(sys.argv[1]))
 cfg["reasoning"].pop("projects", None)
 yaml.safe_dump(cfg, open(sys.argv[2], "w"))
 NOPROJ
-RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/noprojects.yaml" bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/noprojects.yaml" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 3 "" "policy without reasoning.projects"
+
+# --- Rule-6 round (coordinator ruling 2026-09-27).
+# mk ruling: never gpt-5.6-sol. With Claude exhausted every spawn role lands
+# on gpt-6-astra medium; with no eligible seat it fails closed.
+for args in "--role lane --lineage L1" "--role main-session" "--role coordinator-seat --project autosigil" "--role coordinator-seat --project clavain"; do
+  # shellcheck disable=SC2086
+  RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" $args 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 0 "$ASTRA" "Claude exhausted: $args"
+  # shellcheck disable=SC2086
+  RC=0; OUT="$(FAKE_POOL=all-down bash "$SCRIPT" $args 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 3 "" "no eligible seat: $args"
+done
+run --role main-session
+expect 0 "$SONNET" "main-session default"
+run --role coordinator-seat --project autosigil
+jq -e '.route.profile_ref == "coordinator-seat-sonnet" and .profile_source == "none"' <<< "$(latest_receipt)" >/dev/null \
+  || fail "an unprofiled coordinator seat resolves coordinator-seat-sonnet"
+run --role coordinator-seat --project clavain
+jq -e '.route.profile_ref == "coordinator-seat-opus" and .profile_source == "project"' <<< "$(latest_receipt)" >/dev/null \
+  || fail "a profiled coordinator seat resolves coordinator-seat-opus"
+
+# Defense in depth: even a policy whose spawn chain reaches Sol fails closed
+# rather than spawning it.
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/solchain.yaml" <<'SOLCHAIN'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1]))
+tiers = cfg["dispatch"]["tiers"]
+tiers["spawn-sol-test"] = {"role": "main-session", "backend": "codex", "model": "gpt-5.6-sol",
+                           "reasoning_effort": "medium", "service_tier": "standard"}
+tiers["main-sonnet"]["fallbacks"] = ["spawn-sol-test"]
+yaml.safe_dump(cfg, open(sys.argv[2], "w"))
+SOLCHAIN
+RC=0; OUT="$(FAKE_POOL=claude-down CLAVAIN_ROUTING_POLICY="$TMP_ROOT/solchain.yaml" bash "$SCRIPT" --role main-session 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 3 "" "a spawn role resolving gpt-5.6-sol fails closed"
+grep -q "gpt-5.6-sol" "$TMP_ROOT/stderr" || fail "the Sol refusal must name the model"
+
+# N1: family exhaustion mirrors bb's activeWindow: resetAt null or future, and
+# rejected or utilization >= the pool switchThreshold.
+RC=0; OUT="$(FAKE_POOL=opus-weekly-warning bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$SONNET" "Opus at utilization 1.0 (allowed_warning) is exhausted"
+RC=0; OUT="$(FAKE_POOL=opus-weekly-below bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "Opus below the threshold is available"
+RC=0; OUT="$(FAKE_POOL=opus-weekly-below FAKE_THRESHOLD=0.85 bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$SONNET" "the pool's configured switchThreshold is honored"
+RC=0; OUT="$(FAKE_POOL=opus-weekly-expired bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "a rejected window whose resetAt has passed is not active"
+# N3: one exhausted and one available Claude account keeps Opus (all, not any).
+RC=0; OUT="$(FAKE_POOL=claude-mixed bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "mixed Claude accounts keep Opus"
+
+# N8: a provider bb does not route through the pool, or a child host, is not
+# judged by pool accounts.
+RC=0; OUT="$(FAKE_POOL=routing-off bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "Claude routing off: Claude is not judged by pool accounts"
+RC=0; OUT="$(FAKE_POOL=child-host bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "child host: the pool is not evaluated"
+jq -e '.fallbacks_evaluated == false' <<< "$(latest_receipt)" >/dev/null || fail "a child host leaves fallbacks unevaluated"
+
+# N5: timeouts must be finite and positive, and a timed-out resolver's
+# process group dies with it (hangic forks a sleep without exec).
+for bad in abc 0 -1 inf nan; do
+  RC=0; OUT="$(ROUTE_SPAWN_POOL_TIMEOUT="$bad" bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 2 "" "ROUTE_SPAWN_POOL_TIMEOUT=$bad"
+  RC=0; OUT="$(ROUTE_SPAWN_IC_TIMEOUT="$bad" bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 2 "" "ROUTE_SPAWN_IC_TIMEOUT=$bad"
+done
+start=$SECONDS
+# Stderr goes to a pipe too: a surviving grandchild would hold it open.
+RC=0; OUT="$(PATH="$TMP_ROOT/hangic:$PATH" ROUTE_SPAWN_IC_TIMEOUT=1 timeout 30 bash "$SCRIPT" --role lane --lineage L1 2> >(cat > "$TMP_ROOT/stderr"))" || RC=$?
+expect 3 "" "forking hanging resolver"
+(( SECONDS - start < 10 )) || fail "a timed-out resolver's grandchildren must not hold the caller's pipe"
+
+# N4: project-table cross-validation fails closed.
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT" <<'BADTABLE'
+import sys, yaml, copy
+base = yaml.safe_load(open(sys.argv[1]))
+def emit(name, mutate):
+    cfg = copy.deepcopy(base); mutate(cfg["reasoning"])
+    yaml.safe_dump(cfg, open(f"{sys.argv[2]}/{name}.yaml", "w"))
+emit("typo-profile", lambda r: r["project_profiles"].__setitem__("aleph", "project-alpeh"))
+emit("slug-alias", lambda r: r["project_aliases"].__setitem__("clavain", "autosigil"))
+emit("lane-override", lambda r: r["profiles"]["project-aleph"]["roles"].__setitem__("lane", "coordinator-seat-opus"))
+emit("wrong-scope", lambda r: r["profiles"]["project-aleph"].__setitem__("scope", "project:clavain"))
+BADTABLE
+for bad in typo-profile slug-alias lane-override wrong-scope; do
+  RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/$bad.yaml" bash "$SCRIPT" --role coordinator-seat --project autosigil 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 3 "" "invalid project table: $bad"
+done
+
+# N6d: a governed producer exclusion is not reported as a capacity fallback.
+run --role validation --producer-identity claude-opus-5-5
+if grep -q "fallback from" "$TMP_ROOT/stderr"; then
+  grep -q "producer_model_conflict" "$TMP_ROOT/stderr" || fail "a producer exclusion must state its reason, not a bare fallback"
+fi
+
+# N6c: a relative XDG_STATE_HOME is ignored and a symlinked script works.
+unset ROUTE_SPAWN_RECEIPT_DIR
+mkdir -p "$TMP_ROOT/home" "$TMP_ROOT/cwd"
+ln -sf "$SCRIPT" "$TMP_ROOT/route-spawn-link"
+RC=0; OUT="$(cd "$TMP_ROOT/cwd" && HOME="$TMP_ROOT/home" XDG_STATE_HOME=relative/state bash "$TMP_ROOT/route-spawn-link" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "symlinked invocation with a relative XDG_STATE_HOME"
+[[ ! -e "$TMP_ROOT/cwd/relative" ]] || fail "a relative XDG_STATE_HOME must be ignored"
+find "$TMP_ROOT/home/.local/state" -name '*.json' | grep -q . || fail "receipts fall back to \$HOME/.local/state"
+export ROUTE_SPAWN_RECEIPT_DIR="$TMP_ROOT/receipts"
 
 echo "PASS: route-spawn"

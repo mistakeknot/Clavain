@@ -88,5 +88,18 @@ def test_spawner_guidance_points_at_route_spawn():
         assert '"${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh"' in text, f"{rel} must use the selected root"
         assert not re.search(r"(?<![/\w])scripts/route-spawn\.sh", text), f"{rel} has a relative route-spawn path"
         assert "--role planning" not in text, f"{rel}: the frontier planning role is frontier-planning"
+        # A failed resolution must never reach `bb thread spawn` with empty
+        # values: every recipe uses the guarded form.
+        assert "if read -r P M E < <(" in text, f"{rel} must guard the spawn with `if read -r P M E < <(`"
+        assert not re.search(r"^\s*read -r P M E < <\(", text, re.MULTILINE), f"{rel} has an unguarded read"
+        # A coordinator thread's own seat is coordinator-seat; coordination
+        # stays the dispatch.sh relay role.
+        assert 'route-spawn.sh" --role coordinator-seat --project' in text, f"{rel} must give the coordinator-seat recipe"
+        assert 'route-spawn.sh" --role coordination' not in text, f"{rel}: route-spawn resolves coordinator-seat, not coordination"
+        # Recipes a coordinator runs name the selected installation's
+        # dispatch.sh too. The ops doc's older prose cites dispatch.sh as a
+        # source file, so only its spawning section is checked.
+        recipes = text.split("## Spawning bb threads", 1)[-1].split("\n## ", 1)[0]
+        assert not re.search(r"(?<![/\w])scripts/dispatch\.sh", recipes), f"{rel} has a relative dispatch.sh path"
     ops = (ROOT / "docs/canon/reasoning-routing-operations.md").read_text(encoding="utf-8")
     assert "## Spawning bb threads" in ops
