@@ -279,6 +279,33 @@ $(block_claiming_provenance)"
     [[ "$output" == *"Goal-cadence:"* ]]
 }
 
+# End to end for jawnomicon thr_cf7b863d3f (2026-09-27): a turn that files a
+# bead under an epic and closes nothing must stop cleanly, even when the
+# tracker confirms the parent is an epic and the texts say "epic" and "closed".
+@test "a turn that creates a bead under an epic and closes nothing stops cleanly" {
+    local stub; stub="$(mktemp -d)"
+    printf '#!/usr/bin/env bash\necho "[{\\"issue_type\\":\\"epic\\"}]"\n' > "$stub/bd"
+    chmod +x "$stub/bd"
+    local create
+    create=$(jq -cn --arg c 'cd /tmp && bd create --parent jawnomicon-dv5p --title "Rewrite review tool" --description "Google-only, closed registration"' \
+        '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c,description:"File the review-tool bead under the de-slop epic"}}]}}')
+    PATH="$stub:$PATH" run run_stop_hook "$create"$'\n'"$(assistant_line 'Filed jawnomicon-dv5p.5. No /goal was met and no epic closed.')" "sess-create-only"
+    rm -rf "$stub"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Goal-cadence:"* ]]
+    [[ "$output" != *'"decision"'* ]]
+}
+
+@test "a turn that closes an epic gets the goal-cadence request" {
+    local stub; stub="$(mktemp -d)"
+    printf '#!/usr/bin/env bash\necho "[{\\"issue_type\\":\\"epic\\"}]"\n' > "$stub/bd"
+    chmod +x "$stub/bd"
+    PATH="$stub:$PATH" run run_stop_hook "$(jq -cn '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:"bd close proj-ep1"}}]}}')" "sess-epic-close"
+    rm -rf "$stub"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Goal-cadence:"* ]]
+}
+
 # ---------------------------------------------------- verification (2026-08-14)
 #
 # The second claim a block makes. Provenance asks whether a tracker answered;

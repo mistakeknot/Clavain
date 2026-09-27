@@ -219,8 +219,8 @@ fi
 # itself degrades gracefully (see commands/next-goal.md) — this hook only
 # needs to fire the instruction, not resolve any bead data itself.
 #
-# goal-completed is narrow on purpose (lib-signals.sh): a met goal_status or an
-# epic closing, not milestone wording. And a block already in the transcript
+# goal-completed is narrow on purpose (lib-signals.sh): a met goal_status or a
+# `bd close` the tracker confirms closed an epic, never wording. And a block already in the transcript
 # satisfies the tier: demanding one for a block that exists was a wasted turn.
 if [[ -z "$REASON" && "$SIGNALS" == *"goal-completed"* ]]; then
     if [[ ! -f ".claude/clavain.no-goalcadence" && "$NEXT_GOAL_BLOCK_EMITTED" -eq 0 ]]; then

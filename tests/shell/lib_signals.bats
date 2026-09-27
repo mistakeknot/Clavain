@@ -113,10 +113,72 @@ teardown() {
     [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
 }
 
-@test "lib-signals: detects goal-completed when an epic closes" {
-    local transcript='Closed the last child, so the epic is now closed.'
-    detect_signals "$transcript"
+# A Bash tool call as Claude Code records it.
+bash_call() {
+    jq -cn --arg c "$1" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}'
+}
+
+# A bd on PATH that types the IDs listed in $STUB_EPICS as epics, the rest as
+# tasks, and logs every lookup.
+stub_bd() {
+    STUB_DIR="$(mktemp -d)"
+    cat > "$STUB_DIR/bd" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_DIR/calls"
+[[ "$1" == show ]] || exit 0
+t=task; [[ " $STUB_EPICS " == *" $2 "* ]] && t=epic
+printf '[{"id":"%s","issue_type":"%s"}]\n' "$2" "$t"
+EOF
+    chmod +x "$STUB_DIR/bd"
+    export STUB_DIR PATH="$STUB_DIR:$PATH"
+}
+
+@test "lib-signals: detects goal-completed when bd close closes an epic" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(bash_call 'cd /tmp && export BEADS_ACTOR=x && bd close proj-ep1 --reason "all children closed" 2>&1 | tail -3')"
     [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: closing a task is not goal-completed" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(bash_call 'bd close proj-t1.2')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    grep -q "show proj-t1.2" "$STUB_DIR/calls"
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: bd epic close-eligible counts, its dry run does not" {
+    stub_bd
+    detect_signals "$(bash_call 'bd epic close-eligible --dry-run')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    detect_signals "$(bash_call 'bd epic close-eligible')"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+# Regression, jawnomicon thr_cf7b863d3f (2026-09-27): the turn filed a bead
+# under an epic and closed nothing. "epic" in the tool description and
+# "closed registration" in the bead description sat in one JSONL record, and
+# the prose pattern read that as an epic closing and blocked the stop.
+@test "lib-signals: creating a bead under an epic, closing nothing, is not goal-completed" {
+    stub_bd; export STUB_EPICS="jawnomicon-dv5p"
+    local create
+    create=$(jq -cn --arg c 'cd /home/mk/projects/jawnomicon && bd create --type feature --parent jawnomicon-dv5p --title "Rewrite review tool" --description "Auth: Logto (Google-only, closed registration). The epic is complete when mk signs off."' \
+        '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c,description:"File the review-tool bead under the de-slop epic"}}]}}')
+    local transcript
+    transcript=$(printf '%s\n%s\n%s\n' "$create" \
+        '{"type":"user","message":{"content":[{"type":"tool_result","content":"✓ Created issue: jawnomicon-dv5p.5"}]}}' \
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"Filed jawnomicon-dv5p.5 under the epic. No /goal was met and no epic closed."}]}}')
+    detect_signals "$transcript"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    [[ ! -e "$STUB_DIR/calls" ]]   # no close, so the tracker is never asked
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: prose about an epic closing is not goal-completed" {
+    detect_signals '{"type":"assistant","message":{"content":[{"type":"text","text":"Closed the last child, so the epic is now closed."}]}}'
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
 }
 
 @test "lib-signals: milestone and goal wording alone is not goal-completed" {

@@ -32,6 +32,53 @@
 [[ -n "${_LIB_SIGNALS_LOADED:-}" ]] && return 0
 _LIB_SIGNALS_LOADED=1
 
+# _signals_epic_closed <transcript text>
+# True when a Bash tool call in the window ran `bd close` (or `bd done`) on an
+# issue the tracker types as an epic, or ran `bd epic close-eligible` for real.
+# Reads only the commands of assistant tool_use records, never prose or tool
+# output. The tracker is asked only when such a command exists, each lookup is
+# capped at 2s and at most 5 are made, and every failure answers "no": a missed
+# Next-goal block costs less than a stop blocked for work that did not finish.
+_signals_epic_closed() {
+    command -v jq >/dev/null 2>&1 || return 1
+    local cmds
+    cmds=$(printf '%s\n' "$1" | jq -Rc 'fromjson? | select(type == "object" and .type == "assistant")
+        | .message.content[]? | select(type == "object" and .type == "tool_use")
+        | .input.command? | strings' 2>/dev/null) || true
+    [[ -n "$cmds" ]] || return 1
+    command -v bd >/dev/null 2>&1 || return 1
+
+    local encoded cmd seg dir id lookups=0
+    local -a words
+    while IFS= read -r encoded; do
+        cmd=$(jq -r . <<<"$encoded" 2>/dev/null) || continue
+        # Split on shell separators so each bd call is read with the `cd`
+        # that precedes it and without the text of its neighbours.
+        dir=""
+        while IFS= read -r seg; do
+            if [[ "$seg" =~ ^[[:space:]]*cd[[:space:]]+([^[:space:]]+) ]]; then
+                dir="${BASH_REMATCH[1]//[\"\']/}"
+                dir="${dir/#\~/$HOME}"
+            elif [[ "$seg" =~ (^|[[:space:]])bd[[:space:]]+epic[[:space:]]+close-eligible ]]; then
+                [[ "$seg" == *--dry-run* ]] || return 0
+            elif [[ "$seg" =~ (^|[[:space:]])bd[[:space:]]+(close|done)[[:space:]]+(.*)$ ]]; then
+                # IDs come before the flags; a --reason text is not read.
+                read -r -a words <<<"${BASH_REMATCH[3]}"
+                for id in "${words[@]}"; do
+                    [[ "$id" == -* ]] && break
+                    [[ "$id" =~ ^[A-Za-z][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*-[a-z0-9]+(\.[0-9]+)*$ ]] || continue
+                    (( lookups++ < 5 )) || return 1
+                    if (cd "${dir:-.}" 2>/dev/null && timeout 2 bd show "$id" --json 2>/dev/null) \
+                        | jq -e '(if type == "array" then .[0] else . end).issue_type == "epic"' >/dev/null 2>&1; then
+                        return 0
+                    fi
+                done
+            fi
+        done < <(sed -E 's/(&&|\|\||;|\|)/\n/g' <<<"$cmd")
+    done <<<"$cmds"
+    return 1
+}
+
 # Detect signals in transcript text. Sets CLAVAIN_SIGNALS and CLAVAIN_SIGNAL_WEIGHT.
 # Args: $1 = transcript text (multi-line string)
 # Side effects: Sets global CLAVAIN_SIGNALS and CLAVAIN_SIGNAL_WEIGHT
@@ -83,12 +130,19 @@ detect_signals() {
     # independently of CLAVAIN_SIGNAL_WEIGHT).
     #
     # Narrowed 2026-09-24 to two events: Claude Code's own record that a /goal
-    # was met, and an epic said to close within a few words. The old pattern
-    # also took "goal ... complete", "/goal ... done" (every DONE WHEN line) and
-    # "milestone ... landed" anywhere in 80 transcript lines, hook text
-    # included, so it fired on ordinary progress and each firing cost a turn.
+    # was met, and an epic closing. The old pattern also took "goal ...
+    # complete", "/goal ... done" (every DONE WHEN line) and "milestone ...
+    # landed" anywhere in 80 transcript lines, hook text included, so it fired
+    # on ordinary progress and each firing cost a turn.
+    #
+    # The epic close is read from the tracker, not from prose (2026-09-27).
+    # Grep runs per JSONL record, and one record can hold kilobytes of tool
+    # input: a `bd create` filed "under the de-slop epic" whose description
+    # mentioned "closed registration" read as an epic closing and blocked the
+    # stop (jawnomicon, thr_cf7b863d3f). Prose is also where the model says "no
+    # epic closed". See _signals_epic_closed.
     if echo "$text" | grep -q '"type":"goal_status","met":true' \
-        || echo "$text" | grep -iqE '\bepic\b[^"]{0,40}\b(closed|completed?)\b'; then
+        || _signals_epic_closed "$text"; then
         CLAVAIN_SIGNALS="${CLAVAIN_SIGNALS}goal-completed,"
     fi
 
