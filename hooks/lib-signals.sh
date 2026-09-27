@@ -166,11 +166,11 @@ _SIGNALS_JQ_EPOCH='def epoch: (if type == "string" then
 # a close of an epic that was already closed, and `false && bd close` do not
 # count. Reads only Bash tool_use commands, never prose or tool output text.
 #
-# Budget: the Stop hook has 5s. One jq pass and one awk pass read the newest
-# 20 bd calls; the tracker is asked only when a close ran, once per directory
-# with the newest 50 IDs batched, 1s each, at most 2 directories. Every
-# failure answers "no": a missed Next-goal block costs less than a stop
-# blocked for work that did not finish.
+# Budget: the Stop hook has 5s, and its shadow scan may take 3s. One jq pass
+# and one awk pass read the newest 20 bd calls; the tracker is asked only when
+# a close ran, once, for the newest 50 IDs closed in the directory of the
+# newest close, with a 1s deadline. Every failure answers "no": a missed
+# Next-goal block costs less than a stop blocked for work that did not finish.
 #
 # Known miss, quiet: a failed close followed within 120s by someone else's
 # close of the same epic counts.
@@ -218,23 +218,22 @@ _signals_epic_closed() {
     [[ -n "$cands" ]] || return 1
     cands=$(printf '%s' "$cands" | tail -n 50)
 
-    local dirs closed best=0 lookups=0 line at rec
-    dirs=$(cut -f2 <<<"$cands" | sort -u)
-    while IFS= read -r dir; do
-        (( lookups++ < 2 )) || break
-        ids=$(awk -F'\t' -v d="$dir" '$2 == d { print $3 }' <<<"$cands" | sort -u | tr '\n' ' ')
-        # shellcheck disable=SC2086  # IDs are validated tokens, split on purpose
-        closed=$( (cd "${dir:-.}" 2>/dev/null && _signals_deadline 1 bd show $ids --json 2>/dev/null) \
-            | jq -r "${_SIGNALS_JQ_EPOCH}"'(if type == "array" then .[] else . end)
-                | select(.issue_type == "epic" and .status == "closed")
-                | "\(.id)=\(.closed_at | epoch)"' 2>/dev/null) || true
-        for rec in $closed; do
-            id=${rec%%=*} at=${rec#*=}
-            line=$(awk -F'\t' -v d="$dir" -v i="$id" -v at="$at" \
-                '$2 == d && $3 == i && $4 >= 0 && at >= $4 - 1 && at <= $4 + 120 { l = $1 } END { print l + 0 }' <<<"$cands")
-            (( line > best )) && best=$line
-        done
-    done <<<"$dirs"
+    # One lookup, in the directory of the newest close: the hook's shadow
+    # scan may take 3s of the same 5s.
+    local closed best=0 line at rec
+    dir=$(tail -n 1 <<<"$cands" | cut -f2)
+    ids=$(awk -F'\t' -v d="$dir" '$2 == d { print $3 }' <<<"$cands" | sort -u | tr '\n' ' ')
+    # shellcheck disable=SC2086  # IDs are validated tokens, split on purpose
+    closed=$( (cd "${dir:-.}" 2>/dev/null && _signals_deadline 1 bd show $ids --json 2>/dev/null) \
+        | jq -r "${_SIGNALS_JQ_EPOCH}"'(if type == "array" then .[] else . end)
+            | select(.issue_type == "epic" and .status == "closed")
+            | "\(.id)=\(.closed_at | epoch)"' 2>/dev/null) || true
+    for rec in $closed; do
+        id=${rec%%=*} at=${rec#*=}
+        line=$(awk -F'\t' -v d="$dir" -v i="$id" -v at="$at" \
+            '$2 == d && $3 == i && $4 >= 0 && at >= $4 - 1 && at <= $4 + 120 { l = $1 } END { print l + 0 }' <<<"$cands")
+        (( line > best )) && best=$line
+    done
     (( best > 0 )) || return 1
     printf '%s\n' "$best"
 }

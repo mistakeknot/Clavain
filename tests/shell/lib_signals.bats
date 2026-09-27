@@ -301,6 +301,15 @@ EOF
     rm -rf "$STUB_DIR"
 }
 
+@test "lib-signals: closes in two directories cost one lookup, in the newest" {
+    stub_bd; export STUB_EPICS="proj-ep1 proj-ep2"
+    mkdir -p "$STUB_DIR/a" "$STUB_DIR/b"
+    detect_signals "$(bash_call "bd -C $STUB_DIR/a close proj-ep1; bd -C $STUB_DIR/b close proj-ep2")"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    [[ "$(cat "$STUB_DIR/calls")" == "show proj-ep2 --json" ]]
+    rm -rf "$STUB_DIR"
+}
+
 @test "lib-signals: bd not run as the command, or run for help, is not read" {
     stub_bd; export STUB_EPICS="proj-ep1"
     detect_signals "$(printf '%s\n' "$(bash_call 'echo bd close proj-ep1')" \
