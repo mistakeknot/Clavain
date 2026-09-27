@@ -16,19 +16,26 @@ fail() {
   exit 1
 }
 
-# Fake bb: FAKE_POOL=ready (default) | claude-down | error.
+# Fake bb: FAKE_POOL=ready (default) | claude-down | claude-held | codex-down |
+# opus-weekly-rejected | not-accepting | hang | error. Every call is logged.
 cat > "$TMP_ROOT/bin/bb" <<'FAKE_BB'
 #!/usr/bin/env bash
 [[ "$*" == "pool status --json" ]] || { echo "unexpected bb call: $*" >&2; exit 64; }
+echo "$*" >> "${FAKE_BB_LOG:-/dev/null}"
+claude_status=ready codex_status=ready accepting=true opus_weekly=null
 case "${FAKE_POOL:-ready}" in
   error) echo "pool unreachable" >&2; exit 1 ;;
+  hang) exec sleep 60 ;;
   claude-down) claude_status=exhausted ;;
-  *) claude_status=ready ;;
+  claude-held) claude_status=held ;;
+  codex-down) codex_status=exhausted ;;
+  opus-weekly-rejected) opus_weekly='{"status":"rejected","utilization":1}' ;;
+  not-accepting) accepting=false ;;
 esac
 cat <<JSON
-{"accepting":true,"accounts":[
- {"provider":"codex","enabled":true,"status":"ready"},
- {"provider":"claude","enabled":true,"status":"$claude_status"},
+{"accepting":$accepting,"accounts":[
+ {"provider":"codex","enabled":true,"status":"$codex_status","familyWeekly":{"fable":null,"sonnet":null,"opus":null,"haiku":null,"other":null}},
+ {"provider":"claude","enabled":true,"status":"$claude_status","familyWeekly":{"fable":null,"sonnet":{"status":"allowed"},"opus":$opus_weekly,"haiku":null,"other":null}},
  {"provider":"claude","enabled":false,"status":"ready"}]}
 JSON
 FAKE_BB
@@ -39,6 +46,9 @@ echo '{"partial":true}'
 exit 1
 FAKE_IC
 chmod +x "$TMP_ROOT/failic/ic"
+mkdir -p "$TMP_ROOT/hangic"
+printf '#!/usr/bin/env bash\nexec sleep 60\n' > "$TMP_ROOT/hangic/ic"
+chmod +x "$TMP_ROOT/hangic/ic"
 
 export PATH="$TMP_ROOT/bin:$PATH"
 export ROUTE_SPAWN_RECEIPT_DIR="$TMP_ROOT/receipts"
@@ -85,6 +95,8 @@ for pair in proj_3ktdvx76vj:autosigil proj_sy6myvvmq2:rakes proj_94669ff46u:uncr
             proj_qdsjncqfd4:cujgel proj_5wt5mmgska:agmodb proj_g4vgbq6jst:linsenkasten; do
   run --role coordination --project "${pair%%:*}"
   expect 0 "$SONNET" "coordination alias ${pair%%:*} (${pair#*:})"
+  jq -e --arg s "${pair#*:}" '.project == $s' <<< "$(latest_receipt)" >/dev/null \
+    || fail "alias ${pair%%:*} must record slug ${pair#*:}"
 done
 
 # --- Usage errors: exit 2, empty stdout, no spawn tuple.
@@ -175,5 +187,85 @@ jq -e '.fallbacks_evaluated == false and .available_models == null' <<< "$receip
   || fail "an unreachable pool must be recorded as fallbacks not evaluated"
 jq -e '.policy_hash == .route.policy_hash and (.policy_hash | length == 64) and .spawn == {provider: "claude-code", model: "claude-opus-5-5", reasoning_level: "medium"} and .project_input == "clavain" and .profile_source == "project"' <<< "$receipt" >/dev/null \
   || fail "receipt must carry policy hash, spawn tuple, project input and profile source"
+
+
+# --- Review round 1 (mk-42j9.25 Phase 2a) regressions.
+# Option values that look like flags, and unreadable contexts, are usage errors.
+run --role lane --lineage -x
+expect 2 "" "option value starting with a dash"
+run --role lane --lineage L1 --context-file "$TMP_ROOT/no-such-context.json"
+expect 2 "" "missing context file"
+printf 'not json\n' > "$TMP_ROOT/bad-context.json"
+run --role lane --lineage L1 --context-file "$TMP_ROOT/bad-context.json"
+expect 2 "" "non-JSON context file"
+
+# The main backend is the host session; bb cannot spawn it.
+run --role release-authority
+expect 3 "" "release-authority resolves a main-backend seat"
+
+# An empty or "default" CLAVAIN_POLICY_PROFILE is no campaign.
+for value in "" default; do
+  RC=0; OUT="$(CLAVAIN_POLICY_PROFILE="$value" bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 0 "$OPUS" "CLAVAIN_POLICY_PROFILE='$value' is unset"
+done
+
+# Pool states: held accounts still serve; a rejected weekly family is down;
+# a pool that is not accepting leaves fallbacks unevaluated.
+RC=0; OUT="$(FAKE_POOL=claude-held bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "held Claude accounts count as up"
+RC=0; OUT="$(FAKE_POOL=opus-weekly-rejected bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$SONNET" "a rejected Opus weekly family excludes Opus seats"
+grep -qi fallback "$TMP_ROOT/stderr" || fail "a fallback seat must be announced on stderr"
+jq -e '(.available_models | index("claude-opus-5-5") | not) and (.available_models | index("claude-sonnet-5"))' <<< "$(latest_receipt)" >/dev/null \
+  || fail "a rejected Opus family must drop only Opus models"
+RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+grep -qi fallback "$TMP_ROOT/stderr" || fail "a provider change must be announced on stderr"
+RC=0; OUT="$(FAKE_POOL=codex-down bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "coordination with the Codex pool exhausted"
+jq -e '.fallbacks_evaluated == true and (.available_models | index("gpt-5.6-sol") | not) and (.available_models | index("claude-opus-5-5"))' <<< "$(latest_receipt)" >/dev/null \
+  || fail "a Codex outage must drop Codex models only"
+jq -e '[.available_models[] | select(. == "gpt-6-astra" or . == "kimi-code/k3")] == []' <<< "$(latest_receipt)" >/dev/null \
+  || fail "main and unspawnable backends must not count as available"
+RC=0; OUT="$(FAKE_POOL=not-accepting bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "pool not accepting"
+jq -e '.fallbacks_evaluated == false and .available_models == null' <<< "$(latest_receipt)" >/dev/null \
+  || fail "a pool that is not accepting must leave fallbacks unevaluated"
+
+# A hanging pool probe is bounded and treated as not evaluated.
+RC=0; OUT="$(FAKE_POOL=hang ROUTE_SPAWN_POOL_TIMEOUT=1 timeout 30 bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "hanging pool probe"
+jq -e '.fallbacks_evaluated == false' <<< "$(latest_receipt)" >/dev/null || fail "a timed-out probe is not evaluated"
+# A hanging resolver is bounded and fails closed.
+RC=0; OUT="$(PATH="$TMP_ROOT/hangic:$PATH" ROUTE_SPAWN_IC_TIMEOUT=1 timeout 30 bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 3 "" "hanging resolver"
+
+# Governed roles keep dispatch-time capacity handling: no pool probe.
+rm -f "$TMP_ROOT/bbcalls"
+RC=0; OUT="$(FAKE_BB_LOG="$TMP_ROOT/bbcalls" bash "$SCRIPT" --role validation --producer-identity claude-opus-5-5 2>"$TMP_ROOT/stderr")" || RC=$?
+[[ "$RC" == 0 ]] || fail "validation must resolve ($(cat "$TMP_ROOT/stderr"))"
+[[ ! -s "$TMP_ROOT/bbcalls" ]] || fail "governed roles must not probe the pool"
+RC=0; OUT="$(FAKE_BB_LOG="$TMP_ROOT/bbcalls" bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+[[ -s "$TMP_ROOT/bbcalls" ]] || fail "lane must probe the pool"
+
+# Caller available_models are canonicalized through model_aliases before the
+# intersection: "sonnet" means claude-sonnet-5.
+printf '%s\n' '{"reasons":[],"rationale":"caller capacity","available_models":["sonnet","gpt-5.6-sol"]}' > "$TMP_ROOT/avail.json"
+run --role lane --lineage L1 --context-file "$TMP_ROOT/avail.json"
+expect 0 "$SONNET" "caller available_models alias is canonicalized"
+
+# A lane on an unknown project resolves but warns.
+run --role lane --lineage L1 --project no-such-project
+expect 0 "$OPUS" "lane on an unknown project"
+grep -qi "unknown project" "$TMP_ROOT/stderr" || fail "an unknown lane project must warn on stderr"
+
+# The policy must declare its project table explicitly.
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/noprojects.yaml" <<'NOPROJ'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1]))
+cfg["reasoning"].pop("projects", None)
+yaml.safe_dump(cfg, open(sys.argv[2], "w"))
+NOPROJ
+RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/noprojects.yaml" bash "$SCRIPT" --role coordination --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 3 "" "policy without reasoning.projects"
 
 echo "PASS: route-spawn"

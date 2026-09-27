@@ -42,6 +42,11 @@ done
 jq -e '(.reasoning.project_profiles | length) == 9' <<< "$CFG" >/dev/null \
   || fail "project_profiles must list exactly the 9 Opus coordinators"
 
+# reasoning.projects is the explicit 15-slug table route-spawn.sh trusts.
+jq -e --argjson slugs "$(printf '%s\n' "${OPUS_SLUGS[@]}" "${SONNET_SLUGS[@]}" | jq -R . | jq -s 'sort')" \
+  '(.reasoning.projects | sort) == $slugs' <<< "$CFG" >/dev/null \
+  || fail "reasoning.projects must list exactly the 15 table slugs"
+
 # Every alias targets a table slug; shared bb projects have no alias.
 jq -e --argjson slugs "$(printf '%s\n' "${OPUS_SLUGS[@]}" "${SONNET_SLUGS[@]}" | jq -R . | jq -s .)" \
   '.reasoning.project_aliases | to_entries | all(.value as $v | $slugs | index($v))' <<< "$CFG" >/dev/null \
