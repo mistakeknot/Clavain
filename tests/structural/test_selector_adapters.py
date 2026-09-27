@@ -366,6 +366,79 @@ def test_fingerprint_dev_ino_swap_retries_then_raises(tmp_path, monkeypatch):
     assert calls["n"] >= 2
 
 
+def test_fingerprint_read_race_retries_then_matches_settled_entry(tmp_path, monkeypatch):
+    """A file that changes content, size, and mtime while it is being read
+    must be retried once on the same descriptor (plan:364). The resulting
+    entry must equal the entry a fresh, unhurried read of the now-settled
+    file would produce -- never a torn mix of pre-mutation identity fields
+    and post-mutation content (the row-12 race a re-reviewer reproduced
+    against the pre-fix implementation)."""
+    f1 = tmp_path / "a.txt"
+    f1.write_text("stable-content")
+    st0 = f1.stat()
+
+    real_fstat = os.fstat
+    calls = {"n": 0}
+
+    def _flicker_once(fd):
+        calls["n"] += 1
+        pre = real_fstat(fd)
+        if calls["n"] == 1:
+            # Mutate on disk right after the file is opened (and its
+            # identity confirmed) but before it settles for reading --
+            # reproducing a write landing mid-fingerprint. Report the
+            # *pre*-mutation stat, matching what a real fstat() would have
+            # returned had it been called an instant earlier. The mtime is
+            # forced strictly forward by an explicit offset rather than
+            # relying on wall-clock advancement, which the filesystem's
+            # clock resolution may not guarantee between two closely spaced
+            # writes.
+            f1.write_text("mutated-content-longer")
+            os.utime(f1, ns=(st0.st_atime_ns, st0.st_mtime_ns + 1_000_000))
+        return pre
+
+    monkeypatch.setattr(os, "fstat", _flicker_once)
+    entry = adapters_base._entry_for_path(f1)
+    monkeypatch.undo()
+
+    settled_entry = adapters_base._entry_for_path(f1)
+    assert entry == settled_entry
+    # The retry path (a second fstat call) was actually exercised.
+    assert calls["n"] >= 2
+
+
+def test_fingerprint_read_race_persistently_unstable_raises(tmp_path, monkeypatch):
+    """If a file keeps changing across the single retry the plan allows
+    (:364), the fingerprint must raise -- row 12 must take the
+    fingerprint-failure fallback and never emit for a target that never
+    settles."""
+    f1 = tmp_path / "a.txt"
+    f1.write_text("stable-content")
+    st0 = f1.stat()
+
+    real_fstat = os.fstat
+    calls = {"n": 0}
+
+    def _flicker_always(fd):
+        calls["n"] += 1
+        pre = real_fstat(fd)
+        # Mutate before every fstat call, including the post-read check on
+        # the retried pass -- the content never settles. Each mutation's
+        # mtime is forced strictly forward by an explicit offset rather
+        # than relying on wall-clock advancement between closely spaced
+        # writes, which the filesystem's clock resolution may not
+        # distinguish.
+        f1.write_text(f"mutated-content-{calls['n']}")
+        os.utime(f1, ns=(st0.st_atime_ns, st0.st_mtime_ns + calls["n"] * 1_000_000))
+        return pre
+
+    monkeypatch.setattr(os, "fstat", _flicker_always)
+    with pytest.raises(FingerprintUnavailable):
+        adapters_base._entry_for_path(f1)
+    # The retry path was actually exercised, not short-circuited.
+    assert calls["n"] >= 2
+
+
 def test_fingerprint_unavailable_results_never_compare_equal(tmp_path, monkeypatch):
     monkeypatch.setattr(adapters_base, "FINGERPRINT_MAX_BYTES", 1)
     big = tmp_path / "big.txt"

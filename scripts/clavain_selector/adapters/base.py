@@ -288,43 +288,67 @@ def _entry_for_path(
     except OSError:
         resolved = str(p)
 
-    last_exc: OSError | None = None
     for _attempt in range(2):
         try:
-            st1 = _lstat(p)
+            lst = _lstat(p)
         except FileNotFoundError:
             return [resolved, "missing"]
         except OSError as exc:
             raise FingerprintUnavailable(f"lstat failed for {resolved}: {exc}") from exc
 
-        if not stat_module.S_ISREG(st1.st_mode):
-            return [resolved, "not_regular", st1.st_mode, st1.st_dev, st1.st_ino, st1.st_size, st1.st_mtime_ns]
+        if not stat_module.S_ISREG(lst.st_mode):
+            return [resolved, "not_regular", lst.st_mode, lst.st_dev, lst.st_ino, lst.st_size, lst.st_mtime_ns]
 
         read_limit = FINGERPRINT_MAX_BYTES if max_bytes is None else min(FINGERPRINT_MAX_BYTES, max_bytes)
-        if st1.st_size > read_limit:
+        if lst.st_size > read_limit:
             raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
 
         try:
             with open(p, "rb") as handle:
-                st2 = os.fstat(handle.fileno())
-                if (st2.st_dev, st2.st_ino) != (st1.st_dev, st1.st_ino):
+                st = os.fstat(handle.fileno())
+                if (st.st_dev, st.st_ino) != (lst.st_dev, lst.st_ino):
                     # Identity changed between lstat and open (a swap): retry
                     # once, then raise rather than fingerprint a moving target.
-                    last_exc = None
                     continue
-                data = handle.read(read_limit + 1)
+
+                # Read, then confirm the read was of a stable snapshot (plan
+                # :364): the byte count and a post-read fstat must both match
+                # what was seen before the read. A file that changes content,
+                # size or mtime during the read is rewound and retried once
+                # on the same descriptor before this raises.
+                stable = False
+                data = b""
+                for _pass in range(2):
+                    if st.st_size > read_limit:
+                        raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
+                    data = handle.read(read_limit + 1)
+                    if phase is not None:
+                        # The phase budget counts bytes actually read, not
+                        # `st_size`: a file that grows after the size check,
+                        # including on a retried pass, is charged for what
+                        # was read.
+                        phase.bytes_read += len(data)
+                    if len(data) > read_limit:
+                        raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
+
+                    st_after = os.fstat(handle.fileno())
+                    stable = len(data) == st.st_size and (st_after.st_size, st_after.st_mtime_ns) == (
+                        st.st_size,
+                        st.st_mtime_ns,
+                    )
+                    if stable:
+                        break
+                    if _pass == 0:
+                        handle.seek(0)
+                        st = st_after
+
+                if not stable:
+                    raise FingerprintUnavailable(f"unstable content for {resolved}: changed during read")
         except OSError as exc:
             raise FingerprintUnavailable(f"could not read {resolved}: {exc}") from exc
 
-        # The phase budget counts bytes actually read, not `st_size`: a file
-        # that grows after the size check is charged for what was read.
-        if phase is not None:
-            phase.bytes_read += len(data)
-        if len(data) > read_limit:
-            raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
-
         content_sha256 = hashlib.sha256(data).hexdigest()
-        return [resolved, st1.st_dev, st1.st_ino, st1.st_size, st1.st_mtime_ns, content_sha256]
+        return [resolved, st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, content_sha256]
 
     raise FingerprintUnavailable(f"unstable identity for {resolved}: dev/ino swapped between lstat and open")
 
