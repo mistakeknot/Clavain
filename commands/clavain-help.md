@@ -53,7 +53,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/clavain:review-doc` | Single-pass doc refinement |
 | `/interpeer:interpeer` | Cross-AI peer review |
 | `/clavain:migration-safety` | DB migration safety checks |
-| `/clavain:pr-triage` | Batch PR triage with fd-* agents |
+| `/clavain:pr-triage` | Batch PR triage with fd-* agents; `N` for a single-PR pass |
 | `/interflux:flux-gen` | Generate domain-specific review agents |
 
 ### Ship
