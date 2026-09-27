@@ -4,7 +4,7 @@ Document solved problems as searchable institutional knowledge with YAML frontma
 
 ## When to Invoke
 
-After confirmation phrases ("that worked", "it's fixed", "problem solved") or via `/clavain:compound`. **Non-trivial problems only** — skip typos, obvious syntax errors, trivial fixes, and anything the final code already makes impossible to repeat. **One learning per run**: never batch several problems into one doc; run once per problem.
+After confirmation phrases ("that worked", "it's fixed", "problem solved") or via `/clavain:compound`. **Non-trivial problems only** — skip typos, obvious syntax errors, trivial fixes, and anything the final code already makes impossible or obvious to repeat. **One learning per run**: never batch several problems into one doc; run once per problem.
 
 ## Algorithm
 
@@ -36,7 +36,7 @@ If similar issues exist, add bidirectional links. If 3+ similar issues, add patt
 
 ### Step 7: Vocabulary Capture
 
-Update the existing glossary (`docs/glossary.md`, `GLOSSARY.md`, `CONCEPTS.md`), or create `CONCEPTS.md` seeded with this learning's area only. Mutations: add, refine, fold, scrub; entries carry no paths or config values. Apply silently and report `Vocabulary (<file>): not present | scanned, no qualifying terms | updated — N added, N refined, N folded, N scrubbed`. Rules: `references/vocabulary-capture.md`.
+Update the nearest existing glossary (`docs/glossary.md`, `GLOSSARY.md`, `CONCEPTS.md`, checking parent directories up to the workspace root), matching its format. Only if none exists and the learning surfaced a qualifying term, create `CONCEPTS.md` seeded with this learning's area only. Mutations: add, refine, fold, and scrub entries this run touched; entries carry no paths or config values. Apply silently and report `Vocabulary (<file>): not present | scanned, no qualifying terms | updated — N added, N refined, N folded, N scrubbed`. Rules: `references/vocabulary-capture.md`.
 
 ### Step 8: Decision Menu
 

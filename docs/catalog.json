@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-27T06:28:08Z",
+  "generated": "2026-09-27T12:29:32Z",
   "counts": {
     "skills": 26,
     "agents": 6,
@@ -16,7 +16,7 @@
     },
     {
       "name": "code-review-discipline",
-      "description": "Request and assess code review; verify findings and preserve required review gates."
+      "description": "Request code review, and assess received feedback from people, PR comments, or agent and cross-lab reviewers; verify findings before implementing and preserve required review gates."
     },
     {
       "name": "codex-delegate",
@@ -60,7 +60,7 @@
     },
     {
       "name": "landing-a-change",
-      "description": "Land verified work on trunk after tests and required review; preserve release authority."
+      "description": "Land verified work on trunk, or finish a feature branch or worktree, after tests and required review; preserve release authority."
     },
     {
       "name": "lane",
@@ -274,7 +274,7 @@
     },
     {
       "name": "pr-triage",
-      "description": "Triage all open PRs \u2014 batch by theme, review with parallel agents, generate report, walk through decisions"
+      "description": "Triage all open PRs \u2014 batch by theme, review with parallel agents, generate report, walk through decisions. With a PR reference, run one follow-up pass on your own PR after a watcher update."
     },
     {
       "name": "quality-gates",

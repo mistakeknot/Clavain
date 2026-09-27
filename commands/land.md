@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Invoke the landing-a-change skill for: $ARGUMENTS
 
-**After the skill completes**, register the landed artifact:
+**After the skill pushes to the base branch**, register the landed artifact (skip it for a PR, kept branch, local commit or discard):
 ```bash
 clavain-cli set-artifact "$CLAVAIN_BEAD_ID" "landed" "$(git rev-parse HEAD)" 2>/dev/null || true
 ```

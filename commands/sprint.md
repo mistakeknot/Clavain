@@ -488,6 +488,9 @@ fi
 Use `clavain:landing-a-change` skill to verify, document, commit, and push. Do
 not continue until the push succeeds and the landed source is the exact source
 the installed-runtime collector will verify.
+If landing opened a PR, kept the branch, or committed locally instead of pushing
+to the base branch, stop here and leave the bead open; it closes once the change
+reaches base.
 
 Determine whether installed-runtime proof is required. Requirement lookup is
 durable: removing the current label does not bypass a previously bound gate.

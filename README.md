@@ -382,7 +382,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/create-agent-skill` | Create new skills or agents |
 | `/generate-command` | Generate new commands |
 | `/heal-skill` | Fix broken skills |
-| `/pr-triage` | Triage open PR backlog with parallel review agents, or run one Sonnerie-cued triage pass on your own PR (`/pr-triage N`) |
+| `/pr-triage` | Triage open PR backlog with parallel review agents, or run one follow-up pass on your own PR (`/pr-triage owner/repo#N`) |
 | `/review-doc` | Quick single-pass document refinement (lighter than flux-drive) |
 | `/upstream-sync` | Check upstream repos for updates |
 | `/sprint-status` | Deep scan of sprint workflow state: sessions, pipeline, beads |

@@ -106,7 +106,7 @@ When user selects Option 2, use `assets/critical-pattern-template.md` and number
 
 ### Step 8: Vocabulary Capture
 
-Follow [vocabulary-capture.md](./references/vocabulary-capture.md): update the project's existing glossary (or create `CONCEPTS.md` if none exists and the learning surfaced a qualifying term) using only add, refine, fold and scrub. Apply without prompting and include its one-line report in the decision menu.
+Follow [vocabulary-capture.md](./references/vocabulary-capture.md): update the nearest existing glossary, matching its format (or create `CONCEPTS.md` if none exists and the learning surfaced a qualifying term) using only add, refine, fold and scrub. Apply without prompting and include its one-line report in the decision menu.
 
 ---
 
