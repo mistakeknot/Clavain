@@ -47,6 +47,11 @@ case "$ROLE" in
   plan-review|validation|cross-lab-review)
     [[ -n "$PRODUCER" ]] || usage_error "$ROLE requires --producer-identity" ;;
 esac
+if [[ -n "$SEAT_OUT" ]]; then
+  seat_dir="$(dirname -- "$SEAT_OUT")"
+  [[ -d "$seat_dir" && -w "$seat_dir" && ! -d "$SEAT_OUT" ]] ||
+    usage_error "--seat-out needs a file in an existing writable directory: $SEAT_OUT"
+fi
 
 lane_arm() {
   # TODO(mk-42j9.25 Phase 2b): consult rollout state for the supplied lineage.
@@ -129,18 +134,48 @@ def run_bounded(command, timeout):
     return stdout
 
 
-def write_atomic(destination, text):
+def write_pending(destination, text):
+    # A temp file beside destination, so the later rename is atomic.
     pending = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent,
                                          prefix=".route-spawn-", delete=False) as stream:
             pending = Path(stream.name)
             stream.write(text + "\n")
-        # Same-directory rename is atomic, just like temp file + mv.
+    except BaseException:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
+        raise
+    return pending
+
+
+def replace_pending(pending, destination):
+    # Same-directory rename is atomic, just like temp file + mv.
+    try:
         os.replace(pending, destination)
     finally:
-        if pending is not None and pending.exists():
-            pending.unlink()
+        pending.unlink(missing_ok=True)
+
+
+def write_atomic(destination, text):
+    replace_pending(write_pending(destination, text), destination)
+
+
+SOL = "gpt-5.6-sol"
+
+
+def is_sol(name, aliases):
+    """Canonicalize a model name and report whether it is gpt-5.6-sol."""
+    canonical = str(name).lower()
+    seen = {canonical}
+    while aliases.get(canonical, canonical) != canonical:
+        canonical = aliases[canonical]
+        if canonical in seen:
+            fail(f"model_aliases cycle through {canonical} while checking {name} for {SOL}")
+        seen.add(canonical)
+    canonical = canonical.rsplit("/", 1)[-1]
+    return canonical in (SOL, "gpt-5.6") or (
+        canonical.startswith(SOL) and canonical[len(SOL):len(SOL) + 1] in ("-", "@", ":", "."))
 
 
 def active_window(window, threshold, now_ms):
@@ -317,8 +352,8 @@ def main():
     model = seat["model_identity"]
     sol_aliases = {str(k).lower(): str(v).lower() for k, v in model_aliases.items()}
     for name in (seat.get("model"), model):
-        if name is not None and sol_aliases.get(str(name).lower(), str(name).lower()) in ("gpt-5.6-sol", "gpt-5.6"):
-            fail(f"gpt-5.6-sol ({name}) is forbidden for every route-spawn role (mk ruling 2026-09-27)")
+        if name is not None and is_sol(name, sol_aliases):
+            fail(f"{SOL} ({name}) is forbidden for every route-spawn role (mk ruling 2026-09-27)")
     effort = seat["reasoning_effort"]
     for label, value in (("model identity", model), ("reasoning effort", effort)):
         if not isinstance(value, str) or not value or any(c.isspace() for c in value):
@@ -364,10 +399,10 @@ def main():
     safe_role = "".join(c if c.isalnum() or c in "-_" else "_" for c in role)
     destination = receipt_dir / f"{stamp}-{safe_role}-{pid}.json"
     write_atomic(destination, json.dumps(receipt, indent=2))
-    seat_path = None
-    if seat_out:
-        seat_path = Path(seat_out)
-        write_atomic(seat_path, json.dumps({
+    seat_path = Path(seat_out) if seat_out else None
+    seat_pending = None
+    if seat_path is not None:
+        seat_pending = write_pending(seat_path, json.dumps({
             "provider": provider, "model": model, "reasoning_level": effort,
             "role": role, "profile_ref": chosen, "policy_profile": profile,
             "policy_hash": route["policy_hash"], "receipt": str(destination.absolute()),
@@ -375,10 +410,14 @@ def main():
     try:
         print(f"{provider} {model} {effort}", flush=True)
     except OSError:
-        # The seat file exists only when the tuple reached stdout.
-        if seat_path is not None:
-            seat_path.unlink(missing_ok=True)
+        # The seat file changes only when the tuple reached stdout.
+        if seat_pending is not None:
+            seat_pending.unlink(missing_ok=True)
         raise
+    if seat_pending is not None:
+        # The tuple is already on stdout: a failed rename here exits 3 with a
+        # printed tuple and no seat file. Accepted; the caller sees the exit.
+        replace_pending(seat_pending, seat_path)
 
 
 try:

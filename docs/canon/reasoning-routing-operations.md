@@ -314,13 +314,7 @@ fi
 
 Never type a model id on a spawn line. Frontier lanes use `--role frontier-planning`, or
 `plan-review` / `validation` with `--producer-identity` taken from the producer's
-receipt. Until Quilan carry-forward ships, a pinned coordinator's self-handoff
-passes its own current tuple explicitly:
-`bb handoff --provider "$current_provider" --model "$current_model" --reasoning-level "$current_effort" …`.
-Set these variables from the Seat block in your own spawn prompt:
-`.provider`, `.model`, and `.reasoning_level`, respectively. A coordinator
-spawned before `--seat-out` has no Seat block: report it and do not guess.
-On a non-zero resolver exit, do not spawn; report it. Exit codes are
+receipt. On a non-zero resolver exit, do not spawn; report it. Exit codes are
 0 for success, 2 for usage errors, and 3 for resolution or receipt failures.
 
 For a new coordinator thread, the spawner resolves its seat and passes it in
@@ -329,9 +323,25 @@ the spawn prompt:
 ```bash
 seat="$(mktemp)"
 if read -r P M E < <("${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role coordinator-seat --project "$project_slug" --seat-out "$seat"); then
-  bb thread spawn --provider "$P" --model "$M" --reasoning-level "$E" …  # include "Seat: $(cat "$seat")" in the spawn prompt
+  bb thread spawn --provider "$P" --model "$M" --reasoning-level "$E" --prompt "…Seat: $(cat "$seat")"
 else
   echo "Coordinator routing failed; no thread spawned" >&2
+fi
+rm -f "$seat"
+```
+
+Until Quilan carry-forward ships, a pinned coordinator's self-handoff passes
+its own seat. Set `seat_json` to the JSON after "Seat: " in your own spawn or
+handoff prompt; its `.provider`, `.model` and `.reasoning_level` become the
+handoff tuple. Each handoff passes the Seat block on, so every generation has
+it. A coordinator spawned before `--seat-out` has no Seat block: report it and
+do not guess.
+
+```bash
+if P="$(jq -er .provider <<<"$seat_json")" && M="$(jq -er .model <<<"$seat_json")" && E="$(jq -er .reasoning_level <<<"$seat_json")"; then
+  bb handoff --self --to "$P" --model "$M" --effort "$E" --instructions "Seat: $seat_json" …
+else
+  echo "No Seat block; not handing off" >&2
 fi
 ```
 
