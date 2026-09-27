@@ -5,7 +5,7 @@
 #          [--context-file <json>] [--seat-out <file>]
 # Stdout: exactly <bb-provider> <model> <reasoning-level> on success.
 # --seat-out writes the seat tuple, role, profile, policy hash and receipt path
-# as JSON, on success only.
+# as JSON before printing the tuple.
 # Exit codes: 0 success, 2 usage error, 3 resolution or receipt failure.
 set -euo pipefail
 
@@ -144,7 +144,10 @@ def write_pending(destination, text):
             stream.write(text + "\n")
     except BaseException:
         if pending is not None:
-            pending.unlink(missing_ok=True)
+            try:
+                pending.unlink(missing_ok=True)
+            except OSError:
+                pass
         raise
     return pending
 
@@ -154,7 +157,10 @@ def replace_pending(pending, destination):
     try:
         os.replace(pending, destination)
     finally:
-        pending.unlink(missing_ok=True)
+        try:
+            pending.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def write_atomic(destination, text):
@@ -402,33 +408,14 @@ def main():
     if not seat_out:
         print(f"{provider} {model} {effort}", flush=True)
         return
-    # The seat file is in place before the tuple is printed, so a failed seat
-    # write exits with empty stdout. A failed print restores the prior file.
-    seat_path = Path(seat_out)
-    seat_pending = write_pending(seat_path, json.dumps({
+    # Write the seat before printing the tuple; a failed print exits 3 with
+    # the seat already written.
+    write_atomic(Path(seat_out), json.dumps({
         "provider": provider, "model": model, "reasoning_level": effort,
         "role": role, "profile_ref": chosen, "policy_profile": profile,
         "policy_hash": route["policy_hash"], "receipt": str(destination.absolute()),
     }))
-    backup = seat_pending.with_name(seat_pending.name + ".bak")
-    try:
-        try:
-            os.link(seat_path, backup, follow_symlinks=False)
-        except FileNotFoundError:
-            backup = None
-        os.replace(seat_pending, seat_path)
-        try:
-            print(f"{provider} {model} {effort}", flush=True)
-        except BaseException:
-            if backup is not None:
-                os.replace(backup, seat_path)
-            else:
-                seat_path.unlink(missing_ok=True)
-            raise
-    finally:
-        seat_pending.unlink(missing_ok=True)
-        if backup is not None:
-            backup.unlink(missing_ok=True)
+    print(f"{provider} {model} {effort}", flush=True)
 
 
 try:

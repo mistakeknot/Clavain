@@ -355,10 +355,10 @@ Relative `XDG_STATE_HOME` values are ignored in favor of `$HOME/.local/state`.
 It records the requested role, project, profile source, lineage, arm, pool
 availability, spawn tuple, policy hash and full `ic` route. A failed receipt
 write prevents the tuple from reaching stdout. `--seat-out FILE` also writes,
-atomically and on success only, a JSON seat: `provider`, `model`,
+atomically before the tuple is printed, a JSON seat: `provider`, `model`,
 `reasoning_level`, `role`, `profile_ref`, `policy_profile` (null when none),
-`policy_hash` and the absolute `receipt` path. The seat is in place before the
-tuple is printed, and a failed print restores the prior file.
+`policy_hash` and the absolute `receipt` path. A failed print exits 3 with the
+seat already written.
 
 Only role `lane` consults the rollout arm. Until mk-42j9.25 Phase 2b, the lookup
 is a stub returning `control`, so landing this guidance keeps every lineage on
