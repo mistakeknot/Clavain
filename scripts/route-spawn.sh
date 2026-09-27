@@ -2,8 +2,10 @@
 # route-spawn.sh — resolve a bb spawn tuple and retain its routing receipt.
 # Usage: route-spawn.sh --role <role> [--project <slug|bb-project-id>]
 #          [--lineage <coordinatorId>] [--producer-identity <id>]
-#          [--context-file <json>]
+#          [--context-file <json>] [--seat-out <file>]
 # Stdout: exactly <bb-provider> <model> <reasoning-level> on success.
+# --seat-out writes the seat tuple, role, profile, policy hash and receipt path
+# as JSON, on success only.
 # Exit codes: 0 success, 2 usage error, 3 resolution or receipt failure.
 set -euo pipefail
 
@@ -14,13 +16,14 @@ PROJECT=""
 LINEAGE=""
 PRODUCER=""
 CONTEXT="${CLAVAIN_DECISION_CONTEXT:-}"
+SEAT_OUT=""
 
 usage_error() { echo "route-spawn: $*" >&2; exit 2; }
 resolution_error() { echo "route-spawn: $*" >&2; exit 3; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --role|--project|--lineage|--producer-identity|--context-file)
+    --role|--project|--lineage|--producer-identity|--context-file|--seat-out)
       [[ $# -ge 2 && -n "$2" && "$2" != -* ]] || usage_error "$1 requires a value"
       case "$1" in
         --role) ROLE="$2" ;;
@@ -28,6 +31,7 @@ while [[ $# -gt 0 ]]; do
         --lineage) LINEAGE="$2" ;;
         --producer-identity) PRODUCER="$2" ;;
         --context-file) CONTEXT="$2" ;;
+        --seat-out) SEAT_OUT="$2" ;;
       esac
       shift 2
       ;;
@@ -60,7 +64,7 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 
 # Keep structured policy/context handling together; only the final tuple may
 # reach stdout. The caller's context is read once and never written back.
-python3 - "$POLICY" "$ROLE" "$PROJECT" "$LINEAGE" "$PRODUCER" "$CONTEXT" "$ARM" "$TMP_ROOT" "$$" "$ROOT" <<'PY' || { rc=$?; [[ "$rc" == 2 ]] && exit 2; exit 3; }
+python3 - "$POLICY" "$ROLE" "$PROJECT" "$LINEAGE" "$PRODUCER" "$CONTEXT" "$ARM" "$TMP_ROOT" "$$" "$ROOT" "$SEAT_OUT" <<'PY' || { rc=$?; [[ "$rc" == 2 ]] && exit 2; exit 3; }
 import datetime
 import json
 import math
@@ -90,23 +94,53 @@ def timeout_setting(name, default):
     return value
 
 
+def relay(stderr):
+    if stderr:
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        sys.stderr.write(stderr)
+        sys.stderr.flush()
+
+
 def run_bounded(command, timeout):
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True,
-                               start_new_session=True)
+    # Pipe stderr too, so no descendant inherits the caller's stderr; relay it.
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, start_new_session=True)
     try:
-        stdout, _ = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        # Descendants can inherit both our stdout and the caller's stderr pipe.
-        # Kill the entire session group before waiting or draining those pipes.
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        # Kill the entire session group. A setsid descendant escapes it and can
+        # still hold our pipes, so close them instead of draining.
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        process.communicate()
-        raise
+        process.stdout.close()
+        process.stderr.close()
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        relay(exc.stderr)
+        raise exc
+    relay(stderr)
     if process.returncode:
         raise subprocess.CalledProcessError(process.returncode, command, stdout)
     return stdout
+
+
+def write_atomic(destination, text):
+    pending = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent,
+                                         prefix=".route-spawn-", delete=False) as stream:
+            pending = Path(stream.name)
+            stream.write(text + "\n")
+        # Same-directory rename is atomic, just like temp file + mv.
+        os.replace(pending, destination)
+    finally:
+        if pending is not None and pending.exists():
+            pending.unlink()
 
 
 def active_window(window, threshold, now_ms):
@@ -121,7 +155,7 @@ def active_window(window, threshold, now_ms):
 
 
 def main():
-    policy, role, project_input, lineage, producer, context_file, arm, tmp, pid, root = sys.argv[1:]
+    policy, role, project_input, lineage, producer, context_file, arm, tmp, pid, root, seat_out = sys.argv[1:]
     pool_timeout = timeout_setting("ROUTE_SPAWN_POOL_TIMEOUT", "20")
     ic_timeout = timeout_setting("ROUTE_SPAWN_IC_TIMEOUT", "30")
     spawn_roles = ("lane", "coordinator-seat", "main-session")
@@ -281,8 +315,10 @@ def main():
     route = json.loads(run_bounded(command, ic_timeout))
     seat = route["profile"]
     model = seat["model_identity"]
-    if role in spawn_roles and model == "gpt-5.6-sol":
-        fail("gpt-5.6-sol is forbidden for spawn roles (mk ruling 2026-09-27)")
+    sol_aliases = {str(k).lower(): str(v).lower() for k, v in model_aliases.items()}
+    for name in (seat.get("model"), model):
+        if name is not None and sol_aliases.get(str(name).lower(), str(name).lower()) in ("gpt-5.6-sol", "gpt-5.6"):
+            fail(f"gpt-5.6-sol ({name}) is forbidden for every route-spawn role (mk ruling 2026-09-27)")
     effort = seat["reasoning_effort"]
     for label, value in (("model identity", model), ("reasoning effort", effort)):
         if not isinstance(value, str) or not value or any(c.isspace() for c in value):
@@ -327,19 +363,22 @@ def main():
     # Keep an untrusted role from introducing path separators in the filename.
     safe_role = "".join(c if c.isalnum() or c in "-_" else "_" for c in role)
     destination = receipt_dir / f"{stamp}-{safe_role}-{pid}.json"
-    pending = None
+    write_atomic(destination, json.dumps(receipt, indent=2))
+    seat_path = None
+    if seat_out:
+        seat_path = Path(seat_out)
+        write_atomic(seat_path, json.dumps({
+            "provider": provider, "model": model, "reasoning_level": effort,
+            "role": role, "profile_ref": chosen, "policy_profile": profile,
+            "policy_hash": route["policy_hash"], "receipt": str(destination.absolute()),
+        }))
     try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=receipt_dir,
-                                         prefix=".route-spawn-", delete=False) as stream:
-            pending = Path(stream.name)
-            json.dump(receipt, stream, indent=2)
-            stream.write("\n")
-        # Same-directory rename is atomic, just like temp file + mv.
-        os.replace(pending, destination)
-    finally:
-        if pending is not None and pending.exists():
-            pending.unlink()
-    print(f"{provider} {model} {effort}")
+        print(f"{provider} {model} {effort}", flush=True)
+    except OSError:
+        # The seat file exists only when the tuple reached stdout.
+        if seat_path is not None:
+            seat_path.unlink(missing_ok=True)
+        raise
 
 
 try:

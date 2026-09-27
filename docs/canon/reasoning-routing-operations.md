@@ -317,13 +317,24 @@ Never type a model id on a spawn line. Frontier lanes use `--role frontier-plann
 receipt. Until Quilan carry-forward ships, a pinned coordinator's self-handoff
 passes its own current tuple explicitly:
 `bb handoff --provider "$current_provider" --model "$current_model" --reasoning-level "$current_effort" …`.
-Set these variables from the coordinator's own route-spawn receipt:
-`.spawn.provider`, `.spawn.model`, and `.spawn.reasoning_level`, respectively.
+Set these variables from the Seat block in your own spawn prompt:
+`.provider`, `.model`, and `.reasoning_level`, respectively. A coordinator
+spawned before `--seat-out` has no Seat block: report it and do not guess.
 On a non-zero resolver exit, do not spawn; report it. Exit codes are
 0 for success, 2 for usage errors, and 3 for resolution or receipt failures.
 
-For a new coordinator thread, the spawner resolves its own seat with
-`"${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role coordinator-seat --project <slug>`.
+For a new coordinator thread, the spawner resolves its seat and passes it in
+the spawn prompt:
+
+```bash
+seat="$(mktemp)"
+if read -r P M E < <("${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role coordinator-seat --project "$project_slug" --seat-out "$seat"); then
+  bb thread spawn --provider "$P" --model "$M" --reasoning-level "$E" …  # include "Seat: $(cat "$seat")" in the spawn prompt
+else
+  echo "Coordinator routing failed; no thread spawned" >&2
+fi
+```
+
 Relay work uses `"${CLAVAIN_SELECTED_ROOT:?}/scripts/dispatch.sh" --role coordination`.
 
 Each successful call writes an atomic JSON receipt under
@@ -331,7 +342,10 @@ Each successful call writes an atomic JSON receipt under
 Relative `XDG_STATE_HOME` values are ignored in favor of `$HOME/.local/state`.
 It records the requested role, project, profile source, lineage, arm, pool
 availability, spawn tuple, policy hash and full `ic` route. A failed receipt
-write prevents the tuple from reaching stdout.
+write prevents the tuple from reaching stdout. `--seat-out FILE` also writes,
+atomically and on success only, a JSON seat: `provider`, `model`,
+`reasoning_level`, `role`, `profile_ref`, `policy_profile` (null when none),
+`policy_hash` and the absolute `receipt` path.
 
 Only role `lane` consults the rollout arm. Until mk-42j9.25 Phase 2b, the lookup
 is a stub returning `control`, so landing this guidance keeps every lineage on
@@ -363,12 +377,14 @@ unavailable, non-accepting or timed-out status probes and child hosts record
 `fallbacks_evaluated: false`. Providers with pool routing disabled count as up.
 A family counts as exhausted by bb's own rule (the pool `switchThreshold`,
 default 0.98) only when every up Claude account has an active family window.
-With Claude exhausted, spawn roles fall back to gpt-6-astra medium, never
-gpt-5.6-sol (mk 2026-09-27); with no eligible seat, exit 3: do not spawn.
+With Claude exhausted, spawn roles fall back to gpt-6-astra medium. route-spawn
+refuses gpt-5.6-sol for every role, by any alias or case (mk 2026-09-27);
+GPT-6 Sol is allowed. With no eligible seat, exit 3: do not spawn.
 The probe timeout is `ROUTE_SPAWN_POOL_TIMEOUT` seconds (default 20); the resolver
 timeout is `ROUTE_SPAWN_IC_TIMEOUT` seconds (default 30, exit 3 on timeout).
 Both must be finite and positive (otherwise exit 2); timeouts kill the whole
-process group. The pool status and config calls share one timeout budget.
+process group and close the child's pipes, so a descendant that left the group
+cannot hold route-spawn or the caller's stderr. The pool status and config calls share one timeout budget.
 A stderr `fallback from` line names the head and chosen capacity seat;
 producer exclusions state their reason instead.
 
