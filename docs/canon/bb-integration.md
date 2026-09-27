@@ -177,9 +177,11 @@ only excludes seats below the floor. Planning, review, validation and escalation
 keep their existing routes and observed-failure fallback rules.
 
 Dispatch records the snapshot, forecast exclusions and any ordering change.
-`profile_ref` identifies Intercore's resolved profile, while `resolved_profile`
-identifies the attempted seat. The BB seat journal also retains both profile
-references and the requested provider/model/effort. These requested settings do
+`profile_ref` and `primary_profile_ref` identify Intercore's primary resolved
+profile, while `executed_profile_ref` and `resolved_profile` identify the
+attempted seat. Attribution consumers must key on `executed_profile_ref`. The
+BB seat journal also retains both profile references and the requested
+provider/model/effort. These requested settings do
 not populate its observed identity fields. The existing BB transport carries the
 selected backend/model without a separate spawn helper.
 

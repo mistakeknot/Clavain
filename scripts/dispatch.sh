@@ -43,6 +43,9 @@ CAPACITY_SUBSTITUTE_JSON=""
 RECHECK_ITEMS=""
 RECHECK_SOURCE_JSON=""
 RECHECK_BEAD_JSON=""
+DISPATCH_BEAD_FLAG=""
+DISPATCH_BEAD_ENV="${CLAVAIN_BEAD_ID:-}"
+BEAD_SOURCE="none"
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
@@ -232,6 +235,8 @@ Options:
   --role <NAME>                 Resolve backend, model, reasoning effort, service tier,
                                   minimum Codex version, and ordered fallbacks through
                                   `ic route dispatch --role=<NAME> --json`
+  --bead <ID>                   Attribute receipts to a bead (overrides environment and
+                                  the interstat session map; IDs use A-Z, a-z, 0-9, _ . : -)
   --policy <PATH>              Select routing.yaml independently of task directory
   --context-file <PATH>        Structured reasoning decision context
   --policy-profile <NAME>      Declared policy overlay (pilot requires campaign scope)
@@ -277,6 +282,44 @@ require_arg() {
     echo "Error: $1 requires a value" >&2
     exit 1
   fi
+}
+
+_valid_dispatch_bead() {
+  [[ "$1" =~ ^[A-Za-z0-9_.:-]+$ ]]
+}
+
+_resolve_dispatch_bead() {
+  local candidate="" bead_file=""
+  if [[ -n "$DISPATCH_BEAD_FLAG" ]] && _valid_dispatch_bead "$DISPATCH_BEAD_FLAG"; then
+    CLAVAIN_BEAD_ID="$DISPATCH_BEAD_FLAG"
+    BEAD_SOURCE="flag"
+  elif [[ "${CLAVAIN_BEAD_CONTEXT_RESOLVED:-}" == 1 ]] \
+    && _valid_dispatch_bead "$DISPATCH_BEAD_ENV" \
+    && [[ "${CLAVAIN_BEAD_SOURCE:-}" =~ ^(flag|env|interstat-session)$ ]]; then
+    CLAVAIN_BEAD_ID="$DISPATCH_BEAD_ENV"
+    BEAD_SOURCE="$CLAVAIN_BEAD_SOURCE"
+  elif [[ -n "$DISPATCH_BEAD_ENV" ]] && _valid_dispatch_bead "$DISPATCH_BEAD_ENV"; then
+    CLAVAIN_BEAD_ID="$DISPATCH_BEAD_ENV"
+    BEAD_SOURCE="env"
+  elif [[ -n "$DISPATCH_SESSION_ID" ]]; then
+    bead_file="${CLAVAIN_INTERSTAT_BEAD_DIR:-/tmp}/interstat-bead-${DISPATCH_SESSION_ID}"
+    if [[ -r "$bead_file" ]]; then
+      IFS= read -r candidate < "$bead_file" || true
+      candidate="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$candidate")"
+    fi
+    if [[ -n "$candidate" ]] && _valid_dispatch_bead "$candidate"; then
+      CLAVAIN_BEAD_ID="$candidate"
+      BEAD_SOURCE="interstat-session"
+    else
+      CLAVAIN_BEAD_ID=""
+      BEAD_SOURCE="none"
+    fi
+  else
+    CLAVAIN_BEAD_ID=""
+    BEAD_SOURCE="none"
+  fi
+  export CLAVAIN_BEAD_ID
+  export CLAVAIN_BEAD_SOURCE="$BEAD_SOURCE" CLAVAIN_BEAD_CONTEXT_RESOLVED=1
 }
 
 # Resolve a tier name to a model string via routing.yaml (dispatch: section).
@@ -912,6 +955,15 @@ while [[ $# -gt 0 ]]; do
       ROLE="${1#--role=}"
       shift
       ;;
+    --bead)
+      require_arg "$1" "${2:-}"
+      DISPATCH_BEAD_FLAG="$2"
+      shift 2
+      ;;
+    --bead=*)
+      DISPATCH_BEAD_FLAG="${1#--bead=}"
+      shift
+      ;;
     --role-resolved)
       ROLE_RESOLVED=true
       shift
@@ -1048,6 +1100,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+_resolve_dispatch_bead
 
 if [[ "${CLAVAIN_REQUIRE_USAGE:-0}" == 1 ]]; then
   if [[ -n "$VIA" || ( "$ENGINE" != codex && "$ENGINE" != claude ) ]]; then
@@ -2332,6 +2386,8 @@ _extract_verdict() {
         summary="Unrecognized verdict: ${verdict_line#VERDICT: }"
     fi
 
+    # This synthesized FINDINGS line is a compatibility placeholder only;
+    # receipt attribution uses result.findings parsed from the output body.
     cat > "$verdict_file" <<VERDICT
 --- VERDICT ---
 STATUS: $status

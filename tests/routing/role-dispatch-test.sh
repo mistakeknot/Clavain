@@ -68,10 +68,13 @@ if [[ "${1:-}" == "--version" ]]; then
   exit 0
 fi
 model=""
+output=""
 args=("$@")
 for ((i=0; i<${#args[@]}; i++)); do
   if [[ "${args[$i]}" == "-m" ]]; then
     model="${args[$((i+1))]:-}"
+  elif [[ "${args[$i]}" == "-o" ]]; then
+    output="${args[$((i+1))]:-}"
   fi
 done
 printf '%s\n' "$model" >> "$FAKE_CODEX_LOG"
@@ -118,6 +121,9 @@ case "${FAKE_CODEX_MODE:-success}" in
     exit 7
     ;;
 esac
+if [[ -n "$output" ]]; then
+  printf '%s\n' "${FAKE_CODEX_OUTPUT_BODY:-VERDICT: CLEAN}" > "$output"
+fi
 echo 'VERDICT: CLEAN'
 FAKE_CODEX
 chmod +x "$TMP_ROOT/bin/ic" "$TMP_ROOT/bin/codex"
@@ -217,6 +223,54 @@ contains "$(cat "$FAKE_IC_LOG")" "--producer-identity=codex/gpt-6-astra"
 [[ -s "$FAKE_IC_CONTEXT_LOG" ]] || fail "missing immutable routing contexts"
 jq -s -e 'all(.[]; .schema_version == 1 and (.dispatch_id | length > 0) and (.attempt_id | length > 0) and .resolved_profile.profile.model != null and .resolved_route.profile != null and .execution.service_tier == "standard")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "incomplete routing snapshot"
 jq -s -e 'any(.[]; .state == "started") and any(.[]; .state == "completed") and any(.[]; .state == "failed" and .result.failure_class == "terminal_policy")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "missing dispatch lifecycle evidence"
+
+# Receipt attribution resolves a validated bead from flag, environment, or the
+# interstat session map, and records the executed fallback independently from
+# the route's primary profile.
+unset CLAVAIN_BEAD_ID
+: > "$FAKE_IC_LOG"
+: > "$FAKE_IC_CONTEXT_LOG"
+FAKE_CODEX_OUTPUT_BODY='1. **P1 — receipt finding**' \
+  bash "$ROOT/scripts/dispatch.sh" --role deep-execution --bead flag-bead.1 \
+    -C "$TMP_ROOT/work" -o "$TMP_ROOT/flag-output.md" "hi" >/dev/null 2>&1 \
+  || fail "flag bead dispatch failed"
+flag_receipt="$(jq -sc '[.[] | select(.state == "completed")] | last' "$FAKE_IC_CONTEXT_LOG")"
+jq -e '.bead_id == "flag-bead.1" and .bead_source == "flag" and
+  .primary_profile_ref == "deep-astra" and .executed_profile_ref == "deep-astra" and
+  .result.findings == {"source":"body","P0":0,"P1":1,"P2":0,"P3":0,"total":1}' \
+  <<< "$flag_receipt" >/dev/null || fail "flag bead receipt attribution incomplete"
+jq -s -e 'all(.[] | select(.state == "started"); .result.findings == null)' \
+  "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "non-terminal receipt recorded findings"
+contains "$(cat "$FAKE_IC_LOG")" '--bead=flag-bead.1'
+
+: > "$FAKE_IC_CONTEXT_LOG"
+CLAVAIN_BEAD_ID=env-bead:2 bash "$ROOT/scripts/dispatch.sh" --role deep-execution \
+  -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 || fail "environment bead dispatch failed"
+jq -s -e 'any(.[]; .state == "completed" and .bead_id == "env-bead:2" and .bead_source == "env")' \
+  "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "environment bead source not recorded"
+
+mkdir -p "$TMP_ROOT/interstat"
+printf '  session-bead_3  \nignored-second-line\n' > "$TMP_ROOT/interstat/interstat-bead-receipt-session"
+: > "$FAKE_IC_CONTEXT_LOG"
+CLAVAIN_INTERSTAT_BEAD_DIR="$TMP_ROOT/interstat" DISPATCH_SESSION_ID=receipt-session \
+  bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 \
+  || fail "interstat bead dispatch failed"
+jq -s -e 'any(.[]; .state == "completed" and .bead_id == "session-bead_3" and .bead_source == "interstat-session")' \
+  "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "interstat bead source not recorded"
+
+: > "$FAKE_IC_CONTEXT_LOG"
+CLAVAIN_BEAD_ID=env-fallback bash "$ROOT/scripts/dispatch.sh" --role deep-execution \
+  --bead 'invalid bead' -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 \
+  || fail "invalid flag fallback dispatch failed"
+jq -s -e 'any(.[]; .state == "completed" and .bead_id == "env-fallback" and .bead_source == "env")' \
+  "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "invalid bead flag did not fall through to environment"
+
+: > "$FAKE_IC_CONTEXT_LOG"
+FAKE_ROUTE_KIMI_FIRST=1 bash "$ROOT/scripts/dispatch.sh" --role deep-execution \
+  -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 || fail "fallback receipt dispatch failed"
+jq -s -e 'any(.[]; .state == "completed" and .primary_profile_ref == "unsupported-kimi" and
+  .profile_ref == "unsupported-kimi" and .executed_profile_ref == "deep-sol")' \
+  "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "fallback receipt did not distinguish primary and executed profiles"
 
 rm -rf "$TMP_ROOT/work/.clavain/intercept"
 set +e

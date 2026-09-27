@@ -245,6 +245,28 @@ observed `model_unavailable` failures.
 If every eligible seat is below the floor, resolution fails before a model starts;
 the evidence and derived context remain available for inspection.
 
+### Receipt attribution fields
+
+Governed dispatch receipt context keeps the backward-compatible `profile_ref`
+as the primary route profile and adds `primary_profile_ref` with the same value.
+Per-change attribution must key on `executed_profile_ref`, which identifies the
+candidate that actually ran after any fallback; it falls back to
+`resolved_profile.profile_ref` when the explicit resolved reference is absent.
+
+`dispatch.sh --bead <id>` attributes the receipt to a bead. The first non-empty,
+valid ID wins in this order: the flag, `CLAVAIN_BEAD_ID`, then the first trimmed
+line of `/tmp/interstat-bead-${DISPATCH_SESSION_ID}`. Tests may override that
+directory with `CLAVAIN_INTERSTAT_BEAD_DIR`. IDs accept only letters, digits,
+underscore, period, colon, and hyphen; invalid candidates are ignored. The
+receipt records `bead_source` as `flag`, `env`, `interstat-session`, or `none`.
+
+Terminal receipts also expose `result.findings`. A model-authored verdict count
+has precedence; otherwise the parser counts top-level severity-tagged headings
+in the output body. A clean body produces observed zeroes. Ambiguous, missing,
+or unreadable output produces `source: "unknown"` with null counts, never
+fabricated zeroes. Pending receipts, Zaka dispatches, and results without a
+readable non-empty output body record `result.findings: null`.
+
 For routine and deep execution, dispatch stably orders known cross-provider
 candidates from the eligible chain by remaining headroom. It compares the first
 known candidate per provider and preserves policy order within each provider.

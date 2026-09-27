@@ -39,7 +39,8 @@ _prepare_role_audit() {
 }
 
 _role_audit_context() {
-  local state="$1" exit_code="$2" failure_class="$3" version="" verdict="" head_after="" bb_receipt=null
+  local state="$1" exit_code="$2" failure_class="$3" version="" verdict="" head_after="" bb_receipt=null findings=null
+  local findings_helper="${DISPATCH_SCRIPT_DIR:-}"
   if [[ "${VIA:-}" == bb && "${DISPATCH_RESULT_READY:-false}" == true && -f "${OUTPUT}.receipt.json" ]]; then
     bb_receipt="$(jq -c --arg attempt "$ATTEMPT_ID" 'select(.attempt_id == $attempt)' "${OUTPUT}.receipt.json" 2>/dev/null || true)"
     bb_receipt="${bb_receipt:-null}"
@@ -50,6 +51,11 @@ _role_audit_context() {
   if [[ "$state" == completed || "$state" == failed ]] && [[ "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka && -n "${OUTPUT:-}" && -f "${OUTPUT}.verdict" ]]; then
     verdict="$(head -c 4096 "${OUTPUT}.verdict")"
   fi
+  if [[ "$state" == completed || "$state" == failed ]] && [[ "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka && -n "${OUTPUT:-}" && -r "$OUTPUT" && -s "$OUTPUT" ]]; then
+    [[ -n "$findings_helper" ]] || findings_helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    findings="$(python3 "$findings_helper/receipt-findings.py" "$OUTPUT" 2>/dev/null)" || findings=null
+    jq -e 'type == "object"' <<< "$findings" >/dev/null 2>&1 || findings=null
+  fi
   head_after="$(git -C "${WORKDIR:-.}" rev-parse HEAD 2>/dev/null || true)"
   jq -cn --argjson route "${RESOLVED_ROUTE_JSON:-null}" --argjson profile "${RESOLVED_PROFILE_JSON:-null}" \
     --arg dispatch_id "$DISPATCH_ID" --arg attempt_id "$ATTEMPT_ID" --arg state "$state" \
@@ -57,7 +63,8 @@ _role_audit_context() {
     --arg backend "$ENGINE" --arg model "$MODEL" --arg effort "$REASONING_EFFORT" \
     --arg service "$SERVICE_TIER" --arg version "$version" --arg sandbox "$SANDBOX" \
     --arg transport "${DISPATCH_TRANSPORT:-${VIA:-exec}}" --arg parent "$DISPATCH_SESSION_ID" \
-    --arg run "${CLAVAIN_RUN_ID:-}" --arg bead "${CLAVAIN_BEAD_ID:-}" \
+    --arg run "${CLAVAIN_RUN_ID:-}" --arg bead "${CLAVAIN_BEAD_ID:-}" --arg bead_source "${CLAVAIN_BEAD_SOURCE:-none}" \
+    --arg executed_profile_ref "${RESOLVED_PROFILE_REF:-}" \
     --arg session "${ZAKA_SESSION:-}" --arg events "${PROVIDER_EVENTS:-${ZAKA_EVENT_LOG:-}}" \
     --arg before "$CHECKOUT_BEFORE" --arg after "$head_after" \
     --arg output "$OUTPUT" --arg verdict "$verdict" --arg failure "$failure_class" \
@@ -71,19 +78,23 @@ _role_audit_context() {
     --argjson recheck_items "${RECHECK_ITEMS:-null}" \
     --argjson recheck_source "${RECHECK_SOURCE_JSON:-null}" \
     --argjson recheck_bead "${RECHECK_BEAD_JSON:-null}" \
+    --argjson findings "$findings" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,retry_id:$retry_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
+      # Consumers must key attribution on executed_profile_ref, not profile_ref.
       profile_ref:$route.profile_ref,headroom_exclusion:($route.headroom_exclusion // []),
+      primary_profile_ref:$route.profile_ref,
+      executed_profile_ref:(if $executed_profile_ref != "" then $executed_profile_ref else $profile.profile_ref end),
       headroom_reorder:($route.headroom_reorder // null),
       capacity_substitute:$capacity_substitute,recheck_items:$recheck_items,recheck_source:$recheck_source,
       recheck_bead:$recheck_bead,
-      run_id:$run,bead_id:$bead,
+      run_id:$run,bead_id:$bead,bead_source:$bead_source,
       execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
         codex_version:$version,sandbox:$sandbox,transport:$transport,account:$account,session_id:$session,event_log:$events}
         + (if $observation | type == "object" then $observation else {} end)),
       checkout:{before:$before,after:$after},bb_seat:$bb_receipt,
       terminal:($state == "completed" or $state == "failed"),
-      result:({exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict}
+      result:({exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict,findings:$findings}
         + (if $intercept | type == "object" then {intercept_evidence:$intercept} else {} end)
         + (if $intercept_error != "" then {intercept_evidence_error:$intercept_error} else {} end))}
       + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)'
