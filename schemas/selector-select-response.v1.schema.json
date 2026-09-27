@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clavain.internal/schemas/selector-select-response.v1.schema.json",
+  "title": "Clavain select-json response v1",
+  "description": "The records.build_record schema-v1 decision, restricted to the external shadow transport. The adjacent record schema supplies the complete shared record shape. Native/emitted is expressed by applied, not result.kind.",
+  "allOf": [
+    {
+      "$ref": "selector-decision-record.v1.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema",
+        "schema_version",
+        "point",
+        "mode",
+        "request",
+        "result",
+        "validation",
+        "fallback",
+        "applied"
+      ],
+      "properties": {
+        "schema": {
+          "const": "clavain.selector.decision"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "point": {
+          "const": "library"
+        },
+        "mode": {
+          "const": "shadow"
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "version"
+          ],
+          "properties": {
+            "name": {
+              "const": "external"
+            },
+            "version": {
+              "const": "1"
+            }
+          }
+        },
+        "adapter_version": {
+          "const": "1"
+        },
+        "request": {
+          "type": "object",
+          "required": [
+            "provenance",
+            "preparer"
+          ],
+          "properties": {
+            "provenance": {
+              "const": "external"
+            },
+            "preparer": {
+              "type": "null"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "confidence"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "selected",
+                "abstained",
+                "not_called"
+              ]
+            },
+            "candidate_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "jev_choice": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tie_size": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 17
+            },
+            "confidence": {
+              "$ref": "#/$defs/score"
+            },
+            "selected_probability": {
+              "$ref": "#/$defs/score"
+            },
+            "fit": {
+              "$ref": "#/$defs/score"
+            }
+          }
+        },
+        "validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "reject_reason"
+          ],
+          "properties": {
+            "stage": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reject_reason": {
+              "enum": [
+                null,
+                "invalid_id",
+                "stale_revision",
+                "stale_read_set",
+                "expired",
+                "unmet_precondition",
+                "unauthorized"
+              ]
+            }
+          }
+        },
+        "fallback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reason",
+            "detail"
+          ],
+          "properties": {
+            "reason": {
+              "enum": [
+                "flag_off",
+                "invalid_input",
+                "no_candidates",
+                "point_unreachable",
+                "stale_before_select",
+                "egress_refused",
+                "budget_exhausted",
+                "circuit_open",
+                "credential_unavailable",
+                "timeout",
+                "rate_limited",
+                "credential_rejected",
+                "http_error",
+                "invalid_response",
+                "model_mismatch",
+                "jev_escalated",
+                "low_confidence",
+                "low_fit",
+                "invalid_id",
+                "stale_revision",
+                "stale_read_set",
+                "expired",
+                "unmet_precondition",
+                "unauthorized",
+                "shadow_mode",
+                "record_unwritable",
+                "internal_error"
+              ]
+            },
+            "detail": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        },
+        "applied": {
+          "const": "native"
+        }
+      },
+      "not": {
+        "required": [
+          "inputs_ref"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}
