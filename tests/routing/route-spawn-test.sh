@@ -379,6 +379,46 @@ for bad in gov-sol gov-alias gov-upper gov-custom-alias; do
   grep -q "gpt-5.6-sol" "$TMP_ROOT/stderr" || fail "the Sol refusal ($bad) must name gpt-5.6-sol"
 done
 
+# The refusal canonicalizes whatever ic returns: model_aliases to a fixed point
+# (a cycle fails closed), suffixed or prefixed spellings, and both
+# profile.model and profile.model_identity. A canned ic returns FAKE_MODEL and
+# FAKE_IDENTITY; the policy supplies the aliases.
+mkdir -p "$TMP_ROOT/cannedic"
+cat > "$TMP_ROOT/cannedic/ic" <<'FAKE_IC'
+#!/usr/bin/env bash
+printf '{"profile":{"backend":"codex","model":"%s","model_identity":"%s","reasoning_effort":"medium"},"profile_ref":"canned","policy_hash":"%064d","fallback_reason":""}\n' \
+  "$FAKE_MODEL" "${FAKE_IDENTITY:-$FAKE_MODEL}" 0
+FAKE_IC
+chmod +x "$TMP_ROOT/cannedic/ic"
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/aliases.yaml" <<'ALIASES'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1]))
+cfg["dispatch"].setdefault("model_aliases", {}).update({
+    "chain-a": "chain-b", "chain-b": "chain-c", "chain-c": "gpt-5.6-sol",
+    "loop-a": "loop-b", "loop-b": "loop-a", "fine-a": "gpt-6-sol"})
+yaml.safe_dump(cfg, open(sys.argv[2], "w"))
+ALIASES
+canned() {
+  RC=0
+  OUT="$(PATH="$TMP_ROOT/cannedic:$PATH" CLAVAIN_ROUTING_POLICY="$TMP_ROOT/aliases.yaml" \
+    FAKE_MODEL="$1" FAKE_IDENTITY="$2" bash "$SCRIPT" --role routine-execution 2>"$TMP_ROOT/stderr")" || RC=$?
+}
+for pair in "chain-a chain-a" "gpt-5.6-sol-high gpt-5.6-sol-high" "GPT-5.6-SOL@high GPT-5.6-SOL@high" \
+    "openai/gpt-5.6-sol openai/gpt-5.6-sol" "gpt-6-astra gpt-5.6-sol" "gpt-5.6-sol gpt-6-astra" "gpt-6-astra chain-b"; do
+  read -r model identity <<<"$pair"
+  canned "$model" "$identity"
+  expect 3 "" "ic returning model=$model identity=$identity is refused"
+  grep -q "gpt-5.6-sol" "$TMP_ROOT/stderr" || fail "the refusal of $pair must name gpt-5.6-sol"
+done
+canned loop-a loop-a
+expect 3 "" "an alias cycle fails closed"
+grep -qi "cycle" "$TMP_ROOT/stderr" || fail "an alias cycle must be reported as a cycle"
+for pair in "gpt-6-sol gpt-6-sol" "gpt-6-sol gpt-6-sol-high" "fine-a fine-a"; do
+  read -r model identity <<<"$pair"
+  canned "$model" "$identity"
+  expect 0 "codex $identity medium" "GPT-6 Sol ($pair) is allowed"
+done
+
 # N1: family exhaustion mirrors bb's activeWindow: resetAt null or future, and
 # rejected or utilization >= the pool switchThreshold.
 RC=0; OUT="$(FAKE_POOL=opus-weekly-warning bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
@@ -389,6 +429,15 @@ RC=0; OUT="$(FAKE_POOL=opus-weekly-below FAKE_THRESHOLD=0.85 bash "$SCRIPT" --ro
 expect 0 "$SONNET" "the pool's configured switchThreshold is honored"
 RC=0; OUT="$(FAKE_POOL=opus-weekly-expired bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "a rejected window whose resetAt has passed is not active"
+# Only a number in (0, 1] is a threshold; anything else keeps bb's 0.98.
+for bad in 0 -1 '"0.85"' true null; do
+  RC=0; OUT="$(FAKE_POOL=opus-weekly-below FAKE_THRESHOLD="$bad" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 0 "$OPUS" "switchThreshold $bad is ignored (0.9 < 0.98)"
+done
+RC=0; OUT="$(FAKE_POOL=opus-weekly-warning FAKE_THRESHOLD=1.5 bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$SONNET" "switchThreshold 1.5 is ignored (1.0 >= 0.98)"
+RC=0; OUT="$(FAKE_POOL=opus-weekly-warning FAKE_THRESHOLD=1 bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$SONNET" "switchThreshold 1 is honored"
 # N3: one exhausted and one available Claude account keeps Opus (all, not any).
 RC=0; OUT="$(FAKE_POOL=claude-mixed bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "mixed Claude accounts keep Opus"
@@ -464,6 +513,31 @@ expect 3 "" "--seat-out with no eligible seat"
 [[ ! -e "$TMP_ROOT/seat-down.json" ]] || fail "--seat-out is not written when no seat is eligible"
 run --role lane --lineage L1 --seat-out
 expect 2 "" "--seat-out needs a value"
+# A bad --seat-out path is a usage error before bb or ic runs.
+mkdir -p "$TMP_ROOT/markic"
+printf '#!/usr/bin/env bash\ntouch "%s/ic.ran"\nexit 1\n' "$TMP_ROOT" > "$TMP_ROOT/markic/ic"
+chmod +x "$TMP_ROOT/markic/ic"
+for bad in "$TMP_ROOT/no-such-dir/seat.json" "$TMP_ROOT"; do
+  before="$(ls "$ROUTE_SPAWN_RECEIPT_DIR" | wc -l)"
+  : > "$TMP_ROOT/bb.log"
+  RC=0; OUT="$(PATH="$TMP_ROOT/markic:$PATH" FAKE_BB_LOG="$TMP_ROOT/bb.log" bash "$SCRIPT" --role lane --lineage L1 --seat-out "$bad" 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 2 "" "--seat-out $bad is a usage error"
+  [[ ! -s "$TMP_ROOT/bb.log" && ! -e "$TMP_ROOT/ic.ran" ]] || fail "--seat-out $bad must be rejected before bb or ic runs"
+  [[ "$(ls "$ROUTE_SPAWN_RECEIPT_DIR" | wc -l)" == "$before" ]] || fail "--seat-out $bad must not leave a receipt"
+done
+# The recipe's mktemp file exists beforehand: success replaces it, and a failed
+# stdout write leaves the caller's file as it was.
+: > "$TMP_ROOT/seat-pre.json"
+run --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-pre.json"
+expect 0 "$OPUS" "--seat-out over an existing file"
+jq -e '.model == "claude-opus-5-5"' "$TMP_ROOT/seat-pre.json" >/dev/null || fail "--seat-out replaces an existing file on success"
+echo OLD > "$TMP_ROOT/seat-keep.json"
+RC=0; bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-keep.json" >/dev/full 2>"$TMP_ROOT/stderr" || RC=$?
+[[ "$RC" != 0 ]] || fail "a failed stdout write must exit non-zero"
+[[ "$(cat "$TMP_ROOT/seat-keep.json" 2>/dev/null)" == OLD ]] || fail "a failed stdout write must leave an existing --seat-out file unchanged"
+rm -f "$TMP_ROOT/seat-new.json"
+RC=0; bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-new.json" >/dev/full 2>"$TMP_ROOT/stderr" || RC=$?
+[[ "$RC" != 0 && ! -e "$TMP_ROOT/seat-new.json" ]] || fail "a failed stdout write must not create the --seat-out file"
 
 # N6c: a relative XDG_STATE_HOME is ignored and a symlinked script works.
 unset ROUTE_SPAWN_RECEIPT_DIR
