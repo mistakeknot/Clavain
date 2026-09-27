@@ -29,6 +29,8 @@ If results are found, briefly note: "Found N past sessions touching similar topi
 
 ### Step 2: Capture the solution
 
-Use the `clavain:engineering-docs` skill to capture this solution. The skill provides the full 7-step documentation workflow including YAML validation, category classification, and cross-referencing.
+Use the `clavain:engineering-docs` skill to capture this solution. The skill provides the full 8-step documentation workflow including YAML validation, category classification, cross-referencing and vocabulary capture.
+
+Document one solved problem per run. If the session solved several, run the skill once for each; never batch them into one doc.
 
 If no context argument was provided, the skill will extract context from the recent conversation history.

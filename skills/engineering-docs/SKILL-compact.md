@@ -4,7 +4,7 @@ Document solved problems as searchable institutional knowledge with YAML frontma
 
 ## When to Invoke
 
-After confirmation phrases ("that worked", "it's fixed", "problem solved") or via `/clavain:compound`. **Non-trivial problems only** — skip typos, obvious syntax errors, trivial fixes.
+After confirmation phrases ("that worked", "it's fixed", "problem solved") or via `/clavain:compound`. **Non-trivial problems only** — skip typos, obvious syntax errors, trivial fixes, and anything the final code already makes impossible to repeat. **One learning per run**: never batch several problems into one doc; run once per problem.
 
 ## Algorithm
 
@@ -16,7 +16,7 @@ Extract from conversation: module name, symptom (exact error messages), investig
 
 ### Step 2: Check Existing Docs
 
-Search `docs/solutions/` for similar issues. If found, present options: create new with cross-reference (recommended), update existing, or other.
+Search `docs/solutions/` for similar issues. If found, present options: create new with cross-reference (recommended), update existing (same root cause or now materially wrong), or other.
 
 ### Step 3: Generate Filename
 
@@ -34,9 +34,13 @@ Map `problem_type` to category directory (mapping in `references/yaml-schema.md`
 
 If similar issues exist, add bidirectional links. If 3+ similar issues, add pattern to `docs/solutions/patterns/common-solutions.md`.
 
-### Step 7: Decision Menu
+### Step 7: Vocabulary Capture
 
-Present options: (1) Continue workflow, (2) Add to Required Reading (critical-patterns.md), (3) Link related issues, (4) Add to existing skill, (5) Create new skill, (6) View documentation.
+Update the existing glossary (`docs/glossary.md`, `GLOSSARY.md`, `CONCEPTS.md`), or create `CONCEPTS.md` seeded with this learning's area only. Mutations: add, refine, fold, scrub; entries carry no paths or config values. Apply silently and report `Vocabulary (<file>): not present | scanned, no qualifying terms | updated — N added, N refined, N folded, N scrubbed`. Rules: `references/vocabulary-capture.md`.
+
+### Step 8: Decision Menu
+
+Present the vocabulary line, then options: (1) Continue workflow, (2) Add to Required Reading (critical-patterns.md), (3) Link related issues, (4) Add to existing skill, (5) Create new skill, (6) View documentation.
 
 ## Quality Checklist
 

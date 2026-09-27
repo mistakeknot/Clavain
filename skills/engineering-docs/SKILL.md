@@ -11,7 +11,7 @@ preconditions:
   - Solution has been verified working
 ---
 
-<!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same 7-step documentation capture workflow in a single file. -->
+<!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same 8-step documentation capture workflow in a single file. -->
 
 # engineering-docs Skill
 
@@ -19,13 +19,15 @@ preconditions:
 
 ---
 
-## 7-Step Documentation Capture
+## 8-Step Documentation Capture
+
+**One learning per run.** Document exactly one solved problem per invocation; never batch several into one doc or one run. Grounding, overlap detection and cross-referencing all assume a single problem, and batched runs leak list numbering ("Learning 3") into the docs. If the session solved several, run the workflow once for each.
 
 ### Step 1: Detect Confirmation
 
 Auto-invoke after: "that worked", "it's fixed", "working now", "problem solved", "that did it" — OR via `/clavain:compound`.
 
-**Non-trivial only** (multiple attempts, tricky debugging, non-obvious solution). Skip typos, obvious syntax errors, trivial fixes.
+**Non-trivial only** (multiple attempts, tricky debugging, non-obvious solution). Skip typos, obvious syntax errors, trivial fixes. Durable bar: would a future engineer reading only the final code still repeat the mistake? If the fix makes the mistake impossible or obvious, skip the doc.
 
 ### Step 2: Gather Context
 
@@ -52,7 +54,7 @@ If similar found, present and WAIT:
 ```
 Found similar issue: docs/solutions/[path]
 1. Create new doc with cross-reference (recommended)
-2. Update existing doc (only if same root cause)
+2. Update existing doc (same root cause, or the existing doc is now materially wrong)
 3. Other
 Choose (1-3): _
 ```
@@ -102,6 +104,10 @@ If 3+ similar issues exist, append to `docs/solutions/patterns/common-solutions.
 
 When user selects Option 2, use `assets/critical-pattern-template.md` and number sequentially in `docs/solutions/patterns/critical-patterns.md`.
 
+### Step 8: Vocabulary Capture
+
+Follow [vocabulary-capture.md](./references/vocabulary-capture.md): update the project's existing glossary (or create `CONCEPTS.md` if none exists and the learning surfaced a qualifying term) using only add, refine, fold and scrub. Apply without prompting and include its one-line report in the decision menu.
+
 ---
 
 ## Decision Menu After Capture
@@ -110,6 +116,7 @@ Present and WAIT for response:
 ```
 ✓ Solution documented
 File: docs/solutions/[category]/[filename].md
+Vocabulary (<file>): [report line from Step 8]
 
 What's next?
 1. Continue workflow (recommended)
@@ -152,6 +159,7 @@ What's next?
 - Enum values match `schema.yaml` exactly
 - Code examples in solution section
 - Cross-references added if related issues found
+- One problem documented; vocabulary line reported
 - User presented with decision menu and action confirmed
 
 ## Error Handling
