@@ -356,7 +356,7 @@ Slash commands are the user-facing entry points. Most of them load a skill under
 | `/work` | Execute a plan autonomously |
 | `/review` | Multi-agent code review |
 | `/review-discipline` | Disciplined code review and feedback triage |
-| `/execute-plan` | Execute plan in batches with checkpoints |
+| `/execute-plan` | Execute a plan continuously with a final review |
 | `/plan-review` | Parallel plan review |
 | `/quality-gates` | Gate orchestrator — delegates review to flux-drive, enforces pass/fail |
 | `/interserve` | Run Codex-first execution flow for larger scope work |

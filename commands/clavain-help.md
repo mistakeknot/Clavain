@@ -39,7 +39,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 |---|---|
 | `/clavain:remontoire` | Shadow, propose, inspect, approve, decline, resume, and verify receipts |
 | `/clavain:work` | Execute plans |
-| `/clavain:execute-plan` | Execute in separate session |
+| `/clavain:execute-plan` | Execute a plan continuously with a final review |
 | `/clavain:sprint` | Full autonomous pipeline |
 | `/clavain:resolve` | Auto-resolve findings |
 | `/clavain:fixbuild` | Fix build/test failures |

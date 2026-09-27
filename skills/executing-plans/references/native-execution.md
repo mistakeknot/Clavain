@@ -72,7 +72,8 @@ a ruling you ledger. Then:
   `Final: fixed <finding> — <test> RED→GREEN, suite <N>/<N>`. A finding you
   leave is a `Final: Ruling:`. Then dispatch one scoped re-review of the fix
   range with `../subagent-driven-development/re-review-prompt.md` on the same
-  seat; it may not be you. No further rounds: its open findings become
+  seat, passing the plan as the brief, the ledger's `Final:` lines as the
+  report and the final Critical/Important findings; it may not be you. No further rounds: its open findings become
   `Final: Ruling:` lines.
 - **Minor:** ledger `Final: minor (deferred): <one-liner>`; do not fix it.
 
