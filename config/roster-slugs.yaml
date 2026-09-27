@@ -51,11 +51,16 @@ rows:
     effort: high
     reasoning_mode: reasoning
     slug: claude-fable-5-1-high
-  # mk ruling 2026-09-26: every Sol seat runs GPT-6 Sol at medium.
+  # mk ruling 2026-09-26: every Sol seat runs GPT-6 Sol at medium, except the
+  # authority, planning and deep-execution seats at high (mk-rpnv.17, mk-42j9.27).
   - model: gpt-6-sol
     effort: medium
     reasoning_mode: reasoning
     slug: gpt-6-sol-medium
+  - model: gpt-6-sol
+    effort: high
+    reasoning_mode: reasoning
+    slug: gpt-6-sol-high
   - model: gpt-6-astra
     effort: high
     reasoning_mode: reasoning
