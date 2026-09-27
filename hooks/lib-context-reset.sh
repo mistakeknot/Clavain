@@ -39,6 +39,14 @@ fi
 _CR_KW='(push|publish|release|deploy|merge)'
 _CR_ASSIGN='^[A-Za-z_][A-Za-z0-9_]*='
 _CR_HOST_RE='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.?$'
+# Logged in place of a host whenever a URL does not provably parse clean.
+CR_REDACTED_URL='<redacted-url>'
+# Characters that mean a URL token was assembled by the shell (substitution,
+# expansion, escapes, operators) or cut out of a larger word.
+_CR_URL_UNSAFE_RE='[$`\(){};|&<>[:space:][:cntrl:]]'
+# 1 while classifying a command segment that touched a substitution or operator
+# boundary (see _CR_TOK_AWK); every host read from it is redacted.
+_CR_SEG_INTR=0
 
 # ─── Config ──────────────────────────────────────────────────────────────
 
@@ -134,42 +142,65 @@ cr_safe_id() {
     printf '%s' "$s"
 }
 
-# cr_url_host URL — host only (no scheme, userinfo, port, path, query). Input
-# that could carry credentials into the host (an `@` in the path, a non-numeric
-# port, characters outside a hostname) yields the sentinel `ambiguous-host`, so
-# the unstripped part of a URL is never logged.
+# cr_url_host URL — host only (no scheme, userinfo, port, path, query). It
+# redacts unless the URL provably parses clean: any shell-built character, an
+# `@` anywhere after the authority, a port that is not all digits (including an
+# empty one after `:`), or a host outside hostname/IP syntax yields
+# `<redacted-url>`. Nothing before the last `@` of the authority is ever output.
+# Use cr_safe_url_host at call sites.
 cr_url_host() {
-    local u="${1:-}" auth path host port
+    local u="${1:-}" auth rest host port
+    if [[ "$u" =~ $_CR_URL_UNSAFE_RE ]]; then printf '%s' "$CR_REDACTED_URL"; return 0; fi
     if [[ "$u" == *://* ]]; then u="${u#*://}"; fi
     auth="${u%%[/?#]*}"
-    path="${u:${#auth}}"
-    path="${path%%[?#]*}"
+    rest="${u:${#auth}}"
     if [[ "$auth" == *@* ]]; then
         auth="${auth##*@}"
-    elif [[ "$path" == *@* ]]; then
-        printf 'ambiguous-host'
+    elif [[ "$rest" == *@* ]]; then
+        printf '%s' "$CR_REDACTED_URL"
         return 0
     fi
     [[ -n "$auth" ]] || return 0
-    auth=$(printf '%s' "$auth" | tr '[:upper:]' '[:lower:]')
+    auth=$(printf '%s' "$auth" | tr '[:upper:]' '[:lower:]') || { printf '%s' "$CR_REDACTED_URL"; return 0; }
     if [[ "$auth" == \[* ]]; then
         host="${auth%%]*}"
         host="${host#\[}"
         port="${auth#*]}"
-        if [[ ! "$host" =~ ^[0-9a-f:.]+$ || ! "$port" =~ ^(:[0-9]*)?$ ]]; then
-            printf 'ambiguous-host'
+        if [[ ! "$host" =~ ^[0-9a-f:.]+$ || ! "$port" =~ ^(:[0-9]+)?$ ]]; then
+            printf '%s' "$CR_REDACTED_URL"
             return 0
         fi
     else
         host="${auth%%:*}"
         port=""
-        if [[ "$auth" == *:* ]]; then port="${auth#*:}"; fi
-        if [[ ! "$port" =~ ^[0-9]*$ || ! "$host" =~ $_CR_HOST_RE ]]; then
-            printf 'ambiguous-host'
+        if [[ "$auth" == *:* ]]; then
+            port="${auth#*:}"
+            if [[ ! "$port" =~ ^[0-9]+$ ]]; then
+                printf '%s' "$CR_REDACTED_URL"
+                return 0
+            fi
+        fi
+        if [[ ! "$host" =~ $_CR_HOST_RE ]]; then
+            printf '%s' "$CR_REDACTED_URL"
             return 0
         fi
     fi
     printf '%s' "$host"
+}
+
+# cr_safe_url_host URL — the host to log for URL. Fails closed and never
+# fails: inside a segment cut at a substitution/operator boundary, on any
+# parse error, or for any output that is not a plain hostname or IP literal it
+# prints `<redacted-url>`. Empty means the URL has no host (e.g. file:///).
+cr_safe_url_host() {
+    local h
+    if [[ "${_CR_SEG_INTR:-0}" != 0 ]]; then printf '%s' "$CR_REDACTED_URL"; return 0; fi
+    h=$(cr_url_host "${1:-}" 2>/dev/null) || h="$CR_REDACTED_URL"
+    if [[ -n "$h" && "$h" != "$CR_REDACTED_URL" && ! "$h" =~ $_CR_HOST_RE && ! "$h" =~ ^[0-9a-f:.]+$ ]]; then
+        h="$CR_REDACTED_URL"
+    fi
+    printf '%s' "$h"
+    return 0
 }
 
 _cr_is_local_host() {
@@ -195,6 +226,7 @@ cr_parse_payload() {
     local payload="${1:-}" line
     CR_SID="" CR_EVENT="" CR_TOOL="" CR_SKILL="" CR_TRANSCRIPT="" CR_AGENT=""
     CR_SOURCE="" CR_URL="" CR_QUERY="" CR_INPUT="" CR_CMD="" CR_REF="" CR_HOST=""
+    _CR_SEG_INTR=0
     line=$(printf '%s' "$payload" | jq -r "$_CR_PARSE_JQ" 2>/dev/null) || return 1
     [[ -n "$line" ]] || return 1
     IFS=$'\x1f' read -r CR_SID CR_EVENT CR_TOOL CR_SKILL CR_TRANSCRIPT CR_AGENT \
@@ -204,7 +236,9 @@ cr_parse_payload() {
             | if type == "string" then . else tojson end' 2>/dev/null) || CR_CMD=""
     fi
     CR_REF=$(cr_hash "$CR_TOOL|$CR_INPUT")
-    if [[ -n "$CR_URL" ]]; then CR_HOST=$(cr_url_host "$CR_URL"); fi
+    # The payload URL is raw (not tokenized): cr_url_host applies the same
+    # character-class check to it directly.
+    if [[ -n "$CR_URL" ]]; then CR_HOST=$(cr_safe_url_host "$CR_URL"); fi
     return 0
 }
 
@@ -217,15 +251,21 @@ cr_parse_payload() {
 # honours quotes and escapes, splits on ; | & ( ) ` $( and newlines outside
 # quotes, keeps redirections such as 2>&1 whole, drops comments and skips
 # here-document bodies. A final \036 line marks input with an unterminated quote.
+# A word cut short by one of those boundaries (a non-empty word directly before
+# `$(`, `(`, a backtick, `;`, `|` or `&`) or directly continuing after a
+# closing `)` or backtick gets a trailing \035: its other half is on another
+# line, so it may be a fragment of a credential-bearing URL. `${...}` is not
+# split; its `$` stays in the word for cr_url_host's character check.
 _CR_TOK_AWK='
 function flushw() {
     if (hw) {
         gsub(/[\n\r]/, " ", w)
         gsub(US, " ", w)
+        if (cut && w != "") w = w GS
         ln = (nw > 0) ? ln US w : w
         nw++
     }
-    w = ""; hw = 0
+    w = ""; hw = 0; cut = 0
 }
 function flushs() {
     flushw()
@@ -246,9 +286,9 @@ function skiphd(p,    k, rest, e, l) {
     hn = 0
     return p
 }
-BEGIN { RS = "\001"; US = "\037"; SQ = "\047"; DQ = "\"" }
+BEGIN { RS = "\001"; US = "\037"; GS = "\035"; SQ = "\047"; DQ = "\"" }
 {
-    s = $0; n = length(s); q = ""; sp = 0; hn = 0; amb = 0; w = ""; hw = 0; ln = ""; nw = 0
+    s = $0; n = length(s); q = ""; sp = 0; hn = 0; amb = 0; w = ""; hw = 0; cut = 0; ln = ""; nw = 0
     i = 1
     while (i <= n) {
         c = substr(s, i, 1)
@@ -264,8 +304,8 @@ BEGIN { RS = "\001"; US = "\037"; SQ = "\047"; DQ = "\"" }
         }
         if (q == DQ) {
             if (c == DQ) { q = ""; i++; continue }
-            if (c == "$" && substr(s, i + 1, 1) == "(") { push("p", DQ); q = ""; flushs(); i += 2; continue }
-            if (c == "`") { push("b", DQ); q = ""; flushs(); i++; continue }
+            if (c == "$" && substr(s, i + 1, 1) == "(") { push("p", DQ); q = ""; cut = 1; flushs(); i += 2; continue }
+            if (c == "`") { push("b", DQ); q = ""; cut = 1; flushs(); i++; continue }
             w = w c; i++; continue
         }
         if (c == SQ || c == DQ) { q = c; hw = 1; i++; continue }
@@ -297,17 +337,18 @@ BEGIN { RS = "\001"; US = "\037"; SQ = "\047"; DQ = "\"" }
             if (dl != "") { hn++; hd[hn] = dl; hs[hn] = strip } else amb = 1
             continue
         }
-        if (c == "$" && substr(s, i + 1, 1) == "(") { push("p", ""); flushs(); i += 2; continue }
-        if (c == "(") { push("p", ""); flushs(); i++; continue }
-        if (c == ")") { if (sp > 0 && sk[sp] == "p") { q = sr[sp]; sp-- } flushs(); i++; continue }
+        if (c == "$" && substr(s, i + 1, 1) == "(") { push("p", ""); cut = 1; flushs(); i += 2; continue }
+        if (c == "(") { push("p", ""); cut = 1; flushs(); i++; continue }
+        if (c == ")") { if (sp > 0 && sk[sp] == "p") { q = sr[sp]; sp-- } flushs(); cut = 1; i++; continue }
         if (c == "`") {
-            if (sp > 0 && sk[sp] == "b") { q = sr[sp]; sp-- } else push("b", "")
-            flushs(); i++; continue
+            if (sp > 0 && sk[sp] == "b") { q = sr[sp]; sp--; flushs(); cut = 1 }
+            else { push("b", ""); cut = 1; flushs() }
+            i++; continue
         }
-        if (c == ";" || c == "|") { flushs(); i++; continue }
+        if (c == ";" || c == "|") { cut = 1; flushs(); i++; continue }
         if (c == "&") {
             if (substr(s, i + 1, 1) == ">" || (i > 1 && (substr(s, i - 1, 1) == ">" || substr(s, i - 1, 1) == "<"))) { w = w c; hw = 1; i++; continue }
-            flushs(); i++; continue
+            cut = 1; flushs(); i++; continue
         }
         w = w c; hw = 1; i++
     }
@@ -470,8 +511,8 @@ _cr_http() {
             --url|--url=*)
                 urlopt=1
                 if [[ "$a" == --url ]]; then v="${_CR_A[j+1]:-}"; else v="${a#--url=}"; fi
-                if [[ -z "$host" && -n "$v" && "$v" != *'$'* ]]; then host=$(cr_url_host "$v"); fi ;;
-            *://*) if [[ -z "$host" ]]; then host=$(cr_url_host "$a"); fi ;;
+                if [[ -z "$host" && -n "$v" && "$v" != *'$'* ]]; then host=$(cr_safe_url_host "$v"); fi ;;
+            *://*) if [[ -z "$host" ]]; then host=$(cr_safe_url_host "$a"); fi ;;
             -X|--request|--method) method="${_CR_A[j+1]:-}" ;;
             -X*) method="${a#-X}" ;;
             --request=*|--method=*) method="${a#*=}" ;;
@@ -494,7 +535,7 @@ _cr_http() {
                 POST|PUT|PATCH|DELETE|GET|HEAD|post|put|patch|delete|get|head) continue ;;
                 *'$'*) continue ;;
             esac
-            if [[ "$a" == *.* && "$a" != *=* ]]; then host=$(cr_url_host "$a"); break; fi
+            if [[ "$a" == *.* && "$a" != *=* ]]; then host=$(cr_safe_url_host "$a"); break; fi
         done
     fi
     if [[ -n "$host" ]] && ! _cr_is_local_host "$host"; then
@@ -526,7 +567,7 @@ _cr_url_gap() {
     local a h
     for a in "$1" ${_CR_A[@]+"${_CR_A[@]}"}; do
         [[ "$a" == *://* ]] || continue
-        h=$(cr_url_host "$a")
+        h=$(cr_safe_url_host "$a")
         if [[ -n "$h" ]] && ! _cr_is_local_host "$h"; then
             _cr_s_expgap=unclassified-url
             return 0
@@ -676,9 +717,9 @@ _cr_segment() {
             dest="${_CR_P[0]:-}"
             sh_host=""
             if [[ "$dest" == *://* ]]; then
-                sh_host=$(cr_url_host "$dest")
+                sh_host=$(cr_safe_url_host "$dest")
             elif [[ -n "$dest" ]]; then
-                sh_host=$(cr_url_host "ssh://$dest")
+                sh_host=$(cr_safe_url_host "ssh://$dest")
             fi
             if [[ -z "$sh_host" ]]; then
                 _cr_s_expgap=unclassified-remote
@@ -711,17 +752,22 @@ _cr_segment() {
 # cr_classify_command COMMAND — classify a Bash command string (all segments,
 # including `bash -c` / `eval` bodies).
 cr_classify_command() {
-    local cmd="${1:-}" truncated=0 nseg=0 nested=0 amb=0 out line
-    local -a pending=() words=()
+    local cmd="${1:-}" truncated=0 nseg=0 nested=0 amb=0 out line cmd_amb cmd_intr
+    local -a pending=() pintr=() words=()
     [[ -n "$cmd" ]] || return 0
     if (( ${#cmd} > 65536 )); then cmd="${cmd:0:65536}"; truncated=1; fi
     pending=("$cmd")
+    pintr=(0)
     while (( ${#pending[@]} > 0 && nseg <= 2000 )); do
         cmd="${pending[0]}"
+        cmd_intr="${pintr[0]:-0}"
         pending=("${pending[@]:1}")
+        pintr=("${pintr[@]:1}")
+        cmd_amb=0
         out=$(_cr_tokenize "$cmd") || out=$'\036'
         if [[ "$out" == *$'\036' ]]; then
             amb=1
+            cmd_amb=1
             out="${out%$'\036'}"
             out+=$'\n'"$(_cr_legacy_tokenize "$cmd")"
         fi
@@ -729,6 +775,16 @@ cr_classify_command() {
             [[ -n "$line" ]] || continue
             nseg=$((nseg + 1))
             if (( nseg > 2000 )); then truncated=1; break; fi
+            # A segment holding a word cut at a boundary (\035 from the
+            # tokenizer), any segment of an ambiguous command, and any body
+            # nested in such a segment may carry part of a credential-bearing
+            # URL: every host read from it is logged as <redacted-url>.
+            _CR_SEG_INTR=0
+            if [[ "$cmd_intr" != 0 || "$cmd_amb" != 0 ]]; then _CR_SEG_INTR=1; fi
+            if [[ "$line" == *$'\035'* ]]; then
+                _CR_SEG_INTR=1
+                line="${line//$'\035'/}"
+            fi
             words=()
             IFS=$'\x1f' read -ra words <<<"$line" || true
             [[ ${#words[@]} -gt 0 ]] || continue
@@ -744,12 +800,18 @@ cr_classify_command() {
             if [[ -z "$CR_EXPOSURE_GAP" && -n "$_cr_s_expgap" ]]; then CR_EXPOSURE_GAP="$_cr_s_expgap"; fi
             if [[ -n "$_cr_s_nested" ]]; then
                 nested=$((nested + 1))
-                if (( nested > 16 )); then truncated=1; else pending+=("$_cr_s_nested"); fi
+                if (( nested > 16 )); then
+                    truncated=1
+                else
+                    pending+=("$_cr_s_nested")
+                    pintr+=("$_CR_SEG_INTR")
+                fi
             fi
         done <<<"$out"
     done
+    _CR_SEG_INTR=0
     # Unbalanced quoting: a host read from it may be misparsed, so log none.
-    if (( amb )) && [[ -n "$CR_EXPOSURE_HOST" ]]; then CR_EXPOSURE_HOST=ambiguous-host; fi
+    if (( amb )) && [[ -n "$CR_EXPOSURE_HOST" ]]; then CR_EXPOSURE_HOST="$CR_REDACTED_URL"; fi
     if (( truncated )); then
         if [[ -z "$CR_APPROVAL_FAMILY" ]]; then CR_GAP_KIND=truncated-command; fi
         if [[ -z "$CR_EXPOSURE_CLASS" ]]; then CR_EXPOSURE_GAP=truncated-command; fi

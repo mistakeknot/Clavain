@@ -63,8 +63,12 @@ fire, and what it would cost. They are hygiene telemetry only:
   `CLAVAIN_CONTEXT_RESET_DIR`). A child agent (payload `agent_id`) keeps its own
   `state/<session>.agent.<agent>.json`, starting from the parent's exposure.
   URLs, queries and commands are never stored; rows keep the host and a hash
-  reference. A URL whose host cannot be separated cleanly from credentials is
-  logged as `ambiguous-host`.
+  reference. Redaction fails closed: unless a URL provably parses clean, its
+  host is logged as `<redacted-url>`. That covers shell-built URLs (`$`,
+  backticks, `${...}`, operators, whitespace), URLs cut at a substitution or
+  operator boundary, an `@` after the authority, and non-numeric or empty
+  ports. Nothing before the last `@` of an authority is ever logged. This is
+  log hygiene, not a security boundary.
 - Config lives in `config/context-reset.yaml` (override the path with
   `CLAVAIN_CONTEXT_RESET_CONFIG`). Only `mode: observe` and `mode: off` exist.
   If `approval` or `full` is configured, the hooks log an error at SessionStart,
@@ -92,8 +96,12 @@ fire, and what it would cost. They are hygiene telemetry only:
   - a breakdown by role and mode.
 - `scripts/context-reset-audit.sh --transcript FILE [--record]` reconciles a
   transcript against the store, for sessions or hosts where the hooks did not
-  run. Exposure is compared per accounting batch, so a batch that was missed is
-  reported even when an earlier one was logged.
+  run. Exposure is compared per epoch and per accounting batch, and a surplus in
+  one epoch never offsets a shortfall in another. Batch windows use tool-result
+  timestamps, which are closest to the hooks' completion-time batching. A
+  `Task`/`Agent` or uncovered-child call whose `exposure_unknown` row is missing
+  is reported separately as `missed.subagent_unknown`, as uncertain exposure
+  rather than definite exposure.
 
 ### Remote shared-state authority
 

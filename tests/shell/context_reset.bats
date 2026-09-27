@@ -52,6 +52,12 @@ t_rows() {
     jq -s 'length' "$EVENTS"
 }
 t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
+# t_no_secret TEXT — fail if TEXT appears anywhere in the store (rows and
+# state), in any letter case.
+t_no_secret() {
+    run grep -rqiF -- "$1" "$CLAVAIN_CONTEXT_RESET_DIR"
+    [ "$status" -ne 0 ] || { echo "secret $1 leaked into the store"; return 1; }
+}
 
 @test "context-reset: trusted reads write no record" {
     t_start startup
@@ -227,13 +233,135 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
     t_start startup
     t_bash_post 'curl "https://review_secret_123:pw&suffix@api.example.com/data"'
     [ "$(t_count exposure)" -eq 1 ]
-    [ "$(t_last exposure | jq -r .host)" = "api.example.com" ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
     t_start startup
     t_bash_post 'curl https://review_secret_456:pw&suffix@api.example.com/data'
     [ "$(t_count exposure)" -eq 2 ]
-    [ "$(t_last exposure | jq -r .host)" = "ambiguous-host" ]
-    run grep -rq review_secret "$CLAVAIN_CONTEXT_RESET_DIR"
-    [ "$status" -ne 0 ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_bash_post 'curl https://reviewsecret789:1234&suffix@api.example.com/data'
+    [ "$(t_count exposure)" -eq 3 ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_no_secret review_secret
+    t_no_secret reviewsecret789
+}
+
+@test "context-reset: credentials cut by \$(...) in a URL are never logged" {
+    t_start startup
+    t_bash_post 'curl "https://TOKEN123:$(printf x)@api.example.com/"'
+    [ "$(t_count exposure)" -eq 1 ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_bash_post 'curl "https://TOKEN124:1234$(printf x)@api.example.com/"'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_bash_post "bash -c \"curl https://TOKEN125:1234\$(printf x)@api.example.com/\""
+    t_no_secret TOKEN123
+    t_no_secret TOKEN124
+    t_no_secret TOKEN125
+}
+
+@test "context-reset: credentials cut by backticks in a URL are never logged" {
+    t_start startup
+    t_bash_post 'curl "https://TOKEN123:`printf x`@api.example.com/"'
+    [ "$(t_count exposure)" -eq 1 ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_bash_post 'curl https://TOKEN124:1234`printf x`@api.example.com/'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_no_secret TOKEN123
+    t_no_secret TOKEN124
+}
+
+@test "context-reset: credentials around \${VAR} in a URL are never logged" {
+    t_start startup
+    t_bash_post 'curl "https://TOKEN123:${SUFFIX}@api.example.com/"'
+    [ "$(t_count exposure)" -eq 1 ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_bash_post 'curl https://TOKEN124:1234${SUFFIX}'
+    t_no_secret TOKEN123
+    t_no_secret TOKEN124
+}
+
+@test "context-reset: an @ after the authority redacts the URL" {
+    t_start startup
+    t_bash_post 'curl "https://TOKEN123:pa/ss@api.example.com/"'
+    [ "$(t_count exposure)" -eq 1 ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_bash_post 'curl "https://TOKEN124:12?x@api.example.com/"'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_post WebFetch '{"url":"https://TOKEN125:pa/ss@api.example.com/"}'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_no_secret TOKEN123
+    t_no_secret TOKEN124
+    t_no_secret TOKEN125
+}
+
+@test "context-reset: payload URLs that do not parse clean are redacted" {
+    t_start startup
+    t_post WebFetch '{"url":"https://TOKEN123:$(x)@api.example.com/"}'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_post WebFetch '{"url":"https://TOKEN124:"}'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_post mcp__playwright__browser_navigate '{"url":"https://TOKEN125:`x`@example.com/"}'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_post WebFetch '{"url":"https://user:TOKEN126@api.example.com/"}'
+    [ "$(t_last exposure | jq -r .host)" = "api.example.com" ]
+    t_no_secret TOKEN123
+    t_no_secret TOKEN124
+    t_no_secret TOKEN125
+    t_no_secret TOKEN126
+}
+
+@test "context-reset: curl --url credentials are never logged" {
+    t_start startup
+    t_bash_post 'curl --url "https://TOKEN123:$(printf x)@api.example.com/"'
+    [ "$(t_count exposure)" -eq 1 ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_bash_post 'curl --url "https://TOKEN124:pw@api.example.com/"'
+    [ "$(t_last exposure | jq -r .host)" = "api.example.com" ]
+    t_start startup
+    t_bash_post 'curl --url=https://TOKEN125:1234`printf x`@api.example.com/'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_no_secret TOKEN123
+    t_no_secret TOKEN124
+    t_no_secret TOKEN125
+}
+
+@test "context-reset: credentials in a push URL are never logged" {
+    t_start startup
+    t_bash_pre 'git push https://user:SECRET456@github.com/o/r.git main'
+    [ "$(t_count approval_clean)" -eq 1 ]
+    t_bash_pre 'git push "https://user:SECRET789$(printf x)@github.com/o/r.git" main'
+    [ "$(t_count approval_clean)" -eq 2 ]
+    t_bash_post 'git push "https://SECRET790:1234$(printf x)@github.com/o/r.git" main'
+    t_no_secret SECRET456
+    t_no_secret SECRET789
+    t_no_secret SECRET790
+}
+
+@test "context-reset: ssh destinations never log the user part" {
+    t_start startup
+    t_bash_post 'ssh SSHSECRET88@host.example.com true'
+    [ "$(t_count exposure)" -eq 1 ]
+    [ "$(t_last exposure | jq -r .host)" = "host.example.com" ]
+    t_start startup
+    t_bash_post 'ssh "SSHSECRET77$(printf x)@host.example.com" true'
+    [ "$(t_count exposure)" -eq 2 ]
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_start startup
+    t_bash_post 'ssh SSHSECRET99`printf x`@host.example.com true'
+    [ "$(t_last exposure | jq -r .host)" = "<redacted-url>" ]
+    t_no_secret SSHSECRET88
+    t_no_secret SSHSECRET77
+    t_no_secret SSHSECRET99
 }
 
 @test "context-reset: malformed stdin fails open and records a hook_error" {
@@ -514,12 +642,61 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
     [ "$(jq -r .missed.exposure <<<"$output")" -eq 0 ]
 }
 
-@test "context-reset: credentials in a push URL are never logged" {
-    t_start startup
-    t_bash_pre 'git push https://user:SECRET456@github.com/o/r.git main'
-    [ "$(t_count approval_clean)" -eq 1 ]
-    run grep -rq SECRET456 "$CLAVAIN_CONTEXT_RESET_DIR"
-    [ "$status" -ne 0 ]
+@test "context-reset: audit compares batches per epoch, so a surplus cannot hide a missed epoch" {
+    local tr="$BATS_TEST_TMPDIR/audit3.jsonl"
+    {
+        jq -nc '{type:"assistant", sessionId:"aud3", timestamp:"1970-01-01T00:16:40Z",
+            message:{content:[{type:"tool_use", id:"r1", name:"WebFetch", input:{url:"https://example.com/a"}}]}}'
+        jq -nc '{type:"user", sessionId:"aud3", timestamp:"1970-01-01T00:16:40Z",
+            message:{content:[{type:"tool_result", tool_use_id:"r1", content:"x"}]}}'
+        jq -nc '{type:"assistant", sessionId:"aud3", timestamp:"1970-01-01T00:26:30Z",
+            message:{content:[{type:"tool_use", id:"r2", name:"WebFetch", input:{url:"https://example.com/b"}}]}}'
+        jq -nc '{type:"user", sessionId:"aud3", timestamp:"1970-01-01T00:26:50Z",
+            message:{content:[{type:"tool_result", tool_use_id:"r2", content:"x"}]}}'
+        jq -nc '{type:"system", subtype:"compact_boundary", sessionId:"aud3"}'
+        jq -nc '{type:"assistant", sessionId:"aud3", timestamp:"1970-01-01T00:33:20Z",
+            message:{content:[{type:"tool_use", id:"r3", name:"WebFetch", input:{url:"https://example.com/c"}}]}}'
+        jq -nc '{type:"user", sessionId:"aud3", timestamp:"1970-01-01T00:33:20Z",
+            message:{content:[{type:"tool_result", tool_use_id:"r3", content:"x"}]}}'
+    } > "$tr"
+    # Reads start at 1000 and 1590 and complete at 1000 and 1610: the hooks log
+    # two epoch-1 batches. The epoch-2 read after compaction is not logged.
+    t_start startup aud3
+    t_post WebFetch '{"url":"https://example.com/a"}' aud3
+    export CLAVAIN_CONTEXT_RESET_NOW=1610
+    t_post WebFetch '{"url":"https://example.com/b"}' aud3
+    [ "$(t_count exposure)" -eq 2 ]
+    t_start compact aud3
+    run --separate-stderr bash "$AUDIT" --transcript "$tr" --json
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .logged.exposure <<<"$output")" -eq 2 ]
+    [ "$(jq -r .expected.exposure_batches <<<"$output")" -eq 3 ]
+    [ "$(jq -r .epochs <<<"$output")" -eq 2 ]
+    [ "$(jq -r .missed.exposure <<<"$output")" -eq 1 ]
+    export CLAVAIN_CONTEXT_RESET_NOW=2000
+    t_post WebFetch '{"url":"https://example.com/c"}' aud3
+    run --separate-stderr bash "$AUDIT" --transcript "$tr" --json
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .missed.exposure <<<"$output")" -eq 0 ]
+}
+
+@test "context-reset: audit flags a Task call whose exposure_unknown row is missing" {
+    local tr="$BATS_TEST_TMPDIR/audit4.jsonl"
+    printf '%s\n' '{"type":"assistant","sessionId":"aud4","message":{"content":[{"type":"tool_use","id":"k1","name":"Task","input":{"description":"d","prompt":"p"}}]}}' > "$tr"
+    t_start startup aud4
+    run --separate-stderr bash "$AUDIT" --transcript "$tr" --json
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .expected.subagent_unknown <<<"$output")" -eq 1 ]
+    [ "$(jq -r .missed.subagent_unknown <<<"$output")" -eq 1 ]
+    [ "$(jq -r .missed.exposure <<<"$output")" -eq 0 ]
+    run --separate-stderr bash "$AUDIT" --transcript "$tr" --record
+    [ "$status" -eq 0 ]
+    [ "$(t_last coverage_gap | jq -r .kind)" = "audit_missed_subagent_unknown" ]
+    t_post Task '{"description":"d","prompt":"p"}' aud4
+    run --separate-stderr bash "$AUDIT" --transcript "$tr" --json
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .logged.subagent_unknown <<<"$output")" -eq 1 ]
+    [ "$(jq -r .missed.subagent_unknown <<<"$output")" -eq 0 ]
 }
 
 @test "context-reset: rows carry the dispatch role and the report splits by role and mode" {
