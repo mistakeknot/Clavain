@@ -298,6 +298,71 @@ starting; and preserve the packaged default unmodified.
 A started dispatch with incomplete accounting still stops its dependent work;
 the fallback is a separately authorized attempt with its own receipt.
 
+## Spawning bb threads
+
+Resolve each bb worker lane through the policy before spawning. Set
+`coordinator_id` to your coordinatorId and `project_slug` to your logical project
+slug. Guard the spawn on the read: a failed resolver prints no tuple.
+
+```bash
+if read -r P M E < <("${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role lane --lineage "$coordinator_id" --project "$project_slug"); then
+  bb thread spawn --provider "$P" --model "$M" --reasoning-level "$E" …
+else
+  echo "Lane routing failed; no thread spawned" >&2
+fi
+```
+
+Never type a model id on a spawn line. Frontier lanes use `--role frontier-planning`, or
+`plan-review` / `validation` with `--producer-identity` taken from the producer's
+receipt. Until Quilan carry-forward ships, a pinned coordinator's self-handoff
+passes its own current tuple explicitly:
+`bb handoff --provider "$current_provider" --model "$current_model" --reasoning-level "$current_effort" …`.
+Populate these variables from the coordinator's own seat, never from literals
+or a worker's tuple. On a non-zero resolver exit, do not spawn; report it. Exit codes are
+0 for success, 2 for usage errors, and 3 for resolution or receipt failures.
+
+For a new coordinator thread, the spawner resolves its own seat with
+`"${CLAVAIN_SELECTED_ROOT:?}/scripts/route-spawn.sh" --role coordination --project <slug>`.
+Relay work dispatched by a coordinator still uses `scripts/dispatch.sh --role coordination`.
+
+Each successful call writes an atomic JSON receipt under
+`${ROUTE_SPAWN_RECEIPT_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/clavain/route-spawn}/`.
+Relative `XDG_STATE_HOME` values are ignored in favor of `$HOME/.local/state`.
+It records the requested role, project, profile source, lineage, arm, pool
+availability, spawn tuple, policy hash and full `ic` route. A failed receipt
+write prevents the tuple from reaching stdout.
+
+Only role `lane` consults the rollout arm. Until mk-42j9.25 Phase 2b, the lookup
+is a stub returning `control`, so landing this guidance keeps every lineage on
+the status quo. Coordination and governed roles ignore `--lineage` for routing
+and record a null arm.
+
+Known slugs come from `reasoning.projects`. Project profiles come from
+`reasoning.project_profiles`; dedicated bb project
+ids resolve through `reasoning.project_aliases` before slug lookup. A project
+profile applies only to roles in its `roles` map. `--project` is mandatory for
+coordination and must resolve to a known slug. Shared projects `proj_personal`
+and `proj_bnq4zi2wiv` ("projects/Sylveste") deliberately have no alias: pass the
+logical slug. The nine project profiles select the Opus coordination seat;
+the six Sonnet slugs keep fleet routing. Unknown projects on non-coordination
+roles warn and resolve with `project: null`.
+
+Select the profile before changing context scope. A project profile requires
+`project:<slug>` scope and rejects a conflicting caller scope. An explicit
+`CLAVAIN_POLICY_PROFILE` (nonempty and not `default`) requires campaign-scoped
+context and takes precedence for
+other roles, but combining it with an applicable project coordination profile
+exits 3. `CLAVAIN_DECISION_CONTEXT` is inherited unless `--context-file` overrides
+it. Caller context files are never modified.
+
+Only `lane`, `coordination` and `main-session` probe the pool. Governed roles
+keep capacity handling in dispatch and retain the caller's available models.
+Pool status restricts available models without removing caller exclusions;
+unavailable, non-accepting or timed-out probes record `fallbacks_evaluated: false`.
+The probe timeout is `ROUTE_SPAWN_POOL_TIMEOUT` seconds (default 20); the resolver
+timeout is `ROUTE_SPAWN_IC_TIMEOUT` seconds (default 30, exit 3 on timeout).
+A stderr `fallback` line names the head and chosen seat when a spawn uses a fallback.
+
 ## Handoff and escalation
 
 Keep frontier involvement while investigation or experiments change the plan.

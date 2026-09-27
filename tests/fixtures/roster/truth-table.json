@@ -202,6 +202,11 @@
         "providerSlug": "anthropic"
       },
       {
+        "slug": "claude-opus-5-5-medium",
+        "name": "Claude Opus 5.5 (Adaptive Reasoning, Medium Effort, Default Fallback)",
+        "providerSlug": "anthropic"
+      },
+      {
         "slug": "claude-opus-5-5-xhigh",
         "name": "Claude Opus 5.5 (Adaptive Reasoning, Xhigh Effort, Default Fallback)",
         "providerSlug": "anthropic"
