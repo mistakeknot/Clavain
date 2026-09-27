@@ -118,6 +118,7 @@ line; an empty list means you set nothing aside.
 - Explain WHY issues matter
 - Acknowledge strengths
 - Give clear verdict
+- Flag significant deviations from the plan, and say so when the plan itself is wrong
 
 **DON'T:**
 - Say "looks good" without checking

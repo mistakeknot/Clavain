@@ -14,7 +14,7 @@ Two sides: requesting reviews and receiving feedback.
 
 ## Requesting Review
 
-Dispatch `clavain:plan-reviewer` subagent to catch issues before they cascade.
+Dispatch `clavain:plan-reviewer` subagent to catch issues before they cascade. Give it precisely crafted context, never your session history.
 
 **When mandatory:** After each task in subagent-driven development; after major feature; before merge to main.
 **When optional:** When stuck; before refactoring; after fixing complex bug.
@@ -22,7 +22,7 @@ Dispatch `clavain:plan-reviewer` subagent to catch issues before they cascade.
 ### How to Request
 
 ```bash
-BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
+BASE_SHA=$(git rev-parse HEAD~1)  # or: git merge-base origin/main HEAD
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 

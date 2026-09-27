@@ -33,6 +33,8 @@ Task("Fix tool-approval-race-conditions.test.ts failures", model="sonnet")
 // All three run concurrently
 ```
 
+Multiple dispatch calls in one response run in parallel; one per response runs sequentially. Give each agent precisely the context it needs, never your session history.
+
 ### 4. Review and Integrate
 Read each summary → verify fixes don't conflict → run full test suite.
 

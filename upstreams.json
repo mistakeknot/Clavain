@@ -34,34 +34,34 @@
       "name": "superpowers",
       "url": "https://github.com/obra/superpowers.git",
       "branch": "main",
-      "lastSyncedCommit": "e4a2375cb705ca5800f0833528ce36a3faf9017a",
+      "lastSyncedCommit": "8ca22dba9a94f28898bbce59f2537ff4d87c747d",
       "basePath": "",
       "fileMap": {
         "skills/dispatching-parallel-agents/SKILL.md": "skills/dispatching-parallel-agents/SKILL.md",
         "skills/executing-plans/SKILL.md": "skills/executing-plans/SKILL.md",
+        "skills/executing-plans/scripts/task-done": "skills/executing-plans/scripts/task-done",
+        "skills/executing-plans/scripts/task-start": "skills/executing-plans/scripts/task-start",
         "skills/requesting-code-review/SKILL.md": "skills/code-review-discipline/SKILL.md",
         "skills/requesting-code-review/code-reviewer.md": "skills/code-review-discipline/code-reviewer.md",
         "skills/subagent-driven-development/SKILL.md": "skills/subagent-driven-development/SKILL.md",
-        "skills/subagent-driven-development/code-quality-reviewer-prompt.md": "skills/subagent-driven-development/code-quality-reviewer-prompt.md",
         "skills/subagent-driven-development/implementer-prompt.md": "skills/subagent-driven-development/implementer-prompt.md",
-        "skills/subagent-driven-development/spec-reviewer-prompt.md": "skills/subagent-driven-development/spec-reviewer-prompt.md",
-        "skills/systematic-debugging/SKILL.md": "skills/systematic-debugging/SKILL.md",
-        "skills/systematic-debugging/condition-based-waiting.md": "skills/systematic-debugging/condition-based-waiting.md",
-        "skills/systematic-debugging/defense-in-depth.md": "skills/systematic-debugging/defense-in-depth.md",
-        "skills/systematic-debugging/root-cause-tracing.md": "skills/systematic-debugging/root-cause-tracing.md",
-        "skills/test-driven-development/SKILL.md": "skills/test-driven-development/SKILL.md",
-        "skills/test-driven-development/testing-anti-patterns.md": "skills/test-driven-development/testing-anti-patterns.md",
+        "skills/subagent-driven-development/re-review-prompt.md": "skills/subagent-driven-development/re-review-prompt.md",
+        "skills/subagent-driven-development/scripts/review-package": "skills/subagent-driven-development/scripts/review-package",
+        "skills/subagent-driven-development/scripts/sdd-workspace": "skills/subagent-driven-development/scripts/sdd-workspace",
+        "skills/subagent-driven-development/scripts/task-brief": "skills/subagent-driven-development/scripts/task-brief",
+        "skills/subagent-driven-development/task-reviewer-prompt.md": "skills/subagent-driven-development/task-reviewer-prompt.md",
         "skills/using-superpowers/SKILL.md": "skills/using-clavain/SKILL.md",
-        "skills/verification-before-completion/SKILL.md": "skills/verification-before-completion/SKILL.md",
-        "skills/writing-plans/SKILL.md": "skills/writing-plans/SKILL.md",
-        "skills/writing-skills/SKILL.md": "skills/writing-skills/SKILL.md",
-        "skills/writing-skills/anthropic-best-practices.md": "skills/writing-skills/anthropic-best-practices.md",
-        "skills/writing-skills/persuasion-principles.md": "skills/writing-skills/persuasion-principles.md",
-        "skills/writing-skills/testing-skills-with-subagents.md": "skills/writing-skills/testing-skills-with-subagents.md",
-        "commands/brainstorm.md": "commands/brainstorm.md",
-        "commands/execute-plan.md": "commands/execute-plan.md",
-        "commands/write-plan.md": "commands/write-plan.md",
-        "agents/code-reviewer.md": "agents/review/plan-reviewer.md"
+        "skills/writing-plans/SKILL.md": "skills/writing-plans/SKILL.md"
+      },
+      "relocatedTo": {
+        "skills/systematic-debugging/SKILL.md": "intertest:skills/systematic-debugging/SKILL.md",
+        "skills/systematic-debugging/condition-based-waiting.md": "intertest:skills/systematic-debugging/condition-based-waiting.md",
+        "skills/systematic-debugging/defense-in-depth.md": "intertest:skills/systematic-debugging/defense-in-depth.md",
+        "skills/systematic-debugging/root-cause-tracing.md": "intertest:skills/systematic-debugging/root-cause-tracing.md",
+        "skills/test-driven-development/SKILL.md": "intertest:skills/test-driven-development/SKILL.md",
+        "skills/test-driven-development/writing-good-tests.md": "intertest:skills/test-driven-development/writing-good-tests.md",
+        "skills/verification-before-completion/SKILL.md": "intertest:skills/verification-before-completion/SKILL.md",
+        "skills/writing-skills/*": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)"
       }
     },
     {
@@ -80,14 +80,15 @@
       "branch": "main",
       "lastSyncedCommit": "74afe935da49efe782907e837a27ce618498099a",
       "basePath": "",
-      "fileMap": {
-        "skills/developing-claude-code-plugins/SKILL.md": "skills/developing-claude-code-plugins/SKILL.md",
-        "skills/developing-claude-code-plugins/references/common-patterns.md": "skills/developing-claude-code-plugins/references/common-patterns.md",
-        "skills/developing-claude-code-plugins/references/plugin-structure.md": "skills/developing-claude-code-plugins/references/plugin-structure.md",
-        "skills/developing-claude-code-plugins/references/polyglot-hooks.md": "skills/developing-claude-code-plugins/references/polyglot-hooks.md",
-        "skills/developing-claude-code-plugins/references/troubleshooting.md": "skills/developing-claude-code-plugins/references/troubleshooting.md",
-        "skills/working-with-claude-code/SKILL.md": "skills/working-with-claude-code/SKILL.md",
-        "skills/working-with-claude-code/references/*": "skills/working-with-claude-code/references/*"
+      "fileMap": {},
+      "relocatedTo": {
+        "skills/developing-claude-code-plugins/SKILL.md": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)",
+        "skills/developing-claude-code-plugins/references/common-patterns.md": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)",
+        "skills/developing-claude-code-plugins/references/plugin-structure.md": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)",
+        "skills/developing-claude-code-plugins/references/polyglot-hooks.md": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)",
+        "skills/developing-claude-code-plugins/references/troubleshooting.md": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)",
+        "skills/working-with-claude-code/SKILL.md": "interdev:skills/working-with-claude-code/SKILL.md",
+        "skills/working-with-claude-code/references/*": "interdev:skills/working-with-claude-code/references/*"
       }
     },
     {
@@ -95,28 +96,17 @@
       "url": "https://github.com/EveryInc/compound-engineering-plugin.git",
       "branch": "main",
       "lastSyncedCommit": "e8f3bbcb3580862a2715575d609333306ed02ee3",
-      "basePath": "plugins/compound-engineering",
+      "basePath": "",
       "fileMap": {
-        "skills/create-agent-skills/SKILL.md": "skills/create-agent-skills/SKILL.md",
-        "skills/create-agent-skills/references/*": "skills/create-agent-skills/references/*",
-        "skills/create-agent-skills/templates/*": "skills/create-agent-skills/templates/*",
-        "skills/create-agent-skills/workflows/*": "skills/create-agent-skills/workflows/*",
-        "skills/file-todos/SKILL.md": "skills/file-todos/SKILL.md",
-        "skills/file-todos/assets/todo-template.md": "skills/file-todos/assets/todo-template.md",
-        "agents/research/best-practices-researcher.md": "agents/research/best-practices-researcher.md",
-        "agents/research/framework-docs-researcher.md": "agents/research/framework-docs-researcher.md",
-        "agents/research/git-history-analyzer.md": "agents/research/git-history-analyzer.md",
-        "agents/research/learnings-researcher.md": "agents/research/learnings-researcher.md",
-        "agents/research/repo-research-analyst.md": "agents/research/repo-research-analyst.md",
-        "agents/review/data-migration-expert.md": "agents/review/data-migration-expert.md",
-        "agents/workflow/bug-reproduction-validator.md": "agents/workflow/bug-reproduction-validator.md",
-        "agents/workflow/pr-comment-resolver.md": "agents/workflow/pr-comment-resolver.md",
-        "commands/changelog.md": "commands/changelog.md",
-        "commands/create-agent-skill.md": "commands/create-agent-skill.md",
-        "commands/generate_command.md": "commands/generate-command.md",
-        "commands/heal-skill.md": "commands/heal-skill.md",
-        "commands/plan_review.md": "commands/plan-review.md",
-        "commands/triage.md": "commands/triage.md"
+        "skills/ce-code-review/references/personas/data-migration-reviewer.md": "agents/review/data-migration-expert.md",
+        "skills/ce-resolve-pr-feedback/references/agents/pr-comment-resolver.md": "agents/workflow/pr-comment-resolver.md"
+      },
+      "relocatedTo": {
+        "plugins/compound-engineering/agents/research/*": "interflux (moved in Clavain 5a2e27f)",
+        "plugins/compound-engineering/agents/workflow/bug-reproduction-validator.md": "removed upstream in v3; Clavain keeps its copy",
+        "plugins/compound-engineering/commands/*": "removed upstream in v3 (now ce-* skills); Clavain keeps its copies",
+        "plugins/compound-engineering/skills/create-agent-skills/*": "retired (extracted in Clavain 91ea85a)",
+        "plugins/compound-engineering/skills/file-todos/*": "removed upstream in v3; Clavain keeps its copy"
       }
     }
   ],
