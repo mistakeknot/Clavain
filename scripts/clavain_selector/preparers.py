@@ -98,6 +98,14 @@ class Preparer:
     build: Callable[[HostEvent | None, Path | None], PreparedInput]
 
     def __post_init__(self) -> None:
+        if isinstance(self.points, (str, bytes)):
+            # N4-2 (same bug class as finding 2): `frozenset("library")`
+            # silently splits a bare string into one `Point`-shaped
+            # character per element instead of the single intended point.
+            raise NotPrepared(
+                f"preparer {self.name!r} points must be a collection of Point values, "
+                f"not a bare {type(self.points).__name__}: {self.points!r}"
+            )
         object.__setattr__(self, "points", frozenset(self.points))
         object.__setattr__(self, "event_fields", frozenset(self.event_fields))
         bad = self.event_fields - _EVENT_FIELD_NAMES
@@ -122,15 +130,13 @@ class PreparedSet:
     context: str
     candidates: tuple[Candidate, ...]
     sources: tuple[Path, ...]
-    # Per the plan's landed shape (revision 8/9), `project_root` is `Path`
-    # (required) once `prepare()`'s registry-driven rewrite (finding 6,
-    # follow-on commit) makes it a mandatory parameter everywhere. Until
-    # then this task's entry points still accept `project_root=None` for
-    # callers with no read sets at all; `_finish_prepare` fails closed
-    # (`NotPrepared`) the moment any candidate carries a non-empty
-    # `read_set_paths` entry with no `project_root` to bound it (also
-    # enforced transitively by `egress._source_rule`).
-    project_root: Path | None
+    # Per the plan's landed shape (plan lines 405/414-415), `project_root` is
+    # a mandatory `Path` -- this is the fix (Commit C, finding 8) that makes
+    # it so: every entry point (`prepare`, `from_operator`, `from_case`)
+    # requires a real project root and `_finish_prepare` raises
+    # `NotPrepared` for a missing or unresolvable one, before any candidate
+    # is even considered.
+    project_root: Path
     task_revision: str
     bindings: tuple[tuple[str, str], ...]
     read_set_paths: tuple[tuple[str, tuple[str, ...]], ...]
@@ -292,7 +298,24 @@ def _finish_prepare(
     task_revision: str | None,
     read_set_paths: Sequence[tuple[str, Sequence[str]]],
 ) -> PreparedSet:
-    candidates = tuple(candidates)
+    if project_root is None:
+        # Finding 8: `project_root` is mandatory everywhere -- a missing
+        # one is `NotPrepared`, never a silent `None` that later code has
+        # to remember to special-case.
+        raise NotPrepared("project_root is required")
+
+    try:
+        candidates = tuple(candidates)
+    except TypeError as exc:
+        raise NotPrepared(f"candidates is not iterable: {candidates!r}") from exc
+
+    for candidate in candidates:
+        if not isinstance(candidate, Candidate):
+            # N3: a `build()` (or operator/eval-case caller) that hands back
+            # a non-`Candidate` (including `None`) must not reach `.id`
+            # below and raise a raw `AttributeError`.
+            raise NotPrepared(f"candidate is not a Candidate: {candidate!r}")
+
     ids = [c.id for c in candidates]
     if len(ids) != len(set(ids)):
         # `contract.canonical_order` sorts duplicates rather than rejecting
@@ -322,17 +345,12 @@ def _finish_prepare(
             raise NotPrepared("task_revision was not supplied and candidates do not agree on one")
         task_revision = next(iter(revisions))
 
-    root = Path(project_root).resolve() if project_root is not None else None
+    try:
+        root = Path(project_root).resolve()
+    except TypeError as exc:
+        raise NotPrepared(f"project_root is not a valid path: {project_root!r}") from exc
 
     normalized_read_set = _normalize_read_set_paths(read_set_paths, ordered)
-
-    if root is None and any(paths for _, paths in normalized_read_set):
-        # Fails closed explicitly rather than relying only on
-        # `egress._source_rule` always returning `src.outside_project` for
-        # a `None` root (revision 8, finding 8): a missing project root
-        # with any non-empty read-set paths is `NotPrepared`, never a
-        # silently permissive or silently all-rejecting state.
-        raise NotPrepared("read_set_paths requires a project_root")
 
     resolved_pairs: list[tuple[str, tuple[str, ...]]] = []
     for candidate, (cid, paths) in zip(ordered, normalized_read_set):
@@ -360,6 +378,13 @@ def _finish_prepare(
     except ValueError as exc:
         raise NotPrepared(f"could not bind candidate payloads: {exc}") from exc
 
+    try:
+        source_paths = tuple(Path(s) for s in sources)
+    except TypeError as exc:
+        # N3: a `build()`/operator/eval-case `sources` entry that isn't
+        # path-like (e.g. an int) must not raise a raw `TypeError` here.
+        raise NotPrepared(f"sources contains a non-path-like entry: {sources!r}") from exc
+
     prelim = PreparedSet(
         integration=integration,
         point=point,
@@ -368,7 +393,7 @@ def _finish_prepare(
         task=task,
         context=context,
         candidates=ordered,
-        sources=tuple(Path(s) for s in sources),
+        sources=source_paths,
         project_root=root,
         task_revision=task_revision,
         bindings=bindings,
@@ -389,7 +414,7 @@ def prepare(
     integration: str,
     point: "Point | str",
     event: HostEvent | None,
-    project_root: str | Path | None = None,
+    project_root: str | Path,
 ) -> PreparedSet:
     """Build a `PreparedSet` via the registry-resolved, registered `Preparer`.
 
@@ -409,16 +434,28 @@ def prepare(
     candidate id is rejected, not "no restriction". `integration`/`point`
     on the resulting `PreparedSet` always come from this call's own
     arguments, never from anything `build()` returns (`PreparedInput`
-    carries no such fields). Also raises `NotPrepared` when
-    `read_set_paths` (a per-candidate `(id, paths)` sequence in canonical
-    order, or `()` when no candidate has a read set) does not correspond to
-    the candidates or disagrees with a candidate's `read_set_fingerprint`,
-    or when any candidate's path resolves outside `project_root` or onto
-    the source denylist.
+    carries no such fields). `PreparedSet.preparer` is always
+    `preparer_def.name` (finding N4-1), which may differ from the registry
+    key `preparer_def` was looked up under if a preparer is registered
+    under an alias. Also raises `NotPrepared` when `read_set_paths` (a
+    per-candidate `(id, paths)` sequence in canonical order, or `()` when
+    no candidate has a read set) does not correspond to the candidates or
+    disagrees with a candidate's `read_set_fingerprint`, or when any
+    candidate's path resolves outside `project_root` or onto the source
+    denylist. `project_root` is mandatory (finding 8): `None` is
+    `NotPrepared`, never a silently permissive default.
     """
-    point_value = point if isinstance(point, Point) else Point(point)
+    if project_root is None:
+        raise NotPrepared("project_root is required")
+
+    try:
+        point_value = point if isinstance(point, Point) else Point(point)
+    except ValueError as exc:
+        raise NotPrepared(f"not a valid point: {point!r}") from exc
 
     integrations = registry.get("integrations", {}) if isinstance(registry, Mapping) else {}
+    if not isinstance(integrations, Mapping):
+        raise NotPrepared(f"registry integrations is not a mapping: {integrations!r}")
     entry = integrations.get(integration)
     if not isinstance(entry, Mapping):
         raise NotPrepared(f"unknown integration: {integration!r}")
@@ -434,7 +471,10 @@ def prepare(
     if point_value not in preparer_def.points:
         raise NotPrepared(f"preparer {preparer_name!r} does not serve point {point_value!r}")
 
-    root_arg = Path(project_root) if project_root is not None else None
+    try:
+        root_arg = Path(project_root)
+    except TypeError as exc:
+        raise NotPrepared(f"project_root is not a valid path: {project_root!r}") from exc
     projected = _project_event(point_value, event, preparer_def.event_fields)
 
     try:
@@ -448,13 +488,34 @@ def prepare(
         raise NotPrepared(f"preparer {preparer_name!r} build did not return a PreparedInput")
 
     try:
-        vocabulary = frozenset(preparer_def.vocabulary(root_arg))
+        raw_vocabulary = preparer_def.vocabulary(root_arg)
     except NotPrepared:
         raise
     except Exception as exc:  # noqa: BLE001 - any preparer failure means NotPrepared
         raise NotPrepared(f"preparer {preparer_name!r} vocabulary failed: {exc}") from exc
 
+    if isinstance(raw_vocabulary, (str, bytes)):
+        # N4-3: `frozenset("a")` and `frozenset({"a"})` coincide for a
+        # single character but diverge for anything longer -- reject a bare
+        # str/bytes return outright rather than silently treating it as a
+        # set of characters.
+        raise NotPrepared(
+            f"preparer {preparer_name!r} vocabulary() returned a bare "
+            f"{type(raw_vocabulary).__name__}, not a set of ids: {raw_vocabulary!r}"
+        )
+    try:
+        vocabulary = frozenset(raw_vocabulary)
+    except TypeError as exc:
+        raise NotPrepared(f"preparer {preparer_name!r} vocabulary() did not return an iterable: {exc}") from exc
+
     candidates = tuple(built.candidates)
+    for c in candidates:
+        if not isinstance(c, Candidate):
+            # N3: a non-`Candidate` entry (including `None`) has no `.id` to
+            # report -- `_finish_prepare` below raises `NotPrepared` for
+            # this same shape too, but that check must never be reached via
+            # a raw `AttributeError` from `c.id` here first.
+            raise NotPrepared(f"preparer {preparer_name!r} emitted a non-Candidate entry: {c!r}")
     outside = [c.id for c in candidates if c.id not in vocabulary]
     if outside:
         raise NotPrepared(f"preparer {preparer_name!r} emitted candidates outside its vocabulary: {outside}")
@@ -463,12 +524,12 @@ def prepare(
         integration=integration,
         point=point_value,
         provenance=Provenance.PREPARER,
-        preparer=preparer_name,
+        preparer=preparer_def.name,
         task=built.task,
         context=built.context,
         candidates=candidates,
         sources=built.sources,
-        project_root=project_root,
+        project_root=root_arg,
         task_revision=built.task_revision,
         read_set_paths=built.read_set_paths,
     )
@@ -477,11 +538,11 @@ def prepare(
 def from_operator(
     registry: Mapping[str, Any],
     integration: str,
-    point: Point,
+    point: "Point | str",
     task: str,
     context: str,
     candidates: Sequence[Candidate],
-    project_root: str | Path | None = None,
+    project_root: str | Path,
     *,
     sources: Sequence[str] = (),
     read_set_paths: Sequence[tuple[str, Sequence[str]]] = (),
@@ -494,12 +555,19 @@ def from_operator(
 
     `registry` is accepted, as the plan's signature requires (line 415),
     but unused -- there is no vocabulary check for operator-provided sets
-    (plan line 430).
+    (plan line 430). `project_root` is mandatory (finding 8): `None` is
+    `NotPrepared`. `point` is coerced to a real `Point`; anything that
+    isn't a valid `Point` value is `NotPrepared` (N3), not a raw
+    `ValueError` from a downstream comparison.
     """
     del registry
+    try:
+        point_value = point if isinstance(point, Point) else Point(point)
+    except ValueError as exc:
+        raise NotPrepared(f"not a valid point: {point!r}") from exc
     return _finish_prepare(
         integration=integration,
-        point=point,
+        point=point_value,
         provenance=Provenance.OPERATOR,
         preparer=None,
         task=task,
@@ -517,30 +585,43 @@ def from_case(case: Mapping[str, Any], registry: Mapping[str, Any]) -> PreparedS
 
     `registry` is accepted, per the plan's signature (line 416), but
     unused -- no vocabulary check applies to eval-case sets either. `case`
-    must supply `integration`,
-    `point`, `task`, `candidates`, with `context`/`sources`/`read_set_paths`/
-    `project_root`/`task_revision`/`preparer` optional. `read_set_paths`, if
-    given, is a per-candidate `(id, paths)` sequence in canonical order.
+    must supply `integration`, `point`, `task`, `candidates`, `project_root`
+    (mandatory per finding 8 -- a case with no `project_root` key is
+    `NotPrepared`, same as a missing `integration`/`point`/`task`/
+    `candidates`), with `context`/`sources`/`read_set_paths`/`task_revision`/
+    `preparer` optional. `read_set_paths`, if given, is a per-candidate
+    `(id, paths)` sequence in canonical order. A non-`Mapping` `case`
+    (including `None`) is `NotPrepared`, not a raw `TypeError` (N3). `point`
+    is coerced to a real `Point`; anything that isn't a valid `Point` value
+    is `NotPrepared`.
     """
     del registry
+    if not isinstance(case, Mapping):
+        raise NotPrepared(f"eval case is not a mapping: {case!r}")
     try:
         integration = case["integration"]
         point = case["point"]
         task = case["task"]
         candidates = case["candidates"]
+        project_root = case["project_root"]
     except KeyError as exc:
         raise NotPrepared(f"eval case is missing required key {exc.args[0]!r}") from exc
 
+    try:
+        point_value = point if isinstance(point, Point) else Point(point)
+    except ValueError as exc:
+        raise NotPrepared(f"not a valid point: {point!r}") from exc
+
     return _finish_prepare(
         integration=integration,
-        point=point,
+        point=point_value,
         provenance=Provenance.EVAL_CASE,
         preparer=case.get("preparer"),
         task=task,
         context=case.get("context", ""),
         candidates=candidates,
         sources=case.get("sources", ()),
-        project_root=case.get("project_root"),
+        project_root=project_root,
         task_revision=case.get("task_revision"),
         read_set_paths=case.get("read_set_paths", ()),
     )
@@ -610,12 +691,77 @@ def request_from(prepared: PreparedSet, *, session: SessionRef) -> SelectionRequ
     )
 
 
+def _check_request_matches_prepared(prepared: PreparedSet, request: SelectionRequest) -> None:
+    """N1 (mk-42j9.7 Commit C, sealed criterion at plan line 2264).
+
+    `contract.validated_candidates` only checks that `request` is
+    structurally valid and that `bindings` matches `request.candidates`'
+    own payload hashes -- it never checks that `request` actually
+    describes the same selection `prepared` was built for. Without this
+    check, a caller could hand `validated()` a verified `prepared` set
+    together with an unrelated `request` (a different integration, point,
+    task, context, sources, project_root, task_revision, or even
+    substituted `Candidate` objects that happen to share ids and payload
+    hashes with `prepared`'s own candidates) and still get back a
+    `ValidatedCandidates` -- breaking the identity chain `authorize()`
+    relies on. Every field both dataclasses carry must match exactly
+    (`sources` order-sensitively, matching how `request_from` copies it
+    with no reordering); candidates are compared by full field equality
+    (not just id/payload hash), in the same canonical order, so a
+    substituted `Candidate` with a different `description` or
+    `prepared_at_revision` (but the same id and payload hash) is caught
+    too.
+    """
+    mismatches: list[str] = []
+    if request.integration != prepared.integration:
+        mismatches.append("integration")
+    if request.point != prepared.point:
+        mismatches.append("point")
+    if request.task != prepared.task:
+        mismatches.append("task")
+    if request.context != prepared.context:
+        mismatches.append("context")
+    if request.task_revision != prepared.task_revision:
+        mismatches.append("task_revision")
+    if tuple(request.sources) != tuple(prepared.sources):
+        mismatches.append("sources")
+    if request.project_root != prepared.project_root:
+        mismatches.append("project_root")
+    if tuple(request.candidates) != tuple(prepared.candidates):
+        mismatches.append("candidates")
+    if mismatches:
+        raise NotPrepared(f"request does not match the prepared set on: {mismatches}")
+
+
 def validated(prepared: PreparedSet, request: SelectionRequest) -> ValidatedCandidates:
     """`verify()` then bind: the only path from a `PreparedSet` to `ValidatedCandidates`.
 
     `request` is the already-built `SelectionRequest` (built by the caller
     via `request_from(prepared, session=...)`); `validated` no longer
     builds it internally (plan lines 422-424).
+
+    After `verify(prepared)` succeeds, `request` is checked field-by-field
+    against `prepared` (see `_check_request_matches_prepared`) -- a
+    mismatch on any shared field is `NotPrepared`. Once they are known
+    equal, the `ValidatedCandidates` returned is built from a request
+    reconstructed from `prepared`'s own fields (only `session` comes from
+    the caller's `request`, since `PreparedSet` carries no session): its
+    identity always comes from the verified `prepared` set, never from the
+    caller-supplied `request`.
     """
     verify(prepared)
-    return contract.validated_candidates(request, bindings=prepared.bindings, provenance=prepared.provenance)
+    _check_request_matches_prepared(prepared, request)
+    trusted_request = SelectionRequest(
+        integration=prepared.integration,
+        point=prepared.point,
+        task=prepared.task,
+        context=prepared.context,
+        candidates=prepared.candidates,
+        task_revision=prepared.task_revision,
+        session=request.session,
+        sources=prepared.sources,
+        project_root=prepared.project_root,
+    )
+    return contract.validated_candidates(
+        trusted_request, bindings=prepared.bindings, provenance=prepared.provenance
+    )
