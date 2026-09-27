@@ -1,6 +1,6 @@
 ---
 name: landing-a-change
-description: Land verified work on trunk after tests and required review; preserve release authority.
+description: Land verified work on trunk, or finish a feature branch or worktree, after tests and required review; preserve release authority.
 ---
 
 <!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same verify → review → document → commit → confirm process. -->
@@ -76,6 +76,17 @@ options:
   - Review first (show git diff, return to this step)
 ```
 
+**On a feature branch or in a linked worktree**, detect that first and confirm the base branch with the user before offering options:
+
+```bash
+GIT_DIR=$(git rev-parse --absolute-git-dir)
+GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
+[[ "$GIT_DIR" != "$GIT_COMMON" ]] && WORKTREE_PATH=$(git rev-parse --show-toplevel)  # record before any cd
+BRANCH=$(git branch --show-current)   # empty on detached HEAD
+```
+
+Then offer: **Merge locally into `<base>`** (not on detached HEAD), **Push and open PR**, **Keep the branch as is**. Offer **Discard** only when the user asks for it.
+
 ## Step 5: Execute
 
 **Commit and push / Commit locally:**
@@ -91,6 +102,12 @@ git push                      # only for "Commit and push"
 the implementation commit is visible on the remote.
 
 **Changelog first:** Run `/clavain:changelog`, then commit.
+
+**Merge locally:** From the checkout that has `<base>` checked out, `git merge "$BRANCH"`, then run the full test suite again on the merged result. If it fails, stop and report; keep the branch and worktree. Delete the branch with `git branch -d` only after the merged result is green.
+
+**Push and open PR:** `git push -u origin "$BRANCH"`, `gh pr create`, then `sonnerie register owner/repo#N` so review and CI updates reach this thread; handle them with `/clavain:pr-triage N`. Keep the branch, worktree and beads open until the PR merges.
+
+**Discard:** Show what will be lost (`git log --oneline <base>.."$BRANCH"` and the worktree path) and proceed only after the user types `discard`. Then `git branch -D "$BRANCH"`.
 
 **Review first:** Show `git diff --stat && git diff`, return to Step 4.
 
@@ -127,6 +144,17 @@ git push
 The wrapper verifies any installed-runtime evidence requirement before changing
 tracker state. If it rejects a bead, leave that bead open and report the gate.
 
+## Step 5.7: Worktree Cleanup
+
+Remove only a worktree this session created, and only after it is merged or discarded. Keep it for "Push and open PR" and "Keep the branch".
+
+```bash
+git -C "$WORKTREE_PATH" status --porcelain --ignored   # must print nothing
+git worktree remove "$WORKTREE_PATH"
+```
+
+If the status check prints anything, do not remove the worktree. Show the files and ask whether to commit, move or delete them. Never pass `--force`: plain `git worktree remove` already deletes ignored files (logs, `.env`, local caches) without warning, and `--force` also discards untracked and modified files.
+
 ## Step 6: Capture Learnings (Optional)
 
 Run `/clavain:compound` or note insights in project memory files.
@@ -138,3 +166,7 @@ Run `/clavain:compound` or note insights in project memory files.
 - Never `git add .` — stage specific files
 - Never auto-push without user selecting Option 1
 - Never skip the evidence checklist
+- Never force-push unless the user asks for it; a rejected push means fetch and investigate
+- Never `git branch -D` outside an explicit, typed `discard`
+- Never delete a merged branch before re-testing the merged result
+- Never `git worktree remove --force`, or remove a worktree with untracked or ignored files
