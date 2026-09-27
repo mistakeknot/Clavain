@@ -152,8 +152,10 @@ dispatch:
     release-authority: release-authority-main
     # mk ruling 2026-09-26: cross-lab review runs on GPT-6 Sol at medium, and
     # GPT-6 Sol at medium replaces GPT-5.6 Sol in every seat that used it,
-    # except the authority seats main-sol and release-authority-sol, which run
-    # at high (roster Rule 6 bars Sol-medium from authority roles; mk-rpnv.17).
+    # except the authority seats (main-sol, release-authority-sol), the
+    # planning seat (planning-sol) and the deep-execution seats (deep,
+    # deep-clavain, deep-sol), which all run at high (roster Rule 6 bars
+    # Sol-medium from authority/judgment roles; mk-rpnv.17, mk-42j9.27).
     # cross_lab_first still moves crosslab-opus ahead for OpenAI-produced work.
     cross-lab-review: crosslab-sol
     # mk ruling 2026-09-25 (mk-42j9.5): relaying, waiting and status reports
