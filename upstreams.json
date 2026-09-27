@@ -15,19 +15,20 @@
       "branch": "main",
       "lastSyncedCommit": "5f3aef5ae7a0195d5103fdd340a16cc11e0475ae",
       "basePath": "",
-      "fileMap": {
-        "skills/oracle/SKILL.md": "skills/interpeer/references/oracle-reference.md",
-        "README.md": "skills/interpeer/references/oracle-docs/upstream-readme.md",
-        "docs/browser-mode.md": "skills/interpeer/references/oracle-docs/browser-mode.md",
-        "docs/configuration.md": "skills/interpeer/references/oracle-docs/configuration.md",
-        "docs/debug/remote-chrome.md": "skills/interpeer/references/oracle-docs/debug/remote-chrome.md",
-        "docs/gemini.md": "skills/interpeer/references/oracle-docs/gemini.md",
-        "docs/linux.md": "skills/interpeer/references/oracle-docs/linux.md",
-        "docs/mcp.md": "skills/interpeer/references/oracle-docs/mcp.md",
-        "docs/multimodel.md": "skills/interpeer/references/oracle-docs/multimodel.md",
-        "docs/openai-endpoints.md": "skills/interpeer/references/oracle-docs/openai-endpoints.md",
-        "docs/openrouter.md": "skills/interpeer/references/oracle-docs/openrouter.md",
-        "docs/testing/mcp-smoke.md": "skills/interpeer/references/oracle-docs/testing/mcp-smoke.md"
+      "fileMap": {},
+      "relocatedTo": {
+        "skills/oracle/SKILL.md": "interpeer:skills/interpeer/references/oracle-reference.md",
+        "README.md": "interpeer:skills/interpeer/references/oracle-docs/upstream-readme.md",
+        "docs/browser-mode.md": "interpeer:skills/interpeer/references/oracle-docs/browser-mode.md",
+        "docs/configuration.md": "interpeer:skills/interpeer/references/oracle-docs/configuration.md",
+        "docs/debug/remote-chrome.md": "not carried (was skills/interpeer/references/oracle-docs/debug/remote-chrome.md before interpeer extraction; interpeer keeps only the oracle-reference and oracle-docs README/browser-mode/configuration)",
+        "docs/gemini.md": "not carried (was skills/interpeer/references/oracle-docs/gemini.md before interpeer extraction; interpeer keeps only the oracle-reference and oracle-docs README/browser-mode/configuration)",
+        "docs/linux.md": "not carried (was skills/interpeer/references/oracle-docs/linux.md before interpeer extraction; interpeer keeps only the oracle-reference and oracle-docs README/browser-mode/configuration)",
+        "docs/mcp.md": "not carried (was skills/interpeer/references/oracle-docs/mcp.md before interpeer extraction; interpeer keeps only the oracle-reference and oracle-docs README/browser-mode/configuration)",
+        "docs/multimodel.md": "not carried (was skills/interpeer/references/oracle-docs/multimodel.md before interpeer extraction; interpeer keeps only the oracle-reference and oracle-docs README/browser-mode/configuration)",
+        "docs/openai-endpoints.md": "not carried (was skills/interpeer/references/oracle-docs/openai-endpoints.md before interpeer extraction; interpeer keeps only the oracle-reference and oracle-docs README/browser-mode/configuration)",
+        "docs/openrouter.md": "not carried (was skills/interpeer/references/oracle-docs/openrouter.md before interpeer extraction; interpeer keeps only the oracle-reference and oracle-docs README/browser-mode/configuration)",
+        "docs/testing/mcp-smoke.md": "not carried (was skills/interpeer/references/oracle-docs/testing/mcp-smoke.md before interpeer extraction; interpeer keeps only the oracle-reference and oracle-docs README/browser-mode/configuration)"
       }
     },
     {
@@ -54,14 +55,17 @@
         "skills/writing-plans/SKILL.md": "skills/writing-plans/SKILL.md"
       },
       "relocatedTo": {
-        "skills/systematic-debugging/SKILL.md": "intertest:skills/systematic-debugging/SKILL.md — 8ca22db delta not yet ported: mk-km4a.12",
-        "skills/systematic-debugging/condition-based-waiting.md": "intertest:skills/systematic-debugging/condition-based-waiting.md — 8ca22db delta not yet ported: mk-km4a.12",
-        "skills/systematic-debugging/defense-in-depth.md": "intertest:skills/systematic-debugging/defense-in-depth.md — 8ca22db delta not yet ported: mk-km4a.12",
-        "skills/systematic-debugging/root-cause-tracing.md": "intertest:skills/systematic-debugging/root-cause-tracing.md — 8ca22db delta not yet ported: mk-km4a.12",
+        "skills/systematic-debugging/SKILL.md": "intertest:skills/systematic-debugging/SKILL.md — 8ca22db ported (mk-km4a.12, intertest 23f4399)",
+        "skills/systematic-debugging/condition-based-waiting.md": "intertest:skills/systematic-debugging/condition-based-waiting.md — 8ca22db ported (mk-km4a.12, intertest 23f4399)",
+        "skills/systematic-debugging/defense-in-depth.md": "intertest:skills/systematic-debugging/defense-in-depth.md — 8ca22db ported (mk-km4a.12, intertest 23f4399)",
+        "skills/systematic-debugging/find-polluter.sh": "intertest:skills/systematic-debugging/find-polluter.sh — 8ca22db ported (mk-km4a.12, intertest 23f4399)",
+        "skills/systematic-debugging/root-cause-tracing.md": "intertest:skills/systematic-debugging/root-cause-tracing.md — 8ca22db ported (mk-km4a.12, intertest 23f4399)",
         "skills/test-driven-development/SKILL.md": "intertest:skills/test-driven-development/SKILL.md",
         "skills/test-driven-development/writing-good-tests.md": "intertest:skills/test-driven-development/writing-good-tests.md",
-        "skills/verification-before-completion/SKILL.md": "intertest:skills/verification-before-completion/SKILL.md — 8ca22db delta not yet ported: mk-km4a.12",
-        "skills/writing-skills/*": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)"
+        "skills/verification-before-completion/SKILL.md": "intertest:skills/verification-before-completion/SKILL.md — 8ca22db ported (mk-km4a.12, intertest 23f4399)",
+        "skills/writing-skills/*": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)",
+        "skills/receiving-code-review/SKILL.md": "folded into skills/code-review-discipline/SKILL.md (Receiving Feedback, Common Rationalizations) — 8ca22db ported (mk-km4a.6); not in fileMap because requesting-code-review already maps to that file",
+        "skills/finishing-a-development-branch/SKILL.md": "folded into skills/landing-a-change/SKILL.md (branch and worktree options, Step 5.7) — 8ca22db ported (mk-km4a.5)"
       },
       "declinedAtSync": {
         "skills/using-superpowers/SKILL.md": "8ca22db (mk-km4a.11): SUBAGENT-STOP, user-instruction precedence and platform adaptation declined; using-clavain is a managed router rewrite that already states user precedence, and platform tool maps are harness-specific"

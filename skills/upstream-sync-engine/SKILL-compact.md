@@ -11,6 +11,8 @@ Keep Clavain docs and skills aligned with upstream tooling changes.
 5. Refresh baseline with `scripts/upstream-check.sh --update`.
 6. Commit and close/update the issue.
 
+`relocatedTo` entries in `upstreams.json` (files now in intertest, interpeer or folded into another skill) are not synced automatically: diff each from the commit its note names, port by hand, then update the note.
+
 ## Automation Model
 
 - Daily workflow runs upstream checks and opens/comments on sync issues.

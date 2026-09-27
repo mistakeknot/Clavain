@@ -12,12 +12,14 @@ Clavain bundles knowledge from upstream tools. This skill tracks their releases 
 | Tool | Repo | Clavain Skills Affected |
 |------|------|------------------------|
 | Beads | `steveyegge/beads` | `interphase` companion plugin |
-| Oracle | `steipete/oracle` | `interpeer`, `prompterpeer`, `winterpeer`, `splinterpeer` |
+| Oracle | `steipete/oracle` | `interpeer` companion plugin (`relocatedTo` only) |
 | superpowers | `obra/superpowers` | Multiple (founding source) |
 | superpowers-lab | `obra/superpowers-lab` | `using-tmux-for-interactive-commands` |
 | superpowers-dev | `obra/superpowers-developing-for-claude-code` | `developing-claude-code-plugins`, `working-with-claude-code` |
 | compound-engineering | `EveryInc/compound-engineering-plugin` | Multiple (founding source) |
 | CanonGraph | `jvattimo1/canongraph` | `canongraph` external plugin (entity-graph memory lane; see `Sylveste/ops/canongraph/memory-lanes.md`) |
+
+**Relocated files.** The sync engine resolves `fileMap` paths inside Clavain only. Files that moved to a companion plugin (intertest, interpeer) or were folded into a differently named Clavain skill are listed under `relocatedTo` in `upstreams.json`, and nothing consumes that list automatically. Each note names the upstream commit it was last ported from; diff the upstream file from that commit by hand, port the delta into the target, then update the note's commit. Never map two upstream files to one local file in `fileMap`; that conflicts on every sync.
 
 ## Automated Pipeline
 
