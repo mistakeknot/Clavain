@@ -276,7 +276,12 @@ class FingerprintPhase:
     bytes_read: int = 0
 
 
-def _entry_for_path(raw_path: Path | str, *, max_bytes: int | None = None) -> list[Any]:
+def _entry_for_path(
+    raw_path: Path | str,
+    *,
+    max_bytes: int | None = None,
+    phase: FingerprintPhase | None = None,
+) -> list[Any]:
     p = Path(raw_path)
     try:
         resolved = str(p.resolve())
@@ -311,6 +316,10 @@ def _entry_for_path(raw_path: Path | str, *, max_bytes: int | None = None) -> li
         except OSError as exc:
             raise FingerprintUnavailable(f"could not read {resolved}: {exc}") from exc
 
+        # The phase budget counts bytes actually read, not `st_size`: a file
+        # that grows after the size check is charged for what was read.
+        if phase is not None:
+            phase.bytes_read += len(data)
         if len(data) > read_limit:
             raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
 
@@ -332,9 +341,14 @@ def fingerprint_paths(
     path_list = list(paths)
     if len(path_list) > FINGERPRINT_MAX_PATHS:
         raise FingerprintUnavailable(f"too many paths for fingerprint_paths: {len(path_list)} > {FINGERPRINT_MAX_PATHS}")
-    resolved_paths = tuple(sorted({str(Path(path).resolve()) for path in path_list}))
     if phase is None:
-        phase = FingerprintPhase()
+        # R6b semantics, unchanged: no dedup and no resolution before
+        # `_entry_for_path`. Dedup and aggregation are opt-in via `phase`.
+        entries = [_entry_for_path(p) for p in path_list]
+        entries.sort(key=lambda e: e[0])
+        canonical = json.dumps(sorted(entries), ensure_ascii=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    resolved_paths = tuple(sorted({str(Path(path).resolve()) for path in path_list}))
     distinct = set(phase.entries) | set(resolved_paths)
     if len(distinct) > FINGERPRINT_MAX_PATHS:
         raise FingerprintUnavailable(
@@ -347,14 +361,12 @@ def fingerprint_paths(
             entry = _entry_for_path(
                 Path(resolved),
                 max_bytes=FINGERPRINT_MAX_BYTES - phase.bytes_read,
+                phase=phase,
             )
-            # A regular-file entry is [path, dev, ino, size, mtime, sha].
-            size = entry[3] if len(entry) == 6 and not isinstance(entry[1], str) else 0
-            if phase.bytes_read + size > FINGERPRINT_MAX_BYTES:
+            if phase.bytes_read > FINGERPRINT_MAX_BYTES:
                 raise FingerprintUnavailable(
                     f"fingerprint phase exceeds max bytes ({FINGERPRINT_MAX_BYTES})"
                 )
-            phase.bytes_read += size
             phase.entries[resolved] = entry
         entries.append(entry)
     entries.sort(key=lambda e: e[0])

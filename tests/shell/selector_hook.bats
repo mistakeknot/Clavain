@@ -93,3 +93,55 @@ with open('$log') as f:
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+# Fail-closed stdout: the child's bytes reach the host only on exit 0.
+_child() {
+  local path="$TEST_TMP/$1.py"
+  printf '%s\n' '#!/usr/bin/env python3' 'import os, signal, sys, time' "$2" > "$path"
+  chmod +x "$path"
+  printf '%s' "$path"
+}
+
+@test "child exit 1 after valid selection JSON emits nothing" {
+  child="$(_child fail_after_json 'sys.stdout.write("{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}\n"); sys.stdout.flush(); sys.exit(1)')"
+  CLAVAIN_SELECTOR_SCRIPT="$child" "$WRAPPER" pre_tool claude-code < /dev/null > "$TEST_TMP/out" 2>/dev/null
+  status=$?
+  [ "$status" -eq 0 ]
+  [ ! -s "$TEST_TMP/out" ]
+}
+
+@test "child crash after partial JSON emits nothing" {
+  child="$(_child crash_partial 'sys.stdout.write("{\"hookSpecificOutput\":{\"perm"); sys.stdout.flush(); os._exit(3)')"
+  CLAVAIN_SELECTOR_SCRIPT="$child" "$WRAPPER" pre_tool claude-code < /dev/null > "$TEST_TMP/out" 2>/dev/null
+  status=$?
+  [ "$status" -eq 0 ]
+  [ ! -s "$TEST_TMP/out" ]
+}
+
+@test "child killed after partial output emits nothing" {
+  child="$(_child killed_partial 'sys.stdout.write("{\"partial\":"); sys.stdout.flush(); os.kill(os.getpid(), signal.SIGKILL)')"
+  CLAVAIN_SELECTOR_SCRIPT="$child" "$WRAPPER" pre_tool claude-code < /dev/null > "$TEST_TMP/out" 2>/dev/null
+  status=$?
+  [ "$status" -eq 0 ]
+  [ ! -s "$TEST_TMP/out" ]
+}
+
+@test "child exit 0 output is passed through byte for byte" {
+  child="$(_child ok_output 'sys.stdout.write("{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}\n\n"); sys.exit(0)')"
+  printf '%s\n\n' '{"hookSpecificOutput":{"permissionDecision":"allow"}}' > "$TEST_TMP/expected"
+  CLAVAIN_SELECTOR_SCRIPT="$child" "$WRAPPER" pre_tool claude-code < /dev/null > "$TEST_TMP/out" 2>/dev/null
+  status=$?
+  [ "$status" -eq 0 ]
+  cmp "$TEST_TMP/expected" "$TEST_TMP/out"
+}
+
+@test "timeout after partial output writes telemetry and emits nothing" {
+  child="$(_child hang_partial 'sys.stdout.write("{\"hookSpecificOutput\":"); sys.stdout.flush(); time.sleep(10)')"
+  CLAVAIN_SELECTOR_SCRIPT="$child" SELECTOR_HOOK_TIMEOUT=0.2 "$WRAPPER" pre_tool claude-code < /dev/null > "$TEST_TMP/out" 2>/dev/null
+  status=$?
+  [ "$status" -eq 0 ]
+  [ ! -s "$TEST_TMP/out" ]
+  log="$CLAVAIN_STATE_DIR/selector/wrapper-timeouts.jsonl"
+  [ "$(wc -l < "$log")" -eq 1 ]
+  grep -q '"kind":"wrapper_timeout"' "$log"
+}

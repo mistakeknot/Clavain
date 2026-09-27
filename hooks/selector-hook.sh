@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Fail-open, deadline-bounded wrapper for `clavain-select.py hook`.
+# Fail-open, deadline-bounded wrapper for `clavain-select.py hook`: always
+# exits 0, and passes the child's stdout through only when the child exits 0.
 
 set -u
 
@@ -40,8 +41,17 @@ if ! command -v timeout >/dev/null 2>&1; then
   exit 0
 fi
 
-timeout "$HOOK_TIMEOUT" "$PYTHON_BIN" "$SELECTOR_BIN" hook "${HOOK_ARGS[@]}"
+# Fail closed: the child's stdout reaches the host only after a clean exit, so
+# a nonzero exit, kill, timeout or crash after partial output emits nothing.
+OUT_FILE="$(mktemp "${TMPDIR:-/tmp}/clavain-selector-hook.XXXXXX" 2>/dev/null)" || exit 0
+trap 'rm -f "$OUT_FILE"' EXIT
+
+timeout "$HOOK_TIMEOUT" "$PYTHON_BIN" "$SELECTOR_BIN" hook "${HOOK_ARGS[@]}" > "$OUT_FILE"
 status=$?
+
+if [[ "$status" -eq 0 ]]; then
+  cat "$OUT_FILE" 2>/dev/null || true
+fi
 
 if [[ "$status" -eq 124 ]]; then
   integration="${CLAVAIN_SELECTOR_INTEGRATION:-unknown}"

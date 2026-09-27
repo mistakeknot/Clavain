@@ -6,6 +6,7 @@ import dataclasses
 import inspect
 import json
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -198,6 +199,20 @@ def select(
     if mode_override not in (None, "eval"):
         raise ValueError("mode_override must be None or 'eval'")
 
+    # Row 1 precedes every other check, record write and filesystem read. An
+    # unverified integration can only make this inert, never enable it:
+    # verification below rejects a set whose integration was tampered with.
+    try:
+        resolved = flags.resolve_mode(getattr(prepared, "integration"), env, registry)
+    except Exception:
+        return _bare_internal()
+    if resolved.mode == "off":
+        return SelectionResult(None, None, FallbackReason.FLAG_OFF, _native(FallbackReason.FLAG_OFF))
+
+    # Row 12's clock: the caller's `now`, advanced on the monotonic clock
+    # `jev_client.Deadline` already measures with.
+    started_ns = time.monotonic_ns()
+
     try:
         preparers.verify(prepared)
         request = preparers.request_from(prepared, session=session)
@@ -284,12 +299,7 @@ def select(
         return fallback(FallbackReason.INTERNAL_ERROR, detail=_PointMismatch.__name__)
 
     try:
-        # Row 1: the flag is checked before request-dependent filesystem I/O.
-        resolved = flags.resolve_mode(integration, env, registry)
         mode_flags.update(resolved.flags)
-        if resolved.mode == "off":
-            return SelectionResult(None, None, FallbackReason.FLAG_OFF, _native(FallbackReason.FLAG_OFF))
-
         try:
             effective = _mode_decision(
                 _resolve_mode(resolved, prepared.provenance, mode_override),
@@ -469,8 +479,9 @@ def select(
         policy = flags.authorization_policy(registry, integration, point)
         authorized = adapter.authorize(chosen, validated, policy)
         authorized = bool(authorized and adapters_base.launch_argv_ok(chosen, validated))
+        elapsed_ms = max(0, (time.monotonic_ns() - started_ns) // 1_000_000)
         validation_context = contract.ValidationContext(
-            now_ms=now,
+            now_ms=now + elapsed_ms,
             current_revision=prepared.task_revision,
             current_read_set_fingerprints=fingerprints12,
             authorized=authorized,
@@ -501,6 +512,16 @@ def select(
             return fallback(
                 FallbackReason.SHADOW_MODE,
                 chosen=chosen,
+                validation={"stage": "host_revalidation", "reject_reason": None},
+            )
+        # A1: a host effect is bound to the host event it answers. Only the
+        # library point, which has no host event, may emit without one.
+        if (event is None and point is not Point.LIBRARY) or (
+            event is not None and event.point != point
+        ):
+            return fallback(
+                FallbackReason.INTERNAL_ERROR,
+                detail=_PointMismatch.__name__,
                 validation={"stage": "host_revalidation", "reject_reason": None},
             )
 

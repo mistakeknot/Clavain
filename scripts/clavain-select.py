@@ -66,12 +66,21 @@ def main_hook(args) -> int:
         # Invalid point
         return 0
 
+    # The global kill switch is resolved before anything else is loaded.
+    env = dict(os.environ)
+    if str(env.get(flags.GLOBAL_KILL_SWITCH, "")).strip().lower() == "off":
+        return 0
+
     # Load registry and resolve integration
     registry = _load_registry()
     integration = flags.hook_integration(registry, host, point)
 
     if integration is None:
         # No unique match
+        return 0
+
+    # Flag off is inert: stdin is never read and the preparer never runs.
+    if flags.resolve_mode(integration, env, registry).mode == "off":
         return 0
 
     # Get project root
@@ -102,7 +111,6 @@ def main_hook(args) -> int:
     # Run selection under the registry/flag-resolved mode.
     try:
         session = SessionRef(host_session_id=event.session_id or "unknown")
-        env = dict(os.environ)
         now = int(time.time() * 1000)
 
         result = selector.select(

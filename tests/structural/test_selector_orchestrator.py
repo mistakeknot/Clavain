@@ -136,7 +136,7 @@ def _operator(tmp_path, *, candidate=None, point=Point.LIBRARY):
     )
 
 
-def _active_prepared(monkeypatch, tmp_path, *, payload=None, point=Point.LIBRARY):
+def _active_prepared(monkeypatch, tmp_path, *, payload=None, point=Point.LIBRARY, **candidate_fields):
     definition = preparers.Preparer(
         name="test",
         points=frozenset({point}),
@@ -145,7 +145,9 @@ def _active_prepared(monkeypatch, tmp_path, *, payload=None, point=Point.LIBRARY
         build=lambda event, root: preparers.PreparedInput(
             task="t",
             context="c",
-            candidates=(make_candidate(id="a", payload={} if payload is None else payload),),
+            candidates=(
+                make_candidate(id="a", payload={} if payload is None else payload, **candidate_fields),
+            ),
             task_revision="rev-1",
         ),
     )
@@ -315,11 +317,14 @@ def test_external_emission_guard_r12_1(monkeypatch, tmp_path):
 
     monkeypatch.setattr(selector, "_resolve_mode", lambda *a, **k: "active")
     monkeypatch.setattr(base, "emitted_outcome", lambda *a, **k: pytest.fail("emission reached"))
+    adapter = FakeAdapter()
+    adapter.render = lambda *a, **k: pytest.fail("render reached")
 
-    result = _select(prepared, _registry(), FakeAdapter(), env={"CLAVAIN_SELECTOR_SELFTEST": "active"})
+    result = _select(prepared, _registry(), adapter, env={"CLAVAIN_SELECTOR_SELFTEST": "active"})
 
     assert result.fallback_reason == FallbackReason.SHADOW_MODE, result.record_dict["fallback"]
     assert result.record_dict["applied"] == "native"
+    assert result.outcome.kind == "native"
 
 
 def test_jev_failure_timeout(monkeypatch, tmp_path):
@@ -782,6 +787,336 @@ def test_record_question_hash_matches_call_battery(monkeypatch, tmp_path):
     assert result.record_dict["request"]["questions_sha256"] == seen["questions_sha256"]
 
 
+def test_flag_off_precedes_point_mismatch_and_all_other_logic(monkeypatch, tmp_path):
+    """Row 1 runs first: a mismatched event cannot turn an off flag into a record."""
+    prepared = _operator(tmp_path, point=Point.LIBRARY)
+    event = HostEvent(point=Point.PRE_TOOL, session_id="s")
+    monkeypatch.setattr(selector.preparers, "verify", lambda *a, **k: pytest.fail("verify reached"))
+    monkeypatch.setattr(selector.records, "build_record", lambda *a, **k: pytest.fail("record built"))
+    monkeypatch.setattr(selector.records, "append_record", lambda *a, **k: pytest.fail("record written"))
+    monkeypatch.setattr(selector.credentials, "load", lambda: pytest.fail("credential reached"))
+
+    for env in ({}, {"CLAVAIN_SELECTOR": "off", "CLAVAIN_SELECTOR_SELFTEST": "shadow"}):
+        result = _select(prepared, _registry(), FakeAdapter(), env=env, event=event)
+        assert result.fallback_reason == FallbackReason.FLAG_OFF
+        assert result.record_dict is None
+        assert result.outcome.kind == "native"
+
+
+@pytest.mark.parametrize("event_point", [None, Point.LIBRARY], ids=["no_event", "mismatched_event"])
+def test_a1_point_identity_required_for_emission(monkeypatch, tmp_path, event_point):
+    """A1: no path reaches `emitted` unless the event point equals the prepared point."""
+    registry, prepared = _active_prepared(monkeypatch, tmp_path, point=Point.PRE_TOOL)
+    event = None if event_point is None else HostEvent(point=event_point, session_id="s")
+    monkeypatch.setattr(base, "emitted_outcome", lambda *a, **k: pytest.fail("emission reached"))
+
+    result = _select(prepared, registry, FakeAdapter(), env={"CLAVAIN_SELECTOR_SELFTEST": "active"}, event=event)
+
+    assert result.fallback_reason == FallbackReason.INTERNAL_ERROR
+    assert result.record_dict["fallback"]["detail"] == "_PointMismatch"
+    assert result.record_dict["applied"] == "native"
+    assert result.outcome.kind == "native"
+
+
+def test_a1_matching_event_point_emits(monkeypatch, tmp_path):
+    """Positive control for the A1 guard: a matching host event is emitted."""
+    registry, prepared = _active_prepared(monkeypatch, tmp_path, point=Point.PRE_TOOL)
+    event = HostEvent(point=Point.PRE_TOOL, session_id="s")
+    result = _select(prepared, registry, FakeAdapter(), env={"CLAVAIN_SELECTOR_SELFTEST": "active"}, event=event)
+    assert result.fallback_reason is None
+    assert result.outcome.kind == "emitted"
+
+
+def test_row12_revalidation_rereads_clock(monkeypatch, tmp_path):
+    """Row 12 uses the time at revalidation, not the time `select()` started."""
+    registry, prepared = _active_prepared(monkeypatch, tmp_path, expires_at_ms=NOW_MS + 5_000)
+    real_monotonic_ns = time.monotonic_ns
+    offset_ns = [0]
+    monkeypatch.setattr(time, "monotonic_ns", lambda: real_monotonic_ns() + offset_ns[0])
+
+    class SlowClient(_ClientOK):
+        def call(self, call):
+            response = super().call(call)
+            offset_ns[0] += 10_000 * 1_000_000
+            return response
+
+    monkeypatch.setattr(selector.jev_client, "JevClient", SlowClient)
+    monkeypatch.setattr(base, "emitted_outcome", lambda *a, **k: pytest.fail("emission reached"))
+
+    result = _select(prepared, registry, FakeAdapter(), env={"CLAVAIN_SELECTOR_SELFTEST": "active"})
+
+    assert result.fallback_reason == FallbackReason.EXPIRED
+    assert result.record_dict["validation"] == {"stage": "host_revalidation", "reject_reason": "expired"}
+    assert result.record_dict["applied"] == "native"
+    assert result.outcome.kind == "native"
+
+
+def test_fingerprint_phase_counts_bytes_actually_read(monkeypatch, tmp_path):
+    """P3-6: the phase budget counts bytes read, not the size seen at lstat."""
+    path = tmp_path / "grows.txt"
+    path.write_bytes(b"1234")
+    real_lstat = base._lstat
+    grown = []
+
+    def growing_lstat(raw_path):
+        result = real_lstat(raw_path)
+        if not grown:
+            grown.append(True)
+            with open(path, "ab") as handle:
+                handle.write(b"567890")
+        return result
+
+    monkeypatch.setattr(base, "_lstat", growing_lstat)
+    phase = base.FingerprintPhase()
+    base.fingerprint_paths((path,), phase=phase)
+    assert grown == [True]
+    assert phase.bytes_read == 10
+
+
+def test_fingerprint_paths_default_is_r6b(monkeypatch, tmp_path):
+    """Without a phase, no dedup and no resolution happens before `_entry_for_path`."""
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("one")
+    second.write_text("two")
+    link = tmp_path / "link.txt"
+    link.symlink_to(second)
+    paths = [link, first, first]
+
+    expected_entries = [base._entry_for_path(p) for p in paths]
+    expected_entries.sort(key=lambda e: e[0])
+    expected = hashlib.sha256(
+        json.dumps(sorted(expected_entries), ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    real_entry = base._entry_for_path
+    seen = []
+
+    def spy(raw_path, **kwargs):
+        seen.append((raw_path, kwargs))
+        return real_entry(raw_path, **kwargs)
+
+    monkeypatch.setattr(base, "_entry_for_path", spy)
+    assert base.fingerprint_paths(paths) == expected
+    assert seen == [(link, {}), (first, {}), (first, {})]
+
+
+def _gate_order_case(monkeypatch, tmp_path, row):
+    """Arrange the failure for `row` and for every later row of the table."""
+
+    def failing(r):
+        return r >= row
+
+    def unwritable(*args, **kwargs):
+        raise records.RecordUnwritable("gate-order")
+
+    if row == 14:
+        # Row 13 (shadow) and row 14 (active) are mutually exclusive modes, so
+        # row 14 is arranged alone on an otherwise emitting PREPARER set.
+        registry, prepared = _active_prepared(monkeypatch, tmp_path)
+        monkeypatch.setattr(records, "append_record", unwritable)
+        return prepared, registry, FakeAdapter(), {"CLAVAIN_SELECTOR_SELFTEST": "active"}, None
+
+    candidate = make_candidate(
+        id="bad id" if failing(2) else "a",
+        payload={},
+        prepared_at_revision="old" if failing(4) else "rev-1",
+    )
+    prepared = _operator(tmp_path, candidate=candidate)
+    registry = _registry(points=("pre_tool",) if failing(3) else ("library",))
+    if failing(11):
+        registry["integrations"]["selftest"]["floors"]["confidence"] = 0.99
+    if failing(5):
+        monkeypatch.setattr(selector.egress, "admit", lambda *a, **k: egress.Refusal(("cred.test",)))
+    if failing(6):
+        class Exhausted(_BudgetOK):
+            def consume(self):
+                return FallbackReason.BUDGET_EXHAUSTED
+
+        monkeypatch.setattr(selector.jev_client, "Budget", Exhausted)
+    if failing(7):
+        class OpenBreaker(_BreakerOK):
+            def check(self):
+                return FallbackReason.CIRCUIT_OPEN
+
+        monkeypatch.setattr(selector.jev_client, "Breaker", OpenBreaker)
+    if failing(8):
+        def unavailable():
+            raise credentials.CredentialUnavailable("gate-order")
+
+        monkeypatch.setattr(selector.credentials, "load", unavailable)
+    deadline = None
+    if failing(9):
+        deadline = jev_client.Deadline(started_ns=time.monotonic_ns() - 10_000_000, budget_ms=1)
+    if failing(10):
+        class InvalidClient:
+            def __init__(self, credential):
+                pass
+
+            def call(self, call):
+                return jev_client.JevFailure(
+                    reason=FallbackReason.INVALID_RESPONSE,
+                    detail=jev_client.FailureDetail.BAD_JSON,
+                    attempts=1,
+                    http_status=200,
+                    latency_ms=1,
+                )
+
+        monkeypatch.setattr(selector.jev_client, "JevClient", InvalidClient)
+    adapter = FakeAdapter()
+    adapter.authorized = not failing(12)
+    # Row 13 (shadow) is the default below row 14; row 1 replaces it with off.
+    env = {} if failing(1) else {"CLAVAIN_SELECTOR_SELFTEST": "shadow"}
+    # Row 14's failure is arranged under shadow mode, where it cannot win.
+    monkeypatch.setattr(records, "append_record", unwritable)
+    return prepared, registry, adapter, env, deadline
+
+
+@pytest.mark.parametrize(
+    ("row", "expected"),
+    [
+        (1, FallbackReason.FLAG_OFF),
+        (2, FallbackReason.INVALID_INPUT),
+        (3, FallbackReason.POINT_UNREACHABLE),
+        (4, FallbackReason.STALE_BEFORE_SELECT),
+        (5, FallbackReason.EGRESS_REFUSED),
+        (6, FallbackReason.BUDGET_EXHAUSTED),
+        (7, FallbackReason.CIRCUIT_OPEN),
+        (8, FallbackReason.CREDENTIAL_UNAVAILABLE),
+        (9, FallbackReason.TIMEOUT),
+        (10, FallbackReason.INVALID_RESPONSE),
+        (11, FallbackReason.LOW_CONFIDENCE),
+        (12, FallbackReason.UNAUTHORIZED),
+        (13, FallbackReason.SHADOW_MODE),
+        (14, FallbackReason.RECORD_UNWRITABLE),
+    ],
+)
+def test_gate_order(monkeypatch, tmp_path, capsys, row, expected):
+    """Each row wins over every later row's simultaneously arranged failure."""
+    prepared, registry, adapter, env, deadline = _gate_order_case(monkeypatch, tmp_path, row)
+    result = _select(prepared, registry, adapter, env=env, deadline=deadline)
+    assert result.fallback_reason == expected
+    if row == 1:
+        assert result.record_dict is None
+    else:
+        assert result.record_dict["fallback"]["reason"] == expected.value
+    assert result.outcome.kind != "emitted"
+
+
+@pytest.mark.parametrize("provenance", ["operator", "external", "eval_case"])
+def test_provenance_limits_mode_survives_forced_active(monkeypatch, tmp_path, provenance):
+    """R12-1: with the provenance cap bypassed, only PREPARER may still emit."""
+    registry = _registry(active=True)
+    mode_override = None
+    if provenance == "operator":
+        prepared = _operator(tmp_path)
+    elif provenance == "external":
+        prepared = preparers.from_external(
+            registry, "selftest", "choose", "context", (make_candidate(id="a", payload="x"),), tmp_path,
+            task_revision="rev-1", read_set_paths=(), sources=(),
+        )
+    else:
+        prepared = preparers.from_case({
+            "integration": "selftest",
+            "point": "library",
+            "task": "choose",
+            "candidates": (make_candidate(id="a", payload={}),),
+            "project_root": tmp_path,
+            "task_revision": "rev-1",
+        }, registry)
+        mode_override = "eval"
+    assert prepared.provenance is Provenance(provenance)
+
+    monkeypatch.setattr(selector, "_resolve_mode", lambda *a, **k: selector._ModeDecision("active", {}))
+    monkeypatch.setattr(base, "emitted_outcome", lambda *a, **k: pytest.fail("emission reached"))
+    adapter = FakeAdapter()
+    adapter.render = lambda *a, **k: pytest.fail("render reached")
+
+    result = _select(
+        prepared,
+        registry,
+        adapter,
+        env={"CLAVAIN_SELECTOR_SELFTEST": "active"},
+        mode_override=mode_override,
+    )
+
+    assert result.fallback_reason == FallbackReason.SHADOW_MODE
+    assert result.record_dict["mode"] == "active"
+    assert result.record_dict["applied"] == "native"
+    assert result.outcome.kind == "native"
+    # A successful authorization cannot lift the cap.
+    assert len(adapter.authorize_calls) == 1
+    assert base.authorize_by_policy(*adapter.authorize_calls[0]) is True
+
+
+def _external_state_set(tmp_path):
+    state = tmp_path / "state.txt"
+    state.write_text("content")
+    secret = tmp_path / ".env"
+    secret.write_text("TOKEN=not-for-jev")
+    candidate = make_candidate(id="a", payload="x", read_set_fingerprint=base.fingerprint_paths((state,)))
+    prepared = preparers.from_external(
+        _registry(), "selftest", "choose", "context", (candidate,), tmp_path,
+        task_revision="rev-1", read_set_paths=(("a", (str(state),)),), sources=(),
+    )
+    return state, secret, prepared
+
+
+def test_external_scope_recheck_before_fingerprint(monkeypatch, tmp_path):
+    """R12-2, row 4: a path that now resolves to a denylisted target is refused unread."""
+    state, secret, prepared = _external_state_set(tmp_path)
+    state.unlink()
+    state.symlink_to(secret)
+    adapter = FakeAdapter()
+    adapter.fingerprint = lambda *a, **k: pytest.fail("fingerprint reached")
+    monkeypatch.setattr(base, "_entry_for_path", lambda *a, **k: pytest.fail("file content opened"))
+
+    result = _select(prepared, _registry(), adapter)
+
+    assert result.fallback_reason == FallbackReason.EGRESS_REFUSED
+    assert result.record_dict["egress"]["rule_ids"] == ["src.denylisted_path"]
+
+
+def test_external_scope_recheck_before_row12_fingerprint(monkeypatch, tmp_path):
+    """R12-2, row 12: the chosen read set is rechecked before it is re-read."""
+    state, secret, prepared = _external_state_set(tmp_path)
+    swapped = []
+
+    class SwappingClient(_ClientOK):
+        def call(self, call):
+            response = super().call(call)
+            state.unlink()
+            state.symlink_to(secret)
+            swapped.append(True)
+            return response
+
+    real_entry = base._entry_for_path
+
+    def guarded_entry(raw_path, **kwargs):
+        if swapped:
+            pytest.fail("file content opened after the swap")
+        return real_entry(raw_path, **kwargs)
+
+    fingerprint_calls = []
+    adapter = FakeAdapter()
+    real_fingerprint = adapter.fingerprint
+
+    def spy_fingerprint(paths, *, phase=None):
+        fingerprint_calls.append(tuple(paths))
+        return real_fingerprint(paths, phase=phase)
+
+    adapter.fingerprint = spy_fingerprint
+    monkeypatch.setattr(selector.jev_client, "JevClient", SwappingClient)
+    monkeypatch.setattr(base, "_entry_for_path", guarded_entry)
+
+    result = _select(prepared, _registry(), adapter)
+
+    assert swapped == [True]
+    assert len(fingerprint_calls) == 1
+    assert result.fallback_reason == FallbackReason.EGRESS_REFUSED
+    assert result.record_dict["egress"]["rule_ids"] == ["src.denylisted_path"]
+
+
 def _load_cli_module():
     path = Path(__file__).resolve().parents[2] / "scripts" / "clavain-select.py"
     spec = importlib.util.spec_from_file_location("clavain_select_task7_test", path)
@@ -850,3 +1185,87 @@ def test_hook_subcommand_has_no_integration_option(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         cli.main()
     assert exc.value.code == 2
+
+
+def _hook_registry(*, active=False):
+    registry = _registry(active=active)
+    registry["integrations"]["selftest"].update({
+        "preparer": "hook-test",
+        "hooks": [{"host": "claude-code", "point": "pre_tool"}],
+        "points": ["pre_tool"],
+        "deadline_ms": {"pre_tool": 3000},
+    })
+    definition = preparers.Preparer(
+        name="hook-test",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=lambda root: frozenset({"a"}),
+        event_fields=frozenset(),
+        build=lambda event, root: preparers.PreparedInput(
+            task="trusted task",
+            candidates=(make_candidate(id="a", payload={"trusted": True}),),
+            task_revision="rev-1",
+        ),
+    )
+    return registry, definition
+
+
+class _NoStdin:
+    @property
+    def buffer(self):
+        pytest.fail("stdin read")
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"CLAVAIN_SELECTOR": "off", "CLAVAIN_SELECTOR_SELFTEST": "shadow"},
+        {"CLAVAIN_SELECTOR_SELFTEST": "off"},
+    ],
+    ids=["global_kill_switch", "integration_off"],
+)
+def test_hook_flag_off_precedes_stdin_and_preparer(monkeypatch, tmp_path, env):
+    cli = _load_cli_module()
+    registry, definition = _hook_registry()
+    monkeypatch.setattr(preparers, "PREPARERS", MappingProxyType({"hook-test": definition}))
+    monkeypatch.setattr(cli, "_load_registry", lambda: registry)
+    monkeypatch.setattr(cli, "_get_host_adapter", lambda host: FakeAdapter())
+    monkeypatch.setattr(cli.preparers, "prepare", lambda *a, **k: pytest.fail("preparer reached"))
+    monkeypatch.setattr(cli.selector, "select", lambda *a, **k: pytest.fail("select reached"))
+    monkeypatch.setattr(cli.sys, "stdin", _NoStdin())
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.delenv("CLAVAIN_SELECTOR", raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+
+    assert cli.main_hook(SimpleNamespace(point="pre_tool", host="claude-code")) == 0
+
+
+@pytest.mark.parametrize(
+    ("event_point", "rendered"),
+    [(Point.PRE_TOOL, True), (Point.POST_TOOL_OUTPUT, False)],
+    ids=["matching_event", "mismatched_event"],
+)
+def test_hook_renders_only_matching_event_point(monkeypatch, tmp_path, event_point, rendered):
+    cli = _load_cli_module()
+    registry, definition = _hook_registry(active=True)
+    monkeypatch.setattr(preparers, "PREPARERS", MappingProxyType({"hook-test": definition}))
+    monkeypatch.setattr(cli, "_load_registry", lambda: registry)
+
+    class WrongPointAdapter(FakeAdapter):
+        def parse_event(self, point, raw):
+            return HostEvent(point=event_point, session_id="hook-session")
+
+        def render(self, point, outcome, event):
+            assert outcome.kind == "emitted"
+            return b"EMITTED"
+
+    monkeypatch.setattr(cli, "_get_host_adapter", lambda host: WrongPointAdapter())
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.delenv("CLAVAIN_SELECTOR", raising=False)
+    monkeypatch.setenv("CLAVAIN_SELECTOR_SELFTEST", "active")
+    monkeypatch.setattr(cli.sys, "stdin", io.TextIOWrapper(io.BytesIO(b"{}")))
+    stdout = SimpleNamespace(buffer=io.BytesIO())
+    monkeypatch.setattr(cli.sys, "stdout", stdout)
+
+    assert cli.main_hook(SimpleNamespace(point="pre_tool", host="claude-code")) == 0
+    assert stdout.buffer.getvalue() == (b"EMITTED" if rendered else b"")
