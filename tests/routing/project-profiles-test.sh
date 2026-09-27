@@ -78,6 +78,7 @@ python3 - "$POLICY" <<'NOSOL' || fail "a spawn role chain reaches gpt-5.6-sol"
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
 tiers, roles = cfg["dispatch"]["tiers"], cfg["dispatch"]["roles"]
+aliases = {str(k).lower(): str(v).lower() for k, v in (cfg["dispatch"].get("model_aliases") or {}).items()}
 spawn_roles = ("lane", "main-session", "coordinator-seat")
 heads = [roles[r] for r in spawn_roles]
 for prof in cfg["reasoning"]["profiles"].values():
@@ -89,7 +90,8 @@ while stack:
         continue
     seen.add(name)
     tier = tiers[name]
-    if tier.get("model") == "gpt-5.6-sol":
+    model = str(tier.get("model", "")).lower()
+    if aliases.get(model, model) in ("gpt-5.6-sol", "gpt-5.6"):
         bad.append(name)
     stack += tier.get("fallbacks") or []
 assert not bad, f"spawn chains reach gpt-5.6-sol via {bad}"

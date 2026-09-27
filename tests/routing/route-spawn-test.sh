@@ -8,7 +8,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$ROOT/scripts/route-spawn.sh"
 command -v ic >/dev/null
 TMP_ROOT="$(mktemp -d)"
-trap 'rm -rf "$TMP_ROOT"' EXIT
+cleanup() {
+  local f
+  for f in "$TMP_ROOT/gc.pid" "$TMP_ROOT/setsid.pid"; do
+    [[ -s "$f" ]] && kill "$(cat "$f")" 2>/dev/null
+  done
+  rm -rf "$TMP_ROOT"
+}
+trap cleanup EXIT
 mkdir -p "$TMP_ROOT/bin" "$TMP_ROOT/failic" "$TMP_ROOT/receipts"
 
 fail() {
@@ -71,8 +78,13 @@ FAKE_IC
 chmod +x "$TMP_ROOT/failic/ic"
 mkdir -p "$TMP_ROOT/hangic"
 # Not `exec`: the grandchild sleep must die with the timed-out resolver (N5).
-printf '#!/usr/bin/env bash\nsleep 60\nexit 0\n' > "$TMP_ROOT/hangic/ic"
+printf '#!/usr/bin/env bash\nsleep 60 &\necho $! > "%s/gc.pid"\nwait\n' "$TMP_ROOT" > "$TMP_ROOT/hangic/ic"
 chmod +x "$TMP_ROOT/hangic/ic"
+# P2: a descendant that leaves the session escapes killpg; it holds our stdout
+# and the caller's stderr until it exits.
+mkdir -p "$TMP_ROOT/setsidic"
+printf '#!/usr/bin/env bash\nsetsid sleep 30 &\necho $! > "%s/setsid.pid"\nsleep 60\n' "$TMP_ROOT" > "$TMP_ROOT/setsidic/ic"
+chmod +x "$TMP_ROOT/setsidic/ic"
 
 export PATH="$TMP_ROOT/bin:$PATH"
 export ROUTE_SPAWN_RECEIPT_DIR="$TMP_ROOT/receipts"
@@ -330,11 +342,42 @@ tiers = cfg["dispatch"]["tiers"]
 tiers["spawn-sol-test"] = {"role": "main-session", "backend": "codex", "model": "gpt-5.6-sol",
                            "reasoning_effort": "medium", "service_tier": "standard"}
 tiers["main-sonnet"]["fallbacks"] = ["spawn-sol-test"]
+tiers["coordinator-seat-sonnet"]["fallbacks"] = ["spawn-sol-test"]
 yaml.safe_dump(cfg, open(sys.argv[2], "w"))
 SOLCHAIN
-RC=0; OUT="$(FAKE_POOL=claude-down CLAVAIN_ROUTING_POLICY="$TMP_ROOT/solchain.yaml" bash "$SCRIPT" --role main-session 2>"$TMP_ROOT/stderr")" || RC=$?
-expect 3 "" "a spawn role resolving gpt-5.6-sol fails closed"
-grep -q "gpt-5.6-sol" "$TMP_ROOT/stderr" || fail "the Sol refusal must name the model"
+for args in "main-session" "lane --lineage L1" "coordinator-seat --project autosigil" "coordinator-seat --project clavain"; do
+  # shellcheck disable=SC2086
+  RC=0; OUT="$(FAKE_POOL=claude-down CLAVAIN_ROUTING_POLICY="$TMP_ROOT/solchain.yaml" bash "$SCRIPT" --role $args 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 3 "" "spawn role $args resolving gpt-5.6-sol fails closed"
+  grep -q "gpt-5.6-sol" "$TMP_ROOT/stderr" || fail "the Sol refusal for $args must name the model"
+done
+
+# mk ruling 2026-09-27 covers every role route-spawn prints: governed roles
+# never print gpt-5.6-sol under the packaged policy (GPT-6 Sol is allowed)...
+for args in "validation --producer-identity claude-opus-5-5" "cross-lab-review --producer-identity claude-opus-5-5" \
+    routine-execution planning scout release-preparation; do
+  # shellcheck disable=SC2086
+  run --role $args
+  expect 0 "$OUT" "governed role $args resolves under the packaged policy"
+  [[ -n "$OUT" && "$OUT" != *gpt-5.6* ]] || fail "governed role $args must not print gpt-5.6-sol: '$OUT'"
+done
+# ...and a policy that would give one gpt-5.6-sol, by any spelling, fails closed.
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT" <<'GOVSOL'
+import sys, yaml, copy
+base = yaml.safe_load(open(sys.argv[1]))
+for name, model, aliases in (("gov-sol", "gpt-5.6-sol", {}), ("gov-alias", "gpt-5.6", {}),
+                             ("gov-upper", "GPT-5.6-SOL", {}), ("gov-custom-alias", "old-sol", {"old-sol": "gpt-5.6-sol"})):
+    cfg = copy.deepcopy(base)
+    d = cfg["dispatch"]
+    d["tiers"][d["roles"]["routine-execution"]]["model"] = model
+    d.setdefault("model_aliases", {}).update(aliases)
+    yaml.safe_dump(cfg, open(f"{sys.argv[2]}/{name}.yaml", "w"))
+GOVSOL
+for bad in gov-sol gov-alias gov-upper gov-custom-alias; do
+  RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/$bad.yaml" bash "$SCRIPT" --role routine-execution 2>"$TMP_ROOT/stderr")" || RC=$?
+  expect 3 "" "governed role resolving $bad fails closed"
+  grep -q "gpt-5.6-sol" "$TMP_ROOT/stderr" || fail "the Sol refusal ($bad) must name gpt-5.6-sol"
+done
 
 # N1: family exhaustion mirrors bb's activeWindow: resetAt null or future, and
 # rejected or utilization >= the pool switchThreshold.
@@ -371,6 +414,15 @@ start=$SECONDS
 RC=0; OUT="$(PATH="$TMP_ROOT/hangic:$PATH" ROUTE_SPAWN_IC_TIMEOUT=1 timeout 30 bash "$SCRIPT" --role lane --lineage L1 2> >(cat > "$TMP_ROOT/stderr"))" || RC=$?
 expect 3 "" "forking hanging resolver"
 (( SECONDS - start < 10 )) || fail "a timed-out resolver's grandchildren must not hold the caller's pipe"
+[[ -s "$TMP_ROOT/gc.pid" ]] || fail "the forking resolver never ran"
+! kill -0 "$(cat "$TMP_ROOT/gc.pid")" 2>/dev/null || fail "a timed-out resolver's grandchild must be killed"
+# A setsid descendant escapes the group kill: route-spawn must still return
+# within its timeout, and must not have lent it the caller's stderr.
+start=$SECONDS
+RC=0; ALL="$(PATH="$TMP_ROOT/setsidic:$PATH" ROUTE_SPAWN_IC_TIMEOUT=3 timeout 60 bash "$SCRIPT" --role lane --lineage L1 2>&1)" || RC=$?
+[[ "$RC" == 3 ]] || fail "setsid descendant: exit $RC, want 3 ($ALL)"
+[[ "$ALL" != *claude-code* ]] || fail "setsid descendant: no tuple on failure"
+(( SECONDS - start < 10 )) || fail "a setsid descendant must not hold route-spawn or the caller's stderr past the timeout ($((SECONDS - start)) s)"
 
 # N4: project-table cross-validation fails closed.
 python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT" <<'BADTABLE'
@@ -391,9 +443,27 @@ done
 
 # N6d: a governed producer exclusion is not reported as a capacity fallback.
 run --role validation --producer-identity claude-opus-5-5
-if grep -q "fallback from" "$TMP_ROOT/stderr"; then
-  grep -q "producer_model_conflict" "$TMP_ROOT/stderr" || fail "a producer exclusion must state its reason, not a bare fallback"
-fi
+grep -q "producer_model_conflict" "$TMP_ROOT/stderr" || fail "a producer exclusion must state its reason"
+! grep -q "fallback from" "$TMP_ROOT/stderr" || fail "a producer exclusion is not a capacity fallback"
+
+# N7: --seat-out hands the spawner the seat tuple to pass into the
+# coordinator's spawn prompt; nothing is written on failure.
+run --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat.json"
+expect 0 "$OPUS" "coordinator-seat with --seat-out"
+jq -e --slurpfile r <(latest_receipt) '
+  .provider == "claude-code" and .model == "claude-opus-5-5" and .reasoning_level == "medium"
+  and .role == "coordinator-seat" and .profile_ref == "coordinator-seat-opus"
+  and .policy_profile == "project-clavain" and .policy_hash == $r[0].policy_hash
+  and (.policy_hash | length) == 64 and (.receipt | test("\\.json$"))' "$TMP_ROOT/seat.json" >/dev/null \
+  || fail "--seat-out must hold provider, model, reasoning_level, role, profile_ref, policy_profile, policy_hash and receipt"
+run --role coordinator-seat --project no-such-project --seat-out "$TMP_ROOT/seat-bad.json"
+expect 2 "" "--seat-out with a bad project"
+[[ ! -e "$TMP_ROOT/seat-bad.json" ]] || fail "--seat-out is not written on failure"
+RC=0; OUT="$(FAKE_POOL=all-down bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-down.json" 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 3 "" "--seat-out with no eligible seat"
+[[ ! -e "$TMP_ROOT/seat-down.json" ]] || fail "--seat-out is not written when no seat is eligible"
+run --role lane --lineage L1 --seat-out
+expect 2 "" "--seat-out needs a value"
 
 # N6c: a relative XDG_STATE_HOME is ignored and a symlinked script works.
 unset ROUTE_SPAWN_RECEIPT_DIR

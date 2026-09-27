@@ -96,6 +96,13 @@ def test_spawner_guidance_points_at_route_spawn():
         # stays the dispatch.sh relay role.
         assert 'route-spawn.sh" --role coordinator-seat --project' in text, f"{rel} must give the coordinator-seat recipe"
         assert 'route-spawn.sh" --role coordination' not in text, f"{rel}: route-spawn resolves coordinator-seat, not coordination"
+        # N7: the spawner hands the coordinator its seat tuple through the
+        # spawn prompt; a running coordinator cannot find the spawner's receipt.
+        assert re.search(r'route-spawn\.sh" --role coordinator-seat --project [^`]*--seat-out', text), \
+            f"{rel}: the coordinator-seat recipe must write --seat-out"
+        assert "own route-spawn receipt" not in text, f"{rel}: the self-handoff tuple comes from the spawn prompt"
+        assert "spawn prompt" in text and ".reasoning_level" in text, \
+            f"{rel} must say the seat tuple travels in the spawn prompt"
         # Recipes a coordinator runs name the selected installation's
         # dispatch.sh too. The ops doc's older prose cites dispatch.sh as a
         # source file, so only its spawning section is checked.
