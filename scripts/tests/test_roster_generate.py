@@ -222,5 +222,47 @@ class RosterGenerateNegativeCases(unittest.TestCase):
         self.assertIn("| `kimi-code/k3@high` | `kimi-k3` (Kimi K3) |", report)
 
 
+def load_generator():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("roster_generate", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@unittest.skipUnless(EVIDENCE_SNAPSHOT.exists(), "pinned evidence snapshot not present on this host")
+class RosterPendingEffortRows(unittest.TestCase):
+    """mk-42j9.20 / mk-42j9.27 / mk-rpnv.16 (mk-approved 2026-09-27): the
+    registry must map the model@effort combinations the pending routing
+    changes use, as exact rows of the pinned snapshot."""
+
+    NEEDED = [f"{m}@{e}" for m in ("claude-opus-5-5", "gpt-6-astra", "gpt-6-sol", "claude-sonnet-5")
+              for e in ("medium", "high", "xhigh")]
+
+    @classmethod
+    def setUpClass(cls):
+        import yaml
+        cls.g = load_generator()
+        cls.snapshot = json.loads(EVIDENCE_SNAPSHOT.read_text())
+        cls.families = yaml.safe_load(FAMILIES.read_text())
+        cls.slugs = yaml.safe_load(SLUGS.read_text())
+
+    def test_needed_combinations_are_exact_rows(self):
+        registry, gaps = self.g.resolve_registry(self.slugs, self.families, self.g.index_snapshot(self.snapshot))
+        self.assertEqual(gaps, [])
+        for key in self.NEEDED:
+            self.assertIn(key, registry)
+            self.assertEqual(registry[key]["status"], "exact", key)
+
+    def test_kimi_medium_is_not_invented(self):
+        # No kimi-k3 medium row exists; it stays unmapped until mk ratifies a waiver.
+        registry, _ = self.g.resolve_registry(self.slugs, self.families, self.g.index_snapshot(self.snapshot))
+        self.assertNotIn("kimi-code/k3@medium", registry)
+
+    # Rule 6 on GPT-6 Sol at medium is covered by the truth-table case
+    # repo-registry-medium-high-xhigh-rows, which uses an inline routing
+    # fragment and a fixed clock rather than the live routing.yaml.
+
+
 if __name__ == "__main__":
     unittest.main()
