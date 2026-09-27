@@ -170,6 +170,20 @@ dispatch:
   # policy order. Requires ic >= intercore 2caa435.
   cross_lab_first: [validation, cross-lab-review]
 
+  # mk 2026-09-27 (mk-42j9.26 verdict, mk-42j9.28): a minimum reasoning effort
+  # applied after fallback expansion to every candidate a role resolves to,
+  # not just the primary — so a headroom/cross-lab reorder can never pick a
+  # fallback that skipped the floor. Reasons here must be a subset of
+  # reasoning.frontier_reasons. A floor is a MINIMUM: it can raise a
+  # candidate's configured effort but never lower it, and never invents an
+  # effort level a backend can't run (an unenforceable floor excludes that
+  # candidate with reason unsupported_adapter instead of clamping). See
+  # docs/research/2026-09-27-effort-per-role-validation.md.
+  effort_floors:
+    foundational-invariants: high
+    difficult-verification: high
+    capability-failure: high
+
   tiers:
     planning-astra:
       role: frontier-planning
