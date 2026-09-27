@@ -170,10 +170,10 @@ NEXT_GOAL_BLOCK_EMITTED=0
 _ids=("$SESSION_ID" "${CLAUDE_SESSION_ID:-}" "${CLAUDE_CODE_SESSION_ID:-}" "${BB_THREAD_ID:-}")
 if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
     source "${SCRIPT_DIR}/lib-next-goal-provenance.sh" 2>/dev/null || true
-    # Only a block written after the completion answers it. One written for an
-    # earlier goal, still inside the 80-line window, does not.
+    # Only a block in the reply that completed the goal, or later, answers it.
+    # One written for an earlier goal, still inside the 80-line window, does not.
     if declare -F next_goal_block_emitted >/dev/null 2>&1 \
-        && next_goal_block_emitted "$(printf '%s\n' "$RECENT" | tail -n +"$(( ${CLAVAIN_GOAL_COMPLETED_LINE:-0} + 1 ))")"; then
+        && next_goal_block_emitted "$(printf '%s\n' "$RECENT" | tail -n +"$(( ${CLAVAIN_GOAL_COMPLETED_LINE:-0} > 0 ? CLAVAIN_GOAL_COMPLETED_LINE : 1 ))")"; then
         NEXT_GOAL_BLOCK_EMITTED=1
     fi
     if declare -F next_goal_provenance_warning >/dev/null 2>&1; then

@@ -151,7 +151,7 @@ EOF
     stub_bd; export STUB_EPICS="proj-ep1"
     detect_signals "$(bash_call 'cd /tmp && export BEADS_ACTOR=x && bd close proj-ep1 --reason "all children closed" 2>&1 | tail -3')"
     [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
-    [[ "$CLAVAIN_GOAL_COMPLETED_LINE" -eq 1 ]]
+    [[ "$CLAVAIN_GOAL_COMPLETED_LINE" -eq 2 ]]   # a block answers it from the next line
     rm -rf "$STUB_DIR"
 }
 
@@ -276,13 +276,24 @@ EOF
     rm -rf "$STUB_DIR"
 }
 
-@test "lib-signals: CLAVAIN_GOAL_COMPLETED_LINE is the last completion" {
+@test "lib-signals: CLAVAIN_GOAL_COMPLETED_LINE follows the last completion" {
     stub_bd; export STUB_EPICS="proj-ep1"
     detect_signals "$(printf '%s\n' '{"type":"attachment","attachment":{"type":"goal_status","met":true}}' \
         '{"type":"assistant","message":{"content":[{"type":"text","text":"x"}]}}' \
         "$(bash_call 'bd close proj-ep1')")"
-    [[ "$CLAVAIN_GOAL_COMPLETED_LINE" -eq 3 ]]
+    [[ "$CLAVAIN_GOAL_COMPLETED_LINE" -eq 4 ]]
     rm -rf "$STUB_DIR"
+}
+
+# Claude Code writes goal_status at stop time, after the reply that met the
+# goal, so that reply is where a Next-goal block answering it sits.
+@test "lib-signals: a met goal is answered from the reply before its goal_status" {
+    detect_signals "$(printf '%s\n' '{"type":"user","message":{"content":"go"}}' \
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"Done."}]}}' \
+        '{"type":"attachment","attachment":{"type":"hook_success"}}' \
+        '{"type":"attachment","attachment":{"type":"goal_status","met":true}}')"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    [[ "$CLAVAIN_GOAL_COMPLETED_LINE" -eq 2 ]]
 }
 
 # Regression, jawnomicon thr_cf7b863d3f (2026-09-27): the turn filed a bead

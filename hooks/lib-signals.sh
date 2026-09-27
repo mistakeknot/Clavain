@@ -10,7 +10,8 @@
 # After calling detect_signals(), three variables are set:
 #   CLAVAIN_SIGNALS       — comma-separated list of detected signal names
 #   CLAVAIN_SIGNAL_WEIGHT — integer total weight of all detected signals
-#   CLAVAIN_GOAL_COMPLETED_LINE — line of the last goal-completed event, or 0
+#   CLAVAIN_GOAL_COMPLETED_LINE — first line that can answer the last
+#                           goal-completed event (see step 7), or 0
 #
 # Signal definitions:
 #   commit          (weight 1) — git commit in transcript
@@ -291,16 +292,27 @@ detect_signals() {
     # stop (jawnomicon, thr_cf7b863d3f). Prose is also where the model says "no
     # epic closed". See _signals_epic_closed.
     #
-    # CLAVAIN_GOAL_COMPLETED_LINE is the transcript line of the last such
-    # event, so the hook can tell a Next-goal block written after it from a
-    # stale one written for an earlier goal.
-    local goal_line epic_line
-    goal_line=$(printf '%s\n' "$text" | jq -Rr 'input_line_number as $n | fromjson?
-        | select(type == "object" and .type == "attachment"
-            and .attachment.type? == "goal_status" and .attachment.met? == true) | $n' 2>/dev/null \
-        | tail -n 1) || true
-    epic_line=$(_signals_epic_closed "$text") || true
-    CLAVAIN_GOAL_COMPLETED_LINE=$(( ${goal_line:-0} > ${epic_line:-0} ? ${goal_line:-0} : ${epic_line:-0} ))
+    # CLAVAIN_GOAL_COMPLETED_LINE is the first transcript line from which a
+    # Next-goal block answers the last such event, so the hook can tell it
+    # from a stale block written for an earlier goal. Claude Code writes the
+    # goal_status attachment at stop time, after the reply that met the goal,
+    # so for a met goal that is the last assistant record before it. For an
+    # epic close it is the line after the tool call.
+    local goal_at epic_line goal_line=0 goal_from=0
+    goal_at=$(printf '%s\n' "$text" | jq -Rr 'input_line_number as $n | fromjson?
+        | select(type == "object")
+        | if .type == "assistant" then "a \($n)"
+          elif .type == "attachment" and .attachment.type? == "goal_status"
+            and .attachment.met? == true then "g \($n)"
+          else empty end' 2>/dev/null \
+        | awk '$1 == "a" { a = $2 } $1 == "g" { g = $2; f = a ? a : $2 } END { print (g + 0) " " (f + 0) }') || true
+    read -r goal_line goal_from <<<"${goal_at:-0 0}"
+    epic_line=$(_signals_epic_closed "$text") || epic_line=0
+    if (( goal_line > epic_line )); then
+        CLAVAIN_GOAL_COMPLETED_LINE=$goal_from
+    elif (( epic_line > 0 )); then
+        CLAVAIN_GOAL_COMPLETED_LINE=$(( epic_line + 1 ))
+    fi
     if (( CLAVAIN_GOAL_COMPLETED_LINE > 0 )); then
         CLAVAIN_SIGNALS="${CLAVAIN_SIGNALS}goal-completed,"
     fi

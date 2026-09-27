@@ -279,9 +279,26 @@ $(block_claiming_provenance)"
     [[ "$output" == *"Goal-cadence:"* ]]
 }
 
+# Real order (Claude Code writes goal_status at stop time): the reply that met
+# the goal, then its goal_status. Found by cross-lab review of a06392f.
+@test "a Next-goal block in the reply that met the goal answers it on later stops" {
+    write_receipt true
+    transcript="$(block_claiming_provenance)
+$(printf '{"type":"attachment","attachment":{"type":"goal_status","met":true}}')
+$(user_line 'thanks, one more question')
+$(assistant_line 'An ordinary answer.')"
+    run run_stop_hook "$transcript" "sess-block-before-status"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Goal-cadence:"* ]]
+    [[ "$output" != *'"decision"'* ]]
+}
+
 @test "a Next-goal block for an earlier goal does not answer a newer one" {
     write_receipt true
     transcript="$(block_claiming_provenance)
+$(printf '{"type":"attachment","attachment":{"type":"goal_status","met":true}}')
+$(user_line '/goal the next one')
+$(assistant_line 'Second goal done.')
 $(printf '{"type":"attachment","attachment":{"type":"goal_status","met":true}}')"
     run run_stop_hook "$transcript" "sess-stale-block"
     [ "$status" -eq 0 ]
