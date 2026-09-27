@@ -27,6 +27,22 @@ git diff --stat {BASE_SHA}..{HEAD_SHA}
 git diff {BASE_SHA}..{HEAD_SHA}
 ```
 
+If you were given a review package file, read it once instead. The review is
+read-only: never move HEAD or touch the working tree or index; use a separate
+`git worktree` for another revision. Do not dispatch subagents.
+
+## The Spec Is a Vision Document
+
+The spec does not enumerate every input or condition. Where it is silent, a
+reasonable user's expectation is the requirement. Grade findings by their effect
+on that user, not by whether the spec names the trigger.
+
+## Declined to Judge
+
+Before your verdict, list every behavior you considered and set aside as outside
+the plan or spec, one line each with the reason. The executor rules on each
+line; an empty list means you set nothing aside.
+
 ## Review Checklist
 
 **Code Quality:**
@@ -84,6 +100,9 @@ git diff {BASE_SHA}..{HEAD_SHA}
 
 ### Recommendations
 [Improvements for code quality, architecture, or process]
+
+### Declined to Judge
+[One line per behavior set aside, with the reason, or "None"]
 
 ### Assessment
 
