@@ -230,6 +230,56 @@ def load_generator():
     return mod
 
 
+@unittest.skipUnless(EVIDENCE_SNAPSHOT.exists(), "pinned evidence snapshot not present on this host")
+    def test_real_snapshot_keeps_validation_sol(self):
+        # B1 on the real path: validation-sol is flagged, never removed.
+        result = self.run_generate(EVIDENCE_SNAPSHOT, EVIDENCE_SHA256)
+        if result.returncode == 2 and "stale" in result.stderr:
+            self.skipTest("pinned snapshot is past its freshness deadline")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = json.loads((self.out / "eligibility.json").read_text())
+        self.assertIs(record["promotion_ready"], False)
+        self.assertNotIn("validation-sol", record["removals"])
+        self.assertIn("rule1/validation/sol", record["flags"]["validation-sol"])
+        self.assertEqual(record["heads_changed"], [])
+        self.assertTrue((self.out / "routing.proposed.patch").exists())
+
+    @unittest.skipUnless(EVIDENCE_SNAPSHOT.exists(), "pinned evidence snapshot not present on this host")
+    def test_report_decisions_follow_waiver_status(self):
+        # N1: "mk decisions applied" is derived from the slugs file, so a
+        # Kimi waiver demoted to PROPOSED is no longer reported as ratified.
+        # Updated 2026-09-25 (mk-rpnv.9 coordinator ruling): the other 10
+        # waivers are now RATIFIED in the real slugs file, so "RATIFIED by"
+        # legitimately appears in the report for those; only kimi's own
+        # entry must drop out of the ratified list and land in the pending
+        # table instead.
+        import yaml
+        doc = yaml.safe_load(SLUGS.read_text())
+        for w in doc["waivers"]:
+            if w["ref"] == "kimi-code/k3@high":
+                w["status"] = "PROPOSED"
+                w.pop("approved_by", None)
+                w.pop("approval", None)
+        slugs = self.base / "slugs.yaml"
+        slugs.write_text(yaml.safe_dump(doc, sort_keys=False))
+        result = self.run_generate(EVIDENCE_SNAPSHOT, EVIDENCE_SHA256, slugs=slugs)
+        if result.returncode == 2 and "stale" in result.stderr:
+            self.skipTest("pinned snapshot is past its freshness deadline")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = (self.out / "report.md").read_text()
+        self.assertNotIn("RATIFIED by mk** (coordinator thr_n8twxx4psd session 07cdb595, 2026-09-25): `kimi-code/k3@high`", report)
+        self.assertIn("1 waiver(s) PROPOSED", report)
+        self.assertIn("| `kimi-code/k3@high` | `kimi-k3` (Kimi K3) |", report)
+
+
+def load_generator():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("roster_generate", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def set_tier_fields(routing_text, tier, **fields):
     """Rewrite `key: value` lines inside one dispatch.tiers block, keeping the
     text layout the patch renderer expects."""
@@ -264,13 +314,6 @@ class RosterPendingEffortRows(unittest.TestCase):
         cls.families = yaml.safe_load(FAMILIES.read_text())
         cls.slugs = yaml.safe_load(SLUGS.read_text())
 
-    def pipeline(self, routing_text):
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
-        if self.g.freshness(self.snapshot["meta"].get("generatedAt"), now)[0] != "fresh":
-            self.skipTest("pinned snapshot is past its freshness deadline")
-        return self.g.run_pipeline(routing_text, self.families, self.slugs, self.snapshot, now)
-
     def test_needed_combinations_are_exact_rows(self):
         registry, gaps = self.g.resolve_registry(self.slugs, self.families, self.g.index_snapshot(self.snapshot))
         self.assertEqual(gaps, [])
@@ -283,15 +326,9 @@ class RosterPendingEffortRows(unittest.TestCase):
         registry, _ = self.g.resolve_registry(self.slugs, self.families, self.g.index_snapshot(self.snapshot))
         self.assertNotIn("kimi-code/k3@medium", registry)
 
-    def test_rule6_flags_gpt6_sol_medium_in_authority(self):
-        text = set_tier_fields(ROUTING.read_text(), "main-sol", model="gpt-6-sol", reasoning_effort="medium")
-        for tier in ("pilot-sonnet", "routine-sonnet", "release-sonnet"):
-            text = set_tier_fields(text, tier, reasoning_effort="xhigh")
-        res = self.pipeline(text)
-        self.assertEqual(res["status"], "ok")
-        self.assertEqual(res["mapping"]["gpt-6-sol@medium"]["slug"], "gpt-6-sol-medium")
-        self.assertEqual(res["mapping"]["claude-sonnet-5@xhigh"]["slug"], "claude-sonnet-5-xhigh")
-        self.assertIn("rule6/main-integrator/*", res["flags"].get("main-sol", []))
+    # Rule 6 on GPT-6 Sol at medium is covered by the truth-table case
+    # repo-registry-medium-high-xhigh-rows, which uses an inline routing
+    # fragment and a fixed clock rather than the live routing.yaml.
 
 
 if __name__ == "__main__":

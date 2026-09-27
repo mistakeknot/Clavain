@@ -39,8 +39,9 @@ rows:
     effort: high
     reasoning_mode: reasoning
     slug: claude-opus-5-5-high
-  # mk-42j9.20 / mk-42j9.27 / mk-rpnv.16 (approved by mk, coordinator
-  # thr_n8twxx4psd, 2026-09-27): the pending routing changes move seats to
+  # mk-42j9.20 / mk-42j9.27 / mk-rpnv.16: mk approved this follow-up
+  # 2026-09-27 (coordinator thr_n8twxx4psd); the rows below are mechanical,
+  # exact snapshot matches, not waivers. The pending routing changes move seats to
   # medium (Opus 5.5, Astra, gpt-6-sol, Sonnet scout/validation), high
   # (main-sol, release-authority-sol) and xhigh (Sonnet). Exact snapshot rows
   # only; kimi-code/k3@medium has no row and is not mapped here.
