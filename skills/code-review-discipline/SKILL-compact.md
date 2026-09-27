@@ -18,11 +18,13 @@ Two sides: requesting reviews and receiving feedback. Technical correctness over
 
 **Instead:** Restate technical requirement, ask clarifying questions, push back with reasoning if wrong, or just start working.
 
-**External feedback:** Before implementing, check: technically correct for THIS codebase? Breaks existing? Reason for current approach? Conflicts with partner's decisions? → Stop and discuss.
+**External feedback** (including agent and cross-lab reviewers): Before implementing, check: technically correct for THIS codebase? Breaks existing? Reason for current approach? Conflicts with partner's decisions? → Stop and discuss. Can't verify? Say so and ask for direction.
 
 **Implementation order:** Clarify unclear items FIRST, then: blocking issues → simple fixes → complex fixes. Test each individually.
 
 **Push back when:** Breaks existing functionality, reviewer lacks context, violates YAGNI, technically incorrect, conflicts with architectural decisions.
+
+**Rationalizations to reject:** reviewing the diff yourself instead of dispatching a reviewer; giving the reviewer your session history; assuming the reviewer is right; batching fixes before testing; starting on the items you understood; proceeding on what you can't verify. If pushing back feels uncomfortable, name the tension and raise the issue anyway.
 
 **Acknowledge correctly:** "Fixed. [description]" or "Good catch - [issue]. Fixed in [location]." Never "Great point!"
 

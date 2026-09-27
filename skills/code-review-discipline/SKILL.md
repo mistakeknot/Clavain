@@ -1,6 +1,6 @@
 ---
 name: code-review-discipline
-description: Request and assess code review; verify findings and preserve required review gates.
+description: Request code review, and assess received feedback from people, PR comments, or agent and cross-lab reviewers; verify findings before implementing and preserve required review gates.
 ---
 
 <!-- compact: SKILL-compact.md — if it exists in this directory, load it instead of following the full instructions below. The compact version contains the same request/receive review protocol. -->
@@ -72,6 +72,10 @@ STOP — do not implement anything. Ask for clarification first. Items may be re
 
 Push back with technical reasoning if wrong. If conflicts with human partner's decisions, stop and discuss with them first.
 
+**Agent and cross-lab reviewers** (subagents, Codex, Oracle, flux-drive) count as external: verify each finding against the code before acting on it.
+
+**Can't easily verify?** Say so instead of proceeding: "I can't verify this without [X]. Should I investigate, ask, or proceed?"
+
 ### YAGNI Check
 
 ```bash
@@ -98,7 +102,7 @@ grep -r "endpoint_name" .   # Check actual usage
 - Conflicts with human partner's architectural decisions
 
 Push back with technical reasoning, not defensiveness. Reference working tests/code.
-**Signal if uncomfortable pushing back:** "Strange things are afoot at the Circle K"
+**If uncomfortable pushing back out loud:** name that tension, then tell your partner about the issue you've seen.
 
 ### Acknowledging Correct Feedback
 
@@ -122,6 +126,18 @@ Push back with technical reasoning, not defensiveness. Reference working tests/c
 Reply inline in the comment thread: `gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies` — not as a top-level PR comment.
 
 ---
+
+## Common Rationalizations
+
+| Excuse | Reality |
+|--------|---------|
+| "I'll just review the diff myself instead of dispatching a reviewer" | You're the coordinator; reading the diff inline burns the context you need to drive the work. Dispatch a reviewer so only findings come back. |
+| "The reviewer needs my whole session history" | Hand it precisely crafted context. History pulls it onto your reasoning instead of the work product. |
+| "The reviewer is probably right, I'll just apply it" | Check whether it breaks things before implementing. |
+| "I'll apply all the fixes, then test" | One item at a time, test each. |
+| "I understood most items; I'll start on those" | Clarify every unclear item first; items may be related. |
+| "I can't check this, but it sounds right" | State the limitation and ask for direction. |
+| "Pushing back will look defensive" | Technical correctness over comfort; cite the code or test. |
 
 ## Red Flags
 
