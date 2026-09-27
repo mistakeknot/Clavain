@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+import clavain_selector.contract as contract
 from clavain_selector.contract import MAX_REQUEST_BYTES, Point, SelectionRequest
 
 # ---------------------------------------------------------------------------
@@ -96,18 +97,12 @@ def _build_body(request: SelectionRequest) -> bytes:
 
     `Task 5` (the Jev client) wraps this into the full Jev wire request
     (`model`, `questions.fit_i`, ...); this function owns only the part that
-    egress has cleared to leave the process.
+    egress has cleared to leave the process. Delegates to
+    `contract.canonical_request_body`, the single source of truth for this
+    serialization -- `records._request_block` builds the same bytes the
+    same way.
     """
-    point_value = request.point.value if isinstance(request.point, Point) else request.point
-    payload = {
-        "schema": "clavain-selection-v1",
-        "point": point_value,
-        "integration": request.integration,
-        "task": request.task,
-        "context": request.context,
-        "candidates": [c.selector_view() for c in request.candidates],
-    }
-    return json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    return contract.canonical_request_body(request)
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +510,14 @@ def admit(
     declared sources against the denylist and `project_root`, checks the
     project's `origin` owner, and checks the serialized body size. A hit on
     any rule refuses the whole request; only rule ids are recorded.
+
+    Raises `contract.NonCanonicalOrder` unconditionally (before any other
+    check, so a tampered candidate order can never be masked by a `Refusal`
+    return for an unrelated hit) if `request.candidates` is not already in
+    canonical order.
     """
+    contract.require_canonical(request.candidates)
+
     texts: list[str] = [request.task, request.context]
     for candidate in request.candidates:
         texts.append(candidate.id)

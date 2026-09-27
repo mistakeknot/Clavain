@@ -113,7 +113,9 @@
         "bytes",
         "task_sha256",
         "context_sha256",
-        "candidate_count"
+        "candidate_count",
+        "question_set_version",
+        "questions_sha256"
       ],
       "properties": {
         "sha256": {
@@ -133,6 +135,16 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 16
+        },
+        "question_set_version": {
+          "type": "string"
+        },
+        "questions_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Non-null only when egress.verdict == \"admitted\" and the original, uncapped request was structurally valid."
         }
       }
     },

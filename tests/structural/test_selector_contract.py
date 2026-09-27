@@ -1,19 +1,33 @@
-"""Tests for scripts/clavain_selector/contract.py (mk-42j9.7 Task 1)."""
+"""Tests for scripts/clavain_selector/contract.py (mk-42j9.7 Task 1, Task R6a)."""
 
 from __future__ import annotations
 
+import ast
+import hashlib
 import json
+import random
+from pathlib import Path
 
+import pytest
 from selector_helpers import make_candidate, make_request, selector_socket_guard  # noqa: F401
 
+import clavain_selector.contract as contract
 from clavain_selector.contract import (
     FALLBACK_TABLE,
     FallbackReason,
+    NonCanonicalOrder,
     Point,
     RejectReason,
     SessionRef,
     ValidationContext,
+    canonical_order,
+    canonical_request_body,
+    candidate_sort_key,
+    order_salt,
+    payload_sha256,
     pre_eligibility,
+    request_sha256,
+    require_canonical,
     revalidate,
     validate_request,
 )
@@ -108,3 +122,261 @@ def test_point_and_reject_reason_values_are_stable_strings():
 def test_session_ref_is_frozen():
     ref = SessionRef(host_session_id="sess-1")
     assert ref.bead_id is None
+
+
+# ---------------------------------------------------------------------------
+# Task R6a: canonical order, request-body single source, question identity
+# ---------------------------------------------------------------------------
+
+
+def test_salt_dedup():
+    assert order_salt(["a", "b", "a"]) == order_salt(["b", "a"])
+    assert order_salt(["a", "b", "a"]) == order_salt(["a", "b"])
+    assert order_salt(["a", "b"]) != order_salt(["a", "c"])
+
+
+def test_canonical_order():
+    ids = ["zeta", "alpha", "mu", "beta"]
+    candidates = tuple(make_candidate(id=i) for i in ids)
+
+    forward = canonical_order(candidates)
+    reversed_order = canonical_order(tuple(reversed(candidates)))
+    assert [c.id for c in forward] == [c.id for c in reversed_order]
+
+    rng = random.Random(1234)
+    for _ in range(5):
+        shuffled = list(candidates)
+        rng.shuffle(shuffled)
+        permuted = canonical_order(tuple(shuffled))
+        assert [c.id for c in permuted] == [c.id for c in forward]
+
+    # Independently recompute the expected order from the formula itself.
+    salt = order_salt(ids)
+    expected_ids = sorted(ids, key=lambda i: (hashlib.sha256((salt + "\0" + i).encode("utf-8")).hexdigest(), i))
+    assert [c.id for c in forward] == expected_ids
+
+    # Changing the id set changes the salt, and can change the order.
+    other = tuple(make_candidate(id=i) for i in ["zeta", "alpha", "mu", "gamma"])
+    other_order = canonical_order(other)
+    assert order_salt([c.id for c in candidates]) != order_salt([c.id for c in other])
+    # (Not asserting the two orders differ -- that depends on hash luck --
+    # only that the salts genuinely differ, i.e. depend on the id set.)
+    assert len(other_order) == 4
+
+
+def test_canonical_order_duplicate_ids_full_tie_break():
+    dup = (
+        make_candidate(id="same", description="first", payload="p1"),
+        make_candidate(id="same", description="second", payload="p2"),
+    )
+    ordered = canonical_order(dup)
+    assert len(ordered) == 2
+    # require_canonical on the canonicalized duplicate-id tuple must not raise:
+    # the tie is broken by the full candidate_sort_key, not left ambiguous.
+    require_canonical(ordered)
+
+
+def test_require_canonical():
+    ids = ["zeta", "alpha", "mu", "beta"]
+    candidates = tuple(make_candidate(id=i) for i in ids)
+    ordered = canonical_order(candidates)
+
+    require_canonical(ordered)  # does not raise
+
+    with pytest.raises(NonCanonicalOrder):
+        require_canonical(tuple(reversed(ordered)))
+
+    # Still raises even if canonical_order itself is patched to be a no-op:
+    # require_canonical must never call canonical_order internally.
+    import unittest.mock as mock
+
+    with mock.patch.object(contract, "canonical_order", lambda cs: tuple(cs)):
+        with pytest.raises(NonCanonicalOrder):
+            require_canonical(tuple(reversed(ordered)))
+
+    # Accepts selector views (id/description mappings), not just Candidates.
+    views = [c.selector_view() for c in ordered]
+    require_canonical(views)
+    with pytest.raises(NonCanonicalOrder):
+        require_canonical(list(reversed(views)))
+
+    # A tie between two views (no way to break it) always raises.
+    tied_views = [{"id": "same", "description": "a"}, {"id": "same", "description": "b"}]
+    with pytest.raises(NonCanonicalOrder):
+        require_canonical(tied_views)
+
+
+def test_payload_sha256_single_source():
+    assert payload_sha256("abc") == payload_sha256("abc")
+    assert payload_sha256({"a": 1, "b": [1, 2, 3]}) == payload_sha256({"b": [1, 2, 3], "a": 1})
+    assert payload_sha256(None) == hashlib.sha256(b"null").hexdigest()
+
+    for bad in (("tuple", "not", "json"), {1, 2, 3}, {1: "int key"}, float("nan")):
+        with pytest.raises(ValueError):
+            payload_sha256(bad)
+
+    from clavain_selector.adapters import claude_code
+
+    for value in ("hello", {"a": 1}, [1, "two", None, True], None, 3.5, 7):
+        assert claude_code._hash_payload(value) == payload_sha256(value)
+
+
+def test_request_body_single_source():
+    request = make_request(candidates=(make_candidate(id="b"), make_candidate(id="a")))
+    body = canonical_request_body(request)
+    assert request_sha256(request) == hashlib.sha256(body).hexdigest()
+
+    import clavain_selector.egress as egress
+
+    assert egress._build_body(request) == body
+
+    import clavain_selector.records as records
+
+    block = records._request_block(
+        request, len(request.candidates), question_set_version="v", questions_sha256=None
+    )
+    assert block["sha256"] == request_sha256(request)
+    assert block["bytes"] == len(body)
+
+    assert not hasattr(records, "_canonical_request_body")
+    assert not hasattr(records, "_sha256_payload")
+
+    # contract.py imports nothing from the clavain_selector package itself.
+    contract_source = Path(contract.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(contract_source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("clavain_selector"):
+            raise AssertionError(f"contract.py must not import from the package: {node.module}")
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert not alias.name.startswith("clavain_selector"), alias.name
+
+
+# ---------------------------------------------------------------------------
+# Order-guard AST checker
+# ---------------------------------------------------------------------------
+
+_GUARDED_NAMES = {"require_canonical", "canonical_order"}
+
+
+def _build_parent_map(tree: ast.AST) -> dict[int, ast.AST]:
+    parent_of: dict[int, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parent_of[id(child)] = node
+    return parent_of
+
+
+def _is_allowlisted_eval_binding(node: ast.Attribute, parent: ast.AST | None, parent_of: dict[int, ast.AST], filename: str) -> bool:
+    """The sole allowlisted non-call binding: `eval._REFERENCE_CANONICAL_ORDER = contract.canonical_order`.
+
+    Only at module scope, only in a file literally named `eval.py`, only for
+    that exact attribute name on both sides.
+    """
+    if Path(filename).name != "eval.py":
+        return False
+    if node.attr != "canonical_order":
+        return False
+    if not isinstance(parent, ast.Assign):
+        return False
+    if len(parent.targets) != 1:
+        return False
+    target = parent.targets[0]
+    if not (
+        isinstance(target, ast.Attribute)
+        and target.attr == "_REFERENCE_CANONICAL_ORDER"
+        and isinstance(target.value, ast.Name)
+        and target.value.id == "eval"
+    ):
+        return False
+    grandparent = parent_of.get(id(parent))
+    return isinstance(grandparent, ast.Module)
+
+
+def _check_order_guard_source(source: str, filename: str) -> list[str]:
+    violations: list[str] = []
+    tree = ast.parse(source, filename=filename)
+    parent_of = _build_parent_map(tree)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in _GUARDED_NAMES:
+                    violations.append(f"{filename}:{node.lineno}: imports {alias.name!r} by name")
+
+        elif isinstance(node, ast.Attribute) and node.attr in _GUARDED_NAMES:
+            if not (isinstance(node.value, ast.Name) and node.value.id == "contract"):
+                continue
+            parent = parent_of.get(id(node))
+            is_call_func = isinstance(parent, ast.Call) and parent.func is node
+            if is_call_func:
+                continue
+            if _is_allowlisted_eval_binding(node, parent, parent_of, filename):
+                continue
+            violations.append(f"{filename}:{node.lineno}: contract.{node.attr} used outside a direct call")
+
+        elif isinstance(node, ast.Name) and node.id in _GUARDED_NAMES and isinstance(node.ctx, ast.Load):
+            parent = parent_of.get(id(node))
+            if isinstance(parent, ast.Attribute):
+                continue
+            violations.append(f"{filename}:{node.lineno}: bare name {node.id!r} used")
+
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == "contract"
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value in _GUARDED_NAMES
+        ):
+            violations.append(f"{filename}:{node.lineno}: getattr(contract, {node.args[1].value!r})")
+
+    return violations
+
+
+_PACKAGE_ROOT = Path(__file__).resolve().parents[2] / "scripts" / "clavain_selector"
+_FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "selector"
+
+
+def test_order_guard_module_calls():
+    violations: list[str] = []
+    for path in sorted(_PACKAGE_ROOT.rglob("*.py")):
+        if path.name == "contract.py":
+            continue
+        violations.extend(_check_order_guard_source(path.read_text(encoding="utf-8"), str(path)))
+    assert violations == []
+
+    negative = _FIXTURES_DIR / "order_guard_import.py"
+    negative_violations = _check_order_guard_source(negative.read_text(encoding="utf-8"), str(negative))
+    assert len(negative_violations) >= 5
+
+    second_module = _FIXTURES_DIR / "order_guard_second_module.py"
+    second_violations = _check_order_guard_source(second_module.read_text(encoding="utf-8"), str(second_module))
+    assert second_violations
+
+    allowed_source = (
+        "import clavain_selector.contract as contract\n\n"
+        "eval._REFERENCE_CANONICAL_ORDER = contract.canonical_order\n"
+    )
+    assert _check_order_guard_source(allowed_source, "eval.py") == []
+
+    other_name_source = (
+        "import clavain_selector.contract as contract\n\n"
+        "eval._SOMETHING_ELSE = contract.canonical_order\n"
+    )
+    assert _check_order_guard_source(other_name_source, "eval.py") != []
+
+    nested_source = (
+        "import clavain_selector.contract as contract\n\n"
+        "def f():\n"
+        "    eval._REFERENCE_CANONICAL_ORDER = contract.canonical_order\n"
+    )
+    assert _check_order_guard_source(nested_source, "eval.py") != []
+
+    elsewhere_source = (
+        "import clavain_selector.contract as contract\n\n"
+        "eval._REFERENCE_CANONICAL_ORDER = contract.canonical_order\n"
+    )
+    assert _check_order_guard_source(elsewhere_source, "not_eval.py") != []

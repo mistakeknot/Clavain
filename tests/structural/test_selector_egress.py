@@ -309,6 +309,29 @@ def test_size_over_limit():
     assert result.rule_ids == ("size.over_limit",)
 
 
+def test_egress_body_permutation_invariant():
+    import random
+
+    ids = ["zeta", "alpha", "mu", "beta", "gamma"]
+    candidates = tuple(make_candidate(id=i) for i in ids)
+
+    def _admitted_body(cands):
+        req = make_request(candidates=cands)
+        result = egress.admit(req)
+        assert isinstance(result, egress.AdmittedRequest)
+        return result.body
+
+    identity_body = _admitted_body(candidates)
+    reversed_body = _admitted_body(tuple(reversed(candidates)))
+    assert identity_body == reversed_body
+
+    rng = random.Random(4242)
+    for _ in range(3):
+        shuffled = list(candidates)
+        rng.shuffle(shuffled)
+        assert _admitted_body(tuple(shuffled)) == identity_body
+
+
 # ---------------------------------------------------------------------------
 # test_realistic_payloads_refused
 # ---------------------------------------------------------------------------
