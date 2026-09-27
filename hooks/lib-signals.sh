@@ -44,13 +44,38 @@ _signals_deadline() {
     out=$(mktemp 2>/dev/null) || return 1
     "$@" >"$out" &
     pid=$!
-    ( sleep "$secs"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+    # KILL, not TERM: a child that ignores TERM must not outlast the hook.
+    ( sleep "$secs"; kill -9 "$pid" 2>/dev/null ) >/dev/null 2>&1 &
     watchdog=$!
     wait "$pid" || rc=$?
     kill "$watchdog" 2>/dev/null
     (( rc == 0 )) && cat "$out"
     rm -f "$out"
     return "$rc"
+}
+
+# _signals_split_segments < command
+# Prints each simple command of a shell line on its own line, splitting on
+# && || ; | and newlines outside quotes, so `echo "x; bd close y"` stays one
+# segment. Escapes and $(...) are not modelled.
+_signals_split_segments() {
+    awk '{
+        out = ""; q = ""
+        for (i = 1; i <= length($0); i++) {
+            c = substr($0, i, 1)
+            if (q != "") { if (c == q) q = ""; out = out c; continue }
+            if (c == "\"" || c == "\047") { q = c; out = out c; continue }
+            # The & of 2>&1, >&2 and &> is a redirection, not a separator.
+            if (c == "&" && (substr($0, i - 1, 1) ~ /[<>]/ || substr($0, i + 1, 1) == ">")) { out = out c; continue }
+            if (c == ";" || c == "|" || c == "&") {
+                out = out "\n"
+                if (substr($0, i + 1, 1) == c) i++
+                continue
+            }
+            out = out c
+        }
+        print out
+    }'
 }
 
 # _signals_bd_segment <segment>
@@ -92,7 +117,9 @@ _signals_bd_segment() {
         a="${w[i]}"
         case "$a" in
             -h|--help|--dry-run) return 0 ;;
-            -*) (( eligible )) || break ;;
+            -*) ;;
+            # Every word, since flags may come first; the ID pattern later
+            # drops --reason text, and the tracker drops what is not an issue.
             *) (( eligible )) || args+="${a//[\"\']/} " ;;
         esac
     done
@@ -120,16 +147,18 @@ _SIGNALS_JQ_EPOCH='def epoch: (if type == "string" then
 # read from the call's own tool_result). An ID counts only if the tracker now
 # reports it as an epic, closed, with a closed_at no earlier than the call:
 # so a failed close, a close of an epic that was already closed, and
-# `false && bd close` do not count. Reads only Bash tool_use commands, never
+# `false && bd close` do not count, nor a failed close of an epic someone
+# else closed minutes later. Reads only Bash tool_use commands, never
 # prose or tool output text.
 #
 # Budget: the Stop hook has 5s. The tracker is asked only when a close ran,
 # once per directory with every ID batched, 1s each, at most 2 directories and
-# the newest 20 IDs. Every failure answers "no": a missed Next-goal block
+# the newest 50 IDs. Every failure answers "no": a missed Next-goal block
 # costs less than a stop blocked for work that did not finish.
 #
-# Known miss: words are split on whitespace, so `bd -C "/my repo" close x` is
-# not read.
+# Known misses, both quiet: words are split on whitespace, so
+# `bd -C "/my repo" close x` is not read; and a failed close followed within
+# 120s by someone else's close of the same epic counts.
 _signals_epic_closed() {
     command -v jq >/dev/null 2>&1 || return 1
     local calls
@@ -169,10 +198,10 @@ _signals_epic_closed() {
                 [[ "$id" =~ ^[A-Za-z][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*-[a-z0-9]+(\.[0-9]+)*$ ]] || continue
                 cands+="$n"$'\t'"$dir"$'\t'"$id"$'\t'"$ts"$'\n'
             done
-        done < <(sed -E 's/(&&|\|\||;|\|)/\n/g' <<<"$cmd")
+        done < <(_signals_split_segments <<<"$cmd")
     done <<<"$calls"
     [[ -n "$cands" ]] || return 1
-    cands=$(printf '%s' "$cands" | tail -n 20)
+    cands=$(printf '%s' "$cands" | tail -n 50)
 
     local dirs closed best=0 lookups=0 line at
     dirs=$(cut -f2 <<<"$cands" | sort -u)
@@ -186,10 +215,11 @@ _signals_epic_closed() {
                 | "\(.id)=\(.closed_at | epoch)"' 2>/dev/null) || true
         for rec in $closed; do
             id=${rec%%=*} at=${rec#*=}
-            # 5s of slack: the call is stamped when written, before it runs,
-            # and the tracker may keep another clock.
+            # Closed from 5s before the call (it is stamped when written, and
+            # the tracker may keep another clock) to 120s after it: later than
+            # that, someone else closed it after this call failed.
             line=$(awk -F'\t' -v d="$dir" -v i="$id" -v at="$at" \
-                '$2 == d && $3 == i && $4 >= 0 && at >= $4 - 5 { l = $1 } END { print l + 0 }' <<<"$cands")
+                '$2 == d && $3 == i && $4 >= 0 && at >= $4 - 5 && at <= $4 + 120 { l = $1 } END { print l + 0 }' <<<"$cands")
             (( line > best )) && best=$line
         done
     done <<<"$dirs"

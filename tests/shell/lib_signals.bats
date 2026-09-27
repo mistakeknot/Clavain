@@ -202,6 +202,41 @@ EOF
     rm -rf "$STUB_DIR"
 }
 
+@test "lib-signals: an epic closed long after the call is not goal-completed" {
+    stub_bd; export STUB_EPICS="proj-ep1" STUB_CLOSED_AT="2026-09-27T12:10:00Z"
+    detect_signals "$(bash_call 'bd close proj-ep1')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: a tracker that ignores TERM is still abandoned within the budget" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    printf '#!/usr/bin/env bash\ntrap "" TERM\nsleep 10\n' > "$STUB_DIR/bd"
+    local start=$SECONDS
+    detect_signals "$(bash_call 'bd close proj-ep1')"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    (( SECONDS - start <= 3 ))
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: IDs after close flags and past the twentieth are read" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(bash_call 'bd close --reason "all done" proj-ep1 2>&1 | tail -3')"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    detect_signals "$(bash_call "bd close proj-ep1 $(printf 'proj-t%d ' $(seq 2 21))")"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: a separator inside quotes does not start a bd command" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(printf '%s\n' "$(bash_call 'echo "x; bd close proj-ep1"')" \
+        "$(bash_call "printf 'x && bd close proj-ep1'")")"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    [[ ! -e "$STUB_DIR/calls" ]]
+    rm -rf "$STUB_DIR"
+}
+
 @test "lib-signals: quoted IDs, -C and a sixth ID are all read, in one lookup" {
     stub_bd; export STUB_EPICS="proj-ep6"
     detect_signals "$(bash_call 'bd -C /tmp close "proj-t1" proj-t2 proj-t3 proj-t4 proj-t5 '\''proj-ep6'\''')"
