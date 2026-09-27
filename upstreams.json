@@ -54,14 +54,17 @@
         "skills/writing-plans/SKILL.md": "skills/writing-plans/SKILL.md"
       },
       "relocatedTo": {
-        "skills/systematic-debugging/SKILL.md": "intertest:skills/systematic-debugging/SKILL.md",
-        "skills/systematic-debugging/condition-based-waiting.md": "intertest:skills/systematic-debugging/condition-based-waiting.md",
-        "skills/systematic-debugging/defense-in-depth.md": "intertest:skills/systematic-debugging/defense-in-depth.md",
-        "skills/systematic-debugging/root-cause-tracing.md": "intertest:skills/systematic-debugging/root-cause-tracing.md",
+        "skills/systematic-debugging/SKILL.md": "intertest:skills/systematic-debugging/SKILL.md — 8ca22db delta not yet ported: mk-km4a.12",
+        "skills/systematic-debugging/condition-based-waiting.md": "intertest:skills/systematic-debugging/condition-based-waiting.md — 8ca22db delta not yet ported: mk-km4a.12",
+        "skills/systematic-debugging/defense-in-depth.md": "intertest:skills/systematic-debugging/defense-in-depth.md — 8ca22db delta not yet ported: mk-km4a.12",
+        "skills/systematic-debugging/root-cause-tracing.md": "intertest:skills/systematic-debugging/root-cause-tracing.md — 8ca22db delta not yet ported: mk-km4a.12",
         "skills/test-driven-development/SKILL.md": "intertest:skills/test-driven-development/SKILL.md",
         "skills/test-driven-development/writing-good-tests.md": "intertest:skills/test-driven-development/writing-good-tests.md",
-        "skills/verification-before-completion/SKILL.md": "intertest:skills/verification-before-completion/SKILL.md",
+        "skills/verification-before-completion/SKILL.md": "intertest:skills/verification-before-completion/SKILL.md — 8ca22db delta not yet ported: mk-km4a.12",
         "skills/writing-skills/*": "retired (extracted to interdev in Clavain 91ea85a; no longer carried there)"
+      },
+      "declinedAtSync": {
+        "skills/using-superpowers/SKILL.md": "8ca22db (mk-km4a.11): SUBAGENT-STOP, user-instruction precedence and platform adaptation declined; using-clavain is a managed router rewrite that already states user precedence, and platform tool maps are harness-specific"
       }
     },
     {
@@ -97,16 +100,15 @@
       "branch": "main",
       "lastSyncedCommit": "e8f3bbcb3580862a2715575d609333306ed02ee3",
       "basePath": "",
-      "fileMap": {
-        "skills/ce-code-review/references/personas/data-migration-reviewer.md": "agents/review/data-migration-expert.md",
-        "skills/ce-resolve-pr-feedback/references/agents/pr-comment-resolver.md": "agents/workflow/pr-comment-resolver.md"
-      },
+      "fileMap": {},
       "relocatedTo": {
         "plugins/compound-engineering/agents/research/*": "interflux (moved in Clavain 5a2e27f)",
         "plugins/compound-engineering/agents/workflow/bug-reproduction-validator.md": "removed upstream in v3; Clavain keeps its copy",
         "plugins/compound-engineering/commands/*": "removed upstream in v3 (now ce-* skills); Clavain keeps its copies",
         "plugins/compound-engineering/skills/create-agent-skills/*": "retired (extracted in Clavain 91ea85a)",
-        "plugins/compound-engineering/skills/file-todos/*": "removed upstream in v3; Clavain keeps its copy"
+        "plugins/compound-engineering/skills/file-todos/*": "removed upstream in v3; Clavain keeps its copy",
+        "skills/ce-code-review/references/personas/data-migration-reviewer.md": "not mapped: a persona fragment, not an equivalent of the frontmatter-bearing agents/review/data-migration-expert.md; port ideas by hand",
+        "skills/ce-resolve-pr-feedback/references/agents/pr-comment-resolver.md": "not mapped: a reference fragment, not an equivalent of the frontmatter-bearing agents/workflow/pr-comment-resolver.md; port ideas by hand"
       }
     }
   ],

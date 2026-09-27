@@ -158,6 +158,9 @@ line; an empty list means you set nothing aside.
 - Add progress reporting for user experience
 - Consider config file for excluded projects (portability)
 
+### Declined to Judge
+- Indexing throughput on very large archives: the plan sets no performance target
+
 ### Assessment
 
 **Ready to merge: With fixes**

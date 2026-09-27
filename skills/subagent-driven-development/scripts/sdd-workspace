@@ -12,11 +12,8 @@
 # vs docs/beta/plan.md), so each workspace records its owning plan's path in
 # a plan-path marker (repo-relative in-repo, absolute outside). A workspace
 # owned by a different plan is skipped and the slug disambiguated with the
-# plan's parent-directory name, then a counter. A workspace with no marker
-# predates the marker scheme and is adopted for the current plan so in-flight
-# workspaces keep resolving — which means the first collision on such a
-# legacy workspace adopts instead of detecting; acceptable, marker-less
-# workspaces age out as plans finish.
+# plan's parent-directory name, then a counter. A non-empty directory with no
+# marker is never adopted: it is not known to be this plan's.
 #
 # The workspace lives in the working tree (not under .git/) because Claude Code
 # treats .git/ as a protected path and denies agent writes there — which blocks
@@ -38,7 +35,7 @@ fi
 plan=$1
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
 
-slug=$(basename "$plan" .md)
+slug=$(basename -- "$plan" .md)
 [ -n "$slug" ] && [ "$slug" != "." ] && [ "$slug" != ".." ] \
   || { echo "cannot derive a workspace name from: $plan" >&2; exit 2; }
 
@@ -48,22 +45,25 @@ base="$root/.clavain/sdd"
 # Normalize the plan path (physical directory, so relative/absolute/../
 # spellings of one plan compare equal) and express it as the marker value:
 # repo-relative when the plan lives under the repo root, absolute otherwise.
-plan_dir=$(CDPATH='' cd -- "$(dirname "$plan")" && pwd -P)
-plan_abs="$plan_dir/$(basename "$plan")"
+plan_dir=$(CDPATH='' cd -- "$(dirname -- "$plan")" && pwd -P)
+plan_abs="$plan_dir/$(basename -- "$plan")"
 case "$plan_abs" in
   "$root"/*) plan_id=${plan_abs#"$root"/} ;;
   *)         plan_id=$plan_abs ;;
 esac
 
 # True when the workspace at $1 is (or becomes) this plan's: an existing
-# marker must name this plan; a missing marker means a new workspace or a
-# pre-marker legacy one, and either way the plan claims it by writing one.
+# marker must name this plan; a missing or empty directory is claimed by
+# writing one. A failed write is fatal, never "owned by another plan", so the
+# disambiguation loop below cannot spin on an unwritable base.
 owns() {
   if [ -e "$1/plan-path" ]; then
     [ "$(cat "$1/plan-path")" = "$plan_id" ]
+  elif [ -d "$1" ] && [ -n "$(ls -A "$1")" ]; then
+    return 1
   else
-    mkdir -p "$1"
-    printf '%s\n' "$plan_id" > "$1/plan-path"
+    { mkdir -p "$1" && printf '%s\n' "$plan_id" > "$1/plan-path"; } \
+      || { echo "cannot create SDD workspace: $1" >&2; exit 2; }
   fi
 }
 
@@ -73,7 +73,10 @@ if ! owns "$dir"; then
   dir="$base/$slug-$parent"
   if ! owns "$dir"; then
     n=2
-    while ! owns "$base/$slug-$parent-$n"; do n=$((n + 1)); done
+    while ! owns "$base/$slug-$parent-$n"; do
+      n=$((n + 1))
+      [ "$n" -le 100 ] || { echo "no free SDD workspace for: $plan" >&2; exit 2; }
+    done
     dir="$base/$slug-$parent-$n"
   fi
 fi

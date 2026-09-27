@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-27T06:05:37Z",
+  "generated": "2026-09-27T06:28:08Z",
   "counts": {
     "skills": 26,
     "agents": 6,
@@ -36,7 +36,7 @@
     },
     {
       "name": "executing-plans",
-      "description": "Execute a written implementation plan task by task with a progress ledger and a final independent review."
+      "description": "Execute a written implementation plan task by task, continuously, with a final independent review; native mode keeps a progress ledger."
     },
     {
       "name": "file-todos",
@@ -214,7 +214,7 @@
     },
     {
       "name": "execute-plan",
-      "description": "Execute plan in batches with review checkpoints"
+      "description": "Execute a plan continuously, with a ledger and a final independent review"
     },
     {
       "name": "fixbuild",

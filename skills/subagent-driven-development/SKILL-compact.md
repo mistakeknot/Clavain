@@ -3,8 +3,9 @@
 Execute a plan with a fresh implementer per task, one task review (spec, then
 quality) after each, and one independent final review. Run continuously: rule on
 conflicts and ledger `Ruling: <decision> — <why> — <cost if wrong>`. Stop only for
-destructive, security-sensitive or externally visible actions, or a plan with no
-non-guess path forward.
+executing-plans' stop list: destructive, security-sensitive or authority-needing
+external actions, a scope-changing decision, missing information or authority, a
+required checkpoint, or a plan with no non-guess path forward.
 
 ## Setup
 
@@ -14,7 +15,10 @@ non-guess path forward.
 - Read the plan, Global Constraints and Spec once. Write the pre-flight scan table
   (shared files/interfaces, per-task self-consistency) and rule on each row.
 - Resolve every seat through routing with an explicit model: implementers
-  `routine-execution` or `deep-execution`; reviewers `validation`.
+  `routine-execution` or `deep-execution`; reviewers `validation` with
+  `--producer-identity`.
+- Never fix code yourself; never advance past an open Critical or Important
+  finding that is neither fixed nor parked.
 
 ## Per task
 

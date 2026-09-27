@@ -44,8 +44,8 @@ the plan is long enough that later tasks would run on a compacted context.
    and ran, the final run passed, every `Expected:` line and `<verify>` block was
    checked against real output, and every deviation has a ledgered ruling.
    `intertest:verification-before-completion` governs the claim.
-4. `bash scripts/task-done PLAN_FILE N BASE -- <test command>` runs the task's
-   tests, keeps the full log in the workspace and, only on success, appends
+4. `bash scripts/task-done PLAN_FILE N BASE -- <test command>` runs the full
+   suite (or the plan's declared gate), keeps the full log in the workspace and, only on success, appends
    `Task <N>: complete (commits <base7>..<head7>, tests: <command> → <result>)`.
    A failing run records nothing.
 
@@ -55,7 +55,8 @@ the same call as the work they record.
 ## Final review
 
 Run `bash ../subagent-driven-development/scripts/review-package PLAN_FILE MERGE_BASE HEAD`
-(`MERGE_BASE=$(git merge-base origin/main HEAD)` or the branch's start). Resolve
+(MERGE_BASE is Task 1's recorded BASE, else the merge base with the default
+branch). Resolve
 the review role through routing with `--producer-identity` and dispatch it with
 `code-review-discipline/code-reviewer.md`, the package path, plan and spec paths,
 the plan's Review Focus verbatim and a pointer to the ledger's `Ruling:` lines.
@@ -68,14 +69,18 @@ a ruling you ledger. Then:
 
 - **Critical and Important:** fix them in one pass. Each fix gets a test that
   fails first, then passes, then a green suite; ledger
-  `Final: fixed <finding> — <test> RED→GREEN, suite <N>/<N>`. No second pass; a
-  finding you leave is a `Final: Ruling:`.
+  `Final: fixed <finding> — <test> RED→GREEN, suite <N>/<N>`. A finding you
+  leave is a `Final: Ruling:`. Then dispatch one scoped re-review of the fix
+  range with `../subagent-driven-development/re-review-prompt.md` on the same
+  seat; it may not be you. No further rounds: its open findings become
+  `Final: Ruling:` lines.
 - **Minor:** ledger `Final: minor (deferred): <one-liner>`; do not fix it.
 
 ## Finish
 
 List every `Ruling:` line (with its cost if wrong) and every deferred minor in
-the final report. Once the review is clean and its fixes are committed, delete
+the final report. Once every Critical and Important finding is fixed and
+re-reviewed or ruled on, and the fixes are committed, delete
 this plan's workspace directory, then use `clavain:landing-a-change`.
 
 | Excuse | Reality |

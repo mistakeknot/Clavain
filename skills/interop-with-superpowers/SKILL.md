@@ -16,7 +16,7 @@ Clavain shares vocabulary with [superpowers](https://github.com/obra/superpowers
 | `/clavain:brainstorm` | `/superpowers:brainstorm` | Same goal; Clavain emits beads |
 | `/clavain:execute-plan` | `/superpowers:execute-plan` | Clavain integrates with sprint orchestrator |
 | `clavain:dispatching-parallel-agents` skill | `superpowers:dispatching-parallel-agents` skill | Identical semantics; vendored |
-| `clavain:subagent-driven-development` skill | `superpowers:subagent-driven-development` skill | Vendored; identical |
+| `clavain:subagent-driven-development` skill | `superpowers:subagent-driven-development` skill | Vendored; adapted (Clavain routing, workspace paths, review gates) |
 
 ## When to reach for superpowers instead
 

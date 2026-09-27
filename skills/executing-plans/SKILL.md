@@ -1,6 +1,6 @@
 ---
 name: executing-plans
-description: Execute a written implementation plan task by task with a progress ledger and a final independent review.
+description: Execute a written implementation plan task by task, continuously, with a final independent review; native mode keeps a progress ledger.
 ---
 
 # Executing Plans
@@ -32,7 +32,9 @@ do not pause between tasks for approval. Rule on conflicts, ambiguities and plan
 defects against the spec and ledger each ruling with its cost if wrong. Stop and
 ask only for an irreversible or destructive operation, a security-sensitive
 action, a side effect outside the worktree that needs authority (merge, shared
-push, publish) or a plan so broken that every path is a guess.
+push, publish), a decision that changes authorized scope, missing information or
+authority (including an auth-gated interactive step), a checkpoint the plan or
+user explicitly requires, or a plan so broken that every path is a guess.
 
 Verification blocks require a zero process exit as well as the declared
 expectation. Reject unknown expectation syntax; output text never overrides a
@@ -46,8 +48,7 @@ open; do not mark a task accepted from structural checks alone.
 
 Fix bugs and blockers introduced by this work within scope. Two demonstrated
 capability failures require policy escalation; a disproven premise requires
-immediate escalation. Ask when a new architectural decision changes authorized
-scope, or required information/authority is missing. Continue unaffected work.
+immediate escalation. While a stop awaits an answer, continue unaffected work.
 
 Use `clavain:landing-a-change` after verification and required independent review.
 Commit and push when already authorized; publication retains its own authority.

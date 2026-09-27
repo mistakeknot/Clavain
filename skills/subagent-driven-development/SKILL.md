@@ -17,10 +17,11 @@ ledger that survives compaction.
 **Continuous execution.** Do not pause between tasks for check-ins or progress
 summaries. Decide conflicts, ambiguities and plan defects yourself: the spec is
 the binding authority, the plan is its argument. Ledger each decision as
-`Ruling: <decision> — <why> — <cost if wrong>` and keep going. Four things stop
-you: an irreversible or destructive operation, a security-sensitive action, an
-external side effect that norms say you ask about (merge, shared push, publish),
-or a plan so broken that every path forward is a guess.
+`Ruling: <decision> — <why> — <cost if wrong>` and keep going. Stop and ask only
+for the stop list in `../executing-plans/SKILL.md`: destructive, security-
+sensitive or authority-needing external actions (merge, shared push, publish), a
+decision that changes authorized scope, missing information or authority, a
+checkpoint the plan or user requires, or a plan where every path is a guess.
 
 ## When to Use
 
@@ -110,8 +111,8 @@ you paste stays in your context for the rest of the session.
 
 ## Final review and finish
 
-`bash scripts/review-package PLAN_FILE $(git merge-base origin/main HEAD) HEAD`,
-then dispatch `clavain:code-review-discipline`'s
+`bash scripts/review-package PLAN_FILE MERGE_BASE HEAD` (Task 1's BASE, else the
+merge base with the default branch), then dispatch `clavain:code-review-discipline`'s
 [code-reviewer.md](../code-review-discipline/code-reviewer.md) on the most
 capable independent seat with the package, plan, spec, Review Focus and the
 ledger's deferred-minor, parked and `Ruling:` lines. If no independent reviewer

@@ -310,7 +310,7 @@ Skills are workflow disciplines: they guide **how** you work, not what tools to 
 |-------|-------------|
 | **Core Lifecycle** | |
 | `writing-plans` | Create implementation plans with bite-sized tasks |
-| `executing-plans` | Execute plans with review checkpoints |
+| `executing-plans` | Execute plans continuously with a ledger and final review |
 | `landing-a-change` | Trunk-based finish checklist |
 | **Code Discipline** | |
 | `refactor-safely` | Disciplined refactoring with duplication detection |

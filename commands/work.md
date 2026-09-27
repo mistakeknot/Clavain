@@ -8,7 +8,7 @@ argument-hint: "[plan file, specification, or todo file path]"
 
 Execute a work plan (spec, plan, or todo file) systematically to ship complete features.
 
-> **vs `/execute-plan`:** Use `/work` for autonomous feature shipping. Use `/execute-plan` for batch execution with architect review checkpoints every 3 tasks.
+> **vs `/execute-plan`:** Use `/work` for autonomous feature shipping. Use `/execute-plan` for continuous task-by-task execution against a ledger, with a final independent review.
 
 ## Progress Tracking
 

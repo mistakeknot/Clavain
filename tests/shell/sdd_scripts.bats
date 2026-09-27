@@ -41,7 +41,8 @@ commit_file() {
     [ "$output" = "$REPO/.clavain/sdd/plan-a" ]
     dir_b="$(bash "$SDD/sdd-workspace" plan-b.md)"
     [ "$dir_b" = "$REPO/.clavain/sdd/plan-b" ]
-    [ -d "$output" ] && [ -d "$dir_b" ]
+    [ -d "$output" ]
+    [ -d "$dir_b" ]
     [ "$(cat "$output/plan-path")" = "plan-a.md" ]
 }
 
@@ -74,18 +75,28 @@ commit_file() {
     rel="$(bash "$SDD/sdd-workspace" docs/alpha/plan.md)"
     abs="$(bash "$SDD/sdd-workspace" "$REPO/docs/alpha/plan.md")"
     dotdot="$(cd docs/beta && bash "$SDD/sdd-workspace" ../alpha/plan.md)"
-    [ "$rel" = "$abs" ] && [ "$rel" = "$dotdot" ]
+    [ "$rel" = "$abs" ]
+    [ "$rel" = "$dotdot" ]
     [ "$(cat "$rel/plan-path")" = "docs/alpha/plan.md" ]
 }
 
-@test "a markerless legacy workspace is adopted in place" {
+@test "a non-empty markerless directory is never adopted" {
     printf '# Foo\n\n## Task 1: Foo\n\nFoo.\n' > foo.md
     mkdir -p .clavain/sdd/foo
     printf 'ledger\n' > .clavain/sdd/foo/progress.md
     run bash "$SDD/sdd-workspace" foo.md
-    [ "$output" = "$REPO/.clavain/sdd/foo" ]
+    [ "$output" = "$REPO/.clavain/sdd/foo-repo" ]
+    [ ! -e .clavain/sdd/foo/plan-path ]
     [ "$(cat .clavain/sdd/foo/progress.md)" = "ledger" ]
-    [ "$(cat .clavain/sdd/foo/plan-path)" = "foo.md" ]
+}
+
+@test "an unwritable workspace base fails fast instead of looping" {
+    printf '# Foo\n\n## Task 1: Foo\n\nFoo.\n' > foo.md
+    mkdir -p .clavain
+    printf 'not a directory\n' > .clavain/sdd
+    run timeout 10 bash "$SDD/sdd-workspace" foo.md
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"cannot create SDD workspace"* ]]
 }
 
 @test "a workspace owned by another plan is left alone; collisions fall back to a counter" {
@@ -135,7 +146,8 @@ commit_file() {
     brief="$REPO/.clavain/sdd/fenced/task-1-brief.md"
     grep -q "One body." "$brief"
     grep -q "## Task 2: fenced" "$brief"
-    ! grep -q "Ten body." "$brief"
+    run grep -q "Ten body." "$brief"
+    [ "$status" -eq 1 ]
     run bash "$SDD/task-brief" fenced.md 7
     [ "$status" -eq 3 ]
 }
@@ -202,7 +214,8 @@ commit_file() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"FAILED"* ]]
     [[ "$output" == *"NOT recorded"* ]]
-    ! grep -qs "Task 2: complete" "$REPO/.clavain/sdd/plan-a/progress.md"
+    run grep -qs "Task 2: complete" "$REPO/.clavain/sdd/plan-a/progress.md"
+    [ "$status" -ne 0 ]
     run bash "$EP/task-done" plan-a.md 2 "$base" sh -c true
     [ "$status" -eq 2 ]
 }

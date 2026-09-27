@@ -16,13 +16,13 @@ Two sides: requesting reviews and receiving feedback.
 
 Dispatch `clavain:plan-reviewer` subagent to catch issues before they cascade. Give it precisely crafted context, never your session history.
 
-**When mandatory:** After each task in subagent-driven development; after major feature; before merge to main.
+**When mandatory:** After major feature; before merge to main. (Subagent-driven development runs its own per-task review loop; see Integration.)
 **When optional:** When stuck; before refactoring; after fixing complex bug.
 
 ### How to Request
 
 ```bash
-BASE_SHA=$(git rev-parse HEAD~1)  # or: git merge-base origin/main HEAD
+BASE_SHA=$(git merge-base origin/main HEAD)  # or the commit before the work started; never assume HEAD~1
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
@@ -31,7 +31,7 @@ Use Task tool with `clavain:plan-reviewer` type. Fill template at `code-review-d
 **Act on feedback:** Fix Critical immediately; fix Important before proceeding; note Minor for later; push back with reasoning if reviewer is wrong.
 
 **Integration:**
-- Subagent-Driven Development: review after EACH task
+- Subagent-Driven Development: per task, its own `task-reviewer-prompt.md` over BASE..HEAD via `review-package`; this template for the final review only
 - Executing Plans: one whole-branch review after the last task
 - Ad-Hoc: review before merge or when stuck
 

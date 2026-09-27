@@ -1,29 +1,28 @@
 ---
 name: execute-plan
-description: Execute plan in batches with review checkpoints
+description: Execute a plan continuously, with a ledger and a final independent review
 ---
 
-> **When to use vs `/work`:** Use `/execute-plan` for multi-step plans with architect review checkpoints between batches. Use `/work` for autonomous feature execution with quality checks.
+> **When to use vs `/work`:** Use `/execute-plan` for multi-step plans executed task by task against a ledger, with one independent review at the end. Use `/work` for autonomous feature execution with quality checks.
 
 <BEHAVIORAL-RULES>
 1. **Execute tasks in order.** No skipping, reordering, or parallelizing unless plan explicitly marks tasks independent.
 2. **Write artifacts to disk.** Later tasks and the validator read files, not chat.
-3. **Stop at checkpoints for user approval.** Batch review checkpoints are mandatory — never auto-approve.
-4. **Halt on failure.** Stop immediately on failure; report what failed, what succeeded, and options. No silent retry or skip.
+3. **Execute continuously.** Do not pause between tasks. Stop only for the skill's stop list; a checkpoint the plan or user requires is on it and is never auto-approved.
+4. **Never paper over failure.** A failing task records nothing in the ledger. Fix it within scope, or stop and report what failed, what succeeded, and options. No silent retry or skip.
 5. **Executors resolve through the role table.** Offload spawns take their backend and model from `ic route dispatch --role`; naming a backend or model by hand is an override the plan declares.
-6. **Never enter plan mode autonomously.** The plan already exists. Stop and ask if scope changes mid-execution.
+6. **Never enter plan mode autonomously.** The plan already exists. A scope change mid-execution is a stop, not a ruling.
 </BEHAVIORAL-RULES>
 
 ## Progress Tracking
 
-`/execute-plan` is the **Act** leg of the OODARC loop, run in review-gated batches (each checkpoint is a mini Validate). Display and update:
+`/execute-plan` is the **Act** leg of the OODARC loop, closed by one independent review (Validate). Display and update:
 
 ```
-execute-plan (OODARC: Act — batched):
+execute-plan (OODARC: Act — continuous):
 - [ ] Enforce gate + record `executing` phase transition
-- [ ] Execute batch (≤3 tasks)        (Act)
-- [ ] Architect review checkpoint     (Validate — pause for approval)
-- [ ] Repeat until plan complete
+- [ ] Execute each task, ledgering it    (Act)
+- [ ] Final independent review + fixes   (Validate)
 ```
 
 **Before starting execution**, enforce the gate and record phase transition:
@@ -38,7 +37,7 @@ clavain-cli advance-phase "$BEAD_ID" "executing" "Executing: <plan_file_path>" "
 
 Invoke the `clavain:executing-plans` skill and follow it exactly. For offload runs (a fresh-context executor subagent plus a separate validator subagent), the executor and validator contracts are in `${CLAUDE_PLUGIN_ROOT}/skills/executing-plans/references/pattern-f-contracts.md`.
 
-**On plan completion** (all tasks executed, final checkpoint approved), record the routing outcome (capability-routing doctrine Rule 7 — silent, fail-open). Skip if `/clavain:quality-gates` ran for this plan — it already recorded the outcome. Set `_executor` to your model tier (`opus`/`sonnet`/`haiku`); `_author` to the plan author's tier (from the plan's frontmatter/provenance if recorded, else `unknown`); `_validator` to the tier that validated (`self` when the review checkpoints were the only validation). Count the plan's `<verify>` blocks into `_ct` and how many failed on final run into `_cf`:
+**On plan completion** (all tasks executed, final review resolved), record the routing outcome (capability-routing doctrine Rule 7 — silent, fail-open). Skip if `/clavain:quality-gates` ran for this plan — it already recorded the outcome. Set `_executor` to your model tier (`opus`/`sonnet`/`haiku`); `_author` to the plan author's tier (from the plan's frontmatter/provenance if recorded, else `unknown`); `_validator` to the final reviewer's tier (`self` only if the review was blocked). Count the plan's `<verify>` blocks into `_ct` and how many failed on final run into `_cf`:
 
 ```bash
 if source "${CLAUDE_PLUGIN_ROOT}/hooks/lib.sh" 2>/dev/null; then
