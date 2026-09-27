@@ -92,6 +92,36 @@ for source in flag env session; do
     check "$source does not override nested session" receipt_has child-bead interstat-session
   fi
 done
+# Reviewer-flagged regression (mk-42j9.29 delta review of 0e08d59): a
+# caller-exported CLAVAIN_BEAD_ID must only reach a nested dispatch's own
+# environment when the RESOLVED bead source is literally "env" -- not merely
+# because the caller happened to have it exported. An empty/invalid export,
+# or one that loses to a higher-precedence --bead flag, must not leak into
+# the nested dispatch labelled "env".
+: > "$TEST_RECEIPTS"; : > "$TEST_ENV_LOG"
+CLAVAIN_BEAD_ID= DISPATCH_SESSION_ID=outer TEST_NESTED=1 \
+  bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TEST_WORK" hi \
+  > "$TMP_ROOT/empty-env-session-nested.log" 2>&1 \
+  || { cat "$TMP_ROOT/empty-env-session-nested.log"; exit 1; }
+check 'exported-empty env + session: nested dispatch uses its own session, not env' \
+  receipt_has child-bead interstat-session
+
+: > "$TEST_RECEIPTS"; : > "$TEST_ENV_LOG"
+CLAVAIN_BEAD_ID='not valid!' DISPATCH_SESSION_ID=outer TEST_NESTED=1 \
+  bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TEST_WORK" hi \
+  > "$TMP_ROOT/invalid-env-session-nested.log" 2>&1 \
+  || { cat "$TMP_ROOT/invalid-env-session-nested.log"; exit 1; }
+check 'exported-invalid env + session: nested dispatch uses its own session, not env' \
+  receipt_has child-bead interstat-session
+
+: > "$TEST_RECEIPTS"; : > "$TEST_ENV_LOG"
+CLAVAIN_BEAD_ID=env-bead DISPATCH_SESSION_ID=outer TEST_NESTED=1 \
+  bash "$ROOT/scripts/dispatch.sh" --role deep-execution --bead flag-bead -C "$TEST_WORK" hi \
+  > "$TMP_ROOT/env-plus-flag-nested.log" 2>&1 \
+  || { cat "$TMP_ROOT/env-plus-flag-nested.log"; exit 1; }
+check 'exported env + --bead flag: nested dispatch uses its own session, not env' \
+  receipt_has child-bead interstat-session
+
 for value in 'not valid!' ''; do
   : > "$TEST_RECEIPTS"; : > "$TEST_ENV_LOG"
   rc=0

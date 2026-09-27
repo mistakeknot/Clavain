@@ -1143,8 +1143,12 @@ _resolve_dispatch_bead
 # own bookkeeping (CLAVAIN_BEAD_SOURCE, CLAVAIN_BEAD_CONTEXT_RESOLVED stay
 # shell-local), but don't take away a export the caller already had — restore
 # it, now carrying the resolved value, only for the process tree the model
-# seat below inherits from.
-if [[ "$DISPATCH_BEAD_ID_CALLER_EXPORTED" == true ]]; then
+# seat below inherits from. This must only fire when the RESOLVED source is
+# literally "env": a caller-exported CLAVAIN_BEAD_ID that turned out to be
+# empty/invalid, or that lost to a higher-precedence --bead flag, did not
+# actually resolve via env, and must not leak into a nested dispatch's own
+# environment under a false "env" label.
+if [[ "$DISPATCH_BEAD_ID_CALLER_EXPORTED" == true && "$BEAD_SOURCE" == env ]]; then
   export CLAVAIN_BEAD_ID
 fi
 
