@@ -219,6 +219,11 @@
         "providerSlug": "anthropic"
       },
       {
+        "slug": "claude-opus-5-5-medium",
+        "name": "Claude Opus 5.5 (Adaptive Reasoning, Medium Effort, Default Fallback)",
+        "providerSlug": "anthropic"
+      },
+      {
         "slug": "claude-sonnet-5-high",
         "name": "Claude Sonnet 5 (Adaptive Reasoning, High Effort)",
         "providerSlug": "anthropic"
@@ -279,6 +284,16 @@
         "providerSlug": "openai"
       },
       {
+        "slug": "gpt-6-sol-medium",
+        "name": "GPT-6 Sol (medium)",
+        "providerSlug": "openai"
+      },
+      {
+        "slug": "gpt-6-sol-xhigh",
+        "name": "GPT-6 Sol (xhigh)",
+        "providerSlug": "openai"
+      },
+      {
         "slug": "gpt-6-astra-high",
         "name": "GPT-6 Astra (high)",
         "providerSlug": "openai"
@@ -286,6 +301,11 @@
       {
         "slug": "gpt-6-astra-xhigh",
         "name": "GPT-6 Astra (xhigh)",
+        "providerSlug": "openai"
+      },
+      {
+        "slug": "gpt-6-astra-medium",
+        "name": "GPT-6 Astra (medium)",
         "providerSlug": "openai"
       },
       {
@@ -1853,6 +1873,82 @@
         "messages_include": [
           "fallback_ref 'subagent:nonexistent' is not a verified registry entry",
           "fallback_ref 'subagent:opus' is not a verified registry entry"
+        ]
+      }
+    },
+    {
+      "id": "repo-registry-medium-high-xhigh-rows",
+      "note": "mk-42j9.20 / mk-42j9.27 / mk-rpnv.16 (mk-approved 2026-09-27): the repository slug registry maps Opus 5.5, GPT-6 Astra, GPT-6 Sol and Sonnet 5 at medium, high and xhigh as exact snapshot rows. Rule 6 is unchanged: GPT-6 Sol at medium in an authority (main-integrator) or judgment (planning) role is ineligible and removed (never a head); GPT-6 Sol at high in the same authority chain is not flagged.",
+      "routing": "# fixture routing.yaml fragment (mk-42j9.20/.27, mk-rpnv.16 efforts)\ndispatch:\n  model_aliases:\n    opus: claude-opus-5-5\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    main-integrator: main-astra\n    planning: planning-astra\n    plan-review: review-astra\n    deep-execution: deep-sol6\n    scout: scout-sonnet\n  tiers:\n    main-astra:\n      role: main-integrator\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: xhigh\n      fallbacks: [main-sol6med, main-sol6high, main-sonnet]\n      description: fixture seat main-astra\n    main-sol6med:\n      role: main-integrator\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: medium\n      description: fixture seat main-sol6med\n    main-sol6high:\n      role: main-integrator\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: high\n      description: fixture seat main-sol6high\n    main-sonnet:\n      role: main-integrator\n      backend: claude\n      model: sonnet\n      reasoning_effort: xhigh\n      description: fixture seat main-sonnet\n    planning-astra:\n      role: planning\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: medium\n      fallbacks: [planning-sol6med]\n      description: fixture seat planning-astra\n    planning-sol6med:\n      role: planning\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: medium\n      description: fixture seat planning-sol6med\n    review-astra:\n      role: plan-review\n      backend: codex\n      model: gpt-6-astra\n      reasoning_effort: medium\n      fallbacks: [review-opus]\n      description: fixture seat review-astra\n    review-opus:\n      role: plan-review\n      backend: claude\n      model: opus\n      reasoning_effort: medium\n      description: fixture seat review-opus\n    deep-sol6:\n      role: deep-execution\n      backend: codex\n      model: gpt-6-sol\n      reasoning_effort: xhigh\n      fallbacks: [deep-opus]\n      description: fixture seat deep-sol6\n    deep-opus:\n      role: deep-execution\n      backend: claude\n      model: opus\n      reasoning_effort: xhigh\n      description: fixture seat deep-opus\n    scout-sonnet:\n      role: scout\n      backend: claude\n      model: sonnet\n      reasoning_effort: medium\n      description: fixture seat scout-sonnet\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-opus-5-5]\n",
+      "families_file": "config/roster-families.yaml",
+      "slugs_file": "config/roster-slugs.yaml",
+      "expect": {
+        "status": "ok",
+        "mapping": {
+          "claude-opus-5-5@medium": "exact",
+          "claude-opus-5-5@xhigh": "exact",
+          "gpt-6-astra@medium": "exact",
+          "gpt-6-astra@xhigh": "exact",
+          "gpt-6-sol@medium": "exact",
+          "gpt-6-sol@high": "exact",
+          "gpt-6-sol@xhigh": "exact",
+          "claude-sonnet-5@medium": "exact",
+          "claude-sonnet-5@xhigh": "exact"
+        },
+        "mapping_field": {
+          "claude-opus-5-5@medium": {
+            "slug": "claude-opus-5-5-medium"
+          },
+          "gpt-6-astra@medium": {
+            "slug": "gpt-6-astra-medium"
+          },
+          "gpt-6-sol@medium": {
+            "slug": "gpt-6-sol-medium"
+          },
+          "gpt-6-sol@high": {
+            "slug": "gpt-6-sol-high"
+          },
+          "gpt-6-sol@xhigh": {
+            "slug": "gpt-6-sol-xhigh"
+          },
+          "claude-sonnet-5@xhigh": {
+            "slug": "claude-sonnet-5-xhigh"
+          }
+        },
+        "removals": [
+          "main-sol6med",
+          "planning-sol6med"
+        ],
+        "flags_include": {
+          "main-sol6med": [
+            "rule6/main-integrator/*"
+          ],
+          "planning-sol6med": [
+            "rule6/planning/*"
+          ]
+        },
+        "not_flagged": [
+          "main-sol6high",
+          "deep-sol6",
+          "scout-sonnet"
+        ],
+        "heads": {
+          "default|main-integrator|-|nominal|default": "main-astra",
+          "default|main-integrator|-|openai-unavailable|default": "main-sonnet"
+        },
+        "heads_changed": []
+      }
+    },
+    {
+      "id": "repo-registry-kimi-medium-unmapped",
+      "note": "Gap (mk-42j9.27 validation-kimi@medium): the pinned snapshot has only kimi-k3 (unlabelled, max per Artificial Analysis) and kimi-k3-low, no medium row, so the repository registry leaves kimi-code/k3@medium unmapped and the run refuses until mk ratifies a waiver.",
+      "routing": "# fixture routing.yaml fragment (mk-42j9.20/.27, mk-rpnv.16 efforts)\ndispatch:\n  model_aliases:\n    opus: claude-opus-5-5\n    sonnet: claude-sonnet-5\n  cross_lab_first: [validation, cross-lab-review]\n  roles:\n    validation: validation-kimi\n  tiers:\n    validation-kimi:\n      role: validation\n      backend: kimi\n      model: kimi-code/k3\n      reasoning_effort: medium\n      description: fixture seat validation-kimi\n  # end of tiers\nreasoning:\n  frontier_models: [gpt-6-astra, claude-opus-5-5]\n",
+      "families_file": "config/roster-families.yaml",
+      "slugs_file": "config/roster-slugs.yaml",
+      "expect": {
+        "status": "refused",
+        "refusal_include": [
+          "unmapped:kimi-code/k3@medium"
         ]
       }
     },

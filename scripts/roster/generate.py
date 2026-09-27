@@ -81,6 +81,11 @@ RULE6_BARRED_CLASSES = ("authority", "judgment")
 
 # Opus is a capacity substitute (mk ruling 2026-09-10); claude-opus-5 is the
 # only Opus version admitted to frontier_models.
+# Stale since mk-3b8z: routing.yaml's frontier_models now lists
+# claude-opus-5-5, so the real run's opus_last lint reports it (lint only, no
+# refusal). Kept because every truth-table fixture lists claude-opus-5 in
+# frontier_models and opus-in-frontier-models-lint asserts 5.5 is flagged;
+# moving the admitted version means migrating those fixtures with it.
 OPUS_FRONTIER_ADMITTED = ("claude-opus-5",)
 
 # Availability scenarios for effective heads. `sol-unavailable` is the

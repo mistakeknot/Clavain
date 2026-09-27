@@ -222,5 +222,77 @@ class RosterGenerateNegativeCases(unittest.TestCase):
         self.assertIn("| `kimi-code/k3@high` | `kimi-k3` (Kimi K3) |", report)
 
 
+def load_generator():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("roster_generate", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def set_tier_fields(routing_text, tier, **fields):
+    """Rewrite `key: value` lines inside one dispatch.tiers block, keeping the
+    text layout the patch renderer expects."""
+    import re
+    out, current = [], None
+    for line in routing_text.splitlines(keepends=True):
+        m = re.match(r"^    ([A-Za-z0-9_.\-]+):\s*(#.*)?$", line)
+        if m:
+            current = m.group(1)
+        if current == tier:
+            for key, value in fields.items():
+                if re.match(rf"^      {key}:", line):
+                    line = f"      {key}: {value}\n"
+        out.append(line)
+    return "".join(out)
+
+
+@unittest.skipUnless(EVIDENCE_SNAPSHOT.exists(), "pinned evidence snapshot not present on this host")
+class RosterPendingEffortRows(unittest.TestCase):
+    """mk-42j9.20 / mk-42j9.27 / mk-rpnv.16 (mk-approved 2026-09-27): the
+    registry must map the model@effort combinations the pending routing
+    changes use, as exact rows of the pinned snapshot."""
+
+    NEEDED = [f"{m}@{e}" for m in ("claude-opus-5-5", "gpt-6-astra", "gpt-6-sol", "claude-sonnet-5")
+              for e in ("medium", "high", "xhigh")]
+
+    @classmethod
+    def setUpClass(cls):
+        import yaml
+        cls.g = load_generator()
+        cls.snapshot = json.loads(EVIDENCE_SNAPSHOT.read_text())
+        cls.families = yaml.safe_load(FAMILIES.read_text())
+        cls.slugs = yaml.safe_load(SLUGS.read_text())
+
+    def pipeline(self, routing_text):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        if self.g.freshness(self.snapshot["meta"].get("generatedAt"), now)[0] != "fresh":
+            self.skipTest("pinned snapshot is past its freshness deadline")
+        return self.g.run_pipeline(routing_text, self.families, self.slugs, self.snapshot, now)
+
+    def test_needed_combinations_are_exact_rows(self):
+        registry, gaps = self.g.resolve_registry(self.slugs, self.families, self.g.index_snapshot(self.snapshot))
+        self.assertEqual(gaps, [])
+        for key in self.NEEDED:
+            self.assertIn(key, registry)
+            self.assertEqual(registry[key]["status"], "exact", key)
+
+    def test_kimi_medium_is_not_invented(self):
+        # No kimi-k3 medium row exists; it stays unmapped until mk ratifies a waiver.
+        registry, _ = self.g.resolve_registry(self.slugs, self.families, self.g.index_snapshot(self.snapshot))
+        self.assertNotIn("kimi-code/k3@medium", registry)
+
+    def test_rule6_flags_gpt6_sol_medium_in_authority(self):
+        text = set_tier_fields(ROUTING.read_text(), "main-sol", model="gpt-6-sol", reasoning_effort="medium")
+        for tier in ("pilot-sonnet", "routine-sonnet", "release-sonnet"):
+            text = set_tier_fields(text, tier, reasoning_effort="xhigh")
+        res = self.pipeline(text)
+        self.assertEqual(res["status"], "ok")
+        self.assertEqual(res["mapping"]["gpt-6-sol@medium"]["slug"], "gpt-6-sol-medium")
+        self.assertEqual(res["mapping"]["claude-sonnet-5@xhigh"]["slug"], "claude-sonnet-5-xhigh")
+        self.assertIn("rule6/main-integrator/*", res["flags"].get("main-sol", []))
+
+
 if __name__ == "__main__":
     unittest.main()
