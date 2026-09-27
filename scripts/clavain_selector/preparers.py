@@ -255,8 +255,17 @@ def _normalize_read_set_paths(
     if not read_set_paths:
         return tuple((cid, ()) for cid in expected_ids)
 
+    try:
+        entries = list(read_set_paths)
+    except TypeError as exc:
+        # Commit D (N3 residual): a non-iterable `read_set_paths` (e.g. a
+        # bare `5`) must not raise a raw `TypeError` from the `for` loop
+        # below -- `not read_set_paths` above only screens out falsy
+        # values, not truthy non-iterables.
+        raise NotPrepared(f"read_set_paths is not iterable: {read_set_paths!r}") from exc
+
     normalized: list[tuple[str, tuple[str, ...]]] = []
-    for entry in read_set_paths:
+    for entry in entries:
         try:
             cid, paths = entry
         except (TypeError, ValueError) as exc:
@@ -298,11 +307,13 @@ def _finish_prepare(
     task_revision: str | None,
     read_set_paths: Sequence[tuple[str, Sequence[str]]],
 ) -> PreparedSet:
-    if project_root is None:
-        # Finding 8: `project_root` is mandatory everywhere -- a missing
-        # one is `NotPrepared`, never a silent `None` that later code has
-        # to remember to special-case.
-        raise NotPrepared("project_root is required")
+    if project_root is None or (isinstance(project_root, str) and project_root == ""):
+        # Finding 8 / Commit D Minor 2: `project_root` is mandatory
+        # everywhere -- a missing one (`None` or an empty string, which
+        # `Path("")` would otherwise silently resolve to the current
+        # working directory) is `NotPrepared`, never a silent default that
+        # later code has to remember to special-case.
+        raise NotPrepared(f"project_root is required and must be non-empty: {project_root!r}")
 
     try:
         candidates = tuple(candidates)
@@ -445,8 +456,10 @@ def prepare(
     denylist. `project_root` is mandatory (finding 8): `None` is
     `NotPrepared`, never a silently permissive default.
     """
-    if project_root is None:
-        raise NotPrepared("project_root is required")
+    if project_root is None or (isinstance(project_root, str) and project_root == ""):
+        # Commit D Minor 2: an empty string would otherwise resolve
+        # silently to the current working directory via `Path("")`.
+        raise NotPrepared(f"project_root is required and must be non-empty: {project_root!r}")
 
     try:
         point_value = point if isinstance(point, Point) else Point(point)
@@ -456,7 +469,12 @@ def prepare(
     integrations = registry.get("integrations", {}) if isinstance(registry, Mapping) else {}
     if not isinstance(integrations, Mapping):
         raise NotPrepared(f"registry integrations is not a mapping: {integrations!r}")
-    entry = integrations.get(integration)
+    try:
+        entry = integrations.get(integration)
+    except TypeError as exc:
+        # Commit D Minor 3: an unhashable `integration` (e.g. a list) must
+        # not raise a raw `TypeError` from the dict lookup.
+        raise NotPrepared(f"integration is not a valid key: {integration!r}") from exc
     if not isinstance(entry, Mapping):
         raise NotPrepared(f"unknown integration: {integration!r}")
 
@@ -508,7 +526,16 @@ def prepare(
     except TypeError as exc:
         raise NotPrepared(f"preparer {preparer_name!r} vocabulary() did not return an iterable: {exc}") from exc
 
-    candidates = tuple(built.candidates)
+    try:
+        candidates = tuple(built.candidates)
+    except TypeError as exc:
+        # Commit D (N3 residual): a `build()` returning a non-iterable
+        # `candidates` (e.g. `None` or `5`) must not raise a raw
+        # `TypeError` here, before `_finish_prepare`'s own guard is ever
+        # reached.
+        raise NotPrepared(
+            f"preparer {preparer_name!r} build returned non-iterable candidates: {built.candidates!r}"
+        ) from exc
     for c in candidates:
         if not isinstance(c, Candidate):
             # N3: a non-`Candidate` entry (including `None`) has no `.id` to
@@ -712,6 +739,10 @@ def _check_request_matches_prepared(prepared: PreparedSet, request: SelectionReq
     `prepared_at_revision` (but the same id and payload hash) is caught
     too.
     """
+    if not isinstance(request, SelectionRequest):
+        # Commit D Minor 1: a non-`SelectionRequest` (e.g. `None`) must not
+        # raise a raw `AttributeError` from `request.integration` below.
+        raise NotPrepared(f"not a SelectionRequest: {request!r}")
     mismatches: list[str] = []
     if request.integration != prepared.integration:
         mismatches.append("integration")

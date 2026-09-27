@@ -1217,3 +1217,120 @@ def test_prepared_set_project_root_is_always_a_path(tmp_path):
     result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,), project_root=tmp_path)
     assert isinstance(result.project_root, Path)
     assert result.project_root == tmp_path.resolve()
+
+
+# ---------------------------------------------------------------------------
+# Commit D (mk-42j9.7): residual N3 leaks and Minors 1-3 from the scoped
+# review of 916cfb0..HEAD. Each of these must raise NotPrepared, never a
+# raw exception type.
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_rejects_empty_string_project_root(monkeypatch):
+    """Minor 2: `Path("")` would otherwise resolve silently to the cwd."""
+    fake = Preparer(
+        name="needs-root",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=lambda project_root: frozenset(),
+        event_fields=frozenset(),
+        build=lambda event, project_root: PreparedInput(task="x", candidates=()),
+    )
+    _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "needs-root")
+    with pytest.raises(NotPrepared):
+        prepare(registry, "selftest", Point.PRE_TOOL, None, project_root="")
+
+
+def test_from_operator_rejects_empty_string_project_root():
+    """Minor 2, via from_operator's own project_root."""
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    with pytest.raises(NotPrepared):
+        from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,), project_root="")
+
+
+def test_from_case_rejects_empty_string_project_root():
+    """Minor 2, via from_case's own project_root key."""
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    case = {
+        "integration": "selftest",
+        "point": Point.LIBRARY,
+        "task": "task",
+        "candidates": (candidate,),
+        "project_root": "",
+    }
+    with pytest.raises(NotPrepared):
+        from_case(case, UNUSED_REGISTRY)
+
+
+def test_prepare_rejects_unhashable_integration(monkeypatch, tmp_path):
+    """Minor 3: an unhashable `integration` (e.g. a list) must not raise a
+    raw TypeError from the registry dict lookup."""
+    fake = Preparer(
+        name="needs-root",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=lambda project_root: frozenset(),
+        event_fields=frozenset(),
+        build=lambda event, project_root: PreparedInput(task="x", candidates=()),
+    )
+    _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "needs-root")
+    with pytest.raises(NotPrepared):
+        prepare(registry, ["not", "hashable"], Point.PRE_TOOL, None, project_root=tmp_path)
+
+
+def test_prepare_rejects_build_returning_none_candidates(monkeypatch, tmp_path):
+    """N3 residual: `build()` returning a non-iterable `candidates` (here
+    `None`) must not raise a raw TypeError at the `tuple(built.candidates)`
+    call in prepare()."""
+    fake = Preparer(
+        name="none-candidates",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=lambda project_root: frozenset({"a"}),
+        event_fields=frozenset(),
+        build=lambda event, project_root: PreparedInput(task="x", candidates=None),
+    )
+    _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "none-candidates")
+    with pytest.raises(NotPrepared):
+        prepare(registry, "selftest", Point.PRE_TOOL, None, project_root=tmp_path)
+
+
+def test_prepare_rejects_build_returning_int_candidates(monkeypatch, tmp_path):
+    """N3 residual: same shape, a bare int rather than None."""
+    fake = Preparer(
+        name="int-candidates",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=lambda project_root: frozenset({"a"}),
+        event_fields=frozenset(),
+        build=lambda event, project_root: PreparedInput(task="x", candidates=5),
+    )
+    _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "int-candidates")
+    with pytest.raises(NotPrepared):
+        prepare(registry, "selftest", Point.PRE_TOOL, None, project_root=tmp_path)
+
+
+def test_from_operator_rejects_non_iterable_read_set_paths():
+    """N3 residual: same non-iterable class at _normalize_read_set_paths,
+    reached via from_operator's own read_set_paths argument."""
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    with pytest.raises(NotPrepared):
+        from_operator(
+            UNUSED_REGISTRY,
+            "selftest",
+            Point.LIBRARY,
+            "task",
+            "",
+            (candidate,),
+            project_root="/tmp",
+            read_set_paths=5,
+        )
+
+
+def test_validated_rejects_non_selection_request(tmp_path):
+    """Minor 1: a non-SelectionRequest (e.g. None) must not raise a raw
+    AttributeError from _check_request_matches_prepared."""
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    prepared = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,), project_root=tmp_path)
+    with pytest.raises(NotPrepared):
+        validated(prepared, None)
