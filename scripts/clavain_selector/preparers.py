@@ -104,7 +104,7 @@ class PreparedSet:
     project_root: Path | None
     task_revision: str
     bindings: tuple[tuple[str, str], ...]
-    read_set_paths: tuple[str, ...]
+    read_set_paths: tuple[tuple[str, tuple[str, ...]], ...]
     tag: bytes
 
 
@@ -169,7 +169,7 @@ def _taggable_fields(prepared: PreparedSet) -> dict[str, Any]:
         "project_root": prepared.project_root,
         "task_revision": prepared.task_revision,
         "bindings": [list(b) for b in prepared.bindings],
-        "read_set_paths": list(prepared.read_set_paths),
+        "read_set_paths": [[cid, list(paths)] for cid, paths in prepared.read_set_paths],
     }
 
 
@@ -203,6 +203,40 @@ def _project_event(point: Point, event: HostEvent | None, fields: frozenset[str]
 # ---------------------------------------------------------------------------
 
 
+def _normalize_read_set_paths(
+    read_set_paths: Sequence[tuple[str, Sequence[str]]],
+    ordered: Sequence[Candidate],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Fill in the per-candidate `(id, paths)` shape the plan requires.
+
+    An empty `read_set_paths` (the default for callers with no read sets at
+    all) is shorthand for "every candidate has an empty read set" -- it
+    expands to `(id, ())` for every candidate in canonical order. A
+    non-empty `read_set_paths` must already carry exactly the candidates'
+    ids, in canonical order; any other shape is `NotPrepared` (revision 8,
+    P2-10).
+    """
+    expected_ids = tuple(c.id for c in ordered)
+    if not read_set_paths:
+        return tuple((cid, ()) for cid in expected_ids)
+
+    normalized: list[tuple[str, tuple[str, ...]]] = []
+    for entry in read_set_paths:
+        try:
+            cid, paths = entry
+        except (TypeError, ValueError) as exc:
+            raise NotPrepared(f"read_set_paths entry is not an (id, paths) pair: {entry!r}") from exc
+        normalized.append((cid, tuple(paths)))
+
+    got_ids = tuple(cid for cid, _ in normalized)
+    if got_ids != expected_ids:
+        raise NotPrepared(
+            f"read_set_paths ids {list(got_ids)!r} do not match candidates "
+            f"{list(expected_ids)!r} in canonical order"
+        )
+    return tuple(normalized)
+
+
 def _finish_prepare(
     *,
     integration: str,
@@ -215,7 +249,7 @@ def _finish_prepare(
     sources: Sequence[str],
     project_root: str | Path | None,
     task_revision: str | None,
-    read_set_paths: Sequence[str],
+    read_set_paths: Sequence[tuple[str, Sequence[str]]],
 ) -> PreparedSet:
     try:
         ordered = contract.canonical_order(tuple(candidates))
@@ -230,13 +264,24 @@ def _finish_prepare(
 
     root = Path(project_root).resolve() if project_root is not None else None
 
-    resolved_read_set: list[str] = []
-    for raw_path in read_set_paths:
-        real = os.path.realpath(str(raw_path))
-        rule = egress._source_rule(Path(real), root)
-        if rule is not None:
-            raise NotPrepared(f"read_set_paths rejected ({rule}): {raw_path!r}")
-        resolved_read_set.append(real)
+    normalized_read_set = _normalize_read_set_paths(read_set_paths, ordered)
+
+    resolved_pairs: list[tuple[str, tuple[str, ...]]] = []
+    for candidate, (cid, paths) in zip(ordered, normalized_read_set):
+        has_fingerprint = candidate.read_set_fingerprint is not None
+        if bool(paths) != has_fingerprint:
+            raise NotPrepared(
+                f"candidate {cid!r} read_set_paths emptiness ({bool(paths)}) does not match "
+                f"read_set_fingerprint being set ({has_fingerprint})"
+            )
+        resolved_paths: list[str] = []
+        for raw_path in paths:
+            real = os.path.realpath(str(raw_path))
+            rule = egress._source_rule(Path(real), root)
+            if rule is not None:
+                raise NotPrepared(f"read_set_paths rejected ({rule}): {raw_path!r}")
+            resolved_paths.append(real)
+        resolved_pairs.append((cid, tuple(resolved_paths)))
 
     try:
         bindings = tuple((c.id, payload_sha256(c.payload)) for c in ordered)
@@ -255,7 +300,7 @@ def _finish_prepare(
         project_root=root,
         task_revision=task_revision,
         bindings=bindings,
-        read_set_paths=tuple(resolved_read_set),
+        read_set_paths=tuple(resolved_pairs),
         tag=b"",
     )
     tag = _compute_tag(_taggable_fields(prelim))
@@ -273,8 +318,11 @@ def prepare(name: str, event: HostEvent | None, *, project_root: str | Path | No
     Raises `NotPrepared` when `name` is not in `PREPARERS`, when `event`'s
     point is not one the preparer serves, when the preparer's `build` omits
     a required key or raises, when a produced candidate id is outside a
-    non-empty `vocabulary`, or when any `read_set_paths` entry resolves
-    outside `project_root` or onto the source denylist.
+    non-empty `vocabulary`, when `read_set_paths` (a per-candidate `(id,
+    paths)` sequence in canonical order, or `()` when no candidate has a
+    read set) does not correspond to the candidates or disagrees with a
+    candidate's `read_set_fingerprint`, or when any candidate's path
+    resolves outside `project_root` or onto the source denylist.
     """
     preparer_def = PREPARERS.get(name)
     if preparer_def is None:
@@ -327,10 +375,14 @@ def from_operator(
     project_root: str | Path | None = None,
     *,
     sources: Sequence[str] = (),
-    read_set_paths: Sequence[str] = (),
+    read_set_paths: Sequence[tuple[str, Sequence[str]]] = (),
     task_revision: str | None = None,
 ) -> PreparedSet:
-    """Build a `PreparedSet` on behalf of a human operator (no preparer, no event)."""
+    """Build a `PreparedSet` on behalf of a human operator (no preparer, no event).
+
+    `read_set_paths` is a per-candidate `(id, paths)` sequence, in the same
+    canonical order as `candidates`; `()` means no candidate has a read set.
+    """
     return _finish_prepare(
         integration=integration,
         point=point,
@@ -352,7 +404,8 @@ def from_case(case: Mapping[str, Any], registry: Mapping[str, Any] | None = None
     `registry` is accepted but currently unused -- reserved for a future
     per-integration validation pass; `case` must supply `integration`,
     `point`, `task`, `candidates`, with `context`/`sources`/`read_set_paths`/
-    `project_root`/`task_revision`/`preparer` optional.
+    `project_root`/`task_revision`/`preparer` optional. `read_set_paths`, if
+    given, is a per-candidate `(id, paths)` sequence in canonical order.
     """
     del registry
     try:
@@ -384,7 +437,12 @@ def verify(prepared: PreparedSet) -> bool:
     The tag alone would not catch a `payload` mutated in place after
     preparation (a `Candidate`'s dict-encoding for tagging excludes
     `payload`), so this also rebuilds `bindings` from the live candidates
-    and requires an exact match.
+    and requires an exact match. `read_set_paths` is itself part of the
+    tagged fields (so a replaced entry already fails the tag check), but
+    this also re-checks, independently of the tag, that its ids still
+    correspond to `candidates` in canonical order and that each candidate's
+    paths are empty exactly when its `read_set_fingerprint` is `None`
+    (revision 8, P2-10).
     """
     if not isinstance(prepared, PreparedSet):
         return False
@@ -398,7 +456,16 @@ def verify(prepared: PreparedSet) -> bool:
         recomputed = tuple((c.id, payload_sha256(c.payload)) for c in prepared.candidates)
     except ValueError:
         return False
-    return recomputed == prepared.bindings
+    if recomputed != prepared.bindings:
+        return False
+    expected_ids = tuple(c.id for c in prepared.candidates)
+    got_ids = tuple(cid for cid, _ in prepared.read_set_paths)
+    if got_ids != expected_ids:
+        return False
+    for candidate, (_, paths) in zip(prepared.candidates, prepared.read_set_paths):
+        if bool(paths) != (candidate.read_set_fingerprint is not None):
+            return False
+    return True
 
 
 def request_from(prepared: PreparedSet, *, session: SessionRef) -> SelectionRequest:

@@ -269,7 +269,7 @@ def test_verify_rejects_hand_built_preparedset():
         project_root=None,
         task_revision="rev-1",
         bindings=(("cand-a", "0" * 64),),
-        read_set_paths=(),
+        read_set_paths=(("cand-a", ()),),
         tag=b"not-a-real-tag",
     )
     assert verify(forged) is False
@@ -300,7 +300,8 @@ def test_verify_rejects_non_preparedset():
 
 
 # ---------------------------------------------------------------------------
-# read_set_paths source-boundary rejection
+# read_set_paths: per-candidate (id, paths) shape, source-boundary rejection,
+# id-order/fingerprint-correspondence invariants (revision 8, P2-10)
 # ---------------------------------------------------------------------------
 
 
@@ -308,12 +309,12 @@ def test_read_set_paths_inside_project_root_is_accepted(tmp_path):
     inside = tmp_path / "src" / "file.py"
     inside.parent.mkdir(parents=True)
     inside.write_text("x = 1\n")
-    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     result = from_operator(
         "selftest", Point.LIBRARY, "task", "", (candidate,),
-        project_root=tmp_path, read_set_paths=(str(inside),),
+        project_root=tmp_path, read_set_paths=(("cand-a", (str(inside),)),),
     )
-    assert result.read_set_paths == (str(inside.resolve()),)
+    assert result.read_set_paths == (("cand-a", (str(inside.resolve()),)),)
 
 
 def test_read_set_paths_outside_project_root_raises(tmp_path):
@@ -321,31 +322,95 @@ def test_read_set_paths_outside_project_root_raises(tmp_path):
     project_root.mkdir()
     outside = tmp_path / "outside.py"
     outside.write_text("x = 1\n")
-    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     with pytest.raises(NotPrepared):
         from_operator(
             "selftest", Point.LIBRARY, "task", "", (candidate,),
-            project_root=project_root, read_set_paths=(str(outside),),
+            project_root=project_root, read_set_paths=(("cand-a", (str(outside),)),),
         )
 
 
 def test_read_set_paths_denylisted_home_path_raises():
-    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     ssh_key = str(Path("~/.ssh/id_rsa").expanduser())
     with pytest.raises(NotPrepared):
         from_operator(
             "selftest", Point.LIBRARY, "task", "", (candidate,),
-            project_root=None, read_set_paths=(ssh_key,),
+            project_root=None, read_set_paths=(("cand-a", (ssh_key,)),),
         )
 
 
 def test_read_set_paths_with_no_project_root_raises():
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
+    with pytest.raises(NotPrepared):
+        from_operator(
+            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            project_root=None, read_set_paths=(("cand-a", ("/tmp/whatever.py",)),),
+        )
+
+
+def test_read_set_paths_no_read_sets_defaults_to_per_candidate_empty_tuples():
+    """The `()` default (no read sets at all) expands to one `(id, ())` pair
+    per candidate, in canonical order, not a bare empty tuple."""
+    candidates = (
+        make_candidate(id="cand-a", prepared_at_revision="rev-1"),
+        make_candidate(id="cand-b", prepared_at_revision="rev-1"),
+    )
+    result = from_operator("selftest", Point.LIBRARY, "task", "", candidates)
+    assert result.read_set_paths == (("cand-a", ()), ("cand-b", ()))
+
+
+def test_read_set_paths_wrong_id_order_raises():
+    candidates = (
+        make_candidate(id="cand-a", prepared_at_revision="rev-1"),
+        make_candidate(id="cand-b", prepared_at_revision="rev-1"),
+    )
+    with pytest.raises(NotPrepared):
+        from_operator(
+            "selftest", Point.LIBRARY, "task", "", candidates,
+            read_set_paths=(("cand-b", ()), ("cand-a", ())),
+        )
+
+
+def test_read_set_paths_unknown_id_raises():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
     with pytest.raises(NotPrepared):
         from_operator(
             "selftest", Point.LIBRARY, "task", "", (candidate,),
-            project_root=None, read_set_paths=("/tmp/whatever.py",),
+            read_set_paths=(("cand-a", ()), ("cand-b", ())),
         )
+
+
+def test_read_set_paths_nonempty_paths_but_null_fingerprint_raises(tmp_path):
+    inside = tmp_path / "file.py"
+    inside.write_text("x = 1\n")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint=None)
+    with pytest.raises(NotPrepared):
+        from_operator(
+            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            project_root=tmp_path, read_set_paths=(("cand-a", (str(inside),)),),
+        )
+
+
+def test_read_set_paths_fingerprint_set_but_empty_paths_raises():
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
+    with pytest.raises(NotPrepared):
+        from_operator(
+            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            read_set_paths=(("cand-a", ()),),
+        )
+
+
+def test_verify_rejects_replaced_read_set_paths(tmp_path):
+    inside = tmp_path / "file.py"
+    inside.write_text("x = 1\n")
+    candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
+    result = from_operator(
+        "selftest", Point.LIBRARY, "task", "", (candidate,),
+        project_root=tmp_path, read_set_paths=(("cand-a", (str(inside),)),),
+    )
+    tampered = dataclasses.replace(result, read_set_paths=(("cand-a", ()),))
+    assert verify(tampered) is False
 
 
 # ---------------------------------------------------------------------------
