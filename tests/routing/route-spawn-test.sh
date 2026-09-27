@@ -11,7 +11,7 @@ TMP_ROOT="$(mktemp -d)"
 cleanup() {
   local f
   for f in "$TMP_ROOT/gc.pid" "$TMP_ROOT/setsid.pid"; do
-    [[ -s "$f" ]] && kill "$(cat "$f")" 2>/dev/null
+    if [[ -s "$f" ]]; then kill "$(cat "$f")" 2>/dev/null || true; fi
   done
   rm -rf "$TMP_ROOT"
 }
