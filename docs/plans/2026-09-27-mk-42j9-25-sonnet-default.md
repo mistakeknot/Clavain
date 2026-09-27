@@ -350,3 +350,21 @@ A regression triggers Task 9 for that lineage only.
   - N1: `--clear-execution`.
   - N6: lineage key agreed with lane B (D5).
   - N10: treatment successors re-resolve.
+
+## Open findings after the delta re-review (stopping rule reached; unfixed)
+
+- **Round-2 verdicts.**
+  - **Astra** (dispatch f80c3ff7, 650k/7.2k tokens): REJECT.
+  - **Opus 5.5** (declared same-model): APPROVE_WITH_CHANGES.
+- **Resolved:** 12 of the 18 round-1 findings, by both reviewers' account. A second fix round needs coordinator authorization.
+- **Phase 2 cannot start until these are fixed:**
+
+1. **P1, both reviewers. Treatment re-resolution drops governed roles.** D2's rule sends every unpinned successor through `lane`, including unpinned coordinators (After Them) and Astra/Opus review or planning lanes. Fix: record each thread's governed role at spawn (receipt), and re-resolve only role `lane`. Coordinator and governed-role successors carry forward.
+2. **P1, both. The treatment tuple has no writer.** Fix: `rollout-arm.sh set … treatment` resolves `main-session` once and stores the tuple and its `policy_hash` in the rollout state. Quilan reads it, and it is refreshed on each release.
+3. **P1 (Astra) / P2 (Opus). Cross-provider rollback.** A treatment lane on the `main-sol` fallback cannot be told back to Claude. Fix: track the actual selections, and flag those threads for handoff or re-spawn on the prior provider.
+4. **P1, Astra. Retiring arms at stage 2 erases earlier `reverted` exceptions.** Fix: keep reverted entries and their prior tuples until they are explicitly cleared.
+5. **P1, Astra. Whole-change rollback does not restore the server fallback default.** Fix: snapshot and restore it.
+6. **P2, Opus. Rollback tells wake idle threads**, and every child turn-end wakes its parent. Fix: steer running threads only; apply to idle ones on their next natural turn.
+7. **P3, Opus. `thread-send.ts:559-573` rewrites an existing pin** when a non-thread sender passes a differing `--model`. Fix: re-check the pin before each tell, or send with a sender thread id. Correct fact 1.
+8. **P3, Opus. A campaign profile silently overrides `coordination`.** Fix: that conflict exits 3.
+9. **Astra, PARTIAL.** Exercise the rollback before treatment starts (make it a stage-1 precondition). Explicit UI creates in new projects still produce unlocked defaults (Aleph Task 7 scope).
