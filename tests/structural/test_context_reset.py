@@ -76,7 +76,7 @@ def test_hooks_json_wires_context_reset(hooks_json):
         assert pre.fullmatch(tool), tool
     for tool in ("Read", "Edit", "WebFetch"):
         assert not pre.fullmatch(tool), tool
-    for tool in ("WebFetch", "WebSearch", "Bash", "mcp__context7__get-library-docs", "web.run", "web__search"):
+    for tool in ("WebFetch", "WebSearch", "Bash", "Task", "Agent", "mcp__context7__get-library-docs", "web.run", "web__search"):
         assert post.fullmatch(tool), tool
     for tool in ("Read", "Edit", "Write", "Grep"):
         assert not post.fullmatch(tool), tool

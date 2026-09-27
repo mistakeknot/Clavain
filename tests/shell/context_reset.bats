@@ -26,10 +26,11 @@ setup() {
     TRANSCRIPT=""
 }
 
-# Write a tool payload: t_mk EVENT TOOL INPUT_JSON [SESSION]
+# Write a tool payload: t_mk EVENT TOOL INPUT_JSON [SESSION] [AGENT_ID]
 t_mk() {
-    jq -nc --arg e "$1" --arg t "$2" --argjson i "$3" --arg s "${4:-s1}" --arg tp "$TRANSCRIPT" \
-        '{session_id:$s, hook_event_name:$e, tool_name:$t, tool_input:$i, transcript_path:$tp}' > "$PAYLOAD"
+    jq -nc --arg e "$1" --arg t "$2" --argjson i "$3" --arg s "${4:-s1}" --arg tp "$TRANSCRIPT" --arg a "${5:-}" \
+        '{session_id:$s, hook_event_name:$e, tool_name:$t, tool_input:$i, transcript_path:$tp}
+         + (if $a != "" then {agent_id:$a} else {} end)' > "$PAYLOAD"
 }
 # Write a SessionStart payload: t_mk_start SOURCE [SESSION]
 t_mk_start() {
@@ -143,6 +144,7 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
     local c
     local -a forms=(
         'git -C repo push origin main'
+        'git -C "my repo" push origin main'
         '/usr/bin/git push'
         'env GIT_TRACE=1 git push'
         'GIT_SSH_COMMAND=ssh git push origin'
@@ -150,6 +152,7 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
         'timeout 30 git push'
         'sudo -u deploy git push'
         'cd repo && git push'
+        $'git commit -m "$(cat <<\'EOF\'\nDon\'t stop\nEOF\n)" && git push'
         'ic publish --auto'
         'gh release create v1.2.3'
         './scripts/bump-version.sh 1.2.3'
@@ -202,6 +205,35 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
     [ "$(t_count exposure)" -eq 0 ]
     t_bash_pre 'git push'
     [ "$(t_last would_be_reset | jq -r .exposure)" = "unknown" ]
+}
+
+@test "context-reset: ssh remote commands expose and an unresolved curl --url is a gap" {
+    t_start startup
+    t_bash_post 'ssh host.example cat /tmp/remote-output.txt'
+    [ "$(t_count exposure)" -eq 1 ]
+    [ "$(t_last exposure | jq -r .host)" = "host.example" ]
+    [ "$(t_last exposure | jq -r .source_class)" = "remote-command" ]
+    t_start startup
+    t_bash_post 'curl --silent --url "$FETCH_URL"'
+    [ "$(t_count coverage_gap)" -eq 1 ]
+    [ "$(t_last coverage_gap | jq -r .kind)" = "unresolved-url" ]
+    [ "$(t_last coverage_gap | jq -r .surface)" = "exposure" ]
+    [ "$(t_count exposure)" -eq 1 ]
+    t_bash_pre 'git push'
+    [ "$(t_last would_be_reset | jq -r .exposure)" = "unknown" ]
+}
+
+@test "context-reset: credentials around an & in a URL are never logged" {
+    t_start startup
+    t_bash_post 'curl "https://review_secret_123:pw&suffix@api.example.com/data"'
+    [ "$(t_count exposure)" -eq 1 ]
+    [ "$(t_last exposure | jq -r .host)" = "api.example.com" ]
+    t_start startup
+    t_bash_post 'curl https://review_secret_456:pw&suffix@api.example.com/data'
+    [ "$(t_count exposure)" -eq 2 ]
+    [ "$(t_last exposure | jq -r .host)" = "ambiguous-host" ]
+    run grep -rq review_secret "$CLAVAIN_CONTEXT_RESET_DIR"
+    [ "$status" -ne 0 ]
 }
 
 @test "context-reset: malformed stdin fails open and records a hook_error" {
@@ -343,6 +375,31 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
     [ "$(t_count exposure_unknown)" -eq 2 ]
 }
 
+@test "context-reset: child agents keep their own state and Task results are uncertain in the parent" {
+    t_start startup
+    t_post WebFetch '{"url":"https://example.com/"}' s1 child1
+    t_pre Bash "$(t_cmd 'git push origin main')" s1 child1
+    [ "$(t_count would_be_reset)" -eq 1 ]
+    local row
+    row=$(t_last would_be_reset)
+    [ "$(jq -r .agent <<<"$row")" = "child1" ]
+    [ "$(jq -r .exposure <<<"$row")" = "exposed" ]
+    [ "$(jq -r .simulated_reset <<<"$row")" = "true" ]
+    t_bash_pre 'git push origin main'
+    [ "$(t_count approval_clean)" -eq 1 ]
+    [ "$(t_last approval_clean | jq -r .agent)" = "" ]
+    t_post Task '{"description":"d","prompt":"p"}'
+    [ "$(t_count exposure_unknown)" -eq 1 ]
+    [ "$(t_last exposure_unknown | jq -r .source_class)" = "subagent-result" ]
+    t_bash_pre 'git push origin main'
+    [ "$(t_count would_be_reset)" -eq 2 ]
+    row=$(t_last would_be_reset)
+    [ "$(jq -r .agent <<<"$row")" = "" ]
+    [ "$(jq -r .exposure <<<"$row")" = "unknown" ]
+    [ "$(jq -r .exposure_reason <<<"$row")" = "subagent-result" ]
+    [ "$(jq -r .simulated_reset <<<"$row")" = "true" ]
+}
+
 @test "context-reset: session sources open, carry, or keep epochs" {
     t_start startup
     t_post WebFetch '{"url":"https://example.com/"}'
@@ -366,6 +423,25 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
     [ "$(jq -r .reason <<<"$row")" = "resume-without-record" ]
 }
 
+@test "context-reset: the first read after compaction logs its own first-in-epoch row" {
+    t_start startup
+    t_post WebFetch '{"url":"https://example.com/"}'
+    t_start compact
+    t_post WebFetch '{"url":"https://example.com/b"}'
+    [ "$(t_count exposure)" -eq 2 ]
+    local row
+    row=$(t_last exposure)
+    [ "$(jq -r .epoch <<<"$row")" -eq 2 ]
+    [ "$(jq -r .first_in_epoch <<<"$row")" = "true" ]
+    [ "$(jq -r .prior_exposure <<<"$row")" = "exposed" ]
+    [ "$(jq -r .carried <<<"$row")" = "true" ]
+    t_post WebSearch '{"query":"q"}'
+    [ "$(t_count exposure)" -eq 2 ]
+    run --separate-stderr bash "$REPORT" --json
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .exposure_epochs <<<"$output")" -eq 2 ]
+}
+
 @test "context-reset: report counts resets and prices them at H x (write - read)" {
     TRANSCRIPT="$BATS_TEST_TMPDIR/transcript.jsonl"
     printf '%s\n' '{"type":"assistant","message":{"usage":{"input_tokens":1000,"cache_read_input_tokens":90000,"cache_creation_input_tokens":9000}}}' > "$TRANSCRIPT"
@@ -387,6 +463,22 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
     [[ "$output" == *"NOT a security boundary"* ]]
 }
 
+@test "context-reset: report prices research-triggered resets in the full-mode bound" {
+    TRANSCRIPT="$BATS_TEST_TMPDIR/transcript.jsonl"
+    printf '%s\n' '{"type":"assistant","message":{"usage":{"input_tokens":10000}}}' > "$TRANSCRIPT"
+    t_start startup
+    t_post WebFetch '{"url":"https://example.com/"}'
+    run --separate-stderr bash "$REPORT" --json
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .cost.research_batches.input_token_equivalents <<<"$output")" -eq 11500 ]
+    [ "$(jq -r .cost.full_mode_upper_bound.input_token_equivalents <<<"$output")" -eq 11500 ]
+    [ "$(jq -r .cost.full_mode_upper_bound.resets <<<"$output")" -eq 1 ]
+    [ "$(jq -r .resets_per_session.full_mode_upper_bound <<<"$output")" = "1" ]
+    run --separate-stderr bash "$REPORT"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"full mode (upper bound)"* ]]
+}
+
 @test "context-reset: audit finds unlogged calls and --record is idempotent" {
     local tr="$BATS_TEST_TMPDIR/audit.jsonl"
     printf '%s\n' '{"type":"assistant","sessionId":"aud1","message":{"content":[{"type":"tool_use","name":"WebFetch","input":{"url":"https://example.com/"}},{"type":"tool_use","name":"Bash","input":{"command":"git push origin main"}}]}}' > "$tr"
@@ -402,6 +494,24 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
     [ "$(t_count coverage_gap)" -eq 2 ]
     run --separate-stderr bash "$REPORT" --json
     [ "$(jq -r .coverage_gaps.total <<<"$output")" -eq 2 ]
+}
+
+@test "context-reset: audit reports a missed batch even after an earlier one was logged" {
+    local tr="$BATS_TEST_TMPDIR/audit2.jsonl"
+    jq -nc '{type:"assistant", sessionId:"aud2",
+        message:{content:[range(21) | {type:"tool_use", name:"WebSearch", input:{query:"q"}}]}}' > "$tr"
+    t_start startup aud2
+    t_post WebSearch '{"query":"q"}' aud2
+    run --separate-stderr bash "$AUDIT" --transcript "$tr" --json
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .logged.exposure <<<"$output")" -eq 1 ]
+    [ "$(jq -r .expected.exposure_batches <<<"$output")" -eq 2 ]
+    [ "$(jq -r .missed.exposure <<<"$output")" -eq 1 ]
+    local i
+    for ((i = 2; i <= 21; i++)); do t_post WebSearch '{"query":"q"}' aud2; done
+    run --separate-stderr bash "$AUDIT" --transcript "$tr" --json
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .missed.exposure <<<"$output")" -eq 0 ]
 }
 
 @test "context-reset: credentials in a push URL are never logged" {
@@ -429,6 +539,7 @@ t_last() { jq -sc --arg e "$1" 'map(select(.event == $e)) | last' "$EVENTS"; }
              "PreToolUse|Bash|{\"command\":\"git push\"}" \
              "PreToolUse|Bash|{\"command\":\"make release\"}" \
              "PostToolUse|Bash|{\"command\":\"codex exec x\"}" \
+             "PostToolUse|Task|{\"prompt\":\"p\"}" \
              "PreToolUse|Skill|{\"skill\":\"interpub:release\"}" \
              "PreToolUse|mcp__github__merge_pull_request|{}"; do
         IFS='|' read -r ev tool input <<<"$p"

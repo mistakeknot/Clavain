@@ -46,6 +46,9 @@ See `agents/hooks-reference.md` for the store, config and `mode: off` rollback.
   `gemini` call is recorded as `unknown` exposure, because the child's reads
   are not observed. A later approval-gated action in that epoch is counted as a
   would-be reset.
+- In-process Claude Code subagents (`Task`/`Agent`) keep their own state per
+  agent. Their result, once returned to the parent, is recorded in the parent
+  as `unknown` exposure, because which content the child read is not known.
 - To reconcile a session whose hooks did not run, use
   `scripts/context-reset-audit.sh --transcript FILE [--record]`. With
   `--record` it appends idempotent `coverage_gap` rows (`surface: audit`).

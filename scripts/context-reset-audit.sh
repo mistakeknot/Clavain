@@ -4,8 +4,11 @@
 #
 # NOT A SECURITY BOUNDARY. This re-classifies the transcript's tool calls and
 # reports exposure and approval actions that the hooks did not log, for example
-# on hosts or child agents where the hooks do not run. With --record it appends
-# idempotent coverage_gap rows (surface=audit). It never blocks or resets.
+# on hosts or child agents where the hooks do not run. Exposure is compared per
+# accounting batch (the same batch_max_reads / batch_max_seconds windows the
+# hooks use, restarted at each compaction), so one logged batch cannot hide a
+# later missed one. With --record it appends idempotent coverage_gap rows
+# (surface=audit). It never blocks or resets.
 #
 # Usage: context-reset-audit.sh --transcript FILE [--session ID] [--store DIR] [--record] [--json]
 set -uo pipefail
@@ -46,35 +49,62 @@ if [[ -z "$session" ]]; then
     session="${session%.jsonl}"
 fi
 
-tool_uses=0 expected_exposure=0 expected_approval=0
-while IFS= read -r tu; do
-    [[ -n "$tu" ]] || continue
+max_reads=$(cr_config_int batch_max_reads 20)
+max_secs=$(cr_config_int batch_max_seconds 600)
+
+tool_uses=0 expected_exposure=0 expected_batches=0 expected_approval=0
+b_reads=0 b_start=""
+while IFS=$'\t' read -r kind ts tu; do
+    if [[ "$kind" == B ]]; then
+        # Compaction opens a new epoch, whose first read the hooks log.
+        b_reads=0
+        continue
+    fi
+    [[ "$kind" == T && -n "${tu:-}" ]] || continue
     tool_uses=$((tool_uses + 1))
     payload=$(jq -c --arg s "$session" '{session_id: $s, hook_event_name: "PostToolUse",
         tool_name: .name, tool_input: .input}' <<<"$tu" 2>/dev/null) || continue
     cr_parse_payload "$payload" || continue
     cr_classify
-    if [[ -n "$CR_EXPOSURE_CLASS" && "$CR_EXPOSURE_CLASS" != child-uncovered ]]; then
+    if [[ -n "$CR_EXPOSURE_CLASS" && "$CR_EXPOSURE_CLASS" != child-uncovered && "$CR_EXPOSURE_CLASS" != subagent-result ]]; then
         expected_exposure=$((expected_exposure + 1))
+        [[ "$ts" =~ ^[0-9]+$ ]] || ts=""
+        if (( b_reads == 0 || b_reads >= max_reads )) \
+            || [[ -n "$ts" && -n "$b_start" && $((ts - b_start)) -ge $max_secs ]]; then
+            expected_batches=$((expected_batches + 1))
+            b_reads=1
+            b_start="$ts"
+        else
+            b_reads=$((b_reads + 1))
+        fi
     fi
     if [[ -n "$CR_APPROVAL_FAMILY" ]]; then
         expected_approval=$((expected_approval + 1))
     fi
-done < <(jq -Rc 'fromjson? | objects | select(.type == "assistant") | .message.content? | arrays | .[]
-    | objects | select(.type == "tool_use") | {name: (.name // ""), input: (.input // {})}' "$transcript" 2>/dev/null)
+done < <(jq -Rr 'fromjson? | objects
+    | if (.type == "system" and .subtype == "compact_boundary") then "B"
+      elif .type == "assistant" then
+        ((.timestamp // "") | if type == "string" and . != ""
+            then (sub("\\.[0-9]+"; "") | try (fromdateiso8601 | floor | tostring) catch "-")
+            else "-" end) as $ts
+        | .message.content? | arrays | .[] | objects | select(.type == "tool_use")
+        | "T\t\($ts)\t\({name: (.name // ""), input: (.input // {})} | tojson)"
+      else empty end' "$transcript" 2>/dev/null)
 
+# Only this session's parent rows: a transcript holds the parent's tool calls,
+# and child agents keep their own state (rows with a non-empty agent).
 src="$events"
 [[ -r "$src" ]] || src=/dev/null
-logged=$(jq -Rnr --arg s "$session" '[inputs | fromjson? | objects | select(.session == $s)]
-    | "\(map(select(.event == "exposure" or .event == "exposure_unknown")) | length) \(map(select(.event == "would_be_reset" or .event == "approval_clean")) | length)"' \
+logged=$(jq -Rnr --arg s "$session" '[inputs | fromjson? | objects | select(.session == $s and (.agent // "") == "")]
+    | "\(map(select(.event == "exposure")) | length) \(map(select(.event == "would_be_reset" or .event == "approval_clean")) | length)"' \
     "$src" 2>/dev/null) || logged="0 0"
 read -r logged_exposure logged_approval <<<"$logged"
 [[ "${logged_exposure:-}" =~ ^[0-9]+$ ]] || logged_exposure=0
 [[ "${logged_approval:-}" =~ ^[0-9]+$ ]] || logged_approval=0
 
-# Batches coalesce reads, so exposure is compared per session, not per call.
-missed_exposure=0
-if (( expected_exposure > 0 && logged_exposure == 0 )); then missed_exposure=$expected_exposure; fi
+# Each accounting batch is logged as one exposure row, so compare batches.
+missed_exposure=$((expected_batches - logged_exposure))
+if (( missed_exposure < 0 )); then missed_exposure=0; fi
 missed_approval=$((expected_approval - logged_approval))
 if (( missed_approval < 0 )); then missed_approval=0; fi
 
@@ -104,11 +134,11 @@ fi
 
 if (( json )); then
     jq -n --arg session "$session" --argjson tool_uses "$tool_uses" \
-        --argjson ee "$expected_exposure" --argjson ea "$expected_approval" \
+        --argjson ee "$expected_exposure" --argjson eb "$expected_batches" --argjson ea "$expected_approval" \
         --argjson le "$logged_exposure" --argjson la "$logged_approval" \
         --argjson me "$missed_exposure" --argjson ma "$missed_approval" \
         '{session: $session, tool_uses: $tool_uses,
-          expected: {exposure: $ee, approval: $ea},
+          expected: {exposure: $ee, exposure_batches: $eb, approval: $ea},
           logged: {exposure: $le, approval: $la},
           missed: {exposure: $me, approval: $ma},
           recorded: $ARGS.positional,
@@ -118,9 +148,9 @@ if (( json )); then
 else
     printf 'Context-reset audit (observe-mode telemetry only, NOT a security boundary)\n'
     printf 'session: %s   tool uses: %s\n' "$session" "$tool_uses"
-    printf 'expected: exposure %s, approval %s\n' "$expected_exposure" "$expected_approval"
-    printf 'logged:   exposure %s, approval %s\n' "$logged_exposure" "$logged_approval"
-    printf 'missed:   exposure %s, approval %s\n' "$missed_exposure" "$missed_approval"
+    printf 'expected: exposure %s in %s batches, approval %s\n' "$expected_exposure" "$expected_batches" "$expected_approval"
+    printf 'logged:   exposure batches %s, approval %s\n' "$logged_exposure" "$logged_approval"
+    printf 'missed:   exposure batches %s, approval %s\n' "$missed_exposure" "$missed_approval"
     printf 'recorded: %s\n' "${recorded[*]:-none}"
 fi
 exit 0

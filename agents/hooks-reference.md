@@ -11,7 +11,7 @@
 
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
   - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings. Sources `sprint-scan.sh` for sprint awareness. On compact: injects mandatory recovery protocol (re-read CLAUDE.md, confirm conventions, check in-progress beads).
-  - `context-reset-post.sh` — opens (startup/clear), carries (compact) or keeps (resume) the context epoch for observe-mode context-reset telemetry. Prints nothing. NOT a security boundary.
+  - `context-reset-post.sh` — opens (startup/clear), carries (compact) or keeps (resume) the context epoch for observe-mode context-reset telemetry. A compacted epoch carries exposure and logs its own first-read row. Prints nothing. NOT a security boundary.
 - **PreToolUse** (matcher: `Edit|Write|MultiEdit`):
   - `guard-plugin-cache.sh` — blocks edits to `~/.claude/plugins/cache/` (cached copies overwritten on install; directs to source repo)
 - **PreToolUse** (matcher: `Bash|Skill|mcp__.*`):
@@ -23,8 +23,8 @@
 - **PostToolUse** (matcher: `Bash`):
   - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace, syncs GitHub repo description with current component counts
   - `bead-agent-bind.sh` — binds agent identity to beads claimed with bd update/claim (warns on overlap, notifies other agent)
-- **PostToolUse** (matcher: `WebFetch|WebSearch|Bash|mcp__.*|web__.*|web\.run`):
-  - `context-reset-post.sh` — records exposure to untrusted content (web, remote commands, non-exempt MCP, browser), coalesced into accounting batches. Uncovered child agents make exposure `unknown`. Prints nothing. NOT a security boundary.
+- **PostToolUse** (matcher: `WebFetch|WebSearch|Bash|Task|Agent|mcp__.*|web__.*|web\.run`):
+  - `context-reset-post.sh` — records exposure to untrusted content (web, remote commands including `ssh`, non-exempt MCP, browser), coalesced into accounting batches. Uncovered child agents and `Task`/`Agent` results make exposure `unknown`. Prints nothing. NOT a security boundary.
 - **Stop**:
   - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh; goal-completed signal triggers the goal-cadence tier (/clavain:next-goal, highest priority), weight >= 4 triggers /clavain:compound, bead-closed + opt-in triggers self-dispatch, weight >= 3 triggers /interwatch:watch
 - **SessionEnd**:
@@ -60,8 +60,11 @@ fire, and what it would cost. They are hygiene telemetry only:
 - The store is plain JSON, which any local process can edit. It is not
   tamper-resistant. Rows go to `~/.clavain/context-reset/events.jsonl` and
   per-session state to `state/<session>.json` (override the location with
-  `CLAVAIN_CONTEXT_RESET_DIR`). URLs, queries and commands are never stored;
-  rows keep the host and a hash reference.
+  `CLAVAIN_CONTEXT_RESET_DIR`). A child agent (payload `agent_id`) keeps its own
+  `state/<session>.agent.<agent>.json`, starting from the parent's exposure.
+  URLs, queries and commands are never stored; rows keep the host and a hash
+  reference. A URL whose host cannot be separated cleanly from credentials is
+  logged as `ambiguous-host`.
 - Config lives in `config/context-reset.yaml` (override the path with
   `CLAVAIN_CONTEXT_RESET_CONFIG`). Only `mode: observe` and `mode: off` exist.
   If `approval` or `full` is configured, the hooks log an error at SessionStart,
@@ -70,18 +73,27 @@ fire, and what it would cost. They are hygiene telemetry only:
 - **Rollback:** set `mode: off` in the config, or export
   `CLAVAIN_CONTEXT_RESET_MODE=off`.
 - `CLAVAIN_DISPATCH_ROLE` labels rows by role (default `interactive`).
+- Bash commands are split by a heuristic, quote-aware tokenizer. It is not a
+  full shell parser. `bash -c` and `eval` bodies are classified too.
 - Unrecognized forms, such as `$VAR push`, wrappers like `xargs`/`make` around a
-  push, unknown `*deploy*` scripts, or unclassified remote URLs, increment the
-  `coverage_gap` counter. They are never counted as clean.
+  push, unknown `*deploy*` scripts, unclassified remote URLs, or a `curl` whose
+  target is a variable, increment the `coverage_gap` counter. They are never
+  counted as clean.
+- A `Task`/`Agent` result in the parent is recorded as `unknown` exposure
+  (`source_class: subagent-result`), because which content the child read is
+  not known without origin tagging (mk-42j9.42).
 - `scripts/context-reset-report.sh [--json]` summarises the store:
   - exposure epochs and research batches;
   - would-be resets, exposed/unknown vs clean;
   - coverage gaps and hook errors;
-  - estimated cost H × (cache-write − cache-read) in input-token-equivalents;
+  - estimated cost H × (cache-write − cache-read) in input-token-equivalents,
+    for approval-triggered resets and for research-triggered resets
+    (`research_batches`, `full_mode_upper_bound`);
   - a breakdown by role and mode.
 - `scripts/context-reset-audit.sh --transcript FILE [--record]` reconciles a
   transcript against the store, for sessions or hosts where the hooks did not
-  run.
+  run. Exposure is compared per accounting batch, so a batch that was missed is
+  reported even when an earlier one was logged.
 
 ### Remote shared-state authority
 

@@ -4,8 +4,9 @@
 # NOT A SECURITY BOUNDARY. This reports what a context-reset rule *would* have
 # done. It counts exposure epochs and research batches, would-be resets split
 # exposed/unknown vs clean, and coverage gaps. It estimates the cache cost
-# H x (cache-write - cache-read) and breaks the totals down by role and mode.
-# Nothing was blocked or reset.
+# H x (cache-write - cache-read) for approval-triggered resets and for
+# research-triggered (full-mode) resets, and breaks the totals down by role and
+# mode. Nothing was blocked or reset.
 #
 # Usage: context-reset-report.sh [--store DIR] [--session ID] [--json] [--input-usd-per-mtok N]
 set -uo pipefail
@@ -91,7 +92,9 @@ report=$(jq -Rn --arg session "$session" --argjson w "$w" --argjson r "$r" --arg
         cost: {
           approval_mode: costset($sim),
           all_would_be_resets: costset($wbr),
-          every_sensitive_action: costset($wbr + $clean) } };
+          every_sensitive_action: costset($wbr + $clean),
+          research_batches: costset($exp),
+          full_mode_upper_bound: costset($sim + $exp) } };
   [inputs | fromjson? | objects]
   | if $session != "" then map(select(.session == $session)) else . end
   | . as $all
@@ -125,6 +128,8 @@ printf '%s\n' "$report" | jq -r '
   "  approval mode:          \(.cost.approval_mode | c)",
   "  all would-be resets:    \(.cost.all_would_be_resets | c)",
   "  every sensitive action: \(.cost.every_sensitive_action | c)",
+  "  research batches:       \(.cost.research_batches | c)",
+  "  full mode (upper bound): \(.cost.full_mode_upper_bound | c)",
   (.by_role | to_entries[] | "role \(.key): would-be resets \(.value.would_be_resets.exposed + .value.would_be_resets.unknown), clean \(.value.approval_actions_clean), exposure epochs \(.value.exposure_epochs), gaps \(.value.coverage_gaps.total)"),
   (.by_mode | to_entries[] | "mode \(.key): would-be resets \(.value.would_be_resets.exposed + .value.would_be_resets.unknown), clean \(.value.approval_actions_clean), exposure epochs \(.value.exposure_epochs), gaps \(.value.coverage_gaps.total)")
 '

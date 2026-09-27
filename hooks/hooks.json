@@ -158,7 +158,7 @@
         ]
       },
       {
-        "matcher": "WebFetch|WebSearch|Bash|mcp__.*|web__.*|web\\.run",
+        "matcher": "WebFetch|WebSearch|Bash|Task|Agent|mcp__.*|web__.*|web\\.run",
         "hooks": [
           {
             "type": "command",
