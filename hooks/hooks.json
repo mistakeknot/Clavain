@@ -42,6 +42,12 @@
             "async": true,
             "timeout": 15,
             "args": []
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/context-reset-post.sh",
+            "timeout": 5,
+            "args": []
           }
         ]
       }
@@ -65,6 +71,17 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/gauge-gate-executor-spawn.sh",
             "timeout": 30,
+            "args": []
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Skill|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/context-reset-pre.sh",
+            "timeout": 5,
             "args": []
           }
         ]
@@ -135,6 +152,17 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/temple-invariant.sh",
+            "timeout": 5,
+            "args": []
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch|WebSearch|Bash|mcp__.*|web__.*|web\\.run",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/context-reset-post.sh",
             "timeout": 5,
             "args": []
           }

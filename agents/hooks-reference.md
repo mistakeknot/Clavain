@@ -11,8 +11,11 @@
 
 - **SessionStart** (matcher: `startup|resume|clear|compact`):
   - `session-start.sh` — injects `using-clavain` skill content, interserve behavioral contract (when active), upstream staleness warnings. Sources `sprint-scan.sh` for sprint awareness. On compact: injects mandatory recovery protocol (re-read CLAUDE.md, confirm conventions, check in-progress beads).
+  - `context-reset-post.sh` — opens (startup/clear), carries (compact) or keeps (resume) the context epoch for observe-mode context-reset telemetry. Prints nothing. NOT a security boundary.
 - **PreToolUse** (matcher: `Edit|Write|MultiEdit`):
   - `guard-plugin-cache.sh` — blocks edits to `~/.claude/plugins/cache/` (cached copies overwritten on install; directs to source repo)
+- **PreToolUse** (matcher: `Bash|Skill|mcp__.*`):
+  - `context-reset-pre.sh` — logs approval-gated actions (push, PR, release, publication, destructive override) as `would_be_reset` when the epoch is exposed or unknown, or as `approval_clean` when it is clean. It always allows and prints nothing. NOT a security boundary.
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit|NotebookEdit`):
   - `interserve-audit.sh` — logs source code writes when interserve mode is active (audit only, no denial)
 - **PostToolUse** (matcher: `Edit|Write|MultiEdit`):
@@ -20,6 +23,8 @@
 - **PostToolUse** (matcher: `Bash`):
   - `auto-publish.sh` — detects `git push` in plugin repos, auto-bumps patch version if needed, syncs marketplace, syncs GitHub repo description with current component counts
   - `bead-agent-bind.sh` — binds agent identity to beads claimed with bd update/claim (warns on overlap, notifies other agent)
+- **PostToolUse** (matcher: `WebFetch|WebSearch|Bash|mcp__.*|web__.*|web\.run`):
+  - `context-reset-post.sh` — records exposure to untrusted content (web, remote commands, non-exempt MCP, browser), coalesced into accounting batches. Uncovered child agents make exposure `unknown`. Prints nothing. NOT a security boundary.
 - **Stop**:
   - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh; goal-completed signal triggers the goal-cadence tier (/clavain:next-goal, highest priority), weight >= 4 triggers /clavain:compound, bead-closed + opt-in triggers self-dispatch, weight >= 3 triggers /interwatch:watch
 - **SessionEnd**:
@@ -40,6 +45,43 @@ Sourced by hook scripts, not registered as hooks themselves:
 | `lib-verdict.sh` | Verdict file write/read utilities for structured agent handoffs |
 | `lib-gates.sh` | Phase gate shim — delegates to interphase when installed, no-op stub otherwise |
 | `lib-discovery.sh` | Plugin discovery shim — delegates to interphase when installed, no-op stub otherwise |
+| `lib-context-reset.sh` | Observe-mode context-reset telemetry: exposure/approval classification, epoch state, row emission (NOT a security boundary) |
+
+### Observe-mode context-reset telemetry (mk-42j9.40) — NOT a security boundary
+
+The context-reset hooks measure how often a "reset context before an
+approval-gated action once the session has read untrusted content" rule would
+fire, and what it would cost. They are hygiene telemetry only:
+
+- **Nothing blocks, nothing is enforced, no reset is performed or requested.**
+  Every row carries `verdict: "allow"`, `enforced: false` and
+  `security_boundary: false`. The hooks print nothing on stdout, so normal
+  permission prompts are unchanged, and they fail open (`trap 'exit 0' ERR`).
+- The store is plain JSON, which any local process can edit. It is not
+  tamper-resistant. Rows go to `~/.clavain/context-reset/events.jsonl` and
+  per-session state to `state/<session>.json` (override the location with
+  `CLAVAIN_CONTEXT_RESET_DIR`). URLs, queries and commands are never stored;
+  rows keep the host and a hash reference.
+- Config lives in `config/context-reset.yaml` (override the path with
+  `CLAVAIN_CONTEXT_RESET_CONFIG`). Only `mode: observe` and `mode: off` exist.
+  If `approval` or `full` is configured, the hooks log an error at SessionStart,
+  record nothing and never block. Enforcement needs origin tagging and
+  attestation, which are deferred to mk-42j9.42.
+- **Rollback:** set `mode: off` in the config, or export
+  `CLAVAIN_CONTEXT_RESET_MODE=off`.
+- `CLAVAIN_DISPATCH_ROLE` labels rows by role (default `interactive`).
+- Unrecognized forms, such as `$VAR push`, wrappers like `xargs`/`make` around a
+  push, unknown `*deploy*` scripts, or unclassified remote URLs, increment the
+  `coverage_gap` counter. They are never counted as clean.
+- `scripts/context-reset-report.sh [--json]` summarises the store:
+  - exposure epochs and research batches;
+  - would-be resets, exposed/unknown vs clean;
+  - coverage gaps and hook errors;
+  - estimated cost H × (cache-write − cache-read) in input-token-equivalents;
+  - a breakdown by role and mode.
+- `scripts/context-reset-audit.sh --transcript FILE [--record]` reconciles a
+  transcript against the store, for sessions or hosts where the hooks did not
+  run.
 
 ### Remote shared-state authority
 

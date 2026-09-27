@@ -33,6 +33,23 @@ producer-first rollout, companion compatibility, and real first-turn evidence.
 - Full routing tables in `skills/using-clavain/references/routing-tables.md`
 - gen-catalog.py expects pattern `\d+ skills, \d+ agents, and \d+ commands`
 
+### Context-reset telemetry on Codex and other hosts
+
+The context-reset hooks (mk-42j9.40) are observe-mode hygiene telemetry only.
+They are NOT a security boundary: they never block, enforce or reset anything.
+See `agents/hooks-reference.md` for the store, config and `mode: off` rollback.
+
+- They run only where Claude Code runs the plugin's `hooks/hooks.json`. Codex
+  sessions, other hosts, and headless `dispatch.sh` / `codex exec` children may
+  not run them. That is a documented coverage gap, not a blocker.
+- From the parent session, a `dispatch.sh`, `codex exec`, `claude -p` or
+  `gemini` call is recorded as `unknown` exposure, because the child's reads
+  are not observed. A later approval-gated action in that epoch is counted as a
+  would-be reset.
+- To reconcile a session whose hooks did not run, use
+  `scripts/context-reset-audit.sh --transcript FILE [--record]`. With
+  `--record` it appends idempotent `coverage_gap` rows (`surface: audit`).
+
 ### Upstream Sync
 
 - Sync state in `upstreams.json` (commit hashes per upstream + fileMap)

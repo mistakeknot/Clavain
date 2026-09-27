@@ -1,0 +1,36 @@
+# context-reset.yaml — observe-mode context-reset hygiene telemetry (mk-42j9.40).
+#
+# THIS IS NOT A SECURITY BOUNDARY. The hooks that read this file only record
+# what a context-reset rule *would* have done. Every verdict is "allow":
+# nothing is blocked, nothing is enforced, no reset is performed or requested,
+# and the telemetry store is not tamper-resistant. Enforcement (approval/full)
+# needs origin tagging and artifact attestation, deferred to mk-42j9.42.
+#
+# Rollback: set `mode: off` (or export CLAVAIN_CONTEXT_RESET_MODE=off).
+
+# observe | off. `approval` and `full` are named by the plan but NOT implemented
+# in this phase: if configured, the hooks log an error at SessionStart, record
+# nothing, and never block. Not a security boundary.
+mode: observe
+
+# Bump when classification rules change so report rows stay comparable.
+policy_version: 1
+
+# Accounting-only research batch (plan section 3): a batch closes after this many
+# external reads, or this many seconds after the batch opened. Counting only;
+# not a security boundary.
+batch_max_reads: 20
+batch_max_seconds: 600
+
+# MCP servers whose results count as trusted local reads (no exposure row).
+# Empty by default; the exempt-server taxonomy is an open decision for mk.
+# Inline list, e.g. [qmd, context7]. Not a security boundary.
+exempt_mcp_servers: []
+
+# Cost model, relative to one uncached input token: a reset turns the cached
+# prefix H from a cache read into a cache write, costing H x (write - read).
+cache_write_weight: 1.25
+cache_read_weight: 0.1
+
+# Optional USD price per million input tokens. 0 reports input-token-equivalents only.
+input_usd_per_mtok: 0

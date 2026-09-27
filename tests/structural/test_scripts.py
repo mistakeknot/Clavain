@@ -101,6 +101,8 @@ FAIL_OPEN_HOOKS = {
     "auto-stop-actions.sh",
     "bead-agent-bind.sh",
     "catalog-reminder.sh",
+    "context-reset-post.sh",
+    "context-reset-pre.sh",
     "dotfiles-sync.sh",
     "guard-plugin-cache.sh",
     "peer-routing-telemetry.sh",
