@@ -100,12 +100,20 @@ class PreparedSet:
     task: str
     context: str
     candidates: tuple[Candidate, ...]
-    sources: tuple[str, ...]
+    sources: tuple[Path, ...]
+    # Per the plan's landed shape (revision 8/9), `project_root` is `Path`
+    # (required) once `prepare()`'s registry-driven rewrite (finding 6,
+    # follow-on commit) makes it a mandatory parameter everywhere. Until
+    # then this task's entry points still accept `project_root=None` for
+    # callers with no read sets at all; `_finish_prepare` fails closed
+    # (`NotPrepared`) the moment any candidate carries a non-empty
+    # `read_set_paths` entry with no `project_root` to bound it (also
+    # enforced transitively by `egress._source_rule`).
     project_root: Path | None
     task_revision: str
     bindings: tuple[tuple[str, str], ...]
     read_set_paths: tuple[tuple[str, tuple[str, ...]], ...]
-    tag: bytes
+    tag: str
 
 
 class _FrozenPreparers(dict):
@@ -173,9 +181,9 @@ def _taggable_fields(prepared: PreparedSet) -> dict[str, Any]:
     }
 
 
-def _compute_tag(fields: Mapping[str, Any]) -> bytes:
+def _compute_tag(fields: Mapping[str, Any]) -> str:
     body_sha256 = hashlib.sha256(_canonical_json_bytes(fields)).digest()
-    return hmac.new(_PREPARER_KEY, body_sha256, hashlib.sha256).digest()
+    return hmac.new(_PREPARER_KEY, body_sha256, hashlib.sha256).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +234,19 @@ def _normalize_read_set_paths(
             cid, paths = entry
         except (TypeError, ValueError) as exc:
             raise NotPrepared(f"read_set_paths entry is not an (id, paths) pair: {entry!r}") from exc
-        normalized.append((cid, tuple(paths)))
+        if isinstance(paths, (str, bytes)):
+            # `tuple("f.py")` silently splits a bare string into one path
+            # per character; reject the shape outright instead of letting
+            # that happen (revision 8, P2-10 finding 2).
+            raise NotPrepared(
+                f"read_set_paths for {cid!r} must be a sequence of paths, not a bare "
+                f"{type(paths).__name__}: {paths!r}"
+            )
+        try:
+            path_tuple = tuple(paths)
+        except TypeError as exc:
+            raise NotPrepared(f"read_set_paths for {cid!r} is not iterable: {paths!r}") from exc
+        normalized.append((cid, path_tuple))
 
     got_ids = tuple(cid for cid, _ in normalized)
     if got_ids != expected_ids:
@@ -251,10 +271,29 @@ def _finish_prepare(
     task_revision: str | None,
     read_set_paths: Sequence[tuple[str, Sequence[str]]],
 ) -> PreparedSet:
+    candidates = tuple(candidates)
+    ids = [c.id for c in candidates]
+    if len(ids) != len(set(ids)):
+        # `contract.canonical_order` sorts duplicates rather than rejecting
+        # them, which would make the read-set pairing positional/ambiguous
+        # and let a raw `ValueError` from `validated_candidates` reach a
+        # caller downstream instead of `NotPrepared` (revision 8, finding
+        # 5). Reject here, before any candidate ever reaches
+        # `canonical_order`.
+        dupes = sorted({cid for cid in ids if ids.count(cid) > 1})
+        raise NotPrepared(f"duplicate candidate ids: {dupes}")
+
     try:
-        ordered = contract.canonical_order(tuple(candidates))
+        ordered = contract.canonical_order(candidates)
     except contract.NonCanonicalOrder as exc:
         raise NotPrepared(f"candidates could not be canonicalized: {exc}") from exc
+    except ValueError as exc:
+        # `canonical_order`'s sort key hashes each candidate's payload
+        # (`payload_sha256`), so a non-JSON-native payload surfaces here as
+        # a raw `ValueError` before `_finish_prepare` ever reaches its own
+        # `payload_sha256` call below (revision 8, finding 1/8: no raw
+        # exception should ever reach a caller of a trusted entry point).
+        raise NotPrepared(f"could not canonicalize candidates: {exc}") from exc
 
     if task_revision is None:
         revisions = {c.prepared_at_revision for c in ordered}
@@ -265,6 +304,14 @@ def _finish_prepare(
     root = Path(project_root).resolve() if project_root is not None else None
 
     normalized_read_set = _normalize_read_set_paths(read_set_paths, ordered)
+
+    if root is None and any(paths for _, paths in normalized_read_set):
+        # Fails closed explicitly rather than relying only on
+        # `egress._source_rule` always returning `src.outside_project` for
+        # a `None` root (revision 8, finding 8): a missing project root
+        # with any non-empty read-set paths is `NotPrepared`, never a
+        # silently permissive or silently all-rejecting state.
+        raise NotPrepared("read_set_paths requires a project_root")
 
     resolved_pairs: list[tuple[str, tuple[str, ...]]] = []
     for candidate, (cid, paths) in zip(ordered, normalized_read_set):
@@ -281,7 +328,11 @@ def _finish_prepare(
             if rule is not None:
                 raise NotPrepared(f"read_set_paths rejected ({rule}): {raw_path!r}")
             resolved_paths.append(real)
-        resolved_pairs.append((cid, tuple(resolved_paths)))
+        # Order/duplicate-insensitive per candidate, matching how
+        # `fingerprint_paths` itself already ignores order and duplicates
+        # (revision 8, finding 3): two sets prepared from equal inputs,
+        # differently ordered or with a repeat, carry equal tags.
+        resolved_pairs.append((cid, tuple(sorted(set(resolved_paths)))))
 
     try:
         bindings = tuple((c.id, payload_sha256(c.payload)) for c in ordered)
@@ -296,12 +347,12 @@ def _finish_prepare(
         task=task,
         context=context,
         candidates=ordered,
-        sources=tuple(sources),
+        sources=tuple(Path(s) for s in sources),
         project_root=root,
         task_revision=task_revision,
         bindings=bindings,
         read_set_paths=tuple(resolved_pairs),
-        tag=b"",
+        tag="",
     )
     tag = _compute_tag(_taggable_fields(prelim))
     return dataclasses.replace(prelim, tag=tag)
@@ -374,6 +425,7 @@ def from_operator(
     candidates: Sequence[Candidate],
     project_root: str | Path | None = None,
     *,
+    registry: Mapping[str, Any] | None = None,
     sources: Sequence[str] = (),
     read_set_paths: Sequence[tuple[str, Sequence[str]]] = (),
     task_revision: str | None = None,
@@ -382,7 +434,12 @@ def from_operator(
 
     `read_set_paths` is a per-candidate `(id, paths)` sequence, in the same
     canonical order as `candidates`; `()` means no candidate has a read set.
+
+    `registry` is accepted but currently unused, mirroring `from_case` --
+    reserved for finding 6's follow-on registry-driven `prepare()` rewrite;
+    this task does not need it to do anything yet.
     """
+    del registry
     return _finish_prepare(
         integration=integration,
         point=point,
@@ -431,8 +488,15 @@ def from_case(case: Mapping[str, Any], registry: Mapping[str, Any] | None = None
     )
 
 
-def verify(prepared: PreparedSet) -> bool:
+def verify(prepared: PreparedSet) -> None:
     """Recompute the tag and independently recompute the payload bindings.
+
+    Raises `NotPrepared` unless every check passes; returns `None` on
+    success (plan line 421). Never propagates a raw exception -- every
+    exception the tag-computation or re-check path can raise from
+    malformed input (at minimum `TypeError` and `ValueError`, e.g. a
+    per-candidate `read_set_paths` entry of the wrong arity) is caught and
+    mapped to `NotPrepared` (revision 8, P2-10, finding 1).
 
     The tag alone would not catch a `payload` mutated in place after
     preparation (a `Candidate`'s dict-encoding for tagging excludes
@@ -445,27 +509,32 @@ def verify(prepared: PreparedSet) -> bool:
     (revision 8, P2-10).
     """
     if not isinstance(prepared, PreparedSet):
-        return False
+        raise NotPrepared(f"not a PreparedSet: {prepared!r}")
     try:
         expected_tag = _compute_tag(_taggable_fields(prepared))
-    except TypeError:
-        return False
-    if not isinstance(prepared.tag, (bytes, bytearray)) or not hmac.compare_digest(expected_tag, bytes(prepared.tag)):
-        return False
+    except (TypeError, ValueError) as exc:
+        raise NotPrepared(f"could not compute tag for PreparedSet: {exc}") from exc
+    if not isinstance(prepared.tag, str) or not hmac.compare_digest(expected_tag, prepared.tag):
+        raise NotPrepared("PreparedSet tag does not verify")
     try:
         recomputed = tuple((c.id, payload_sha256(c.payload)) for c in prepared.candidates)
-    except ValueError:
-        return False
+    except ValueError as exc:
+        raise NotPrepared(f"could not recompute payload bindings: {exc}") from exc
     if recomputed != prepared.bindings:
-        return False
-    expected_ids = tuple(c.id for c in prepared.candidates)
-    got_ids = tuple(cid for cid, _ in prepared.read_set_paths)
+        raise NotPrepared("PreparedSet bindings do not match recomputed payload hashes")
+    try:
+        expected_ids = tuple(c.id for c in prepared.candidates)
+        got_ids = tuple(cid for cid, _ in prepared.read_set_paths)
+    except (TypeError, ValueError) as exc:
+        raise NotPrepared(f"malformed read_set_paths: {exc}") from exc
     if got_ids != expected_ids:
-        return False
+        raise NotPrepared("read_set_paths ids do not match candidates in canonical order")
     for candidate, (_, paths) in zip(prepared.candidates, prepared.read_set_paths):
         if bool(paths) != (candidate.read_set_fingerprint is not None):
-            return False
-    return True
+            raise NotPrepared(
+                f"candidate {candidate.id!r} read_set_paths emptiness does not match "
+                "read_set_fingerprint being set"
+            )
 
 
 def request_from(prepared: PreparedSet, *, session: SessionRef) -> SelectionRequest:
@@ -483,9 +552,12 @@ def request_from(prepared: PreparedSet, *, session: SessionRef) -> SelectionRequ
     )
 
 
-def validated(prepared: PreparedSet, *, session: SessionRef) -> ValidatedCandidates:
-    """`verify()` then bind: the only path from a `PreparedSet` to `ValidatedCandidates`."""
-    if not verify(prepared):
-        raise NotPrepared("PreparedSet failed verification")
-    request = request_from(prepared, session=session)
+def validated(prepared: PreparedSet, request: SelectionRequest) -> ValidatedCandidates:
+    """`verify()` then bind: the only path from a `PreparedSet` to `ValidatedCandidates`.
+
+    `request` is the already-built `SelectionRequest` (built by the caller
+    via `request_from(prepared, session=...)`); `validated` no longer
+    builds it internally (plan lines 422-424).
+    """
+    verify(prepared)
     return contract.validated_candidates(request, bindings=prepared.bindings, provenance=prepared.provenance)
