@@ -41,6 +41,7 @@ _TOP_LEVEL_KEYS = {
 def _base_kwargs(**overrides):
     kwargs = dict(
         request=make_request(),
+        fit_questions=True,
         host={"name": "claude-code", "version": "2.1.282"},
         adapter_version="1",
         mode="shadow",
@@ -137,6 +138,15 @@ def test_bounds():
     record_many = build_record(**_base_kwargs(request=request_many, egress_verdict="admitted"))
     assert len(record_many["candidates"]) == 16
     assert record_many["request"]["candidate_count"] == 16
+    # The 16 kept are the canonically first 16 (request.candidates is already
+    # canonicalized at construction time; capping just takes a prefix).
+    expected_first_16 = [c.id for c in request_many.candidates[:16]]
+    assert [entry["id"] for entry in record_many["candidates"]] == expected_first_16
+    # The request itself is structurally invalid (>16 candidates), so no
+    # question battery was ever built for it: questions_sha256 stays null
+    # even though egress_verdict == "admitted".
+    assert record_many["request"]["question_set_version"] is not None
+    assert record_many["request"]["questions_sha256"] is None
 
     record_scores = build_record(
         **_base_kwargs(result={"kind": "selected", "candidate_id": "c0", "confidence": 1.7, "fit": float("nan")})
@@ -169,6 +179,7 @@ def _append_worker(record_dir: str, n: int) -> None:
     for _ in range(n):
         rec = _build_record(
             request=make_request(),
+            fit_questions=True,
             host={"name": "claude-code", "version": "2.1.282"},
             adapter_version="1",
             mode="shadow",
@@ -217,6 +228,68 @@ def test_outcome_join(tmp_path):
 
     plain = read_records(record_dir=record_dir, join_outcomes=False)
     assert "outcomes" not in plain[0]
+
+
+def test_build_record_requires_fit_questions_keyword():
+    kwargs = _base_kwargs()
+    del kwargs["fit_questions"]
+    with pytest.raises(TypeError):
+        build_record(**kwargs)
+
+
+def test_record_question_identity():
+    import clavain_selector.questions as questions
+
+    request = make_request(
+        candidates=(make_candidate(id="cand-a"), make_candidate(id="cand-b")),
+    )
+
+    admitted_true = build_record(**_base_kwargs(request=request, egress_verdict="admitted", fit_questions=True))
+    admitted_false = build_record(**_base_kwargs(request=request, egress_verdict="admitted", fit_questions=False))
+    assert admitted_true["request"]["question_set_version"] == questions.QUESTION_SET_VERSION
+    assert admitted_false["request"]["question_set_version"] == questions.QUESTION_SET_VERSION
+    assert admitted_true["request"]["questions_sha256"] is not None
+    assert admitted_false["request"]["questions_sha256"] is not None
+    assert admitted_true["request"]["questions_sha256"] != admitted_false["request"]["questions_sha256"]
+
+    views = [c.selector_view() for c in request.candidates]
+    battery = questions.build_battery(views, fit_questions=True)
+    assert admitted_true["request"]["questions_sha256"] == battery.sha256
+
+    for verdict in ("refused", "not_run"):
+        record = build_record(**_base_kwargs(request=request, egress_verdict=verdict))
+        assert record["request"]["question_set_version"] == questions.QUESTION_SET_VERSION
+        assert record["request"]["questions_sha256"] is None
+
+    # An invalid request (empty candidates -> NO_CANDIDATES) never raises
+    # from build_record, and reports questions_sha256 as null even if the
+    # caller (incorrectly) claims egress_verdict="admitted".
+    invalid_request = make_request(candidates=())
+    invalid_record = build_record(
+        **_base_kwargs(request=invalid_request, egress_verdict="admitted", fallback_reason="no_candidates")
+    )
+    assert invalid_record["request"]["questions_sha256"] is None
+
+
+def test_record_permutation_invariant():
+    ids = ["zeta", "alpha", "mu", "beta"]
+    forward = make_request(candidates=tuple(make_candidate(id=i) for i in ids))
+    reversed_request = make_request(candidates=tuple(make_candidate(id=i) for i in reversed(ids)))
+
+    record_forward = build_record(**_base_kwargs(request=forward, egress_verdict="admitted"))
+    record_reversed = build_record(**_base_kwargs(request=reversed_request, egress_verdict="admitted"))
+
+    assert record_forward["request"]["sha256"] == record_reversed["request"]["sha256"]
+    assert record_forward["request"]["questions_sha256"] == record_reversed["request"]["questions_sha256"]
+    assert [c["id"] for c in record_forward["candidates"]] == [c["id"] for c in record_reversed["candidates"]]
+
+
+def test_record_duplicate_id_request_does_not_raise():
+    dup_request = make_request(candidates=(make_candidate(id="same"), make_candidate(id="same")))
+    record = build_record(
+        **_base_kwargs(request=dup_request, egress_verdict="not_run", fallback_reason="invalid_input")
+    )
+    assert record["request"]["questions_sha256"] is None
 
 
 def test_unwritable_raises(tmp_path):

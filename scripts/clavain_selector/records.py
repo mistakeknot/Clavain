@@ -29,6 +29,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import clavain_selector.contract as contract
+import clavain_selector.questions as questions
 from clavain_selector.contract import MAX_CANDIDATES, Candidate, Point, SelectionRequest, SessionRef
 
 SCHEMA = "clavain.selector.decision"
@@ -66,14 +68,6 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _sha256_payload(payload: Any) -> str:
-    try:
-        serialized = json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str)
-    except TypeError:
-        serialized = repr(payload)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
 def _clamp_unit(value: Any) -> float | None:
     if value is None:
         return None
@@ -102,34 +96,29 @@ def _session_block(session: SessionRef) -> dict[str, Any]:
     return {"host_session_id": session.host_session_id, "bead_id": session.bead_id}
 
 
-def _canonical_request_body(request: SelectionRequest) -> bytes:
-    """The same canonical, selector-visible envelope egress.admit() scans.
+def _request_block(
+    request: SelectionRequest,
+    candidate_count: int,
+    *,
+    question_set_version: str,
+    questions_sha256: str | None,
+) -> dict[str, Any]:
+    """The `request` sub-block, including the question-set identity fields.
 
-    Reimplemented locally (rather than importing egress's private
-    `_build_body`) so records.py stays independent of egress's internals;
-    both hash exactly {schema, point, integration, task, context,
-    candidates[{id, description}]}, so the resulting `request.sha256` is
-    stable across a request whether or not `admit()` has already run for it.
+    The bytes and hash delegate to `contract.canonical_request_body`/
+    `contract.request_sha256` -- the single source of truth also used by
+    `egress._build_body` -- so `request.sha256` is stable across a request
+    whether or not `admit()` has already run for it.
     """
-    payload = {
-        "schema": "clavain-selection-v1",
-        "point": _point_value(request.point),
-        "integration": request.integration,
-        "task": request.task,
-        "context": request.context,
-        "candidates": [c.selector_view() for c in request.candidates],
-    }
-    return json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
-
-
-def _request_block(request: SelectionRequest, candidate_count: int) -> dict[str, Any]:
-    body = _canonical_request_body(request)
+    body = contract.canonical_request_body(request)
     return {
-        "sha256": hashlib.sha256(body).hexdigest(),
+        "sha256": contract.request_sha256(request),
         "bytes": len(body),
         "task_sha256": _sha256_text(request.task),
         "context_sha256": _sha256_text(request.context),
         "candidate_count": candidate_count,
+        "question_set_version": question_set_version,
+        "questions_sha256": questions_sha256,
     }
 
 
@@ -137,7 +126,7 @@ def _candidate_entries(candidates: Sequence[Candidate], *, admitted: bool) -> li
     capped = list(candidates)[:MAX_CANDIDATES]
     entries: list[dict[str, Any]] = []
     for candidate in capped:
-        payload_sha256 = _sha256_payload(candidate.payload)
+        payload_sha256 = contract.payload_sha256(candidate.payload)
         if admitted:
             entries.append({
                 "id": candidate.id,
@@ -176,6 +165,7 @@ def _no_forbidden_keys(value: Any) -> bool:
 def build_record(
     *,
     request: SelectionRequest,
+    fit_questions: bool,
     host: Mapping[str, Any],
     adapter_version: str,
     mode: str,
@@ -203,16 +193,34 @@ def build_record(
     payload_sha256}`. `applied` must be `"native"` or `"emitted"` -- the
     selector never writes `"selected"` (that is an outcome, joined later by
     `effective_applied`).
+
+    `request.question_set_version` is set unconditionally
+    (`questions.QUESTION_SET_VERSION`); `request.questions_sha256` is only
+    populated when `egress_verdict == "admitted"` *and* the original,
+    uncapped request is structurally valid (`contract.validate_request(request)
+    is None`) -- so, e.g., a 20-candidate request that gets capped to 16 for
+    `candidates` here still reports `questions_sha256: null`, because the
+    battery a real Jev call would have used was never built for an invalid
+    request in the first place.
     """
     if applied not in _VALID_APPLIED:
         raise ValueError(f"applied must be one of {_VALID_APPLIED}, got {applied!r}")
     if inputs_ref is not None and mode != "eval":
         raise ValueError("inputs_ref is only allowed when mode == 'eval'")
 
+    contract.require_canonical(request.candidates)
+
     when = created_at or dt.datetime.now(dt.timezone.utc)
     admitted = egress_verdict == "admitted"
     candidates = _candidate_entries(request.candidates, admitted=admitted)
     candidate_count = len(candidates)
+
+    question_set_version = questions.QUESTION_SET_VERSION
+    questions_sha256_value: str | None = None
+    if admitted and contract.validate_request(request) is None:
+        views = [c.selector_view() for c in request.candidates]
+        battery = questions.build_battery(views, fit_questions=fit_questions)
+        questions_sha256_value = battery.sha256
 
     record: dict[str, Any] = {
         "schema": SCHEMA,
@@ -226,7 +234,12 @@ def build_record(
         "mode": mode,
         "session": _session_block(request.session),
         "task_revision": request.task_revision,
-        "request": _request_block(request, candidate_count),
+        "request": _request_block(
+            request,
+            candidate_count,
+            question_set_version=question_set_version,
+            questions_sha256=questions_sha256_value,
+        ),
         "candidates": candidates,
         "selector": dict({"backend": "jev"}, **(selector or {})),
         "result": _clamp_scores(result) if result else {"kind": "not_called"},

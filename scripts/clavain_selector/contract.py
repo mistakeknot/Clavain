@@ -9,11 +9,14 @@ environment.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 import re
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 # ---------------------------------------------------------------------------
 # Limits (Selector contract section)
@@ -172,6 +175,135 @@ class Candidate:
         return {"id": self.id, "description": self.description}
 
 
+class NonCanonicalOrder(ValueError):
+    """Raised when a candidate/view sequence is not in its canonical order.
+
+    A subclass of ``ValueError`` so existing broad ``except ValueError``
+    handling continues to catch it, while callers that specifically need to
+    tell "not canonical" apart from other structural problems can still do
+    so with ``except NonCanonicalOrder``.
+    """
+
+
+def order_salt(ids: Sequence[str]) -> str:
+    """A salt derived from the *set* of candidate ids, not their order or count.
+
+    Ids are deduplicated before hashing so a request that (invalidly)
+    contains a duplicate id still has one consistent salt to sort and
+    re-verify against, rather than the salt itself depending on how many
+    times an id was repeated or where the duplicate landed.
+    """
+    unique_ids = sorted(set(ids))
+    text = "clavain-order-v1\n" + "\n".join(unique_ids)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _check_json_native(value: Any) -> None:
+    if value is None or isinstance(value, bool):
+        return
+    if isinstance(value, int):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("payload float must be finite")
+        return
+    if isinstance(value, str):
+        return
+    if isinstance(value, list):
+        for item in value:
+            _check_json_native(item)
+        return
+    if isinstance(value, dict):
+        for key, sub in value.items():
+            if not isinstance(key, str):
+                raise ValueError("payload dict keys must be str")
+            _check_json_native(sub)
+        return
+    raise ValueError(f"payload contains a non-JSON-native value: {type(value)!r}")
+
+
+def payload_bytes(payload: Any) -> bytes:
+    """Canonical JSON bytes for a candidate payload or any other JSON-native value.
+
+    The single source of truth for payload serialization: raises
+    ``ValueError`` for anything that is not JSON-native (tuples, sets,
+    dict keys that are not ``str``, non-finite floats, or arbitrary
+    objects) rather than silently falling back to ``repr()`` or ``str()``.
+    """
+    _check_json_native(payload)
+    return json.dumps(payload, sort_keys=True, ensure_ascii=True, allow_nan=False).encode("utf-8")
+
+
+def payload_sha256(payload: Any) -> str:
+    return hashlib.sha256(payload_bytes(payload)).hexdigest()
+
+
+def candidate_sort_key(candidate: "Candidate", *, salt: str) -> tuple[Any, ...]:
+    """The full tie-break key for one candidate under a given order salt.
+
+    The salted hash of the id dominates; the remaining fields only matter to
+    break a hash collision (astronomically unlikely) or -- more relevantly
+    for tests -- to give a deterministic order to two candidates that
+    (invalidly) share the same id.
+    """
+    digest = hashlib.sha256((salt + "\0" + candidate.id).encode("utf-8")).hexdigest()
+    return (
+        digest,
+        candidate.id,
+        candidate.description,
+        payload_sha256(candidate.payload),
+        candidate.prepared_at_revision,
+        candidate.read_set_fingerprint or "",
+        -1 if candidate.expires_at_ms is None else candidate.expires_at_ms,
+        candidate.preconditions,
+    )
+
+
+def canonical_order(candidates: Sequence["Candidate"]) -> tuple["Candidate", ...]:
+    """Sort `candidates` into the one order every consumer must agree on.
+
+    Permutation-invariant: any ordering of the same candidate set produces
+    the same output, because the sort key is derived from a salt over the
+    *set* of ids (`order_salt`), not from input position.
+    """
+    salt = order_salt([c.id for c in candidates])
+    return tuple(sorted(candidates, key=lambda c: candidate_sort_key(c, salt=salt)))
+
+
+def _view_id(item: Any) -> str:
+    return item["id"] if isinstance(item, Mapping) else item.id
+
+
+def require_canonical(candidates: Sequence[Any]) -> None:
+    """Raise `NonCanonicalOrder` unless `candidates` is already in canonical order.
+
+    Accepts either `Candidate` objects or `{id, description}` selector-view
+    mappings. Deliberately never calls `canonical_order` itself (so a test
+    or a caller that only patches `canonical_order` cannot silently disable
+    this guard) -- it recomputes the salt and per-item hash independently.
+    For two adjacent items that tie on `(hash, id)`, a full-key tie-break is
+    only possible when both items are `Candidate` objects (a selector view
+    lacks the fields a full tie-break needs), so a tie involving any view
+    raises unconditionally.
+    """
+    items = list(candidates)
+    ids = [_view_id(item) for item in items]
+    salt = order_salt(ids)
+    for previous, current in zip(items, items[1:]):
+        prev_id = _view_id(previous)
+        curr_id = _view_id(current)
+        prev_key = (hashlib.sha256((salt + "\0" + prev_id).encode("utf-8")).hexdigest(), prev_id)
+        curr_key = (hashlib.sha256((salt + "\0" + curr_id).encode("utf-8")).hexdigest(), curr_id)
+        if prev_key < curr_key:
+            continue
+        if prev_key > curr_key:
+            raise NonCanonicalOrder(f"candidates not in canonical order at id {prev_id!r} -> {curr_id!r}")
+        if isinstance(previous, Mapping) or isinstance(current, Mapping):
+            raise NonCanonicalOrder(f"duplicate id {prev_id!r} in a selector-view sequence has no canonical tie-break")
+        if candidate_sort_key(previous, salt=salt) > candidate_sort_key(current, salt=salt):
+            raise NonCanonicalOrder(f"duplicate-id candidates out of order at id {prev_id!r}")
+
+
 @dataclass(frozen=True)
 class SessionRef:
     """Host session identity carried through a selection for logging and budgets."""
@@ -191,6 +323,36 @@ class SelectionRequest:
     session: SessionRef
     sources: tuple[Path, ...] = ()
     project_root: Path | None = None
+
+    def __post_init__(self) -> None:
+        # A frozen dataclass: reorder at construction time via
+        # object.__setattr__ so every consumer of `request.candidates`
+        # downstream sees the one canonical order, without each consumer
+        # having to remember to sort it itself.
+        object.__setattr__(self, "candidates", canonical_order(self.candidates))
+
+
+def canonical_request_body(request: "SelectionRequest") -> bytes:
+    """The single source of truth for the bytes sent to Jev for a request.
+
+    `egress._build_body` and `records._request_block` both delegate here
+    rather than each serializing the request themselves.
+    """
+    require_canonical(request.candidates)
+    point_value = request.point.value if isinstance(request.point, Point) else request.point
+    payload = {
+        "schema": "clavain-selection-v1",
+        "point": point_value,
+        "integration": request.integration,
+        "task": request.task,
+        "context": request.context,
+        "candidates": [c.selector_view() for c in request.candidates],
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+
+def request_sha256(request: "SelectionRequest") -> str:
+    return hashlib.sha256(canonical_request_body(request)).hexdigest()
 
 
 @dataclass(frozen=True)
