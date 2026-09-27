@@ -170,7 +170,10 @@ NEXT_GOAL_BLOCK_EMITTED=0
 _ids=("$SESSION_ID" "${CLAUDE_SESSION_ID:-}" "${CLAUDE_CODE_SESSION_ID:-}" "${BB_THREAD_ID:-}")
 if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
     source "${SCRIPT_DIR}/lib-next-goal-provenance.sh" 2>/dev/null || true
-    if declare -F next_goal_block_emitted >/dev/null 2>&1 && next_goal_block_emitted "$RECENT"; then
+    # Only a block written after the completion answers it. One written for an
+    # earlier goal, still inside the 80-line window, does not.
+    if declare -F next_goal_block_emitted >/dev/null 2>&1 \
+        && next_goal_block_emitted "$(printf '%s\n' "$RECENT" | tail -n +"$(( ${CLAVAIN_GOAL_COMPLETED_LINE:-0} + 1 ))")"; then
         NEXT_GOAL_BLOCK_EMITTED=1
     fi
     if declare -F next_goal_provenance_warning >/dev/null 2>&1; then
@@ -220,8 +223,9 @@ fi
 # needs to fire the instruction, not resolve any bead data itself.
 #
 # goal-completed is narrow on purpose (lib-signals.sh): a met goal_status or a
-# `bd close` the tracker confirms closed an epic, never wording. And a block already in the transcript
-# satisfies the tier: demanding one for a block that exists was a wasted turn.
+# `bd close` the tracker confirms closed an epic, never wording. And a block
+# written after that event satisfies the tier: demanding one for a block that
+# exists was a wasted turn.
 if [[ -z "$REASON" && "$SIGNALS" == *"goal-completed"* ]]; then
     if [[ ! -f ".claude/clavain.no-goalcadence" && "$NEXT_GOAL_BLOCK_EMITTED" -eq 0 ]]; then
         if intercore_sentinel_check_or_legacy "goal_cadence_throttle" "$SESSION_ID" 60; then

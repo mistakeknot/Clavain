@@ -115,19 +115,31 @@ teardown() {
 
 # A Bash tool call as Claude Code records it.
 bash_call() {
-    jq -cn --arg c "$1" '{type:"assistant",message:{content:[{type:"tool_use",name:"Bash",input:{command:$c}}]}}'
+    jq -cn --arg c "$1" --arg id "${2:-toolu_1}" '{type:"assistant",message:{content:[{type:"tool_use",id:$id,name:"Bash",input:{command:$c}}]}}'
 }
 
-# A bd on PATH that types the IDs listed in $STUB_EPICS as epics, the rest as
-# tasks, and logs every lookup.
+# The tool_result Claude Code records for a call.
+tool_result() {
+    jq -cn --arg t "$2" --arg id "$1" '{type:"user",message:{content:[{type:"tool_result",tool_use_id:$id,content:$t}]}}'
+}
+
+# A bd on PATH that answers `bd show ID... --json` like the real one: the IDs in
+# $STUB_EPICS are epics, the rest tasks; the IDs in $STUB_OPEN are open, the
+# rest closed. Every call is logged.
 stub_bd() {
     STUB_DIR="$(mktemp -d)"
     cat > "$STUB_DIR/bd" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$STUB_DIR/calls"
 [[ "$1" == show ]] || exit 0
-t=task; [[ " $STUB_EPICS " == *" $2 "* ]] && t=epic
-printf '[{"id":"%s","issue_type":"%s"}]\n' "$2" "$t"
+shift; sep=""; printf '['
+for id in "$@"; do
+    [[ "$id" == -* ]] && continue
+    t=task; [[ " $STUB_EPICS " == *" $id "* ]] && t=epic
+    st=closed; [[ " ${STUB_OPEN:-} " == *" $id "* ]] && st=open
+    printf '%s{"id":"%s","issue_type":"%s","status":"%s"}' "$sep" "$id" "$t" "$st"; sep=,
+done
+printf ']\n'
 EOF
     chmod +x "$STUB_DIR/bd"
     export STUB_DIR PATH="$STUB_DIR:$PATH"
@@ -137,6 +149,7 @@ EOF
     stub_bd; export STUB_EPICS="proj-ep1"
     detect_signals "$(bash_call 'cd /tmp && export BEADS_ACTOR=x && bd close proj-ep1 --reason "all children closed" 2>&1 | tail -3')"
     [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    [[ "$CLAVAIN_GOAL_COMPLETED_LINE" -eq 1 ]]
     rm -rf "$STUB_DIR"
 }
 
@@ -144,16 +157,62 @@ EOF
     stub_bd; export STUB_EPICS="proj-ep1"
     detect_signals "$(bash_call 'bd close proj-t1.2')"
     [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    [[ "$CLAVAIN_GOAL_COMPLETED_LINE" -eq 0 ]]
     grep -q "show proj-t1.2" "$STUB_DIR/calls"
     rm -rf "$STUB_DIR"
 }
 
-@test "lib-signals: bd epic close-eligible counts, its dry run does not" {
-    stub_bd
-    detect_signals "$(bash_call 'bd epic close-eligible --dry-run')"
+@test "lib-signals: a close that left the epic open is not goal-completed" {
+    stub_bd; export STUB_EPICS="proj-ep1" STUB_OPEN="proj-ep1"
+    detect_signals "$(bash_call 'bd close proj-ep1')"
     [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
-    detect_signals "$(bash_call 'bd epic close-eligible')"
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: quoted IDs, -C and a sixth ID are all read, in one lookup" {
+    stub_bd; export STUB_EPICS="proj-ep6"
+    detect_signals "$(bash_call 'bd -C /tmp close "proj-t1" proj-t2 proj-t3 proj-t4 proj-t5 '\''proj-ep6'\''')"
     [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    [[ "$(wc -l < "$STUB_DIR/calls")" -eq 1 ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: bd not run as the command, or run for help, is not read" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(printf '%s\n' "$(bash_call 'echo bd close proj-ep1')" \
+        "$(bash_call 'bd close proj-ep1 --help')" \
+        "$(bash_call 'bd epic close-eligible -h')" \
+        "$(jq -cn '{type:"assistant",message:{content:[{type:"tool_use",name:"Monitor",input:{command:"bd close proj-ep1"}}]}}')")"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    [[ ! -e "$STUB_DIR/calls" ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: bd epic close-eligible counts the epics it closed, its dry run does not" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(printf '%s\n' "$(bash_call 'bd epic close-eligible --dry-run' t1)" \
+        "$(tool_result t1 $'Would close 1 epic(s):\n  - proj-ep1: Ship it')")"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    detect_signals "$(printf '%s\n' "$(bash_call 'bd epic close-eligible' t2)" \
+        "$(tool_result t2 $'Closed 1 epic(s):\n  - proj-ep1: Ship it')")"
+    [[ "$CLAVAIN_SIGNALS" == *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: bd epic close-eligible that closed nothing is not goal-completed" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(printf '%s\n' "$(bash_call 'bd epic close-eligible' t1)" \
+        "$(tool_result t1 'No epics eligible for closure')")"
+    [[ "$CLAVAIN_SIGNALS" != *"goal-completed"* ]]
+    rm -rf "$STUB_DIR"
+}
+
+@test "lib-signals: CLAVAIN_GOAL_COMPLETED_LINE is the last completion" {
+    stub_bd; export STUB_EPICS="proj-ep1"
+    detect_signals "$(printf '%s\n' '{"type":"attachment","attachment":{"type":"goal_status","met":true}}' \
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"x"}]}}' \
+        "$(bash_call 'bd close proj-ep1')")"
+    [[ "$CLAVAIN_GOAL_COMPLETED_LINE" -eq 3 ]]
     rm -rf "$STUB_DIR"
 }
 
