@@ -60,24 +60,45 @@ class NotPrepared(ValueError):
 
 
 @dataclass(frozen=True)
+class PreparedInput:
+    """What `Preparer.build` returns: task, context, candidates, read-set
+    paths, sources and task_revision only (finding 6, mk-42j9.7).
+
+    Deliberately carries no `integration`/`point` -- those always come from
+    the `prepare()` call's own registry-resolved arguments, never from
+    whatever a preparer's `build` happens to return, so a preparer cannot
+    smuggle a different integration or point into the resulting
+    `PreparedSet`.
+    """
+
+    task: str
+    candidates: Sequence[Candidate]
+    context: str = ""
+    read_set_paths: Sequence[tuple[str, Sequence[str]]] = ()
+    sources: Sequence[str] = ()
+    task_revision: str | None = None
+
+
+@dataclass(frozen=True)
 class Preparer:
     """A trusted, named builder for one or more points.
 
-    `vocabulary`, when non-empty, is the closed set of candidate ids this
-    preparer is allowed to emit; `event_fields` is a subset of
+    `vocabulary(project_root)` is the closed set of candidate ids this
+    preparer is allowed to emit for that project root -- it never sees the
+    event, and an empty result means an empty closed set (every id is
+    rejected), not "no restriction". `event_fields` is a subset of
     `{"session_id", "tool_name", "tool_input", "tool_response"}` -- the only
     fields of the real `HostEvent` the preparer's `build` ever sees.
     """
 
     name: str
     points: frozenset[Point]
-    vocabulary: frozenset[str]
+    vocabulary: Callable[[Path], frozenset[str]]
     event_fields: frozenset[str]
-    build: Callable[[HostEvent], Mapping[str, Any]]
+    build: Callable[[HostEvent | None, Path | None], PreparedInput]
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "points", frozenset(self.points))
-        object.__setattr__(self, "vocabulary", frozenset(self.vocabulary))
         object.__setattr__(self, "event_fields", frozenset(self.event_fields))
         bad = self.event_fields - _EVENT_FIELD_NAMES
         if bad:
@@ -363,61 +384,98 @@ def _finish_prepare(
 # ---------------------------------------------------------------------------
 
 
-def prepare(name: str, event: HostEvent | None, *, project_root: str | Path | None = None) -> PreparedSet:
-    """Build a `PreparedSet` via the named, registered `Preparer`.
+def prepare(
+    registry: Mapping[str, Any],
+    integration: str,
+    point: "Point | str",
+    event: HostEvent | None,
+    project_root: str | Path | None = None,
+) -> PreparedSet:
+    """Build a `PreparedSet` via the registry-resolved, registered `Preparer`.
 
-    Raises `NotPrepared` when `name` is not in `PREPARERS`, when `event`'s
-    point is not one the preparer serves, when the preparer's `build` omits
-    a required key or raises, when a produced candidate id is outside a
-    non-empty `vocabulary`, when `read_set_paths` (a per-candidate `(id,
-    paths)` sequence in canonical order, or `()` when no candidate has a
-    read set) does not correspond to the candidates or disagrees with a
-    candidate's `read_set_fingerprint`, or when any candidate's path
-    resolves outside `project_root` or onto the source denylist.
+    `registry` is the loaded integration registry (the same
+    `Mapping[str, Any]` shape `flags.py` already reads: a `dict` with an
+    `integrations` mapping from integration name to an entry `dict` whose
+    `"preparer"` key names an entry in `PREPARERS`). Looks up
+    `registry["integrations"][integration]["preparer"]` in `PREPARERS`
+    (an unknown integration or preparer name is `NotPrepared`) and requires
+    `point in preparer.points` -- this check is always required, including
+    when `event is None`; there is no fallback that picks a point from
+    `preparer.points`. Projects `event` down to only the fields
+    `preparer.event_fields` declares (every other field is `None`, `raw` is
+    `{}`) and calls `preparer.build(projected, project_root)`. Every
+    produced candidate id must be in `preparer.vocabulary(project_root)`;
+    an empty result from that call is an empty closed set -- every
+    candidate id is rejected, not "no restriction". `integration`/`point`
+    on the resulting `PreparedSet` always come from this call's own
+    arguments, never from anything `build()` returns (`PreparedInput`
+    carries no such fields). Also raises `NotPrepared` when
+    `read_set_paths` (a per-candidate `(id, paths)` sequence in canonical
+    order, or `()` when no candidate has a read set) does not correspond to
+    the candidates or disagrees with a candidate's `read_set_fingerprint`,
+    or when any candidate's path resolves outside `project_root` or onto
+    the source denylist.
     """
-    preparer_def = PREPARERS.get(name)
-    if preparer_def is None:
-        raise NotPrepared(f"unknown preparer: {name!r}")
-    if event is not None and event.point not in preparer_def.points:
-        raise NotPrepared(f"preparer {name!r} does not serve point {event.point!r}")
+    point_value = point if isinstance(point, Point) else Point(point)
 
-    point = event.point if event is not None else next(iter(preparer_def.points), Point.LIBRARY)
-    projected = _project_event(point, event, preparer_def.event_fields)
+    integrations = registry.get("integrations", {}) if isinstance(registry, Mapping) else {}
+    entry = integrations.get(integration)
+    if not isinstance(entry, Mapping):
+        raise NotPrepared(f"unknown integration: {integration!r}")
+
+    preparer_name = entry.get("preparer")
+    if not isinstance(preparer_name, str):
+        raise NotPrepared(f"integration {integration!r} has no registered preparer")
+
+    preparer_def = PREPARERS.get(preparer_name)
+    if preparer_def is None:
+        raise NotPrepared(f"unknown preparer: {preparer_name!r}")
+
+    if point_value not in preparer_def.points:
+        raise NotPrepared(f"preparer {preparer_name!r} does not serve point {point_value!r}")
+
+    root_arg = Path(project_root) if project_root is not None else None
+    projected = _project_event(point_value, event, preparer_def.event_fields)
 
     try:
-        built = dict(preparer_def.build(projected))
+        built = preparer_def.build(projected, root_arg)
     except NotPrepared:
         raise
     except Exception as exc:  # noqa: BLE001 - any preparer failure means NotPrepared
-        raise NotPrepared(f"preparer {name!r} build failed: {exc}") from exc
+        raise NotPrepared(f"preparer {preparer_name!r} build failed: {exc}") from exc
+
+    if not isinstance(built, PreparedInput):
+        raise NotPrepared(f"preparer {preparer_name!r} build did not return a PreparedInput")
 
     try:
-        candidates = tuple(built["candidates"])
-        task = built["task"]
-    except KeyError as exc:
-        raise NotPrepared(f"preparer {name!r} build did not return {exc.args[0]!r}") from exc
+        vocabulary = frozenset(preparer_def.vocabulary(root_arg))
+    except NotPrepared:
+        raise
+    except Exception as exc:  # noqa: BLE001 - any preparer failure means NotPrepared
+        raise NotPrepared(f"preparer {preparer_name!r} vocabulary failed: {exc}") from exc
 
-    if preparer_def.vocabulary:
-        outside = [c.id for c in candidates if c.id not in preparer_def.vocabulary]
-        if outside:
-            raise NotPrepared(f"preparer {name!r} emitted candidates outside its vocabulary: {outside}")
+    candidates = tuple(built.candidates)
+    outside = [c.id for c in candidates if c.id not in vocabulary]
+    if outside:
+        raise NotPrepared(f"preparer {preparer_name!r} emitted candidates outside its vocabulary: {outside}")
 
     return _finish_prepare(
-        integration=built.get("integration", ""),
-        point=built.get("point", point),
+        integration=integration,
+        point=point_value,
         provenance=Provenance.PREPARER,
-        preparer=name,
-        task=task,
-        context=built.get("context", ""),
+        preparer=preparer_name,
+        task=built.task,
+        context=built.context,
         candidates=candidates,
-        sources=built.get("sources", ()),
-        project_root=project_root if project_root is not None else built.get("project_root"),
-        task_revision=built.get("task_revision"),
-        read_set_paths=built.get("read_set_paths", ()),
+        sources=built.sources,
+        project_root=project_root,
+        task_revision=built.task_revision,
+        read_set_paths=built.read_set_paths,
     )
 
 
 def from_operator(
+    registry: Mapping[str, Any],
     integration: str,
     point: Point,
     task: str,
@@ -425,7 +483,6 @@ def from_operator(
     candidates: Sequence[Candidate],
     project_root: str | Path | None = None,
     *,
-    registry: Mapping[str, Any] | None = None,
     sources: Sequence[str] = (),
     read_set_paths: Sequence[tuple[str, Sequence[str]]] = (),
     task_revision: str | None = None,
@@ -435,9 +492,9 @@ def from_operator(
     `read_set_paths` is a per-candidate `(id, paths)` sequence, in the same
     canonical order as `candidates`; `()` means no candidate has a read set.
 
-    `registry` is accepted but currently unused, mirroring `from_case` --
-    reserved for finding 6's follow-on registry-driven `prepare()` rewrite;
-    this task does not need it to do anything yet.
+    `registry` is accepted, as the plan's signature requires (line 415),
+    but unused -- there is no vocabulary check for operator-provided sets
+    (plan line 430).
     """
     del registry
     return _finish_prepare(
@@ -455,11 +512,12 @@ def from_operator(
     )
 
 
-def from_case(case: Mapping[str, Any], registry: Mapping[str, Any] | None = None) -> PreparedSet:
+def from_case(case: Mapping[str, Any], registry: Mapping[str, Any]) -> PreparedSet:
     """Build a `PreparedSet` from one eval-harness case mapping (Task 9).
 
-    `registry` is accepted but currently unused -- reserved for a future
-    per-integration validation pass; `case` must supply `integration`,
+    `registry` is accepted, per the plan's signature (line 416), but
+    unused -- no vocabulary check applies to eval-case sets either. `case`
+    must supply `integration`,
     `point`, `task`, `candidates`, with `context`/`sources`/`read_set_paths`/
     `project_root`/`task_revision`/`preparer` optional. `read_set_paths`, if
     given, is a per-candidate `(id, paths)` sequence in canonical order.

@@ -11,6 +11,17 @@ Findings 1-5, 7-9 from the other-frontier review of 13e74b3 (mk-42j9.7):
 (finding 7); every assertion below that used to check `verify(...) is
 True`/`is False` now checks `verify(...) is None` or
 `pytest.raises(NotPrepared)`.
+
+Finding 6 (this file's revision): `prepare`/`from_operator`/`from_case` are
+registry-driven per plan lines 414-416. `registry` is the same
+`Mapping[str, Any]` shape `flags.py` already reads: a `dict` with an
+`integrations` mapping from integration name to an entry `dict` whose
+`"preparer"` key names an entry in `PREPARERS`. `from_operator`/`from_case`
+accept `registry` per the plan's signature but never use it (no vocabulary
+check for operator/eval-case sets). `Preparer.vocabulary` is now
+`Callable[[Path], frozenset[str]]`, and `Preparer.build` now takes
+`(event, project_root)` and returns a `PreparedInput` (task, context,
+candidates, read_set_paths, sources, task_revision -- no integration/point).
 """
 
 from __future__ import annotations
@@ -29,6 +40,7 @@ from clavain_selector.preparers import (
     NotPrepared,
     PREPARERS,
     Preparer,
+    PreparedInput,
     PreparedSet,
     from_case,
     from_operator,
@@ -42,6 +54,15 @@ from clavain_selector.preparers import (
 # ---------------------------------------------------------------------------
 # Registry: empty, immutable
 # ---------------------------------------------------------------------------
+
+
+def _registry_for(integration: str, preparer_name: str) -> dict:
+    return {"schema_version": 1, "integrations": {integration: {"preparer": preparer_name}}}
+
+
+# A registry usable by from_operator/from_case tests: never consulted by
+# either factory, so its shape doesn't matter beyond being a Mapping.
+UNUSED_REGISTRY: dict = {"schema_version": 1, "integrations": {}}
 
 
 def test_registry_starts_empty():
@@ -58,20 +79,27 @@ def test_preparer_rejects_unknown_event_fields():
         Preparer(
             name="bad",
             points=frozenset({Point.PRE_TOOL}),
-            vocabulary=frozenset(),
+            vocabulary=lambda project_root: frozenset(),
             event_fields=frozenset({"bogus_field"}),
-            build=lambda event: {"task": "x", "candidates": ()},
+            build=lambda event, project_root: PreparedInput(task="x", candidates=()),
         )
 
 
 # ---------------------------------------------------------------------------
-# prepare(): unknown name, point mismatch, build failures, vocabulary
+# prepare(): unknown integration/preparer, point mismatch, build failures,
+# vocabulary
 # ---------------------------------------------------------------------------
 
 
-def test_prepare_unknown_name_raises():
+def test_prepare_unknown_integration_raises():
     with pytest.raises(NotPrepared):
-        prepare("does-not-exist", None)
+        prepare(UNUSED_REGISTRY, "does-not-exist", Point.PRE_TOOL, None)
+
+
+def test_prepare_unknown_preparer_name_raises():
+    registry = _registry_for("selftest", "does-not-exist")
+    with pytest.raises(NotPrepared):
+        prepare(registry, "selftest", Point.PRE_TOOL, None)
 
 
 def _install_preparer(monkeypatch, preparer: Preparer) -> None:
@@ -81,28 +109,30 @@ def _install_preparer(monkeypatch, preparer: Preparer) -> None:
 
 
 def test_prepare_happy_path_produces_verifiable_set(monkeypatch):
-    def _build(event: HostEvent) -> dict:
-        return {
-            "integration": "selftest",
-            "task": "do the thing",
-            "context": "",
-            "candidates": (make_candidate(id="cand-a", prepared_at_revision="rev-1"),),
-        }
+    def _build(event: HostEvent | None, project_root) -> PreparedInput:
+        return PreparedInput(
+            task="do the thing",
+            context="",
+            candidates=(make_candidate(id="cand-a", prepared_at_revision="rev-1"),),
+        )
 
     fake = Preparer(
         name="test-preparer",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset(),
+        vocabulary=lambda project_root: frozenset({"cand-a"}),
         event_fields=frozenset({"tool_name"}),
         build=_build,
     )
     _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "test-preparer")
 
     event = HostEvent(point=Point.PRE_TOOL, session_id="sess-real", tool_name="Bash", tool_input={"command": "rm -rf /"})
-    result = prepare("test-preparer", event)
+    result = prepare(registry, "selftest", Point.PRE_TOOL, event)
 
     assert result.provenance is Provenance.PREPARER
     assert result.preparer == "test-preparer"
+    assert result.integration == "selftest"
+    assert result.point is Point.PRE_TOOL
     assert result.task == "do the thing"
     assert [c.id for c in result.candidates] == ["cand-a"]
     assert verify(result) is None
@@ -112,90 +142,180 @@ def test_prepare_point_mismatch_raises(monkeypatch):
     fake = Preparer(
         name="pre-tool-only",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset(),
+        vocabulary=lambda project_root: frozenset(),
         event_fields=frozenset(),
-        build=lambda event: {"task": "x", "candidates": (make_candidate(id="cand-a"),)},
+        build=lambda event, project_root: PreparedInput(task="x", candidates=(make_candidate(id="cand-a"),)),
     )
     _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "pre-tool-only")
 
     event = HostEvent(point=Point.POST_TOOL_OUTPUT, session_id="sess-real")
     with pytest.raises(NotPrepared):
-        prepare("pre-tool-only", event)
+        prepare(registry, "selftest", Point.POST_TOOL_OUTPUT, event)
+
+
+def test_prepare_point_mismatch_raises_even_with_no_event(monkeypatch):
+    """Finding 6: `point in preparer.points` is always required, including
+    when `event is None` -- there is no fallback that iterates
+    `preparer.points` to pick one."""
+    fake = Preparer(
+        name="pre-tool-only-no-event",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=lambda project_root: frozenset(),
+        event_fields=frozenset(),
+        build=lambda event, project_root: PreparedInput(task="x", candidates=(make_candidate(id="cand-a"),)),
+    )
+    _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "pre-tool-only-no-event")
+
+    with pytest.raises(NotPrepared):
+        prepare(registry, "selftest", Point.SESSION_START, None)
 
 
 def test_prepare_build_missing_required_key_raises(monkeypatch):
     fake = Preparer(
         name="incomplete",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset(),
+        vocabulary=lambda project_root: frozenset(),
         event_fields=frozenset(),
-        build=lambda event: {"task": "x"},  # missing "candidates"
+        build=lambda event, project_root: PreparedInput(task="x"),  # missing "candidates"
     )
     _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "incomplete")
     with pytest.raises(NotPrepared):
-        prepare("incomplete", HostEvent(point=Point.PRE_TOOL, session_id="s"))
+        prepare(registry, "selftest", Point.PRE_TOOL, HostEvent(point=Point.PRE_TOOL, session_id="s"))
+
+
+def test_prepare_build_wrong_return_type_raises(monkeypatch):
+    """Finding 6: a preparer that returns a plain `dict` instead of a
+    `PreparedInput` is `NotPrepared`, not silently accepted."""
+    fake = Preparer(
+        name="wrong-shape",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=lambda project_root: frozenset(),
+        event_fields=frozenset(),
+        build=lambda event, project_root: {"task": "x", "candidates": ()},
+    )
+    _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "wrong-shape")
+    with pytest.raises(NotPrepared):
+        prepare(registry, "selftest", Point.PRE_TOOL, HostEvent(point=Point.PRE_TOOL, session_id="s"))
 
 
 def test_prepare_build_exception_becomes_not_prepared(monkeypatch):
-    def _boom(event: HostEvent):
+    def _boom(event: HostEvent | None, project_root):
         raise RuntimeError("boom")
 
     fake = Preparer(
         name="explodes",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset(),
+        vocabulary=lambda project_root: frozenset(),
         event_fields=frozenset(),
         build=_boom,
     )
     _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "explodes")
     with pytest.raises(NotPrepared):
-        prepare("explodes", HostEvent(point=Point.PRE_TOOL, session_id="s"))
+        prepare(registry, "selftest", Point.PRE_TOOL, HostEvent(point=Point.PRE_TOOL, session_id="s"))
 
 
 def test_prepare_vocabulary_restriction_rejects_outside_ids(monkeypatch):
     fake = Preparer(
         name="scoped",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset({"allowed-a", "allowed-b"}),
+        vocabulary=lambda project_root: frozenset({"allowed-a", "allowed-b"}),
         event_fields=frozenset(),
-        build=lambda event: {"task": "x", "candidates": (make_candidate(id="not-allowed"),)},
+        build=lambda event, project_root: PreparedInput(task="x", candidates=(make_candidate(id="not-allowed"),)),
     )
     _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "scoped")
     with pytest.raises(NotPrepared):
-        prepare("scoped", HostEvent(point=Point.PRE_TOOL, session_id="s"))
+        prepare(registry, "selftest", Point.PRE_TOOL, HostEvent(point=Point.PRE_TOOL, session_id="s"))
 
 
 def test_prepare_vocabulary_restriction_allows_in_scope_ids(monkeypatch):
     fake = Preparer(
         name="scoped-ok",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset({"allowed-a"}),
+        vocabulary=lambda project_root: frozenset({"allowed-a"}),
         event_fields=frozenset(),
-        build=lambda event: {"task": "x", "candidates": (make_candidate(id="allowed-a"),)},
+        build=lambda event, project_root: PreparedInput(task="x", candidates=(make_candidate(id="allowed-a"),)),
     )
     _install_preparer(monkeypatch, fake)
-    result = prepare("scoped-ok", HostEvent(point=Point.PRE_TOOL, session_id="s"))
+    registry = _registry_for("selftest", "scoped-ok")
+    result = prepare(registry, "selftest", Point.PRE_TOOL, HostEvent(point=Point.PRE_TOOL, session_id="s"))
     assert [c.id for c in result.candidates] == ["allowed-a"]
+
+
+def test_prepare_empty_vocabulary_rejects_every_id(monkeypatch):
+    """Finding 6: an empty `vocabulary(project_root)` result is an empty
+    *closed* set -- every candidate id is rejected, not "no restriction"
+    (the opposite of what was previously landed)."""
+    fake = Preparer(
+        name="closed",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=lambda project_root: frozenset(),
+        event_fields=frozenset(),
+        build=lambda event, project_root: PreparedInput(task="x", candidates=(make_candidate(id="anything"),)),
+    )
+    _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "closed")
+    with pytest.raises(NotPrepared):
+        prepare(registry, "selftest", Point.PRE_TOOL, HostEvent(point=Point.PRE_TOOL, session_id="s"))
+
+
+def test_prepare_calls_vocabulary_with_project_root_only(tmp_path, monkeypatch):
+    """Plan line 1717 ('the vocabulary function is called with
+    project_root only (spy)'): finding 9's vocabulary-spy test, un-skipped
+    now that `Preparer.vocabulary` is `Callable[[Path], frozenset[str]]`
+    (finding 6)."""
+    calls: list[tuple] = []
+
+    def _vocabulary(project_root):
+        calls.append((project_root,))
+        return frozenset({"cand-a"})
+
+    fake = Preparer(
+        name="vocab-spy",
+        points=frozenset({Point.PRE_TOOL}),
+        vocabulary=_vocabulary,
+        event_fields=frozenset(),
+        build=lambda event, project_root: PreparedInput(task="x", candidates=(make_candidate(id="cand-a"),)),
+    )
+    _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "vocab-spy")
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    prepare(
+        registry, "selftest", Point.PRE_TOOL, HostEvent(point=Point.PRE_TOOL, session_id="s"),
+        project_root=project_root,
+    )
+
+    assert len(calls) == 1
+    (args,) = calls
+    assert args == (Path(project_root),)
 
 
 def test_prepare_projects_event_to_declared_fields_only(monkeypatch):
     seen: dict = {}
 
-    def _build(event: HostEvent) -> dict:
+    def _build(event: HostEvent, project_root) -> PreparedInput:
         seen["session_id"] = event.session_id
         seen["tool_name"] = event.tool_name
         seen["tool_input"] = event.tool_input
         seen["tool_response"] = event.tool_response
-        return {"task": "x", "candidates": (make_candidate(id="cand-a"),)}
+        return PreparedInput(task="x", candidates=(make_candidate(id="cand-a"),))
 
     fake = Preparer(
         name="projected",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset(),
+        vocabulary=lambda project_root: frozenset({"cand-a"}),
         event_fields=frozenset({"tool_name"}),  # only tool_name declared
         build=_build,
     )
     _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "projected")
 
     real_event = HostEvent(
         point=Point.PRE_TOOL,
@@ -204,7 +324,7 @@ def test_prepare_projects_event_to_declared_fields_only(monkeypatch):
         tool_input={"command": "rm -rf /"},
         tool_response="should never be seen",
     )
-    prepare("projected", real_event)
+    prepare(registry, "selftest", Point.PRE_TOOL, real_event)
 
     # Only the declared field crosses the boundary; every other field is
     # reset to its projected default regardless of what the real event held.
@@ -214,17 +334,25 @@ def test_prepare_projects_event_to_declared_fields_only(monkeypatch):
     assert seen["tool_response"] is None
 
 
-def test_prepare_with_no_event_uses_first_declared_point(monkeypatch):
+def test_prepare_result_integration_and_point_come_from_registry_call_not_build(monkeypatch):
+    """Finding 6: `integration`/`point` on the resulting `PreparedSet` come
+    from `prepare()`'s own arguments (resolved via the registry), never
+    from anything `build()` returns. `PreparedInput` carries no
+    integration/point field at all, so a preparer cannot smuggle bogus
+    values in."""
     fake = Preparer(
-        name="no-event",
-        points=frozenset({Point.SESSION_START}),
-        vocabulary=frozenset(),
+        name="library-preparer",
+        points=frozenset({Point.SESSION_START, Point.LIBRARY}),
+        vocabulary=lambda project_root: frozenset({"cand-a"}),
         event_fields=frozenset(),
-        build=lambda event: {"task": "x", "candidates": (make_candidate(id="cand-a"),), "point": event.point},
+        build=lambda event, project_root: PreparedInput(task="x", candidates=(make_candidate(id="cand-a"),)),
     )
     _install_preparer(monkeypatch, fake)
-    result = prepare("no-event", None)
-    assert result.point == Point.SESSION_START
+    registry = _registry_for("selftest", "library-preparer")
+
+    result = prepare(registry, "selftest", Point.SESSION_START, None)
+    assert result.integration == "selftest"
+    assert result.point is Point.SESSION_START
 
 
 def test_preparer_hostile_event(monkeypatch):
@@ -237,26 +365,27 @@ def test_preparer_hostile_event(monkeypatch):
     and `read_set_paths` byte-identical to a clean event's; only
     `tool_name` moves the payload, exactly as the transform specifies."""
 
-    def _build(event: HostEvent) -> dict:
-        return {
-            "task": "x",
-            "candidates": (
+    def _build(event: HostEvent, project_root) -> PreparedInput:
+        return PreparedInput(
+            task="x",
+            candidates=(
                 make_candidate(
                     id="cand-a",
                     payload={"transformed": (event.tool_name or "").upper()},
                     prepared_at_revision="rev-1",
                 ),
             ),
-        }
+        )
 
     fake = Preparer(
         name="hostile",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset(),
+        vocabulary=lambda project_root: frozenset({"cand-a"}),
         event_fields=frozenset({"tool_name"}),
         build=_build,
     )
     _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "hostile")
 
     def _prepare(tool_name, *, tool_input=None, tool_response=None, raw=None):
         event = HostEvent(
@@ -267,7 +396,7 @@ def test_preparer_hostile_event(monkeypatch):
             tool_response=tool_response,
             raw=raw or {},
         )
-        return prepare("hostile", event)
+        return prepare(registry, "selftest", Point.PRE_TOOL, event)
 
     clean = _prepare("Bash")
 
@@ -294,23 +423,24 @@ def test_preparer_hostile_event_read_set_path_from_tool_name(monkeypatch, tmp_pa
     `egress._source_rule` -- the preparer contract does not exempt a
     preparer-derived path from the project-root/denylist check."""
 
-    def _build(event: HostEvent) -> dict:
-        return {
-            "task": "x",
-            "candidates": (
+    def _build(event: HostEvent, project_root) -> PreparedInput:
+        return PreparedInput(
+            task="x",
+            candidates=(
                 make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1"),
             ),
-            "read_set_paths": (("cand-a", (event.tool_name,)),),
-        }
+            read_set_paths=(("cand-a", (event.tool_name,)),),
+        )
 
     fake = Preparer(
         name="path-from-tool-name",
         points=frozenset({Point.PRE_TOOL}),
-        vocabulary=frozenset(),
+        vocabulary=lambda project_root: frozenset({"cand-a"}),
         event_fields=frozenset({"tool_name"}),
         build=_build,
     )
     _install_preparer(monkeypatch, fake)
+    registry = _registry_for("selftest", "path-from-tool-name")
 
     project_root = tmp_path / "project"
     project_root.mkdir()
@@ -318,7 +448,7 @@ def test_preparer_hostile_event_read_set_path_from_tool_name(monkeypatch, tmp_pa
     escape = str(project_root / ".." / ".." / ".ssh" / "id_x")
     with pytest.raises(NotPrepared):
         prepare(
-            "path-from-tool-name",
+            registry, "selftest", Point.PRE_TOOL,
             HostEvent(point=Point.PRE_TOOL, session_id="s", tool_name=escape),
             project_root=project_root,
         )
@@ -326,7 +456,7 @@ def test_preparer_hostile_event_read_set_path_from_tool_name(monkeypatch, tmp_pa
     denylisted = str(Path("~/.config/jev/secrets.env").expanduser())
     with pytest.raises(NotPrepared):
         prepare(
-            "path-from-tool-name",
+            registry, "selftest", Point.PRE_TOOL,
             HostEvent(point=Point.PRE_TOOL, session_id="s", tool_name=denylisted),
             project_root=project_root,
         )
@@ -339,20 +469,20 @@ def test_preparer_hostile_event_read_set_path_from_tool_name(monkeypatch, tmp_pa
 
 def test_from_operator_happy_path():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
-    result = from_operator("selftest", Point.LIBRARY, "do the thing", "", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "do the thing", "", (candidate,))
     assert result.provenance is Provenance.OPERATOR
     assert result.preparer is None
     assert verify(result) is None
 
 
-def test_from_operator_accepts_registry_kwarg():
-    """Finding 7: `from_operator` needs a `registry` parameter per the
-    plan, even though this task does not need it to do anything yet
-    (finding 6's registry-driven `prepare()` rewrite is a follow-on
-    commit)."""
+def test_from_operator_registry_is_first_positional_and_unused():
+    """Finding 6: `from_operator`'s signature is
+    `(registry, integration, point, task, context, candidates, project_root)`
+    per plan line 415 -- `registry` is required and positional, not a
+    keyword-only stopgap, and still does no vocabulary check."""
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
     result = from_operator(
-        "selftest", Point.LIBRARY, "do the thing", "", (candidate,), registry={"anything": True}
+        {"anything": True}, "selftest", Point.LIBRARY, "do the thing", "", (candidate,)
     )
     assert verify(result) is None
 
@@ -365,21 +495,21 @@ def test_from_case_happy_path():
         "task": "do the thing",
         "candidates": (candidate,),
     }
-    result = from_case(case)
+    result = from_case(case, UNUSED_REGISTRY)
     assert result.provenance is Provenance.EVAL_CASE
     assert verify(result) is None
 
 
 def test_from_case_missing_required_key_raises():
     with pytest.raises(NotPrepared):
-        from_case({"integration": "selftest", "point": Point.LIBRARY, "task": "x"})
+        from_case({"integration": "selftest", "point": Point.LIBRARY, "task": "x"}, UNUSED_REGISTRY)
 
 
 def test_from_operator_non_json_native_payload_raises():
     """Plan line 426: "A non-JSON-native payload is `NotPrepared`.\""""
     candidate = make_candidate(id="cand-a", payload={1, 2, 3}, prepared_at_revision="rev-1")
     with pytest.raises(NotPrepared):
-        from_operator("selftest", Point.LIBRARY, "task", "", (candidate,))
+        from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,))
 
 
 def test_from_operator_duplicate_candidate_ids_raises():
@@ -393,7 +523,7 @@ def test_from_operator_duplicate_candidate_ids_raises():
         make_candidate(id="cand-a", prepared_at_revision="rev-1", description="different"),
     )
     with pytest.raises(NotPrepared):
-        from_operator("selftest", Point.LIBRARY, "task", "", candidates)
+        from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", candidates)
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +554,7 @@ def test_verify_rejects_hand_built_preparedset():
 
 def test_verify_rejects_tampered_task_after_prepare():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
-    result = from_operator("selftest", Point.LIBRARY, "original task", "", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "original task", "", (candidate,))
     tampered = dataclasses.replace(result, task="a different task")
     with pytest.raises(NotPrepared):
         verify(tampered)
@@ -434,7 +564,7 @@ def test_verify_catches_payload_tampered_after_prepare():
     """The HMAC tag excludes `payload` (per `_json_default`), so a payload
     swap alone must be caught by the recomputed-bindings check, not the tag."""
     candidate = make_candidate(id="cand-a", payload="original", prepared_at_revision="rev-1")
-    result = from_operator("selftest", Point.LIBRARY, "do the thing", "", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "do the thing", "", (candidate,))
     tampered_candidate = dataclasses.replace(candidate, payload="tampered")
     tampered = dataclasses.replace(result, candidates=(tampered_candidate,))
     # The tag itself is untouched (payload isn't tagged) -- only the binding
@@ -455,7 +585,7 @@ def test_verify_rejects_malformed_read_set_paths_too_few_elements():
     reaching `verify()` (e.g. after `dataclasses.replace`) must never
     propagate a raw `ValueError` -- it must map to `NotPrepared`."""
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
-    result = from_operator("selftest", Point.LIBRARY, "task", "", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,))
     tampered = dataclasses.replace(result, read_set_paths=(("cand-a",),))
     with pytest.raises(NotPrepared):
         verify(tampered)
@@ -463,7 +593,7 @@ def test_verify_rejects_malformed_read_set_paths_too_few_elements():
 
 def test_verify_rejects_malformed_read_set_paths_too_many_elements():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
-    result = from_operator("selftest", Point.LIBRARY, "task", "", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,))
     tampered = dataclasses.replace(result, read_set_paths=(("cand-a", (), "extra"),))
     with pytest.raises(NotPrepared):
         verify(tampered)
@@ -478,7 +608,7 @@ def test_verify_recheck_independent_of_tag():
     `test_verify_rejects_replaced_read_set_paths` only exercises the tag
     check (an externally-replaced field fails the tag first)."""
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint=None)
-    result = from_operator("selftest", Point.LIBRARY, "task", "", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,))
     tampered = dataclasses.replace(result, read_set_paths=(("cand-a", ("/tmp/x",)),))
     retagged = dataclasses.replace(
         tampered, tag=preparers._compute_tag(preparers._taggable_fields(tampered))
@@ -502,7 +632,7 @@ def test_read_set_paths_inside_project_root_is_accepted(tmp_path):
     inside.write_text("x = 1\n")
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     result = from_operator(
-        "selftest", Point.LIBRARY, "task", "", (candidate,),
+        UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
         project_root=tmp_path, read_set_paths=(("cand-a", (str(inside),)),),
     )
     assert result.read_set_paths == (("cand-a", (str(inside.resolve()),)),)
@@ -516,7 +646,7 @@ def test_read_set_paths_outside_project_root_raises(tmp_path):
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
             project_root=project_root, read_set_paths=(("cand-a", (str(outside),)),),
         )
 
@@ -535,7 +665,7 @@ def test_read_set_paths_second_candidate_outside_project_root_raises(tmp_path):
     cand_b = make_candidate(id="cand-b", prepared_at_revision="rev-1", read_set_fingerprint="fp-b")
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", (cand_a, cand_b),
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (cand_a, cand_b),
             project_root=project_root,
             read_set_paths=(("cand-a", (str(inside),)), ("cand-b", (str(outside),))),
         )
@@ -546,7 +676,7 @@ def test_read_set_paths_denylisted_home_path_raises():
     ssh_key = str(Path("~/.ssh/id_rsa").expanduser())
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
             project_root=None, read_set_paths=(("cand-a", (ssh_key,)),),
         )
 
@@ -555,7 +685,7 @@ def test_read_set_paths_with_no_project_root_raises():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
             project_root=None, read_set_paths=(("cand-a", ("/tmp/whatever.py",)),),
         )
 
@@ -567,7 +697,7 @@ def test_read_set_paths_no_read_sets_defaults_to_per_candidate_empty_tuples():
         make_candidate(id="cand-a", prepared_at_revision="rev-1"),
         make_candidate(id="cand-b", prepared_at_revision="rev-1"),
     )
-    result = from_operator("selftest", Point.LIBRARY, "task", "", candidates)
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", candidates)
     assert result.read_set_paths == (("cand-a", ()), ("cand-b", ()))
 
 
@@ -578,7 +708,7 @@ def test_read_set_paths_wrong_id_order_raises():
     )
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", candidates,
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", candidates,
             read_set_paths=(("cand-b", ()), ("cand-a", ())),
         )
 
@@ -587,7 +717,7 @@ def test_read_set_paths_unknown_id_raises():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
             read_set_paths=(("cand-a", ()), ("cand-b", ())),
         )
 
@@ -598,7 +728,7 @@ def test_read_set_paths_nonempty_paths_but_null_fingerprint_raises(tmp_path):
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint=None)
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
             project_root=tmp_path, read_set_paths=(("cand-a", (str(inside),)),),
         )
 
@@ -607,7 +737,7 @@ def test_read_set_paths_fingerprint_set_but_empty_paths_raises():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
             read_set_paths=(("cand-a", ()),),
         )
 
@@ -621,7 +751,7 @@ def test_read_set_paths_rejects_bare_string_paths(tmp_path):
     bare_path = str(tmp_path / "f.py")
     with pytest.raises(NotPrepared):
         from_operator(
-            "selftest", Point.LIBRARY, "task", "", (candidate,),
+            UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
             project_root=tmp_path, read_set_paths=(("cand-a", bare_path),),
         )
 
@@ -637,11 +767,11 @@ def test_read_set_paths_per_candidate_sorted_and_deduped(tmp_path):
     b.write_text("2")
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     result1 = from_operator(
-        "selftest", Point.LIBRARY, "task", "", (candidate,),
+        UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
         project_root=tmp_path, read_set_paths=(("cand-a", (str(a), str(b))),),
     )
     result2 = from_operator(
-        "selftest", Point.LIBRARY, "task", "", (candidate,),
+        UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
         project_root=tmp_path, read_set_paths=(("cand-a", (str(b), str(a), str(a))),),
     )
     assert result1.read_set_paths == result2.read_set_paths
@@ -653,7 +783,7 @@ def test_verify_rejects_replaced_read_set_paths(tmp_path):
     inside.write_text("x = 1\n")
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1", read_set_fingerprint="fp-1")
     result = from_operator(
-        "selftest", Point.LIBRARY, "task", "", (candidate,),
+        UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
         project_root=tmp_path, read_set_paths=(("cand-a", (str(inside),)),),
     )
     tampered = dataclasses.replace(result, read_set_paths=(("cand-a", ()),))
@@ -675,8 +805,8 @@ def test_equal_inputs_prepare_to_equal_tags():
     """Plan line 1722: two `PreparedSet`s prepared from equal inputs carry
     equal tags (the encoding is deterministic)."""
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
-    first = from_operator("selftest", Point.LIBRARY, "task", "", (candidate,))
-    second = from_operator("selftest", Point.LIBRARY, "task", "", (candidate,))
+    first = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,))
+    second = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,))
     assert first.tag == second.tag
 
 
@@ -686,27 +816,12 @@ def test_prepared_set_field_types():
     `bytes`."""
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
     result = from_operator(
-        "selftest", Point.LIBRARY, "task", "", (candidate,),
+        UNUSED_REGISTRY, "selftest", Point.LIBRARY, "task", "", (candidate,),
         sources=("a.txt", "b.txt"),
     )
     assert result.sources
     assert all(isinstance(s, Path) for s in result.sources)
     assert isinstance(result.tag, str)
-
-
-@pytest.mark.skip(
-    reason=(
-        "Plan line 1717 ('the vocabulary function is called with "
-        "project_root only (spy)') requires Preparer.vocabulary to be a "
-        "Callable[[Path], frozenset[str]] (plan line 391). That shape "
-        "lands with finding 6's registry-driven prepare() rewrite "
-        "(a separate, follow-on commit) -- .7's Preparer.vocabulary is "
-        "still a plain frozenset here. Un-skip and rewrite this test to "
-        "call the callable vocabulary with project_root once that lands."
-    )
-)
-def test_prepare_calls_vocabulary_with_project_root_only():
-    pass
 
 
 # ---------------------------------------------------------------------------
@@ -716,7 +831,7 @@ def test_prepare_calls_vocabulary_with_project_root_only():
 
 def test_request_from_round_trips_prepared_fields():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
-    result = from_operator("selftest", Point.LIBRARY, "do the thing", "ctx", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "do the thing", "ctx", (candidate,))
     session = SessionRef(host_session_id="sess-real-1")
     request = request_from(result, session=session)
     assert request.integration == "selftest"
@@ -729,7 +844,7 @@ def test_request_from_round_trips_prepared_fields():
 
 def test_validated_succeeds_for_a_freshly_prepared_set():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
-    result = from_operator("selftest", Point.LIBRARY, "do the thing", "", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "do the thing", "", (candidate,))
     session = SessionRef(host_session_id="sess-real-1")
     request = request_from(result, session=session)
     vc = validated(result, request)
@@ -740,7 +855,7 @@ def test_validated_succeeds_for_a_freshly_prepared_set():
 
 def test_validated_raises_when_verification_fails():
     candidate = make_candidate(id="cand-a", prepared_at_revision="rev-1")
-    result = from_operator("selftest", Point.LIBRARY, "do the thing", "", (candidate,))
+    result = from_operator(UNUSED_REGISTRY, "selftest", Point.LIBRARY, "do the thing", "", (candidate,))
     tampered = dataclasses.replace(result, task="tampered task")
     request = request_from(tampered, session=SessionRef(host_session_id="sess-real-1"))
     with pytest.raises(NotPrepared):
