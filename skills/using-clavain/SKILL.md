@@ -9,7 +9,7 @@ Load this router once at the first substantive task and reuse it on resume unles
 
 Read the selected `docs/canon/reasoning-routing.md` before substantive planning or execution and record its accountable decision context. It contains the binding classification, role, frontier, reviewer, failure, evidence and authority rules. Code behavior changes and execution of plans count even when small. Select installed skills by actual task, read each selected body before applying it, and retain all unique specialist and companion capabilities. Trivial requests stay lightweight. Load reference detail only as needed.
 
-## Quick Router — 26 skills, 6 agents, and 57 commands
+## Quick Router — 26 skills, 6 agents, and 58 commands
 
 In Codex, read the selected skill's full `SKILL.md` from its path in the current catalog. Claude slash commands are not shell commands or Codex APIs. In Claude Code, invoke the corresponding Skill tool or installed command. Names below are capability hints; resolve the installed path before use.
 

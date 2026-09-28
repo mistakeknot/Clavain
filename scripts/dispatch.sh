@@ -68,6 +68,8 @@ BEAD_SOURCE="none"
 CLAVAIN_INTERSERVE_MODE=false
 CLAVAIN_DISPATCH_PROFILE="${CLAVAIN_DISPATCH_PROFILE:-${CLAVAIN_INTERSERVE_PROFILE:-}}"
 INJECT_DOCS=""  # empty=off, "claude" (default for bare --inject-docs), "agents", "all"
+BRIEF_BEAD=""   # bead id to open a role briefing for (mk-42j9.44 / mk-42j9.38 lane-spawn wiring)
+BRIEF_BD_CWD="" # dir whose .beads binds the tracker holding BRIEF_BEAD, if not WORKDIR
 NAME=""
 DRY_RUN=false
 KIMI_UNSAFE=false
@@ -283,6 +285,12 @@ Options:
                                   =claude     CLAUDE.md only
                                   =agents     AGENTS.md only (usually redundant)
                                   =all        CLAUDE.md + AGENTS.md
+  --brief-bead <ID>              Prepend a role briefing for this bead to the prompt
+                                  (scripts/assemble-briefing.py; mk-42j9.44/mk-42j9.38).
+                                  A failed acceptance gate is reported, not hidden --
+                                  the lane starts anyway with whatever assembled.
+  --brief-bd-cwd <DIR>           Dir whose .beads binds the tracker holding --brief-bead,
+                                  if it differs from -C (bd resolves its tracker from cwd)
   --name <LABEL>                Label for {name} in output path and tracking
   --prompt-file <FILE>          Read prompt from file instead of positional arg
   --template <FILE>             Assemble prompt from template + task description
@@ -302,6 +310,7 @@ Examples:
   dispatch.sh --to kimi --tier deep -C /root/projects/Foo -o /tmp/kimi-out.md "Review the auth changes"
   dispatch.sh --via zaka --to kimi -C /root/projects/Foo "Long-running refactor — steer as it goes"
   dispatch.sh --dry-run --inject-docs -C /root/projects/Foo -o /tmp/out.md "Test prompt"
+  dispatch.sh --brief-bead mk-42j9.44 --brief-bd-cwd /home/mk/hub -C /root/projects/Foo -o /tmp/out.md "Continue the work"
 HELP
   exit 0
 }
@@ -1166,6 +1175,24 @@ while [[ $# -gt 0 ]]; do
       INJECT_DOCS="${1#--inject-docs=}"
       shift
       ;;
+    --brief-bead)
+      require_arg "$1" "${2:-}"
+      BRIEF_BEAD="$2"
+      shift 2
+      ;;
+    --brief-bead=*)
+      BRIEF_BEAD="${1#--brief-bead=}"
+      shift
+      ;;
+    --brief-bd-cwd)
+      require_arg "$1" "${2:-}"
+      BRIEF_BD_CWD="$2"
+      shift 2
+      ;;
+    --brief-bd-cwd=*)
+      BRIEF_BD_CWD="${1#--brief-bd-cwd=}"
+      shift
+      ;;
     --name)
       require_arg "$1" "${2:-}"
       NAME="$2"
@@ -1583,6 +1610,38 @@ You are executing the **Act** leg of an OODARC loop on behalf of a coordinating 
     PROMPT="${ORIENT_BRIEFING}${DOCS_PREFIX}---
 
 ${PROMPT}"
+  fi
+fi
+
+# Prepend a role briefing for --brief-bead (mk-42j9.44 lane-spawn wiring:
+# scripts/assemble-briefing.py is the deterministic core from
+# docs/plans/2026-09-28-mk-42j9.38-role-briefing-template.md). A fresh lane
+# opens with bd/git/ic/CanonGraph/memory state already assembled and
+# provenance-checked, instead of having to reconstruct it from a transcript.
+if [[ -n "$BRIEF_BEAD" ]]; then
+  ASSEMBLER="$DISPATCH_SCRIPT_DIR/assemble-briefing.py"
+  if [[ ! -f "$ASSEMBLER" ]]; then
+    echo "Warning: --brief-bead given but $ASSEMBLER is missing; continuing without a briefing" >&2
+  else
+    BRIEF_ARGS=(--bead "$BRIEF_BEAD" --repo "${WORKDIR:-$PWD}")
+    if [[ -n "$BRIEF_BD_CWD" ]]; then
+      BRIEF_ARGS+=(--bd-cwd "$BRIEF_BD_CWD")
+    fi
+    BRIEF_TEXT=""
+    BRIEF_GATE_OK=true
+    if ! BRIEF_TEXT="$(python3 "$ASSEMBLER" "${BRIEF_ARGS[@]}" 2>/tmp/brief-${BRIEF_BEAD//\//_}.stderr)"; then
+      BRIEF_GATE_OK=false
+      echo "Note: role briefing for $BRIEF_BEAD failed its acceptance gate (see $(cat /tmp/brief-${BRIEF_BEAD//\//_}.stderr 2>/dev/null || true)); prepending it anyway -- a failing gate is real information for the lane, not a reason to withhold the briefing." >&2
+    fi
+    if [[ -n "$BRIEF_TEXT" ]]; then
+      PROMPT="${BRIEF_TEXT}
+
+---
+
+${PROMPT}"
+    else
+      echo "Warning: --brief-bead produced no output for $BRIEF_BEAD; continuing without a briefing" >&2
+    fi
   fi
 fi
 
