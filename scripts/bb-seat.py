@@ -241,6 +241,9 @@ def supervise(args):
     model=next((m for m in models if m.get('id')==args.model),{})
     if args.effort not in [r['reasoningEffort'] for r in model.get('supportedReasoningEfforts',[])]:
         raise SeatError('Requested model/effort unsupported')
+    # mk-hpwq: Sonnet 5.5 is capped at xhigh whatever BB advertises.
+    if args.effort=='max' and args.model.startswith('claude-sonnet-5-5'):
+        raise SeatError('Claude Sonnet 5.5 is capped at xhigh; effort max is refused')
     tier='default' if args.service_tier=='standard' else args.service_tier
     if tier not in [t['id'] for t in available[0].get('serviceTiers',[])]:
         raise SeatError('Requested service tier unsupported by BB provider')

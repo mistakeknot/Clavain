@@ -51,6 +51,12 @@ for model in claude-sonnet-5-5 sonnet; do
   bash "$ROOT/scripts/dispatch.sh" --dry-run --to claude --model "$model" --reasoning-effort high "x" >/dev/null 2>&1 \
     || fail "dispatch refused $model at high"
 done
+# No --model: the host default may be Sonnet 5.5, so max is refused; xhigh runs.
+if bash "$ROOT/scripts/dispatch.sh" --dry-run --to claude --reasoning-effort max "x" >"$WORK/max.out" 2>&1; then
+  fail "dispatch accepted the host default model at max"
+fi
+bash "$ROOT/scripts/dispatch.sh" --dry-run --to claude --model claude-sonnet-5-5 --reasoning-effort xhigh "x" >/dev/null 2>&1 \
+  || fail "dispatch refused Sonnet 5.5 at xhigh"
 bash "$ROOT/scripts/dispatch.sh" --dry-run --to claude --model claude-opus-5-5 --reasoning-effort max "x" >/dev/null 2>&1 \
   || fail "the Sonnet 5.5 cap leaked onto Opus"
 

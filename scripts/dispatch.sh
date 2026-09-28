@@ -522,14 +522,17 @@ DISPATCH_INTERCEPT_EVIDENCE_ERROR=""
 # mk ruling 2026-09-28 (mk-hpwq): Sonnet 5.5 is capped at xhigh. Anthropic
 # reports that at max its review subagents time out or make out-of-scope
 # edits, so max is refused for the model and for the `sonnet` alias, which
-# resolves to it.
+# resolves to it. With no --model the host default applies, which may be
+# Sonnet 5.5, so max also needs an explicit non-Sonnet model.
 _claude_sonnet55_effort_cap() {
+  [[ "$2" == max ]] || return 0
   case "$1" in
     claude-sonnet-5-5*|sonnet|sonnet\[*|anthropic/claude-sonnet-5-5*)
-      if [[ "$2" == max ]]; then
-        echo "Error: Claude Sonnet 5.5 is capped at xhigh; effort 'max' is refused (mk-hpwq)" >&2
-        return 1
-      fi ;;
+      echo "Error: Claude Sonnet 5.5 is capped at xhigh; effort 'max' is refused (mk-hpwq)" >&2
+      return 1 ;;
+    "")
+      echo "Error: effort 'max' requires an explicit --model; the host default may be Claude Sonnet 5.5, capped at xhigh (mk-hpwq)" >&2
+      return 1 ;;
   esac
 }
 
@@ -1876,7 +1879,7 @@ if [[ "$VIA" == "zaka" ]]; then
     ZAKA_SPAWN+=(--agent-arg=-c --agent-arg="model_reasoning_effort=$REASONING_EFFORT")
   fi
   if [[ "$ZAKA_AGENT" == "claude-code" && -n "$REASONING_EFFORT" ]]; then
-    case "$REASONING_EFFORT" in low|medium|high|max) ZAKA_SPAWN+=(--agent-arg=--effort --agent-arg="$REASONING_EFFORT") ;; *) echo "Error: unsupported Claude effort" >&2; exit 1 ;; esac
+    case "$REASONING_EFFORT" in low|medium|high|xhigh|max) ZAKA_SPAWN+=(--agent-arg=--effort --agent-arg="$REASONING_EFFORT") ;; *) echo "Error: unsupported Claude effort" >&2; exit 1 ;; esac
     _claude_sonnet55_effort_cap "$MODEL" "$REASONING_EFFORT" || exit 1
   fi
   if [[ "$ZAKA_AGENT" != codex && -n "$SERVICE_TIER" && "$SERVICE_TIER" != standard ]]; then
@@ -2169,7 +2172,7 @@ elif [[ "$ENGINE" == "claude" ]]; then
   fi
   CMD=(claude)
   if [[ -n "$REASONING_EFFORT" ]]; then
-    case "$REASONING_EFFORT" in low|medium|high|max) CMD+=(--effort "$REASONING_EFFORT") ;; *) echo "Error: Claude does not support reasoning effort '$REASONING_EFFORT'" >&2; exit 1 ;; esac
+    case "$REASONING_EFFORT" in low|medium|high|xhigh|max) CMD+=(--effort "$REASONING_EFFORT") ;; *) echo "Error: Claude does not support reasoning effort '$REASONING_EFFORT'" >&2; exit 1 ;; esac
     _claude_sonnet55_effort_cap "$MODEL" "$REASONING_EFFORT" || exit 1
   fi
   if [[ -n "$SERVICE_TIER" && "$SERVICE_TIER" != standard ]]; then

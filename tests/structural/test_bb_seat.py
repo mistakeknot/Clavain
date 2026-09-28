@@ -35,7 +35,7 @@ if a[:1]==['status']: value={'thread':{'id':'thr_parent','environment':{'hostId'
 elif a[:2]==['pool','status']: value={'accounts':[{'id':'fixture-'+p,'provider':p,'enabled':True,'sevenDayUtilization':v,'fiveHourUtilization':.1} for p,v in [('codex',.8),('claude',.2)]]}
 elif a[:2]==['project','list']: value=[{'id':'proj_fixture','sources':[{'hostId':'host_pda34naxgq','path':str(root/'work')}]}]
 elif a[:2]==['provider','list']: value=[{'id':p,'available':True,'capabilities':{'permissionModes':['auto']},'serviceTiers':[{'id':'default'}]} for p in ('codex','claude-code')]
-elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e} for e in es]} for m,es in [('gpt-6-astra',['xhigh']),('claude-sonnet-5-5',['medium','high']),('claude-opus-5-5',['high'])]]
+elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e} for e in es]} for m,es in [('gpt-6-astra',['xhigh']),('claude-sonnet-5-5',['medium','high','max']),('claude-opus-5-5',['high'])]]
 elif a[:2]==['thread','spawn']:
  sys.stdin.read()
  if '--plan' in a: (root/'plan-mode').touch()
@@ -148,6 +148,16 @@ def test_headroom_resolved_claude_seat(seat):
     assert receipt['requested_provider']=='claude-code'
     assert receipt['requested_model']=='claude-sonnet-5-5'
     assert receipt['actual_model']=='unknown'
+
+
+@pytest.mark.requires_ic
+def test_sonnet_55_max_effort_is_refused_even_when_bb_advertises_it(seat):
+    root,run=seat
+    p=run(role='deep-execution',backend='claude',model='claude-sonnet-5-5',effort='max')
+    assert p.returncode!=0
+    assert 'capped at xhigh' in p.stderr
+    calls=(root/'calls').read_text() if (root/'calls').exists() else ''
+    assert '"thread", "spawn"' not in calls
 
 
 @pytest.mark.requires_ic
