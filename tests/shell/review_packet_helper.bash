@@ -140,3 +140,94 @@ review_packet_fixture_patch() {
     jq "$filter" "$INPUT_JSON" > "$tmp"
     mv "$tmp" "$INPUT_JSON"
 }
+
+# --- Step 3 fixtures: a richer diff-scope repo -----------------------------
+#
+# Builds $DIFF_REPO with a base/head commit pair that exercises: a change
+# buried in the middle of a long file (so unchanged distant lines must be
+# excluded from bounded excerpts but still fully present in the raw diff),
+# a deleted file, an added file, a mode-only change, and a rename
+# represented as delete+add (--no-renames). Sets DIFF_REPO, DIFF_BASE_SHA,
+# DIFF_HEAD_SHA.
+review_packet_fixture_diff_repo() {
+    DIFF_REPO="$FIXTURE_DIR/diffrepo"
+    mkdir -p "$DIFF_REPO"
+    git -C "$DIFF_REPO" init -q
+    git -C "$DIFF_REPO" config user.email test@example.com
+    git -C "$DIFF_REPO" config user.name test
+
+    # 40-line file; only line 20 (1-indexed) changes at head.
+    seq 0 39 | sed 's/^/line /' > "$DIFF_REPO/bigfile.txt"
+    printf 'to be deleted\n' > "$DIFF_REPO/to_delete.txt"
+    printf '#!/bin/sh\necho old-name\n' > "$DIFF_REPO/rename_old.sh"
+    printf 'echo mode-file\n' > "$DIFF_REPO/mode_file.sh"
+    chmod 644 "$DIFF_REPO/mode_file.sh"
+    git -C "$DIFF_REPO" add -A
+    git -C "$DIFF_REPO" commit -qm base
+    DIFF_BASE_SHA="$(git -C "$DIFF_REPO" rev-parse HEAD)"
+
+    sed -i '20s/.*/line 19 CHANGED/' "$DIFF_REPO/bigfile.txt"
+    git -C "$DIFF_REPO" rm -q to_delete.txt
+    git -C "$DIFF_REPO" mv rename_old.sh rename_new.sh
+    chmod 755 "$DIFF_REPO/mode_file.sh"
+    printf 'brand new file\n' > "$DIFF_REPO/added.txt"
+    git -C "$DIFF_REPO" add -A
+    git -C "$DIFF_REPO" commit -qam head
+    DIFF_HEAD_SHA="$(git -C "$DIFF_REPO" rev-parse HEAD)"
+}
+
+# Adds a binary file change (base: absent, head: bytes with a NUL) to an
+# existing diff-scope repo/commit pair, returning the new head sha via
+# DIFF_HEAD_SHA (rewrites the head commit in place is avoided; instead this
+# adds one more commit on top so tests can pick base=DIFF_BASE_SHA,
+# head=DIFF_HEAD_SHA for a scope that includes exactly the binary change).
+review_packet_fixture_diff_repo_binary() {
+    DIFF_REPO="$FIXTURE_DIR/diffrepo-binary"
+    mkdir -p "$DIFF_REPO"
+    git -C "$DIFF_REPO" init -q
+    git -C "$DIFF_REPO" config user.email test@example.com
+    git -C "$DIFF_REPO" config user.name test
+    printf 'line one\n' > "$DIFF_REPO/text.txt"
+    git -C "$DIFF_REPO" add -A
+    git -C "$DIFF_REPO" commit -qm base
+    DIFF_BASE_SHA="$(git -C "$DIFF_REPO" rev-parse HEAD)"
+    printf 'BIN\x00\x01\x02DATA' > "$DIFF_REPO/blob.bin"
+    git -C "$DIFF_REPO" add -A
+    git -C "$DIFF_REPO" commit -qm head
+    DIFF_HEAD_SHA="$(git -C "$DIFF_REPO" rev-parse HEAD)"
+}
+
+# Adds a submodule (gitlink) entry between base and head.
+review_packet_fixture_diff_repo_submodule() {
+    DIFF_REPO="$FIXTURE_DIR/diffrepo-submodule"
+    mkdir -p "$DIFF_REPO"
+    git -C "$DIFF_REPO" init -q
+    git -C "$DIFF_REPO" config user.email test@example.com
+    git -C "$DIFF_REPO" config user.name test
+    printf 'line one\n' > "$DIFF_REPO/text.txt"
+    git -C "$DIFF_REPO" add -A
+    git -C "$DIFF_REPO" commit -qm base
+    DIFF_BASE_SHA="$(git -C "$DIFF_REPO" rev-parse HEAD)"
+    git -C "$DIFF_REPO" update-index --add --cacheinfo \
+        160000,0000000000000000000000000000000000000001,vendored-sub
+    git -C "$DIFF_REPO" commit -qm head
+    DIFF_HEAD_SHA="$(git -C "$DIFF_REPO" rev-parse HEAD)"
+}
+
+# Writes $DIFF_INPUT_JSON: a minimal, valid kind:diff INPUT.json reusing the
+# already-set-up beads/producer_receipt/ic fixtures, scoped to one repo/base/head.
+review_packet_fixture_diff_input() {
+    local repo="$1" base="$2" head="$3"
+    DIFF_INPUT_JSON="$INPUT_DIR/diff_input.json"
+    cat > "$DIFF_INPUT_JSON" <<EOF
+{
+  "schema_version": 1,
+  "kind": "diff",
+  "bead_ids": ["fixture-1"],
+  "beads_file": "beads.json",
+  "producer_receipt": "producer_receipt.json",
+  "changes": [{"repo": "$repo", "base": "$base", "head": "$head"}],
+  "tests_not_run": "fixture: no tests wired for this diff-scope check"
+}
+EOF
+}

@@ -548,7 +548,7 @@ def _sha256_file(path: Path) -> str:
     return _sha256_bytes(path.read_bytes())
 
 
-def _git_diff(repo: str, base: str, head: str) -> str:
+def _verify_refs(repo: str, base: str, head: str) -> None:
     for ref in (base, head):
         try:
             subprocess.run(
@@ -562,11 +562,73 @@ def _git_diff(repo: str, base: str, head: str) -> str:
                 f"ref {ref!r} does not resolve to a commit in {repo}: "
                 f"{exc.stderr.strip()}"
             ) from exc
+
+
+def _reject_binary_or_submodule(repo: str, base: str, head: str) -> None:
+    """Fail explicitly on any binary or submodule (gitlink) change.
+
+    A text-only packet must never be passed off as complete evidence for
+    these -- v1 has no evidence contract for them at all.
+    """
+    try:
+        raw = subprocess.run(
+            ["git", "-C", repo, "diff", "--raw", "-z", "--no-renames", base, head, "--"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except FileNotFoundError as exc:
+        raise ToolError("git executable not found") from exc
+    except subprocess.CalledProcessError as exc:
+        raise ToolError(f"git diff --raw failed for {repo}: {exc.stderr.strip()}") from exc
+
+    fields = raw.split("\0")
+    i = 0
+    while i < len(fields) and fields[i]:
+        meta = fields[i]
+        # ":<old-mode> <new-mode> <old-sha> <new-sha> <status>"
+        parts = meta.split(" ")
+        old_mode, new_mode = parts[0].lstrip(":"), parts[1]
+        path = fields[i + 1]
+        i += 2
+        if old_mode == "160000" or new_mode == "160000":
+            raise InputError(
+                f"{path}: submodule (gitlink) changes are not a supported "
+                "evidence type; require an explicit separately reviewed "
+                "evidence contract before extending v1 to them"
+            )
+
+    try:
+        numstat = subprocess.run(
+            ["git", "-C", repo, "diff", "--numstat", "-z", "--no-renames", base, head, "--"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except FileNotFoundError as exc:
+        raise ToolError("git executable not found") from exc
+    except subprocess.CalledProcessError as exc:
+        raise ToolError(f"git diff --numstat failed for {repo}: {exc.stderr.strip()}") from exc
+    for line in numstat.split("\0"):
+        if not line:
+            continue
+        cols = line.split("\t", 2)
+        if len(cols) == 3 and cols[0] == "-" and cols[1] == "-":
+            raise InputError(
+                f"{cols[2]}: binary changes are not a supported evidence "
+                "type; require an explicit separately reviewed evidence "
+                "contract before extending v1 to them"
+            )
+
+
+def _git_diff(repo: str, base: str, head: str) -> str:
+    _verify_refs(repo, base, head)
+    _reject_binary_or_submodule(repo, base, head)
     try:
         proc = subprocess.run(
             [
                 "git", "-C", repo, "diff", "--no-ext-diff", "--no-textconv",
-                "--no-color", "--no-renames", "--unified=3", base, head, "--",
+                "--no-color", "--no-renames", "--unified=0", base, head, "--",
             ],
             check=True,
             capture_output=True,
@@ -577,6 +639,121 @@ def _git_diff(repo: str, base: str, head: str) -> str:
     except subprocess.CalledProcessError as exc:
         raise ToolError(f"git diff failed for {repo}: {exc.stderr.strip()}") from exc
     return proc.stdout
+
+
+_HUNK_HEADER_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+_EXCERPT_CONTEXT_LINES = 8
+_MAX_PLAN_EXCERPT_LINES = 80
+
+
+def _parse_diff_paths(repo: str, base: str, head: str) -> list[tuple[str, str, str]]:
+    """Return (status, old_path, new_path) for every entry in the scope."""
+    try:
+        raw = subprocess.run(
+            ["git", "-C", repo, "diff", "--raw", "-z", "--no-renames", base, head, "--"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except FileNotFoundError as exc:
+        raise ToolError("git executable not found") from exc
+    except subprocess.CalledProcessError as exc:
+        raise ToolError(f"git diff --raw failed for {repo}: {exc.stderr.strip()}") from exc
+
+    fields = raw.split("\0")
+    entries = []
+    i = 0
+    while i < len(fields) and fields[i]:
+        meta = fields[i]
+        status = meta.split(" ")[-1]
+        path = fields[i + 1]
+        i += 2
+        if status[0] in ("R", "C"):
+            new_path = fields[i]
+            i += 1
+            entries.append((status, path, new_path))
+        elif status[0] == "A":
+            entries.append((status, "", path))
+        elif status[0] == "D":
+            entries.append((status, path, ""))
+        else:
+            entries.append((status, path, path))
+    return entries
+
+
+def _show_file_lines(repo: str, ref: str, path: str) -> list[str] | None:
+    try:
+        content = subprocess.run(
+            ["git", "-C", repo, "show", f"{ref}:{path}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return content.splitlines()
+
+
+def collect_excerpts_for_diff_scope(repo: str, base: str, head: str) -> str:
+    """Bind bounded, 8-line context excerpts around every zero-context hunk.
+
+    A wholly new/deleted file is fully present in the raw diff already; this
+    labels that fact rather than repeating its contents. Ranges are merged
+    per (side, path) and sorted so the same scope always renders identically.
+    """
+    entries = _parse_diff_paths(repo, base, head)
+    parts = []
+    for status, old_path, new_path in entries:
+        if status[0] == "A":
+            parts.append(f"`{new_path}` @ `{head}`: new file, fully present in the diff above.")
+            continue
+        if status[0] == "D":
+            parts.append(f"`{old_path}` @ `{base}`: deleted file, fully present in the diff above.")
+            continue
+
+        path = new_path or old_path
+        try:
+            file_diff = subprocess.run(
+                [
+                    "git", "-C", repo, "diff", "--no-ext-diff", "--no-textconv",
+                    "--no-color", "--no-renames", "--unified=0", base, head, "--", path,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+        except FileNotFoundError as exc:
+            raise ToolError("git executable not found") from exc
+        except subprocess.CalledProcessError as exc:
+            raise ToolError(f"git diff failed for {repo}:{path}: {exc.stderr.strip()}") from exc
+
+        head_lines = _show_file_lines(repo, head, path)
+        ranges: list[tuple[int, int]] = []
+        for line in file_diff.splitlines():
+            m = _HUNK_HEADER_RE.match(line)
+            if not m:
+                continue
+            new_start = int(m.group(3))
+            new_count = int(m.group(4) or "1")
+            lo = max(1, new_start - _EXCERPT_CONTEXT_LINES)
+            hi = new_start + max(new_count, 1) - 1 + _EXCERPT_CONTEXT_LINES
+            ranges.append((lo, hi))
+        if not ranges or head_lines is None:
+            continue
+        ranges.sort()
+        merged: list[list[int]] = []
+        for lo, hi in ranges:
+            if merged and lo <= merged[-1][1] + 1:
+                merged[-1][1] = max(merged[-1][1], hi)
+            else:
+                merged.append([lo, hi])
+        for lo, hi in merged:
+            hi = min(hi, len(head_lines))
+            snippet = "\n".join(head_lines[lo - 1 : hi])
+            parts.append(
+                f"`{path}` lines {lo}-{hi} @ `{head}`:\n\n```\n{snippet}\n```"
+            )
+    return "\n\n".join(parts) if parts else "None supplied"
 
 
 def collect_changes(spec: dict[str, Any]) -> list[dict[str, str]]:
@@ -698,16 +875,30 @@ def _render_touched_excerpts(spec: dict[str, Any], changes: list[dict[str, str]]
             reject_transcript_input(f"{repo}:{ref}:{path}", content)
             lines = content.splitlines()
             start, end = rng["start_line"], rng["end_line"]
+            if end - start + 1 > _MAX_PLAN_EXCERPT_LINES:
+                raise InputError(
+                    f"excerpt {repo}:{path} lines {start}-{end} exceeds the "
+                    f"{_MAX_PLAN_EXCERPT_LINES}-line limit for plan excerpt ranges"
+                )
+            if start < 1 or end < start or end > len(lines):
+                raise InputError(
+                    f"excerpt {repo}:{path} lines {start}-{end} is out of range "
+                    f"for {ref} ({len(lines)} lines)"
+                )
             snippet = "\n".join(lines[start - 1 : end])
             parts.append(
                 f"`{repo}:{path}` lines {start}-{end} @ `{ref}`:\n\n```\n{snippet}\n```"
             )
         return "\n\n".join(parts)
-    # kind: diff -- Step 3 binds bounded, merged, 8-line-context excerpts per
-    # hunk; Step 1 surfaces the same diffs collected above as a placeholder.
+    # kind: diff -- bounded, merged, 8-line-context excerpts per zero-context
+    # hunk (whole new/deleted files are labeled, not repeated: they're
+    # already fully present in the diff above).
     if not changes:
         return "None supplied"
-    return "Derived automatically from the diff above (see Diff or plan)."
+    parts = [
+        collect_excerpts_for_diff_scope(c["repo"], c["base"], c["head"]) for c in changes
+    ]
+    return "\n\n".join(p for p in parts if p and p != "None supplied") or "None supplied"
 
 
 def _render_test_output(spec: dict[str, Any]) -> str:
@@ -728,11 +919,25 @@ def _render_test_output(spec: dict[str, Any]) -> str:
     return "\n\n".join(parts) if parts else "None supplied"
 
 
-def _render_prior_findings(spec: dict[str, Any]) -> str:
+def _render_prior_findings(
+    spec: dict[str, Any], previous_manifest: dict[str, Any] | None = None
+) -> str:
     findings = spec.get("prior_findings")
+    lines: list[str] = []
+    if previous_manifest is not None:
+        lines.append(
+            "**This is a delta re-review**, not a full review: it binds to and "
+            f"continues parent packet `{previous_manifest['packet_id']}`. Every "
+            "scope and finding disposition already reviewed there carries "
+            "forward unchanged; only the fix delta since that head is new "
+            "evidence here."
+        )
+        lines.append("")
     if not findings:
-        return "None supplied"
-    lines = ["| id | severity | disposition | evidence |", "|---|---|---|---|"]
+        lines.append("None supplied")
+        return "\n".join(lines)
+    lines.append("| id | severity | disposition | evidence |")
+    lines.append("|---|---|---|---|")
     for f in findings:
         lines.append(
             f"| {f.get('id','')} | {f.get('severity','')} | "
@@ -785,7 +990,12 @@ def _collect_sources(spec: dict[str, Any]) -> list[dict[str, str]]:
     return sources
 
 
-def _identity_payload(spec: dict[str, Any], beads: list[dict[str, Any]], changes: list[dict[str, str]]) -> dict[str, Any]:
+def _identity_payload(
+    spec: dict[str, Any],
+    beads: list[dict[str, Any]],
+    changes: list[dict[str, str]],
+    previous_manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """The subset of evidence that determines packet identity.
 
     Excludes anything about *where* the packet is written (output_dir) or
@@ -808,7 +1018,50 @@ def _identity_payload(spec: dict[str, Any], beads: list[dict[str, Any]], changes
             if spec.get("plan_file")
             else None
         ),
+        "previous_packet_id": (
+            previous_manifest["packet_id"] if previous_manifest is not None else None
+        ),
     }
+
+
+def _load_previous_packet_manifest(spec: dict[str, Any]) -> dict[str, Any] | None:
+    prev = spec.get("previous_packet")
+    if not prev:
+        return None
+    p = _resolve(spec["_base_dir"], prev)
+    if not p.is_file():
+        raise InputError(f"previous_packet manifest not found: {p}")
+    try:
+        manifest = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise InputError(f"previous_packet manifest is not valid JSON: {exc}") from exc
+    if not isinstance(manifest, dict) or not manifest.get("packet_id"):
+        raise InputError(f"previous_packet manifest is missing packet_id: {p}")
+    return manifest
+
+
+def _bind_delta_to_parent(
+    spec: dict[str, Any], changes: list[dict[str, str]], previous_manifest: dict[str, Any]
+) -> None:
+    """A delta re-review's base must equal its parent's reviewed head.
+
+    This is what makes a delta unable to masquerade as a full review of an
+    unrelated or expanded scope: it can only ever continue exactly the scope
+    the parent packet already covered.
+    """
+    if spec["kind"] != "diff":
+        raise InputError("previous_packet is only supported for kind:diff re-review")
+    prev_changes = previous_manifest.get("changes") or []
+    if len(prev_changes) != len(changes):
+        raise InputError(
+            "previous_packet scope count does not match this packet's changes"
+        )
+    for prev, cur in zip(prev_changes, changes):
+        if prev.get("repo") != cur["repo"] or prev.get("head") != cur["base"]:
+            raise InputError(
+                f"delta base for {cur['repo']} must equal previous_packet's "
+                f"reviewed head ({prev.get('head')!r}), got base={cur['base']!r}"
+            )
 
 
 def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
@@ -817,6 +1070,9 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
     receipt = _load_producer_receipt_for_spec(spec)
     changes = collect_changes(spec)
     sources = _collect_sources(spec)
+    previous_manifest = _load_previous_packet_manifest(spec)
+    if previous_manifest is not None:
+        _bind_delta_to_parent(spec, changes, previous_manifest)
 
     sections = {
         "Review contract": _render_review_contract(),
@@ -826,7 +1082,7 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
         "Diff or plan": _render_diff_or_plan(spec, changes),
         "Touched-file excerpts": _render_touched_excerpts(spec, changes),
         "Test output": _render_test_output(spec),
-        "Prior-review disposition": _render_prior_findings(spec),
+        "Prior-review disposition": _render_prior_findings(spec, previous_manifest),
         "Focused review asks": _render_asks(spec),
         "Attached": _render_attached(spec, sources),
         "Requested output": _render_requested_output(),
@@ -837,39 +1093,78 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
 
     max_bytes = spec.get("max_bytes", DEFAULT_MAX_BYTES)
     if len(packet_bytes) > max_bytes:
+        # Never truncate to hit a cost target -- print a per-section byte
+        # breakdown so the operator can see exactly where to trim duplicated
+        # context (or decide to raise max_bytes) without guessing.
+        section_sizes = {
+            name: len((f"## {name}\n\n{sections[name]}").encode("utf-8"))
+            for name in SECTION_ORDER
+        }
+        breakdown = "\n".join(
+            f"  {name}: {size} bytes"
+            for name, size in sorted(section_sizes.items(), key=lambda kv: -kv[1])
+        )
         raise InputError(
-            f"packet is {len(packet_bytes)} bytes, exceeds max_bytes={max_bytes}"
+            f"packet is {len(packet_bytes)} bytes, exceeds max_bytes={max_bytes}\n"
+            f"per-section byte counts:\n{breakdown}"
         )
 
-    identity = _identity_payload(spec, beads, changes)
+    identity = _identity_payload(spec, beads, changes, previous_manifest)
     packet_id = _sha256_bytes(
         json.dumps(identity, sort_keys=True, default=str).encode("utf-8")
     )
 
-    dest_dir = Path(output_dir) / packet_id
+    # A delta packet is addressed distinctly from a full review of the same
+    # content -- both to avoid colliding with an unrelated full review that
+    # happens to hash the same, and so the printed path itself is legible as
+    # a delta bound to its parent (never mistakable for an independent full
+    # review of the combined scope).
+    if previous_manifest is not None:
+        dest_dir = Path(output_dir) / f"delta-{previous_manifest['packet_id']}-{packet_id}"
+    else:
+        dest_dir = Path(output_dir) / packet_id
     dest_packet = dest_dir / "packet.md"
     dest_manifest = dest_dir / "manifest.json"
 
     if dest_packet.is_file():
-        # Idempotent: identical input identity already published -- but an
-        # existing file at the content-addressed path is only trusted after
-        # it re-verifies clean. A corrupted or tampered bundle sitting at
-        # this path must not be handed to a reviewer as if it were the
-        # freshly-computed packet; rebuild (overwrite) instead of failing
-        # open.
-        try:
-            verify_packet(str(dest_packet))
-        except ToolError:
-            pass
-        else:
-            return dest_packet
+        # Idempotent: identical input identity already published, and the
+        # existing bundle at this content-addressed path re-verifies clean.
+        # A corrupted or tampered bundle sitting at this path must fail
+        # loudly instead of being silently rebuilt/overwritten -- that would
+        # erase the evidence that tampering happened.
+        verify_packet(str(dest_packet))
+        return dest_packet
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_packet.write_bytes(packet_bytes)
+    profile = (receipt.get("resolved_profile") or {}).get("profile") or {}
+    execution = receipt.get("execution") or {}
     manifest = {
         "packet_id": packet_id,
         "packet_sha256": _sha256_bytes(packet_bytes),
+        "packet_bytes": len(packet_bytes),
         "sources": sources,
+        # "attachments" duplicates "sources" under the plan's field name;
+        # verify_packet keeps reading "sources" so existing bundles stay
+        # verifiable.
+        "attachments": sources,
+        "inputs": {
+            "schema_version": spec["schema_version"],
+            "kind": spec["kind"],
+            "bead_ids": spec["bead_ids"],
+        },
+        "producer_identity": {
+            "profile_ref": (receipt.get("resolved_profile") or {}).get("profile_ref"),
+            "backend": profile.get("backend") or execution.get("backend"),
+            "model": profile.get("model") or execution.get("model"),
+            "model_identity": profile.get("model_identity"),
+            "reasoning_effort": profile.get("reasoning_effort") or execution.get("reasoning_effort"),
+            "attempt_id": receipt.get("attempt_id"),
+        },
+        "changes": changes,
+        "previous_packet_id": (
+            previous_manifest["packet_id"] if previous_manifest is not None else None
+        ),
     }
     dest_manifest.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return dest_packet
