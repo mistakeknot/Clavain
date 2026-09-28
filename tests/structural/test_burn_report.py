@@ -13,7 +13,7 @@ WORKSPACE = "-home-mk--bb-machines-host-data-workspaces-thr-ay39nh2cpv"
 WORKTREE = "-home-mk--bb-machines-host-data-worktrees-thr-3rezw7dwvy-1-Aleph"
 
 
-def line(msg, req, ts, model="claude-sonnet-5", **usage):
+def line(msg, req, ts, model="claude-sonnet-5-5", **usage):
     return json.dumps(dict(type="assistant", requestId=req, timestamp=ts,
                            message=dict(id=msg, model=model, usage=usage)))
 
@@ -98,5 +98,5 @@ def test_coordination_role_resolves_to_sonnet():
     r = subprocess.run([ic, "--json", "route", "dispatch", f"--policy={ROOT / 'config/routing.yaml'}",
                         "--role=coordination"], capture_output=True, text=True, check=True)
     route = json.loads(r.stdout)
-    assert route["profile"]["model_identity"] == "claude-sonnet-5"
+    assert route["profile"]["model_identity"] == "claude-sonnet-5-5"
     assert [c["profile"]["backend"] for c in route["fallback_chain"]] == ["codex"]

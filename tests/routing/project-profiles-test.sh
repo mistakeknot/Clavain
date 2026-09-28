@@ -107,10 +107,10 @@ route() {
 }
 printf '%s\n' '{"reasons":[],"rationale":"project-profiles test"}' > "$TMP_ROOT/plain.json"
 
-# main-session: Sonnet 5 medium, and Opus is nowhere in its chain.
+# main-session: Sonnet 5.5 medium, and Opus is nowhere in its chain.
 out="$(route "$TMP_ROOT/plain.json" --role=main-session)"
-jq -e '.profile.model_identity == "claude-sonnet-5" and .profile.reasoning_effort == "medium"' <<< "$out" >/dev/null \
-  || fail "main-session must resolve Sonnet 5 medium"
+jq -e '.profile.model_identity == "claude-sonnet-5-5" and .profile.reasoning_effort == "medium"' <<< "$out" >/dev/null \
+  || fail "main-session must resolve Sonnet 5.5 medium"
 jq -e '[.profile.model_identity, (.fallback_chain[]?.profile.model_identity)] | all(test("opus|fable") | not)' <<< "$out" >/dev/null \
   || fail "main-session fallback chain must never include Opus or Fable"
 
@@ -121,18 +121,18 @@ jq -e '.profile_ref == "lane-status-quo" and .profile.model_identity == "claude-
 
 # Relay coordination and the unprofiled coordinator seat stay on Sonnet.
 out="$(route "$TMP_ROOT/plain.json" --role=coordination)"
-jq -e '.profile.model_identity == "claude-sonnet-5" and .profile.reasoning_effort == "medium"' <<< "$out" >/dev/null \
-  || fail "fleet coordination must stay Sonnet 5 medium"
+jq -e '.profile.model_identity == "claude-sonnet-5-5" and .profile.reasoning_effort == "medium"' <<< "$out" >/dev/null \
+  || fail "fleet coordination must stay Sonnet 5.5 medium"
 out="$(route "$TMP_ROOT/plain.json" --role=coordinator-seat)"
-jq -e '.profile_ref == "coordinator-seat-sonnet" and .profile.model_identity == "claude-sonnet-5" and .profile.reasoning_effort == "medium"' <<< "$out" >/dev/null \
-  || fail "the fleet coordinator seat must be Sonnet 5 medium"
+jq -e '.profile_ref == "coordinator-seat-sonnet" and .profile.model_identity == "claude-sonnet-5-5" and .profile.reasoning_effort == "medium"' <<< "$out" >/dev/null \
+  || fail "the fleet coordinator seat must be Sonnet 5.5 medium"
 
 # Every table slug resolves coordinator-seat to the fleet Sonnet default,
 # unprofiled — no project scope is required or consulted any more.
 for slug in "${ALL_SLUGS[@]}"; do
   jq --arg s "project:$slug" '. + {scope: $s}' "$TMP_ROOT/plain.json" > "$TMP_ROOT/$slug.json"
   out="$(route "$TMP_ROOT/$slug.json" --role=coordinator-seat)"
-  jq -e '.profile_ref == "coordinator-seat-sonnet" and .profile.model_identity == "claude-sonnet-5" and .profile.reasoning_effort == "medium"' <<< "$out" >/dev/null \
+  jq -e '.profile_ref == "coordinator-seat-sonnet" and .profile.model_identity == "claude-sonnet-5-5" and .profile.reasoning_effort == "medium"' <<< "$out" >/dev/null \
     || fail "$slug must resolve coordinator-seat to coordinator-seat-sonnet, unprofiled"
 done
 

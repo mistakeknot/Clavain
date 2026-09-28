@@ -151,7 +151,7 @@ the producer's ahead of same-lab seats. Frontier labs are those of
 any change as `cross_lab_reorder: {from, to}` over the seats that survive the
 reasoning contract. For `validation`, Claude-produced code therefore reaches Sol
 first. When the Codex lane is out, observed as a capacity failure, the same-lab
-substitute is Opus 5.5, or Sonnet 5 when Opus produced the work. Do not wait for
+substitute is Opus 5.5, or Sonnet 5.5 when Opus produced the work. Do not wait for
 the Codex reset; Fable is retired (mk-3b8z). Codex-produced work keeps the policy
 order, with Opus first. `cross-lab-review` keeps its Claude first-pass seat, now
 `crosslab-opus` (it was `crosslab-fable`); for a Claude producer it resolves Sol

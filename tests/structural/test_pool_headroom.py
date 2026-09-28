@@ -30,7 +30,7 @@ def core(value, *args):
 def route():
     return {'profile_ref': 'routine-sol', 'profile': {'backend': 'codex', 'model': 'gpt-6-sol'},
             'fallback_chain': [{'profile_ref': 'routine-sonnet', 'profile': {
-                'backend': 'claude', 'model': 'claude-sonnet-5'}}]}
+                'backend': 'claude', 'model': 'claude-sonnet-5-5'}}]}
 
 
 def advise(snapshot, role='routine-execution', resolved=None):

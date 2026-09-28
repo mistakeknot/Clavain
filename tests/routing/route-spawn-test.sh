@@ -110,7 +110,7 @@ latest_receipt() {
 }
 
 OPUS="claude-code claude-opus-5-5 medium"
-SONNET="claude-code claude-sonnet-5 medium"
+SONNET="claude-code claude-sonnet-5-5 medium"
 ASTRA="codex gpt-6-astra medium"
 
 # --- mk-h73i: all 15 table slugs resolve coordinator-seat to the fleet
@@ -205,7 +205,7 @@ expect 0 "$SONNET" "campaign profile with a project that has no profile"
 jq -e '.project == "autosigil" and .policy_profile == "ci-campaign-pilot" and .route.policy_profile == "ci-campaign-pilot"' <<< "$(latest_receipt)" >/dev/null \
   || fail "campaign receipt must record the project and the campaign profile"
 RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role routine-execution --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
-expect 0 "claude-code claude-sonnet-5 high" "campaign keeps precedence for other roles"
+expect 0 "claude-code claude-sonnet-5-5 high" "campaign keeps precedence for other roles"
 jq -e '.project == "clavain" and .route.decision_context.scope == "mk-ag2s"' <<< "$(latest_receipt)" >/dev/null \
   || fail "campaign scope must be preserved for non-coordination roles"
 cmp -s "$TMP_ROOT/campaign.json" "$TMP_ROOT/campaign.orig.json" || fail "the caller's context file must never be modified"
@@ -275,7 +275,7 @@ expect 0 "$OPUS" "held Claude accounts count as up"
 RC=0; OUT="$(FAKE_POOL=opus-weekly-rejected bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "a rejected Opus weekly family excludes Opus seats"
 grep -q "fallback from .* to " "$TMP_ROOT/stderr" || fail "a fallback seat must be announced on stderr"
-jq -e '(.available_models | index("claude-opus-5-5") | not) and (.available_models | index("claude-sonnet-5"))' <<< "$(latest_receipt)" >/dev/null \
+jq -e '(.available_models | index("claude-opus-5-5") | not) and (.available_models | index("claude-sonnet-5-5"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "a rejected Opus family must drop only Opus models"
 RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$ASTRA" "lane with the Claude pool exhausted"
@@ -310,7 +310,7 @@ RC=0; OUT="$(FAKE_BB_LOG="$TMP_ROOT/bbcalls" bash "$SCRIPT" --role lane --lineag
 [[ -s "$TMP_ROOT/bbcalls" ]] || fail "lane must probe the pool"
 
 # Caller available_models are canonicalized through model_aliases before the
-# intersection: "sonnet" means claude-sonnet-5.
+# intersection: "sonnet" means claude-sonnet-5-5.
 printf '%s\n' '{"reasons":[],"rationale":"caller capacity","available_models":["sonnet","gpt-5.6-sol"]}' > "$TMP_ROOT/avail.json"
 run --role lane --lineage L1 --context-file "$TMP_ROOT/avail.json"
 expect 0 "$SONNET" "caller available_models alias is canonicalized"
@@ -526,7 +526,7 @@ grep -q "producer_model_conflict" "$TMP_ROOT/stderr" || fail "a producer exclusi
 run --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat.json"
 expect 0 "$SONNET" "coordinator-seat with --seat-out"
 jq -e --slurpfile r <(latest_receipt) '
-  .provider == "claude-code" and .model == "claude-sonnet-5" and .reasoning_level == "medium"
+  .provider == "claude-code" and .model == "claude-sonnet-5-5" and .reasoning_level == "medium"
   and .role == "coordinator-seat" and .profile_ref == "coordinator-seat-sonnet"
   and .policy_profile == null and .policy_hash == $r[0].policy_hash
   and (.policy_hash | length) == 64 and (.receipt | test("\\.json$"))' "$TMP_ROOT/seat.json" >/dev/null \
@@ -555,13 +555,13 @@ done
 : > "$TMP_ROOT/seat-pre.json"
 run --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-pre.json"
 expect 0 "$SONNET" "--seat-out over an existing file"
-jq -e '.model == "claude-sonnet-5"' "$TMP_ROOT/seat-pre.json" >/dev/null || fail "--seat-out replaces an existing file on success"
+jq -e '.model == "claude-sonnet-5-5"' "$TMP_ROOT/seat-pre.json" >/dev/null || fail "--seat-out replaces an existing file on success"
 # The seat is replaced before the tuple is printed; a failed print exits
 # non-zero and leaves the (accurate) new seat in place.
 echo OLD > "$TMP_ROOT/seat-keep.json"
 RC=0; bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-keep.json" >/dev/full 2>"$TMP_ROOT/stderr" || RC=$?
 [[ "$RC" == 3 ]] || fail "a failed stdout write must exit 3, got $RC"
-jq -e '.model == "claude-sonnet-5"' "$TMP_ROOT/seat-keep.json" >/dev/null || fail "the seat is in place before the tuple is printed"
+jq -e '.model == "claude-sonnet-5-5"' "$TMP_ROOT/seat-keep.json" >/dev/null || fail "the seat is in place before the tuple is printed"
 ! compgen -G "$TMP_ROOT/.route-spawn-*" >/dev/null || fail "a failed stdout write must not leave temp files"
 # A failed os.replace onto the seat path exits 3 with empty stdout, before
 # the tuple is printed. sitecustomize makes that one rename raise.

@@ -118,7 +118,7 @@ reasoning:
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
   profiles:
-    # mk ruling 2026-09-27 (mk-h73i): all coordinator seats run Sonnet 5.
+    # mk ruling 2026-09-27 (mk-h73i): all coordinator seats run Sonnet 5 (Sonnet 5.5, claude-sonnet-5-5, from 2026-09-28: mk-hpwq).
     # Reverses the mk-42j9.25/mk-42j9.5 per-project Opus coordinator-seat
     # table (its 9 project-*: {coordinator-seat: coordinator-seat-opus}
     # profiles were removed by bf23c82) — coordinator-seat now resolves to
@@ -180,7 +180,11 @@ dispatch:
   # Canonical endpoints, not UI aliases, define producer/validator separation.
   model_aliases:
     opus: claude-opus-5-5
-    sonnet: claude-sonnet-5
+    # mk ruling 2026-09-28 (mk-hpwq): Sonnet 5.5 replaces Sonnet 5 in every seat.
+    # claude-sonnet-5 is deliberately not a seat: Anthropic falls higher-risk
+    # cyber requests back to it automatically, so it stays in the roster maps
+    # (roster-families/slugs) to attribute those runs, never in a chain.
+    sonnet: claude-sonnet-5-5
     k3: kimi-code/k3
     kimi/k3: kimi-code/k3
   # Roles are the authoritative dispatch interface. Tier names remain for
@@ -194,9 +198,14 @@ dispatch:
     escalation: planning-astra
     main-integrator: main-astra
     scout: scout-sol
-    routine-execution: routine-sol
-    deep-execution: deep-astra
-    # mk ruling 2026-09-08: Opus validates, Sonnet 5 is the fallback. The
+    # mk ruling 2026-09-28 (mk-hpwq): execution roles default to Sonnet 5.5,
+    # high for deep-execution and medium for routine (mechanical) edits. Sol
+    # stays the cross-lab executor and the capacity fallback behind each seat.
+    # Elevated contexts still reach Astra/Opus: Sonnet is not a frontier model,
+    # so the frontier_required filter removes both Sonnet execution seats.
+    routine-execution: routine-exec-sonnet
+    deep-execution: deep-sonnet
+    # mk ruling 2026-09-08: Opus validates, Sonnet 5.5 is the fallback (mk ruling 2026-09-28). The
     # producer is normally gpt-6-sol, so any Claude model keeps independence.
     validation: validation-opus
     release-preparation: release-sol
@@ -396,7 +405,7 @@ dispatch:
     scout-sonnet:
       role: scout
       backend: claude
-      model: claude-sonnet-5
+      model: claude-sonnet-5-5
       reasoning_effort: high
       service_tier: standard
       # Not kimi: the Kimi seat runs a toolless agent file (goal 60771535, run
@@ -406,7 +415,7 @@ dispatch:
     main-sonnet:
       role: main-session
       backend: claude
-      model: claude-sonnet-5
+      model: claude-sonnet-5-5
       reasoning_effort: medium
       service_tier: standard
       fallbacks: [main-session-astra]
@@ -441,7 +450,7 @@ dispatch:
     coordinator-seat-sonnet:
       role: coordinator-seat
       backend: claude
-      model: claude-sonnet-5
+      model: claude-sonnet-5-5
       reasoning_effort: medium
       service_tier: standard
       # mk 2026-09-27: spawn roles fall back to Astra medium, never Sol.
@@ -449,7 +458,7 @@ dispatch:
     coordination-sonnet:
       role: coordination
       backend: claude
-      model: claude-sonnet-5
+      model: claude-sonnet-5-5
       reasoning_effort: medium
       service_tier: standard
       fallbacks: [coordination-sol]
@@ -481,10 +490,26 @@ dispatch:
       # redirects planning to frontier-planning before this chain is reached.
       fallbacks: [routine-sonnet]
       description: Unelevated planning; Sol at high because Rule 6 bars Sol-medium from judgment roles
+    routine-exec-sonnet:
+      role: routine-execution
+      backend: claude
+      model: claude-sonnet-5-5
+      reasoning_effort: medium
+      service_tier: standard
+      fallbacks: [routine-sol]
+      description: Default routine (mechanical) execution seat, mk ruling 2026-09-28 (mk-hpwq)
+    deep-sonnet:
+      role: deep-execution
+      backend: claude
+      model: claude-sonnet-5-5
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [deep-astra]
+      description: Default deep-execution seat when the context is not elevated, mk ruling 2026-09-28 (mk-hpwq)
     routine-sonnet:
       role: routine-execution
       backend: claude
-      model: claude-sonnet-5
+      model: claude-sonnet-5-5
       reasoning_effort: high
       service_tier: standard
       # Same seat the ci-campaign-pilot profile already declares for this role
@@ -536,7 +561,7 @@ dispatch:
     validation-sonnet:
       role: validation
       backend: claude
-      model: claude-sonnet-5
+      model: claude-sonnet-5-5
       reasoning_effort: high
       service_tier: standard
       fallbacks: [validation-sol, validation-kimi]
@@ -568,7 +593,7 @@ dispatch:
     release-sonnet:
       role: release-preparation
       backend: claude
-      model: claude-sonnet-5
+      model: claude-sonnet-5-5
       reasoning_effort: high
       service_tier: standard
       # Preparation only. release-authority is a separate role and is unchanged:

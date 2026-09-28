@@ -519,6 +519,20 @@ CLAVAIN_LAST_FAILURE_CLASS=""
 DISPATCH_INTERCEPT_EVIDENCE=null
 DISPATCH_INTERCEPT_EVIDENCE_ERROR=""
 
+# mk ruling 2026-09-28 (mk-hpwq): Sonnet 5.5 is capped at xhigh. Anthropic
+# reports that at max its review subagents time out or make out-of-scope
+# edits, so max is refused for the model and for the `sonnet` alias, which
+# resolves to it.
+_claude_sonnet55_effort_cap() {
+  case "$1" in
+    claude-sonnet-5-5*|sonnet|sonnet\[*|anthropic/claude-sonnet-5-5*)
+      if [[ "$2" == max ]]; then
+        echo "Error: Claude Sonnet 5.5 is capped at xhigh; effort 'max' is refused (mk-hpwq)" >&2
+        return 1
+      fi ;;
+  esac
+}
+
 _dispatch_write_failure_class() {
   local class="${1:-terminal_error}"
   [[ -n "${CLAVAIN_DISPATCH_FAILURE_FILE:-}" ]] || return 0
@@ -1863,6 +1877,7 @@ if [[ "$VIA" == "zaka" ]]; then
   fi
   if [[ "$ZAKA_AGENT" == "claude-code" && -n "$REASONING_EFFORT" ]]; then
     case "$REASONING_EFFORT" in low|medium|high|max) ZAKA_SPAWN+=(--agent-arg=--effort --agent-arg="$REASONING_EFFORT") ;; *) echo "Error: unsupported Claude effort" >&2; exit 1 ;; esac
+    _claude_sonnet55_effort_cap "$MODEL" "$REASONING_EFFORT" || exit 1
   fi
   if [[ "$ZAKA_AGENT" != codex && -n "$SERVICE_TIER" && "$SERVICE_TIER" != standard ]]; then
     echo "Error: service tier unsupported by this host adapter" >&2; exit 1
@@ -2155,6 +2170,7 @@ elif [[ "$ENGINE" == "claude" ]]; then
   CMD=(claude)
   if [[ -n "$REASONING_EFFORT" ]]; then
     case "$REASONING_EFFORT" in low|medium|high|max) CMD+=(--effort "$REASONING_EFFORT") ;; *) echo "Error: Claude does not support reasoning effort '$REASONING_EFFORT'" >&2; exit 1 ;; esac
+    _claude_sonnet55_effort_cap "$MODEL" "$REASONING_EFFORT" || exit 1
   fi
   if [[ -n "$SERVICE_TIER" && "$SERVICE_TIER" != standard ]]; then
     echo "Error: Claude service tier '$SERVICE_TIER' is unsupported by this adapter" >&2; exit 1

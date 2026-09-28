@@ -251,7 +251,7 @@ echo "PASS: plan review degrades to a distinct frontier model when the preferred
 # under the second profile_ref, and goes on to Sonnet.
 REVIEW_ROLE=cross-lab-review FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6-sol
 [[ "$rc" == 0 ]] || fail "cross-lab, Opus out: expected review to reach Sonnet, got exit $rc: $(grep '^dispatch:' "$TMP_ROOT/err" | tail -3)"
-[[ "$(paste -sd' ' "$FAKE_CLAUDE_LOG")" == "claude-opus-5-5 claude-sonnet-5" ]] \
+[[ "$(paste -sd' ' "$FAKE_CLAUDE_LOG")" == "claude-opus-5-5 claude-sonnet-5-5" ]] \
   || fail "cross-lab, Opus out: expected one Opus attempt then Sonnet, got: $(paste -sd' ' "$FAKE_CLAUDE_LOG")"
 grep -q "reuses claude/claude-opus-5-5, already unavailable" "$TMP_ROOT/err" \
   || fail "cross-lab, Opus out: the repeated Opus seat was not skipped by name"

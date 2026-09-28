@@ -92,12 +92,12 @@ run_tier() {
 # Sonnet capacity seat routine-sol already falls back to (routine-sonnet).
 run_tier fast
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "fast: expected one gpt-6-sol Codex attempt before fallback, got: $(cat "$FAKE_CODEX_LOG")"
-grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5" || fail "fast: quota_exhausted did not reach claude-sonnet-5, got: $(cat "$FAKE_CLAUDE_LOG")"
+grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5-5" || fail "fast: quota_exhausted did not reach claude-sonnet-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 # fast-clavain: scout's tier alias. Falls back to scout-sonnet.
 run_tier fast-clavain
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "fast-clavain: expected one gpt-6-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
-grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5" || fail "fast-clavain: quota_exhausted did not reach claude-sonnet-5, got: $(cat "$FAKE_CLAUDE_LOG")"
+grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5-5" || fail "fast-clavain: quota_exhausted did not reach claude-sonnet-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 # deep: deep-execution's tier alias. Falls back to deep-opus (Opus, matching
 # deep-astra -> deep-sol -> deep-opus's own terminus).
@@ -134,7 +134,7 @@ run_tier_rate429() {
 }
 run_tier_rate429 fast
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "fast/429: expected one gpt-6-sol Codex attempt before fallback, got: $(cat "$FAKE_CODEX_LOG")"
-grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5" || fail "fast/429: rate_limited did not reach claude-sonnet-5, got: $(cat "$FAKE_CLAUDE_LOG")"
+grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5-5" || fail "fast/429: rate_limited did not reach claude-sonnet-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 echo "PASS: bare --tier dispatch reaches its declared Claude fallback on quota_exhausted"
 

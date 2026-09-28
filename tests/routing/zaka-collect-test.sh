@@ -10,7 +10,10 @@ printf '#!/usr/bin/env bash\ncat "$FIXTURE"\n' > "$TEST_ROOT/bin/zaka"
 chmod +x "$TEST_ROOT/bin/zaka"
 export PATH="$TEST_ROOT/bin:$PATH"
 (cd "$TEST_ROOT/work" && ic init >/dev/null)
-route="$(cd "$ROOT" && ic route dispatch --role=deep-execution --json)"
+# mk-hpwq: unelevated deep-execution now resolves to Sonnet 5.5 (deep-sonnet);
+# the Zaka fixture below is a Codex/Astra turn, so resolve an elevated context.
+printf '%s\n' '{"reasons":["broad-consequences"],"rationale":"elevated deep-execution so the Astra seat resolves"}' > "$TEST_ROOT/context.json"
+route="$(cd "$ROOT" && ic route dispatch --role=deep-execution --context-file="$TEST_ROOT/context.json" --json)"
 jq -n --argjson route "$route" --arg cwd "$TEST_ROOT/work" --arg events "$TEST_ROOT/events.jsonl" '
   {session:"as-123456789012345678901234",transport:"app-server",thread_id:"thread-1",turn_id:"turn-1",
    phase:"completed",turn_status:"completed",pending_requests:[],event_log:$events,updated_at:"2026-09-05T00:00:00Z",

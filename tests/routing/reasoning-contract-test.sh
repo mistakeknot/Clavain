@@ -25,9 +25,9 @@ jq -e '.profile.backend != "claude"' "$work/crosslab.json" >/dev/null
 # never the producer itself; Codex work keeps the policy order with Opus first.
 # Needs ic >= intercore 2caa435.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=claude-sonnet-5 --context-file="$work/routine.json" > "$work/claude-review.json"
+  --producer-identity=claude-sonnet-5-5 --context-file="$work/routine.json" > "$work/claude-review.json"
 jq -e '.profile.model == "gpt-6-sol" and .fallback_chain[0].profile.model == "claude-opus-5-5"
-  and ([.profile.model, .fallback_chain[].profile.model] | index("claude-sonnet-5") == null)
+  and ([.profile.model, .fallback_chain[].profile.model] | index("claude-sonnet-5-5") == null)
   and .cross_lab_reorder.to[0] == "validation-sol"' "$work/claude-review.json" >/dev/null ||
   { echo 'FAIL: Claude-produced code does not reach Sol, then Opus'; exit 1; }
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
@@ -35,9 +35,9 @@ ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation 
 jq -e '.profile.model == "gpt-6-sol"
   and ([.profile.model, .fallback_chain[].profile.model] | index("claude-opus-5-5") == null)' "$work/opus-review.json" >/dev/null ||
   { echo 'FAIL: Opus-produced code reaches Opus or skips Sol'; exit 1; }
-printf '%s\n' '{"reasons":[],"rationale":"codex lane out","available_models":["claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]}' > "$work/codex-out.json"
+printf '%s\n' '{"reasons":[],"rationale":"codex lane out","available_models":["claude-opus-5-5","claude-sonnet-5-5","kimi-code/k3"]}' > "$work/codex-out.json"
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=claude-sonnet-5 --context-file="$work/codex-out.json" > "$work/codex-out-review.json"
+  --producer-identity=claude-sonnet-5-5 --context-file="$work/codex-out.json" > "$work/codex-out-review.json"
 jq -e '.profile.model == "claude-opus-5-5"' "$work/codex-out-review.json" >/dev/null ||
   { echo 'FAIL: Codex out does not fall back to Opus'; exit 1; }
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
@@ -52,7 +52,7 @@ jq -e '.profile.model == "claude-opus-5-5" and .frontier_required and .validator
 # With Astra out an Opus-authored plan has no routed reviewer: resolution
 # fails closed rather than admitting Opus as its own reviewer (the agent then
 # runs the declared adversarial Opus review by hand; mk-2e1e).
-jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5"]' "$work/context.json" > "$work/no-astra.json"
+jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5-5"]' "$work/context.json" > "$work/no-astra.json"
 if ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
   --producer-identity=claude-opus-5-5 --context-file="$work/no-astra.json" > "$work/producer-route.json" 2>&1; then
   echo 'FAIL: Opus producer admitted as its own plan reviewer'; exit 1
@@ -61,7 +61,7 @@ grep -q 'no eligible model satisfies reasoning contract' "$work/producer-route.j
 # ic's refusal is generic, so pin its cause: the same context with a
 # non-Opus producer still routes to Opus 5.5.
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=plan-review \
-  --producer-identity=claude-sonnet-5 --context-file="$work/no-astra.json" \
+  --producer-identity=claude-sonnet-5-5 --context-file="$work/no-astra.json" \
   | jq -e '.profile.model == "claude-opus-5-5"' >/dev/null
 # A review-lane edit is fixtured separately so the guard below can prove it
 # never reaches the authoring lane.
@@ -181,7 +181,7 @@ jq -e '.profile_ref == "crosslab-sol" and .profile.reasoning_effort == "high"
 # still raise it there rather than only checking the pre-reorder chain.
 printf '%s\n' '{"reasons":["foundational-invariants"],"rationale":"reorder floor check"}' > "$work/fi-reorder.json"
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
-  --producer-identity=claude-sonnet-5 --context-file="$work/fi-reorder.json" > "$work/floor-reorder.json"
+  --producer-identity=claude-sonnet-5-5 --context-file="$work/fi-reorder.json" > "$work/floor-reorder.json"
 jq -e '.profile_ref == "validation-sol" and .profile.reasoning_effort == "high"
   and (.effort_floors_applied[] | select(.profile_ref == "validation-sol") | .to == "high")' \
   "$work/floor-reorder.json" >/dev/null \
@@ -269,7 +269,7 @@ jq -e '.profile_ref == "main-astra"
 # seats when Codex is ALSO exhausted -- main-opus (backend: claude,
 # claude-opus-5-5, high) is pilot-opus's declared fallback for exactly this
 # case and already meets every floor.
-jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5"]' "$work/main-integrator.json" > "$work/main-integrator-codex-out.json"
+jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5-5"]' "$work/main-integrator.json" > "$work/main-integrator-codex-out.json"
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=main-integrator \
   --context-file="$work/main-integrator-codex-out.json" > "$work/floor-codex-out.json"
 jq -e '.profile_ref == "main-opus" and .profile.reasoning_effort == "high"

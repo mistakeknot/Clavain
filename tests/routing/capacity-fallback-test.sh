@@ -35,8 +35,8 @@ cat > "$WORK/routine.json" <<'JSON'
 {"reasons": [], "rationale": "routine change with settled constraints"}
 JSON
 
-CLAUDE_LANE='["claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]'
-NO_ASTRA='["gpt-6-sol","claude-opus-5-5","claude-sonnet-5","kimi-code/k3"]'
+CLAUDE_LANE='["claude-opus-5-5","claude-sonnet-5-5","kimi-code/k3"]'
+NO_ASTRA='["gpt-6-sol","claude-opus-5-5","claude-sonnet-5-5","kimi-code/k3"]'
 
 ctx() { # ctx <base> <available_models-json|-> <out>
   if [[ "$2" == "-" ]]; then cp "$1" "$3"; else
@@ -64,10 +64,10 @@ check_primary() { # check_primary <role> <ctx> <expected-profile_ref> [producer]
   got="$(echo "$got" | jq -r '.profile_ref')"
   [[ "$got" == "$3" ]] || fail "$1 primary drifted: want $3, got $got"
 }
-check_primary routine-execution   "$WORK/c-routine.json" routine-sol
+check_primary routine-execution   "$WORK/c-routine.json" routine-exec-sonnet
 check_primary scout               "$WORK/c-routine.json" scout-sol
 check_primary release-preparation "$WORK/c-routine.json" release-sol
-check_primary deep-execution      "$WORK/c-routine.json" deep-astra
+check_primary deep-execution      "$WORK/c-routine.json" deep-sonnet
 check_primary deep-execution      "$WORK/c-front.json"   deep-astra
 check_primary plan-review         "$WORK/c-front.json"   review-opus gpt-6-astra
 check_primary plan-review         "$WORK/c-front.json"   review-astra claude-opus-5-5
@@ -108,7 +108,7 @@ fi
   || fail "Opus-authored plan-review refused for the wrong reason: $out"
 # ic's refusal is generic, so pin its cause: the same context with a
 # non-Opus producer still routes to Opus 5.5.
-out="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" claude-sonnet-5)" \
+out="$(resolve "$POLICY" plan-review "$WORK/c-codex-down.json" claude-sonnet-5-5)" \
   || fail "Astra-out context refuses every producer, not just Opus: $out"
 [[ "$(jq -r .profile.model <<< "$out")" == claude-opus-5-5 ]] || fail "Sonnet-authored plan, Astra out: expected Opus 5.5, got: $out"
 

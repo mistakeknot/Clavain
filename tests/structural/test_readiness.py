@@ -221,12 +221,12 @@ def test_former_claude_models_refused_even_with_fallback_record(tmp_path, former
 
 
 def test_listed_fallback_requires_explicit_binding(tmp_path, monkeypatch):
-    monkeypatch.setattr(readiness, "FALLBACK_MODELS", {"claude": ("claude-sonnet-5",)})
-    value, rows = claude_rows(); rows[1]["message"]["model"] = "claude-sonnet-5"
+    monkeypatch.setattr(readiness, "FALLBACK_MODELS", {"claude": ("claude-sonnet-5-5",)})
+    value, rows = claude_rows(); rows[1]["message"]["model"] = "claude-sonnet-5-5"
     path = tmp_path / "native.jsonl"; path.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    with pytest.raises(ValueError): readiness.bind_decision("claude", path, "subject", value, "claude-sonnet-5")
+    with pytest.raises(ValueError): readiness.bind_decision("claude", path, "subject", value, "claude-sonnet-5-5")
     fallback = {"reason": "fable-usage-limit", "user_authorization": "explicit test fixture authorization", "evidence_sha256": "a" * 64}
-    result = readiness.bind_decision("claude", path, "subject", value, "claude-sonnet-5", fallback)
+    result = readiness.bind_decision("claude", path, "subject", value, "claude-sonnet-5-5", fallback)
     assert result["assignment"] == "authorized-fallback"
     assert result["fallback"] == fallback
 

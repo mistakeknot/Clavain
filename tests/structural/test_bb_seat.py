@@ -35,7 +35,7 @@ if a[:1]==['status']: value={'thread':{'id':'thr_parent','environment':{'hostId'
 elif a[:2]==['pool','status']: value={'accounts':[{'id':'fixture-'+p,'provider':p,'enabled':True,'sevenDayUtilization':v,'fiveHourUtilization':.1} for p,v in [('codex',.8),('claude',.2)]]}
 elif a[:2]==['project','list']: value=[{'id':'proj_fixture','sources':[{'hostId':'host_pda34naxgq','path':str(root/'work')}]}]
 elif a[:2]==['provider','list']: value=[{'id':p,'available':True,'capabilities':{'permissionModes':['auto']},'serviceTiers':[{'id':'default'}]} for p in ('codex','claude-code')]
-elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e}]} for m,e in [('gpt-6-astra','xhigh'),('claude-sonnet-5','high'),('claude-opus-5-5','high')]]
+elif a[:2]==['provider','models']: value=[{'id':m,'supportedReasoningEfforts':[{'reasoningEffort':e} for e in es]} for m,es in [('gpt-6-astra',['xhigh']),('claude-sonnet-5-5',['medium','high']),('claude-opus-5-5',['high'])]]
 elif a[:2]==['thread','spawn']:
  sys.stdin.read()
  if '--plan' in a: (root/'plan-mode').touch()
@@ -134,19 +134,19 @@ def test_headroom_resolved_claude_seat(seat):
     reorder={'from':['routine-sol','routine-sonnet'], 'to':['routine-sonnet','routine-sol'],
              'snapshot_at':'2026-09-22T23:00:00Z'}
     route={'profile_ref':'routine-sol','headroom_reorder':reorder,'headroom_exclusion':[]}
-    p=run(role='routine-execution',backend='claude',model='claude-sonnet-5',effort='high',
+    p=run(role='routine-execution',backend='claude',model='claude-sonnet-5-5',effort='high',
           extra_args=['--resolved-route-json',json.dumps(route),'--profile-ref','routine-sonnet'])
     assert p.returncode==1,p.stderr  # BB still supplies no observed model attestation.
     calls=[json.loads(s) for s in (root/'calls').read_text().splitlines()]
     spawn=next(x for x in calls if x[:2]==['thread','spawn'])
     assert spawn[spawn.index('--provider')+1]=='claude-code'
-    assert spawn[spawn.index('--model')+1]=='claude-sonnet-5'
+    assert spawn[spawn.index('--model')+1]=='claude-sonnet-5-5'
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['profile_ref']=='routine-sol'
     assert receipt['resolved_profile_ref']=='routine-sonnet'
     assert receipt['headroom_reorder']==reorder
     assert receipt['requested_provider']=='claude-code'
-    assert receipt['requested_model']=='claude-sonnet-5'
+    assert receipt['requested_model']=='claude-sonnet-5-5'
     assert receipt['actual_model']=='unknown'
 
 
@@ -157,10 +157,13 @@ def test_dispatch_carries_headroom_route_to_bb_journal(seat):
     assert p.returncode==1,p.stderr  # Unknown observed identity still blocks acceptance.
     receipt=json.loads((root/'result.receipt.json').read_text())
     assert receipt['requested_provider']=='claude-code'
-    assert receipt['requested_model']=='claude-sonnet-5'
-    assert receipt['profile_ref']=='routine-sol'
-    assert receipt['resolved_profile_ref']=='routine-sonnet'
-    assert receipt['headroom_reorder']['to'][0]=='routine-sonnet'
+    assert receipt['requested_model']=='claude-sonnet-5-5'
+    # mk-hpwq: routine-execution leads with Sonnet 5.5, so favouring Claude
+    # headroom keeps it first and only moves Sol behind Sonnet's own substitute.
+    assert receipt['profile_ref']=='routine-exec-sonnet'
+    assert receipt['resolved_profile_ref']=='routine-exec-sonnet'
+    assert receipt['headroom_reorder']['from'][0]==receipt['headroom_reorder']['to'][0]=='routine-exec-sonnet'
+    assert receipt['headroom_reorder']['to'][-1]=='routine-sol'
     assert receipt['actual_model']=='unknown'
 
 
