@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# route-spawn.sh acceptance suite (mk-42j9.25 Phase 2a Task 2). Real Intercore
-# resolver against the packaged policy, fake `bb` for the pool probe. No model
-# calls and no thread spawns.
+# route-spawn.sh acceptance suite (mk-42j9.25 Phase 2a Task 2; project-profile
+# resolution updated for mk-h73i, which emptied reasoning.project_profiles).
+# Real Intercore resolver against the packaged policy, fake `bb` for the pool
+# probe. No model calls and no thread spawns.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -112,23 +113,18 @@ OPUS="claude-code claude-opus-5-5 medium"
 SONNET="claude-code claude-sonnet-5 medium"
 ASTRA="codex gpt-6-astra medium"
 
-# --- The mk-42j9.5 table, by slug (15 rows) and by alias (10 dedicated ids).
-for slug in aleph clavain autarch after-them bbops shadow-work quilan sylvesteops nartopo; do
-  run --role coordinator-seat --project "$slug"
-  expect 0 "$OPUS" "coordinator-seat --project $slug"
-done
-for slug in autosigil rakes uncrancher cujgel agmodb linsenkasten; do
+# --- mk-h73i: all 15 table slugs resolve coordinator-seat to the fleet
+# Sonnet default. No project carries a coordinator-seat override any more —
+# this reverses the mk-42j9.25/mk-42j9.5 nine-Opus/six-Sonnet split that used
+# to live here.
+for slug in aleph clavain autarch after-them bbops shadow-work quilan sylvesteops nartopo \
+            autosigil rakes uncrancher cujgel agmodb linsenkasten; do
   run --role coordinator-seat --project "$slug"
   expect 0 "$SONNET" "coordinator-seat --project $slug"
 done
 for pair in proj_dnrqkvnf5x:autarch proj_fsrj27djw2:after-them proj_2apc9fag87:after-them \
-            proj_eh66ikerj2:shadow-work proj_ewcj55ndy5:nartopo; do
-  run --role coordinator-seat --project "${pair%%:*}"
-  expect 0 "$OPUS" "coordinator-seat alias ${pair%%:*} (${pair#*:})"
-  jq -e --arg s "${pair#*:}" '.project == $s' <<< "$(latest_receipt)" >/dev/null \
-    || fail "alias ${pair%%:*} must record slug ${pair#*:}"
-done
-for pair in proj_3ktdvx76vj:autosigil proj_sy6myvvmq2:rakes proj_94669ff46u:uncrancher \
+            proj_eh66ikerj2:shadow-work proj_ewcj55ndy5:nartopo \
+            proj_3ktdvx76vj:autosigil proj_sy6myvvmq2:rakes proj_94669ff46u:uncrancher \
             proj_qdsjncqfd4:cujgel proj_5wt5mmgska:agmodb proj_g4vgbq6jst:linsenkasten; do
   run --role coordinator-seat --project "${pair%%:*}"
   expect 0 "$SONNET" "coordinator-seat alias ${pair%%:*} (${pair#*:})"
@@ -185,10 +181,24 @@ jq -e '.arm == null and .route.requested_role == "validation" and .producer_iden
 [[ "$base" != *claude-opus-5-5* ]] || fail "validation for an Opus producer must not resolve Opus: $base"
 [[ "$base" == codex\ * ]] || fail "a Codex seat must map to the bb codex provider: $base"
 
+# A synthetic fixture re-adding a coordinator-seat override for "clavain"
+# only, so the campaign/context-scope-conflict paths that depend on a live
+# project profile stay covered even though the packaged policy's
+# project_profiles is now empty (mk-h73i).
+python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT/clavainprofile.yaml" <<'CLAVAINPROFILE'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+cfg["reasoning"]["project_profiles"]["clavain"] = "project-clavain"
+cfg["reasoning"]["profiles"]["project-clavain"] = {
+    "scope": "project:clavain", "roles": {"coordinator-seat": "coordinator-seat-opus"}}
+yaml.safe_dump(cfg, open(sys.argv[2], "w"))
+CLAVAINPROFILE
+CLAVAINPOLICY="$TMP_ROOT/clavainprofile.yaml"
+
 # --- Finding 8 and campaign precedence.
 printf '%s\n' '{"reasons":[],"rationale":"campaign","scope":"mk-ag2s"}' > "$TMP_ROOT/campaign.json"
 cp "$TMP_ROOT/campaign.json" "$TMP_ROOT/campaign.orig.json"
-RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role coordinator-seat --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot CLAVAIN_ROUTING_POLICY="$CLAVAINPOLICY" bash "$SCRIPT" --role coordinator-seat --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 3 "" "campaign profile over a project coordination profile fails closed"
 RC=0; OUT="$(CLAVAIN_POLICY_PROFILE=ci-campaign-pilot bash "$SCRIPT" --role coordinator-seat --project autosigil --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "campaign profile with a project that has no profile"
@@ -201,10 +211,10 @@ jq -e '.project == "clavain" and .route.decision_context.scope == "mk-ag2s"' <<<
 cmp -s "$TMP_ROOT/campaign.json" "$TMP_ROOT/campaign.orig.json" || fail "the caller's context file must never be modified"
 
 # A caller context whose scope contradicts the project profile fails closed.
-run --role coordinator-seat --project clavain --context-file "$TMP_ROOT/campaign.json"
+RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$CLAVAINPOLICY" bash "$SCRIPT" --role coordinator-seat --project clavain --context-file "$TMP_ROOT/campaign.json" 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 3 "" "context scope conflicting with the project profile"
 # CLAVAIN_DECISION_CONTEXT is honored when --context-file is absent.
-RC=0; OUT="$(CLAVAIN_DECISION_CONTEXT="$TMP_ROOT/campaign.json" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(CLAVAIN_DECISION_CONTEXT="$TMP_ROOT/campaign.json" CLAVAIN_ROUTING_POLICY="$CLAVAINPOLICY" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 3 "" "CLAVAIN_DECISION_CONTEXT is the default context"
 
 # --- Resolution failures: exit 3 with empty stdout.
@@ -217,18 +227,21 @@ RC=0; OUT="$(CLAVAIN_ROUTING_POLICY="$TMP_ROOT/bad.yaml" bash "$SCRIPT" --role l
 expect 3 "" "unparseable policy"
 
 # --- Pool probe: an exhausted Claude pool moves the spawn to Codex; an
-# unreachable pool leaves fallbacks unevaluated but still resolves.
-RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
-expect 0 "$ASTRA" "coordinator-seat with the Claude pool exhausted"
+# unreachable pool leaves fallbacks unevaluated but still resolves. Uses lane
+# (Opus 5.5 via lane-status-quo, same fallback shape as the retired
+# coordinator-seat-opus) since coordinator-seat now defaults to Sonnet for
+# every project (mk-h73i) and this section exercises Opus-headed fallback.
+RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$ASTRA" "lane with the Claude pool exhausted"
 jq -e '.fallbacks_evaluated == true and (.available_models | index("claude-opus-5-5") | not) and (.available_models | index("gpt-6-astra"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "receipt must record the probed available_models"
-RC=0; OUT="$(FAKE_POOL=error bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
-expect 0 "$OPUS" "coordination with the pool unreachable"
+RC=0; OUT="$(FAKE_POOL=error bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "lane with the pool unreachable"
 receipt="$(latest_receipt)"
 jq -e '.fallbacks_evaluated == false and .available_models == null' <<< "$receipt" >/dev/null \
   || fail "an unreachable pool must be recorded as fallbacks not evaluated"
-jq -e '.policy_hash == .route.policy_hash and (.policy_hash | length == 64) and .spawn == {provider: "claude-code", model: "claude-opus-5-5", reasoning_level: "medium"} and .project_input == "clavain" and .profile_source == "project"' <<< "$receipt" >/dev/null \
-  || fail "receipt must carry policy hash, spawn tuple, project input and profile source"
+jq -e '.policy_hash == .route.policy_hash and (.policy_hash | length == 64) and .spawn == {provider: "claude-code", model: "claude-opus-5-5", reasoning_level: "medium"} and .role == "lane" and .profile_source == "none"' <<< "$receipt" >/dev/null \
+  || fail "receipt must carry policy hash, spawn tuple, role and profile source"
 
 
 # --- Review round 1 (mk-42j9.25 Phase 2a) regressions.
@@ -245,39 +258,43 @@ expect 2 "" "non-JSON context file"
 run --role release-authority
 expect 3 "" "release-authority resolves a main-backend seat"
 
-# An empty or "default" CLAVAIN_POLICY_PROFILE is no campaign.
+# An empty or "default" CLAVAIN_POLICY_PROFILE is no campaign — exercised
+# against the clavainprofile.yaml fixture so this still tests that an unset
+# campaign profile doesn't disable a live project profile (the packaged
+# policy has no project profile of its own to disable any more).
 for value in "" default; do
-  RC=0; OUT="$(CLAVAIN_POLICY_PROFILE="$value" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+  RC=0; OUT="$(CLAVAIN_POLICY_PROFILE="$value" CLAVAIN_ROUTING_POLICY="$CLAVAINPOLICY" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
   expect 0 "$OPUS" "CLAVAIN_POLICY_PROFILE='$value' is unset"
 done
 
 # Pool states: held accounts still serve; a rejected weekly family is down;
-# a pool that is not accepting leaves fallbacks unevaluated.
-RC=0; OUT="$(FAKE_POOL=claude-held bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+# a pool that is not accepting leaves fallbacks unevaluated. Uses lane, same
+# reason as the pool-probe section above.
+RC=0; OUT="$(FAKE_POOL=claude-held bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "held Claude accounts count as up"
-RC=0; OUT="$(FAKE_POOL=opus-weekly-rejected bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=opus-weekly-rejected bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "a rejected Opus weekly family excludes Opus seats"
 grep -q "fallback from .* to " "$TMP_ROOT/stderr" || fail "a fallback seat must be announced on stderr"
 jq -e '(.available_models | index("claude-opus-5-5") | not) and (.available_models | index("claude-sonnet-5"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "a rejected Opus family must drop only Opus models"
-RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
-expect 0 "$ASTRA" "coordinator-seat with the Claude pool exhausted"
+RC=0; OUT="$(FAKE_POOL=claude-down bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$ASTRA" "lane with the Claude pool exhausted"
 grep -q "fallback from .* to " "$TMP_ROOT/stderr" || fail "a provider change must be announced on stderr"
-RC=0; OUT="$(FAKE_POOL=codex-down bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
-expect 0 "$OPUS" "coordination with the Codex pool exhausted"
+RC=0; OUT="$(FAKE_POOL=codex-down bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
+expect 0 "$OPUS" "lane with the Codex pool exhausted"
 jq -e '.fallbacks_evaluated == true and (.available_models | index("gpt-6-astra") | not) and (.available_models | index("claude-opus-5-5"))' <<< "$(latest_receipt)" >/dev/null \
   || fail "a Codex outage must drop Codex models only"
 # The fake pool has ready kimi and main accounts; bb still cannot spawn them.
-RC=0; OUT="$(bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 jq -e '[.available_models[] | select(. == "kimi-code/k3")] == []' <<< "$(latest_receipt)" >/dev/null \
   || fail "main and unspawnable backends must not count as available"
-RC=0; OUT="$(FAKE_POOL=not-accepting bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=not-accepting bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "pool not accepting"
 jq -e '.fallbacks_evaluated == false and .available_models == null' <<< "$(latest_receipt)" >/dev/null \
   || fail "a pool that is not accepting must leave fallbacks unevaluated"
 
 # A hanging pool probe is bounded and treated as not evaluated.
-RC=0; OUT="$(FAKE_POOL=hang ROUTE_SPAWN_POOL_TIMEOUT=1 timeout 30 bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=hang ROUTE_SPAWN_POOL_TIMEOUT=1 timeout 30 bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "hanging pool probe"
 jq -e '.fallbacks_evaluated == false' <<< "$(latest_receipt)" >/dev/null || fail "a timed-out probe is not evaluated"
 # A hanging resolver is bounded and fails closed.
@@ -329,9 +346,11 @@ expect 0 "$SONNET" "main-session default"
 run --role coordinator-seat --project autosigil
 jq -e '.route.profile_ref == "coordinator-seat-sonnet" and .profile_source == "none"' <<< "$(latest_receipt)" >/dev/null \
   || fail "an unprofiled coordinator seat resolves coordinator-seat-sonnet"
+# mk-h73i: project_profiles is now empty, so every project resolves
+# coordinator-seat unprofiled, including the former Opus slugs like clavain.
 run --role coordinator-seat --project clavain
-jq -e '.route.profile_ref == "coordinator-seat-opus" and .profile_source == "project"' <<< "$(latest_receipt)" >/dev/null \
-  || fail "a profiled coordinator seat resolves coordinator-seat-opus"
+jq -e '.route.profile_ref == "coordinator-seat-sonnet" and .profile_source == "none"' <<< "$(latest_receipt)" >/dev/null \
+  || fail "clavain has no project_profiles entry any more; coordinator-seat resolves coordinator-seat-sonnet"
 
 # Defense in depth: even a policy whose spawn chain reaches Sol fails closed
 # rather than spawning it.
@@ -420,23 +439,24 @@ for pair in "gpt-6-sol gpt-6-sol" "gpt-6-sol gpt-6-sol-high" "fine-a fine-a"; do
 done
 
 # N1: family exhaustion mirrors bb's activeWindow: resetAt null or future, and
-# rejected or utilization >= the pool switchThreshold.
-RC=0; OUT="$(FAKE_POOL=opus-weekly-warning bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+# rejected or utilization >= the pool switchThreshold. Uses lane, same reason
+# as the pool-probe sections above.
+RC=0; OUT="$(FAKE_POOL=opus-weekly-warning bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "Opus at utilization 1.0 (allowed_warning) is exhausted"
-RC=0; OUT="$(FAKE_POOL=opus-weekly-below bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=opus-weekly-below bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "Opus below the threshold is available"
-RC=0; OUT="$(FAKE_POOL=opus-weekly-below FAKE_THRESHOLD=0.85 bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=opus-weekly-below FAKE_THRESHOLD=0.85 bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "the pool's configured switchThreshold is honored"
-RC=0; OUT="$(FAKE_POOL=opus-weekly-expired bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=opus-weekly-expired bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$OPUS" "a rejected window whose resetAt has passed is not active"
 # Only a number in (0, 1] is a threshold; anything else keeps bb's 0.98.
 for bad in 0 -1 '"0.85"' true null; do
-  RC=0; OUT="$(FAKE_POOL=opus-weekly-below FAKE_THRESHOLD="$bad" bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+  RC=0; OUT="$(FAKE_POOL=opus-weekly-below FAKE_THRESHOLD="$bad" bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
   expect 0 "$OPUS" "switchThreshold $bad is ignored (0.9 < 0.98)"
 done
-RC=0; OUT="$(FAKE_POOL=opus-weekly-warning FAKE_THRESHOLD=1.5 bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=opus-weekly-warning FAKE_THRESHOLD=1.5 bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "switchThreshold 1.5 is ignored (1.0 >= 0.98)"
-RC=0; OUT="$(FAKE_POOL=opus-weekly-warning FAKE_THRESHOLD=1 bash "$SCRIPT" --role coordinator-seat --project clavain 2>"$TMP_ROOT/stderr")" || RC=$?
+RC=0; OUT="$(FAKE_POOL=opus-weekly-warning FAKE_THRESHOLD=1 bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
 expect 0 "$SONNET" "switchThreshold 1 is honored"
 # N3: one exhausted and one available Claude account keeps Opus (all, not any).
 RC=0; OUT="$(FAKE_POOL=claude-mixed bash "$SCRIPT" --role lane --lineage L1 2>"$TMP_ROOT/stderr")" || RC=$?
@@ -477,6 +497,12 @@ RC=0; ALL="$(PATH="$TMP_ROOT/setsidic:$PATH" ROUTE_SPAWN_IC_TIMEOUT=3 timeout 60
 python3 - "$ROOT/config/routing.yaml" "$TMP_ROOT" <<'BADTABLE'
 import sys, yaml, copy
 base = yaml.safe_load(open(sys.argv[1]))
+# mk-h73i emptied project_profiles; inject a synthetic project-aleph profile
+# so cross-validation of profile scope/role shape stays covered even though
+# the packaged policy no longer ships one.
+base["reasoning"]["project_profiles"]["aleph"] = "project-aleph"
+base["reasoning"]["profiles"]["project-aleph"] = {
+    "scope": "project:aleph", "roles": {"coordinator-seat": "coordinator-seat-opus"}}
 def emit(name, mutate):
     cfg = copy.deepcopy(base); mutate(cfg["reasoning"])
     yaml.safe_dump(cfg, open(f"{sys.argv[2]}/{name}.yaml", "w"))
@@ -498,11 +524,11 @@ grep -q "producer_model_conflict" "$TMP_ROOT/stderr" || fail "a producer exclusi
 # N7: --seat-out hands the spawner the seat tuple to pass into the
 # coordinator's spawn prompt; nothing is written on failure.
 run --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat.json"
-expect 0 "$OPUS" "coordinator-seat with --seat-out"
+expect 0 "$SONNET" "coordinator-seat with --seat-out"
 jq -e --slurpfile r <(latest_receipt) '
-  .provider == "claude-code" and .model == "claude-opus-5-5" and .reasoning_level == "medium"
-  and .role == "coordinator-seat" and .profile_ref == "coordinator-seat-opus"
-  and .policy_profile == "project-clavain" and .policy_hash == $r[0].policy_hash
+  .provider == "claude-code" and .model == "claude-sonnet-5" and .reasoning_level == "medium"
+  and .role == "coordinator-seat" and .profile_ref == "coordinator-seat-sonnet"
+  and .policy_profile == null and .policy_hash == $r[0].policy_hash
   and (.policy_hash | length) == 64 and (.receipt | test("\\.json$"))' "$TMP_ROOT/seat.json" >/dev/null \
   || fail "--seat-out must hold provider, model, reasoning_level, role, profile_ref, policy_profile, policy_hash and receipt"
 run --role coordinator-seat --project no-such-project --seat-out "$TMP_ROOT/seat-bad.json"
@@ -528,14 +554,14 @@ done
 # The recipe's mktemp file exists beforehand: success replaces it.
 : > "$TMP_ROOT/seat-pre.json"
 run --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-pre.json"
-expect 0 "$OPUS" "--seat-out over an existing file"
-jq -e '.model == "claude-opus-5-5"' "$TMP_ROOT/seat-pre.json" >/dev/null || fail "--seat-out replaces an existing file on success"
+expect 0 "$SONNET" "--seat-out over an existing file"
+jq -e '.model == "claude-sonnet-5"' "$TMP_ROOT/seat-pre.json" >/dev/null || fail "--seat-out replaces an existing file on success"
 # The seat is replaced before the tuple is printed; a failed print exits
 # non-zero and leaves the (accurate) new seat in place.
 echo OLD > "$TMP_ROOT/seat-keep.json"
 RC=0; bash "$SCRIPT" --role coordinator-seat --project clavain --seat-out "$TMP_ROOT/seat-keep.json" >/dev/full 2>"$TMP_ROOT/stderr" || RC=$?
 [[ "$RC" == 3 ]] || fail "a failed stdout write must exit 3, got $RC"
-jq -e '.model == "claude-opus-5-5"' "$TMP_ROOT/seat-keep.json" >/dev/null || fail "the seat is in place before the tuple is printed"
+jq -e '.model == "claude-sonnet-5"' "$TMP_ROOT/seat-keep.json" >/dev/null || fail "the seat is in place before the tuple is printed"
 ! compgen -G "$TMP_ROOT/.route-spawn-*" >/dev/null || fail "a failed stdout write must not leave temp files"
 # A failed os.replace onto the seat path exits 3 with empty stdout, before
 # the tuple is printed. sitecustomize makes that one rename raise.

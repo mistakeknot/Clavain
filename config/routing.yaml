@@ -131,6 +131,10 @@ reasoning:
         routine-execution: pilot-sonnet
         validation: validation-sol
   # route-spawn.sh uses this table and maps; ic ignores unknown reasoning keys.
+  # Flat list, no former-Opus/Sonnet split: route-spawn.sh needs every slug
+  # here regardless of whether a project_profiles override exists, to resolve
+  # project_aliases and to reject an unknown --project for coordinator-seat
+  # (mk-h73i). project_profiles being empty does not shrink this set.
   projects:
     - aleph
     - clavain
@@ -147,16 +151,13 @@ reasoning:
     - cujgel
     - agmodb
     - linsenkasten
-  project_profiles:
-    aleph: project-aleph
-    clavain: project-clavain
-    autarch: project-autarch
-    after-them: project-after-them
-    bbops: project-bbops
-    shadow-work: project-shadow-work
-    quilan: project-quilan
-    sylvesteops: project-sylvesteops
-    nartopo: project-nartopo
+  # project_profiles held the 9 project-*: {coordinator-seat: coordinator-seat-opus}
+  # overrides removed by mk's 2026-09-27 ruling (mk-h73i, reverses
+  # mk-42j9.25/mk-42j9.5). No project currently overrides any role, so the
+  # mapping is empty; route-spawn.sh treats a missing/empty project_profiles
+  # as "no per-project override" and falls through to the fleet roles table
+  # above (coordinator-seat: coordinator-seat-sonnet for every project).
+  project_profiles: {}
   # Dedicated bb projects, verified live 2026-09-27. proj_personal and
   # proj_bnq4zi2wiv ("projects/Sylveste") are shared projects and deliberately
   # have no alias. Callers pass the slug.

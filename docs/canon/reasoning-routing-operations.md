@@ -393,9 +393,12 @@ ids resolve through `reasoning.project_aliases` before slug lookup. A project
 profile applies only to roles in its `roles` map. `--project` is mandatory for
 coordinator-seat and must resolve to a known slug. Shared projects `proj_personal`
 and `proj_bnq4zi2wiv` ("projects/Sylveste") deliberately have no alias: pass the
-logical slug. The nine project profiles select the Opus coordinator seat;
-the six Sonnet slugs keep fleet routing. Unknown projects on other
-roles warn and resolve with `project: null`.
+logical slug. `project_profiles` is currently empty: mk ruled 2026-09-27
+(mk-h73i) that every coordinator seat resolves the fleet default,
+coordinator-seat-sonnet, reversing the nine-project Opus coordinator-seat
+table that mk-42j9.25/mk-42j9.5 had established. All fifteen known slugs
+keep fleet routing unless a future project profile overrides a role again.
+Unknown projects on other roles warn and resolve with `project: null`.
 
 Select the profile before changing context scope. A project profile requires
 `project:<slug>` scope and rejects a conflicting caller scope. An explicit

@@ -27,9 +27,15 @@ GUIDES = [
     "docs/canon/reasoning-routing-operations.md",
 ]
 SEAT = {
-    "provider": "claude-code", "model": "claude-opus-5-5", "reasoning_level": "medium",
-    "role": "coordinator-seat", "profile_ref": "coordinator-seat-opus",
-    "policy_profile": "project-clavain", "policy_hash": "a" * 64,
+    # mk-h73i: coordinator-seat resolves the fleet default, unprofiled, for
+    # every project. This dict is an opaque fixture value the fake
+    # route-spawn.sh echoes back verbatim; the recipes never inspect it, so
+    # any valid seat shape would do, but it should look like a seat a
+    # coordinator would actually see today rather than the retired
+    # per-project Opus override.
+    "provider": "claude-code", "model": "claude-sonnet-5", "reasoning_level": "medium",
+    "role": "coordinator-seat", "profile_ref": "coordinator-seat-sonnet",
+    "policy_profile": None, "policy_hash": "a" * 64,
     "receipt": "/state/route-spawn/r.json",
 }
 FENCED = re.compile(r"^\s*```([\w-]*)\n(.*?)^\s*```", re.DOTALL | re.MULTILINE)
@@ -142,7 +148,7 @@ def test_coordinator_spawn_recipe_runs_verbatim(rel, tmp_path):
     [call] = _bb_calls(env)
     assert call["args"][:2] == ["thread", "spawn"], call
     assert _flag(call["args"], "--provider") == "claude-code"
-    assert _flag(call["args"], "--model") == "claude-opus-5-5"
+    assert _flag(call["args"], "--model") == "claude-sonnet-5"
     assert _flag(call["args"], "--reasoning-level") == "medium"
     assert _seat_in(call) == SEAT, f"{rel}: the spawn prompt must carry the Seat block"
     assert not any(scratch.iterdir()), f"{rel}: the mktemp seat file must be removed after a spawn"
@@ -177,7 +183,7 @@ def test_self_handoff_carries_the_seat_to_every_generation(rel, tmp_path):
         call = _bb_calls(env)[-1]
         assert call["args"][:2] == ["handoff", "--self"], call
         assert _flag(call["args"], "--to") == "claude-code"
-        assert _flag(call["args"], "--model") == "claude-opus-5-5"
+        assert _flag(call["args"], "--model") == "claude-sonnet-5"
         assert _flag(call["args"], "--effort") == "medium"
         seat = _seat_in(call)
         assert seat == SEAT, f"{rel} generation {generation}: the handoff must carry the Seat block forward"
