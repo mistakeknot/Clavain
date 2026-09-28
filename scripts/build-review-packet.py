@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -216,7 +217,7 @@ def validate_input(spec: dict[str, Any]) -> None:
         raise InputError(f"producer_receipt not found: {receipt_path}")
 
     _load_and_validate_beads(spec)
-    _load_producer_receipt_dict(spec)  # validated for side effect (raises InputError)
+    _load_producer_receipt_for_spec(spec)  # validated for side effect (raises InputError)
 
 
 def _load_and_validate_beads(spec: dict[str, Any]) -> list[dict[str, Any]]:
@@ -265,10 +266,12 @@ def _load_and_validate_beads(spec: dict[str, Any]) -> list[dict[str, Any]]:
                 raise InputError(
                     f"criteria seal verification failed for {crit_path}: {exc}"
                 ) from exc
+        crit_text = crit_path.read_text(encoding="utf-8")
+        reject_transcript_input(str(crit_path), crit_text)
         beads_by_id[bid] = {
             "id": bid,
             "title": beads_by_id.get(bid, {}).get("title", ""),
-            "acceptance_criteria": crit_path.read_text(encoding="utf-8"),
+            "acceptance_criteria": crit_text,
         }
 
     missing = [b for b in bead_ids if b not in beads_by_id]
@@ -283,27 +286,253 @@ def _load_and_validate_beads(spec: dict[str, Any]) -> list[dict[str, Any]]:
     return [beads_by_id[b] for b in bead_ids]
 
 
-def _load_producer_receipt_dict(spec: dict[str, Any]) -> dict[str, Any]:
-    base_dir: Path = spec["_base_dir"]
-    receipt_path = _resolve(base_dir, spec["producer_receipt"])
+def load_producer_receipt(path: str) -> dict[str, Any]:
+    """Load and independently re-verify one completed native dispatch receipt.
+
+    The file at `path` is expected to be the shape `ic --json route list
+    --dispatch=<id>`'s `context_json` produces for one attempt (see
+    scripts/collect-zaka.sh, which writes this exact shape). Loading it is
+    not admission by itself: this function re-queries `ic route list` for
+    the declared `dispatch_id`, requires an explicit `attempt_id` match
+    (never the first/latest record), and requires the matched record to
+    agree with the supplied file. It also cross-checks the executed model
+    against `ic route identity` so a caller cannot claim an identity the
+    resolver would not recognize. This is the review's producer -- the
+    model that actually ran -- never a nested `producer_model` describing
+    an earlier reviewed artifact's author, and never the requested profile.
+    """
+    receipt_path = Path(path)
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise InputError(f"cannot read producer_receipt {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise InputError(f"producer_receipt is not valid JSON: {exc}") from exc
     if not isinstance(receipt, dict):
         raise InputError("producer_receipt must be a JSON object")
-    # Full admission (native-dispatch lookup via `ic route list`, allowlisted
-    # field projection, canonical identity comparison) is Step 2's
-    # load_producer_receipt(). Step 1 only requires a genuinely terminal,
-    # successful receipt to exist before it will build anything.
+
     if receipt.get("state") != "completed" or receipt.get("terminal") is not True:
-        raise InputError(
-            "producer_receipt is not a completed, terminal dispatch result"
-        )
+        raise InputError("producer_receipt is not a completed, terminal dispatch result")
     result = receipt.get("result")
     if not isinstance(result, dict) or result.get("exit_code") != 0:
         raise InputError("producer_receipt result.exit_code must be 0")
+
+    dispatch_id = receipt.get("dispatch_id")
+    attempt_id = receipt.get("attempt_id")
+    if not dispatch_id or not attempt_id:
+        raise InputError("producer_receipt is missing dispatch_id or attempt_id")
+
+    route = receipt.get("resolved_route") or {}
+    profile = receipt.get("resolved_profile") or {}
+    inner_profile = profile.get("profile") or {}
+    execution = receipt.get("execution") or {}
+    if not route.get("policy_hash"):
+        raise InputError("producer_receipt is missing resolved_route.policy_hash")
+    if not inner_profile.get("backend") or not inner_profile.get("model"):
+        raise InputError("producer_receipt is missing resolved_profile.profile.{backend,model}")
+    if not execution.get("backend") or not execution.get("model"):
+        raise InputError("producer_receipt is missing execution.{backend,model}")
+
+    # Re-derive the authoritative record from `ic route list` -- never trust
+    # a caller-supplied hash of its own claim. Selecting by attempt_id (not
+    # "first" or "last") is what makes this an explicit selection rather
+    # than an arbitrary one.
+    try:
+        proc = subprocess.run(
+            ["ic", "--json", "route", "list", f"--dispatch={dispatch_id}", "--limit=10000"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise ToolError("ic executable not found") from exc
+    except subprocess.CalledProcessError as exc:
+        raise ToolError(f"ic route list failed: {exc.stderr.strip()}") from exc
+    try:
+        records = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise ToolError(f"ic route list did not return valid JSON: {exc}") from exc
+
+    matches = []
+    for record in records or []:
+        try:
+            ctx = json.loads(record["context_json"])
+        except (KeyError, TypeError, json.JSONDecodeError):
+            continue
+        if ctx.get("terminal") is True and ctx.get("attempt_id") == attempt_id:
+            matches.append(ctx)
+    if not matches:
+        raise InputError(
+            f"no terminal ic route record matches dispatch_id={dispatch_id} "
+            f"attempt_id={attempt_id}"
+        )
+    if len(matches) > 1:
+        raise InputError(
+            f"ambiguous ic route record: {len(matches)} terminal matches for "
+            f"dispatch_id={dispatch_id} attempt_id={attempt_id}"
+        )
+    authoritative = matches[0]
+    # Cross-check every claim this packet will actually render, not only the
+    # fields most convenient to check -- bead_id and checkout are displayed
+    # in the Producer receipt section, so a caller who could forge only those
+    # two fields could still misattribute the packet to a bead/checkout it
+    # was never dispatched against.
+    if (
+        authoritative.get("state") != receipt.get("state")
+        or authoritative.get("result", {}).get("exit_code") != result.get("exit_code")
+        or (authoritative.get("resolved_route") or {}).get("policy_hash") != route.get("policy_hash")
+        or (authoritative.get("execution") or {}).get("model") != execution.get("model")
+        or authoritative.get("bead_id") != receipt.get("bead_id")
+        or authoritative.get("checkout") != receipt.get("checkout")
+        or (authoritative.get("resolved_profile") or {}).get("profile_ref") != profile.get("profile_ref")
+    ):
+        raise InputError(
+            "producer_receipt disagrees with the authoritative ic route record "
+            f"for dispatch_id={dispatch_id} attempt_id={attempt_id}"
+        )
+
+    # Canonical identity check: never duplicate alias normalization here.
+    try:
+        proc = subprocess.run(
+            ["ic", "--json", "route", "identity", f"--model={execution['model']}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise ToolError("ic executable not found") from exc
+    except subprocess.CalledProcessError as exc:
+        raise ToolError(f"ic route identity failed: {exc.stderr.strip()}") from exc
+    try:
+        identity = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise ToolError(f"ic route identity did not return valid JSON: {exc}") from exc
+    canonical = identity.get("canonical_identity")
+    declared = inner_profile.get("model_identity")
+    if not canonical or (declared and declared != canonical):
+        raise InputError(
+            f"producer identity disagreement: declared model_identity={declared!r}, "
+            f"ic route identity resolved {canonical!r}"
+        )
+
     return receipt
+
+
+def _load_producer_receipt_for_spec(spec: dict[str, Any]) -> dict[str, Any]:
+    base_dir: Path = spec["_base_dir"]
+    receipt_path = _resolve(base_dir, spec["producer_receipt"])
+    if not receipt_path.is_file():
+        raise InputError(f"producer_receipt not found: {receipt_path}")
+    return load_producer_receipt(str(receipt_path))
+
+
+# ---------------------------------------------------------------------------
+# Transcript-input rejection (Step 2)
+# ---------------------------------------------------------------------------
+
+_AUTHOR_SESSION_DIR_NAMES = {
+    (".claude", "projects"),
+    (".codex", "sessions"),
+}
+
+_ANCHORED_MARKER_PAIRS = [
+    (r"(?m)^\s*(Human|User)\s*:\s", r"(?m)^\s*Assistant\s*:\s"),
+    (r"(?m)^\s*#{1,6}\s*(Human|User)\b", r"(?m)^\s*#{1,6}\s*Assistant\b"),
+    (r"(?m)^\s*\*\*(Human|User)\s*:?\*\*", r"(?m)^\s*\*\*Assistant\s*:?\*\*"),
+    (r"<\|im_start\|>\s*(user|human)", r"<\|im_start\|>\s*assistant"),
+]
+
+_MESSAGE_ROLE_VALUES = {"user", "assistant", "system", "human"}
+_CODEX_ITEM_TYPES = {"message", "reasoning"}
+
+
+def _json_object_looks_like_message(obj: Any) -> bool:
+    return (
+        isinstance(obj, dict)
+        and isinstance(obj.get("role"), str)
+        and obj.get("role").lower() in _MESSAGE_ROLE_VALUES
+        and "content" in obj
+    )
+
+
+def _line_looks_like_session_event(obj: dict[str, Any]) -> bool:
+    # Claude session JSONL: {"type": "user"|"assistant", "message": {...}}
+    if obj.get("type") in ("user", "assistant") and isinstance(obj.get("message"), dict):
+        return True
+    # Codex response_item JSONL: {"type": "response_item", "item": {"type": "message"|"reasoning", ...}}
+    if obj.get("type") == "response_item" and isinstance(obj.get("item"), dict):
+        if obj["item"].get("type") in _CODEX_ITEM_TYPES:
+            return True
+    # Raw provider event/usage log, regardless of filename.
+    if "total_cost_usd" in obj or "event_log" in obj:
+        return True
+    return False
+
+
+def _detect_transcript_rule(content: str) -> str | None:
+    stripped = content.strip()
+    if not stripped:
+        return None
+
+    # Whole-file JSON: messages-array export.
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, list) and parsed and all(
+        _json_object_looks_like_message(item) for item in parsed
+    ):
+        return "messages-array export"
+
+    # JSONL: Claude/Codex session events or raw provider events.
+    lines = [ln for ln in stripped.splitlines() if ln.strip()]
+    if lines:
+        parsed_lines = []
+        for ln in lines:
+            try:
+                parsed_lines.append(json.loads(ln))
+            except json.JSONDecodeError:
+                parsed_lines = None
+                break
+        if parsed_lines and any(
+            isinstance(obj, dict) and _line_looks_like_session_event(obj)
+            for obj in parsed_lines
+        ):
+            return "session/provider event JSONL"
+
+    # Anchored, paired conversation markers (plain text or Markdown).
+    for human_pat, assistant_pat in _ANCHORED_MARKER_PAIRS:
+        if re.search(human_pat, content) and re.search(assistant_pat, content):
+            return "anchored conversation markers"
+
+    return None
+
+
+def reject_transcript_input(path: str, content: str) -> None:
+    """Raise InputError if `content` (read from `path`) is transcript-shaped.
+
+    Reject rather than strip: stripping can turn failing evidence into
+    apparent success. Diagnostics name the source and the matched rule
+    without echoing the rejected text. This cannot prove arbitrary unmarked
+    prose was never copied from a conversation -- it only catches the
+    realistic accident of attaching a provider JSONL, a session export, or
+    an anchored conversation fixture as if it were ordinary evidence.
+    """
+    p = Path(path)
+    try:
+        resolved = p.resolve()
+    except OSError:
+        resolved = p
+    parts = resolved.parts
+    for i in range(len(parts) - 1):
+        if (parts[i], parts[i + 1]) in _AUTHOR_SESSION_DIR_NAMES:
+            raise InputError(
+                f"{path}: rejected as input from a known author session directory"
+            )
+
+    rule = _detect_transcript_rule(content)
+    if rule:
+        raise InputError(f"{path}: rejected as transcript-shaped input ({rule})")
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +667,7 @@ def _render_diff_or_plan(spec: dict[str, Any], changes: list[dict[str, str]]) ->
     if spec["kind"] == "plan":
         plan_path = _resolve(spec["_base_dir"], spec["plan_file"])
         plan_text = plan_path.read_text(encoding="utf-8")
+        reject_transcript_input(str(plan_path), plan_text)
         parts.append(f"#### Plan: `{spec['plan_file']}`\n\n```markdown\n{plan_text}\n```")
     for change in changes:
         parts.append(
@@ -465,6 +695,7 @@ def _render_touched_excerpts(spec: dict[str, Any], changes: list[dict[str, str]]
                 raise InputError(
                     f"excerpt {repo}:{ref}:{path} could not be read: {exc}"
                 ) from exc
+            reject_transcript_input(f"{repo}:{ref}:{path}", content)
             lines = content.splitlines()
             start, end = rng["start_line"], rng["end_line"]
             snippet = "\n".join(lines[start - 1 : end])
@@ -489,6 +720,7 @@ def _render_test_output(spec: dict[str, Any]) -> str:
             out_path = _resolve(spec["_base_dir"], t["path"])
             if out_path.is_file():
                 output_text = out_path.read_text(encoding="utf-8")
+                reject_transcript_input(str(out_path), output_text)
         parts.append(
             f"- **{t['label']}** (`{t['command']}`, scope `{t['scope']}`, "
             f"exit_code {t['exit_code']}):\n\n```\n{output_text}\n```"
@@ -582,7 +814,7 @@ def _identity_payload(spec: dict[str, Any], beads: list[dict[str, Any]], changes
 def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
     validate_input(spec)
     beads = _load_and_validate_beads(spec)
-    receipt = _load_producer_receipt_dict(spec)
+    receipt = _load_producer_receipt_for_spec(spec)
     changes = collect_changes(spec)
     sources = _collect_sources(spec)
 
@@ -619,10 +851,18 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
     dest_manifest = dest_dir / "manifest.json"
 
     if dest_packet.is_file():
-        # Idempotent: identical input identity already published. Step 3
-        # hardens this against a corrupted existing bundle; Step 1 trusts an
-        # existing file at the content-addressed path.
-        return dest_packet
+        # Idempotent: identical input identity already published -- but an
+        # existing file at the content-addressed path is only trusted after
+        # it re-verifies clean. A corrupted or tampered bundle sitting at
+        # this path must not be handed to a reviewer as if it were the
+        # freshly-computed packet; rebuild (overwrite) instead of failing
+        # open.
+        try:
+            verify_packet(str(dest_packet))
+        except ToolError:
+            pass
+        else:
+            return dest_packet
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_packet.write_bytes(packet_bytes)
@@ -653,9 +893,10 @@ def verify_packet(path: str) -> dict[str, Any]:
 
     for source in manifest.get("sources", []):
         source_path = Path(source["path"])
-        if source_path.is_file():
-            if _sha256_file(source_path) != source["sha256"]:
-                raise ToolError(f"source {source_path} no longer matches recorded sha256")
+        if not source_path.is_file():
+            raise ToolError(f"source {source_path} recorded in manifest no longer exists")
+        if _sha256_file(source_path) != source["sha256"]:
+            raise ToolError(f"source {source_path} no longer matches recorded sha256")
 
     return manifest
 

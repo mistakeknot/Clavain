@@ -8,6 +8,7 @@ setup() {
     BUILDER="$REPO_ROOT/scripts/build-review-packet.py"
     load "$BATS_TEST_DIRNAME/review_packet_helper.bash"
     review_packet_fixture_setup
+    review_packet_fixture_install_fake_ic
 }
 
 teardown() {
@@ -77,6 +78,7 @@ build() {
 
     # Reset, then break the producer receipt instead: not terminal.
     review_packet_fixture_setup
+    review_packet_fixture_install_fake_ic
     review_packet_fixture_patch '.producer_receipt = "producer_receipt.json"'
     jq '.terminal = false' "$INPUT_DIR/producer_receipt.json" > "$INPUT_DIR/producer_receipt.json.tmp"
     mv "$INPUT_DIR/producer_receipt.json.tmp" "$INPUT_DIR/producer_receipt.json"
@@ -184,4 +186,125 @@ build() {
     run python3 "$BUILDER" --verify "$packet_path"
     [ "$status" -ne 0 ]
     ! echo "$output" | grep -qi "verdict"
+}
+
+# --- Step 2: producer attribution reuse and transcript-input rejection -----
+
+@test "producer identity follows the executed fallback" {
+    # The receipt declares codex/gpt-6-astra; ic route identity agrees; ic
+    # route list has a matching terminal attempt. Build must succeed and the
+    # rendered packet must show the EXECUTED identity, not a requested one.
+    build
+    [ "$status" -eq 0 ]
+    grep -q '`gpt-6-astra`' "$output"
+    grep -q "route list" "$FIXTURE_DIR/ic.log"
+    grep -q "route identity" "$FIXTURE_DIR/ic.log"
+}
+
+@test "failed or unidentified producer is rejected" {
+    # ic route list has no record for this dispatch/attempt at all.
+    printf '[]\n' > "$IC_ROUTE_LIST_JSON"
+    build
+    [ "$status" -eq 2 ]
+
+    # ic route identity disagrees with the receipt's declared model_identity.
+    review_packet_fixture_setup
+    review_packet_fixture_install_fake_ic
+    printf '{"canonical_identity":"claude-opus-5-5"}\n' > "$IC_IDENTITY_JSON"
+    build
+    [ "$status" -eq 2 ]
+
+    # Receipt is missing attempt_id entirely.
+    review_packet_fixture_setup
+    review_packet_fixture_install_fake_ic
+    review_packet_fixture_patch '.producer_receipt = "producer_receipt.json"'
+    jq 'del(.attempt_id)' "$INPUT_DIR/producer_receipt.json" > "$INPUT_DIR/producer_receipt.json.tmp"
+    mv "$INPUT_DIR/producer_receipt.json.tmp" "$INPUT_DIR/producer_receipt.json"
+    build
+    [ "$status" -eq 2 ]
+}
+
+@test "receipt event-log pointers are never followed" {
+    jq '.execution.event_log = "/should/never/be/read.jsonl"' \
+        "$INPUT_DIR/producer_receipt.json" > "$INPUT_DIR/producer_receipt.json.tmp"
+    mv "$INPUT_DIR/producer_receipt.json.tmp" "$INPUT_DIR/producer_receipt.json"
+    review_packet_fixture_install_fake_ic
+
+    build
+    [ "$status" -eq 0 ]
+    ! grep -qF "/should/never/be/read.jsonl" "$output"
+}
+
+@test "transcript shaped test output is rejected without echoing content" {
+    local canary="THE-SECRET-ASSISTANT-REPLY-MUST-NOT-APPEAR"
+
+    # Claude session JSONL.
+    printf '{"type":"user","message":{"role":"user","content":"hi"}}\n{"type":"assistant","message":{"role":"assistant","content":"%s"}}\n' \
+        "$canary" > "$INPUT_DIR/claude-transcript.jsonl"
+    review_packet_fixture_patch '.tests[0].path = "claude-transcript.jsonl"'
+    build
+    [ "$status" -eq 2 ]
+    ! echo "$output" | grep -qF "$canary"
+    [ -z "$(find "$OUTPUT_DIR" -mindepth 1 2>/dev/null)" ]
+
+    # Codex response_item JSONL.
+    review_packet_fixture_setup
+    review_packet_fixture_install_fake_ic
+    printf '{"type":"response_item","item":{"type":"reasoning","text":"%s"}}\n{"type":"response_item","item":{"type":"message","role":"assistant","content":"%s"}}\n' \
+        "$canary" "$canary" > "$INPUT_DIR/codex-transcript.jsonl"
+    review_packet_fixture_patch '.tests[0].path = "codex-transcript.jsonl"'
+    build
+    [ "$status" -eq 2 ]
+    ! echo "$output" | grep -qF "$canary"
+
+    # Messages-array export.
+    review_packet_fixture_setup
+    review_packet_fixture_install_fake_ic
+    jq -n --arg s "$canary" '[{"role":"user","content":"hi"},{"role":"assistant","content":$s}]' \
+        > "$INPUT_DIR/messages-export.json"
+    review_packet_fixture_patch '.tests[0].path = "messages-export.json"'
+    build
+    [ "$status" -eq 2 ]
+    ! echo "$output" | grep -qF "$canary"
+
+    # Markdown conversation fixture.
+    review_packet_fixture_setup
+    review_packet_fixture_install_fake_ic
+    printf '**Human:** hi\n\n**Assistant:** %s\n' "$canary" > "$INPUT_DIR/conversation.md"
+    review_packet_fixture_patch '.tests[0].path = "conversation.md"'
+    build
+    [ "$status" -eq 2 ]
+    ! echo "$output" | grep -qF "$canary"
+}
+
+@test "renamed transcript and symlink to a session log are rejected" {
+    local canary="ANOTHER-SECRET-THAT-MUST-NOT-LEAK"
+
+    # Renamed: Claude JSONL content under an innocuous .txt name.
+    printf '{"type":"assistant","message":{"role":"assistant","content":"%s"}}\n' \
+        "$canary" > "$INPUT_DIR/innocuous-name.txt"
+    review_packet_fixture_patch '.tests[0].path = "innocuous-name.txt"'
+    build
+    [ "$status" -eq 2 ]
+    ! echo "$output" | grep -qF "$canary"
+
+    # Symlink into a known author-session directory.
+    review_packet_fixture_setup
+    review_packet_fixture_install_fake_ic
+    mkdir -p "$FIXTURE_DIR/.claude/projects/some-project"
+    printf 'plain diagnostic text, not a transcript\n' \
+        > "$FIXTURE_DIR/.claude/projects/some-project/session.jsonl"
+    ln -s "$FIXTURE_DIR/.claude/projects/some-project/session.jsonl" "$INPUT_DIR/linked.jsonl"
+    review_packet_fixture_patch '.tests[0].path = "linked.jsonl"'
+    build
+    [ "$status" -eq 2 ]
+}
+
+@test "ordinary test diagnostics mentioning assistant are accepted" {
+    printf 'FAIL: the assistant module returned exit code 1\nHuman review recommended.\n' \
+        > "$INPUT_DIR/plain-output.txt"
+    review_packet_fixture_patch '.tests[0].path = "plain-output.txt"'
+    build
+    [ "$status" -eq 0 ]
+    grep -qF "the assistant module returned exit code 1" "$output"
 }
