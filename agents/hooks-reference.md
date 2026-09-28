@@ -26,7 +26,7 @@
 - **PostToolUse** (matcher: `WebFetch|WebSearch|Bash|Task|Agent|mcp__.*|web__.*|web\.run`):
   - `context-reset-post.sh` — records exposure to untrusted content (web, remote commands including `ssh`, non-exempt MCP, browser), coalesced into accounting batches. Uncovered child agents and `Task`/`Agent` results make exposure `unknown`. Prints nothing. NOT a security boundary.
 - **Stop**:
-  - `auto-stop-actions.sh` — unified post-turn actions: detects signals via lib-signals.sh; goal-completed signal triggers the goal-cadence tier (/clavain:next-goal, highest priority), weight >= 4 triggers /clavain:compound, bead-closed + opt-in triggers self-dispatch, weight >= 3 triggers /interwatch:watch
+  - `auto-stop-actions.sh` — unified post-turn actions: entity-backed goal audit defects (lib-goal-audit.sh, highest priority) short-circuit the rest; otherwise detects signals via lib-signals.sh: weight >= 4 triggers /clavain:compound, bead-closed + opt-in triggers self-dispatch, weight >= 3 triggers /interwatch:watch
 - **SessionEnd**:
   - `dotfiles-sync.sh` — syncs dotfile changes at end of session
 

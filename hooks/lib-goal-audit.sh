@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # lib-goal-audit.sh — entity-backed goal-cadence check (f-016/f-030).
-# The standing auditor: fires on ic goal audit defects, independent of the
-# goal-completed prose signal. Everything fails open (lib-intercore.sh idiom).
+# The standing auditor: fires on ic goal audit defects (dormant, stuck-closing,
+# closed-without-successor), independent of transcript prose. Everything fails
+# open (lib-intercore.sh idiom).
 
 # Callers must have sourced lib-intercore.sh first.
 source "${BASH_SOURCE[0]%/*}/lib-session-project.sh" 2>/dev/null || true

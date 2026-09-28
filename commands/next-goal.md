@@ -1,6 +1,6 @@
 ---
 name: next-goal
-description: Generate a Next-goal block (2-4 leverage-ranked candidates + recommendation + ready-to-paste /goal text) — required at the end of any goal-completion message
+description: Generate a Next-goal block (2-4 leverage-ranked candidates + recommendation + ready-to-paste /goal text) — invoke manually after a /goal completes or whenever you want a fresh set of candidates
 argument-hint: "[optional: repo path or bead-prefix to scope candidates to]"
 ---
 
@@ -8,17 +8,17 @@ argument-hint: "[optional: repo path or bead-prefix to scope candidates to]"
 
 <next_goal_args> #$ARGUMENTS </next_goal_args>
 
-## Structural goal-cadence doctrine
+## Opt-in, manual invocation
 
-Whenever a `/goal` completes or a goal-scale milestone lands, the session's
-completion message to the user **must end** with a "Next goal" block: 2-4
-candidate goals, each with a one-line leverage rationale, a clear
-recommendation, and ready-to-paste `/goal` text for the recommended
-candidate. This is a structural requirement, not a convention — the
-`goal-cadence` tier in `hooks/auto-stop-actions.sh` detects goal-completion
-language via `hooks/lib-signals.sh`'s `goal-completed` signal and blocks the
-turn with an instruction to run this command. This command is also safe (and
-encouraged) to invoke manually any time you want a fresh set of candidates.
+This command is not enforced by any Stop hook — the structural "MUST end with
+a Next goal block" tier (`hooks/auto-stop-actions.sh`, mk-fx3) was removed
+mk-4hqi (2026-09-28): it fired on ordinary status turns where no `/goal` was
+met, forcing a wasted extra turn. Run this command yourself, using the Skill
+tool, whenever a `/goal` completes or a goal-scale milestone lands and you
+want 2-4 leverage-ranked candidate goals, each with a one-line leverage
+rationale, a clear recommendation, and ready-to-paste `/goal` text for the
+recommended candidate. It is equally safe to invoke any other time you want a
+fresh set of candidates.
 
 Never skip the block because bead data is unavailable — degrade to a
 lighter-weight recommendation (see Step 4) rather than omitting it.
@@ -415,15 +415,15 @@ must either be checked before emission or rewritten as an instruction to check.
 A wrong fact in a `/goal` is worse than a missing one: it arrives pre-approved
 and the next session builds on it.
 
-### This is checked, not merely requested
+### Verification leaves a receipt
 
 `scripts/next-goal-verify.sh` leaves a receipt at
-`~/.cache/clavain/next-goal-verify/$CLAUDE_SESSION_ID.json`, and the Stop hook
-reads it (`next_goal_verification_warning` in
-`hooks/lib-next-goal-provenance.sh`). A block emitted with no receipt is flagged
-as unverified; a block emitted while the receipt lists disqualified candidates
-is flagged with their names. It runs only when the provenance audit is already
-clean, so a session that skipped the lookup entirely gets one warning, not two.
+`~/.cache/clavain/next-goal-verify/$CLAUDE_SESSION_ID.json` recording whether
+each candidate is still open. No Stop hook reads this receipt (the
+`hooks/lib-next-goal-provenance.sh` audit that used to compare it against the
+emitted block was removed mk-4hqi, 2026-09-28, along with the structural
+goal-cadence tier) — running the verify step and honoring its result is on
+you, not mechanically enforced.
 
 If bd is unreachable the helper reports `ok: null`, never `true` — an unrun
 check is not a passed one, and the block is then required to say the candidates
@@ -464,25 +464,19 @@ Never emit an improvised block that reads as though it were tracker-ranked. A
 reader cannot audit the difference after the fact, which is exactly how five
 consecutive goals went out unlinted from this path.
 
-### This is checked, not merely requested
+### Provenance is recorded, not mechanically enforced
 
 `scripts/next-goal-candidates.sh` leaves a receipt at
 `~/.cache/clavain/next-goal-provenance/$CLAUDE_SESSION_ID.json` recording
-whether any tracker answered. The Stop hook reads it
-(`hooks/lib-next-goal-provenance.sh`) and compares it against what you actually
-emitted. A block that omits the degradation disclosure is taken as claiming
-tracker provenance, so it needs a receipt saying a tracker was reached.
+whether any tracker answered. No Stop hook reads this receipt (the
+`hooks/lib-next-goal-provenance.sh` audit that compared it against the
+emitted block was removed mk-4hqi, 2026-09-28, along with the structural
+goal-cadence tier) — a block that omits the degradation disclosure when it
+applies is still wrong, just not mechanically caught. Emit the disclosure
+honestly regardless of enforcement: it is the whole reason a reader can trust
+the block.
 
-Two things follow, and the second is the one worth internalising:
-
-1. Emitting the disclosure when it applies is enforced, not trusted.
-2. **Skipping this command does not skip the check.** No run means no receipt,
-   and a Next-goal block with no receipt is flagged as improvised — which it
-   is. Writing the block from session context to save a tool call produces a
-   warning on the next turn, not a shortcut.
-
-Set `CLAVAIN_PROVENANCE_AUDIT_DISABLE=1` to silence the audit, or
-`.claude/clavain.no-goalcadence` to opt a repo out of the whole tier.
+Set `CLAVAIN_PROVENANCE_DISABLE=1` to skip writing the receipt.
 
 ## Step 5: Emit the block
 

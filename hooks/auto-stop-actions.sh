@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Stop hook: unified post-turn actions (goal-cadence + compound + dispatch + drift check)
+# Stop hook: unified post-turn actions (goal audit + compound + dispatch + drift check)
 #
 # Detects work signals once using lib-signals.sh, then applies tiered thresholds:
-#   - goal-completed signal → goal-cadence (structural Next-goal block, highest priority)
+#   - entity-backed goal audit defects (lib-goal-audit.sh) → highest priority
 #   - weight >= 4 → trigger /clavain:compound (non-trivial problem-solving)
 #   - bead-closed + CLAVAIN_SELF_DISPATCH=true → self-dispatch (autonomous bead pickup)
 #   - weight >= 3 → trigger /interwatch:watch (doc drift check)
@@ -10,8 +10,13 @@
 # Merged from auto-compound.sh + auto-drift-check.sh (iv-rn81).
 # Self-dispatch tier added in ysxe.3 (2026-03-20): merged here per flux-drive
 # review to avoid sentinel conflict with separate hook file.
-# Goal-cadence tier added mk-fx3 (2026-07-08): same rationale — folded in
-# rather than a second Stop hook, to avoid sentinel-dedup races.
+# Goal-cadence tier (structural "MUST end with a Next goal block" demand,
+# mk-fx3, 2026-07-08) removed mk-4hqi (2026-09-28): mk ruled it wasted tokens
+# — it fired on ordinary status turns where no /goal was met, forcing a wasted
+# extra turn, and /clavain:next-goal remains available as an opt-in command.
+# The entity-backed goal audit tier (lib-goal-audit.sh, f-016/f-030) is a
+# distinct feature — it only fires on actual audit defects (dormant/stuck/
+# no-successor), not on every goal completion — and stays.
 #
 # Guards: stop_hook_active, shared sentinel, per-repo opt-out, per-action throttle.
 # Returns JSON with decision:"block" + reason when action is warranted.
@@ -125,7 +130,7 @@ fi
 # Scanning "." meant that ending a session in an umbrella directory like
 # ~/projects (which is not a repo and holds 60+ checkouts) swept every repo at
 # once — measured at 6.4s of a hook capped at 5s, so it always timed out there
-# and the goal-cadence/compound/drift instruction was silently dropped. No repo
+# and the goal-audit/compound/drift instruction was silently dropped. No repo
 # => no project => nothing to enforce.
 SHADOW_WARNING=""
 _SHADOW_SCAN_ROOT=""
@@ -137,7 +142,7 @@ if [[ -n "$_SHADOW_SCAN_ROOT" && ! -f ".claude/clavain.no-shadow-enforce" ]]; th
     # successful detection is a "failure" as far as bash is concerned. With the
     # `trap 'exit 0' ERR` at the top of this file, a bare assignment therefore
     # killed the whole hook the moment any shadow tracker was found — before
-    # the goal-cadence / compound / dispatch / drift waterfall below ever ran.
+    # the goal-audit / compound / dispatch / drift waterfall below ever ran.
     # In a repo with even one tracker this hook was a silent no-op end to end
     # (~/projects/shadow-work has 25). The `|| shadow_count=$?` form both
     # captures the count and keeps the ERR trap out of it. (doctor run, 2026-07-30)
@@ -148,54 +153,9 @@ if [[ -n "$_SHADOW_SCAN_ROOT" && ! -f ".claude/clavain.no-shadow-enforce" ]]; th
     fi
 fi
 
-# Next-goal provenance audit — orthogonal to the tier waterfall, same shape as
-# the shadow-tracker scan above: computed unconditionally, consumed below.
-#
-# Cheap by construction. It reads one small receipt file that
-# scripts/next-goal-candidates.sh wrote when it ran; it never calls bd. That
-# matters here specifically — lib-shadow-tracker.sh documents this hook timing
-# out at 5s and silently dropping the entire waterfall, and the candidate
-# lookup allows 25s per bead root. Re-querying trackers from inside the hook
-# would reintroduce exactly that failure.
-#
-# ADVISORY ONLY (2026-09-24). The finding goes to the user as a systemMessage
-# and never blocks the stop. As a block it was re-injected into the model's
-# context and demanded another turn, and when the receipt was merely filed
-# under another of the session's ids it did so for a lookup that had run.
-PROVENANCE_WARNING=""
-NEXT_GOAL_BLOCK_EMITTED=0
-# Every name this process has for its session. BB_THREAD_ID is taken from the
-# environment as is: it only selects which receipt file to read, and confirming
-# it with `bb status` would spend a subprocess of this hook's 5s budget.
-_ids=("$SESSION_ID" "${CLAUDE_SESSION_ID:-}" "${CLAUDE_CODE_SESSION_ID:-}" "${BB_THREAD_ID:-}")
-if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
-    source "${SCRIPT_DIR}/lib-next-goal-provenance.sh" 2>/dev/null || true
-    # Only a block in the reply that completed the goal, or later, answers it.
-    # One written for an earlier goal, still inside the 80-line window, does not.
-    if declare -F next_goal_block_emitted >/dev/null 2>&1 \
-        && next_goal_block_emitted "$(printf '%s\n' "$RECENT" | tail -n +"$(( ${CLAVAIN_GOAL_COMPLETED_LINE:-0} > 0 ? CLAVAIN_GOAL_COMPLETED_LINE : 1 ))")"; then
-        NEXT_GOAL_BLOCK_EMITTED=1
-    fi
-    if declare -F next_goal_provenance_warning >/dev/null 2>&1; then
-        PROVENANCE_SESSION_ID="$(next_goal_receipt_session "$CLAVAIN_PROVENANCE_DIR" "${_ids[@]}")"
-        PROVENANCE_WARNING="$(next_goal_provenance_warning "$PROVENANCE_SESSION_ID" "$RECENT" 2>/dev/null || true)"
-    fi
-    # The verification audit — "is what you cited still true" — runs only when
-    # provenance came back clean. Not to spare the noise: when no lookup ran at
-    # all, both receipts are missing and both would fire, and the provenance
-    # remedy (run /clavain:next-goal, re-derive) already produces the
-    # verification receipt as a side effect. Same subsumption argument the
-    # provenance tier makes against goal-cadence, one level in.
-    if [[ -z "$PROVENANCE_WARNING" ]] && declare -F next_goal_verification_warning >/dev/null 2>&1; then
-        VERIFY_SESSION_ID="$(next_goal_receipt_session "$CLAVAIN_VERIFY_DIR" "${_ids[@]}")"
-        PROVENANCE_WARNING="$(next_goal_verification_warning "$VERIFY_SESSION_ID" "$RECENT" 2>/dev/null || true)"
-    fi
-fi
-
-# Tiered decision: goal-cadence > compound > dispatch > drift check
-# goal-completed signal: structural requirement — the completion message must
-#   END with a Next-goal block (2-4 candidates + recommendation), so this
-#   tier takes top priority and short-circuits the rest of the waterfall.
+# Tiered decision: goal audit > compound > dispatch > drift check
+# Entity-backed goal audit defects (dormant/stuck/no-successor) take top
+# priority and short-circuit the rest of the waterfall.
 # Weight >= 4: non-trivial problem-solving → compound (raised from 3)
 # bead-closed + opt-in: autonomous dispatch → claim next bead
 # Weight >= 3: shipped work → drift check (raised from 2)
@@ -207,35 +167,9 @@ fi
 
 REASON=""
 
-# Provenance audit: advisory. Throttled here, emitted as a systemMessage at the
-# end, so it neither blocks nor claims the waterfall.
-PROVENANCE_NOTICE=""
-if [[ -n "$PROVENANCE_WARNING" ]]; then
-    if intercore_sentinel_check_or_legacy "next_goal_provenance_throttle" "$SESSION_ID" 300; then
-        PROVENANCE_NOTICE="$PROVENANCE_WARNING"
-    fi
-fi
-
-# Goal-cadence tier: fires on the goal-completed signal, ahead of every other
-# tier. Per-repo opt-out + throttle follow the same pattern as the other
-# tiers below. Fail-open: if bd/intercore are unavailable, /clavain:next-goal
-# itself degrades gracefully (see commands/next-goal.md) — this hook only
-# needs to fire the instruction, not resolve any bead data itself.
-#
-# goal-completed is narrow on purpose (lib-signals.sh): a met goal_status or a
-# `bd close` the tracker confirms closed an epic, never wording. And a block
-# written after that event satisfies the tier: demanding one for a block that
-# exists was a wasted turn.
-if [[ -z "$REASON" && "$SIGNALS" == *"goal-completed"* ]]; then
-    if [[ ! -f ".claude/clavain.no-goalcadence" && "$NEXT_GOAL_BLOCK_EMITTED" -eq 0 ]]; then
-        if intercore_sentinel_check_or_legacy "goal_cadence_throttle" "$SESSION_ID" 60; then
-            REASON="Goal-cadence: this turn completed a /goal or closed an epic. Per structural goal-cadence policy, your completion message to the user MUST end with a 'Next goal' block. Run /clavain:next-goal using the Skill tool to generate it (2-4 candidates with leverage rationale, a clear recommendation, and ready-to-paste /goal text), then append that block verbatim to the end of your reply."
-        fi
-    fi
-fi
-
 # Entity-backed goal audit (f-016): the standing auditor, independent of
-# prose signals. Only consulted when no higher tier fired.
+# prose signals. Highest-priority tier since the goal-cadence tier (mk-4hqi,
+# 2026-09-28) was removed.
 if [[ -z "$REASON" ]] && [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
     AUDIT_REASON=$(goal_audit_reason "$SESSION_ID")
     if [[ -n "$AUDIT_REASON" ]]; then
@@ -312,11 +246,8 @@ if [[ -z "$REASON" && -n "$SHADOW_WARNING" ]]; then
     REASON="$SHADOW_WARNING"
 fi
 
-# No tier matched — at most the advisory notice, which never blocks.
+# No tier matched — nothing to do.
 if [[ -z "$REASON" ]]; then
-    if [[ -n "$PROVENANCE_NOTICE" ]]; then
-        jq -n --arg msg "$PROVENANCE_NOTICE" '{"systemMessage":$msg}'
-    fi
     exit 0
 fi
 
@@ -327,21 +258,13 @@ fi
 source "${SCRIPT_DIR}/lib-loop-breaker.sh" 2>/dev/null || true
 if type loop_breaker_filter &>/dev/null; then
     if ! REASON=$(loop_breaker_filter "$SESSION_ID" "$REASON"); then
-        if [[ -n "$PROVENANCE_NOTICE" ]]; then
-            jq -n --arg msg "$PROVENANCE_NOTICE" '{"systemMessage":$msg}'
-        fi
         exit 0
     fi
 fi
 
 # Return block decision
 if command -v jq &>/dev/null; then
-    if [[ -n "$PROVENANCE_NOTICE" ]]; then
-        jq -n --arg reason "$REASON" --arg msg "$PROVENANCE_NOTICE" \
-            '{"decision":"block","reason":$reason,"systemMessage":$msg}'
-    else
-        jq -n --arg reason "$REASON" '{"decision":"block","reason":$reason}'
-    fi
+    jq -n --arg reason "$REASON" '{"decision":"block","reason":$reason}'
 else
     cat <<ENDJSON
 {
