@@ -55,14 +55,19 @@ SCOPE="${1:-}"
 
 # ------------------------------------------------------------------ provenance
 #
-# Every run leaves a receipt saying whether a tracker actually answered. The
-# Stop hook reads it to tell a tracker-ranked Next-goal block from an
-# improvised one (hooks/lib-next-goal-provenance.sh).
+# Every run leaves a receipt saying whether a tracker actually answered, so a
+# reader (human or model) can tell a tracker-ranked Next-goal block from an
+# improvised one. No Stop hook reads this receipt — the audit that compared
+# it against the emitted block (hooks/lib-next-goal-provenance.sh) was
+# removed mk-4hqi (2026-09-28) along with the structural goal-cadence tier;
+# this command is now opt-in and manually invoked. The receipt format is kept
+# because it's still the cheapest way to record what a run actually found.
 #
-# WHY A RECEIPT AND NOT A LIVE RE-QUERY: the Stop hook is capped at 5s, and
-# lib-shadow-tracker.sh already documents what happens when a hook overruns it
-# — the whole waterfall is silently dropped. Each root here gets up to 25s of
-# bd, so re-querying from the hook would blow the cap on the first root.
+# WHY A RECEIPT AND NOT A LIVE RE-QUERY: even unread by a hook, a live
+# re-query is the wrong shape here — lib-shadow-tracker.sh documents what
+# happens when a hook overruns its budget, and each root here gets up to 25s
+# of bd, more than any hook could afford. A receipt is also useful for a
+# human or another session reading after the fact.
 #
 # The receipt is keyed by session because the useful question is "did the
 # helper run for THIS conversation" — a stale receipt from yesterday must not

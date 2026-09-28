@@ -138,10 +138,12 @@ def test_next_goal_ranks_roadmap_only_when_fresh(project_root):
 
 
 def test_next_goal_helper_records_a_receipt(project_root):
-    """The helper must leave evidence a hook can check without re-querying bd.
+    """The helper must leave evidence a reader can check without re-querying bd.
 
-    Re-querying from the Stop hook is not an option: the hook is capped at 5s
-    and each bead root allows 25s of bd, so the first root alone would blow it.
+    No Stop hook reads this receipt (the audit that did was removed mk-4hqi,
+    2026-09-28); the receipt is still useful evidence for a human or another
+    session reading after the fact, and re-querying live is expensive
+    regardless — each bead root allows up to 25s of bd.
     """
     helper = (project_root / "scripts" / "next-goal-candidates.sh").read_text()
 

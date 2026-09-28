@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-27T18:41:08Z",
+  "generated": "2026-09-28T17:02:38Z",
   "counts": {
     "skills": 26,
     "agents": 6,
@@ -262,7 +262,7 @@
     },
     {
       "name": "next-goal",
-      "description": "Generate a Next-goal block (2-4 leverage-ranked candidates + recommendation + ready-to-paste /goal text) \u2014 required at the end of any goal-completion message"
+      "description": "Generate a Next-goal block (2-4 leverage-ranked candidates + recommendation + ready-to-paste /goal text) \u2014 invoke manually after a /goal completes or whenever you want a fresh set of candidates"
     },
     {
       "name": "peers",

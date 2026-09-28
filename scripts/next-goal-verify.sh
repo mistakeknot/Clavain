@@ -5,9 +5,11 @@
 #
 # WHY THIS EXISTS, and why it is NOT the same check as the provenance receipt.
 #
-# next-goal-candidates.sh answers "did a tracker answer at all", and the Stop
-# hook flags a block with no receipt as improvised. That closed the failure
-# where a block was written from session context without consulting anything.
+# next-goal-candidates.sh answers "did a tracker answer at all", recorded in
+# a receipt a reader can check. That addresses the failure where a block was
+# written from session context without consulting anything — no Stop hook
+# enforces it (removed mk-4hqi, 2026-09-28); the discipline is on the model
+# invoking this command.
 #
 # It does not close this one. On 2026-08-14 a Next-goal block cited
 # `solwend-w46q` — a real bead ID, correctly formed, from a reachable tracker,
