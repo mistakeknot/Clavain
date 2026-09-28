@@ -325,6 +325,11 @@ diff_build() {
     # excerpt/diff evidence.
     ! grep -qxF "line 0" "$output"
     ! grep -qxF "line 38" "$output"
+    # Positive assertion: near-context lines immediately around the change
+    # must actually be present -- otherwise this test would pass equally if
+    # excerpt generation produced no context at all.
+    grep -qxF "line 18" "$output"
+    grep -qxF "line 20" "$output"
 }
 
 @test "all changed lines survive" {
