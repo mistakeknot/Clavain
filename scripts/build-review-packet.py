@@ -1271,6 +1271,11 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
             "reasoning_effort": profile.get("reasoning_effort") or execution.get("reasoning_effort"),
             "attempt_id": receipt.get("attempt_id"),
         },
+        # Surfaced (not just used internally for packet_id) so a consumer
+        # such as dispatch.sh's audit trail can bind an attempt to the exact
+        # receipt bytes the packet was built from, without recomputing the
+        # hash itself or re-reading producer_receipt off disk.
+        "producer_receipt_sha256": identity.get("producer_receipt_sha256"),
         "changes": changes,
         "previous_packet_id": (
             previous_manifest["packet_id"] if previous_manifest is not None else None
