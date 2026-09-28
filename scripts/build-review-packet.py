@@ -372,19 +372,33 @@ def load_producer_receipt(path: str) -> dict[str, Any]:
             f"dispatch_id={dispatch_id} attempt_id={attempt_id}"
         )
     authoritative = matches[0]
+    auth_route = authoritative.get("resolved_route") or {}
+    auth_profile = authoritative.get("resolved_profile") or {}
+    auth_inner_profile = auth_profile.get("profile") or {}
+    auth_execution = authoritative.get("execution") or {}
     # Cross-check every claim this packet will actually render, not only the
-    # fields most convenient to check -- bead_id and checkout are displayed
-    # in the Producer receipt section, so a caller who could forge only those
-    # two fields could still misattribute the packet to a bead/checkout it
-    # was never dispatched against.
+    # fields most convenient to check -- every field named here appears in
+    # _render_producer_receipt(), so a caller who forged any one of them
+    # (e.g. resolved_profile.profile.model_identity, execution.backend,
+    # resolved_route.classification_reasons) could otherwise misattribute
+    # the packet without the checked fields ever disagreeing.
     if (
         authoritative.get("state") != receipt.get("state")
         or authoritative.get("result", {}).get("exit_code") != result.get("exit_code")
-        or (authoritative.get("resolved_route") or {}).get("policy_hash") != route.get("policy_hash")
-        or (authoritative.get("execution") or {}).get("model") != execution.get("model")
+        or auth_route.get("policy_hash") != route.get("policy_hash")
+        or auth_route.get("classification_reasons") != route.get("classification_reasons")
+        or auth_route.get("review_requirement") != route.get("review_requirement")
+        or auth_route.get("policy_profile") != route.get("policy_profile")
+        or auth_execution.get("model") != execution.get("model")
+        or auth_execution.get("backend") != execution.get("backend")
+        or auth_execution.get("reasoning_effort") != execution.get("reasoning_effort")
         or authoritative.get("bead_id") != receipt.get("bead_id")
         or authoritative.get("checkout") != receipt.get("checkout")
-        or (authoritative.get("resolved_profile") or {}).get("profile_ref") != profile.get("profile_ref")
+        or auth_profile.get("profile_ref") != profile.get("profile_ref")
+        or auth_inner_profile.get("backend") != inner_profile.get("backend")
+        or auth_inner_profile.get("model") != inner_profile.get("model")
+        or auth_inner_profile.get("model_identity") != inner_profile.get("model_identity")
+        or auth_inner_profile.get("reasoning_effort") != inner_profile.get("reasoning_effort")
     ):
         raise InputError(
             "producer_receipt disagrees with the authoritative ic route record "
@@ -909,9 +923,17 @@ def _render_test_output(spec: dict[str, Any]) -> str:
         output_text = "None supplied"
         if t.get("path") and t["path"] != "-":
             out_path = _resolve(spec["_base_dir"], t["path"])
-            if out_path.is_file():
-                output_text = out_path.read_text(encoding="utf-8")
-                reject_transcript_input(str(out_path), output_text)
+            if not out_path.is_file():
+                # A test entry that names an output file is asserting that
+                # file is the evidence for its exit_code -- silently
+                # rendering "None supplied" would let required test evidence
+                # go missing without assembly ever failing.
+                raise InputError(
+                    f"test {t['label']!r} names output path {out_path} but it "
+                    "does not exist"
+                )
+            output_text = out_path.read_text(encoding="utf-8")
+            reject_transcript_input(str(out_path), output_text)
         parts.append(
             f"- **{t['label']}** (`{t['command']}`, scope `{t['scope']}`, "
             f"exit_code {t['exit_code']}):\n\n```\n{output_text}\n```"
@@ -1001,7 +1023,22 @@ def _identity_payload(
     Excludes anything about *where* the packet is written (output_dir) or
     *when*/*by whom* it will be reviewed -- those never affect what a
     reviewer is shown, only where the bytes land.
+
+    Includes a content hash for every input whose *bytes*, not just its
+    metadata, can change what gets rendered: the preamble text, each test's
+    output file, and the producer receipt itself. Test/receipt *metadata*
+    (label, command, exit_code, the receipt's parsed fields) is already
+    covered by "tests" and by the producer-receipt cross-check in
+    load_producer_receipt(), but only a content hash catches a same-metadata,
+    different-bytes swap of the underlying evidence file.
     """
+    base_dir: Path = spec["_base_dir"]
+    test_output_sha256 = {}
+    for t in spec.get("tests") or []:
+        if t.get("path") and t["path"] != "-":
+            out_path = _resolve(base_dir, t["path"])
+            if out_path.is_file():
+                test_output_sha256[t["label"]] = _sha256_file(out_path)
     return {
         "schema_version": spec["schema_version"],
         "kind": spec["kind"],
@@ -1009,15 +1046,23 @@ def _identity_payload(
         "beads": beads,
         "changes": changes,
         "tests": spec.get("tests"),
+        "test_output_sha256": test_output_sha256,
         "tests_not_run": spec.get("tests_not_run"),
         "prior_findings": spec.get("prior_findings"),
         "asks": spec.get("asks"),
         "excerpts_not_applicable": spec.get("excerpts_not_applicable"),
         "plan_file_sha256": (
-            _sha256_file(_resolve(spec["_base_dir"], spec["plan_file"]))
+            _sha256_file(_resolve(base_dir, spec["plan_file"]))
             if spec.get("plan_file")
             else None
         ),
+        "producer_receipt_sha256": (
+            _sha256_file(_resolve(base_dir, spec["producer_receipt"]))
+            if spec.get("producer_receipt")
+            else None
+        ),
+        "preamble_sha256": _sha256_bytes(PREAMBLE_PATH.read_bytes()),
+        "max_bytes": spec.get("max_bytes", DEFAULT_MAX_BYTES),
         "previous_packet_id": (
             previous_manifest["packet_id"] if previous_manifest is not None else None
         ),
@@ -1031,23 +1076,34 @@ def _load_previous_packet_manifest(spec: dict[str, Any]) -> dict[str, Any] | Non
     p = _resolve(spec["_base_dir"], prev)
     if not p.is_file():
         raise InputError(f"previous_packet manifest not found: {p}")
+    # A bare, unverified manifest.json is just a JSON file a caller supplied
+    # -- it could claim any packet_id/head it likes. Route it through
+    # verify_packet() against the packet.md sitting next to it so the parent
+    # bundle's own packet_sha256 and source hashes have to check out before
+    # its "reviewed head" is trusted for delta binding.
     try:
-        manifest = json.loads(p.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise InputError(f"previous_packet manifest is not valid JSON: {exc}") from exc
-    if not isinstance(manifest, dict) or not manifest.get("packet_id"):
-        raise InputError(f"previous_packet manifest is missing packet_id: {p}")
+        manifest = verify_packet(str(p.parent / "packet.md"))
+    except ToolError as exc:
+        raise InputError(f"previous_packet failed verification: {exc}") from exc
     return manifest
 
 
 def _bind_delta_to_parent(
-    spec: dict[str, Any], changes: list[dict[str, str]], previous_manifest: dict[str, Any]
+    spec: dict[str, Any],
+    beads: list[dict[str, Any]],
+    changes: list[dict[str, str]],
+    previous_manifest: dict[str, Any],
 ) -> None:
-    """A delta re-review's base must equal its parent's reviewed head.
+    """A delta re-review's base must equal its parent's reviewed head, and its
+    bead scope/acceptance criteria must be unchanged from the parent's.
 
     This is what makes a delta unable to masquerade as a full review of an
     unrelated or expanded scope: it can only ever continue exactly the scope
-    the parent packet already covered.
+    the parent packet already covered. Without the bead/criteria check, a
+    caller could keep the same commit range while attaching a new or reworded
+    bead -- the rendered disposition text claims "every scope ... already
+    reviewed there carries forward unchanged," which is only true if the
+    bead scope actually did not change.
     """
     if spec["kind"] != "diff":
         raise InputError("previous_packet is only supported for kind:diff re-review")
@@ -1062,6 +1118,18 @@ def _bind_delta_to_parent(
                 f"delta base for {cur['repo']} must equal previous_packet's "
                 f"reviewed head ({prev.get('head')!r}), got base={cur['base']!r}"
             )
+    prev_bead_ids = (previous_manifest.get("inputs") or {}).get("bead_ids")
+    if prev_bead_ids != spec["bead_ids"]:
+        raise InputError(
+            "previous_packet bead_ids do not match this packet's bead_ids -- "
+            "a changed bead scope requires a fresh full review, not a delta"
+        )
+    if previous_manifest.get("beads") != beads:
+        raise InputError(
+            "previous_packet acceptance criteria do not match this packet's "
+            "beads -- a changed criterion requires a fresh full review, not "
+            "a delta"
+        )
 
 
 def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
@@ -1072,7 +1140,7 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
     sources = _collect_sources(spec)
     previous_manifest = _load_previous_packet_manifest(spec)
     if previous_manifest is not None:
-        _bind_delta_to_parent(spec, changes, previous_manifest)
+        _bind_delta_to_parent(spec, beads, changes, previous_manifest)
 
     sections = {
         "Review contract": _render_review_contract(),
@@ -1132,7 +1200,20 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
         # A corrupted or tampered bundle sitting at this path must fail
         # loudly instead of being silently rebuilt/overwritten -- that would
         # erase the evidence that tampering happened.
-        verify_packet(str(dest_packet))
+        cached_manifest = verify_packet(str(dest_packet))
+        # Defense in depth beyond the identity payload: if the freshly
+        # assembled bytes for this call disagree with what's cached at this
+        # content-addressed path, the identity payload missed some rendered
+        # input (a packet_id collision on different evidence) -- fail loudly
+        # rather than silently serving stale evidence under a "clean" cache
+        # hit.
+        if cached_manifest.get("packet_sha256") != _sha256_bytes(packet_bytes):
+            raise ToolError(
+                f"packet_id {packet_id} is cached at {dest_packet} with "
+                "different rendered bytes than this call just produced -- "
+                "the identity payload does not capture everything that "
+                "changed"
+            )
         return dest_packet
 
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -1153,6 +1234,10 @@ def build_packet(spec: dict[str, Any], output_dir: str) -> Path:
             "kind": spec["kind"],
             "bead_ids": spec["bead_ids"],
         },
+        # Retained (not just bead_ids) so a delta re-review can detect a
+        # reworded/expanded acceptance criterion even when bead_ids is
+        # unchanged -- see _bind_delta_to_parent().
+        "beads": beads,
         "producer_identity": {
             "profile_ref": (receipt.get("resolved_profile") or {}).get("profile_ref"),
             "backend": profile.get("backend") or execution.get("backend"),
@@ -1186,7 +1271,10 @@ def verify_packet(path: str) -> dict[str, Any]:
     if actual_sha != manifest.get("packet_sha256"):
         raise ToolError("packet.md does not match manifest.packet_sha256 (tampered or stale)")
 
-    for source in manifest.get("sources", []):
+    if "sources" not in manifest:
+        raise ToolError(f"manifest is missing the sources field: {manifest_path}")
+
+    for source in manifest["sources"]:
         source_path = Path(source["path"])
         if not source_path.is_file():
             raise ToolError(f"source {source_path} recorded in manifest no longer exists")
