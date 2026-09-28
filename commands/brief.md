@@ -21,7 +21,7 @@ Sections 1, 2, 3a, 4, 5, 6, 7 are assembled by `scripts/assemble-briefing.py` �
 
 ### 1. Parse arguments
 
-Extract the bead id (required) from context. Optional flags: `--role=<role>` (routing role for `ic route dispatch`), `--bd-cwd=<path>` (the directory whose `.beads` binds the tracker that actually holds this bead — **not necessarily the repo root**; bd resolves its tracker from cwd, and a code checkout can have a different tracker binding than the hub tracker the bead lives in). If the bead id is missing, ask the user.
+Extract the bead id (required) from context. Optional flags: `--role=<role>` (routing role for `ic route dispatch`), `--bd-cwd=<path>` (the directory whose `.beads` binds the tracker that actually holds this bead — **not necessarily the repo root**; bd resolves its tracker from cwd, and a code checkout can have a different tracker binding than the hub tracker the bead lives in), `--policy=<path>` (routing.yaml for `--role` resolution; only meaningful together with `--role`). If the bead id is missing, ask the user. If `--role` is given without `--policy`, don't invent one here — the script itself falls back to `$CLAVAIN_ROUTING_POLICY`, then `<repo>/config/routing.yaml`, and reports `UNKNOWN` in §2 if neither resolves; just pass through whatever `--policy` the caller gave, or nothing.
 
 ### 2. Run the deterministic assembler
 
@@ -31,12 +31,15 @@ python3 "${CLAUDE_PLUGIN_ROOT:-.}/scripts/assemble-briefing.py" \
   --repo "$(pwd)" \
   ${BD_CWD:+--bd-cwd "$BD_CWD"} \
   ${ROLE:+--role "$ROLE"} \
+  ${POLICY:+--policy "$POLICY"} \
   --out /tmp/brief-<bead-id>.md
 ```
 
+Without `--policy`, `--role` resolution is not inert — the script tries `$CLAVAIN_ROUTING_POLICY` and `<repo>/config/routing.yaml` before giving up and reporting `UNKNOWN` in §2 Authority.
+
 Exit code `0` means the §4 acceptance gate passed. Exit code `2` means it failed — the script prints the specific problems (`NEXT: UNKNOWN`, `mandatory coverage: partial`, `UNKNOWN in open decisions`) to stderr. **A failing gate is not a bug to paper over** — it means the bead genuinely lacks a next-action directive, a lane is unreachable, or an open decision has no recorded resolution. Surface the gate result to the user as-is; do not invent a NEXT: line or mark a lane reachable to force a pass.
 
-Read the rendered file at `/tmp/brief-<bead-id>.md`. It already contains sections 1 (Objective), 2 (Constraints), 3a (Invariants, with mandatory-coverage status), 4 (acceptance criteria), 5 (Open Decisions), 6 (lane reachability map), 7 (rejected-item log, if any items were dropped for missing provenance).
+Read the rendered file at `/tmp/brief-<bead-id>.md`. It already contains sections 1 (Objective), 2 (Authority — role/routing resolution, standing gate headings, DECIDED rulings scoped to a decider), 3a (Invariants, mandatory and uncapped, with a `coverage: complete|partial` line), 4 (Sources and versions — git/bead/file/query-set fingerprints), 5 (Open decisions — OPEN items, open children/deps, pending mk/vizier cards, proposed CanonGraph decisions), 6 (Verification evidence — EVIDENCE/DEAD-END notes, gate results, a freshness reminder), 7 (Expiry — when to regenerate). A dropped, unsourced item is logged to stderr with `--json-debug`, not rendered as its own section.
 
 ### 3. Populate §3b — ranked context (the one model-in-loop step)
 

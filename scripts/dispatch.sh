@@ -884,8 +884,8 @@ _dispatch_prepare_review_packet() {
     echo "Error: --plan cannot be combined with --review-input/--review-packet; a raw plan belongs in INPUT.json's plan_file" >&2
     return 1
   fi
-  if [[ -n "$PROMPT_FILE" || -n "$TEMPLATE_FILE" || -n "$INJECT_DOCS" || ${#IMAGES[@]} -gt 0 || ${#EXTRA_ARGS[@]} -gt 0 || -n "$positional_prompt" ]]; then
-    echo "Error: a verified review packet dispatch cannot combine a positional prompt, --prompt-file, --template, --inject-docs, images, or backend passthrough" >&2
+  if [[ -n "$PROMPT_FILE" || -n "$TEMPLATE_FILE" || -n "$INJECT_DOCS" || -n "$BRIEF_BEAD" || ${#IMAGES[@]} -gt 0 || ${#EXTRA_ARGS[@]} -gt 0 || -n "$positional_prompt" ]]; then
+    echo "Error: a verified review packet dispatch cannot combine a positional prompt, --prompt-file, --template, --inject-docs, --brief-bead, images, or backend passthrough" >&2
     return 1
   fi
   if [[ -n "$REVIEW_INPUT" ]]; then
