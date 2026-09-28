@@ -205,6 +205,14 @@ def validate_input(spec: dict[str, Any]) -> None:
                 raise InputError(
                     "each tests entry needs label, command, exit_code, scope, path"
                 )
+            # "-" is the only valid way to say "no output file for this test";
+            # anything else falsy (empty string, null) must not silently take
+            # the same "no output supplied" path as a deliberate "-".
+            if not isinstance(entry["path"], str) or entry["path"] == "":
+                raise InputError(
+                    f"tests entry {entry.get('label')!r} path must be a "
+                    "non-empty string ('-' for no output file)"
+                )
 
     max_bytes = spec.get("max_bytes", DEFAULT_MAX_BYTES)
     if not isinstance(max_bytes, int) or max_bytes <= 0:
@@ -1076,15 +1084,32 @@ def _load_previous_packet_manifest(spec: dict[str, Any]) -> dict[str, Any] | Non
     p = _resolve(spec["_base_dir"], prev)
     if not p.is_file():
         raise InputError(f"previous_packet manifest not found: {p}")
+    try:
+        claimed = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise InputError(f"previous_packet manifest is not valid JSON: {exc}") from exc
+    if not isinstance(claimed, dict) or not claimed.get("packet_id"):
+        raise InputError(f"previous_packet manifest is missing packet_id: {p}")
     # A bare, unverified manifest.json is just a JSON file a caller supplied
     # -- it could claim any packet_id/head it likes. Route it through
     # verify_packet() against the packet.md sitting next to it so the parent
     # bundle's own packet_sha256 and source hashes have to check out before
-    # its "reviewed head" is trusted for delta binding.
+    # its "reviewed head" is trusted for delta binding. Also require the
+    # manifest.json actually named by previous_packet to agree with the
+    # verified sibling bundle's packet_id -- verify_packet() only checks
+    # internal self-consistency of whatever manifest.json sits next to
+    # packet.md, so without this a previous_packet pointing at some other
+    # filename in that directory could silently resolve to an unrelated
+    # bundle.
     try:
         manifest = verify_packet(str(p.parent / "packet.md"))
     except ToolError as exc:
         raise InputError(f"previous_packet failed verification: {exc}") from exc
+    if manifest.get("packet_id") != claimed["packet_id"]:
+        raise InputError(
+            f"previous_packet ({p}) claims packet_id={claimed['packet_id']!r} but "
+            f"the verified bundle at {p.parent} is {manifest.get('packet_id')!r}"
+        )
     return manifest
 
 
