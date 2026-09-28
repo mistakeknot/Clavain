@@ -308,3 +308,153 @@ build() {
     [ "$status" -eq 0 ]
     grep -qF "the assistant module returned exit code 1" "$output"
 }
+
+# --- Step 3: bounded excerpts, complete diffs, and immutable reuse ---------
+
+diff_build() {
+    run python3 "$BUILDER" --input "$DIFF_INPUT_JSON" --output-dir "$OUTPUT_DIR"
+}
+
+@test "context excludes distant unchanged code" {
+    review_packet_fixture_diff_repo
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 0 ]
+    # Line 1 ("line 0") and line 39 ("line 38") sit far from the single
+    # changed line (line 20, 1-indexed) and must never appear in the bounded
+    # excerpt/diff evidence.
+    ! grep -qxF "line 0" "$output"
+    ! grep -qxF "line 38" "$output"
+}
+
+@test "all changed lines survive" {
+    review_packet_fixture_diff_repo
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 0 ]
+    grep -qF "line 19 CHANGED" "$output"
+    grep -qF "brand new file" "$output"
+    grep -qF "to be deleted" "$output"
+}
+
+@test "add delete rename and mode changes retain scope" {
+    review_packet_fixture_diff_repo
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 0 ]
+    grep -qF "added.txt" "$output"
+    grep -qF "to_delete.txt" "$output"
+    grep -qF "rename_old.sh" "$output"
+    grep -qF "rename_new.sh" "$output"
+    grep -qF "mode_file.sh" "$output"
+}
+
+@test "binary or submodule changes fail explicitly" {
+    review_packet_fixture_diff_repo_binary
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 2 ]
+    echo "$output" | grep -qF "blob.bin"
+
+    review_packet_fixture_diff_repo_submodule
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 2 ]
+    echo "$output" | grep -qF "vendored-sub"
+}
+
+@test "oversize evidence is never silently truncated" {
+    review_packet_fixture_diff_repo
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    tmp="$(mktemp)"
+    jq '.max_bytes = 10' "$DIFF_INPUT_JSON" > "$tmp"
+    mv "$tmp" "$DIFF_INPUT_JSON"
+    diff_build
+    [ "$status" -eq 2 ]
+    [ -z "$(find "$OUTPUT_DIR" -mindepth 1 2>/dev/null)" ]
+    echo "$output" | grep -qiF "byte"
+}
+
+@test "tampered packet or attachment fails verification" {
+    review_packet_fixture_diff_repo
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 0 ]
+    packet_path="$output"
+
+    run python3 "$BUILDER" --verify "$packet_path"
+    [ "$status" -eq 0 ]
+
+    # Tamper an attached source file (the beads_file) after publish.
+    printf '\ntampered\n' >> "$INPUT_DIR/beads.json"
+    run python3 "$BUILDER" --verify "$packet_path"
+    [ "$status" -ne 0 ]
+}
+
+@test "branch movement changes packet identity" {
+    review_packet_fixture_diff_repo
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 0 ]
+    first_path="$output"
+
+    git -C "$DIFF_REPO" commit -q --allow-empty -m "moved head"
+    NEW_HEAD_SHA="$(git -C "$DIFF_REPO" rev-parse HEAD)"
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$NEW_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 0 ]
+    second_path="$output"
+
+    [ "$first_path" != "$second_path" ]
+}
+
+@test "retry reuses the exact bundle" {
+    review_packet_fixture_diff_repo
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 0 ]
+    first_path="$output"
+    first_mtime="$(stat -c %Y "$first_path")"
+
+    diff_build
+    [ "$status" -eq 0 ]
+    [ "$output" = "$first_path" ]
+    [ "$(stat -c %Y "$first_path")" = "$first_mtime" ]
+
+    # A corrupted existing bundle at the same content-addressed path must
+    # fail rebuild, never be silently overwritten (that would erase evidence
+    # of tampering).
+    printf 'corrupted\n' >> "$first_path"
+    diff_build
+    [ "$status" -ne 0 ]
+}
+
+@test "delta binds its parent and cannot masquerade as full review" {
+    review_packet_fixture_diff_repo
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$DIFF_HEAD_SHA"
+    diff_build
+    [ "$status" -eq 0 ]
+    parent_packet="$output"
+    parent_manifest="$(dirname "$parent_packet")/manifest.json"
+
+    # A delta whose base does not equal the parent's reviewed head is rejected.
+    git -C "$DIFF_REPO" commit -q --allow-empty -m "further change"
+    FURTHER_HEAD="$(git -C "$DIFF_REPO" rev-parse HEAD)"
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_BASE_SHA" "$FURTHER_HEAD"
+    tmp="$(mktemp)"
+    jq --arg p "$parent_manifest" '. + {previous_packet: $p}' "$DIFF_INPUT_JSON" > "$tmp"
+    mv "$tmp" "$DIFF_INPUT_JSON"
+    diff_build
+    [ "$status" -eq 2 ]
+
+    # A delta whose base equals the parent's reviewed head is accepted and
+    # is labeled as a delta, not a full review.
+    review_packet_fixture_diff_input "$DIFF_REPO" "$DIFF_HEAD_SHA" "$FURTHER_HEAD"
+    tmp="$(mktemp)"
+    jq --arg p "$parent_manifest" '. + {previous_packet: $p}' "$DIFF_INPUT_JSON" > "$tmp"
+    mv "$tmp" "$DIFF_INPUT_JSON"
+    diff_build
+    [ "$status" -eq 0 ]
+    grep -qiF "delta" "$output"
+    grep -qF "$(basename "$(dirname "$parent_packet")")" "$output"
+}
