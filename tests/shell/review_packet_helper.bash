@@ -31,8 +31,12 @@ review_packet_fixture_setup() {
 Do the fixture thing.
 EOF
 
+    DISPATCH_ID="dispatch-fixture-1"
+    ATTEMPT_ID="attempt-fixture-1"
     cat > "$INPUT_DIR/producer_receipt.json" <<EOF
 {
+  "dispatch_id": "$DISPATCH_ID",
+  "attempt_id": "$ATTEMPT_ID",
   "state": "completed",
   "terminal": true,
   "result": {"exit_code": 0},
@@ -92,6 +96,39 @@ EOF
 
 review_packet_fixture_teardown() {
     rm -rf "$FIXTURE_DIR"
+}
+
+# Installs a fake `ic` binary on PATH that answers exactly the two subcommands
+# the builder is allowed to use: `--json route list --dispatch=<id>` (returns
+# one context_json-wrapped attempt record matching the fixture receipt) and
+# `--json route identity --model=<model>` (canonical identity lookup). Callers
+# may override IC_ROUTE_LIST_JSON / IC_IDENTITY_JSON before invoking the
+# builder to simulate a mismatch.
+review_packet_fixture_install_fake_ic() {
+    IC_BIN_DIR="$FIXTURE_DIR/bin"
+    mkdir -p "$IC_BIN_DIR"
+
+    IC_ROUTE_LIST_JSON="$FIXTURE_DIR/ic-route-list.json"
+    IC_IDENTITY_JSON="$FIXTURE_DIR/ic-identity.json"
+
+    local context
+    context="$(cat "$INPUT_DIR/producer_receipt.json")"
+    jq -n --argjson ctx "$context" '[{"context_json": ($ctx | tostring)}]' > "$IC_ROUTE_LIST_JSON"
+    printf '{"canonical_identity":"gpt-6-astra"}\n' > "$IC_IDENTITY_JSON"
+
+    cat > "$IC_BIN_DIR/ic" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$FIXTURE_DIR/ic.log"
+if [[ "\$*" == *"route list"* ]]; then
+    cat "$IC_ROUTE_LIST_JSON"
+elif [[ "\$*" == *"route identity"* ]]; then
+    cat "$IC_IDENTITY_JSON"
+else
+    exit 3
+fi
+SH
+    chmod +x "$IC_BIN_DIR/ic"
+    export PATH="$IC_BIN_DIR:$PATH"
 }
 
 # Rewrite $INPUT_JSON via jq, e.g.:
