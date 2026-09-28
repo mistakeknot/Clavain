@@ -118,16 +118,12 @@ reasoning:
   dual_review_reasons: [foundational-invariants, broad-consequences]
   strikes: 2
   profiles:
-    # mk-42j9.25: logical projects override only the coordinator seat.
-    project-aleph: {scope: "project:aleph", roles: {coordinator-seat: coordinator-seat-opus}}
-    project-clavain: {scope: "project:clavain", roles: {coordinator-seat: coordinator-seat-opus}}
-    project-autarch: {scope: "project:autarch", roles: {coordinator-seat: coordinator-seat-opus}}
-    project-after-them: {scope: "project:after-them", roles: {coordinator-seat: coordinator-seat-opus}}
-    project-bbops: {scope: "project:bbops", roles: {coordinator-seat: coordinator-seat-opus}}
-    project-shadow-work: {scope: "project:shadow-work", roles: {coordinator-seat: coordinator-seat-opus}}
-    project-quilan: {scope: "project:quilan", roles: {coordinator-seat: coordinator-seat-opus}}
-    project-sylvesteops: {scope: "project:sylvesteops", roles: {coordinator-seat: coordinator-seat-opus}}
-    project-nartopo: {scope: "project:nartopo", roles: {coordinator-seat: coordinator-seat-opus}}
+    # mk ruling 2026-09-27 (mk-h73i): all coordinator seats run Sonnet 5.
+    # Reverses the mk-42j9.25/mk-42j9.5 per-project Opus coordinator-seat
+    # table below — coordinator-seat now resolves to coordinator-seat-sonnet
+    # everywhere via the bare `coordinator-seat: coordinator-seat-sonnet`
+    # default fallback (see the `reasoning:` seats block), so no per-project
+    # override is needed. Review and execution seats are unchanged.
     ci-campaign-pilot:
       scope: mk-ag2s
       roles:
