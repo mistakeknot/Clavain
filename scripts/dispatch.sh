@@ -77,6 +77,10 @@ FLERE_TIMEOUT=120
 PROMPT_FILE=""
 TEMPLATE_FILE=""
 PLAN_FILE=""
+REVIEW_INPUT=""
+REVIEW_PACKET=""
+REVIEW_PACKET_JSON=""
+REVIEW_PACKET_MODE=false
 SEAT_SNAPSHOT_BEFORE=""
 IMAGES=()
 EXTRA_ARGS=()
@@ -263,6 +267,13 @@ Options:
   --plan <FILE>                 The contract the seat must read. It must exist before any
                                   model runs; for --to claude its directory is added as a
                                   readable root (--add-dir) so a plan outside -C is readable
+  --review-input <INPUT.json>   Opt in to a deterministic review packet built from INPUT.json
+                                  (build-review-packet.py) for --role plan-review, validation,
+                                  or cross-lab-review only; mutually exclusive with
+                                  --review-packet, --plan, --prompt-file, --template, a
+                                  positional prompt, and backend passthrough
+  --review-packet <PACKET.md>   Opt in with an already-built, verified review packet instead
+                                  of building one; same restrictions as --review-input
   --validator-relationship <R> Validator relationship recorded with the routing decision
   --phase <NAME>                Sprint phase context (stored for future phase-aware dispatch)
   --class <NAME>                Task class for --to auto executor routing
@@ -471,10 +482,10 @@ done
 ROLE_PASSTHROUGH=()
 for ((i = 0; i < ${#ORIGINAL_ARGS[@]}; i++)); do
   case "${ORIGINAL_ARGS[$i]}" in
-    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--fallback-reason|--producer-identity|--validator-relationship|--capacity-substitute)
+    --role|--to|--engine|-m|--model|--tier|--reasoning-effort|--service-tier|--minimum-codex-version|--resolved-profile-ref|--resolved-route-json|--resolved-profile-json|--fallback-reason|--producer-identity|--validator-relationship|--capacity-substitute|--review-input|--review-packet)
       i=$((i + 1))
       ;;
-    --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*|--capacity-substitute=*)
+    --role=*|--to=*|--engine=*|--model=*|--tier=*|--reasoning-effort=*|--service-tier=*|--minimum-codex-version=*|--resolved-profile-ref=*|--fallback-reason=*|--producer-identity=*|--validator-relationship=*|--capacity-substitute=*|--review-input=*|--review-packet=*)
       ;;
     --role-resolved)
       ;;
@@ -527,7 +538,7 @@ _run_candidate_with_policy() {
   while true; do
     : > "$failure_file"
     set +e
-    CLAVAIN_DISPATCH_FAILURE_FILE="$failure_file" CLAVAIN_RETRY_ID="$retry_id" CLAVAIN_BB_POOL_RETRY="$pool_retry" "$@"
+    CLAVAIN_DISPATCH_FAILURE_FILE="$failure_file" CLAVAIN_RETRY_ID="$retry_id" CLAVAIN_BB_POOL_RETRY="$pool_retry" "$@" < /dev/null
     rc=$?
     set -e
     failure_class="$(head -1 "$failure_file" 2>/dev/null || true)"
@@ -777,6 +788,117 @@ _dispatch_role_profile() {
 
   [[ "$candidate_count" -gt 0 ]] || echo "Error: role '$role' has no executable profiles" >&2
   return "$rc"
+}
+
+# Verify (never rebuild) $REVIEW_PACKET: re-derive its manifest, load it into
+# REVIEW_PACKET_JSON for the audit trail, and canonicalize its producer
+# identity into PRODUCER_IDENTITY -- requiring equality with any
+# caller-supplied --producer-identity. Both the outer opt-in call and every
+# resolved child (which only ever receives --review-packet, never
+# --review-input) run this so a fallback/pool-retry candidate cannot skip it.
+_dispatch_verify_review_packet() {
+  if [[ -z "$REVIEW_PACKET" ]]; then
+    echo "Error: no review packet path to verify" >&2
+    return 1
+  fi
+  if [[ ! -f "$REVIEW_PACKET" ]]; then
+    echo "Error: --review-packet not found: $REVIEW_PACKET" >&2
+    return 1
+  fi
+  command -v ic >/dev/null 2>&1 || { echo "Error: ic is required for review-packet dispatch" >&2; return 1; }
+  command -v jq >/dev/null 2>&1 || { echo "Error: jq is required for review-packet dispatch" >&2; return 1; }
+  local verified_path manifest_path
+  verified_path="$(python3 "$DISPATCH_SCRIPT_DIR/build-review-packet.py" --verify "$REVIEW_PACKET" 2>&1)" || {
+    echo "Error: review packet failed verification: $REVIEW_PACKET" >&2
+    echo "$verified_path" >&2
+    return 1
+  }
+  manifest_path="$(dirname "$verified_path")/manifest.json"
+  if [[ ! -f "$manifest_path" ]]; then
+    echo "Error: verified review packet has no manifest.json: $manifest_path" >&2
+    return 1
+  fi
+  REVIEW_PACKET_JSON="$(cat "$manifest_path")" || return 1
+  REVIEW_PACKET="$verified_path"
+
+  local declared_model canonical_json canonical caller_json caller_canonical
+  declared_model="$(jq -r '.producer_identity.model_identity // .producer_identity.model // empty' <<< "$REVIEW_PACKET_JSON")"
+  if [[ -z "$declared_model" ]]; then
+    echo "Error: review packet manifest is missing a producer identity" >&2
+    return 1
+  fi
+  canonical_json="$(ic --json route identity --model="$declared_model")" || {
+    echo "Error: ic route identity failed for the review packet's producer" >&2
+    return 1
+  }
+  canonical="$(jq -r '.canonical_identity // empty' <<< "$canonical_json")"
+  if [[ -z "$canonical" ]]; then
+    echo "Error: ic route identity could not canonicalize the review packet's producer" >&2
+    return 1
+  fi
+  if [[ -n "$PRODUCER_IDENTITY" ]]; then
+    caller_json="$(ic --json route identity --model="$PRODUCER_IDENTITY")" || {
+      echo "Error: ic route identity failed for --producer-identity" >&2
+      return 1
+    }
+    caller_canonical="$(jq -r '.canonical_identity // empty' <<< "$caller_json")"
+    if [[ "$caller_canonical" != "$canonical" ]]; then
+      echo "Error: --producer-identity '$PRODUCER_IDENTITY' does not match the review packet's producer ('$canonical')" >&2
+      return 1
+    fi
+  fi
+  PRODUCER_IDENTITY="$canonical"
+}
+
+# Opt-in boundary for review-packet dispatch (plan step 4). Activated only by
+# the caller passing --review-input or --review-packet -- never inferred from
+# a role name, model, legacy --tier, producer identity, or the presence of a
+# plan. Runs once for the outer (non-resolved) invocation, which may build a
+# fresh packet from --review-input, and again (verify-only) for the resolved
+# child, which only ever receives the canonical --review-packet path.
+# $1: the positional prompt candidate, if any (the caller's "$1" after option
+# parsing), passed explicitly since a function has its own positional params.
+_dispatch_prepare_review_packet() {
+  local positional_prompt="${1:-}"
+  case "$ROLE" in
+    plan-review|validation|cross-lab-review) ;;
+    *)
+      echo "Error: --review-input/--review-packet require --role plan-review, validation, or cross-lab-review (got '${ROLE:-<none>}')" >&2
+      return 1
+      ;;
+  esac
+  if [[ -n "$REVIEW_INPUT" && -n "$REVIEW_PACKET" ]]; then
+    echo "Error: --review-input and --review-packet are mutually exclusive" >&2
+    return 1
+  fi
+  if [[ -n "$PLAN_FILE" ]]; then
+    echo "Error: --plan cannot be combined with --review-input/--review-packet; a raw plan belongs in INPUT.json's plan_file" >&2
+    return 1
+  fi
+  if [[ -n "$PROMPT_FILE" || -n "$TEMPLATE_FILE" || -n "$INJECT_DOCS" || ${#IMAGES[@]} -gt 0 || ${#EXTRA_ARGS[@]} -gt 0 || -n "$positional_prompt" ]]; then
+    echo "Error: a verified review packet dispatch cannot combine a positional prompt, --prompt-file, --template, --inject-docs, images, or backend passthrough" >&2
+    return 1
+  fi
+  if [[ -n "$REVIEW_INPUT" ]]; then
+    if [[ ! -f "$REVIEW_INPUT" ]]; then
+      echo "Error: --review-input not found: $REVIEW_INPUT" >&2
+      return 1
+    fi
+    local out_dir built
+    out_dir="${WORKDIR:-.}/.clavain/review-packets"
+    mkdir -p "$out_dir" || return 1
+    built="$(python3 "$DISPATCH_SCRIPT_DIR/build-review-packet.py" --input "$REVIEW_INPUT" --output-dir "$out_dir" 2>&1)" || {
+      echo "Error: failed to build review packet from --review-input: $REVIEW_INPUT" >&2
+      echo "$built" >&2
+      return 1
+    }
+    REVIEW_PACKET="$built"
+  fi
+  _dispatch_verify_review_packet || return 1
+  # Reuse the existing --plan machinery unchanged: readability check, and
+  # --add-dir for --to claude so the seat can read the packet under dontAsk.
+  PLAN_FILE="$REVIEW_PACKET"
+  REVIEW_PACKET_MODE=true
 }
 
 # Walk a bare --tier's declared `fallbacks:` chain (config/routing.yaml
@@ -1063,6 +1185,24 @@ while [[ $# -gt 0 ]]; do
       PLAN_FILE="${1#--plan=}"
       shift
       ;;
+    --review-input)
+      require_arg "$1" "${2:-}"
+      REVIEW_INPUT="$2"
+      shift 2
+      ;;
+    --review-input=*)
+      REVIEW_INPUT="${1#--review-input=}"
+      shift
+      ;;
+    --review-packet)
+      require_arg "$1" "${2:-}"
+      REVIEW_PACKET="$2"
+      shift 2
+      ;;
+    --review-packet=*)
+      REVIEW_PACKET="${1#--review-packet=}"
+      shift
+      ;;
     --template)
       require_arg "$1" "${2:-}"
       TEMPLATE_FILE="$2"
@@ -1205,6 +1345,14 @@ if [[ "$ENGINE" == kimi && -n "$ROLE" && -n "$REASONING_EFFORT" ]]; then
   exit 1
 fi
 
+# Opt-in review-packet boundary (plan step 4). Activated only by an explicit
+# --review-input/--review-packet flag, for both the outer role-dispatch call
+# (which may build a fresh packet) and a resolved child (verify-only, from
+# the canonical --review-packet ROLE_PASSTHROUGH already injected below).
+if [[ -n "$REVIEW_INPUT" || -n "$REVIEW_PACKET" ]]; then
+  _dispatch_prepare_review_packet "${1:-}" || exit 1
+fi
+
 # A role is a complete Intercore-owned execution contract. The outer invocation
 # resolves it once, then invokes this script with the exact primary/fallback
 # profiles. Explicit engine/model/tier overrides would make the durable record
@@ -1213,6 +1361,9 @@ if [[ -n "$ROLE" && "$ROLE_RESOLVED" != true ]]; then
   if [[ "$ENGINE_SET" == true || -n "$MODEL" || -n "$TIER" || -n "$REASONING_EFFORT" || -n "$SERVICE_TIER" ]]; then
     echo "Error: --role cannot be combined with --to, --model, --tier, --reasoning-effort, or --service-tier" >&2
     exit 1
+  fi
+  if [[ "$REVIEW_PACKET_MODE" == true ]]; then
+    ROLE_PASSTHROUGH+=(--review-packet "$REVIEW_PACKET")
   fi
   set +e
   _dispatch_role_profile "$ROLE"
@@ -1275,6 +1426,13 @@ if [[ -n "$PLAN_FILE" && ! -r "$PLAN_FILE" ]]; then
   _dispatch_write_failure_class terminal_configuration
   echo "Error: --plan not found or unreadable: $PLAN_FILE" >&2
   exit 1
+fi
+
+# A verified review packet is the entire prompt. _dispatch_prepare_review_packet
+# already rejected any positional prompt/--prompt-file/--template alongside it,
+# so this cannot silently combine with or be overridden by those paths below.
+if [[ "$REVIEW_PACKET_MODE" == true ]]; then
+  PROMPT="$(cat "$REVIEW_PACKET")"
 fi
 
 if [[ -n "$PROMPT_FILE" ]]; then
@@ -1556,7 +1714,11 @@ _apply_context_gateway() {
   return "$gateway_status"
 }
 
-if [[ "$ENGINE" != "auto" || "$VIA" == "zaka" ]]; then
+# A verified review packet is exact evidence bytes the packet builder already
+# hashed and bound to a producer receipt; the context gateway's enrichment/
+# compaction would silently expand or alter that evidence, defeating the
+# packet's whole purpose. Never route packet-mode prompts through it.
+if [[ "$REVIEW_PACKET_MODE" != true && ( "$ENGINE" != "auto" || "$VIA" == "zaka" ) ]]; then
   _apply_context_gateway
 fi
 

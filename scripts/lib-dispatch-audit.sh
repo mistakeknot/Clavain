@@ -57,7 +57,19 @@ _role_audit_context() {
     jq -e 'type == "object"' <<< "$findings" >/dev/null 2>&1 || findings=null
   fi
   head_after="$(git -C "${WORKDIR:-.}" rev-parse HEAD 2>/dev/null || true)"
+  # A verified review packet binds this attempt to exact evidence bytes, not
+  # just a role/profile. Set only when dispatch.sh's own verification (never
+  # this function) already checked the packet's hashes; no packet content is
+  # copied here, only identifiers and hashes already in its manifest.
+  local review_packet=null
+  if [[ -n "${REVIEW_PACKET_JSON:-}" ]]; then
+    review_packet="$(jq -cn --argjson m "$REVIEW_PACKET_JSON" --arg path "${REVIEW_PACKET:-}" \
+      '{packet_id:$m.packet_id,sha256:$m.packet_sha256,path:$path,kind:$m.inputs.kind,
+        previous_packet_id:$m.previous_packet_id,producer_receipt_sha256:$m.producer_receipt_sha256}')" \
+      || review_packet=null
+  fi
   jq -cn --argjson route "${RESOLVED_ROUTE_JSON:-null}" --argjson profile "${RESOLVED_PROFILE_JSON:-null}" \
+    --argjson review_packet "$review_packet" \
     --arg dispatch_id "$DISPATCH_ID" --arg attempt_id "$ATTEMPT_ID" --arg state "$state" \
     --arg retry_id "${CLAVAIN_RETRY_ID:-}" --arg account "unknown" \
     --arg backend "$ENGINE" --arg model "$MODEL" --arg effort "$REASONING_EFFORT" \
@@ -97,7 +109,8 @@ _role_audit_context() {
       result:({exit_code:$exit_code,failure_class:$failure,output_path:$output,verdict:$verdict,findings:$findings}
         + (if $intercept | type == "object" then {intercept_evidence:$intercept} else {} end)
         + (if $intercept_error != "" then {intercept_evidence_error:$intercept_error} else {} end))}
-      + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)'
+      + (if $enrollment != "" then {task_envelope:{enrollment_id:$enrollment,manifest_sha256:$manifest,cohort_id:$cohort}} else {} end)
+      + (if $review_packet != null then {review_packet:$review_packet} else {} end)'
 }
 
 _record_role_routing_decision() {
