@@ -32,14 +32,18 @@ python3 "${CLAUDE_PLUGIN_ROOT:-.}/scripts/assemble-briefing.py" \
   ${BD_CWD:+--bd-cwd "$BD_CWD"} \
   ${ROLE:+--role "$ROLE"} \
   ${POLICY:+--policy "$POLICY"} \
+  ${CLAVAIN_DECISION_CONTEXT:+--decision-context "$CLAVAIN_DECISION_CONTEXT"} \
+  --target-host claude \
   --out /tmp/brief-<bead-id>.md
 ```
 
+`--decision-context` is handed to `ic route dispatch --context-file`, so §2 resolves the same route the dispatcher does. `--target-host` selects whose instruction chain supplies the §3a gate headings (`claude`: AGENTS.md + CLAUDE.md up the tree and `~/.claude/CLAUDE.md`; `codex`: AGENTS.md up the tree and `~/.codex/AGENTS.md`; default `any`: both). `--tasks-project` widens the §5 card search to another bb project; cards reachable only through an attached thread are not enumerated, and §5 says so.
+
 Without `--policy`, `--role` resolution is not inert — the script tries `$CLAVAIN_ROUTING_POLICY` and `<repo>/config/routing.yaml` before giving up and reporting `UNKNOWN` in §2 Authority.
 
-Exit code `0` means the §4 acceptance gate passed. Exit code `2` means it failed — the script prints the specific problems (`NEXT: UNKNOWN`, `mandatory coverage: partial`, `UNKNOWN in open decisions`) to stderr. **A failing gate is not a bug to paper over** — it means the bead genuinely lacks a next-action directive, a lane is unreachable, or an open decision has no recorded resolution. Surface the gate result to the user as-is; do not invent a NEXT: line or mark a lane reachable to force a pass.
+Exit code `0` means the §4 acceptance gate passed. Exit code `2` means it failed — the script prints the specific problems (`NEXT: UNKNOWN`, `mandatory coverage: partial`, `UNKNOWN in open decisions`, `N UNKNOWN item(s)`) to stderr. **A failing gate is not a bug to paper over** — it means the bead genuinely lacks a next-action directive, a lane is unreachable, or an open decision has no recorded resolution. Surface the gate result to the user as-is; do not invent a NEXT: line or mark a lane reachable to force a pass.
 
-Read the rendered file at `/tmp/brief-<bead-id>.md`. It already contains sections 1 (Objective), 2 (Authority — role/routing resolution, standing gate headings, DECIDED rulings scoped to a decider), 3a (Invariants, mandatory and uncapped, with a `coverage: complete|partial` line), 4 (Sources and versions — git/bead/file/query-set fingerprints), 5 (Open decisions — OPEN items, open children/deps, pending mk/vizier cards, proposed CanonGraph decisions), 6 (Verification evidence — EVIDENCE/DEAD-END notes, gate results, a freshness reminder), 7 (Expiry — when to regenerate). A dropped, unsourced item is logged to stderr with `--json-debug`, not rendered as its own section.
+Read the rendered file at `/tmp/brief-<bead-id>.md`. It already contains sections 1 (Objective), 2 (Authority — role/routing resolution, standing gate headings, DECIDED rulings scoped to a decider), 3a (Invariants, mandatory and uncapped, with a `coverage: complete|partial` line), 4 (Sources and versions — git/bead/file/query-set fingerprints), 5 (Open decisions — OPEN items, open children/deps, pending mk/vizier cards, proposed CanonGraph decisions with `decider: UNKNOWN`, since CanonGraph records no decider), 6 (Verification evidence — EVIDENCE/DEAD-END notes, gate results, run artifacts, and the unconditional freshness rule), 7 (Expiry — when to regenerate). A dropped, unsourced item is logged to stderr with `--json-debug`, not rendered as its own section.
 
 ### 3. Populate §3b — ranked context (the one model-in-loop step)
 

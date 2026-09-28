@@ -1627,6 +1627,13 @@ if [[ -n "$BRIEF_BEAD" ]]; then
     if [[ -n "$BRIEF_BD_CWD" ]]; then
       BRIEF_ARGS+=(--bd-cwd "$BRIEF_BD_CWD")
     fi
+    # §2 Authority must resolve the same role, policy and decision context
+    # this dispatch resolves (finding #11), not whatever the assembler's
+    # environment happens to hold.
+    [[ -z "$ROLE" ]] || BRIEF_ARGS+=(--role "$ROLE")
+    [[ -z "${CLAVAIN_ROUTING_POLICY:-}" ]] || BRIEF_ARGS+=(--policy "$CLAVAIN_ROUTING_POLICY")
+    [[ -z "${CLAVAIN_DECISION_CONTEXT:-}" ]] || BRIEF_ARGS+=(--decision-context "$CLAVAIN_DECISION_CONTEXT")
+    [[ -z "$PRODUCER_IDENTITY" ]] || BRIEF_ARGS+=(--producer-identity "$PRODUCER_IDENTITY")
     BRIEF_TEXT=""
     BRIEF_GATE_OK=true
     if ! BRIEF_TEXT="$(python3 "$ASSEMBLER" "${BRIEF_ARGS[@]}" 2>/tmp/brief-${BRIEF_BEAD//\//_}.stderr)"; then
