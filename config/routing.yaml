@@ -120,10 +120,12 @@ reasoning:
   profiles:
     # mk ruling 2026-09-27 (mk-h73i): all coordinator seats run Sonnet 5.
     # Reverses the mk-42j9.25/mk-42j9.5 per-project Opus coordinator-seat
-    # table below — coordinator-seat now resolves to coordinator-seat-sonnet
-    # everywhere via the bare `coordinator-seat: coordinator-seat-sonnet`
-    # default fallback (see the `reasoning:` seats block), so no per-project
-    # override is needed. Review and execution seats are unchanged.
+    # table (its 9 project-*: {coordinator-seat: coordinator-seat-opus}
+    # profiles were removed by bf23c82) — coordinator-seat now resolves to
+    # coordinator-seat-sonnet everywhere via the bare
+    # `coordinator-seat: coordinator-seat-sonnet` default fallback (see the
+    # `reasoning:` seats block), so no per-project override is needed. Review
+    # and execution seats are unchanged.
     ci-campaign-pilot:
       scope: mk-ag2s
       roles:
@@ -425,6 +427,11 @@ dispatch:
       service_tier: standard
       fallbacks: [main-sonnet]
     coordinator-seat-opus:
+      # mk-h73i: no role or profile points at this tier any more — every
+      # project resolves coordinator-seat to coordinator-seat-sonnet. Kept
+      # defined (not deleted) because mk-h73i is a resolution ruling, not a
+      # deletion; it remains directly selectable via `--tier=coordinator-seat-opus`
+      # for an operator who explicitly wants it.
       role: coordinator-seat
       backend: claude
       model: claude-opus-5-5

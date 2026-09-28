@@ -59,8 +59,10 @@ jq -e '[.dispatch.tiers | to_entries[] | select(.value.role == "coordination") |
 jq -e '.dispatch.tiers | has("coordination-opus") | not' <<< "$CFG" >/dev/null \
   || fail "coordination-opus is replaced by coordinator-seat-opus"
 # coordinator-seat-opus itself stays defined (mk-h73i is about resolution,
-# not about deleting the tier) but is unreachable: nothing in dispatch.roles
-# or reasoning.profiles points to it any more.
+# not about deleting the tier): nothing in dispatch.roles or
+# reasoning.profiles points to it any more, so no role/project resolution
+# ever lands on it, but it stays explicitly selectable via
+# `--tier=coordinator-seat-opus` for an operator who wants it directly.
 jq -e '.dispatch.tiers | has("coordinator-seat-opus")' <<< "$CFG" >/dev/null \
   || fail "coordinator-seat-opus tier must still exist (mk-h73i left the tier definition in place)"
 jq -e '[.reasoning.profiles | to_entries[] | .value.roles | to_entries[] | select(.value == "coordinator-seat-opus")] | length == 0' <<< "$CFG" >/dev/null \
