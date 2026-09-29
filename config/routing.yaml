@@ -198,9 +198,10 @@ dispatch:
     escalation: planning-astra
     main-integrator: main-astra
     scout: scout-sol
-    # mk ruling 2026-09-28 (mk-hpwq): execution roles default to Sonnet 5.5,
-    # high for deep-execution and medium for routine (mechanical) edits. Sol
-    # stays the cross-lab executor and the capacity fallback behind each seat.
+    # mk ruling 2026-09-28 (mk-hpwq): execution roles default to Sonnet 5.5.
+    # mk ruling 2026-09-29 (mk-hpwq.1, mk-ezna): both run at high, routine
+    # included (was medium). Sol stays the cross-lab executor and the capacity
+    # fallback behind each seat.
     # Elevated contexts still reach Astra/Opus: Sonnet is not a frontier model,
     # so the frontier_required filter removes both Sonnet execution seats.
     routine-execution: routine-exec-sonnet
@@ -494,10 +495,10 @@ dispatch:
       role: routine-execution
       backend: claude
       model: claude-sonnet-5-5
-      reasoning_effort: medium
+      reasoning_effort: high
       service_tier: standard
       fallbacks: [routine-sol]
-      description: Default routine (mechanical) execution seat, mk ruling 2026-09-28 (mk-hpwq)
+      description: Default routine (mechanical) execution seat, mk rulings 2026-09-28 (mk-hpwq) and 2026-09-29 (mk-hpwq.1, high not medium)
     deep-sonnet:
       role: deep-execution
       backend: claude
