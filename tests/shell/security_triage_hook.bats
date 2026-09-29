@@ -40,13 +40,54 @@ teardown() {
   [ ! -e "$MARK" ]
 }
 
+# Shadow detaches the selector, so its effects land shortly after the hook returns.
+_await_mark() {
+  for _ in $(seq 1 100); do
+    [ -s "$MARK" ] && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
 @test "shadow and active hand off to the pre_tool claude-code hook" {
   for value in shadow SHADOW active; do
     rm -f "$MARK"
     run env CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE="$value" "$HOOK" <<< "{}"
     [ "$status" -eq 0 ]
+    _await_mark
     [ "$(cat "$MARK")" = "hook --point pre_tool --host claude-code" ]
   done
+}
+
+@test "shadow returns at once without waiting for a slow selector and forwards stdin" {
+  slow="$TEST_TMP/slow.py"
+  cat > "$slow" <<PY
+#!/usr/bin/env python3
+import sys, time
+data = sys.stdin.buffer.read()
+time.sleep(2)
+open("$MARK", "wb").write(data)
+PY
+  chmod +x "$slow"
+  start=$(date +%s.%N)
+  run env SELECTOR_HOOK_TIMEOUT=10 CLAVAIN_SELECTOR_SCRIPT="$slow" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< '{"k":"v"}'
+  end=$(date +%s.%N)
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  python3 -c "import sys; sys.exit(0 if float('$end') - float('$start') < 1.0 else 1)"
+  for _ in $(seq 1 100); do [ -s "$MARK" ] && break; sleep 0.1; done
+  [ "$(cat "$MARK")" = '{"k":"v"}' ]
+}
+
+@test "shadow leaves no event file behind" {
+  run env TMPDIR="$TEST_TMP" CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+  [ "$status" -eq 0 ]
+  _await_mark
+  for _ in $(seq 1 30); do
+    ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1 || break
+    sleep 0.1
+  done
+  ! ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1
 }
 
 @test "a failing selector never blocks and prints nothing" {

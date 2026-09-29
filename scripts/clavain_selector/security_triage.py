@@ -70,6 +70,26 @@ _SIGNALS = (
 )
 
 
+# Credential-shaped assignments. `egress.scan_text` catches high-entropy tokens
+# but not short values such as `API_KEY = "abc123"`, so the host redacts the
+# right-hand side (to end of line) of any secret-named assignment before the
+# excerpt can leave the machine, and drops the excerpt entirely when it holds
+# key material. Signals are computed from the original text and are names only.
+_ASSIGNMENT = re.compile(
+    r"(?i)((?:secret|token|passw\w*|pwd|api[_-]?key|private[_-]?key|credential\w*|bearer|authorization|auth\w*)"
+    r"[\w.\-\]\[\"']*\s*[:=]\s*)(.+)$",
+    re.M,
+)
+_KEY_MATERIAL = re.compile(r"-----BEGIN [A-Z ]*(?:PRIVATE KEY|CERTIFICATE|PGP)[A-Z ]*-----|\bssh-(?:rsa|ed25519)\b", re.I)
+REDACTED = "<redacted>"
+
+
+def _redact(text: str) -> str:
+    if _KEY_MATERIAL.search(text):
+        return "<excerpt omitted: contains key material>"
+    return _ASSIGNMENT.sub(lambda m: m.group(1) + REDACTED, text)
+
+
 def vocabulary(project_root: Path | None = None) -> frozenset[str]:
     return VOCABULARY
 
@@ -92,8 +112,16 @@ def _edit_text(tool_name: str, tool_input: Mapping[str, Any]) -> str:
     return "\n".join(p for p in parts if isinstance(p, str))
 
 
-def _relative_path(raw: str, project_root: Path | None) -> str:
+def _absolute_path(raw: str, project_root: Path | None) -> str:
+    """A relative edit path is relative to the project, not the hook's cwd."""
     path = Path(raw)
+    if not path.is_absolute() and project_root is not None:
+        path = Path(project_root) / path
+    return str(path)
+
+
+def _relative_path(absolute: str, project_root: Path | None) -> str:
+    path = Path(absolute)
     if project_root is not None:
         try:
             return str(path.resolve().relative_to(Path(project_root).resolve()))
@@ -159,12 +187,13 @@ def build(event: HostEvent | None, project_root: Path | None):
     if not isinstance(raw_path, str) or not raw_path:
         raise NotPrepared("edit has no file path")
 
+    raw_path = _absolute_path(raw_path, project_root)
     text = _edit_text(event.tool_name, tool_input)
     rel = _relative_path(raw_path, project_root)[:_PATH_CHARS]
     signals = _signals(text, rel)
     digest = hashlib.sha256(f"{event.tool_name}\0{raw_path}\0{text}".encode("utf-8")).hexdigest()
 
-    excerpt = text[:_EXCERPT_CHARS]
+    excerpt = _redact(text[:_EXCERPT_CHARS])
     context = "\n".join(
         (
             f"tool: {event.tool_name}",

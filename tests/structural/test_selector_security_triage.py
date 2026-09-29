@@ -204,6 +204,76 @@ def test_secret_looking_edit_text_is_refused_at_egress(tmp_path, monkeypatch):
     assert isinstance(egress.admit(_request_for(prepared), high_entropy=True), egress.Refusal)
 
 
+SHORT_SECRETS = [
+    'API_KEY = "abc123"',
+    "password: hunter2",
+    "db_password='p4ss'",
+    'const authToken = "abc"',
+    "AWS_SECRET_ACCESS_KEY=short",
+    'headers["Authorization"] = "Bearer abc"',
+    "credentials = {'user': 'a'}",
+]
+
+
+@pytest.mark.parametrize("line", SHORT_SECRETS)
+def test_credential_assignments_are_redacted_before_they_leave(tmp_path, monkeypatch, line):
+    """Egress misses short values; the preparer must redact the right-hand side."""
+    monkeypatch.setattr(egress, "project_owner", lambda root: "mistakeknot")
+    value = re.split(r"[:=]\s*", line, maxsplit=1)[1].strip("\"' {}")
+    ev = _event("Write", {"file_path": str(tmp_path / "cfg.py"), "content": f"x = 1\n{line}\ny = 2"}, tmp_path)
+    prepared = preparers.prepare(_shipped_registry(), "security_triage", Point.PRE_TOOL, ev, tmp_path)
+    request = _request_for(prepared)
+    assert value and value not in request.context
+    assert security_triage.REDACTED in request.context
+    assert "x = 1" in request.context and "y = 2" in request.context
+    # Egress may still refuse (a stricter outcome, e.g. the AWS key-name rule);
+    # what must never happen is the value reaching the wire.
+    for cand in request.candidates:
+        assert value not in cand.description
+
+
+def test_key_material_drops_the_whole_excerpt(tmp_path):
+    dashes = "-" * 5  # built at runtime so the fixture is not itself a committed PEM header
+    kind = " ".join(["RSA", "PRIV" + "ATE", "KEY"])
+    body = f"{dashes}BEGIN {kind}{dashes}\nMIIabc\n{dashes}END {kind}{dashes}"
+    built = security_triage.build(_event("Write", {"file_path": str(tmp_path / "k.py"), "content": body}, tmp_path), tmp_path)
+    assert "MIIabc" not in built.context and "BEGIN" not in built.context
+    assert "excerpt omitted" in built.context
+
+
+def test_redaction_keeps_host_signals_from_the_original_text(tmp_path):
+    built = security_triage.build(
+        _event("Write", {"file_path": str(tmp_path / "a.py"), "content": 'API_KEY = "abc123"'}, tmp_path), tmp_path
+    )
+    assert "secrets" in built.context
+
+
+def test_relative_edit_paths_resolve_against_the_project_not_the_cwd(tmp_path, monkeypatch):
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.chdir(other)
+    built = security_triage.build(_event("Edit", {"file_path": "src/auth.py", "new_string": "x"}, project), project)
+    assert "file: src/auth.py" in built.context
+    assert built.sources == (str(project / "src" / "auth.py"),)
+    same = security_triage.build(
+        _event("Edit", {"file_path": str(project / "src" / "auth.py"), "new_string": "x"}, project), project
+    )
+    assert same.task_revision == built.task_revision
+
+
+def test_relative_env_path_is_still_refused_when_cwd_is_elsewhere(tmp_path, monkeypatch):
+    project = tmp_path / "proj"
+    project.mkdir()
+    monkeypatch.chdir(tmp_path)
+    ev = _event("Write", {"file_path": ".env", "content": "K=v"}, project)
+    prepared = preparers.prepare(_shipped_registry(), "security_triage", Point.PRE_TOOL, ev, project)
+    refusal = egress.admit(_request_for(prepared))
+    assert isinstance(refusal, egress.Refusal)
+    assert "src.denylisted_path" in refusal.rule_ids
+
+
 def _request_for(prepared):
     from clavain_selector.contract import SelectionRequest, SessionRef
 
@@ -469,3 +539,12 @@ def test_hooks_json_wires_exactly_one_flag_gated_triage_hook():
     assert 0 < hook["timeout"] <= 5
     script = REPO / "hooks" / "security-triage-hook.sh"
     assert script.stat().st_mode & stat.S_IXUSR
+
+
+def test_shadow_measurement_runs_off_the_edit_critical_path():
+    """Shadow detaches the selection; only the (never-printing) hand-off is inline."""
+    text = (REPO / "hooks" / "security-triage-hook.sh").read_text()
+    shadow = text.split('if [[ "$mode" == "active" ]]', 1)[1].split("fi\n", 1)[1]
+    assert "&\n" in shadow and "> /dev/null 2>&1" in shadow
+    assert "selector-hook.sh" in shadow
+    assert _entry()["deadline_ms"]["pre_tool"] <= 1500
