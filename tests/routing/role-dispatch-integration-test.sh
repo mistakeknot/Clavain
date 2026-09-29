@@ -55,10 +55,10 @@ latest="$(route_records --limit=20 | jq 'sort_by(.id) | reverse | .[:2]')"
 jq -e '[.[] | .context_json | fromjson | select(.state == "failed")] | length == 1 and all(.[]; .result.verdict == "" and .result.failure_class == "terminal_configuration")' <<< "$latest" >/dev/null
 sonnet="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role validation --producer-identity 'anthropic/claude-sonnet-5-5[1m]' -C "$TMP_ROOT/work" fixture 2>&1)"
 # Claude-produced code goes to the other lab first (cross_lab_first): Sol.
-[[ "$sonnet" == *'gpt-6-sol'* && "$sonnet" != *'claude-sonnet-5-5'* ]]
+[[ "$sonnet" == *'gpt-6.1-sol'* && "$sonnet" != *'claude-sonnet-5-5'* ]]
 # A decorated Opus identity must still exclude Opus as its own validator.
 opus="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role validation --producer-identity 'anthropic/claude-opus-5-5[1m]' -C "$TMP_ROOT/work" fixture 2>&1)"
-[[ "$opus" == *'gpt-6-sol'* && "$opus" != *'claude-opus-5-5'* ]]
+[[ "$opus" == *'gpt-6.1-sol'* && "$opus" != *'claude-opus-5-5'* ]]
 astra="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --via zaka --role validation --producer-identity codex/gpt-6-astra -C "$TMP_ROOT/work" fixture 2>&1)"
 [[ "$astra" == *'--agent claude-code'* && "$astra" == *'--model claude-opus-5-5'* ]]
 echo 'PASS: real Intercore identity, dispatch and immutable SQLite audit integration'

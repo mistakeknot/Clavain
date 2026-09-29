@@ -96,7 +96,7 @@ def test_execution_reorders_and_receipt_preserves_ic_profile(dispatch):
     assert p.returncode == 0, p.stderr
     assert calls == 'status\n'
     r = rows[-1]
-    assert r['execution']['model'] == 'gpt-6-sol'
+    assert r['execution']['model'] == 'gpt-6.1-sol'
     assert r['profile_ref'] == r['resolved_route']['profile_ref'] == 'routine-exec-sonnet'
     assert r['resolved_profile']['profile_ref'] == 'routine-sol'
     assert r['headroom_reorder']['to'][0] == 'routine-sol'
@@ -107,8 +107,8 @@ def test_forecast_exclusion_has_evidence_and_separate_label(dispatch):
     assert p.returncode == 0, p.stderr
     r = rows[-1]
     assert r['execution']['model'] == 'claude-sonnet-5-5'
-    assert r['headroom_exclusion'] == ['gpt-6-sol']
-    assert r['resolved_route']['headroom_exclusion'] == ['gpt-6-sol']
+    assert r['headroom_exclusion'] == ['gpt-6.1-sol']
+    assert r['resolved_route']['headroom_exclusion'] == ['gpt-6.1-sol']
     assert not any(e['reason'] == 'model_unavailable' for e in r['resolved_route'].get('excluded', []))
     ctx = r['resolved_route']['decision_context']
     assert 'forecast from bb pool headroom' in ctx['rationale']
@@ -139,7 +139,7 @@ def test_unknown_pool_does_not_change_execution(dispatch):
 
 def test_forecast_does_not_resurrect_previously_unavailable_models(dispatch):
     p, rows, _, _ = dispatch([account('codex', .99), account('claude', .2)],
-                            available=['gpt-6-sol'])
+                            available=['gpt-6.1-sol'])
     assert p.returncode != 0
     assert not rows  # No eligible seat remains; never invoke Claude.
 
@@ -153,4 +153,4 @@ def test_probe_wrapper_failure_leaves_route_unchanged(dispatch):
 def test_evidence_creation_is_portable(dispatch):
     p, rows, _, _ = dispatch([account('codex', .99), account('claude', .2)], bsd_temp=True)
     assert p.returncode == 0, p.stderr
-    assert rows[-1]['headroom_exclusion'] == ['gpt-6-sol']
+    assert rows[-1]['headroom_exclusion'] == ['gpt-6.1-sol']

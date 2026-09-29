@@ -417,7 +417,7 @@ A family counts as exhausted by bb's own rule (the pool `switchThreshold`,
 default 0.98) only when every up Claude account has an active family window.
 With Claude exhausted, spawn roles fall back to gpt-6-astra medium. route-spawn
 refuses gpt-5.6-sol for every role, by any alias or case (mk 2026-09-27);
-GPT-6 Sol is allowed. With no eligible seat, exit 3: do not spawn.
+GPT-6.1 Sol is allowed (mk-v4ao; legacy GPT-6 Sol still is). With no eligible seat, exit 3: do not spawn.
 The probe timeout is `ROUTE_SPAWN_POOL_TIMEOUT` seconds (default 20); the resolver
 timeout is `ROUTE_SPAWN_IC_TIMEOUT` seconds (default 30, exit 3 on timeout).
 Both must be finite and positive (otherwise exit 2); timeouts kill the whole

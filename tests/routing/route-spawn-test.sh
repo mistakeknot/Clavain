@@ -432,7 +432,7 @@ done
 canned loop-a loop-a
 expect 3 "" "an alias cycle fails closed"
 grep -qi "cycle" "$TMP_ROOT/stderr" || fail "an alias cycle must be reported as a cycle"
-for pair in "gpt-6-sol gpt-6-sol" "gpt-6-sol gpt-6-sol-high" "fine-a fine-a"; do
+for pair in "gpt-6-sol gpt-6-sol" "gpt-6-sol gpt-6-sol-high" "gpt-6.1-sol gpt-6.1-sol" "fine-a fine-a"; do
   read -r model identity <<<"$pair"
   canned "$model" "$identity"
   expect 0 "codex $identity medium" "GPT-6 Sol ($pair) is allowed"

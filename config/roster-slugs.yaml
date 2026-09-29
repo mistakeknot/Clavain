@@ -85,6 +85,19 @@ rows:
     effort: high
     reasoning_mode: reasoning
     slug: gpt-6-sol-high
+  # mk-v4ao (mk ruling 2026-09-29): every Sol seat moves to GPT-6.1 Sol at its
+  # current effort, so the same two efforts are admitted. UNVERIFIED slugs: no
+  # "GPT-6.1 Sol" row is confirmed in the pinned snapshot yet. Like the Sonnet 5.5
+  # rows, a missing slug is a fatal registry gap: generate refuses the whole run
+  # until a snapshot carrying GPT-6.1 Sol is pinned.
+  - model: gpt-6.1-sol
+    effort: medium
+    reasoning_mode: reasoning
+    slug: gpt-6.1-sol-medium
+  - model: gpt-6.1-sol
+    effort: high
+    reasoning_mode: reasoning
+    slug: gpt-6.1-sol-high
   # mk-42j9.25: main-session-astra, the spawn roles' Claude-exhaustion seat
   # (never gpt-5.6-sol, mk 2026-09-27), runs Astra at medium. Snapshot row
   # "GPT-6 Astra (medium)"; mechanical, exact snapshot match on the mk-3b8z

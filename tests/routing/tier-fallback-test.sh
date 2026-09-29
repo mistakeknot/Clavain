@@ -91,30 +91,30 @@ run_tier() {
 # fast: routine-execution's tier alias. Codex-exhausted must reach the same
 # Sonnet capacity seat routine-sol already falls back to (routine-sonnet).
 run_tier fast
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "fast: expected one gpt-6-sol Codex attempt before fallback, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "fast: expected one gpt-6.1-sol Codex attempt before fallback, got: $(cat "$FAKE_CODEX_LOG")"
 grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5-5" || fail "fast: quota_exhausted did not reach claude-sonnet-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 # fast-clavain: scout's tier alias. Falls back to scout-sonnet.
 run_tier fast-clavain
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "fast-clavain: expected one gpt-6-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "fast-clavain: expected one gpt-6.1-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
 grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5-5" || fail "fast-clavain: quota_exhausted did not reach claude-sonnet-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 # deep: deep-execution's tier alias. Falls back to deep-opus (Opus, matching
 # deep-astra -> deep-sol -> deep-opus's own terminus).
 run_tier deep
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "deep: expected one gpt-6-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "deep: expected one gpt-6.1-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
 grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-opus-5-5" || fail "deep: quota_exhausted did not reach claude-opus-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 # deep-clavain: same terminus.
 run_tier deep-clavain
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "deep-clavain: expected one gpt-6-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "deep-clavain: expected one gpt-6.1-sol Codex attempt, got: $(cat "$FAKE_CODEX_LOG")"
 grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-opus-5-5" || fail "deep-clavain: quota_exhausted did not reach claude-opus-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 # A healthy Codex lane keeps using the primary tier model unchanged (Claude
 # fallbacks go last, so nothing changes while Codex is reachable).
 : > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"
 bash "$ROOT/scripts/dispatch.sh" --tier fast -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer2.md" "hi" >/dev/null 2>&1
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "healthy fast tier did not use gpt-6-sol"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "healthy fast tier did not use gpt-6.1-sol"
 [[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "healthy Codex lane unexpectedly reached Claude"
 
 # tier-fallback-chain.py: unknown tier fails loudly rather than resolving nothing.
@@ -133,7 +133,7 @@ run_tier_rate429() {
     -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer-429.md" "hi" >/dev/null 2>&1
 }
 run_tier_rate429 fast
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "fast/429: expected one gpt-6-sol Codex attempt before fallback, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "fast/429: expected one gpt-6.1-sol Codex attempt before fallback, got: $(cat "$FAKE_CODEX_LOG")"
 grep -A1 -x -- "--model" "$FAKE_CLAUDE_LOG" | grep -q -x "claude-sonnet-5-5" || fail "fast/429: rate_limited did not reach claude-sonnet-5-5, got: $(cat "$FAKE_CLAUDE_LOG")"
 
 echo "PASS: bare --tier dispatch reaches its declared Claude fallback on quota_exhausted"
@@ -150,7 +150,7 @@ echo "PASS: bare --tier dispatch reaches its declared Claude fallback on quota_e
 : > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"
 CLAVAIN_REQUIRE_USAGE=1 FAKE_CODEX_MODE=quota_all CLAVAIN_REVIEW_EVENTS="$TMP_ROOT/events.jsonl" \
   bash "$ROOT/scripts/dispatch.sh" --tier validation-kimi -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer3.md" "hi" >/dev/null 2>&1 || true
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "N1: expected exactly one codex attempt (validation-sol), got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "N1: expected exactly one codex attempt (validation-sol), got: $(cat "$FAKE_CODEX_LOG")"
 [[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "N1: CLAVAIN_REQUIRE_USAGE must stop after the first started candidate's failure, but Claude was reached: $(cat "$FAKE_CLAUDE_LOG")"
 
 # B1: a tier-resolved Claude candidate must get the same write authority an
@@ -207,7 +207,7 @@ python3 - "$ROOT/config/routing.yaml" "$DECOY_POLICY" <<'PY'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
 text = open(src, encoding="utf-8").read()
-text = text.replace("    fast:\n      role: routine-execution\n      backend: codex\n      model: gpt-6-sol\n",
+text = text.replace("    fast:\n      role: routine-execution\n      backend: codex\n      model: gpt-6.1-sol\n",
                      "    fast:\n      role: routine-execution\n      backend: codex\n      model: bihl-decoy-model\n", 1)
 open(dst, "w", encoding="utf-8").write(text)
 PY
@@ -241,6 +241,6 @@ chmod +x "$TMP_ROOT/bin-noyaml/python3"
 PATH="$TMP_ROOT/bin-noyaml:$PATH" bash "$ROOT/scripts/dispatch.sh" --tier fast -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer5.md" "hi" >/dev/null 2>&1
 rc=$?
 [[ "$rc" == 0 ]] || fail "N3: pyyaml-missing degradation expected dispatch to still succeed via the legacy resolver, got exit $rc"
-[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-sol" ]] || fail "N3: pyyaml-missing degradation expected the legacy resolver to still reach gpt-6-sol, got: $(cat "$FAKE_CODEX_LOG")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6.1-sol" ]] || fail "N3: pyyaml-missing degradation expected the legacy resolver to still reach gpt-6.1-sol, got: $(cat "$FAKE_CODEX_LOG")"
 
 echo "PASS: tier resolution restores CLAVAIN_ROUTING_CONFIG discovery and degrades gracefully without pyyaml"
