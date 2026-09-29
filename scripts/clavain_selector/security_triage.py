@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-import unicodedata
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -53,7 +52,6 @@ EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 # even a mis-edited authorize policy cannot emit them.
 NEVER_EMITTED = "measurement_only"
 
-_EXCERPT_CHARS = 4_000
 _PATH_CHARS = 240
 
 # Deterministic host-side facts handed to Jev as context. Names only; the
@@ -71,35 +69,13 @@ _SIGNALS = (
 )
 
 
-# Fail closed on anything credential-shaped. `egress.scan_text` catches
-# high-entropy tokens but not short or multi-line values (`API_KEY = "abc123"`,
-# `password = (\n "x"\n)`, heredocs, lookalike characters), and a per-line
-# redaction cannot promise to catch them all. So when the edit text names a
-# credential at all, or carries key material or URL userinfo, the excerpt is
-# withheld entirely. Jev still gets the file, size and the host_signals names
-# (computed from the original text), which is what the triage needs.
-_CREDENTIAL_NAME = re.compile(
-    r"secret|token|passw|passphrase|pwd|api[_\-\s]?key|private[_\-\s]?key|credential|bearer|authorization|auth[_\-]?key",
-    re.I,
-)
-_KEY_MATERIAL = re.compile(
-    r"-----BEGIN [A-Z ]*-----|\bssh-(?:rsa|ed25519|dss)\b|\becdsa-sha2-|\bAKIA[0-9A-Z]{8,}|<<-?\s*['\"]?\w+",
-    re.I,
-)
-_URL_USERINFO = re.compile(r"://[^/\s:@]+:[^/\s@]+@")
-OMITTED = "<excerpt omitted: credential-shaped content>"
-
-
-def _excerpt(text: str) -> str:
-    # NFKC folds width/compatibility lookalikes; strip zero-width and format
-    # characters that could split a name; anything left unrecognised stays
-    # subject to egress.scan_text as the second gate.
-    folded = "".join(
-        ch for ch in unicodedata.normalize("NFKC", text) if unicodedata.category(ch) not in ("Cf", "Cc") or ch in "\n\t"
-    )
-    if _CREDENTIAL_NAME.search(folded) or _KEY_MATERIAL.search(folded) or _URL_USERINFO.search(folded):
-        return OMITTED
-    return text[:_EXCERPT_CHARS]
+# Raw edit text never leaves the machine. A name/pattern denylist cannot promise
+# to catch every credential (short values, multi-line values, heredocs, lookalike
+# characters, provider formats not yet invented), and egress.scan_text only
+# catches high-entropy tokens, so the only reliable boundary is to send none.
+# Jev gets the file, size and the host_signals category names, all computed from
+# the original text on this machine; that is what the triage needs.
+EXCERPT_POLICY = "withheld: raw edit text is never sent, only the host_signals above"
 
 
 def vocabulary(project_root: Path | None = None) -> frozenset[str]:
@@ -205,7 +181,6 @@ def build(event: HostEvent | None, project_root: Path | None):
     signals = _signals(text, rel)
     digest = hashlib.sha256(f"{event.tool_name}\0{raw_path}\0{text}".encode("utf-8")).hexdigest()
 
-    excerpt = _excerpt(text)
     context = "\n".join(
         (
             f"tool: {event.tool_name}",
@@ -213,8 +188,7 @@ def build(event: HostEvent | None, project_root: Path | None):
             f"new_text_chars: {len(text)}",
             f"new_text_lines: {text.count(chr(10)) + (1 if text else 0)}",
             f"host_signals: {', '.join(signals) if signals else 'none'}",
-            "new_text_excerpt:",
-            excerpt,
+            f"new_text_excerpt: {EXCERPT_POLICY}",
         )
     )
     return PreparedInput(

@@ -16,6 +16,8 @@ sys.stdin.buffer.read()
 PY
   chmod +x "$STUB"
   unset CLAVAIN_SELECTOR CLAVAIN_SELECTOR_SECURITY_TRIAGE
+  EVENTS="$CLAVAIN_STATE_DIR/selector/triage-events"
+  SLOTS="$CLAVAIN_STATE_DIR/selector/triage-slots"
 }
 
 teardown() {
@@ -80,14 +82,14 @@ PY
 }
 
 @test "shadow leaves no event file behind" {
-  run env TMPDIR="$TEST_TMP" CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+  run env CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
   [ "$status" -eq 0 ]
   _await_mark
   for _ in $(seq 1 30); do
-    ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1 || break
+    ls "$EVENTS"/event.* >/dev/null 2>&1 || break
     sleep 0.1
   done
-  ! ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1
+  ! ls "$EVENTS"/event.* >/dev/null 2>&1
 }
 
 @test "a failing selector never blocks and prints nothing" {
@@ -106,22 +108,21 @@ PY
 }
 
 @test "an interrupt while stdin is still open leaves no event file and frees the slot" {
-  export TMPDIR="$TEST_TMP"
   fifo="$TEST_TMP/fifo"
   mkfifo "$fifo"
   env CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" < "$fifo" &
   hook_pid=$!
   exec 9> "$fifo"   # open the write end so the hook blocks in cat, never seeing EOF
   for _ in $(seq 1 50); do
-    ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1 && break
+    ls "$EVENTS"/event.* >/dev/null 2>&1 && break
     sleep 0.1
   done
-  ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1   # the capture really is in flight
+  ls "$EVENTS"/event.* >/dev/null 2>&1   # the capture really is in flight
   kill -TERM "$hook_pid"
   wait "$hook_pid" || true
   exec 9>&-
-  ! ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1
-  [ -z "$(ls "$TEST_TMP/selector/triage-slots" 2>/dev/null)" ]
+  ! ls "$EVENTS"/event.* >/dev/null 2>&1
+  flock -n "$SLOTS/slot.1" true   # the interrupted hook released its slot
 }
 
 @test "shadow jobs are bounded: extra edits are dropped, never queued" {
@@ -137,10 +138,33 @@ PY
   [ "$(wc -c < "$MARK")" -eq 2 ]
 }
 
-@test "a stale slot is reaped so measurement resumes" {
-  mkdir -p "$CLAVAIN_STATE_DIR/selector/triage-slots/slot.1"
-  touch -d '2 minutes ago' "$CLAVAIN_STATE_DIR/selector/triage-slots/slot.1"
-  run env CLAVAIN_TRIAGE_MAX_JOBS=1 CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+@test "the slot lock dies with its job: a SIGKILLed job never wedges measurement" {
+  slow="$TEST_TMP/slow.py"
+  printf '#!/usr/bin/env python3\nimport sys, time\nsys.stdin.buffer.read()\nopen("%s", "a").write("x")\ntime.sleep(30)\n' "$MARK" > "$slow"
+  chmod +x "$slow"
+  run env SELECTOR_HOOK_TIMEOUT=60 CLAVAIN_TRIAGE_MAX_JOBS=1 CLAVAIN_SELECTOR_SCRIPT="$slow" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
   [ "$status" -eq 0 ]
-  _await_mark
+  for _ in $(seq 1 50); do [ -s "$MARK" ] && break; sleep 0.1; done
+  ! flock -n "$SLOTS/slot.1" true            # busy while the job lives
+  pids=$(pgrep -f "$slow" || true)
+  [ -n "$pids" ]
+  pkill -KILL -f "$slow"; pkill -KILL -f "selector-hook.sh pre_tool" || true
+  for _ in $(seq 1 50); do flock -n "$SLOTS/slot.1" true && break; sleep 0.1; done
+  flock -n "$SLOTS/slot.1" true               # the kernel released it
+}
+
+@test "event files abandoned by a killed job are swept on the next run" {
+  mkdir -p "$EVENTS"
+  echo "edit text" > "$EVENTS/event.abandoned"
+  touch -d '5 minutes ago' "$EVENTS/event.abandoned"
+  echo "fresh" > "$EVENTS/event.fresh"
+  run env CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+  [ "$status" -eq 0 ]
+  [ ! -e "$EVENTS/event.abandoned" ]
+  [ -e "$EVENTS/event.fresh" ]
+}
+
+@test "the event directory and files are private" {
+  run env CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+  [ "$(stat -c %a "$EVENTS")" = "700" ]
 }

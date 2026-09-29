@@ -139,7 +139,7 @@ def test_prepare_builds_for_every_edit_tool(tmp_path, tool, tool_input):
     )
     assert {c.id for c in prepared.candidates} == security_triage.VOCABULARY
     assert "shell" in prepared.context
-    assert "os.system" not in prepared.context.split("new_text_excerpt:")[0]
+    assert "os.system" not in prepared.context
     assert prepared.integration == "security_triage"
     assert prepared.point == Point.PRE_TOOL
 
@@ -176,11 +176,11 @@ def test_preparer_never_sees_tool_response(tmp_path):
     assert "TOP-SECRET-RESPONSE" not in prepared.context
 
 
-def test_excerpt_is_bounded_and_revision_tracks_the_edit(tmp_path):
+def test_context_is_bounded_and_revision_tracks_the_edit(tmp_path):
     big = "x = 1\n" * 5000
     ev = _event("Write", {"file_path": str(tmp_path / "a.py"), "content": big}, tmp_path)
     built = security_triage.build(ev, tmp_path)
-    assert len(built.context) < 4_600
+    assert len(built.context) < 600
     other = security_triage.build(_event("Write", {"file_path": str(tmp_path / "a.py"), "content": big + "y"}, tmp_path), tmp_path)
     assert built.task_revision != other.task_revision
     assert built.task_revision == security_triage.build(ev, tmp_path).task_revision
@@ -196,67 +196,56 @@ def test_env_file_edits_never_reach_egress(tmp_path, name):
     assert "src.denylisted_path" in refusal.rule_ids
 
 
-def test_secret_looking_edit_text_is_refused_at_egress(tmp_path, monkeypatch):
-    monkeypatch.setattr(egress, "project_owner", lambda root: "mistakeknot")
-    secret = "sk-" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0"
-    ev = _event("Write", {"file_path": str(tmp_path / "a.py"), "content": f'KEY = "{secret}"'}, tmp_path)
-    prepared = preparers.prepare(_shipped_registry(), "security_triage", Point.PRE_TOOL, ev, tmp_path)
-    assert isinstance(egress.admit(_request_for(prepared), high_entropy=True), egress.Refusal)
-
+# Provider-shaped prefixes are assembled at runtime so the fixtures are not
+# themselves committed credential-looking literals.
+_SK = "sk" + "_live_"
+_GH = "gh" + "p_"
 
 CREDENTIAL_FIXTURES = [
     ('API_KEY = "abc123"', "abc123"),
     ("password: hunter2", "hunter2"),
-    ("db_password='p4ss'", "p4ss"),
-    ('const authToken = "abc"', "abc"),
-    ("AWS_SECRET_ACCESS_KEY=short", "short"),
-    ('headers["Authorization"] = "Bearer abc"', "Bearer abc"),
-    ("credentials = {'user': 'a'}", "'user'"),
     ('password = (\n    "hunter2"\n)', "hunter2"),
-    ('{\n  "passWord": "hunter2"\n}', "hunter2"),
-    ("export FOO_TOKEN=xyz9", "xyz9"),
-    ("conn = 'postgres://admin:hunter2@db/x'", "hunter2"),
     ("cat <<EOF\nsecret=hunter2\nEOF", "hunter2"),
-    ("cat <<'EOT'\nx=hunter2\nEOT", "hunter2"),
-    ("p\u200bassword = 'hunter2'", "hunter2"),
-    ("\uff50\uff41\uff53\uff53\uff57\uff4f\uff52\uff44 = 'hunter2'", "hunter2"),
-    ("my_pwd = 'hunter2'", "hunter2"),
-    ("SSH = 'ssh-ed25519 AAAAC3hunter2'", "hunter2"),
+    ("conn = 'postgres://admin:hunter2@db/x'", "hunter2"),
+    ("key = 'abc123'", "abc123"),
+    ("pass = 'abc123'", "abc123"),
+    ("p\u0430ssword = 'abc123'", "abc123"),  # Cyrillic a
+    ("\u03c1assword = 'abc123'", "abc123"),  # Greek rho
+    (f"token = '{_SK}abc123'", f"{_SK}abc123"),
+    (f"g = '{_GH}abc123def'", f"{_GH}abc123def"),
+    ("blob = 'YWJjMTIzZGVmNDU2'", "YWJjMTIzZGVmNDU2"),
+    ("//registry.example/:_authToken=abc123", "abc123"),
+    ("no name at all: hunter2-value", "hunter2-value"),
 ]
 
 
 @pytest.mark.parametrize("line,value", CREDENTIAL_FIXTURES)
-def test_credential_shaped_text_never_leaves_the_machine(tmp_path, monkeypatch, line, value):
-    """Fail closed: the excerpt is withheld, so no value can reach the wire even
-    if egress would have admitted the text. Asserted on the built request and on
-    the full admission path, so an egress refusal cannot mask a leak."""
+def test_raw_edit_text_never_leaves_the_machine(tmp_path, monkeypatch, line, value):
+    """No name-based filter can be complete, so no raw text is sent at all.
+    Asserted on the built request and every candidate; an egress refusal cannot
+    mask a leak because the check is on the request itself."""
     monkeypatch.setattr(egress, "project_owner", lambda root: "mistakeknot")
     ev = _event("Write", {"file_path": str(tmp_path / "cfg.py"), "content": f"x = 1\n{line}\ny = 2"}, tmp_path)
     prepared = preparers.prepare(_shipped_registry(), "security_triage", Point.PRE_TOOL, ev, tmp_path)
     request = _request_for(prepared)
-    assert value not in request.context
-    assert "x = 1" not in request.context and "y = 2" not in request.context
-    assert security_triage.OMITTED in request.context
-    for cand in request.candidates:
-        assert value not in cand.description
+    for text in (request.context, request.task, *(c.description for c in request.candidates)):
+        assert value not in text
+        assert "x = 1" not in text and "y = 2" not in text
+    assert security_triage.EXCERPT_POLICY in request.context
     # the metadata Jev still needs survives
     assert "file: cfg.py" in request.context and "new_text_chars:" in request.context
+    assert not isinstance(egress.admit(request, high_entropy=True), egress.Refusal)
 
 
-def test_credential_free_edits_keep_their_excerpt(tmp_path):
-    body = "def add(a, b):\n    return a + b\n"
-    built = security_triage.build(_event("Write", {"file_path": str(tmp_path / "m.py"), "content": body}, tmp_path), tmp_path)
-    assert "return a + b" in built.context
-    assert security_triage.OMITTED not in built.context
-
-
-def test_key_material_drops_the_whole_excerpt(tmp_path):
-    dashes = "-" * 5  # built at runtime so the fixture is not itself a committed PEM header
-    kind = " ".join(["RSA", "PRIV" + "ATE", "KEY"])
-    body = f"{dashes}BEGIN {kind}{dashes}\nMIIabc\n{dashes}END {kind}{dashes}"
-    built = security_triage.build(_event("Write", {"file_path": str(tmp_path / "k.py"), "content": body}, tmp_path), tmp_path)
-    assert "MIIabc" not in built.context and "BEGIN" not in built.context
-    assert security_triage.OMITTED in built.context
+@pytest.mark.parametrize("tool,field", [("Write", "content"), ("Edit", "new_string"), ("NotebookEdit", "new_source")])
+def test_no_edit_shape_sends_raw_text(tmp_path, tool, field):
+    key = "file_path" if tool != "NotebookEdit" else "notebook_path"
+    built = security_triage.build(_event(tool, {key: str(tmp_path / "m.py"), field: "def add(a, b): return a + b"}, tmp_path), tmp_path)
+    assert "return a + b" not in built.context
+    multi = security_triage.build(
+        _event("MultiEdit", {"file_path": str(tmp_path / "m.py"), "edits": [{"new_string": "return a + b"}]}, tmp_path), tmp_path
+    )
+    assert "return a + b" not in multi.context
 
 
 def test_redaction_keeps_host_signals_from_the_original_text(tmp_path):

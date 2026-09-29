@@ -26,35 +26,43 @@ fi
 # still bounded by the wrapper's own timeout) and return at once.
 #
 # Shadow measurement is best-effort, so it is also bounded: at most
-# CLAVAIN_TRIAGE_MAX_JOBS detached selections run at once (mkdir slots, stale
-# ones reaped after 30s); an edit that finds every slot busy is simply not
-# measured. The event file holds edit text, so it is created 0600 and removed on
-# every exit path, including an interrupt while stdin is still being read.
+# CLAVAIN_TRIAGE_MAX_JOBS detached selections run at once, each holding a kernel
+# flock on a slot file (inherited by the detached job, released by the kernel
+# when it exits or is killed, so there is no stale-slot bookkeeping and no way
+# to release another job's slot). An edit that finds every slot busy, or a host
+# without flock, is simply not measured. The event file holds edit text: it
+# lives in a private 0700 directory, is removed on every exit path including an
+# interrupt or a killed job's catchable signals, and files a SIGKILL abandons
+# are swept on the next run.
 MAX_JOBS="${CLAVAIN_TRIAGE_MAX_JOBS:-3}"
 [[ "$MAX_JOBS" =~ ^[0-9]+$ ]] || MAX_JOBS=3
-SLOT_ROOT="${CLAVAIN_STATE_DIR:-${TMPDIR:-/tmp}}/selector/triage-slots"
-mkdir -p "$SLOT_ROOT" 2>/dev/null || exit 0
-SLOT=""
+command -v flock >/dev/null 2>&1 || exit 0
+STATE="${CLAVAIN_STATE_DIR:-${TMPDIR:-/tmp}}/selector"
+SLOT_ROOT="$STATE/triage-slots"
+EVENT_ROOT="$STATE/triage-events"
+(umask 077; mkdir -p "$SLOT_ROOT" "$EVENT_ROOT") 2>/dev/null || exit 0
+chmod 700 "$EVENT_ROOT" 2>/dev/null
+find "$EVENT_ROOT" -maxdepth 1 -type f -name 'event.*' -mmin +2 -delete 2>/dev/null
+
+got=0
 for ((i = 1; i <= MAX_JOBS; i++)); do
-  if [[ -d "$SLOT_ROOT/slot.$i" && -n "$(find "$SLOT_ROOT/slot.$i" -maxdepth 0 -mmin +0.5 2>/dev/null)" ]]; then
-    rmdir "$SLOT_ROOT/slot.$i" 2>/dev/null
-  fi
-  if mkdir "$SLOT_ROOT/slot.$i" 2>/dev/null; then
-    SLOT="$SLOT_ROOT/slot.$i"
+  exec 8> "$SLOT_ROOT/slot.$i" 2>/dev/null || continue
+  if flock -n 8; then
+    got=1
     break
   fi
+  exec 8>&-
 done
-[[ -n "$SLOT" ]] || exit 0
+[[ "$got" == 1 ]] || exit 0
 
 EVENT_FILE=""
 READER=""
-release() {
+cleanup() {
   [[ -n "$READER" ]] && kill "$READER" 2>/dev/null
   [[ -n "$EVENT_FILE" ]] && rm -f "$EVENT_FILE"
-  rmdir "$SLOT" 2>/dev/null
 }
-trap 'release; exit 0' EXIT INT TERM HUP
-EVENT_FILE="$(mktemp "${TMPDIR:-/tmp}/clavain-triage-event.XXXXXX" 2>/dev/null)" || exit 0
+trap 'cleanup; exit 0' EXIT INT TERM HUP
+EVENT_FILE="$(umask 077; mktemp "$EVENT_ROOT/event.XXXXXX" 2>/dev/null)" || exit 0
 # Read in the background and `wait`: bash only runs a trap between commands, so a
 # foreground `cat` blocked on an open stdin would defer the cleanup indefinitely.
 cat <&0 > "$EVENT_FILE" 2>/dev/null &   # explicit <&0: a bare async command would read /dev/null
@@ -62,12 +70,12 @@ READER=$!
 wait "$READER" || exit 0
 READER=""
 
-# Ownership of the file and the slot passes to the detached job.
+# Ownership of the file and the slot lock (fd 8) passes to the detached job.
 trap - EXIT INT TERM HUP
 (
+  trap 'rm -f "$EVENT_FILE"; exit 0' TERM INT HUP
   "$SCRIPT_DIR/selector-hook.sh" pre_tool claude-code < "$EVENT_FILE" > /dev/null 2>&1
   rm -f "$EVENT_FILE"
-  rmdir "$SLOT" 2>/dev/null
 ) > /dev/null 2>&1 < /dev/null &
 disown 2>/dev/null || true
 exit 0
