@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -70,24 +71,35 @@ _SIGNALS = (
 )
 
 
-# Credential-shaped assignments. `egress.scan_text` catches high-entropy tokens
-# but not short values such as `API_KEY = "abc123"`, so the host redacts the
-# right-hand side (to end of line) of any secret-named assignment before the
-# excerpt can leave the machine, and drops the excerpt entirely when it holds
-# key material. Signals are computed from the original text and are names only.
-_ASSIGNMENT = re.compile(
-    r"(?i)((?:secret|token|passw\w*|pwd|api[_-]?key|private[_-]?key|credential\w*|bearer|authorization|auth\w*)"
-    r"[\w.\-\]\[\"']*\s*[:=]\s*)(.+)$",
-    re.M,
+# Fail closed on anything credential-shaped. `egress.scan_text` catches
+# high-entropy tokens but not short or multi-line values (`API_KEY = "abc123"`,
+# `password = (\n "x"\n)`, heredocs, lookalike characters), and a per-line
+# redaction cannot promise to catch them all. So when the edit text names a
+# credential at all, or carries key material or URL userinfo, the excerpt is
+# withheld entirely. Jev still gets the file, size and the host_signals names
+# (computed from the original text), which is what the triage needs.
+_CREDENTIAL_NAME = re.compile(
+    r"secret|token|passw|passphrase|pwd|api[_\-\s]?key|private[_\-\s]?key|credential|bearer|authorization|auth[_\-]?key",
+    re.I,
 )
-_KEY_MATERIAL = re.compile(r"-----BEGIN [A-Z ]*(?:PRIVATE KEY|CERTIFICATE|PGP)[A-Z ]*-----|\bssh-(?:rsa|ed25519)\b", re.I)
-REDACTED = "<redacted>"
+_KEY_MATERIAL = re.compile(
+    r"-----BEGIN [A-Z ]*-----|\bssh-(?:rsa|ed25519|dss)\b|\becdsa-sha2-|\bAKIA[0-9A-Z]{8,}|<<-?\s*['\"]?\w+",
+    re.I,
+)
+_URL_USERINFO = re.compile(r"://[^/\s:@]+:[^/\s@]+@")
+OMITTED = "<excerpt omitted: credential-shaped content>"
 
 
-def _redact(text: str) -> str:
-    if _KEY_MATERIAL.search(text):
-        return "<excerpt omitted: contains key material>"
-    return _ASSIGNMENT.sub(lambda m: m.group(1) + REDACTED, text)
+def _excerpt(text: str) -> str:
+    # NFKC folds width/compatibility lookalikes; strip zero-width and format
+    # characters that could split a name; anything left unrecognised stays
+    # subject to egress.scan_text as the second gate.
+    folded = "".join(
+        ch for ch in unicodedata.normalize("NFKC", text) if unicodedata.category(ch) not in ("Cf", "Cc") or ch in "\n\t"
+    )
+    if _CREDENTIAL_NAME.search(folded) or _KEY_MATERIAL.search(folded) or _URL_USERINFO.search(folded):
+        return OMITTED
+    return text[:_EXCERPT_CHARS]
 
 
 def vocabulary(project_root: Path | None = None) -> frozenset[str]:
@@ -193,7 +205,7 @@ def build(event: HostEvent | None, project_root: Path | None):
     signals = _signals(text, rel)
     digest = hashlib.sha256(f"{event.tool_name}\0{raw_path}\0{text}".encode("utf-8")).hexdigest()
 
-    excerpt = _redact(text[:_EXCERPT_CHARS])
+    excerpt = _excerpt(text)
     context = "\n".join(
         (
             f"tool: {event.tool_name}",

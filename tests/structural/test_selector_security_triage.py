@@ -204,32 +204,50 @@ def test_secret_looking_edit_text_is_refused_at_egress(tmp_path, monkeypatch):
     assert isinstance(egress.admit(_request_for(prepared), high_entropy=True), egress.Refusal)
 
 
-SHORT_SECRETS = [
-    'API_KEY = "abc123"',
-    "password: hunter2",
-    "db_password='p4ss'",
-    'const authToken = "abc"',
-    "AWS_SECRET_ACCESS_KEY=short",
-    'headers["Authorization"] = "Bearer abc"',
-    "credentials = {'user': 'a'}",
+CREDENTIAL_FIXTURES = [
+    ('API_KEY = "abc123"', "abc123"),
+    ("password: hunter2", "hunter2"),
+    ("db_password='p4ss'", "p4ss"),
+    ('const authToken = "abc"', "abc"),
+    ("AWS_SECRET_ACCESS_KEY=short", "short"),
+    ('headers["Authorization"] = "Bearer abc"', "Bearer abc"),
+    ("credentials = {'user': 'a'}", "'user'"),
+    ('password = (\n    "hunter2"\n)', "hunter2"),
+    ('{\n  "passWord": "hunter2"\n}', "hunter2"),
+    ("export FOO_TOKEN=xyz9", "xyz9"),
+    ("conn = 'postgres://admin:hunter2@db/x'", "hunter2"),
+    ("cat <<EOF\nsecret=hunter2\nEOF", "hunter2"),
+    ("cat <<'EOT'\nx=hunter2\nEOT", "hunter2"),
+    ("p\u200bassword = 'hunter2'", "hunter2"),
+    ("\uff50\uff41\uff53\uff53\uff57\uff4f\uff52\uff44 = 'hunter2'", "hunter2"),
+    ("my_pwd = 'hunter2'", "hunter2"),
+    ("SSH = 'ssh-ed25519 AAAAC3hunter2'", "hunter2"),
 ]
 
 
-@pytest.mark.parametrize("line", SHORT_SECRETS)
-def test_credential_assignments_are_redacted_before_they_leave(tmp_path, monkeypatch, line):
-    """Egress misses short values; the preparer must redact the right-hand side."""
+@pytest.mark.parametrize("line,value", CREDENTIAL_FIXTURES)
+def test_credential_shaped_text_never_leaves_the_machine(tmp_path, monkeypatch, line, value):
+    """Fail closed: the excerpt is withheld, so no value can reach the wire even
+    if egress would have admitted the text. Asserted on the built request and on
+    the full admission path, so an egress refusal cannot mask a leak."""
     monkeypatch.setattr(egress, "project_owner", lambda root: "mistakeknot")
-    value = re.split(r"[:=]\s*", line, maxsplit=1)[1].strip("\"' {}")
     ev = _event("Write", {"file_path": str(tmp_path / "cfg.py"), "content": f"x = 1\n{line}\ny = 2"}, tmp_path)
     prepared = preparers.prepare(_shipped_registry(), "security_triage", Point.PRE_TOOL, ev, tmp_path)
     request = _request_for(prepared)
-    assert value and value not in request.context
-    assert security_triage.REDACTED in request.context
-    assert "x = 1" in request.context and "y = 2" in request.context
-    # Egress may still refuse (a stricter outcome, e.g. the AWS key-name rule);
-    # what must never happen is the value reaching the wire.
+    assert value not in request.context
+    assert "x = 1" not in request.context and "y = 2" not in request.context
+    assert security_triage.OMITTED in request.context
     for cand in request.candidates:
         assert value not in cand.description
+    # the metadata Jev still needs survives
+    assert "file: cfg.py" in request.context and "new_text_chars:" in request.context
+
+
+def test_credential_free_edits_keep_their_excerpt(tmp_path):
+    body = "def add(a, b):\n    return a + b\n"
+    built = security_triage.build(_event("Write", {"file_path": str(tmp_path / "m.py"), "content": body}, tmp_path), tmp_path)
+    assert "return a + b" in built.context
+    assert security_triage.OMITTED not in built.context
 
 
 def test_key_material_drops_the_whole_excerpt(tmp_path):
@@ -238,7 +256,7 @@ def test_key_material_drops_the_whole_excerpt(tmp_path):
     body = f"{dashes}BEGIN {kind}{dashes}\nMIIabc\n{dashes}END {kind}{dashes}"
     built = security_triage.build(_event("Write", {"file_path": str(tmp_path / "k.py"), "content": body}, tmp_path), tmp_path)
     assert "MIIabc" not in built.context and "BEGIN" not in built.context
-    assert "excerpt omitted" in built.context
+    assert security_triage.OMITTED in built.context
 
 
 def test_redaction_keeps_host_signals_from_the_original_text(tmp_path):

@@ -104,3 +104,43 @@ PY
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "an interrupt while stdin is still open leaves no event file and frees the slot" {
+  export TMPDIR="$TEST_TMP"
+  fifo="$TEST_TMP/fifo"
+  mkfifo "$fifo"
+  env CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" < "$fifo" &
+  hook_pid=$!
+  exec 9> "$fifo"   # open the write end so the hook blocks in cat, never seeing EOF
+  for _ in $(seq 1 50); do
+    ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1 && break
+    sleep 0.1
+  done
+  ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1   # the capture really is in flight
+  kill -TERM "$hook_pid"
+  wait "$hook_pid" || true
+  exec 9>&-
+  ! ls "$TEST_TMP"/clavain-triage-event.* >/dev/null 2>&1
+  [ -z "$(ls "$TEST_TMP/selector/triage-slots" 2>/dev/null)" ]
+}
+
+@test "shadow jobs are bounded: extra edits are dropped, never queued" {
+  slow="$TEST_TMP/slow.py"
+  printf '#!/usr/bin/env python3\nimport sys, time\nsys.stdin.buffer.read()\nopen("%s", "a").write("x")\ntime.sleep(2)\n' "$MARK" > "$slow"
+  chmod +x "$slow"
+  for _ in 1 2 3 4 5 6; do
+    run env SELECTOR_HOOK_TIMEOUT=10 CLAVAIN_TRIAGE_MAX_JOBS=2 CLAVAIN_SELECTOR_SCRIPT="$slow" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+  done
+  sleep 1
+  [ "$(wc -c < "$MARK")" -eq 2 ]
+}
+
+@test "a stale slot is reaped so measurement resumes" {
+  mkdir -p "$CLAVAIN_STATE_DIR/selector/triage-slots/slot.1"
+  touch -d '2 minutes ago' "$CLAVAIN_STATE_DIR/selector/triage-slots/slot.1"
+  run env CLAVAIN_TRIAGE_MAX_JOBS=1 CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+  [ "$status" -eq 0 ]
+  _await_mark
+}
