@@ -490,7 +490,9 @@ def select(
             prepared.candidates,
             chosen.id,
             validation_context,
-            preconditions_met=True,
+            # No host-owned verifier exists for declared preconditions, so any
+            # precondition on the chosen candidate is unverifiable, hence unmet.
+            preconditions_met=not chosen.preconditions,
         )
         if rejected is not None:
             reason = FallbackReason(rejected.value)

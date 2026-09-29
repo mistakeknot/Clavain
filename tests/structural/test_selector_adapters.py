@@ -366,6 +366,68 @@ def test_fingerprint_dev_ino_swap_retries_then_raises(tmp_path, monkeypatch):
     assert calls["n"] >= 2
 
 
+def _regular_stat_for(real_path, monkeypatch):
+    """Make base._lstat report `real_path`'s regular-file stat for any path, so a
+    test can swap the real target after the lstat without the size/type check
+    short-circuiting the open."""
+    real_lstat = os.lstat
+    regular = real_lstat(real_path)
+    monkeypatch.setattr(adapters_base, "_lstat", lambda path: regular)
+    return regular
+
+
+def test_fingerprint_fifo_swap_never_blocks(tmp_path, monkeypatch):
+    """A regular file swapped for a FIFO between lstat and open must not hang
+    the fingerprint before the Jev deadline (plan step 4: O_NONBLOCK). The
+    open must return at once and the dev/ino identity check must then reject
+    it."""
+    import signal
+
+    decoy = tmp_path / "decoy.txt"
+    decoy.write_text("alpha")
+    fifo = tmp_path / "a.txt"
+    os.mkfifo(fifo)
+    _regular_stat_for(decoy, monkeypatch)
+
+    def _hang(signum, frame):
+        raise AssertionError("fingerprint blocked opening a FIFO")
+
+    old = signal.signal(signal.SIGALRM, _hang)
+    signal.alarm(5)
+    try:
+        with pytest.raises(FingerprintUnavailable):
+            fingerprint_paths([fifo])
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
+
+
+def test_fingerprint_symlink_swap_is_not_followed(tmp_path, monkeypatch):
+    """A regular file swapped for a symlink between lstat and open must not be
+    followed (plan step 4: O_NOFOLLOW): the fingerprint raises instead of
+    hashing whatever the link points at."""
+    target = tmp_path / "target.txt"
+    target.write_text("secret elsewhere")
+    link = tmp_path / "a.txt"
+    link.symlink_to(target)
+    _regular_stat_for(target, monkeypatch)
+
+    opened = []
+    real_open = os.open
+
+    def _spy_open(path, flags, *args, **kwargs):
+        opened.append(flags)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", _spy_open)
+    # realpath resolves the link before lstat, so hand base the link path itself
+    # to exercise the open under the swapped lstat.
+    with pytest.raises(FingerprintUnavailable):
+        adapters_base._entry_for_path(link)
+    assert opened, "fingerprint must open through os.open"
+    assert all(flag & os.O_NOFOLLOW and flag & os.O_NONBLOCK for flag in opened)
+
+
 def test_fingerprint_read_race_retries_then_matches_settled_entry(tmp_path, monkeypatch):
     """A file that changes content, size, and mtime while it is being read
     must be retried once on the same descriptor (plan:364). The resulting

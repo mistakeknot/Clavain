@@ -827,6 +827,27 @@ def test_a1_matching_event_point_emits(monkeypatch, tmp_path):
     assert result.outcome.kind == "emitted"
 
 
+def test_row12_unverifiable_precondition_never_emits(monkeypatch, tmp_path):
+    """Landing review: row 12 must not assert `preconditions_met=True` for a
+    trusted-preparer candidate that declares preconditions. This landing has no
+    host verifier for them, so an unverifiable precondition is unmet: native
+    fallback, nothing emitted."""
+    registry, prepared = _active_prepared(
+        monkeypatch, tmp_path, expires_at_ms=NOW_MS + 60_000, preconditions=("host-condition-unverified",)
+    )
+    monkeypatch.setattr(base, "emitted_outcome", lambda *a, **k: pytest.fail("emission reached"))
+
+    result = _select(prepared, registry, FakeAdapter(), env={"CLAVAIN_SELECTOR_SELFTEST": "active"})
+
+    assert result.fallback_reason == FallbackReason.UNMET_PRECONDITION
+    assert result.record_dict["validation"] == {
+        "stage": "host_revalidation",
+        "reject_reason": "unmet_precondition",
+    }
+    assert result.record_dict["applied"] == "native"
+    assert result.outcome.kind == "native"
+
+
 def test_row12_revalidation_rereads_clock(monkeypatch, tmp_path):
     """Row 12 uses the time at revalidation, not the time `select()` started."""
     registry, prepared = _active_prepared(monkeypatch, tmp_path, expires_at_ms=NOW_MS + 5_000)

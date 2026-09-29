@@ -304,8 +304,25 @@ def _entry_for_path(
             raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
 
         try:
-            with open(p, "rb") as handle:
+            # One O_NOFOLLOW|O_NONBLOCK descriptor (plan step 4): a swap to a
+            # symlink is never followed and a swap to a FIFO cannot block; the
+            # dev/ino check below rejects either.
+            try:
+                fd = os.open(
+                    p,
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | os.O_NOCTTY,
+                )
+            except FileNotFoundError:
+                return [resolved, "missing"]
+            try:
+                handle = os.fdopen(fd, "rb")
+            except BaseException:
+                os.close(fd)
+                raise
+            with handle:
                 st = os.fstat(handle.fileno())
+                if not stat_module.S_ISREG(st.st_mode):
+                    raise FingerprintUnavailable(f"{resolved} is not a regular file at open")
                 if (st.st_dev, st.st_ino) != (lst.st_dev, lst.st_ino):
                     # Identity changed between lstat and open (a swap): retry
                     # once, then raise rather than fingerprint a moving target.
