@@ -116,6 +116,7 @@ FAIL_OPEN_HOOKS = {
 FAIL_OPEN_HOOKS_NO_TRAP = {
     "context-gateway.sh",
     "gate-calibration-session-end.sh",
+    "security-triage-hook.sh",
 }
 
 

@@ -66,8 +66,10 @@ def _registry_for(integration: str, preparer_name: str) -> dict:
 UNUSED_REGISTRY: dict = {"schema_version": 1, "integrations": {}}
 
 
-def test_registry_starts_empty():
-    assert dict(PREPARERS) == {}
+def test_registry_holds_only_the_shipped_preparers():
+    # Deliberately updated by mk-42j9.9 when the first preparer shipped: this
+    # pins the exact shipped set so adding one is always a visible decision.
+    assert set(PREPARERS) == {"security_triage"}
 
 
 def test_registry_is_immutable():
