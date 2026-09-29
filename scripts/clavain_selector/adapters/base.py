@@ -318,17 +318,22 @@ def _entry_for_path(
                 # on the same descriptor before this raises.
                 stable = False
                 data = b""
+                consumed = 0
                 for _pass in range(2):
-                    if st.st_size > read_limit:
+                    # The retry pass spends only what the first pass left of
+                    # this path's read budget, never the whole budget again.
+                    remaining = read_limit - consumed
+                    if st.st_size > remaining:
                         raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
-                    data = handle.read(read_limit + 1)
+                    data = handle.read(remaining + 1)
+                    consumed += len(data)
                     if phase is not None:
                         # The phase budget counts bytes actually read, not
                         # `st_size`: a file that grows after the size check,
                         # including on a retried pass, is charged for what
                         # was read.
                         phase.bytes_read += len(data)
-                    if len(data) > read_limit:
+                    if len(data) > remaining:
                         raise FingerprintUnavailable(f"{resolved} exceeds fingerprint max bytes ({read_limit})")
 
                     st_after = os.fstat(handle.fileno())

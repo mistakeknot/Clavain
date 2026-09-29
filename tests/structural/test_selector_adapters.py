@@ -439,6 +439,39 @@ def test_fingerprint_read_race_persistently_unstable_raises(tmp_path, monkeypatc
     assert calls["n"] >= 2
 
 
+def test_fingerprint_retry_read_stays_within_remaining_budget(tmp_path, monkeypatch):
+    """The retry pass must spend only what is left of the read budget, not
+    the whole budget again (plan steps 5-7): a file that grows between the
+    passes must not let one path read ~2x its allowance (a reviewer probe read
+    16 + 25 = 41 bytes against a 32-byte budget before raising)."""
+    f1 = tmp_path / "a.txt"
+    f1.write_bytes(b"a" * 16)
+    st0 = f1.stat()
+
+    real_fstat = os.fstat
+    calls = {"n": 0}
+
+    def _grow_after_first_pass(fd):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            # The post-read check of pass 1: the file grows to 25 bytes and
+            # its mtime moves, so pass 1 is unstable and a retry is taken.
+            f1.write_bytes(b"a" * 25)
+            os.utime(f1, ns=(st0.st_atime_ns, st0.st_mtime_ns + 1_000_000))
+        return real_fstat(fd)
+
+    phase = adapters_base.FingerprintPhase()
+    monkeypatch.setattr(adapters_base, "FINGERPRINT_MAX_BYTES", 32)
+    monkeypatch.setattr(os, "fstat", _grow_after_first_pass)
+    with pytest.raises(FingerprintUnavailable):
+        fingerprint_paths([f1], phase=phase)
+    monkeypatch.undo()
+
+    assert calls["n"] >= 2
+    # Budget 32 plus the single over-limit probe byte, never 16 + 25.
+    assert phase.bytes_read <= 32 + 1
+
+
 def test_fingerprint_unavailable_results_never_compare_equal(tmp_path, monkeypatch):
     monkeypatch.setattr(adapters_base, "FINGERPRINT_MAX_BYTES", 1)
     big = tmp_path / "big.txt"
