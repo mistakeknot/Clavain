@@ -350,6 +350,14 @@ TEXT
     grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
+@test "extract: block-only output with pass then fail STATUS lines writes one non-pass STATUS" {
+    _load
+    printf -- '--- VERDICT ---\nSTATUS: pass\nStatus: fail\nSUMMARY: x\n---\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    [ "$(grep -ci '^status:' "$VERDICT_FILE")" -eq 1 ]
+    grep -q '^STATUS: fail$' "$VERDICT_FILE"
+}
+
 # --- mk-rzi5: CLEAN must be anchored, not a substring match -----------------
 # Before mk-rzi5 the synthesized-verdict branch matched *"CLEAN"* anywhere in
 # the VERDICT line, so a reviewer writing "VERDICT: NOT CLEAN, see findings"

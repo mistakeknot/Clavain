@@ -2701,22 +2701,24 @@ _extract_verdict() {
     if [[ -n "$verdict_block" ]] && grep -qi '^status:[[:space:]]' <<< "$verdict_block"; then
         has_valid_block=1
     fi
-    local block_status_lower=""
+    local block_status_lower="" block_status_raw=""
     if [[ "$has_valid_block" == 1 ]]; then
         # Every STATUS line counts: a block that says "pass" and later
         # "fail" is a disagreement, so the first non-pass status wins and
         # only an all-pass block reads as pass.
-        local _bs _bs_seen=0
+        local _bs _bs_seen=0 _bs_raw
         while IFS= read -r _bs; do
             _bs="${_bs#*:}"
             _bs="${_bs%$'\r'}"
             _bs="${_bs#"${_bs%%[![:space:]]*}"}"
             _bs="${_bs%"${_bs##*[![:space:]]}"}"
+            _bs_raw="$_bs"
             _bs="${_bs,,}"
             # An empty STATUS is a non-pass value too: once seen it stays
             # unless it is still "pass" (never overwritten by a later pass).
             if [[ "$_bs_seen" == 0 || "$block_status_lower" == pass ]]; then
                 block_status_lower="$_bs"
+                block_status_raw="$_bs_raw"
                 _bs_seen=1
             fi
         done < <(grep -i '^status:[[:space:]]' <<< "$verdict_block")
@@ -2724,6 +2726,15 @@ _extract_verdict() {
 
     _write_verdict_block() {
         local block="$1"
+        # Collapse the block's STATUS lines to the single resolved value so
+        # readers of the sidecar (which take one STATUS) cannot see a
+        # "pass" ahead of a later "fail" or mixed-case "Status:" spelling.
+        if [[ "$has_valid_block" == 1 ]]; then
+            block="$(awk -v st="$block_status_raw" '
+                tolower($0) ~ /^status:[[:space:]]/ { if (!done) { print "STATUS: " st; done=1 } next }
+                { print }
+            ' <<< "$block")"
+        fi
         if [[ -n "$provisional_line" ]]; then
             # Insert right after the opening delimiter (before STATUS), so a
             # consumer reading top-down sees the marker before any verdict.
