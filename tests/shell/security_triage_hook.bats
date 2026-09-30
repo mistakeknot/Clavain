@@ -168,3 +168,43 @@ PY
   run env CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
   [ "$(stat -c %a "$EVENTS")" = "700" ]
 }
+
+@test "a planted slot symlink is never followed or truncated" {
+  mkdir -p "$SLOTS" "$EVENTS"
+  echo "precious" > "$TEST_TMP/victim"
+  ln -s "$TEST_TMP/victim" "$SLOTS/slot.1"
+  run env CLAVAIN_TRIAGE_MAX_JOBS=1 CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$TEST_TMP/victim")" = "precious" ]
+  [ ! -e "$MARK" ]   # slot refused, so no measurement ran
+}
+
+@test "a symlinked state directory receives nothing" {
+  mkdir -p "$TEST_TMP/elsewhere" "$CLAVAIN_STATE_DIR"
+  ln -s "$TEST_TMP/elsewhere" "$CLAVAIN_STATE_DIR/selector"
+  run env CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+  [ "$status" -eq 0 ]
+  [ -z "$(ls -A "$TEST_TMP/elsewhere")" ]
+  [ ! -e "$MARK" ]
+}
+
+@test "the default state dir is per-user, not shared /tmp" {
+  run env -u CLAVAIN_STATE_DIR HOME="$TEST_TMP/home" CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" <<< "{}"
+  [ "$status" -eq 0 ]
+  [ -d "$TEST_TMP/home/.clavain/selector/triage-slots" ]
+}
+
+@test "the stdin reader does not hold the slot lock after the hook is SIGKILLed" {
+  fifo="$TEST_TMP/fifo"
+  mkfifo "$fifo"
+  env CLAVAIN_TRIAGE_MAX_JOBS=1 CLAVAIN_SELECTOR_SCRIPT="$STUB" CLAVAIN_SELECTOR_SECURITY_TRIAGE=shadow "$HOOK" < "$fifo" &
+  hook_pid=$!
+  exec 9> "$fifo"   # keep stdin open: the reader blocks
+  for _ in $(seq 1 50); do ls "$EVENTS"/event.* >/dev/null 2>&1 && break; sleep 0.1; done
+  ! flock -n "$SLOTS/slot.1" true      # held while capturing
+  kill -KILL "$hook_pid"
+  wait "$hook_pid" 2>/dev/null || true
+  for _ in $(seq 1 30); do flock -n "$SLOTS/slot.1" true && break; sleep 0.1; done
+  flock -n "$SLOTS/slot.1" true        # the orphaned reader must not keep it
+  exec 9>&-
+}

@@ -37,16 +37,27 @@ fi
 MAX_JOBS="${CLAVAIN_TRIAGE_MAX_JOBS:-3}"
 [[ "$MAX_JOBS" =~ ^[0-9]+$ ]] || MAX_JOBS=3
 command -v flock >/dev/null 2>&1 || exit 0
-STATE="${CLAVAIN_STATE_DIR:-${TMPDIR:-/tmp}}/selector"
+# Same default as selector-hook.sh: a per-user directory, never a shared /tmp.
+STATE="${CLAVAIN_STATE_DIR:-${HOME:-}/.clavain}/selector"
+[[ -n "${CLAVAIN_STATE_DIR:-${HOME:-}}" ]] || exit 0
 SLOT_ROOT="$STATE/triage-slots"
 EVENT_ROOT="$STATE/triage-events"
+[[ -L "$STATE" || -L "$SLOT_ROOT" || -L "$EVENT_ROOT" ]] && exit 0   # before mkdir -p can create through a link
 (umask 077; mkdir -p "$SLOT_ROOT" "$EVENT_ROOT") 2>/dev/null || exit 0
-chmod 700 "$EVENT_ROOT" 2>/dev/null
+# Refuse anything that is not a real directory we own: a planted symlink or a
+# foreign-owned directory must never receive edit text or have a file truncated.
+for d in "$STATE" "$SLOT_ROOT" "$EVENT_ROOT"; do
+  [[ -d "$d" && ! -L "$d" && -O "$d" ]] || exit 0
+done
+chmod 700 "$SLOT_ROOT" "$EVENT_ROOT" 2>/dev/null
 find "$EVENT_ROOT" -maxdepth 1 -type f -name 'event.*' -mmin +2 -delete 2>/dev/null
 
 got=0
 for ((i = 1; i <= MAX_JOBS; i++)); do
-  exec 8> "$SLOT_ROOT/slot.$i" 2>/dev/null || continue
+  slot="$SLOT_ROOT/slot.$i"
+  # Never follow or truncate a planted link; append-open so nothing is clobbered.
+  [[ -L "$slot" || ( -e "$slot" && ! -O "$slot" ) ]] && continue
+  exec 8>> "$slot" 2>/dev/null || continue
   if flock -n 8; then
     got=1
     break
@@ -65,7 +76,7 @@ trap 'cleanup; exit 0' EXIT INT TERM HUP
 EVENT_FILE="$(umask 077; mktemp "$EVENT_ROOT/event.XXXXXX" 2>/dev/null)" || exit 0
 # Read in the background and `wait`: bash only runs a trap between commands, so a
 # foreground `cat` blocked on an open stdin would defer the cleanup indefinitely.
-cat <&0 > "$EVENT_FILE" 2>/dev/null &   # explicit <&0: a bare async command would read /dev/null
+cat <&0 8>&- > "$EVENT_FILE" 2>/dev/null &   # explicit <&0: a bare async command would read /dev/null; 8>&-: the reader must not hold the slot lock
 READER=$!
 wait "$READER" || exit 0
 READER=""
