@@ -2712,6 +2712,8 @@ _extract_verdict() {
             _bs="${_bs%$'\r'}"
             _bs="${_bs#"${_bs%%[![:space:]]*}"}"
             _bs="${_bs%"${_bs##*[![:space:]]}"}"
+            # An empty STATUS is unreadable, not a pass: record it as warn.
+            [[ -n "$_bs" ]] || _bs="warn"
             _bs_raw="$_bs"
             _bs="${_bs,,}"
             # An empty STATUS is a non-pass value too: once seen it stays
@@ -2730,15 +2732,17 @@ _extract_verdict() {
         # readers of the sidecar (which take one STATUS) cannot see a
         # "pass" ahead of a later "fail" or mixed-case "Status:" spelling.
         if [[ "$has_valid_block" == 1 ]]; then
-            block="$(awk -v st="$block_status_raw" '
-                tolower($0) ~ /^status:[[:space:]]/ { if (!done) { print "STATUS: " st; done=1 } next }
+            # ENVIRON, not awk -v: -v interprets backslash escapes, so a
+            # literal "\x70ass" would be rewritten into "pass".
+            block="$(ST="$block_status_raw" awk '
+                tolower($0) ~ /^status:[[:space:]]/ { if (!done) { print "STATUS: " ENVIRON["ST"]; done=1 } next }
                 { print }
             ' <<< "$block")"
         fi
         if [[ -n "$provisional_line" ]]; then
             # Insert right after the opening delimiter (before STATUS), so a
             # consumer reading top-down sees the marker before any verdict.
-            block="$(awk -v line="$provisional_line" 'NR==1 { print; print line; next } { print }' <<< "$block")"
+            block="$(PL="$provisional_line" awk 'NR==1 { print; print ENVIRON["PL"]; next } { print }' <<< "$block")"
         fi
         printf '%s\n' "$block" > "$verdict_file"
     }
