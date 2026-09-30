@@ -3580,7 +3580,7 @@ _finalize_dispatch_result() {
         # blocked/denied") may override it.
         case "$failure_class" in
           rate_limited|quota_exhausted)
-            if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|policy[^[:alnum:]]+(block(ed|ing)?|den(y|ied|ies|ying))\b' "$STDERR_FILE" 2>/dev/null; then
+            if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|policy[^[:alnum:]]+(block(s|ed|ing)?|den(y|ied|ies|ying))\b' "$STDERR_FILE" 2>/dev/null; then
               failure_class="$stderr_class"
             fi
             ;;
