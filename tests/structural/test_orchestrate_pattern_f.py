@@ -489,6 +489,19 @@ def test_a_validator_pass_that_dispatch_demoted_to_warn_is_not_merged(
     assert r.status != "merged" and not r.merged
 
 
+def test_a_validator_pass_that_dispatch_demoted_to_fail_is_not_merged(
+    orc, repo, tmp_path, stubs, monkeypatch,
+):
+    # Round-2 review P1: a `fail` sidecar (trailing block said fail) must not
+    # be overridden by a body PASS that pf's looser line search still finds.
+    monkeypatch.setenv("PF_STUB_SIDECAR_STATUS", "fail")
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.validator_verdict == "UNRUN"
+    assert r.status != "merged" and not r.merged
+
+
 def test_stale_sidecars_are_cleared_before_a_capacity_recheck_walk_attempt(
     orc, repo, tmp_path, stubs, monkeypatch,
 ):

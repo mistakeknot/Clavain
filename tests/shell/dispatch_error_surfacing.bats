@@ -336,6 +336,20 @@ TEXT
     ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
+@test "extract: an empty STATUS in the trailing block is not erased by a later pass" {
+    _load
+    printf 'Verdict: CLEAN\n\n--- VERDICT ---\nSTATUS: \nSTATUS: pass\nSUMMARY: x\n---\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: kimi-style '• VERDICT: PASS' bullet still synthesizes pass" {
+    _load
+    printf '• VERDICT: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
 # --- mk-rzi5: CLEAN must be anchored, not a substring match -----------------
 # Before mk-rzi5 the synthesized-verdict branch matched *"CLEAN"* anywhere in
 # the VERDICT line, so a reviewer writing "VERDICT: NOT CLEAN, see findings"
