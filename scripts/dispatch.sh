@@ -2706,13 +2706,18 @@ _extract_verdict() {
         # Every STATUS line counts: a block that says "pass" and later
         # "fail" is a disagreement, so the first non-pass status wins and
         # only an all-pass block reads as pass.
-        local _bs
+        local _bs _bs_seen=0
         while IFS= read -r _bs; do
             _bs="${_bs#*:}"
+            _bs="${_bs%$'\r'}"
             _bs="${_bs#"${_bs%%[![:space:]]*}"}"
+            _bs="${_bs%"${_bs##*[![:space:]]}"}"
             _bs="${_bs,,}"
-            if [[ -z "$block_status_lower" || "$block_status_lower" == pass ]]; then
+            # An empty STATUS is a non-pass value too: once seen it stays
+            # unless it is still "pass" (never overwritten by a later pass).
+            if [[ "$_bs_seen" == 0 || "$block_status_lower" == pass ]]; then
                 block_status_lower="$_bs"
+                _bs_seen=1
             fi
         done < <(grep -i '^status:[[:space:]]' <<< "$verdict_block")
     fi
@@ -2753,13 +2758,13 @@ _extract_verdict() {
         normalized="$(sed 's/\xC2\xA0/ /g' <<< "$normalized")"
         # mk P2 round-5: repeatedly strip a leading markdown container
         # prefix — a heading (`#`, one or more), a blockquote (`>`), or a
-        # single list marker (`-`/`*`/`+`) — each requiring trailing
+        # single list marker (`-`/`*`/`+`/`•`, kimi's bullet) — each requiring trailing
         # whitespace, so a stacked form like "> - Verdict: ..." reduces the
         # same way a bare "Verdict: ..." does.
         local stripped_prefix=1
         while [[ "$stripped_prefix" == 1 ]]; do
             stripped_prefix=0
-            if [[ "$normalized" =~ ^[[:space:]]*(#+|\>|[-*+])[[:space:]]+(.*)$ ]]; then
+            if [[ "$normalized" =~ ^[[:space:]]*(#+|\>|[-*+]|•|‣|◦)[[:space:]]+(.*)$ ]]; then
                 normalized="${BASH_REMATCH[2]}"
                 stripped_prefix=1
             fi
