@@ -2929,13 +2929,17 @@ _extract_verdict() {
                 { sub(/\r$/, "") }
                 {
                     line = $0
-                    if (match(line, /^[[:space:]]*(```+|~~~+)/)) {
+                    if (match(line, /^ ? ? ?(```+|~~~+)/)) {
                         run = substr(line, RSTART, RLENGTH)
-                        sub(/^[[:space:]]*/, "", run)
+                        sub(/^ +/, "", run)
                         rest = substr(line, RSTART + RLENGTH)
                         ch = substr(run, 1, 1)
-                        if (open == "") { open = ch; olen = length(run) }
-                        else if (ch == open && length(run) >= olen && rest ~ /^[[:space:]]*$/) { open = "" }
+                        if (open == "") {
+                            # a backtick fence info string may not contain a
+                            # backtick; such a line is not an opener
+                            if (!(ch == "`" && index(rest, "`"))) { open = ch; olen = length(run) }
+                        }
+                        else if (ch == open && length(run) >= olen && rest ~ /^[ \t]*$/) { open = "" }
                     }
                 }
                 $0 ~ /[^[:space:]]/ { last = $0 }
@@ -3576,7 +3580,7 @@ _finalize_dispatch_result() {
         # blocked/denied") may override it.
         case "$failure_class" in
           rate_limited|quota_exhausted)
-            if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|policy[^[:alnum:]]+(block(ed)?|den(y|ied|ies))\b' "$STDERR_FILE" 2>/dev/null; then
+            if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|policy[^[:alnum:]]+(block(ed|ing)?|den(y|ied|ies|ying))\b' "$STDERR_FILE" 2>/dev/null; then
               failure_class="$stderr_class"
             fi
             ;;

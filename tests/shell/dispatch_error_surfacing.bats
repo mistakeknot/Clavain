@@ -595,6 +595,20 @@ TEXT
     grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
+@test "extract: a four-space-indented fence line does not close a fence" {
+    _load
+    printf 'Notes.\n~~~text\n    ~~~\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: a backtick line with a backtick in its info string is not an opener" {
+    _load
+    printf 'Notes.\n```bad`info\n```\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
 @test "extract: a first-line verdict is never overridden by a final VERDICT: PASS line" {
     _load
     printf 'Verdict: NEEDS-FIXES\nquoted:\nVERDICT: PASS\n' > "$OUTPUT"

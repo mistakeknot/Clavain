@@ -565,3 +565,10 @@ def test_incidental_policy_words_do_not_override_structured_quota(tmp_path, stde
     assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}],
                         stderr=stderr) != 0
     assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"
+
+
+@pytest.mark.parametrize("stderr", ["forbidden: policy denying this request", "forbidden: policy blocking this request"])
+def test_denial_participles_override_structured_quota(tmp_path, stderr):
+    assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}],
+                        stderr=stderr) != 0
+    assert (tmp_path/"failure").read_text().strip() == "terminal_policy"
