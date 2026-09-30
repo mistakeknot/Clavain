@@ -502,6 +502,20 @@ def test_a_validator_pass_that_dispatch_demoted_to_fail_is_not_merged(
     assert r.status != "merged" and not r.merged
 
 
+def test_read_verdict_status_takes_first_non_pass_case_insensitively(orc, tmp_path):
+    # Round-3 review P1: the reader must not stop at a leading STATUS: pass
+    # nor ignore a mixed-case "Status: fail".
+    f = tmp_path / "v.verdict"
+    f.write_text("--- VERDICT ---\nSTATUS: pass\nSTATUS: fail\n---\n")
+    assert orc._read_verdict_status(str(f)) == "fail"
+    f.write_text("--- VERDICT ---\nStatus: fail\n---\n")
+    assert orc._read_verdict_status(str(f)) == "fail"
+    f.write_text("--- VERDICT ---\nSTATUS: pass\nSTATUS: PASS\n---\n")
+    assert orc._read_verdict_status(str(f)) == "pass"
+    f.write_text("--- VERDICT ---\nSUMMARY: none\n---\n")
+    assert orc._read_verdict_status(str(f)) is None
+
+
 def test_stale_sidecars_are_cleared_before_a_capacity_recheck_walk_attempt(
     orc, repo, tmp_path, stubs, monkeypatch,
 ):

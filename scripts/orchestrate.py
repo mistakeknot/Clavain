@@ -431,11 +431,17 @@ def _outcome_check(task: Task, project_dir: str, since: float) -> bool:
 def _read_verdict_status(verdict_path: str) -> str | None:
     if not os.path.exists(verdict_path):
         return None
-    with open(verdict_path) as f:
+    # Every STATUS line counts (case-insensitively): the first non-pass value
+    # wins, so a "pass" ahead of a later "fail" cannot read as pass.
+    statuses = []
+    with open(verdict_path, errors="replace") as f:
         for line in f:
-            if line.startswith("STATUS:"):
-                return line.split(":", 1)[1].strip()
-    return None
+            m = re.match(r"status:(.*)$", line.rstrip("\r\n"), re.I)
+            if m:
+                statuses.append(m.group(1).strip().lower())
+    if not statuses:
+        return None
+    return next((s for s in statuses if s != "pass"), "pass")
 
 
 def _read_verdict_provisional(verdict_path: str) -> str | None:
