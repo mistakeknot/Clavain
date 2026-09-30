@@ -2922,13 +2922,24 @@ _extract_verdict() {
         if [[ "$has_valid_block" != 1 ]]; then
             local last_line
             # A final line inside an unclosed code fence is quoted example
-            # text, not the agent's ruling: an odd number of fence lines
-            # means the last line sits inside one.
+            # text, not the agent's ruling. Track fence char and opening length: a
+            # closer must repeat the char, be at least as long, and carry no
+            # trailing text.
             last_line="$(awk '
                 { sub(/\r$/, "") }
-                /^[[:space:]]*(```|~~~)/ { fences++ }
+                {
+                    line = $0
+                    if (match(line, /^[[:space:]]*(```+|~~~+)/)) {
+                        run = substr(line, RSTART, RLENGTH)
+                        sub(/^[[:space:]]*/, "", run)
+                        rest = substr(line, RSTART + RLENGTH)
+                        ch = substr(run, 1, 1)
+                        if (open == "") { open = ch; olen = length(run) }
+                        else if (ch == open && length(run) >= olen && rest ~ /^[[:space:]]*$/) { open = "" }
+                    }
+                }
                 $0 ~ /[^[:space:]]/ { last = $0 }
-                END { if (fences % 2 == 0) print last }
+                END { if (open == "") print last }
             ' "$output_file" 2>/dev/null)" || last_line=""
             if [[ "${last_line^^}" =~ ^VERDICT:[[:space:]]*PASS[[:space:]]*$ ]]; then
                 status="pass"
@@ -3565,7 +3576,7 @@ _finalize_dispatch_result() {
         # blocked/denied") may override it.
         case "$failure_class" in
           rate_limited|quota_exhausted)
-            if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|policy[^[:alnum:]]+(block|den)' "$STDERR_FILE" 2>/dev/null; then
+            if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|policy[^[:alnum:]]+(block(ed)?|den(y|ied|ies))\b' "$STDERR_FILE" 2>/dev/null; then
               failure_class="$stderr_class"
             fi
             ;;

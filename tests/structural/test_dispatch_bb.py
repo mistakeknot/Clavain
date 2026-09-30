@@ -558,3 +558,10 @@ def test_borrowed_token_is_not_persisted_by_dispatch(tmp_path):
     leaked = [p for p in tmp_path.rglob('*') if p.is_file()
               and secret in p.read_text(errors='ignore')]
     assert leaked == []
+
+
+@pytest.mark.parametrize("stderr", ["forbidden: policy density 3", "misalignment; policy denominator 2"])
+def test_incidental_policy_words_do_not_override_structured_quota(tmp_path, stderr):
+    assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}],
+                        stderr=stderr) != 0
+    assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"

@@ -567,6 +567,34 @@ TEXT
     grep -q '^STATUS: warn$' "$VERDICT_FILE"
 }
 
+@test "extract: a four-backtick fence closed only by three backticks stays open" {
+    _load
+    printf 'Notes.\n````text\n```\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: a tilde fence is not closed by a backtick fence" {
+    _load
+    printf 'Notes.\n~~~text\n```\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: a fence-like line with trailing text does not close a fence" {
+    _load
+    printf 'Notes.\n```text\n```not a closer\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: a properly closed fence before the final verdict still passes" {
+    _load
+    printf 'Notes.\n````text\nquoted\n`````\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
 @test "extract: a first-line verdict is never overridden by a final VERDICT: PASS line" {
     _load
     printf 'Verdict: NEEDS-FIXES\nquoted:\nVERDICT: PASS\n' > "$OUTPUT"
