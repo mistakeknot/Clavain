@@ -61,15 +61,15 @@ def find_rollouts(root, tid):
     return sorted(root.glob(f'*/*/*/rollout-*-{tid}.jsonl'))
 
 def responded(o, p):
-    """A record proving the model answered: an assistant message, or usage counted for the turn."""
-    return (o.get('type') == 'response_item' and p.get('type') == 'message' and p.get('role') == 'assistant') or \
-           (o.get('type') == 'event_msg' and p.get('type') == 'token_count' and bool(p.get('info')))
+    """A record proving the model answered this turn: an assistant message. Usage snapshots do not
+    count: a token_count can repeat an earlier turn's totals, so it cannot attest the current turn."""
+    return o.get('type') == 'response_item' and p.get('type') == 'message' and p.get('role') == 'assistant'
 
 def read_rollout(path, tid):
     """(model of every turn in order, final turn's effort) for the session `tid`.
 
     Unprovable (([], None)) when anything about a turn is doubtful: an unparsable
-    record, a turn without a valid model, or a turn with no sign the model answered
+    record, a turn without a valid model, or a turn with no assistant message
     (a configured-but-refused turn, e.g. a usage limit, is not a model that ran)."""
     models, effort, meta_ok, answered = [], None, False, True
     with open(path, errors='replace') as f:

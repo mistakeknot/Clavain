@@ -98,7 +98,7 @@ def test_reads_the_real_rollout_shape_seen_in_codex_0_159(tmp_path):
         json.dumps({'type': 'session_meta', 'payload': {'id': TID, 'session_id': TID, 'originator': 'codex_exec', 'model_provider': 'bb-account-pool'}}) + '\n'
         + json.dumps({'type': 'event_msg', 'payload': {'type': 'task_started'}}) + '\n'
         + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol', 'effort': 'medium', 'collaboration_mode': {'settings': {'model': 'gpt-6.1-sol'}}}}) + '\n'
-        + json.dumps({'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {'total_token_usage': {}}}}) + '\n')
+        + json.dumps(ANSWER) + '\n')
     r = run(events(tmp_path / 'e.jsonl', TID), tmp_path / 's', 'gpt-6.1-sol')
     assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_effort'] == 'medium'
 
@@ -240,3 +240,12 @@ def test_threads_with_different_efforts_claim_no_effort(tmp_path):
     rollout(s, TID, ['gpt-6.1-sol'], effort='high'); rollout(s, other, ['gpt-6.1-sol'], effort='low')
     r = run(events(tmp_path / 'e.jsonl', TID, other), s, 'gpt-6.1-sol')
     assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_effort'] == 'unknown'
+
+
+def test_a_stale_usage_snapshot_does_not_prove_an_unanswered_turn(tmp_path):
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol'])
+    f = next(s.rglob('rollout-*.jsonl'))
+    usage = json.dumps({'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {'total_token_usage': {'input_tokens': 5}}}})
+    f.write_text(f.read_text() + usage + '\n' + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol'}}) + '\n' + usage + '\n')
+    assert run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6.1-sol')['observed_model'] == 'unknown'
