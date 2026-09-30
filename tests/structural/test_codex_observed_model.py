@@ -98,3 +98,41 @@ def test_reads_the_real_rollout_shape_seen_in_codex_0_159(tmp_path):
         + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol', 'effort': 'medium', 'collaboration_mode': {'settings': {'model': 'gpt-6.1-sol'}}}}) + '\n')
     r = run(events(tmp_path / 'e.jsonl', TID), tmp_path / 's', 'gpt-6.1-sol')
     assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_effort'] == 'medium'
+
+
+def test_switch_back_reports_the_final_model_not_the_last_new_one(tmp_path):
+    rollout(tmp_path / 's', TID, ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6.1-sol'])
+    r = run(events(tmp_path / 'e.jsonl', TID), tmp_path / 's', 'gpt-6.1-sol')
+    assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_models'] == ['gpt-6.1-sol', 'gpt-6-astra']
+    assert r['observed_model_matches_requested'] is False
+
+
+def test_two_rollouts_claiming_one_thread_id_are_ambiguous_not_last_wins(tmp_path):
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol'])
+    d = s / '2026' / '10' / '01'; d.mkdir(parents=True)
+    (d / f'rollout-2026-10-01T00-00-00-{TID}.jsonl').write_text(
+        json.dumps({'type': 'session_meta', 'payload': {'id': TID}}) + '\n'
+        + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6-astra'}}) + '\n')
+    r = run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6-astra')
+    assert r['observed_model'] == 'unknown' and r['observed_model_matches_requested'] is None
+    assert 'claim thread' in r['observed_reason']
+
+
+@pytest.mark.parametrize('bad', ['x' * 129, 'gpt 6', 'gpt-6\n', '$(id)', ';rm'])
+def test_a_value_that_is_not_a_model_id_is_unprovable(tmp_path, bad):
+    rollout(tmp_path / 's', TID, [bad])
+    r = run(events(tmp_path / 'e.jsonl', TID), tmp_path / 's', 'gpt-6.1-sol')
+    assert r['observed_model'] == 'unknown' and r['observed_source'] == 'unavailable'
+
+
+def test_a_fifo_for_events_or_rollout_never_blocks_the_helper(tmp_path):
+    s = tmp_path / 's'; s.mkdir()
+    fifo = tmp_path / 'e.fifo'; os.mkfifo(fifo)
+    p = subprocess.run([sys.executable, str(HELPER), str(fifo), '--sessions-dir', str(s)], capture_output=True, text=True, timeout=10)
+    assert json.loads(p.stdout)['observed_source'] == 'unavailable'
+    d = s / '2026' / '09' / '30'; d.mkdir(parents=True)
+    os.mkfifo(d / f'rollout-2026-09-30T00-00-00-{TID}.jsonl')
+    p = subprocess.run([sys.executable, str(HELPER), str(events(tmp_path / 'e.jsonl', TID)), '--sessions-dir', str(s)], capture_output=True, text=True, timeout=10)
+    r = json.loads(p.stdout)
+    assert r['observed_model'] == 'unknown' and 'regular file' in r['observed_reason']

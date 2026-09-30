@@ -62,15 +62,19 @@ _role_audit_context() {
   local observed=null
   if [[ "$ENGINE" == codex && ( "$state" == completed || "$state" == failed ) && "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka ]]; then
     if [[ "${VIA:-}" == bb ]]; then
-      observed="$(jq -c --arg req "$MODEL" 'if type == "object" then
-          {observed_model:(.actual_model // "unknown"),observed_effort:(.actual_effort // "unknown"),
-           observed_source:"bb-seat-receipt",
-           observed_model_matches_requested:(if (.actual_model // "unknown") == "unknown" then null else .actual_model == $req end)}
+      # The installed BB emits no turn event attesting the model (bb-seat.py
+      # leaves actual_model "unknown"), so this is "unknown" until BB does.
+      observed="$(jq -c --arg req "$MODEL" --arg attempt "$ATTEMPT_ID" 'if type == "object" and .attempt_id == $attempt and (.actual_model // "unknown") != "unknown" then
+          {observed_model:.actual_model,observed_effort:(.actual_effort // "unknown"),
+           observed_source:"bb-seat-receipt",observed_model_matches_requested:(.actual_model == $req)}
         else {observed_model:"unknown",observed_effort:"unknown",observed_source:"unavailable",
-              observed_reason:"no bb seat receipt for this attempt",observed_model_matches_requested:null} end' <<< "$bb_receipt" 2>/dev/null || true)"
+              observed_reason:(if type == "object" and .attempt_id == $attempt then "bb seat receipt does not attest the model that ran" else "no bb seat receipt for this attempt" end),
+              observed_model_matches_requested:null} end' <<< "$bb_receipt" 2>/dev/null || true)"
     else
       [[ -n "$findings_helper" ]] || findings_helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-      observed="$(python3 "$findings_helper/codex-observed-model.py" "${PROVIDER_EVENTS:-/dev/null}" --requested-model "$MODEL" 2>/dev/null || true)"
+      # Bounded: evidence gathering may never stall or fail a finished dispatch.
+      local -a bound=(); command -v timeout >/dev/null 2>&1 && bound=(timeout "${OBSERVED_MODEL_TIMEOUT:-30}")
+      observed="$("${bound[@]}" python3 "$findings_helper/codex-observed-model.py" "${PROVIDER_EVENTS:-/dev/null}" --requested-model "$MODEL" 2>/dev/null | head -c 8192 || true)"
     fi
     jq -e 'type == "object"' <<< "${observed:-}" >/dev/null 2>&1 || \
       observed='{"observed_model":"unknown","observed_source":"unavailable","observed_reason":"observed-model capture failed","observed_model_matches_requested":null}'

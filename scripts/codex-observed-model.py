@@ -13,29 +13,36 @@ dispatch already captured, finds their rollouts, and prints one JSON object:
 Anything it cannot prove is "unknown" plus observed_reason; it never guesses from
 the requested model and always exits 0 so evidence gathering cannot fail a run.
 """
-import argparse, json, os, re, sys
+import argparse, json, os, re, stat, sys
 from pathlib import Path
 
-UUID = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+MODEL = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}')
+MAX_MODELS = 16
+UUID = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+
+def regular(path):
+    """True only for a regular file: a FIFO or device at the path must never block the reader."""
+    try: return stat.S_ISREG(os.stat(path).st_mode)
+    except OSError: return False
 
 def thread_ids(events):
     ids = []
+    if not regular(events): return ids
     try:
         with open(events, errors='replace') as f:
             for line in f:
                 try: o = json.loads(line)
                 except ValueError: continue
                 t = o.get('thread_id') if isinstance(o, dict) and o.get('type') == 'thread.started' else None
-                if isinstance(t, str) and UUID.match(t) and t not in ids: ids.append(t)
+                if isinstance(t, str) and UUID.fullmatch(t) and t not in ids: ids.append(t)
     except OSError: pass
     return ids
 
-def find_rollout(root, tid):
-    hits = sorted(root.glob(f'*/*/*/rollout-*-{tid}.jsonl'))
-    return hits[-1] if hits else None
+def find_rollouts(root, tid):
+    return sorted(root.glob(f'*/*/*/rollout-*-{tid}.jsonl'))
 
 def read_rollout(path, tid):
-    """(models in first-seen order, last effort) from turn_context records of the session `tid`."""
+    """(model of every turn in order, last effort) from turn_context records of the session `tid`."""
     models, effort, meta_ok = [], None, False
     with open(path, errors='replace') as f:
         for line in f:
@@ -46,8 +53,9 @@ def read_rollout(path, tid):
             if o.get('type') == 'session_meta':
                 meta_ok = p.get('id') == tid
             elif o.get('type') == 'turn_context' and isinstance(p.get('model'), str) and p['model']:
-                if p['model'] not in models: models.append(p['model'])
-                if isinstance(p.get('effort'), str): effort = p['effort']
+                if not MODEL.fullmatch(p['model']) or len(models) >= 100000: return [], None  # not a model id: unprovable
+                models.append(p['model'])
+                if isinstance(p.get('effort'), str) and MODEL.fullmatch(p['effort']): effort = p['effort']
     return (models, effort) if meta_ok else ([], None)
 
 def observe(events, sessions, requested_model=''):
@@ -58,20 +66,26 @@ def observe(events, sessions, requested_model=''):
     if not ids:
         return {**out, 'observed_source': 'unavailable', 'observed_reason': 'no thread.started event in provider events'}
     out['observed_thread_id'] = ids[0]
-    models, effort = [], None
+    turns, effort = [], None
     for tid in ids:
-        path = find_rollout(sessions, tid)
-        if path is None:
-            return {**out, 'observed_source': 'unavailable', 'observed_reason': f'no session rollout for thread {tid} under {sessions}'}
-        try: m, e = read_rollout(path, tid)
+        paths = find_rollouts(sessions, tid)
+        if len(paths) != 1:  # none, or several files claiming one thread id: cannot say which run this was
+            why = f'no session rollout for thread {tid} under {sessions}' if not paths else f'{len(paths)} session rollouts claim thread {tid}'
+            return {**out, 'observed_source': 'unavailable', 'observed_reason': why}
+        if not regular(paths[0]):
+            return {**out, 'observed_source': 'unavailable', 'observed_reason': f'rollout for thread {tid} is not a regular file'}
+        try: m, e = read_rollout(paths[0], tid)
         except OSError as err:
             return {**out, 'observed_source': 'unavailable', 'observed_reason': f'cannot read rollout: {err.strerror}'}
         if not m:
-            return {**out, 'observed_source': 'unavailable', 'observed_reason': f'rollout for thread {tid} has no matching session_meta/turn_context model'}
-        models += [x for x in m if x not in models]
+            return {**out, 'observed_source': 'unavailable', 'observed_reason': f'rollout for thread {tid} has no matching session_meta or a valid turn_context model'}
+        turns += m
         effort = e or effort
+    models = list(dict.fromkeys(turns))
+    if len(models) > MAX_MODELS:
+        return {**out, 'observed_source': 'unavailable', 'observed_reason': 'implausibly many distinct models in session'}
     out['observed_models'] = models
-    out['observed_model'] = models[-1]
+    out['observed_model'] = turns[-1]  # the model of the final turn, even when it switched back to an earlier one
     out['observed_effort'] = effort or 'unknown'
     if requested_model:
         # Every model that actually ran must be the requested one.

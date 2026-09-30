@@ -65,7 +65,9 @@ exec_of() { _role_audit_context "$1" "${2:-0}" "${3:-success}" | jq -c '.executi
     [ "$(jq -r .observed_reason <<< "$output")" = "observed-model capture failed" ]
 }
 
-@test "bb transport: observed model comes from the bb seat receipt" {
+# Synthetic receipt: the installed bb-seat.py never writes actual_model (it stays
+# "unknown"), so this only proves the branch would honour one if BB attested it.
+@test "bb transport: a receipt that does attest a model is honoured (synthetic)" {
     VIA=bb
     jq -cn '{attempt_id:"attempt-1",actual_model:"gpt-6.1-sol",actual_effort:"high"}' > "$OUTPUT.receipt.json"
     run exec_of completed
@@ -81,6 +83,7 @@ exec_of() { _role_audit_context "$1" "${2:-0}" "${3:-success}" | jq -c '.executi
     run exec_of completed
     [ "$(jq -r .observed_model <<< "$output")" = unknown ]
     [ "$(jq -r .observed_model_matches_requested <<< "$output")" = null ]
+    [ "$(jq -r .observed_reason <<< "$output")" = "bb seat receipt does not attest the model that ran" ]
 }
 
 @test "bb transport: a receipt left by another attempt is ignored" {
@@ -99,4 +102,14 @@ exec_of() { _role_audit_context "$1" "${2:-0}" "${3:-success}" | jq -c '.executi
     [ "$(jq 'has("observed_model")' <<< "$output")" = false ]
     ENGINE=claude run exec_of completed
     [ "$(jq 'has("observed_model")' <<< "$output")" = false ]
+}
+
+@test "a hung observed-model helper is bounded and degrades to unknown" {
+    rollout gpt-6.1-sol
+    mkdir -p "$T/slow"
+    printf '#!/usr/bin/env python3\nimport time\ntime.sleep(300)\n' > "$T/slow/codex-observed-model.py"
+    DISPATCH_SCRIPT_DIR="$T/slow" OBSERVED_MODEL_TIMEOUT=1 run exec_of completed
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .observed_model <<< "$output")" = unknown ]
+    [ "$(jq -r .observed_reason <<< "$output")" = "observed-model capture failed" ]
 }
