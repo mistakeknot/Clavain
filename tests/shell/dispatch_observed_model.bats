@@ -21,7 +21,7 @@ teardown() { rm -rf "$T"; }
 
 rollout() {  # rollout MODEL [THREAD_ID]
     local tid="${2:-$TID}"
-    printf '{"type":"session_meta","payload":{"id":"%s"}}\n{"type":"turn_context","payload":{"model":"%s","effort":"high"}}\n' \
+    printf '{"type":"session_meta","payload":{"id":"%s"}}\n{"type":"turn_context","payload":{"model":"%s","effort":"high"}}\n{"type":"response_item","payload":{"type":"message","role":"assistant"}}\n' \
         "$tid" "$1" > "$CODEX_HOME/sessions/2026/09/30/rollout-2026-09-30T00-00-00-$tid.jsonl"
     printf '{"type":"thread.started","thread_id":"%s"}\n' "$tid" > "$PROVIDER_EVENTS"
 }

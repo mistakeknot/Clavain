@@ -9,6 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / 'scripts' / 'codex-observed-model.py'
+ANSWER = {'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant'}}
 TID = '01a0f12b-4441-7732-b494-da5347122cea'
 
 
@@ -31,7 +32,8 @@ def rollout(root, tid, models, meta_id=None, effort='high'):
     d = root / '2026' / '09' / '30'
     d.mkdir(parents=True, exist_ok=True)
     rows = [{'type': 'session_meta', 'payload': {'id': meta_id or tid}}]
-    rows += [{'type': 'turn_context', 'payload': {'model': m, 'effort': effort}} for m in models]
+    for m in models:
+        rows += [{'type': 'turn_context', 'payload': {'model': m, 'effort': effort}}, ANSWER]
     (d / f'rollout-2026-09-30T00-00-00-{tid}.jsonl').write_text('\n'.join(map(json.dumps, rows)) + '\n')
 
 
@@ -95,7 +97,8 @@ def test_reads_the_real_rollout_shape_seen_in_codex_0_159(tmp_path):
     (d / f'rollout-2026-09-30T01-15-40-{TID}.jsonl').write_text(
         json.dumps({'type': 'session_meta', 'payload': {'id': TID, 'session_id': TID, 'originator': 'codex_exec', 'model_provider': 'bb-account-pool'}}) + '\n'
         + json.dumps({'type': 'event_msg', 'payload': {'type': 'task_started'}}) + '\n'
-        + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol', 'effort': 'medium', 'collaboration_mode': {'settings': {'model': 'gpt-6.1-sol'}}}}) + '\n')
+        + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol', 'effort': 'medium', 'collaboration_mode': {'settings': {'model': 'gpt-6.1-sol'}}}}) + '\n'
+        + json.dumps({'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {'total_token_usage': {}}}}) + '\n')
     r = run(events(tmp_path / 'e.jsonl', TID), tmp_path / 's', 'gpt-6.1-sol')
     assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_effort'] == 'medium'
 
@@ -180,7 +183,7 @@ def test_helper_bounds_itself_without_timeout_1(tmp_path):
     assert time.time() - t < 10 and p.stdout.strip() == 'Expired'
 
 
-@pytest.mark.parametrize('tail', ['{"type":"turn_context","payload":{"model":"gpt-6.1-so', '{"type":"turn_context","payload":null}', '{"type":"turn_context"}'])
+@pytest.mark.parametrize('tail', ['{"type":"turn_context","payload":{"model":"gpt-6.1-so', '{"type":"turn_context","payload":null}', '{"type":"turn_context"}', '{"type":"turn_con'])
 def test_a_damaged_later_turn_is_unprovable(tmp_path, tail):
     s = tmp_path / 's'
     rollout(s, TID, ['gpt-6.1-sol'])
@@ -194,7 +197,7 @@ def test_effort_is_the_final_turns_not_an_earlier_one(tmp_path):
     s = tmp_path / 's'
     rollout(s, TID, ['gpt-6.1-sol'], effort='high')
     f = next(s.rglob('rollout-*.jsonl'))
-    f.write_text(f.read_text() + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol'}}) + '\n')
+    f.write_text(f.read_text() + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol'}}) + '\n' + json.dumps(ANSWER) + '\n')
     r = run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6.1-sol')
     assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_effort'] == 'unknown'
 
@@ -210,3 +213,30 @@ def test_an_oversized_record_is_bounded_and_unprovable(tmp_path):
     ev.write_text('{"pad":"' + 'a' * (33 << 20) + '"}\n' + json.dumps({'type': 'thread.started', 'thread_id': TID}) + '\n')
     rollout(tmp_path / 's2', TID, ['gpt-6.1-sol'])
     assert run(ev, tmp_path / 's2', 'gpt-6.1-sol')['observed_model'] == 'gpt-6.1-sol'
+
+
+def test_a_turn_the_model_never_answered_is_not_a_model_that_ran(tmp_path):
+    """A configured-but-refused turn (e.g. a usage limit) leaves a turn_context and no answer."""
+    s = tmp_path / 's'
+    rollout(s, TID, [])
+    f = next(s.rglob('rollout-*.jsonl'))
+    f.write_text(f.read_text() + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol', 'effort': 'high'}}) + '\n'
+                 + json.dumps({'type': 'event_msg', 'payload': {'type': 'error', 'codex_error_info': 'usage_limit_exceeded'}}) + '\n')
+    r = run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6.1-sol')
+    assert r['observed_model'] == 'unknown' and r['observed_model_matches_requested'] is None
+
+
+def test_a_refused_later_turn_does_not_leave_the_earlier_model_observed(tmp_path):
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol'])
+    f = next(s.rglob('rollout-*.jsonl'))
+    f.write_text(f.read_text() + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol'}}) + '\n')
+    assert run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6.1-sol')['observed_model'] == 'unknown'
+
+
+def test_threads_with_different_efforts_claim_no_effort(tmp_path):
+    other = '02b1f23c-5552-7843-c5a5-eb6458233dfb'
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol'], effort='high'); rollout(s, other, ['gpt-6.1-sol'], effort='low')
+    r = run(events(tmp_path / 'e.jsonl', TID, other), s, 'gpt-6.1-sol')
+    assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_effort'] == 'unknown'

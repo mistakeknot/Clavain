@@ -60,30 +60,41 @@ def thread_ids(events):
 def find_rollouts(root, tid):
     return sorted(root.glob(f'*/*/*/rollout-*-{tid}.jsonl'))
 
+def responded(o, p):
+    """A record proving the model answered: an assistant message, or usage counted for the turn."""
+    return (o.get('type') == 'response_item' and p.get('type') == 'message' and p.get('role') == 'assistant') or \
+           (o.get('type') == 'event_msg' and p.get('type') == 'token_count' and bool(p.get('info')))
+
 def read_rollout(path, tid):
-    """(model of every turn in order, last effort) from turn_context records of the session `tid`."""
-    models, effort, meta_ok = [], None, False
+    """(model of every turn in order, final turn's effort) for the session `tid`.
+
+    Unprovable (([], None)) when anything about a turn is doubtful: an unparsable
+    record, a turn without a valid model, or a turn with no sign the model answered
+    (a configured-but-refused turn, e.g. a usage limit, is not a model that ran)."""
+    models, effort, meta_ok, answered = [], None, False, True
     with open(path, errors='replace') as f:
         for line, big in lines(f):
             if big: return [], None
+            if not line.strip(): continue
             try: o = json.loads(line)
-            except ValueError:
-                if 'turn_context' in line: return [], None  # a damaged turn record: the final turn is unprovable
-                continue
-            if not isinstance(o, dict): continue
+            except ValueError: return [], None  # a damaged record could be a damaged turn
+            if not isinstance(o, dict): return [], None
             p = o.get('payload')
             if o.get('type') == 'turn_context' and not isinstance(p, dict): return [], None
             if not isinstance(p, dict): continue
             if o.get('type') == 'session_meta':
                 meta_ok = p.get('id') == tid
             elif o.get('type') == 'turn_context':
+                if not answered: return [], None
                 m = p.get('model')
                 # A turn with no valid model is unprovable: skipping it would credit the earlier turn's model.
                 if not isinstance(m, str) or not MODEL.fullmatch(m) or len(models) >= 100000: return [], None
-                models.append(m)
+                models.append(m); answered = False
                 # Effort belongs to the turn that carries it; a later turn without one must not inherit it.
                 effort = p['effort'] if isinstance(p.get('effort'), str) and MODEL.fullmatch(p['effort']) else None
-    return (models, effort) if meta_ok else ([], None)
+            elif responded(o, p):
+                answered = True
+    return (models, effort) if meta_ok and answered else ([], None)
 
 def observe(events, sessions, requested_model=''):
     out = {'observed_model': 'unknown', 'observed_models': [], 'observed_effort': 'unknown',
@@ -93,7 +104,7 @@ def observe(events, sessions, requested_model=''):
     if not ids:
         return {**out, 'observed_source': 'unavailable', 'observed_reason': 'no thread.started event in provider events'}
     out['observed_thread_id'] = ids[0]
-    turns, effort = [], None
+    turns, efforts = [], []
     for tid in ids:
         paths = find_rollouts(sessions, tid)
         if len(paths) != 1:  # none, or several files claiming one thread id: cannot say which run this was
@@ -107,8 +118,10 @@ def observe(events, sessions, requested_model=''):
         if not m:
             return {**out, 'observed_source': 'unavailable', 'observed_reason': f'rollout for thread {tid} has no matching session_meta or a valid turn_context model'}
         turns += m
-        effort = e
+        efforts.append(e)
     models = list(dict.fromkeys(turns))
+    # Threads finish in an unknown order: an effort is only claimed when every thread agrees.
+    effort = efforts[0] if len(set(efforts)) == 1 else None
     if len(models) > MAX_MODELS:
         return {**out, 'observed_source': 'unavailable', 'observed_reason': 'implausibly many distinct models in session'}
     out['observed_models'] = models

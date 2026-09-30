@@ -126,7 +126,7 @@ if [[ -n "${FAKE_CODEX_ROLLOUT_MODEL:-}" ]]; then
   # ran in the session rollout (the --json stream itself carries no model).
   tid="${FAKE_CODEX_THREAD_ID:-11111111-2222-4333-8444-555555555555}"
   rdir="$CODEX_HOME/sessions/2026/09/30"; mkdir -p "$rdir"
-  printf '{"type":"session_meta","payload":{"id":"%s"}}\n{"type":"turn_context","payload":{"model":"%s","effort":"high"}}\n' \
+  printf '{"type":"session_meta","payload":{"id":"%s"}}\n{"type":"turn_context","payload":{"model":"%s","effort":"high"}}\n{"type":"response_item","payload":{"type":"message","role":"assistant"}}\n' \
     "$tid" "$FAKE_CODEX_ROLLOUT_MODEL" > "$rdir/rollout-2026-09-30T00-00-00-$tid.jsonl"
   printf '{"type":"thread.started","thread_id":"%s"}\n' "$tid"
 fi
