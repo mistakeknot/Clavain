@@ -2910,6 +2910,25 @@ _extract_verdict() {
     elif [[ -z "$verdict_line" ]]; then
         status="warn"
         summary="No verdict line in agent output."
+        # The first line carries no verdict at all, so (like a trailing
+        # structured block) the LAST non-blank line is the one remaining
+        # legitimate verdict source: agents that narrate first and close
+        # with "VERDICT: PASS" (claude result text) end this way. Only an
+        # exact PASS/CLEAN token on that final line counts, and only when
+        # no trailing block exists — mid-body lines, quoted fences and
+        # recaps followed by further prose are never consulted (mk P1-2).
+        # Anything else stays warn.
+        if [[ "$has_valid_block" != 1 ]]; then
+            local last_line
+            last_line="$(awk '{ sub(/\r$/, ""); if ($0 ~ /[^[:space:]]/) last = $0 } END { print last }' "$output_file" 2>/dev/null)" || last_line=""
+            if [[ "${last_line^^}" =~ ^VERDICT:[[:space:]]*PASS[[:space:]]*$ ]]; then
+                status="pass"
+                summary="Validator replay PASS."
+            elif [[ "${last_line^^}" =~ ^VERDICT:[[:space:]]*CLEAN[[:space:]]*$ ]]; then
+                status="pass"
+                summary="Agent reports clean completion."
+            fi
+        fi
     elif [[ "$verdict_word_upper" =~ ^(NEEDS-FIXES|NOT[[:space:]]+CLEAN) ]]; then
         # Starts with a NEEDS-FIXES/NOT CLEAN prefix but isn't the exact
         # token (e.g. "NEEDS-FIXES (2 P2)") — still unambiguously a
@@ -3515,20 +3534,27 @@ _finalize_dispatch_result() {
     exit_code=1
     failure_class=terminal_accounting
   fi
-  # A terminal stderr denial dominates an earlier structured capacity error —
-  # EXCEPT a structured rate_limited or quota_exhausted result (review
-  # finding: a stderr terminal_configuration override, e.g. from an
-  # incidental 401-shaped phrase elsewhere in the same stderr, was silently
-  # turning a real, correctly-classified capacity failure into a terminal one
-  # and suppressing the fallback walk). Once provider-errors.py has already
-  # structured the failure as one of those two, that result always wins.
+  # A terminal stderr denial dominates an earlier structured capacity error.
+  # A stderr terminal_policy denial (an explicit policy block) is always
+  # authoritative: letting a structured quota event outrank it would keep the
+  # fallback walk going past a denial that must stop it (test_dispatch_bb
+  # test_stderr_denial_dominates_quota). A stderr terminal_configuration
+  # override, however, must not clobber a structured rate_limited or
+  # quota_exhausted result (review finding: an incidental 401-shaped phrase
+  # elsewhere in the same stderr was silently turning a real,
+  # correctly-classified capacity failure into a terminal one and suppressing
+  # the fallback walk). Once provider-errors.py has already structured the
+  # failure as one of those two, only a policy denial can override it.
   if [[ -n "$failure_class" ]]; then
-    case "$failure_class" in
-      rate_limited|quota_exhausted) ;;
-      *)
-        local stderr_class
-        stderr_class="$(_classify_dispatch_failure "$STDERR_FILE" 1)"
-        case "$stderr_class" in terminal_policy|terminal_configuration) failure_class="$stderr_class" ;; esac
+    local stderr_class
+    stderr_class="$(_classify_dispatch_failure "$STDERR_FILE" 1)"
+    case "$stderr_class" in
+      terminal_policy) failure_class="$stderr_class" ;;
+      terminal_configuration)
+        case "$failure_class" in
+          rate_limited|quota_exhausted) ;;
+          *) failure_class="$stderr_class" ;;
+        esac
         ;;
     esac
   fi

@@ -536,6 +536,37 @@ TEXT
     ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
+# A first line with no verdict at all falls back to the LAST non-blank line
+# (claude result text narrates, then closes "VERDICT: PASS"); a mid-body or
+# non-final verdict line, or a non-pass token, never passes.
+@test "extract: narration then a final 'VERDICT: PASS' line synthesizes pass" {
+    _load
+    printf 'Reviewed.\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
+@test "extract: a mid-body VERDICT: CLEAN followed by more prose stays warn" {
+    _load
+    printf 'Reviewed.\nVERDICT: CLEAN\nbut one more thing\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: a final 'VERDICT: FAIL' line after narration stays warn" {
+    _load
+    printf 'Reviewed.\nVERDICT: FAIL\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
+@test "extract: a first-line verdict is never overridden by a final VERDICT: PASS line" {
+    _load
+    printf 'Verdict: NEEDS-FIXES\nquoted:\nVERDICT: PASS\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
 # --- mk P3-7 (round-3 re-check): common markdown/whitespace dressing around
 # the label and the token must still read as plain CLEAN. -------------------
 
