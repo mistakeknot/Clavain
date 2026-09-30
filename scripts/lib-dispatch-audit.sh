@@ -56,6 +56,25 @@ _role_audit_context() {
     findings="$(python3 "$findings_helper/receipt-findings.py" "$OUTPUT" 2>/dev/null)" || findings=null
     jq -e 'type == "object"' <<< "$findings" >/dev/null 2>&1 || findings=null
   fi
+  # The requested model is not evidence of the model that ran. On a finished
+  # codex run record the observed one: from the bb seat receipt on the bb path,
+  # else from the session rollout named by the captured thread.started event.
+  local observed=null
+  if [[ "$ENGINE" == codex && ( "$state" == completed || "$state" == failed ) && "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka ]]; then
+    if [[ "${VIA:-}" == bb ]]; then
+      observed="$(jq -c --arg req "$MODEL" 'if type == "object" then
+          {observed_model:(.actual_model // "unknown"),observed_effort:(.actual_effort // "unknown"),
+           observed_source:"bb-seat-receipt",
+           observed_model_matches_requested:(if (.actual_model // "unknown") == "unknown" then null else .actual_model == $req end)}
+        else {observed_model:"unknown",observed_effort:"unknown",observed_source:"unavailable",
+              observed_reason:"no bb seat receipt for this attempt",observed_model_matches_requested:null} end' <<< "$bb_receipt" 2>/dev/null || true)"
+    else
+      [[ -n "$findings_helper" ]] || findings_helper="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      observed="$(python3 "$findings_helper/codex-observed-model.py" "${PROVIDER_EVENTS:-/dev/null}" --requested-model "$MODEL" 2>/dev/null || true)"
+    fi
+    jq -e 'type == "object"' <<< "${observed:-}" >/dev/null 2>&1 || \
+      observed='{"observed_model":"unknown","observed_source":"unavailable","observed_reason":"observed-model capture failed","observed_model_matches_requested":null}'
+  fi
   head_after="$(git -C "${WORKDIR:-.}" rev-parse HEAD 2>/dev/null || true)"
   # A verified review packet binds this attempt to exact evidence bytes, not
   # just a role/profile. Set only when dispatch.sh's own verification (never
@@ -83,6 +102,7 @@ _role_audit_context() {
     --arg enrollment "${CLAVAIN_TASK_ENROLLMENT_ID:-}" --arg manifest "${CLAVAIN_TASK_MANIFEST_SHA256:-}" \
     --arg cohort "${CLAVAIN_TASK_COHORT_ID:-}" \
     --argjson exit_code "$exit_code" --argjson observation "${DISPATCH_EXECUTION_OBSERVATION:-null}" \
+    --argjson observed_model "$observed" \
     --argjson intercept "${DISPATCH_INTERCEPT_EVIDENCE:-null}" \
     --arg intercept_error "${DISPATCH_INTERCEPT_EVIDENCE_ERROR:-}" \
     --argjson bb_receipt "$bb_receipt" \
@@ -103,6 +123,7 @@ _role_audit_context() {
       run_id:$run,bead_id:$bead,bead_source:$bead_source,
       execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
         codex_version:$version,sandbox:$sandbox,transport:$transport,account:$account,session_id:$session,event_log:$events}
+        + (if $observed_model | type == "object" then $observed_model else {} end)
         + (if $observation | type == "object" then $observation else {} end)),
       checkout:{before:$before,after:$after},bb_seat:$bb_receipt,
       terminal:($state == "completed" or $state == "failed"),

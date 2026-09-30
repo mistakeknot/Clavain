@@ -121,6 +121,15 @@ case "${FAKE_CODEX_MODE:-success}" in
     exit 7
     ;;
 esac
+if [[ -n "${FAKE_CODEX_ROLLOUT_MODEL:-}" ]]; then
+  # Like real codex: announce the thread on stdout and record the model that
+  # ran in the session rollout (the --json stream itself carries no model).
+  tid="${FAKE_CODEX_THREAD_ID:-11111111-2222-4333-8444-555555555555}"
+  rdir="$CODEX_HOME/sessions/2026/09/30"; mkdir -p "$rdir"
+  printf '{"type":"session_meta","payload":{"id":"%s"}}\n{"type":"turn_context","payload":{"model":"%s","effort":"high"}}\n' \
+    "$tid" "$FAKE_CODEX_ROLLOUT_MODEL" > "$rdir/rollout-2026-09-30T00-00-00-$tid.jsonl"
+  printf '{"type":"thread.started","thread_id":"%s"}\n' "$tid"
+fi
 if [[ -n "$output" ]]; then
   printf '%s\n' "${FAKE_CODEX_OUTPUT_BODY:-VERDICT: CLEAN}" > "$output"
 fi
@@ -223,6 +232,24 @@ contains "$(cat "$FAKE_IC_LOG")" "--producer-identity=codex/gpt-6-astra"
 [[ -s "$FAKE_IC_CONTEXT_LOG" ]] || fail "missing immutable routing contexts"
 jq -s -e 'all(.[]; .schema_version == 1 and (.dispatch_id | length > 0) and (.attempt_id | length > 0) and .resolved_profile.profile.model != null and .resolved_route.profile != null and .execution.service_tier == "standard")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "incomplete routing snapshot"
 jq -s -e 'any(.[]; .state == "started") and any(.[]; .state == "completed") and any(.[]; .state == "failed" and .result.failure_class == "terminal_policy")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "missing dispatch lifecycle evidence"
+
+# mk-28gt: the receipt records the model codex actually ran (from its session
+# rollout), not just the requested one; a mismatch or missing evidence is
+# visible rather than silently equal to the request.
+export CODEX_HOME="$TMP_ROOT/codex-home"
+: > "$FAKE_IC_CONTEXT_LOG"
+bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 || fail "baseline dispatch failed"
+jq -s -e 'any(.[]; .state == "completed" and .execution.observed_source == "unavailable" and .execution.observed_model == "unknown" and .execution.observed_model_matches_requested == null and (.execution.observed_reason | length > 0))' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "run without codex session evidence must say observed model is unknown"
+requested_model="$(jq -s -r 'map(select(.state == "completed"))[-1].execution.model' "$FAKE_IC_CONTEXT_LOG")"
+[[ -n "$requested_model" && "$requested_model" != null ]] || fail "no requested model in receipt"
+: > "$FAKE_IC_CONTEXT_LOG"
+FAKE_CODEX_ROLLOUT_MODEL="$requested_model" bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 || fail "observed-model dispatch failed"
+jq -s -e --arg m "$requested_model" 'any(.[]; .state == "completed" and .execution.model == $m and .execution.observed_model == $m and .execution.observed_effort == "high" and .execution.observed_source == "codex-session-rollout" and .execution.observed_model_matches_requested == true and .execution.observed_thread_id == "11111111-2222-4333-8444-555555555555")' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "completed receipt lacks the observed codex model"
+jq -s -e 'all(.[]; .state != "started" or (.execution | has("observed_model") | not))' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "a started receipt must not claim an observed model"
+: > "$FAKE_IC_CONTEXT_LOG"
+FAKE_CODEX_ROLLOUT_MODEL=other-model FAKE_CODEX_THREAD_ID=99999999-2222-4333-8444-555555555555 bash "$ROOT/scripts/dispatch.sh" --role deep-execution -C "$TMP_ROOT/work" "hi" >/dev/null 2>&1 || fail "mismatch dispatch failed"
+jq -s -e --arg m "$requested_model" 'any(.[]; .state == "completed" and .execution.model == $m and .execution.observed_model == "other-model" and .execution.observed_model_matches_requested == false)' "$FAKE_IC_CONTEXT_LOG" >/dev/null || fail "receipt did not expose a requested/observed model mismatch"
+unset CODEX_HOME
 
 # Receipt attribution resolves a validated bead from flag, environment, or the
 # interstat session map, and records the executed fallback independently from
