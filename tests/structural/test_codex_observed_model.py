@@ -136,3 +136,45 @@ def test_a_fifo_for_events_or_rollout_never_blocks_the_helper(tmp_path):
     p = subprocess.run([sys.executable, str(HELPER), str(events(tmp_path / 'e.jsonl', TID)), '--sessions-dir', str(s)], capture_output=True, text=True, timeout=10)
     r = json.loads(p.stdout)
     assert r['observed_model'] == 'unknown' and 'regular file' in r['observed_reason']
+
+
+def test_a_later_turn_without_a_model_is_unprovable_not_the_earlier_model(tmp_path):
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol'])
+    f = next(s.rglob('rollout-*.jsonl'))
+    f.write_text(f.read_text() + json.dumps({'type': 'turn_context', 'payload': {'effort': 'high'}}) + '\n')
+    r = run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6.1-sol')
+    assert r['observed_model'] == 'unknown' and r['observed_model_matches_requested'] is None
+
+
+def test_threads_that_ran_different_models_name_no_single_final_model(tmp_path):
+    other = '02b1f23c-5552-7843-c5a5-eb6458233dfb'
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol']); rollout(s, other, ['gpt-6-astra'])
+    r = run(events(tmp_path / 'e.jsonl', TID, other), s, 'gpt-6.1-sol')
+    assert r['observed_model'] == 'unknown' and r['observed_models'] == ['gpt-6.1-sol', 'gpt-6-astra']
+    assert r['observed_model_matches_requested'] is False and 'several threads' in r['observed_reason']
+
+
+def test_two_threads_on_one_model_still_observe_it(tmp_path):
+    other = '02b1f23c-5552-7843-c5a5-eb6458233dfb'
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol']); rollout(s, other, ['gpt-6.1-sol'])
+    r = run(events(tmp_path / 'e.jsonl', TID, other), s, 'gpt-6.1-sol')
+    assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_model_matches_requested'] is True
+
+
+def test_helper_bounds_itself_without_timeout_1(tmp_path):
+    """A stalled read ends at the helper's own deadline; it does not rely on timeout(1)."""
+    import time
+    h = tmp_path / 'h.py'; h.write_text(HELPER.read_text().replace('DEADLINE_S = 20', 'DEADLINE_S = 1'))
+    s = tmp_path / 's'; rollout(s, TID, ['gpt-6.1-sol'])
+    ev = events(tmp_path / 'e.jsonl', TID)
+    stall = ("import importlib.util as u, sys, time\n"
+             f"sp = u.spec_from_file_location('h', {str(h)!r}); m = u.module_from_spec(sp); sp.loader.exec_module(m)\n"
+             "m.read_rollout = lambda *a: time.sleep(30)\n"
+             f"sys.argv = ['h', {str(ev)!r}, '--sessions-dir', {str(s)!r}]\n"
+             "try:\n    m.main()\nexcept Exception as e:\n    print(type(e).__name__)\n")
+    t = time.time()
+    p = subprocess.run([sys.executable, '-c', stall], capture_output=True, text=True, timeout=20)
+    assert time.time() - t < 10 and p.stdout.strip() == 'Expired'

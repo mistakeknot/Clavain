@@ -13,12 +13,17 @@ dispatch already captured, finds their rollouts, and prints one JSON object:
 Anything it cannot prove is "unknown" plus observed_reason; it never guesses from
 the requested model and always exits 0 so evidence gathering cannot fail a run.
 """
-import argparse, json, os, re, stat, sys
+import argparse, json, os, re, signal, stat, sys
 from pathlib import Path
 
 MODEL = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}')
 MAX_MODELS = 16
+DEADLINE_S = 20  # own bound: must hold even where `timeout(1)` is absent
+MAX_LINE = 1 << 22
 UUID = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+
+class Expired(Exception):
+    pass
 
 def regular(path):
     """True only for a regular file: a FIFO or device at the path must never block the reader."""
@@ -46,15 +51,18 @@ def read_rollout(path, tid):
     models, effort, meta_ok = [], None, False
     with open(path, errors='replace') as f:
         for line in f:
+            if len(line) > MAX_LINE: return [], None
             try: o = json.loads(line)
             except ValueError: continue
             if not isinstance(o, dict) or not isinstance(o.get('payload'), dict): continue
             p = o['payload']
             if o.get('type') == 'session_meta':
                 meta_ok = p.get('id') == tid
-            elif o.get('type') == 'turn_context' and isinstance(p.get('model'), str) and p['model']:
-                if not MODEL.fullmatch(p['model']) or len(models) >= 100000: return [], None  # not a model id: unprovable
-                models.append(p['model'])
+            elif o.get('type') == 'turn_context':
+                m = p.get('model')
+                # A turn with no valid model is unprovable: skipping it would credit the earlier turn's model.
+                if not isinstance(m, str) or not MODEL.fullmatch(m) or len(models) >= 100000: return [], None
+                models.append(m)
                 if isinstance(p.get('effort'), str) and MODEL.fullmatch(p['effort']): effort = p['effort']
     return (models, effort) if meta_ok else ([], None)
 
@@ -85,6 +93,12 @@ def observe(events, sessions, requested_model=''):
     if len(models) > MAX_MODELS:
         return {**out, 'observed_source': 'unavailable', 'observed_reason': 'implausibly many distinct models in session'}
     out['observed_models'] = models
+    if len(ids) > 1 and len(models) > 1:
+        # Threads are ordered by start, not by finish, so no single final model can be named.
+        out['observed_reason'] = 'several threads ran different models'
+        if requested_model: out['observed_model_matches_requested'] = False
+        out['observed_effort'] = effort or 'unknown'
+        return out
     out['observed_model'] = turns[-1]  # the model of the final turn, even when it switched back to an earlier one
     out['observed_effort'] = effort or 'unknown'
     if requested_model:
@@ -98,6 +112,8 @@ def main():
     ap.add_argument('--sessions-dir')
     ap.add_argument('--requested-model', default='')
     a = ap.parse_args()
+    def expired(*_): raise Expired
+    signal.signal(signal.SIGALRM, expired); signal.alarm(DEADLINE_S)
     root = Path(a.sessions_dir) if a.sessions_dir else Path(os.environ.get('CODEX_HOME') or Path.home() / '.codex') / 'sessions'
     print(json.dumps(observe(a.events, root, a.requested_model), separators=(',', ':')))
 
