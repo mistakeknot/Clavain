@@ -178,3 +178,35 @@ def test_helper_bounds_itself_without_timeout_1(tmp_path):
     t = time.time()
     p = subprocess.run([sys.executable, '-c', stall], capture_output=True, text=True, timeout=20)
     assert time.time() - t < 10 and p.stdout.strip() == 'Expired'
+
+
+@pytest.mark.parametrize('tail', ['{"type":"turn_context","payload":{"model":"gpt-6.1-so', '{"type":"turn_context","payload":null}', '{"type":"turn_context"}'])
+def test_a_damaged_later_turn_is_unprovable(tmp_path, tail):
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol'])
+    f = next(s.rglob('rollout-*.jsonl'))
+    f.write_text(f.read_text() + tail + '\n')
+    r = run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6.1-sol')
+    assert r['observed_model'] == 'unknown' and r['observed_model_matches_requested'] is None
+
+
+def test_effort_is_the_final_turns_not_an_earlier_one(tmp_path):
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol'], effort='high')
+    f = next(s.rglob('rollout-*.jsonl'))
+    f.write_text(f.read_text() + json.dumps({'type': 'turn_context', 'payload': {'model': 'gpt-6.1-sol'}}) + '\n')
+    r = run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6.1-sol')
+    assert r['observed_model'] == 'gpt-6.1-sol' and r['observed_effort'] == 'unknown'
+
+
+def test_an_oversized_record_is_bounded_and_unprovable(tmp_path):
+    s = tmp_path / 's'
+    rollout(s, TID, ['gpt-6.1-sol'])
+    f = next(s.rglob('rollout-*.jsonl'))
+    f.write_text(f.read_text() + '{"type":"x","payload":{"pad":"' + 'a' * (33 << 20) + '"}}\n')
+    r = run(events(tmp_path / 'e.jsonl', TID), s, 'gpt-6.1-sol')
+    assert r['observed_model'] == 'unknown'
+    ev = tmp_path / 'e2.jsonl'
+    ev.write_text('{"pad":"' + 'a' * (33 << 20) + '"}\n' + json.dumps({'type': 'thread.started', 'thread_id': TID}) + '\n')
+    rollout(tmp_path / 's2', TID, ['gpt-6.1-sol'])
+    assert run(ev, tmp_path / 's2', 'gpt-6.1-sol')['observed_model'] == 'gpt-6.1-sol'

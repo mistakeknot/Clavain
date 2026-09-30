@@ -19,7 +19,7 @@ from pathlib import Path
 MODEL = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}')
 MAX_MODELS = 16
 DEADLINE_S = 20  # own bound: must hold even where `timeout(1)` is absent
-MAX_LINE = 1 << 22
+MAX_LINE = 1 << 25  # 32 MiB; real tool-output records reach a few MiB
 UUID = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
 
 class Expired(Exception):
@@ -30,12 +30,26 @@ def regular(path):
     try: return stat.S_ISREG(os.stat(path).st_mode)
     except OSError: return False
 
+def lines(f):
+    """(line, oversized): reads at most MAX_LINE bytes of a line at a time, so a huge record cannot balloon memory."""
+    while True:
+        line = f.readline(MAX_LINE + 1)
+        if not line: return
+        if len(line) > MAX_LINE and not line.endswith('\n'):
+            while True:  # drain the rest of the oversized record without keeping it
+                rest = f.readline(MAX_LINE)
+                if not rest or rest.endswith('\n'): break
+            yield '', True
+        else:
+            yield line, False
+
 def thread_ids(events):
     ids = []
     if not regular(events): return ids
     try:
         with open(events, errors='replace') as f:
-            for line in f:
+            for line, big in lines(f):
+                if big: continue
                 try: o = json.loads(line)
                 except ValueError: continue
                 t = o.get('thread_id') if isinstance(o, dict) and o.get('type') == 'thread.started' else None
@@ -50,12 +64,16 @@ def read_rollout(path, tid):
     """(model of every turn in order, last effort) from turn_context records of the session `tid`."""
     models, effort, meta_ok = [], None, False
     with open(path, errors='replace') as f:
-        for line in f:
-            if len(line) > MAX_LINE: return [], None
+        for line, big in lines(f):
+            if big: return [], None
             try: o = json.loads(line)
-            except ValueError: continue
-            if not isinstance(o, dict) or not isinstance(o.get('payload'), dict): continue
-            p = o['payload']
+            except ValueError:
+                if 'turn_context' in line: return [], None  # a damaged turn record: the final turn is unprovable
+                continue
+            if not isinstance(o, dict): continue
+            p = o.get('payload')
+            if o.get('type') == 'turn_context' and not isinstance(p, dict): return [], None
+            if not isinstance(p, dict): continue
             if o.get('type') == 'session_meta':
                 meta_ok = p.get('id') == tid
             elif o.get('type') == 'turn_context':
@@ -63,7 +81,8 @@ def read_rollout(path, tid):
                 # A turn with no valid model is unprovable: skipping it would credit the earlier turn's model.
                 if not isinstance(m, str) or not MODEL.fullmatch(m) or len(models) >= 100000: return [], None
                 models.append(m)
-                if isinstance(p.get('effort'), str) and MODEL.fullmatch(p['effort']): effort = p['effort']
+                # Effort belongs to the turn that carries it; a later turn without one must not inherit it.
+                effort = p['effort'] if isinstance(p.get('effort'), str) and MODEL.fullmatch(p['effort']) else None
     return (models, effort) if meta_ok else ([], None)
 
 def observe(events, sessions, requested_model=''):
@@ -88,7 +107,7 @@ def observe(events, sessions, requested_model=''):
         if not m:
             return {**out, 'observed_source': 'unavailable', 'observed_reason': f'rollout for thread {tid} has no matching session_meta or a valid turn_context model'}
         turns += m
-        effort = e or effort
+        effort = e
     models = list(dict.fromkeys(turns))
     if len(models) > MAX_MODELS:
         return {**out, 'observed_source': 'unavailable', 'observed_reason': 'implausibly many distinct models in session'}
