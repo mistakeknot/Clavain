@@ -431,9 +431,35 @@ def _outcome_check(task: Task, project_dir: str, since: float) -> bool:
 def _read_verdict_status(verdict_path: str) -> str | None:
     if not os.path.exists(verdict_path):
         return None
-    with open(verdict_path) as f:
+    # Every STATUS line counts (case-insensitively): the first non-pass value
+    # wins, so a "pass" ahead of a later "fail" cannot read as pass.
+    statuses = []
+    with open(verdict_path, errors="replace") as f:
         for line in f:
-            if line.startswith("STATUS:"):
+            m = re.match(r"status:(.*)$", line.rstrip("\r\n"), re.I)
+            if m:
+                # an empty STATUS is unreadable, never a pass
+                statuses.append(m.group(1).strip().lower() or "invalid")
+    if not statuses:
+        return None
+    return next((s for s in statuses if s != "pass"), "pass")
+
+
+def _read_verdict_provisional(verdict_path: str) -> str | None:
+    """mk-rzi5: dispatch.sh's _extract_verdict stamps a PROVISIONAL line on
+    any .verdict sidecar written by a same-lab capacity-substitute review
+    (mk-gp32/mk-dabt) — reviewer_lab == producer_lab reached after a
+    capacity walk, never an independent other-lab review. The gate itself
+    stays unchanged (provisional but non-blocking, see
+    reasoning-routing-operations.md "Capacity-substitute reviews are
+    provisional, never blocking") — this only lets a caller surface the
+    caveat alongside an approval instead of reporting it as an ordinary,
+    fully independent pass."""
+    if not os.path.exists(verdict_path):
+        return None
+    with open(verdict_path, errors="replace") as f:
+        for line in f:
+            if line.startswith("PROVISIONAL:"):
                 return line.split(":", 1)[1].strip()
     return None
 
@@ -2660,6 +2686,18 @@ def pf_validate(
     receipt_path = os.path.join(item_dir, "receipt")
     prompt_path = os.path.join(item_dir, "validator.prompt.md")
     output = os.path.join(item_dir, "validator.md")
+    # P3: item_dir (and so `output`) is a fixed path per item.id, reused
+    # across capacity-recheck walk attempts. If a previous walk step wrote
+    # validator.md/.verdict/.recheck.md and then the walk failed before this
+    # attempt's dispatch call ever produced fresh output (a crash, a denied
+    # tool call before the seat wrote anything), reading these sidecars below
+    # would silently pick up the PREVIOUS attempt's verdict/recheck items
+    # instead of reporting "no output for this attempt". Clear them first.
+    for stale in (output, output + ".verdict", output + ".recheck.md"):
+        try:
+            os.remove(stale)
+        except FileNotFoundError:
+            pass
     _write_text(prompt_path, pf_validator_prompt(item.plan, contract, wt, commit, packet, receipt_path))
     # The nonce is written only after the prompt is fixed on disk, so the
     # prompt cannot carry it: the seat has to run the receipt command.
@@ -2710,6 +2748,14 @@ def pf_validate(
         return PFValidation("UNRUN", crit, _pf_sidecar_summary(output + ".verdict") or "dispatch reported an error verdict", receipt_ok, [], model)
     if v not in ("PASS", "FAIL", "UNRUN"):
         return PFValidation("UNRUN", crit, f"no VERDICT line from the seat (dispatch rc={rc}, sidecar {status or 'missing'})", receipt_ok, findings, model)
+    if v == "PASS" and status is not None and status != "pass":
+        # dispatch.sh demotes a body PASS (warn/fail) when a present trailing
+        # verdict block disagrees; a pass needs every verdict source to agree.
+        return PFValidation(
+            "UNRUN", crit,
+            _pf_sidecar_summary(output + ".verdict") or f"dispatch demoted the validator PASS to {status}",
+            receipt_ok, findings, model,
+        )
     if v == "FAIL":
         env = _pf_environment_failure(text)
         if env:
@@ -2720,7 +2766,14 @@ def pf_validate(
             f"receipt mismatch: wrote {nonce}, seat echoed {rec or 'none'}; nothing shows the block was run",
             False, findings, model,
         )
-    return PFValidation(v, crit, (crit if v == "UNRUN" else None), receipt_ok, findings, model)
+    # mk-rzi5: a PASS from a same-lab capacity-substitute validator is still
+    # accepted (provisional, never blocking) but must say so in the note the
+    # merge/report path surfaces, not read as an ordinary independent PASS.
+    final_note = crit if v == "UNRUN" else None
+    provisional = _read_verdict_provisional(output + ".verdict")
+    if provisional:
+        final_note = f"{final_note}; {provisional}" if final_note else provisional
+    return PFValidation(v, crit, final_note, receipt_ok, findings, model)
 
 
 def pf_merge(run: PFRun, branch: str, wt: str) -> tuple[bool, str | None, str]:
@@ -2877,8 +2930,18 @@ def _pf_item_steps(
     val = pf_validate(run, item, contract, wt, commit, packet, producer, item_dir, dispatch_sh, meter)
     res.validator_model = val.model
     res.validator_verdict, res.validator_criterion, res.receipt_ok = val.verdict, val.criterion, val.receipt_ok
-    if val.note and val.verdict != "PASS":
-        res.note = val.note  # the packet says why a seat did not rule, not only the register
+    # mk-rzi5: previously gated to verdict != "PASS", on the assumption a
+    # PASS never carries a note — true before this bead (the only note a
+    # PASS could carry is the mk-rzi5 same-lab capacity-substitute
+    # PROVISIONAL caveat pf_validate now appends). A provisional PASS must
+    # reach the packet, not just the register row below, or the report
+    # reads it as an ordinary fully independent pass with no caveat at all.
+    if val.note:
+        # P3: append to any note the executor already set (e.g. "worktree
+        # dirty after the executor" above) instead of overwriting it — a
+        # provisional-PASS caveat here used to silently erase that earlier
+        # warning rather than add to it.
+        res.note = f"{res.note}; {val.note}" if res.note else val.note  # the packet says why a seat did not rule (or, on a PASS, that it was provisional)
     pf_register(
         run, verdict_sh, res, commit=commit, role="validator", kind="replay",
         verdict=val.verdict, criterion=(val.criterion if val.verdict != "PASS" else None), note=val.note,

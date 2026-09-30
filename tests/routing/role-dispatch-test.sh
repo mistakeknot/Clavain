@@ -146,6 +146,16 @@ export FAKE_IC_CONTEXT_LOG="$TMP_ROOT/contexts.jsonl"
 export FAKE_CODEX_LOG="$TMP_ROOT/codex.log"
 export CLAVAIN_CONTEXT_GATEWAY_MODE=off
 export CLAVAIN_BB_DIRECT_POOL=0
+# mk-c66x: execution roles (routine-execution|deep-execution|scout) probe a
+# live `bb pool` headroom snapshot via pool-headroom.sh unless this is 0.
+# That snapshot reflects this host's actual, currently-changing bb pool
+# state, so it is not reproducible: on zklw it has been observed to emit
+# malformed/incomplete JSON ("jq: error... Cannot iterate over null (null)")
+# depending on live pool contents at the moment the test happens to run,
+# which cascades into unrelated assertions failing nondeterministically.
+# Disable the live probe so this test's dispatch calls are driven purely by
+# the fixtures it controls, like CLAVAIN_BB_DIRECT_POOL above.
+export CLAVAIN_POOL_HEADROOM=0
 
 dry_run="$(bash "$ROOT/scripts/dispatch.sh" --dry-run --role deep-execution -C "$TMP_ROOT/work" "hi" 2>&1)" \
   || fail "role dry-run failed"

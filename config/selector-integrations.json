@@ -25,6 +25,41 @@
       },
       "hooks": [],
       "owner_bead": "mk-42j9.7"
+    },
+    "security_triage": {
+      "flag": "CLAVAIN_SELECTOR_SECURITY_TRIAGE",
+      "points": [
+        "pre_tool"
+      ],
+      "active_allowed": false,
+      "shadow_only": true,
+      "floors": {
+        "confidence": 0.6,
+        "fit": 0.6
+      },
+      "fit_questions": true,
+      "high_entropy": true,
+      "deadline_ms": {
+        "pre_tool": 1500
+      },
+      "session_budget": 40,
+      "authorize": {
+        "allow_ids": [
+          "raise_scrutiny"
+        ],
+        "deny_ids": [
+          "keep_native_review",
+          "light_check_suffices"
+        ]
+      },
+      "preparer": "security_triage",
+      "hooks": [
+        {
+          "host": "claude-code",
+          "point": "pre_tool"
+        }
+      ],
+      "owner_bead": "mk-42j9.9"
     }
   }
 }

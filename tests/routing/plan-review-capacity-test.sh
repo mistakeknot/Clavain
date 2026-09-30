@@ -134,9 +134,25 @@ for a in "$@"; do
   fi
 done
 { printf '<<<BD-CALL>>>\n'; printf '%s\x1f' "$@"; printf '\n'; } >> "$FAKE_BD_LOG"
+is_dep_add=0
+[[ "$1" == dep && "$2" == add ]] && is_dep_add=1
 if [[ "${FAKE_BD_MODE:-}" == fail ]]; then
   echo "fake-bd: simulated failure" >&2
   exit 1
+fi
+# P3 finding 10: fails only the separate `bd dep add` link call, leaving
+# `bd create` itself untouched — proves a rejected link never turns an
+# already-successful filing into "bd_failed".
+if [[ "${FAKE_BD_MODE:-}" == depfail && "$is_dep_add" == 1 ]]; then
+  echo "fake-bd: simulated dep add failure" >&2
+  exit 1
+fi
+# P3 finding 10: `bd create` exits 0 (a real filing happened) but prints
+# nothing id-shaped — dispatch.sh's id-parse must fail distinctly from both
+# a clean filing and a hard bd_failed.
+if [[ "${FAKE_BD_MODE:-}" == unparsable_id && "$is_dep_add" == 0 ]]; then
+  echo "unexpected response containing no issue identifier at all"
+  exit 0
 fi
 for a in "$@"; do
   if [[ "$a" == --silent ]]; then
@@ -196,6 +212,20 @@ bd_log_has_dir() {
   # \037 is the octal form of the unit separator (\x1f) — tr does not accept
   # \x hex escapes, so a \x1f pattern here silently matches nothing at all.
   tr '\037' '\n' < "$FAKE_BD_LOG" | grep -qx -- "$1"
+}
+
+# Round-2 ruling disagreement fix: the discovered-from link is now its own
+# `bd dep add <child> <parent> --type discovered-from` call, separate from
+# `bd create`, so a filing that gets linked back to its parent bead logs two
+# <<<BD-CALL>>> entries, not one. True when the fake bd log contains exactly
+# that dep-add call, argv-exact (fake bd always returns the id "fake-42").
+bd_log_has_dep() {
+  # Substring (not -x) match: dispatch.sh's fake-bd fixture writes a trailing
+  # \x1f after the final argv token (before the newline), so an exact-line
+  # match built without one would never match. The joined-token substring
+  # below is still unambiguous — it can't appear inside a `bd create` call.
+  local parent_id="$1" sep=$'\x1f'
+  grep -Fq -- "dep${sep}add${sep}fake-42${sep}${parent_id}${sep}--type${sep}discovered-from${sep}-C${sep}$2${sep}" "$FAKE_BD_LOG"
 }
 
 # Prints the context_json of the most recent terminal (completed/failed)
@@ -321,11 +351,17 @@ CLAVAIN_BEAD_ID="bd-parent-1" \
 [[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "two re-check items: expected a recheck sidecar file"
 grep -q "confirmed the migration script" "$TMP_ROOT/answer.md.recheck.md" || fail "two re-check items: sidecar missing first item"
 grep -q "unsure whether the fallback order" "$TMP_ROOT/answer.md.recheck.md" || fail "two re-check items: sidecar missing second item"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "two re-check items: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+# Round-2 ruling disagreement: bd create no longer carries --deps directly
+# (a rejected dep attachment used to make an otherwise-successful filing look
+# like "bd_failed" to everything downstream); the link is now a separate
+# `bd dep add` call, made only after a clean create with a parsed id, so a
+# successful link is exactly two bd calls, not one.
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "two re-check items: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
 grep -q "capacity-recheck" "$FAKE_BD_LOG" || fail "two re-check items: bd create did not carry the capacity-recheck label"
-grep -q "discovered-from:bd-parent-1" "$FAKE_BD_LOG" || fail "two re-check items: bd create did not carry --deps discovered-from"
+bd_log_has_dep "bd-parent-1" "$TMP_ROOT/work" || fail "two re-check items: bd dep add did not link fake-42 back to bd-parent-1, got: $(cat "$FAKE_BD_LOG")"
 grep -q "Re-check capacity-substitute plan-review review (bd-parent-1)" "$FAKE_BD_LOG" || fail "two re-check items: unexpected bd create title: $(cat "$FAKE_BD_LOG")"
 receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead_dep' <<< "$receipt")" == "linked" ]] || fail "two re-check items: receipt recheck_bead_dep was not 'linked': $receipt"
 [[ "$(jq -r '.recheck_items' <<< "$receipt")" == "2" ]] || fail "two re-check items: receipt recheck_items was not 2: $receipt"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "listed" ]] || fail "two re-check items: receipt recheck_source was not 'listed': $receipt"
 [[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "two re-check items: receipt recheck_bead was not the filed id: $receipt"
@@ -354,6 +390,40 @@ grep -qi "WARNING.*could not file the capacity-recheck bead" "$TMP_ROOT/err" || 
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "failing bd: receipt recheck_bead was not null: $receipt"
 
+# P3 finding 10: a `bd create` that exits 0 but whose output has no
+# id-shaped token must be distinguished from both a clean filing and a hard
+# bd_failed — a human should be able to recover the id from the raw stdout
+# a warning surfaces, instead of a caller re-filing a duplicate bead.
+FAKE_BD_MODE=unparsable_id \
+  FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed nothing was executed\n')" \
+  run_substitute_review
+[[ "$rc" == 0 ]] || fail "unparsable bd id: expected the dispatch to still succeed, got exit $rc"
+[[ -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "unparsable bd id: expected the sidecar to still be written"
+grep -qi "WARNING.*bd create.*exited 0 but no id could be parsed" "$TMP_ROOT/err" || fail "unparsable bd id: expected a loud stderr warning naming the unparsed-id case: $(tail -5 "$TMP_ROOT/err")"
+grep -q "unexpected response containing no issue identifier at all" "$TMP_ROOT/err" || fail "unparsable bd id: expected the warning to include bd's own raw stdout: $(tail -5 "$TMP_ROOT/err")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "unparsable bd id: receipt recheck_bead was not null: $receipt"
+[[ "$(jq -r '.recheck_bead_status' <<< "$receipt")" == "filed_id_unparsed" ]] || fail "unparsable bd id: receipt recheck_bead_status was not 'filed_id_unparsed': $receipt"
+
+echo "PASS: a bd create that exits 0 with no parseable id is reported as filed_id_unparsed, distinct from bd_failed"
+
+# P3 finding 10 (ruling disagreement): a `bd dep add` failure never
+# retroactively fails an already-successful `bd create` — the bead stays
+# filed under its own id, the link is separately recorded as failed, and a
+# stderr warning names the bead and the parent it could not attach to.
+CLAVAIN_BEAD_ID="bd-parent-depfail" FAKE_BD_MODE=depfail \
+  FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed nothing was executed\n')" \
+  run_substitute_review
+[[ "$rc" == 0 ]] || fail "dep add failure: expected the dispatch to still succeed, got exit $rc"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "dep add failure: expected one bd create call and one (failing) bd dep add call, got: $(cat "$FAKE_BD_LOG")"
+grep -qi "WARNING.*could not link it to bd-parent-depfail" "$TMP_ROOT/err" || fail "dep add failure: expected a loud stderr warning naming the unlinked parent: $(tail -5 "$TMP_ROOT/err")"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "dep add failure: receipt recheck_bead was not the filed id despite the failed link: $receipt"
+[[ "$(jq -r '.recheck_bead_status' <<< "$receipt")" == "filed" ]] || fail "dep add failure: receipt recheck_bead_status was not 'filed' (a failed link must not demote it to bd_failed): $receipt"
+[[ "$(jq -r '.recheck_bead_dep' <<< "$receipt")" == "failed" ]] || fail "dep add failure: receipt recheck_bead_dep was not 'failed': $receipt"
+
+echo "PASS: a failing bd dep add keeps the bead 'filed' and only marks the link itself as failed"
+
 # The reviewer writes the heading with no items under it (not "None."): B3
 # treats an empty section the same as a missing one — the whole review still
 # needs a re-check, not a silent "nothing to flag".
@@ -362,7 +432,8 @@ CLAVAIN_BEAD_ID="bd-parent-2b" \
   run_substitute_review
 [[ "$rc" == 0 ]] || fail "empty re-check section: expected review to succeed, got exit $rc"
 grep -q "reviewer did not list re-check items" "$TMP_ROOT/answer.md.recheck.md" || fail "empty re-check section: expected the fabricated whole-review item, got: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "empty re-check section: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "empty re-check section: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
+bd_log_has_dep "bd-parent-2b" "$TMP_ROOT/work" || fail "empty re-check section: bd dep add did not link fake-42 back to bd-parent-2b, got: $(cat "$FAKE_BD_LOG")"
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "missing" ]] || fail "empty re-check section: receipt recheck_source was not 'missing': $receipt"
 
@@ -394,26 +465,45 @@ receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_items' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_items was not null: $receipt"
 [[ "$(jq -r '.recheck_source' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_source was not null: $receipt"
 [[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "null" ]] || fail "cross-lab (not substitute): receipt recheck_bead was not null: $receipt"
+# P3 (round-2 review finding 7): _dispatch_ic_version used to be recorded
+# only inside an already-marked capacity_substitute; this receipt is the
+# opposite case (capacity_substitute is null, asserted above) and must
+# still carry a non-null ic_version, since that field's own stated purpose
+# is auditing whether an old `ic` explains a review that was NOT flagged.
+[[ "$(jq -r '.ic_version' <<< "$receipt")" != "null" ]] || fail "cross-lab (not substitute): receipt ic_version was null on an unmarked review receipt: $receipt"
 
-echo "PASS: a different-lab fallback review is not treated as a capacity substitute"
+echo "PASS: a different-lab fallback review is not treated as a capacity substitute, and still records ic_version"
 
 # review-opus is excluded pre-walk by ic (available_models omits Opus:
 # model_unavailable) and the walk lands on review-astra, the same lab as the
-# Sol producer. A pre-walk ic exclusion is not a real capacity-class failure
-# at run time, so capacity_failure_class stays empty and this must NOT be
-# flagged as a capacity substitute even though it is same-lab and reached
-# after a walk.
+# Sol producer.
+#
+# P1-1 (behavior change, mk-c66x follow-up): capacity-fallback.sh's own header
+# calls capacity exhaustion (model_unavailable / headroom_exclusion) an
+# OPERATIONAL failure, not a policy one — so a pre-walk ic exclusion for one
+# of those reasons must seed capacity_failure_class exactly like an in-loop
+# skip/failure would, and this same-lab landing on review-astra now MUST be
+# flagged as a capacity substitute with provisional handling kicking in. This
+# used to assert capacity_substitute was null for this exact case; that
+# assertion was wrong and is corrected here.
 jq -c '. + {available_models: ["gpt-6-astra"]}' "$CONTEXT_FILE" > "$TMP_ROOT/context-no-opus.json"
 FAKE_CODEX_MODE=success CONTEXT_FILE="$TMP_ROOT/context-no-opus.json" run_review gpt-6.1-sol
 [[ "$rc" == 0 ]] || fail "pre-walk exclusion only: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
 [[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "pre-walk exclusion only: review-opus should never have been actually attempted, got: $(cat "$FAKE_CLAUDE_LOG")"
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "pre-walk exclusion only: expected gpt-6-astra to review, got: $(cat "$FAKE_CODEX_LOG")"
 never_reviewed_by "pre-walk exclusion only" gpt-6.1-sol
-grep -q "capacity-substitute" "$FAKE_CODEX_PROMPT_LOG" 2>/dev/null && fail "pre-walk exclusion only: the Astra prompt unexpectedly carried the re-check paragraph"
-[[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "pre-walk exclusion only: unexpectedly wrote a recheck sidecar"
-[[ ! -s "$FAKE_BD_LOG" ]] || fail "pre-walk exclusion only: unexpectedly filed a bd create call"
+# Provisional handling now kicks in exactly as it does for an in-loop
+# capacity substitute (run_substitute_review below): the reviewer prompt
+# carries the re-check paragraph, and since the default fake-codex answer
+# ("VERDICT: CLEAN") lists no re-check items, the fallback whole-review item
+# is fabricated into the sidecar and one bd create call is filed.
+grep -q "capacity-substitute" "$FAKE_CODEX_PROMPT_LOG" || fail "pre-walk exclusion only: reviewer prompt did not carry the re-check paragraph: $(cat "$FAKE_CODEX_PROMPT_LOG")"
+grep -q "reviewer did not list re-check items" "$TMP_ROOT/answer.md.recheck.md" || fail "pre-walk exclusion only: a missing re-check section did not fall back to the whole-review item: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "pre-walk exclusion only: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
 receipt="$(latest_receipt)"
-[[ "$(jq -r '.capacity_substitute' <<< "$receipt")" == "null" ]] || fail "pre-walk exclusion only: receipt capacity_substitute was not null: $receipt"
+[[ "$(jq -r '.capacity_substitute.failure_class' <<< "$receipt")" == "model_unavailable" ]] || fail "pre-walk exclusion only: receipt capacity_substitute.failure_class was not model_unavailable: $receipt"
+[[ "$(jq -r '.capacity_substitute.producer_lab' <<< "$receipt")" == "openai" ]] || fail "pre-walk exclusion only: receipt capacity_substitute.producer_lab unexpected: $receipt"
+[[ "$(jq -r '.capacity_substitute.reviewer_lab' <<< "$receipt")" == "openai" ]] || fail "pre-walk exclusion only: receipt capacity_substitute.reviewer_lab unexpected: $receipt"
 
 # review-opus is excluded pre-walk with fallback_reason=producer_model_conflict
 # (producer is also claude-opus-5-5) and review-astra is skipped pre-run via
@@ -426,7 +516,50 @@ FAKE_CODEX_VERSION="0.100.0" run_review claude-opus-5-5
 grep -q "requires Codex >=" "$TMP_ROOT/err" || fail "producer_model_conflict plus version skip: expected the insufficient_codex_version pre-run skip recorded on stderr: $(cat "$TMP_ROOT/err")"
 [[ ! -s "$FAKE_BD_LOG" ]] || fail "producer_model_conflict plus version skip: unexpectedly filed a bd create call"
 
-echo "PASS: a pre-walk ic exclusion is not a capacity substitute, and a producer conflict plus a version skip blocks"
+# Round-2 review (P3 finding 8): this message used to say "is not a capacity
+# substitute", left over from before the P1-1 fix flipped the assertion
+# above (a pre-walk operational exclusion for model_unavailable IS now
+# flagged, with provisional handling). Only the policy-based
+# producer_model_conflict case, paired with a version skip, blocks outright.
+echo "PASS: a pre-walk operational (model_unavailable) exclusion IS a capacity substitute; a producer_model_conflict exclusion plus a version skip still blocks"
+
+# mk-dabt, re-expressed after mk-3b8z (Opus 5.5 replaced Fable 5.1, review-fable
+# no longer exists): the rule is that ANY operational skip/failure this loop
+# itself observes must mark a same-lab landing as a capacity substitute, and
+# the ONLY thing that must never do so is a pre-walk `ic` POLICY exclusion
+# such as producer_model_conflict (or the model_unavailable exclusion above).
+#
+# The positive half of that rule — an operational skip landing same-lab —
+# is already exercised above by the mk-gp32 block ("capacity substitute",
+# Sol producer, review-opus quota_exhausted, walk lands on review-astra,
+# same lab, marked). Under the post-swap two-seat plan-review chain
+# (review-opus -> [review-astra]), that Sol/Opus-quota-exhausted walk is the
+# only reachable "operational skip then same-lab landing" shape: whenever a
+# pre-walk POLICY exclusion (producer_model_conflict, or the available_models
+# exclusion above) already removes review-opus, review-astra is the last
+# remaining candidate, so any operational failure on it exhausts the chain
+# instead of landing anywhere — that is exactly the blocked-review case just
+# above, not a substitute case. insufficient_codex_version can therefore
+# never itself produce a same-lab landing here; it only ever blocks review
+# once producer_model_conflict has already removed review-opus.
+#
+# What is NOT yet covered above is the negative half in isolation, with an
+# explicit receipt check: a pure producer_model_conflict exclusion, with the
+# walk completing normally on review-astra and no operational failure
+# anywhere, must leave capacity_substitute null. FAKE_CODEX_MODE=success (a
+# current Codex version) means review-astra actually runs and succeeds, so
+# capacity_failure_class is never set and review-opus is never reached.
+FAKE_CODEX_MODE=success run_review claude-opus-5-5
+[[ "$rc" == 0 ]] || fail "producer_model_conflict alone: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "producer_model_conflict alone: expected review-astra to actually review, got: $(cat "$FAKE_CODEX_LOG")"
+[[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "producer_model_conflict alone: review-opus should never have been reached, got: $(cat "$FAKE_CLAUDE_LOG")"
+never_reviewed_by "producer_model_conflict alone" claude-opus-5-5
+[[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "producer_model_conflict alone: unexpectedly wrote a recheck sidecar"
+[[ ! -s "$FAKE_BD_LOG" ]] || fail "producer_model_conflict alone: unexpectedly filed a bd create call"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.capacity_substitute' <<< "$receipt")" == "null" ]] || fail "producer_model_conflict alone: receipt capacity_substitute was not null: $receipt"
+
+echo "PASS: mk-dabt: a pre-walk producer_model_conflict exclusion alone is still not a capacity substitute; an operational skip landing same-lab still is (see the mk-gp32 block above)"
 
 # --- mk-hadt: bd -C $WORKDIR must never resolve a tracker above the repo --
 #
@@ -464,8 +597,9 @@ CLAVAIN_BEAD_ID="bd-parent-4" \
   FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed the override directory was used\n')" \
   run_substitute_review "$TMP_ROOT/work" "$TMP_ROOT/override-tracker"
 [[ "$rc" == 0 ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/override-tracker" || fail "CLAVAIN_RECHECK_BEADS_DIR: expected bd to be invoked with the override as -C, got: $(cat "$FAKE_BD_LOG")"
+bd_log_has_dep "bd-parent-4" "$TMP_ROOT/override-tracker" || fail "CLAVAIN_RECHECK_BEADS_DIR: bd dep add did not link fake-42 back to bd-parent-4 using the override -C, got: $(cat "$FAKE_BD_LOG")"
 receipt="$(latest_receipt)"
 [[ "$(jq -r '.recheck_bead' <<< "$receipt")" == "fake-42" ]] || fail "CLAVAIN_RECHECK_BEADS_DIR: receipt recheck_bead was not the filed id: $receipt"
 
@@ -492,9 +626,10 @@ CLAVAIN_BEAD_ID="bd-parent-5" \
   FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed the repo toplevel was used, not the subdirectory\n')" \
   run_substitute_review "$TMP_ROOT/work/sub/dir"
 [[ "$rc" == 0 ]] || fail "subdirectory WORKDIR: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "subdirectory WORKDIR: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "subdirectory WORKDIR: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/work" || fail "subdirectory WORKDIR: expected bd -C to resolve to the repo toplevel, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/work/sub/dir" && fail "subdirectory WORKDIR: bd was invoked with the subdirectory instead of the toplevel: $(cat "$FAKE_BD_LOG")"
+bd_log_has_dep "bd-parent-5" "$TMP_ROOT/work" || fail "subdirectory WORKDIR: bd dep add did not link fake-42 back to bd-parent-5 using the repo toplevel -C, got: $(cat "$FAKE_BD_LOG")"
 
 # A linked worktree whose main checkout HAS its own .beads: files into main,
 # never into the worktree — the production shape this incident actually
@@ -508,9 +643,10 @@ CLAVAIN_BEAD_ID="bd-parent-6" \
   FAKE_CODEX_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\n- confirmed the main checkout tracker was used\n')" \
   run_substitute_review "$TMP_ROOT/wt-linked"
 [[ "$rc" == 0 ]] || fail "linked worktree, main has .beads: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
-[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "linked worktree, main has .beads: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 2 ]] || fail "linked worktree, main has .beads: expected exactly one bd create call and one bd dep add call, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/wt-main" || fail "linked worktree, main has .beads: expected bd -C to resolve to the main checkout, got: $(cat "$FAKE_BD_LOG")"
 bd_log_has_dir "$TMP_ROOT/wt-linked" && fail "linked worktree, main has .beads: bd was invoked with the worktree itself instead of main: $(cat "$FAKE_BD_LOG")"
+bd_log_has_dep "bd-parent-6" "$TMP_ROOT/wt-main" || fail "linked worktree, main has .beads: bd dep add did not link fake-42 back to bd-parent-6 using the main checkout -C, got: $(cat "$FAKE_BD_LOG")"
 
 # A linked worktree whose main checkout LACKS .beads, with a decoy .beads
 # sitting one level above main: refuses even though bd itself would happily
@@ -547,3 +683,111 @@ grep -qi "no beads tracker resolved" "$TMP_ROOT/err" || fail "bare repo worktree
 rm -rf "$TMP_ROOT/.beads"
 
 echo "PASS: capacity-recheck bead filing never resolves a tracker above the repo root, validates its override, and correctly walks subdirectory/linked-worktree/bare-repo checkouts"
+
+# --- mk-c66x: a stale .recheck.md must not survive a reused OUTPUT path ----
+#
+# dispatch.sh resets OUTPUT and OUTPUT.verdict for every fresh attempt (see
+# "Role output paths are fresh attempt artifacts" above the main dispatch
+# loop) but, before this fix, never touched OUTPUT.recheck.md. A stale
+# sidecar left by an EARLIER attempt that reused the same -o path (a retry,
+# or two unrelated dispatch.sh invocations sharing one OUTPUT) survived
+# untouched into an attempt that itself files nothing this time — here, an
+# explicit "None." — silently misleading anyone who reads the sidecar
+# expecting it to reflect only the current attempt. Seed the stale file
+# directly (run_review's own `rm -f` before each call would otherwise mask
+# exactly the bug this covers) and invoke dispatch.sh the same way run_review
+# does.
+: > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"; : > "$FAKE_CLAUDE_PROMPT_LOG"; : > "$FAKE_BD_LOG"
+printf '# Re-check by the other lab\n\n- stale item from a previous attempt at this OUTPUT path\n' > "$TMP_ROOT/answer.md.recheck.md"
+(cd "$TMP_ROOT/work" && ic init >/dev/null 2>&1) || true
+rc=0
+CLAVAIN_RECHECK_BEADS_DIR="" CLAVAIN_BEAD_ID="bd-parent-stale" \
+  FAKE_CLAUDE_ANSWER="$(printf 'VERDICT: CLEAN\n\n## Re-check by the other lab\nNone.\n')" \
+  bash "$ROOT/scripts/dispatch.sh" --role plan-review --producer-identity gpt-6-sol \
+  --context-file "$CONTEXT_FILE" -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer.md" \
+  "review the plan" >/dev/null 2>"$TMP_ROOT/err" || rc=$?
+[[ "$rc" == 0 ]] || fail "stale recheck sidecar: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ ! -f "$TMP_ROOT/answer.md.recheck.md" ]] || fail "stale recheck sidecar: a stale .recheck.md from a prior attempt at this OUTPUT path survived an attempt that itself filed nothing: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
+
+echo "PASS: mk-c66x: a stale .recheck.md sidecar does not survive a reused OUTPUT path"
+
+# --- P1-1: a genuinely 3-seat fixture policy end-to-end, isolated from the
+# real policy
+#
+# The pre-walk-exclusion-only block above already exercises this against the
+# real config/routing.yaml plan-review/Sol/Astra seats. This uses a minimal,
+# purpose-built fixture policy instead so the scenario is pinned independent
+# of any future change to the real policy's seat list or lab assignments.
+#
+# Round-2 review (P3 finding 9): the previous version of this block only
+# defined two seats (fixture-seat-a, fixture-seat-b) despite its name and
+# comment claiming three. This defines all three the finding asked for:
+#   - fixture-seat-a: same lab as the producer (openai), excluded PRE-WALK
+#     for model_unavailable (never actually dispatched).
+#   - fixture-seat-b: same lab as the producer, becomes the reviewer that
+#     actually runs — must be marked capacity_substitute.
+#   - fixture-seat-c: a DIFFERENT lab (anthropic), fixture-seat-b's own
+#     fallback, so it sits later in the chain than seat-b — and must never
+#     be reached, since seat-b succeeds. available_models below leaves
+#     seat-c un-excluded pre-walk, so "never reached" is proven by seat-b's
+#     success stopping the walk, not by a second pre-walk exclusion.
+FIXTURE_POLICY="$TMP_ROOT/fixture-routing.yaml"
+cat > "$FIXTURE_POLICY" <<'FIXTURE_YAML'
+reasoning:
+  frontier_models: [gpt-9-fixture-a, gpt-9-fixture-b, claude-9-fixture-c]
+  frontier_reasons: [unresolved-success-criteria, foundational-invariants, broad-consequences, difficult-verification, capability-failure]
+  dual_review_reasons: [foundational-invariants, broad-consequences]
+  strikes: 2
+dispatch:
+  roles:
+    plan-review: fixture-seat-a
+  tiers:
+    fixture-seat-a:
+      role: plan-review
+      backend: codex
+      model: gpt-9-fixture-a
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [fixture-seat-b]
+    fixture-seat-b:
+      role: plan-review
+      backend: codex
+      model: gpt-9-fixture-b
+      reasoning_effort: high
+      service_tier: standard
+      fallbacks: [fixture-seat-c]
+    fixture-seat-c:
+      role: plan-review
+      backend: claude
+      model: claude-9-fixture-c
+      reasoning_effort: high
+      service_tier: standard
+FIXTURE_YAML
+
+: > "$FAKE_CODEX_LOG"; : > "$FAKE_CLAUDE_LOG"; : > "$FAKE_CLAUDE_PROMPT_LOG"; : > "$FAKE_CODEX_PROMPT_LOG"; : > "$FAKE_BD_LOG"
+rm -f "$TMP_ROOT/answer.md.recheck.md"
+# Only seat-a is excluded pre-walk: seat-b and seat-c are both left available
+# so seat-c's absence from the run proves the walk stopped at seat-b's
+# success, not that seat-c was itself pre-excluded.
+jq -c '. + {available_models: ["gpt-9-fixture-b", "claude-9-fixture-c"]}' "$CONTEXT_FILE" > "$TMP_ROOT/context-fixture.json"
+(cd "$TMP_ROOT/work" && ic init >/dev/null 2>&1) || true
+rc=0
+CLAVAIN_ROUTING_POLICY="$FIXTURE_POLICY" CLAVAIN_RECHECK_BEADS_DIR="" FAKE_CODEX_MODE=success \
+  bash "$ROOT/scripts/dispatch.sh" --role plan-review --producer-identity gpt-9-fixture-producer \
+  --context-file "$TMP_ROOT/context-fixture.json" -C "$TMP_ROOT/work" -o "$TMP_ROOT/answer.md" \
+  "review the plan" >/dev/null 2>"$TMP_ROOT/err" || rc=$?
+[[ "$rc" == 0 ]] || fail "3-seat fixture policy: expected review to succeed, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-9-fixture-b" ]] || fail "3-seat fixture policy: expected fixture-seat-a to be excluded pre-walk and fixture-seat-b to review, got: $(cat "$FAKE_CODEX_LOG")"
+[[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "3-seat fixture policy: fixture-seat-c should never have been reached (seat-b already succeeded), got: $(cat "$FAKE_CLAUDE_LOG")"
+never_reviewed_by "3-seat fixture policy" gpt-9-fixture-producer
+grep -q "capacity-substitute" "$FAKE_CODEX_PROMPT_LOG" || fail "3-seat fixture policy: reviewer prompt did not carry the re-check paragraph: $(cat "$FAKE_CODEX_PROMPT_LOG")"
+grep -q "reviewer did not list re-check items" "$TMP_ROOT/answer.md.recheck.md" || fail "3-seat fixture policy: a missing re-check section did not fall back to the whole-review item: $(cat "$TMP_ROOT/answer.md.recheck.md" 2>/dev/null)"
+[[ "$(grep -c '<<<BD-CALL>>>' "$FAKE_BD_LOG")" == 1 ]] || fail "3-seat fixture policy: expected exactly one bd create call, got: $(cat "$FAKE_BD_LOG")"
+receipt="$(cd "$TMP_ROOT/work" && ic route list --json 2>/dev/null | jq -c --arg dir "$TMP_ROOT/work" '
+  [.[] | select(.project_dir == $dir)] | sort_by(.id) |
+  [.[] | (.context_json | fromjson) | select(.state == "completed" or .state == "failed")] | .[-1] // empty')"
+[[ "$(jq -r '.capacity_substitute.failure_class' <<< "$receipt")" == "model_unavailable" ]] || fail "3-seat fixture policy: receipt capacity_substitute.failure_class was not model_unavailable: $receipt"
+[[ "$(jq -r '.capacity_substitute.producer_lab' <<< "$receipt")" == "openai" ]] || fail "3-seat fixture policy: receipt capacity_substitute.producer_lab unexpected: $receipt"
+[[ "$(jq -r '.capacity_substitute.reviewer_lab' <<< "$receipt")" == "openai" ]] || fail "3-seat fixture policy: receipt capacity_substitute.reviewer_lab unexpected: $receipt"
+
+echo "PASS: P1-1 genuinely-3-seat fixture policy: seat-a excluded pre-walk (model_unavailable), same-lab seat-b becomes the capacity-substitute reviewer, and different-lab seat-c (next in the chain) is never reached"

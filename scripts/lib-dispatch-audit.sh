@@ -11,8 +11,77 @@ _classify_dispatch_failure() {
   [[ "$exit_code" == 0 ]] && { echo success; return 0; }
   if [[ -f "$stderr_file" ]]; then
     # A final denial dominates earlier transport/account failures in this attempt.
-    if grep -qiE '\b403\b|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then echo terminal_policy
-    elif grep -qiE '\b429\b|too many requests|rate.?limit' "$stderr_file"; then echo rate_limited
+    # mk-zz4m: rate_limited walks the fallback chain (dispatch.sh, since
+    # db2b24e), so this match must be status-code-anchored, not bare prose —
+    # the old `\b429\b|too many requests|rate.?limit` mapped 'HTTP 401
+    # Unauthorized (x-ratelimit-remaining: 0)' (the header name contains
+    # "ratelimit"), 'File "runner.py", line 429, in main' (a traceback line
+    # number), and 'invalid_api_key; see rate-limit docs' (a doc reference) to
+    # rate_limited, silently switching the reviewing model on an auth failure.
+    # A real 429 is anchored to "Too Many Requests" or a status/code/http
+    # marker; a real rate-limit signal is the provider's own error code
+    # (Claude's `rate_limit_error`) or the adjectival/verb phrase
+    # ("rate[- ]limited", "rate limit exceeded") — never a bare "rate-limit"
+    # noun mention or an "x-ratelimit-*" header name.
+    #
+    # P2 follow-up (review findings 3+4): the 401/unauthorized check now runs
+    # BEFORE the 429/rate-limit check (a real observed 401 message like
+    # 'Error code: 401 - unauthenticated clients are rate limited' or '401
+    # Unauthorized: invalid x-api-key (see rate limit exceeded FAQ)' also
+    # contains rate-limit-shaped prose; checking 401 first means that prose
+    # is never reached). The 429 patterns below are widened to real observed
+    # shapes — 'HTTP/2 429', 'HTTP/1.1 429' (an explicit HTTP-version form,
+    # since the old `[^0-9]{0,15}` gap broke on the version's own digits),
+    # 'Error 429:', 'upstream responded 429', OpenAI's
+    # `"code":"rate_limit_exceeded"` / bare 'rate_limit_exceeded', 'Rate
+    # limit reached for', Moonshot's 'rate_limit_reached_error', and
+    # 'ratelimited' with no separator — while a traceback's 'line 429' (even
+    # when the file is literally named status.py/http.py/code.py) still must
+    # NEVER match.
+    #
+    # Round-2 re-check follow-up (P2 finding 2, P3 finding 3): the previous
+    # anchor (`[[:space:]]*[:=][[:space:]]*`) required a literal `:` or `=`
+    # directly against the keyword, which broke real forms with a plain
+    # space ('status 429'), an underscore-joined key ('status_code=429'), or
+    # a quoted JSON field ('"status":429'). The anchor is now "no letters or
+    # digits between the keyword and the number" — `[^0-9a-z]{0,15}` — which
+    # still refuses to bridge a filename's own letters (status.py, http.py,
+    # code.py), so the traceback false positive stays excluded, while
+    # 'status_code=429', '"status":429', and '{"status": 429, ...}' all
+    # match again. A dedicated 'http/<version> 429|401' alternative covers
+    # the HTTP-status-line form, since the version's own digits ('1.1')
+    # would otherwise break the letter/digit-free gap.
+    #
+    # The bare `\b401\b` used to match ANY mention of the number, including
+    # one that has nothing to do with auth (e.g. a token-count "Requested
+    # 401." in a real rate-limit message) — turning a capacity failure into
+    # a false auth classification and suppressing the fallback walk. 401 is
+    # now anchored the same way as 429: a status/code/http marker next to
+    # the number, or '401' directly followed by an "unauthor..." word, are
+    # required for the bare number to count; "Unauthorized", "unauthenticated",
+    # "invalid_api_key" and "invalid ... x-api-key" still match standalone,
+    # with no number required, since those words are unambiguous auth
+    # signals on their own.
+    #
+    # Round-3 re-check follow-up (P3-2, P3-3):
+    # - The 403 anchor used to be a bare `\b403\b`, which caught a real
+    #   rate-limit message's own incidental "Requested 403." the same way
+    #   the old bare `\b401\b` once did — fixed the same way: 403 is now
+    #   anchored to a status/code/http marker or a "forbidden" word next to
+    #   it, and "forbidden" stands on its own as an unambiguous signal (like
+    #   "unauthorized" does for 401), so `403 Forbidden` still classifies.
+    # - The 429 (status|code|http) anchor's leading `\b` blocked the group
+    #   from matching inside a camelCase or SCREAMING_CASE key
+    #   (`statusCode`, `httpStatus`, `HTTP_STATUS`) because there is no word
+    #   boundary between "status" and "Code", or between "_" and "STATUS"
+    #   (underscore counts as a word character). Dropping the leading `\b`
+    #   lets grep's case-insensitive match land mid-word instead; the
+    #   trailing `[^0-9a-z]{0,15}` gap still refuses to bridge a traceback's
+    #   own lowercase filename letters (status.py, http.py, code.py), so
+    #   that false positive stays excluded.
+    if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|forbidden|misalignment|policy[^[:alnum:]]+(block|den)' "$stderr_file"; then echo terminal_policy
+    elif grep -qiE 'http/[0-9.]+[[:space:]]+401\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}401\b|\b401[^0-9a-z]{0,15}unauthor|unauthorized|unauthenticated|invalid_api_key|invalid[^0-9a-z]{1,10}x-api-key|authentication[^[:alnum:]]+fail' "$stderr_file"; then echo terminal_configuration
+    elif grep -qiE '429[[:space:]]+too many requests|too many requests[^0-9]{0,20}429|http/[0-9.]+[[:space:]]+429\b|(status_code|status|code|http)[^0-9a-z]{0,15}429\b|\berror[[:space:]]+429:|upstream responded[[:space:]]+429|rate_limit_exceeded|rate_limit_reached_error|rate limit reached for|rate_limit_error|rate[-_ ]?limited\b|rate[-_ ]limit[[:space:]]+exceeded' "$stderr_file"; then echo rate_limited
     elif grep -qiE 'not supported when using Codex with a ChatGPT account|not available (to|for) (this|your) account|account[^[:alnum:]]+access' "$stderr_file"; then echo account_access_absent
     elif grep -qiE 'model_not_found|model[^[:alnum:]]+(not found|does not exist|unavailable)|unknown model' "$stderr_file"; then echo model_unavailable
     elif grep -qiE '\b4[0-9]{2}\b|bad request|unauthorized|forbidden' "$stderr_file"; then echo terminal_configuration
@@ -46,6 +115,16 @@ _role_audit_context() {
     bb_receipt="${bb_receipt:-null}"
   fi
   [[ "$ENGINE" != codex ]] || version="$(codex --version 2>/dev/null || true)"
+  # P3: `_dispatch_ic_version` used to be recorded only inside an already-
+  # marked capacity_substitute — exactly the unmarked same-lab reviews its
+  # own stated purpose (auditing whether an old `ic` explains a missed mark)
+  # needs to check. Record it on every review-role receipt now, marked or not.
+  local ic_version=""
+  case "${ROLE:-}" in
+    plan-review|validation|cross-lab-review)
+      command -v _dispatch_ic_version >/dev/null 2>&1 && ic_version="$(_dispatch_ic_version 2>/dev/null || true)"
+      ;;
+  esac
   # A reused output path may still contain a previous attempt's sidecar.
   # Pending states have no verdict; App Server verdicts come from collection.
   if [[ "$state" == completed || "$state" == failed ]] && [[ "${DISPATCH_RESULT_READY:-false}" == true && "${VIA:-exec}" != zaka && -n "${OUTPUT:-}" && -f "${OUTPUT}.verdict" ]]; then
@@ -103,6 +182,7 @@ _role_audit_context() {
     --arg session "${ZAKA_SESSION:-}" --arg events "${PROVIDER_EVENTS:-${ZAKA_EVENT_LOG:-}}" \
     --arg before "$CHECKOUT_BEFORE" --arg after "$head_after" \
     --arg output "$OUTPUT" --arg verdict "$verdict" --arg failure "$failure_class" \
+    --arg ic_version "$ic_version" \
     --arg enrollment "${CLAVAIN_TASK_ENROLLMENT_ID:-}" --arg manifest "${CLAVAIN_TASK_MANIFEST_SHA256:-}" \
     --arg cohort "${CLAVAIN_TASK_COHORT_ID:-}" \
     --argjson exit_code "$exit_code" --argjson observation "${DISPATCH_EXECUTION_OBSERVATION:-null}" \
@@ -115,6 +195,10 @@ _role_audit_context() {
     --argjson recheck_source "${RECHECK_SOURCE_JSON:-null}" \
     --argjson recheck_bead "${RECHECK_BEAD_JSON:-null}" \
     --argjson findings "$findings" \
+    --argjson recheck_bead_status "${RECHECK_BEAD_STATUS_JSON:-null}" \
+    --argjson recheck_bead_dep "${RECHECK_BEAD_DEP_JSON:-null}" \
+    --argjson recheck_tracker_dir "${RECHECK_TRACKER_DIR_JSON:-null}" \
+    --argjson recheck_sidecar_path "${RECHECK_SIDECAR_PATH_JSON:-null}" \
     '{schema_version:1,dispatch_id:$dispatch_id,attempt_id:$attempt_id,retry_id:$retry_id,state:$state,
       resolved_route:$route,resolved_profile:$profile,parent_session_id:$parent,
       # Consumers must key attribution on executed_profile_ref, not profile_ref.
@@ -122,8 +206,10 @@ _role_audit_context() {
       primary_profile_ref:$route.profile_ref,
       executed_profile_ref:(if $executed_profile_ref != "" then $executed_profile_ref else $profile.profile_ref end),
       headroom_reorder:($route.headroom_reorder // null),
+      ic_version:(if $ic_version != "" then $ic_version else null end),
       capacity_substitute:$capacity_substitute,recheck_items:$recheck_items,recheck_source:$recheck_source,
-      recheck_bead:$recheck_bead,
+      recheck_bead:$recheck_bead,recheck_bead_status:$recheck_bead_status,recheck_bead_dep:$recheck_bead_dep,
+      recheck_tracker_dir:$recheck_tracker_dir,recheck_sidecar_path:$recheck_sidecar_path,
       run_id:$run,bead_id:$bead,bead_source:$bead_source,
       execution:({backend:$backend,model:$model,reasoning_effort:$effort,service_tier:$service,
         codex_version:$version,sandbox:$sandbox,transport:$transport,account:$account,session_id:$session,event_log:$events}

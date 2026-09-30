@@ -159,6 +159,31 @@ class _FrozenPreparers(dict):
 PREPARERS: Mapping[str, Preparer] = MappingProxyType(_FrozenPreparers())
 
 
+def _register_shipped_preparers() -> Mapping[str, Preparer]:
+    """Rebind `PREPARERS` once, at import, to the shipped preparers.
+
+    Still an immutable mapping: nothing can add to it after import.
+    """
+    import clavain_selector.security_triage as security_triage
+
+    return MappingProxyType(
+        _FrozenPreparers(
+            {
+                security_triage.NAME: Preparer(
+                    name=security_triage.NAME,
+                    points=frozenset({Point.PRE_TOOL}),
+                    vocabulary=security_triage.vocabulary,
+                    event_fields=frozenset({"session_id", "tool_name", "tool_input"}),
+                    build=security_triage.build,
+                )
+            }
+        )
+    )
+
+
+PREPARERS = _register_shipped_preparers()
+
+
 # ---------------------------------------------------------------------------
 # Canonical JSON + HMAC tag (revision 8, P3-13)
 # ---------------------------------------------------------------------------

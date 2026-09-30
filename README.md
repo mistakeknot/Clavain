@@ -541,6 +541,10 @@ Or refresh from within Claude Code:
 /plugin marketplace update claude-plugins-official
 ```
 
+### Dispatch fails with a missing `.../cache/.../clavain/<version>` directory
+
+A long-lived or resumed session resolves its Clavain plugin root once, at start, and keeps it. When an update lands and the old cache directory is pruned, that session still points at the deleted version, so `scripts/dispatch.sh`, `CLAVAIN_SELECTED_ROOT` and skill paths fail with "No such file or directory". Run `/reload-plugins` or start a fresh session; either picks up the version in `~/.claude/plugins/installed_plugins.json`. Do not recreate the old directory: pruned versions can carry retired routing seats.
+
 ### Error path shows a different user's home directory
 
 If the error references `/Users/someone-else/` instead of your home directory, the marketplace cache was created by a different user account on the same machine. Same fix — remove and restart:

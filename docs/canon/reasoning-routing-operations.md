@@ -161,17 +161,29 @@ policy order.
 
 ### Capacity-substitute reviews are provisional, never blocking
 
-mk-gp32. A `plan-review`, `validation` or `cross-lab-review` candidate counts as
-a capacity substitute only when an *earlier* candidate in the same walk was
-actually attempted and failed with a real capacity class — `quota_exhausted`,
-`rate_limited`, `model_unavailable` or `account_access_absent`, tracked in
-`_dispatch_role_profile` as `capacity_failure_class` — and this candidate's
-lab matches the producer's. A pre-walk `ic` `fallback_reason` such as
-`producer_model_conflict` (seeded before any candidate in this loop has run,
-e.g. from `cross_lab_first` reordering) or a pre-run skip such as
-`usage_reporting_unavailable`/`insufficient_codex_version` never marks a
-substitute by itself; both keep the walk going without setting
-`capacity_failure_class`. `_dispatch_model_lab` in `scripts/dispatch.sh` ports
+mk-gp32, tightened by mk-dabt. A `plan-review`, `validation` or
+`cross-lab-review` candidate counts as a capacity substitute when an *earlier*
+candidate in the same walk was skipped or failed for an OPERATIONAL reason —
+either actually attempted and failed with a real capacity class
+(`quota_exhausted`, `rate_limited`, `model_unavailable`,
+`account_access_absent`), or skipped pre-run/post-run for
+`insufficient_codex_version`, `unsupported_adapter` or
+`usage_reporting_unavailable` — and this candidate's lab matches the
+producer's; all of these set `capacity_failure_class` in
+`_dispatch_role_profile`. mk-dabt: an operational skip is not a policy
+decision that the other lab shouldn't review, so per canon it must still mark
+the substitute the same as an actually-attempted capacity failure does — an
+earlier version of this walk let `insufficient_codex_version` and
+`usage_reporting_unavailable` skips through *without* setting
+`capacity_failure_class`, so a plan-review that only ever hit those skips
+before landing same-lab was wrongly reported as an ordinary, fully
+independent review. The ONLY thing that must *not* mark a substitute by
+itself is a pre-walk `ic` `fallback_reason` such as `producer_model_conflict`
+(seeded before any candidate in this loop has run, e.g. from
+`cross_lab_first` reordering) — that is a POLICY exclusion baked into the
+resolved route before the loop ever sees a candidate, never a skip/failure
+the loop itself observed, and it leaves `capacity_failure_class` unset.
+`_dispatch_model_lab` in `scripts/dispatch.sh` ports
 intercore's `modelLab` (`internal/routing/identity.go:138-148`) from the model
 identity prefix (`gpt-` → openai, `claude-` → anthropic, `kimi` → moonshot;
 anything else never counts as same-lab). When it fires, the reviewer prompt
@@ -304,7 +316,7 @@ observed:
 scripts/capacity-fallback.sh --seat gpt-6-astra \
   --context .clavain/decisions/<plan>.json \
   --evidence .clavain/capacity/<date>-astra-usage-limit.md \
-  --role plan-review --producer-identity claude-fable-5-1
+  --role plan-review --producer-identity claude-opus-5-5
 ```
 
 The helper merges `available_models` into a copy of the decision context, refuses

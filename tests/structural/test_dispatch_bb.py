@@ -272,6 +272,18 @@ def test_stderr_denial_dominates_quota(tmp_path):
     assert (tmp_path/"failure").read_text().strip() == "terminal_policy"
 
 
+def test_stderr_configuration_does_not_clobber_structured_quota(tmp_path):
+    assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}],
+                        stderr="HTTP 401 Unauthorized: token refreshed") != 0
+    assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"
+
+
+def test_incidental_forbidden_stderr_does_not_clobber_structured_quota(tmp_path):
+    assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}],
+                        stderr="warning: resolved tool schema misalignment; retrying") != 0
+    assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"
+
+
 def test_real_rollout_quota_fixture(tmp_path):
     event = json.loads((ROOT / "tests/fixtures/codex-usage-limit-rollout.jsonl").read_text())
     assert run_dispatch(tmp_path, [event]) != 0
@@ -546,3 +558,17 @@ def test_borrowed_token_is_not_persisted_by_dispatch(tmp_path):
     leaked = [p for p in tmp_path.rglob('*') if p.is_file()
               and secret in p.read_text(errors='ignore')]
     assert leaked == []
+
+
+@pytest.mark.parametrize("stderr", ["forbidden: policy density 3", "misalignment; policy denominator 2"])
+def test_incidental_policy_words_do_not_override_structured_quota(tmp_path, stderr):
+    assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}],
+                        stderr=stderr) != 0
+    assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"
+
+
+@pytest.mark.parametrize("stderr", ["forbidden: policy denying this request", "forbidden: policy blocking this request", "forbidden: policy blocks this request", "forbidden: policy denies this request"])
+def test_denial_participles_override_structured_quota(tmp_path, stderr):
+    assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}],
+                        stderr=stderr) != 0
+    assert (tmp_path/"failure").read_text().strip() == "terminal_policy"

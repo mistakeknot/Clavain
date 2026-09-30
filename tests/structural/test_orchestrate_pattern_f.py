@@ -96,10 +96,27 @@ case "$role" in
       printf -- '--- VERDICT ---\nSTATUS: error\nSUMMARY: validation seat mutated the checkout: src/app.py\n---\n' > "$out.verdict"
       : > "$out"; exit 1
     fi
+    if [[ -n "${PF_STUB_NO_OUTPUT:-}" ]]; then
+      # P3: simulates a crash/denied-tool-call before the seat wrote anything
+      # for THIS attempt — used to prove pf_validate cleared a previous
+      # attempt's stale validator.md/.verdict/.recheck.md before this walk,
+      # rather than silently reading their leftover verdict.
+      echo "fake crash before writing output" >&2
+      exit 7
+    fi
     [[ -n "${PF_STUB_TOUCH:-}" ]] && echo "seat wrote here" >> "$C/src/other.py"
     printf '%sVERDICT: %s\n%sCRITERION: %s\n%sRECEIPT: %s\n%sBEYOND THE GAUGE:\n%s\n' \
       "${PF_STUB_BULLET:-}" "${PF_STUB_VERDICT:-PASS}" "${PF_STUB_BULLET:-}" "${PF_STUB_CRITERION:-none}" "${PF_STUB_BULLET:-}" "${PF_STUB_RECEIPT:-$rec}" "${PF_STUB_BULLET:-}" "${PF_STUB_BEYOND:-- none}" > "$out"
-    printf -- '--- VERDICT ---\nSTATUS: warn\nSUMMARY: stub\n---\n' > "$out.verdict"
+    # Mirror dispatch.sh: a PASS body yields a pass sidecar, anything else warn;
+    # PF_STUB_SIDECAR_STATUS forces a sidecar that disagrees with the body
+    # (dispatch's demotion when a trailing verdict block conflicts).
+    sc="warn"; [[ "${PF_STUB_VERDICT:-PASS}" == PASS ]] && sc="pass"
+    sc="${PF_STUB_SIDECAR_STATUS:-$sc}"
+    if [[ -n "${PF_STUB_PROVISIONAL:-}" ]]; then
+      printf -- '--- VERDICT ---\nPROVISIONAL: %s\nSTATUS: %s\nSUMMARY: stub\n---\n' "$PF_STUB_PROVISIONAL" "$sc" > "$out.verdict"
+    else
+      printf -- '--- VERDICT ---\nSTATUS: %s\nSUMMARY: stub\n---\n' "$sc" > "$out.verdict"
+    fi
     ;;
   routine-execution)
     [[ -n "${PF_STUB_EXEC_SLEEP:-}" ]] && sleep "$PF_STUB_EXEC_SLEEP"
@@ -107,6 +124,12 @@ case "$role" in
     var="PF_STUB_EXEC_FILE_$(basename "$C")"
     echo "from executor $(basename "$C")" >> "$C/${!var:-src/app.py}"
     git -C "$C" add -A && git -C "$C" commit -q -m "executor work"
+    if [[ -n "${PF_STUB_EXEC_DIRTY:-}" ]]; then
+      # left uncommitted on purpose, after the executor's own commit, so
+      # pf_execute_brief's `git status --porcelain` check fires and sets an
+      # executor note this stub combines with a later provisional-PASS note.
+      echo "left dirty on purpose" >> "$C/src/other.py"
+    fi
     printf 'Did the thing.\nVERDICT: %s\nCRITERION: %s\n' "${PF_STUB_EXEC_VERDICT:-PASS}" "${PF_STUB_EXEC_CRITERION:-none}" > "$out"
     printf -- '--- VERDICT ---\nSTATUS: pass\nSUMMARY: stub\n---\n' > "$out.verdict"
     ;;
@@ -205,7 +228,8 @@ def stubs(tmp_path: Path, monkeypatch) -> dict:
     for k in ("PF_STUB_SLEEP", "PF_STUB_MUTATE", "PF_STUB_VERDICT", "PF_STUB_CRITERION",
               "PF_STUB_RECEIPT", "PF_STUB_BEYOND", "PF_STUB_EXEC_VERDICT", "PF_VERDICT_FAIL",
               "PF_STUB_CODEX_SEAT", "PF_STUB_TOUCH", "PF_STUB_BULLET", "PF_STUB_EXEC_SLEEP",
-              "PF_STUB_IC_FAIL_PATTERN"):
+              "PF_STUB_IC_FAIL_PATTERN", "PF_STUB_NO_OUTPUT", "PF_STUB_EXEC_DIRTY",
+              "PF_STUB_PROVISIONAL", "PF_STUB_SIDECAR_STATUS"):
         monkeypatch.delenv(k, raising=False)
     register = tmp_path / "register.db"
     register.write_text("")
@@ -386,6 +410,149 @@ def test_validator_fail_parks_the_item_with_its_criterion(orc, repo, tmp_path, s
     assert r.status == "validator_fail" and r.validator_criterion.startswith("grep -n")
     assert "--role validator --kind replay --verdict FAIL" in stubs["register_log"].read_text().splitlines()[1]
     assert _packet(capsys)["items"][0]["validator_strikes"] == 1
+
+
+def test_a_provisional_pass_still_merges_but_carries_the_caveat(orc, repo, tmp_path, stubs, monkeypatch, capsys):
+    # mk-rzi5: a same-lab capacity-substitute validator PASS (mk-gp32/mk-dabt)
+    # gates exactly like an ordinary PASS (provisional, never blocking — see
+    # reasoning-routing-operations.md) but must not be reported as an
+    # ordinary, fully independent one: the caveat dispatch.sh's
+    # _extract_verdict stamped into the .verdict sidecar's PROVISIONAL line
+    # must reach the item's result note and the register row, not be
+    # silently dropped the way a PASS's note always was before this bead.
+    monkeypatch.setenv(
+        "PF_STUB_PROVISIONAL",
+        "capacity-substitute reviewer_lab=anthropic producer_lab=anthropic failure_class=quota_exhausted",
+    )
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.status == "merged" and r.merged and r.validator_verdict == "PASS"
+    assert r.note is not None and "capacity-substitute" in r.note
+    assert "reviewer_lab=anthropic" in r.note
+    rows = stubs["register_log"].read_text().splitlines()
+    assert "--role validator --kind replay --verdict PASS" in rows[1]
+    assert "capacity-substitute" in rows[1]
+    out = _packet(capsys)
+    assert "capacity-substitute" in json.dumps(out)
+
+
+def test_an_ordinary_pass_still_carries_no_note(orc, repo, tmp_path, stubs):
+    # Control for the fix above: an ordinary independent PASS (no
+    # PROVISIONAL line in the sidecar) must still carry no note at all —
+    # confirms the broadened `if val.note:` condition did not start
+    # fabricating notes for a genuine independent pass.
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.status == "merged" and r.validator_verdict == "PASS"
+    assert r.note is None
+
+
+def test_a_provisional_pass_note_is_appended_to_an_existing_executor_note(
+    orc, repo, tmp_path, stubs, monkeypatch, capsys,
+):
+    # Round-2 review, P3 finding 7: the provisional-PASS note append fix
+    # (orchestrate.py ~2929) needed a test showing an *existing* executor
+    # note (e.g. "worktree dirty after the executor") survives concatenated
+    # with the validator's capacity-substitute caveat, not silently
+    # overwritten by it. Uses a brief item so the executor goes through
+    # dispatch.sh's routine-execution stub, which PF_STUB_EXEC_DIRTY leaves
+    # dirty after its own commit.
+    monkeypatch.setenv("PF_STUB_EXEC_DIRTY", "1")
+    monkeypatch.setenv(
+        "PF_STUB_PROVISIONAL",
+        "capacity-substitute reviewer_lab=anthropic producer_lab=anthropic failure_class=quota_exhausted",
+    )
+    brief = tmp_path / "brief.md"
+    brief.write_text(BRIEF)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("b1", brief, {})], stubs["register"])))[0]
+    assert r.status == "merged" and r.validator_verdict == "PASS"
+    assert r.note is not None
+    assert "worktree dirty after the executor" in r.note
+    assert "capacity-substitute" in r.note
+    # both halves must be present, joined — neither having replaced the other
+    assert r.note.index("worktree dirty after the executor") < r.note.index("capacity-substitute")
+
+
+def test_a_validator_pass_that_dispatch_demoted_to_warn_is_not_merged(
+    orc, repo, tmp_path, stubs, monkeypatch,
+):
+    # Round-1 cross-lab review P1: dispatch.sh demotes a body PASS to a warn
+    # sidecar when a present trailing verdict block disagrees. pf_validate
+    # must not accept the body PASS over that demotion.
+    monkeypatch.setenv("PF_STUB_SIDECAR_STATUS", "warn")
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.validator_verdict == "UNRUN"
+    assert r.status != "merged" and not r.merged
+
+
+def test_a_validator_pass_that_dispatch_demoted_to_fail_is_not_merged(
+    orc, repo, tmp_path, stubs, monkeypatch,
+):
+    # Round-2 review P1: a `fail` sidecar (trailing block said fail) must not
+    # be overridden by a body PASS that pf's looser line search still finds.
+    monkeypatch.setenv("PF_STUB_SIDECAR_STATUS", "fail")
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.validator_verdict == "UNRUN"
+    assert r.status != "merged" and not r.merged
+
+
+def test_read_verdict_status_takes_first_non_pass_case_insensitively(orc, tmp_path):
+    # Round-3 review P1: the reader must not stop at a leading STATUS: pass
+    # nor ignore a mixed-case "Status: fail".
+    f = tmp_path / "v.verdict"
+    f.write_text("--- VERDICT ---\nSTATUS: pass\nSTATUS: fail\n---\n")
+    assert orc._read_verdict_status(str(f)) == "fail"
+    f.write_text("--- VERDICT ---\nStatus: fail\n---\n")
+    assert orc._read_verdict_status(str(f)) == "fail"
+    f.write_text("--- VERDICT ---\nSTATUS: pass\nSTATUS: PASS\n---\n")
+    assert orc._read_verdict_status(str(f)) == "pass"
+    f.write_text("--- VERDICT ---\nSUMMARY: none\n---\n")
+    assert orc._read_verdict_status(str(f)) is None
+    f.write_text("--- VERDICT ---\nSTATUS: \nSTATUS: fail\n---\n")
+    assert orc._read_verdict_status(str(f)) == "invalid"
+
+
+def test_stale_sidecars_are_cleared_before_a_capacity_recheck_walk_attempt(
+    orc, repo, tmp_path, stubs, monkeypatch,
+):
+    # Round-2 review, P3 finding 7: pf_validate's item_dir is a fixed path
+    # per item.id, reused across capacity-recheck walk attempts. Pre-seed a
+    # PREVIOUS attempt's validator.md/.verdict/.recheck.md at that exact
+    # path, then make THIS attempt's dispatch crash before writing any
+    # output at all (PF_STUB_NO_OUTPUT) to prove the stale files were
+    # removed up front rather than silently read as this attempt's verdict.
+    class _FixedUUID:
+        hex = "deadbeef"
+
+    monkeypatch.setattr(orc, "uuid4", lambda: _FixedUUID())
+    item_dir = repo / ".clavain" / "orchestrate-runs" / "deadbeef" / "t1"
+    item_dir.mkdir(parents=True)
+    (item_dir / "validator.md").write_text("STALE BODY FROM A PRIOR ATTEMPT\nVERDICT: PASS\nRECEIPT: whatever\n")
+    (item_dir / "validator.md.verdict").write_text(
+        "--- VERDICT ---\nSTATUS: pass\nSUMMARY: stale pass from a prior attempt\n---\n"
+    )
+    (item_dir / "validator.md.recheck.md").write_text("- stale recheck item from a prior attempt\n")
+    monkeypatch.setenv("PF_STUB_NO_OUTPUT", "1")
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    # this attempt produced no output at all: it must be reported UNRUN, and
+    # must never inherit the stale PASS left over from the previous attempt
+    # at this same item_dir path.
+    assert r.validator_verdict == "UNRUN"
+    assert r.status != "merged"
+    assert "no VERDICT line from the seat" in (r.note or "")
+    assert not (item_dir / "validator.md.recheck.md").exists()
+    # validator.md itself is gone too: the stub crashed before writing a
+    # fresh one, so its absence (rather than the stale PASS body) is the
+    # proof the stale copy was cleared instead of read.
+    assert not (item_dir / "validator.md").exists()
 
 
 def test_register_write_failure_is_loud_but_does_not_stop_the_run(orc, repo, tmp_path, stubs, monkeypatch, capsys):
