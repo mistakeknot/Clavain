@@ -2703,8 +2703,18 @@ _extract_verdict() {
     fi
     local block_status_lower=""
     if [[ "$has_valid_block" == 1 ]]; then
-        block_status_lower="$(grep -im1 '^status:[[:space:]]' <<< "$verdict_block" | sed -E 's/^[^:]*:[[:space:]]*//')"
-        block_status_lower="${block_status_lower,,}"
+        # Every STATUS line counts: a block that says "pass" and later
+        # "fail" is a disagreement, so the first non-pass status wins and
+        # only an all-pass block reads as pass.
+        local _bs
+        while IFS= read -r _bs; do
+            _bs="${_bs#*:}"
+            _bs="${_bs#"${_bs%%[![:space:]]*}"}"
+            _bs="${_bs,,}"
+            if [[ -z "$block_status_lower" || "$block_status_lower" == pass ]]; then
+                block_status_lower="$_bs"
+            fi
+        done < <(grep -i '^status:[[:space:]]' <<< "$verdict_block")
     fi
 
     _write_verdict_block() {

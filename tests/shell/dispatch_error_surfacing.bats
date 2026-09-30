@@ -317,6 +317,25 @@ TEXT
     ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
 }
 
+# Round-1 cross-lab review P2: a trailing block that itself carries
+# conflicting STATUS lines ("pass" then "fail") is a disagreement; reading only
+# the first STATUS let a first-line CLEAN keep its pass.
+@test "extract: first-line CLEAN demoted when the trailing block has pass then fail STATUS lines" {
+    _load
+    cat > "$OUTPUT" <<'TEXT'
+Verdict: CLEAN
+
+--- VERDICT ---
+STATUS: pass
+STATUS: fail
+SUMMARY: conflicting statuses in one block
+---
+TEXT
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+}
+
 # --- mk-rzi5: CLEAN must be anchored, not a substring match -----------------
 # Before mk-rzi5 the synthesized-verdict branch matched *"CLEAN"* anywhere in
 # the VERDICT line, so a reviewer writing "VERDICT: NOT CLEAN, see findings"

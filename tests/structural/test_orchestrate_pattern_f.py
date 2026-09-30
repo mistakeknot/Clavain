@@ -107,10 +107,15 @@ case "$role" in
     [[ -n "${PF_STUB_TOUCH:-}" ]] && echo "seat wrote here" >> "$C/src/other.py"
     printf '%sVERDICT: %s\n%sCRITERION: %s\n%sRECEIPT: %s\n%sBEYOND THE GAUGE:\n%s\n' \
       "${PF_STUB_BULLET:-}" "${PF_STUB_VERDICT:-PASS}" "${PF_STUB_BULLET:-}" "${PF_STUB_CRITERION:-none}" "${PF_STUB_BULLET:-}" "${PF_STUB_RECEIPT:-$rec}" "${PF_STUB_BULLET:-}" "${PF_STUB_BEYOND:-- none}" > "$out"
+    # Mirror dispatch.sh: a PASS body yields a pass sidecar, anything else warn;
+    # PF_STUB_SIDECAR_STATUS forces a sidecar that disagrees with the body
+    # (dispatch's demotion when a trailing verdict block conflicts).
+    sc="warn"; [[ "${PF_STUB_VERDICT:-PASS}" == PASS ]] && sc="pass"
+    sc="${PF_STUB_SIDECAR_STATUS:-$sc}"
     if [[ -n "${PF_STUB_PROVISIONAL:-}" ]]; then
-      printf -- '--- VERDICT ---\nPROVISIONAL: %s\nSTATUS: warn\nSUMMARY: stub\n---\n' "$PF_STUB_PROVISIONAL" > "$out.verdict"
+      printf -- '--- VERDICT ---\nPROVISIONAL: %s\nSTATUS: %s\nSUMMARY: stub\n---\n' "$PF_STUB_PROVISIONAL" "$sc" > "$out.verdict"
     else
-      printf -- '--- VERDICT ---\nSTATUS: warn\nSUMMARY: stub\n---\n' > "$out.verdict"
+      printf -- '--- VERDICT ---\nSTATUS: %s\nSUMMARY: stub\n---\n' "$sc" > "$out.verdict"
     fi
     ;;
   routine-execution)
@@ -224,7 +229,7 @@ def stubs(tmp_path: Path, monkeypatch) -> dict:
               "PF_STUB_RECEIPT", "PF_STUB_BEYOND", "PF_STUB_EXEC_VERDICT", "PF_VERDICT_FAIL",
               "PF_STUB_CODEX_SEAT", "PF_STUB_TOUCH", "PF_STUB_BULLET", "PF_STUB_EXEC_SLEEP",
               "PF_STUB_IC_FAIL_PATTERN", "PF_STUB_NO_OUTPUT", "PF_STUB_EXEC_DIRTY",
-              "PF_STUB_PROVISIONAL"):
+              "PF_STUB_PROVISIONAL", "PF_STUB_SIDECAR_STATUS"):
         monkeypatch.delenv(k, raising=False)
     register = tmp_path / "register.db"
     register.write_text("")
@@ -468,6 +473,20 @@ def test_a_provisional_pass_note_is_appended_to_an_existing_executor_note(
     assert "capacity-substitute" in r.note
     # both halves must be present, joined — neither having replaced the other
     assert r.note.index("worktree dirty after the executor") < r.note.index("capacity-substitute")
+
+
+def test_a_validator_pass_that_dispatch_demoted_to_warn_is_not_merged(
+    orc, repo, tmp_path, stubs, monkeypatch,
+):
+    # Round-1 cross-lab review P1: dispatch.sh demotes a body PASS to a warn
+    # sidecar when a present trailing verdict block disagrees. pf_validate
+    # must not accept the body PASS over that demotion.
+    monkeypatch.setenv("PF_STUB_SIDECAR_STATUS", "warn")
+    plan = tmp_path / "exact.md"
+    plan.write_text(GOOD)
+    r = orc.orchestrate_pattern_f(str(_run_file(tmp_path, repo, [("t1", plan, {})], stubs["register"])))[0]
+    assert r.validator_verdict == "UNRUN"
+    assert r.status != "merged" and not r.merged
 
 
 def test_stale_sidecars_are_cleared_before_a_capacity_recheck_walk_attempt(
