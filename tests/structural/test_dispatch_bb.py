@@ -278,6 +278,12 @@ def test_stderr_configuration_does_not_clobber_structured_quota(tmp_path):
     assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"
 
 
+def test_incidental_forbidden_stderr_does_not_clobber_structured_quota(tmp_path):
+    assert run_dispatch(tmp_path, [{"type":"task_complete", "error":{"codex_error_info":"usage_limit_exceeded"}}],
+                        stderr="warning: resolved tool schema misalignment; retrying") != 0
+    assert (tmp_path/"failure").read_text().strip() == "quota_exhausted"
+
+
 def test_real_rollout_quota_fixture(tmp_path):
     event = json.loads((ROOT / "tests/fixtures/codex-usage-limit-rollout.jsonl").read_text())
     assert run_dispatch(tmp_path, [event]) != 0

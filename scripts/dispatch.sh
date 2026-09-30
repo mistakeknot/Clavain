@@ -2915,12 +2915,21 @@ _extract_verdict() {
         # legitimate verdict source: agents that narrate first and close
         # with "VERDICT: PASS" (claude result text) end this way. Only an
         # exact PASS/CLEAN token on that final line counts, and only when
-        # no trailing block exists — mid-body lines, quoted fences and
-        # recaps followed by further prose are never consulted (mk P1-2).
+        # no trailing block exists and the line is outside a code fence —
+        # mid-body lines, quoted fences and recaps followed by further prose
+        # are never consulted (mk P1-2).
         # Anything else stays warn.
         if [[ "$has_valid_block" != 1 ]]; then
             local last_line
-            last_line="$(awk '{ sub(/\r$/, ""); if ($0 ~ /[^[:space:]]/) last = $0 } END { print last }' "$output_file" 2>/dev/null)" || last_line=""
+            # A final line inside an unclosed code fence is quoted example
+            # text, not the agent's ruling: an odd number of fence lines
+            # means the last line sits inside one.
+            last_line="$(awk '
+                { sub(/\r$/, "") }
+                /^[[:space:]]*(```|~~~)/ { fences++ }
+                $0 ~ /[^[:space:]]/ { last = $0 }
+                END { if (fences % 2 == 0) print last }
+            ' "$output_file" 2>/dev/null)" || last_line=""
             if [[ "${last_line^^}" =~ ^VERDICT:[[:space:]]*PASS[[:space:]]*$ ]]; then
                 status="pass"
                 summary="Validator replay PASS."
@@ -3549,7 +3558,20 @@ _finalize_dispatch_result() {
     local stderr_class
     stderr_class="$(_classify_dispatch_failure "$STDERR_FILE" 1)"
     case "$stderr_class" in
-      terminal_policy) failure_class="$stderr_class" ;;
+      terminal_policy)
+        # The classifier also matches bare "forbidden"/"misalignment", which
+        # incidental stderr text can carry; against a structured capacity
+        # failure only an explicit denial (a 403 status or "policy
+        # blocked/denied") may override it.
+        case "$failure_class" in
+          rate_limited|quota_exhausted)
+            if grep -qiE 'http/[0-9.]+[[:space:]]+403\b|\b(status_code|status|code|http)[^0-9a-z]{0,15}403\b|\b403[^0-9a-z]{0,15}forbidden|policy[^[:alnum:]]+(block|den)' "$STDERR_FILE" 2>/dev/null; then
+              failure_class="$stderr_class"
+            fi
+            ;;
+          *) failure_class="$stderr_class" ;;
+        esac
+        ;;
       terminal_configuration)
         case "$failure_class" in
           rate_limited|quota_exhausted) ;;
