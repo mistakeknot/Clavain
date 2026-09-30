@@ -438,7 +438,8 @@ def _read_verdict_status(verdict_path: str) -> str | None:
         for line in f:
             m = re.match(r"status:(.*)$", line.rstrip("\r\n"), re.I)
             if m:
-                statuses.append(m.group(1).strip().lower())
+                # an empty STATUS is unreadable, never a pass
+                statuses.append(m.group(1).strip().lower() or "invalid")
     if not statuses:
         return None
     return next((s for s in statuses if s != "pass"), "pass")

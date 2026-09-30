@@ -358,6 +358,21 @@ TEXT
     grep -q '^STATUS: fail$' "$VERDICT_FILE"
 }
 
+@test "extract: an escape sequence in a block STATUS is not interpreted into pass" {
+    _load
+    printf -- '--- VERDICT ---\nSTATUS: \\x70ass\nSUMMARY: x\n---\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    ! grep -q '^STATUS: pass$' "$VERDICT_FILE"
+    grep -qF 'STATUS: \x70ass' "$VERDICT_FILE"
+}
+
+@test "extract: block-only empty STATUS then fail resolves to a non-empty non-pass STATUS" {
+    _load
+    printf -- '--- VERDICT ---\nSTATUS: \nSTATUS: fail\nSUMMARY: x\n---\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
 # --- mk-rzi5: CLEAN must be anchored, not a substring match -----------------
 # Before mk-rzi5 the synthesized-verdict branch matched *"CLEAN"* anywhere in
 # the VERDICT line, so a reviewer writing "VERDICT: NOT CLEAN, see findings"

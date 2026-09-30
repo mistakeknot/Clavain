@@ -514,6 +514,8 @@ def test_read_verdict_status_takes_first_non_pass_case_insensitively(orc, tmp_pa
     assert orc._read_verdict_status(str(f)) == "pass"
     f.write_text("--- VERDICT ---\nSUMMARY: none\n---\n")
     assert orc._read_verdict_status(str(f)) is None
+    f.write_text("--- VERDICT ---\nSTATUS: \nSTATUS: fail\n---\n")
+    assert orc._read_verdict_status(str(f)) == "invalid"
 
 
 def test_stale_sidecars_are_cleared_before_a_capacity_recheck_walk_attempt(
