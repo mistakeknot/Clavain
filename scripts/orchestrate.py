@@ -2741,6 +2741,14 @@ def pf_validate(
         return PFValidation("UNRUN", crit, _pf_sidecar_summary(output + ".verdict") or "dispatch reported an error verdict", receipt_ok, [], model)
     if v not in ("PASS", "FAIL", "UNRUN"):
         return PFValidation("UNRUN", crit, f"no VERDICT line from the seat (dispatch rc={rc}, sidecar {status or 'missing'})", receipt_ok, findings, model)
+    if v == "PASS" and status == "warn":
+        # dispatch.sh demotes a body PASS to warn when a present trailing
+        # verdict block disagrees; a pass needs every verdict source to agree.
+        return PFValidation(
+            "UNRUN", crit,
+            _pf_sidecar_summary(output + ".verdict") or "dispatch demoted the validator PASS to warn",
+            receipt_ok, findings, model,
+        )
     if v == "FAIL":
         env = _pf_environment_failure(text)
         if env:
