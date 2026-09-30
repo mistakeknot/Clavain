@@ -560,6 +560,13 @@ TEXT
     grep -q '^STATUS: warn$' "$VERDICT_FILE"
 }
 
+@test "extract: a final VERDICT: CLEAN inside an unclosed code fence stays warn" {
+    _load
+    printf 'Review is incomplete.\nExample output:\n```text\nVERDICT: CLEAN\n' > "$OUTPUT"
+    _extract_verdict "$OUTPUT"
+    grep -q '^STATUS: warn$' "$VERDICT_FILE"
+}
+
 @test "extract: a first-line verdict is never overridden by a final VERDICT: PASS line" {
     _load
     printf 'Verdict: NEEDS-FIXES\nquoted:\nVERDICT: PASS\n' > "$OUTPUT"
