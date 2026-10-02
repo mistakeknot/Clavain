@@ -15,7 +15,9 @@ FAILED=0
 
 run_structural() {
   echo "=== Tier 1: Structural Tests (pytest) ==="
-  cd "$PROJECT_ROOT/tests" && uv run pytest structural/ -v --tb=short || FAILED=1
+  # pytest-xdist: the structural suite is parallel-safe (2,822 tests, ~35 s on 16
+  # workers vs ~280 s serial). CLAVAIN_TEST_WORKERS=0 forces a serial run.
+  cd "$PROJECT_ROOT/tests" && uv run pytest structural/ -v --tb=short -n "${CLAVAIN_TEST_WORKERS:-auto}" || FAILED=1
   cd "$PROJECT_ROOT"
 }
 

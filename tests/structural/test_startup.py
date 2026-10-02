@@ -65,13 +65,20 @@ def test_archive_detects_unlocked_legacy_append(tmp_path, monkeypatch):
 
 def test_lock_contention_does_not_block_startup(tmp_path):
     project = tmp_path/'project'; project.mkdir(); state = tmp_path/'state'; state.mkdir(mode=0o700)
+    # Interpreter start-up dominates and varies with host load, so bound what the
+    # held lock adds (the supervisor waits 0.1 s for it) over an uncontended run
+    # of the same command in a separate state dir, not the absolute wall time.
+    quiet = tmp_path/'quiet'; quiet.mkdir(mode=0o700)
+    start = time.monotonic()
+    invoke(project, quiet, extra=('--telemetry',))
+    baseline = time.monotonic()-start
     lock = state/'hook-health.lock'
     lock.touch(mode=0o600)
     with lock.open('rb') as stream:
         fcntl.flock(stream, fcntl.LOCK_EX)
         start = time.monotonic()
         result = invoke(project, state, extra=('--telemetry',))
-        assert time.monotonic()-start < 2
+        assert time.monotonic()-start < baseline+1
     assert result.returncode == 0
     assert 'telemetry unavailable' in result.stdout
     assert len(result.stdout.encode()) <= 10000
