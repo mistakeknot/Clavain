@@ -108,9 +108,9 @@ print(json.dumps(value))
         command=['python3',str(ROOT/'scripts/bb-seat.py'),'--role',role,'--backend',backend,
                  '--model',model,'--effort',effort,'--service-tier','standard','--workdir',str(work),
                  '--output',str(tmp_path/'result'), '--attempt-id',attempt,'--dispatch-id','dispatch_one',
-                 # Only the modes that never reach a terminal event need the short
-                 # budget; the rest end on events, so a roomy budget keeps a loaded
-                 # host from turning a normal run into a spurious timeout.
+                 # 'timeout' is the deadline test and keeps the short budget (as does
+                 # 'waiting'); the other modes end on events, so a roomy budget keeps
+                 # a loaded host from turning a normal run into a spurious timeout.
                  '--timeout','0.6' if mode in ('timeout','waiting') else '10']
         if sandbox is not None:
             command += ['--sandbox',sandbox]

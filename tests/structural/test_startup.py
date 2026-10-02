@@ -70,8 +70,9 @@ def test_lock_contention_does_not_block_startup(tmp_path):
     # of the same command in a separate state dir, not the absolute wall time.
     quiet = tmp_path/'quiet'; quiet.mkdir(mode=0o700)
     start = time.monotonic()
-    invoke(project, quiet, extra=('--telemetry',))
+    quiet_result = invoke(project, quiet, extra=('--telemetry',))
     baseline = time.monotonic()-start
+    assert quiet_result.returncode == 0
     lock = state/'hook-health.lock'
     lock.touch(mode=0o600)
     with lock.open('rb') as stream:
