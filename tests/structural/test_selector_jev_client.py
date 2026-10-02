@@ -290,6 +290,29 @@ def test_only_admitted_requests(fake_server):
 # ---------------------------------------------------------------------------
 
 
+def test_deadline_socket_timeout_before_join_returns_is_timeout(fake_server, monkeypatch):
+    """Regression (sylveste-ytpg): a loaded host can wake `join` after the worker's own
+    socket read timeout fired; that must still classify as the deadline, not http_error."""
+    request = make_request()
+    call = _call(request, budget_ms=300)
+    battery = call.battery
+    fake_server.script.append(_sleep_step(3.0, _json_step(200, _response_json(battery)).__call__))
+
+    real_join = threading.Thread.join
+
+    def late_join(self, timeout=None):
+        if timeout is not None:
+            time.sleep(timeout + 0.2)  # scheduler delay: worker's read timeout fires first
+        return real_join(self, timeout)
+
+    monkeypatch.setattr(threading.Thread, "join", late_join)
+    result = _client(fake_server).call(call)
+
+    assert isinstance(result, JevFailure)
+    assert result.reason == FallbackReason.TIMEOUT
+    assert result.detail == FailureDetail.DEADLINE
+
+
 def test_deadline(fake_server):
     request = make_request()
     call = _call(request, budget_ms=300)

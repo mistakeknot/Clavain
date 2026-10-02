@@ -519,7 +519,12 @@ class JevClient:
             attempts += 1
             box, elapsed_ms = self._attempt(call)
 
-            if box.get("_timed_out"):
+            # Under scheduler delay the worker's socket read timeout (set to the
+            # remaining budget) can fire before `join` returns; that is the
+            # deadline expiring, not a connect error.
+            if box.get("_timed_out") or (
+                isinstance(box.get("exception"), TimeoutError) and call.deadline.remaining_ms() <= 0
+            ):
                 return JevFailure(
                     reason=FallbackReason.TIMEOUT, detail=FailureDetail.DEADLINE,
                     attempts=attempts, http_status=None, latency_ms=elapsed_ms,
