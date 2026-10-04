@@ -3,7 +3,7 @@
 `prepare.py` creates a new twelve-subject manifest from full committed source
 SHAs and an existing authoritative Intercore database. It preserves the stopped
 comparison. The six scenarios use Astra high in Codex on the Mac and Opus 5.5
-high in Claude on zklw (Fable 5.1 before mk-3b8z), with the existing isolated profiles and specialist catalog.
+high in Claude on the dev server (Fable 5.1 before 2026-09-25), with the existing isolated profiles and specialist catalog.
 
 New manifests select `native-two-phase`. Preparation reads the router, routing
 canon and task evidence with model write tools unavailable, then emits the subject's
@@ -30,7 +30,7 @@ features and connectors; an outer exec tool record cannot prove every nested cal
 
 An explicit user-authorized capacity fallback can be preregistered with
 `--claude-model MODEL --fallback-record RECORD` for a model listed in
-`readiness.FALLBACK_MODELS`; that table is empty since mk-3b8z, so no fallback is
+`readiness.FALLBACK_MODELS`; that table has been empty since 2026-09-25, so no fallback is
 currently admissible. The record must identify the `fable-usage-limit` reason
 (its historical name), the user's authorization and the SHA256 of the retained
 capacity evidence. The manifest and native binding preserve the changed

@@ -144,7 +144,7 @@ the child drops that stale route and uses its own provider login.
   boundary, because the borrowed bearer is one the process already holds. When
   pool-shaped variables are present but enrollment cannot be verified, dispatch
   stops with `terminal_configuration` instead of trying an unrelated login.
-- Raw provider captures are tracked separately (sylveste-2tpo).
+- Raw provider captures are tracked separately.
 
 Quota classification consumes structured provider errors, never quoted task
 text. Permission, configuration, policy or unclear acceptance is terminal and

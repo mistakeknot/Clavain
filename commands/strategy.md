@@ -87,7 +87,7 @@ Default when prior art exists: integrate, not reimplement.
 
 ## Phase 0.5: Shipped-State Reconciliation
 
-Phase 0 catches *external* prior art (other people's OSS). Phase 0.5 catches *internal* overlap: an in-tree epic — **open OR shipped** — that already covers the same architectural territory as the new design. Skipping this is how parallel implementations and redundant rebuilds of sunk work happen (canonical miss: the persona-lens-ontology PRD rebuilt `interweave` on AGE/Cypher; reconciliation `sylveste-9gn9` cut ~40% of the planned epic via a `subsume` verdict).
+Phase 0 catches *external* prior art (other people's OSS). Phase 0.5 catches *internal* overlap: an in-tree epic — **open OR shipped** — that already covers the same architectural territory as the new design. Skipping this is how parallel implementations and redundant rebuilds of sunk work happen (canonical miss: the persona-lens-ontology PRD rebuilt `interweave` on AGE/Cypher; a reconciliation cut ~40% of the planned epic via a `subsume` verdict).
 
 **Enforcement scope (fail-safe to FULL).** Borrowing the review-calibration shape (`sprint.md`):
 
@@ -166,7 +166,7 @@ Emit a `prior_implementations` block into the PRD (frontmatter + surfaced in the
 
 ```yaml
 prior_implementations:
-  - bead: sylveste-46s
+  - bead: <bead-id>
     title: "interweave: generative ontology graph for agentic platforms"
     status: open            # or closed
     matched_keywords: [ontology, graph, lens, persona]

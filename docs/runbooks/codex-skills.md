@@ -112,10 +112,10 @@ verified reduction, **not** a claim that the warning is fixed. Both the
 headless and interactive probes returned `OK` without tool use. They are
 diagnostics, not evidence of skill-selection quality or canary task acceptance.
 
-Track this work in `Sylveste-x7va`. The changed discovery configuration is a
-new evidence boundary for `Sylveste-kbh5`; do not pool future enrolled work
+The changed discovery configuration is a
+new evidence boundary for canary tracking; do not pool future enrolled work
 with a different skill configuration without recording that distinction.
-Do not run the global Codex installer or bootstrap while `Sylveste-8nov`'s
+Do not run the global Codex installer or bootstrap while the
 MCP-schema discrepancy remains unresolved. Older companion links require a scoped compatibility audit; they are not
 permission to run a global installer here.
 

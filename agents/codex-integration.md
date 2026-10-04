@@ -14,7 +14,7 @@
 loads the proportional OODARCS router for substantive Codex work in any directory.
 Use `scripts/install-codex.sh sync-instructions --source <checkout> [--dry-run]`
 for an instruction-only update. Keep broad install/update and automatic refresh
-unused while `Sylveste-8nov` remains open. Follow the skill runbook for review,
+unused while the MCP-schema discrepancy remains open. Follow the skill runbook for review,
 producer-first rollout, companion compatibility, and real first-turn evidence.
 
 ## Worktree Coordination
@@ -35,7 +35,7 @@ producer-first rollout, companion compatibility, and real first-turn evidence.
 
 ### Context-reset telemetry on Codex and other hosts
 
-The context-reset hooks (mk-42j9.40) are observe-mode hygiene telemetry only.
+The context-reset hooks are observe-mode hygiene telemetry only.
 They are NOT a security boundary: they never block, enforce or reset anything.
 See `agents/hooks-reference.md` for the store, config and `mode: off` rollback.
 

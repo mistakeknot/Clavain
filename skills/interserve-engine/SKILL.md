@@ -60,7 +60,7 @@ If Codex unavailable, fall back to `clavain:subagent-driven-development`.
 
 See `references/cli-reference.md` for full flag reference.
 
-## Executor class (Sylveste-d3m phase 1 — shadow wiring)
+## Executor class (phase 1 — shadow wiring)
 
 Unenrolled legacy interserve dispatch goes through `--to auto --class <class>` so executor routing sees it:
 

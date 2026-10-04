@@ -24,4 +24,4 @@ If you prefer the original obra workflow (lighter integration, no beads requirem
 
 ## Compound-engineering note
 
-`compound-engineering@every-marketplace` shares this bridge skill for V1. A dedicated `interop-with-compound-engineering` skill is filed as P3 (sylveste-fj1w) if telemetry shows that coexistence pattern is heavily exercised.
+`compound-engineering@every-marketplace` shares this bridge skill for V1. A dedicated `interop-with-compound-engineering` skill is filed as P3 if telemetry shows that coexistence pattern is heavily exercised.

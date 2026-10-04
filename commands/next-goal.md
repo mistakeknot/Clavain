@@ -11,8 +11,8 @@ argument-hint: "[optional: repo path or bead-prefix to scope candidates to]"
 ## Opt-in, manual invocation
 
 This command is not enforced by any Stop hook — the structural "MUST end with
-a Next goal block" tier (`hooks/auto-stop-actions.sh`, mk-fx3) was removed
-mk-4hqi (2026-09-28): it fired on ordinary status turns where no `/goal` was
+a Next goal block" tier (`hooks/auto-stop-actions.sh`) was removed
+on 2026-09-28: it fired on ordinary status turns where no `/goal` was
 met, forcing a wasted extra turn. Run this command yourself, using the Skill
 tool, whenever a `/goal` completes or a goal-scale milestone lands and you
 want 2-4 leverage-ranked candidate goals, each with a one-line leverage
@@ -307,7 +307,7 @@ done
 # continues the lineage of the goals just closed, and ALWAYS --text with the
 # /goal line you are about to emit plus --out-of naming where the just-closed
 # goal's condition lives (all below). Exits 3 if any candidate is disqualified.
-VERIFY_JSON=$(bash "$VERIFY_HELPER" --recommend solwend-abcd solwend-abcd mk-1234 \
+VERIFY_JSON=$(bash "$VERIFY_HELPER" --recommend solwend-abcd solwend-abcd solwend-1234 \
                    --text "/goal solwend-abcd — OUTCOME: ..." --out-of solwend-epic \
                    --path apps/web/components/thing/ 2>/dev/null)
 ```
@@ -421,7 +421,7 @@ and the next session builds on it.
 `~/.cache/clavain/next-goal-verify/$CLAUDE_SESSION_ID.json` recording whether
 each candidate is still open. No Stop hook reads this receipt (the
 `hooks/lib-next-goal-provenance.sh` audit that used to compare it against the
-emitted block was removed mk-4hqi, 2026-09-28, along with the structural
+emitted block was removed on 2026-09-28, along with the structural
 goal-cadence tier) — running the verify step and honoring its result is on
 you, not mechanically enforced.
 
@@ -470,7 +470,7 @@ consecutive goals went out unlinted from this path.
 `~/.cache/clavain/next-goal-provenance/$CLAUDE_SESSION_ID.json` recording
 whether any tracker answered. No Stop hook reads this receipt (the
 `hooks/lib-next-goal-provenance.sh` audit that compared it against the
-emitted block was removed mk-4hqi, 2026-09-28, along with the structural
+emitted block was removed on 2026-09-28, along with the structural
 goal-cadence tier) — a block that omits the degradation disclosure when it
 applies is still wrong, just not mechanically caught. Emit the disclosure
 honestly regardless of enforcement: it is the whole reason a reader can trust
