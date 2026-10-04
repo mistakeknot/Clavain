@@ -6,7 +6,7 @@
 # DISCOVERY_ROOTS support:
 #   Set DISCOVERY_ROOTS to a colon-separated list of additional project directories
 #   to scan alongside the current project (DISCOVERY_PROJECT_DIR).
-#   Example: DISCOVERY_ROOTS="/home/mk/projects/Foo:/home/mk/projects/Bar"
+#   Example: DISCOVERY_ROOTS="$HOME/projects/Foo:$HOME/projects/Bar"
 #
 #   When set, discovery_scan_beads runs once per root directory and merges the
 #   results into a single JSON array sorted by score DESC.  Each result gains a

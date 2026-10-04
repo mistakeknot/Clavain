@@ -446,7 +446,7 @@ string `no tracker reachable`, followed by the failing root and its reason from
 `LOOKUP_FAILURES`. For example:
 
 ```
-(no tracker reachable — /Users/sma/projects/Sylveste/interverse/tool-time:
+(no tracker reachable — /path/to/project:
 no beads database found. Candidates below are improvised from this session,
 not ranked from the backlog.)
 ```

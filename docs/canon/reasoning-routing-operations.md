@@ -221,7 +221,7 @@ Bead filing never lets `bd` resolve its own tracker (mk-hadt: `bd -C
 $WORKDIR` from a worktree with no local `.beads` walked up past the repo root
 into an unrelated ancestor tracker and filed real beads there). If
 `CLAVAIN_RECHECK_BEADS_DIR` is set, dispatch runs `bd -C` there — but only
-when that directory itself contains `.beads` (zklw sets it to `/home/mk/hub`);
+when that directory itself contains `.beads` (the canonical host points it at its hub checkout);
 an override pointed anywhere else is refused with the same warning as no
 tracker resolving at all, rather than trusted to let `bd` walk up from there.
 Otherwise dispatch resolves `WORKDIR` to its repo's own top level (mirroring

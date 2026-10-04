@@ -10,7 +10,7 @@ Autonomous software agency — orchestrates the full development lifecycle from 
 
 ```bash
 # Test locally
-claude --plugin-dir /home/mk/projects/Sylveste/os/Clavain
+claude --plugin-dir /path/to/Clavain
 
 # Validate structure
 ls skills/*/SKILL.md | wc -l          # Should be 20

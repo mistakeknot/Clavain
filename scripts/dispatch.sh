@@ -3498,10 +3498,10 @@ _dispatch_capacity_recheck_section() {
 # directory, exactly like git looks for `.git` — a worktree with no `.beads`
 # of its own walks past its own repo root into whatever unrelated tracker
 # happens to sit above it. Observed in production: WORKDIR
-# /home/mk/projects/.clavain-capreview has no .beads, so `bd -C` there
-# filed capacity-recheck beads into /home/mk/projects/.beads, an unrelated
-# tracker (mk-hadt fix). CLAVAIN_RECHECK_BEADS_DIR overrides outright (e.g.
-# zklw points it at /home/mk/hub) but only when it names a directory that
+# $HOME/projects/.clavain-capreview has no .beads, so `bd -C` there
+# filed capacity-recheck beads into $HOME/projects/.beads, an unrelated
+# tracker. CLAVAIN_RECHECK_BEADS_DIR overrides outright (e.g.
+# the canonical host points it at its hub checkout) but only when it names a directory that
 # itself has `.beads` — an override pointed at a bare directory would just
 # let bd walk up from there and reopen the same hazard. Otherwise mirror
 # next-goal-candidates.sh's tracker_home() (scripts/next-goal-candidates.sh:
