@@ -4,10 +4,6 @@
 
 Gate threshold calibration now uses a SQLite store (`.clavain/gate.db`) while preserving the `ic gate check` contract through automatic backward-compat JSON export. The data source remains unchanged (`ic gate signals --since-id=<cursor>`), but state is now persisted in `tier_state` and can be updated incrementally by theme-aware windows with concurrency-safe drains.
 
-Reference docs:
-- [PRD](../../../docs/prds/2026-04-18-gate-threshold-calibration-v2.md)
-- [Brainstorm](../../../docs/plans/2026-04-19-gate-threshold-calibration-v2.md)
-
 ## Storage layout
 
 The calibration state is stored in `.clavain/gate.db` with:

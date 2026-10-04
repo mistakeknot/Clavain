@@ -146,7 +146,7 @@ grep -q 'policy changed after resolution' "$work/drift.log"
 # mk-42j9.28: a minimum reasoning effort applies after fallback expansion to
 # EVERY candidate a role resolves to, not just the primary, and never
 # invents an effort level a backend can't run. See config/routing.yaml
-# dispatch.effort_floors and docs/research/2026-09-27-effort-per-role-validation.md.
+# dispatch.effort_floors.
 
 # A medium-configured fallback candidate under a floored reason is raised,
 # and the raise is receipted with its from/to and the reason that fired.

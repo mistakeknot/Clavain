@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end test for the auto-proceed authz v2 token layer.
 #
-# Covers the full matrix from docs/plans/2026-04-21-auto-proceed-authz-v2.md
-# Task 8: root issue + consume, delegation, POP rejection, caller-agent
+# Covers the full matrix of the auto-proceed authz v2 design:
+# root issue + consume, delegation, POP rejection, caller-agent
 # mismatch, scope narrowing, depth cap, double-consume, expired, revoke
 # cascade (+ non-root refusal), non-cascade revoke, transactional consume
 # (fault-injected via the testfault-tagged Go test), ic-publish token path,

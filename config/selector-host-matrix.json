@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "source": "docs/plans/2026-09-25-jev-decision-layer.md#host-matrix-configselector-host-matrixjson, docs/research/jev/2026-09-25-host-integration-matrix.md",
+  "source": "host integration matrix for the selector decision layer",
   "hosts": {
     "claude-code": {
       "launch_profile": {

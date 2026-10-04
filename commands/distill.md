@@ -33,7 +33,7 @@ In interactive mode: ask which categories to proceed with.
    Cluster 1: "Plugin Loading" (3 docs)
      - docs/solutions/integration-issues/plugin-loading-failures-interverse-20260215.md
      - docs/solutions/patterns/plugin-validation-errors-20260222.md
-     - docs/research/plugin-cache-staleness-analysis.md
+     - docs/solutions/integration-issues/synthesis-plugin-cache-session-lifecycle.md
    ```
 4. Interactive: approve/edit clusters. Batch: proceed on clusters with 2+ docs.
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://clavain.internal/schemas/selector-decision-record.v1.schema.json",
   "title": "Clavain selector decision record (schema v1)",
-  "description": "Documentation schema for scripts/clavain_selector/records.build_record's output, per docs/plans/2026-09-25-jev-decision-layer.md's 'Decision records (schema v1)' section. Not enforced by a JSON Schema validator in tests (stdlib/pytest/pyyaml only, no jsonschema dependency); `tests/structural/test_selector_records.py::test_record_shape` checks that `required` here equals build_record's top-level keys exactly. Records never contain prompts, task text, context, candidate payloads, raw model output or credentials -- only hashes, ids, bounded summaries (<=96 chars), scores and reasons.",
+  "description": "Documentation schema for scripts/clavain_selector/records.build_record's output (decision records, schema v1). Not enforced by a JSON Schema validator in tests (stdlib/pytest/pyyaml only, no jsonschema dependency); `tests/structural/test_selector_records.py::test_record_shape` checks that `required` here equals build_record's top-level keys exactly. Records never contain prompts, task text, context, candidate payloads, raw model output or credentials -- only hashes, ids, bounded summaries (<=96 chars), scores and reasons.",
   "type": "object",
   "additionalProperties": false,
   "required": [
