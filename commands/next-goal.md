@@ -126,7 +126,7 @@ found" into the same `[]` a clean tracker produces. Every improvised block then
 presented as though it had consulted the trackers. Read `LOOKUP_FAILURES` for
 the per-root reason; each entry carries `{root, reason}`.
 
-This is the code half of bead `mk-fx3`, which closed on the strength of "the
+This is the code half of a tracked fix, which closed on the strength of "the
 goal-complete hook enriches from bd ready + open epics across trackers" while
 the across-trackers part shipped as advice in this paragraph.
 

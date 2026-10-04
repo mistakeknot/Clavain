@@ -175,7 +175,7 @@ either actually attempted and failed with a real capacity class
 `insufficient_codex_version`, `unsupported_adapter` or
 `usage_reporting_unavailable` — and this candidate's lab matches the
 producer's; all of these set `capacity_failure_class` in
-`_dispatch_role_profile`. mk-dabt: an operational skip is not a policy
+`_dispatch_role_profile`. An operational skip is not a policy
 decision that the other lab shouldn't review, so per canon it must still mark
 the substitute the same as an actually-attempted capacity failure does — an
 earlier version of this walk let `insufficient_codex_version` and
@@ -217,7 +217,7 @@ outcomes plus the different-lab case where no paragraph or bead is expected,
 the producer-conflict-only case where no capacity failure occurred, and the
 tracker-resolution cases below.
 
-Bead filing never lets `bd` resolve its own tracker (mk-hadt: `bd -C
+Bead filing never lets `bd` resolve its own tracker (`bd -C
 $WORKDIR` from a worktree with no local `.beads` walked up past the repo root
 into an unrelated ancestor tracker and filed real beads there). If
 `CLAVAIN_RECHECK_BEADS_DIR` is set, dispatch runs `bd -C` there — but only
@@ -239,7 +239,7 @@ directory with its own `.beads` no longer files there (it did before this
 fix, since the old code ran `bd -C $WORKDIR` directly with no git dependence
 at all) — real dispatch `WORKDIR`s are always git checkouts, so this is not
 expected to matter in practice, but it is a real behavior change from before
-mk-hadt. When no tracker resolves, dispatch files nothing, still writes the sidecar, and
+When no tracker resolves, dispatch files nothing, still writes the sidecar, and
 prints a loud stderr warning naming the sidecar and
 `CLAVAIN_RECHECK_BEADS_DIR`. The receipt carries
 `recheck_bead` (the filed bead's id, or `null` when nothing was filed).
