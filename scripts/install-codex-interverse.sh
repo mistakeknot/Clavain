@@ -128,7 +128,6 @@ EOF
       cat <<'EOF'
 intercache
 interject
-interlens
 intermap
 intermux
 interrank
