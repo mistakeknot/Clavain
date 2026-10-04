@@ -54,7 +54,7 @@ if [[ -n "$SEAT_OUT" ]]; then
 fi
 
 lane_arm() {
-  # TODO(mk-42j9.25 Phase 2b): consult rollout state for the supplied lineage.
+  # TODO(Phase 2b): consult rollout state for the supplied lineage.
   # Until then, every lineage stays on the explicit status-quo control arm.
   echo control
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# context-reset-report.sh — summarise observe-mode context-reset telemetry (mk-42j9.40).
+# context-reset-report.sh — summarise observe-mode context-reset telemetry.
 #
 # NOT A SECURITY BOUNDARY. This reports what a context-reset rule *would* have
 # done. It counts exposure epochs and research batches, would-be resets split

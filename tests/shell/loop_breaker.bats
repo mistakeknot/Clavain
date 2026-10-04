@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for hooks/lib-loop-breaker.sh (mk-ax8): identical Stop-hook demands
+# Tests for hooks/lib-loop-breaker.sh: identical Stop-hook demands
 # with no intervening work park the session instead of looping forever.
 
 setup() {

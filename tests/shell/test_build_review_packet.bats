@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Step 1 (mk-42j9.34): deterministic review-packet builder interface.
+# Step 1: deterministic review-packet builder interface.
 # No model or live tracker calls; every fixture is local files + a scratch
 # git repo built in setup().
 

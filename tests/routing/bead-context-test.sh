@@ -92,7 +92,7 @@ for source in flag env session; do
     check "$source does not override nested session" receipt_has child-bead interstat-session
   fi
 done
-# Reviewer-flagged regression (mk-42j9.29 delta review of 0e08d59): a
+# Reviewer-flagged regression (delta review of 0e08d59): a
 # caller-exported CLAVAIN_BEAD_ID must only reach a nested dispatch's own
 # environment when the RESOLVED bead source is literally "env" -- not merely
 # because the caller happened to have it exported. An empty/invalid export,

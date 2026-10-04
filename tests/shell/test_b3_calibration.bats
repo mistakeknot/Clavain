@@ -145,7 +145,7 @@ _insert_dispatch() {
 }
 
 @test "reader: shared calibration golden cases match the Intercore candidate" {
-    # Explicit opt-in only (Sylveste-we1q). This used to default to a dated path
+    # Explicit opt-in only. This used to default to a dated path
     # under world-writable /tmp and execute whatever was there -- under a daily
     # timer that is a predictable target. Unset means the case is visibly omitted;
     # an explicit path that is not a regular executable file is an error, never a
@@ -748,7 +748,7 @@ JSON
 }
 
 # ═══════════════════════════════════════════════════════════════════
-# Audit-trail emission (Sylveste-a5u — closes audit-trail unconformity)
+# Audit-trail emission (closes audit-trail unconformity)
 #
 # When B3 calibration runs in shadow mode, every decision branch — including
 # the no-op short-circuit where calibrated == base — must emit a

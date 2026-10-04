@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # context-reset-audit.sh — reconcile a session transcript against observe-mode
-# context-reset telemetry (mk-42j9.40).
+# context-reset telemetry.
 #
 # NOT A SECURITY BOUNDARY. This re-classifies the transcript's tool calls and
 # reports exposure and approval actions that the hooks did not log, for example

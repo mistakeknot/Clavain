@@ -22,7 +22,7 @@
 # Removed: insight (weight 1) — ★ Insight block marker. This is a style artifact
 # from explanatory output mode, always present, and inflated signal weight.
 #
-# Removed (mk-4hqi, 2026-09-28): goal-completed (weight 0) — a met /goal or an
+# Removed (2026-09-28): goal-completed (weight 0) — a met /goal or an
 # epic closing, plus the CLAVAIN_GOAL_COMPLETED_LINE line-tracking and the
 # _signals_epic_closed/_signals_bd_segment/_signals_tokenize helpers that fed
 # it. This existed solely for the goal-cadence Stop-hook tier and its

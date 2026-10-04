@@ -47,7 +47,7 @@ if [[ "${FAKE_CODEX_MODE:-success}" == quota_all ]]; then
 fi
 if [[ "${FAKE_CODEX_MODE:-success}" == rate429_all ]]; then
   # A pooled Codex lane whose own client already retried and gave up
-  # (mk-nh6v): classifies rate_limited, distinct from quota_all above.
+  #: classifies rate_limited, distinct from quota_all above.
   echo '{"type":"error","message":"exceeded retry limit, last status: 429 Too Many Requests"}'
   echo '{"type":"turn.failed","error":{"message":"exceeded retry limit, last status: 429 Too Many Requests"}}'
   exit 1

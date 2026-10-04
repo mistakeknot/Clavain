@@ -223,7 +223,7 @@ func cmdSprintAdvance(args []string) error {
 	fmt.Fprintf(os.Stderr, "Phase: %s \u2192 %s (auto-advancing)\n", fromPhase, toPhase)
 
 	// Sideband parity (KD 11): keep the statusline current without interphase.
-	// Session keying resolves inside writeBeadSideband (Sylveste-23k).
+	// Session keying resolves inside writeBeadSideband.
 	_ = writeBeadSideband("", beadID, toPhase, "sprint-advance")
 	return nil
 }

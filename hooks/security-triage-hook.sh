@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse entry for the security-review triage integration (mk-42j9.9),
+# PreToolUse entry for the security-review triage integration,
 # SHADOW ONLY. Flag off (the default) costs one bash start and nothing else:
 # no python, no stdin read, no state. Flag on hands off to the fail-open
 # selector wrapper: detached in shadow (the edit never waits), inline in

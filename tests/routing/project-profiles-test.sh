@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Coordinator-seat routing for the fleet's project table (mk-h73i, reverses
+# Coordinator-seat routing for the fleet's project table (reverses
 # the mk-42j9.25/mk-42j9.5 per-project Opus coordinator-seat table). Real
 # Intercore resolver against the packaged policy; no model calls.
 set -euo pipefail
@@ -15,7 +15,7 @@ fail() {
   exit 1
 }
 
-# mk ruled 2026-09-27 (mk-h73i): every coordinator seat resolves the fleet
+# mk ruled 2026-09-27: every coordinator seat resolves the fleet
 # default, coordinator-seat-sonnet. The former nine-Opus/six-Sonnet split is
 # gone; all fifteen table slugs are equivalent for coordinator-seat purposes.
 ALL_SLUGS=(aleph clavain autarch after-them bbops shadow-work quilan sylvesteops nartopo autosigil rakes uncrancher cujgel agmodb linsenkasten)
@@ -58,7 +58,7 @@ jq -e '[.dispatch.tiers | to_entries[] | select(.value.role == "coordination") |
   || fail "coordination is the relay role; its tiers admit Sonnet or Sol only (roster rule 6)"
 jq -e '.dispatch.tiers | has("coordination-opus") | not' <<< "$CFG" >/dev/null \
   || fail "coordination-opus is replaced by coordinator-seat-opus"
-# coordinator-seat-opus itself stays defined (mk-h73i is about resolution,
+# coordinator-seat-opus itself stays defined (is about resolution,
 # not about deleting the tier): nothing in dispatch.roles or
 # reasoning.profiles points to it any more, so no role/project resolution
 # ever lands on it, but it stays explicitly selectable via

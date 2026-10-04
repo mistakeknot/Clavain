@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Regression tests for hooks/auto-push.sh (mk-667): upstream-less worktree
+# Regression tests for hooks/auto-push.sh: upstream-less worktree
 # branches were stranded (silent exit), and branches tracking origin/main
 # failed bare `git push` under push.default=simple.
 

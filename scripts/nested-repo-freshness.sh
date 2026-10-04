@@ -3,7 +3,7 @@ set -uo pipefail
 
 # nested-repo-freshness.sh — Report freshness of nested plugin/subproject git repos.
 #
-# Background (sylveste-x1rf): the Sylveste monorepo root checkout can be clean
+# Background: the Sylveste monorepo root checkout can be clean
 # while a nested plugin repo (e.g. interverse/interlock) is one commit behind
 # origin/main, leaving Claude Code loading obsolete code from the plugin cache.
 # Each subproject under os/ interverse/ core/ sdk/ apps/ is its OWN git repo,

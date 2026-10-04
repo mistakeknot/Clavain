@@ -3,7 +3,7 @@
 #
 # Reads bd state fields (labels) on sylveste-s3z6.19.10 and reports the active
 # deferral tier relative to today's date. Filed as F4 of the .19.10 decision
-# (sylveste-58tb); the deferral mechanics themselves were shipped in 21ee907f.
+#; the deferral mechanics themselves were shipped in 21ee907f.
 #
 # State fields read (bd labels, "key:value"):
 #   deferral_check_in           (YYYY-MM-DD) escalating check-in date

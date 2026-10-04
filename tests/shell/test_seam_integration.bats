@@ -13,7 +13,7 @@ setup() {
     load test_helper
 
     # Build ic once per test FILE, into the file-scoped temp dir bats owns and
-    # removes (Sylveste-we1q). This used to build /tmp/ic-seam-$$, RE-USE it
+    # removes. This used to build /tmp/ic-seam-$$, RE-USE it
     # without rebuilding when it already existed, and then put /tmp itself first
     # on PATH for every case in this file -- so anything dropped at a predictable
     # /tmp path would be executed, and a planted /tmp/ic would shadow the binary

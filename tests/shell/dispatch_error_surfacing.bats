@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# Tests for codex error surfacing in dispatch.sh (sylveste-mb3i).
+# Tests for codex error surfacing in dispatch.sh.
 # Exercises _detect_codex_error + _write_error_verdict by sourcing dispatch.sh
 # with a guard that prevents the top-level codex invocation from running.
 
@@ -161,7 +161,7 @@ PRE
 # anything happen"; the output file is direct evidence. When they disagree,
 # the proxy is what's broken.
 
-@test "detect: zero-state but real output → no override (mk-1hrx)" {
+@test "detect: zero-state but real output → no override" {
     _load
     : > "$STDERR_FILE"
     printf '{"turns":0,"messages":0,"commands":0}\n' > "$STATE_FILE"
@@ -233,7 +233,7 @@ PRE
     grep -q "^SUMMARY: Unrecognized verdict: SHIPSHAPE$" "$VERDICT_FILE"
 }
 
-# P1-2 (mk-rzi5 follow-up): the verdict is now read ONLY from the first
+# P1-2 (follow-up): the verdict is now read ONLY from the first
 # non-blank line of the output — a later "VERDICT:" line (e.g. after a
 # preceding "body" line) is no longer scanned for at all, so this fixture
 # moved the verdict onto line 1 to keep testing the fallback-synthesis path.
@@ -384,7 +384,7 @@ TEXT
 # (or any text merely containing the word CLEAN) synthesized STATUS: pass —
 # ungrounded approval of a review that explicitly said the opposite.
 
-@test "extract: VERDICT: NOT CLEAN must not synthesize pass (mk-rzi5)" {
+@test "extract: VERDICT: NOT CLEAN must not synthesize pass" {
     _load
     printf 'VERDICT: NOT CLEAN, see findings below\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
@@ -401,7 +401,7 @@ TEXT
     grep -q '^SUMMARY: NOT CLEAN$' "$VERDICT_FILE"
 }
 
-@test "extract: prose mentioning CLEAN off-anchor must not synthesize pass (mk-rzi5)" {
+@test "extract: prose mentioning CLEAN off-anchor must not synthesize pass" {
     _load
     printf 'VERDICT: the migration is not fully CLEAN yet\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
@@ -434,7 +434,7 @@ TEXT
 # undistinguished from a truly unknown vocabulary and reported with a
 # confusing summary. Give it its own branch, like NEEDS_ATTENTION.
 
-# P1-2 (mk-rzi5 follow-up): verdict is read only from the first non-blank
+# P1-2 (follow-up): verdict is read only from the first non-blank
 # line, so this fixture's verdict line moved to line 1.
 #
 # mk P1-2 round 2 (finding 4): NEEDS-FIXES is now also an EXACT token (like
@@ -442,7 +442,7 @@ TEXT
 # branch and summary, but elaboration after it now falls to the generic
 # "Unrecognized verdict" bucket instead. That's still always warn, never
 # pass — see the next test.
-@test "extract: VERDICT: NEEDS-FIXES (bare) synthesizes warn with its own summary (mk-rzi5)" {
+@test "extract: VERDICT: NEEDS-FIXES (bare) synthesizes warn with its own summary" {
     _load
     printf 'VERDICT: NEEDS-FIXES\n' > "$OUTPUT"
     _extract_verdict "$OUTPUT"
@@ -466,9 +466,9 @@ TEXT
 # CAPACITY_SUBSTITUTE_JSON from the resolved candidate walk (never from the
 # reviewing model's own text) before calling _extract_verdict.
 
-# P1-2 (mk-rzi5 follow-up): verdict is read only from the first non-blank
+# P1-2 (follow-up): verdict is read only from the first non-blank
 # line, so this fixture's verdict line moved to line 1.
-@test "extract: capacity-substitute stamps PROVISIONAL on a synthesized pass (mk-rzi5)" {
+@test "extract: capacity-substitute stamps PROVISIONAL on a synthesized pass" {
     _load
     CAPACITY_SUBSTITUTE_JSON='{"failure_class":"quota_exhausted","producer_lab":"anthropic","reviewer_lab":"anthropic"}'
     printf 'VERDICT: CLEAN\n' > "$OUTPUT"
@@ -480,7 +480,7 @@ TEXT
     grep -q 'failure_class=quota_exhausted' "$VERDICT_FILE"
 }
 
-@test "extract: capacity-substitute stamps PROVISIONAL on a structured block too (mk-rzi5)" {
+@test "extract: capacity-substitute stamps PROVISIONAL on a structured block too" {
     _load
     CAPACITY_SUBSTITUTE_JSON='{"failure_class":"insufficient_codex_version","producer_lab":"anthropic","reviewer_lab":"anthropic"}'
     printf -- '--- VERDICT ---\nSTATUS: pass\nSUMMARY: looks fine\n---\n' > "$OUTPUT"
@@ -489,7 +489,7 @@ TEXT
     grep -q '^PROVISIONAL: capacity-substitute' "$VERDICT_FILE"
 }
 
-@test "extract: no CAPACITY_SUBSTITUTE_JSON means no PROVISIONAL marker (mk-rzi5)" {
+@test "extract: no CAPACITY_SUBSTITUTE_JSON means no PROVISIONAL marker" {
     _load
     unset CAPACITY_SUBSTITUTE_JSON
     printf 'body\nVERDICT: CLEAN\n' > "$OUTPUT"

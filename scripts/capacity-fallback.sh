@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # capacity-fallback.sh — record an observed capacity failure and re-resolve the
 # affected roles against it. Generalizes the pattern proven on After-Them-rust
-# 2026-09-18 (mk-9yyt).
+# 2026-09-18.
 #
 # Capacity exhaustion is an OPERATIONAL failure: it consumes no capability strike,
 # and it must neither silently downgrade the work nor silently stall it. The

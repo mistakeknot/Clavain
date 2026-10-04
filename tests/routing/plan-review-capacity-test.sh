@@ -6,8 +6,8 @@
 # through the real dispatch walk (quota_exhausted -> next declared fallback).
 #
 # Invariants pinned here (reasoning-routing.md "Use one frontier author" and
-# reasoning-routing-operations.md "Scope correction (mk-9yyt)"):
-#   - Opus 5.5 (mk-3b8z) and Astra are the only plan-review seats; each
+# reasoning-routing-operations.md "Scope correction"):
+#   - Opus 5.5 and Astra are the only plan-review seats; each
 #     reviews the other's plans. Other OpenAI producers degrade from Opus to
 #     Astra; Sonnet producers degrade from Astra to Opus.
 #   - No leg of the walk ever reviews with the producer's own model.
@@ -15,7 +15,7 @@
 #     (non-zero exit) instead of falling through to the producer. For an
 #     Opus-authored plan with Codex out that is the expected outcome: routing
 #     fails closed and the agent runs the declared adversarial Opus review by
-#     hand (mk-2e1e tracks a routable seat).
+#     hand (tracks a routable seat).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -74,7 +74,7 @@ if [[ "${FAKE_CODEX_MODE:-quota}" == success ]]; then
 fi
 if [[ "${FAKE_CODEX_MODE:-quota}" == rate429 ]]; then
   # A pooled Codex lane whose own client already retried and gave up
-  # (mk-nh6v): classifies rate_limited, distinct from the model-level
+  #: classifies rate_limited, distinct from the model-level
   # usage_limit_exceeded quota case below.
   echo '{"type":"error","message":"exceeded retry limit, last status: 429 Too Many Requests"}'
   echo '{"type":"turn.failed","error":{"message":"exceeded retry limit, last status: 429 Too Many Requests"}}'
@@ -291,7 +291,7 @@ echo "PASS: plan review degrades to a distinct frontier model when the preferred
 
 # Cross-lab review of Sol work, Opus out of quota. crosslab-opus and the
 # validation-opus seat it reaches through validation-sol are both Opus 5.5
-# (mk-3b8z); once that seat failed on capacity the walk must not retry it
+#; once that seat failed on capacity the walk must not retry it
 # under the second profile_ref, and goes on to Sonnet.
 REVIEW_ROLE=cross-lab-review FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.1-sol
 [[ "$rc" == 0 ]] || fail "cross-lab, Opus out: expected review to reach Sonnet, got exit $rc: $(grep '^dispatch:' "$TMP_ROOT/err" | tail -3)"
@@ -304,7 +304,7 @@ never_reviewed_by "cross-lab, Opus out" gpt-6.1-sol
 echo "PASS: a seat that failed on capacity is not retried under another profile_ref"
 
 # Opus-authored plan, Codex out: no distinct frontier seat is left, so the
-# review blocks (mk-3b8z fail-closed) and never falls through to Opus itself.
+# review blocks (fail-closed) and never falls through to Opus itself.
 run_review claude-opus-5-5
 [[ "$rc" != 0 ]] || fail "Opus producer, Codex out: expected a blocked review (non-zero exit), got success"
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Opus producer, Codex out: expected one gpt-6-astra attempt, got: $(cat "$FAKE_CODEX_LOG")"

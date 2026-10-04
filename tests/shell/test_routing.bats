@@ -612,7 +612,7 @@ YAML
 }
 
 # ═══════════════════════════════════════════════════════════════════
-# Safety floor tests (iv-db5pc)
+# Safety floor tests
 # ═══════════════════════════════════════════════════════════════════
 
 @test "safety floor: agent in role with min_model gets clamped up" {

@@ -941,7 +941,7 @@ def test_validated_raises_when_verification_fails(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# N1 (mk-42j9.7 Commit C, sealed criterion at plan line 2264):
+# N1 (Commit C, sealed criterion at plan line 2264):
 # validated() must reject a request that doesn't match the prepared set,
 # even when bindings/tag/verify all pass on their own terms.
 # ---------------------------------------------------------------------------
@@ -1017,7 +1017,7 @@ def test_validated_succeeds_with_correctly_built_request_uses_prepared_values(tm
 
 
 # ---------------------------------------------------------------------------
-# N3 (mk-42j9.7 Commit C): only NotPrepared may ever escape a trusted entry
+# N3 (Commit C): only NotPrepared may ever escape a trusted entry
 # point, even for malformed/hostile input -- point coercion, non-mapping
 # registries, wrong-typed build() outputs, and non-mapping eval cases.
 # ---------------------------------------------------------------------------
@@ -1119,7 +1119,7 @@ def test_from_operator_non_path_sources_raises(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# N4 (mk-42j9.7 Commit C): trivial correctness fixes.
+# N4 (Commit C): trivial correctness fixes.
 # ---------------------------------------------------------------------------
 
 
@@ -1223,7 +1223,7 @@ def test_prepared_set_project_root_is_always_a_path(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Commit D (mk-42j9.7): residual N3 leaks and Minors 1-3 from the scoped
+# Commit D: residual N3 leaks and Minors 1-3 from the scoped
 # review of 916cfb0..HEAD. Each of these must raise NotPrepared, never a
 # raw exception type.
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Tests for scripts/microrouter-deferral-status.sh — F4 surfacing of the
-# microrouter architecture-decision deferral tiers (sylveste-58tb).
+# microrouter architecture-decision deferral tiers.
 # Mocks bd so no real beads DB is required.
 
 setup() {

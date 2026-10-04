@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# Tripwire for the ship-class shortcut bypass (Sylveste-ymp2 stage A, goal
+# Tripwire for the ship-class shortcut bypass (stage A, goal
 # 14539da7). commands/quality-gates.md Phase 1 offers a "small change shortcut"
 # that runs one fd-quality agent and explicitly skips Phases 2-3 — which is
 # where fd-safety is enforced as a MANDATORY reviewer for ship-class surfaces.

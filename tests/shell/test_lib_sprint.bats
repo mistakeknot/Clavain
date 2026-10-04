@@ -20,7 +20,7 @@ setup() {
     unset _SPRINT_LOADED _GATES_LOADED _PHASE_LOADED _DISCOVERY_LOADED _LIB_LOADED
     unset _SPRINT_TEST_IC_AVAILABLE
 
-    # NO global /tmp cleanup here, deliberately (Sylveste-we1q).
+    # NO global /tmp cleanup here, deliberately.
     # /tmp/intercore/locks/sprint-claim is the PRODUCTION mutual-exclusion
     # namespace -- hooks/lib-sprint.sh:849, cmd/clavain-cli/claim.go:71,
     # hooks/lib-intercore.sh:359 and Intercore's internal/lock/lock.go:16
@@ -59,7 +59,7 @@ _source_sprint_lib() {
 }
 
 # Assert the production lock contract every sprint_claim path must honour
-# (Sylveste-we1q). The mocks log rather than silently returning 0, so these
+#. The mocks log rather than silently returning 0, so these
 # tests now prove the lock is taken with the right name/scope/timeout and
 # released exactly once -- which is what makes deleting the old global
 # /tmp cleanup safe rather than merely convenient.
