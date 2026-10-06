@@ -12,6 +12,7 @@
 #      branch carries commits that exist on no remote ref (avoids minting
 #      pointless remote branches for unmodified checkouts).
 # Also runs beads push if .beads/ exists. Runs async so it doesn't block.
+# Skips repos where anyone else has committed, and main/master outside my own GitHub (see autopush_allowed).
 #
 # Input: Hook JSON on stdin
 # Output: none (async, fire-and-forget)
@@ -26,6 +27,29 @@ cd "$GIT_ROOT"
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
 [[ "$BRANCH" == "HEAD" ]] && exit 0 # detached — nothing safe to push
+
+# Only auto-push where it is just me. A repo where anyone else has committed is shared: pushing there
+# is a decision for the person, not a session-end side effect.
+#   git config clavain.autopush true|false     per-repo override, always wins
+#   git config --global clavain.autopushIdentities '<regex>'   author emails that count as me
+# Without an override: push only if every author on the remote is me (or a bot), and never push
+# main/master unless the repo also lives under my own GitHub account.
+autopush_allowed() {
+    local override me others owner
+    override=$(git config --get clavain.autopush 2>/dev/null || true)
+    [[ "$override" == "true" ]] && return 0
+    [[ "$override" == "false" ]] && return 1
+    me=$(git config --get clavain.autopushIdentities 2>/dev/null || true)
+    [[ -n "$me" ]] || me='mistakeknot|demarch\.local|codex@local|noreply@anthropic\.com|\[bot\]'
+    others=$(git log --remotes --format='%ae' 2>/dev/null | sort -u | grep -v -E "$me" | head -1)
+    [[ -z "$others" ]] || return 1
+    if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+        owner=$(git remote get-url origin 2>/dev/null | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#/.*##')
+        [[ "$owner" == "mistakeknot" ]] || return 1
+    fi
+    return 0
+}
+autopush_allowed || exit 0
 
 push_current() {
     local upstream ahead remote unpushed
