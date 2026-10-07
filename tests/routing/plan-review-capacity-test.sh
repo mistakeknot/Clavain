@@ -8,8 +8,8 @@
 # Invariants pinned here (reasoning-routing.md "Use one frontier author" and
 # reasoning-routing-operations.md "Scope correction (mk-9yyt)"):
 #   - Opus 5.5 (mk-3b8z) and Astra are the only plan-review seats; each
-#     reviews the other's plans, and a third-model plan degrades from Opus to
-#     Astra when Opus is out of quota.
+#     reviews the other's plans. Other OpenAI producers degrade from Opus to
+#     Astra; Sonnet producers degrade from Astra to Opus.
 #   - No leg of the walk ever reviews with the producer's own model.
 #   - When every non-producer candidate is out, review stays blocked
 #     (non-zero exit) instead of falling through to the producer. For an
@@ -263,6 +263,20 @@ FAKE_CODEX_MODE=success run_review claude-opus-5-5
 [[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Opus producer: expected gpt-6-astra, got: $(cat "$FAKE_CODEX_LOG")"
 never_reviewed_by "Opus producer" claude-opus-5-5
 
+# Cross-lab first: Sonnet-produced plans start across labs with Astra. When
+# Astra quota-exhausts, Opus remains the declared same-lab substitute.
+FAKE_CODEX_MODE=success run_review claude-sonnet-5-5
+[[ "$rc" == 0 ]] || fail "Sonnet producer: expected success, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Sonnet producer: expected Astra first"
+[[ ! -s "$FAKE_CLAUDE_LOG" ]] || fail "Sonnet producer: same-lab Opus ran before capacity fallback"
+run_review claude-sonnet-5-5
+[[ "$rc" == 0 ]] || fail "Sonnet producer, Astra out: expected Opus fallback, got exit $rc: $(tail -5 "$TMP_ROOT/err")"
+[[ "$(cat "$FAKE_CODEX_LOG")" == "gpt-6-astra" ]] || fail "Sonnet producer, Astra out: expected one Astra attempt"
+[[ "$(cat "$FAKE_CLAUDE_LOG")" == "claude-opus-5-5" ]] || fail "Sonnet producer, Astra out: expected Opus fallback"
+receipt="$(latest_receipt)"
+[[ "$(jq -r '.capacity_substitute.failure_class' <<< "$receipt")" == quota_exhausted ]] || fail "Sonnet producer, Astra out: capacity failure was not recorded: $receipt"
+never_reviewed_by "Sonnet producer, Astra out" claude-sonnet-5-5
+
 # Third-model plan (Sol), Opus out of Claude quota: the walk must continue to
 # Astra. Before mk-esex the Claude limit classified as terminal_error and the
 # fallback was suppressed, so this review blocked.
@@ -318,8 +332,8 @@ echo "PASS: plan review stays blocked rather than self-reviewing when no distinc
 # is itself the same-lab substitute this covers: producer gpt-6.1-sol and
 # reviewer gpt-6-astra are both openai, and the candidate is reached after a
 # walk (fallback_reason non-empty). Reuse it to check the reviewer's prompt
-# carries B1's fixed re-check paragraph. Since mk-3b8z no Anthropic-authored
-# plan can reach a same-lab reviewer: Opus 5.5 is the only Anthropic seat.
+# carries B1's fixed re-check paragraph. Sonnet-produced plans can likewise
+# reach same-lab Opus after Astra exhausts capacity (cross-lab rule above).
 run_substitute_review() {
   FAKE_CODEX_MODE=success FAKE_CLAUDE_QUOTA="claude-opus-5-5" run_review gpt-6.1-sol "$@"
 }
@@ -532,16 +546,14 @@ echo "PASS: a pre-walk operational (model_unavailable) exclusion IS a capacity s
 # The positive half of that rule — an operational skip landing same-lab —
 # is already exercised above by the mk-gp32 block ("capacity substitute",
 # Sol producer, review-opus quota_exhausted, walk lands on review-astra,
-# same lab, marked). Under the post-swap two-seat plan-review chain
-# (review-opus -> [review-astra]), that Sol/Opus-quota-exhausted walk is the
-# only reachable "operational skip then same-lab landing" shape: whenever a
-# pre-walk POLICY exclusion (producer_model_conflict, or the available_models
+# same lab, marked). Sonnet/Astra-quota-exhausted is also covered above.
+# When a pre-walk exclusion (producer_model_conflict, or the available_models
 # exclusion above) already removes review-opus, review-astra is the last
 # remaining candidate, so any operational failure on it exhausts the chain
 # instead of landing anywhere — that is exactly the blocked-review case just
-# above, not a substitute case. insufficient_codex_version can therefore
-# never itself produce a same-lab landing here; it only ever blocks review
-# once producer_model_conflict has already removed review-opus.
+# above, not a substitute case. insufficient_codex_version blocks review
+# once producer_model_conflict has already removed review-opus; for Sonnet
+# producers it can instead leave the same-lab Opus fallback reachable.
 #
 # What is NOT yet covered above is the negative half in isolation, with an
 # explicit receipt check: a pure producer_model_conflict exclusion, with the

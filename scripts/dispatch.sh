@@ -624,6 +624,41 @@ _dispatch_ic_version() {
   ic version 2>/dev/null | head -1
 }
 
+# Opt-in static routing guard. Inactive unless
+# CLAVAIN_ROUTING_PRECHECK=1; unset/empty/0 return before touching anything.
+# Once enabled it fails closed: a missing checker, missing evidence paths, an
+# unrecognized setting, or any nonzero checker exit (drift, UNKNOWN seat
+# evidence under --strict, invalid input) refuses the dispatch. The checker's
+# JSON report goes to stderr so dispatch stdout is unchanged.
+_dispatch_routing_precheck() {
+  local role="$1" policy_source="$2"
+  shift 2
+  local checker="$DISPATCH_SCRIPT_DIR/routing-check.py"
+  case "${CLAVAIN_ROUTING_PRECHECK:-}" in
+    ""|0) return 0 ;;
+    1) ;;
+    *)
+      echo "Error: routing precheck setting CLAVAIN_ROUTING_PRECHECK must be 1 (enable) or unset/0; got '${CLAVAIN_ROUTING_PRECHECK}'" >&2
+      return 1
+      ;;
+  esac
+  if [[ ! -f "$checker" ]]; then
+    echo "Error: routing precheck enabled but $checker is missing; refusing role '$role'" >&2
+    return 1
+  fi
+  if [[ -z "${CLAVAIN_RELEASED_MODELS:-}" || -z "${CLAVAIN_SEAT_RECORDS:-}" ]]; then
+    echo "Error: routing precheck enabled but CLAVAIN_RELEASED_MODELS and CLAVAIN_SEAT_RECORDS must both be set; refusing role '$role'" >&2
+    return 1
+  fi
+  local -a scope=()
+  [[ -z "$role" ]] || scope=(--precheck "$role")
+  python3 "$checker" --routing "$policy_source" --released-models "$CLAVAIN_RELEASED_MODELS" \
+    --seats "$CLAVAIN_SEAT_RECORDS" "${scope[@]}" "$@" --strict >&2 || {
+    echo "Error: routing precheck failed for role '$role' (stale pin, seat drift, UNKNOWN evidence or invalid input); refusing dispatch" >&2
+    return 1
+  }
+}
+
 _dispatch_role_profile() {
   local role="$1" resolved candidates candidate profile_ref backend model effort service minimum
   local fallback_reason="" rc=1 candidate_count=0 producer_model="" capacity_substitute=null
@@ -645,6 +680,7 @@ _dispatch_role_profile() {
     return 1
   }
   local policy_source="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
+  _dispatch_routing_precheck "$role" "$policy_source" || return 1
   local headroom='{"status":"unknown"}' advice exclusions='[]' evidence derived base_context
   # Probe before resolving, but only execution roles may even read a forecast.
   case "$role" in
@@ -1339,6 +1375,56 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Replayed resolved decisions are a separate governed entry point. Derive the
+# role from the decision, never from a caller's --role alone. Keep all parsing
+# and evidence work inside the opt-in boundary so unset dispatch is unchanged.
+if [[ "$ROLE_RESOLVED" == true && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" && "${CLAVAIN_ROUTING_PRECHECK:-}" != 0 ]]; then
+  precheck_decision="$(python3 - "$RESOLVED_ROUTE_JSON" "$ROLE" "${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" <<'PY'
+import json
+import sys
+try:
+    decision = json.loads(sys.argv[1])
+    roles = []
+    if "requested_role" in decision:
+        roles.append(decision["requested_role"])
+    if "role" in decision.get("profile", {}):
+        roles.append(decision["profile"]["role"])
+    if not roles or any(not isinstance(r, str) or not r.strip() for r in roles):
+        raise ValueError("missing or invalid decision role")
+    if len(set(roles)) != 1 or (sys.argv[2] and sys.argv[2] != roles[0]):
+        raise ValueError("conflicting decision roles")
+    policy = decision.get("policy_source", sys.argv[3])
+    if not isinstance(policy, str) or not policy.strip():
+        raise ValueError("invalid decision policy_source")
+    print(roles[0])
+    print(policy)
+except (ValueError, TypeError, AttributeError, KeyError) as exc:
+    print(f"Error: routing precheck cannot derive resolved role: {exc}", file=sys.stderr)
+    sys.exit(1)
+PY
+  )" || exit 1
+  precheck_role="${precheck_decision%%$'\n'*}"
+  precheck_policy="${precheck_decision#*$'\n'}"
+  precheck_execution="$(python3 - "$MODEL" "$RESOLVED_PROFILE_REF" "$RESOLVED_ROUTE_JSON" "$RESOLVED_PROFILE_JSON" "$REASONING_EFFORT" "$ENGINE" <<'PY'
+import json
+import sys
+print(json.dumps(dict(zip(("model", "profile_ref", "route_json", "profile_json", "reasoning_effort", "backend"), sys.argv[1:]))))
+PY
+  )" || exit 1
+  _dispatch_routing_precheck "$precheck_role" "$precheck_policy" --execution-json "$precheck_execution" || exit 1
+fi
+
+# Bare policy-backed tiers (including explicit Claude adapters) do not enter
+# role resolution. Audit the full policy and evidence before their resolver;
+# this also covers fallback chains and the legacy single-candidate resolver.
+if [[ -n "$TIER" && "$ENGINE" != kimi && "${CLAVAIN_ROUTING_PRECHECK:-}" != "" && "${CLAVAIN_ROUTING_PRECHECK:-}" != 0 ]]; then
+  precheck_policy="${CLAVAIN_ROUTING_POLICY:-}"
+  if [[ -z "$precheck_policy" ]] && declare -f _routing_find_config >/dev/null 2>&1; then
+    precheck_policy="$(_routing_find_config 2>/dev/null)" || precheck_policy=""
+  fi
+  _dispatch_routing_precheck "" "${precheck_policy:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}" || exit 1
+fi
 
 _resolve_dispatch_bead
 # Purely additive means: don't newly export what dispatch resolved for its

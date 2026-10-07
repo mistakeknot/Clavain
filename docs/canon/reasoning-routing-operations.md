@@ -117,9 +117,12 @@ has no distinct routed reviewer, and routing fails closed rather than admitting 
 same-model review. The agent then applies mk's adversarial orthogonal same-model
 Opus review by hand and declares it as such in the receipt and evidence; mk-2e1e
 tracks a routable seat for that review. The mk-9yyt same-lab degradation still
-applies where a distinct same-lab seat exists. The only such plan-review path is
-a Sol-authored plan whose Opus reviewer fails on capacity: the walk reaches Astra,
-another OpenAI model, as a provisional capacity substitute.
+applies where a distinct same-lab seat exists. Two plan-review paths qualify: a
+Sol-authored plan whose Opus reviewer fails on capacity (the walk reaches Astra,
+another OpenAI model), and, since plan-review was put in
+`cross_lab_first`, a Sonnet-authored plan whose Astra reviewer fails on capacity
+(the walk reaches Opus, another Anthropic model). Both are provisional capacity
+substitutes and the same-lab one is declared as such.
 A pooled Codex lane whose own retries ran out (`exceeded retry limit, last
 status: 429`) now classifies as `rate_limited` rather than `terminal_error`. An
 exhausted-retries 429 is capacity, not a reason to keep hammering the same

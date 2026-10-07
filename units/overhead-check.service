@@ -1,0 +1,12 @@
+[Unit]
+Description=Audit active BB threads for zero-token overhead
+Documentation=file://%h/projects/Sylveste/os/Clavain/units/README.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/projects/Sylveste/os/Clavain/scripts/overhead-check.py --no-dry-run --health-dir %h/.claude/health
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Nice=10
+TimeoutStartSec=1800
+# Independent host-local scheduling; no GitHub Actions dependency.
+# Exit 1 is an audit finding; exit 2 is an operational/evidence failure.

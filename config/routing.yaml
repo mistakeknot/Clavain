@@ -228,14 +228,15 @@ dispatch:
     coordinator-seat: coordinator-seat-sonnet
     main-session: main-sonnet
     lane: lane-status-quo
-  # mk ruling 2026-09-24: review another lab's work first. For these roles the
+  # mk ruling 2026-09-24; the cross-lab seat rule includes plan review:
+  # cross-lab first, same-lab only as a declared fallback. For these roles the
   # resolver stably moves eligible seats from a frontier lab other than the
   # producer's ahead of same-lab seats, and the receipt records the change as
   # `cross_lab_reorder`. Claude-produced code therefore reaches Sol before Opus
   # in `validation`; Opus is the same-lab substitute when the Codex lane is out.
-  # Codex-produced work keeps the
-  # policy order. Requires ic >= intercore 2caa435.
-  cross_lab_first: [validation, cross-lab-review]
+  # Sonnet-produced plans reach Astra before the same-lab Opus fallback.
+  # Codex-produced work keeps the policy order. Requires ic >= intercore 2caa435.
+  cross_lab_first: [validation, cross-lab-review, plan-review]
 
   # mk 2026-09-27 (mk-42j9.26 verdict, mk-42j9.28): a minimum reasoning effort
   # applied after fallback expansion to every candidate a role resolves to,
@@ -317,7 +318,10 @@ dispatch:
       model: claude-opus-5-5
       reasoning_effort: high
       service_tier: standard
-      # Plan-review primary since mk-3b8z (was review-fable). An Opus-authored plan
+      # Declared plan-review head (was review-fable).
+      # cross_lab_first promotes Astra for Claude producers,
+      # retaining Opus as the declared same-lab fallback for Sonnet producers.
+      # An Opus-authored plan
       # removes this seat by producer_model_conflict and reaches review-astra. When
       # Astra is also out there is no routed reviewer: routing fails closed and the
       # agent applies mk's adversarial orthogonal same-model Opus review, declared

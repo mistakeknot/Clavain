@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily model routing audit alongside rig-health
+
+[Timer]
+OnCalendar=*-*-* 04:25:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=routing-check.service
+
+[Install]
+WantedBy=timers.target

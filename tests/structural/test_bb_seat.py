@@ -313,7 +313,8 @@ def astra_first_review_policy(root):
 def test_dispatch_astra_first_review_falls_back_to_read_only_claude_seat(seat):
     root,run=seat
     policy=astra_first_review_policy(root)
-    result=run(role='plan-review',via_dispatch=True,producer_identity='gpt-5',
+    # Cross-lab first: a Claude producer keeps Astra first under cross_lab_first.
+    result=run(role='plan-review',via_dispatch=True,producer_identity='claude-sonnet-5-5',
                extra_env={'CLAVAIN_ROUTING_POLICY':str(policy)})
     assert result.returncode==1,result.stderr  # Fallback ran; observed identity remains unknown.
     assert "review-astra' unavailable (unsupported_adapter)" in result.stderr
@@ -328,7 +329,7 @@ def test_dispatch_astra_first_review_falls_back_to_read_only_claude_seat(seat):
 def test_dispatch_dry_run_applies_backend_check_and_reports_read_only_fallback(seat):
     root,run=seat
     policy=astra_first_review_policy(root)
-    result=run(role='plan-review',via_dispatch=True,producer_identity='gpt-5',
+    result=run(role='plan-review',via_dispatch=True,producer_identity='claude-sonnet-5-5',
                extra_env={'CLAVAIN_ROUTING_POLICY':str(policy)},extra_args=['--dry-run'])
     assert result.returncode==0,result.stderr
     assert "review-astra' unavailable (unsupported_adapter)" in result.stderr

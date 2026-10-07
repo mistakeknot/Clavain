@@ -239,7 +239,7 @@ python3 - "$ROOT/config/routing.yaml" "$work/claude-propagation.yaml" <<'PYFIXTU
 from pathlib import Path
 import sys
 text = Path(sys.argv[1]).read_text()
-needle = '      model: claude-opus-5-5\n      reasoning_effort: high\n      service_tier: standard\n      # Plan-review primary'
+needle = '    review-opus:\n      role: plan-review\n      backend: claude\n      model: claude-opus-5-5\n      reasoning_effort: high\n'
 assert text.count(needle) == 1
 text = text.replace(needle, needle.replace('reasoning_effort: high', 'reasoning_effort: medium'))
 Path(sys.argv[2]).write_text(text)

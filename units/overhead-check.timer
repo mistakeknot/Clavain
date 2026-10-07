@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily BB overhead audit alongside rig-health
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=overhead-check.service
+
+[Install]
+WantedBy=timers.target

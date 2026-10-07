@@ -1,0 +1,14 @@
+[Unit]
+Description=Audit routing pins and live BB seat snapshots
+Documentation=file://%h/projects/Sylveste/os/Clavain/units/README.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/projects/Sylveste/os/Clavain/scripts/routing-check.py --released-models %h/.config/clavain/released-models.json --seats %h/.config/clavain/seat-records.json --strict
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Nice=10
+TimeoutStartSec=60
+# Independent host-local scheduling; no GitHub Actions dependency.
+# Dry-run only: findings and proposed bead commands go to the journal.
+# Exit 1 is stale pin/drift; exit 2 is an operational/evidence failure;
+# exit 3 (--strict) is UNKNOWN seat evidence, which must not look like a pass.
