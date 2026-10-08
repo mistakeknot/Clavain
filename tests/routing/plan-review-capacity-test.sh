@@ -15,7 +15,7 @@
 #     (non-zero exit) instead of falling through to the producer. For an
 #     Opus-authored plan with Codex out that is the expected outcome: routing
 #     fails closed and the agent runs the declared adversarial Opus review by
-#     hand (tracks a routable seat).
+#     hand (a routable seat for that review is still to be added).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
