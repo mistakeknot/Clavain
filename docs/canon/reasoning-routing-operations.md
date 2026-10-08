@@ -208,7 +208,7 @@ not list re-check items; re-check the whole review" — a present-but-empty
 section is not read as `None.`, only an explicit `None.` is. `"listed"` and
 `"missing"` both write `${OUTPUT}.recheck.md` and file one `bd create` (label
 `capacity-recheck`, `--deps discovered-from:$CLAVAIN_BEAD_ID` when set) so the
-other lab re-verifies. `CLAVAIN_RECHECK_BEADS=0` disables filing the bead but
+other lab re-verifies (while the workspace tracker is on Beads; see `bb-integration.md`). `CLAVAIN_RECHECK_BEADS=0` disables filing the bead but
 still writes the sidecar; a `bd` failure prints to stderr and never fails the
 dispatch. `tests/routing/plan-review-capacity-test.sh` drives all these
 outcomes plus the different-lab case where no paragraph or bead is expected,

@@ -19,6 +19,12 @@ enrolled. Failure leaves the existing direct paths unchanged.
 | Runs, goals and attempt lifecycle | Intercore |
 | Retry, cancellation and transport selection | dispatch |
 
+Every `bd` instruction in canon, skills and hooks applies to a tracker only while
+that tracker is on Beads. A tracker's activation receipt is the Weaver Stage 4
+record naming that tracker (see the Weaver migration plan, `docs/weaver-migration-plan.md`
+in the Aleph repository); it covers only the tracker it names. After the receipt,
+new work for that tracker goes to Aleph tasks and the Beads copy is read-only.
+
 Intercore is the sole writer of admission/running/terminal attempt state. BB
 events are observations reconciled by dispatch; BB cannot complete an Intercore
 attempt. A BB turn completing proves a transport outcome, not independent task
