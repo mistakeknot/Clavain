@@ -130,7 +130,7 @@ fi
 
 if [[ "$FORECAST" == true ]]; then
   for role in "${ROLES[@]}"; do
-    case "$role" in routine-execution|deep-execution|scout) ;;
+    case "$role" in routine-execution|deep-execution|scout|coordination) ;;
       *) die "headroom forecasts are forbidden for role $role" ;;
     esac
   done

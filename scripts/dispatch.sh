@@ -684,7 +684,7 @@ _dispatch_role_profile() {
   local headroom='{"status":"unknown"}' advice exclusions='[]' evidence derived base_context
   # Probe before resolving, but only execution roles may even read a forecast.
   case "$role" in
-    routine-execution|deep-execution|scout)
+    routine-execution|deep-execution|scout|coordination)
       if [[ "${CLAVAIN_POOL_HEADROOM:-1}" == 1 ]]; then
         headroom="$(bash "$DISPATCH_SCRIPT_DIR/pool-headroom.sh")" || headroom='{"status":"unknown"}'
       fi

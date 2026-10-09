@@ -139,6 +139,18 @@ def test_cross_provider_preference_preserves_each_providers_policy_order():
     assert [c['profile_ref'] for c in result['candidates']] == ['fable', 'opus', 'astra']
 
 
+def test_coordination_follows_headroom_to_sol():
+    # Relay and status work has no producer-independence constraint, so under
+    # Claude quota pressure it moves to the Codex seat (mk-ji9m).
+    fixture = copy.deepcopy(HEALTHY)
+    fixture['accounts'][1]['sevenDayUtilization'] = .8
+    resolved = {'profile_ref': 'coordination-sonnet', 'profile': {'backend': 'claude', 'model': 'claude-sonnet-5-5'},
+                'fallback_chain': [{'profile_ref': 'coordination-sol', 'profile': {
+                    'backend': 'codex', 'model': 'gpt-6.1-sol'}}]}
+    result = advise(core(fixture), 'coordination', resolved)
+    assert [c['profile_ref'] for c in result['candidates']] == ['coordination-sol', 'coordination-sonnet']
+
+
 @pytest.mark.parametrize('role', ['plan-review', 'validation', 'escalation', 'planning', 'cross-lab-review'])
 def test_protected_roles_ignore_exhausted_fable(role):
     fixture = copy.deepcopy(HEALTHY)
