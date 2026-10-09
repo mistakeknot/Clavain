@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 
-EXECUTION = ('routine-execution', 'deep-execution', 'scout')
+EXECUTION = ('routine-execution', 'deep-execution', 'scout', 'coordination')
 FAMILIES = ('fable', 'opus', 'sonnet')
 
 
