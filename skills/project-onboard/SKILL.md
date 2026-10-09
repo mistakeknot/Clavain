@@ -37,7 +37,7 @@ GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 [[ -z "$GIT_ROOT" ]] && git init && GIT_ROOT=$(pwd)
 cd "$GIT_ROOT"
 ```
-Check `command -v bd` — if missing, warn and skip beads steps.
+Check `command -v bd` — if missing, warn and skip beads steps. If the project's tracker is already Aleph tasks (`bb tasks project list` shows its prefix), use `bb tasks` for every tracker step below instead of `bd`, and do not run `bd init`.
 
 ## Phase 0: Repository Setup (new projects only)
 
