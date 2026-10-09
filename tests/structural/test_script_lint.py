@@ -1,5 +1,6 @@
 """Static handoff preflight: real CLI, fixture scripts are never executed."""
 import os
+import hashlib
 import subprocess
 
 import pytest
@@ -25,20 +26,28 @@ report() {
         result=failure
     fi
     local message="handoff $result exit=$rc"
+    runuser -u mk -- tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" <<< "$message" >/dev/null || true
     if ! runuser -u mk -- @OWNER_HOME@/.local/bin/bb thread tell "$THREAD" --mode auto "$message"; then
         printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' "$message"
     fi
 }
 trap report EXIT
 cd / || exit 1
+if [[ ${1:-} == --check ]]; then exit 0; fi
 runuser -u mk -- touch @OWNER_HOME@/example
 '''
 
 
 @pytest.fixture
-def lint(project_root):
+def lint(project_root, tmp_path):
     script = project_root / "scripts/script-lint.sh"
-    def run(*args, env=None):
+    def run(*args, env=None, auto_handoff=True):
+        if auto_handoff and args and not str(args[-1]).startswith('-') and '--handoff-message' not in args:
+            path = args[-1]
+            if hasattr(path, 'read_bytes') and path.exists():
+                message = tmp_path / 'auto-message.md'
+                message.write_text(f'bash {path.resolve()}\n{hashlib.sha256(path.read_bytes()).hexdigest()}\n')
+                args = ('--handoff-message', message, *args)
         return subprocess.run(
             ["bash", str(script), *map(str, args)], text=True,
             capture_output=True, timeout=10, env=env,
@@ -131,7 +140,9 @@ def test_relative_write_in_sticky_cwd(lint, fixture_script):
 
 def test_message_file_report(lint, fixture_script):
     body = GOOD.replace('    local message="handoff $result exit=$rc"',
-                        '    local message=$(mktemp)\n    printf "handoff %s exit=%s\\n" "$result" "$rc" > "$message"')
+                        '    local message=$(mktemp)\n    printf "handoff %s exit=%s\\n" "$result" "$rc" > "$message"\n    chmod 644 "$message" || true')
+    body = body.replace('tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" <<< "$message"',
+                        'cp "$message" "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt"')
     body = body.replace('--mode auto "$message"', '--mode auto --message-file "$message"')
     body = body.replace("printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
                         "printf 'BEGIN PASTE BLOCK\\n'\n        cat \"$message\"\n        printf 'END PASTE BLOCK\\n'")
@@ -211,7 +222,6 @@ def test_executable_bit(lint, fixture_script):
 
 
 @pytest.mark.parametrize("operation", [
-    "sudo -u mk -- touch @OWNER_HOME@/example",
     "as_mk() { runuser -u mk -- \"$@\"; }\nas_mk touch @OWNER_HOME@/example",
     "runuser -u mk -- git -C @OWNER_HOME@/repo status",
     "git config --global --add safe.directory /srv/repo\ngit -C /srv/repo status",
@@ -238,10 +248,9 @@ def test_comments_do_not_count_as_code_lines(lint, fixture_script):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_reports_all_files_and_rules(lint, fixture_script):
+def test_reports_all_rules(lint, fixture_script):
     bad = fixture_script("#!/bin/sh\necho bad\n", "bad.sh", 0o644)
-    good = fixture_script()
-    result = lint(bad, good)
+    result = lint(bad)
     assert result.returncode == 1
     for rule in ("bash-shebang", "executable", "nounset", "fixed-path", "exit-report", "paste-fallback", "readable-cwd"):
         assert f"[{rule}]" in result.stdout
@@ -259,7 +268,7 @@ def test_thread_is_checked(lint, fixture_script):
 def test_handoff_requires_absolute_command(lint, fixture_script, tmp_path):
     path = fixture_script()
     message = tmp_path / "message.md"
-    message.write_text(f"Run:\n```bash\nbash {path} --check\n```\n")
+    message.write_text(f"Run:\n```bash\nbash {path} --check\n```\n{hashlib.sha256(path.read_bytes()).hexdigest()}\n")
     assert lint("--handoff-message", message, path).returncode == 0
     message.write_text("Run: handoff.sh --check\n")
     result = lint("--handoff-message", message, path)
@@ -285,12 +294,16 @@ def test_usage_errors(lint, args):
 
 
 def test_missing_inputs(lint, tmp_path, fixture_script):
-    result = lint(tmp_path / "missing.sh", fixture_script())
+    result = lint('--handoff-message', tmp_path / 'message.md', tmp_path / "missing.sh")
     assert result.returncode == 1
     assert "[readable-script]" in result.stdout
     result = lint("--handoff-message", tmp_path / "missing.md", fixture_script())
     assert result.returncode == 1
     assert "[pinned-handoff]" in result.stdout
+
+
+def test_v4_single_script_cli(lint, fixture_script):
+    assert lint(fixture_script(name='one.sh'), fixture_script(name='two.sh')).returncode == 2
 
 
 def test_empty_environment(lint, fixture_script):
@@ -563,9 +576,7 @@ def test_git_word_in_data_is_not_a_git_command(lint, fixture_script):
 
 
 @pytest.mark.parametrize("line", [
-    "{path} --check",
     "bash {path} --check",
-    "/bin/bash {path}",
     "$ bash {path} --check",
     "  bash '{path}' --check",
     "bash \"{path}\"",
@@ -573,7 +584,7 @@ def test_git_word_in_data_is_not_a_git_command(lint, fixture_script):
 def test_handoff_accepts_pinned_commands(lint, fixture_script, tmp_path, line):
     path = fixture_script()
     message = tmp_path / "message.md"
-    message.write_text("Run:\n```bash\n" + line.format(path=path) + "\n```\n")
+    message.write_text("Run:\n```bash\n" + line.format(path=path) + "\n```\n" + hashlib.sha256(path.read_bytes()).hexdigest() + '\n')
     result = lint("--handoff-message", message, path)
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -598,9 +609,9 @@ def test_handoff_rejects_unpinned_text(lint, fixture_script, tmp_path, text):
 
 
 def test_handoff_absent_is_disclosed(lint, fixture_script):
-    result = lint(fixture_script())
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "SKIP handoff-message not provided" in result.stdout
+    result = lint(fixture_script(), auto_handoff=False)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "[pinned-handoff]" in result.stdout
 
 
 def test_handoff_present_has_no_skip(lint, fixture_script, tmp_path):
@@ -1056,3 +1067,396 @@ def test_download_known_limits_are_disclosed(lint, project_root):
                       '--expand-*', '--variable', 'implicit', '--next',
                       'Long read-option' if text == header else 'long read-option'):
             assert limit.lower() in text.lower()
+
+
+@pytest.mark.parametrize('body,rule', [
+    (GOOD.replace('if [[ ${1:-} == --check ]]; then exit 0; fi', '# no safe dry run'), 'check-mode'),
+    (GOOD.replace('runuser -u mk -- tee', 'tee'), 'report-storage'),
+    (GOOD.replace('<<< "$message"', '<<< "unrelated"'), 'report-storage'),
+    (GOOD.replace('if ! runuser -u mk -- @OWNER_HOME@/.local/bin/bb', 'if ! sudo -u mk -- @OWNER_HOME@/.local/bin/bb'), 'exit-report'),
+    (GOOD.replace('runuser -u mk -- touch', 'sudo -u mk -- touch'), 'mk-home-user'),
+])
+def test_v4_requirements(lint, fixture_script, body, rule):
+    result = lint(fixture_script(body))
+    assert result.returncode == 1, result.stdout
+    assert f'[{rule}]' in result.stdout
+
+
+def test_v4_hash_tracks_final_bytes(lint, fixture_script, tmp_path):
+    path = fixture_script()
+    message = tmp_path / 'message.md'
+    message.write_text(f'bash {path}\n{hashlib.sha256(path.read_bytes()).hexdigest()}\n')
+    assert lint('--handoff-message', message, path).returncode == 0
+    path.write_text(GOOD + '\n# changed\n')
+    result = lint('--handoff-message', message, path)
+    assert result.returncode == 1
+    assert '[handoff-sha256]' in result.stdout
+
+
+@pytest.mark.parametrize('operation', [
+    'chmod 777 /srv/file', 'chown mk /srv/file', 'setfacl -m u:mk:rw /srv/file',
+    'usermod -aG root mk', 'visudo', 'echo x >/etc/sudoers.d/mk',
+    'echo x > /srv/settings.local.json', 'echo x > /srv/.claude/settings.json',
+    'echo "permission rule"', 'mystery-command --do-stuff',
+])
+def test_v4_manual_review(lint, fixture_script, operation):
+    path = fixture_script(with_payload('# authorized permission edit\n' + operation))
+    result = lint(path)
+    assert result.returncode == 0, result.stdout
+    assert 'REVIEW' in result.stdout
+    assert lint('--strict', path).returncode == 1
+
+
+@pytest.mark.parametrize('operation', [
+    'install -m 0777 /srv/input /srv/output',
+    'mkdir -m 0777 /srv/output', 'mkdir -pm0777 /srv/output',
+    'install --mode=0777 /srv/input /srv/output',
+    'mkdir --mode 0777 /srv/output',
+    'install -o mk /srv/input /srv/output',
+    'install -gmk /srv/input /srv/output',
+    'install --owner=mk --group=mk /srv/input /srv/output',
+    'runuser -u mk -- /usr/bin/install -Dm755 /srv/input /srv/output',
+    'command mkdir --mode=755 /srv/output',
+])
+def test_permission_changing_creation_options(lint, fixture_script, operation):
+    path = fixture_script(with_payload(operation))
+    result = lint(path)
+    assert result.returncode == 0, result.stdout
+    assert 'REVIEW' in result.stdout
+    assert lint('--strict', path).returncode == 1
+
+
+@pytest.mark.parametrize('operation', [
+    'install /srv/input /srv/output', 'mkdir -p /srv/output',
+    'install -t /srv/output /srv/input',
+    'install -S -m /srv/input /srv/output',
+    'install --suffix=--mode=0777 /srv/input /srv/output',
+    'install -- --mode=0777 /srv/output', 'mkdir -- -m',
+    "printf '%s\\n' 'install -m 0777'",
+])
+def test_creation_options_clean_variants(lint, fixture_script, operation):
+    result = lint('--strict', fixture_script(with_payload(operation)))
+    assert result.returncode == 0, result.stdout
+    assert 'REVIEW' not in result.stdout
+
+
+@pytest.mark.parametrize('grant', ['chmod o+r "$message.other"', 'chown mk "$message.other"',
+                                   'chmod o+r --reference="$message" "$message"'])
+def test_v4_readable_grant_must_name_the_report_file(lint, fixture_script, grant):
+    body = GOOD.replace('local message="handoff $result exit=$rc"',
+                        'local message=$(mktemp)\n    printf "handoff %s exit=%s\\n" "$result" "$rc" > "$message"\n    ' + grant)
+    body = body.replace('--mode auto "$message"', '--mode auto --message-file "$message"')
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[report-readable]' in result.stdout
+
+
+def test_v4_message_file_must_be_readable(lint, fixture_script):
+    body = GOOD.replace('local message="handoff $result exit=$rc"',
+                        'local message=$(mktemp)\n    printf "handoff %s exit=%s\\n" "$result" "$rc" > "$message"')
+    body = body.replace('--mode auto "$message"', '--mode auto --message-file "$message"')
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[report-readable]' in result.stdout
+
+
+@pytest.mark.parametrize('header,code', [('', 1), ('# vizier-script\n', 0)])
+def test_v4_vizier_reporter(lint, fixture_script, header, code):
+    body = vizier_report(header)
+    result = lint(fixture_script(body))
+    assert result.returncode == code, result.stdout
+
+
+def test_v4_clean_script_has_no_manual_review(lint, fixture_script):
+    result = lint('--strict', fixture_script())
+    assert result.returncode == 0, result.stdout
+    assert 'REVIEW' not in result.stdout
+
+
+@pytest.mark.parametrize('replacement', [
+    '# --check', 'echo "--check $1"', 'if echo "--check $1"; then true; fi',
+])
+def test_v4_check_must_be_argument_handler(lint, fixture_script, replacement):
+    body = GOOD.replace('if [[ ${1:-} == --check ]]; then exit 0; fi', replacement)
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[check-mode]' in result.stdout
+
+
+def test_v4_case_check_handler(lint, fixture_script):
+    body = GOOD.replace('if [[ ${1:-} == --check ]]; then exit 0; fi',
+                        'case "${1:-}" in\n --check) exit 0 ;;\n esac')
+    assert lint(fixture_script(body)).returncode == 0
+
+
+@pytest.mark.parametrize('line', ['{path}', '/bin/bash {path}', '/usr/bin/bash {path}'])
+def test_v4_handoff_requires_bash_literal(lint, fixture_script, tmp_path, line):
+    path = fixture_script()
+    message = tmp_path / 'message.md'
+    message.write_text(line.format(path=path) + '\n' + hashlib.sha256(path.read_bytes()).hexdigest())
+    result = lint('--handoff-message', message, path)
+    assert result.returncode == 1
+    assert '[pinned-handoff]' in result.stdout
+
+
+@pytest.mark.parametrize('storage', [
+    'runuser -u mk -- tee "@OWNER_HOME@/.local/share/bb/threads/other/report.txt" <<< "$message" >/dev/null || true',
+    'runuser -u mk -- cp /srv/unrelated "@OWNER_HOME@/.local/share/bb/threads/$THREAD/$message" || true',
+    'runuser -u mk -- tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" < /dev/null; echo "$message"',
+])
+def test_v4_storage_must_save_report_for_target(lint, fixture_script, storage):
+    body = GOOD.replace('runuser -u mk -- tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" <<< "$message" >/dev/null || true', storage)
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[report-storage]' in result.stdout
+
+
+@pytest.mark.parametrize('producer', [
+    "printf 'send failed\\n' \"$message\"",
+    "printf '%%s\\n' \"$message\"",
+    "printf '%s %d\\n' unrelated \"$message\"",
+    "printf '%.3s\\n' \"$message\"",
+    "printf 'send failed\\c%s' \"$message\"",
+    'printf "send failed\\c$message"',
+    "printf '%s\\n' '$message'",
+])
+def test_printf_storage_must_consume_full_message(lint, fixture_script, producer):
+    body = GOOD.replace('<<< "$message"', '').replace(
+        'runuser -u mk -- tee', producer + ' | runuser -u mk -- tee')
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[report-storage]' in result.stdout
+
+
+@pytest.mark.parametrize('producer', [
+    "printf '%s\\n' \"$message\"", "printf '%b\\n' \"$message\"",
+    'printf "report: $message\\n"',
+    "printf '%%s %s\\n' \"${message}\"",
+    "printf '%d %s\\n' 0 \"$message\"",
+    "printf '%s\\n' unrelated \"$message\"",
+    "printf '\\\\c %s\\n' \"$message\"",
+    'echo "$message"',
+])
+def test_printf_storage_clean_variants(lint, fixture_script, producer):
+    body = GOOD.replace('<<< "$message"', '').replace(
+        'runuser -u mk -- tee', producer + ' | runuser -u mk -- tee')
+    result = lint(fixture_script(body))
+    assert result.returncode == 0, result.stdout
+
+
+def file_report():
+    body = GOOD.replace('local message="handoff $result exit=$rc"',
+                        'local message=$(mktemp)\n    printf "handoff %s exit=%s\\n" "$result" "$rc" > "$message"\n    chown mk "$message" || true')
+    body = body.replace('--mode auto "$message"', '--mode auto --message-file "$message"')
+    body = body.replace('tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" <<< "$message"',
+                        'cp "$message" "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt"')
+    return body
+
+
+@pytest.mark.parametrize('isfile,producer', [
+    (False, "printf '%s\\n' \"$message\""),
+    (False, 'echo "$message"'),
+    (True, 'cat "$message"'),
+])
+@pytest.mark.parametrize('redirect', [
+    '>/dev/null', '> /srv/report', '1>/dev/null', '>>/srv/report',
+    '>&2', '&>/dev/null', '> /srv/report 2>&1',
+])
+def test_storage_producer_stdout_must_reach_tee(lint, fixture_script, isfile, producer, redirect):
+    storage = 'runuser -u mk -- tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" >/dev/null || true'
+    if isfile:
+        body = file_report().replace(
+            "printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
+            'cat "$message"').replace(
+            'runuser -u mk -- cp "$message" "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" >/dev/null || true',
+            producer + ' ' + redirect + ' | ' + storage)
+    else:
+        body = GOOD.replace(
+            'runuser -u mk -- tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" <<< "$message" >/dev/null || true',
+            producer + ' ' + redirect + ' | ' + storage)
+    result = lint(fixture_script(body))
+    assert result.returncode == 1, result.stdout
+    assert '[report-storage]' in result.stdout
+
+
+@pytest.mark.parametrize('isfile,producer', [
+    (False, "printf '%s\\n' \"$message\""),
+    (False, 'echo "$message"'),
+    (True, 'cat "$message"'),
+])
+@pytest.mark.parametrize('redirect', ['', '2>/dev/null', '2>>/srv/errors'])
+def test_storage_producer_unredirected_stdout_is_clean(lint, fixture_script, isfile, producer, redirect):
+    storage = 'runuser -u mk -- tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" >/dev/null || true'
+    if isfile:
+        body = file_report().replace(
+            "printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
+            'cat "$message"').replace(
+            'runuser -u mk -- cp "$message" "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" >/dev/null || true',
+            producer + ' ' + redirect + ' | ' + storage)
+    else:
+        body = GOOD.replace(
+            'runuser -u mk -- tee "@OWNER_HOME@/.local/share/bb/threads/$THREAD/report.txt" <<< "$message" >/dev/null || true',
+            producer + ' ' + redirect + ' | ' + storage)
+    result = lint(fixture_script(body))
+    assert result.returncode == 0, result.stdout
+
+
+def vizier_report(header='# vizier-script\n'):
+    body = file_report().replace('set -euo pipefail', header + 'set -euo pipefail')
+    body = body.replace('@OWNER_HOME@/.local/bin/bb thread tell "$THREAD" --mode auto',
+                        '@OWNER_HOME@/.local/bin/vizier-tell')
+    return body.replace("printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
+                        'cat "$message"')
+
+
+@pytest.mark.parametrize('thread', [None, 'thr_example'])
+def test_vizier_message_file_without_positional_thread(lint, fixture_script, thread):
+    body = vizier_report().replace('message=', 'MSG=').replace('$message', '$MSG')
+    args = ('--thread', thread) if thread else ()
+    result = lint(*args, fixture_script(body))
+    assert result.returncode == 0, result.stdout
+
+
+def test_vizier_storage_uses_creating_thread(lint, fixture_script):
+    body = vizier_report().replace('/threads/$THREAD/report.txt', '/threads/other/report.txt')
+    result = lint('--thread', 'thr_example', fixture_script(body))
+    assert result.returncode == 1
+    assert '[report-storage]' in result.stdout
+
+
+def test_vizier_rejects_bb_arguments(lint, fixture_script):
+    body = vizier_report().replace('vizier-tell --message-file',
+                                   'vizier-tell "$THREAD" --mode auto --message-file')
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[exit-report]' in result.stdout
+
+
+@pytest.mark.parametrize('fallback', [
+    "printf 'send failed\\n' \"$message\"",
+    "printf '%%s\\n' \"$message\"",
+    "printf '%s\\n' unrelated \"$message\" >/dev/null",
+    "printf '%s %d\\n' unrelated \"$message\"",
+    "printf '%.3s\\n' \"$message\"",
+    "printf 'send failed\\c%s' \"$message\"",
+    'printf "send failed\\c$message"',
+    "printf '%s\\n' '$message'",
+])
+def test_printf_fallback_must_consume_full_message(lint, fixture_script, fallback):
+    body = GOOD.replace("printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"", fallback)
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[paste-fallback]' in result.stdout
+
+
+@pytest.mark.parametrize('fallback', [
+    "printf '%s\\n' \"$message\"", "printf '%b\\n' \"$message\"",
+    'printf "report: $message\\n"',
+    "printf '%%s %s\\n' \"${message}\"",
+    "printf '%d %s\\n' 0 \"$message\"",
+    "printf '%s\\n' unrelated \"$message\"",
+    "printf '\\\\c %s\\n' \"$message\"",
+    'echo "$message"',
+])
+def test_printf_fallback_clean_variants(lint, fixture_script, fallback):
+    body = GOOD.replace("printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"", fallback)
+    result = lint(fixture_script(body))
+    assert result.returncode == 0, result.stdout
+
+
+def test_v4_filename_is_not_full_report_fallback(lint, fixture_script):
+    result = lint(fixture_script(file_report()))
+    assert result.returncode == 1
+    assert '[paste-fallback]' in result.stdout
+
+
+def test_v4_owned_file_and_cat_fallback(lint, fixture_script):
+    body = file_report().replace("printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
+                                 "printf 'BEGIN PASTE BLOCK\\n'\n        cat \"$message\"\n        printf 'END PASTE BLOCK\\n'")
+    assert lint(fixture_script(body)).returncode == 0
+
+
+def test_v4_permission_label_alone_is_not_review(lint, fixture_script):
+    result = lint('--strict', fixture_script(with_payload('# permission rule authorized\ntrue')))
+    assert result.returncode == 0, result.stdout
+
+
+def test_v4_full_report_needs_no_paste_label(lint, fixture_script):
+    body = GOOD.replace("printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n'", "printf '%s\\n'")
+    result = lint(fixture_script(body))
+    assert result.returncode == 0, result.stdout
+
+
+def test_v4_vizier_marker_must_be_header(lint, fixture_script):
+    body = GOOD.replace('local result', '# vizier-script\n    local result')
+    body = body.replace('@OWNER_HOME@/.local/bin/bb thread tell', '@OWNER_HOME@/.local/bin/vizier-tell')
+    assert lint(fixture_script(body)).returncode == 1
+
+
+@pytest.mark.parametrize('consumer_redirect', ['< /dev/null', '0< /dev/null', '<<< "x"'])
+def test_storage_pipeline_consumer_stdin_redirect_is_rejected(lint, fixture_script, consumer_redirect):
+    # The producer's stdout never reaches tee when tee's stdin is redirected.
+    body = GOOD.replace('<<< "$message" >/dev/null', consumer_redirect + ' >/dev/null').replace(
+        'runuser -u mk -- tee', "printf '%s\\n' \"$message\" | runuser -u mk -- tee")
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[report-storage]' in result.stdout
+
+
+@pytest.mark.parametrize('cat_form', ['cat "$message.other"', 'cat "${message}x"', 'cat -n "$message"'])
+def test_file_report_cat_must_read_exact_report_file(lint, fixture_script, cat_form):
+    body = file_report().replace(
+        "printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
+        "printf 'BEGIN PASTE BLOCK\\n'\n        " + cat_form + "\n        printf 'END PASTE BLOCK\\n'")
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[paste-fallback]' in result.stdout
+
+
+def test_file_report_cat_double_dash_is_accepted(lint, fixture_script):
+    body = file_report().replace(
+        "printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
+        "printf 'BEGIN PASTE BLOCK\\n'\n        cat -- \"$message\"\n        printf 'END PASTE BLOCK\\n'")
+    result = lint(fixture_script(body))
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize('cat_form', ['cat "$message" 2>&1 -n', 'cat "$message" 2>/dev/null extra',
+                                       'cat "$message" 2<&0 --help', 'cat "$message" "<" --help'])
+def test_file_report_cat_rejects_operands_after_redirect(lint, fixture_script, cat_form):
+    body = file_report().replace(
+        "printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
+        "printf 'BEGIN PASTE BLOCK\\n'\n        " + cat_form + "\n        printf 'END PASTE BLOCK\\n'")
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[paste-fallback]' in result.stdout
+
+
+def test_storage_last_stdin_redirect_wins(lint, fixture_script):
+    body = GOOD.replace('<<< "$message" >/dev/null', '<<< "$message" < /dev/null >/dev/null')
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[report-storage]' in result.stdout
+
+
+def test_storage_other_input_fd_does_not_block_pipeline(lint, fixture_script):
+    body = GOOD.replace('<<< "$message" >/dev/null', '3< /dev/null >/dev/null').replace(
+        'runuser -u mk -- tee', "printf '%s\\n' \"$message\" | runuser -u mk -- tee")
+    result = lint(fixture_script(body))
+    assert result.returncode == 0, result.stdout
+
+
+def test_storage_zero_padded_fd_zero_redirect_is_stdin(lint, fixture_script):
+    body = GOOD.replace('<<< "$message" >/dev/null', '00< /dev/null >/dev/null').replace(
+        'runuser -u mk -- tee', "printf '%s\\n' \"$message\" | runuser -u mk -- tee")
+    result = lint(fixture_script(body))
+    assert result.returncode == 1
+    assert '[report-storage]' in result.stdout
+
+
+def test_file_report_cat_accepts_separated_fd_dup(lint, fixture_script):
+    body = file_report().replace(
+        "printf 'BEGIN PASTE BLOCK\\n%s\\nEND PASTE BLOCK\\n' \"$message\"",
+        "printf 'BEGIN PASTE BLOCK\\n'\n        cat \"$message\" 2>& 1\n        printf 'END PASTE BLOCK\\n'")
+    result = lint(fixture_script(body))
+    assert result.returncode == 0, result.stdout
