@@ -60,7 +60,7 @@ Use AskUserQuestion. Skip questions answered by introspection or pre-filled in P
 
 Skip anything that exists. Execute in order:
 
-1. `bd init` + `bd setup claude --project` (if no .beads/)
+1. `bd init` + `bd setup claude --project` (if no .beads/), unless the project's tracker has a Weaver Stage 4 activation receipt naming it (then use `bb tasks` for its tracker steps and skip `bd init`; a prefix in `bb tasks project list` is not the receipt; if ownership is unresolved, make no tracker writes and ask; see `docs/canon/bb-integration.md`)
 2. `/clavain:clavain-init` (if no .clavain/)
 3. Generate MISSION.md from `templates/MISSION.md.tmpl` (Q0 → one-sentence mission)
 4. Generate CLAUDE.md from `templates/CLAUDE.md.tmpl` (30-60 lines, operations only)

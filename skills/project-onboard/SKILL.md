@@ -37,7 +37,7 @@ GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 [[ -z "$GIT_ROOT" ]] && git init && GIT_ROOT=$(pwd)
 cd "$GIT_ROOT"
 ```
-Check `command -v bd` — if missing, warn and skip beads steps.
+Check `command -v bd` — if missing, warn and skip beads steps. Beads stays authoritative for a project's tracker until that tracker's Weaver Stage 4 activation receipt names it (`docs/canon/bb-integration.md`); a prefix in `bb tasks project list` is not that receipt. Only with the receipt, use `bb tasks` for that project's tracker steps instead of `bd` and skip `bd init`. If ownership is unresolved, make no tracker writes and ask. Other trackers (for example the CI migration task) are resolved independently.
 
 ## Phase 0: Repository Setup (new projects only)
 

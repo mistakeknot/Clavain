@@ -23,7 +23,7 @@ python3 -c "import json; json.load(open('hooks/hooks.json'))"           # Hooks 
 
 ## Work Tracking
 
-All work tracking goes through beads (`bd create`). Never create TODO files with status frontmatter, pending-beads lists, or markdown checklists for tracking work. If beads is unavailable, note items in a single `BLOCKED.md` and convert when it recovers.
+All work tracking goes through the project's single tracker: beads (`bd create`) until the project's tracker has been switched to Aleph tasks (`bb tasks create`), and Aleph tasks after that (see `docs/canon/bb-integration.md`). Never track the same work in both. Never create TODO files with status frontmatter, pending-beads lists, or markdown checklists for tracking work. If the tracker is unavailable, note items in a single `BLOCKED.md` and convert when it recovers.
 
 ## Telemetry
 
