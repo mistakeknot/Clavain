@@ -30,6 +30,22 @@ Use Task tool with `clavain:plan-reviewer` type. Fill template at `code-review-d
 
 **Act on feedback:** Fix Critical immediately; fix Important before proceeding; note Minor for later; push back with reasoning if reviewer is wrong.
 
+### Re-review After Fixes
+
+A review round after fixes is scoped, not a fresh review, for every reviewer, cross-lab (`--role cross-lab-review`) included. Record the head and base each round saw as `REVIEWED_SHA` and `REVIEWED_BASE`. The next round's brief carries:
+
+- the previous round's open findings, verbatim;
+- the fix range only: `git diff REVIEWED_SHA HEAD`, not the whole branch diff (this also shows anything merged in from main);
+- the plan or requirements the findings cite.
+
+Ask the reviewer to verdict each finding (ADDRESSED / NOT ADDRESSED, with file:line) and flag breakage the fix range introduced. The reviewer may read callers and dependencies of the changed code. A Critical or Important defect found anywhere still blocks or needs an accountable ruling, wherever it sits; only lesser issues outside the range are non-blocking observations. Use the Inputs, Scope and Output sections of `subagent-driven-development/re-review-prompt.md` as the brief. The scoped round's verdict is the review of record for the new head; earlier rounds cover the rest of the branch.
+
+Scoping narrows what is re-read, not what is required. A `validation` dispatch still runs every acceptance check and evidence gate its contract mandates against the resulting checkout (for example Pattern F's frozen acceptance replay), even where the re-review template says not to re-run the suite.
+
+After a rebase moves `REVIEWED_SHA` off the branch, give the reviewer `git range-diff REVIEWED_BASE..REVIEWED_SHA NEW_BASE..HEAD` plus `git diff REVIEWED_BASE NEW_BASE` for the paths the change touches and the code it depends on: callers, interfaces it uses, configuration and manifests. If the base moved under any of those, or the rebase resolved conflicts or merges, that counts as a rebase that changed the reviewed code: review in full. A rebase that touched none of them is not a reason for a full pass.
+
+Run a full review again only when the fix range rewrites most of the change, a rebase changed the reviewed code, or the previous verdict rejected the design rather than listing fixable findings. Name the reason in the brief.
+
 **Integration:**
 - Subagent-Driven Development: per task, its own `task-reviewer-prompt.md` over BASE..HEAD via `review-package`; this template for the final review only
 - Executing Plans: one whole-branch review after the last task

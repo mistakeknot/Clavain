@@ -9,6 +9,7 @@ Two sides: requesting reviews and receiving feedback. Technical correctness over
 1. Get git SHAs: `BASE_SHA=$(git merge-base origin/main HEAD)` (or the commit before the work; never assume `HEAD~1`), `HEAD_SHA=$(git rev-parse HEAD)`
 2. Dispatch `clavain:plan-reviewer` subagent with template from `code-reviewer.md`
 3. Act on feedback: fix Critical immediately, fix Important before proceeding, note Minor for later
+4. Re-review after fixes is scoped, for every reviewer including cross-lab. Record each round's `REVIEWED_SHA` and `REVIEWED_BASE`. Send the previous round's open findings verbatim, `git diff REVIEWED_SHA HEAD` (the fix range, not the whole branch) and the requirements the findings cite. Ask for a verdict per finding plus breakage in the range; the reviewer may read callers and dependencies, and a Critical or Important defect anywhere still blocks. Template: `subagent-driven-development/re-review-prompt.md`. A `validation` dispatch still runs every acceptance check and evidence gate its contract mandates. After a rebase, send `git range-diff REVIEWED_BASE..REVIEWED_SHA NEW_BASE..HEAD` plus `git diff REVIEWED_BASE NEW_BASE` on the touched paths and what they depend on (callers, interfaces, configuration, manifests); if the base moved under any of those or conflicts were resolved, review in full. Full re-review also if the fixes rewrite most of the change or the last verdict rejected the design; name the reason in the brief.
 
 ## Receiving Feedback
 
