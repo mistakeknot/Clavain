@@ -5,9 +5,24 @@
 # behavior. A regex/lexer linter cannot be sound; a script can always defeat it
 # (eval, indirect expansion, sourced files, aliases, computed command names).
 # KNOWN LIMITS:
+#   * Does not certify --check safety, idempotence, root-shell behavior or
+#     absence of permission edits. Manual REVIEW labels are not authorization.
+#     Verify --check and safe command dry runs in an isolated guest; commands
+#     with no safe dry run need a recorded limit and task-specific verification
+#     gate before handoff. A header never replaces a declared --check mode.
+#   * Report readability/storage is textual, not a filesystem/access proof.
+#     Thread storage paths must contain /threads/ or /thread-storage/ and the
+#     destination thread ID. Unknown command classifications require review.
+#     Vizier storage uses --thread or a literal THREAD assignment as the
+#     creating thread; the helper delivery destination is not proved.
+#     Fixed-name sticky writes are conservatively flagged even when a script
+#     claims it will write first and chown later; ownership is not observed.
 #   * No eval, sourced-file, alias, indirect-expansion or computed-command model.
 #   * No complete control/data flow, runtime exit-status or shell-option model;
 #     printf/echo/cat I/O failures and assignment substitutions are not proved.
+#     Paste printf accepts full %s/%b conversions or message expansion in the
+#     format; dynamic formats, %b escapes and message format directives are
+#     not evaluated. Permission option tables do not model future options.
 #   * No invalidation of initial PATH checks by later PATH reassignment.
 #   * git config --remove-section can leave stale trust in the textual model.
 #   * success/failure text is not required to reach the message; status-to-text
@@ -40,12 +55,13 @@
 #     rule is skipped and the skip is disclosed in the output.
 # Keep commands explicit: nounset and an exported literal absolute PATH in the
 # first 20 code lines; a readable absolute cwd before payload work; an EXIT
-# reporter with status, success/failure, bb tell (--mode auto), and a
-# failed-send paste block.
+# reporter with status, success/failure, runuser bb tell (--mode auto), a
+# failed-send paste block and mk-owned thread storage; a declared --check;
+# required handoff text with bash absolute-path and sha256 of final bytes.
 set -u
 
 usage() {
-    printf 'Usage: script-lint.sh [--thread ID] [--handoff-message FILE] PATH...\n'
+    printf 'Usage: script-lint.sh [--strict] [--thread ID] --handoff-message FILE SCRIPT\n'
 }
 help_text() {
     usage
@@ -58,9 +74,23 @@ This is a HEURISTIC source lint, not a proof of shell behavior; it can be
 defeated by eval, indirection, sourced files or computed command names.
 
 KNOWN LIMITS:
+  * Does not certify --check safety, idempotence, root-shell behavior or
+    absence of permission edits. REVIEW labels do not establish authorization.
+    Verify --check and safe command dry runs in an isolated guest; where no
+    safe dry run exists, record the limit and require a task-specific
+    verification gate before handoff. Headers never replace --check.
+  * Report readability/storage is textual, not a filesystem/access proof.
+    Storage paths must contain /threads/ or /thread-storage/ and the thread ID.
+    Vizier storage uses --thread or a literal THREAD assignment as the creating
+    thread; the helper delivery destination is not proved.
+    Fixed-name sticky writes are conservatively flagged even with a claim to
+    write first and chown later; ownership is not observed.
   * eval, sourced files, aliases, indirect expansion and computed commands
   * complete control/data flow, runtime exit statuses and shell-option semantics
     (printf/echo/cat I/O failures and assignment substitutions are not proved)
+    Paste printf accepts full %s/%b conversions or message expansion in the
+    format; dynamic formats, %b escapes and message format directives are not
+    evaluated. Permission option tables do not model future options.
   * later PATH reassignment does not invalidate the initial PATH checks
   * git config --remove-section can leave stale trust in the textual model
   * success/failure text is not required to reach the message; status-to-text
@@ -95,10 +125,23 @@ Rules:
                               EUID/UID/id -u zero comparison (heuristic)
   shellcheck                  unset-variable use (SC2154) when shellcheck is
                               installed; otherwise SKIP is printed, exit stays 0
-  pinned-handoff              with --handoff-message, a line must start with the
-                              absolute script path or `bash <absolute path>`;
-                              command must also parse with bash -n
-                              otherwise "SKIP handoff-message not provided"
+  check-mode                  a case/if declaration handling --check
+  report-readable             message file readable by mk (created as mk,
+                              chown mk or chmod granting read access)
+  report-storage              save the report as mk via tee/cp to thread storage
+  pinned-handoff              REQUIRED message contains a runnable command
+                              `bash <absolute script path>` parsed with bash -n
+  handoff-sha256              message contains sha256 of current script bytes
+  REVIEW                     permission edits or unclassified commands need
+                              manual review; only --strict makes these fatal
+
+Report sends require runuser -u mk -- <owner home>/.local/bin/bb thread tell.
+Only a # vizier-script header permits <owner home>/.local/bin/vizier-tell instead.
+Vizier uses --message-file FILE without a positional thread or --mode auto.
+For vizier storage, declare the creating thread with --thread or literal THREAD.
+Run this lint before hands-on steps and as CI on the mk-ops scripts directory.
+Vizier writer integration is a separate follow-up. Denial scans are separate:
+denial-scan.py needs structured denial events (none exist yet).
 
 Command substitutions $(...), `...`, <(...) and unquoted heredocs are linted
 as root commands: their ownership, git and sticky-directory effects count.
@@ -106,7 +149,7 @@ Literal bash/sh -c command lists use the same checks with the selected user;
 command/builtin prefixes do not bypass checks. Send paths in data do not count.
 TEXT
 }
-thread='' handoff='' failed=0
+thread='' handoff='' failed=0 strict=0
 # The handoff owner is mk; their home is /home/<owner>.
 owner_user=mk
 owner_home=/home/$owner_user
@@ -120,12 +163,13 @@ while (($#)); do
             if [[ $1 == --thread ]]; then thread=$2; else handoff=$2; fi
             shift 2 ;;
         --) shift; paths+=("$@"); break ;;
+        --strict) strict=1; shift ;;
         --help|-h) help_text; exit 0 ;;
         -*) usage >&2; exit 2 ;;
         *) paths+=("$1"); shift ;;
     esac
 done
-if ((${#paths[@]} == 0)); then usage >&2; exit 2; fi
+if ((${#paths[@]} != 1)); then usage >&2; exit 2; fi
 
 have_shellcheck=0
 if command -v shellcheck >/dev/null 2>&1; then
@@ -133,7 +177,10 @@ if command -v shellcheck >/dev/null 2>&1; then
 else
     printf 'SKIP shellcheck not installed\n'
 fi
-if [[ -z $handoff ]]; then printf 'SKIP handoff-message not provided\n'; fi
+if [[ -z $handoff ]]; then
+    printf '[pinned-handoff] Required --handoff-message FILE is missing.\n'
+    failed=1
+fi
 
 finding() { printf '%s: [%s] %s\n' "$1" "$2" "$3"; failed=1; }
 for path in "${paths[@]}"; do
@@ -149,7 +196,7 @@ for path in "${paths[@]}"; do
 
     # awk lexes source only. Quoted text and comments cannot create commands;
     # literal sh/bash -c payloads are separately inspected for filesystem use.
-    if ! awk -v file="$path" -v expected_thread="$thread" -v owner_home="$owner_home" '
+    if ! awk -v file="$path" -v expected_thread="$thread" -v owner_home="$owner_home" -v strict="$strict" '
     BEGIN {
         # owner_home as a literal regex; "/" needs no escape in a dynamic regex.
         for(k=1;k<=length(owner_home);k++) {
@@ -160,6 +207,11 @@ for path in "${paths[@]}"; do
     function fail(rule, detail) {
         printf "%s: [%s] %s\n", file, rule, detail
         bad=1
+    }
+    function review(detail) {
+        if(!(detail in reviewed)) printf "%s: REVIEW %s; manual review required (a label is not authorization).\n", file, detail
+        reviewed[detail]=1
+        if(strict) bad=1
     }
     function trim(s) { sub(/^[ \t\r\n]+/, "", s); sub(/[ \t\r\n]+$/, "", s); return s }
     # Retain only text that can expand: single quotes and escaped dollars are
@@ -238,12 +290,108 @@ for path in "${paths[@]}"; do
         }
         return out
     }
+    function permission_options(a,n,start,cmd,    i,j,w,c) {
+        for(i=start;i<=n;i++) {
+            w=a[i]
+            if(w=="--") break
+            if(w ~ /^--(mode|owner|group)(=|$)/) return 1
+            # These install options consume arguments, including option-like
+            # filenames. Do not classify those arguments as permission options.
+            if(cmd=="install" && w ~ /^--(suffix|target-directory)$/) {i++; continue}
+            if(w ~ /^--/) continue
+            if(w ~ /^-[^-]/) for(j=2;j<=length(w);j++) {
+                c=substr(w,j,1)
+                if(c ~ /^[mog]$/) return 1
+                if(cmd=="install" && c ~ /^[St]$/) {
+                    if(j==length(w)) i++
+                    break
+                }
+            }
+        }
+        return 0
+    }
+    function output_message(s,var,isfile,    i,c,q,esc,masked,a,n,ref,fmt,conv,nc,j,code,slot,op,tail) {
+        # Preserve token positions and literal formats while masking dollars
+        # that the shell cannot expand (single quotes or an escaped dollar).
+        q=""; esc=0; masked=""
+        for(i=1;i<=length(s);i++) {
+            c=substr(s,i,1)
+            if(c=="$" && (q=="\047" || esc)) c="#"
+            masked=masked c
+            # words() drops backslashes outside single quotes. In a double
+            # quoted format, bash retains \n and similar printf escapes; keep
+            # their boundary so "$message\n" is not read as "$messagen".
+            if(c=="\\" && q=="\042" && substr(s,i+1,1) !~ /^[\042$`\\]$/)
+                masked=masked c
+            if(esc) {esc=0; continue}
+            if(c=="\\" && q!="\047") {esc=1; continue}
+            if(q!="") {if(c==q) q=""}
+            else if(c=="\047" || c=="\042") q=c
+        }
+        n=words(masked,a)
+        ref="\\$(\\{" var "\\}|" var "([^A-Za-z0-9_]|$))"
+        if(isfile) {
+            # cat must read exactly the report file: options are not accepted
+            # beyond "--", and a longer word such as "$message.other" is a
+            # different file. Redirections after the operand stay legal.
+            if(a[1]!="cat") return 0
+            j=(a[2]=="--") ? 3 : 2
+            if(a[j] !~ ("^\\$(\\{" var "\\}|" var ")$")) return 0
+            # Everything after the operand must be a redirection (words()
+            # splits a leading fd digit from ">", and a bare operator takes
+            # the next word as its target); any other word is a cat operand.
+            # words() strips quotes, so a quoted "<" would look like a
+            # redirection: refuse quotes, escapes and expansions in the tail.
+            match(masked, "\\$(\\{" var "\\}|" var ")")
+            tail=substr(masked, RSTART+RLENGTH)
+            sub(/^[\042\047]/, "", tail)
+            if(tail ~ /[\042\047\\`$]/) return 0
+            for(i=j+1;i<=n;) {
+                if(a[i] ~ /^[0-9]+$/ && a[i+1] ~ /^[<>]/) i++
+                if(a[i] !~ /^[0-9]*[<>&]/) return 0
+                # A bare operator needs a target word; the lexer splits "<&0"
+                # at "&", so a trailing operator hides what follows it.
+                op=(a[i] ~ /^[0-9]*(<|>+&?)$/)
+                if(op && i+1>n) return 0
+                i += op ? 2 : 1
+            }
+            return 1
+        }
+        if(a[1]=="echo") {
+            for(i=2;i<=n;i++) if(a[i] ~ ref) return 1
+            return 0
+        }
+        if(a[1]!="printf" || a[2]=="-v") return 0
+        j=(a[2]=="--") ? 3 : 2
+        fmt=a[j]
+        for(i=1;i<=length(fmt);i++) if(substr(fmt,i,1)=="\\") {
+            # A literal \c terminates printf before later conversions. An
+            # escaped backslash (\\c) prints data instead.
+            if(substr(fmt,++i,1)=="c") return 0
+        }
+        if(fmt ~ ref) return 1
+        nc=0; split("",conv)
+        for(i=1;i<=length(fmt);i++) if(substr(fmt,i,1)=="%") {
+            code=substr(fmt,++i,1)
+            if(code=="%") continue
+            # Accept a settled literal subset. Precision can truncate the
+            # report and stars consume extra arguments, so reject either.
+            while(code ~ /^[-+ #0-9]$/) code=substr(fmt,++i,1)
+            if(code !~ /^[sbdiouxXfeEgGaAcq]$/) return 0
+            conv[++nc]=code
+        }
+        if(!nc) return 0
+        for(i=j+1;i<=n;i++) {
+            slot=((i-j-1)%nc)+1
+            if(conv[slot] ~ /^[sb]$/ && a[i] ~ ref) return 1
+        }
+        return 0
+    }
     function mk(s,    a,n) {
         sub(/^(if[ \t]+)?![ \t]+/, "", s)
         s=prefixes(s)
         n=words(s,a)
-        return (a[1]=="runuser" && a[2]=="-u" && a[3]=="mk" && a[4]=="--") ||
-               (a[1]=="sudo" && a[2]=="-u" && a[3]=="mk") || (a[1] in wrappers)
+        return (a[1]=="runuser" && a[2]=="-u" && a[3]=="mk" && a[4]=="--") || (a[1] in wrappers)
     }
     function sticky(path) {
         return path ~ /^\/(var\/)?tmp\// ||
@@ -526,6 +674,21 @@ for path in "${paths[@]}"; do
         # A literal shell payload is a command list, not a single filesystem
         # command. Apply the same scans with the shell selected by the wrapper.
         na=words(outer,a)
+        # Classify executable command words, including wrappers and absolute
+        # command paths; comments and quoted command names in data do not count.
+        for(i=1;i<=na;i++) if(a[i] !~ /^-/ &&
+            !(i>1 && a[i-1] ~ /^-[ugCT]$/) && cmd_position(a,i)) {
+            command_name=a[i]; sub(/^.*\//,"",command_name)
+            if(command_name ~ /^(chmod|chown|chgrp|setfacl|usermod|useradd|userdel|groupmod|visudo)$/)
+                review("permission-editing command " command_name)
+            else if(command_name ~ /^(install|mkdir)$/ && permission_options(a,na,i+1,command_name))
+                review("permission-changing options for " command_name)
+            else if(command_name !~ /^(if|then|else|elif|do|while|until|for|case|esac|fi|done|in|function|local|export|readonly|declare|typeset|set|trap|return|exit|break|continue|shift|true|false|:|\[|\[\[|\(\(|!|runuser|sudo|env|command|builtin|exec|nohup|nice|timeout|stdbuf|ionice|doas|bash|sh|cd|pwd|printf|echo|cat|tee|cp|mv|rm|mkdir|rmdir|touch|mktemp|git|curl|wget|tar|gzip|gunzip|xz|unzip|install|ln|id|test|read|stat|ls|find|sed|awk|grep|head|tail|cut|sort|uniq|wc|date|sleep|sha256sum|bb|vizier-tell)$/ &&
+                    command_name !~ /^[A-Za-z_][A-Za-z0-9_]*=/ && !(command_name in bodies))
+                review("unclassified command " command_name)
+        }
+        if(expand(outer) ~ /settings[^ \t\/]*\.json|\.claude\/settings|sudoers|[Pp][Ee][Rr][Mm][Ii][Ss][Ss][Ii][Oo][Nn][ \t]+[Rr][Uu][Ll][Ee]/)
+            review("permission/settings operation " outer)
         if(level<8) for(i=1;i<na;i++) if(a[i] ~ /(^|\/)(bash|sh)$/ && cmd_position(a,i) && a[i+1]=="-c") {
             inner=a[i+2]; np=split_list(inner,parts)
             saved_uncond=scan_uncond; saved_cwd=cwd_path
@@ -658,6 +821,8 @@ for path in "${paths[@]}"; do
     function why_add(s) { why=why (why=="" ? "" : "; ") s }
 
     {
+        if(!header_done && $0 ~ /^[ \t]*#[ \t]*vizier-script[ \t]*$/) vizier=1
+        if($0 !~ /^[ \t]*(#|$)/) header_done=1
         if(heredoc!="") {
             terminator=$0; sub(/\r$/, "", terminator)
             if(heredoc_tabs) sub(/^\t+/, "", terminator)
@@ -711,7 +876,7 @@ for path in "${paths[@]}"; do
                 block_depth--; if(!block_depth) current=""; continue
             }
             if(c==";" || c=="|" || c=="&") {
-                if(c=="&" && buffer ~ />$/) {buffer=buffer c; continue}
+                if(c=="&" && (buffer ~ />$/ || nx==">")) {buffer=buffer c; continue}
                 op=c
                 if((c=="|" || c=="&") && nx==c) { op=c c; pos++ }
                 else if(c=="|" && nx=="&") pos++
@@ -735,8 +900,7 @@ for path in "${paths[@]}"; do
         # First collect explicit user-switch wrappers and function bodies.
         for(j=1;j<=count;j++) if(scope[j]!="" && j>=last_def[scope[j]]) {
             bodies[scope[j]]=bodies[scope[j]] statements[j] "\n"
-            if(statements[j] ~ /^runuser[ \t]+-u[ \t]+mk[ \t]+--[ \t]+[\042\047]*\$[@]/ ||
-               statements[j] ~ /^sudo[ \t]+-u[ \t]+mk[ \t]+(--[ \t]+)?[\042\047]*\$[@]/) wrappers[scope[j]]=1
+            if(statements[j] ~ /^runuser[ \t]+-u[ \t]+mk[ \t]+--[ \t]+[\042\047]*\$[@]/) wrappers[scope[j]]=1
         }
         # Structural walks: top level, then every function (for root-refusal).
         walk("", "", 0)
@@ -772,6 +936,9 @@ for path in "${paths[@]}"; do
         for(j=1;j<=count;j++) {
             if(scope[j]!="" && j<last_def[scope[j]]) continue
             s=statements[j]; n=words(s,a); cmd=a[1]
+            if(!stmt_dead[j] && s ~ /^(if[ \t]+|elif[ \t]+)?(\[|\[\[|test)[ \t]/ &&
+                s ~ /--check/ && s ~ /\$/ && s ~ /[!=]=?/) check_mode=1
+            if(s ~ /^--check[ \t]*\)/) check_mode=1
             scan_uncond=stmt_uncond[j]
             if(line[j]!=previous_line) code_lines++
             previous_line=line[j]
@@ -846,7 +1013,13 @@ for path in "${paths[@]}"; do
         if(!has_status) why_add("report does not distinguish success and failure from $?")
         for(r=r0;r<=r1;r++) {
             n=words(Rtext[r],a)
-            for(i=1;i+2<=n;i++) if(a[i]==owner_home "/.local/bin/bb" && a[i+1]=="thread" && a[i+2]=="tell" && cmd_position(a,i)) {T=r; break}
+            for(i=1;i<=n;i++) if(((a[i]==owner_home "/.local/bin/bb" && a[i+1]=="thread" && a[i+2]=="tell") ||
+                (vizier && a[i]==owner_home "/.local/bin/vizier-tell")) && cmd_position(a,i)) {
+                T=r
+                if(i<5 || a[i-4]!="runuser" || a[i-3]!="-u" || a[i-2]!="mk" || a[i-1]!="--")
+                    why_add("send must use runuser -u mk --")
+                break
+            }
             if(T) break
         }
         if(!T) why_add("no " owner_home "/.local/bin/bb thread tell in the reporter")
@@ -866,25 +1039,40 @@ for path in "${paths[@]}"; do
             if(!(Rpath[T]=="" && Rbop[T] !~ /^(&&|\|\||\|)$/ && Raop[T] !~ /^(&|\|)$/))
                 why_add("bb send is conditional or not reached on every exit")
             n=words(Rtext[T],a); ti=0
-            for(i=3;i<=n;i++) if(a[i]=="tell" && a[i-1]=="thread" && a[i-2] ~ /(^|\/)bb$/) {ti=i; break}
+            for(i=1;i<=n;i++) {
+                if(a[i]=="tell" && a[i-1]=="thread" && a[i-2] ~ /(^|\/)bb$/) {ti=i; break}
+                if(vizier && a[i]==owner_home "/.local/bin/vizier-tell") {ti=i; break}
+            }
+            vizier_send=(a[ti]==owner_home "/.local/bin/vizier-tell")
             np=0; mode=""; msgfile=""; unsupported=""; split("", targs)
             for(i=ti+1;i<=n;i++) {
                 tk=a[i]
                 if(tk=="--") { for(i=i+1;i<=n;i++) targs[++np]=a[i]; break }
-                else if(tk=="--mode") { mode=a[i+1]; i++ }
-                else if(tk ~ /^--mode=/) { mode=tk; sub(/^[^=]*=/,"",mode) }
                 else if(tk=="--message-file") { msgfile=a[i+1]; i++ }
                 else if(tk ~ /^--message-file=/) { msgfile=tk; sub(/^[^=]*=/,"",msgfile) }
+                else if(vizier_send && tk ~ /^-/) unsupported=tk
+                else if(tk=="--mode") { mode=a[i+1]; i++ }
+                else if(tk ~ /^--mode=/) { mode=tk; sub(/^[^=]*=/,"",mode) }
                 else if(tk ~ /^--(model|service-tier|reasoning-level|permission-mode|send-at|file|image)$/) i++
                 else if(tk ~ /^--(model|service-tier|reasoning-level|permission-mode|send-at|file|image)=/ || tk ~ /^--(json|plan)$/) { }
                 else if(tk ~ /^-/) unsupported=tk
                 else targs[++np]=tk
             }
-            if(mode!="auto") why_add("bb thread tell must pass --mode auto")
-            if(unsupported!="") why_add("unsupported bb thread tell option " unsupported " (use --message-file or a positional message)")
-            if(np<1 || (msgfile=="" && np<2)) why_add("bb thread tell needs <thread> and a message")
-            report_target=expand(targs[1])
-            mtoken=(msgfile!="") ? msgfile : targs[2]
+            if(vizier_send) {
+                if(msgfile=="" || np) why_add("vizier-tell requires --message-file and no positional thread")
+                if(unsupported!="") why_add("unsupported vizier-tell option " unsupported)
+                # The helper has no destination argument. Storage is checked
+                # against the declared creating thread, independently of bb.
+                report_target=expected_thread
+                if(report_target=="" && "THREAD" in literal) report_target=literal["THREAD"]
+                mtoken=msgfile
+            } else {
+                if(mode!="auto") why_add("bb thread tell must pass --mode auto")
+                if(unsupported!="") why_add("unsupported bb thread tell option " unsupported " (use --message-file or a positional message)")
+                if(np<1 || (msgfile=="" && np<2)) why_add("bb thread tell needs <thread> and a message")
+                report_target=expand(targs[1])
+                mtoken=(msgfile!="") ? msgfile : targs[2]
+            }
             if(msgfile!="") message_file=1
             if(mtoken ~ /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/) { message_var=mtoken; gsub(/[${}]/,"",message_var); message_text=dynamic[message_var] }
             else message_text=expanding(Rtext[T])
@@ -896,6 +1084,56 @@ for path in "${paths[@]}"; do
             }
             if(!dynamic_message) why_add("message does not carry the captured status")
 
+            # The file passed to the sender must have an explicit access grant
+            # before sending, or be created as mk under mk home. This remains
+            # a textual heuristic: ACLs, ancestor access and later mutations
+            # need isolated-guest verification.
+            readable=!message_file; stored=0
+            for(r=r0;r<=r1;r++) if(!dead_record(r) && Rpath[r]=="") {
+                t=Rtext[r]; n=words(t,a)
+                ref=(message_var!="" && expanding(t) ~ ("\\$(\\{)?" message_var "([^A-Za-z0-9_]|$)"))
+                if(r<T && ref) {
+                    # The grant must name the report file as its only operand.
+                    ref_opt=0
+                    for(i=1;i<=n;i++) if(a[i] ~ /^--reference/) ref_opt=1
+                    if(!ref_opt && a[n] ~ ("^\\$(\\{" message_var "\\}|" message_var ")$") &&
+                       (t ~ /^chmod[ \t]+(0?[0-7][0-7][4567]|a\+r|o\+r)([ \t]|$)/ ||
+                        t ~ /^chown[ \t]+mk(:[^ \t]+)?([ \t]|$)/)) readable=1
+                    # A tee that writes a different file does not grant read
+                    # access to its input or to a filename passed as data.
+                    if(mk(t)) for(i=5;i<=n;i++) if(a[i] ~ /(^|\/)(tee|cp)$/ &&
+                        a[i+1]==mtoken && a[i] ~ /(^|\/)tee$/ &&
+                        expand(a[i+1]) ~ ("^" owner_re "/")) readable=1
+                }
+                if(r<T && message_file && message_var!="" &&
+                    t ~ ("^(local[ \t]+)?" message_var "=") &&
+                    t ~ /runuser[ \t]+-u[ \t]+mk[ \t]+--[ \t]+mktemp/ &&
+                    t ~ (owner_re "/")) readable=1
+                for(i=5;i<=n;i++) if(a[i] ~ /(^|\/)(tee|cp)$/ && cmd_position(a,i) &&
+                    a[i-4]=="runuser" && a[i-3]=="-u" && a[i-2]=="mk" && a[i-1]=="--") {
+                    storage_input=0; storage_target=""
+                    if(a[i] ~ /(^|\/)cp$/ && message_file && a[i+1]==mtoken && ref) {
+                        storage_input=1; storage_target=expand(a[i+2])
+                    }
+                    if(a[i] ~ /(^|\/)tee$/) {
+                        storage_target=expand(a[i+1])
+                        # The last fd-0 redirect decides what tee reads; other
+                        # input fds (3<) do not touch its stdin.
+                        last_stdin=0
+                        for(q=i+1;q<=n;q++) if(a[q] ~ /^0*<(<<?)?/) last_stdin=q
+                        for(q=i+2;q<n;q++) if(q==last_stdin && a[q]==(message_file ? "<" : "<<<") &&
+                            a[q+1]==mtoken && ref) storage_input=1
+                        if(r>r0 && Rbop[r]=="|" && !last_stdin &&
+                            message_var!="" && !stdout_redirect(Rtext[r-1]) &&
+                            output_message(Rtext[r-1],message_var,message_file)) storage_input=1
+                    }
+                    if(storage_input && storage_target ~ /\/(thread-storage|threads)\// &&
+                        report_target!="" && index(storage_target,"/" report_target "/")) stored=1
+                }
+            }
+            if(!readable) fail("report-readable", "Grant mk read access to the message file before sending.")
+            if(!stored) fail("report-storage", "Save the full report as mk via runuser -u mk -- tee/cp into thread storage.")
+
             # The failure branch of the send: where the paste block must live.
             rp=""; direct=0
             if(Rifhdr[T] && Raop[T] !~ /^(&&|\|\||\||&)$/)
@@ -904,16 +1142,14 @@ for path in "${paths[@]}"; do
                 rp=joinp(Rpath[T], entry("group", "", "", "", "||", T))
                 direct=(T+1<=r1 && Rbop[T+1]=="||" && Rpath[T+1]==Rpath[T])
             }
-            paste_contents=0; paste_word=0; lastsig=T
+            paste_contents=0; lastsig=T
             for(r=T+1;r<=r1;r++) if((rp!="" && Rpath[r]==rp) || (direct && r==T+1)) {
                 lastsig=r
                 kw_split(Rtext[r])
-                if(kw_w ~ /^(printf|echo|cat)$/ && message_var!="" &&
-                   expanding(Rtext[r]) ~ ("\\$(\\{)?" message_var "([^A-Za-z0-9_]|$)") &&
+                if(message_var!="" && output_message(Rtext[r],message_var,message_file) &&
                    !stdout_redirect(Rtext[r]) && !Rredirect[r]) paste_contents=1
-                if(Rtext[r] ~ /[Pp][Aa][Ss][Tt][Ee]/) paste_word=1
             }
-            fallback=(paste_contents && paste_word)
+            fallback=paste_contents
             # An early return/exit before the send or its failure branch skips it.
             for(r=r0;r<lastsig;r++) if(early_exit_word(Rtext[r])) {
                 why_add("return/exit/exec before the send or its failure branch"); break
@@ -942,12 +1178,13 @@ for path in "${paths[@]}"; do
         }
         if(!trap_body || !trap_ok || (trap_body && !(fname in bodies)) || !T || why!="" || pretrap_payload)
             fail("exit-report", "Install an unconditional top-level EXIT trap whose reporter captures $? and sends via " owner_home "/.local/bin/bb thread tell <thread> --mode auto <message> on success and failure (" why ").")
-        if(!fallback) fail("paste-fallback", "On a failed bb send, print a paste block containing the report (in the failure branch of the send).")
+        if(!fallback) fail("paste-fallback", "On a failed send, print the full report (in the failure branch of the send).")
         if(expected_thread!="") {
             if(report_target!=expected_thread)
                 fail("report-thread", "EXIT reporter must target the supplied --thread ID.")
         }
         if(!nounset) fail("nounset", "Enable set -u within the first 20 code lines.")
+        if(!check_mode) fail("check-mode", "Declare a --check mode; a no-safe-dry-run header is not a replacement.")
         if(!path_fixed || !path_exported) fail("fixed-path", "Set and export a literal PATH of absolute directories within the first 20 code lines.")
         if(ownership_bad) fail("ownership-assumptions", "Use explicit mk identity; do not rely on $USER, $HOME or $SUDO_USER.")
         if(home_bad) fail("mk-home-user", "Operations under " owner_home " require runuser -u mk -- or sudo -u mk; parent-shell redirects and command substitutions are still root operations.")
@@ -980,7 +1217,7 @@ for path in "${paths[@]}"; do
                 line=${line#'$ '}
                 for q in '' "'" '"'; do
                     quoted="$q$absolute$q"
-                    for cand in "$quoted" "bash $quoted" "/bin/bash $quoted" "/usr/bin/bash $quoted"; do
+                    for cand in "bash $quoted"; do
                         if [[ $line == "$cand" || $line == "$cand "* || $line == "$cand"$'\t'* ]]; then
                             # Parse the candidate command without executing it;
                             # prefix matching alone accepts broken quoting and
@@ -994,7 +1231,11 @@ for path in "${paths[@]}"; do
             done < "$handoff"
         fi
         if ((!pinned)); then
-            finding "$path" pinned-handoff "Hand-off message needs a runnable line starting with $absolute or bash $absolute"
+            finding "$path" pinned-handoff "Hand-off message needs a runnable line starting with bash $absolute"
+        fi
+        digest=$(sha256sum -- "$path"); digest=${digest%% *}
+        if [[ ! -f $handoff || ! -r $handoff ]] || ! grep -Eq "(^|[^[:xdigit:]])$digest([^[:xdigit:]]|$)" -- "$handoff"; then
+            finding "$path" handoff-sha256 'Hand-off message must contain sha256 of the final unchanged script bytes.'
         fi
     fi
 done
