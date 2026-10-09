@@ -30,6 +30,20 @@ Use Task tool with `clavain:plan-reviewer` type. Fill template at `code-review-d
 
 **Act on feedback:** Fix Critical immediately; fix Important before proceeding; note Minor for later; push back with reasoning if reviewer is wrong.
 
+### Re-review After Fixes
+
+A review round after fixes is scoped, not a fresh review. This holds for every reviewer, including cross-lab (`--role cross-lab-review`) and `validation` dispatches. Record the head each round saw as `REVIEWED_SHA`. The next round's brief carries:
+
+- the previous round's open findings, verbatim;
+- the fix range only: `git diff REVIEWED_SHA HEAD`, not the whole branch diff;
+- the plan or requirements the findings cite.
+
+Ask the reviewer to verdict each finding (ADDRESSED / NOT ADDRESSED, with file:line), flag breakage the fix range introduced, and report issues wholly outside the range as non-blocking observations. Use the Inputs, Scope and Output sections of `subagent-driven-development/re-review-prompt.md` as the brief. The scoped round's verdict is the review of record for the new head; earlier rounds cover the rest of the branch.
+
+If a rebase moved `REVIEWED_SHA` off the branch, give the reviewer `git range-diff OLD_BASE..REVIEWED_SHA NEW_BASE..HEAD` instead. A clean rebase is not a reason for a full pass.
+
+Run a full review again only when the fix range rewrites most of the change, a rebase changed the reviewed code underneath it, or the previous verdict rejected the design rather than listing fixable findings. Name the reason in the brief.
+
 **Integration:**
 - Subagent-Driven Development: per task, its own `task-reviewer-prompt.md` over BASE..HEAD via `review-package`; this template for the final review only
 - Executing Plans: one whole-branch review after the last task
