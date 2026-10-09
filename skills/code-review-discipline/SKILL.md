@@ -42,7 +42,7 @@ Ask the reviewer to verdict each finding (ADDRESSED / NOT ADDRESSED, with file:l
 
 Scoping narrows what is re-read, not what is required. A `validation` dispatch still runs every acceptance check and evidence gate its contract mandates against the resulting checkout (for example Pattern F's frozen acceptance replay), even where the re-review template says not to re-run the suite.
 
-After a rebase moves `REVIEWED_SHA` off the branch, give the reviewer `git range-diff REVIEWED_BASE..REVIEWED_SHA NEW_BASE..HEAD` plus `git diff REVIEWED_BASE NEW_BASE` limited to the paths the change touches. If the base moved under those paths, or the rebase resolved conflicts or merges, that counts as a rebase that changed the reviewed code: review in full. A rebase that touched none of them is not a reason for a full pass.
+After a rebase moves `REVIEWED_SHA` off the branch, give the reviewer `git range-diff REVIEWED_BASE..REVIEWED_SHA NEW_BASE..HEAD` plus `git diff REVIEWED_BASE NEW_BASE` for the paths the change touches and the code it depends on: callers, interfaces it uses, configuration and manifests. If the base moved under any of those, or the rebase resolved conflicts or merges, that counts as a rebase that changed the reviewed code: review in full. A rebase that touched none of them is not a reason for a full pass.
 
 Run a full review again only when the fix range rewrites most of the change, a rebase changed the reviewed code, or the previous verdict rejected the design rather than listing fixable findings. Name the reason in the brief.
 
