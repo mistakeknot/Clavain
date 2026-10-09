@@ -15,9 +15,15 @@ enrolled. Failure leaves the existing direct paths unchanged.
 | File reservations | interlock |
 | Scheduled BB-native jobs | BB automations, using queued messages |
 | Builds, tests and CI orchestration | zklw-ci |
-| Issue tracking | Beads; BB Tasks is not a second tracker |
+| Issue tracking | Beads is authoritative for each tracker until that tracker's Weaver Stage 4 activation receipt, then Aleph tasks (decision 2026-10-08, bead mk-gqds); never both for one tracker |
 | Runs, goals and attempt lifecycle | Intercore |
 | Retry, cancellation and transport selection | dispatch |
+
+Every `bd` instruction in canon, skills and hooks applies to a tracker only while
+that tracker is on Beads. A tracker's activation receipt is the Weaver Stage 4
+record naming that tracker (see the Weaver migration plan, `docs/weaver-migration-plan.md`
+in the Aleph repository); it covers only the tracker it names. After the receipt,
+new work for that tracker goes to Aleph tasks and the Beads copy is read-only.
 
 Intercore is the sole writer of admission/running/terminal attempt state. BB
 events are observations reconciled by dispatch; BB cannot complete an Intercore
@@ -25,8 +31,13 @@ attempt. A BB turn completing proves a transport outcome, not independent task
 acceptance. Steering an admitted task is a recorded task change. Scheduled work
 must use queued messages, not steering.
 
-Each seat has a durable Intercore state mapping of bead, run, dispatch, attempt,
-BB thread, submitted request and turn. A local journal is written before spawn
+Each seat has a durable Intercore state mapping of task, run, dispatch, attempt,
+BB thread, submitted request and turn. The task is identified by its canonical
+`task_ref`; the legacy bead ID is kept as an alias on the same mapping (version
+the mapping when the field is added; readers accept alias-only records written
+before the tracker's activation receipt). Switching trackers never changes
+attempt ownership: Intercore remains the sole writer of attempt state, and the
+task tracker only supplies the `task_ref`. A local journal is written before spawn
 and updated immediately when its ID arrives; this is crash recovery evidence,
 not a competing lifecycle store. Event sequence numbers make replay idempotent.
 Unclear spawn responses are final and require reconciliation; they never trigger
@@ -217,7 +228,7 @@ including stale, missing, unreadable and peer findings; optional detail and skip
 lines are omitted. Instruction-contract state, ownership uncertainty and runtime
 blockers retain their content. Remontoire retains inspect/resume/replay/doctor
 commands and approval boundaries, deduplicated by thread/cycle/stage/evidence
-hash. `bd where --json` owns workspace resolution; an unknown failure does not
+hash. `bd where --json` owns workspace resolution for any tracker still on Beads; an unknown failure does not
 silently skip the primer. Tests: `test_bb_startup.py`, `test_startup.py`,
 `test_remontoire_facade.py` and dotfiles `test_bb_startup_hooks.py`.
 The routing instruction is retained too. Personal hooks resolve the managed
