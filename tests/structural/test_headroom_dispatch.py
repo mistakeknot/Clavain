@@ -117,6 +117,28 @@ def test_forecast_exclusion_has_evidence_and_separate_label(dispatch):
     assert len(evidence) == 1 and json.loads(evidence[0].read_text())['status'] == 'known'
 
 
+def test_coordination_reorders_to_sol_under_claude_pressure(dispatch):
+    # mk-ji9m: relay work has no producer-independence rule, so it follows headroom like execution.
+    p, rows, calls, _ = dispatch([account('codex', .2), account('claude', .9)], 'coordination')
+    assert p.returncode == 0, p.stderr
+    assert calls == 'status\n'
+    assert rows[-1]['execution']['model'] == 'gpt-6.1-sol'
+    assert rows[-1]['headroom_reorder']['to'][0] == 'coordination-sol'
+
+
+def test_coordination_excludes_exhausted_claude(dispatch):
+    p, rows, _, _ = dispatch([account('codex', .2), account('claude', .99)], 'coordination')
+    assert p.returncode == 0, p.stderr
+    assert rows[-1]['execution']['model'] == 'gpt-6.1-sol'
+    assert rows[-1]['headroom_exclusion'] == ['claude-sonnet-5-5']
+
+
+def test_coordination_unknown_pool_keeps_route(dispatch):
+    p, rows, _, _ = dispatch([], 'coordination')
+    assert p.returncode == 0, p.stderr
+    assert rows[-1]['execution']['model'] == 'claude-sonnet-5-5'
+
+
 @pytest.mark.parametrize('role', ['plan-review', 'validation', 'escalation', 'planning', 'cross-lab-review'])
 def test_protected_resolution_never_probes_pool(dispatch, role):
     accounts = [account('codex', .1), account('claude', .99, familyWeekly={'fable': {'utilization': 1}})]
