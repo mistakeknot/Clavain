@@ -44,6 +44,8 @@ echo "$*" >> "$IC_LOG"
 if [[ "$*" == *"route list"* ]]; then
     cat "$IC_ROUTE_LIST_JSON"
 elif [[ "$*" == *"route identity"* ]]; then
+    # Real ic fails closed (exit 2) without a routing policy.
+    [[ "$*" == *"--policy="* || -n "${CLAVAIN_ROUTING_POLICY:-}" ]] || exit 2
     for a in "$@"; do
         case "$a" in
             --model=*)
@@ -52,9 +54,9 @@ elif [[ "$*" == *"route identity"* ]]; then
         esac
     done
     if [[ -n "${IC_IDENTITY_OVERRIDE:-}" && "$model" == "${IC_IDENTITY_OVERRIDE_MODEL:-}" ]]; then
-        printf '{"canonical_identity":"%s"}\n' "$IC_IDENTITY_OVERRIDE"
+        printf '{"model_identity":"%s"}\n' "$IC_IDENTITY_OVERRIDE"
     else
-        printf '{"canonical_identity":"gpt-6-astra"}\n'
+        printf '{"model_identity":"gpt-6-astra"}\n'
     fi
 elif [[ "$*" == *"route dispatch"* ]]; then
     cat "$IC_ROUTE_DISPATCH_JSON"

@@ -210,7 +210,7 @@ build() {
     # ic route identity disagrees with the receipt's declared model_identity.
     review_packet_fixture_setup
     review_packet_fixture_install_fake_ic
-    printf '{"canonical_identity":"claude-opus-5-5"}\n' > "$IC_IDENTITY_JSON"
+    printf '{"model_identity":"claude-opus-5-5"}\n' > "$IC_IDENTITY_JSON"
     build
     [ "$status" -eq 2 ]
 

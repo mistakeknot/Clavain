@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -117,6 +118,18 @@ def load_input(path: str) -> dict[str, Any]:
         raise InputError("input file must contain a JSON object")
     spec["_base_dir"] = input_path.resolve().parent
     return spec
+
+
+def _routing_policy_path() -> Path:
+    """The routing policy `ic route identity` canonicalizes against.
+
+    Same default dispatch.sh uses: an explicit CLAVAIN_ROUTING_POLICY, else the
+    routing.yaml packaged beside this script. ic fails closed (exit 2) without one.
+    """
+    override = os.environ.get("CLAVAIN_ROUTING_POLICY")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parent.parent / "config" / "routing.yaml"
 
 
 def _resolve(base_dir: Path, rel: str) -> Path:
@@ -416,7 +429,11 @@ def load_producer_receipt(path: str) -> dict[str, Any]:
     # Canonical identity check: never duplicate alias normalization here.
     try:
         proc = subprocess.run(
-            ["ic", "--json", "route", "identity", f"--model={execution['model']}"],
+            [
+                "ic", "--json", "route", "identity",
+                f"--policy={_routing_policy_path()}",
+                f"--model={execution['model']}",
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -429,7 +446,7 @@ def load_producer_receipt(path: str) -> dict[str, Any]:
         identity = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         raise ToolError(f"ic route identity did not return valid JSON: {exc}") from exc
-    canonical = identity.get("canonical_identity")
+    canonical = identity.get("model_identity")
     declared = inner_profile.get("model_identity")
     if not canonical or (declared and declared != canonical):
         raise InputError(
