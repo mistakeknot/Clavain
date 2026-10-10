@@ -89,3 +89,42 @@ def test_unknown_host_reports_error_json(run, rendered):
     result = run('--host', 'nonesuch', '--file', str(rendered))
     assert result.returncode == 2
     assert json.loads(result.stdout)['drift'] == ['renderer-error']
+
+
+@pytest.mark.parametrize('args', [('--host',), ('--file',), ('--host', 'claude', '--file')])
+def test_trailing_option_without_value_exits_two_not_hangs(run, args):
+    assert run(*args).returncode == 2
+
+
+def test_receipt_outside_managed_block_is_ignored(run, rendered):
+    stale = ('Managed by the selected Clavain installation. Host: claude; package: 0.0.1; '
+             f'policy selection: portable-managed-installation; policy SHA256: {"0" * 64}; x.\n')
+    rendered.write_text(stale + rendered.read_text())
+    result = run('--host', 'claude', '--file', str(rendered))
+    assert result.returncode == 0, result.stdout
+    report = json.loads(result.stdout)
+    assert report['current'] is True and report['drift'] == []
+    assert report['file_version'] == report['installed_version']
+
+
+def _stub_root(tmp_path, project_root, body):
+    root = tmp_path / 'root'
+    (root / 'scripts').mkdir(parents=True)
+    (root / 'scripts/sync-agent-instructions.py').write_text(body)
+    return root
+
+
+@pytest.mark.parametrize('body', [
+    'import sys\nprint(\'{"current": true, "version": "1", "policy_hash": "a"}\')\nsys.exit(2)\n',
+    'print("[]")\n',
+    'print(\'{"current": true}\')\n',
+    'print(\'{"current": true, "version": "1", "policy_hash": "a"}\')\nimport sys\nsys.exit(1)\n',
+    'print("not json")\n',
+])
+def test_renderer_runtime_failures_exit_two_with_json(run, tmp_path, project_root, body):
+    root = _stub_root(tmp_path, project_root, body)
+    target = tmp_path / 'f.md'
+    target.write_text('x')
+    result = run('--host', 'claude', '--file', str(target), root=root)
+    assert result.returncode == 2, result.stdout
+    assert json.loads(result.stdout)['drift'] == ['renderer-error']
