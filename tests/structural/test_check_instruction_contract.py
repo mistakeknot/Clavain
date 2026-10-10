@@ -128,3 +128,33 @@ def test_renderer_runtime_failures_exit_two_with_json(run, tmp_path, project_roo
     result = run('--host', 'claude', '--file', str(target), root=root)
     assert result.returncode == 2, result.stdout
     assert json.loads(result.stdout)['drift'] == ['renderer-error']
+
+
+def test_explicit_installation_mode(run, project_root, tmp_path):
+    path = tmp_path / 'CLAUDE.md'
+    subprocess.run(['python3', '-I', str(project_root / 'scripts/sync-agent-instructions.py'),
+                    '--source', str(project_root), '--host', 'claude', '--file', str(path)],
+                   check=True, capture_output=True, timeout=30)
+    assert run('--host', 'claude', '--file', str(path)).returncode == 1
+    result = run('--host', 'claude', '--file', str(path), '--explicit')
+    assert result.returncode == 0, result.stdout
+    assert json.loads(result.stdout)['policy_selection'] == 'explicit-installation'
+
+
+@pytest.mark.parametrize('current,version,policy', [
+    ('"false"', '"1"', '"%s"' % ('a' * 64)),
+    ('1', '"1"', '"%s"' % ('a' * 64)),
+    ('null', '"1"', '"%s"' % ('a' * 64)),
+    ('[]', '"1"', '"%s"' % ('a' * 64)),
+    ('true', '1', '"%s"' % ('a' * 64)),
+    ('true', '"1"', '"short"'),
+    ('true', '"1"', 'null'),
+])
+def test_renderer_field_types_are_validated(run, tmp_path, project_root, current, version, policy):
+    body = ('print(\'{"current": %s, "version": %s, "policy_hash": %s}\')\n' % (current, version, policy))
+    root = _stub_root(tmp_path, project_root, body)
+    target = tmp_path / 'f.md'
+    target.write_text('x')
+    result = run('--host', 'claude', '--file', str(target), root=root)
+    assert result.returncode == 2, result.stdout
+    assert json.loads(result.stdout)['drift'] == ['renderer-error']
