@@ -122,6 +122,8 @@ printf '%s\n' "\$*" >> "$FIXTURE_DIR/ic.log"
 if [[ "\$*" == *"route list"* ]]; then
     cat "$IC_ROUTE_LIST_JSON"
 elif [[ "\$*" == *"route identity"* ]]; then
+    # Real ic fails closed (exit 2) without a routing policy.
+    [[ "\$*" == *"--policy="* || -n "\${CLAVAIN_ROUTING_POLICY:-}" ]] || exit 2
     cat "$IC_IDENTITY_JSON"
 else
     exit 3

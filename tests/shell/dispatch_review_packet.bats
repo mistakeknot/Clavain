@@ -44,6 +44,8 @@ echo "$*" >> "$IC_LOG"
 if [[ "$*" == *"route list"* ]]; then
     cat "$IC_ROUTE_LIST_JSON"
 elif [[ "$*" == *"route identity"* ]]; then
+    # Real ic fails closed (exit 2) without a routing policy.
+    [[ "$*" == *"--policy="* || -n "${CLAVAIN_ROUTING_POLICY:-}" ]] || exit 2
     for a in "$@"; do
         case "$a" in
             --model=*)

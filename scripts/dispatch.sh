@@ -919,13 +919,14 @@ _dispatch_verify_review_packet() {
   REVIEW_PACKET_JSON="$(cat "$manifest_path")" || return 1
   REVIEW_PACKET="$verified_path"
 
-  local declared_model canonical_json canonical caller_json caller_canonical
+  local declared_model canonical_json canonical caller_json caller_canonical identity_policy
+  identity_policy="${CLAVAIN_ROUTING_POLICY:-$DISPATCH_SCRIPT_DIR/../config/routing.yaml}"
   declared_model="$(jq -r '.producer_identity.model_identity // .producer_identity.model // empty' <<< "$REVIEW_PACKET_JSON")"
   if [[ -z "$declared_model" ]]; then
     echo "Error: review packet manifest is missing a producer identity" >&2
     return 1
   fi
-  canonical_json="$(ic --json route identity --model="$declared_model")" || {
+  canonical_json="$(ic --json route identity --policy="$identity_policy" --model="$declared_model")" || {
     echo "Error: ic route identity failed for the review packet's producer" >&2
     return 1
   }
@@ -935,7 +936,7 @@ _dispatch_verify_review_packet() {
     return 1
   fi
   if [[ -n "$PRODUCER_IDENTITY" ]]; then
-    caller_json="$(ic --json route identity --model="$PRODUCER_IDENTITY")" || {
+    caller_json="$(ic --json route identity --policy="$identity_policy" --model="$PRODUCER_IDENTITY")" || {
       echo "Error: ic route identity failed for --producer-identity" >&2
       return 1
     }
