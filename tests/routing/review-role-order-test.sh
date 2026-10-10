@@ -72,4 +72,30 @@ for context in routine frontier; do
     checks=$((checks + 1))
   done
 done
+# cross-lab-review: crosslab-sol -> crosslab-astra -> crosslab-opus (mk-xlio).
+role=cross-lab-review
+for context in routine frontier; do
+  ctx="$WORK/$context.json"
+  jq '.available_models = ["claude-opus-5-5", "claude-sonnet-5-5", "gpt-6-astra"]' "$ctx" > "$WORK/no-sol.json"
+
+  receipt="$(resolve claude-sonnet-5-5 "$ctx")"
+  check "$receipt" '
+    .profile_ref == "crosslab-sol" and .fallback_chain[0].profile_ref == "crosslab-astra"
+    and .fallback_chain[0].profile.model_identity == "gpt-6-astra"
+    and ([.fallback_chain[].profile_ref] | index("crosslab-astra")) < ([.fallback_chain[].profile_ref] | index("crosslab-opus"))
+  ' 'Claude producer must reach Sol, then Astra, then Opus'
+
+  receipt="$(resolve gpt-6-astra "$ctx")"
+  check "$receipt" '
+    .profile_ref == "crosslab-opus"
+    and any(.excluded[]; .profile_ref == "crosslab-astra" and .reason == "producer_model_conflict")
+  ' 'Astra producer must exclude crosslab-astra'
+
+  receipt="$(resolve claude-sonnet-5-5 "$WORK/no-sol.json")"
+  check "$receipt" '
+    .profile_ref == "crosslab-astra" and .profile.model_identity == "gpt-6-astra"
+    and .profile.reasoning_effort == "xhigh"
+    and any(.excluded[]; .profile_ref == "crosslab-sol" and .reason == "model_unavailable")
+  ' 'Sol unavailable must land on Astra'
+done
 echo "PASS: $checks real-ic plan review order and capacity checks"
