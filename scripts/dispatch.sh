@@ -929,7 +929,7 @@ _dispatch_verify_review_packet() {
     echo "Error: ic route identity failed for the review packet's producer" >&2
     return 1
   }
-  canonical="$(jq -r '.canonical_identity // empty' <<< "$canonical_json")"
+  canonical="$(jq -r '.model_identity // empty' <<< "$canonical_json")"
   if [[ -z "$canonical" ]]; then
     echo "Error: ic route identity could not canonicalize the review packet's producer" >&2
     return 1
@@ -939,7 +939,7 @@ _dispatch_verify_review_packet() {
       echo "Error: ic route identity failed for --producer-identity" >&2
       return 1
     }
-    caller_canonical="$(jq -r '.canonical_identity // empty' <<< "$caller_json")"
+    caller_canonical="$(jq -r '.model_identity // empty' <<< "$caller_json")"
     if [[ "$caller_canonical" != "$canonical" ]]; then
       echo "Error: --producer-identity '$PRODUCER_IDENTITY' does not match the review packet's producer ('$canonical')" >&2
       return 1

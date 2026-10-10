@@ -429,7 +429,7 @@ def load_producer_receipt(path: str) -> dict[str, Any]:
         identity = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         raise ToolError(f"ic route identity did not return valid JSON: {exc}") from exc
-    canonical = identity.get("canonical_identity")
+    canonical = identity.get("model_identity")
     declared = inner_profile.get("model_identity")
     if not canonical or (declared and declared != canonical):
         raise InputError(

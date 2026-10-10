@@ -114,7 +114,7 @@ review_packet_fixture_install_fake_ic() {
     local context
     context="$(cat "$INPUT_DIR/producer_receipt.json")"
     jq -n --argjson ctx "$context" '[{"context_json": ($ctx | tostring)}]' > "$IC_ROUTE_LIST_JSON"
-    printf '{"canonical_identity":"gpt-6-astra"}\n' > "$IC_IDENTITY_JSON"
+    printf '{"model_identity":"gpt-6-astra"}\n' > "$IC_IDENTITY_JSON"
 
     cat > "$IC_BIN_DIR/ic" <<SH
 #!/usr/bin/env bash
