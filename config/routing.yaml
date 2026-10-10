@@ -655,7 +655,17 @@ dispatch:
       model: gpt-6.1-sol
       reasoning_effort: medium
       service_tier: standard
-      fallbacks: [crosslab-opus]
+      fallbacks: [crosslab-astra, crosslab-opus]
+      description: Sealed first-pass review by a provider/model other than the producer
+    crosslab-astra:
+      role: cross-lab-review
+      backend: codex
+      model: gpt-6-astra
+      reasoning_effort: xhigh
+      service_tier: standard
+      minimum_codex_version: 0.153.1
+      # Astra seat between Sol and Opus (mk-xlio), mirroring review-astra:
+      # same model and effort, reached when Sol is unavailable.
       description: Sealed first-pass review by a provider/model other than the producer
     crosslab-opus:
       role: cross-lab-review

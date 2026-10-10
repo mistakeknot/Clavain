@@ -158,7 +158,10 @@ substitute is Opus 5.5, or Sonnet 5.5 when Opus produced the work. Do not wait f
 the Codex reset; Fable is retired (mk-3b8z). Codex-produced work keeps the policy
 order, with Opus first. `cross-lab-review` keeps its Claude first-pass seat, now
 `crosslab-opus` (it was `crosslab-fable`); for a Claude producer it resolves Sol
-first, and never the producer's own model. Requires Intercore `ic` at or
+first, then the Astra seat `crosslab-astra` (GPT-6 Astra at xhigh, Codex >= 0.153.1)
+when Sol is unavailable, and never the producer's own model. The chain is
+`crosslab-sol -> crosslab-astra -> crosslab-opus` (mk-xlio); an Astra-produced
+review drops `crosslab-astra` by `producer_model_conflict`. Requires Intercore `ic` at or
 after commit 2caa435; an older `ic` ignores `cross_lab_first` and keeps the
 policy order.
 
