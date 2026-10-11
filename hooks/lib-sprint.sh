@@ -343,7 +343,7 @@ sprint_read_state() {
     if [[ -n "$events_json" ]]; then
         history=$(echo "$events_json" | jq '
             [.[] | select(.event_type == "advance") |
-             {((.to_phase // "") + "_at"): (.created_at // "")}] | add // {}' 2>/dev/null) || history="{}"
+             {((.to_phase // "") + "_at"): (.created_at | if type == "number" then todate else (. // "") end)}] | add // {}' 2>/dev/null) || history="{}"
     fi
 
     # Process active session (agent tracking)
@@ -863,10 +863,15 @@ sprint_claim() {
             return 0  # Already claimed by us
         fi
         local created_at_str now_epoch created_at age_minutes
-        created_at_str=$(echo "$active_agents" | jq -r '.[0].created_at // "1970-01-01T00:00:00Z"')
+        created_at_str=$(echo "$active_agents" | jq -r '.[0].created_at // 0')
+        # ic emits created_at as epoch seconds. ISO strings are still accepted:
         # GNU date -d with BSD date -j -u -f fallback (macOS has no -d);
         # fractional seconds and Z/+00:00 suffixes normalized first.
-        created_at=$(date -d "$created_at_str" +%s 2>/dev/null) || created_at=""
+        if [[ "$created_at_str" =~ ^[0-9]+$ ]]; then
+            created_at="$created_at_str"
+        else
+            created_at=$(date -d "$created_at_str" +%s 2>/dev/null) || created_at=""
+        fi
         if [[ -z "$created_at" ]]; then
             local _created_norm="${created_at_str%%.*}"
             _created_norm="${_created_norm%+00:00}"

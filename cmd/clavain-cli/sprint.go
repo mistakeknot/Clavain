@@ -371,7 +371,7 @@ func cmdSprintFindActive(args []string) error {
 type RunEvent struct {
 	EventType string `json:"event_type"`
 	ToPhase   string `json:"to_phase"`
-	CreatedAt string `json:"created_at"`
+	CreatedAt int64  `json:"created_at"` // epoch seconds
 }
 
 // cmdSprintReadState assembles sprint state from multiple ic queries.
@@ -451,7 +451,7 @@ func cmdSprintReadState(args []string) error {
 	history := make(map[string]string, len(events))
 	for _, ev := range events {
 		if ev.EventType == "advance" && ev.ToPhase != "" {
-			history[ev.ToPhase+"_at"] = ev.CreatedAt
+			history[ev.ToPhase+"_at"] = time.Unix(ev.CreatedAt, 0).UTC().Format(time.RFC3339)
 		}
 	}
 

@@ -5,6 +5,10 @@ bats_require_minimum_version 1.5.0
 setup() {
     load test_helper
 
+    # Inside a bb thread the script hands its output to bb-notice.py instead of
+    # printing the hook JSON these cases assert on, so run as a plain host.
+    unset "${!BB_@}"
+
     SCRIPT_UNDER_TEST="$BATS_TEST_DIRNAME/../../scripts/remontoire-attention.sh"
     TEST_DIR="$(mktemp -d)"
     FIXTURE="$TEST_DIR/attention.json"

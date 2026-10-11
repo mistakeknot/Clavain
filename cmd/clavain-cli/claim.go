@@ -114,14 +114,7 @@ func cmdSprintClaim(args []string) error {
 		}
 
 		// Check age
-		createdAt := existing.CreatedAt
-		if createdAt == "" {
-			createdAt = "1970-01-01T00:00:00Z"
-		}
-		created, err := time.Parse(time.RFC3339, createdAt)
-		if err != nil {
-			created = time.Unix(0, 0)
-		}
+		created := time.Unix(existing.CreatedAt, 0)
 		ageMinutes := int(time.Since(created).Minutes())
 
 		if ageMinutes < sprintClaimStaleMinutes {

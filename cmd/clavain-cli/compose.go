@@ -505,7 +505,7 @@ func computeStageBudget(sprintID, stage string, stageSpec StageSpec) int64 {
 		return int64(stageSpec.Budget.MinTokens)
 	}
 	// Try ic run tokens for total budget
-	out, err := runIC("run", "budget", sprintID)
+	out, err := runIC("--json", "run", "budget", sprintID)
 	if err != nil || len(out) == 0 {
 		return int64(stageSpec.Budget.MinTokens)
 	}

@@ -325,11 +325,12 @@ _mock_intercore_available() {
     # Mock ic run artifact list (called directly via $INTERCORE_BIN)
     # We need to make INTERCORE_BIN point to a script that handles run artifact list
     local mock_bin="$TEST_PROJECT/mock_ic"
+    export IC_FIXTURES="$BATS_TEST_DIRNAME/../fixtures/ic"
     cat > "$mock_bin" << 'MOCKEOF'
 #!/bin/bash
 case "$1 $2" in
     "run artifact") echo '[{"type":"brainstorm","path":"/tmp/bs.md"}]' ;;
-    "run events")   echo '[{"event_type":"advance","to_phase":"brainstorm","created_at":"2026-01-01T00:00:00Z"}]' ;;
+    "run events")   cat "$IC_FIXTURES/run-events.json" ;;
     "run tokens")   echo '{"input_tokens":5000,"output_tokens":3000}' ;;
     "health")       exit 0 ;;
     *)              echo '{}' ;;
@@ -353,7 +354,8 @@ MOCKEOF
     echo "$output" | jq -e '.id == "iv-test1"'
     echo "$output" | jq -e '.phase == "executing"'
     echo "$output" | jq -e '.artifacts.brainstorm == "/tmp/bs.md"'
-    echo "$output" | jq -e '.history.brainstorm_at == "2026-01-01T00:00:00Z"'
+    expected_at=$(jq -r '.[0].created_at | todate' "$BATS_TEST_DIRNAME/../fixtures/ic/run-events.json")
+    echo "$output" | jq -e --arg at "$expected_at" '.history["brainstorm-reviewed_at"] == $at'
     echo "$output" | jq -e '.complexity == "3"'
     echo "$output" | jq -e '.active_session == "sess-123"'
     echo "$output" | jq -e '.tokens_spent == 8000'
@@ -477,11 +479,11 @@ MOCKEOF
     _source_sprint_lib
 
     local now_ts
-    now_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    now_ts=$(date +%s)  # ic emits created_at as epoch seconds
 
     # Mock: one active session agent
     intercore_run_agent_list() {
-        echo "[{\"id\":\"agent-001\",\"name\":\"session-first\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":\"$IC_NOW_TS\"}]"
+        echo "[{\"id\":\"agent-001\",\"name\":\"session-first\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":$IC_NOW_TS}]"
     }
     intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 0; }
     intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
@@ -510,11 +512,11 @@ MOCKEOF
     _source_sprint_lib
 
     local expired_ts
-    expired_ts=$(date -u -d "61 minutes ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-61M +%Y-%m-%dT%H:%M:%SZ)
+    expired_ts=$(( $(date +%s) - 61 * 60 ))
 
     # Mock: one expired session agent
     intercore_run_agent_list() {
-        echo "[{\"id\":\"agent-old\",\"name\":\"session-old\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":\"$IC_EXPIRED_TS\"}]"
+        echo "[{\"id\":\"agent-old\",\"name\":\"session-old\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":$IC_EXPIRED_TS}]"
     }
     intercore_run_agent_update() { return 0; }
     intercore_run_agent_add() { echo "agent-new"; return 0; }
@@ -545,10 +547,10 @@ MOCKEOF
     _source_sprint_lib
 
     local recent_ts
-    recent_ts=$(date -u -d "59 minutes ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-59M +%Y-%m-%dT%H:%M:%SZ)
+    recent_ts=$(( $(date +%s) - 59 * 60 ))
 
     intercore_run_agent_list() {
-        echo "[{\"id\":\"agent-001\",\"name\":\"session-active\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":\"$IC_RECENT_TS\"}]"
+        echo "[{\"id\":\"agent-001\",\"name\":\"session-active\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":$IC_RECENT_TS}]"
     }
     intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 0; }
     intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
@@ -577,10 +579,10 @@ MOCKEOF
     _source_sprint_lib
 
     local now_ts
-    now_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    now_ts=$(date +%s)  # ic emits created_at as epoch seconds
 
     intercore_run_agent_list() {
-        echo "[{\"id\":\"agent-001\",\"name\":\"session-abc\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":\"$IC_NOW_TS\"}]"
+        echo "[{\"id\":\"agent-001\",\"name\":\"session-abc\",\"status\":\"active\",\"agent_type\":\"session\",\"created_at\":$IC_NOW_TS}]"
     }
     intercore_lock() { printf 'lock %s %s %s\n' "$1" "$2" "$3" >> "$IC_CALL_LOG"; return 0; }
     intercore_unlock() { printf 'unlock %s %s\n' "$1" "$2" >> "$IC_CALL_LOG"; return 0; }
