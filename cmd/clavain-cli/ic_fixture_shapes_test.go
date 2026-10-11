@@ -25,7 +25,7 @@ func TestBudgetResultReadsICShape(t *testing.T) {
 	if err := json.Unmarshal(readICFixture(t, "run-budget.json"), &br); err != nil {
 		t.Fatal(err)
 	}
-	if br.RunID == "" || br.TokenBudget != 1000 || br.TokensUsed != 0 || br.Exceeded || br.WarnPct != 80 {
+	if br.RunID == "" || br.TokenBudget != 1000 || br.TokensUsed != 250 || br.Exceeded || br.WarnPct != 80 {
 		t.Fatalf("unexpected budget result: %+v", br)
 	}
 }
@@ -68,12 +68,8 @@ func TestRunEventsIntegerIDAndPhases(t *testing.T) {
 	if len(events) != 1 || events[0].EventType != "advance" || events[0].ToPhase != "brainstorm-reviewed" || events[0].CreatedAt == 0 {
 		t.Fatalf("unexpected events: %+v", events)
 	}
-	var cx []struct {
-		ID    int64  `json:"id"`
-		Type  string `json:"event_type"`
-		Phase string `json:"to_phase,omitempty"`
-	}
-	if err := json.Unmarshal(readICFixture(t, "run-events.json"), &cx); err != nil || len(cx) != 1 || cx[0].ID != 1 {
+	var cx []icRunEvent
+	if err := json.Unmarshal(readICFixture(t, "run-events.json"), &cx); err != nil || len(cx) != 1 || cx[0].ID != 1 || cx[0].Type != "advance" || cx[0].Phase != "brainstorm-reviewed" {
 		t.Fatalf("cxdb event shape: %v %+v", err, cx)
 	}
 }

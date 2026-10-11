@@ -213,6 +213,13 @@ func cxdbAppendTyped(client *CXDBClient, ctxID uint64, typeID string, record any
 	return nil
 }
 
+// icRunEvent is the subset of `ic run events` that cxdb-sync reads.
+type icRunEvent struct {
+	ID    int64  `json:"id"`
+	Type  string `json:"event_type"`
+	Phase string `json:"to_phase,omitempty"`
+}
+
 // cmdCXDBSync backfills the CXDB Turn DAG from Intercore events.
 // Supports incremental sync via cursor stored in ic state.
 // Usage: cxdb-sync <sprint-id>
@@ -252,11 +259,7 @@ func cmdCXDBSync(args []string) error {
 		}
 	}
 
-	var events []struct {
-		ID    int64  `json:"id"`
-		Type  string `json:"event_type"`
-		Phase string `json:"to_phase,omitempty"`
-	}
+	var events []icRunEvent
 	if err := runICJSON(&events, "run", "events", runID); err != nil {
 		return fmt.Errorf("cxdb-sync: cannot read events: %w", err)
 	}

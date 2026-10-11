@@ -110,10 +110,10 @@ type TokenAgg struct {
 
 // RunAction from ic run action list.
 type RunAction struct {
-	Command  string `json:"command"`
-	Phase    string `json:"phase"`
-	Mode     string `json:"mode,omitempty"`
-	Priority int    `json:"priority,omitempty"`
+	Command  string          `json:"command"`
+	Phase    string          `json:"phase"`
+	Mode     string          `json:"mode,omitempty"`
+	Priority int             `json:"priority,omitempty"`
 	Args     json.RawMessage `json:"args,omitempty"` // ic emits a JSON value, not a string
 }
 
