@@ -210,10 +210,16 @@ func TestPhaseAttributionSessionIDPrefersEnvironmentThenFile(t *testing.T) {
 	}
 
 	t.Setenv("CLAUDE_SESSION_ID", "session-env")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "app-env")
 	if got := phaseAttributionSessionID(); got != "session-env" {
 		t.Fatalf("phaseAttributionSessionID with env = %q, want session-env", got)
 	}
+	// The start hook never fired: Claude Code's own register still wins over the file (mk-rd9f).
 	t.Setenv("CLAUDE_SESSION_ID", "")
+	if got := phaseAttributionSessionID(); got != "app-env" {
+		t.Fatalf("phaseAttributionSessionID app register = %q, want app-env", got)
+	}
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
 	if got := phaseAttributionSessionID(); got != "session-file" {
 		t.Fatalf("phaseAttributionSessionID fallback = %q, want session-file", got)
 	}

@@ -201,7 +201,7 @@ conf_status="CLEAN"; conf_findings=0
 grep -q 'CONFORMANCE: FAIL' "$results_path" && { conf_status="NEEDS_ATTENTION"; conf_findings=$(grep -c '| *fail' "$results_path" || echo 1); }
 mkdir -p .clavain/verdicts
 jq -n --arg s "$conf_status" --argjson f "$conf_findings" --arg d "$results_path" \
-  '{type:"plan-conformance", status:$s, model:"opus", tokens_spent:0, files_changed:0, findings_count:$f, summary:("plan conformance: " + $s), detail_path:$d, timestamp:(now|todate), session_id:(env.CLAUDE_SESSION_ID // "unknown")}' \
+  '{type:"plan-conformance", status:$s, model:"opus", tokens_spent:0, files_changed:0, findings_count:$f, summary:("plan conformance: " + $s), detail_path:$d, timestamp:(now|todate), session_id:(env.CLAUDE_SESSION_ID // env.CLAUDE_CODE_SESSION_ID // "unknown")}' \
   > .clavain/verdicts/plan-conformance.json
 ```
 
@@ -229,7 +229,7 @@ if [[ -f "$_il" ]]; then
     --argjson ct "${_crit_total:-0}" --argjson cf "${_crit_failed:-0}" --argjson esc "${_esc:-0}" \
     --arg src "$_src" --arg bead "$CLAVAIN_BEAD_ID" --arg cp "${criteria_path:-}" \
     '{author_model:$a, executor_model:$e, validator_model:$v, criteria_total:$ct, criteria_failed:$cf, pass:($cf==0 and $ct>0), escalation_count:$esc, session_source:$src, bead:$bead, criteria_path:$cp}')
-  _interspect_insert_evidence "${CLAUDE_SESSION_ID:-unknown}" "quality-gates" "plan_execution_outcome" "" "$_ctx" 2>/dev/null || true
+  _interspect_insert_evidence "${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}" "quality-gates" "plan_execution_outcome" "" "$_ctx" 2>/dev/null || true
 fi
 ```
 

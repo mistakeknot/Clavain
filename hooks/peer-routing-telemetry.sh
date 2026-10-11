@@ -39,7 +39,10 @@ fi
 LOG="${CLAVAIN_PEER_ROUTING_FILE:-$HOME/.clavain/peer-routing.jsonl}"
 mkdir -p "$(dirname "$LOG")" 2>/dev/null || exit 0
 
-SID="${CLAUDE_SESSION_ID:-${CODEX_SESSION_ID:-unknown}}"
+# shellcheck source=hooks/lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh" 2>/dev/null || true
+SID="$(clavain_session_id "$INPUT" "" 2>/dev/null || true)"
+[[ -n "$SID" ]] || SID="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-unknown}}}"
 SID_HASH=$(printf '%s' "$SID" | sha256sum | cut -c1-12)
 
 TS=$(date +%s)

@@ -1,0 +1,41 @@
+{
+  "id": "fd-collation-conformance",
+  "kind": "base",
+  "parents": [],
+  "domain": "Analytical and descriptive bibliography of the hand-press book — collation formulae, ideal-copy reconstruction, cancel leaves, stop-press variants, sophisticated copies, and the Hinman collator.",
+  "axioms": [
+    "A copy is described by a formula that enumerates every gathering and leaf; anything the formula does not name is never examined, and the omission is invisible forever rather than eventually.",
+    "The authority for a comparison is an ideal copy reconstructed from many exemplars, never the single exemplar in hand and never a copy of unknown state.",
+    "Two copies bearing one imprint can differ leaf by leaf, because correction happens while the press runs; identity of imprint is not identity of sheets.",
+    "A cancellans is genuine paper and genuine type substituted for another leaf: it satisfies the formula exactly while carrying different words, so any rule stated as a surface form can be satisfied without being obeyed.",
+    "The imprint line is a claim by the printer and is evidence of nothing on its own; it is recorded, not believed.",
+    "A sophisticated copy — made up from parts of several copies so that it looks complete — is the copy most likely to pass inspection, so a comparison that supplies both of its own sides proves only self-agreement.",
+    "Collation by superimposition detects change only within the pages placed under the machine; coverage and correctness are separate properties and coverage is the one that is silently absent."
+  ],
+  "primitives": [
+    "gathering / signature",
+    "leaf and its two pages",
+    "forme and press run",
+    "edition, issue, state",
+    "cancellandum and cancellans",
+    "ideal copy",
+    "exemplar in hand",
+    "collation formula",
+    "press variant",
+    "imprint line",
+    "made-up / sophisticated copy",
+    "point of difference"
+  ],
+  "failure_mode": [
+    "Reasons about a fixed artifact at rest, so it systematically misses timing: how often a comparison runs, whether the window between publication and inspection is itself the fault, and whether the reference moved during the examination.",
+    "Has no vocabulary for a human reader who stops reading; alarm cadence, fatigue, and the standing-failure downgrade are outside the discipline and will be under-weighted or ignored.",
+    "Treats completeness as the supreme virtue, so it over-values whole-tree comparison and under-costs the finding-list noise a wider surface produces.",
+    "Cannot judge whether a value is stale, only whether two artifacts differ; questions of precedence between live and carried identifiers read to it as questions about which copy, not about which moment.",
+    "Assumes the examiner is a trained human with unlimited attention per copy, so it under-weights runtime bounds — a 60 s fetch, a 300 s check, a fail-open hook path."
+  ],
+  "findings": [
+    "f-013",
+    "f-014",
+    "f-015"
+  ]
+}

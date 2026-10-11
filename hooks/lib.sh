@@ -6,6 +6,28 @@
 # shellcheck source=hooks/lib-log.sh
 source "${BASH_SOURCE[0]%/*}/lib-log.sh" 2>/dev/null || true
 
+# ─── Session identity ────────────────────────────────────────────────────────
+# The session a hook or command is running in, read from the registers Claude
+# Code actually populates (mk-rd9f, 2026-09-02). Precedence:
+#   1. the hook's own stdin payload ($1, JSON carrying .session_id) — always the
+#      right answer for the hook that received it;
+#   2. CLAUDE_SESSION_ID — written by hooks/session-start.sh into CLAUDE_ENV_FILE,
+#      so present only in sessions whose start hook fired;
+#   3. CLAUDE_CODE_SESSION_ID — exported by Claude Code itself into the Bash tool;
+#   4. $2, the caller's fallback (default "unknown").
+# Prints the id, returns 0 always, never writes to stderr. Nothing may key state
+# on CLAUDE_SESSION_ID alone: tests/structural/test_session_registers.py fails
+# on any bare read.
+clavain_session_id() {
+    local _input="${1:-}" _fallback="${2:-unknown}" _sid=""
+    if [[ -n "$_input" ]] && command -v jq >/dev/null 2>&1; then
+        _sid=$(printf '%s' "$_input" | jq -r '.session_id // empty' 2>/dev/null) || _sid=""
+    fi
+    [[ -n "$_sid" ]] || _sid="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
+    printf '%s' "${_sid:-$_fallback}"
+    return 0
+}
+
 # ─── Companion plugin discovery ──────────────────────────────────────────────
 # Batch-discovers all companion plugin root directories with a single `find`
 # call, then caches results both in-process (_CACHED_* vars) and on disk
@@ -28,7 +50,7 @@ _discover_all_companions() {
     if [[ -f "$_COMPANION_CACHE_FILE" ]]; then
         local _cache_sid
         _cache_sid=$(head -1 "$_COMPANION_CACHE_FILE" 2>/dev/null) || _cache_sid=""
-        local _expected_key="# session=${CLAUDE_SESSION_ID:-$$}"
+        local _expected_key="# session=$(clavain_session_id "" "$$")"
         if [[ "$_cache_sid" == "$_expected_key" ]]; then
             # Cache is from this session — read it
             while IFS='=' read -r _key _val; do
@@ -106,7 +128,7 @@ _discover_all_companions() {
     mkdir -p "$_COMPANION_CACHE_DIR" 2>/dev/null || true
     local _tmp="${_COMPANION_CACHE_FILE}.$$"
     {
-        echo "# session=${CLAUDE_SESSION_ID:-$$}"
+        echo "# session=$(clavain_session_id "" "$$")"
         echo "INTERPHASE=${_CACHED_INTERPHASE_ROOT}"
         echo "INTERFLUX=${_CACHED_INTERFLUX_ROOT}"
         echo "INTERPATH=${_CACHED_INTERPATH_ROOT}"

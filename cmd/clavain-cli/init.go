@@ -125,7 +125,7 @@ func cmdSprintInit(args []string) error {
 	wg.Wait()
 
 	// Interstat attribution (fire-and-forget)
-	sessionID := os.Getenv("CLAUDE_SESSION_ID")
+	sessionID := sessionRegisterID()
 	if sessionID == "" {
 		// Try the interstat session file
 		if data, err := os.ReadFile("/tmp/interstat-session-id"); err == nil {

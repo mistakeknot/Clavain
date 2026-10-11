@@ -264,7 +264,7 @@ func refreshPhaseAdvanceAttribution(beadID, runID, phase string) {
 }
 
 func phaseAttributionSessionID() string {
-	if sessionID := strings.TrimSpace(os.Getenv("CLAUDE_SESSION_ID")); sessionID != "" {
+	if sessionID := sessionRegisterID(); sessionID != "" {
 		return sessionID
 	}
 	data, err := os.ReadFile(phaseAttributionSessionFile)
