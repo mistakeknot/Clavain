@@ -5,7 +5,8 @@ quality) after each, and one independent final review. Run continuously: rule on
 conflicts and ledger `Ruling: <decision> — <why> — <cost if wrong>`. Stop only for
 executing-plans' stop list: destructive, security-sensitive or authority-needing
 external actions, a scope-changing decision, missing information or authority, a
-required checkpoint, or a plan with no non-guess path forward.
+required checkpoint, a Critical/Important still open after the final
+re-review, or a plan with no non-guess path forward.
 
 ## Setup
 
@@ -43,7 +44,9 @@ required checkpoint, or a plan with no non-guess path forward.
 Final review package from the merge base; dispatch
 `../code-review-discipline/code-reviewer.md` on the most capable independent seat
 (blocked if none: ledger it, keep the gate open). One fix dispatch, one scoped
-re-review, adjudicate residuals. Report every `Ruling:` line, delete this plan's
+re-review. A Critical/Important still open after it escalates to a human as a
+blocker (findings verbatim, trigger and consequence), never a ruling; adjudicate
+residual Minors. Report every `Ruling:` line, delete this plan's
 workspace, then use `clavain:landing-a-change`.
 
 ---

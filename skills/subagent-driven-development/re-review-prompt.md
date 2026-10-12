@@ -45,7 +45,8 @@ Task tool (general-purpose):
     name the trigger and the consequence that justify its severity.
 
     ### Out-of-Scope Observations
-    Non-blocking; the controller defers them to the ledger. Or "None".
+    Non-blocking; the controller defers them to the ledger. Or "None". For
+    each, give its severity and name the trigger and consequence behind it.
 
     ### Verdict
     **Fix round:** All findings addressed, no new Critical/Important breakage |
