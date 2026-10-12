@@ -14,6 +14,9 @@ trap 'exit 0' ERR
 
 INPUT=$(cat)
 
+# shellcheck source=hooks/lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh" 2>/dev/null || true
+
 # Only trigger on git commit commands
 TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null) || exit 0
 if ! echo "$TOOL_INPUT" | grep -qE 'git commit'; then
@@ -27,9 +30,13 @@ if ! echo "$TOOL_OUTPUT" | grep -qiE 'create mode|delete mode|rename'; then
 fi
 
 # Count structural changes in the commit
-CREATES=$(echo "$TOOL_OUTPUT" | grep -c 'create mode' 2>/dev/null || echo 0)
-DELETES=$(echo "$TOOL_OUTPUT" | grep -c 'delete mode' 2>/dev/null || echo 0)
-RENAMES=$(echo "$TOOL_OUTPUT" | grep -c 'rename' 2>/dev/null || echo 0)
+# grep -c prints 0 on no match and exits 1; the old `|| echo 0` then appended a
+# second 0, the arithmetic below died on "0\n0", and the ERR trap exited 0 —
+# so this hook had been silent for every commit without a rename.
+CREATES=$(echo "$TOOL_OUTPUT" | grep -c 'create mode' 2>/dev/null || true)
+DELETES=$(echo "$TOOL_OUTPUT" | grep -c 'delete mode' 2>/dev/null || true)
+RENAMES=$(echo "$TOOL_OUTPUT" | grep -c 'rename' 2>/dev/null || true)
+CREATES=${CREATES:-0}; DELETES=${DELETES:-0}; RENAMES=${RENAMES:-0}
 TOTAL=$((CREATES + DELETES + RENAMES))
 
 if [[ "$TOTAL" -lt 2 ]]; then
@@ -37,7 +44,9 @@ if [[ "$TOTAL" -lt 2 ]]; then
 fi
 
 # Throttle: don't fire more than once per 10 minutes
-THROTTLE_FILE="/tmp/clavain-agents-md-refresh-${CLAUDE_SESSION_ID:-default}"
+_SID="$(clavain_session_id "$INPUT" default 2>/dev/null)" || _SID=""
+[[ -n "$_SID" ]] || _SID="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-default}}"
+THROTTLE_FILE="/tmp/clavain-agents-md-refresh-${_SID}"
 if [[ -f "$THROTTLE_FILE" ]]; then
     LAST=$(cat "$THROTTLE_FILE" 2>/dev/null || echo 0)
     NOW=$(date +%s)

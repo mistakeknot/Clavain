@@ -203,7 +203,7 @@ func cmdBeadClaim(args []string) error {
 		return fmt.Errorf("usage: bead-claim <bead_id> [session_id]")
 	}
 	beadID := args[0]
-	sessionID := os.Getenv("CLAUDE_SESSION_ID")
+	sessionID := sessionRegisterID()
 	if sessionID == "" {
 		sessionID = "unknown"
 	}
@@ -316,7 +316,7 @@ func cmdBeadRelease(args []string) error {
 	}
 
 	// Ownership check: only release if we own the claim
-	ourSession := os.Getenv("CLAUDE_SESSION_ID")
+	ourSession := sessionRegisterID()
 	if ourSession == "" {
 		ourSession = "unknown"
 	}
@@ -363,7 +363,7 @@ func cmdBeadHeartbeat(args []string) error {
 	}
 
 	// Only heartbeat if we own the claim
-	ourSession := os.Getenv("CLAUDE_SESSION_ID")
+	ourSession := sessionRegisterID()
 	if ourSession == "" {
 		ourSession = "unknown"
 	}

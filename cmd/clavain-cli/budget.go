@@ -582,7 +582,7 @@ func cmdRecordPhaseTokens(args []string) error {
 
 	// Try actual data from interstat (session-scoped billing tokens)
 	var actualTokens int64
-	sessionID := os.Getenv("CLAUDE_SESSION_ID")
+	sessionID := sessionRegisterID()
 	if sessionID != "" {
 		dbPath := os.Getenv("HOME") + "/.claude/interstat/metrics.db"
 		if _, err := os.Stat(dbPath); err == nil {

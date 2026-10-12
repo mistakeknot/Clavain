@@ -50,7 +50,7 @@ Use `timeout: 600000`.
 _db="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.clavain/interspect/interspect.db"
 if command -v sqlite3 &>/dev/null && [ -f "$_db" ]; then
   _ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  _session="${CLAUDE_SESSION_ID:-unknown}"
+  _session="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
   _project="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
   _seq=$(sqlite3 "$_db" "SELECT COALESCE(MAX(seq),0)+1 FROM evidence WHERE session_id='$_session';" 2>/dev/null || echo "1")
   # oodarc_phase tags which leg this evidence is about, so cross-session

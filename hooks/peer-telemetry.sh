@@ -25,12 +25,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RIG="$SCRIPT_DIR/../agent-rig.json"
 [[ -f "$RIG" ]] || exit 0
 
+# shellcheck source=hooks/lib.sh
+source "$SCRIPT_DIR/lib.sh" 2>/dev/null || true
+INPUT=""
+[[ -t 0 ]] || INPUT="$(cat 2>/dev/null || true)"
+
 peers_detected="[]"
 if command -v jq &>/dev/null; then
     peers_detected=$(jq -c '[.plugins.peers[]?.source]' "$RIG" 2>/dev/null || echo "[]")
 fi
 
-SID="${CLAUDE_SESSION_ID:-${CODEX_SESSION_ID:-unknown}}"
+SID="$(clavain_session_id "$INPUT" "" 2>/dev/null || true)"
+[[ -n "$SID" ]] || SID="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-unknown}}}"
 SID_HASH=$(printf '%s' "$SID" | sha256sum | cut -c1-12)
 
 TS=$(date +%s)

@@ -228,7 +228,20 @@ VERIFY_JSON=$(bash "$VERIFY_HELPER" solwend-abcd mk-1234 \
 |---|---|---|
 | `ok` | open | usable |
 | `warn` | `in_progress` / `blocked` | usable only if the goal is to FINISH or UNBLOCK it — and the block must say which, and name what it waits on |
+| `warn` | open, but `has_notes` | **read `notes_excerpt` before citing.** A note may supersede the title (mk-ud80's notes opened "CLEARED MOST OF THIS" and it was ranked #2 off its title). Cite what the notes say the bead is now, or drop it |
+| `warn` | open, `age_days` past `CLAVAIN_NEXT_GOAL_STALE_DAYS` (30) | re-verify that the condition the title describes still holds; say the age in the rationale |
 | `disqualified` | `closed`, `deferred`, or no such bead | **drop it.** Do not cite it, not even with a caveat |
+
+Every entry also carries `updated_at`, `comment_count`, `has_notes` and
+`notes_excerpt`: the evidence the verifier read, surfaced so the reader can
+read it too.
+
+**Every candidate line cites a verified bead ID.** The Stop hook checks that
+the IDs the block cites are a subset of the IDs in the verify receipt, and
+that every numbered candidate carries an ID whose tracker the receipts know.
+A candidate with no ID ("Merge PR #26") cannot be verified now and cannot be
+re-found next session: file it and cite the ID, or write the degraded block
+(Step 4), which discloses that the candidates are improvised.
 
 **Any candidate whose verb is build / create / add must assert the artifact's
 absence** with `--path`. A bead's status cannot catch this: an epic can be
@@ -268,7 +281,7 @@ and the next session builds on it.
 ### This is checked, not merely requested
 
 `scripts/next-goal-verify.sh` leaves a receipt at
-`~/.cache/clavain/next-goal-verify/$CLAUDE_SESSION_ID.json`, and the Stop hook
+`~/.cache/clavain/next-goal-verify/<session id>.json`, and the Stop hook
 reads it (`next_goal_verification_warning` in
 `hooks/lib-next-goal-provenance.sh`). A block emitted with no receipt is flagged
 as unverified; a block emitted while the receipt lists disqualified candidates
@@ -317,7 +330,7 @@ consecutive goals went out unlinted from this path.
 ### This is checked, not merely requested
 
 `scripts/next-goal-candidates.sh` leaves a receipt at
-`~/.cache/clavain/next-goal-provenance/$CLAUDE_SESSION_ID.json` recording
+`~/.cache/clavain/next-goal-provenance/<session id>.json` recording
 whether any tracker answered. The Stop hook reads it
 (`hooks/lib-next-goal-provenance.sh`) and compares it against what you actually
 emitted. A block that omits the degradation disclosure is taken as claiming
@@ -358,6 +371,20 @@ self-contained free-text goal description. When the recommendation is a
 Remontoire promotion, identify it as coming from the canonical portfolio
 backlog in the `/goal` text so the next session does not assume the bead is
 stored in the current repository's tracker.
+
+**The `/goal` line is what the hook keys on.** A block is detected by a line
+that begins with `/goal ` and real text, within 40 lines of a "Next goal"
+heading, in this turn's assistant output. Indent it as shown, put it last, and
+never emit the template's `/goal <placeholder>` form as if it were a goal. The
+text follows goal-shape (`docs/guide-goal-shape.md`): `OUTCOME:` first, open
+calls under `GATE`, `DONE WHEN:` naming the observable condition. A goal that
+opens with merge / install / deploy / ship, or that asks the agent to merge a
+PR, is a landing chore or an mk-step, not a successor; the lint warns on both.
+
+Receipts are keyed on `CLAUDE_SESSION_ID`, falling back to
+`CLAUDE_CODE_SESSION_ID` (which the Bash tool exports). Run the helpers in
+the turn that emits the block: a receipt is a per-turn fact, and the hook
+flags a receipt older than this turn's prompt as STALE.
 
 Frame each candidate as a DRAFT CHARTER seed: the recommendation's /goal text
 must be lint-clean (`ic goal lint-condition`) and the block should note that
