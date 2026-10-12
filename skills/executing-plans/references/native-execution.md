@@ -69,19 +69,21 @@ a ruling you ledger. Then:
 
 - **Critical and Important:** fix them in one pass. Each fix gets a test that
   fails first, then passes, then a green suite; ledger
-  `Final: fixed <finding> — <test> RED→GREEN, suite <N>/<N>`. A finding you
-  leave is a `Final: Ruling:`. Then dispatch one scoped re-review of the fix
+  `Final: fixed <finding> — <test> RED→GREEN, suite <N>/<N>`. You may not
+  leave one with a ruling. Then dispatch one scoped re-review of the fix
   range with `../subagent-driven-development/re-review-prompt.md` on the same
   seat, passing the plan as the brief, the ledger's `Final:` lines as the
-  report and the final Critical/Important findings; it may not be you. No further rounds: its open findings become
-  `Final: Ruling:` lines.
+  report and the final Critical/Important findings; it may not be you. No
+  further rounds: a Critical or Important finding still open stops the run.
+  Ledger `Final review: escalated (<findings>)` and escalate it to a human as a
+  blocker, with the findings verbatim, each with its trigger and consequence.
 - **Minor:** ledger `Final: minor (deferred): <one-liner>`; do not fix it.
 
 ## Finish
 
 List every `Ruling:` line (with its cost if wrong) and every deferred minor in
 the final report. Once every Critical and Important finding is fixed and
-re-reviewed or ruled on, and the fixes are committed, delete
+re-reviewed clean, or a human has ruled on it, and the fixes are committed, delete
 this plan's workspace directory, then use `clavain:landing-a-change`.
 
 | Excuse | Reality |
