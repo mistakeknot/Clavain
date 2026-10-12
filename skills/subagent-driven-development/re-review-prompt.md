@@ -37,10 +37,12 @@ Task tool (general-purpose):
 
     ### Finding Verdicts
     - **[finding]** — ADDRESSED | NOT ADDRESSED, with file:line evidence.
-      Attempted is not addressed: the defect must be gone.
+      Attempted is not addressed: the defect must be gone. For NOT
+      ADDRESSED, name the trigger and consequence behind its severity.
 
     ### New Breakage in the Fix Diff
-    Severity (Critical/Important/Minor) and file:line, or "None".
+    Severity (Critical/Important/Minor) and file:line, or "None". For each,
+    name the trigger and the consequence that justify its severity.
 
     ### Out-of-Scope Observations
     Non-blocking; the controller defers them to the ledger. Or "None".
