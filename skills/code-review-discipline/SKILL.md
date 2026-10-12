@@ -46,6 +46,17 @@ After a rebase moves `REVIEWED_SHA` off the branch, give the reviewer `git range
 
 Run a full review again only when the fix range rewrites most of the change, a rebase changed the reviewed code, or the previous verdict rejected the design rather than listing fixable findings. Name the reason in the brief.
 
+### Converging the Loop
+
+Number review rounds per change, starting at 1 for the first review, and put the number in each brief. Late rounds mostly find defects that the previous round's fix introduced, and their severity is often overstated. So:
+
+- **Rounds 1–3:** fix every Critical and Important finding, as above.
+- **From round 4:** only Critical and Important findings justify another round. Before you fix one, check its severity against the reachable failure. A finding that needs two independent faults, sits on a path nothing reaches, or fails safe is Minor: record it as deferred instead of fixing it. Code that runs as root or handles secrets, credentials or money and credit accounting is the exception: there a Medium finding still blocks.
+- **Every fix after round 3** names the test that covers it, with the command and its output, and so does the round's brief.
+- **After round 5, stop the loop.** Adjudicate each open finding. Record wrong or overstated findings as rulings. Escalate load-bearing ones to a human, with the findings verbatim, as a blocker. Never land with an open Critical or Important finding. A further round needs that human's ruling.
+
+Subagent-driven development keeps its own per-task cap and breaker; this section governs every other review loop, cross-lab included.
+
 **Integration:**
 - Subagent-Driven Development: per task, its own `task-reviewer-prompt.md` over BASE..HEAD via `review-package`; this template for the final review only
 - Executing Plans: one whole-branch review after the last task

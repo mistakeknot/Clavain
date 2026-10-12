@@ -40,7 +40,11 @@ Task tool (general-purpose):
       Attempted is not addressed: the defect must be gone.
 
     ### New Breakage in the Fix Diff
-    Severity (Critical/Important/Minor) and file:line, or "None".
+    Severity (Critical/Important/Minor) and file:line, or "None". Rate
+    severity by the reachable failure and name its trigger. A defect that
+    needs two independent faults, sits on a path nothing reaches, or fails
+    safe is Minor, except in root-run, secret, credential or credit-accounting
+    code.
 
     ### Out-of-Scope Observations
     Non-blocking; the controller defers them to the ledger. Or "None".
