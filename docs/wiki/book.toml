@@ -1,0 +1,11 @@
+[book]
+title = "Clavain Wiki"
+description = "How Clavain works, written from its code and checked against it"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html.search]
+enable = true
