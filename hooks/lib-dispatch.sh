@@ -114,6 +114,15 @@ dispatch_log() {
 # drops to 1 ("in the weeds" protocol from cuisine agent).
 
 # Returns: count of beads awaiting review on stdout
+# Prints "true" when the named lane is paused. ic emits lane .metadata as a
+# JSON-encoded string (e.g. "{\"paused\":true}"); tolerate an object too in
+# case Intercore changes the emitter.
+_dispatch_lane_paused() {
+    ic lane status "$1" --json 2>/dev/null \
+        | jq -r '(.metadata | if type == "string" then (try fromjson catch {}) else . end) | .paused // empty' 2>/dev/null \
+        || true
+}
+
 _dispatch_review_pressure() {
     local pending=0
     if command -v bd &>/dev/null; then
@@ -236,7 +245,7 @@ dispatch_rescore() {
             _bead_labels=$(bd show "$bead_id" --json 2>/dev/null | jq -r '.labels[]? // empty' 2>/dev/null) || _bead_labels=""
             _bead_lane=$(echo "$_bead_labels" | grep -oP '^lane:\K.*' | head -1) || _bead_lane=""
             if [[ -n "$_bead_lane" ]]; then
-                _lane_paused=$(ic lane status "$_bead_lane" --json 2>/dev/null | jq -r '.metadata.paused // empty' 2>/dev/null) || _lane_paused=""
+                _lane_paused=$(_dispatch_lane_paused "$_bead_lane")
                 if [[ "$_lane_paused" == "true" ]]; then
                     dispatch_log "$session_id" "$bead_id" "0" "lane_paused:$_bead_lane"
                     continue

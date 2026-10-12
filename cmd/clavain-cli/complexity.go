@@ -259,12 +259,14 @@ func cmdClassifyComplexity(args []string) error {
 // tryComplexityOverride checks ic run status and bd state for a manual complexity override.
 // Returns the override string (numeric or legacy), or "" if none found.
 func tryComplexityOverride(beadID string) string {
-	// Try ic run status first — get the run for this bead
+	// Try ic run status first — ic has no --scope flag on run status, so
+	// resolve the bead's run ID and read that run.
 	if icAvailable() {
 		var run Run
-		err := runICJSON(&run, "run", "status", "--scope", beadID)
-		if err == nil && run.Complexity > 0 {
-			return strconv.Itoa(run.Complexity)
+		if runID, err := resolveRunID(beadID); err == nil {
+			if err := runICJSON(&run, "run", "status", runID); err == nil && run.Complexity > 0 {
+				return strconv.Itoa(run.Complexity)
+			}
 		}
 	}
 

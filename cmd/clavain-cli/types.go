@@ -1,5 +1,7 @@
 package main
 
+import "encoding/json"
+
 // Run represents an Intercore sprint run.
 type Run struct {
 	ID            string   `json:"id"`
@@ -19,13 +21,33 @@ type Run struct {
 	UpdatedAt     int64    `json:"updated_at"`
 }
 
-// BudgetResult from ic run budget.
+// BudgetResult from ic run budget --json. ic emits budget/used, with a null
+// budget (and a message) when none is set; UnmarshalJSON maps that onto the
+// TokenBudget/TokensUsed fields the callers read.
 type BudgetResult struct {
-	RunID       string `json:"run_id"`
-	TokenBudget int64  `json:"token_budget"`
-	TokensUsed  int64  `json:"tokens_used"`
-	Exceeded    bool   `json:"exceeded"`
-	WarnPct     int    `json:"warn_pct,omitempty"`
+	RunID       string
+	TokenBudget int64
+	TokensUsed  int64
+	Exceeded    bool
+	WarnPct     int
+}
+
+func (b *BudgetResult) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		RunID    string `json:"run_id"`
+		Budget   *int64 `json:"budget"`
+		Used     int64  `json:"used"`
+		Exceeded bool   `json:"exceeded"`
+		WarnPct  int    `json:"warn_pct"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*b = BudgetResult{RunID: raw.RunID, TokensUsed: raw.Used, Exceeded: raw.Exceeded, WarnPct: raw.WarnPct}
+	if raw.Budget != nil {
+		b.TokenBudget = *raw.Budget
+	}
+	return nil
 }
 
 // GateResult from ic gate check.
@@ -88,11 +110,11 @@ type TokenAgg struct {
 
 // RunAction from ic run action list.
 type RunAction struct {
-	Command  string `json:"command"`
-	Phase    string `json:"phase"`
-	Mode     string `json:"mode,omitempty"`
-	Priority int    `json:"priority,omitempty"`
-	Args     string `json:"args,omitempty"`
+	Command  string          `json:"command"`
+	Phase    string          `json:"phase"`
+	Mode     string          `json:"mode,omitempty"`
+	Priority int             `json:"priority,omitempty"`
+	Args     json.RawMessage `json:"args,omitempty"` // ic emits a JSON value, not a string
 }
 
 // RunAgent from ic run agent list.
@@ -102,7 +124,7 @@ type RunAgent struct {
 	AgentType string `json:"agent_type"`
 	Name      string `json:"name,omitempty"`
 	Status    string `json:"status"`
-	CreatedAt string `json:"created_at,omitempty"`
+	CreatedAt int64  `json:"created_at,omitempty"` // epoch seconds
 }
 
 // SprintState is the JSON output of sprint-read-state.

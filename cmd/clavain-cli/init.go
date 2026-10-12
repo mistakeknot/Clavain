@@ -287,9 +287,10 @@ func parseBDTitle(output string) string {
 func tryComplexityOverrideQuiet(beadID string) string {
 	if icAvailable() {
 		var run Run
-		err := runICJSONQuiet(&run, "run", "status", "--scope", beadID)
-		if err == nil && run.Complexity > 0 {
-			return strconv.Itoa(run.Complexity)
+		if runID, err := resolveRunIDQuiet(beadID); err == nil {
+			if err := runICJSONQuiet(&run, "run", "status", runID); err == nil && run.Complexity > 0 {
+				return strconv.Itoa(run.Complexity)
+			}
 		}
 	}
 	if bdAvailable() {
