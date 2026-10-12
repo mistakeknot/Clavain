@@ -37,7 +37,8 @@ Task tool (general-purpose):
 
     ### Finding Verdicts
     - **[finding]** — ADDRESSED | NOT ADDRESSED, with file:line evidence.
-      Attempted is not addressed: the defect must be gone.
+      Attempted is not addressed: the defect must be gone. For NOT
+      ADDRESSED, name the trigger and consequence behind its severity.
 
     ### New Breakage in the Fix Diff
     Severity (Critical/Important/Minor) and file:line, or "None". For each,

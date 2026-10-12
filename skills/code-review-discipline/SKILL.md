@@ -55,7 +55,7 @@ A review loop gets at most three fix rounds. Number the reviews per change, star
 - **Every escalated finding** names its trigger and its consequence, so the human can see which findings are overstated. A finding that needs two independent faults, or sits on a path nothing reaches, is often less severe than it is rated.
 - **A further round needs that human's ruling,** and the ruling names its scope. Never land with an open Critical or Important finding.
 
-Subagent-driven development keeps its own per-task cap and breaker; this section governs every other review loop, cross-lab included. The re-review template asks reviewers to name the trigger and consequence behind each severity in every round. That makes ratings checkable; it does not lower any finding.
+Subagent-driven development (its per-task loop and its final review) and executing-plans' final review keep their own fix and ruling procedures; this section governs every other review loop, cross-lab included. The re-review template asks reviewers to name the trigger and consequence behind each severity in every round. That makes ratings checkable; it does not lower any finding.
 
 **Integration:**
 - Subagent-Driven Development: per task, its own `task-reviewer-prompt.md` over BASE..HEAD via `review-package`; this template for the final review only
