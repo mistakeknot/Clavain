@@ -168,13 +168,33 @@ jq -e '(.fallback_chain[] | select(.profile_ref == "validation-kimi") | .profile
 # The floor applies to every expanded candidate, including the primary
 # itself -- crosslab-sol is the declared primary for cross-lab-review at
 # medium (mk ruling 2026-09-26), and a floored reason must still raise it.
-printf '%s\n' '{"reasons":["difficult-verification"],"rationale":"cross-lab floor check"}' > "$work/dv.json"
+printf '%s\n' '{"reasons":["capability-failure"],"rationale":"cross-lab floor check"}' > "$work/cf.json"
 ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
-  --producer-identity=claude-opus-5-5 --context-file="$work/dv.json" > "$work/floor-primary.json"
+  --producer-identity=claude-opus-5-5 --context-file="$work/cf.json" > "$work/floor-primary.json"
 jq -e '.profile_ref == "crosslab-sol" and .profile.reasoning_effort == "high"
   and (.effort_floors_applied[] | select(.profile_ref == "crosslab-sol") | .to == "high")' \
   "$work/floor-primary.json" >/dev/null \
   || { echo 'FAIL: floor did not raise the primary candidate itself'; exit 1; }
+
+# bead mk-qypaz: difficult-verification alone does not raise cross-lab-review.
+# The seat stays medium, the exemption is receipted, the reason still
+# classifies the decision, and validation (also Sol for Claude work) is still
+# raised by the same reason. Needs ic >= intercore d42c037.
+printf '%s\n' '{"reasons":["difficult-verification"],"rationale":"cross-lab exemption check"}' > "$work/dv.json"
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=cross-lab-review \
+  --producer-identity=claude-opus-5-5 --context-file="$work/dv.json" > "$work/dv-exempt.json"
+jq -e '.profile_ref == "crosslab-sol" and .profile.reasoning_effort == "medium"
+  and .effort_floors_exempted == ["difficult-verification"]
+  and (.classification_reasons | index("difficult-verification")) != null
+  and ((.effort_floors_applied // []) | length) == 0' \
+  "$work/dv-exempt.json" >/dev/null \
+  || { echo 'FAIL: difficult-verification raised cross-lab-review or was not receipted'; exit 1; }
+ic --json route dispatch --policy="$ROOT/config/routing.yaml" --role=validation \
+  --producer-identity=claude-opus-5-5 --context-file="$work/dv.json" > "$work/dv-validation.json"
+jq -e '.profile_ref == "validation-sol" and .profile.reasoning_effort == "high"
+  and .effort_floors_exempted == null' \
+  "$work/dv-validation.json" >/dev/null \
+  || { echo 'FAIL: the cross-lab-review exemption leaked into validation'; exit 1; }
 
 # Floors apply after cross-lab reordering too: Claude-produced work moves
 # validation-sol to the front (mk ruling 2026-09-24), and the floor must
