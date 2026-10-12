@@ -253,6 +253,20 @@ dispatch:
     difficult-verification: high
     capability-failure: high
 
+  # bead mk-qypaz: difficult-verification alone no longer raises the cross-lab
+  # review seat (crosslab-sol, medium). foundational-invariants and
+  # capability-failure still raise it, every other role keeps all three floors,
+  # and the reason still classifies the decision, so frontier requirements and
+  # reviewer independence are unchanged. Accepted cost: in the medium-vs-high
+  # replay sample, medium missed about 2 of 54 significant defects
+  # (replay recorded on the bead). RECEIPTS WATCH: decisions
+  # carry effort_floors_exempted: [difficult-verification]; compare their
+  # review recall with high-effort receipts so a recall drop is visible.
+  # Requires ic >= intercore d42c037 (older ic ignores the key and keeps the
+  # floor).
+  effort_floor_exemptions:
+    cross-lab-review: [difficult-verification]
+
   # mk ruling 2026-09-29 (mk-v4ao, from mk-51s7): every gpt-6-sol seat moves to
   # gpt-6.1-sol, each seat keeping its current effort (no effort cuts; lowering
   # effort is a separate ruling, mk-m201). Only Sol seats move: gpt-6-astra and
