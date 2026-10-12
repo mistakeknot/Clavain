@@ -325,7 +325,7 @@ original_child_ids=$(bd children "$epic_id" --json 2>/dev/null | jq -r '[.[].id]
 
 decomp_prediction=$(jq -n \
     --arg epic "$epic_id" \
-    --arg session "${CLAUDE_SESSION_ID:-unknown}" \
+    --arg session "${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}" \
     --argjson child_count "$child_count" \
     --argjson complexity_dist "$complexity_dist" \
     --argjson typical "$typical_p50" \

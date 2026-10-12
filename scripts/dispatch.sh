@@ -40,7 +40,7 @@ PHASE=""
 CONTEXT_GATEWAY_MODE="${CLAVAIN_CONTEXT_GATEWAY_MODE:-auto}"
 DISPATCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INTERBAND_DISPATCH_FILE=""
-DISPATCH_SESSION_ID="${CLAUDE_SESSION_ID:-}"
+DISPATCH_SESSION_ID="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
 
 # Source routing library (shared with model-routing command)
 # shellcheck source=lib-routing.sh

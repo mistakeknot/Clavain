@@ -107,7 +107,7 @@ but the sprint remains in `reflect` until its terminal ship step succeeds.
            # If this sprint worked on an epic that has a decomp_prediction,
            # emit the actuals for calibration.
            _sprint_id="<sprint_id>"
-           _session_id=$(cat /tmp/interstat-session-id 2>/dev/null || echo "${CLAUDE_SESSION_ID:-unknown}")
+           _session_id=$(cat /tmp/interstat-session-id 2>/dev/null || echo "${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}")
            _decomp_raw=$(bd state "$_sprint_id" decomp_prediction 2>/dev/null) || _decomp_raw=""
            if [[ -n "$_decomp_raw" ]] && [[ "$_decomp_raw" != *"no decomp_prediction"* ]]; then
                _epic_id=$(echo "$_decomp_raw" | jq -r '.epic // empty' 2>/dev/null) || _epic_id=""

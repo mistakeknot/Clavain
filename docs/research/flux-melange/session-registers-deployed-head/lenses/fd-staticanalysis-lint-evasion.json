@@ -1,0 +1,39 @@
+{
+  "id": "fd-staticanalysis-lint-evasion",
+  "kind": "base",
+  "parents": [],
+  "domain": "static analysis / CI lint-gate engineering (pattern-based custom lint rules and their evasion surface)",
+  "axioms": [
+    "A regex- or substring-based structural check enumerates FORMS, not MEANING; any semantically-equivalent form outside the enumerated set is invisible to it",
+    "A check's walked-roots list is a closed set; anything constructed, templated, generated, or vendored outside it is unchecked by definition",
+    "Developers route around a gate that produces false positives faster than they fix the gate, so a suppression mechanism -- formal or ad hoc -- is a de facto part of every static check's real behavior",
+    "A check that is not wired into a blocking CI step is advisory regardless of how correct its logic is",
+    "Cross-language codebases need per-language pattern sets; a pattern tuned for shell/jq syntax has no purchase on equivalent Python or other-language constructs"
+  ],
+  "primitives": [
+    "accepted-form pattern",
+    "walked root",
+    "bare read",
+    "suppression pragma",
+    "CI gate (blocking vs advisory)",
+    "same-expression vs same-file matching granularity"
+  ],
+  "failure_mode": [
+    "does not evaluate whether the underlying session-identity semantics the check protects are themselves correct, only whether the check can be gamed",
+    "not positioned to judge the rig check's git-blob-hashing correctness or drift severity policy",
+    "may flag theoretical evasion paths that are unlikely given this specific team's actual contribution patterns"
+  ],
+  "findings": [
+    "f-005",
+    "f-006",
+    "f-007",
+    "f-008",
+    "f-020",
+    "f-021",
+    "f-022",
+    "f-023",
+    "f-024",
+    "f-025",
+    "f-026"
+  ]
+}

@@ -160,8 +160,17 @@ fi
 PROVENANCE_WARNING=""
 if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
     source "${SCRIPT_DIR}/lib-next-goal-provenance.sh" 2>/dev/null || true
+    # The receipt key: the writers key on CLAUDE_SESSION_ID, else
+    # CLAUDE_CODE_SESSION_ID; stdin's .session_id is a third register. The
+    # library settles on whichever has a receipt (mk-hxgi). Sentinels and the
+    # loop breaker keep using SESSION_ID — only the receipt lookup is affected.
+    NEXT_GOAL_SESSION="$SESSION_ID"
+    if declare -F next_goal_session_key >/dev/null 2>&1; then
+        NEXT_GOAL_SESSION="$(next_goal_session_key "$SESSION_ID" 2>/dev/null || printf '%s' "$SESSION_ID")"
+        [[ -n "$NEXT_GOAL_SESSION" ]] || NEXT_GOAL_SESSION="$SESSION_ID"
+    fi
     if declare -F next_goal_provenance_warning >/dev/null 2>&1; then
-        PROVENANCE_WARNING="$(next_goal_provenance_warning "$SESSION_ID" "$RECENT" 2>/dev/null || true)"
+        PROVENANCE_WARNING="$(next_goal_provenance_warning "$NEXT_GOAL_SESSION" "$RECENT" 2>/dev/null || true)"
     fi
     # The verification audit — "is what you cited still true" — runs only when
     # provenance came back clean. Not to spare the noise: when no lookup ran at
@@ -170,7 +179,7 @@ if [[ ! -f ".claude/clavain.no-goalcadence" ]]; then
     # verification receipt as a side effect. Same subsumption argument the
     # provenance tier makes against goal-cadence, one level in.
     if [[ -z "$PROVENANCE_WARNING" ]] && declare -F next_goal_verification_warning >/dev/null 2>&1; then
-        PROVENANCE_WARNING="$(next_goal_verification_warning "$SESSION_ID" "$RECENT" 2>/dev/null || true)"
+        PROVENANCE_WARNING="$(next_goal_verification_warning "$NEXT_GOAL_SESSION" "$RECENT" 2>/dev/null || true)"
     fi
 fi
 

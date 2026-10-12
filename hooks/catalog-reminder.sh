@@ -20,9 +20,15 @@ esac
 
 # Source intercore wrappers (fail-safe: falls back to temp files)
 source "${BASH_SOURCE[0]%/*}/lib-intercore.sh" 2>/dev/null || true
+# shellcheck source=hooks/lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh" 2>/dev/null || true
 
 # One reminder per session (intercore sentinel or temp file fallback)
-_SID="${CLAUDE_SESSION_ID:-unknown}"
+# The stdin session_id first (mk-rd9f): CLAUDE_SESSION_ID is absent when the
+# start hook did not fire, and "unknown" would make every such session share
+# one sentinel.
+_SID="$(clavain_session_id "$INPUT" 2>/dev/null)" || _SID=""
+[[ -n "$_SID" ]] || _SID="${CLAUDE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-unknown}}"
 intercore_check_or_die "catalog_remind" "$_SID" 0
 
 BASENAME="$(basename "$FILE_PATH")"
