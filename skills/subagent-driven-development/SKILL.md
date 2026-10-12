@@ -21,7 +21,8 @@ the binding authority, the plan is its argument. Ledger each decision as
 for the stop list in `../executing-plans/SKILL.md`: destructive, security-
 sensitive or authority-needing external actions (merge, shared push, publish), a
 decision that changes authorized scope, missing information or authority, a
-checkpoint the plan or user requires, or a plan where every path is a guess.
+checkpoint the plan or user requires, a Critical or Important finding still
+open after the final re-review, or a plan where every path is a guess.
 
 ## When to Use
 
@@ -117,9 +118,13 @@ merge base with the default branch), then dispatch `clavain:code-review-discipli
 capable independent seat with the package, plan, spec, Review Focus and the
 ledger's deferred-minor, parked and `Ruling:` lines. If no independent reviewer
 can run, ledger `Final review: blocked (<reason>)` and keep the gate open.
-Findings get ONE fix dispatch with the whole list, one scoped re-review, and
-breaker-style adjudication of residuals; there is no second wave. Each item on
-the reviewer's "Declined to judge" list is a ruling you ledger.
+Findings get ONE fix dispatch with the whole list and one scoped re-review;
+there is no second wave. A Critical or Important finding still open after that
+re-review is not yours to rule on: ledger `Final review: escalated (<findings>)`,
+stop, and escalate it to a human as a blocker with the findings verbatim, each
+with its trigger and consequence. Residual Minors get breaker-style
+adjudication. Each item on the reviewer's "Declined to judge" list is a ruling
+you ledger.
 
 Report every ledger `Ruling:` line with its cost if wrong under "Rulings I made";
 a ruling that dies with the workspace was made in secret. Once the review is

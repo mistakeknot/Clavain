@@ -34,7 +34,8 @@ ask only for an irreversible or destructive operation, a security-sensitive
 action, a side effect outside the worktree that needs authority (merge, shared
 push, publish), a decision that changes authorized scope, missing information or
 authority (including an auth-gated interactive step), a checkpoint the plan or
-user explicitly requires, or a plan so broken that every path is a guess.
+user explicitly requires, a Critical or Important finding still open after the
+final review's re-review, or a plan so broken that every path is a guess.
 
 Verification blocks require a zero process exit as well as the declared
 expectation. Reject unknown expectation syntax; output text never overrides a
