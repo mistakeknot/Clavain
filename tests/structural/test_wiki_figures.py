@@ -39,10 +39,10 @@ def test_skill_count_and_skill_md():
 
 
 def test_named_skills_exist():
-    names = set(re.findall(r"`([a-z][a-z-]+)`", page("skills.md")))
+    names = set(re.findall(r"`([a-z][a-z0-9-]+)`", page("skills.md")))
     existing = {d.name for d in (ROOT / "skills").iterdir() if d.is_dir()}
-    # every backticked token that looks like a skill must be one
-    assert {"using-clavain", "ship", "lane"} <= names & existing
+    assert len(names) >= 10
+    assert names <= existing, names - existing
 
 
 def test_command_file_count():
@@ -51,7 +51,9 @@ def test_command_file_count():
 
 
 def test_named_commands_exist():
-    for cmd in re.findall(r"`/([a-z-]+)`", page("commands.md")):
+    cmds = re.findall(r"`/([a-z0-9-]+)`", page("commands.md"))
+    assert len(cmds) >= 10
+    for cmd in cmds:
         assert (ROOT / "commands" / f"{cmd}.md").is_file(), cmd
 
 
@@ -62,8 +64,8 @@ def test_hook_events_and_script_count():
     assert bold_numbers(text) == [len(hooks), len(scripts)]
     for event in hooks:
         assert f"`{event}`" in text
-    assert "`PreToolUse` %d" % len(hooks["PreToolUse"]) in text
-    assert "`PostToolUse` %d" % len(hooks["PostToolUse"]) in text
+    stated = dict(re.findall(r"`([A-Za-z]+)` (\d+)\b", text))
+    assert stated == {e: str(len(v)) for e, v in hooks.items()}
 
 
 def test_routing_sections_and_strikes():
@@ -72,7 +74,7 @@ def test_routing_sections_and_strikes():
     assert bold_numbers(text) == [len(cfg), cfg["reasoning"]["strikes"]]
     for section in cfg:
         assert f"`{section}`" in text
-    for model in cfg["reasoning"]["frontier_models"]:
-        assert f"`{model}`" in text
+    stated_models = set(re.findall(r"`((?:gpt|claude)-[a-z0-9.-]+)`", text))
+    assert stated_models == set(cfg["reasoning"]["frontier_models"])
     assert "five frontier reasons" in text
     assert len(cfg["reasoning"]["frontier_reasons"]) == 5

@@ -10,4 +10,4 @@ checked by `tests/structural/test_wiki_figures.py`, which runs in the normal
 structural suite; a change to the code that makes a page wrong fails the test.
 Pages mark each checked figure in bold.
 
-Status: private working document. It is not published anywhere.
+Status: working draft, built locally with mdBook; not hosted anywhere yet.
