@@ -48,14 +48,14 @@ Run a full review again only when the fix range rewrites most of the change, a r
 
 ### Converging the Loop
 
-Number review rounds per change, starting at 1 for the first review, and put the number in each brief. Late rounds mostly find defects that the previous round's fix introduced, and their severity is often overstated. So:
+A review loop gets at most three fix rounds. Number the reviews per change, starting at 1, and put the number in each brief.
 
-- **Rounds 1–3:** fix every Critical and Important finding, as above.
-- **From round 4:** only Critical and Important findings justify another round. Before you fix one, check its severity against the reachable failure: name the trigger and the consequence. If the consequence is minor, the finding is Minor; record it as deferred instead of fixing it. Common grounds are a trigger that needs two independent faults, or a path nothing reaches. A safe failure is Minor only when it also leaves legitimate use working: a service that safely refuses every request is still Important. This check never lowers a finding in code that runs as root or handles secrets, credentials, or money and credit accounting; there the reviewer's severity stands.
-- **Every fix after round 3** names the test that covers it, with the command and its output, and so does the round's brief.
-- **After round 5, stop the loop.** Adjudicate each open finding. Record wrong or overstated findings as rulings. Escalate load-bearing ones to a human, with the findings verbatim, as a blocker. Never land with an open Critical or Important finding. A further round needs that human's ruling.
+- **Reviews 1–3:** fix every Critical and Important finding, as above. Each fix names the test that covers it, with the command and its output, and the next brief carries that evidence. Late findings are mostly defects that the previous fix introduced.
+- **Review 4 only confirms** the third round of fixes, scoped to that fix range. If it finds nothing, the loop is done. Any finding stops the change: do not fix it in the loop. Escalate it to a human as a blocker, with the findings verbatim.
+- **Every escalated finding** names its trigger and its consequence, so the human can see which findings are overstated. A finding that needs two independent faults, or sits on a path nothing reaches, is often less severe than it is rated.
+- **A further round needs that human's ruling,** and the ruling names its scope. Never land with an open Critical or Important finding.
 
-Subagent-driven development keeps its own per-task cap and breaker; this section governs every other review loop, cross-lab included. In every round and loop, the re-review template asks reviewers to name the trigger and consequence behind each severity. That only makes the rating checkable; the round-4 check above is the only rule that defers a finding.
+Subagent-driven development keeps its own per-task cap and breaker; this section governs every other review loop, cross-lab included. The re-review template asks reviewers to name the trigger and consequence behind each severity in every round. That makes ratings checkable; it does not lower any finding.
 
 **Integration:**
 - Subagent-Driven Development: per task, its own `task-reviewer-prompt.md` over BASE..HEAD via `review-package`; this template for the final review only
