@@ -15,6 +15,16 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/startup.py'
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_git_above_tmp(tmp_path):
+    # startup.py refuses state dirs under ANY git worktree (real behavior, kept).
+    # A stray `.git` in an ancestor of tmp_path (e.g. /tmp/.git left by another
+    # process) turns ~20 unrelated tests red with an opaque error. Fail loudly
+    # and name the cause; do not skip, so the coverage is never silently lost.
+    stray = [str(p/'.git') for p in [tmp_path, *tmp_path.parents] if (p/'.git').exists()]
+    assert not stray, f'environment: ambient git dir above tmp_path breaks isolation: {stray}'
+
+
 def test_archive_ledger_preserves_bytes_and_hash(tmp_path):
     project = tmp_path/'project'; project.mkdir()
     state = tmp_path/'state'
@@ -69,18 +79,23 @@ def test_lock_contention_does_not_block_startup(tmp_path):
     # held lock adds (the supervisor waits 0.1 s for it) over an uncontended run
     # of the same command in a separate state dir, not the absolute wall time.
     quiet = tmp_path/'quiet'; quiet.mkdir(mode=0o700)
-    start = time.monotonic()
-    quiet_result = invoke(project, quiet, extra=('--telemetry',))
-    baseline = time.monotonic()-start
-    assert quiet_result.returncode == 0
     lock = state/'hook-health.lock'
     lock.touch(mode=0o600)
-    with lock.open('rb') as stream:
-        fcntl.flock(stream, fcntl.LOCK_EX)
+    # Interleave samples and compare minima: a single sample is dominated by
+    # scheduler noise on a loaded host, the minimum is not. The bound is unchanged.
+    quiet_times, held_times = [], []
+    for _ in range(3):
         start = time.monotonic()
-        result = invoke(project, state, extra=('--telemetry',))
-        assert time.monotonic()-start < baseline+1
-    assert result.returncode == 0
+        quiet_result = invoke(project, quiet, extra=('--telemetry',))
+        quiet_times.append(time.monotonic()-start)
+        assert quiet_result.returncode == 0
+        with lock.open('rb') as stream:
+            fcntl.flock(stream, fcntl.LOCK_EX)
+            start = time.monotonic()
+            result = invoke(project, state, extra=('--telemetry',))
+            held_times.append(time.monotonic()-start)
+        assert result.returncode == 0
+    assert min(held_times) < min(quiet_times)+1
     assert 'telemetry unavailable' in result.stdout
     assert len(result.stdout.encode()) <= 10000
     assert not (state/'hook-health.jsonl').exists()
