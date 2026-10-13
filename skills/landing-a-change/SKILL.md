@@ -159,6 +159,8 @@ git branch -d <branch>     # after a merge; after a typed discard, -D
 
 Git refuses to delete a branch that a worktree still has checked out, so the branch goes last. If the status check prints anything, do not remove the worktree. Show the files and ask whether to commit, move or delete them. Never pass `--force`: plain `git worktree remove` already deletes ignored files (logs, `.env`, local caches) without warning, and `--force` also discards untracked and modified files.
 
+Report outcome as three separate facts: code-ready, deployed, behavior-verified. For deployable bundles, deployed means `scripts/check-version-endpoint.sh` matched the expected commit; a capability marked off in `agents/development.md` (Capability State) is unavailable and cannot be reported deployed. Say "not deployed" or "not verified" when so.
+
 ## Step 6: Capture Learnings (Optional)
 
 Run `/clavain:compound` or note insights in project memory files.

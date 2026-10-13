@@ -61,4 +61,4 @@ git push
 
 ## Step 7: Confirm
 
-Report: commit hash + message, files changed, beads closed, push status.
+Report: commit hash + message, files changed, beads closed, push status. Also report code-ready, deployed and behavior-verified as separate facts; pushing is none of the last two. See `agents/development.md` (Release Reporting, Version Endpoint).
