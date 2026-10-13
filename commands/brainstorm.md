@@ -136,16 +136,17 @@ AskUserQuestion — one at a time.
 
 ### Phase 2: Explore Approaches
 
+**Optional deepen:** when the ask is complex (or C3+ if goal-form classified
+it), offer `/clavain:deepen` on it before proposing approaches, to name the
+practitioner method, rawest source, instruments and external evidence. Skip it
+if the user declines.
+
 Propose **2-3 concrete approaches** based on research and dialogue. For each:
 - Brief description (2-3 sentences)
 - Pros and cons
 - When best suited
 
 Lead with recommendation and rationale. Apply YAGNI — prefer simpler.
-
-**Optional deepen:** when the ask is C3 or above, offer `/clavain:deepen` on it
-before proposing approaches, to name the practitioner method, rawest source,
-instruments and external evidence. Skip it if the user declines.
 
 **Research and escalation:** for a bounded question, use one careful pass or
 `/interflux:flux-review`; do not turn ordinary discovery-shaped work into an

@@ -97,7 +97,7 @@ The condition also carries a `PREMISE` line at C3 and above (guide-goal-shape
 rule 6): the key assumption the goal rests on, and the cheapest test against
 raw data that would disprove it, such as "reproduce the claimed regression from
 the CI logs". The executor runs that test first. If it fails, the premise is
-disproven and the existing escalation rule applies: stop and report, do not
+disproven and the disproven-premise rule in `docs/canon/reasoning-routing.md` applies: stop and report, do not
 carry on with the original goal. At C1-C2 the line is optional. `ic goal
 lint-condition` has no rule for it, so Step 5 will not catch a missing one.
 

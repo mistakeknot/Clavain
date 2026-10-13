@@ -47,7 +47,7 @@ a command, an exit code, a bead close, an artifact state. Bound it:
 OUT: what is explicitly not in scope, with the ruling it follows from.
 ```
 
-## Five rules
+## Rules
 
 **1. State the outcome, not the mechanism.** The frontier tier writes goals;
 plans carry exact paths, signatures, and machine-checkable steps for a weaker
@@ -137,7 +137,8 @@ above and optional below.
 ## Outside judge
 
 Two warnings from `ic goal lint-condition` target a goal that only its producer
-can grade. Both are warnings, never errors.
+can grade. Both are warnings, never errors. They need an `ic` build that
+includes intercore#37; older builds do not emit them.
 
 - `self-graded`: DONE WHEN rests on wording like "reviewed" or "report
   written" and names no command, exit code, external tool or independent
