@@ -17,12 +17,15 @@ else
 fi
 export BODY="$body" WANT="$want" WANT_VERSION="$want_version" URL="$url"
 exec python3 -I - <<'PY'
-import json, os, sys
+import json, os, re, sys
 try:
     d = json.loads(os.environ["BODY"])
-    got, ver = str(d["commit"]), str(d["version"])
+    got, ver = d["commit"], d["version"]
+    if not (isinstance(got, str) and isinstance(ver, str) and ver
+            and re.fullmatch(r"[0-9a-fA-F]{7,64}", got)):
+        raise ValueError("bad field types or commit format")
 except (ValueError, KeyError, TypeError):
-    print(f"{os.environ['URL']}: payload lacks version/commit", file=sys.stderr); sys.exit(1)
+    print(f"{os.environ['URL']}: payload lacks string version and hex commit", file=sys.stderr); sys.exit(1)
 want, wv = os.environ["WANT"], os.environ["WANT_VERSION"]
 ok = len(want) >= 7 and len(got) >= 7 and (got.startswith(want) or want.startswith(got))
 if not ok:

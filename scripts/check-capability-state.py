@@ -30,7 +30,10 @@ def main(argv=None):
     a = p.parse_args(argv)
     try:
         caps = json.loads(Path(a.source).read_text())["capabilities"]
-        bad = [c for c in caps if c.get("state") not in STATES]
+        if not isinstance(caps, list):
+            raise ValueError("capabilities must be a list")
+        bad = [c for c in caps if not isinstance(c, dict) or c.get("state") not in STATES
+               or not isinstance(c.get("label"), str)]
         if bad:
             print(f"invalid state in source: {bad}", file=sys.stderr)
             return 2
@@ -38,7 +41,7 @@ def main(argv=None):
             print(render(caps))
             return 0
         text = Path(a.doc).read_text()
-    except (OSError, ValueError, KeyError) as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         print(f"unreadable input: {e}", file=sys.stderr)
         return 2
     m = re.search(re.escape(START) + r"\n(.*?)\n" + re.escape(END), text, re.S)

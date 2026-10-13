@@ -18,14 +18,24 @@ def test_repo_block_agrees_with_source(project_root):
     assert cap(project_root).returncode == 0
 
 
-def test_all_capabilities_default_off(project_root):
-    caps = json.loads((project_root / "config/capability-state.json").read_text())["capabilities"]
-    assert caps and all(c["state"] == "off" for c in caps)
+# Capabilities deliberately switched on. Add an id here in the same change that flips it.
+ALLOWED_ON = set()
+
+
+def load_source(project_root):
+    return json.loads((project_root / "config/capability-state.json").read_text())
+
+
+def test_capabilities_default_off_unless_allowed(project_root):
+    caps = load_source(project_root)["capabilities"]
+    assert caps and all(c["state"] == "off" for c in caps if c["id"] not in ALLOWED_ON)
 
 
 def test_drift_fails(project_root, tmp_path):
+    c = load_source(project_root)["capabilities"][0]
+    flipped = "off" if c["state"] == "on" else "on"
     doc = (project_root / "agents/development.md").read_text()
-    drifted = doc.replace("Gradual rollout: off.", "Gradual rollout: on.")
+    drifted = doc.replace(f"- {c['label']}: {c['state']}.", f"- {c['label']}: {flipped}.")
     assert drifted != doc
     p = tmp_path / "d.md"
     p.write_text(drifted)
@@ -34,8 +44,9 @@ def test_drift_fails(project_root, tmp_path):
 
 
 def test_source_flip_fails(project_root, tmp_path):
-    src = json.loads((project_root / "config/capability-state.json").read_text())
-    src["capabilities"][0]["state"] = "on"
+    src = load_source(project_root)
+    c = src["capabilities"][0]
+    c["state"] = "off" if c["state"] == "on" else "on"
     p = tmp_path / "s.json"
     p.write_text(json.dumps(src))
     assert cap(project_root, "--source", str(p)).returncode == 1
@@ -47,10 +58,20 @@ def test_missing_block_fails(project_root, tmp_path):
     assert cap(project_root, "--doc", str(p)).returncode == 1
 
 
-def test_invalid_state_is_input_error(project_root, tmp_path):
+@pytest.mark.parametrize("payload", [
+    {"capabilities": [{"label": "x", "state": "maybe"}]},
+    {"capabilities": [None]},
+    {"capabilities": ["off"]},
+    {"capabilities": {"a": 1}},
+    {"capabilities": [{"state": "off"}]},
+])
+def test_invalid_state_is_input_error(project_root, tmp_path, payload):
     p = tmp_path / "s.json"
-    p.write_text(json.dumps({"capabilities": [{"label": "x", "state": "maybe"}]}))
-    assert cap(project_root, "--source", str(p)).returncode == 2
+    p.write_text(json.dumps(payload))
+    r = cap(project_root, "--source", str(p))
+    assert r.returncode == 2
+    assert "invalid state in source" in r.stderr or "unreadable input" in r.stderr
+    assert "Traceback" not in r.stderr and "can't open file" not in r.stderr
 
 
 @pytest.fixture
@@ -84,3 +105,15 @@ def test_endpoint_bad_payload_and_fetch_failure(project_root, fetcher):
     assert ver(project_root, fetcher('{"version":"1"}'), "abcdef1").returncode == 1
     assert ver(project_root, fetcher("", fail=True), "abcdef1").returncode == 2
     assert ver(project_root, fetcher('{"version":"1","commit":"ab"}'), "ab").returncode == 1
+
+
+@pytest.mark.parametrize("body", [
+    '{"version":null,"commit":"abcdef1234567"}',
+    '{"version":{},"commit":1234567}',
+    '{"version":"1","commit":1234567}',
+    '{"version":"1","commit":"not-hex-commit"}',
+    '{"version":["1"],"commit":"abcdef1234567"}',
+])
+def test_endpoint_rejects_non_string_or_malformed_fields(project_root, fetcher, body):
+    r = ver(project_root, fetcher(body), "abcdef1")
+    assert r.returncode == 1 and "payload lacks" in r.stderr
