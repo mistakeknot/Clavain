@@ -80,7 +80,7 @@ evaluator can judge it from surfaced output: commands, exit codes, bead
 closes; bound it with "or stop after N turns") · Successor obligations.
 
 **The completion condition follows `docs/guide-goal-shape.md`** —
-OUTCOME / GATE n / DONE WHEN / OUT, and its four rules. Two of them bind
+OUTCOME / PREMISE / GATE n / DONE WHEN / OUT, and its rules. Two of them bind
 hardest on YOU as the drafter:
 
 - **State the outcome, not the mechanism.** Exact signatures, discriminant
@@ -89,6 +89,17 @@ hardest on YOU as the drafter:
   it" in a charter you drafted satisfies a canon gate with your own
   document. Carry the open call into the condition as a QUESTION; put your
   recommendation in the handoff message, not inside the goal.
+
+At C3 and above, offer `/clavain:deepen` on the draft before writing the
+charter. It is optional: the user may decline, and a decline needs no reason.
+
+The condition also carries a `PREMISE` line at C3 and above (guide-goal-shape
+rule 6): the key assumption the goal rests on, and the cheapest test against
+raw data that would disprove it, such as "reproduce the claimed regression from
+the CI logs". The executor runs that test first. If it fails, the premise is
+disproven and the disproven-premise rule in `docs/canon/reasoning-routing.md` applies: stop and report, do not
+carry on with the original goal. At C1-C2 the line is optional. `ic goal
+lint-condition` has no rule for it, so Step 5 will not catch a missing one.
 
 The condition also carries `WHO'S WAITING` (guide-goal-shape rule 5): the
 consumer whose capability changes when this lands, or `nobody` written out.

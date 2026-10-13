@@ -136,6 +136,11 @@ AskUserQuestion — one at a time.
 
 ### Phase 2: Explore Approaches
 
+**Optional deepen:** when the ask is complex (or C3+ if goal-form classified
+it), offer `/clavain:deepen` on it before proposing approaches, to name the
+practitioner method, rawest source, instruments and external evidence. Skip it
+if the user declines.
+
 Propose **2-3 concrete approaches** based on research and dialogue. For each:
 - Brief description (2-3 sentences)
 - Pros and cons

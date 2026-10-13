@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-29T23:24:57Z",
+  "generated": "2026-10-13T21:23:26Z",
   "counts": {
     "skills": 26,
     "agents": 6,
-    "commands": 57,
+    "commands": 58,
     "hooks": 22,
     "mcp_servers": 0,
     "review": 2,
@@ -203,6 +203,10 @@
     {
       "name": "debate",
       "description": "Run a structured Claude\u2194Codex debate before implementing a complex task"
+    },
+    {
+      "name": "deepen",
+      "description": "Rewrite an ask as a deeper version, not a bigger one: name the top practitioner's method, the rawest source, the real instruments and the external evidence that would prove the result"
     },
     {
       "name": "describe-pr",
