@@ -10,9 +10,12 @@ Beads mk-6ghz4 / mk-54hzc. Nothing in the dev server, the CI registry or hooks w
   and for a public mistakeknot/gensysven repo scan every commit the destination does not already
   have (from `git ls-remote` of the destination, not local refs). Findings block the push.
 - Audit: `~/.local/state/public-repo-guard/audit.log`; human overrides in `bypass.log`.
-- STRICT mode (`PUBLIC_REPO_GUARD_STRICT=1`, used by `git-autosync-promote.sh`) ignores the bypass,
-  blocks on any gh outage, and prints `PUBLIC_REPO_GUARD: SCANNED <n> commit(s)` or `NOT-PUBLIC`
-  on stdout only after a completed verdict. This is the interface a CI job should consume.
+- STRICT mode (`PUBLIC_REPO_GUARD_STRICT=1`, used by `git-autosync-promote.sh`) ignores the bypass and
+  prints `PUBLIC_REPO_GUARD: SCANNED <n> commit(s)` or `NOT-PUBLIC`
+  on stdout only after a completed verdict. STRICT does not by itself make a gh outage fatal: as of this
+  investigation the scan can still fall back to cached public/private visibility during an outage and emit
+  `SCANNED` with exit 0 (see the unchecked-push evidence below). A CI job must therefore treat the
+  `SCANNED`/`NOT-PUBLIC` line as necessary but not sufficient until the guard fails closed in STRICT mode.
 - `rig-public-guard-unchecked.py` (run daily by `rig-health-check.sh`) fails on any `unchecked-*` line.
 
 ## Running it in the CI service (proposal, design choice)
@@ -29,7 +32,7 @@ mistakeknot/gensysven repo (visibility read from the GitHub API at job start, ne
    config, so it needs a small seam); (b) a thin wrapper that runs gitleaks and
    `public-repo-scan.py` directly over the range (smaller, but a second copy of the plumbing to keep in sync).
    Recommend (a) with a `PUBLIC_REPO_GUARD_RANGE` seam, so there is one implementation.
-4. Pass criteria: exit 0 and the `SCANNED`/`NOT-PUBLIC` line. A gh outage fails the job (STRICT), never passes it.
+4. Pass criteria: exit 0 and the `SCANNED`/`NOT-PUBLIC` line. Whether a gh outage fails the job depends on the guard failing closed in STRICT mode, which is not yet true (see above); until it is, the CI job should also fail when the audit line records an `unchecked-*` outcome.
 5. Pin the dotfiles `cloud/` revision (scripts, patterns, gitleaks config) by sha in the registry row,
    so a push cannot weaken the rules that judge it; allowlist `.public-hygiene-allow` is already read
    from the destination's existing commit.
