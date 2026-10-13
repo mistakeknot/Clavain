@@ -185,3 +185,17 @@ func TestLeaseModelSequence(t *testing.T) {
 		}
 	}
 }
+
+func TestParseLeaseGen(t *testing.T) {
+	ok := map[string]int64{"": 0, "(no claim_gen state set)": 0, "0": 0, "7": 7, " 3 ": 3}
+	for in, want := range ok {
+		if got, err := parseLeaseGen(in); err != nil || got != want {
+			t.Errorf("%q: got %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"garbage", "-1", "1.5", "0x2"} {
+		if _, err := parseLeaseGen(in); err == nil {
+			t.Errorf("%q: want error", in)
+		}
+	}
+}

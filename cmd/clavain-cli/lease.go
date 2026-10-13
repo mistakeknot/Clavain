@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -104,6 +105,21 @@ func leaseRelease(l Lease, holder string, fence int64) (Lease, error) {
 		return l, err
 	}
 	return Lease{Holder: "", Gen: l.Gen, ExpiresAt: 0}, nil
+}
+
+// parseLeaseGen validates a raw claim_gen label. Absent ("" or a bd "(no ...)"
+// sentinel) is generation 0; a present value must be a non-negative integer.
+// Malformed values are an error so they can never reset the fence to 1.
+func parseLeaseGen(raw string) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "(no ") {
+		return 0, nil
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("malformed claim generation %q", raw)
+	}
+	return n, nil
 }
 
 // leaseFromLegacy reads pre-existing claim labels into a Lease without

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -253,5 +254,102 @@ func TestClaimGenReadErrorFailsClosed(t *testing.T) {
 	}
 	if after := fakeLabel(t, state, "claimed_by"); after != before {
 		t.Fatalf("claimed_by changed %q -> %q", before, after)
+	}
+}
+
+func TestLockBeadClaimUsesSameOwner(t *testing.T) {
+	var calls [][]string
+	old := lockICRunner
+	lockICRunner = func(args ...string) ([]byte, error) {
+		calls = append(calls, append([]string(nil), args...))
+		return nil, nil
+	}
+	defer func() { lockICRunner = old }()
+
+	unlock, err := lockBeadClaim("test-owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	if len(calls) != 2 || calls[0][1] != "acquire" || calls[1][1] != "release" {
+		t.Fatalf("calls = %v", calls)
+	}
+	ownerOf := func(args []string) string {
+		for _, a := range args {
+			if strings.HasPrefix(a, "--owner=") {
+				return a
+			}
+		}
+		return ""
+	}
+	a, r := ownerOf(calls[0]), ownerOf(calls[1])
+	if a == "" || a != r {
+		t.Fatalf("acquire owner %q, release owner %q: must be identical and non-empty", a, r)
+	}
+}
+
+func TestMalformedClaimGenRejected(t *testing.T) {
+	state := fakeBD(t)
+	const bead = "test-bad-gen"
+	fallbackUnlock("bead-claim", bead)
+	t.Setenv("CLAUDE_SESSION_ID", "s1")
+	for _, bad := range []string{"garbage", "-3", "1.5"} {
+		os.WriteFile(filepath.Join(state, "claim_gen"), []byte(bad), 0o644)
+		os.WriteFile(filepath.Join(state, "claimed_by"), []byte("released"), 0o644)
+		if err := cmdBeadClaim([]string{bead, "s2"}); err == nil {
+			t.Errorf("claim_gen %q: want error", bad)
+		}
+		if g := fakeLabel(t, state, "claim_gen"); g != bad {
+			t.Errorf("claim_gen %q rewritten to %q", bad, g)
+		}
+		if by := fakeLabel(t, state, "claimed_by"); by != "released" {
+			t.Errorf("claimed_by changed to %q", by)
+		}
+	}
+}
+
+func TestRejectedFencedReleaseChangesNothing(t *testing.T) {
+	state := fakeBD(t)
+	const bead = "test-rel-reject"
+	fallbackUnlock("bead-claim", bead)
+	t.Setenv("CLAUDE_SESSION_ID", "s1")
+	if err := cmdBeadClaim([]string{bead, "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdBeadRelease([]string{bead, "--fence=0", "--failure-class=retriable"}); err == nil {
+		t.Fatal("stale fence release must fail")
+	}
+	if fc := fakeLabel(t, state, "failure_class"); fc != "" {
+		t.Fatalf("rejected release wrote failure_class %q", fc)
+	}
+	if by := fakeLabel(t, state, "claimed_by"); by != "s1" {
+		t.Fatalf("claimed_by = %q, want s1", by)
+	}
+}
+
+func TestFencedReleasePropagatesUpdateError(t *testing.T) {
+	state := fakeBD(t)
+	const bead = "test-rel-uperr"
+	fallbackUnlock("bead-claim", bead)
+	t.Setenv("CLAUDE_SESSION_ID", "s1")
+	if err := cmdBeadClaim([]string{bead, "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	// Make only `bd update` fail from now on.
+	bd := filepath.Join(filepath.Dir(state), "bin", "bd")
+	b, _ := os.ReadFile(bd)
+	patched := strings.Replace(string(b), "update)\n", "update)\n  exit 1 ;;\nxupdate)\n", 1)
+	if err := os.WriteFile(bd, []byte(patched), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdBeadRelease([]string{bead, "--fence=1"}); err == nil {
+		t.Fatal("fenced release must report the failed bd update")
+	}
+	if by := fakeLabel(t, state, "claimed_by"); by != "s1" {
+		t.Fatalf("holder = %q, want s1 still held", by)
+	}
+	// Unfenced callers keep best-effort semantics.
+	if err := cmdBeadRelease([]string{bead}); err != nil {
+		t.Fatalf("unfenced release: %v", err)
 	}
 }

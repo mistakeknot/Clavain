@@ -251,15 +251,22 @@ var leaseReadHook func()
 // lock) and returns its unlock func. Every read/check/write transaction on a
 // bead lease (acquire, heartbeat, release) must run under it.
 func lockBeadClaim(beadID string) (func(), error) {
-	_, lockErr := runIC("lock", "acquire", "bead-claim", beadID, "--timeout=500ms")
+	// ic derives the owner from its own PID by default, and each runIC call is
+	// a separate process, so release would never match acquire. Pass one
+	// explicit owner to both.
+	owner := fmt.Sprintf("clavain-bead-claim:%d", os.Getpid())
+	_, lockErr := lockICRunner("lock", "acquire", "bead-claim", beadID, "--timeout=500ms", "--owner="+owner)
 	if lockErr != nil {
 		if err := fallbackLock("bead-claim", beadID); err != nil {
 			return nil, fmt.Errorf("bead-claim: lock contention for %s", beadID)
 		}
 		return func() { fallbackUnlock("bead-claim", beadID) }, nil
 	}
-	return func() { _, _ = runIC("lock", "release", "bead-claim", beadID) }, nil
+	return func() { _, _ = lockICRunner("lock", "release", "bead-claim", beadID, "--owner="+owner) }, nil
 }
+
+// lockICRunner is the ic invoker used by lockBeadClaim; tests replace it.
+var lockICRunner = runIC
 
 // readBeadLease loads the current lease from bd labels (additive: claim_gen is
 // optional) and returns the raw label values so writers can strip them. A
@@ -291,6 +298,9 @@ func readBeadLease(beadID string, now int64) (Lease, string, string, string, err
 	}
 	if leaseReadHook != nil {
 		leaseReadHook()
+	}
+	if _, err := parseLeaseGen(gen); err != nil {
+		return Lease{}, "", "", "", fmt.Errorf("%s of %s: %w", leaseGenLabel, beadID, err)
 	}
 	return leaseFromLegacy(by, at, gen, now), by, at, gen, nil
 }
@@ -359,10 +369,6 @@ func cmdBeadRelease(args []string) error {
 			failureClass = strings.TrimPrefix(arg, "--failure-class=")
 		}
 	}
-	if failureClass != "" {
-		_, _ = runBDQuiet("set-state", beadID, "failure_class="+failureClass)
-	}
-
 	if !bdAvailable() {
 		return nil
 	}
@@ -395,6 +401,11 @@ func cmdBeadRelease(args []string) error {
 		}
 	}
 
+	// Validation passed: only now may the release mutate anything.
+	if failureClass != "" {
+		_, _ = runBDQuiet("set-state", beadID, "failure_class="+failureClass)
+	}
+
 	// Build atomic update: remove old labels, add sentinel labels. The
 	// generation is preserved so the next acquire gets gen+1.
 	updateArgs := []string{"update", beadID}
@@ -408,7 +419,10 @@ func cmdBeadRelease(args []string) error {
 		"--add-label", "claimed_by:released",
 		"--add-label", "claimed_at:0",
 	)
-	_, _ = runBD(updateArgs...)
+	if _, err := runBD(updateArgs...); err != nil && hasFence {
+		// A fenced caller relies on success meaning the holder is gone.
+		return fmt.Errorf("bead-release: bd update failed for %s: %w", beadID, err)
+	}
 	return nil
 }
 
