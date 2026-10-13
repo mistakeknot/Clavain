@@ -1,6 +1,8 @@
 package records
 
 import (
+	"errors"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -306,5 +308,38 @@ func TestDigestSkipsOversizedLine(t *testing.T) {
 	}
 	if d.Turns != 1 || d.States["done"] != 1 {
 		t.Fatalf("digest = %+v, want one done turn", d)
+	}
+}
+
+type failAfter struct {
+	data []byte
+	err  error
+}
+
+func (f *failAfter) Read(p []byte) (int, error) {
+	if len(f.data) == 0 {
+		return 0, f.err
+	}
+	n := copy(p, f.data)
+	f.data = f.data[n:]
+	return n, nil
+}
+
+func TestDigestReadErrorsPropagate(t *testing.T) {
+	boom := errors.New("boom")
+	good := `{"version":"0.1","kind":"turn","session":"s","turn_id":"s:1","at":"2026-10-13T09:00:00Z","state":"done"}` + "\n"
+	for name, data := range map[string]string{
+		"ordinary":      good,
+		"oversized64k":  strings.Repeat("x", 64*1024),
+		"oversized200k": strings.Repeat("x", 200*1024),
+	} {
+		d := Digest{States: map[string]int{}, Stops: map[string]int{}, Friction: map[string]int{}}
+		if _, err := digestFrom(d, &failAfter{data: []byte(data), err: boom}); !errors.Is(err, boom) {
+			t.Fatalf("%s: err = %v, want boom", name, err)
+		}
+	}
+	d := Digest{States: map[string]int{}, Stops: map[string]int{}, Friction: map[string]int{}}
+	if _, err := digestFrom(d, &failAfter{data: []byte(good), err: io.EOF}); err != nil {
+		t.Fatalf("EOF must be clean: %v", err)
 	}
 }

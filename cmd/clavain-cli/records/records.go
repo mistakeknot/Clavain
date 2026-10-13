@@ -204,10 +204,16 @@ func BuildDigest(dir, day string) (Digest, error) {
 		return d, err
 	}
 	defer f.Close()
+	return digestFrom(d, f)
+}
+
+// digestFrom folds the JSONL stream r into d. Oversized lines are dropped; any
+// read error other than EOF is returned so a partial digest is never persisted.
+func digestFrom(d Digest, r io.Reader) (Digest, error) {
 	sessions := map[string]bool{}
 	type turnKey struct{ session, id string }
 	turns := map[turnKey]bool{}
-	rd := bufio.NewReaderSize(f, 64*1024)
+	rd := bufio.NewReaderSize(r, 64*1024)
 	for {
 		line, rerr := rd.ReadSlice('\n')
 		if rerr == bufio.ErrBufferFull {
@@ -216,6 +222,9 @@ func BuildDigest(dir, day string) (Digest, error) {
 				_, rerr = rd.ReadSlice('\n')
 			}
 			if rerr != nil {
+				if rerr != io.EOF {
+					return d, rerr
+				}
 				break
 			}
 			continue
