@@ -143,6 +143,10 @@ Propose **2-3 concrete approaches** based on research and dialogue. For each:
 
 Lead with recommendation and rationale. Apply YAGNI — prefer simpler.
 
+**Optional deepen:** when the ask is C3 or above, offer `/clavain:deepen` on it
+before proposing approaches, to name the practitioner method, rawest source,
+instruments and external evidence. Skip it if the user declines.
+
 **Research and escalation:** for a bounded question, use one careful pass or
 `/interflux:flux-review`; do not turn ordinary discovery-shaped work into an
 adaptive loop. Use `/interflux:flux-melange <research inputs or target dir>

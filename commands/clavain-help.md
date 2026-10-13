@@ -100,6 +100,7 @@ description: Show Clavain commands organized by daily drivers first, then by wor
 | `/clavain:next-goal` | Propose leverage-ranked successor goals |
 |---|---|
 | `/clavain:goal-form` | Collaborative goal-formation ritual |
+| `/clavain:deepen` | Rewrite an ask as a deeper version, not a bigger one |
 | `/clavain:campaign` | Orchestrate epic execution across phases |
 | `/clavain:bead-sweep` | Find stale beads already implemented |
 | `/clavain:sprint-dag` | Visualize sprint execution as a DAG |

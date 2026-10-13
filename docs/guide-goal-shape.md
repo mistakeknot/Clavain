@@ -28,6 +28,10 @@ OUTCOME: what is true when this is done, and what is true now that
 makes it worth doing. Two or three sentences. Numbers if you have
 them.
 
+PREMISE (required at C3 and above): the key assumption this goal rests
+on, and the cheapest test against raw data that would disprove it. The
+executor runs that test first; if it fails, stop and report.
+
 WHO'S WAITING: the consumer that can do something new once this
 lands, and what they cannot do until it does. "nobody" is a
 permitted answer and has to be written down, never left off.
@@ -119,6 +123,30 @@ The serving map is `docs/serving-map.yaml` by convention; jawnomicon's is
 is not a blocker — answer from what you know and say which it was. `WHO'S
 WAITING: nobody — no consumer registry in this repo` is a complete answer. What
 it must not become is silence.
+
+**6. Name the premise, and the test that would break it.** `PREMISE` is the one
+line that can stop the goal before any work is done. It states the belief the
+goal rests on ("onboarding is where churn happens") and the cheapest check
+against raw data that would falsify it ("reproduce the churn split from the
+event table"). Run that check first. A failed check is a disproven premise:
+stop and report instead of building on it. The line is required at C3 and
+above and optional below.
+
+*`ic goal lint-condition` does not check this line.*
+
+## Outside judge
+
+Two warnings from `ic goal lint-condition` target a goal that only its producer
+can grade. Both are warnings, never errors.
+
+- `self-graded`: DONE WHEN rests on wording like "reviewed" or "report
+  written" and names no command, exit code, external tool or independent
+  reviewer. Add a check the producer cannot pass by asserting it.
+- `no bar`: OUTCOME has no number or comparison. State a measurable bar, even a
+  stretch one.
+
+Both skip a goal that omits the section, and both are heuristics: if the goal
+legitimately needs the wording, say why in the message around the goal.
 
 ## What stays allowed
 
