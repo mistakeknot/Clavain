@@ -142,12 +142,13 @@ includes intercore#38; builds with only intercore#37 emit a narrower
 `self-graded`, and older builds emit neither.
 
 - `self-graded`: DONE WHEN names only artifacts the producer creates
-  (committed, pushed, bead closed, report written, file exists). A command,
-  test or reviewer counts only with its result: "`make check` exits 0", "tests
-  pass", "a cross-lab review passed", "reviewed by an independent reviewer".
-  Naming one is not enough, so "`make report` writes the report" and "review
-  checklist file exists" still warn. Add a check the producer cannot pass by
-  asserting it.
+  (committed, pushed, bead closed, report written, file exists). Naming a
+  command, test or review is not enough. It counts with a result ("`make
+  check` exits 0", "tests pass", "a cross-lab review passed"), a run ("the
+  regression tests run in CI"), or an outside reviewer ("reviewed by an
+  independent reviewer", "reviewed by a human"). So "`make report` writes the
+  report" and "review checklist file exists" still warn. Add a check the
+  producer cannot pass by asserting it.
 - `no bar`: OUTCOME has no number, comparison or universal (every, zero,
   identical). State a measurable bar, even a stretch one.
 
