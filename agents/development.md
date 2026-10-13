@@ -10,6 +10,34 @@
 - The command commits and pushes both plugin and marketplace repos.
 - For routine updates, use patch bumps (`0.6.x -> 0.6.x+1`).
 
+## Capability State
+
+Every deployment or automation capability defaults to off. Source of truth: `config/capability-state.json`; `scripts/check-capability-state.py` fails when this block disagrees with it (render with `--render`). Change both in the same PR.
+
+<!-- capability-state:start -->
+- Automatic production deploy: off.
+- Automatic stage deploy: off.
+- Automatic rollback after promotion: off.
+- Provisioned canary tenant: off.
+- Gradual rollout: off.
+
+Off means unavailable for operational use, even if code or tests exist.
+<!-- capability-state:end -->
+
+## Release Reporting
+
+Report three facts separately, never merged into one "shipped" word:
+
+- **Code-ready:** merged or committed, checks green at the exact commit.
+- **Deployed:** the target serves that commit (read back, see below), not merely that a deploy ran.
+- **Behavior-verified:** the user-visible outcome was observed on the deployed target, signed out where relevant.
+
+A capability marked off cannot be claimed as deployed or verified. State "not deployed" or "not verified" plainly instead of inferring it from green status.
+
+## Version Endpoint
+
+Every deployable bundle serves `/.well-known/<project>/version` as JSON with `version` and `commit`. After deploy, run `scripts/check-version-endpoint.sh <base-url> <project> <expected-commit> [expected-version]`; exit 0 is the evidence for "deployed".
+
 ## Validation Checklist
 
 When making changes, verify:

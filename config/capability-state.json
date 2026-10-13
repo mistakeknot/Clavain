@@ -1,0 +1,11 @@
+{
+  "$comment": "Machine-readable source for the capability-state block in agents/development.md. Every deployment/automation capability defaults to off. Off means unavailable for operational use, even if code or tests exist. Flip a value here and regenerate the block in the same change.",
+  "version": 1,
+  "capabilities": [
+    {"id": "automatic-production-deploy", "label": "Automatic production deploy", "state": "off"},
+    {"id": "automatic-stage-deploy", "label": "Automatic stage deploy", "state": "off"},
+    {"id": "automatic-rollback", "label": "Automatic rollback after promotion", "state": "off"},
+    {"id": "canary-tenant", "label": "Provisioned canary tenant", "state": "off"},
+    {"id": "gradual-rollout", "label": "Gradual rollout", "state": "off"}
+  ]
+}

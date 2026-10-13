@@ -76,3 +76,5 @@ Never push without passing tests. Never close before push. Never `git add .`. Ne
 ---
 
 *For detailed integration points or common mistakes, read SKILL.md.*
+
+Report code-ready, deployed and behavior-verified as separate facts; deployed needs `scripts/check-version-endpoint.sh` to match the commit, and a capability marked off (`agents/development.md`) is unavailable.
