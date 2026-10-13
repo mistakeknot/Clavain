@@ -69,6 +69,40 @@ type Ask struct {
 	State   State  `json:"state"`
 }
 
+// clone returns a copy of a that shares no memory with it (DueBy is a pointer),
+// so callers and the journal can never mutate each other's deadlines.
+func clone(a Ask) Ask {
+	if a.DueBy != nil {
+		d := *a.DueBy
+		a.DueBy = &d
+	}
+	return a
+}
+
+func cloneAll(in []Ask) []Ask {
+	out := make([]Ask, len(in))
+	for i, a := range in {
+		out[i] = clone(a)
+	}
+	return out
+}
+
+// checkIDs rejects empty and duplicate ids: an id must name exactly one ask,
+// or Ack and Reply would strand the later entry.
+func checkIDs(a []Ask) error {
+	seen := make(map[string]struct{}, len(a))
+	for _, x := range a {
+		if x.ID == "" {
+			return errors.New("asks: ask with empty id")
+		}
+		if _, dup := seen[x.ID]; dup {
+			return fmt.Errorf("asks: duplicate ask id %q", x.ID)
+		}
+		seen[x.ID] = struct{}{}
+	}
+	return nil
+}
+
 // Ports abstract persistence and time.
 type Ports struct {
 	Load func() ([]Ask, error)
@@ -92,7 +126,10 @@ func Open(p Ports) (*Journal, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Journal{ports: p, entries: append([]Ask(nil), e...)}, nil
+	if err := checkIDs(e); err != nil {
+		return nil, err
+	}
+	return &Journal{ports: p, entries: cloneAll(e)}, nil
 }
 
 func (j *Journal) persist(next []Ask) error {
@@ -122,9 +159,9 @@ func (j *Journal) advance(i int, e Event) (Ask, error) {
 	next := append([]Ask(nil), j.entries...)
 	next[i] = a
 	if err := j.persist(next); err != nil {
-		return a, err
+		return clone(a), err
 	}
-	return a, nil
+	return clone(a), nil
 }
 
 // Record adds a new pending ask and returns immediately. SentAt is stamped
@@ -142,12 +179,13 @@ func (j *Journal) Record(a Ask) (Ask, error) {
 	if a.SentAt == 0 {
 		a.SentAt = j.ports.Now().UnixMilli()
 	}
+	a = clone(a)
 	a.State = Pending
 	next := append(append([]Ask(nil), j.entries...), a)
 	if err := j.persist(next); err != nil {
-		return a, err
+		return clone(a), err
 	}
-	return a, nil
+	return clone(a), nil
 }
 
 // Reply matches an inbound reply (replyTo id from sender did) to an open ask
@@ -206,7 +244,7 @@ func (j *Journal) Open() []Ask {
 	var out []Ask
 	for _, a := range j.entries {
 		if a.State != Closed {
-			out = append(out, a)
+			out = append(out, clone(a))
 		}
 	}
 	sort.SliceStable(out, func(x, y int) bool {
@@ -244,6 +282,9 @@ func Unmarshal(b []byte) ([]Ask, error) {
 		if _, ok := transitions[x.State]; !ok {
 			return nil, fmt.Errorf("asks: invalid state %q for %q", x.State, x.ID)
 		}
+	}
+	if err := checkIDs(a); err != nil {
+		return nil, err
 	}
 	return a, nil
 }

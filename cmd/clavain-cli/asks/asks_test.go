@@ -272,3 +272,37 @@ func TestFormatReason(t *testing.T) {
 		t.Fatal("relayed copy wakes")
 	}
 }
+
+func TestDeadlinePointersAreNotShared(t *testing.T) {
+	f := &fakeStore{now: time.UnixMilli(1000)}
+	j, _ := Open(f.ports())
+	due := int64(5000)
+	got, _ := j.Record(Ask{ID: "a", Did: "d", DueBy: &due})
+	due = 0        // caller mutates its input
+	*got.DueBy = 0 // and the returned snapshot
+	*j.Open()[0].DueBy = 0
+	f.now = time.UnixMilli(2000)
+	if n, _ := j.Nudges(); len(n) != 0 {
+		t.Fatalf("journal deadline changed through a caller pointer: %v", n)
+	}
+	f.now = time.UnixMilli(5000)
+	if n, _ := j.Nudges(); len(n) != 1 {
+		t.Fatal("ask must nudge at its original deadline")
+	}
+}
+
+func TestDuplicateAndEmptyPersistedIDsRejected(t *testing.T) {
+	dup := []Ask{{ID: "a", State: Pending}, {ID: "a", State: Pending}}
+	f := &fakeStore{data: dup, now: time.UnixMilli(1)}
+	if _, err := Open(f.ports()); err == nil {
+		t.Fatal("Open must reject duplicate ids")
+	}
+	b, _ := Marshal(dup)
+	if _, err := Unmarshal(b); err == nil {
+		t.Fatal("Unmarshal must reject duplicate ids")
+	}
+	b, _ = Marshal([]Ask{{ID: "", State: Pending}})
+	if _, err := Unmarshal(b); err == nil {
+		t.Fatal("Unmarshal must reject an empty id")
+	}
+}
