@@ -205,29 +205,26 @@ func cmdBeadClaim(args []string) error {
 	if len(args) > 1 && args[1] != "" && !strings.HasPrefix(args[1], "--") {
 		sessionID = args[1]
 	}
-	_, _, printFence := parseFenceFlags(args[1:])
+	_, _, printFence, err := parseFenceFlags(args[1:])
+	if err != nil {
+		return fmt.Errorf("bead-claim: %w", err)
+	}
 
 	if !bdAvailable() {
 		return nil
 	}
 
-	// Advisory lock: serialize concurrent Go callers (mirrors cmdSprintClaim pattern).
-	// Try ic lock first, fall back to mkdir lock.
-	_, lockErr := runIC("lock", "acquire", "bead-claim", beadID, "--timeout=500ms")
-	if lockErr != nil {
-		lockErr = fallbackLock("bead-claim", beadID)
-		if lockErr != nil {
-			return fmt.Errorf("bead-claim: lock contention for %s", beadID)
-		}
-		defer fallbackUnlock("bead-claim", beadID)
-	} else {
-		defer func() {
-			_, _ = runIC("lock", "release", "bead-claim", beadID)
-		}()
+	unlock, err := lockBeadClaim(beadID)
+	if err != nil {
+		return err
 	}
+	defer unlock()
 
 	now := time.Now().Unix()
-	cur, rawClaim, rawAt, rawGen := readBeadLease(beadID, now)
+	cur, rawClaim, rawAt, rawGen, err := readBeadLease(beadID, now)
+	if err != nil {
+		return fmt.Errorf("bead-claim: %w", err)
+	}
 	next, err := leaseAcquire(cur, sessionID, now, maxLeaseTTLSeconds)
 	if err != nil {
 		shortSession := cur.Holder
@@ -246,22 +243,56 @@ func cmdBeadClaim(args []string) error {
 	return nil
 }
 
+// leaseReadHook, when non-nil, runs after a lease read and before the matching
+// write, inside the claim lock. Tests use it to force interleavings.
+var leaseReadHook func()
+
+// lockBeadClaim takes the per-bead claim lock (ic lock, falling back to a mkdir
+// lock) and returns its unlock func. Every read/check/write transaction on a
+// bead lease (acquire, heartbeat, release) must run under it.
+func lockBeadClaim(beadID string) (func(), error) {
+	_, lockErr := runIC("lock", "acquire", "bead-claim", beadID, "--timeout=500ms")
+	if lockErr != nil {
+		if err := fallbackLock("bead-claim", beadID); err != nil {
+			return nil, fmt.Errorf("bead-claim: lock contention for %s", beadID)
+		}
+		return func() { fallbackUnlock("bead-claim", beadID) }, nil
+	}
+	return func() { _, _ = runIC("lock", "release", "bead-claim", beadID) }, nil
+}
+
 // readBeadLease loads the current lease from bd labels (additive: claim_gen is
-// optional) and returns the raw label values so writers can strip them.
-func readBeadLease(beadID string, now int64) (Lease, string, string, string) {
-	get := func(key string) string {
+// optional) and returns the raw label values so writers can strip them. A
+// failed read is an error (fail closed): it must never read as generation 0,
+// which would let acquisition reuse a fence token.
+func readBeadLease(beadID string, now int64) (Lease, string, string, string, error) {
+	get := func(key string) (string, error) {
 		out, err := runBD("state", beadID, key)
 		if err != nil {
-			return ""
+			return "", fmt.Errorf("read %s of %s: %w", key, beadID, err)
 		}
 		v := strings.TrimSpace(string(out))
 		if strings.HasPrefix(v, "(no ") {
-			return ""
+			return "", nil
 		}
-		return v
+		return v, nil
 	}
-	by, at, gen := get("claimed_by"), get("claimed_at"), get(leaseGenLabel)
-	return leaseFromLegacy(by, at, gen, now), by, at, gen
+	by, err := get("claimed_by")
+	if err != nil {
+		return Lease{}, "", "", "", err
+	}
+	at, err := get("claimed_at")
+	if err != nil {
+		return Lease{}, "", "", "", err
+	}
+	gen, err := get(leaseGenLabel)
+	if err != nil {
+		return Lease{}, "", "", "", err
+	}
+	if leaseReadHook != nil {
+		leaseReadHook()
+	}
+	return leaseFromLegacy(by, at, gen, now), by, at, gen, nil
 }
 
 // writeBeadLease atomically swaps the claim labels in one bd update.
@@ -286,13 +317,17 @@ func writeBeadLease(beadID, oldBy, oldAt, oldGen, newBy string, now, gen int64) 
 }
 
 // parseFenceFlags extracts --fence=N and --print-fence from args.
-func parseFenceFlags(args []string) (fence int64, hasFence, printFence bool) {
+// A malformed --fence is an error so callers can reject it before mutating
+// anything, rather than silently falling back to unfenced behaviour.
+func parseFenceFlags(args []string) (fence int64, hasFence, printFence bool, err error) {
 	for _, a := range args {
 		switch {
-		case strings.HasPrefix(a, "--fence="):
-			if n, err := strconv.ParseInt(strings.TrimPrefix(a, "--fence="), 10, 64); err == nil {
-				fence, hasFence = n, true
+		case a == "--fence" || strings.HasPrefix(a, "--fence="):
+			n, perr := strconv.ParseInt(strings.TrimPrefix(a, "--fence="), 10, 64)
+			if a == "--fence" || perr != nil {
+				return 0, false, false, fmt.Errorf("invalid --fence value %q (want an integer)", a)
 			}
+			fence, hasFence = n, true
 		case a == "--print-fence":
 			printFence = true
 		}
@@ -310,6 +345,12 @@ func cmdBeadRelease(args []string) error {
 		return fmt.Errorf("usage: bead-release <bead_id> [--failure-class=<class>]")
 	}
 	beadID := args[0]
+
+	// Validate flags before any mutation.
+	fence, hasFence, _, err := parseFenceFlags(args[1:])
+	if err != nil {
+		return fmt.Errorf("bead-release: %w", err)
+	}
 
 	// Parse optional --failure-class flag
 	failureClass := ""
@@ -332,9 +373,16 @@ func cmdBeadRelease(args []string) error {
 	if ourSession == "" {
 		ourSession = "unknown"
 	}
-	fence, hasFence, _ := parseFenceFlags(args[1:])
+	unlock, err := lockBeadClaim(beadID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	now := time.Now().Unix()
-	cur, rawBy, rawAt, _ := readBeadLease(beadID, now)
+	cur, rawBy, rawAt, _, err := readBeadLease(beadID, now)
+	if err != nil {
+		return fmt.Errorf("bead-release: %w", err)
+	}
 	if cur.Holder != "" && cur.Holder != ourSession {
 		if hasFence {
 			return fmt.Errorf("bead-release: %s: %w", beadID, ErrLeaseNotHolder)
@@ -373,6 +421,11 @@ func cmdBeadHeartbeat(args []string) error {
 	}
 	beadID := args[0]
 
+	fence, hasFence, _, err := parseFenceFlags(args[1:])
+	if err != nil {
+		return fmt.Errorf("bead-heartbeat: %w", err)
+	}
+
 	if !bdAvailable() {
 		return nil
 	}
@@ -382,9 +435,22 @@ func cmdBeadHeartbeat(args []string) error {
 	if ourSession == "" {
 		ourSession = "unknown"
 	}
-	fence, hasFence, _ := parseFenceFlags(args[1:])
+	unlock, err := lockBeadClaim(beadID)
+	if err != nil {
+		if hasFence {
+			return err
+		}
+		return nil // legacy heartbeat is best-effort
+	}
+	defer unlock()
 	now := time.Now().Unix()
-	cur, rawBy, rawAt, rawGen := readBeadLease(beadID, now)
+	cur, rawBy, rawAt, rawGen, err := readBeadLease(beadID, now)
+	if err != nil {
+		if hasFence {
+			return fmt.Errorf("bead-heartbeat: %w", err)
+		}
+		return nil
+	}
 
 	if hasFence {
 		// Strict mode: renew requires the current holder, fence and an
