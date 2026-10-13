@@ -254,7 +254,10 @@ func lockBeadClaim(beadID string) (func(), error) {
 	// ic derives the owner from its own PID by default, and each runIC call is
 	// a separate process, so release would never match acquire. Pass one
 	// explicit owner to both.
-	owner := fmt.Sprintf("clavain-bead-claim:%d", os.Getpid())
+	// ic's liveness check expects "<pid>:<host>"; any other shape reads as
+	// dead after its stale window and the lock becomes stealable.
+	host, _ := os.Hostname()
+	owner := fmt.Sprintf("%d:%s", os.Getpid(), host)
 	_, lockErr := lockICRunner("lock", "acquire", "bead-claim", beadID, "--timeout=500ms", "--owner="+owner)
 	if lockErr != nil {
 		if err := fallbackLock("bead-claim", beadID); err != nil {
@@ -399,6 +402,10 @@ func cmdBeadRelease(args []string) error {
 		if _, err := leaseRelease(cur, ourSession, fence); err != nil {
 			return fmt.Errorf("bead-release: %s: %w", beadID, err)
 		}
+	}
+	if hasFence && cur.Holder == "" && fence != cur.Gen {
+		// Unheld lease: a stale fence must not mutate anything either.
+		return fmt.Errorf("bead-release: %s: %w", beadID, ErrLeaseFence)
 	}
 
 	// Validation passed: only now may the release mutate anything.

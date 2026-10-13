@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -128,6 +129,8 @@ case "$1" in
 state)
   if [ -e "$S/fail_$3" ]; then echo boom >&2; exit 1; fi
   if [ -f "$S/$3" ]; then cat "$S/$3"; else echo "(no $3 state set)"; fi ;;
+set-state)
+  k="${3%%=*}"; v="${3#*=}"; printf '%s' "$v" > "$S/$k" ;;
 update)
   shift 2
   while [ $# -gt 0 ]; do
@@ -286,6 +289,10 @@ func TestLockBeadClaimUsesSameOwner(t *testing.T) {
 	if a == "" || a != r {
 		t.Fatalf("acquire owner %q, release owner %q: must be identical and non-empty", a, r)
 	}
+	// ic only treats an owner as live when it is "<pid>:<host>".
+	if pid, _, ok := strings.Cut(strings.TrimPrefix(a, "--owner="), ":"); !ok || pid != strconv.Itoa(os.Getpid()) {
+		t.Fatalf("owner %q: want <pid>:<host> with this process's pid", a)
+	}
 }
 
 func TestMalformedClaimGenRejected(t *testing.T) {
@@ -351,5 +358,46 @@ func TestFencedReleasePropagatesUpdateError(t *testing.T) {
 	// Unfenced callers keep best-effort semantics.
 	if err := cmdBeadRelease([]string{bead}); err != nil {
 		t.Fatalf("unfenced release: %v", err)
+	}
+}
+
+func TestStaleFencedReleaseOnUnheldLeaseChangesNothing(t *testing.T) {
+	state := fakeBD(t)
+	const bead = "test-rel-unheld"
+	fallbackUnlock("bead-claim", bead)
+	t.Setenv("CLAUDE_SESSION_ID", "s1")
+	for i := 0; i < 2; i++ {
+		if err := cmdBeadClaim([]string{bead, "s1"}); err != nil {
+			t.Fatal(err)
+		}
+		fence := fakeLabel(t, state, "claim_gen")
+		if err := cmdBeadRelease([]string{bead, "--fence=" + fence}); err != nil {
+			t.Fatalf("release gen %s: %v", fence, err)
+		}
+	}
+	if g := fakeLabel(t, state, "claim_gen"); g != "2" {
+		t.Fatalf("claim_gen = %q, want 2", g)
+	}
+	if err := cmdBeadRelease([]string{bead, "--fence=1", "--failure-class=retriable"}); err == nil {
+		t.Fatal("stale fenced release on an unheld lease must fail")
+	}
+	if fc := fakeLabel(t, state, "failure_class"); fc != "" {
+		t.Fatalf("rejected release wrote failure_class %q", fc)
+	}
+}
+
+func TestAcceptedFencedReleaseWritesFailureClass(t *testing.T) {
+	state := fakeBD(t)
+	const bead = "test-rel-fc"
+	fallbackUnlock("bead-claim", bead)
+	t.Setenv("CLAUDE_SESSION_ID", "s1")
+	if err := cmdBeadClaim([]string{bead, "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdBeadRelease([]string{bead, "--fence=1", "--failure-class=retriable"}); err != nil {
+		t.Fatal(err)
+	}
+	if fc := fakeLabel(t, state, "failure_class"); fc != "retriable" {
+		t.Fatalf("failure_class = %q, want retriable", fc)
 	}
 }
