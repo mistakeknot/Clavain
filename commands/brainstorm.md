@@ -143,6 +143,14 @@ Propose **2-3 concrete approaches** based on research and dialogue. For each:
 
 Lead with recommendation and rationale. Apply YAGNI — prefer simpler.
 
+**Optional, C3 and above only:** when Phase 0.5's `complexity` is 3 or higher
+(or, outside a sprint, the work would charter at C3 or above), you may run
+`/clavain:deepen` once on
+the recommended approach. It keeps the scope and asks how the best practitioner
+would do it: method, rawest source, instruments, external evidence, one stretch
+bar. Offer the deepened version beside the original in the question below; do
+not replace it unasked.
+
 **Research and escalation:** for a bounded question, use one careful pass or
 `/interflux:flux-review`; do not turn ordinary discovery-shaped work into an
 adaptive loop. Use `/interflux:flux-melange <research inputs or target dir>

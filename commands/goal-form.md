@@ -80,8 +80,8 @@ evaluator can judge it from surfaced output: commands, exit codes, bead
 closes; bound it with "or stop after N turns") · Successor obligations.
 
 **The completion condition follows `docs/guide-goal-shape.md`** —
-OUTCOME / GATE n / DONE WHEN / OUT, and its four rules. Two of them bind
-hardest on YOU as the drafter:
+OUTCOME / WHO'S WAITING / PREMISE / GATE n / DONE WHEN / OUT, and its seven
+rules. Two of them bind hardest on YOU as the drafter:
 
 - **State the outcome, not the mechanism.** Exact signatures, discriminant
   numbers, and `file.rs:120` refs are plan content, not goal content.
@@ -97,6 +97,19 @@ waiting on. Where the project has no serving documents, answer from the
 interview — the user holds that fact even when no file records it — and if the
 answer really is `nobody`, write `nobody`. `ic goal lint-condition` has no rule
 for this line, so Step 5 will not catch a missing one.
+
+**C3+: the condition carries `PREMISE`** (guide-goal-shape rule 7): the belief
+the goal rests on, and the cheapest test against raw data that would show it
+false. The executor runs that test first; if it fails, the executor stops and
+escalates, because a disproven premise escalates immediately. Below C3 the line
+is optional. Lint does not check it, so check it by eye.
+
+**C3+, optional: deepen the draft.** Before Step 5, you may run
+`/clavain:deepen <charter-path>` once. It names the practitioner method, the
+rawest source, the instruments, the external evidence and one stretch bar, then
+returns a rewritten condition with the same scope. Its rawest source often
+supplies the `PREMISE` test. Show the user both versions and let them pick;
+never swap in the rewrite unasked.
 
 A non-goal the charter would cross is a defect in the charter, not an obstacle
 to route around. Name the constraint, put the re-ruling to the user, and leave

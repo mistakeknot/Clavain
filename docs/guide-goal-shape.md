@@ -25,25 +25,30 @@ predicates. Add a predicate and it returned `null`, exit 0.
 /goal <Project> — <outcome in one clause>
 
 OUTCOME: what is true when this is done, and what is true now that
-makes it worth doing. Two or three sentences. Numbers if you have
-them.
+makes it worth doing. Two or three sentences. State the bar the
+outcome must clear: a number, a comparison, or a universal.
 
 WHO'S WAITING: the consumer that can do something new once this
 lands, and what they cannot do until it does. "nobody" is a
 permitted answer and has to be written down, never left off.
+
+PREMISE: the belief this goal rests on, and the cheapest test
+against raw data that would show it false. The executor runs it
+first. Required at C3 and above.
 
 GATE n — <what kind>: a question, left open, with who decides it.
 "Bring me options" / "recommend one" is the instruction; the answer
 is not in the goal.
 
 DONE WHEN: predicates an evaluator can judge from surfaced output —
-a command, an exit code, a bead close, an artifact state. Bound it:
+a command, an exit code, a bead close, an artifact state. At least
+one is judged by something other than the producer. Bound it:
 "or stop after N turns".
 
 OUT: what is explicitly not in scope, with the ruling it follows from.
 ```
 
-## Five rules
+## Seven rules
 
 **1. State the outcome, not the mechanism.** The frontier tier writes goals;
 plans carry exact paths, signatures, and machine-checkable steps for a weaker
@@ -97,7 +102,7 @@ knowing, and an omitted line reads identically to a line whose answer was
 first and the user second.
 
 *`ic goal lint-condition` does not check this line.* It enforces the mechanical
-half — predicates, ventriloquism, plan detail — and gained no rule here, so a
+half — predicates, ventriloquism, plan detail, judge and bar — and gained no rule here, so a
 goal missing `WHO'S WAITING` still exits 0. The line is enforced by the reader,
 and by `/clavain:next-goal` Step 2, where a candidate with no answer cannot
 sort on the serving axis and loses to one that has it. Do not read a clean lint
@@ -119,6 +124,45 @@ The serving map is `docs/serving-map.yaml` by convention; jawnomicon's is
 is not a blocker — answer from what you know and say which it was. `WHO'S
 WAITING: nobody — no consumer registry in this repo` is a complete answer. What
 it must not become is silence.
+
+**6. Set a bar, and let something other than the producer judge it.** A goal
+whose only predicates are things the executor makes (committed, pushed, bead
+closed, the report file exists) is graded by the executor. The evaluator can
+confirm the work was filed, never that it is right. Put at least one judge
+outside the producer in `DONE WHEN`: a command whose verdict the evaluator
+reads, a test run, a consumer's check, an independent review. And give
+`OUTCOME` a bar: "imports finish in under 3 seconds", "every export
+round-trips", "output identical to the reference". Without one, done collapses
+to "did something".
+
+Measured on 26 real charter conditions when the rule landed (bead mk-3mo0w):
+four were flagged self-graded. Two were right: a catalog goal whose four
+predicates were a log, a doc section, a TSV and a clean push, all written by
+the executor, and a goal whose bats tests had to be updated but never had to
+pass. Two were borderline: one judged by validator seats, one by a meter run
+against a sequential baseline, each named too far from its result for the
+lint to see. None of the ten with an `OUTCOME` lacked a bar.
+Both rules are heuristics with a low base rate; read the warning as a
+question, not a verdict.
+
+*`ic goal lint-condition` warns: `self-graded` and `no bar`.* It looks for the
+judge in `DONE WHEN` only, so a review named in `OUTCOME` or excluded under
+`OUT` does not count.
+
+**7. Test the premise first.** At C3 and above, write `PREMISE`: the belief
+the goal rests on, and the cheapest test against raw data that would show it
+false. "Churn is an onboarding problem" is a belief. A test: from the raw
+signup and cancellation events, compare 30-day churn for users who finished
+onboarding with users who did not, with enough users in each group to show a
+gap the size the goal is betting on. If no such gap appears, the premise
+fails. A test that can only confirm the belief is not a test. The executor
+runs it before building anything. If the test falsifies the premise, the executor stops and escalates:
+a disproven premise escalates immediately, and the executor does not re-scope
+the goal around it. `/clavain:deepen` often finds the test, because its rawest
+source is usually the data the premise can be checked against.
+
+*`ic goal lint-condition` does not check this line;* goal-form Step 4 requires
+it at C3 and above.
 
 ## What stays allowed
 
@@ -142,9 +186,9 @@ ic goal lint-condition --text="<the goal text>"
 Exit 0 with no output means clean. Fix errors; read warnings and fix them
 unless you can say why the goal legitimately needs the mechanism named.
 
-Then check `WHO'S WAITING` by eye. The lint has no rule for it, so a goal
-missing the line passes this command — which is precisely the gap rule 5
-exists in, rather than alongside.
+Then check `WHO'S WAITING`, and at C3 and above `PREMISE`, by eye. The lint
+has no rule for either, so a goal missing them passes this command — which is
+precisely the gap rules 5 and 7 exist in, rather than alongside.
 
 ## Prose
 
