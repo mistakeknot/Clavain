@@ -336,9 +336,9 @@ Children:
   close-parent-if-done     <bead_id> [reason]
 
 Bead Claiming:
-  bead-claim              <bead_id> [session_id]
-  bead-release            <bead_id> [--failure-class=<class>]
-  bead-heartbeat          <bead_id>     Refresh claimed_at timestamp
+  bead-claim              <bead_id> [session_id] [--print-fence]   Acquire fenced lease (claim_gen); never steals a live lease
+  bead-release            <bead_id> [--failure-class=<class>] [--fence=N]
+  bead-heartbeat          <bead_id> [--fence=N]   Renew lease (strict when --fence given)
 
 Quality Gates:
   quality-gate-run        [project_dir]   Run deterministic gates (build/test/lint)

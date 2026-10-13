@@ -114,10 +114,11 @@ func cmdSprintClaim(args []string) error {
 		}
 
 		// Check age
-		created := time.Unix(existing.CreatedAt, 0)
-		ageMinutes := int(time.Since(created).Minutes())
+		// An unknown (epoch/zero) created_at must not read as ~56 years old.
+		ageSec := ageSecondsOrUnknown(existing.CreatedAt, time.Now().Unix())
+		ageMinutes := int(ageSec / 60)
 
-		if ageMinutes < sprintClaimStaleMinutes {
+		if ageSec < 0 || ageMinutes < sprintClaimStaleMinutes {
 			shortName := existingName
 			if len(shortName) > 8 {
 				shortName = shortName[:8]
@@ -190,7 +191,8 @@ func cmdSprintRelease(args []string) error {
 // Advisory locking — serializes concurrent Go callers via ic lock (or mkdir fallback)
 // but does not cover direct `bd` CLI invocations from shell scripts. The claim system
 // is best-effort; downstream consumers must tolerate stale or contested claims.
-// Exit 1 if a fresh claim exists from another session.
+// Exit 1 if a live lease exists from another session. Each successful claim
+// bumps the claim_gen fence token; --print-fence prints it on stdout.
 func cmdBeadClaim(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: bead-claim <bead_id> [session_id]")
@@ -200,86 +202,150 @@ func cmdBeadClaim(args []string) error {
 	if sessionID == "" {
 		sessionID = "unknown"
 	}
-	if len(args) > 1 && args[1] != "" {
+	if len(args) > 1 && args[1] != "" && !strings.HasPrefix(args[1], "--") {
 		sessionID = args[1]
+	}
+	_, _, printFence, err := parseFenceFlags(args[1:])
+	if err != nil {
+		return fmt.Errorf("bead-claim: %w", err)
 	}
 
 	if !bdAvailable() {
 		return nil
 	}
 
-	// Advisory lock: serialize concurrent Go callers (mirrors cmdSprintClaim pattern).
-	// Try ic lock first, fall back to mkdir lock.
-	_, lockErr := runIC("lock", "acquire", "bead-claim", beadID, "--timeout=500ms")
-	if lockErr != nil {
-		lockErr = fallbackLock("bead-claim", beadID)
-		if lockErr != nil {
-			return fmt.Errorf("bead-claim: lock contention for %s", beadID)
+	unlock, err := lockBeadClaim(beadID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	now := time.Now().Unix()
+	cur, rawClaim, rawAt, rawGen, err := readBeadLease(beadID, now)
+	if err != nil {
+		return fmt.Errorf("bead-claim: %w", err)
+	}
+	next, err := leaseAcquire(cur, sessionID, now, maxLeaseTTLSeconds)
+	if err != nil {
+		shortSession := cur.Holder
+		if len(shortSession) > 8 {
+			shortSession = shortSession[:8]
 		}
-		defer fallbackUnlock("bead-claim", beadID)
-	} else {
-		defer func() {
-			_, _ = runIC("lock", "release", "bead-claim", beadID)
-		}()
+		ageMin := (now - (cur.ExpiresAt - maxLeaseTTLSeconds)) / 60
+		return fmt.Errorf("bead %s claimed by session %s (%dm ago)", beadID, shortSession, ageMin)
 	}
-
-	// Check existing claim
-	existingClaim := ""
-	if out, err := runBD("state", beadID, "claimed_by"); err == nil {
-		existingClaim = strings.TrimSpace(string(out))
-	}
-
-	if existingClaim != "" && !strings.HasPrefix(existingClaim, "(no ") && existingClaim != "released" {
-		// Same session? Already claimed by us.
-		if existingClaim == sessionID {
-			return nil
-		}
-
-		// Check staleness
-		existingAt := ""
-		if out, err := runBD("state", beadID, "claimed_at"); err == nil {
-			existingAt = strings.TrimSpace(string(out))
-		}
-
-		if existingAt != "" && !strings.HasPrefix(existingAt, "(no ") {
-			epoch, err := strconv.ParseInt(existingAt, 10, 64)
-			if err == nil {
-				ageSeconds := time.Now().Unix() - epoch
-				if ageSeconds < beadClaimStaleSeconds {
-					shortSession := existingClaim
-					if len(shortSession) > 8 {
-						shortSession = shortSession[:8]
-					}
-					ageMin := ageSeconds / 60
-					return fmt.Errorf("bead %s claimed by session %s (%dm ago)",
-						beadID, shortSession, ageMin)
-				}
-			}
-		}
-	}
-
-	// Build atomic update args: remove old labels, add new ones
-	epoch := strconv.FormatInt(time.Now().Unix(), 10)
-	updateArgs := []string{"update", beadID}
-	if existingClaim != "" && !strings.HasPrefix(existingClaim, "(no ") {
-		updateArgs = append(updateArgs, "--remove-label", "claimed_by:"+existingClaim)
-	}
-	existingAt := ""
-	if out, err := runBD("state", beadID, "claimed_at"); err == nil {
-		existingAt = strings.TrimSpace(string(out))
-	}
-	if existingAt != "" && !strings.HasPrefix(existingAt, "(no ") {
-		updateArgs = append(updateArgs, "--remove-label", "claimed_at:"+existingAt)
-	}
-	updateArgs = append(updateArgs,
-		"--add-label", "claimed_by:"+sessionID,
-		"--add-label", "claimed_at:"+epoch,
-	)
-
-	if _, err := runBD(updateArgs...); err != nil {
+	if err := writeBeadLease(beadID, rawClaim, rawAt, rawGen, sessionID, now, next.Gen); err != nil {
 		return fmt.Errorf("bead-claim: bd update failed for %s: %w", beadID, err)
 	}
+	if printFence {
+		fmt.Println(next.Gen)
+	}
 	return nil
+}
+
+// leaseReadHook, when non-nil, runs after a lease read and before the matching
+// write, inside the claim lock. Tests use it to force interleavings.
+var leaseReadHook func()
+
+// lockBeadClaim takes the per-bead claim lock (ic lock, falling back to a mkdir
+// lock) and returns its unlock func. Every read/check/write transaction on a
+// bead lease (acquire, heartbeat, release) must run under it.
+func lockBeadClaim(beadID string) (func(), error) {
+	// ic derives the owner from its own PID by default, and each runIC call is
+	// a separate process, so release would never match acquire. Pass one
+	// explicit owner to both.
+	// ic's liveness check expects "<pid>:<host>"; any other shape reads as
+	// dead after its stale window and the lock becomes stealable.
+	host, _ := os.Hostname()
+	owner := fmt.Sprintf("%d:%s", os.Getpid(), host)
+	_, lockErr := lockICRunner("lock", "acquire", "bead-claim", beadID, "--timeout=500ms", "--owner="+owner)
+	if lockErr != nil {
+		if err := fallbackLock("bead-claim", beadID); err != nil {
+			return nil, fmt.Errorf("bead-claim: lock contention for %s", beadID)
+		}
+		return func() { fallbackUnlock("bead-claim", beadID) }, nil
+	}
+	return func() { _, _ = lockICRunner("lock", "release", "bead-claim", beadID, "--owner="+owner) }, nil
+}
+
+// lockICRunner is the ic invoker used by lockBeadClaim; tests replace it.
+var lockICRunner = runIC
+
+// readBeadLease loads the current lease from bd labels (additive: claim_gen is
+// optional) and returns the raw label values so writers can strip them. A
+// failed read is an error (fail closed): it must never read as generation 0,
+// which would let acquisition reuse a fence token.
+func readBeadLease(beadID string, now int64) (Lease, string, string, string, error) {
+	get := func(key string) (string, error) {
+		out, err := runBD("state", beadID, key)
+		if err != nil {
+			return "", fmt.Errorf("read %s of %s: %w", key, beadID, err)
+		}
+		v := strings.TrimSpace(string(out))
+		if strings.HasPrefix(v, "(no ") {
+			return "", nil
+		}
+		return v, nil
+	}
+	by, err := get("claimed_by")
+	if err != nil {
+		return Lease{}, "", "", "", err
+	}
+	at, err := get("claimed_at")
+	if err != nil {
+		return Lease{}, "", "", "", err
+	}
+	gen, err := get(leaseGenLabel)
+	if err != nil {
+		return Lease{}, "", "", "", err
+	}
+	if leaseReadHook != nil {
+		leaseReadHook()
+	}
+	if _, err := parseLeaseGen(gen); err != nil {
+		return Lease{}, "", "", "", fmt.Errorf("%s of %s: %w", leaseGenLabel, beadID, err)
+	}
+	return leaseFromLegacy(by, at, gen, now), by, at, gen, nil
+}
+
+// writeBeadLease atomically swaps the claim labels in one bd update.
+func writeBeadLease(beadID, oldBy, oldAt, oldGen, newBy string, now, gen int64) error {
+	args := []string{"update", beadID}
+	if oldBy != "" {
+		args = append(args, "--remove-label", "claimed_by:"+oldBy)
+	}
+	if oldAt != "" {
+		args = append(args, "--remove-label", "claimed_at:"+oldAt)
+	}
+	if oldGen != "" {
+		args = append(args, "--remove-label", leaseGenLabel+":"+oldGen)
+	}
+	args = append(args,
+		"--add-label", "claimed_by:"+newBy,
+		"--add-label", "claimed_at:"+strconv.FormatInt(now, 10),
+		"--add-label", leaseGenLabel+":"+strconv.FormatInt(gen, 10),
+	)
+	_, err := runBD(args...)
+	return err
+}
+
+// parseFenceFlags extracts --fence=N and --print-fence from args.
+// A malformed --fence is an error so callers can reject it before mutating
+// anything, rather than silently falling back to unfenced behaviour.
+func parseFenceFlags(args []string) (fence int64, hasFence, printFence bool, err error) {
+	for _, a := range args {
+		switch {
+		case a == "--fence" || strings.HasPrefix(a, "--fence="):
+			n, perr := strconv.ParseInt(strings.TrimPrefix(a, "--fence="), 10, 64)
+			if a == "--fence" || perr != nil {
+				return 0, false, false, fmt.Errorf("invalid --fence value %q (want an integer)", a)
+			}
+			fence, hasFence = n, true
+		case a == "--print-fence":
+			printFence = true
+		}
+	}
+	return
 }
 
 // cmdBeadRelease clears a bead claim.
@@ -293,6 +359,12 @@ func cmdBeadRelease(args []string) error {
 	}
 	beadID := args[0]
 
+	// Validate flags before any mutation.
+	fence, hasFence, _, err := parseFenceFlags(args[1:])
+	if err != nil {
+		return fmt.Errorf("bead-release: %w", err)
+	}
+
 	// Parse optional --failure-class flag
 	failureClass := ""
 	for _, arg := range args[1:] {
@@ -300,45 +372,64 @@ func cmdBeadRelease(args []string) error {
 			failureClass = strings.TrimPrefix(arg, "--failure-class=")
 		}
 	}
-	if failureClass != "" {
-		_, _ = runBDQuiet("set-state", beadID, "failure_class="+failureClass)
-	}
-
 	if !bdAvailable() {
 		return nil
 	}
 
-	// Ownership check: only release if we own the claim
+	// Ownership check: only release if we own the claim. With --fence=N the
+	// fence must also be current; a mismatch is a hard error (stale holder).
 	ourSession := os.Getenv("CLAUDE_SESSION_ID")
 	if ourSession == "" {
 		ourSession = "unknown"
 	}
-	currentClaimer := ""
-	if out, err := runBD("state", beadID, "claimed_by"); err == nil {
-		currentClaimer = strings.TrimSpace(string(out))
+	unlock, err := lockBeadClaim(beadID)
+	if err != nil {
+		return err
 	}
-	if currentClaimer != "" && !strings.HasPrefix(currentClaimer, "(no ") && currentClaimer != "released" && currentClaimer != ourSession {
+	defer unlock()
+	now := time.Now().Unix()
+	cur, rawBy, rawAt, _, err := readBeadLease(beadID, now)
+	if err != nil {
+		return fmt.Errorf("bead-release: %w", err)
+	}
+	if cur.Holder != "" && cur.Holder != ourSession {
+		if hasFence {
+			return fmt.Errorf("bead-release: %s: %w", beadID, ErrLeaseNotHolder)
+		}
 		return nil // Another session holds this — don't release
 	}
+	if hasFence && cur.Holder != "" {
+		if _, err := leaseRelease(cur, ourSession, fence); err != nil {
+			return fmt.Errorf("bead-release: %s: %w", beadID, err)
+		}
+	}
+	if hasFence && cur.Holder == "" && fence != cur.Gen {
+		// Unheld lease: a stale fence must not mutate anything either.
+		return fmt.Errorf("bead-release: %s: %w", beadID, ErrLeaseFence)
+	}
 
-	// Build atomic update: remove old labels, add sentinel labels
+	// Validation passed: only now may the release mutate anything.
+	if failureClass != "" {
+		_, _ = runBDQuiet("set-state", beadID, "failure_class="+failureClass)
+	}
+
+	// Build atomic update: remove old labels, add sentinel labels. The
+	// generation is preserved so the next acquire gets gen+1.
 	updateArgs := []string{"update", beadID}
-	if currentClaimer != "" && !strings.HasPrefix(currentClaimer, "(no ") {
-		updateArgs = append(updateArgs, "--remove-label", "claimed_by:"+currentClaimer)
+	if rawBy != "" {
+		updateArgs = append(updateArgs, "--remove-label", "claimed_by:"+rawBy)
 	}
-	existingAt := ""
-	if out, err := runBD("state", beadID, "claimed_at"); err == nil {
-		existingAt = strings.TrimSpace(string(out))
-	}
-	if existingAt != "" && !strings.HasPrefix(existingAt, "(no ") {
-		updateArgs = append(updateArgs, "--remove-label", "claimed_at:"+existingAt)
+	if rawAt != "" {
+		updateArgs = append(updateArgs, "--remove-label", "claimed_at:"+rawAt)
 	}
 	updateArgs = append(updateArgs,
 		"--add-label", "claimed_by:released",
 		"--add-label", "claimed_at:0",
 	)
-
-	_, _ = runBD(updateArgs...)
+	if _, err := runBD(updateArgs...); err != nil && hasFence {
+		// A fenced caller relies on success meaning the holder is gone.
+		return fmt.Errorf("bead-release: bd update failed for %s: %w", beadID, err)
+	}
 	return nil
 }
 
@@ -351,6 +442,11 @@ func cmdBeadHeartbeat(args []string) error {
 	}
 	beadID := args[0]
 
+	fence, hasFence, _, err := parseFenceFlags(args[1:])
+	if err != nil {
+		return fmt.Errorf("bead-heartbeat: %w", err)
+	}
+
 	if !bdAvailable() {
 		return nil
 	}
@@ -360,39 +456,53 @@ func cmdBeadHeartbeat(args []string) error {
 	if ourSession == "" {
 		ourSession = "unknown"
 	}
-	currentClaimer := ""
-	if out, err := runBD("state", beadID, "claimed_by"); err == nil {
-		currentClaimer = strings.TrimSpace(string(out))
+	unlock, err := lockBeadClaim(beadID)
+	if err != nil {
+		if hasFence {
+			return err
+		}
+		return nil // legacy heartbeat is best-effort
+	}
+	defer unlock()
+	now := time.Now().Unix()
+	cur, rawBy, rawAt, rawGen, err := readBeadLease(beadID, now)
+	if err != nil {
+		if hasFence {
+			return fmt.Errorf("bead-heartbeat: %w", err)
+		}
+		return nil
 	}
 
-	// Refresh if: we own it, it's unclaimed, or it's the "unknown" sentinel
-	if currentClaimer != "" &&
-		!strings.HasPrefix(currentClaimer, "(no ") &&
-		currentClaimer != "released" &&
-		currentClaimer != "unknown" &&
-		currentClaimer != ourSession {
+	if hasFence {
+		// Strict mode: renew requires the current holder, fence and an
+		// unexpired lease; anything else fails loudly.
+		next, err := leaseRenew(cur, ourSession, fence, now, maxLeaseTTLSeconds)
+		if err != nil {
+			return fmt.Errorf("bead-heartbeat: %s: %w", beadID, err)
+		}
+		return writeBeadLease(beadID, rawBy, rawAt, rawGen, ourSession, now, next.Gen)
+	}
+
+	// Legacy (unfenced) mode: refresh if we own it, it's unclaimed, or it's the
+	// "unknown" sentinel. An expired claim we still hold is re-acquired (new
+	// generation) rather than renewed.
+	if cur.Holder != "" && cur.Holder != "unknown" && cur.Holder != ourSession {
 		return nil // Another session holds this — don't touch
 	}
-
-	// Atomic refresh: remove old labels, add new ones in single call
-	epoch := strconv.FormatInt(time.Now().Unix(), 10)
-	updateArgs := []string{"update", beadID}
-	if currentClaimer != "" && !strings.HasPrefix(currentClaimer, "(no ") {
-		updateArgs = append(updateArgs, "--remove-label", "claimed_by:"+currentClaimer)
+	if cur.Holder == "unknown" && ourSession != "unknown" {
+		cur.ExpiresAt = 0 // sentinel holder never blocks
 	}
-	existingAt := ""
-	if out, err := runBD("state", beadID, "claimed_at"); err == nil {
-		existingAt = strings.TrimSpace(string(out))
+	gen := cur.Gen
+	if cur.Holder == ourSession && cur.Live(now) {
+		// plain renew, same generation
+	} else {
+		next, err := leaseAcquire(cur, ourSession, now, maxLeaseTTLSeconds)
+		if err != nil {
+			return nil
+		}
+		gen = next.Gen
 	}
-	if existingAt != "" && !strings.HasPrefix(existingAt, "(no ") {
-		updateArgs = append(updateArgs, "--remove-label", "claimed_at:"+existingAt)
-	}
-	updateArgs = append(updateArgs,
-		"--add-label", "claimed_by:"+ourSession,
-		"--add-label", "claimed_at:"+epoch,
-	)
-
-	_, _ = runBD(updateArgs...)
+	_ = writeBeadLease(beadID, rawBy, rawAt, rawGen, ourSession, now, gen)
 	return nil
 }
 
